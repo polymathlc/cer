@@ -1747,7 +1747,7 @@ function renderBlocks() {
                      oninput="saveBlockContent('${block.id}', 'url', this.value); previewImage('${block.id}', this.value)">
             </div>
             <div class="image-preview" id="imgPreview_${block.id}">
-              ${block.url ? `<img src="${escapeHtml(block.url)}" onerror="this.parentElement.innerHTML='<div class=\\'image-error\\'><svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><circle cx=\\'12\\' cy=\\'12\\' r=\\'10\\'/><line x1=\\'15\\' y1=\\'9\\' x2=\\'9\\' y2=\\'15\\'/><line x1=\\'9\\' y1=\\'9\\' x2=\\'15\\' y2=\\'15\\'/></svg><div>Image failed to load</div></div>'">` : '<div class="image-error">No image URL provided</div>'}
+              ${block.url ? `<img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.parentElement.innerHTML='<div class=\\'image-error\\'><svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><circle cx=\\'12\\' cy=\\'12\\' r=\\'10\\'/><line x1=\\'15\\' y1=\\'9\\' x2=\\'9\\' y2=\\'15\\'/><line x1=\\'9\\' y1=\\'9\\' x2=\\'15\\' y2=\\'15\\'/></svg><div>Image failed to load</div></div>'">` : '<div class="image-error">No image URL provided</div>'}
             </div>
           </div>
         `;
@@ -1889,7 +1889,7 @@ function previewImage(blockId, url) {
     container.innerHTML = '<div class="image-error">No image URL provided</div>';
     return;
   }
-  container.innerHTML = `<img src="${escapeHtml(url)}" onerror="this.parentElement.innerHTML='<div class=\\'image-error\\'><svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><circle cx=\\'12\\' cy=\\'12\\' r=\\'10\\'/><line x1=\\'15\\' y1=\\'9\\' x2=\\'9\\' y2=\\'15\\'/><line x1=\\'9\\' y1=\\'9\\' x2=\\'15\\' y2=\\'15\\'/></svg><div>Image failed to load</div></div>'">`;
+  container.innerHTML = `<img src="${escapeHtml(transformImageUrl(url))}" onerror="this.parentElement.innerHTML='<div class=\\'image-error\\'><svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><circle cx=\\'12\\' cy=\\'12\\' r=\\'10\\'/><line x1=\\'15\\' y1=\\'9\\' x2=\\'9\\' y2=\\'15\\'/><line x1=\\'9\\' y1=\\'9\\' x2=\\'15\\' y2=\\'15\\'/></svg><div>Image failed to load</div></div>'">`;
 }
 
 // =====================================================================
@@ -1954,7 +1954,7 @@ function openPreview() {
       case 'image':
         if (block.url) {
           html += `<div style="margin:14px 0;">
-            <img src="${escapeHtml(block.url)}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);">
+            <img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);">
           </div>`;
         }
         break;
@@ -2080,6 +2080,18 @@ function getYouTubeEmbedUrl(url) {
   const regex = /(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
   const match = url.match(regex);
   return match ? `https://www.youtube.com/embed/${match[1]}` : null;
+}
+
+function transformImageUrl(url) {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    if (u.hostname.endsWith('dropbox.com')) {
+      u.searchParams.set('dl', '1');
+      return u.toString();
+    }
+  } catch (e) {}
+  return url;
 }
 
 // =====================================================================
@@ -2395,7 +2407,7 @@ function renderStudentView() {
         break;
       case 'image':
         if (block.url) {
-          html += `<div style="margin:12px 0;"><img src="${escapeHtml(block.url)}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
         }
         break;
       case 'answer':
