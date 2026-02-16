@@ -2214,6 +2214,12 @@ import {
   signOut,
   updateProfile
 } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-auth.js";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc
+} from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -2230,6 +2236,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const auth = getAuth(app);
+const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
 // Expose auth functions globally so onclick handlers work
@@ -2377,7 +2384,7 @@ function getAuthErrorMessage(code) {
 // =====================================================================
 // AUTH STATE LISTENER
 // =====================================================================
-function enterApp(user) {
+async function enterApp(user) {
   const displayName = user.displayName || user.email.split('@')[0];
   currentUser = {
     uid: user.uid,
@@ -2388,7 +2395,7 @@ function enterApp(user) {
   showPage('appWrapper');
   document.querySelector('.avatar').textContent = displayName[0].toUpperCase();
   document.querySelector('.sidebar-footer div div:first-child').textContent = displayName;
-  loadFromStorage();
+  await loadFromStorage();
   loadSampleData();
   renderBlocks();
   showToast('Welcome, ' + displayName + '!', 'success');
@@ -3707,30 +3714,34 @@ function printWorksheet() {
 }
 
 // =====================================================================
-// STORAGE (localStorage)
+// STORAGE (Firestore per-user persistence)
 // =====================================================================
+let _saveTimer = null;
+
 function saveToStorage() {
-  try {
-    const data = JSON.stringify({ questionBank, vettingList });
-    localStorage.setItem('cerData', data);
-  } catch (e) {
-    window.__cerData = { questionBank, vettingList };
-  }
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => {
+    _saveTimer = null;
+    if (!currentUser) return;
+    const ref = doc(db, 'users', currentUser.uid);
+    setDoc(ref, { questionBank, vettingList }, { merge: true }).catch(err => {
+      console.error('Firestore save failed:', err);
+    });
+  }, 500);
 }
 
-function loadFromStorage() {
+async function loadFromStorage() {
+  if (!currentUser) return;
   try {
-    const raw = localStorage.getItem('cerData');
-    if (raw) {
-      const data = JSON.parse(raw);
+    const ref = doc(db, 'users', currentUser.uid);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const data = snap.data();
       questionBank = data.questionBank || [];
       vettingList = data.vettingList || [];
     }
-  } catch (e) {
-    if (window.__cerData) {
-      questionBank = window.__cerData.questionBank || [];
-      vettingList = window.__cerData.vettingList || [];
-    }
+  } catch (err) {
+    console.error('Firestore load failed:', err);
   }
   updateCounts();
   populateTopicFilter();
