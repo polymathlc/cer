@@ -3150,22 +3150,26 @@ function checkStudentAnswers(qId) {
 // =====================================================================
 function saveToStorage() {
   try {
-    const data = { questionBank, vettingList };
-    // Use in-memory only since localStorage may not be available
-    window.__cerData = data;
+    const data = JSON.stringify({ questionBank, vettingList });
+    localStorage.setItem('cerData', data);
   } catch (e) {
-    // Silently fail
+    window.__cerData = { questionBank, vettingList };
   }
 }
 
 function loadFromStorage() {
   try {
+    const raw = localStorage.getItem('cerData');
+    if (raw) {
+      const data = JSON.parse(raw);
+      questionBank = data.questionBank || [];
+      vettingList = data.vettingList || [];
+    }
+  } catch (e) {
     if (window.__cerData) {
       questionBank = window.__cerData.questionBank || [];
       vettingList = window.__cerData.vettingList || [];
     }
-  } catch (e) {
-    // Silently fail
   }
   updateCounts();
   populateTopicFilter();
