@@ -2086,8 +2086,9 @@ function transformImageUrl(url) {
   if (!url) return url;
   try {
     const u = new URL(url);
-    if (u.hostname.endsWith('dropbox.com')) {
-      u.searchParams.set('dl', '1');
+    if (u.hostname.endsWith('dropbox.com') && u.hostname !== 'dl.dropboxusercontent.com') {
+      u.hostname = 'dl.dropboxusercontent.com';
+      u.searchParams.delete('dl');
       return u.toString();
     }
   } catch (e) {}
