@@ -1342,6 +1342,280 @@ option {
 }
 .sidebar-logout-btn svg { width: 16px; height: 16px; }
 
+/* ========== PRINT WORKSHEET PAGE ========== */
+.print-select-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.print-select-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.print-select-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+.print-select-card.selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+.print-select-card input[type="checkbox"] {
+  width: 18px; height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.print-select-card .psc-info {
+  flex: 1;
+  min-width: 0;
+}
+.print-select-card .psc-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.print-select-card .psc-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.print-select-card .psc-blanks {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.print-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.print-toolbar .selected-count {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.print-no-questions {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+}
+
+/* ========== PRINT OUTPUT (on-screen preview) ========== */
+.print-preview-container {
+  display: none;
+}
+
+/* ========== PRINT STYLES (A4) ========== */
+@media print {
+  /* Hide everything except the print output */
+  body > *:not(#printOutput) {
+    display: none !important;
+  }
+  #printOutput {
+    display: block !important;
+  }
+  body {
+    background: #fff;
+    color: #000;
+    font-family: 'DM Sans', 'Segoe UI', sans-serif;
+    font-size: 11pt;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* A4 page setup */
+  @page {
+    size: A4;
+    margin: 18mm 16mm 20mm 16mm;
+  }
+
+  /* Each question breaks to a new page */
+  .print-question-page {
+    page-break-after: always;
+    page-break-inside: avoid;
+    max-width: 100%;
+    padding: 0;
+  }
+  .print-question-page:last-of-type:not(.print-answer-key-page) {
+    page-break-after: always;
+  }
+
+  /* Answer key starts on its own page */
+  .print-answer-key-page {
+    page-break-before: always;
+    page-break-after: auto;
+  }
+
+  /* Print header */
+  .print-q-header {
+    border-bottom: 2pt solid #000;
+    padding-bottom: 8pt;
+    margin-bottom: 16pt;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .print-q-header h2 {
+    font-size: 14pt;
+    font-weight: 700;
+    margin: 0;
+  }
+  .print-q-header .print-q-meta {
+    font-size: 9pt;
+    color: #555;
+  }
+
+  /* Worksheet header */
+  .print-worksheet-header {
+    text-align: center;
+    margin-bottom: 20pt;
+  }
+  .print-worksheet-header h1 {
+    font-size: 16pt;
+    font-weight: 700;
+    margin: 0 0 4pt;
+  }
+  .print-worksheet-header p {
+    font-size: 9pt;
+    color: #666;
+    margin: 0;
+  }
+  .print-student-info {
+    border: 1pt solid #ccc;
+    padding: 8pt 12pt;
+    margin-bottom: 16pt;
+    display: flex;
+    gap: 24pt;
+    font-size: 10pt;
+  }
+  .print-student-info span {
+    border-bottom: 1pt solid #999;
+    flex: 1;
+    padding-bottom: 2pt;
+  }
+
+  /* Content blocks */
+  .print-text-block {
+    margin-bottom: 10pt;
+    font-size: 11pt;
+    line-height: 1.6;
+  }
+  .print-text-block img {
+    max-width: 100%;
+    max-height: 200pt;
+  }
+
+  /* Blank lines */
+  .print-blank {
+    display: inline-block;
+    min-width: 70pt;
+    border-bottom: 1.5pt solid #000;
+    margin: 0 2pt;
+    text-align: center;
+    font-size: 10pt;
+    color: transparent;
+  }
+  .print-blank-numbered {
+    display: inline-block;
+    min-width: 70pt;
+    border-bottom: 1.5pt solid #000;
+    margin: 0 2pt;
+    text-align: center;
+    font-size: 8pt;
+    color: #999;
+  }
+
+  /* CER section in print */
+  .print-cer-section {
+    border: 1pt solid #ccc;
+    border-radius: 4pt;
+    margin: 10pt 0;
+    overflow: hidden;
+  }
+  .print-cer-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4pt 10pt;
+    font-weight: 700;
+    border-bottom: 1pt solid #ccc;
+    background: #f5f5f5;
+  }
+  .print-cer-content {
+    padding: 8pt 10pt;
+    line-height: 1.8;
+    font-size: 11pt;
+  }
+
+  /* Table in print */
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10pt 0;
+    font-size: 10pt;
+  }
+  .print-table th, .print-table td {
+    border: 1pt solid #999;
+    padding: 6pt 8pt;
+    text-align: left;
+  }
+  .print-table th {
+    background: #f0f0f0;
+    font-weight: 600;
+  }
+
+  /* Answer key */
+  .print-answer-key-page h2 {
+    font-size: 14pt;
+    font-weight: 700;
+    border-bottom: 2pt solid #000;
+    padding-bottom: 8pt;
+    margin-bottom: 16pt;
+  }
+  .print-ak-question {
+    margin-bottom: 14pt;
+    page-break-inside: avoid;
+  }
+  .print-ak-question h4 {
+    font-size: 11pt;
+    font-weight: 700;
+    margin-bottom: 4pt;
+  }
+  .print-ak-answers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2pt 20pt;
+    font-size: 10pt;
+    padding-left: 12pt;
+  }
+  .print-ak-answers .ak-item {
+    display: flex;
+    gap: 4pt;
+  }
+  .print-ak-answers .ak-num {
+    font-weight: 700;
+    color: #555;
+    min-width: 20pt;
+  }
+  .print-ak-answers .ak-word {
+    font-weight: 600;
+  }
+}
+
 /* ========== VETTING LIST ========== */
 .vetting-badge {
   font-size: 0.72rem;
@@ -1636,6 +1910,10 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         Student View
       </div>
+      <div class="nav-item" data-page="print" onclick="navigateTo('print')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print Worksheet
+      </div>
     </nav>
     <div class="sidebar-footer">
       <div class="avatar">A</div>
@@ -1846,8 +2124,42 @@ option {
       </div>
     </div>
 
+    <!-- ===== PAGE: PRINT WORKSHEET ===== -->
+    <div class="page" id="page-print">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Print Worksheet</h2>
+          </div>
+          <div class="subtitle">Select questions and print as a fill-in-the-blank worksheet</div>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:780px;">
+        <div class="print-toolbar">
+          <div>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;">
+              <input type="checkbox" id="printSelectAll" onchange="togglePrintSelectAll(this.checked)" style="width:16px;height:16px;accent-color:var(--primary);">
+              Select All
+            </label>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="selected-count" id="printSelectedCount">0 selected</span>
+            <button class="btn btn-primary" onclick="printWorksheet()" id="printBtn" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Print Worksheet
+            </button>
+          </div>
+        </div>
+        <div id="printSelectGrid" class="print-select-grid"></div>
+      </div>
+    </div>
+
   </div>
 </div>
+
+<!-- ==================== PRINT OUTPUT (hidden, rendered for window.print) ==================== -->
+<div id="printOutput" style="display:none;"></div>
 
 <!-- ==================== PREVIEW OVERLAY ==================== -->
 <div class="preview-overlay" id="previewOverlay">
@@ -2116,6 +2428,7 @@ function navigateTo(page) {
     populateStudentSelect();
     renderStudentView();
   }
+  if (page === 'print') renderPrintSelect();
   // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -3146,6 +3459,254 @@ function checkStudentAnswers(qId) {
 }
 
 // =====================================================================
+// PRINT WORKSHEET
+// =====================================================================
+let printSelectedIds = new Set();
+
+function renderPrintSelect() {
+  const grid = document.getElementById('printSelectGrid');
+  if (!grid) return;
+
+  if (questionBank.length === 0) {
+    grid.innerHTML = `<div class="print-no-questions">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;margin-bottom:14px;">
+        <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      <h3>No questions available</h3>
+      <p>Add questions to the Question Bank first, then come back to print.</p>
+    </div>`;
+    return;
+  }
+
+  let html = '';
+  questionBank.forEach(q => {
+    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
+    const checked = printSelectedIds.has(q.id);
+    html += `<label class="print-select-card${checked ? ' selected' : ''}" data-qid="${q.id}">
+      <input type="checkbox" ${checked ? 'checked' : ''} onchange="togglePrintQuestion('${q.id}', this.checked)">
+      <div class="psc-info">
+        <div class="psc-title">${escapeHtml(q.title)}</div>
+        <div class="psc-meta">
+          <span class="qb-tag category">${escapeHtml(q.category)}</span>
+          <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+          ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
+        </div>
+      </div>
+      <span class="psc-blanks">${q.blocks.length} block${q.blocks.length !== 1 ? 's' : ''}</span>
+    </label>`;
+  });
+  grid.innerHTML = html;
+  updatePrintCount();
+}
+
+function togglePrintQuestion(id, checked) {
+  if (checked) {
+    printSelectedIds.add(id);
+  } else {
+    printSelectedIds.delete(id);
+  }
+  // Update card visual
+  const card = document.querySelector(`.print-select-card[data-qid="${id}"]`);
+  if (card) card.classList.toggle('selected', checked);
+  // Update select-all checkbox
+  const selectAll = document.getElementById('printSelectAll');
+  if (selectAll) selectAll.checked = printSelectedIds.size === questionBank.length && questionBank.length > 0;
+  updatePrintCount();
+}
+
+function togglePrintSelectAll(checked) {
+  printSelectedIds.clear();
+  if (checked) {
+    questionBank.forEach(q => printSelectedIds.add(q.id));
+  }
+  document.querySelectorAll('.print-select-card input[type="checkbox"]').forEach(cb => cb.checked = checked);
+  document.querySelectorAll('.print-select-card').forEach(card => card.classList.toggle('selected', checked));
+  updatePrintCount();
+}
+
+function updatePrintCount() {
+  const countEl = document.getElementById('printSelectedCount');
+  const btn = document.getElementById('printBtn');
+  if (countEl) countEl.textContent = printSelectedIds.size + ' selected';
+  if (btn) btn.disabled = printSelectedIds.size === 0;
+}
+
+function renderPrintText(blockId, content, blanks, blankCounter) {
+  if (!content) return { html: '', counter: blankCounter };
+  const textOnly = content.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!textOnly) return { html: '', counter: blankCounter };
+  const words = textOnly.split(/\s+/);
+  const blockBlanks = blanks?.[blockId] || {};
+  let html = '';
+  let counter = blankCounter;
+  words.forEach((word, idx) => {
+    if (blockBlanks[idx]) {
+      counter++;
+      const width = Math.max(60, word.length * 8);
+      html += `<span class="print-blank-numbered" style="min-width:${width}pt;">(${counter})</span> `;
+    } else {
+      html += escapeHtml(word) + ' ';
+    }
+  });
+  return { html, counter };
+}
+
+function collectPrintBlanks(blockId, content, blanks) {
+  if (!content) return [];
+  const textOnly = content.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!textOnly) return [];
+  const words = textOnly.split(/\s+/);
+  const blockBlanks = blanks?.[blockId] || {};
+  const result = [];
+  words.forEach((word, idx) => {
+    if (blockBlanks[idx]) {
+      result.push(word);
+    }
+  });
+  return result;
+}
+
+function printWorksheet() {
+  if (printSelectedIds.size === 0) {
+    showToast('Select at least one question to print', 'info');
+    return;
+  }
+
+  const selected = questionBank.filter(q => printSelectedIds.has(q.id));
+  const output = document.getElementById('printOutput');
+  let allHtml = '';
+  const answerKeyData = []; // { title, answers: [word1, word2, ...] }
+  let blankCounter = 0; // global counter across all questions
+
+  selected.forEach((q, qIndex) => {
+    let qHtml = `<div class="print-question-page">`;
+
+    // Worksheet header on first page
+    if (qIndex === 0) {
+      qHtml += `<div class="print-worksheet-header">
+        <h1>CER Worksheet</h1>
+        <p>Polymath Learning Centre</p>
+      </div>
+      <div class="print-student-info">
+        <span>Name: ___________________________</span>
+        <span>Date: _______________</span>
+        <span>Class: ___________</span>
+      </div>`;
+    }
+
+    // Question header
+    qHtml += `<div class="print-q-header">
+      <h2>${escapeHtml(q.title)}</h2>
+      <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
+    </div>`;
+
+    const qAnswers = [];
+
+    // Render blocks
+    q.blocks.forEach(block => {
+      switch (block.type) {
+        case 'text': {
+          const result = renderPrintText(block.id, block.content, q.blanks, blankCounter);
+          blankCounter = result.counter;
+          qHtml += `<div class="print-text-block">${result.html}</div>`;
+          // Collect answers
+          const words = collectPrintBlanks(block.id, block.content, q.blanks);
+          qAnswers.push(...words);
+          break;
+        }
+        case 'image': {
+          if (block.url) {
+            qHtml += `<div class="print-text-block"><img src="${escapeHtml(block.url)}" alt="Image"></div>`;
+          }
+          break;
+        }
+        case 'answer': {
+          qHtml += `<div class="print-cer-section">`;
+          // Claim
+          const claimResult = renderPrintText(block.id + '_claim', block.claim, q.blanks, blankCounter);
+          blankCounter = claimResult.counter;
+          qHtml += `<div class="print-cer-label">Claim</div><div class="print-cer-content">${claimResult.html}</div>`;
+          qAnswers.push(...collectPrintBlanks(block.id + '_claim', block.claim, q.blanks));
+
+          // Evidence
+          const evResult = renderPrintText(block.id + '_evidence', block.evidence, q.blanks, blankCounter);
+          blankCounter = evResult.counter;
+          qHtml += `<div class="print-cer-label">Evidence</div><div class="print-cer-content">${evResult.html}</div>`;
+          qAnswers.push(...collectPrintBlanks(block.id + '_evidence', block.evidence, q.blanks));
+
+          // Reasoning
+          const resResult = renderPrintText(block.id + '_reasoning', block.reasoning, q.blanks, blankCounter);
+          blankCounter = resResult.counter;
+          qHtml += `<div class="print-cer-label">Reasoning</div><div class="print-cer-content">${resResult.html}</div>`;
+          qAnswers.push(...collectPrintBlanks(block.id + '_reasoning', block.reasoning, q.blanks));
+
+          qHtml += `</div>`;
+          break;
+        }
+        case 'explanation': {
+          // Skip explanations in student printout
+          break;
+        }
+        case 'video': {
+          if (block.url) {
+            qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`;
+          }
+          break;
+        }
+        case 'table': {
+          if (block.headers || block.data) {
+            let tHtml = '<table class="print-table"><thead><tr>';
+            const cols = block.cols || 3;
+            for (let c = 0; c < cols; c++) {
+              tHtml += `<th>${escapeHtml(block.headers?.[c] || '')}</th>`;
+            }
+            tHtml += '</tr></thead><tbody>';
+            const rows = block.rows || 3;
+            for (let r = 0; r < rows; r++) {
+              tHtml += '<tr>';
+              for (let c = 0; c < cols; c++) {
+                tHtml += `<td>${escapeHtml(block.data?.[r]?.[c] || '')}</td>`;
+              }
+              tHtml += '</tr>';
+            }
+            tHtml += '</tbody></table>';
+            qHtml += tHtml;
+          }
+          break;
+        }
+      }
+    });
+
+    qHtml += `</div>`; // close print-question-page
+    allHtml += qHtml;
+
+    answerKeyData.push({ title: q.title, answers: qAnswers });
+  });
+
+  // Answer Key Page
+  const hasAnyBlanks = answerKeyData.some(d => d.answers.length > 0);
+  if (hasAnyBlanks) {
+    allHtml += `<div class="print-question-page print-answer-key-page">`;
+    allHtml += `<h2>Answer Key</h2>`;
+    let globalNum = 0;
+    answerKeyData.forEach(qData => {
+      if (qData.answers.length === 0) return;
+      allHtml += `<div class="print-ak-question">`;
+      allHtml += `<h4>${escapeHtml(qData.title)}</h4>`;
+      allHtml += `<div class="print-ak-answers">`;
+      qData.answers.forEach(word => {
+        globalNum++;
+        allHtml += `<div class="ak-item"><span class="ak-num">${globalNum}.</span> <span class="ak-word">${escapeHtml(word)}</span></div>`;
+      });
+      allHtml += `</div></div>`;
+    });
+    allHtml += `</div>`;
+  }
+
+  output.innerHTML = allHtml;
+  window.print();
+}
+
+// =====================================================================
 // STORAGE (localStorage)
 // =====================================================================
 function saveToStorage() {
@@ -3362,6 +3923,10 @@ window.updateTableDimensions = updateTableDimensions;
 window.execCmd = execCmd;
 window.execCmdVal = execCmdVal;
 window.previewImage = previewImage;
+window.renderPrintSelect = renderPrintSelect;
+window.togglePrintQuestion = togglePrintQuestion;
+window.togglePrintSelectAll = togglePrintSelectAll;
+window.printWorksheet = printWorksheet;
 </script>
 </body>
 </html>
