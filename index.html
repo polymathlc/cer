@@ -2214,6 +2214,12 @@ import {
   signOut,
   updateProfile
 } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-auth.js";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc
+} from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -2230,6 +2236,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const auth = getAuth(app);
+const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
 // Expose auth functions globally so onclick handlers work
@@ -2377,7 +2384,7 @@ function getAuthErrorMessage(code) {
 // =====================================================================
 // AUTH STATE LISTENER
 // =====================================================================
-function enterApp(user) {
+async function enterApp(user) {
   const displayName = user.displayName || user.email.split('@')[0];
   currentUser = {
     uid: user.uid,
@@ -2388,7 +2395,7 @@ function enterApp(user) {
   showPage('appWrapper');
   document.querySelector('.avatar').textContent = displayName[0].toUpperCase();
   document.querySelector('.sidebar-footer div div:first-child').textContent = displayName;
-  loadFromStorage();
+  await loadFromStorage();
   loadSampleData();
   renderBlocks();
   showToast('Welcome, ' + displayName + '!', 'success');
@@ -3707,26 +3714,43 @@ function printWorksheet() {
 }
 
 // =====================================================================
-// STORAGE (localStorage)
+// STORAGE (Firestore)
 // =====================================================================
+let _saveTimeout = null;
+
 function saveToStorage() {
+  // Debounce writes to Firestore (wait 500ms after last change)
+  if (_saveTimeout) clearTimeout(_saveTimeout);
+  _saveTimeout = setTimeout(() => {
+    _saveToFirestore();
+  }, 500);
+}
+
+async function _saveToFirestore() {
+  if (!currentUser || !currentUser.uid) return;
   try {
-    const data = { questionBank, vettingList };
-    // Use in-memory only since localStorage may not be available
-    window.__cerData = data;
+    const data = { questionBank, vettingList, updatedAt: new Date().toISOString() };
+    await setDoc(doc(db, 'users', currentUser.uid), data);
   } catch (e) {
-    // Silently fail
+    console.error('Firestore save error:', e);
   }
 }
 
-function loadFromStorage() {
+async function loadFromStorage() {
+  if (!currentUser || !currentUser.uid) {
+    updateCounts();
+    populateTopicFilter();
+    return;
+  }
   try {
-    if (window.__cerData) {
-      questionBank = window.__cerData.questionBank || [];
-      vettingList = window.__cerData.vettingList || [];
+    const snap = await getDoc(doc(db, 'users', currentUser.uid));
+    if (snap.exists()) {
+      const data = snap.data();
+      questionBank = data.questionBank || [];
+      vettingList = data.vettingList || [];
     }
   } catch (e) {
-    // Silently fail
+    console.error('Firestore load error:', e);
   }
   updateCounts();
   populateTopicFilter();
