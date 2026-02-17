@@ -1615,15 +1615,25 @@ option {
     margin: 18mm 16mm 20mm 16mm;
   }
 
-  /* Each question breaks to a new page */
+  /* Each question on its own page, scaled to fit */
   .print-question-page {
     page-break-after: always;
     page-break-inside: avoid;
     max-width: 100%;
     padding: 0;
+    overflow: hidden;
   }
   .print-question-page:last-of-type:not(.print-answer-key-page) {
     page-break-after: always;
+  }
+  .print-question-page img {
+    max-width: 100%;
+    max-height: 180pt;
+    object-fit: contain;
+  }
+  .print-text-block img {
+    display: block;
+    margin: 6pt 0;
   }
 
   /* Answer key starts on its own page */
@@ -1702,25 +1712,24 @@ option {
     color: transparent;
   }
   .print-blank-numbered {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
+    display: inline-block;
     min-width: 70pt;
-    margin: 0 2pt;
-    vertical-align: bottom;
+    margin: 0 3pt;
+    text-align: center;
+    vertical-align: baseline;
   }
   .print-blank-line {
     display: block;
     width: 100%;
     border-bottom: 1.5pt solid #000;
-    min-height: 14pt;
+    height: 16pt;
   }
   .print-blank-num {
     display: block;
     font-size: 7pt;
-    color: #999;
-    margin-top: 1pt;
-    line-height: 1;
+    color: #666;
+    margin-top: 2pt;
+    line-height: 1.2;
   }
 
   /* CER section in print */
@@ -1799,6 +1808,117 @@ option {
   .print-ak-answers .ak-word {
     font-weight: 600;
   }
+}
+
+/* ========== STUDENT SETUP ========== */
+.student-setup-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+}
+.student-setup-row input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  outline: none;
+}
+.student-setup-row input:focus { border-color: var(--primary); }
+.student-setup-row select {
+  padding: 6px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  outline: none;
+  background: var(--surface);
+}
+.student-setup-row .remove-student-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-light);
+}
+.student-setup-row .remove-student-btn:hover {
+  background: var(--accent-red-light);
+  color: var(--accent-red);
+}
+
+/* ========== PRACTICE MODE ========== */
+.practice-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.practice-card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.practice-card-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+}
+.practice-card-body {
+  padding: 20px;
+  line-height: 1.8;
+}
+.practice-card-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+}
+.practice-card-body table th, .practice-card-body table td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 0.88rem;
+}
+.practice-card-body table th {
+  background: var(--surface-alt);
+  font-weight: 600;
+}
+.practice-actions {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.practice-score {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.practice-student-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: var(--primary-light);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--primary);
 }
 
 /* ========== VETTING LIST ========== */
@@ -2099,6 +2219,11 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Print Worksheet
       </div>
+      <div class="nav-section-label">Students</div>
+      <div class="nav-item" data-page="practice" onclick="navigateTo('practice')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        Practice Mode
+      </div>
     </nav>
     <div class="sidebar-footer">
       <div class="avatar">A</div>
@@ -2315,6 +2440,36 @@ option {
       </div>
     </div>
 
+    <!-- ===== PAGE: PRACTICE MODE ===== -->
+    <div class="page" id="page-practice">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Practice Mode</h2>
+          </div>
+          <div class="subtitle">Fill in the blanks to practice CER questions</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <select id="practiceStudentSelect" class="form-select" onchange="onPracticeStudentChange()" style="min-width:160px;">
+            <option value="">Select student...</option>
+          </select>
+          <button class="btn btn-outline" onclick="openStudentSetup()" title="Manage Students" style="padding:8px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:780px;">
+        <div id="practiceContainer">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            <h3>Select a Student</h3>
+            <p>Choose a student from the dropdown above, then click "Next Question" to start practising.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== PAGE: PRINT WORKSHEET ===== -->
     <div class="page" id="page-print">
       <div class="page-header">
@@ -2384,6 +2539,26 @@ option {
     <div class="btn-group">
       <button class="btn btn-outline" onclick="closeConfirm()">Cancel</button>
       <button class="btn btn-danger" id="confirmAction" onclick="closeConfirm()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== STUDENT SETUP OVERLAY ==================== -->
+<div class="confirm-overlay" id="studentSetupOverlay">
+  <div class="confirm-dialog" style="max-width:460px;text-align:left;">
+    <h3 style="margin-bottom:4px;">Student Setup</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Add your child's details to get started with practice mode.</p>
+    <div id="studentSetupList"></div>
+    <button class="btn btn-outline" onclick="addStudentRow()" style="margin-top:10px;font-size:0.82rem;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      Add Another Child
+    </button>
+    <div class="btn-group" style="margin-top:18px;">
+      <button class="btn btn-outline" onclick="skipStudentSetup()">Skip for Now</button>
+      <button class="btn btn-primary" onclick="saveStudentSetup()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
+        Save
+      </button>
     </div>
   </div>
 </div>
@@ -2587,9 +2762,16 @@ async function enterApp(user) {
   document.querySelector('.avatar').textContent = displayName[0].toUpperCase();
   document.querySelector('.sidebar-footer div div:first-child').textContent = displayName;
   await loadFromStorage();
+  await loadStudentsFromStorage();
   loadSampleData();
   renderBlocks();
+  populatePracticeStudentSelect();
   showToast('Welcome, ' + displayName + '!', 'success');
+
+  // Prompt student setup if no students exist (first-time user)
+  if (students.length === 0) {
+    setTimeout(() => openStudentSetup(), 600);
+  }
 }
 
 onAuthStateChanged(auth, (user) => {
@@ -2627,6 +2809,7 @@ function navigateTo(page) {
     renderStudentView();
   }
   if (page === 'print') renderPrintSelect();
+  if (page === 'practice') populatePracticeStudentSelect();
   // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -4383,7 +4566,7 @@ function printWorksheet() {
         }
         case 'image': {
           if (block.url) {
-            qHtml += `<div class="print-text-block"><img src="${escapeHtml(block.url)}" alt="Image"></div>`;
+            qHtml += `<div class="print-text-block"><img src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="max-width:100%;max-height:200pt;"></div>`;
           }
           break;
         }
@@ -4454,7 +4637,29 @@ function printWorksheet() {
   }
 
   output.innerHTML = allHtml;
-  window.print();
+
+  // Auto-scale each question page to fit within one printed page
+  // A4 printable area ~ 257mm x 170mm with margins
+  requestAnimationFrame(() => {
+    const pages = output.querySelectorAll('.print-question-page');
+    const maxH = 770; // approx px for A4 printable height at 96dpi
+    pages.forEach(page => {
+      page.style.transform = '';
+      page.style.transformOrigin = 'top left';
+      const h = page.scrollHeight;
+      if (h > maxH) {
+        const scale = Math.max(0.55, maxH / h);
+        page.style.transform = `scale(${scale})`;
+        page.style.height = maxH + 'px';
+      }
+    });
+    window.print();
+    // Reset after print
+    pages.forEach(page => {
+      page.style.transform = '';
+      page.style.height = '';
+    });
+  });
 }
 
 // =====================================================================
@@ -4559,6 +4764,294 @@ function closeConfirm() {
 }
 
 // =====================================================================
+// STUDENT MANAGEMENT
+// =====================================================================
+let students = []; // [{ name: 'John', level: 'P4' }]
+let activeStudentIndex = -1;
+
+const topicLevelMap = {
+  'Living and non-living things': 'P3', 'Materials': 'P3', 'Life Cycles': 'P3', 'Magnets': 'P3',
+  'Plant Systems': 'P4', 'Human Body Systems': 'P4', 'Matter and its 3 States': 'P4', 'Light': 'P4', 'Heat': 'P4',
+  'Water and its 3 States': 'P5', 'Plant Reproduction': 'P5', 'Human Reproduction': 'P5',
+  'Human and Plant Respiration': 'P5', 'Human and Plant Transport': 'P5', 'Electrical Systems': 'P5',
+  'Forces': 'P6', 'Energy in Food': 'P6', 'Energy Conversion': 'P6',
+  'Living Together': 'P6', 'Food Chains and Webs': 'P6', 'Humans and the Environment': 'P6'
+};
+
+function getTopicLevel(topic) {
+  return topicLevelMap[topic] || 'P6'; // default to P6 for custom topics
+}
+
+function getLevelNumber(level) {
+  return parseInt(level.replace('P', '')) || 3;
+}
+
+function openStudentSetup() {
+  const overlay = document.getElementById('studentSetupOverlay');
+  const list = document.getElementById('studentSetupList');
+  list.innerHTML = '';
+  if (students.length === 0) {
+    addStudentRow();
+  } else {
+    students.forEach((s, i) => addStudentRow(s.name, s.level));
+  }
+  overlay.classList.add('active');
+}
+
+function addStudentRow(name, level) {
+  const list = document.getElementById('studentSetupList');
+  const row = document.createElement('div');
+  row.className = 'student-setup-row';
+  row.innerHTML = `
+    <input type="text" placeholder="Student name" value="${escapeHtml(name || '')}" class="student-name-input">
+    <select class="student-level-select">
+      <option value="P3"${level === 'P3' ? ' selected' : ''}>P3</option>
+      <option value="P4"${level === 'P4' ? ' selected' : ''}>P4</option>
+      <option value="P5"${level === 'P5' ? ' selected' : ''}>P5</option>
+      <option value="P6"${level === 'P6' ? ' selected' : ''}>P6</option>
+    </select>
+    <button class="remove-student-btn" onclick="this.parentElement.remove()" title="Remove">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  `;
+  list.appendChild(row);
+}
+
+function saveStudentSetup() {
+  const rows = document.querySelectorAll('#studentSetupList .student-setup-row');
+  const newStudents = [];
+  rows.forEach(row => {
+    const name = row.querySelector('.student-name-input').value.trim();
+    const level = row.querySelector('.student-level-select').value;
+    if (name) {
+      newStudents.push({ name, level });
+    }
+  });
+  if (newStudents.length === 0) {
+    showToast('Please enter at least one student name', 'error');
+    return;
+  }
+  students = newStudents;
+  saveStudentsToStorage();
+  document.getElementById('studentSetupOverlay').classList.remove('active');
+  populatePracticeStudentSelect();
+  showToast('Students saved!', 'success');
+}
+
+function skipStudentSetup() {
+  document.getElementById('studentSetupOverlay').classList.remove('active');
+}
+
+function saveStudentsToStorage() {
+  if (!currentUser) return;
+  const ref = doc(db, 'users', currentUser.uid);
+  setDoc(ref, { students }, { merge: true }).catch(err => {
+    console.error('Failed to save students:', err);
+  });
+}
+
+async function loadStudentsFromStorage() {
+  if (!currentUser) return;
+  try {
+    const ref = doc(db, 'users', currentUser.uid);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      students = snap.data().students || [];
+    }
+  } catch (err) {
+    console.error('Failed to load students:', err);
+  }
+}
+
+function populatePracticeStudentSelect() {
+  const sel = document.getElementById('practiceStudentSelect');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Select student...</option>';
+  students.forEach((s, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${s.name} (${s.level})`;
+    sel.appendChild(opt);
+  });
+}
+
+function onPracticeStudentChange() {
+  const sel = document.getElementById('practiceStudentSelect');
+  activeStudentIndex = sel.value !== '' ? parseInt(sel.value) : -1;
+  if (activeStudentIndex >= 0) {
+    renderPracticeReady();
+  } else {
+    document.getElementById('practiceContainer').innerHTML = `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        <h3>Select a Student</h3>
+        <p>Choose a student from the dropdown above, then click "Next Question" to start practising.</p>
+      </div>`;
+  }
+}
+
+function renderPracticeReady() {
+  const student = students[activeStudentIndex];
+  if (!student) return;
+
+  document.getElementById('practiceContainer').innerHTML = `
+    <div class="practice-student-info">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      ${escapeHtml(student.name)} &mdash; Level ${escapeHtml(student.level)}
+    </div>
+    <div style="text-align:center;padding:30px 0;">
+      <button class="btn btn-primary btn-lg" onclick="loadRandomPracticeQuestion()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+        Start Practice
+      </button>
+    </div>`;
+}
+
+function getQuestionsForLevel(level) {
+  const maxLevel = getLevelNumber(level);
+  return questionBank.filter(q => {
+    // Only include questions that have blanks
+    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
+    if (blankCount === 0) return false;
+    const qLevel = getLevelNumber(getTopicLevel(q.topic));
+    return qLevel <= maxLevel;
+  });
+}
+
+function loadRandomPracticeQuestion() {
+  const student = students[activeStudentIndex];
+  if (!student) return;
+
+  const available = getQuestionsForLevel(student.level);
+  if (available.length === 0) {
+    document.getElementById('practiceContainer').innerHTML = `
+      <div class="practice-student-info">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        ${escapeHtml(student.name)} &mdash; Level ${escapeHtml(student.level)}
+      </div>
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <h3>No Questions Available</h3>
+        <p>There are no fill-in-the-blank questions for ${escapeHtml(student.level)} level or below. Add questions with blanks to the Question Bank first.</p>
+      </div>`;
+    return;
+  }
+
+  const q = available[Math.floor(Math.random() * available.length)];
+  renderPracticeQuestion(q, student);
+}
+
+function renderPracticeQuestion(q, student) {
+  let html = `
+    <div class="practice-student-info">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      ${escapeHtml(student.name)} &mdash; Level ${escapeHtml(student.level)}
+      <span style="margin-left:auto;font-size:0.78rem;color:var(--text-muted);">Topic: ${escapeHtml(q.topic)}</span>
+    </div>
+    <div class="practice-card">
+      <div class="practice-card-header">
+        <h3>${escapeHtml(q.title)}</h3>
+        <div style="display:flex;gap:6px;">
+          <span class="qb-tag category">${escapeHtml(q.category)}</span>
+          <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+        </div>
+      </div>
+      <div class="practice-card-body">`;
+
+  q.blocks.forEach(block => {
+    switch (block.type) {
+      case 'text':
+        html += renderStudentText(block.id, block.content, q.blanks);
+        break;
+      case 'image':
+        if (block.url) {
+          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+        }
+        break;
+      case 'answer':
+        html += `<div class="cer-student-section">`;
+        html += `<div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div>`;
+        html += `</div>`;
+        html += `<div class="cer-student-section">`;
+        html += `<div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, q.blanks)}</div>`;
+        html += `</div>`;
+        html += `<div class="cer-student-section">`;
+        html += `<div class="cer-student-label" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div>`;
+        html += `</div>`;
+        break;
+      case 'explanation':
+        break; // hidden
+      case 'video':
+        if (block.url) {
+          const embedUrl = getYouTubeEmbedUrl(block.url);
+          if (embedUrl) {
+            html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
+          }
+        }
+        break;
+      case 'table':
+        html += renderTableReadonly(block, '');
+        break;
+    }
+  });
+
+  html += `</div>
+      <div class="practice-actions">
+        <div class="practice-score" id="practiceScoreDisplay"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="resetStudentAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+          <button class="btn btn-blue" onclick="checkPracticeAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
+            Check
+          </button>
+          <button class="btn btn-primary" onclick="loadRandomPracticeQuestion()">
+            Next Question &rarr;
+          </button>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('practiceContainer').innerHTML = html;
+}
+
+function checkPracticeAnswers() {
+  const inputs = document.querySelectorAll('#practiceContainer .blank-input');
+  let correct = 0;
+  let total = inputs.length;
+
+  inputs.forEach(input => {
+    const answer = input.dataset.answer.toLowerCase().trim();
+    const userAnswer = input.value.toLowerCase().trim();
+    if (userAnswer === answer) {
+      input.style.borderBottomColor = 'var(--primary)';
+      input.style.background = '#e8f5e9';
+      correct++;
+    } else if (userAnswer === '') {
+      input.style.borderBottomColor = 'var(--accent-orange)';
+      input.style.background = 'var(--accent-orange-light)';
+    } else {
+      input.style.borderBottomColor = 'var(--accent-red)';
+      input.style.background = 'var(--accent-red-light)';
+    }
+  });
+
+  const scoreEl = document.getElementById('practiceScoreDisplay');
+  if (total === 0) {
+    scoreEl.textContent = 'No blanks to check';
+  } else {
+    const pct = Math.round((correct / total) * 100);
+    scoreEl.textContent = `Score: ${correct}/${total} (${pct}%)`;
+    scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
+  }
+}
+
+// =====================================================================
 // SAMPLE DATA LOADER — adds one demo question to get started
 // =====================================================================
 function loadSampleData() {
@@ -4622,6 +5115,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closePreview();
     closeConfirm();
+    document.getElementById('studentSetupOverlay').classList.remove('active');
     document.querySelectorAll('.table-grid-popup.active').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.special-chars-popup.active').forEach(p => p.classList.remove('active'));
   }
@@ -4703,6 +5197,13 @@ window.tableAddRow = tableAddRow;
 window.tableRemoveRow = tableRemoveRow;
 window.tableAddCol = tableAddCol;
 window.tableRemoveCol = tableRemoveCol;
+window.openStudentSetup = openStudentSetup;
+window.addStudentRow = addStudentRow;
+window.saveStudentSetup = saveStudentSetup;
+window.skipStudentSetup = skipStudentSetup;
+window.onPracticeStudentChange = onPracticeStudentChange;
+window.loadRandomPracticeQuestion = loadRandomPracticeQuestion;
+window.checkPracticeAnswers = checkPracticeAnswers;
 </script>
 </body>
 </html>
