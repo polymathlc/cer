@@ -1702,13 +1702,25 @@ option {
     color: transparent;
   }
   .print-blank-numbered {
-    display: inline-block;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
     min-width: 70pt;
-    border-bottom: 1.5pt solid #000;
     margin: 0 2pt;
-    text-align: center;
-    font-size: 8pt;
+    vertical-align: bottom;
+  }
+  .print-blank-line {
+    display: block;
+    width: 100%;
+    border-bottom: 1.5pt solid #000;
+    min-height: 14pt;
+  }
+  .print-blank-num {
+    display: block;
+    font-size: 7pt;
     color: #999;
+    margin-top: 1pt;
+    line-height: 1;
   }
 
   /* CER section in print */
@@ -4298,7 +4310,7 @@ function renderPrintText(blockId, content, blanks, blankCounter) {
     if (blockBlanks[idx]) {
       counter++;
       const width = Math.max(60, word.length * 8);
-      html += `<span class="print-blank-numbered" style="min-width:${width}pt;">(${counter})</span> `;
+      html += `<span class="print-blank-numbered" style="min-width:${width}pt;"><span class="print-blank-line"></span><span class="print-blank-num">(${counter})</span></span> `;
     } else {
       html += escapeHtml(word) + ' ';
     }
