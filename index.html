@@ -258,8 +258,19 @@ option {
   box-shadow: var(--shadow-sm);
 }
 .block-card.dragging {
-  opacity: 0.5;
+  opacity: 0.35;
   border-style: dashed;
+  border-color: var(--primary);
+  box-shadow: none;
+  transform: scale(0.99);
+}
+.block-card.drop-above {
+  border-top: 3px solid var(--primary);
+  margin-top: -1px;
+}
+.block-card.drop-below {
+  border-bottom: 3px solid var(--primary);
+  margin-bottom: -1px;
 }
 .block-header {
   display: flex;
@@ -3575,6 +3586,12 @@ function renderBlocks() {
     
     card.addEventListener('dragstart', handleDragStart);
     card.addEventListener('dragover', handleDragOver);
+    card.addEventListener('dragleave', function(e) {
+      // Only clear if leaving to outside this card entirely
+      if (!this.contains(e.relatedTarget)) {
+        this.classList.remove('drop-above', 'drop-below');
+      }
+    });
     card.addEventListener('drop', handleDrop);
     card.addEventListener('dragend', handleDragEnd);
     
@@ -3779,31 +3796,61 @@ function previewImage(blockId, url) {
 // =====================================================================
 let draggedBlockId = null;
 
+function clearDropIndicators() {
+  document.querySelectorAll('.block-card.drop-above, .block-card.drop-below').forEach(el => {
+    el.classList.remove('drop-above', 'drop-below');
+  });
+}
+
+function getDropPosition(e, el) {
+  const rect = el.getBoundingClientRect();
+  return e.clientY < rect.top + rect.height / 2 ? 'above' : 'below';
+}
+
 function handleDragStart(e) {
   draggedBlockId = this.dataset.id;
   this.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
+  // Tiny delay so the ghost image renders before we style the source
+  setTimeout(() => this.classList.add('dragging'), 0);
 }
 
 function handleDragOver(e) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
+  const targetId = this.dataset.id;
+  if (!draggedBlockId || draggedBlockId === targetId) return;
+
+  clearDropIndicators();
+  const pos = getDropPosition(e, this);
+  this.classList.add(pos === 'above' ? 'drop-above' : 'drop-below');
 }
 
 function handleDrop(e) {
   e.preventDefault();
   const targetId = this.dataset.id;
+  const pos = getDropPosition(e, this);
+  clearDropIndicators();
+
   if (draggedBlockId && draggedBlockId !== targetId) {
     const fromIdx = blocks.findIndex(b => b.id === draggedBlockId);
-    const toIdx = blocks.findIndex(b => b.id === targetId);
+    let toIdx = blocks.findIndex(b => b.id === targetId);
+    // Insert after target when dropping on lower half
+    if (pos === 'below' && toIdx >= fromIdx) toIdx++;
+    else if (pos === 'above' && toIdx > fromIdx) { /* keep toIdx */ }
+    else if (pos === 'below' && toIdx < fromIdx) toIdx++;
+
     const [moved] = blocks.splice(fromIdx, 1);
-    blocks.splice(toIdx, 0, moved);
+    const insertAt = blocks.findIndex(b => b.id === targetId);
+    const finalIdx = pos === 'above' ? insertAt : insertAt + 1;
+    blocks.splice(Math.max(0, finalIdx), 0, moved);
     renderBlocks();
   }
 }
 
 function handleDragEnd() {
   this.classList.remove('dragging');
+  clearDropIndicators();
   draggedBlockId = null;
 }
 
