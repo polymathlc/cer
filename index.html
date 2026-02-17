@@ -447,6 +447,7 @@ option {
   padding: 8px 12px;
   text-align: left;
   font-size: 0.88rem;
+  position: relative;
 }
 .editable-table th {
   background: var(--surface-alt);
@@ -454,12 +455,184 @@ option {
   font-size: 0.82rem;
   color: var(--text-muted);
 }
-.editable-table td[contenteditable] {
+.editable-table td[contenteditable],
+.editable-table th[contenteditable] {
   outline: none;
   cursor: text;
 }
-.editable-table td[contenteditable]:focus {
+.editable-table td[contenteditable]:focus,
+.editable-table th[contenteditable]:focus {
   background: var(--primary-light);
+}
+.editable-table td.table-cell-selected,
+.editable-table th.table-cell-selected {
+  background: #d0e8ff !important;
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
+}
+
+/* Table Grid Popup (size selector) */
+.table-grid-popup-wrapper {
+  position: relative;
+  display: inline-block;
+}
+.table-grid-popup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  display: none;
+}
+.table-grid-popup.active {
+  display: block;
+}
+.table-grid-popup-label {
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  font-family: 'Space Mono', monospace;
+}
+.table-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 24px);
+  grid-template-rows: repeat(8, 24px);
+  gap: 2px;
+}
+.table-grid-cell {
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.table-grid-cell.highlighted {
+  background: var(--accent-teal-light);
+  border-color: var(--accent-teal);
+}
+
+/* Advanced Table Toolbar */
+.table-advanced-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  background: var(--surface-alt);
+}
+.table-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.table-toolbar-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-light);
+  font-weight: 700;
+  margin-right: 3px;
+  white-space: nowrap;
+}
+.table-toolbar-btn {
+  min-width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: all var(--transition);
+  padding: 0 5px;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.table-toolbar-btn:hover {
+  background: var(--surface);
+  border-color: var(--border);
+}
+.table-toolbar-btn.active {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.table-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 5px;
+}
+.table-toolbar-color-input {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 2px;
+  background: var(--surface);
+}
+.table-toolbar-color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.table-toolbar-color-input::-webkit-color-swatch { border: none; border-radius: 2px; }
+.table-hint {
+  width: 100%;
+  font-size: 0.7rem;
+  color: var(--text-light);
+  font-style: italic;
+  margin-top: 2px;
+  padding: 0 2px;
+}
+
+/* Special Characters Popup */
+.special-chars-popup {
+  position: absolute;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  box-shadow: var(--shadow-lg);
+  z-index: 300;
+  display: none;
+  max-width: 280px;
+}
+.special-chars-popup.active {
+  display: block;
+}
+.special-chars-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 30px);
+  gap: 2px;
+}
+.special-char-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all var(--transition);
+}
+.special-char-btn:hover {
+  background: var(--accent-teal-light);
+  border-color: var(--accent-teal);
 }
 
 /* Answer Block - CER Framework */
@@ -2025,10 +2198,16 @@ option {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               Add Image URL
             </button>
-            <button class="add-block-btn table-add" onclick="addBlock('table')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-              Add Table
-            </button>
+            <div class="table-grid-popup-wrapper">
+              <button class="add-block-btn table-add" onclick="toggleTableGridPopup(event)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                Add Table
+              </button>
+              <div class="table-grid-popup" id="tableGridPopup">
+                <div class="table-grid-popup-label" id="tableGridLabel">Select size</div>
+                <div class="table-grid" id="tableGrid"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2493,10 +2672,12 @@ function addBlock(type) {
       block.url = '';
       break;
     case 'table':
-      block.rows = 3;
-      block.cols = 2;
-      block.data = Array.from({ length: 3 }, () => Array.from({ length: 2 }, () => ''));
-      block.headers = Array.from({ length: 2 }, () => '');
+      block.rows = block.rows || 3;
+      block.cols = block.cols || 3;
+      block.data = Array.from({ length: block.rows }, () => Array.from({ length: block.cols }, () => ''));
+      block.headers = Array.from({ length: block.cols }, () => '');
+      block.merges = [];
+      block.cellStyles = {};
       break;
   }
   
@@ -2578,6 +2759,610 @@ function updateTableDimensions(id, dimension, value) {
   }
   
   renderBlocks();
+}
+
+// =====================================================================
+// ADVANCED TABLE FUNCTIONS
+// =====================================================================
+let tableSelectedCells = {}; // { blockId: Set of "r_c" keys (r=-1 for headers) }
+let activeTableBlockId = null;
+
+function toggleTableGridPopup(e) {
+  e.stopPropagation();
+  const popup = document.getElementById('tableGridPopup');
+  const grid = document.getElementById('tableGrid');
+  const isActive = popup.classList.contains('active');
+
+  // Close any open popups first
+  document.querySelectorAll('.table-grid-popup.active').forEach(p => p.classList.remove('active'));
+
+  if (!isActive) {
+    // Build 8x8 grid
+    grid.innerHTML = '';
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'table-grid-cell';
+        cell.dataset.row = r;
+        cell.dataset.col = c;
+        cell.addEventListener('mouseenter', () => highlightGridCells(r, c));
+        cell.addEventListener('click', () => {
+          addTableWithSize(r + 1, c + 1);
+          popup.classList.remove('active');
+        });
+        grid.appendChild(cell);
+      }
+    }
+    document.getElementById('tableGridLabel').textContent = 'Select size';
+    popup.classList.add('active');
+  }
+}
+
+function highlightGridCells(row, col) {
+  const cells = document.querySelectorAll('#tableGrid .table-grid-cell');
+  cells.forEach(cell => {
+    const r = parseInt(cell.dataset.row);
+    const c = parseInt(cell.dataset.col);
+    if (r <= row && c <= col) {
+      cell.classList.add('highlighted');
+    } else {
+      cell.classList.remove('highlighted');
+    }
+  });
+  document.getElementById('tableGridLabel').textContent = `${row + 1} x ${col + 1}`;
+}
+
+function addTableWithSize(rows, cols) {
+  const id = generateBlockId();
+  const block = { id, type: 'table', rows, cols };
+  block.data = Array.from({ length: rows }, () => Array.from({ length: cols }, () => ''));
+  block.headers = Array.from({ length: cols }, (_, i) => 'Header ' + (i + 1));
+  block.merges = [];
+  block.cellStyles = {};
+  blocks.push(block);
+  renderBlocks();
+  showToast(`Table (${rows}x${cols}) added`, 'info');
+}
+
+// Close table grid popup when clicking elsewhere
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.table-grid-popup-wrapper')) {
+    document.querySelectorAll('.table-grid-popup.active').forEach(p => p.classList.remove('active'));
+  }
+  // Close special chars popup
+  if (!e.target.closest('.special-chars-popup') && !e.target.closest('.table-toolbar-btn[data-action="special"]')) {
+    document.querySelectorAll('.special-chars-popup.active').forEach(p => p.classList.remove('active'));
+  }
+});
+
+function getTableSelectedCells(blockId) {
+  if (!tableSelectedCells[blockId]) tableSelectedCells[blockId] = new Set();
+  return tableSelectedCells[blockId];
+}
+
+function handleTableCellClick(blockId, row, col, event) {
+  const selected = getTableSelectedCells(blockId);
+  const key = row + '_' + col;
+  activeTableBlockId = blockId;
+
+  if (event.shiftKey || event.ctrlKey || event.metaKey) {
+    // Multi-select
+    if (selected.has(key)) {
+      selected.delete(key);
+    } else {
+      selected.add(key);
+    }
+  } else {
+    // Single select — clear and select just this one
+    selected.clear();
+    selected.add(key);
+  }
+
+  updateTableCellSelection(blockId);
+}
+
+function updateTableCellSelection(blockId) {
+  const selected = getTableSelectedCells(blockId);
+  const table = document.querySelector(`[data-table-block="${blockId}"]`);
+  if (!table) return;
+
+  table.querySelectorAll('th, td').forEach(cell => {
+    const key = cell.dataset.row + '_' + cell.dataset.col;
+    if (selected.has(key)) {
+      cell.classList.add('table-cell-selected');
+    } else {
+      cell.classList.remove('table-cell-selected');
+    }
+  });
+}
+
+function tableSelectRow(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const selected = getTableSelectedCells(blockId);
+  // Find which rows are already partially selected
+  const selectedRows = new Set();
+  selected.forEach(key => {
+    selectedRows.add(parseInt(key.split('_')[0]));
+  });
+  // Select all cells in those rows; if none selected, select first row
+  if (selectedRows.size === 0) selectedRows.add(0);
+  selected.clear();
+  selectedRows.forEach(r => {
+    for (let c = 0; c < block.cols; c++) {
+      selected.add(r + '_' + c);
+    }
+  });
+  updateTableCellSelection(blockId);
+}
+
+function tableSelectCol(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const selected = getTableSelectedCells(blockId);
+  const selectedCols = new Set();
+  selected.forEach(key => {
+    selectedCols.add(parseInt(key.split('_')[1]));
+  });
+  if (selectedCols.size === 0) selectedCols.add(0);
+  selected.clear();
+  selectedCols.forEach(c => {
+    // Include header row (-1)
+    selected.add('-1_' + c);
+    for (let r = 0; r < block.rows; r++) {
+      selected.add(r + '_' + c);
+    }
+  });
+  updateTableCellSelection(blockId);
+}
+
+function tableSelectAll(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const selected = getTableSelectedCells(blockId);
+  selected.clear();
+  for (let c = 0; c < block.cols; c++) {
+    selected.add('-1_' + c);
+  }
+  for (let r = 0; r < block.rows; r++) {
+    for (let c = 0; c < block.cols; c++) {
+      selected.add(r + '_' + c);
+    }
+  }
+  updateTableCellSelection(blockId);
+}
+
+function tableClearSelection(blockId) {
+  const selected = getTableSelectedCells(blockId);
+  selected.clear();
+  updateTableCellSelection(blockId);
+}
+
+function isCellMerged(block, r, c) {
+  if (!block.merges) return null;
+  for (const m of block.merges) {
+    if (r >= m.sr && r <= m.er && c >= m.sc && c <= m.ec) {
+      return m;
+    }
+  }
+  return null;
+}
+
+function isMergeOrigin(block, r, c) {
+  if (!block.merges) return null;
+  for (const m of block.merges) {
+    if (r === m.sr && c === m.sc) return m;
+  }
+  return null;
+}
+
+function tableMergeCells(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const selected = getTableSelectedCells(blockId);
+  if (selected.size < 2) {
+    showToast('Select at least 2 cells to merge', 'error');
+    return;
+  }
+
+  // Find bounding box of selected cells (body only, row >= 0)
+  let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
+  let hasBodyCells = false;
+  selected.forEach(key => {
+    const [r, c] = key.split('_').map(Number);
+    if (r < 0) return; // skip headers
+    hasBodyCells = true;
+    if (r < minR) minR = r;
+    if (r > maxR) maxR = r;
+    if (c < minC) minC = c;
+    if (c > maxC) maxC = c;
+  });
+
+  if (!hasBodyCells) {
+    showToast('Cannot merge header cells', 'error');
+    return;
+  }
+
+  // Check for overlapping merges
+  if (!block.merges) block.merges = [];
+  for (const m of block.merges) {
+    if (minR <= m.er && maxR >= m.sr && minC <= m.ec && maxC >= m.sc) {
+      showToast('Selection overlaps an existing merge', 'error');
+      return;
+    }
+  }
+
+  block.merges.push({ sr: minR, sc: minC, er: maxR, ec: maxC });
+  selected.clear();
+  renderBlocks();
+  showToast('Cells merged', 'success');
+}
+
+function tableUnmergeCells(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || !block.merges) return;
+  const selected = getTableSelectedCells(blockId);
+
+  if (selected.size === 0) {
+    // Unmerge all
+    block.merges = [];
+  } else {
+    // Unmerge any merge that overlaps with selection
+    const toRemove = [];
+    selected.forEach(key => {
+      const [r, c] = key.split('_').map(Number);
+      block.merges.forEach((m, idx) => {
+        if (r >= m.sr && r <= m.er && c >= m.sc && c <= m.ec) {
+          if (!toRemove.includes(idx)) toRemove.push(idx);
+        }
+      });
+    });
+    toRemove.sort((a, b) => b - a).forEach(idx => block.merges.splice(idx, 1));
+  }
+
+  selected.clear();
+  renderBlocks();
+  showToast('Cells unmerged', 'success');
+}
+
+function tableFormatSelected(blockId, tag) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const selected = getTableSelectedCells(blockId);
+
+  selected.forEach(key => {
+    const [r, c] = key.split('_').map(Number);
+    const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${r}"][data-col="${c}"]`);
+    if (cell) {
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.execCommand(tag, false, null);
+      sel.removeAllRanges();
+      // Save content
+      if (r === -1) {
+        block.headers[c] = cell.innerHTML;
+      } else {
+        block.data[r][c] = cell.innerHTML;
+      }
+    }
+  });
+}
+
+function tableInsertSpecialChar(blockId, char) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const selected = getTableSelectedCells(blockId);
+
+  if (selected.size === 0) {
+    showToast('Select a cell first', 'info');
+    return;
+  }
+
+  // Insert into the last selected cell
+  const lastKey = Array.from(selected).pop();
+  const [r, c] = lastKey.split('_').map(Number);
+  const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${r}"][data-col="${c}"]`);
+  if (cell) {
+    cell.focus();
+    document.execCommand('insertText', false, char);
+    if (r === -1) {
+      block.headers[c] = cell.innerHTML;
+    } else {
+      block.data[r][c] = cell.innerHTML;
+    }
+  }
+
+  // Close special chars popup
+  document.querySelectorAll('.special-chars-popup.active').forEach(p => p.classList.remove('active'));
+}
+
+function toggleSpecialCharsPopup(blockId, btnEl) {
+  const popup = btnEl.closest('.table-advanced-toolbar').querySelector('.special-chars-popup');
+  if (!popup) return;
+  popup.classList.toggle('active');
+}
+
+function tableSetAlign(blockId, align) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  if (!block.cellStyles) block.cellStyles = {};
+  const selected = getTableSelectedCells(blockId);
+
+  selected.forEach(key => {
+    if (!block.cellStyles[key]) block.cellStyles[key] = {};
+    block.cellStyles[key].textAlign = align;
+    const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${key.split('_')[0]}"][data-col="${key.split('_')[1]}"]`);
+    if (cell) cell.style.textAlign = align;
+  });
+}
+
+function tableSetVerticalAlign(blockId, valign) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  if (!block.cellStyles) block.cellStyles = {};
+  const selected = getTableSelectedCells(blockId);
+
+  selected.forEach(key => {
+    if (!block.cellStyles[key]) block.cellStyles[key] = {};
+    block.cellStyles[key].verticalAlign = valign;
+    const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${key.split('_')[0]}"][data-col="${key.split('_')[1]}"]`);
+    if (cell) cell.style.verticalAlign = valign;
+  });
+}
+
+function tableSetColor(blockId, color) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  if (!block.cellStyles) block.cellStyles = {};
+  const selected = getTableSelectedCells(blockId);
+
+  selected.forEach(key => {
+    if (!block.cellStyles[key]) block.cellStyles[key] = {};
+    block.cellStyles[key].backgroundColor = color;
+    const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${key.split('_')[0]}"][data-col="${key.split('_')[1]}"]`);
+    if (cell) cell.style.backgroundColor = color;
+  });
+}
+
+function tableAddRow(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  block.data.push(Array.from({ length: block.cols }, () => ''));
+  block.rows++;
+  renderBlocks();
+}
+
+function tableRemoveRow(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || block.rows <= 1) return;
+  block.data.pop();
+  block.rows--;
+  // Remove merges that reference deleted rows
+  if (block.merges) {
+    block.merges = block.merges.filter(m => m.er < block.rows);
+  }
+  // Clean up cell styles for removed row
+  if (block.cellStyles) {
+    Object.keys(block.cellStyles).forEach(key => {
+      const r = parseInt(key.split('_')[0]);
+      if (r >= block.rows) delete block.cellStyles[key];
+    });
+  }
+  renderBlocks();
+}
+
+function tableAddCol(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  block.headers.push('');
+  block.data.forEach(row => row.push(''));
+  block.cols++;
+  renderBlocks();
+}
+
+function tableRemoveCol(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || block.cols <= 1) return;
+  block.headers.pop();
+  block.data.forEach(row => row.pop());
+  block.cols--;
+  // Remove merges that reference deleted cols
+  if (block.merges) {
+    block.merges = block.merges.filter(m => m.ec < block.cols);
+  }
+  if (block.cellStyles) {
+    Object.keys(block.cellStyles).forEach(key => {
+      const c = parseInt(key.split('_')[1]);
+      if (c >= block.cols) delete block.cellStyles[key];
+    });
+  }
+  renderBlocks();
+}
+
+function renderTableReadonly(block, tableClass) {
+  if (!block.headers && !block.data) return '';
+  const cols = block.cols || 3;
+  const rows = block.rows || 3;
+  const merges = block.merges || [];
+  const cellStyles = block.cellStyles || {};
+
+  let html = `<table${tableClass ? ' class="' + tableClass + '"' : ''}>`;
+  html += '<thead><tr>';
+  for (let c = 0; c < cols; c++) {
+    const sk = '-1_' + c;
+    const s = cellStyles[sk] || {};
+    let st = '';
+    if (s.textAlign) st += 'text-align:' + s.textAlign + ';';
+    if (s.verticalAlign) st += 'vertical-align:' + s.verticalAlign + ';';
+    if (s.backgroundColor) st += 'background-color:' + s.backgroundColor + ';';
+    html += `<th${st ? ' style="' + st + '"' : ''}>${block.headers?.[c] || ''}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+  for (let r = 0; r < rows; r++) {
+    html += '<tr>';
+    for (let c = 0; c < cols; c++) {
+      // Check if covered by merge (not origin)
+      let isCovered = false;
+      let mergeInfo = null;
+      for (const m of merges) {
+        if (r >= m.sr && r <= m.er && c >= m.sc && c <= m.ec) {
+          if (r === m.sr && c === m.sc) {
+            mergeInfo = m;
+          } else {
+            isCovered = true;
+          }
+          break;
+        }
+      }
+      if (isCovered) continue;
+
+      const sk = r + '_' + c;
+      const s = cellStyles[sk] || {};
+      let st = '';
+      if (s.textAlign) st += 'text-align:' + s.textAlign + ';';
+      if (s.verticalAlign) st += 'vertical-align:' + s.verticalAlign + ';';
+      if (s.backgroundColor) st += 'background-color:' + s.backgroundColor + ';';
+
+      let spanAttr = '';
+      if (mergeInfo) {
+        const rs = mergeInfo.er - mergeInfo.sr + 1;
+        const cs = mergeInfo.ec - mergeInfo.sc + 1;
+        if (rs > 1) spanAttr += ` rowspan="${rs}"`;
+        if (cs > 1) spanAttr += ` colspan="${cs}"`;
+      }
+
+      html += `<td${st ? ' style="' + st + '"' : ''}${spanAttr}>${block.data?.[r]?.[c] || ''}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
+function renderAdvancedTableBlock(block) {
+  const bid = block.id;
+  const specialChars = ['\u00B0','\u00B2','\u00B3','\u00BC','\u00BD','\u00BE','\u00D7','\u00F7',
+    '\u03B1','\u03B2','\u03B3','\u03B4','\u03B5','\u03B8','\u03BB','\u03BC',
+    '\u03C0','\u03C3','\u03C6','\u03C9','\u0394','\u03A3','\u03A9','\u221A',
+    '\u221E','\u2248','\u2260','\u2264','\u2265','\u00B1','\u2192','\u2190'];
+
+  let specialCharsHTML = '<div class="special-chars-popup" id="specialPopup_' + bid + '"><div class="special-chars-grid">';
+  specialChars.forEach(ch => {
+    specialCharsHTML += `<button class="special-char-btn" onmousedown="event.preventDefault();tableInsertSpecialChar('${bid}','${ch}')">${ch}</button>`;
+  });
+  specialCharsHTML += '</div></div>';
+
+  let html = `
+    <div class="table-advanced-toolbar">
+      <div class="table-toolbar-group">
+        <span class="table-toolbar-label">Format:</span>
+        <button class="table-toolbar-btn" title="Bold" onmousedown="event.preventDefault();tableFormatSelected('${bid}','bold')"><b>B</b></button>
+        <button class="table-toolbar-btn" title="Italic" onmousedown="event.preventDefault();tableFormatSelected('${bid}','italic')"><i>I</i></button>
+        <button class="table-toolbar-btn" title="Subscript" onmousedown="event.preventDefault();tableFormatSelected('${bid}','subscript')" style="font-size:0.7rem;">X<sub>2</sub></button>
+        <button class="table-toolbar-btn" title="Superscript" onmousedown="event.preventDefault();tableFormatSelected('${bid}','superscript')" style="font-size:0.7rem;">X<sup>2</sup></button>
+        <button class="table-toolbar-btn" title="Special Characters" data-action="special" onmousedown="event.preventDefault();toggleSpecialCharsPopup('${bid}', this)">\u03A9</button>
+        ${specialCharsHTML}
+      </div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group">
+        <span class="table-toolbar-label">Select:</span>
+        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableSelectRow('${bid}')">Row</button>
+        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableSelectCol('${bid}')">Col</button>
+        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableSelectAll('${bid}')">All</button>
+        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableClearSelection('${bid}')">Clear</button>
+      </div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group">
+        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableMergeCells('${bid}')">Merge</button>
+        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableUnmergeCells('${bid}')">Unmerge</button>
+      </div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group">
+        <span class="table-toolbar-label">Align:</span>
+        <button class="table-toolbar-btn" title="Align Left" onmousedown="event.preventDefault();tableSetAlign('${bid}','left')">\u2261</button>
+        <button class="table-toolbar-btn" title="Align Center" onmousedown="event.preventDefault();tableSetAlign('${bid}','center')">\u2261</button>
+        <button class="table-toolbar-btn" title="Align Right" onmousedown="event.preventDefault();tableSetAlign('${bid}','right')">\u2261</button>
+      </div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group">
+        <span class="table-toolbar-label">V-Align:</span>
+        <button class="table-toolbar-btn" title="Top" onmousedown="event.preventDefault();tableSetVerticalAlign('${bid}','top')">T</button>
+        <button class="table-toolbar-btn" title="Middle" onmousedown="event.preventDefault();tableSetVerticalAlign('${bid}','middle')">M</button>
+        <button class="table-toolbar-btn" title="Bottom" onmousedown="event.preventDefault();tableSetVerticalAlign('${bid}','bottom')">B</button>
+      </div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group">
+        <span class="table-toolbar-label">Color:</span>
+        <input type="color" class="table-toolbar-color-input" value="#ffffff" onchange="tableSetColor('${bid}', this.value)">
+      </div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group">
+        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableAddRow('${bid}')">+ Row</button>
+        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableRemoveRow('${bid}')">- Row</button>
+        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableAddCol('${bid}')">+ Col</button>
+        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableRemoveCol('${bid}')">- Col</button>
+      </div>
+      <div class="table-hint">Shift+Click or Ctrl+Click to select multiple cells for merging</div>
+    </div>
+    <div class="block-body">
+      <table class="editable-table" data-table-block="${bid}">
+        <thead><tr>`;
+
+  // Header row
+  for (let c = 0; c < block.cols; c++) {
+    const styleKey = '-1_' + c;
+    const styles = block.cellStyles?.[styleKey] || {};
+    let styleStr = '';
+    if (styles.textAlign) styleStr += 'text-align:' + styles.textAlign + ';';
+    if (styles.verticalAlign) styleStr += 'vertical-align:' + styles.verticalAlign + ';';
+    if (styles.backgroundColor) styleStr += 'background-color:' + styles.backgroundColor + ';';
+
+    html += `<th contenteditable="true" data-row="-1" data-col="${c}" style="${styleStr}"
+                onclick="handleTableCellClick('${bid}', -1, ${c}, event)"
+                oninput="saveBlockContent('${bid}', 'header_${c}', this.innerHTML)">${block.headers[c] || ''}</th>`;
+  }
+
+  html += `</tr></thead><tbody>`;
+
+  // Body rows with merge support
+  if (!block.merges) block.merges = [];
+
+  for (let r = 0; r < block.rows; r++) {
+    html += '<tr>';
+    for (let c = 0; c < block.cols; c++) {
+      // Check if this cell is inside a merge but not the origin
+      const merge = isCellMerged(block, r, c);
+      if (merge && !(merge.sr === r && merge.sc === c)) {
+        continue; // skip cells covered by merge
+      }
+
+      const styleKey = r + '_' + c;
+      const styles = block.cellStyles?.[styleKey] || {};
+      let styleStr = '';
+      if (styles.textAlign) styleStr += 'text-align:' + styles.textAlign + ';';
+      if (styles.verticalAlign) styleStr += 'vertical-align:' + styles.verticalAlign + ';';
+      if (styles.backgroundColor) styleStr += 'background-color:' + styles.backgroundColor + ';';
+
+      let spanAttr = '';
+      if (merge) {
+        const rowspan = merge.er - merge.sr + 1;
+        const colspan = merge.ec - merge.sc + 1;
+        if (rowspan > 1) spanAttr += ` rowspan="${rowspan}"`;
+        if (colspan > 1) spanAttr += ` colspan="${colspan}"`;
+      }
+
+      html += `<td contenteditable="true" data-row="${r}" data-col="${c}" style="${styleStr}"${spanAttr}
+                   onclick="handleTableCellClick('${bid}', ${r}, ${c}, event)"
+                   oninput="saveBlockContent('${bid}', 'cell_${r}_${c}', this.innerHTML)">${block.data[r]?.[c] || ''}</td>`;
+    }
+    html += '</tr>';
+  }
+
+  html += `</tbody></table></div>`;
+  return html;
 }
 
 // =====================================================================
@@ -2737,33 +3522,7 @@ function renderBlocks() {
         break;
         
       case 'table':
-        let tableHTML = `
-          <div class="block-body">
-            <div class="table-controls">
-              <label>Rows:</label>
-              <input type="number" value="${block.rows}" min="1" max="20" 
-                     onchange="updateTableDimensions('${block.id}', 'rows', this.value)">
-              <label>Columns:</label>
-              <input type="number" value="${block.cols}" min="1" max="10"
-                     onchange="updateTableDimensions('${block.id}', 'cols', this.value)">
-            </div>
-            <table class="editable-table">
-              <thead><tr>`;
-        for (let c = 0; c < block.cols; c++) {
-          tableHTML += `<th contenteditable="true" 
-                            oninput="saveBlockContent('${block.id}', 'header_${c}', this.textContent)">${escapeHtml(block.headers[c] || '')}</th>`;
-        }
-        tableHTML += `</tr></thead><tbody>`;
-        for (let r = 0; r < block.rows; r++) {
-          tableHTML += '<tr>';
-          for (let c = 0; c < block.cols; c++) {
-            tableHTML += `<td contenteditable="true"
-                             oninput="saveBlockContent('${block.id}', 'cell_${r}_${c}', this.textContent)">${escapeHtml(block.data[r]?.[c] || '')}</td>`;
-          }
-          tableHTML += '</tr>';
-        }
-        tableHTML += `</tbody></table></div>`;
-        bodyHTML = tableHTML;
+        bodyHTML = renderAdvancedTableBlock(block);
         break;
     }
     
@@ -2917,26 +3676,13 @@ function openPreview() {
         }
         break;
       case 'table':
-        html += '<table>';
-        html += '<thead><tr>';
-        for (let c = 0; c < block.cols; c++) {
-          html += `<th>${escapeHtml(block.headers[c] || '')}</th>`;
-        }
-        html += '</tr></thead><tbody>';
-        for (let r = 0; r < block.rows; r++) {
-          html += '<tr>';
-          for (let c = 0; c < block.cols; c++) {
-            html += `<td>${escapeHtml(block.data[r]?.[c] || '')}</td>`;
-          }
-          html += '</tr>';
-        }
-        html += '</tbody></table>';
+        html += renderTableReadonly(block, '');
         break;
     }
   });
-  
+
   html += `</div>`;
-  
+
   document.getElementById('previewBody').innerHTML = html;
   document.getElementById('previewOverlay').classList.add('active');
   updateBlankCount();
@@ -3033,6 +3779,22 @@ function collectQuestionData() {
     const field = el.dataset.field;
     const block = blocks.find(b => b.id === bid);
     if (block) block[field] = el.innerHTML;
+  });
+
+  // Sync table contenteditable cells
+  document.querySelectorAll('[data-table-block]').forEach(table => {
+    const bid = table.dataset.tableBlock;
+    const block = blocks.find(b => b.id === bid);
+    if (!block) return;
+    table.querySelectorAll('th[data-row][data-col], td[data-row][data-col]').forEach(cell => {
+      const r = parseInt(cell.dataset.row);
+      const c = parseInt(cell.dataset.col);
+      if (r === -1) {
+        block.headers[c] = cell.innerHTML;
+      } else {
+        if (block.data[r]) block.data[r][c] = cell.innerHTML;
+      }
+    });
   });
   
   return {
@@ -3368,24 +4130,11 @@ function renderStudentView() {
         }
         break;
       case 'table':
-        html += '<table>';
-        html += '<thead><tr>';
-        for (let c = 0; c < block.cols; c++) {
-          html += `<th>${escapeHtml(block.headers[c] || '')}</th>`;
-        }
-        html += '</tr></thead><tbody>';
-        for (let r = 0; r < block.rows; r++) {
-          html += '<tr>';
-          for (let c = 0; c < block.cols; c++) {
-            html += `<td>${escapeHtml(block.data[r]?.[c] || '')}</td>`;
-          }
-          html += '</tr>';
-        }
-        html += '</tbody></table>';
+        html += renderTableReadonly(block, '');
         break;
     }
   });
-  
+
   html += `</div></div>`;
   
   // Submit button
@@ -3660,24 +4409,7 @@ function printWorksheet() {
           break;
         }
         case 'table': {
-          if (block.headers || block.data) {
-            let tHtml = '<table class="print-table"><thead><tr>';
-            const cols = block.cols || 3;
-            for (let c = 0; c < cols; c++) {
-              tHtml += `<th>${escapeHtml(block.headers?.[c] || '')}</th>`;
-            }
-            tHtml += '</tr></thead><tbody>';
-            const rows = block.rows || 3;
-            for (let r = 0; r < rows; r++) {
-              tHtml += '<tr>';
-              for (let c = 0; c < cols; c++) {
-                tHtml += `<td>${escapeHtml(block.data?.[r]?.[c] || '')}</td>`;
-              }
-              tHtml += '</tr>';
-            }
-            tHtml += '</tbody></table>';
-            qHtml += tHtml;
-          }
+          qHtml += renderTableReadonly(block, 'print-table');
           break;
         }
       }
@@ -3878,6 +4610,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closePreview();
     closeConfirm();
+    document.querySelectorAll('.table-grid-popup.active').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.special-chars-popup.active').forEach(p => p.classList.remove('active'));
   }
 });
 
@@ -3938,6 +4672,25 @@ window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
 window.togglePrintSelectAll = togglePrintSelectAll;
 window.printWorksheet = printWorksheet;
+window.toggleTableGridPopup = toggleTableGridPopup;
+window.addTableWithSize = addTableWithSize;
+window.handleTableCellClick = handleTableCellClick;
+window.tableSelectRow = tableSelectRow;
+window.tableSelectCol = tableSelectCol;
+window.tableSelectAll = tableSelectAll;
+window.tableClearSelection = tableClearSelection;
+window.tableMergeCells = tableMergeCells;
+window.tableUnmergeCells = tableUnmergeCells;
+window.tableFormatSelected = tableFormatSelected;
+window.tableInsertSpecialChar = tableInsertSpecialChar;
+window.toggleSpecialCharsPopup = toggleSpecialCharsPopup;
+window.tableSetAlign = tableSetAlign;
+window.tableSetVerticalAlign = tableSetVerticalAlign;
+window.tableSetColor = tableSetColor;
+window.tableAddRow = tableAddRow;
+window.tableRemoveRow = tableRemoveRow;
+window.tableAddCol = tableAddCol;
+window.tableRemoveCol = tableRemoveCol;
 </script>
 </body>
 </html>
