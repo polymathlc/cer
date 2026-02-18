@@ -2883,15 +2883,21 @@ function navigateTo(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
   document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
-  if (page === 'create' && !_skipCreateReset) {
-    blocks = [];
-    selectedBlanks = {};
-    currentEditingQuestion = null;
-    document.getElementById('questionTitle').value = '';
-    document.getElementById('categorySelect').value = 'CER (Open Ended)';
-    document.getElementById('topicSelect').value = 'Heat';
-    renderBlocks();
-    setEditMode(false);
+  if (page === 'create') {
+    if (_skipCreateReset) {
+      // Coming from editQuestion — switch to edit mode
+      setEditMode(!!currentEditingQuestion);
+    } else {
+      // Fresh create — reset everything
+      blocks = [];
+      selectedBlanks = {};
+      currentEditingQuestion = null;
+      document.getElementById('questionTitle').value = '';
+      document.getElementById('categorySelect').value = 'CER (Open Ended)';
+      document.getElementById('topicSelect').value = 'Heat';
+      renderBlocks();
+      setEditMode(false);
+    }
   }
   _skipCreateReset = false;
   if (page === 'bank') renderQuestionBank();
@@ -4348,7 +4354,6 @@ function editQuestion(id) {
   renderBlocks();
   _skipCreateReset = true;
   navigateTo('create');
-  setEditMode(true);
   showToast('Editing: ' + q.title, 'info');
 }
 
