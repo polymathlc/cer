@@ -297,6 +297,7 @@ option {
 .block-type-badge.answer-badge { background: var(--primary-light); color: var(--primary); }
 .block-type-badge.explanation-badge { background: var(--accent-orange-light); color: var(--accent-orange); }
 .block-type-badge.video-badge { background: var(--accent-red-light); color: var(--accent-red); }
+.block-type-badge.plainanswer-badge { background: #e0f2f1; color: #00897b; }
 .block-type-badge.table-badge { background: var(--accent-teal-light); color: var(--accent-teal); }
 .block-type-badge svg { width: 13px; height: 13px; }
 
@@ -681,6 +682,25 @@ option {
 .cer-textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+/* Plain Answer Block */
+.plain-answer-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--transition);
+}
+.plain-answer-textarea:focus {
+  border-color: #00897b;
+  box-shadow: 0 0 0 3px #e0f2f1;
 }
 
 /* ========== ADD BLOCK BUTTONS ========== */
@@ -2268,11 +2288,26 @@ option {
           <div class="form-group">
             <label class="form-label">Category</label>
             <select id="categorySelect" class="form-select">
-              <option value="CER (Open Ended)">CER (Open Ended)</option>
-              <option value="CER (Fill in Blanks)">CER (Fill in Blanks)</option>
-              <option value="CER (MCQ)">CER (MCQ)</option>
-              <option value="Open Ended">Open Ended</option>
-              <option value="MCQ">MCQ</option>
+              <optgroup label="── CER ──">
+                <option value="CER (Open Ended)">CER (Open Ended)</option>
+                <option value="CER (Fill in Blanks)">CER (Fill in Blanks)</option>
+                <option value="CER (MCQ)">CER (MCQ)</option>
+              </optgroup>
+              <optgroup label="── Skills ──">
+                <option value="Single Relationship">Single Relationship</option>
+                <option value="Double Relationship">Double Relationship</option>
+                <option value="Reliability">Reliability</option>
+                <option value="Fairness">Fairness</option>
+                <option value="Accuracy">Accuracy</option>
+                <option value="Constant Variable">Constant Variable</option>
+                <option value="Hypothesis">Hypothesis</option>
+                <option value="Aim">Aim</option>
+                <option value="Conclusion">Conclusion</option>
+              </optgroup>
+              <optgroup label="── Other ──">
+                <option value="Open Ended">Open Ended</option>
+                <option value="MCQ">MCQ</option>
+              </optgroup>
             </select>
           </div>
           <div class="form-group">
@@ -2331,6 +2366,10 @@ option {
               Add Text
             </button>
             <button class="add-block-btn answer-add" onclick="addBlock('answer')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              Add CER Answer
+            </button>
+            <button class="add-block-btn answer-add" onclick="addBlock('plainanswer')" style="border-color:var(--accent-teal-light);">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               Add Answer
             </button>
@@ -2403,11 +2442,26 @@ option {
           </select>
           <select id="bankFilterCategory" onchange="renderQuestionBank()">
             <option value="">All Categories</option>
-            <option value="CER (Open Ended)">CER (Open Ended)</option>
-            <option value="CER (Fill in Blanks)">CER (Fill in Blanks)</option>
-            <option value="CER (MCQ)">CER (MCQ)</option>
-            <option value="Open Ended">Open Ended</option>
-            <option value="MCQ">MCQ</option>
+            <optgroup label="── CER ──">
+              <option value="CER (Open Ended)">CER (Open Ended)</option>
+              <option value="CER (Fill in Blanks)">CER (Fill in Blanks)</option>
+              <option value="CER (MCQ)">CER (MCQ)</option>
+            </optgroup>
+            <optgroup label="── Skills ──">
+              <option value="Single Relationship">Single Relationship</option>
+              <option value="Double Relationship">Double Relationship</option>
+              <option value="Reliability">Reliability</option>
+              <option value="Fairness">Fairness</option>
+              <option value="Accuracy">Accuracy</option>
+              <option value="Constant Variable">Constant Variable</option>
+              <option value="Hypothesis">Hypothesis</option>
+              <option value="Aim">Aim</option>
+              <option value="Conclusion">Conclusion</option>
+            </optgroup>
+            <optgroup label="── Other ──">
+              <option value="Open Ended">Open Ended</option>
+              <option value="MCQ">MCQ</option>
+            </optgroup>
           </select>
         </div>
         <div class="question-bank-grid" id="questionBankGrid"></div>
@@ -2870,6 +2924,9 @@ function addBlock(type) {
       block.claim = '';
       block.evidence = '';
       block.reasoning = '';
+      break;
+    case 'plainanswer':
+      block.content = '';
       break;
     case 'explanation':
       block.content = '';
@@ -3612,6 +3669,11 @@ function renderBlocks() {
         badgeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
         badgeLabel = 'Answer Block (CER)';
         break;
+      case 'plainanswer':
+        badgeClass = 'plainanswer-badge';
+        badgeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg>';
+        badgeLabel = 'Answer Block';
+        break;
       case 'explanation':
         badgeClass = 'explanation-badge';
         badgeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
@@ -3699,7 +3761,16 @@ function renderBlocks() {
           </div>
         `;
         break;
-        
+
+      case 'plainanswer':
+        bodyHTML = `
+          <div class="block-body">
+            <textarea class="plain-answer-textarea" placeholder="Enter the answer..."
+                      oninput="saveBlockContent('${block.id}', 'content', this.value)">${escapeHtml(block.content || '')}</textarea>
+          </div>
+        `;
+        break;
+
       case 'explanation':
         bodyHTML = `
           <div class="text-toolbar">
@@ -3899,6 +3970,11 @@ function openPreview() {
         html += `<div class="cer-preview-section">`;
         html += `<div class="cer-preview-label reasoning-bg">Reasoning</div>`;
         html += `<div class="cer-preview-content">${renderSelectableText(block.id + '_reasoning', block.reasoning, 'reasoning')}</div>`;
+        html += `</div>`;
+        break;
+      case 'plainanswer':
+        html += `<div style="padding:10px 0;">`;
+        html += renderSelectableText(block.id, block.content, 'answer');
         html += `</div>`;
         break;
       case 'explanation':
@@ -4360,6 +4436,9 @@ function renderStudentView() {
         html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div>`;
         html += `</div>`;
         break;
+      case 'plainanswer':
+        html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
+        break;
       case 'explanation':
         // Hidden from students by default
         break;
@@ -4638,6 +4717,13 @@ function printWorksheet() {
           qAnswers.push(...collectPrintBlanks(block.id + '_reasoning', block.reasoning, q.blanks));
 
           qHtml += `</div>`;
+          break;
+        }
+        case 'plainanswer': {
+          const paResult = renderPrintText(block.id, block.content, q.blanks, blankCounter);
+          blankCounter = paResult.counter;
+          qHtml += `<div class="print-text-block">${paResult.html}</div>`;
+          qAnswers.push(...collectPrintBlanks(block.id, block.content, q.blanks));
           break;
         }
         case 'explanation': {
@@ -5028,6 +5114,9 @@ function renderPracticeQuestion(q, student) {
         html += `<div class="cer-student-label" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
         html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div>`;
         html += `</div>`;
+        break;
+      case 'plainanswer':
+        html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
         break;
       case 'explanation':
         break; // hidden
