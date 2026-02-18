@@ -5130,6 +5130,33 @@ function doPrintWorksheetOpen() {
 
 // ===== SHARED: Auto-scale pages and trigger print =====
 function autoscaleAndPrint(output) {
+  // Wait for all images to load before printing
+  const images = Array.from(output.querySelectorAll('img'));
+  const unloaded = images.filter(img => !img.complete);
+
+  if (unloaded.length > 0) {
+    let remaining = unloaded.length;
+    const onReady = () => {
+      remaining--;
+      if (remaining <= 0) doScaleAndPrint(output);
+    };
+    unloaded.forEach(img => {
+      img.addEventListener('load', onReady, { once: true });
+      img.addEventListener('error', onReady, { once: true });
+    });
+    // Safety timeout — don't wait forever if an image is very slow
+    setTimeout(() => {
+      if (remaining > 0) {
+        remaining = 0;
+        doScaleAndPrint(output);
+      }
+    }, 5000);
+  } else {
+    doScaleAndPrint(output);
+  }
+}
+
+function doScaleAndPrint(output) {
   requestAnimationFrame(() => {
     const pages = output.querySelectorAll('.print-question-page');
     const maxH = 770;
