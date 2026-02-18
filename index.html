@@ -1839,6 +1839,107 @@ option {
   .print-ak-answers .ak-word {
     font-weight: 600;
   }
+
+  /* Open-ended blank answer box */
+  .print-open-answer-box {
+    border: 1.5pt solid #999;
+    border-radius: 4pt;
+    min-height: 60pt;
+    margin: 4pt 0 6pt 0;
+    padding: 6pt;
+    position: relative;
+  }
+  .print-open-answer-box .print-open-lines {
+    width: 100%;
+  }
+  .print-open-answer-box .print-open-line {
+    border-bottom: 1pt dotted #ccc;
+    height: 20pt;
+    width: 100%;
+  }
+  .print-open-cer-section {
+    border: 1pt solid #ccc;
+    border-radius: 4pt;
+    margin: 10pt 0;
+    overflow: hidden;
+  }
+  .print-open-cer-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4pt 10pt;
+    font-weight: 700;
+    border-bottom: 1pt solid #ccc;
+    background: #f5f5f5;
+  }
+  .print-open-cer-box {
+    padding: 6pt 10pt;
+    min-height: 56pt;
+  }
+  .print-open-cer-box .print-open-line {
+    border-bottom: 1pt dotted #ccc;
+    height: 20pt;
+    width: 100%;
+  }
+
+  /* Open-ended answer key full text */
+  .print-ak-fulltext {
+    font-size: 10pt;
+    line-height: 1.6;
+    padding-left: 12pt;
+    margin-bottom: 4pt;
+  }
+  .print-ak-fulltext .ak-sublabel {
+    font-family: 'Space Mono', monospace;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #777;
+    font-weight: 700;
+    margin-top: 4pt;
+  }
+  .print-ak-fulltext .ak-fullcontent {
+    margin-top: 2pt;
+    font-weight: 500;
+  }
+}
+
+/* ========== PRINT MODE SELECTION ========== */
+.print-mode-options {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+}
+.print-mode-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 20px 16px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: center;
+}
+.print-mode-btn:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.print-mode-btn .print-mode-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+.print-mode-btn .print-mode-desc {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.35;
 }
 
 /* ========== STUDENT SETUP ========== */
@@ -2621,6 +2722,27 @@ option {
       <button class="btn btn-outline" onclick="closeConfirm()">Cancel</button>
       <button class="btn btn-danger" id="confirmAction" onclick="closeConfirm()">Delete</button>
     </div>
+  </div>
+</div>
+
+<!-- ==================== PRINT MODE SELECTION OVERLAY ==================== -->
+<div class="confirm-overlay" id="printModeOverlay">
+  <div class="confirm-dialog" style="max-width:420px;text-align:center;">
+    <h3 style="margin-bottom:6px;">Choose Worksheet Format</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:20px;">How should the answer sections appear on the worksheet?</p>
+    <div class="print-mode-options">
+      <button class="print-mode-btn" onclick="confirmPrintMode('blanks')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;margin-bottom:6px;"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h13"/><rect x="16" y="10" width="5" height="4" rx="1" stroke-dasharray="2 1"/></svg>
+        <span class="print-mode-title">Fill in the Blanks</span>
+        <span class="print-mode-desc">Selected words are blanked out with numbered lines. Answer key lists blanked words.</span>
+      </button>
+      <button class="print-mode-btn" onclick="confirmPrintMode('open')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;margin-bottom:6px;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10" stroke-dasharray="2 2"/><path d="M7 12h10" stroke-dasharray="2 2"/><path d="M7 16h6" stroke-dasharray="2 2"/></svg>
+        <span class="print-mode-title">Open Ended</span>
+        <span class="print-mode-desc">Answer sections are blank writing boxes. Answer key shows the full answer text.</span>
+      </button>
+    </div>
+    <button class="btn btn-outline" onclick="closePrintMode()" style="margin-top:16px;font-size:0.82rem;">Cancel</button>
   </div>
 </div>
 
@@ -4737,17 +4859,56 @@ function printWorksheet() {
     showToast('Select at least one question to print', 'info');
     return;
   }
+  // Show mode selection overlay
+  document.getElementById('printModeOverlay').classList.add('active');
+}
 
+function closePrintMode() {
+  document.getElementById('printModeOverlay').classList.remove('active');
+}
+
+function confirmPrintMode(mode) {
+  closePrintMode();
+  if (mode === 'blanks') {
+    doPrintWorksheetBlanks();
+  } else {
+    doPrintWorksheetOpen();
+  }
+}
+
+// Helper: generate dotted writing lines for open-ended boxes
+function openEndedLines(count) {
+  let html = '';
+  for (let i = 0; i < count; i++) {
+    html += `<div class="print-open-line"></div>`;
+  }
+  return html;
+}
+
+// Helper: strip HTML tags to plain text
+function stripHtml(content) {
+  if (!content) return '';
+  return content.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Helper: estimate how many writing lines an answer needs
+function linesForText(text, charsPerLine) {
+  if (!text) return 3;
+  const plain = stripHtml(text);
+  return Math.max(3, Math.ceil(plain.length / (charsPerLine || 60)));
+}
+
+// ===== FILL IN THE BLANKS MODE =====
+function doPrintWorksheetBlanks() {
   const selected = questionBank.filter(q => printSelectedIds.has(q.id));
   const output = document.getElementById('printOutput');
   let allHtml = '';
-  const answerKeyData = []; // { title, answers: [word1, word2, ...] }
-  let blankCounter = 0; // global counter across all questions
+  const answerKeyData = [];
+  let blankCounter = 0;
 
   selected.forEach((q, qIndex) => {
     let qHtml = `<div class="print-question-page">`;
 
-    // Worksheet header on first page
     if (qIndex === 0) {
       qHtml += `<div class="print-worksheet-header">
         <h1>CER Worksheet</h1>
@@ -4760,7 +4921,6 @@ function printWorksheet() {
       </div>`;
     }
 
-    // Question header
     qHtml += `<div class="print-q-header">
       <h2>${escapeHtml(q.title)}</h2>
       <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
@@ -4768,16 +4928,13 @@ function printWorksheet() {
 
     const qAnswers = [];
 
-    // Render blocks
     q.blocks.forEach(block => {
       switch (block.type) {
         case 'text': {
           const result = renderPrintText(block.id, block.content, q.blanks, blankCounter);
           blankCounter = result.counter;
           qHtml += `<div class="print-text-block">${result.html}</div>`;
-          // Collect answers
-          const words = collectPrintBlanks(block.id, block.content, q.blanks);
-          qAnswers.push(...words);
+          qAnswers.push(...collectPrintBlanks(block.id, block.content, q.blanks));
           break;
         }
         case 'image': {
@@ -4788,19 +4945,16 @@ function printWorksheet() {
         }
         case 'answer': {
           qHtml += `<div class="print-cer-section">`;
-          // Claim
           const claimResult = renderPrintText(block.id + '_claim', block.claim, q.blanks, blankCounter);
           blankCounter = claimResult.counter;
           qHtml += `<div class="print-cer-label">Claim</div><div class="print-cer-content">${claimResult.html}</div>`;
           qAnswers.push(...collectPrintBlanks(block.id + '_claim', block.claim, q.blanks));
 
-          // Evidence
           const evResult = renderPrintText(block.id + '_evidence', block.evidence, q.blanks, blankCounter);
           blankCounter = evResult.counter;
           qHtml += `<div class="print-cer-label">Evidence</div><div class="print-cer-content">${evResult.html}</div>`;
           qAnswers.push(...collectPrintBlanks(block.id + '_evidence', block.evidence, q.blanks));
 
-          // Reasoning
           const resResult = renderPrintText(block.id + '_reasoning', block.reasoning, q.blanks, blankCounter);
           blankCounter = resResult.counter;
           qHtml += `<div class="print-cer-label">Reasoning</div><div class="print-cer-content">${resResult.html}</div>`;
@@ -4816,10 +4970,7 @@ function printWorksheet() {
           qAnswers.push(...collectPrintBlanks(block.id, block.content, q.blanks));
           break;
         }
-        case 'explanation': {
-          // Skip explanations in student printout
-          break;
-        }
+        case 'explanation': break;
         case 'video': {
           if (block.url) {
             qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`;
@@ -4833,13 +4984,12 @@ function printWorksheet() {
       }
     });
 
-    qHtml += `</div>`; // close print-question-page
+    qHtml += `</div>`;
     allHtml += qHtml;
-
     answerKeyData.push({ title: q.title, answers: qAnswers });
   });
 
-  // Answer Key Page
+  // Answer Key Page (fill in blanks — numbered words)
   const hasAnyBlanks = answerKeyData.some(d => d.answers.length > 0);
   if (hasAnyBlanks) {
     allHtml += `<div class="print-question-page print-answer-key-page">`;
@@ -4860,12 +5010,129 @@ function printWorksheet() {
   }
 
   output.innerHTML = allHtml;
+  autoscaleAndPrint(output);
+}
 
-  // Auto-scale each question page to fit within one printed page
-  // A4 printable area ~ 257mm x 170mm with margins
+// ===== OPEN ENDED MODE =====
+function doPrintWorksheetOpen() {
+  const selected = questionBank.filter(q => printSelectedIds.has(q.id));
+  const output = document.getElementById('printOutput');
+  let allHtml = '';
+  const answerKeyData = []; // { title, sections: [{ label?, content }] }
+
+  selected.forEach((q, qIndex) => {
+    let qHtml = `<div class="print-question-page">`;
+
+    if (qIndex === 0) {
+      qHtml += `<div class="print-worksheet-header">
+        <h1>CER Worksheet</h1>
+        <p>Polymath Learning Centre</p>
+      </div>
+      <div class="print-student-info">
+        <span>Name: ___________________________</span>
+        <span>Date: _______________</span>
+        <span>Class: ___________</span>
+      </div>`;
+    }
+
+    qHtml += `<div class="print-q-header">
+      <h2>${escapeHtml(q.title)}</h2>
+      <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
+    </div>`;
+
+    const qSections = [];
+
+    q.blocks.forEach(block => {
+      switch (block.type) {
+        case 'text': {
+          // Text blocks are shown normally (questions / instructions)
+          const textOnly = stripHtml(block.content);
+          if (textOnly) {
+            qHtml += `<div class="print-text-block">${escapeHtml(textOnly)}</div>`;
+          }
+          break;
+        }
+        case 'image': {
+          if (block.url) {
+            qHtml += `<div class="print-text-block"><img src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="max-width:100%;max-height:200pt;"></div>`;
+          }
+          break;
+        }
+        case 'answer': {
+          // CER answer — show labelled blank writing boxes
+          qHtml += `<div class="print-open-cer-section">`;
+          const claimLines = linesForText(block.claim, 70);
+          qHtml += `<div class="print-open-cer-label">Claim</div><div class="print-open-cer-box">${openEndedLines(claimLines)}</div>`;
+
+          const evLines = linesForText(block.evidence, 70);
+          qHtml += `<div class="print-open-cer-label">Evidence</div><div class="print-open-cer-box">${openEndedLines(evLines)}</div>`;
+
+          const resLines = linesForText(block.reasoning, 70);
+          qHtml += `<div class="print-open-cer-label">Reasoning</div><div class="print-open-cer-box">${openEndedLines(resLines)}</div>`;
+          qHtml += `</div>`;
+
+          // Collect full text for answer key
+          qSections.push({ label: 'Claim', content: stripHtml(block.claim) });
+          qSections.push({ label: 'Evidence', content: stripHtml(block.evidence) });
+          qSections.push({ label: 'Reasoning', content: stripHtml(block.reasoning) });
+          break;
+        }
+        case 'plainanswer': {
+          // Plain answer — blank writing box
+          const paLines = linesForText(block.content, 70);
+          qHtml += `<div class="print-open-answer-box"><div class="print-open-lines">${openEndedLines(paLines)}</div></div>`;
+          qSections.push({ label: null, content: stripHtml(block.content) });
+          break;
+        }
+        case 'explanation': break;
+        case 'video': {
+          if (block.url) {
+            qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`;
+          }
+          break;
+        }
+        case 'table': {
+          qHtml += renderTableReadonly(block, 'print-table');
+          break;
+        }
+      }
+    });
+
+    qHtml += `</div>`;
+    allHtml += qHtml;
+    answerKeyData.push({ title: q.title, sections: qSections });
+  });
+
+  // Answer Key Page (open ended — full answer text)
+  const hasAnySections = answerKeyData.some(d => d.sections.length > 0);
+  if (hasAnySections) {
+    allHtml += `<div class="print-question-page print-answer-key-page">`;
+    allHtml += `<h2>Answer Key</h2>`;
+    answerKeyData.forEach(qData => {
+      if (qData.sections.length === 0) return;
+      allHtml += `<div class="print-ak-question">`;
+      allHtml += `<h4>${escapeHtml(qData.title)}</h4>`;
+      allHtml += `<div class="print-ak-fulltext">`;
+      qData.sections.forEach(sec => {
+        if (sec.label) {
+          allHtml += `<div class="ak-sublabel">${escapeHtml(sec.label)}</div>`;
+        }
+        allHtml += `<div class="ak-fullcontent">${escapeHtml(sec.content)}</div>`;
+      });
+      allHtml += `</div></div>`;
+    });
+    allHtml += `</div>`;
+  }
+
+  output.innerHTML = allHtml;
+  autoscaleAndPrint(output);
+}
+
+// ===== SHARED: Auto-scale pages and trigger print =====
+function autoscaleAndPrint(output) {
   requestAnimationFrame(() => {
     const pages = output.querySelectorAll('.print-question-page');
-    const maxH = 770; // approx px for A4 printable height at 96dpi
+    const maxH = 770;
     pages.forEach(page => {
       page.style.transform = '';
       page.style.transformOrigin = 'top left';
@@ -4877,7 +5144,6 @@ function printWorksheet() {
       }
     });
     window.print();
-    // Reset after print
     pages.forEach(page => {
       page.style.transform = '';
       page.style.height = '';
@@ -5495,6 +5761,8 @@ window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
 window.togglePrintSelectAll = togglePrintSelectAll;
 window.printWorksheet = printWorksheet;
+window.confirmPrintMode = confirmPrintMode;
+window.closePrintMode = closePrintMode;
 window.toggleTableGridPopup = toggleTableGridPopup;
 window.addTableWithSize = addTableWithSize;
 window.handleTableCellClick = handleTableCellClick;
