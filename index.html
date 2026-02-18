@@ -2867,6 +2867,15 @@ function navigateTo(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
   document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
+  if (page === 'create') {
+    blocks = [];
+    selectedBlanks = {};
+    currentEditingQuestion = null;
+    document.getElementById('questionTitle').value = '';
+    document.getElementById('categorySelect').value = 'CER (Open Ended)';
+    document.getElementById('topicSelect').value = 'Heat';
+    renderBlocks();
+  }
   if (page === 'bank') renderQuestionBank();
   if (page === 'vetting') renderVettingList();
   if (page === 'student') {
