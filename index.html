@@ -2664,7 +2664,8 @@ import {
   getFirestore,
   doc,
   getDoc,
-  setDoc
+  setDoc,
+  runTransaction
 } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 
 // Firebase configuration
@@ -4188,6 +4189,8 @@ function addToBank() {
   showToast('Question added to bank', 'success');
   updateCounts();
   saveToStorage();
+  renderQuestionBank(); // Ensure the new question shows up immediately
+  navigateTo('bank'); // Navigate to bank page to show the new question
 }
 
 function saveEditedQuestion() {
@@ -4245,6 +4248,7 @@ function addToVetting() {
   vettingList.push(q);
   updateCounts();
   saveToStorage();
+  renderVettingList(); // Ensure the new question shows up immediately
   showToast('Question added to vetting list', 'success');
 }
 
@@ -4891,8 +4895,63 @@ function saveToStorage() {
     _saveTimer = null;
     if (!currentUser) return;
     const ref = doc(db, 'users', currentUser.uid);
-    setDoc(ref, { questionBank, vettingList }, { merge: true }).catch(err => {
+    
+    // Use transaction to merge arrays by ID, preventing data loss from concurrent updates
+    runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(ref);
+      let existingQuestionBank = [];
+      let existingVettingList = [];
+      
+      if (snap.exists()) {
+        const data = snap.data();
+        existingQuestionBank = data.questionBank || [];
+        existingVettingList = data.vettingList || [];
+      }
+      
+      // Merge arrays by ID: keep existing questions, update/add local ones
+      const mergedQuestionBank = [...existingQuestionBank];
+      const mergedVettingList = [...existingVettingList];
+      
+      // Create maps for quick lookup
+      const questionBankMap = new Map(mergedQuestionBank.map(q => [q.id, q]));
+      const vettingListMap = new Map(mergedVettingList.map(q => [q.id, q]));
+      
+      // Merge local questionBank
+      questionBank.forEach(localQ => {
+        if (questionBankMap.has(localQ.id)) {
+          // Update existing question
+          const idx = mergedQuestionBank.findIndex(q => q.id === localQ.id);
+          mergedQuestionBank[idx] = localQ;
+        } else {
+          // Add new question
+          mergedQuestionBank.push(localQ);
+        }
+      });
+      
+      // Merge local vettingList
+      vettingList.forEach(localQ => {
+        if (vettingListMap.has(localQ.id)) {
+          // Update existing question
+          const idx = mergedVettingList.findIndex(q => q.id === localQ.id);
+          mergedVettingList[idx] = localQ;
+        } else {
+          // Add new question
+          mergedVettingList.push(localQ);
+        }
+      });
+      
+      // Update local arrays to match merged data
+      questionBank = mergedQuestionBank;
+      vettingList = mergedVettingList;
+      
+      // Save merged data
+      transaction.set(ref, { questionBank: mergedQuestionBank, vettingList: mergedVettingList });
+    }).catch(err => {
       console.error('Firestore save failed:', err);
+      // Fallback to simple save if transaction fails
+      setDoc(ref, { questionBank, vettingList }, { merge: true }).catch(fallbackErr => {
+        console.error('Firestore fallback save failed:', fallbackErr);
+      });
     });
   }, 500);
 }
@@ -4904,8 +4963,42 @@ async function loadFromStorage() {
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const data = snap.data();
-      questionBank = data.questionBank || [];
-      vettingList = data.vettingList || [];
+      const remoteQuestionBank = data.questionBank || [];
+      const remoteVettingList = data.vettingList || [];
+      
+      // Merge remote data with local data by ID instead of replacing
+      // This prevents losing local changes that haven't been saved yet
+      const localQuestionBankMap = new Map(questionBank.map(q => [q.id, q]));
+      const localVettingListMap = new Map(vettingList.map(q => [q.id, q]));
+      
+      // Merge questionBank: remote takes precedence for existing IDs, but keep local unsaved items
+      const mergedQuestionBank = [...questionBank];
+      remoteQuestionBank.forEach(remoteQ => {
+        const localIdx = mergedQuestionBank.findIndex(q => q.id === remoteQ.id);
+        if (localIdx !== -1) {
+          // Update existing question with remote version
+          mergedQuestionBank[localIdx] = remoteQ;
+        } else {
+          // Add new question from remote
+          mergedQuestionBank.push(remoteQ);
+        }
+      });
+      
+      // Merge vettingList: remote takes precedence for existing IDs, but keep local unsaved items
+      const mergedVettingList = [...vettingList];
+      remoteVettingList.forEach(remoteQ => {
+        const localIdx = mergedVettingList.findIndex(q => q.id === remoteQ.id);
+        if (localIdx !== -1) {
+          // Update existing question with remote version
+          mergedVettingList[localIdx] = remoteQ;
+        } else {
+          // Add new question from remote
+          mergedVettingList.push(remoteQ);
+        }
+      });
+      
+      questionBank = mergedQuestionBank;
+      vettingList = mergedVettingList;
     }
   } catch (err) {
     console.error('Firestore load failed:', err);
