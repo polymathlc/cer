@@ -2858,6 +2858,7 @@ let questionBank = [];
 let vettingList = [];
 let selectedBlanks = {}; // { blockId: { wordIndex: true } }
 let currentEditingQuestion = null;
+let _skipCreateReset = false;
 
 // =====================================================================
 // NAVIGATION
@@ -2867,14 +2868,16 @@ function navigateTo(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
   document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
-  if (page === 'create' && !currentEditingQuestion) {
+  if (page === 'create' && !_skipCreateReset) {
     blocks = [];
     selectedBlanks = {};
+    currentEditingQuestion = null;
     document.getElementById('questionTitle').value = '';
     document.getElementById('categorySelect').value = 'CER (Open Ended)';
     document.getElementById('topicSelect').value = 'Heat';
     renderBlocks();
   }
+  _skipCreateReset = false;
   if (page === 'bank') renderQuestionBank();
   if (page === 'vetting') renderVettingList();
   if (page === 'student') {
@@ -4276,6 +4279,7 @@ function editQuestion(id) {
   selectedBlanks = JSON.parse(JSON.stringify(q.blanks || {}));
   
   renderBlocks();
+  _skipCreateReset = true;
   navigateTo('create');
   showToast('Editing: ' + q.title, 'info');
 }
