@@ -2277,9 +2277,9 @@ option {
         <div>
           <div style="display:flex;align-items:center;gap:10px;">
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
-            <h2>Create Question</h2>
+            <h2 id="createPageTitle">Create Question</h2>
           </div>
-          <div class="subtitle">Build a CER question with blocks</div>
+          <div class="subtitle" id="createPageSubtitle">Build a CER question with blocks</div>
         </div>
       </div>
       <div class="page-body">
@@ -2398,8 +2398,8 @@ option {
           </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="action-row">
+        <!-- Action Buttons (Create Mode) -->
+        <div class="action-row" id="createModeActions">
           <button class="btn btn-danger" onclick="clearForm()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             Clear Form
@@ -2415,6 +2415,21 @@ option {
           <button class="btn btn-primary" onclick="addToBank()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             Add to Question Bank
+          </button>
+        </div>
+        <!-- Action Buttons (Edit Mode) -->
+        <div class="action-row" id="editModeActions" style="display:none;">
+          <button class="btn btn-secondary" onclick="cancelEdit()" style="background:#6b7280;color:#fff;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Cancel Edit
+          </button>
+          <button class="btn btn-orange" onclick="openPreview()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            Preview & Select Blanks
+          </button>
+          <button class="btn btn-primary" onclick="saveEditedQuestion()" style="background:#10b981;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save Question
           </button>
         </div>
       </div>
@@ -2876,6 +2891,7 @@ function navigateTo(page) {
     document.getElementById('categorySelect').value = 'CER (Open Ended)';
     document.getElementById('topicSelect').value = 'Heat';
     renderBlocks();
+    setEditMode(false);
   }
   _skipCreateReset = false;
   if (page === 'bank') renderQuestionBank();
@@ -4138,29 +4154,79 @@ function collectQuestionData() {
   };
 }
 
+function setEditMode(isEditing) {
+  const title = document.getElementById('createPageTitle');
+  const subtitle = document.getElementById('createPageSubtitle');
+  const createActions = document.getElementById('createModeActions');
+  const editActions = document.getElementById('editModeActions');
+  if (isEditing) {
+    title.textContent = 'Edit Question';
+    subtitle.textContent = 'Modify and save your question';
+    createActions.style.display = 'none';
+    editActions.style.display = '';
+  } else {
+    title.textContent = 'Create Question';
+    subtitle.textContent = 'Build a CER question with blocks';
+    createActions.style.display = '';
+    editActions.style.display = 'none';
+  }
+}
+
 function addToBank() {
   if (blocks.length === 0) {
     showToast('Add some blocks before saving', 'error');
     return;
   }
   const q = collectQuestionData();
-  if (currentEditingQuestion) {
-    const idx = questionBank.findIndex(qb => qb.id === currentEditingQuestion);
-    if (idx !== -1) {
+  questionBank.push(q);
+  showToast('Question added to bank', 'success');
+  updateCounts();
+  saveToStorage();
+}
+
+function saveEditedQuestion() {
+  if (blocks.length === 0) {
+    showToast('Add some blocks before saving', 'error');
+    return;
+  }
+  if (!currentEditingQuestion) {
+    showToast('No question being edited', 'error');
+    return;
+  }
+  const q = collectQuestionData();
+  const idx = questionBank.findIndex(qb => qb.id === currentEditingQuestion);
+  if (idx !== -1) {
+    q.id = currentEditingQuestion;
+    questionBank[idx] = q;
+    showToast('Question saved successfully', 'success');
+  } else {
+    // Check vetting list too
+    const vIdx = vettingList.findIndex(v => v.id === currentEditingQuestion);
+    if (vIdx !== -1) {
       q.id = currentEditingQuestion;
-      questionBank[idx] = q;
-      showToast('Question updated in bank', 'success');
+      vettingList[vIdx] = q;
+      showToast('Question saved successfully', 'success');
     } else {
       questionBank.push(q);
       showToast('Question added to bank', 'success');
     }
-    currentEditingQuestion = null;
-  } else {
-    questionBank.push(q);
-    showToast('Question added to bank', 'success');
   }
+  currentEditingQuestion = null;
+  setEditMode(false);
   updateCounts();
   saveToStorage();
+  navigateTo('bank');
+}
+
+function cancelEdit() {
+  showConfirm('Cancel Edit', 'Discard changes and go back to the question bank?', () => {
+    currentEditingQuestion = null;
+    setEditMode(false);
+    blocks = [];
+    selectedBlanks = {};
+    renderBlocks();
+    navigateTo('bank');
+  });
 }
 
 function addToVetting() {
@@ -4185,6 +4251,7 @@ function clearForm() {
     document.getElementById('categorySelect').value = 'CER (Open Ended)';
     document.getElementById('topicSelect').value = 'Heat';
     renderBlocks();
+    setEditMode(false);
     showToast('Form cleared', 'info');
   });
 }
@@ -4281,6 +4348,7 @@ function editQuestion(id) {
   renderBlocks();
   _skipCreateReset = true;
   navigateTo('create');
+  setEditMode(true);
   showToast('Editing: ' + q.title, 'info');
 }
 
@@ -5302,6 +5370,8 @@ window.toggleBlank = toggleBlank;
 window.clearAllBlanks = clearAllBlanks;
 window.confirmBlanks = confirmBlanks;
 window.addToBank = addToBank;
+window.saveEditedQuestion = saveEditedQuestion;
+window.cancelEdit = cancelEdit;
 window.addToVetting = addToVetting;
 window.clearForm = clearForm;
 window.editQuestion = editQuestion;
