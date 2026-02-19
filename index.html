@@ -3557,7 +3557,7 @@ function tableFormatSelected(blockId, tag) {
   selected.forEach(key => {
     const [r, c] = key.split('_').map(Number);
     const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${r}"][data-col="${c}"]`);
-      if (cell) {
+    if (cell) {
       const sel = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents(cell);
@@ -4559,7 +4559,7 @@ function collectQuestionData() {
     table.querySelectorAll('td[data-row][data-col]').forEach(cell => {
       const r = parseInt(cell.dataset.row);
       const c = parseInt(cell.dataset.col);
-      if (block.data[r]) block.data[r][c] = cell.innerHTML;
+        if (block.data[r]) block.data[r][c] = cell.innerHTML;
     });
   });
   
@@ -4599,12 +4599,20 @@ function addToBank() {
     return;
   }
   const q = collectQuestionData();
+  if (!q.title || q.title === 'Untitled') {
+    // warn but don't block
+  }
   questionBank.push(q);
-  showToast('Question added to bank', 'success');
   updateCounts();
+  // Reset form immediately so the user can't accidentally double-add
+  blocks = [];
+  selectedBlanks = {};
+  currentEditingQuestion = null;
+  renderBlocks();
   saveToStorage();
-  renderQuestionBank(); // Ensure the new question shows up immediately
-  navigateTo('bank'); // Navigate to bank page to show the new question
+  renderQuestionBank();
+  showToast('Question added to bank ✓', 'success');
+  navigateTo('bank');
 }
 
 function saveEditedQuestion() {
@@ -4661,9 +4669,15 @@ function addToVetting() {
   q.status = 'pending';
   vettingList.push(q);
   updateCounts();
+  // Reset form so user can't accidentally double-add
+  blocks = [];
+  selectedBlanks = {};
+  currentEditingQuestion = null;
+  renderBlocks();
   saveToStorage();
-  renderVettingList(); // Ensure the new question shows up immediately
-  showToast('Question added to vetting list', 'success');
+  renderVettingList();
+  showToast('Question added to vetting list ✓', 'success');
+  navigateTo('vetting');
 }
 
 function clearForm() {
@@ -5472,73 +5486,86 @@ function doScaleAndPrint(output) {
 // =====================================================================
 // STORAGE (Firestore per-user persistence)
 // =====================================================================
+
+// Merge two arrays by id: remote is the base, local entries win for same id
+function mergeById(remote, local) {
+  const result = [...remote];
+  const idxMap = new Map(result.map((q, i) => [q.id, i]));
+  local.forEach(lq => {
+    const idx = idxMap.get(lq.id);
+    if (idx !== undefined) result[idx] = lq; // local version wins
+    else result.push(lq);                    // new local entry
+  });
+  return result;
+}
+
 let _saveTimer = null;
+let _saveInFlight = false;
+let _pendingSaveAfterInflight = false;
 
 function saveToStorage() {
+  if (_saveInFlight) {
+    // A save is already running; queue one more save for when it finishes
+    _pendingSaveAfterInflight = true;
+    return;
+  }
   if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => {
+  _saveTimer = setTimeout(_doSave, 300);
+}
+
+async function _doSave() {
     _saveTimer = null;
     if (!currentUser) return;
+
+  // Snapshot CURRENT state right now, before any async gap
+  const localQB = JSON.parse(JSON.stringify(questionBank));
+  const localVL = JSON.parse(JSON.stringify(vettingList));
+
+  _saveInFlight = true;
     const ref = doc(db, 'users', currentUser.uid);
-    
-    // Use transaction to merge arrays by ID, preventing data loss from concurrent updates
-    runTransaction(db, async (transaction) => {
-      const snap = await transaction.get(ref);
-      let existingQuestionBank = [];
-      let existingVettingList = [];
-      
-      if (snap.exists()) {
-        const data = snap.data();
-        existingQuestionBank = data.questionBank || [];
-        existingVettingList = data.vettingList || [];
-      }
-      
-      // Merge arrays by ID: keep existing questions, update/add local ones
-      const mergedQuestionBank = [...existingQuestionBank];
-      const mergedVettingList = [...existingVettingList];
-      
-      // Create maps for quick lookup
-      const questionBankMap = new Map(mergedQuestionBank.map(q => [q.id, q]));
-      const vettingListMap = new Map(mergedVettingList.map(q => [q.id, q]));
-      
-      // Merge local questionBank
-      questionBank.forEach(localQ => {
-        if (questionBankMap.has(localQ.id)) {
-          // Update existing question
-          const idx = mergedQuestionBank.findIndex(q => q.id === localQ.id);
-          mergedQuestionBank[idx] = localQ;
-        } else {
-          // Add new question
-          mergedQuestionBank.push(localQ);
-        }
-      });
-      
-      // Merge local vettingList
-      vettingList.forEach(localQ => {
-        if (vettingListMap.has(localQ.id)) {
-          // Update existing question
-          const idx = mergedVettingList.findIndex(q => q.id === localQ.id);
-          mergedVettingList[idx] = localQ;
-        } else {
-          // Add new question
-          mergedVettingList.push(localQ);
-        }
-      });
-      
-      // Update local arrays to match merged data
-      questionBank = mergedQuestionBank;
-      vettingList = mergedVettingList;
-      
-      // Save merged data
-      transaction.set(ref, { questionBank: mergedQuestionBank, vettingList: mergedVettingList });
-    }).catch(err => {
-      console.error('Firestore save failed:', err);
-      // Fallback to simple save if transaction fails
-      setDoc(ref, { questionBank, vettingList }, { merge: true }).catch(fallbackErr => {
-        console.error('Firestore fallback save failed:', fallbackErr);
-      });
+
+  try {
+    // Transaction: merge local snapshot with whatever is on the server
+    const merged = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      const existing = snap.exists() ? snap.data() : {};
+      const remoteQB = existing.questionBank || [];
+      const remoteVL  = existing.vettingList  || [];
+
+      const mergedQB = mergeById(remoteQB, localQB);
+      const mergedVL = mergeById(remoteVL, localVL);
+
+      tx.set(ref, { questionBank: mergedQB, vettingList: mergedVL });
+      // Return merged data so we can update local state OUTSIDE the callback
+      return { questionBank: mergedQB, vettingList: mergedVL };
     });
-  }, 500);
+
+    // Add any questions that the server had but we didn't (other-device additions)
+    // without overwriting anything already in local state
+    merged.questionBank.forEach(rq => {
+      if (!questionBank.find(lq => lq.id === rq.id)) questionBank.push(rq);
+    });
+    merged.vettingList.forEach(rq => {
+      if (!vettingList.find(lq => lq.id === rq.id)) vettingList.push(rq);
+    });
+    updateCounts();
+
+  } catch (txErr) {
+    console.error('Firestore transaction failed, trying direct write:', txErr);
+    try {
+      // Fallback: write the snapshot we took — at minimum preserves THIS device's data
+      await setDoc(ref, { questionBank: localQB, vettingList: localVL });
+    } catch (writeErr) {
+      console.error('Firestore direct write also failed:', writeErr);
+      showToast('⚠️ Save failed — check your connection and try again', 'error');
+    }
+  } finally {
+    _saveInFlight = false;
+    if (_pendingSaveAfterInflight) {
+      _pendingSaveAfterInflight = false;
+      saveToStorage(); // flush the queued save
+    }
+  }
 }
 
 async function loadFromStorage() {
