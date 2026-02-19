@@ -460,12 +460,7 @@ option {
   text-align: left;
   font-size: 0.88rem;
   position: relative;
-}
-.editable-table th {
-  background: var(--surface-alt);
-  font-weight: 600;
-  font-size: 0.82rem;
-  color: var(--text-muted);
+  /* All cells look the same - no header differentiation */
 }
 .editable-table td[contenteditable],
 .editable-table th[contenteditable] {
@@ -482,6 +477,79 @@ option {
   outline: 2px solid var(--accent-blue);
   outline-offset: -2px;
 }
+/* Color palette in toolbar */
+.table-color-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  align-items: center;
+}
+.table-color-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  flex-shrink: 0;
+  position: relative;
+}
+.table-color-swatch:hover {
+  transform: scale(1.25);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  z-index: 2;
+}
+.table-color-swatch.no-color {
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cline x1='0' y1='0' x2='18' y2='18' stroke='%23e03e3e' stroke-width='2'/%3E%3C/svg%3E") center/cover;
+}
+.table-color-more-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  transition: all var(--transition);
+  flex-shrink: 0;
+  position: relative;
+}
+.table-color-more-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.table-color-more-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  box-shadow: var(--shadow-lg);
+  z-index: 500;
+  display: none;
+}
+.table-color-more-picker.active { display: block; }
+/* Small number inputs in toolbar */
+.table-toolbar-input {
+  width: 42px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-family: 'Space Mono', monospace;
+  text-align: center;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 3px;
+}
+.table-toolbar-input:focus { outline: none; border-color: var(--primary); }
 
 /* Table Grid Popup (size selector) */
 .table-grid-popup-wrapper {
@@ -608,6 +676,20 @@ option {
   margin-top: 2px;
   padding: 0 2px;
 }
+
+/* Table border presets */
+.editable-table[data-border="none"] th,
+.editable-table[data-border="none"] td { border: none !important; }
+.editable-table[data-border="outer"] th,
+.editable-table[data-border="outer"] td { border: none !important; }
+.editable-table[data-border="outer"] { border: 2px solid var(--border) !important; }
+.editable-table[data-border="inner"] { border: none !important; }
+.editable-table[data-border="inner"] th,
+.editable-table[data-border="inner"] td { border: 1px solid var(--border) !important; border-top: none !important; border-left: none !important; }
+.editable-table[data-border="header-row"] th,
+.editable-table[data-border="header-row"] td { border: none !important; border-bottom: 1px solid var(--border) !important; }
+.editable-table[data-border="all"] th,
+.editable-table[data-border="all"] td { border: 1px solid var(--border) !important; }
 
 /* Special Characters Popup */
 .special-chars-popup {
@@ -3095,9 +3177,11 @@ function addBlock(type) {
       block.rows = block.rows || 3;
       block.cols = block.cols || 3;
       block.data = Array.from({ length: block.rows }, () => Array.from({ length: block.cols }, () => ''));
-      block.headers = Array.from({ length: block.cols }, () => '');
       block.merges = [];
       block.cellStyles = {};
+      block.cellPadding = {};
+      block.colWidths = Array(block.cols).fill(null);
+      block.rowHeights = {};
       break;
   }
   
@@ -3140,10 +3224,7 @@ function saveBlockContent(id, field, value) {
       const parts = field.split('_');
       const r = parseInt(parts[1]);
       const c = parseInt(parts[2]);
-      block.data[r][c] = value;
-    } else if (field.startsWith('header_')) {
-      const c = parseInt(field.split('_')[1]);
-      block.headers[c] = value;
+      if (block.data[r]) block.data[r][c] = value;
     } else {
       block[field] = value;
     }
@@ -3169,10 +3250,8 @@ function updateTableDimensions(id, dimension, value) {
   } else if (dimension === 'cols') {
     const diff = num - block.cols;
     if (diff > 0) {
-      block.headers = [...block.headers, ...Array.from({ length: diff }, () => '')];
       block.data = block.data.map(row => [...row, ...Array.from({ length: diff }, () => '')]);
     } else if (diff < 0) {
-      block.headers = block.headers.slice(0, num);
       block.data = block.data.map(row => row.slice(0, num));
     }
     block.cols = num;
@@ -3236,12 +3315,46 @@ function addTableWithSize(rows, cols) {
   const id = generateBlockId();
   const block = { id, type: 'table', rows, cols };
   block.data = Array.from({ length: rows }, () => Array.from({ length: cols }, () => ''));
-  block.headers = Array.from({ length: cols }, (_, i) => 'Header ' + (i + 1));
   block.merges = [];
   block.cellStyles = {};
+  block.cellPadding = {};
+  block.colWidths = Array(cols).fill(null);
+  block.rowHeights = {};
   blocks.push(block);
   renderBlocks();
   showToast(`Table (${rows}x${cols}) added`, 'info');
+}
+
+// Migrate old blocks that used a separate block.headers (row -1) into unified data rows
+function ensureTableMigrated(block) {
+  if (!block.headers) return;
+  // Prepend header row as data[0]
+  const headerRow = Array.from({ length: block.cols }, (_, c) => block.headers[c] || '');
+  block.data.unshift(headerRow);
+  block.rows += 1;
+  // Shift cellStyles: -1_c → 0_c, all others shift +1
+  const newStyles = {};
+  Object.keys(block.cellStyles || {}).forEach(key => {
+    const parts = key.split('_');
+    const r = parseInt(parts[0]), c = parseInt(parts[1]);
+    if (r === -1) newStyles['0_' + c] = block.cellStyles[key];
+    else newStyles[(r + 1) + '_' + c] = block.cellStyles[key];
+  });
+  block.cellStyles = newStyles;
+  // Shift cellPadding the same way
+  const newPadding = {};
+  Object.keys(block.cellPadding || {}).forEach(key => {
+    const parts = key.split('_');
+    const r = parseInt(parts[0]), c = parseInt(parts[1]);
+    if (r === -1) newPadding['0_' + c] = block.cellPadding[key];
+    else newPadding[(r + 1) + '_' + c] = block.cellPadding[key];
+  });
+  block.cellPadding = newPadding;
+  // Shift merge row indices
+  block.merges = (block.merges || []).map(m => ({ sr: m.sr + 1, sc: m.sc, er: m.er + 1, ec: m.ec }));
+  if (!block.colWidths) block.colWidths = Array(block.cols).fill(null);
+  if (!block.rowHeights) block.rowHeights = {};
+  delete block.headers;
 }
 
 // Close table grid popup when clicking elsewhere
@@ -3252,6 +3365,10 @@ document.addEventListener('click', (e) => {
   // Close special chars popup
   if (!e.target.closest('.special-chars-popup') && !e.target.closest('.table-toolbar-btn[data-action="special"]')) {
     document.querySelectorAll('.special-chars-popup.active').forEach(p => p.classList.remove('active'));
+  }
+  // Close custom colour pickers
+  if (!e.target.closest('.table-color-more-btn') && !e.target.closest('.table-color-more-picker')) {
+    document.querySelectorAll('.table-color-more-picker.active').forEach(p => p.classList.remove('active'));
   }
 });
 
@@ -3327,8 +3444,6 @@ function tableSelectCol(blockId) {
   if (selectedCols.size === 0) selectedCols.add(0);
   selected.clear();
   selectedCols.forEach(c => {
-    // Include header row (-1)
-    selected.add('-1_' + c);
     for (let r = 0; r < block.rows; r++) {
       selected.add(r + '_' + c);
     }
@@ -3341,9 +3456,6 @@ function tableSelectAll(blockId) {
   if (!block) return;
   const selected = getTableSelectedCells(blockId);
   selected.clear();
-  for (let c = 0; c < block.cols; c++) {
-    selected.add('-1_' + c);
-  }
   for (let r = 0; r < block.rows; r++) {
     for (let c = 0; c < block.cols; c++) {
       selected.add(r + '_' + c);
@@ -3385,23 +3497,15 @@ function tableMergeCells(blockId) {
     return;
   }
 
-  // Find bounding box of selected cells (body only, row >= 0)
+  // Find bounding box of ALL selected cells (any row)
   let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
-  let hasBodyCells = false;
   selected.forEach(key => {
     const [r, c] = key.split('_').map(Number);
-    if (r < 0) return; // skip headers
-    hasBodyCells = true;
     if (r < minR) minR = r;
     if (r > maxR) maxR = r;
     if (c < minC) minC = c;
     if (c > maxC) maxC = c;
   });
-
-  if (!hasBodyCells) {
-    showToast('Cannot merge header cells', 'error');
-    return;
-  }
 
   // Check for overlapping merges
   if (!block.merges) block.merges = [];
@@ -3453,7 +3557,7 @@ function tableFormatSelected(blockId, tag) {
   selected.forEach(key => {
     const [r, c] = key.split('_').map(Number);
     const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${r}"][data-col="${c}"]`);
-    if (cell) {
+      if (cell) {
       const sel = window.getSelection();
       const range = document.createRange();
       range.selectNodeContents(cell);
@@ -3461,12 +3565,7 @@ function tableFormatSelected(blockId, tag) {
       sel.addRange(range);
       document.execCommand(tag, false, null);
       sel.removeAllRanges();
-      // Save content
-      if (r === -1) {
-        block.headers[c] = cell.innerHTML;
-      } else {
-        block.data[r][c] = cell.innerHTML;
-      }
+      if (block.data[r]) block.data[r][c] = cell.innerHTML;
     }
   });
 }
@@ -3488,11 +3587,7 @@ function tableInsertSpecialChar(blockId, char) {
   if (cell) {
     cell.focus();
     document.execCommand('insertText', false, char);
-    if (r === -1) {
-      block.headers[c] = cell.innerHTML;
-    } else {
-      block.data[r][c] = cell.innerHTML;
-    }
+    if (block.data[r]) block.data[r][c] = cell.innerHTML;
   }
 
   // Close special chars popup
@@ -3538,13 +3633,128 @@ function tableSetColor(blockId, color) {
   if (!block) return;
   if (!block.cellStyles) block.cellStyles = {};
   const selected = getTableSelectedCells(blockId);
-
   selected.forEach(key => {
     if (!block.cellStyles[key]) block.cellStyles[key] = {};
-    block.cellStyles[key].backgroundColor = color;
+    block.cellStyles[key].backgroundColor = color === 'none' ? '' : color;
     const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${key.split('_')[0]}"][data-col="${key.split('_')[1]}"]`);
-    if (cell) cell.style.backgroundColor = color;
+    if (cell) cell.style.backgroundColor = color === 'none' ? '' : color;
   });
+}
+
+function tableSetTextColor(blockId, color) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  if (!block.cellStyles) block.cellStyles = {};
+  const selected = getTableSelectedCells(blockId);
+  selected.forEach(key => {
+    if (!block.cellStyles[key]) block.cellStyles[key] = {};
+    block.cellStyles[key].color = color === 'none' ? '' : color;
+    const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${key.split('_')[0]}"][data-col="${key.split('_')[1]}"]`);
+    if (cell) cell.style.color = color === 'none' ? '' : color;
+  });
+}
+
+function tableSetFontSize(blockId, size) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  if (!block.cellStyles) block.cellStyles = {};
+  const selected = getTableSelectedCells(blockId);
+  selected.forEach(key => {
+    if (!block.cellStyles[key]) block.cellStyles[key] = {};
+    block.cellStyles[key].fontSize = size ? size + 'pt' : '';
+    const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${key.split('_')[0]}"][data-col="${key.split('_')[1]}"]`);
+    if (cell) cell.style.fontSize = size ? size + 'pt' : '';
+  });
+}
+
+function tableSetPadding(blockId, side, value) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  if (!block.cellPadding) block.cellPadding = {};
+  const selected = getTableSelectedCells(blockId);
+  const px = parseInt(value);
+  selected.forEach(key => {
+    if (!block.cellPadding[key]) block.cellPadding[key] = {};
+    if (side === 'all') {
+      block.cellPadding[key] = { top: px, right: px, bottom: px, left: px };
+    } else {
+      block.cellPadding[key][side] = px;
+    }
+    applyCellPadding(blockId, key, block.cellPadding[key]);
+  });
+}
+
+function applyCellPadding(blockId, key, pad) {
+  const [r, c] = key.split('_');
+  const cell = document.querySelector(`[data-table-block="${blockId}"] [data-row="${r}"][data-col="${c}"]`);
+  if (!cell || !pad) return;
+  const t = pad.top ?? 6, r2 = pad.right ?? 10, b = pad.bottom ?? 6, l = pad.left ?? 10;
+  cell.style.padding = `${t}px ${r2}px ${b}px ${l}px`;
+}
+
+function tableSetBorder(blockId, preset) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  if (!block.cellStyles) block.cellStyles = {};
+  block.tableBorder = preset; // 'all' | 'outer' | 'inner' | 'none' | 'header-row'
+  renderBlocks();
+}
+
+function tableSetRowHeight(blockId, height) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  if (!block.rowHeights) block.rowHeights = {};
+  const selected = getTableSelectedCells(blockId);
+  const rows = new Set();
+  selected.forEach(key => rows.add(parseInt(key.split('_')[0])));
+  if (rows.size === 0) return;
+  rows.forEach(r => {
+    if (height) block.rowHeights[r] = parseInt(height);
+    else delete block.rowHeights[r];
+    document.querySelectorAll(`[data-table-block="${blockId}"] [data-row="${r}"]`).forEach(cell => {
+      cell.style.height = height ? parseInt(height) + 'px' : '';
+    });
+  });
+}
+
+function tableSetColWidth(blockId, width) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  if (!block.colWidths) block.colWidths = Array(block.cols).fill(null);
+  const selected = getTableSelectedCells(blockId);
+  const cols = new Set();
+  selected.forEach(key => cols.add(parseInt(key.split('_')[1])));
+  if (cols.size === 0) return;
+  cols.forEach(c => {
+    if (c >= 0 && c < block.cols) {
+      block.colWidths[c] = width ? parseInt(width) : null;
+    }
+  });
+  // Update colgroup in DOM
+  const table = document.querySelector(`[data-table-block="${blockId}"]`);
+  if (table) {
+    const colgroup = table.querySelector('colgroup');
+    if (colgroup) {
+      colgroup.querySelectorAll('col').forEach((col, i) => {
+        col.style.width = block.colWidths[i] ? block.colWidths[i] + 'px' : '';
+      });
+    }
+  }
+}
+
+function tableApplyColor(blockId, type, color) {
+  if (type === 'bg') tableSetColor(blockId, color);
+  else tableSetTextColor(blockId, color);
+}
+
+function tableToggleColorPicker(blockId, type, pickerEl) {
+  const picker = pickerEl.closest('.table-color-palette').querySelector('.table-color-more-picker');
+  if (!picker) return;
+  // Close all other pickers first
+  document.querySelectorAll('.table-color-more-picker.active').forEach(p => {
+    if (p !== picker) p.classList.remove('active');
+  });
+  picker.classList.toggle('active');
 }
 
 function tableAddRow(blockId) {
@@ -3577,7 +3787,6 @@ function tableRemoveRow(blockId) {
 function tableAddCol(blockId) {
   const block = blocks.find(b => b.id === blockId);
   if (!block) return;
-  block.headers.push('');
   block.data.forEach(row => row.push(''));
   block.cols++;
   renderBlocks();
@@ -3586,7 +3795,6 @@ function tableAddCol(blockId) {
 function tableRemoveCol(blockId) {
   const block = blocks.find(b => b.id === blockId);
   if (!block || block.cols <= 1) return;
-  block.headers.pop();
   block.data.forEach(row => row.pop());
   block.cols--;
   // Remove merges that reference deleted cols
@@ -3603,37 +3811,33 @@ function tableRemoveCol(blockId) {
 }
 
 function renderTableReadonly(block, tableClass) {
-  if (!block.headers && !block.data) return '';
+  if (!block.data) return '';
+  ensureTableMigrated(block);
   const cols = block.cols || 3;
   const rows = block.rows || 3;
   const merges = block.merges || [];
   const cellStyles = block.cellStyles || {};
+  const cellPadding = block.cellPadding || {};
+  const colWidths = block.colWidths || [];
+  const rowHeights = block.rowHeights || {};
 
-  let html = `<table${tableClass ? ' class="' + tableClass + '"' : ''}>`;
-  html += '<thead><tr>';
+  let html = `<table${tableClass ? ' class="' + tableClass + '"' : ''} style="width:100%;border-collapse:collapse;">`;
+  // Colgroup for column widths
+  html += '<colgroup>';
   for (let c = 0; c < cols; c++) {
-    const sk = '-1_' + c;
-    const s = cellStyles[sk] || {};
-    let st = '';
-    if (s.textAlign) st += 'text-align:' + s.textAlign + ';';
-    if (s.verticalAlign) st += 'vertical-align:' + s.verticalAlign + ';';
-    if (s.backgroundColor) st += 'background-color:' + s.backgroundColor + ';';
-    html += `<th${st ? ' style="' + st + '"' : ''}>${block.headers?.[c] || ''}</th>`;
+    html += `<col${colWidths[c] ? ' style="width:' + colWidths[c] + 'px"' : ''}>`;
   }
-  html += '</tr></thead><tbody>';
+  html += '</colgroup><tbody>';
+
   for (let r = 0; r < rows; r++) {
     html += '<tr>';
     for (let c = 0; c < cols; c++) {
-      // Check if covered by merge (not origin)
       let isCovered = false;
       let mergeInfo = null;
       for (const m of merges) {
         if (r >= m.sr && r <= m.er && c >= m.sc && c <= m.ec) {
-          if (r === m.sr && c === m.sc) {
-            mergeInfo = m;
-          } else {
-            isCovered = true;
-          }
+          if (r === m.sr && c === m.sc) mergeInfo = m;
+          else isCovered = true;
           break;
         }
       }
@@ -3641,10 +3845,17 @@ function renderTableReadonly(block, tableClass) {
 
       const sk = r + '_' + c;
       const s = cellStyles[sk] || {};
-      let st = '';
+      const pad = cellPadding[sk];
+      let st = 'border:1px solid #ccc;';
       if (s.textAlign) st += 'text-align:' + s.textAlign + ';';
       if (s.verticalAlign) st += 'vertical-align:' + s.verticalAlign + ';';
       if (s.backgroundColor) st += 'background-color:' + s.backgroundColor + ';';
+      if (s.color) st += 'color:' + s.color + ';';
+      if (s.fontSize) st += 'font-size:' + s.fontSize + ';';
+      if (s.fontWeight) st += 'font-weight:' + s.fontWeight + ';';
+      if (pad) st += `padding:${pad.top??6}px ${pad.right??10}px ${pad.bottom??6}px ${pad.left??10}px;`;
+      else st += 'padding:6px 10px;';
+      if (rowHeights[r]) st += 'height:' + rowHeights[r] + 'px;';
 
       let spanAttr = '';
       if (mergeInfo) {
@@ -3653,8 +3864,7 @@ function renderTableReadonly(block, tableClass) {
         if (rs > 1) spanAttr += ` rowspan="${rs}"`;
         if (cs > 1) spanAttr += ` colspan="${cs}"`;
       }
-
-      html += `<td${st ? ' style="' + st + '"' : ''}${spanAttr}>${block.data?.[r]?.[c] || ''}</td>`;
+      html += `<td style="${st}"${spanAttr}>${block.data?.[r]?.[c] || ''}</td>`;
     }
     html += '</tr>';
   }
@@ -3663,7 +3873,14 @@ function renderTableReadonly(block, tableClass) {
 }
 
 function renderAdvancedTableBlock(block) {
+  // Migrate old blocks that had a separate header row
+  ensureTableMigrated(block);
+
   const bid = block.id;
+  if (!block.colWidths) block.colWidths = Array(block.cols).fill(null);
+  if (!block.rowHeights) block.rowHeights = {};
+  if (!block.merges) block.merges = [];
+
   const specialChars = ['\u00B0','\u00B2','\u00B3','\u00BC','\u00BD','\u00BE','\u00D7','\u00F7',
     '\u03B1','\u03B2','\u03B3','\u03B4','\u03B5','\u03B8','\u03BB','\u03BC',
     '\u03C0','\u03C3','\u03C6','\u03C9','\u0394','\u03A3','\u03A9','\u221A',
@@ -3675,12 +3892,55 @@ function renderAdvancedTableBlock(block) {
   });
   specialCharsHTML += '</div></div>';
 
+  // Pastel colour swatches (background & text colours)
+  const PASTEL_BG = [
+    {c:'none',  label:'No Fill'},
+    {c:'#ffffff',label:'White'}, {c:'#f1f3f5',label:'Light Gray'}, {c:'#dee2e6',label:'Gray'},
+    {c:'#fff9db',label:'Cream'}, {c:'#ffe066',label:'Yellow'},
+    {c:'#ffd8b1',label:'Peach'}, {c:'#ffa94d',label:'Orange'},
+    {c:'#d3f9d8',label:'Mint'},  {c:'#8ce99a',label:'Green'},
+    {c:'#dbe4ff',label:'Lavender'},{c:'#74c0fc',label:'Sky Blue'},
+    {c:'#e7f5ff',label:'Ice Blue'},{c:'#a5d8ff',label:'Baby Blue'},
+    {c:'#fce8f3',label:'Blush'}, {c:'#f783ac',label:'Pink'},
+    {c:'#e9d5ff',label:'Lilac'}, {c:'#b197fc',label:'Violet'},
+  ];
+  const PASTEL_TEXT = [
+    {c:'none',  label:'Default'},
+    {c:'#212529',label:'Black'}, {c:'#495057',label:'Dark Gray'}, {c:'#868e96',label:'Gray'},
+    {c:'#e03131',label:'Red'},   {c:'#e8590c',label:'Orange'},
+    {c:'#2f9e44',label:'Green'}, {c:'#1971c2',label:'Blue'},
+    {c:'#7048e8',label:'Purple'},{c:'#c2255c',label:'Pink'},
+    {c:'#0c8599',label:'Teal'},  {c:'#5f3dc4',label:'Indigo'},
+  ];
+
+  function buildPalette(colors, type) {
+    let h = `<div class="table-color-palette">`;
+    colors.forEach(({c, label}) => {
+      if (c === 'none') {
+        h += `<button class="table-color-swatch no-color" title="${label}" onmousedown="event.preventDefault();tableApplyColor('${bid}','${type}','none')"></button>`;
+      } else {
+        h += `<button class="table-color-swatch" title="${label}" style="background:${c}" onmousedown="event.preventDefault();tableApplyColor('${bid}','${type}','${c}')"></button>`;
+      }
+    });
+    // "More colors" picker
+    h += `<button class="table-color-more-btn" title="More colours" onmousedown="event.preventDefault();tableToggleColorPicker('${bid}','${type}',this)">+
+      <div class="table-color-more-picker" id="colorPicker_${type}_${bid}">
+        <div style="font-size:0.65rem;color:var(--text-light);margin-bottom:4px;">Custom</div>
+        <input type="color" value="#ffffff" style="width:80px;height:26px;border:1px solid var(--border);border-radius:3px;cursor:pointer;padding:1px;"
+               onchange="tableApplyColor('${bid}','${type}',this.value)">
+      </div>
+    </button>`;
+    h += `</div>`;
+    return h;
+  }
+
   let html = `
     <div class="table-advanced-toolbar">
       <div class="table-toolbar-group">
         <span class="table-toolbar-label">Format:</span>
         <button class="table-toolbar-btn" title="Bold" onmousedown="event.preventDefault();tableFormatSelected('${bid}','bold')"><b>B</b></button>
         <button class="table-toolbar-btn" title="Italic" onmousedown="event.preventDefault();tableFormatSelected('${bid}','italic')"><i>I</i></button>
+        <button class="table-toolbar-btn" title="Strikethrough" onmousedown="event.preventDefault();tableFormatSelected('${bid}','strikeThrough')" style="text-decoration:line-through;">S</button>
         <button class="table-toolbar-btn" title="Subscript" onmousedown="event.preventDefault();tableFormatSelected('${bid}','subscript')" style="font-size:0.7rem;">X<sub>2</sub></button>
         <button class="table-toolbar-btn" title="Superscript" onmousedown="event.preventDefault();tableFormatSelected('${bid}','superscript')" style="font-size:0.7rem;">X<sup>2</sup></button>
         <button class="table-toolbar-btn" title="Special Characters" data-action="special" onmousedown="event.preventDefault();toggleSpecialCharsPopup('${bid}', this)">\u03A9</button>
@@ -3688,11 +3948,19 @@ function renderAdvancedTableBlock(block) {
       </div>
       <span class="table-toolbar-divider"></span>
       <div class="table-toolbar-group">
+        <span class="table-toolbar-label">Font&nbsp;pt:</span>
+        <input type="number" class="table-toolbar-input" placeholder="pt" min="6" max="72" step="1"
+               title="Font size in pt"
+               onchange="tableSetFontSize('${bid}', this.value)"
+               style="width:46px;">
+      </div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group">
         <span class="table-toolbar-label">Select:</span>
         <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableSelectRow('${bid}')">Row</button>
         <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableSelectCol('${bid}')">Col</button>
         <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableSelectAll('${bid}')">All</button>
-        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableClearSelection('${bid}')">Clear</button>
+        <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableClearSelection('${bid}')">✕</button>
       </div>
       <span class="table-toolbar-divider"></span>
       <div class="table-toolbar-group">
@@ -3702,21 +3970,60 @@ function renderAdvancedTableBlock(block) {
       <span class="table-toolbar-divider"></span>
       <div class="table-toolbar-group">
         <span class="table-toolbar-label">Align:</span>
-        <button class="table-toolbar-btn" title="Align Left" onmousedown="event.preventDefault();tableSetAlign('${bid}','left')">\u2261</button>
-        <button class="table-toolbar-btn" title="Align Center" onmousedown="event.preventDefault();tableSetAlign('${bid}','center')">\u2261</button>
-        <button class="table-toolbar-btn" title="Align Right" onmousedown="event.preventDefault();tableSetAlign('${bid}','right')">\u2261</button>
+        <button class="table-toolbar-btn" title="Left" onmousedown="event.preventDefault();tableSetAlign('${bid}','left')">&#8678;</button>
+        <button class="table-toolbar-btn" title="Center" onmousedown="event.preventDefault();tableSetAlign('${bid}','center')">&#8676;</button>
+        <button class="table-toolbar-btn" title="Right" onmousedown="event.preventDefault();tableSetAlign('${bid}','right')">&#8680;</button>
+        <button class="table-toolbar-btn" title="Top" onmousedown="event.preventDefault();tableSetVerticalAlign('${bid}','top')">&#8679;</button>
+        <button class="table-toolbar-btn" title="Middle" onmousedown="event.preventDefault();tableSetVerticalAlign('${bid}','middle')">&#8661;</button>
+        <button class="table-toolbar-btn" title="Bottom" onmousedown="event.preventDefault();tableSetVerticalAlign('${bid}','bottom')">&#8681;</button>
+      </div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group" style="flex-direction:column;align-items:flex-start;gap:2px;">
+        <div style="display:flex;align-items:center;gap:3px;">
+          <span class="table-toolbar-label" style="font-size:0.6rem;">Fill:</span>
+          ${buildPalette(PASTEL_BG, 'bg')}
+        </div>
+        <div style="display:flex;align-items:center;gap:3px;">
+          <span class="table-toolbar-label" style="font-size:0.6rem;">Text:</span>
+          ${buildPalette(PASTEL_TEXT, 'text')}
+        </div>
       </div>
       <span class="table-toolbar-divider"></span>
       <div class="table-toolbar-group">
-        <span class="table-toolbar-label">V-Align:</span>
-        <button class="table-toolbar-btn" title="Top" onmousedown="event.preventDefault();tableSetVerticalAlign('${bid}','top')">T</button>
-        <button class="table-toolbar-btn" title="Middle" onmousedown="event.preventDefault();tableSetVerticalAlign('${bid}','middle')">M</button>
-        <button class="table-toolbar-btn" title="Bottom" onmousedown="event.preventDefault();tableSetVerticalAlign('${bid}','bottom')">B</button>
+        <span class="table-toolbar-label">Borders:</span>
+        <button class="table-toolbar-btn" title="All borders" onmousedown="event.preventDefault();tableSetBorder('${bid}','all')">&#9783;</button>
+        <button class="table-toolbar-btn" title="No borders" onmousedown="event.preventDefault();tableSetBorder('${bid}','none')" style="font-size:0.65rem;">&#9636;</button>
+        <button class="table-toolbar-btn" title="Outer only" onmousedown="event.preventDefault();tableSetBorder('${bid}','outer')" style="font-size:0.7rem;">&#9634;</button>
+        <button class="table-toolbar-btn" title="Inner only" onmousedown="event.preventDefault();tableSetBorder('${bid}','inner')" style="font-size:0.7rem;">&#9670;</button>
+        <button class="table-toolbar-btn" title="Horizontal lines" onmousedown="event.preventDefault();tableSetBorder('${bid}','header-row')" style="font-size:0.7rem;">&#9552;</button>
       </div>
       <span class="table-toolbar-divider"></span>
       <div class="table-toolbar-group">
-        <span class="table-toolbar-label">Color:</span>
-        <input type="color" class="table-toolbar-color-input" value="#ffffff" onchange="tableSetColor('${bid}', this.value)">
+        <span class="table-toolbar-label">Cell Padding:</span>
+        <input type="number" class="table-toolbar-input" placeholder="All" min="0" max="40" step="1"
+               title="All sides padding (px)" onchange="tableSetPadding('${bid}','all',this.value)">
+        <input type="number" class="table-toolbar-input" placeholder="T" min="0" max="40" step="1"
+               title="Top padding (px)" onchange="tableSetPadding('${bid}','top',this.value)">
+        <input type="number" class="table-toolbar-input" placeholder="R" min="0" max="40" step="1"
+               title="Right padding (px)" onchange="tableSetPadding('${bid}','right',this.value)">
+        <input type="number" class="table-toolbar-input" placeholder="B" min="0" max="40" step="1"
+               title="Bottom padding (px)" onchange="tableSetPadding('${bid}','bottom',this.value)">
+        <input type="number" class="table-toolbar-input" placeholder="L" min="0" max="40" step="1"
+               title="Left padding (px)" onchange="tableSetPadding('${bid}','left',this.value)">
+      </div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group">
+        <span class="table-toolbar-label">Row&nbsp;H:</span>
+        <input type="number" class="table-toolbar-input" placeholder="px" min="16" max="300" step="1"
+               title="Row height (px) for selected rows" onchange="tableSetRowHeight('${bid}',this.value)" style="width:46px;">
+        <button class="table-toolbar-btn" title="Clear row height" onmousedown="event.preventDefault();tableSetRowHeight('${bid}','')">✕</button>
+      </div>
+      <span class="table-toolbar-divider"></span>
+      <div class="table-toolbar-group">
+        <span class="table-toolbar-label">Col&nbsp;W:</span>
+        <input type="number" class="table-toolbar-input" placeholder="px" min="20" max="600" step="1"
+               title="Column width (px) for selected columns" onchange="tableSetColWidth('${bid}',this.value)" style="width:46px;">
+        <button class="table-toolbar-btn" title="Clear col width" onmousedown="event.preventDefault();tableSetColWidth('${bid}','')">✕</button>
       </div>
       <span class="table-toolbar-divider"></span>
       <div class="table-toolbar-group">
@@ -3725,46 +4032,34 @@ function renderAdvancedTableBlock(block) {
         <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableAddCol('${bid}')">+ Col</button>
         <button class="table-toolbar-btn" onmousedown="event.preventDefault();tableRemoveCol('${bid}')">- Col</button>
       </div>
-      <div class="table-hint">Shift+Click or Ctrl+Click to select multiple cells for merging</div>
+      <div class="table-hint">Click to select · Shift/Ctrl+Click for multi-select · Merge selected cells</div>
     </div>
-    <div class="block-body">
-      <table class="editable-table" data-table-block="${bid}">
-        <thead><tr>`;
+    <div class="block-body" style="overflow-x:auto;">
+      <table class="editable-table" data-table-block="${bid}" style="table-layout:fixed;"${block.tableBorder ? ` data-border="${block.tableBorder}"` : ''}>
+        <colgroup>`;
 
-  // Header row
   for (let c = 0; c < block.cols; c++) {
-    const styleKey = '-1_' + c;
-    const styles = block.cellStyles?.[styleKey] || {};
-    let styleStr = '';
-    if (styles.textAlign) styleStr += 'text-align:' + styles.textAlign + ';';
-    if (styles.verticalAlign) styleStr += 'vertical-align:' + styles.verticalAlign + ';';
-    if (styles.backgroundColor) styleStr += 'background-color:' + styles.backgroundColor + ';';
-
-    html += `<th contenteditable="true" data-row="-1" data-col="${c}" style="${styleStr}"
-                onclick="handleTableCellClick('${bid}', -1, ${c}, event)"
-                oninput="saveBlockContent('${bid}', 'header_${c}', this.innerHTML)">${block.headers[c] || ''}</th>`;
+    html += `<col${block.colWidths[c] ? ' style="width:' + block.colWidths[c] + 'px"' : ''}>`;
   }
-
-  html += `</tr></thead><tbody>`;
-
-  // Body rows with merge support
-  if (!block.merges) block.merges = [];
+  html += `</colgroup><tbody>`;
 
   for (let r = 0; r < block.rows; r++) {
     html += '<tr>';
     for (let c = 0; c < block.cols; c++) {
-      // Check if this cell is inside a merge but not the origin
       const merge = isCellMerged(block, r, c);
-      if (merge && !(merge.sr === r && merge.sc === c)) {
-        continue; // skip cells covered by merge
-      }
+      if (merge && !(merge.sr === r && merge.sc === c)) continue;
 
       const styleKey = r + '_' + c;
       const styles = block.cellStyles?.[styleKey] || {};
+      const pad = block.cellPadding?.[styleKey];
       let styleStr = '';
       if (styles.textAlign) styleStr += 'text-align:' + styles.textAlign + ';';
       if (styles.verticalAlign) styleStr += 'vertical-align:' + styles.verticalAlign + ';';
       if (styles.backgroundColor) styleStr += 'background-color:' + styles.backgroundColor + ';';
+      if (styles.color) styleStr += 'color:' + styles.color + ';';
+      if (styles.fontSize) styleStr += 'font-size:' + styles.fontSize + ';';
+      if (pad) styleStr += `padding:${pad.top??6}px ${pad.right??10}px ${pad.bottom??6}px ${pad.left??10}px;`;
+      if (block.rowHeights[r]) styleStr += 'height:' + block.rowHeights[r] + 'px;';
 
       let spanAttr = '';
       if (merge) {
@@ -4256,19 +4551,15 @@ function collectQuestionData() {
     if (block) block[field] = el.innerHTML;
   });
 
-  // Sync table contenteditable cells
+  // Sync table contenteditable cells (all rows unified, no header distinction)
   document.querySelectorAll('[data-table-block]').forEach(table => {
     const bid = table.dataset.tableBlock;
     const block = blocks.find(b => b.id === bid);
     if (!block) return;
-    table.querySelectorAll('th[data-row][data-col], td[data-row][data-col]').forEach(cell => {
+    table.querySelectorAll('td[data-row][data-col]').forEach(cell => {
       const r = parseInt(cell.dataset.row);
       const c = parseInt(cell.dataset.col);
-      if (r === -1) {
-        block.headers[c] = cell.innerHTML;
-      } else {
-        if (block.data[r]) block.data[r][c] = cell.innerHTML;
-      }
+      if (block.data[r]) block.data[r][c] = cell.innerHTML;
     });
   });
   
@@ -5805,6 +6096,14 @@ window.toggleSpecialCharsPopup = toggleSpecialCharsPopup;
 window.tableSetAlign = tableSetAlign;
 window.tableSetVerticalAlign = tableSetVerticalAlign;
 window.tableSetColor = tableSetColor;
+window.tableSetTextColor = tableSetTextColor;
+window.tableSetFontSize = tableSetFontSize;
+window.tableSetPadding = tableSetPadding;
+window.tableSetBorder = tableSetBorder;
+window.tableSetRowHeight = tableSetRowHeight;
+window.tableSetColWidth = tableSetColWidth;
+window.tableApplyColor = tableApplyColor;
+window.tableToggleColorPicker = tableToggleColorPicker;
 window.tableAddRow = tableAddRow;
 window.tableRemoveRow = tableRemoveRow;
 window.tableAddCol = tableAddCol;
