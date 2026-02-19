@@ -2439,6 +2439,7 @@ option {
         Practice Mode
       </div>
     </nav>
+    <div id="saveStatusIndicator" style="display:none;width:100%;text-align:center;font-size:0.7rem;padding:4px 12px;border-radius:6px;margin:0 8px 6px;font-family:'Space Mono',monospace;letter-spacing:0.03em;"></div>
     <div class="sidebar-footer">
       <div class="avatar">A</div>
       <div>
@@ -2868,9 +2869,11 @@ import {
 import {
   getFirestore,
   doc,
+  collection,
   getDoc,
+  getDocs,
   setDoc,
-  runTransaction
+  deleteDoc
 } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 
 // Firebase configuration
@@ -4599,20 +4602,17 @@ function addToBank() {
     return;
   }
   const q = collectQuestionData();
-  if (!q.title || q.title === 'Untitled') {
-    // warn but don't block
-  }
   questionBank.push(q);
   updateCounts();
-  // Reset form immediately so the user can't accidentally double-add
+  // Reset form right away so user cannot double-add
   blocks = [];
   selectedBlanks = {};
   currentEditingQuestion = null;
   renderBlocks();
-  saveToStorage();
   renderQuestionBank();
   showToast('Question added to bank ✓', 'success');
   navigateTo('bank');
+  saveQuestion(q); // async, non-blocking
 }
 
 function saveEditedQuestion() {
@@ -4625,28 +4625,30 @@ function saveEditedQuestion() {
     return;
   }
   const q = collectQuestionData();
-  const idx = questionBank.findIndex(qb => qb.id === currentEditingQuestion);
-  if (idx !== -1) {
     q.id = currentEditingQuestion;
-    questionBank[idx] = q;
-    showToast('Question saved successfully', 'success');
+
+  let savedToVetting = false;
+  const qIdx = questionBank.findIndex(qb => qb.id === currentEditingQuestion);
+  if (qIdx !== -1) {
+    questionBank[qIdx] = q;
   } else {
-    // Check vetting list too
     const vIdx = vettingList.findIndex(v => v.id === currentEditingQuestion);
     if (vIdx !== -1) {
-      q.id = currentEditingQuestion;
       vettingList[vIdx] = q;
-      showToast('Question saved successfully', 'success');
+      savedToVetting = true;
     } else {
       questionBank.push(q);
-      showToast('Question added to bank', 'success');
     }
   }
+
   currentEditingQuestion = null;
   setEditMode(false);
   updateCounts();
-  saveToStorage();
+  renderQuestionBank();
+  showToast('Question saved ✓', 'success');
   navigateTo('bank');
+  if (savedToVetting) saveVettingQuestion(q);
+  else saveQuestion(q);
 }
 
 function cancelEdit() {
@@ -4669,15 +4671,15 @@ function addToVetting() {
   q.status = 'pending';
   vettingList.push(q);
   updateCounts();
-  // Reset form so user can't accidentally double-add
+  // Reset form right away so user cannot double-add
   blocks = [];
   selectedBlanks = {};
   currentEditingQuestion = null;
   renderBlocks();
-  saveToStorage();
   renderVettingList();
   showToast('Question added to vetting list ✓', 'success');
   navigateTo('vetting');
+  saveVettingQuestion(q); // async, non-blocking
 }
 
 function clearForm() {
@@ -4797,19 +4799,19 @@ function duplicateQuestion(id) {
   clone.title = q.title + ' (Copy)';
   clone.createdAt = new Date().toISOString();
   questionBank.push(clone);
-  saveToStorage();
   renderQuestionBank();
   updateCounts();
   showToast('Question duplicated', 'success');
+  saveQuestion(clone);
 }
 
 function deleteQuestion(id) {
   showConfirm('Delete Question', 'Are you sure you want to permanently delete this question?', () => {
     questionBank = questionBank.filter(q => q.id !== id);
-    saveToStorage();
     renderQuestionBank();
     updateCounts();
     showToast('Question deleted', 'info');
+    deleteQuestionDoc(id);
   });
 }
 
@@ -4867,19 +4869,20 @@ function approveVetting(id) {
   q.status = 'approved';
   questionBank.push(q);
   vettingList.splice(idx, 1);
-  saveToStorage();
   renderVettingList();
   updateCounts();
   showToast('Question approved and added to bank', 'success');
+  saveQuestion(q);       // add to questions subcollection
+  deleteVettingDoc(id);  // remove from vetting subcollection
 }
 
 function deleteVetting(id) {
   showConfirm('Delete from Vetting', 'Remove this question from the vetting list?', () => {
     vettingList = vettingList.filter(q => q.id !== id);
-    saveToStorage();
     renderVettingList();
     updateCounts();
     showToast('Question removed from vetting list', 'info');
+    deleteVettingDoc(id);
   });
 }
 
@@ -5484,136 +5487,147 @@ function doScaleAndPrint(output) {
 }
 
 // =====================================================================
-// STORAGE (Firestore per-user persistence)
+// STORAGE — subcollection-per-question architecture
+//
+//   users/{uid}/questions/{questionId}   ← question bank
+//   users/{uid}/vetting/{questionId}     ← vetting list
+//
+// Each question is its own document: no transactions, no size limits,
+// no merging complexity.  A single setDoc/deleteDoc call never fails
+// due to contention or document growth.
 // =====================================================================
 
-// Merge two arrays by id: remote is the base, local entries win for same id
-function mergeById(remote, local) {
-  const result = [...remote];
-  const idxMap = new Map(result.map((q, i) => [q.id, i]));
-  local.forEach(lq => {
-    const idx = idxMap.get(lq.id);
-    if (idx !== undefined) result[idx] = lq; // local version wins
-    else result.push(lq);                    // new local entry
-  });
-  return result;
-}
+function _qRef(id) { return doc(db, 'users', currentUser.uid, 'questions', id); }
+function _vRef(id) { return doc(db, 'users', currentUser.uid, 'vetting',   id); }
+function _qCol()   { return collection(db, 'users', currentUser.uid, 'questions'); }
+function _vCol()   { return collection(db, 'users', currentUser.uid, 'vetting');   }
 
-let _saveTimer = null;
-let _saveInFlight = false;
-let _pendingSaveAfterInflight = false;
+let _inflightOps = 0;
+let _saveHideTimer = null;
 
-function saveToStorage() {
-  if (_saveInFlight) {
-    // A save is already running; queue one more save for when it finishes
-    _pendingSaveAfterInflight = true;
-    return;
+function _setSaveStatus(state) {
+  const el = document.getElementById('saveStatusIndicator');
+  if (!el) return;
+  clearTimeout(_saveHideTimer);
+  if (state === 'saving') {
+    el.textContent = '● Saving…';
+    el.style.cssText = 'display:block;color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.05);';
+  } else if (state === 'saved') {
+    el.textContent = '✓ Saved';
+    el.style.cssText = 'display:block;color:#52c41a;background:rgba(82,196,26,0.1);';
+    _saveHideTimer = setTimeout(() => { el.style.display = 'none'; el.textContent = ''; }, 2500);
+  } else if (state === 'error') {
+    el.textContent = '⚠ Save failed';
+    el.style.cssText = 'display:block;color:#ff4d4f;background:rgba(255,77,79,0.1);';
+    _saveHideTimer = setTimeout(() => { el.style.display = 'none'; el.textContent = ''; }, 5000);
   }
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(_doSave, 300);
 }
 
-async function _doSave() {
-    _saveTimer = null;
+// Write one question doc with auto-retry
+async function saveQuestion(q) {
     if (!currentUser) return;
-
-  // Snapshot CURRENT state right now, before any async gap
-  const localQB = JSON.parse(JSON.stringify(questionBank));
-  const localVL = JSON.parse(JSON.stringify(vettingList));
-
-  _saveInFlight = true;
-    const ref = doc(db, 'users', currentUser.uid);
-
-  try {
-    // Transaction: merge local snapshot with whatever is on the server
-    const merged = await runTransaction(db, async (tx) => {
-      const snap = await tx.get(ref);
-      const existing = snap.exists() ? snap.data() : {};
-      const remoteQB = existing.questionBank || [];
-      const remoteVL  = existing.vettingList  || [];
-
-      const mergedQB = mergeById(remoteQB, localQB);
-      const mergedVL = mergeById(remoteVL, localVL);
-
-      tx.set(ref, { questionBank: mergedQB, vettingList: mergedVL });
-      // Return merged data so we can update local state OUTSIDE the callback
-      return { questionBank: mergedQB, vettingList: mergedVL };
-    });
-
-    // Add any questions that the server had but we didn't (other-device additions)
-    // without overwriting anything already in local state
-    merged.questionBank.forEach(rq => {
-      if (!questionBank.find(lq => lq.id === rq.id)) questionBank.push(rq);
-    });
-    merged.vettingList.forEach(rq => {
-      if (!vettingList.find(lq => lq.id === rq.id)) vettingList.push(rq);
-    });
-    updateCounts();
-
-  } catch (txErr) {
-    console.error('Firestore transaction failed, trying direct write:', txErr);
+  _inflightOps++;
+  _setSaveStatus('saving');
+  let attempts = 0;
+  while (attempts < 3) {
     try {
-      // Fallback: write the snapshot we took — at minimum preserves THIS device's data
-      await setDoc(ref, { questionBank: localQB, vettingList: localVL });
-    } catch (writeErr) {
-      console.error('Firestore direct write also failed:', writeErr);
-      showToast('⚠️ Save failed — check your connection and try again', 'error');
-    }
-  } finally {
-    _saveInFlight = false;
-    if (_pendingSaveAfterInflight) {
-      _pendingSaveAfterInflight = false;
-      saveToStorage(); // flush the queued save
+      await setDoc(_qRef(q.id), q);
+      _inflightOps--;
+      if (_inflightOps === 0) _setSaveStatus('saved');
+      return;
+    } catch (err) {
+      attempts++;
+      if (attempts >= 3) {
+        _inflightOps--;
+        if (_inflightOps === 0) _setSaveStatus('error');
+        console.error('saveQuestion failed after 3 attempts:', err);
+        showToast('⚠ Could not save question — check your connection', 'error');
+        return;
+      }
+      await new Promise(r => setTimeout(r, 800 * attempts)); // back-off
     }
   }
 }
 
+// Write one vetting doc with auto-retry
+async function saveVettingQuestion(q) {
+  if (!currentUser) return;
+  _inflightOps++;
+  _setSaveStatus('saving');
+  let attempts = 0;
+  while (attempts < 3) {
+    try {
+      await setDoc(_vRef(q.id), q);
+      _inflightOps--;
+      if (_inflightOps === 0) _setSaveStatus('saved');
+      return;
+    } catch (err) {
+      attempts++;
+      if (attempts >= 3) {
+        _inflightOps--;
+        if (_inflightOps === 0) _setSaveStatus('error');
+        console.error('saveVettingQuestion failed after 3 attempts:', err);
+        showToast('⚠ Could not save question — check your connection', 'error');
+        return;
+      }
+      await new Promise(r => setTimeout(r, 800 * attempts));
+    }
+  }
+}
+
+// Delete one question doc (fire-and-forget; failure is non-critical)
+function deleteQuestionDoc(id) {
+  if (!currentUser) return;
+  deleteDoc(_qRef(id)).catch(err => console.warn('deleteQuestionDoc:', err));
+}
+
+// Delete one vetting doc (fire-and-forget)
+function deleteVettingDoc(id) {
+  if (!currentUser) return;
+  deleteDoc(_vRef(id)).catch(err => console.warn('deleteVettingDoc:', err));
+}
+
+// no-op kept so any stray internal calls don't throw
+function saveToStorage() {}
+
+// Load all questions from subcollections; auto-migrates old single-doc format
 async function loadFromStorage() {
   if (!currentUser) return;
   try {
-    const ref = doc(db, 'users', currentUser.uid);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      const data = snap.data();
-      const remoteQuestionBank = data.questionBank || [];
-      const remoteVettingList = data.vettingList || [];
-      
-      // Merge remote data with local data by ID instead of replacing
-      // This prevents losing local changes that haven't been saved yet
-      const localQuestionBankMap = new Map(questionBank.map(q => [q.id, q]));
-      const localVettingListMap = new Map(vettingList.map(q => [q.id, q]));
-      
-      // Merge questionBank: remote takes precedence for existing IDs, but keep local unsaved items
-      const mergedQuestionBank = [...questionBank];
-      remoteQuestionBank.forEach(remoteQ => {
-        const localIdx = mergedQuestionBank.findIndex(q => q.id === remoteQ.id);
-        if (localIdx !== -1) {
-          // Update existing question with remote version
-          mergedQuestionBank[localIdx] = remoteQ;
-        } else {
-          // Add new question from remote
-          mergedQuestionBank.push(remoteQ);
-        }
-      });
-      
-      // Merge vettingList: remote takes precedence for existing IDs, but keep local unsaved items
-      const mergedVettingList = [...vettingList];
-      remoteVettingList.forEach(remoteQ => {
-        const localIdx = mergedVettingList.findIndex(q => q.id === remoteQ.id);
-        if (localIdx !== -1) {
-          // Update existing question with remote version
-          mergedVettingList[localIdx] = remoteQ;
-        } else {
-          // Add new question from remote
-          mergedVettingList.push(remoteQ);
-        }
-      });
-      
-      questionBank = mergedQuestionBank;
-      vettingList = mergedVettingList;
+    // ── Migration: old format stored arrays inside users/{uid} ──
+    const userRef = doc(db, 'users', currentUser.uid);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const old = userSnap.data();
+      if (Array.isArray(old.questionBank) || Array.isArray(old.vettingList)) {
+        console.log('Migrating from legacy single-doc format…');
+        const writes = [];
+        (old.questionBank || []).forEach(q => {
+          if (q && q.id) writes.push(setDoc(_qRef(q.id), q));
+        });
+        (old.vettingList || []).forEach(q => {
+          if (q && q.id) writes.push(setDoc(_vRef(q.id), q));
+        });
+        await Promise.all(writes);
+        // Overwrite user doc — remove the old arrays so we don't re-migrate
+        await setDoc(userRef, { _v: 2, migratedAt: new Date().toISOString() });
+        console.log('Migration complete.');
+      }
     }
+
+    // ── Load from subcollections ──
+    const [qSnap, vSnap] = await Promise.all([
+      getDocs(_qCol()),
+      getDocs(_vCol())
+    ]);
+    questionBank = [];
+    vettingList  = [];
+    qSnap.forEach(d => { if (d.data() && d.data().id) questionBank.push(d.data()); });
+    vSnap.forEach(d => { if (d.data() && d.data().id) vettingList.push(d.data()); });
+
   } catch (err) {
-    console.error('Firestore load failed:', err);
+    console.error('loadFromStorage failed:', err);
+    showToast('⚠ Could not load questions — working with local data', 'error');
   }
   updateCounts();
   populateTopicFilter();
@@ -6025,8 +6039,8 @@ function loadSampleData() {
     createdBy: 'Admin'
   });
   
-  saveToStorage();
   updateCounts();
+  questionBank.forEach(q => saveQuestion(q));
 }
 
 // =====================================================================
@@ -6135,6 +6149,10 @@ window.tableAddRow = tableAddRow;
 window.tableRemoveRow = tableRemoveRow;
 window.tableAddCol = tableAddCol;
 window.tableRemoveCol = tableRemoveCol;
+window.saveQuestion = saveQuestion;
+window.saveVettingQuestion = saveVettingQuestion;
+window.deleteQuestionDoc = deleteQuestionDoc;
+window.deleteVettingDoc = deleteVettingDoc;
 window.openStudentSetup = openStudentSetup;
 window.addStudentRow = addStudentRow;
 window.saveStudentSetup = saveStudentSetup;
