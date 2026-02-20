@@ -4545,16 +4545,74 @@ function transformImageUrl(url) {
 // =====================================================================
 // SAVE / LOAD QUESTION
 // =====================================================================
+
+// Firestore forbids nested arrays (array-of-arrays).
+// Convert table block.data  [[r0c0, r0c1], [r1c0, r1c1]]
+//   →  { "0": { "0": r0c0, "1": r0c1 }, "1": { "0": r1c0, "1": r1c1 } }
+function tableDataToFirestore(data) {
+  if (!Array.isArray(data)) return data; // already converted
+  const out = {};
+  data.forEach((row, r) => {
+    out[String(r)] = {};
+    const rowArr = Array.isArray(row) ? row : Object.values(row);
+    rowArr.forEach((cell, c) => {
+      out[String(r)][String(c)] = cell ?? '';
+    });
+  });
+  return out;
+}
+
+// Reverse: convert Firestore object-of-objects back to array-of-arrays
+function tableDataFromFirestore(data) {
+  if (Array.isArray(data)) return data; // already in array form
+  if (!data || typeof data !== 'object') return [];
+  return Object.keys(data)
+    .sort((a, b) => parseInt(a) - parseInt(b))
+    .map(r => {
+      const row = data[r];
+      if (Array.isArray(row)) return row;
+      if (!row || typeof row !== 'object') return [];
+      return Object.keys(row)
+        .sort((a, b) => parseInt(a) - parseInt(b))
+        .map(c => row[c] ?? '');
+    });
+}
+
+// Normalise a question loaded from Firestore back to in-memory format
+function normalizeLoadedQuestion(q) {
+  if (!q || !Array.isArray(q.blocks)) return q;
+  q.blocks.forEach(block => {
+    if (block.type !== 'table') return;
+    // Restore data
+    if (block.data && !Array.isArray(block.data)) {
+      block.data = tableDataFromFirestore(block.data);
+    }
+    if (!block.data) block.data = [];
+    // Restore colWidths (saved as object to avoid Firestore sparse-array issues)
+    if (block.colWidths && !Array.isArray(block.colWidths)) {
+      const arr = Array(block.cols || 3).fill(null);
+      Object.keys(block.colWidths).forEach(i => { arr[parseInt(i)] = block.colWidths[i]; });
+      block.colWidths = arr;
+    }
+    if (!block.colWidths) block.colWidths = Array(block.cols || 3).fill(null);
+    if (!block.rowHeights) block.rowHeights = {};
+    if (!block.merges) block.merges = [];
+    if (!block.cellStyles) block.cellStyles = {};
+    if (!block.cellPadding) block.cellPadding = {};
+  });
+  return q;
+}
+
 function collectQuestionData() {
-  // Sync contenteditable blocks
+  // Sync contenteditable text/explanation blocks from DOM → blocks[]
   document.querySelectorAll('.content-editable[data-block-id]').forEach(el => {
     const bid = el.dataset.blockId;
     const field = el.dataset.field;
     const block = blocks.find(b => b.id === bid);
-    if (block) block[field] = el.innerHTML;
+    if (block && field) block[field] = el.innerHTML;
   });
 
-  // Sync table contenteditable cells (all rows unified, no header distinction)
+  // Sync table cells from DOM → blocks[].data
   document.querySelectorAll('[data-table-block]').forEach(table => {
     const bid = table.dataset.tableBlock;
     const block = blocks.find(b => b.id === bid);
@@ -4562,16 +4620,33 @@ function collectQuestionData() {
     table.querySelectorAll('td[data-row][data-col]').forEach(cell => {
       const r = parseInt(cell.dataset.row);
       const c = parseInt(cell.dataset.col);
-        if (block.data[r]) block.data[r][c] = cell.innerHTML;
+      if (block.data[r]) block.data[r][c] = cell.innerHTML;
     });
   });
-  
+
+  // Deep-clone blocks so we don't mutate the live editor state
+  const blocksClone = JSON.parse(JSON.stringify(blocks));
+
+  // Convert nested arrays → Firestore-safe objects for every table block
+  blocksClone.forEach(block => {
+    if (block.type !== 'table') return;
+    if (Array.isArray(block.data)) {
+      block.data = tableDataToFirestore(block.data);
+    }
+    // colWidths: store as object so Firestore won't reject sparse arrays
+    if (Array.isArray(block.colWidths)) {
+      const cw = {};
+      block.colWidths.forEach((w, i) => { if (w !== null && w !== undefined) cw[String(i)] = w; });
+      block.colWidths = cw;
+    }
+  });
+
   return {
     id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: document.getElementById('questionTitle').value || 'Untitled',
     category: document.getElementById('categorySelect').value,
     topic: document.getElementById('topicSelect').value,
-    blocks: JSON.parse(JSON.stringify(blocks)),
+    blocks: blocksClone,
     blanks: JSON.parse(JSON.stringify(selectedBlanks)),
     createdAt: new Date().toISOString(),
     createdBy: currentUser?.name || 'Admin'
@@ -5603,10 +5678,27 @@ async function loadFromStorage() {
         console.log('Migrating from legacy single-doc format…');
         const writes = [];
         (old.questionBank || []).forEach(q => {
-          if (q && q.id) writes.push(setDoc(_qRef(q.id), q));
+          if (q && q.id) {
+            // Re-save through collectQuestionData-style conversion so nested arrays are fixed
+            const safe = JSON.parse(JSON.stringify(q));
+            if (Array.isArray(safe.blocks)) {
+              safe.blocks.forEach(b => {
+                if (b.type === 'table' && Array.isArray(b.data)) b.data = tableDataToFirestore(b.data);
+              });
+            }
+            writes.push(setDoc(_qRef(q.id), safe));
+          }
         });
         (old.vettingList || []).forEach(q => {
-          if (q && q.id) writes.push(setDoc(_vRef(q.id), q));
+          if (q && q.id) {
+            const safe = JSON.parse(JSON.stringify(q));
+            if (Array.isArray(safe.blocks)) {
+              safe.blocks.forEach(b => {
+                if (b.type === 'table' && Array.isArray(b.data)) b.data = tableDataToFirestore(b.data);
+              });
+            }
+            writes.push(setDoc(_vRef(q.id), safe));
+          }
         });
         await Promise.all(writes);
         // Overwrite user doc — remove the old arrays so we don't re-migrate
@@ -5622,8 +5714,14 @@ async function loadFromStorage() {
     ]);
     questionBank = [];
     vettingList  = [];
-    qSnap.forEach(d => { if (d.data() && d.data().id) questionBank.push(d.data()); });
-    vSnap.forEach(d => { if (d.data() && d.data().id) vettingList.push(d.data()); });
+    qSnap.forEach(d => {
+      const q = d.data();
+      if (q && q.id) questionBank.push(normalizeLoadedQuestion(q));
+    });
+    vSnap.forEach(d => {
+      const q = d.data();
+      if (q && q.id) vettingList.push(normalizeLoadedQuestion(q));
+    });
 
   } catch (err) {
     console.error('loadFromStorage failed:', err);
@@ -6058,6 +6156,21 @@ document.addEventListener('keydown', (e) => {
     document.getElementById('studentSetupOverlay').classList.remove('active');
     document.querySelectorAll('.table-grid-popup.active').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.special-chars-popup.active').forEach(p => p.classList.remove('active'));
+  }
+});
+
+// Block image pastes in contenteditable areas — images must be added via URL block
+document.addEventListener('paste', (e) => {
+  const t = e.target;
+  if (!t.classList.contains('content-editable') && !t.hasAttribute('contenteditable')) return;
+  const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+  if (!items) return;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
+      e.preventDefault();
+      showToast('Images cannot be pasted directly — use the "Add Image" block with a URL instead', 'error');
+      return;
+    }
   }
 });
 
