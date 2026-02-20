@@ -2660,7 +2660,7 @@ option {
         <div class="filter-bar">
           <div class="search-box">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input id="bankSearch" placeholder="Search questions..." oninput="renderQuestionBank()">
+            <input id="bankSearch" placeholder="Search words or \"phrases\" in title/content..." oninput="renderQuestionBank()">
           </div>
           <select id="bankFilterTopic" onchange="renderQuestionBank()">
             <option value="">All Topics</option>
@@ -2680,6 +2680,7 @@ option {
               <option value="Accuracy">Accuracy</option>
               <option value="Constant Variable">Constant Variable</option>
               <option value="Hypothesis">Hypothesis</option>
+              <option value="Definition">Definition</option>
               <option value="Aim">Aim</option>
               <option value="Conclusion">Conclusion</option>
             </optgroup>
@@ -2687,6 +2688,13 @@ option {
               <option value="Open Ended">Open Ended</option>
               <option value="MCQ">MCQ</option>
             </optgroup>
+          </select>
+          <select id="bankFilterLevel" onchange="renderQuestionBank()">
+            <option value="">All Levels</option>
+            <option value="P3">P3</option>
+            <option value="P4">P4</option>
+            <option value="P5">P5</option>
+            <option value="P6">P6</option>
           </select>
         </div>
         <div class="question-bank-grid" id="questionBankGrid"></div>
@@ -4799,16 +4807,67 @@ function clearForm() {
 // =====================================================================
 // QUESTION BANK RENDERING
 // =====================================================================
+function stripHtmlToText(html) {
+  if (!html) return '';
+  return String(html)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractQuestionSearchText(q) {
+  const parts = [q.title || '', q.topic || '', q.category || '', getTopicLevel(q.topic || '')];
+  (q.blocks || []).forEach(block => {
+    if (!block || !block.type) return;
+    if (block.type === 'text') parts.push(stripHtmlToText(block.content));
+    else if (block.type === 'image') parts.push(stripHtmlToText(block.caption));
+    else if (block.type === 'video') {
+      parts.push(stripHtmlToText(block.title));
+      parts.push(stripHtmlToText(block.description));
+    } else if (block.type === 'answer') {
+      parts.push(stripHtmlToText(block.claim));
+      parts.push(stripHtmlToText(block.evidence));
+      parts.push(stripHtmlToText(block.reasoning));
+    } else if (block.type === 'table') {
+      if (Array.isArray(block.data)) {
+        block.data.forEach(row => {
+          if (Array.isArray(row)) row.forEach(cell => parts.push(stripHtmlToText(cell)));
+        });
+      }
+    }
+  });
+  return parts.join(' ').toLowerCase();
+}
+
+function parseSearchTokens(raw) {
+  const tokens = [];
+  const re = /"([^"]+)"|(\S+)/g;
+  let match;
+  while ((match = re.exec(raw)) !== null) {
+    const token = (match[1] || match[2] || '').trim().toLowerCase();
+    if (token) tokens.push(token);
+  }
+  return tokens;
+}
+
 function renderQuestionBank() {
   const container = document.getElementById('questionBankGrid');
-  const search = (document.getElementById('bankSearch')?.value || '').toLowerCase();
+  const searchRaw = (document.getElementById('bankSearch')?.value || '').trim();
+  const searchTokens = parseSearchTokens(searchRaw);
   const topicFilter = document.getElementById('bankFilterTopic')?.value || '';
   const catFilter = document.getElementById('bankFilterCategory')?.value || '';
+  const levelFilter = document.getElementById('bankFilterLevel')?.value || '';
   
   let filtered = questionBank.filter(q => {
-    if (search && !q.title.toLowerCase().includes(search) && !q.topic.toLowerCase().includes(search)) return false;
     if (topicFilter && q.topic !== topicFilter) return false;
     if (catFilter && q.category !== catFilter) return false;
+    const qLevel = getTopicLevel(q.topic || '');
+    if (levelFilter && qLevel !== levelFilter) return false;
+    if (searchTokens.length > 0) {
+      const haystack = extractQuestionSearchText(q);
+      if (!searchTokens.every(token => haystack.includes(token))) return false;
+    }
     return true;
   });
   
@@ -4825,6 +4884,7 @@ function renderQuestionBank() {
   container.innerHTML = filtered.map(q => {
     const blankCount = Object.values(q.blanks || {}).reduce((sum, blk) => sum + Object.keys(blk).length, 0);
     const preview = getQuestionPreview(q);
+    const qLevel = getTopicLevel(q.topic || '');
     return `
       <div class="qb-card" ondblclick="editQuestion('${q.id}')">
         <div class="qb-card-header">
@@ -4833,6 +4893,7 @@ function renderQuestionBank() {
             <div class="qb-card-meta">
               <span class="qb-tag category">${escapeHtml(q.category)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+              <span class="qb-tag">${escapeHtml(qLevel)}</span>
               ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
             </div>
           </div>
