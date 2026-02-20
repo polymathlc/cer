@@ -76,22 +76,33 @@ body {
   transition: transform var(--transition);
 }
 .sidebar-brand {
-  padding: 24px 20px;
+  padding: 18px 20px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-.sidebar-brand h1 {
+.sidebar-brand-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+.sidebar-brand-text h1 {
   font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+  margin: 0;
 }
-.sidebar-brand span {
+.sidebar-brand-text span {
   font-family: 'Space Mono', monospace;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: rgba(255,255,255,0.4);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   display: block;
-  margin-top: 4px;
+  margin-top: 3px;
 }
 .sidebar-nav {
   flex: 1;
@@ -1776,17 +1787,30 @@ option {
 
   /* Worksheet header */
   .print-worksheet-header {
-    text-align: center;
-    margin-bottom: 20pt;
+    display: flex;
+    align-items: center;
+    gap: 14pt;
+    margin-bottom: 18pt;
+    padding-bottom: 12pt;
+    border-bottom: 1.5pt solid #222;
+  }
+  .print-worksheet-header-logo {
+    width: 52pt;
+    height: 52pt;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .print-worksheet-header-text {
+    flex: 1;
   }
   .print-worksheet-header h1 {
     font-size: 16pt;
     font-weight: 700;
-    margin: 0 0 4pt;
+    margin: 0 0 3pt;
   }
   .print-worksheet-header p {
     font-size: 9pt;
-    color: #666;
+    color: #555;
     margin: 0;
   }
   .print-student-info {
@@ -2255,9 +2279,7 @@ option {
 <div id="landingPage" class="landing-page">
   <nav class="landing-nav">
     <div class="brand">
-      <div class="brand-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-      </div>
+      <img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath" style="width:40px;height:40px;object-fit:contain;border-radius:8px;">
       <div class="brand-text">
         <h1>CER Builder</h1>
         <span>Polymath Learning Centre</span>
@@ -2404,8 +2426,11 @@ option {
   <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
+      <img class="sidebar-brand-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Logo">
+      <div class="sidebar-brand-text">
       <h1>CER Builder</h1>
       <span>Polymath Learning Centre</span>
+      </div>
     </div>
     <nav class="sidebar-nav">
       <div class="nav-section-label">Build</div>
@@ -4620,7 +4645,7 @@ function collectQuestionData() {
     table.querySelectorAll('td[data-row][data-col]').forEach(cell => {
       const r = parseInt(cell.dataset.row);
       const c = parseInt(cell.dataset.col);
-      if (block.data[r]) block.data[r][c] = cell.innerHTML;
+        if (block.data[r]) block.data[r][c] = cell.innerHTML;
     });
   });
 
@@ -4640,7 +4665,7 @@ function collectQuestionData() {
       block.colWidths = cw;
     }
   });
-
+  
   return {
     id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: document.getElementById('questionTitle').value || 'Untitled',
@@ -5294,8 +5319,11 @@ function doPrintWorksheetBlanks() {
 
     if (qIndex === 0) {
       qHtml += `<div class="print-worksheet-header">
+        <img class="print-worksheet-header-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath">
+        <div class="print-worksheet-header-text">
         <h1>CER Worksheet</h1>
         <p>Polymath Learning Centre</p>
+        </div>
       </div>
       <div class="print-student-info">
         <span>Name: ___________________________</span>
@@ -5408,8 +5436,11 @@ function doPrintWorksheetOpen() {
 
     if (qIndex === 0) {
       qHtml += `<div class="print-worksheet-header">
-        <h1>CER Worksheet</h1>
-        <p>Polymath Learning Centre</p>
+        <img class="print-worksheet-header-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath">
+        <div class="print-worksheet-header-text">
+          <h1>CER Worksheet</h1>
+          <p>Polymath Learning Centre</p>
+        </div>
       </div>
       <div class="print-student-info">
         <span>Name: ___________________________</span>
