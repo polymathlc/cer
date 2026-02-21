@@ -2497,12 +2497,8 @@ option {
           <div class="form-group">
             <label class="form-label">Category</label>
             <select id="categorySelect" class="form-select">
-              <optgroup label="── CER ──">
-                <option value="CER (Open Ended)">CER (Open Ended)</option>
-                <option value="CER (Fill in Blanks)">CER (Fill in Blanks)</option>
-                <option value="CER (MCQ)">CER (MCQ)</option>
-              </optgroup>
               <optgroup label="── Skills ──">
+                <option value="CER">CER</option>
                 <option value="Single Relationship">Single Relationship</option>
                 <option value="Double Relationship">Double Relationship</option>
                 <option value="Reliability">Reliability</option>
@@ -2514,9 +2510,8 @@ option {
                 <option value="Conclusion">Conclusion</option>
                 <option value="Definition">Definition</option>
               </optgroup>
-              <optgroup label="── Other ──">
-                <option value="Open Ended">Open Ended</option>
-                <option value="MCQ">MCQ</option>
+              <optgroup label="── Key Concepts ──">
+                <option value="Key Concepts">Key Concepts</option>
               </optgroup>
             </select>
           </div>
@@ -2667,12 +2662,8 @@ option {
           </select>
           <select id="bankFilterCategory" onchange="renderQuestionBank()">
             <option value="">All Categories</option>
-            <optgroup label="── CER ──">
-              <option value="CER (Open Ended)">CER (Open Ended)</option>
-              <option value="CER (Fill in Blanks)">CER (Fill in Blanks)</option>
-              <option value="CER (MCQ)">CER (MCQ)</option>
-            </optgroup>
             <optgroup label="── Skills ──">
+              <option value="CER">CER</option>
               <option value="Single Relationship">Single Relationship</option>
               <option value="Double Relationship">Double Relationship</option>
               <option value="Reliability">Reliability</option>
@@ -2684,9 +2675,8 @@ option {
               <option value="Aim">Aim</option>
               <option value="Conclusion">Conclusion</option>
             </optgroup>
-            <optgroup label="── Other ──">
-              <option value="Open Ended">Open Ended</option>
-              <option value="MCQ">MCQ</option>
+            <optgroup label="── Key Concepts ──">
+              <option value="Key Concepts">Key Concepts</option>
             </optgroup>
           </select>
           <select id="bankFilterLevel" onchange="renderQuestionBank()">
@@ -3117,6 +3107,18 @@ let selectedBlanks = {}; // { blockId: { wordIndex: true } }
 let currentEditingQuestion = null;
 let _skipCreateReset = false;
 
+function normalizeCategoryValue(category) {
+  const legacyCER = new Set([
+    'CER (Open Ended)',
+    'CER (Fill in Blanks)',
+    'CER (MCQ)',
+    'Open Ended',
+    'MCQ'
+  ]);
+  if (legacyCER.has(category)) return 'CER';
+  return category || 'CER';
+}
+
 // =====================================================================
 // NAVIGATION
 // =====================================================================
@@ -3135,7 +3137,7 @@ function navigateTo(page) {
       selectedBlanks = {};
       currentEditingQuestion = null;
       document.getElementById('questionTitle').value = '';
-      document.getElementById('categorySelect').value = 'CER (Open Ended)';
+      document.getElementById('categorySelect').value = 'CER';
       document.getElementById('topicSelect').value = 'Heat';
       renderBlocks();
       setEditMode(false);
@@ -4191,7 +4193,8 @@ function renderBlocks() {
             <button class="toolbar-btn" title="Superscript" onmousedown="event.preventDefault();execCmd('superscript')" style="font-size:0.72rem;">X<sup>2</sup></button>
             <button class="toolbar-btn" title="Subscript" onmousedown="event.preventDefault();execCmd('subscript')" style="font-size:0.72rem;">X<sub>2</sub></button>
             <span class="toolbar-divider"></span>
-            <button class="toolbar-btn" title="Ordered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">⊞</button>
+            <button class="toolbar-btn" title="Bulleted List" onmousedown="event.preventDefault();execCmd('insertUnorderedList')">•</button>
+            <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
             <span class="toolbar-divider"></span>
             <button class="toolbar-btn" title="Align Left" onmousedown="event.preventDefault();execCmd('justifyLeft')">≡</button>
             <button class="toolbar-btn" title="Align Center" onmousedown="event.preventDefault();execCmd('justifyCenter')">≡</button>
@@ -4267,6 +4270,9 @@ function renderBlocks() {
             <button class="toolbar-btn" title="Underline" onmousedown="event.preventDefault();execCmd('underline')"><u>U</u></button>
             <button class="toolbar-btn" title="Superscript" onmousedown="event.preventDefault();execCmd('superscript')" style="font-size:0.72rem;">X<sup>2</sup></button>
             <button class="toolbar-btn" title="Subscript" onmousedown="event.preventDefault();execCmd('subscript')" style="font-size:0.72rem;">X<sub>2</sub></button>
+            <span class="toolbar-divider"></span>
+            <button class="toolbar-btn" title="Bulleted List" onmousedown="event.preventDefault();execCmd('insertUnorderedList')">•</button>
+            <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
             <span class="toolbar-divider"></span>
             <select class="toolbar-select" onchange="execCmdVal('formatBlock', this.value); this.value='';">
               <option value="">List Style</option>
@@ -4494,24 +4500,47 @@ function openPreview() {
   updateBlankCount();
 }
 
+// Tokenize text for blank selection:
+// - punctuation is NOT part of words
+// - hyphenated/apostrophe words remain single words (e.g. man-made, it's)
+function tokenizeBlankText(content) {
+  const textOnly = (content || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!textOnly) return [];
+
+  const tokens = [];
+  let wordIndex = 0;
+  const re = /([A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*)|(\s+)|([^A-Za-z0-9\s]+)/g;
+  let m;
+  while ((m = re.exec(textOnly)) !== null) {
+    if (m[1]) tokens.push({ type: 'word', text: m[1], wordIndex: wordIndex++ });
+    else tokens.push({ type: 'sep', text: m[0] });
+  }
+  return tokens;
+}
+
 function renderSelectableText(blockId, content, sectionType) {
   if (!content) return '';
-  
-  // Strip HTML tags for word tokenization but keep structure
-  const textOnly = content.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!textOnly) return '';
-  
-  const words = textOnly.split(/\s+/);
+  const tokens = tokenizeBlankText(content);
+  if (tokens.length === 0) return '';
+
   let html = '<div style="line-height:2;">';
-  
-  words.forEach((word, idx) => {
-    const key = blockId + '_' + idx;
-    const isBlanked = selectedBlanks[blockId] && selectedBlanks[blockId][idx];
-    html += `<span class="selectable-word${isBlanked ? ' blanked' : ''}" 
+
+  tokens.forEach(tok => {
+    if (tok.type === 'word') {
+      const idx = tok.wordIndex;
+      const isBlanked = selectedBlanks[blockId] && selectedBlanks[blockId][idx];
+      html += `<span class="selectable-word${isBlanked ? ' blanked' : ''}" 
                   data-block="${blockId}" data-word-index="${idx}"
-                  onclick="toggleBlank('${blockId}', ${idx}, this)">${escapeHtml(word)}</span> `;
+                  onclick="toggleBlank('${blockId}', ${idx}, this)">${escapeHtml(tok.text)}</span>`;
+    } else {
+      html += escapeHtml(tok.text);
+    }
   });
-  
+
   html += '</div>';
   return html;
 }
@@ -4614,6 +4643,7 @@ function tableDataFromFirestore(data) {
 // Normalise a question loaded from Firestore back to in-memory format
 function normalizeLoadedQuestion(q) {
   if (!q || !Array.isArray(q.blocks)) return q;
+  q.category = normalizeCategoryValue(q.category);
   q.blocks.forEach(block => {
     if (block.type !== 'table') return;
     // Restore data
@@ -4677,7 +4707,7 @@ function collectQuestionData() {
   return {
     id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: document.getElementById('questionTitle').value || 'Untitled',
-    category: document.getElementById('categorySelect').value,
+    category: normalizeCategoryValue(document.getElementById('categorySelect').value),
     topic: document.getElementById('topicSelect').value,
     blocks: blocksClone,
     blanks: JSON.parse(JSON.stringify(selectedBlanks)),
@@ -4796,7 +4826,7 @@ function clearForm() {
     selectedBlanks = {};
     currentEditingQuestion = null;
     document.getElementById('questionTitle').value = '';
-    document.getElementById('categorySelect').value = 'CER (Open Ended)';
+    document.getElementById('categorySelect').value = 'CER';
     document.getElementById('topicSelect').value = 'Heat';
     renderBlocks();
     setEditMode(false);
@@ -4861,7 +4891,7 @@ function renderQuestionBank() {
   
   let filtered = questionBank.filter(q => {
     if (topicFilter && q.topic !== topicFilter) return false;
-    if (catFilter && q.category !== catFilter) return false;
+    if (catFilter && normalizeCategoryValue(q.category) !== catFilter) return false;
     const qLevel = getTopicLevel(q.topic || '');
     if (levelFilter && qLevel !== levelFilter) return false;
     if (searchTokens.length > 0) {
@@ -4885,13 +4915,14 @@ function renderQuestionBank() {
     const blankCount = Object.values(q.blanks || {}).reduce((sum, blk) => sum + Object.keys(blk).length, 0);
     const preview = getQuestionPreview(q);
     const qLevel = getTopicLevel(q.topic || '');
+    const qCategory = normalizeCategoryValue(q.category);
     return `
       <div class="qb-card" ondblclick="editQuestion('${q.id}')">
         <div class="qb-card-header">
           <div>
             <div class="qb-card-title">${escapeHtml(q.title)}</div>
             <div class="qb-card-meta">
-              <span class="qb-tag category">${escapeHtml(q.category)}</span>
+              <span class="qb-tag category">${escapeHtml(qCategory)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
               ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
@@ -4929,7 +4960,7 @@ function editQuestion(id) {
   
   currentEditingQuestion = q.id;
   document.getElementById('questionTitle').value = q.title;
-  document.getElementById('categorySelect').value = q.category;
+  document.getElementById('categorySelect').value = normalizeCategoryValue(q.category);
   
   // Try to set topic, handle custom topics
   const topicSelect = document.getElementById('topicSelect');
@@ -5156,20 +5187,23 @@ function renderStudentView() {
 
 function renderStudentText(blockId, content, blanks) {
   if (!content) return '';
-  
-  const textOnly = content.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!textOnly) return '';
-  
-  const words = textOnly.split(/\s+/);
+  const tokens = tokenizeBlankText(content);
+  if (tokens.length === 0) return '';
   const blockBlanks = blanks?.[blockId] || {};
   
   let html = '<div style="line-height:2.2;">';
-  words.forEach((word, idx) => {
-    if (blockBlanks[idx]) {
-      html += `<input class="blank-input" data-answer="${escapeHtml(word)}" data-block="${blockId}" data-idx="${idx}" 
-                      placeholder="________" style="width:${Math.max(80, word.length * 12)}px;"> `;
+  tokens.forEach(tok => {
+    if (tok.type === 'word') {
+      const idx = tok.wordIndex;
+      const word = tok.text;
+      if (blockBlanks[idx]) {
+        html += `<input class="blank-input" data-answer="${escapeHtml(word)}" data-block="${blockId}" data-idx="${idx}" 
+                      placeholder="________" style="width:${Math.max(80, word.length * 12)}px;">`;
+      } else {
+        html += escapeHtml(word);
+      }
     } else {
-      html += escapeHtml(word) + ' ';
+      html += escapeHtml(tok.text);
     }
   });
   html += '</div>';
@@ -5290,19 +5324,24 @@ function updatePrintCount() {
 
 function renderPrintText(blockId, content, blanks, blankCounter) {
   if (!content) return { html: '', counter: blankCounter };
-  const textOnly = content.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!textOnly) return { html: '', counter: blankCounter };
-  const words = textOnly.split(/\s+/);
+  const tokens = tokenizeBlankText(content);
+  if (tokens.length === 0) return { html: '', counter: blankCounter };
   const blockBlanks = blanks?.[blockId] || {};
   let html = '';
   let counter = blankCounter;
-  words.forEach((word, idx) => {
-    if (blockBlanks[idx]) {
-      counter++;
-      const width = Math.max(60, word.length * 8);
-      html += `<span class="print-blank-numbered" style="min-width:${width}pt;"><span class="print-blank-line"></span><span class="print-blank-num">(${counter})</span></span> `;
+  tokens.forEach(tok => {
+    if (tok.type === 'word') {
+      const idx = tok.wordIndex;
+      const word = tok.text;
+      if (blockBlanks[idx]) {
+        counter++;
+        const width = Math.max(60, word.length * 8);
+        html += `<span class="print-blank-numbered" style="min-width:${width}pt;"><span class="print-blank-line"></span><span class="print-blank-num">(${counter})</span></span>`;
+      } else {
+        html += escapeHtml(word);
+      }
     } else {
-      html += escapeHtml(word) + ' ';
+      html += escapeHtml(tok.text);
     }
   });
   return { html, counter };
@@ -5310,14 +5349,13 @@ function renderPrintText(blockId, content, blanks, blankCounter) {
 
 function collectPrintBlanks(blockId, content, blanks) {
   if (!content) return [];
-  const textOnly = content.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!textOnly) return [];
-  const words = textOnly.split(/\s+/);
+  const tokens = tokenizeBlankText(content);
+  if (tokens.length === 0) return [];
   const blockBlanks = blanks?.[blockId] || {};
   const result = [];
-  words.forEach((word, idx) => {
-    if (blockBlanks[idx]) {
-      result.push(word);
+  tokens.forEach(tok => {
+    if (tok.type === 'word' && blockBlanks[tok.wordIndex]) {
+      result.push(tok.text);
     }
   });
   return result;
@@ -6221,7 +6259,7 @@ function loadSampleData() {
   questionBank.push({
     id: 'q_sample_1',
     title: 'Question 1',
-    category: 'CER (Open Ended)',
+    category: 'CER',
     topic: 'Heat',
     blocks: sampleBlocks,
     blanks: sampleBlanks,
