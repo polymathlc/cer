@@ -2411,7 +2411,7 @@ option {
           </div>
         </div>
         <div class="landing-demo-body" id="landingDemoBody"></div>
-      </div>
+          </div>
     </div>
   </div>
   <div class="landing-footer">Polymath Learning Centre &copy; 2026</div>
@@ -5297,27 +5297,54 @@ function renderStudentView() {
 
 function renderStudentText(blockId, content, blanks) {
   if (!content) return '';
-  const tokens = tokenizeBlankText(content);
-  if (tokens.length === 0) return '';
   const blockBlanks = blanks?.[blockId] || {};
   
-  let html = '<div style="line-height:2.2;">';
-  tokens.forEach(tok => {
-    if (tok.type === 'word') {
-      const idx = tok.wordIndex;
-      const word = tok.text;
+  // Preserve original HTML structure (e.g. <ol>/<ul>/<li>) while replacing
+  // selected words with blank inputs by global word index.
+  const root = document.createElement('div');
+  root.innerHTML = content;
+  let wordIndex = 0;
+  const wordRe = /([A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*)|(\s+)|([^A-Za-z0-9\s]+)/g;
+
+  function buildFragmentFromText(text) {
+    const frag = document.createDocumentFragment();
+    let m;
+    while ((m = wordRe.exec(text)) !== null) {
+      if (m[1]) {
+        const word = m[1];
+        const idx = wordIndex++;
     if (blockBlanks[idx]) {
-      html += `<input class="blank-input" data-answer="${escapeHtml(word)}" data-block="${blockId}" data-idx="${idx}" 
-                      placeholder="________" style="width:${Math.max(80, word.length * 12)}px;">`;
+          const input = document.createElement('input');
+          input.className = 'blank-input';
+          input.setAttribute('data-answer', word);
+          input.setAttribute('data-block', blockId);
+          input.setAttribute('data-idx', String(idx));
+          input.setAttribute('placeholder', '________');
+          input.style.width = `${Math.max(80, word.length * 12)}px`;
+          frag.appendChild(input);
     } else {
-        html += escapeHtml(word);
+          frag.appendChild(document.createTextNode(word));
+        }
+      } else {
+        frag.appendChild(document.createTextNode(m[0]));
       }
-    } else {
-      html += escapeHtml(tok.text);
     }
-  });
-  html += '</div>';
-  return html;
+    return frag;
+  }
+
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const repl = buildFragmentFromText(node.nodeValue || '');
+      node.parentNode.replaceChild(repl, node);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const children = Array.from(node.childNodes);
+    children.forEach(walk);
+  }
+
+  walk(root);
+  return `<div style="line-height:2.2;">${root.innerHTML}</div>`;
 }
 
 function resetStudentAnswers() {
