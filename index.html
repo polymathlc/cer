@@ -1251,21 +1251,6 @@ option {
   padding: 12px 14px;
   line-height: 1.8;
 }
-.student-card-body ol,
-.student-card-body ul,
-.cer-student-content ol,
-.cer-student-content ul,
-.practice-card-body ol,
-.practice-card-body ul {
-  list-style-position: inside;
-  margin: 6px 0 8px 0;
-  padding-left: 0;
-}
-.student-card-body li,
-.cer-student-content li,
-.practice-card-body li {
-  margin: 2px 0;
-}
 
 .submit-row {
   display: flex;
@@ -3208,6 +3193,7 @@ let vettingList = [];
 let selectedBlanks = {}; // { blockId: { wordIndex: true } }
 let currentEditingQuestion = null;
 let _skipCreateReset = false;
+let showFirstLetterClues = false;
 
 function normalizeCategoryValue(category) {
   const legacyCER = new Set([
@@ -5297,6 +5283,10 @@ function renderStudentView() {
   
   // Submit button
   html += `<div class="submit-row">
+    <button class="btn btn-outline" id="firstLetterToggleBtn" onclick="toggleFirstLetterClues()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
+      ${showFirstLetterClues ? 'Hide Clues' : 'Show First Letter'}
+    </button>
     <button class="btn btn-outline" onclick="resetStudentAnswers()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
       Reset
@@ -5308,6 +5298,7 @@ function renderStudentView() {
   </div>`;
   
   container.innerHTML = html;
+  applyFirstLetterClues();
 }
 
 function renderStudentText(blockId, content, blanks) {
@@ -5368,7 +5359,43 @@ function resetStudentAnswers() {
     input.style.borderBottomColor = 'var(--primary)';
     input.style.background = 'var(--primary-light)';
   });
+  applyFirstLetterClues();
   showToast('Answers reset', 'info');
+}
+
+function applyFirstLetterClues() {
+  document.querySelectorAll('.blank-input').forEach(input => {
+    const ans = input.dataset.answer || '';
+    if (!ans) return;
+    if (showFirstLetterClues) {
+      const first = ans.charAt(0);
+      const rest = '_'.repeat(Math.max(3, ans.length - 1));
+      input.placeholder = `${first}${rest}`;
+    } else {
+      input.placeholder = '________';
+    }
+  });
+
+  const btn = document.getElementById('firstLetterToggleBtn');
+  if (btn) {
+    btn.innerHTML = `${showFirstLetterClues
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> Hide Clues'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> Show First Letter'
+    }`;
+  }
+
+  const pBtn = document.getElementById('practiceFirstLetterToggleBtn');
+  if (pBtn) {
+    pBtn.innerHTML = `${showFirstLetterClues
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> Hide Clues'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> First Letter'
+    }`;
+  }
+}
+
+function toggleFirstLetterClues() {
+  showFirstLetterClues = !showFirstLetterClues;
+  applyFirstLetterClues();
 }
 
 function checkStudentAnswers(qId) {
@@ -6344,6 +6371,10 @@ function renderPracticeQuestion(q, student) {
       <div class="practice-actions">
         <div class="practice-score" id="practiceScoreDisplay"></div>
         <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" id="practiceFirstLetterToggleBtn" onclick="toggleFirstLetterClues()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
+            ${showFirstLetterClues ? 'Hide Clues' : 'First Letter'}
+          </button>
           <button class="btn btn-outline" onclick="resetStudentAnswers()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             Reset
@@ -6360,6 +6391,7 @@ function renderPracticeQuestion(q, student) {
     </div>`;
 
   document.getElementById('practiceContainer').innerHTML = html;
+  applyFirstLetterClues();
 }
 
 function checkPracticeAnswers() {
@@ -6560,6 +6592,7 @@ window.approveVetting = approveVetting;
 window.deleteVetting = deleteVetting;
 window.resetStudentAnswers = resetStudentAnswers;
 window.checkStudentAnswers = checkStudentAnswers;
+window.toggleFirstLetterClues = toggleFirstLetterClues;
 window.showToast = showToast;
 window.showConfirm = showConfirm;
 window.closeConfirm = closeConfirm;
