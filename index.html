@@ -2009,6 +2009,18 @@ option {
     margin-top: 2pt;
     font-weight: 500;
   }
+  .print-ak-fulltext .ak-fullcontent ul,
+  .print-ak-fulltext .ak-fullcontent ol {
+    margin: 4pt 0 6pt 18pt;
+    padding: 0;
+  }
+  .print-ak-fulltext .ak-fullcontent li {
+    margin: 2pt 0;
+  }
+  .print-ak-fulltext .ak-fullcontent sup,
+  .print-ak-fulltext .ak-fullcontent sub {
+    line-height: 0;
+  }
 }
 
 /* ========== PRINT MODE SELECTION ========== */
@@ -3080,8 +3092,8 @@ async function enterApp(user) {
   populatePracticeStudentSelect();
   showToast('Welcome, ' + displayName + '!', 'success');
 
-  // Prompt student setup if no students exist (first-time user)
-  if (students.length === 0) {
+  // Prompt student setup only once per user account
+  if (!studentSetupSeen) {
     setTimeout(() => openStudentSetup(), 600);
   }
 }
@@ -3091,6 +3103,8 @@ onAuthStateChanged(auth, (user) => {
     enterApp(user);
   } else {
     currentUser = null;
+    students = [];
+    studentSetupSeen = false;
     showPage('landingPage');
   }
 });
@@ -3978,6 +3992,7 @@ function renderAdvancedTableBlock(block) {
         <span class="table-toolbar-label">Format:</span>
         <button class="table-toolbar-btn" title="Bold" onmousedown="event.preventDefault();tableFormatSelected('${bid}','bold')"><b>B</b></button>
         <button class="table-toolbar-btn" title="Italic" onmousedown="event.preventDefault();tableFormatSelected('${bid}','italic')"><i>I</i></button>
+        <button class="table-toolbar-btn" title="Underline" onmousedown="event.preventDefault();tableFormatSelected('${bid}','underline')"><u>U</u></button>
         <button class="table-toolbar-btn" title="Strikethrough" onmousedown="event.preventDefault();tableFormatSelected('${bid}','strikeThrough')" style="text-decoration:line-through;">S</button>
         <button class="table-toolbar-btn" title="Subscript" onmousedown="event.preventDefault();tableFormatSelected('${bid}','subscript')" style="font-size:0.7rem;">X<sub>2</sub></button>
         <button class="table-toolbar-btn" title="Superscript" onmousedown="event.preventDefault();tableFormatSelected('${bid}','superscript')" style="font-size:0.7rem;">X<sup>2</sup></button>
@@ -4234,20 +4249,32 @@ function renderBlocks() {
       case 'answer':
         bodyHTML = `
           <div class="block-body">
+            <div class="text-toolbar">
+              <button class="toolbar-btn" title="Bold" onmousedown="event.preventDefault();execCmd('bold')"><b>B</b></button>
+              <button class="toolbar-btn" title="Underline" onmousedown="event.preventDefault();execCmd('underline')"><u>U</u></button>
+              <button class="toolbar-btn" title="Superscript" onmousedown="event.preventDefault();execCmd('superscript')" style="font-size:0.72rem;">X<sup>2</sup></button>
+              <button class="toolbar-btn" title="Subscript" onmousedown="event.preventDefault();execCmd('subscript')" style="font-size:0.72rem;">X<sub>2</sub></button>
+              <span class="toolbar-divider"></span>
+              <button class="toolbar-btn" title="Bulleted List" onmousedown="event.preventDefault();execCmd('insertUnorderedList')">•</button>
+              <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
+            </div>
             <div class="cer-section">
               <div class="cer-label claim-label">Claim</div>
-              <textarea class="cer-textarea" placeholder="Enter the claim answer..."
-                        oninput="saveBlockContent('${block.id}', 'claim', this.value)">${escapeHtml(block.claim)}</textarea>
+              <div class="content-editable" contenteditable="true" data-placeholder="Enter the claim answer..."
+                   data-block-id="${block.id}" data-field="claim"
+                   oninput="saveBlockContent('${block.id}', 'claim', this.innerHTML)">${block.claim || ''}</div>
             </div>
             <div class="cer-section">
               <div class="cer-label evidence-label">Evidence</div>
-              <textarea class="cer-textarea" placeholder="Enter the evidence answer..."
-                        oninput="saveBlockContent('${block.id}', 'evidence', this.value)">${escapeHtml(block.evidence)}</textarea>
+              <div class="content-editable" contenteditable="true" data-placeholder="Enter the evidence answer..."
+                   data-block-id="${block.id}" data-field="evidence"
+                   oninput="saveBlockContent('${block.id}', 'evidence', this.innerHTML)">${block.evidence || ''}</div>
             </div>
             <div class="cer-section">
               <div class="cer-label reasoning-label">Reasoning</div>
-              <textarea class="cer-textarea" placeholder="Enter the reasoning answer..."
-                        oninput="saveBlockContent('${block.id}', 'reasoning', this.value)">${escapeHtml(block.reasoning)}</textarea>
+              <div class="content-editable" contenteditable="true" data-placeholder="Enter the reasoning answer..."
+                   data-block-id="${block.id}" data-field="reasoning"
+                   oninput="saveBlockContent('${block.id}', 'reasoning', this.innerHTML)">${block.reasoning || ''}</div>
             </div>
           </div>
         `;
@@ -4256,8 +4283,18 @@ function renderBlocks() {
       case 'plainanswer':
         bodyHTML = `
           <div class="block-body">
-            <textarea class="plain-answer-textarea" placeholder="Enter the answer..."
-                      oninput="saveBlockContent('${block.id}', 'content', this.value)">${escapeHtml(block.content || '')}</textarea>
+            <div class="text-toolbar">
+              <button class="toolbar-btn" title="Bold" onmousedown="event.preventDefault();execCmd('bold')"><b>B</b></button>
+              <button class="toolbar-btn" title="Underline" onmousedown="event.preventDefault();execCmd('underline')"><u>U</u></button>
+              <button class="toolbar-btn" title="Superscript" onmousedown="event.preventDefault();execCmd('superscript')" style="font-size:0.72rem;">X<sup>2</sup></button>
+              <button class="toolbar-btn" title="Subscript" onmousedown="event.preventDefault();execCmd('subscript')" style="font-size:0.72rem;">X<sub>2</sub></button>
+              <span class="toolbar-divider"></span>
+              <button class="toolbar-btn" title="Bulleted List" onmousedown="event.preventDefault();execCmd('insertUnorderedList')">•</button>
+              <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
+            </div>
+            <div class="content-editable" contenteditable="true" data-placeholder="Enter the answer..."
+                 data-block-id="${block.id}" data-field="content"
+                 oninput="saveBlockContent('${block.id}', 'content', this.innerHTML)">${block.content || ''}</div>
           </div>
         `;
         break;
@@ -4526,21 +4563,21 @@ function renderSelectableText(blockId, content, sectionType) {
   if (!content) return '';
   const tokens = tokenizeBlankText(content);
   if (tokens.length === 0) return '';
-
+  
   let html = '<div style="line-height:2;">';
-
+  
   tokens.forEach(tok => {
     if (tok.type === 'word') {
       const idx = tok.wordIndex;
-      const isBlanked = selectedBlanks[blockId] && selectedBlanks[blockId][idx];
-      html += `<span class="selectable-word${isBlanked ? ' blanked' : ''}" 
+    const isBlanked = selectedBlanks[blockId] && selectedBlanks[blockId][idx];
+    html += `<span class="selectable-word${isBlanked ? ' blanked' : ''}" 
                   data-block="${blockId}" data-word-index="${idx}"
                   onclick="toggleBlank('${blockId}', ${idx}, this)">${escapeHtml(tok.text)}</span>`;
     } else {
       html += escapeHtml(tok.text);
     }
   });
-
+  
   html += '</div>';
   return html;
 }
@@ -5196,10 +5233,10 @@ function renderStudentText(blockId, content, blanks) {
     if (tok.type === 'word') {
       const idx = tok.wordIndex;
       const word = tok.text;
-      if (blockBlanks[idx]) {
-        html += `<input class="blank-input" data-answer="${escapeHtml(word)}" data-block="${blockId}" data-idx="${idx}" 
+    if (blockBlanks[idx]) {
+      html += `<input class="blank-input" data-answer="${escapeHtml(word)}" data-block="${blockId}" data-idx="${idx}" 
                       placeholder="________" style="width:${Math.max(80, word.length * 12)}px;">`;
-      } else {
+    } else {
         html += escapeHtml(word);
       }
     } else {
@@ -5333,11 +5370,11 @@ function renderPrintText(blockId, content, blanks, blankCounter) {
     if (tok.type === 'word') {
       const idx = tok.wordIndex;
       const word = tok.text;
-      if (blockBlanks[idx]) {
-        counter++;
-        const width = Math.max(60, word.length * 8);
+    if (blockBlanks[idx]) {
+      counter++;
+      const width = Math.max(60, word.length * 8);
         html += `<span class="print-blank-numbered" style="min-width:${width}pt;"><span class="print-blank-line"></span><span class="print-blank-num">(${counter})</span></span>`;
-      } else {
+    } else {
         html += escapeHtml(word);
       }
     } else {
@@ -5396,6 +5433,16 @@ function openEndedLines(count) {
 function stripHtml(content) {
   if (!content) return '';
   return content.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Keep simple formatting (lists, sup/sub, bold, underline) for answer-key rendering
+function sanitizeAnswerKeyHtml(content) {
+  if (!content) return '';
+  return String(content)
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
+    .replace(/\son\w+="[^"]*"/gi, '')
+    .replace(/\son\w+='[^']*'/gi, '');
 }
 
 // Helper: estimate how many writing lines an answer needs
@@ -5584,17 +5631,17 @@ function doPrintWorksheetOpen() {
           qHtml += `<div class="print-open-cer-label">Reasoning</div><div class="print-open-cer-box">${openEndedLines(resLines)}</div>`;
           qHtml += `</div>`;
 
-          // Collect full text for answer key
-          qSections.push({ label: 'Claim', content: stripHtml(block.claim) });
-          qSections.push({ label: 'Evidence', content: stripHtml(block.evidence) });
-          qSections.push({ label: 'Reasoning', content: stripHtml(block.reasoning) });
+          // Collect formatted text for answer key
+          qSections.push({ label: 'Claim', content: sanitizeAnswerKeyHtml(block.claim) });
+          qSections.push({ label: 'Evidence', content: sanitizeAnswerKeyHtml(block.evidence) });
+          qSections.push({ label: 'Reasoning', content: sanitizeAnswerKeyHtml(block.reasoning) });
           break;
         }
         case 'plainanswer': {
           // Plain answer — blank writing box
           const paLines = linesForText(block.content, 70);
           qHtml += `<div class="print-open-answer-box"><div class="print-open-lines">${openEndedLines(paLines)}</div></div>`;
-          qSections.push({ label: null, content: stripHtml(block.content) });
+          qSections.push({ label: null, content: sanitizeAnswerKeyHtml(block.content) });
           break;
         }
         case 'explanation': break;
@@ -5630,7 +5677,7 @@ function doPrintWorksheetOpen() {
         if (sec.label) {
           allHtml += `<div class="ak-sublabel">${escapeHtml(sec.label)}</div>`;
         }
-        allHtml += `<div class="ak-fullcontent">${escapeHtml(sec.content)}</div>`;
+        allHtml += `<div class="ak-fullcontent">${sec.content}</div>`;
       });
       allHtml += `</div></div>`;
     });
@@ -5932,6 +5979,7 @@ function closeConfirm() {
 // STUDENT MANAGEMENT
 // =====================================================================
 let students = []; // [{ name: 'John', level: 'P4' }]
+let studentSetupSeen = false; // once true, don't auto-prompt again
 let activeStudentIndex = -1;
 
 const topicLevelMap = {
@@ -5997,6 +6045,7 @@ function saveStudentSetup() {
     return;
   }
   students = newStudents;
+  studentSetupSeen = true;
   saveStudentsToStorage();
   document.getElementById('studentSetupOverlay').classList.remove('active');
   populatePracticeStudentSelect();
@@ -6004,13 +6053,15 @@ function saveStudentSetup() {
 }
 
 function skipStudentSetup() {
+  studentSetupSeen = true;
+  saveStudentsToStorage();
   document.getElementById('studentSetupOverlay').classList.remove('active');
 }
 
 function saveStudentsToStorage() {
   if (!currentUser) return;
   const ref = doc(db, 'users', currentUser.uid);
-  setDoc(ref, { students }, { merge: true }).catch(err => {
+  setDoc(ref, { students, studentSetupSeen }, { merge: true }).catch(err => {
     console.error('Failed to save students:', err);
   });
 }
@@ -6021,10 +6072,18 @@ async function loadStudentsFromStorage() {
     const ref = doc(db, 'users', currentUser.uid);
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      students = snap.data().students || [];
+      const data = snap.data();
+      students = data.students || [];
+      // Backward compatibility: users with existing students should not be prompted again
+      studentSetupSeen = !!data.studentSetupSeen || students.length > 0;
+    } else {
+      students = [];
+      studentSetupSeen = false;
     }
   } catch (err) {
     console.error('Failed to load students:', err);
+    // On load failure, avoid trapping user in repeated prompts this session
+    studentSetupSeen = true;
   }
 }
 
