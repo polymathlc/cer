@@ -2577,6 +2577,130 @@ option {
   padding: 2px 4px;
   margin: 0 2px;
 }
+
+/* Expandable question preview in worksheet creator */
+.ws-q-card {
+  flex-direction: column;
+  align-items: stretch;
+}
+.ws-q-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ws-q-preview {
+  display: none;
+  padding: 12px 14px 8px 44px;
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: var(--text);
+  max-height: 400px;
+  overflow-y: auto;
+}
+.ws-q-preview.open {
+  display: block;
+}
+.ws-q-preview img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 8px 0;
+}
+.ws-q-preview table {
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin: 8px 0;
+}
+.ws-q-preview table th,
+.ws-q-preview table td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+}
+.ws-q-expand-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all var(--transition);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ws-q-expand-btn:hover { color: var(--primary); background: var(--primary-light); }
+.ws-q-expand-btn svg { width: 14px; height: 14px; transition: transform var(--transition); }
+.ws-q-expand-btn.expanded svg { transform: rotate(180deg); }
+
+/* Quick Practice page */
+.qp-level-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.qp-level-bar label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.qp-level-bar select {
+  padding: 8px 32px 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.88rem;
+  background: var(--surface);
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%237a756d' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6l3.5 4 3.5-4z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.qp-progress {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.qp-progress-text {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.qp-progress-bar {
+  width: 120px;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.qp-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.qp-level-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--accent-blue-light);
+  color: var(--accent-blue);
+}
 </style>
 </head>
 <body>
@@ -2766,6 +2890,11 @@ option {
       <div class="nav-item student-only" data-page="myworksheets" onclick="navigateTo('myworksheets')" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         My Worksheets
+      </div>
+      <div class="nav-section-label student-only" style="display:none;">Practice</div>
+      <div class="nav-item student-only" data-page="quickpractice" onclick="navigateTo('quickpractice')" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        Quick Practice
       </div>
     </nav>
     <div id="saveStatusIndicator" style="display:none;width:100%;text-align:center;font-size:0.7rem;padding:4px 12px;border-radius:6px;margin:0 8px 6px;font-family:'Space Mono',monospace;letter-spacing:0.03em;"></div>
@@ -3199,6 +3328,45 @@ option {
       </div>
       <div class="page-body" style="max-width:780px;">
         <div class="ws-saved-grid" id="savedWsGrid"></div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: QUICK PRACTICE (Students) ===== -->
+    <div class="page" id="page-quickpractice">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Quick Practice</h2>
+          </div>
+          <div class="subtitle">Practice questions starting from your level</div>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:780px;">
+        <div class="qp-level-bar">
+          <label>Your Level:</label>
+          <select id="qpLevelSelect" onchange="onQpLevelChange()">
+            <option value="P3">P3</option>
+            <option value="P4">P4</option>
+            <option value="P5">P5</option>
+            <option value="P6" selected>P6</option>
+          </select>
+          <div class="qp-progress">
+            <span class="qp-progress-text" id="qpProgressText">0 / 0</span>
+            <div class="qp-progress-bar"><div class="qp-progress-fill" id="qpProgressFill" style="width:0%;"></div></div>
+          </div>
+        </div>
+        <div id="qpContainer">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            <h3>Ready to Practice</h3>
+            <p>Choose your level above, then press Start to begin.</p>
+            <button class="btn btn-primary btn-lg" onclick="startQuickPractice()" style="margin-top:16px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Start Practice
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3644,6 +3812,7 @@ function navigateTo(page) {
     renderWsQuestions();
   }
   if (page === 'myworksheets') renderSavedWorksheets();
+  if (page === 'quickpractice') updateQpProgress();
   // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -6883,20 +7052,78 @@ function renderWsQuestions() {
     const qLevel = getTopicLevel(q.topic || '');
     const qCategory = normalizeCategoryValue(q.category);
     const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
-    return `<label class="ws-q-card${checked ? ' selected' : ''}" data-qid="${q.id}">
-      <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleWsQuestion('${q.id}', this.checked)">
-      <div class="ws-q-info">
-        <div class="ws-q-title">${escapeHtml(q.title)}</div>
-        <div class="ws-q-meta">
-          <span class="qb-tag category">${escapeHtml(qCategory)}</span>
-          <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
-          <span class="qb-tag">${escapeHtml(qLevel)}</span>
-          ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
+    const previewText = getQuestionPreview(q);
+    return `<div class="ws-q-card${checked ? ' selected' : ''}" data-qid="${q.id}" onclick="onWsCardClick('${q.id}', event)" style="cursor:pointer;">
+      <div class="ws-q-top">
+        <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleWsQuestion('${q.id}', this.checked)">
+        <div class="ws-q-info">
+          <div class="ws-q-title">${escapeHtml(q.title)}</div>
+          <div class="ws-q-meta">
+            <span class="qb-tag category">${escapeHtml(qCategory)}</span>
+            <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+            <span class="qb-tag">${escapeHtml(qLevel)}</span>
+            ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
+          </div>
         </div>
+        <button class="ws-q-expand-btn" onclick="event.stopPropagation();toggleWsPreview('${q.id}', this)" title="Preview question">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
       </div>
-    </label>`;
+      <div class="ws-q-preview" id="wsPreview_${q.id}"></div>
+    </div>`;
   }).join('');
   updateWsCount();
+}
+
+function toggleWsPreview(qId, btn) {
+  const previewEl = document.getElementById('wsPreview_' + qId);
+  if (!previewEl) return;
+  const isOpen = previewEl.classList.contains('open');
+  if (isOpen) {
+    previewEl.classList.remove('open');
+    btn.classList.remove('expanded');
+  } else {
+    // Render preview content on first open
+    if (!previewEl.dataset.rendered) {
+      previewEl.innerHTML = renderQuestionPreviewHtml(qId);
+      previewEl.dataset.rendered = '1';
+    }
+    previewEl.classList.add('open');
+    btn.classList.add('expanded');
+  }
+}
+
+function renderQuestionPreviewHtml(qId) {
+  const q = questionBank.find(qb => qb.id === qId);
+  if (!q) return '<p>Question not found</p>';
+  let html = '';
+  q.blocks.forEach(block => {
+    switch (block.type) {
+      case 'text':
+        if (block.content) html += `<div style="margin:6px 0;">${block.content}</div>`;
+        break;
+      case 'image':
+        if (block.url) html += `<div style="margin:8px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:6px;"></div>`;
+        break;
+      case 'answer':
+        html += `<div style="margin:8px 0;padding:8px 12px;background:var(--accent-blue-light);border-radius:6px;"><strong style="color:var(--accent-blue);font-size:0.78rem;">Claim:</strong> ${block.claim || '<em>empty</em>'}</div>`;
+        html += `<div style="margin:8px 0;padding:8px 12px;background:var(--accent-orange-light);border-radius:6px;"><strong style="color:var(--accent-orange);font-size:0.78rem;">Evidence:</strong> ${block.evidence || '<em>empty</em>'}</div>`;
+        html += `<div style="margin:8px 0;padding:8px 12px;background:var(--primary-light);border-radius:6px;"><strong style="color:var(--primary);font-size:0.78rem;">Reasoning:</strong> ${block.reasoning || '<em>empty</em>'}</div>`;
+        break;
+      case 'plainanswer':
+        if (block.content) html += `<div style="margin:6px 0;padding:8px 12px;background:var(--surface-alt);border:1px solid var(--border);border-radius:6px;">${block.content}</div>`;
+        break;
+      case 'table':
+        html += renderTableReadonly(block, '');
+        break;
+      case 'video':
+        if (block.url) html += `<div style="margin:6px 0;font-style:italic;color:var(--text-muted);font-size:0.82rem;">Video: ${escapeHtml(block.url)}</div>`;
+        break;
+      case 'explanation':
+        break;
+    }
+  });
+  return html || '<p style="color:var(--text-muted);font-style:italic;">No content</p>';
 }
 
 function toggleWsQuestion(id, checked) {
@@ -6907,6 +7134,18 @@ function toggleWsQuestion(id, checked) {
   const selectAll = document.getElementById('wsSelectAll');
   if (selectAll) selectAll.checked = wsSelectedIds.size === questionBank.length && questionBank.length > 0;
   updateWsCount();
+}
+
+function onWsCardClick(id, event) {
+  // Don't toggle if clicking expand button, checkbox, or preview area
+  if (event.target.closest('.ws-q-expand-btn') || event.target.closest('.ws-q-preview') || event.target.tagName === 'INPUT') return;
+  const card = document.querySelector(`.ws-q-card[data-qid="${id}"]`);
+  if (!card) return;
+  const cb = card.querySelector('input[type="checkbox"]');
+  if (cb) {
+    cb.checked = !cb.checked;
+    toggleWsQuestion(id, cb.checked);
+  }
 }
 
 function toggleWsSelectAll(checked) {
@@ -7227,6 +7466,251 @@ function doPrintStudentWorksheet(selected, format, worksheetTitle) {
 }
 
 // =====================================================================
+// QUICK PRACTICE MODE — level-ordered practice for students
+// =====================================================================
+let qpQueue = [];       // ordered array of question objects
+let qpIndex = -1;       // current position in queue
+let qpLevel = 'P6';     // selected student level
+let qpAnswered = 0;     // questions answered so far
+
+function onQpLevelChange() {
+  qpLevel = document.getElementById('qpLevelSelect').value;
+  // Reset practice when level changes
+  qpQueue = [];
+  qpIndex = -1;
+  qpAnswered = 0;
+  updateQpProgress();
+  document.getElementById('qpContainer').innerHTML = `
+    <div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      <h3>Ready to Practice</h3>
+      <p>Level set to ${escapeHtml(qpLevel)}. Press Start to begin.</p>
+      <button class="btn btn-primary btn-lg" onclick="startQuickPractice()" style="margin-top:16px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Start Practice
+      </button>
+    </div>`;
+}
+
+function buildQpQueue(level) {
+  const levelNum = getLevelNumber(level);
+  // Collect questions that have blanks, grouped by level
+  const withBlanks = questionBank.filter(q => {
+    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
+    return blankCount > 0;
+  });
+
+  // Group by level
+  const byLevel = {};
+  withBlanks.forEach(q => {
+    const qLevel = getTopicLevel(q.topic || '');
+    const qNum = getLevelNumber(qLevel);
+    if (!byLevel[qNum]) byLevel[qNum] = [];
+    byLevel[qNum].push(q);
+  });
+
+  // Shuffle each level group
+  const shuffle = arr => {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  };
+
+  // Build queue: student's level first, then descending (level-1, level-2, ...)
+  const queue = [];
+  // First: questions at student's own level
+  if (byLevel[levelNum]) queue.push(...shuffle([...byLevel[levelNum]]));
+  // Then: each lower level in descending order
+  for (let l = levelNum - 1; l >= 3; l--) {
+    if (byLevel[l]) queue.push(...shuffle([...byLevel[l]]));
+  }
+  // Finally: any levels above the student (less likely, but include them)
+  for (let l = levelNum + 1; l <= 6; l++) {
+    if (byLevel[l]) queue.push(...shuffle([...byLevel[l]]));
+  }
+  return queue;
+}
+
+function startQuickPractice() {
+  qpLevel = document.getElementById('qpLevelSelect').value;
+  qpQueue = buildQpQueue(qpLevel);
+  qpIndex = -1;
+  qpAnswered = 0;
+  if (qpQueue.length === 0) {
+    document.getElementById('qpContainer').innerHTML = `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <h3>No Questions Available</h3>
+        <p>There are no fill-in-the-blank questions in the question bank yet.</p>
+      </div>`;
+    updateQpProgress();
+    return;
+  }
+  loadNextQpQuestion();
+}
+
+function loadNextQpQuestion() {
+  qpIndex++;
+  if (qpIndex >= qpQueue.length) {
+    // All done!
+    document.getElementById('qpContainer').innerHTML = `
+      <div class="empty-state" style="padding:40px 20px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="width:56px;height:56px;margin-bottom:14px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <h3>All Done!</h3>
+        <p>You completed all ${qpQueue.length} question${qpQueue.length !== 1 ? 's' : ''}. Great work!</p>
+        <button class="btn btn-primary" onclick="startQuickPractice()" style="margin-top:16px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          Restart Practice
+        </button>
+      </div>`;
+    updateQpProgress();
+    return;
+  }
+  renderQpQuestion(qpQueue[qpIndex]);
+  updateQpProgress();
+}
+
+function updateQpProgress() {
+  const total = qpQueue.length;
+  const current = Math.min(qpIndex + 1, total);
+  const textEl = document.getElementById('qpProgressText');
+  const fillEl = document.getElementById('qpProgressFill');
+  if (textEl) textEl.textContent = `${qpAnswered} / ${total} answered`;
+  if (fillEl) fillEl.style.width = total > 0 ? `${Math.round((qpAnswered / total) * 100)}%` : '0%';
+}
+
+function renderQpQuestion(q) {
+  const qLevel = getTopicLevel(q.topic || '');
+  let html = `
+    <div class="practice-card">
+      <div class="practice-card-header">
+        <h3>${escapeHtml(q.title)}</h3>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
+          <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
+          <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+        </div>
+      </div>
+      <div class="practice-card-body">`;
+
+  q.blocks.forEach(block => {
+    switch (block.type) {
+      case 'text':
+        html += renderStudentText(block.id, block.content, q.blanks);
+        break;
+      case 'image':
+        if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+        break;
+      case 'answer':
+        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div></div>`;
+        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, q.blanks)}</div></div>`;
+        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div></div>`;
+        break;
+      case 'plainanswer':
+        html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
+        break;
+      case 'explanation': break;
+      case 'video':
+        if (block.url) {
+          const embedUrl = getYouTubeEmbedUrl(block.url);
+          if (embedUrl) html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
+        }
+        break;
+      case 'table':
+        html += renderTableReadonly(block, '');
+        break;
+    }
+  });
+
+  html += `</div>
+      <div class="practice-actions">
+        <div class="practice-score" id="qpScoreDisplay"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" id="qpFirstLetterBtn" onclick="toggleQpFirstLetter()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
+            ${showFirstLetterClues ? 'Hide Clues' : 'First Letter'}
+          </button>
+          <button class="btn btn-outline" onclick="resetQpAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+          <button class="btn btn-blue" onclick="checkQpAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
+            Check
+          </button>
+          <button class="btn btn-primary" onclick="loadNextQpQuestion()">
+            Next &rarr;
+          </button>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('qpContainer').innerHTML = html;
+  applyFirstLetterClues();
+}
+
+function toggleQpFirstLetter() {
+  showFirstLetterClues = !showFirstLetterClues;
+  applyFirstLetterClues();
+  const btn = document.getElementById('qpFirstLetterBtn');
+  if (btn) {
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> ${showFirstLetterClues ? 'Hide Clues' : 'First Letter'}`;
+  }
+}
+
+function resetQpAnswers() {
+  document.querySelectorAll('#qpContainer .blank-input').forEach(input => {
+    input.value = '';
+    input.style.borderBottomColor = 'var(--primary)';
+    input.style.background = 'var(--primary-light)';
+  });
+  applyFirstLetterClues();
+  const scoreEl = document.getElementById('qpScoreDisplay');
+  if (scoreEl) scoreEl.textContent = '';
+}
+
+function checkQpAnswers() {
+  const inputs = document.querySelectorAll('#qpContainer .blank-input');
+  let correct = 0;
+  let total = inputs.length;
+
+  inputs.forEach(input => {
+    const answer = input.dataset.answer.toLowerCase().trim();
+    const userAnswer = input.value.toLowerCase().trim();
+    if (userAnswer === answer) {
+      input.style.borderBottomColor = 'var(--primary)';
+      input.style.background = '#e8f5e9';
+      correct++;
+    } else if (userAnswer === '') {
+      input.style.borderBottomColor = 'var(--accent-orange)';
+      input.style.background = 'var(--accent-orange-light)';
+    } else {
+      input.style.borderBottomColor = 'var(--accent-red)';
+      input.style.background = 'var(--accent-red-light)';
+    }
+  });
+
+  qpAnswered = Math.max(qpAnswered, qpIndex + 1);
+  updateQpProgress();
+
+  const scoreEl = document.getElementById('qpScoreDisplay');
+  if (total === 0) {
+    if (scoreEl) scoreEl.textContent = 'No blanks to check';
+  } else {
+    const pct = Math.round((correct / total) * 100);
+    if (scoreEl) {
+      scoreEl.textContent = `Score: ${correct}/${total} (${pct}%)`;
+      scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
+    }
+  }
+}
+
+// =====================================================================
 // SAMPLE DATA LOADER — adds one demo question to get started
 // =====================================================================
 function loadSampleData() {
@@ -7454,12 +7938,21 @@ window.setLandingDemoMode = setLandingDemoMode;
 window.renderWsQuestions = renderWsQuestions;
 window.toggleWsQuestion = toggleWsQuestion;
 window.toggleWsSelectAll = toggleWsSelectAll;
+window.toggleWsPreview = toggleWsPreview;
+window.onWsCardClick = onWsCardClick;
 window.setWsFormat = setWsFormat;
 window.saveWorksheet = saveWorksheet;
 window.printStudentWorksheet = printStudentWorksheet;
 window.renderSavedWorksheets = renderSavedWorksheets;
 window.deleteWorksheet = deleteWorksheet;
 window.reprintWorksheet = reprintWorksheet;
+// Quick Practice
+window.onQpLevelChange = onQpLevelChange;
+window.startQuickPractice = startQuickPractice;
+window.loadNextQpQuestion = loadNextQpQuestion;
+window.toggleQpFirstLetter = toggleQpFirstLetter;
+window.resetQpAnswers = resetQpAnswers;
+window.checkQpAnswers = checkQpAnswers;
 </script>
 </body>
 </html>
