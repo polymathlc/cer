@@ -2369,6 +2369,214 @@ option {
 .confirm-dialog h3 { margin-bottom: 8px; font-size: 1.05rem; }
 .confirm-dialog p { font-size: 0.88rem; color: var(--text-muted); margin-bottom: 20px; }
 .confirm-dialog .btn-group { display: flex; gap: 10px; justify-content: center; }
+
+/* ========== STUDENT WORKSHEET CREATOR ========== */
+.ws-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+.ws-filter-bar select,
+.ws-filter-bar input[type="text"] {
+  padding: 9px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.85rem;
+  background: var(--surface);
+  outline: none;
+}
+.ws-filter-bar select {
+  appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%237a756d' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6l3.5 4 3.5-4z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.ws-filter-bar input[type="text"] {
+  flex: 1;
+  min-width: 160px;
+}
+.ws-question-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.ws-q-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.ws-q-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-sm);
+}
+.ws-q-card.selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+.ws-q-card input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  flex-shrink: 0;
+}
+.ws-q-info {
+  flex: 1;
+  min-width: 0;
+}
+.ws-q-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-q-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ws-format-section {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.ws-format-section h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+.ws-format-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ws-format-btn {
+  flex: 1;
+  min-width: 140px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--transition);
+  font-family: inherit;
+}
+.ws-format-btn:hover {
+  border-color: var(--primary);
+}
+.ws-format-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: 0 0 0 2px var(--primary-light);
+}
+.ws-format-btn .ws-fmt-icon {
+  font-size: 1.3rem;
+  margin-bottom: 6px;
+  display: block;
+}
+.ws-format-btn .ws-fmt-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  display: block;
+  margin-bottom: 2px;
+}
+.ws-format-btn .ws-fmt-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: block;
+}
+.ws-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+}
+.ws-selected-count {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.ws-title-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.92rem;
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color var(--transition);
+  outline: none;
+  margin-bottom: 16px;
+}
+.ws-title-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+/* Saved worksheets list */
+.ws-saved-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ws-saved-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+}
+.ws-saved-card:hover {
+  box-shadow: var(--shadow-sm);
+}
+.ws-saved-info h4 {
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.ws-saved-info p {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.ws-saved-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Print blanks-first-letter style */
+.print-blank-first-letter {
+  display: inline-block;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.85em;
+  color: var(--text-muted);
+  border-bottom: 1.5px solid var(--text);
+  min-width: 60pt;
+  text-align: center;
+  padding: 2px 4px;
+  margin: 0 2px;
+}
 </style>
 </head>
 <body>
@@ -2518,35 +2726,46 @@ option {
       </div>
     </div>
     <nav class="sidebar-nav">
-      <div class="nav-section-label">Build</div>
-      <div class="nav-item active" data-page="create" onclick="navigateTo('create')">
+      <!-- Admin-only nav items -->
+      <div class="nav-section-label admin-only">Build</div>
+      <div class="nav-item active admin-only" data-page="create" onclick="navigateTo('create')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
         Create Question
       </div>
-      <div class="nav-section-label">Manage</div>
-      <div class="nav-item" data-page="bank" onclick="navigateTo('bank')">
+      <div class="nav-section-label admin-only">Manage</div>
+      <div class="nav-item admin-only" data-page="bank" onclick="navigateTo('bank')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         Question Bank
         <span class="badge" id="bankCount">0</span>
       </div>
-      <div class="nav-item" data-page="vetting" onclick="navigateTo('vetting')">
+      <div class="nav-item admin-only" data-page="vetting" onclick="navigateTo('vetting')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         Vetting List
         <span class="badge" id="vettingCount">0</span>
       </div>
-      <div class="nav-section-label">Preview</div>
-      <div class="nav-item" data-page="student" onclick="navigateTo('student')">
+      <div class="nav-section-label admin-only">Preview</div>
+      <div class="nav-item admin-only" data-page="student" onclick="navigateTo('student')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         Student View
       </div>
-      <div class="nav-item" data-page="print" onclick="navigateTo('print')">
+      <div class="nav-item admin-only" data-page="print" onclick="navigateTo('print')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Print Worksheet
       </div>
-      <div class="nav-section-label">Students</div>
-      <div class="nav-item" data-page="practice" onclick="navigateTo('practice')">
+      <div class="nav-section-label admin-only">Students</div>
+      <div class="nav-item admin-only" data-page="practice" onclick="navigateTo('practice')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         Practice Mode
+      </div>
+      <!-- Student-only nav items -->
+      <div class="nav-section-label student-only" style="display:none;">Worksheets</div>
+      <div class="nav-item student-only" data-page="worksheet" onclick="navigateTo('worksheet')" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        Create Worksheet
+      </div>
+      <div class="nav-item student-only" data-page="myworksheets" onclick="navigateTo('myworksheets')" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        My Worksheets
       </div>
     </nav>
     <div id="saveStatusIndicator" style="display:none;width:100%;text-align:center;font-size:0.7rem;padding:4px 12px;border-radius:6px;margin:0 8px 6px;font-family:'Space Mono',monospace;letter-spacing:0.03em;"></div>
@@ -2874,6 +3093,115 @@ option {
       </div>
     </div>
 
+    <!-- ===== PAGE: CREATE WORKSHEET (Students) ===== -->
+    <div class="page" id="page-worksheet">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Create Worksheet</h2>
+          </div>
+          <div class="subtitle">Select questions, choose answer format, and print your worksheet</div>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:900px;">
+        <input type="text" id="wsTitle" class="ws-title-input" placeholder="Worksheet title (e.g. Heat Practice 1)">
+
+        <div class="ws-filter-bar">
+          <select id="wsFilterLevel" onchange="renderWsQuestions()">
+            <option value="">All Levels</option>
+            <option value="P3">P3</option>
+            <option value="P4">P4</option>
+            <option value="P5">P5</option>
+            <option value="P6">P6</option>
+          </select>
+          <select id="wsFilterTopic" onchange="renderWsQuestions()">
+            <option value="">All Topics</option>
+          </select>
+          <select id="wsFilterCategory" onchange="renderWsQuestions()">
+            <option value="">All Question Types</option>
+            <optgroup label="── Skills ──">
+              <option value="CER">CER</option>
+              <option value="Single Relationship">Single Relationship</option>
+              <option value="Double Relationship">Double Relationship</option>
+              <option value="Reliability">Reliability</option>
+              <option value="Fairness">Fairness</option>
+              <option value="Accuracy">Accuracy</option>
+              <option value="Constant Variable">Constant Variable</option>
+              <option value="Hypothesis">Hypothesis</option>
+              <option value="Aim">Aim</option>
+              <option value="Conclusion">Conclusion</option>
+              <option value="Definition">Definition</option>
+            </optgroup>
+            <optgroup label="── Key Concepts ──">
+              <option value="Key Concepts">Key Concepts</option>
+            </optgroup>
+          </select>
+          <input type="text" id="wsSearch" placeholder="Search questions..." oninput="renderWsQuestions()">
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem;font-weight:500;">
+            <input type="checkbox" id="wsSelectAll" onchange="toggleWsSelectAll(this.checked)" style="width:16px;height:16px;accent-color:var(--primary);">
+            Select All
+          </label>
+          <span class="ws-selected-count" id="wsSelectedCount">0 selected</span>
+        </div>
+
+        <div class="ws-question-grid" id="wsQuestionGrid"></div>
+
+        <div class="ws-format-section">
+          <h4>Answer Format</h4>
+          <div class="ws-format-options">
+            <button class="ws-format-btn active" data-format="blanks" onclick="setWsFormat('blanks')">
+              <span class="ws-fmt-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;display:inline;"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h13"/><rect x="16" y="10" width="5" height="4" rx="1" stroke-dasharray="2 1"/></svg></span>
+              <span class="ws-fmt-title">Blanks</span>
+              <span class="ws-fmt-desc">Fill in the blank fields</span>
+            </button>
+            <button class="ws-format-btn" data-format="firstletter" onclick="setWsFormat('firstletter')">
+              <span class="ws-fmt-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;display:inline;"><path d="M4 7h16"/><path d="M4 12h6"/><path d="M12 12h2" stroke-dasharray="1 1"/><path d="M4 17h8"/><path d="M14 17h2" stroke-dasharray="1 1"/></svg></span>
+              <span class="ws-fmt-title">Blanks + First Letter</span>
+              <span class="ws-fmt-desc">First letter hint shown</span>
+            </button>
+            <button class="ws-format-btn" data-format="open" onclick="setWsFormat('open')">
+              <span class="ws-fmt-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;display:inline;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10" stroke-dasharray="2 2"/><path d="M7 12h10" stroke-dasharray="2 2"/><path d="M7 16h6" stroke-dasharray="2 2"/></svg></span>
+              <span class="ws-fmt-title">Full Open Ended</span>
+              <span class="ws-fmt-desc">Blank writing boxes</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="ws-actions-bar">
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-outline" onclick="saveWorksheet()" id="wsSaveBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Save Worksheet
+            </button>
+            <button class="btn btn-primary" onclick="printStudentWorksheet()" id="wsPrintBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Print Worksheet
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: MY WORKSHEETS (Students) ===== -->
+    <div class="page" id="page-myworksheets">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>My Worksheets</h2>
+          </div>
+          <div class="subtitle">Your saved worksheets</div>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:780px;">
+        <div class="ws-saved-grid" id="savedWsGrid"></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -3147,27 +3475,98 @@ function getAuthErrorMessage(code) {
 // =====================================================================
 // AUTH STATE LISTENER
 // =====================================================================
+const ADMIN_EMAIL = 'chungzhikai@gmail.com';
+let adminUid = null; // will be loaded for student accounts
+
 async function enterApp(user) {
   const displayName = user.displayName || user.email.split('@')[0];
+  const isAdmin = user.email === ADMIN_EMAIL;
   currentUser = {
     uid: user.uid,
     email: user.email,
     name: displayName,
-    role: 'teacher'
+    role: isAdmin ? 'admin' : 'student'
   };
   showPage('appWrapper');
   document.querySelector('.avatar').textContent = displayName[0].toUpperCase();
   document.querySelector('.sidebar-footer div div:first-child').textContent = displayName;
-  await loadFromStorage();
-  await loadStudentsFromStorage();
-  loadSampleData();
-  renderBlocks();
-  populatePracticeStudentSelect();
-  showToast('Welcome, ' + displayName + '!', 'success');
 
-  // Prompt student setup only once per user account
-  if (!studentSetupSeen) {
-    setTimeout(() => openStudentSetup(), 600);
+  if (isAdmin) {
+    // Admin: save UID to config doc so students can find it
+    setDoc(doc(db, 'config', 'admin'), { uid: user.uid, email: user.email }).catch(err =>
+      console.warn('Could not save admin config:', err)
+    );
+    configureSidebarForRole('admin');
+    await loadFromStorage();
+    await loadStudentsFromStorage();
+    loadSampleData();
+    renderBlocks();
+    populatePracticeStudentSelect();
+    // Prompt student setup only once per user account
+    if (!studentSetupSeen) {
+      setTimeout(() => openStudentSetup(), 600);
+    }
+  } else {
+    // Student: load admin's question bank
+    configureSidebarForRole('student');
+    await loadAdminQuestions();
+    await loadSavedWorksheets();
+    populateWsTopicFilter();
+    renderWsQuestions();
+    renderSavedWorksheets();
+  }
+
+  showToast('Welcome, ' + displayName + '!', 'success');
+}
+
+function configureSidebarForRole(role) {
+  const adminItems = document.querySelectorAll('.admin-only');
+  const studentItems = document.querySelectorAll('.student-only');
+  if (role === 'admin') {
+    adminItems.forEach(el => el.style.display = '');
+    studentItems.forEach(el => el.style.display = 'none');
+    // Ensure create page is default active
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const createNav = document.querySelector('.nav-item[data-page="create"]');
+    if (createNav) createNav.classList.add('active');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const createPage = document.getElementById('page-create');
+    if (createPage) createPage.classList.add('active');
+  } else {
+    adminItems.forEach(el => el.style.display = 'none');
+    studentItems.forEach(el => el.style.display = '');
+    // Set worksheet page as default active for students
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const wsNav = document.querySelector('.nav-item[data-page="worksheet"]');
+    if (wsNav) wsNav.classList.add('active');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const wsPage = document.getElementById('page-worksheet');
+    if (wsPage) wsPage.classList.add('active');
+  }
+}
+
+async function loadAdminQuestions() {
+  try {
+    // First, get admin UID from config
+    const configSnap = await getDoc(doc(db, 'config', 'admin'));
+    if (!configSnap.exists()) {
+      showToast('Admin has not set up the question bank yet', 'error');
+      return;
+    }
+    adminUid = configSnap.data().uid;
+    // Load all questions from admin's subcollection
+    const adminQCol = collection(db, 'users', adminUid, 'questions');
+    const qSnap = await getDocs(adminQCol);
+    questionBank = [];
+    qSnap.forEach(d => {
+      const q = d.data();
+      if (q && q.id) questionBank.push(normalizeLoadedQuestion(q));
+    });
+    updateCounts();
+    populateWsTopicFilter();
+  } catch (err) {
+    console.error('loadAdminQuestions failed:', err);
+    showToast('Could not load questions - check your connection', 'error');
   }
 }
 
@@ -3240,6 +3639,11 @@ function navigateTo(page) {
   }
   if (page === 'print') renderPrintSelect();
   if (page === 'practice') populatePracticeStudentSelect();
+  if (page === 'worksheet') {
+    populateWsTopicFilter();
+    renderWsQuestions();
+  }
+  if (page === 'myworksheets') renderSavedWorksheets();
   // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -6426,6 +6830,403 @@ function checkPracticeAnswers() {
 }
 
 // =====================================================================
+// STUDENT WORKSHEET CREATOR
+// =====================================================================
+let wsSelectedIds = new Set();
+let wsFormat = 'blanks'; // 'blanks' | 'firstletter' | 'open'
+let savedWorksheets = [];
+
+function populateWsTopicFilter() {
+  const sel = document.getElementById('wsFilterTopic');
+  if (!sel) return;
+  const topics = [...new Set(questionBank.map(q => q.topic))].sort();
+  sel.innerHTML = '<option value="">All Topics</option>';
+  topics.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t;
+    opt.textContent = t;
+    sel.appendChild(opt);
+  });
+}
+
+function renderWsQuestions() {
+  const grid = document.getElementById('wsQuestionGrid');
+  if (!grid) return;
+  const levelFilter = document.getElementById('wsFilterLevel')?.value || '';
+  const topicFilter = document.getElementById('wsFilterTopic')?.value || '';
+  const catFilter = document.getElementById('wsFilterCategory')?.value || '';
+  const searchRaw = (document.getElementById('wsSearch')?.value || '').trim().toLowerCase();
+
+  let filtered = questionBank.filter(q => {
+    if (topicFilter && q.topic !== topicFilter) return false;
+    if (catFilter && normalizeCategoryValue(q.category) !== catFilter) return false;
+    const qLevel = getTopicLevel(q.topic || '');
+    if (levelFilter && qLevel !== levelFilter) return false;
+    if (searchRaw) {
+      const haystack = extractQuestionSearchText(q);
+      if (!haystack.includes(searchRaw)) return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <h3>No questions found</h3>
+      <p>Try adjusting your filters</p>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(q => {
+    const checked = wsSelectedIds.has(q.id);
+    const qLevel = getTopicLevel(q.topic || '');
+    const qCategory = normalizeCategoryValue(q.category);
+    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
+    return `<label class="ws-q-card${checked ? ' selected' : ''}" data-qid="${q.id}">
+      <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleWsQuestion('${q.id}', this.checked)">
+      <div class="ws-q-info">
+        <div class="ws-q-title">${escapeHtml(q.title)}</div>
+        <div class="ws-q-meta">
+          <span class="qb-tag category">${escapeHtml(qCategory)}</span>
+          <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+          <span class="qb-tag">${escapeHtml(qLevel)}</span>
+          ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
+        </div>
+      </div>
+    </label>`;
+  }).join('');
+  updateWsCount();
+}
+
+function toggleWsQuestion(id, checked) {
+  if (checked) wsSelectedIds.add(id);
+  else wsSelectedIds.delete(id);
+  const card = document.querySelector(`.ws-q-card[data-qid="${id}"]`);
+  if (card) card.classList.toggle('selected', checked);
+  const selectAll = document.getElementById('wsSelectAll');
+  if (selectAll) selectAll.checked = wsSelectedIds.size === questionBank.length && questionBank.length > 0;
+  updateWsCount();
+}
+
+function toggleWsSelectAll(checked) {
+  // Select/deselect only currently visible (filtered) questions
+  const visibleCards = document.querySelectorAll('.ws-q-card');
+  visibleCards.forEach(card => {
+    const qid = card.dataset.qid;
+    if (checked) wsSelectedIds.add(qid);
+    else wsSelectedIds.delete(qid);
+    card.classList.toggle('selected', checked);
+    const cb = card.querySelector('input[type="checkbox"]');
+    if (cb) cb.checked = checked;
+  });
+  updateWsCount();
+}
+
+function updateWsCount() {
+  const countEl = document.getElementById('wsSelectedCount');
+  if (countEl) countEl.textContent = wsSelectedIds.size + ' selected';
+}
+
+function setWsFormat(format) {
+  wsFormat = format;
+  document.querySelectorAll('.ws-format-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.format === format);
+  });
+}
+
+// ---- Save worksheets to Firestore ----
+function _wsCol() { return collection(db, 'users', currentUser.uid, 'worksheets'); }
+function _wsRef(id) { return doc(db, 'users', currentUser.uid, 'worksheets', id); }
+
+async function saveWorksheet() {
+  if (wsSelectedIds.size === 0) {
+    showToast('Select at least one question', 'error');
+    return;
+  }
+  const title = (document.getElementById('wsTitle')?.value || '').trim() || 'Untitled Worksheet';
+  const ws = {
+    id: 'ws_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+    title: title,
+    questionIds: Array.from(wsSelectedIds),
+    format: wsFormat,
+    createdAt: new Date().toISOString()
+  };
+  savedWorksheets.push(ws);
+  renderSavedWorksheets();
+  showToast('Worksheet saved!', 'success');
+  // Persist to Firestore
+  if (currentUser) {
+    setDoc(_wsRef(ws.id), ws).catch(err => console.error('Failed to save worksheet:', err));
+  }
+}
+
+async function loadSavedWorksheets() {
+  if (!currentUser) return;
+  try {
+    const snap = await getDocs(_wsCol());
+    savedWorksheets = [];
+    snap.forEach(d => {
+      const ws = d.data();
+      if (ws && ws.id) savedWorksheets.push(ws);
+    });
+    savedWorksheets.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  } catch (err) {
+    console.error('Failed to load worksheets:', err);
+  }
+}
+
+function renderSavedWorksheets() {
+  const grid = document.getElementById('savedWsGrid');
+  if (!grid) return;
+  if (savedWorksheets.length === 0) {
+    grid.innerHTML = `<div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      <h3>No saved worksheets</h3>
+      <p>Create a worksheet to see it here</p>
+    </div>`;
+    return;
+  }
+  grid.innerHTML = savedWorksheets.map(ws => {
+    const formatLabels = { blanks: 'Blanks', firstletter: 'Blanks + First Letter', open: 'Open Ended' };
+    const date = ws.createdAt ? new Date(ws.createdAt).toLocaleDateString() : '';
+    return `<div class="ws-saved-card">
+      <div class="ws-saved-info">
+        <h4>${escapeHtml(ws.title)}</h4>
+        <p>${ws.questionIds.length} question${ws.questionIds.length !== 1 ? 's' : ''} &middot; ${formatLabels[ws.format] || ws.format} &middot; ${date}</p>
+      </div>
+      <div class="ws-saved-actions">
+        <button class="btn btn-outline" onclick="reprintWorksheet('${ws.id}')" title="Print">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print
+        </button>
+        <button class="qb-action-btn delete-qb" onclick="deleteWorksheet('${ws.id}')" title="Delete">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function deleteWorksheet(id) {
+  showConfirm('Delete Worksheet', 'Are you sure you want to delete this worksheet?', () => {
+    savedWorksheets = savedWorksheets.filter(ws => ws.id !== id);
+    renderSavedWorksheets();
+    showToast('Worksheet deleted', 'info');
+    if (currentUser) {
+      deleteDoc(_wsRef(id)).catch(err => console.warn('deleteWorksheet:', err));
+    }
+  });
+}
+
+function reprintWorksheet(id) {
+  const ws = savedWorksheets.find(w => w.id === id);
+  if (!ws) return;
+  const selected = questionBank.filter(q => ws.questionIds.includes(q.id));
+  if (selected.length === 0) {
+    showToast('Questions no longer available', 'error');
+    return;
+  }
+  doPrintStudentWorksheet(selected, ws.format, ws.title);
+}
+
+// ---- Print student worksheet with logo ----
+function printStudentWorksheet() {
+  if (wsSelectedIds.size === 0) {
+    showToast('Select at least one question', 'error');
+    return;
+  }
+  const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
+  const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
+  doPrintStudentWorksheet(selected, wsFormat, title);
+}
+
+function renderPrintTextWithFirstLetter(blockId, content, blanks, blankCounter) {
+  if (!content) return { html: '', counter: blankCounter };
+  const tokens = tokenizeBlankText(content);
+  if (tokens.length === 0) return { html: '', counter: blankCounter };
+  const blockBlanks = blanks?.[blockId] || {};
+  let html = '';
+  let counter = blankCounter;
+  tokens.forEach(tok => {
+    if (tok.type === 'word') {
+      const idx = tok.wordIndex;
+      const word = tok.text;
+      if (blockBlanks[idx]) {
+        counter++;
+        const firstLetter = word.charAt(0);
+        const rest = '_'.repeat(Math.max(3, word.length - 1));
+        const width = Math.max(60, word.length * 8);
+        html += `<span class="print-blank-numbered" style="min-width:${width}pt;"><span class="print-blank-line">${escapeHtml(firstLetter)}${rest}</span><span class="print-blank-num">(${counter})</span></span>`;
+      } else {
+        html += escapeHtml(word);
+      }
+    } else {
+      html += escapeHtml(tok.text);
+    }
+  });
+  return { html, counter };
+}
+
+function doPrintStudentWorksheet(selected, format, worksheetTitle) {
+  const output = document.getElementById('printOutput');
+  let allHtml = '';
+  const answerKeyData = [];
+  let blankCounter = 0;
+
+  const renderFn = format === 'firstletter' ? renderPrintTextWithFirstLetter : renderPrintText;
+
+  selected.forEach((q, qIndex) => {
+    let qHtml = `<div class="print-question-page">`;
+
+    if (qIndex === 0) {
+      qHtml += `<div class="print-worksheet-header">
+        <img class="print-worksheet-header-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath">
+        <div class="print-worksheet-header-text">
+          <h1>${escapeHtml(worksheetTitle)}</h1>
+          <p>Polymath Learning Centre</p>
+        </div>
+      </div>
+      <div class="print-student-info">
+        <span>Name: ___________________________</span>
+        <span>Date: _______________</span>
+        <span>Class: ___________</span>
+      </div>`;
+    }
+
+    qHtml += `<div class="print-q-header">
+      <h2>${escapeHtml(q.title)}</h2>
+      <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
+    </div>`;
+
+    if (format === 'open') {
+      // Open ended mode
+      const qSections = [];
+      q.blocks.forEach(block => {
+        switch (block.type) {
+          case 'text': {
+            const textOnly = stripHtml(block.content);
+            if (textOnly) qHtml += `<div class="print-text-block">${escapeHtml(textOnly)}</div>`;
+            break;
+          }
+          case 'image': {
+            if (block.url) qHtml += `<div class="print-text-block"><img src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="max-width:100%;max-height:200pt;"></div>`;
+            break;
+          }
+          case 'answer': {
+            qHtml += `<div class="print-open-cer-section">`;
+            qHtml += `<div class="print-open-cer-label">Claim</div><div class="print-open-cer-box">${openEndedLines(linesForText(block.claim, 70))}</div>`;
+            qHtml += `<div class="print-open-cer-label">Evidence</div><div class="print-open-cer-box">${openEndedLines(linesForText(block.evidence, 70))}</div>`;
+            qHtml += `<div class="print-open-cer-label">Reasoning</div><div class="print-open-cer-box">${openEndedLines(linesForText(block.reasoning, 70))}</div>`;
+            qHtml += `</div>`;
+            qSections.push({ label: 'Claim', content: sanitizeAnswerKeyHtml(block.claim) });
+            qSections.push({ label: 'Evidence', content: sanitizeAnswerKeyHtml(block.evidence) });
+            qSections.push({ label: 'Reasoning', content: sanitizeAnswerKeyHtml(block.reasoning) });
+            break;
+          }
+          case 'plainanswer': {
+            qHtml += `<div class="print-open-answer-box"><div class="print-open-lines">${openEndedLines(linesForText(block.content, 70))}</div></div>`;
+            qSections.push({ label: null, content: sanitizeAnswerKeyHtml(block.content) });
+            break;
+          }
+          case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
+          case 'explanation': break;
+          case 'video': { if (block.url) qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`; break; }
+        }
+      });
+      qHtml += `</div>`;
+      allHtml += qHtml;
+      answerKeyData.push({ title: q.title, type: 'open', sections: qSections });
+    } else {
+      // Blanks or Blanks with first letter mode
+      const qAnswers = [];
+      q.blocks.forEach(block => {
+        switch (block.type) {
+          case 'text': {
+            const result = renderFn(block.id, block.content, q.blanks, blankCounter);
+            blankCounter = result.counter;
+            qHtml += `<div class="print-text-block">${result.html}</div>`;
+            qAnswers.push(...collectPrintBlanks(block.id, block.content, q.blanks));
+            break;
+          }
+          case 'image': {
+            if (block.url) qHtml += `<div class="print-text-block"><img src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="max-width:100%;max-height:200pt;"></div>`;
+            break;
+          }
+          case 'answer': {
+            qHtml += `<div class="print-cer-section">`;
+            const claimResult = renderFn(block.id + '_claim', block.claim, q.blanks, blankCounter);
+            blankCounter = claimResult.counter;
+            qHtml += `<div class="print-cer-label">Claim</div><div class="print-cer-content">${claimResult.html}</div>`;
+            qAnswers.push(...collectPrintBlanks(block.id + '_claim', block.claim, q.blanks));
+            const evResult = renderFn(block.id + '_evidence', block.evidence, q.blanks, blankCounter);
+            blankCounter = evResult.counter;
+            qHtml += `<div class="print-cer-label">Evidence</div><div class="print-cer-content">${evResult.html}</div>`;
+            qAnswers.push(...collectPrintBlanks(block.id + '_evidence', block.evidence, q.blanks));
+            const resResult = renderFn(block.id + '_reasoning', block.reasoning, q.blanks, blankCounter);
+            blankCounter = resResult.counter;
+            qHtml += `<div class="print-cer-label">Reasoning</div><div class="print-cer-content">${resResult.html}</div>`;
+            qAnswers.push(...collectPrintBlanks(block.id + '_reasoning', block.reasoning, q.blanks));
+            qHtml += `</div>`;
+            break;
+          }
+          case 'plainanswer': {
+            const paResult = renderFn(block.id, block.content, q.blanks, blankCounter);
+            blankCounter = paResult.counter;
+            qHtml += `<div class="print-text-block">${paResult.html}</div>`;
+            qAnswers.push(...collectPrintBlanks(block.id, block.content, q.blanks));
+            break;
+          }
+          case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
+          case 'explanation': break;
+          case 'video': { if (block.url) qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`; break; }
+        }
+      });
+      qHtml += `</div>`;
+      allHtml += qHtml;
+      answerKeyData.push({ title: q.title, type: 'blanks', answers: qAnswers });
+    }
+  });
+
+  // Answer Key Page
+  if (format === 'open') {
+    const hasAny = answerKeyData.some(d => d.sections && d.sections.length > 0);
+    if (hasAny) {
+      allHtml += `<div class="print-question-page print-answer-key-page"><h2>Answer Key</h2>`;
+      answerKeyData.forEach(qData => {
+        if (!qData.sections || qData.sections.length === 0) return;
+        allHtml += `<div class="print-ak-question"><h4>${escapeHtml(qData.title)}</h4><div class="print-ak-fulltext">`;
+        qData.sections.forEach(sec => {
+          if (sec.label) allHtml += `<div class="ak-sublabel">${escapeHtml(sec.label)}</div>`;
+          allHtml += `<div class="ak-fullcontent">${sec.content}</div>`;
+        });
+        allHtml += `</div></div>`;
+      });
+      allHtml += `</div>`;
+    }
+  } else {
+    const hasAny = answerKeyData.some(d => d.answers && d.answers.length > 0);
+    if (hasAny) {
+      allHtml += `<div class="print-question-page print-answer-key-page"><h2>Answer Key</h2>`;
+      let globalNum = 0;
+      answerKeyData.forEach(qData => {
+        if (!qData.answers || qData.answers.length === 0) return;
+        allHtml += `<div class="print-ak-question"><h4>${escapeHtml(qData.title)}</h4><div class="print-ak-answers">`;
+        qData.answers.forEach(word => {
+          globalNum++;
+          allHtml += `<div class="ak-item"><span class="ak-num">${globalNum}.</span> <span class="ak-word">${escapeHtml(word)}</span></div>`;
+        });
+        allHtml += `</div></div>`;
+      });
+      allHtml += `</div>`;
+    }
+  }
+
+  output.innerHTML = allHtml;
+  autoscaleAndPrint(output);
+}
+
+// =====================================================================
 // SAMPLE DATA LOADER — adds one demo question to get started
 // =====================================================================
 function loadSampleData() {
@@ -6649,6 +7450,16 @@ window.onPracticeStudentChange = onPracticeStudentChange;
 window.loadRandomPracticeQuestion = loadRandomPracticeQuestion;
 window.checkPracticeAnswers = checkPracticeAnswers;
 window.setLandingDemoMode = setLandingDemoMode;
+// Student worksheet functions
+window.renderWsQuestions = renderWsQuestions;
+window.toggleWsQuestion = toggleWsQuestion;
+window.toggleWsSelectAll = toggleWsSelectAll;
+window.setWsFormat = setWsFormat;
+window.saveWorksheet = saveWorksheet;
+window.printStudentWorksheet = printStudentWorksheet;
+window.renderSavedWorksheets = renderSavedWorksheets;
+window.deleteWorksheet = deleteWorksheet;
+window.reprintWorksheet = reprintWorksheet;
 </script>
 </body>
 </html>
