@@ -7642,17 +7642,18 @@ function renderQpQuestion(q) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             Reset
           </button>
-          <button class="btn btn-blue" onclick="checkQpAnswers()">
+          <button class="btn btn-primary" id="qpSubmitBtn" onclick="submitQpAnswers()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
-            Check
+            Submit
           </button>
-          <button class="btn btn-primary" onclick="loadNextQpQuestion()">
+          <button class="btn btn-primary" id="qpNextBtn" onclick="loadNextQpQuestion()" style="display:none;">
             Next &rarr;
           </button>
         </div>
       </div>
     </div>`;
 
+  qpSubmitted = false;
   document.getElementById('qpContainer').innerHTML = html;
   applyFirstLetterClues();
 }
@@ -7667,6 +7668,7 @@ function toggleQpFirstLetter() {
 }
 
 function resetQpAnswers() {
+  if (qpSubmitted) return; // Can't reset after submission
   document.querySelectorAll('#qpContainer .blank-input').forEach(input => {
     input.value = '';
     input.style.borderBottomColor = 'var(--primary)';
@@ -7677,30 +7679,42 @@ function resetQpAnswers() {
   if (scoreEl) scoreEl.textContent = '';
 }
 
-function checkQpAnswers() {
+let qpSubmitted = false;
+
+function submitQpAnswers() {
+  if (qpSubmitted) return;
+  qpSubmitted = true;
+
   const inputs = document.querySelectorAll('#qpContainer .blank-input');
   let correct = 0;
   let total = inputs.length;
 
   inputs.forEach(input => {
-    const answer = input.dataset.answer.toLowerCase().trim();
+    const answer = input.dataset.answer;
+    const answerLower = answer.toLowerCase().trim();
     const userAnswer = input.value.toLowerCase().trim();
-    if (userAnswer === answer) {
+    if (userAnswer === answerLower) {
       input.style.borderBottomColor = 'var(--primary)';
       input.style.background = '#e8f5e9';
+      input.readOnly = true;
       correct++;
-    } else if (userAnswer === '') {
-      input.style.borderBottomColor = 'var(--accent-orange)';
-      input.style.background = 'var(--accent-orange-light)';
     } else {
+      // Show the correct answer for wrong/empty blanks
       input.style.borderBottomColor = 'var(--accent-red)';
       input.style.background = 'var(--accent-red-light)';
+      input.readOnly = true;
+      // Insert a correction label after the input
+      const correction = document.createElement('span');
+      correction.style.cssText = 'color:var(--primary);font-weight:600;font-size:0.82rem;margin-left:4px;';
+      correction.textContent = answer;
+      input.parentNode.insertBefore(correction, input.nextSibling);
     }
   });
 
   qpAnswered = Math.max(qpAnswered, qpIndex + 1);
   updateQpProgress();
 
+  // Show score
   const scoreEl = document.getElementById('qpScoreDisplay');
   if (total === 0) {
     if (scoreEl) scoreEl.textContent = 'No blanks to check';
@@ -7711,6 +7725,14 @@ function checkQpAnswers() {
       scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
     }
   }
+
+  // Hide submit, show next; disable first-letter and reset
+  const submitBtn = document.getElementById('qpSubmitBtn');
+  const nextBtn = document.getElementById('qpNextBtn');
+  const firstLetterBtn = document.getElementById('qpFirstLetterBtn');
+  if (submitBtn) submitBtn.style.display = 'none';
+  if (nextBtn) nextBtn.style.display = '';
+  if (firstLetterBtn) firstLetterBtn.disabled = true;
 }
 
 // =====================================================================
@@ -7955,7 +7977,7 @@ window.startQuickPractice = startQuickPractice;
 window.loadNextQpQuestion = loadNextQpQuestion;
 window.toggleQpFirstLetter = toggleQpFirstLetter;
 window.resetQpAnswers = resetQpAnswers;
-window.checkQpAnswers = checkQpAnswers;
+window.submitQpAnswers = submitQpAnswers;
 </script>
 </body>
 </html>
