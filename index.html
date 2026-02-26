@@ -2107,6 +2107,15 @@ option {
   .print-ak-fulltext .ak-fullcontent sub {
     line-height: 0;
   }
+
+  /* Question chunk within grouped pages (auto-detect layout) */
+  .print-question-chunk {
+    overflow: hidden;
+  }
+  .print-question-separator {
+    border-top: 1pt solid #ccc;
+    margin: 10pt 0;
+  }
 }
 
 /* ========== PRINT MODE SELECTION ========== */
@@ -6179,7 +6188,7 @@ function doPrintWorksheetBlanks() {
   let blankCounter = 0;
 
   selected.forEach((q, qIndex) => {
-    let qHtml = `<div class="print-question-page">`;
+    let qHtml = `<div class="print-question-chunk">`;
 
     if (qIndex === 0) {
       qHtml += `<div class="print-worksheet-header">
@@ -6296,7 +6305,7 @@ function doPrintWorksheetOpen() {
   const answerKeyData = []; // { title, sections: [{ label?, content }] }
 
   selected.forEach((q, qIndex) => {
-    let qHtml = `<div class="print-question-page">`;
+    let qHtml = `<div class="print-question-chunk">`;
 
     if (qIndex === 0) {
       qHtml += `<div class="print-worksheet-header">
@@ -6435,23 +6444,94 @@ function autoscaleAndPrint(output) {
 }
 
 function doScaleAndPrint(output) {
+  // Make output visible off-screen so we can measure heights accurately
+  output.style.cssText = 'display:block;position:absolute;left:-9999px;top:0;width:178mm;';
+
   requestAnimationFrame(() => {
-    const pages = output.querySelectorAll('.print-question-page');
     const maxH = 770;
-    pages.forEach(page => {
-      page.style.transform = '';
-      page.style.transformOrigin = 'top left';
-      const h = page.scrollHeight;
-      if (h > maxH) {
-        const scale = Math.max(0.55, maxH / h);
-        page.style.transform = `scale(${scale})`;
-        page.style.height = maxH + 'px';
-      }
-    });
-    window.print();
-    pages.forEach(page => {
-      page.style.transform = '';
-      page.style.height = '';
+    const chunks = Array.from(output.querySelectorAll('.print-question-chunk'));
+    const answerKeys = Array.from(output.querySelectorAll('.print-answer-key-page'));
+
+    if (chunks.length === 0) {
+      // Fallback: no question chunks, just scale existing pages
+      const pages = output.querySelectorAll('.print-question-page');
+      pages.forEach(page => {
+        page.style.transform = '';
+        page.style.transformOrigin = 'top left';
+        const h = page.scrollHeight;
+        if (h > maxH) {
+          const scale = Math.max(0.55, maxH / h);
+          page.style.transform = `scale(${scale})`;
+          page.style.height = maxH + 'px';
+        }
+      });
+      output.style.cssText = 'display:none;';
+      window.print();
+      pages.forEach(page => { page.style.transform = ''; page.style.height = ''; });
+      return;
+    }
+
+    // Measure each chunk's natural height
+    const heights = chunks.map(c => c.scrollHeight);
+
+    // Use non-header chunks for median calculation (first chunk includes worksheet header)
+    const measureHeights = chunks.length > 1 ? heights.slice(1) : heights;
+    const sorted = [...measureHeights].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+
+    // Determine questions per page: round to nearest of 1, 2, or 4
+    const naturalFit = Math.max(1, Math.floor(maxH / Math.max(1, median)));
+    let perPage;
+    if (naturalFit >= 3) perPage = 4;
+    else if (naturalFit >= 2) perPage = 2;
+    else perPage = 1;
+
+    // Detach all chunks and answer keys from current DOM positions
+    chunks.forEach(c => c.remove());
+    answerKeys.forEach(ak => ak.remove());
+    output.innerHTML = '';
+
+    // Group chunks into print-question-page wrappers
+    for (let i = 0; i < chunks.length; i += perPage) {
+      const page = document.createElement('div');
+      page.className = 'print-question-page';
+
+      const group = chunks.slice(i, i + perPage);
+      group.forEach((chunk, idx) => {
+        if (idx > 0) {
+          const sep = document.createElement('div');
+          sep.className = 'print-question-separator';
+          page.appendChild(sep);
+        }
+        page.appendChild(chunk);
+      });
+
+      output.appendChild(page);
+    }
+
+    // Re-add answer key pages
+    answerKeys.forEach(ak => output.appendChild(ak));
+
+    // Second rAF: measure grouped pages and scale to fit
+    requestAnimationFrame(() => {
+      const pages = output.querySelectorAll('.print-question-page');
+      pages.forEach(page => {
+        page.style.transform = '';
+        page.style.transformOrigin = 'top left';
+        const h = page.scrollHeight;
+        if (h > maxH) {
+          const scale = Math.max(0.55, maxH / h);
+          page.style.transform = `scale(${scale})`;
+          page.style.height = maxH + 'px';
+        }
+      });
+
+      // Hide output and trigger print
+      output.style.cssText = 'display:none;';
+      window.print();
+
+      // Clean up transforms after print dialog closes
+      pages.forEach(page => { page.style.transform = ''; page.style.height = ''; });
     });
   });
 }
@@ -7319,7 +7399,7 @@ function doPrintStudentWorksheet(selected, format, worksheetTitle) {
   const renderFn = format === 'firstletter' ? renderPrintTextWithFirstLetter : renderPrintText;
 
   selected.forEach((q, qIndex) => {
-    let qHtml = `<div class="print-question-page">`;
+    let qHtml = `<div class="print-question-chunk">`;
 
     if (qIndex === 0) {
       qHtml += `<div class="print-worksheet-header">
