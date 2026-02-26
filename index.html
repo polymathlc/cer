@@ -1831,7 +1831,7 @@ option {
     page-break-inside: avoid;
     max-width: 100%;
     padding: 0;
-    overflow: hidden;
+    overflow: visible;
   }
   .print-question-page:last-of-type:not(.print-answer-key-page) {
     page-break-after: always;
@@ -6460,41 +6460,38 @@ function doScaleAndPrint(output) {
       // Fallback: no question chunks, just scale existing pages
       const pages = output.querySelectorAll('.print-question-page');
       pages.forEach(page => {
-        page.style.transform = '';
-        page.style.transformOrigin = 'top left';
+        page.style.zoom = '';
         const h = page.scrollHeight;
         if (h > maxH) {
-          const scale = Math.max(0.7, maxH / h);
-          page.style.transform = `scale(${scale})`;
-          page.style.height = maxH + 'px';
+          page.style.zoom = Math.max(0.7, maxH / h);
         }
       });
       output.style.cssText = 'display:none;';
       window.print();
-      pages.forEach(page => { page.style.transform = ''; page.style.height = ''; });
+      pages.forEach(page => { page.style.zoom = ''; });
       return;
     }
 
     // Measure each chunk's natural height
     const heights = chunks.map(c => c.scrollHeight);
 
-    // Greedy bin-packing: fill each page until adding the next question would overflow
-    const pageGroups = [];
-    let currentGroup = [0];
-    let currentHeight = heights[0];
+    // First chunk (with worksheet header) always gets its own page
+    const pageGroups = [[0]];
+    let currentGroup = [];
+    let currentHeight = 0;
 
     for (let i = 1; i < chunks.length; i++) {
-      const addedHeight = separatorH + heights[i];
-      if (currentHeight + addedHeight <= maxH) {
-        currentGroup.push(i);
-        currentHeight += addedHeight;
-      } else {
+      const addedHeight = (currentGroup.length > 0 ? separatorH : 0) + heights[i];
+      if (currentGroup.length > 0 && currentHeight + addedHeight > maxH) {
         pageGroups.push(currentGroup);
         currentGroup = [i];
         currentHeight = heights[i];
+      } else {
+        currentGroup.push(i);
+        currentHeight += addedHeight;
       }
     }
-    pageGroups.push(currentGroup);
+    if (currentGroup.length > 0) pageGroups.push(currentGroup);
 
     // Detach all chunks and answer keys from current DOM positions
     chunks.forEach(c => c.remove());
@@ -6521,17 +6518,15 @@ function doScaleAndPrint(output) {
     // Re-add answer key pages
     answerKeys.forEach(ak => output.appendChild(ak));
 
-    // Second rAF: measure grouped pages and scale to fit
+    // Second rAF: measure grouped pages and scale with zoom (not transform)
+    // zoom affects layout size directly, so content is never clipped
     requestAnimationFrame(() => {
       const pages = output.querySelectorAll('.print-question-page');
       pages.forEach(page => {
-        page.style.transform = '';
-        page.style.transformOrigin = 'top left';
+        page.style.zoom = '';
         const h = page.scrollHeight;
         if (h > maxH) {
-          const scale = Math.max(0.7, maxH / h);
-          page.style.transform = `scale(${scale})`;
-          page.style.height = maxH + 'px';
+          page.style.zoom = Math.max(0.7, maxH / h);
         }
       });
 
@@ -6539,8 +6534,8 @@ function doScaleAndPrint(output) {
       output.style.cssText = 'display:none;';
       window.print();
 
-      // Clean up transforms after print dialog closes
-      pages.forEach(page => { page.style.transform = ''; page.style.height = ''; });
+      // Clean up after print dialog closes
+      pages.forEach(page => { page.style.zoom = ''; });
     });
   });
 }
