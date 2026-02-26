@@ -2952,6 +2952,7 @@ option {
                 <option value="Conclusion">Conclusion</option>
                 <option value="Definition">Definition</option>
                 <option value="Explanation">Explanation</option>
+                <option value="Stating">Stating</option>
               </optgroup>
               <optgroup label="── Key Concepts ──">
                 <option value="Key Concepts">Key Concepts</option>
@@ -3118,6 +3119,7 @@ option {
               <option value="Explanation">Explanation</option>
               <option value="Aim">Aim</option>
               <option value="Conclusion">Conclusion</option>
+              <option value="Stating">Stating</option>
             </optgroup>
             <optgroup label="── Key Concepts ──">
               <option value="Key Concepts">Key Concepts</option>
@@ -3273,6 +3275,7 @@ option {
               <option value="Conclusion">Conclusion</option>
               <option value="Definition">Definition</option>
               <option value="Explanation">Explanation</option>
+              <option value="Stating">Stating</option>
             </optgroup>
             <optgroup label="── Key Concepts ──">
               <option value="Key Concepts">Key Concepts</option>
@@ -6449,6 +6452,7 @@ function doScaleAndPrint(output) {
 
   requestAnimationFrame(() => {
     const maxH = 770;
+    const separatorH = 30; // approx height of .print-question-separator
     const chunks = Array.from(output.querySelectorAll('.print-question-chunk'));
     const answerKeys = Array.from(output.querySelectorAll('.print-answer-key-page'));
 
@@ -6460,7 +6464,7 @@ function doScaleAndPrint(output) {
         page.style.transformOrigin = 'top left';
         const h = page.scrollHeight;
         if (h > maxH) {
-          const scale = Math.max(0.55, maxH / h);
+          const scale = Math.max(0.7, maxH / h);
           page.style.transform = `scale(${scale})`;
           page.style.height = maxH + 'px';
         }
@@ -6474,40 +6478,45 @@ function doScaleAndPrint(output) {
     // Measure each chunk's natural height
     const heights = chunks.map(c => c.scrollHeight);
 
-    // Use non-header chunks for median calculation (first chunk includes worksheet header)
-    const measureHeights = chunks.length > 1 ? heights.slice(1) : heights;
-    const sorted = [...measureHeights].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
+    // Greedy bin-packing: fill each page until adding the next question would overflow
+    const pageGroups = [];
+    let currentGroup = [0];
+    let currentHeight = heights[0];
 
-    // Determine questions per page: round to nearest of 1, 2, or 4
-    const naturalFit = Math.max(1, Math.floor(maxH / Math.max(1, median)));
-    let perPage;
-    if (naturalFit >= 3) perPage = 4;
-    else if (naturalFit >= 2) perPage = 2;
-    else perPage = 1;
+    for (let i = 1; i < chunks.length; i++) {
+      const addedHeight = separatorH + heights[i];
+      if (currentHeight + addedHeight <= maxH) {
+        currentGroup.push(i);
+        currentHeight += addedHeight;
+      } else {
+        pageGroups.push(currentGroup);
+        currentGroup = [i];
+        currentHeight = heights[i];
+      }
+    }
+    pageGroups.push(currentGroup);
 
     // Detach all chunks and answer keys from current DOM positions
     chunks.forEach(c => c.remove());
     answerKeys.forEach(ak => ak.remove());
     output.innerHTML = '';
 
-    // Group chunks into print-question-page wrappers
-    for (let i = 0; i < chunks.length; i += perPage) {
+    // Build pages from groups
+    pageGroups.forEach(group => {
       const page = document.createElement('div');
       page.className = 'print-question-page';
 
-      const group = chunks.slice(i, i + perPage);
-      group.forEach((chunk, idx) => {
-        if (idx > 0) {
+      group.forEach((chunkIdx, posInGroup) => {
+        if (posInGroup > 0) {
           const sep = document.createElement('div');
           sep.className = 'print-question-separator';
           page.appendChild(sep);
         }
-        page.appendChild(chunk);
+        page.appendChild(chunks[chunkIdx]);
       });
 
       output.appendChild(page);
-    }
+    });
 
     // Re-add answer key pages
     answerKeys.forEach(ak => output.appendChild(ak));
@@ -6520,7 +6529,7 @@ function doScaleAndPrint(output) {
         page.style.transformOrigin = 'top left';
         const h = page.scrollHeight;
         if (h > maxH) {
-          const scale = Math.max(0.55, maxH / h);
+          const scale = Math.max(0.7, maxH / h);
           page.style.transform = `scale(${scale})`;
           page.style.height = maxH + 'px';
         }
