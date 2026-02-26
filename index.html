@@ -3225,6 +3225,10 @@ option {
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
             <span class="selected-count" id="printSelectedCount">0 selected</span>
+            <button class="btn btn-outline" onclick="practiceFromPrint()" id="printPracticeBtn" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Practice
+            </button>
             <button class="btn btn-primary" onclick="printWorksheet()" id="printBtn" disabled>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               Print Worksheet
@@ -6085,8 +6089,10 @@ function togglePrintSelectAll(checked) {
 function updatePrintCount() {
   const countEl = document.getElementById('printSelectedCount');
   const btn = document.getElementById('printBtn');
+  const practiceBtn = document.getElementById('printPracticeBtn');
   if (countEl) countEl.textContent = printSelectedIds.size + ' selected';
   if (btn) btn.disabled = printSelectedIds.size === 0;
+  if (practiceBtn) practiceBtn.disabled = printSelectedIds.size === 0;
 }
 
 function renderPrintText(blockId, content, blanks, blankCounter) {
@@ -7322,6 +7328,10 @@ function renderSavedWorksheets() {
         <p>${ws.questionIds.length} question${ws.questionIds.length !== 1 ? 's' : ''} &middot; ${formatLabels[ws.format] || ws.format} &middot; ${date}</p>
       </div>
       <div class="ws-saved-actions">
+        <button class="btn btn-outline" onclick="practiceWorksheet('${ws.id}')" title="Practice">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Practice
+        </button>
         <button class="btn btn-outline" onclick="reprintWorksheet('${ws.id}')" title="Print">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           Print
@@ -7820,6 +7830,51 @@ function submitQpAnswers() {
 }
 
 // =====================================================================
+// PRACTICE FROM SELECTION — practice specific question IDs
+// =====================================================================
+function practiceQuestions(questionIds) {
+  const withBlanks = questionBank.filter(q => {
+    if (!questionIds.includes(q.id)) return false;
+    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
+    return blankCount > 0;
+  });
+  if (withBlanks.length === 0) {
+    showToast('No fill-in-the-blank questions to practice', 'info');
+    return;
+  }
+  // Shuffle
+  for (let i = withBlanks.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [withBlanks[i], withBlanks[j]] = [withBlanks[j], withBlanks[i]];
+  }
+  qpQueue = withBlanks;
+  qpIndex = -1;
+  qpAnswered = 0;
+  navigateTo('quickpractice');
+  updateQpProgress();
+  loadNextQpQuestion();
+}
+
+function practiceFromPrint() {
+  if (printSelectedIds.size === 0) {
+    showToast('Select at least one question', 'info');
+    return;
+  }
+  practiceQuestions([...printSelectedIds]);
+}
+
+function practiceWorksheet(id) {
+  const ws = savedWorksheets.find(w => w.id === id);
+  if (!ws) return;
+  const available = questionBank.filter(q => ws.questionIds.includes(q.id));
+  if (available.length === 0) {
+    showToast('Questions no longer available', 'error');
+    return;
+  }
+  practiceQuestions(ws.questionIds);
+}
+
+// =====================================================================
 // SAMPLE DATA LOADER — adds one demo question to get started
 // =====================================================================
 function loadSampleData() {
@@ -8062,6 +8117,9 @@ window.loadNextQpQuestion = loadNextQpQuestion;
 window.toggleQpFirstLetter = toggleQpFirstLetter;
 window.resetQpAnswers = resetQpAnswers;
 window.submitQpAnswers = submitQpAnswers;
+window.practiceQuestions = practiceQuestions;
+window.practiceFromPrint = practiceFromPrint;
+window.practiceWorksheet = practiceWorksheet;
 </script>
 </body>
 </html>
