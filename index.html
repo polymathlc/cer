@@ -460,13 +460,15 @@ option {
 }
 .editable-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
-  overflow: hidden;
+  table-layout: fixed;
 }
 .editable-table th, .editable-table td {
-  border: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   padding: 8px 12px;
   text-align: left;
   font-size: 0.88rem;
@@ -474,14 +476,19 @@ option {
   vertical-align: top;
   word-break: break-word;
   overflow-wrap: break-word;
-  min-width: 30px;
   box-sizing: border-box;
+}
+.editable-table th:last-child, .editable-table td:last-child {
+  border-right: none;
+}
+.editable-table tbody tr:last-child th,
+.editable-table tbody tr:last-child td {
+  border-bottom: none;
 }
 .editable-table td[contenteditable],
 .editable-table th[contenteditable] {
   outline: none;
   cursor: text;
-  overflow: hidden;
 }
 .editable-table td[contenteditable]:focus,
 .editable-table th[contenteditable]:focus {
@@ -490,8 +497,7 @@ option {
 .editable-table td.table-cell-selected,
 .editable-table th.table-cell-selected {
   background: #d0e8ff !important;
-  outline: 2px solid var(--accent-blue);
-  outline-offset: -2px;
+  box-shadow: inset 0 0 0 2px var(--accent-blue);
 }
 /* Color palette in toolbar */
 .table-color-palette {
@@ -726,6 +732,7 @@ option {
 }
 
 /* Table border presets */
+.editable-table[data-border="none"] { border: none !important; }
 .editable-table[data-border="none"] th,
 .editable-table[data-border="none"] td { border: none !important; }
 .editable-table[data-border="outer"] th,
@@ -733,11 +740,22 @@ option {
 .editable-table[data-border="outer"] { border: 2px solid var(--border) !important; }
 .editable-table[data-border="inner"] { border: none !important; }
 .editable-table[data-border="inner"] th,
-.editable-table[data-border="inner"] td { border: 1px solid var(--border) !important; border-top: none !important; border-left: none !important; }
+.editable-table[data-border="inner"] td { border-right: 1px solid var(--border) !important; border-bottom: 1px solid var(--border) !important; }
+.editable-table[data-border="inner"] th:last-child,
+.editable-table[data-border="inner"] td:last-child { border-right: none !important; }
+.editable-table[data-border="inner"] tbody tr:last-child th,
+.editable-table[data-border="inner"] tbody tr:last-child td { border-bottom: none !important; }
+.editable-table[data-border="header-row"] { border: none !important; }
 .editable-table[data-border="header-row"] th,
 .editable-table[data-border="header-row"] td { border: none !important; border-bottom: 1px solid var(--border) !important; }
+.editable-table[data-border="header-row"] tbody tr:last-child th,
+.editable-table[data-border="header-row"] tbody tr:last-child td { border-bottom: none !important; }
 .editable-table[data-border="all"] th,
-.editable-table[data-border="all"] td { border: 1px solid var(--border) !important; }
+.editable-table[data-border="all"] td { border-right: 1px solid var(--border) !important; border-bottom: 1px solid var(--border) !important; }
+.editable-table[data-border="all"] th:last-child,
+.editable-table[data-border="all"] td:last-child { border-right: none !important; }
+.editable-table[data-border="all"] tbody tr:last-child th,
+.editable-table[data-border="all"] tbody tr:last-child td { border-bottom: none !important; }
 
 /* Special Characters Popup */
 .special-chars-popup {
@@ -5792,8 +5810,10 @@ function renderAdvancedTableBlock(block) {
       <table class="editable-table" data-table-block="${bid}" style="table-layout:fixed;"${block.tableBorder ? ` data-border="${block.tableBorder}"` : ''}>
         <colgroup>`;
 
+  const defaultColPct = (100 / block.cols).toFixed(4) + '%';
   for (let c = 0; c < block.cols; c++) {
-    html += `<col${block.colWidths[c] ? ' style="width:' + block.colWidths[c] + 'px"' : ''}>`;
+    const w = block.colWidths[c] ? block.colWidths[c] + 'px' : defaultColPct;
+    html += `<col style="width:${w}">`;
   }
   html += `</colgroup><tbody>`;
 
