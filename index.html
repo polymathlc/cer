@@ -2934,6 +2934,155 @@ option {
   font-size: 0.78rem;
   padding: 6px 12px;
 }
+
+/* ========== TOPICAL PRACTICE ========== */
+.tp-level-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.tp-level-bar label {
+  font-weight: 600;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+.tp-level-bar select {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.88rem;
+  background: var(--surface);
+}
+.tp-level-section {
+  margin-bottom: 28px;
+}
+.tp-level-heading {
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 8px 0;
+  margin-bottom: 10px;
+  border-bottom: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tp-level-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: var(--accent-blue-light);
+  color: var(--accent-blue);
+}
+.tp-topic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.tp-topic-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: left;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text);
+}
+.tp-topic-btn:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: var(--shadow-sm);
+}
+.tp-topic-btn:active {
+  transform: scale(0.98);
+}
+.tp-topic-btn.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.tp-topic-btn .tp-topic-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.tp-topic-btn .tp-topic-name {
+  flex: 1;
+  min-width: 0;
+}
+.tp-topic-btn .tp-topic-count {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.tp-topic-btn .tp-lock-icon {
+  color: var(--text-light);
+  flex-shrink: 0;
+}
+.tp-practice-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+}
+.tp-practice-topic {
+  font-weight: 700;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tp-progress {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+}
+.tp-progress-text {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.tp-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.tp-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
 </style>
 </head>
 <body>
@@ -3137,6 +3286,10 @@ option {
       <div class="nav-item student-only" data-page="quickpractice" onclick="navigateTo('quickpractice')" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         Quick Practice
+      </div>
+      <div class="nav-item student-only" data-page="topicalpractice" onclick="navigateTo('topicalpractice')" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+        Topical Practice
       </div>
     </nav>
     <div id="saveStatusIndicator" style="display:none;width:100%;text-align:center;font-size:0.7rem;padding:4px 12px;border-radius:6px;margin:0 8px 6px;font-family:'Space Mono',monospace;letter-spacing:0.03em;"></div>
@@ -3618,6 +3771,50 @@ option {
               Start Practice
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: TOPICAL PRACTICE (Student Only) ===== -->
+    <div class="page" id="page-topicalpractice">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2 id="tpPageTitle">Topical Practice</h2>
+          </div>
+          <div class="subtitle" id="tpPageSubtitle">Choose a topic to practice</div>
+        </div>
+        <button class="btn btn-outline" id="tpBackBtn" onclick="tpBackToTopics()" style="display:none;font-size:0.82rem;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Back to Topics
+        </button>
+      </div>
+      <div class="page-body" style="max-width:880px;">
+        <!-- Level selector -->
+        <div class="tp-level-bar" id="tpLevelBar">
+          <label>Your Level:</label>
+          <select id="tpLevelSelect" onchange="tpRenderTopics()">
+            <option value="P3">P3</option>
+            <option value="P4">P4</option>
+            <option value="P5">P5</option>
+            <option value="P6" selected>P6</option>
+          </select>
+        </div>
+
+        <!-- Topic grid (shown by default) -->
+        <div id="tpTopicGrid"></div>
+
+        <!-- Practice area (hidden by default) -->
+        <div id="tpPracticeArea" style="display:none;">
+          <div class="tp-practice-bar">
+            <span class="tp-practice-topic" id="tpCurrentTopicLabel"></span>
+            <div class="tp-progress">
+              <span class="tp-progress-text" id="tpProgressText">0 / 0 answered</span>
+              <div class="tp-progress-bar"><div class="tp-progress-fill" id="tpProgressFill" style="width:0%;"></div></div>
+            </div>
+          </div>
+          <div id="tpContainer"></div>
         </div>
       </div>
     </div>
@@ -4309,6 +4506,7 @@ function navigateTo(page) {
   }
   if (page === 'myworksheets') renderSavedWorksheets();
   if (page === 'quickpractice') updateQpProgress();
+  if (page === 'topicalpractice') tpRenderTopics();
   if (page === 'usage') loadUsageDashboard();
   if (page === 'scheduled') loadScheduledQuestions();
   // close sidebar on mobile
@@ -8555,6 +8753,344 @@ document.getElementById('registerPassConfirm').addEventListener('keydown', (e) =
 });
 
 // =====================================================================
+// TOPICAL PRACTICE (Student Only)
+// =====================================================================
+// Ordered topics per level (matches topicLevelMap)
+const topicsByLevel = {
+  'P3': ['Living and non-living things', 'Materials', 'Life Cycles', 'Magnets'],
+  'P4': ['Plant Systems', 'Human Body Systems', 'Matter and its 3 States', 'Light', 'Heat'],
+  'P5': ['Water and its 3 States', 'Plant Reproduction', 'Human Reproduction', 'Human and Plant Respiration', 'Human and Plant Transport', 'Electrical Systems'],
+  'P6': ['Forces', 'Energy in Food', 'Energy Conversion', 'Living Together', 'Food Chains and Webs', 'Humans and the Environment']
+};
+
+const levelColors = {
+  'P3': { bg: 'var(--accent-teal-light)', fg: 'var(--accent-teal)' },
+  'P4': { bg: 'var(--accent-blue-light)', fg: 'var(--accent-blue)' },
+  'P5': { bg: 'var(--accent-orange-light)', fg: 'var(--accent-orange)' },
+  'P6': { bg: 'var(--accent-purple-light)', fg: 'var(--accent-purple)' }
+};
+
+let tpQueue = [];
+let tpIndex = -1;
+let tpAnswered = 0;
+let tpSubmitted = false;
+let tpCurrentTopic = '';
+
+function tpRenderTopics() {
+  const grid = document.getElementById('tpTopicGrid');
+  if (!grid) return;
+  // Show topic grid, hide practice area
+  grid.style.display = '';
+  document.getElementById('tpPracticeArea').style.display = 'none';
+  document.getElementById('tpBackBtn').style.display = 'none';
+  document.getElementById('tpLevelBar').style.display = '';
+  document.getElementById('tpPageTitle').textContent = 'Topical Practice';
+  document.getElementById('tpPageSubtitle').textContent = 'Choose a topic to practice';
+
+  const studentLevel = document.getElementById('tpLevelSelect').value;
+  const studentLevelNum = getLevelNumber(studentLevel);
+
+  // Count questions per topic (only those with blanks)
+  const topicCounts = {};
+  questionBank.forEach(q => {
+    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
+    if (blankCount > 0) {
+      const t = q.topic || '';
+      topicCounts[t] = (topicCounts[t] || 0) + 1;
+    }
+  });
+
+  let html = '';
+  const levels = ['P3', 'P4', 'P5', 'P6'];
+
+  levels.forEach(level => {
+    const levelNum = getLevelNumber(level);
+    const isAccessible = levelNum <= studentLevelNum;
+    const topics = topicsByLevel[level] || [];
+    const colors = levelColors[level];
+
+    html += `<div class="tp-level-section">
+      <div class="tp-level-heading">
+        <span class="tp-level-badge" style="background:${colors.bg};color:${colors.fg};">${level}</span>
+        ${!isAccessible ? '<span style="font-size:0.78rem;color:var(--text-light);font-weight:400;">Locked — select a higher level to unlock</span>' : ''}
+      </div>
+      <div class="tp-topic-grid">`;
+
+    topics.forEach(topic => {
+      const count = topicCounts[topic] || 0;
+      if (isAccessible) {
+        html += `<button class="tp-topic-btn${count === 0 ? ' disabled' : ''}" onclick="${count > 0 ? `tpStartTopic('${topic.replace(/'/g, "\\'")}')` : ''}">
+          <div class="tp-topic-icon" style="background:${colors.bg};color:${colors.fg};">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          </div>
+          <span class="tp-topic-name">${escapeHtml(topic)}</span>
+          <span class="tp-topic-count">${count} Q</span>
+        </button>`;
+      } else {
+        html += `<button class="tp-topic-btn disabled">
+          <div class="tp-topic-icon" style="background:var(--surface-alt);color:var(--text-light);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <span class="tp-topic-name">${escapeHtml(topic)}</span>
+          <span class="tp-lock-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </span>
+        </button>`;
+      }
+    });
+
+    html += `</div></div>`;
+  });
+
+  grid.innerHTML = html;
+}
+
+function tpStartTopic(topic) {
+  tpCurrentTopic = topic;
+  // Build queue: all questions from this topic that have blanks, shuffled
+  const withBlanks = questionBank.filter(q => {
+    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
+    return blankCount > 0 && q.topic === topic;
+  });
+
+  // Shuffle
+  for (let i = withBlanks.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [withBlanks[i], withBlanks[j]] = [withBlanks[j], withBlanks[i]];
+  }
+
+  tpQueue = withBlanks;
+  tpIndex = -1;
+  tpAnswered = 0;
+
+  if (tpQueue.length === 0) {
+    showToast('No questions with blanks found for this topic', 'error');
+    return;
+  }
+
+  // Switch to practice view
+  document.getElementById('tpTopicGrid').style.display = 'none';
+  document.getElementById('tpLevelBar').style.display = 'none';
+  document.getElementById('tpPracticeArea').style.display = '';
+  document.getElementById('tpBackBtn').style.display = '';
+  document.getElementById('tpPageTitle').textContent = topic;
+  document.getElementById('tpPageSubtitle').textContent = getTopicLevel(topic) + ' — ' + tpQueue.length + ' question' + (tpQueue.length !== 1 ? 's' : '');
+
+  const topicLevel = getTopicLevel(topic);
+  const colors = levelColors[topicLevel] || levelColors['P6'];
+  document.getElementById('tpCurrentTopicLabel').innerHTML = `
+    <span class="tp-level-badge" style="background:${colors.bg};color:${colors.fg};">${topicLevel}</span>
+    ${escapeHtml(topic)}`;
+
+  tpLoadNextQuestion();
+}
+
+function tpLoadNextQuestion() {
+  tpIndex++;
+  if (tpIndex >= tpQueue.length) {
+    document.getElementById('tpContainer').innerHTML = `
+      <div class="empty-state" style="padding:40px 20px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="width:56px;height:56px;margin-bottom:14px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <h3>All Done!</h3>
+        <p>You completed all ${tpQueue.length} question${tpQueue.length !== 1 ? 's' : ''} on <strong>${escapeHtml(tpCurrentTopic)}</strong>. Great work!</p>
+        <div style="display:flex;gap:10px;margin-top:16px;justify-content:center;">
+          <button class="btn btn-outline" onclick="tpBackToTopics()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            Back to Topics
+          </button>
+          <button class="btn btn-primary" onclick="tpStartTopic('${tpCurrentTopic.replace(/'/g, "\\'")}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Restart Topic
+          </button>
+        </div>
+      </div>`;
+    tpUpdateProgress();
+    return;
+  }
+  tpRenderQuestion(tpQueue[tpIndex]);
+  tpUpdateProgress();
+}
+
+function tpUpdateProgress() {
+  const total = tpQueue.length;
+  const textEl = document.getElementById('tpProgressText');
+  const fillEl = document.getElementById('tpProgressFill');
+  if (textEl) textEl.textContent = `${tpAnswered} / ${total} answered`;
+  if (fillEl) fillEl.style.width = total > 0 ? `${Math.round((tpAnswered / total) * 100)}%` : '0%';
+}
+
+function tpRenderQuestion(q) {
+  const qLevel = getTopicLevel(q.topic || '');
+  let html = `
+    <div class="practice-card">
+      <div class="practice-card-header">
+        <h3>${escapeHtml(q.title)}</h3>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
+          <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
+          <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+        </div>
+      </div>
+      <div class="practice-card-body">`;
+
+  q.blocks.forEach(block => {
+    switch (block.type) {
+      case 'text':
+        html += renderStudentText(block.id, block.content, q.blanks);
+        break;
+      case 'image':
+        if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+        break;
+      case 'answer':
+        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div></div>`;
+        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, q.blanks)}</div></div>`;
+        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div></div>`;
+        break;
+      case 'plainanswer':
+        html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
+        break;
+      case 'explanation': break;
+      case 'video':
+        if (block.url) {
+          const embedUrl = getYouTubeEmbedUrl(block.url);
+          if (embedUrl) html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
+        }
+        break;
+      case 'table':
+        html += renderTableReadonly(block, '');
+        break;
+    }
+  });
+
+  html += `</div>
+      <div class="practice-actions">
+        <div class="practice-score" id="tpScoreDisplay"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" id="tpFirstLetterBtn" onclick="tpToggleFirstLetter()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
+            First Letter
+          </button>
+          <button class="btn btn-outline" onclick="tpResetAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+          <button class="btn btn-primary" id="tpSubmitBtn" onclick="tpSubmitAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
+            Submit
+          </button>
+          <button class="btn btn-primary" id="tpNextBtn" onclick="tpLoadNextQuestion()" style="display:none;">
+            Next &rarr;
+          </button>
+        </div>
+      </div>
+    </div>`;
+
+  tpSubmitted = false;
+  showFirstLetterClues = false;
+  document.getElementById('tpContainer').innerHTML = html;
+  applyFirstLetterClues();
+}
+
+function tpToggleFirstLetter() {
+  showFirstLetterClues = !showFirstLetterClues;
+  applyFirstLetterClues();
+  const btn = document.getElementById('tpFirstLetterBtn');
+  if (btn) {
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> ${showFirstLetterClues ? 'Hide Clues' : 'First Letter'}`;
+  }
+}
+
+function tpResetAnswers() {
+  if (tpSubmitted) return;
+  document.querySelectorAll('#tpContainer .blank-input').forEach(input => {
+    input.value = '';
+    input.style.borderBottomColor = 'var(--primary)';
+    input.style.background = 'var(--primary-light)';
+  });
+  applyFirstLetterClues();
+  const scoreEl = document.getElementById('tpScoreDisplay');
+  if (scoreEl) scoreEl.textContent = '';
+}
+
+function tpSubmitAnswers() {
+  if (tpSubmitted) return;
+  tpSubmitted = true;
+
+  const inputs = document.querySelectorAll('#tpContainer .blank-input');
+  let correct = 0;
+  let total = inputs.length;
+
+  inputs.forEach(input => {
+    const answer = input.dataset.answer;
+    const answerLower = answer.toLowerCase().trim();
+    const userAnswer = input.value.toLowerCase().trim();
+    if (userAnswer === answerLower) {
+      input.style.borderBottomColor = 'var(--primary)';
+      input.style.background = '#e8f5e9';
+      input.readOnly = true;
+      correct++;
+    } else {
+      input.style.borderBottomColor = 'var(--accent-red)';
+      input.style.background = 'var(--accent-red-light)';
+      input.readOnly = true;
+      const correction = document.createElement('span');
+      correction.style.cssText = 'color:var(--primary);font-weight:600;font-size:0.82rem;margin-left:4px;';
+      correction.textContent = answer;
+      input.parentNode.insertBefore(correction, input.nextSibling);
+    }
+  });
+
+  tpAnswered = Math.max(tpAnswered, tpIndex + 1);
+  tpUpdateProgress();
+
+  // Record question attempt for usage tracking
+  if (currentUser && currentUser.role === 'student') {
+    const currentQ = tpQueue[tpIndex];
+    addDoc(collection(db, 'questionAttempts'), {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      displayName: currentUser.name,
+      questionId: currentQ ? currentQ.id : '',
+      questionTitle: currentQ ? currentQ.title : '',
+      score: total > 0 ? correct : 0,
+      totalBlanks: total,
+      timestamp: Timestamp.now(),
+      mode: 'topicalpractice'
+    }).catch(err => console.warn('Could not record attempt:', err));
+  }
+
+  const scoreEl = document.getElementById('tpScoreDisplay');
+  if (total === 0) {
+    if (scoreEl) scoreEl.textContent = 'No blanks to check';
+  } else {
+    const pct = Math.round((correct / total) * 100);
+    if (scoreEl) {
+      scoreEl.textContent = `Score: ${correct}/${total} (${pct}%)`;
+      scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
+    }
+  }
+
+  const submitBtn = document.getElementById('tpSubmitBtn');
+  const nextBtn = document.getElementById('tpNextBtn');
+  const firstLetterBtn = document.getElementById('tpFirstLetterBtn');
+  if (submitBtn) submitBtn.style.display = 'none';
+  if (nextBtn) nextBtn.style.display = '';
+  if (firstLetterBtn) firstLetterBtn.disabled = true;
+}
+
+function tpBackToTopics() {
+  tpQueue = [];
+  tpIndex = -1;
+  tpAnswered = 0;
+  tpCurrentTopic = '';
+  showFirstLetterClues = false;
+  tpRenderTopics();
+}
+
+// =====================================================================
 // STUDENT USAGE DASHBOARD (Admin Only)
 // =====================================================================
 let usageDashboardLoaded = false;
@@ -9163,6 +9699,14 @@ window.editScheduledQuestion = editScheduledQuestion;
 window.closeEditScheduleDialog = closeEditScheduleDialog;
 window.saveEditedSchedule = saveEditedSchedule;
 window.deleteScheduledQuestion = deleteScheduledQuestion;
+// Topical Practice
+window.tpRenderTopics = tpRenderTopics;
+window.tpStartTopic = tpStartTopic;
+window.tpLoadNextQuestion = tpLoadNextQuestion;
+window.tpToggleFirstLetter = tpToggleFirstLetter;
+window.tpResetAnswers = tpResetAnswers;
+window.tpSubmitAnswers = tpSubmitAnswers;
+window.tpBackToTopics = tpBackToTopics;
 </script>
 </body>
 </html>
