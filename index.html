@@ -471,12 +471,17 @@ option {
   text-align: left;
   font-size: 0.88rem;
   position: relative;
-  /* All cells look the same - no header differentiation */
+  vertical-align: top;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  min-width: 30px;
+  box-sizing: border-box;
 }
 .editable-table td[contenteditable],
 .editable-table th[contenteditable] {
   outline: none;
   cursor: text;
+  overflow: hidden;
 }
 .editable-table td[contenteditable]:focus,
 .editable-table th[contenteditable]:focus {
@@ -686,6 +691,38 @@ option {
   font-style: italic;
   margin-top: 2px;
   padding: 0 2px;
+}
+
+/* Table drag-to-resize */
+.table-resize-wrapper {
+  position: relative;
+}
+.table-col-resize-handle {
+  position: absolute;
+  top: 0;
+  width: 7px;
+  margin-left: -3px;
+  cursor: col-resize;
+  z-index: 10;
+  user-select: none;
+}
+.table-col-resize-handle:hover,
+.table-col-resize-handle.active {
+  background: rgba(59, 130, 246, 0.3);
+}
+.table-row-resize-handle {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 7px;
+  margin-top: -3px;
+  cursor: row-resize;
+  z-index: 10;
+  user-select: none;
+}
+.table-row-resize-handle:hover,
+.table-row-resize-handle.active {
+  background: rgba(59, 130, 246, 0.3);
 }
 
 /* Table border presets */
@@ -5263,6 +5300,7 @@ function tableSetRowHeight(blockId, height) {
       cell.style.height = height ? parseInt(height) + 'px' : '';
     });
   });
+  requestAnimationFrame(() => initTableResizeHandles(blockId));
 }
 
 function tableSetColWidth(blockId, width) {
@@ -5287,6 +5325,142 @@ function tableSetColWidth(blockId, width) {
         col.style.width = block.colWidths[i] ? block.colWidths[i] + 'px' : '';
       });
     }
+  }
+  requestAnimationFrame(() => initTableResizeHandles(blockId));
+}
+
+// =====================================================================
+// TABLE DRAG-TO-RESIZE
+// =====================================================================
+function initTableResizeHandles(blockId) {
+  const table = document.querySelector(`[data-table-block="${blockId}"]`);
+  if (!table) return;
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+
+  // Wrap the table in a resize wrapper if not already
+  let wrapper = table.parentElement;
+  if (!wrapper.classList.contains('table-resize-wrapper')) {
+    const newWrapper = document.createElement('div');
+    newWrapper.className = 'table-resize-wrapper';
+    newWrapper.style.position = 'relative';
+    wrapper.insertBefore(newWrapper, table);
+    newWrapper.appendChild(table);
+    wrapper = newWrapper;
+  }
+
+  // Remove old handles
+  wrapper.querySelectorAll('.table-col-resize-handle, .table-row-resize-handle').forEach(h => h.remove());
+
+  // Column resize handles
+  const cols = table.querySelectorAll('colgroup col');
+  const headerCells = table.querySelectorAll('tbody tr:first-child td');
+  if (headerCells.length === 0) return;
+
+  for (let c = 0; c < cols.length; c++) {
+    const handle = document.createElement('div');
+    handle.className = 'table-col-resize-handle';
+    handle.dataset.col = c;
+
+    // Position handle at right border of each column
+    const cell = headerCells[Math.min(c, headerCells.length - 1)];
+    const tableRect = table.getBoundingClientRect();
+    const cellRect = cell.getBoundingClientRect();
+    handle.style.left = (cellRect.right - tableRect.left) + 'px';
+    handle.style.height = table.offsetHeight + 'px';
+
+    handle.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const colIdx = parseInt(this.dataset.col);
+      const startX = e.clientX;
+      const col = cols[colIdx];
+      const startWidth = col.offsetWidth || parseInt(col.style.width) || cellRect.width;
+      this.classList.add('active');
+
+      function onMouseMove(ev) {
+        const diff = ev.clientX - startX;
+        const newWidth = Math.max(30, startWidth + diff);
+        col.style.width = newWidth + 'px';
+      }
+
+      function onMouseUp() {
+        handle.classList.remove('active');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+
+        // Save the new width
+        const finalWidth = parseInt(col.style.width) || 100;
+        if (!block.colWidths) block.colWidths = Array(block.cols).fill(null);
+        block.colWidths[colIdx] = finalWidth;
+
+        // Reposition handles
+        initTableResizeHandles(blockId);
+      }
+
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+
+    wrapper.appendChild(handle);
+  }
+
+  // Row resize handles
+  const rows = table.querySelectorAll('tbody tr');
+  for (let r = 0; r < rows.length; r++) {
+    const handle = document.createElement('div');
+    handle.className = 'table-row-resize-handle';
+    handle.dataset.row = r;
+
+    const tableRect = table.getBoundingClientRect();
+    const rowRect = rows[r].getBoundingClientRect();
+    handle.style.top = (rowRect.bottom - tableRect.top) + 'px';
+    handle.style.width = table.offsetWidth + 'px';
+
+    handle.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const rowIdx = parseInt(this.dataset.row);
+      const startY = e.clientY;
+      const startHeight = rows[rowIdx].offsetHeight;
+      this.classList.add('active');
+
+      function onMouseMove(ev) {
+        const diff = ev.clientY - startY;
+        const newHeight = Math.max(20, startHeight + diff);
+        rows[rowIdx].querySelectorAll('td').forEach(cell => {
+          cell.style.height = newHeight + 'px';
+        });
+      }
+
+      function onMouseUp() {
+        handle.classList.remove('active');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+
+        // Save the new height
+        const firstCell = rows[rowIdx].querySelector('td');
+        const finalHeight = firstCell ? firstCell.offsetHeight : 30;
+        if (!block.rowHeights) block.rowHeights = {};
+        block.rowHeights[rowIdx] = finalHeight;
+
+        // Reposition handles
+        initTableResizeHandles(blockId);
+      }
+
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+
+    wrapper.appendChild(handle);
   }
 }
 
@@ -5863,6 +6037,11 @@ function renderBlocks() {
     `;
     
     container.appendChild(card);
+
+    // Initialize drag-to-resize handles for table blocks
+    if (block.type === 'table') {
+      requestAnimationFrame(() => initTableResizeHandles(block.id));
+    }
   });
 }
 
@@ -10099,6 +10278,7 @@ window.tableSetBorder = tableSetBorder;
 window.tableSetRowHeight = tableSetRowHeight;
 window.tableSetColWidth = tableSetColWidth;
 window.tableApplyColor = tableApplyColor;
+window.initTableResizeHandles = initTableResizeHandles;
 window.tableToggleColorPicker = tableToggleColorPicker;
 window.tableAddRow = tableAddRow;
 window.tableRemoveRow = tableRemoveRow;
