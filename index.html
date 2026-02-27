@@ -3083,6 +3083,102 @@ option {
   border-radius: 3px;
   transition: width 0.3s ease;
 }
+
+/* ========== FLAG BUTTON (Student Practice) ========== */
+.flag-question-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.flag-question-btn:hover {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+  background: var(--accent-red-light);
+}
+
+/* ========== FLAGGED QUESTIONS (Admin) ========== */
+.flagged-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent-red);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  margin-bottom: 12px;
+}
+.flagged-card .fc-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.flagged-card .fc-question-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.flagged-card .fc-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  align-items: center;
+}
+.flagged-card .fc-comment {
+  background: var(--accent-red-light);
+  border: 1px solid #f5c6c6;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.flagged-card .fc-comment-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-red);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.flagged-card .fc-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.flagged-card .fc-actions .btn {
+  font-size: 0.78rem;
+  padding: 6px 12px;
+}
+.flagged-card .fc-status {
+  display: inline-block;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.flagged-card .fc-status.open {
+  background: var(--accent-red-light);
+  color: var(--accent-red);
+}
+.flagged-card .fc-status.resolved {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+.flagged-card .fc-status.dismissed {
+  background: var(--surface-alt);
+  color: var(--text-muted);
+}
 </style>
 </head>
 <body>
@@ -3248,6 +3344,11 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         Vetting List
         <span class="badge" id="vettingCount">0</span>
+      </div>
+      <div class="nav-item admin-only" data-page="flagged" onclick="navigateTo('flagged')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+        Flagged Questions
+        <span class="badge" id="flaggedCount">0</span>
       </div>
       <div class="nav-section-label admin-only">Preview</div>
       <div class="nav-item admin-only" data-page="student" onclick="navigateTo('student')">
@@ -3461,6 +3562,10 @@ option {
           <button class="btn btn-orange" onclick="openPreview()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             Preview & Select Blanks
+          </button>
+          <button class="btn btn-blue" onclick="moveEditToVetting()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Move to Vetting
           </button>
           <button class="btn btn-primary" onclick="saveEditedQuestion()" style="background:#10b981;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -3936,6 +4041,51 @@ option {
       </div>
     </div>
 
+    <!-- ===== PAGE: FLAGGED QUESTIONS (Admin Only) ===== -->
+    <div class="page" id="page-flagged">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Flagged Questions</h2>
+          </div>
+          <div class="subtitle">Review questions flagged by students</div>
+        </div>
+        <button class="btn btn-outline" onclick="loadFlaggedQuestions()" style="font-size:0.82rem;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          Refresh
+        </button>
+      </div>
+      <div class="page-body" style="max-width:1000px;">
+        <div id="flaggedQuestionsContainer">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+            <h3>No Flagged Questions</h3>
+            <p>Questions flagged by students will appear here for review.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==================== FLAG QUESTION DIALOG (Student) ==================== -->
+<div class="confirm-overlay" id="flagQuestionOverlay">
+  <div class="confirm-dialog" style="max-width:440px;text-align:left;">
+    <h3 style="margin-bottom:4px;">Flag This Question</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Let the teacher know if something is wrong with this question (e.g. wrong answer, typo, unclear wording).</p>
+    <div class="form-group">
+      <label class="form-label">What's the issue?</label>
+      <textarea id="flagCommentInput" class="form-input" rows="4" placeholder="Describe the problem you noticed..." style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
+    </div>
+    <div class="btn-group" style="justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeFlagDialog()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitFlag()" style="background:var(--accent-red);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+        Submit Flag
+      </button>
+    </div>
   </div>
 </div>
 
@@ -4363,6 +4513,8 @@ async function enterApp(user) {
     populatePracticeStudentSelect();
     // Load scheduled questions and auto-release any due ones
     loadScheduledQuestions();
+    // Load flagged question count for badge
+    loadFlaggedQuestions();
     // Prompt student setup only once per user account
     if (!studentSetupSeen) {
       setTimeout(() => openStudentSetup(), 600);
@@ -4509,6 +4661,7 @@ function navigateTo(page) {
   if (page === 'topicalpractice') tpRenderTopics();
   if (page === 'usage') loadUsageDashboard();
   if (page === 'scheduled') loadScheduledQuestions();
+  if (page === 'flagged') loadFlaggedQuestions();
   // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -8491,7 +8644,13 @@ function renderQpQuestion(q) {
 
   html += `</div>
       <div class="practice-actions">
-        <div class="practice-score" id="qpScoreDisplay"></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="practice-score" id="qpScoreDisplay"></div>
+          <button class="flag-question-btn" onclick="openFlagDialog('${q.id}','${escapeHtml(q.title).replace(/'/g,"\\'")}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+            Flag
+          </button>
+        </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-outline" id="qpFirstLetterBtn" onclick="toggleQpFirstLetter()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
@@ -8994,7 +9153,13 @@ function tpRenderQuestion(q) {
 
   html += `</div>
       <div class="practice-actions">
-        <div class="practice-score" id="tpScoreDisplay"></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="practice-score" id="tpScoreDisplay"></div>
+          <button class="flag-question-btn" onclick="openFlagDialog('${q.id}','${escapeHtml(q.title).replace(/'/g,"\\'")}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+            Flag
+          </button>
+        </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-outline" id="tpFirstLetterBtn" onclick="tpToggleFirstLetter()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
@@ -9608,6 +9773,267 @@ function deleteScheduledQuestion(docId) {
 }
 
 // =====================================================================
+// MOVE EDITED QUESTION TO VETTING (Admin)
+// =====================================================================
+function moveEditToVetting() {
+  if (blocks.length === 0) {
+    showToast('Add some blocks before saving', 'error');
+    return;
+  }
+  if (!currentEditingQuestion) {
+    showToast('No question being edited', 'error');
+    return;
+  }
+  const q = collectQuestionData();
+  q.id = currentEditingQuestion;
+
+  // Remove from question bank if it was there
+  const qIdx = questionBank.findIndex(qb => qb.id === currentEditingQuestion);
+  if (qIdx !== -1) {
+    questionBank.splice(qIdx, 1);
+    deleteQuestionDoc(currentEditingQuestion);
+  }
+
+  // Remove from vetting if already there (will re-add)
+  const vIdx = vettingList.findIndex(v => v.id === currentEditingQuestion);
+  if (vIdx !== -1) {
+    vettingList.splice(vIdx, 1);
+  }
+
+  // Add to vetting
+  q.status = 'pending';
+  vettingList.push(q);
+  saveVettingQuestion(q);
+
+  currentEditingQuestion = null;
+  setEditMode(false);
+  updateCounts();
+  renderQuestionBank();
+  showToast('Question moved to vetting list', 'success');
+  navigateTo('vetting');
+}
+
+// =====================================================================
+// FLAG QUESTION (Student)
+// =====================================================================
+let flaggingQuestionId = null;
+let flaggingQuestionTitle = '';
+
+function openFlagDialog(questionId, questionTitle) {
+  flaggingQuestionId = questionId;
+  flaggingQuestionTitle = questionTitle;
+  document.getElementById('flagCommentInput').value = '';
+  document.getElementById('flagQuestionOverlay').classList.add('active');
+}
+
+function closeFlagDialog() {
+  document.getElementById('flagQuestionOverlay').classList.remove('active');
+  flaggingQuestionId = null;
+  flaggingQuestionTitle = '';
+}
+
+async function submitFlag() {
+  const comment = document.getElementById('flagCommentInput').value.trim();
+  if (!comment) {
+    showToast('Please describe the issue', 'error');
+    return;
+  }
+  if (!flaggingQuestionId || !currentUser) {
+    showToast('Unable to submit flag', 'error');
+    return;
+  }
+
+  try {
+    await addDoc(collection(db, 'flaggedQuestions'), {
+      questionId: flaggingQuestionId,
+      questionTitle: flaggingQuestionTitle,
+      comment: comment,
+      flaggedBy: currentUser.name,
+      flaggedByEmail: currentUser.email,
+      flaggedByUid: currentUser.uid,
+      timestamp: Timestamp.now(),
+      status: 'open' // open | resolved | dismissed
+    });
+    closeFlagDialog();
+    showToast('Question flagged — your teacher will review it', 'success');
+  } catch (err) {
+    console.error('submitFlag failed:', err);
+    showToast('Could not submit flag — check your connection', 'error');
+  }
+}
+
+// =====================================================================
+// FLAGGED QUESTIONS MANAGEMENT (Admin)
+// =====================================================================
+let flaggedQuestions = [];
+
+async function loadFlaggedQuestions() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  try {
+    const snap = await getDocs(collection(db, 'flaggedQuestions'));
+    flaggedQuestions = [];
+    snap.forEach(d => {
+      flaggedQuestions.push({ ...d.data(), _docId: d.id });
+    });
+    // Sort: open first, then by timestamp descending
+    flaggedQuestions.sort((a, b) => {
+      const statusOrder = { open: 0, resolved: 1, dismissed: 2 };
+      const sa = statusOrder[a.status] ?? 0;
+      const sb = statusOrder[b.status] ?? 0;
+      if (sa !== sb) return sa - sb;
+      const ta = a.timestamp ? (a.timestamp.toDate ? a.timestamp.toDate() : new Date(a.timestamp)) : new Date(0);
+      const tb = b.timestamp ? (b.timestamp.toDate ? b.timestamp.toDate() : new Date(b.timestamp)) : new Date(0);
+      return tb - ta;
+    });
+    updateFlaggedCount();
+    renderFlaggedQuestions();
+  } catch (err) {
+    console.error('loadFlaggedQuestions failed:', err);
+    showToast('Could not load flagged questions', 'error');
+  }
+}
+
+function updateFlaggedCount() {
+  const openCount = flaggedQuestions.filter(f => f.status === 'open').length;
+  const el = document.getElementById('flaggedCount');
+  if (el) el.textContent = openCount;
+}
+
+function renderFlaggedQuestions() {
+  const container = document.getElementById('flaggedQuestionsContainer');
+  if (!container) return;
+
+  if (flaggedQuestions.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+        <h3>No Flagged Questions</h3>
+        <p>Questions flagged by students will appear here for review.</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = flaggedQuestions.map(f => {
+    const ts = f.timestamp ? (f.timestamp.toDate ? f.timestamp.toDate() : new Date(f.timestamp)) : null;
+    const timeStr = ts ? formatDateTimeSGT(ts) : 'Unknown';
+    const statusClass = f.status || 'open';
+    const statusLabel = statusClass.charAt(0).toUpperCase() + statusClass.slice(1);
+
+    return `<div class="flagged-card">
+      <div class="fc-header">
+        <div>
+          <div class="fc-question-title">${escapeHtml(f.questionTitle || 'Untitled Question')}</div>
+          <div class="fc-meta">
+            <span class="fc-status ${statusClass}">${statusLabel}</span>
+            <span style="font-size:0.78rem;color:var(--text-muted);">Flagged by <strong>${escapeHtml(f.flaggedBy || 'Unknown')}</strong> (${escapeHtml(f.flaggedByEmail || '')})</span>
+            <span style="font-size:0.75rem;color:var(--text-light);">${timeStr}</span>
+          </div>
+        </div>
+      </div>
+      <div class="fc-comment">
+        <div class="fc-comment-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Student Comment
+        </div>
+        ${escapeHtml(f.comment || 'No comment provided')}
+      </div>
+      <div class="fc-actions">
+        ${f.status === 'open' ? `
+          <button class="btn btn-primary" onclick="flagEditQuestion('${f._docId}','${f.questionId}')" style="font-size:0.78rem;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit Question
+          </button>
+          <button class="btn btn-outline" onclick="flagMoveToVetting('${f._docId}','${f.questionId}')" style="font-size:0.78rem;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Move to Vetting
+          </button>
+          <button class="btn btn-outline" onclick="resolveFlaggedQuestion('${f._docId}')" style="color:var(--primary);font-size:0.78rem;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><polyline points="20 6 9 17 4 12"/></svg>
+            Resolve
+          </button>
+          <button class="btn btn-outline" onclick="dismissFlaggedQuestion('${f._docId}')" style="color:var(--text-muted);font-size:0.78rem;">
+            Dismiss
+          </button>
+        ` : `
+          <button class="btn btn-outline" onclick="deleteFlaggedQuestion('${f._docId}')" style="color:var(--accent-red);font-size:0.78rem;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Delete
+          </button>
+        `}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function flagEditQuestion(flagDocId, questionId) {
+  // Open the question in the editor
+  const q = questionBank.find(qb => qb.id === questionId) || vettingList.find(v => v.id === questionId);
+  if (q) {
+    editQuestion(questionId);
+  } else {
+    showToast('Question not found in bank or vetting list', 'error');
+  }
+}
+
+async function flagMoveToVetting(flagDocId, questionId) {
+  // Move the question from bank to vetting
+  const qIdx = questionBank.findIndex(qb => qb.id === questionId);
+  if (qIdx !== -1) {
+    const q = questionBank[qIdx];
+    q.status = 'pending';
+    questionBank.splice(qIdx, 1);
+    vettingList.push(q);
+    deleteQuestionDoc(questionId);
+    saveVettingQuestion(q);
+    updateCounts();
+    showToast('Question moved to vetting list', 'success');
+  } else {
+    showToast('Question is already in vetting or not found', 'info');
+  }
+  // Mark flag as resolved
+  await updateFlagStatus(flagDocId, 'resolved');
+}
+
+async function resolveFlaggedQuestion(docId) {
+  await updateFlagStatus(docId, 'resolved');
+  showToast('Flag marked as resolved', 'success');
+}
+
+async function dismissFlaggedQuestion(docId) {
+  await updateFlagStatus(docId, 'dismissed');
+  showToast('Flag dismissed', 'info');
+}
+
+async function updateFlagStatus(docId, status) {
+  try {
+    const ref = doc(db, 'flaggedQuestions', docId);
+    await updateDoc(ref, { status });
+    const f = flaggedQuestions.find(f => f._docId === docId);
+    if (f) f.status = status;
+    updateFlaggedCount();
+    renderFlaggedQuestions();
+  } catch (err) {
+    console.error('updateFlagStatus failed:', err);
+    showToast('Could not update flag status', 'error');
+  }
+}
+
+async function deleteFlaggedQuestion(docId) {
+  showConfirm('Delete Flag', 'Remove this flagged question report?', async () => {
+    try {
+      await deleteDoc(doc(db, 'flaggedQuestions', docId));
+      flaggedQuestions = flaggedQuestions.filter(f => f._docId !== docId);
+      updateFlaggedCount();
+      renderFlaggedQuestions();
+      showToast('Flag removed', 'info');
+    } catch (err) {
+      console.error('deleteFlaggedQuestion failed:', err);
+      showToast('Could not delete flag', 'error');
+    }
+  });
+}
+
+// =====================================================================
 // EXPOSE FUNCTIONS GLOBALLY (required for module scope + onclick handlers)
 // =====================================================================
 window.navigateTo = navigateTo;
@@ -9734,6 +10160,19 @@ window.tpToggleFirstLetter = tpToggleFirstLetter;
 window.tpResetAnswers = tpResetAnswers;
 window.tpSubmitAnswers = tpSubmitAnswers;
 window.tpBackToTopics = tpBackToTopics;
+// Move to Vetting (edit mode)
+window.moveEditToVetting = moveEditToVetting;
+// Flag Question (student)
+window.openFlagDialog = openFlagDialog;
+window.closeFlagDialog = closeFlagDialog;
+window.submitFlag = submitFlag;
+// Flagged Questions (admin)
+window.loadFlaggedQuestions = loadFlaggedQuestions;
+window.flagEditQuestion = flagEditQuestion;
+window.flagMoveToVetting = flagMoveToVetting;
+window.resolveFlaggedQuestion = resolveFlaggedQuestion;
+window.dismissFlaggedQuestion = dismissFlaggedQuestion;
+window.deleteFlaggedQuestion = deleteFlaggedQuestion;
 </script>
 </body>
 </html>
