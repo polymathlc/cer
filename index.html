@@ -6438,7 +6438,7 @@ function applyFirstLetterClues() {
   document.querySelectorAll('.blank-input').forEach(input => {
     const ans = input.dataset.answer || '';
     if (!ans) return;
-    if (showFirstLetterClues) {
+    if (showFirstLetterClues && ans.length > 1) {
       const first = ans.charAt(0);
       const rest = '_'.repeat(Math.max(3, ans.length - 1));
       input.placeholder = `${first}${rest}`;
@@ -8315,6 +8315,7 @@ function renderQpQuestion(q) {
     </div>`;
 
   qpSubmitted = false;
+  showFirstLetterClues = false;
   document.getElementById('qpContainer').innerHTML = html;
   applyFirstLetterClues();
 }
