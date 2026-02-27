@@ -3536,32 +3536,32 @@ option {
           <div class="add-block-row">
             <button class="add-block-btn text-add" onclick="addBlock('text')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-              Add Text
+              &#x1F4DD; Add Text
             </button>
             <button class="add-block-btn answer-add" onclick="addBlock('answer')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-              Add CER Answer
+              &#x1F9EA; Add CER Answer
             </button>
             <button class="add-block-btn answer-add" onclick="addBlock('plainanswer')" style="border-color:var(--accent-teal-light);">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-              Add Answer
+              &#x2705; Add Answer
             </button>
             <button class="add-block-btn explanation-add" onclick="addBlock('explanation')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-              Add Explanation
+              &#x1F4A1; Add Explanation
             </button>
             <button class="add-block-btn video-add" onclick="addBlock('video')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-              Add Video URL
+              &#x1F3AC; Add Video URL
             </button>
             <button class="add-block-btn image-add" onclick="addBlock('image')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-              Add Image URL
+              &#x1F5BC;&#xFE0F; Add Image URL
             </button>
             <div class="table-grid-popup-wrapper">
               <button class="add-block-btn table-add" onclick="toggleTableGridPopup(event)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                Add Table
+                &#x1F4CA; Add Table
               </button>
               <div class="table-grid-popup" id="tableGridPopup">
                 <div class="table-grid-popup-label" id="tableGridLabel">Select size</div>
@@ -3575,38 +3575,47 @@ option {
         <div class="action-row" id="createModeActions">
           <button class="btn btn-danger" onclick="clearForm()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            Clear Form
+            &#x1F5D1;&#xFE0F; Clear Form
           </button>
           <button class="btn btn-orange" onclick="openPreview()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            Preview & Select Blanks
+            &#x270F;&#xFE0F; Preview & Select Blanks
+          </button>
+          <button class="btn" onclick="previewAsStudent()" style="background:#8b5cf6;color:#fff;">
+            &#x1F393; Preview as Student
           </button>
           <button class="btn btn-blue" onclick="addToVetting()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-            Add to Vetting List
+            &#x1F4CB; Add to Vetting List
           </button>
           <button class="btn btn-primary" onclick="addToBank()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            Add to Question Bank
+            &#x1F4BE; Add to Question Bank
+          </button>
+          <button class="btn" onclick="openScheduleFromCreate()" style="background:#f59e0b;color:#fff;">
+            &#x1F4C5; Add Scheduled Question
           </button>
         </div>
         <!-- Action Buttons (Edit Mode) -->
         <div class="action-row" id="editModeActions" style="display:none;">
           <button class="btn btn-secondary" onclick="cancelEdit()" style="background:#6b7280;color:#fff;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            Cancel Edit
+            &#x274C; Cancel Edit
           </button>
           <button class="btn btn-orange" onclick="openPreview()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            Preview & Select Blanks
+            &#x270F;&#xFE0F; Preview & Select Blanks
+          </button>
+          <button class="btn" onclick="previewAsStudent()" style="background:#8b5cf6;color:#fff;">
+            &#x1F393; Preview as Student
           </button>
           <button class="btn btn-blue" onclick="moveEditToVetting()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-            Move to Vetting
+            &#x1F4E4; Move to Vetting
           </button>
           <button class="btn btn-primary" onclick="saveEditedQuestion()" style="background:#10b981;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            Save Question
+            &#x1F4BE; Save Question
           </button>
         </div>
       </div>
@@ -4063,8 +4072,7 @@ option {
           <div class="subtitle">Schedule questions to be released at a future date (12:00 AM SGT)</div>
         </div>
         <button class="btn btn-primary" onclick="openScheduleQuestionDialog()" style="font-size:0.82rem;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-          Schedule New Question
+          &#x1F4C5; Schedule New Question
         </button>
       </div>
       <div class="page-body" style="max-width:1100px;">
@@ -4204,6 +4212,29 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         Confirm Blanks
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== STUDENT PREVIEW OVERLAY ==================== -->
+<div class="preview-overlay" id="studentPreviewOverlay">
+  <div class="preview-panel" style="max-width:800px;">
+    <div class="preview-header" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9);">
+      <h3 style="display:flex;align-items:center;gap:8px;">&#x1F393; Student Preview</h3>
+      <button class="preview-close" onclick="closeStudentPreview()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="padding:10px 28px 4px;background:var(--surface-alt);border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-muted);">
+      This is exactly how students will see this question in practice mode. Try filling in the blanks!
+    </div>
+    <div class="preview-body" id="studentPreviewBody" style="padding:20px 28px;"></div>
+    <div style="padding:0 28px 20px;display:flex;gap:10px;justify-content:space-between;align-items:center;">
+      <div id="studentPreviewResult" style="font-size:0.85rem;font-weight:600;"></div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-outline" onclick="checkStudentPreviewAnswers()">&#x2705; Check Answers</button>
+        <button class="btn btn-primary" onclick="closeStudentPreview()">&#x274C; Close</button>
+      </div>
     </div>
   </div>
 </div>
@@ -6294,6 +6325,168 @@ function confirmBlanks() {
 
 function closePreview() {
   document.getElementById('previewOverlay').classList.remove('active');
+}
+
+// =====================================================================
+// STUDENT PREVIEW (how students see the question in practice mode)
+// =====================================================================
+function previewAsStudent() {
+  if (blocks.length === 0) {
+    showToast('Add some blocks first before previewing', 'error');
+    return;
+  }
+  if (Object.keys(selectedBlanks).length === 0) {
+    showToast('Select some blanks first using "Preview & Select Blanks"', 'error');
+    return;
+  }
+
+  // Sync DOM content to blocks
+  document.querySelectorAll('.content-editable[data-block-id]').forEach(el => {
+    const bid = el.dataset.blockId;
+    const field = el.dataset.field;
+    const block = blocks.find(b => b.id === bid);
+    if (block && field) block[field] = el.innerHTML;
+  });
+  document.querySelectorAll('[data-table-block]').forEach(table => {
+    const bid = table.dataset.tableBlock;
+    const block = blocks.find(b => b.id === bid);
+    if (!block) return;
+    table.querySelectorAll('td[data-row][data-col]').forEach(cell => {
+      const r = parseInt(cell.dataset.row);
+      const c = parseInt(cell.dataset.col);
+      if (block.data[r]) block.data[r][c] = cell.innerHTML;
+    });
+  });
+
+  const title = document.getElementById('questionTitle').value || 'Untitled Question';
+  const category = document.getElementById('categorySelect').value;
+  const topic = document.getElementById('topicSelect').value;
+  const blanks = JSON.parse(JSON.stringify(selectedBlanks));
+
+  let html = `<div class="student-view-card" style="border:none;box-shadow:none;">`;
+  html += `<div class="student-card-header" style="padding:0 0 12px;">
+    <h3 style="font-size:1.1rem;">${escapeHtml(title)}</h3>
+    <div style="display:flex;gap:8px;">
+      <span class="qb-tag category">${escapeHtml(category)}</span>
+      <span class="qb-tag topic">${escapeHtml(topic)}</span>
+    </div>
+  </div>`;
+  html += `<div class="student-card-body" style="padding:0;">`;
+
+  blocks.forEach(block => {
+    switch (block.type) {
+      case 'text':
+        html += renderStudentText(block.id, block.content, blanks);
+        break;
+      case 'image':
+        if (block.url) {
+          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+        }
+        break;
+      case 'answer':
+        html += `<div class="cer-student-section">`;
+        html += `<div class="cer-student-label claim-bg" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, blanks)}</div>`;
+        html += `</div>`;
+        html += `<div class="cer-student-section">`;
+        html += `<div class="cer-student-label evidence-bg" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, blanks)}</div>`;
+        html += `</div>`;
+        html += `<div class="cer-student-section">`;
+        html += `<div class="cer-student-label reasoning-bg" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
+        html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, blanks)}</div>`;
+        html += `</div>`;
+        break;
+      case 'plainanswer':
+        html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, blanks)}</div>`;
+        break;
+      case 'explanation':
+        // Hidden from students
+        break;
+      case 'video':
+        if (block.url) {
+          const embedUrl = getYouTubeEmbedUrl(block.url);
+          if (embedUrl) {
+            html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
+          }
+        }
+        break;
+      case 'table':
+        html += renderTableReadonly(block, '');
+        break;
+    }
+  });
+
+  html += `</div></div>`;
+
+  document.getElementById('studentPreviewBody').innerHTML = html;
+  document.getElementById('studentPreviewResult').innerHTML = '';
+  document.getElementById('studentPreviewOverlay').classList.add('active');
+}
+
+function closeStudentPreview() {
+  document.getElementById('studentPreviewOverlay').classList.remove('active');
+}
+
+function checkStudentPreviewAnswers() {
+  const container = document.getElementById('studentPreviewBody');
+  const inputs = container.querySelectorAll('.blank-input');
+  let correct = 0, total = inputs.length;
+
+  inputs.forEach(input => {
+    const answer = input.getAttribute('data-answer');
+    const userVal = input.value.trim();
+    if (userVal.toLowerCase() === answer.toLowerCase()) {
+      input.style.border = '2px solid #10b981';
+      input.style.background = '#d1fae5';
+      correct++;
+    } else {
+      input.style.border = '2px solid #ef4444';
+      input.style.background = '#fee2e2';
+    }
+  });
+
+  const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
+  const resultEl = document.getElementById('studentPreviewResult');
+  if (pct === 100) {
+    resultEl.innerHTML = `<span style="color:#10b981;">&#x1F389; ${correct}/${total} correct (${pct}%) - Perfect!</span>`;
+  } else {
+    resultEl.innerHTML = `<span style="color:#f59e0b;">${correct}/${total} correct (${pct}%)</span>`;
+  }
+}
+
+// Schedule question from create page (saves to bank then opens schedule dialog)
+function openScheduleFromCreate() {
+  if (blocks.length === 0) {
+    showToast('Add some blocks first', 'error');
+    return;
+  }
+  if (Object.keys(selectedBlanks).length === 0) {
+    showToast('Select some blanks first using "Preview & Select Blanks"', 'error');
+    return;
+  }
+
+  // Collect and save the question to bank first
+  const q = collectQuestionData();
+  questionBank.push(q);
+  saveQuestion(q);
+  updateCounts();
+  renderQuestionBank();
+
+  // Now open the schedule dialog with this question pre-selected
+  openScheduleQuestionDialog();
+
+  // Auto-select this question in the schedule dialog after a brief delay
+  setTimeout(() => {
+    selectedScheduleQuestionId = q.id;
+    const infoEl = document.getElementById('scheduleSelectedInfo');
+    const cardEl = document.getElementById('scheduleSelectedCard');
+    if (infoEl) infoEl.style.display = '';
+    if (cardEl) cardEl.innerHTML = `<strong>${escapeHtml(q.title)}</strong><br><span style="font-size:0.8rem;color:var(--text-muted);">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</span>`;
+  }, 200);
+
+  clearForm();
+  showToast('Question added to bank. Now set the scheduled release date.', 'info');
 }
 
 function getYouTubeEmbedUrl(url) {
@@ -9078,6 +9271,11 @@ document.getElementById('previewOverlay').addEventListener('click', (e) => {
     closePreview();
   }
 });
+document.getElementById('studentPreviewOverlay').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('studentPreviewOverlay')) {
+    closeStudentPreview();
+  }
+});
 
 // Enter key support for login and register forms
 document.getElementById('loginPass').addEventListener('keydown', (e) => {
@@ -10223,6 +10421,10 @@ window.moveBlock = moveBlock;
 window.duplicateBlock = duplicateBlock;
 window.openPreview = openPreview;
 window.closePreview = closePreview;
+window.previewAsStudent = previewAsStudent;
+window.closeStudentPreview = closeStudentPreview;
+window.checkStudentPreviewAnswers = checkStudentPreviewAnswers;
+window.openScheduleFromCreate = openScheduleFromCreate;
 window.toggleBlank = toggleBlank;
 window.clearAllBlanks = clearAllBlanks;
 window.confirmBlanks = confirmBlanks;
