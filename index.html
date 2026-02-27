@@ -3138,6 +3138,69 @@ option {
   border-radius: 3px;
   transition: width 0.3s ease;
 }
+/* Multi-topic selection */
+.tp-topic-btn.selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: 0 0 0 2px var(--primary);
+}
+.tp-topic-btn.selected .tp-topic-count {
+  color: var(--primary);
+  font-weight: 700;
+}
+.tp-selection-bar {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-top: 2px solid var(--primary);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  z-index: 20;
+  flex-wrap: wrap;
+}
+.tp-selection-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.tp-selection-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--primary-light);
+  border: 1px solid var(--primary);
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--primary);
+  white-space: nowrap;
+}
+.tp-selection-tag .tp-tag-remove {
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-left: 2px;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.tp-selection-tag .tp-tag-remove:hover {
+  opacity: 1;
+}
+.tp-selection-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
 
 /* ========== FLAG BUTTON (Student Practice) ========== */
 .flag-question-btn {
@@ -3973,6 +4036,20 @@ option {
 
         <!-- Topic grid (shown by default) -->
         <div id="tpTopicGrid"></div>
+
+        <!-- Selection bar (shown when topics selected) -->
+        <div id="tpSelectionBar" class="tp-selection-bar" style="display:none;">
+          <div style="display:flex;flex-direction:column;gap:6px;flex:1;min-width:0;">
+            <div style="font-size:0.78rem;color:var(--text-muted);font-weight:600;">Selected topics:</div>
+            <div class="tp-selection-tags" id="tpSelectionTags"></div>
+          </div>
+          <div class="tp-selection-actions">
+            <button class="btn btn-outline" onclick="tpClearSelection()" style="font-size:0.82rem;">Clear All</button>
+            <button class="btn btn-primary" id="tpStartPracticeBtn" onclick="tpStartPractice()" style="font-size:0.88rem;">
+              &#x1F3AF; Practice <span id="tpSelectionCount">0</span> topics
+            </button>
+          </div>
+        </div>
 
         <!-- Practice area (hidden by default) -->
         <div id="tpPracticeArea" style="display:none;">
@@ -9359,6 +9436,8 @@ let tpIndex = -1;
 let tpAnswered = 0;
 let tpSubmitted = false;
 let tpCurrentTopic = '';
+let tpSelectedTopics = new Set();
+let tpActiveTopics = []; // topics being practiced in current session
 
 function tpRenderTopics() {
   const grid = document.getElementById('tpTopicGrid');
@@ -9369,7 +9448,7 @@ function tpRenderTopics() {
   document.getElementById('tpBackBtn').style.display = 'none';
   document.getElementById('tpLevelBar').style.display = '';
   document.getElementById('tpPageTitle').textContent = 'Topical Practice';
-  document.getElementById('tpPageSubtitle').textContent = 'Choose a topic to practice';
+  document.getElementById('tpPageSubtitle').textContent = 'Select one or more topics, then click Practice';
 
   const studentLevel = document.getElementById('tpLevelSelect').value;
   const studentLevelNum = getLevelNumber(studentLevel);
@@ -9382,6 +9461,12 @@ function tpRenderTopics() {
       const t = q.topic || '';
       topicCounts[t] = (topicCounts[t] || 0) + 1;
     }
+  });
+
+  // Remove selected topics that are no longer accessible at this level
+  tpSelectedTopics.forEach(t => {
+    const tLevel = getTopicLevel(t);
+    if (getLevelNumber(tLevel) > studentLevelNum) tpSelectedTopics.delete(t);
   });
 
   let html = '';
@@ -9403,8 +9488,9 @@ function tpRenderTopics() {
     topics.forEach(topic => {
       const count = topicCounts[topic] || 0;
       const emoji = topicEmojis[topic] || '📘';
+      const isSelected = tpSelectedTopics.has(topic);
       if (isAccessible) {
-        html += `<button class="tp-topic-btn${count === 0 ? ' disabled' : ''}" onclick="${count > 0 ? `tpStartTopic('${topic.replace(/'/g, "\\'")}')` : ''}">
+        html += `<button class="tp-topic-btn${count === 0 ? ' disabled' : ''}${isSelected ? ' selected' : ''}" onclick="${count > 0 ? `tpToggleTopic('${topic.replace(/'/g, "\\'")}')` : ''}">
           <div class="tp-topic-icon" style="background:${colors.bg};font-size:1.3rem;">
             ${emoji}
           </div>
@@ -9426,64 +9512,160 @@ function tpRenderTopics() {
   });
 
   grid.innerHTML = html;
+  tpUpdateSelectionBar();
 }
 
-function tpStartTopic(topic) {
-  tpCurrentTopic = topic;
-  // Build queue: all questions from this topic that have blanks, shuffled
-  const withBlanks = questionBank.filter(q => {
-    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
-    return blankCount > 0 && q.topic === topic;
-  });
+function tpToggleTopic(topic) {
+  if (tpSelectedTopics.has(topic)) {
+    tpSelectedTopics.delete(topic);
+  } else {
+    tpSelectedTopics.add(topic);
+  }
+  tpRenderTopics();
+}
 
-  // Shuffle
-  for (let i = withBlanks.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [withBlanks[i], withBlanks[j]] = [withBlanks[j], withBlanks[i]];
+function tpClearSelection() {
+  tpSelectedTopics.clear();
+  tpRenderTopics();
+}
+
+function tpRemoveSelectedTopic(topic) {
+  tpSelectedTopics.delete(topic);
+  tpRenderTopics();
+}
+
+function tpUpdateSelectionBar() {
+  const bar = document.getElementById('tpSelectionBar');
+  const tagsEl = document.getElementById('tpSelectionTags');
+  const countEl = document.getElementById('tpSelectionCount');
+  if (!bar) return;
+
+  if (tpSelectedTopics.size === 0) {
+    bar.style.display = 'none';
+    return;
   }
 
-  tpQueue = withBlanks;
+  bar.style.display = '';
+  countEl.textContent = tpSelectedTopics.size;
+
+  let tagsHtml = '';
+  tpSelectedTopics.forEach(topic => {
+    const emoji = topicEmojis[topic] || '📘';
+    tagsHtml += `<span class="tp-selection-tag">
+      ${emoji} ${escapeHtml(topic)}
+      <span class="tp-tag-remove" onclick="event.stopPropagation();tpRemoveSelectedTopic('${topic.replace(/'/g, "\\'")}')">&times;</span>
+    </span>`;
+  });
+  tagsEl.innerHTML = tagsHtml;
+}
+
+function tpStartPractice() {
+  if (tpSelectedTopics.size === 0) {
+    showToast('Select at least one topic first', 'error');
+    return;
+  }
+
+  tpActiveTopics = Array.from(tpSelectedTopics);
+
+  // Gather questions per topic, each shuffled independently
+  const questionsByTopic = {};
+  tpActiveTopics.forEach(topic => {
+    const withBlanks = questionBank.filter(q => {
+      const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
+      return blankCount > 0 && q.topic === topic;
+    });
+    // Shuffle
+    for (let i = withBlanks.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [withBlanks[i], withBlanks[j]] = [withBlanks[j], withBlanks[i]];
+    }
+    questionsByTopic[topic] = withBlanks;
+  });
+
+  // Interleave: round-robin across topics, skip exhausted topics
+  const queue = [];
+  const indices = {};
+  tpActiveTopics.forEach(t => { indices[t] = 0; });
+  let remaining = tpActiveTopics.filter(t => questionsByTopic[t].length > 0);
+
+  while (remaining.length > 0) {
+    for (const topic of remaining) {
+      if (indices[topic] < questionsByTopic[topic].length) {
+        queue.push(questionsByTopic[topic][indices[topic]]);
+        indices[topic]++;
+      }
+    }
+    remaining = remaining.filter(t => indices[t] < questionsByTopic[t].length);
+  }
+
+  tpQueue = queue;
   tpIndex = -1;
   tpAnswered = 0;
 
   if (tpQueue.length === 0) {
-    showToast('No questions with blanks found for this topic', 'error');
+    showToast('No questions with blanks found for the selected topics', 'error');
     return;
   }
 
   // Switch to practice view
   document.getElementById('tpTopicGrid').style.display = 'none';
   document.getElementById('tpLevelBar').style.display = 'none';
+  document.getElementById('tpSelectionBar').style.display = 'none';
   document.getElementById('tpPracticeArea').style.display = '';
   document.getElementById('tpBackBtn').style.display = '';
-  document.getElementById('tpPageTitle').textContent = topic;
-  document.getElementById('tpPageSubtitle').textContent = getTopicLevel(topic) + ' — ' + tpQueue.length + ' question' + (tpQueue.length !== 1 ? 's' : '');
 
-  const topicLevel = getTopicLevel(topic);
-  const colors = levelColors[topicLevel] || levelColors['P6'];
-  document.getElementById('tpCurrentTopicLabel').innerHTML = `
-    <span class="tp-level-badge" style="background:${colors.bg};color:${colors.fg};">${topicLevel}</span>
-    ${escapeHtml(topic)}`;
+  if (tpActiveTopics.length === 1) {
+    tpCurrentTopic = tpActiveTopics[0];
+    document.getElementById('tpPageTitle').textContent = tpCurrentTopic;
+    const topicLevel = getTopicLevel(tpCurrentTopic);
+    document.getElementById('tpPageSubtitle').textContent = topicLevel + ' — ' + tpQueue.length + ' question' + (tpQueue.length !== 1 ? 's' : '');
+    const colors = levelColors[topicLevel] || levelColors['P6'];
+    document.getElementById('tpCurrentTopicLabel').innerHTML = `
+      <span class="tp-level-badge" style="background:${colors.bg};color:${colors.fg};">${topicLevel}</span>
+      ${escapeHtml(tpCurrentTopic)}`;
+  } else {
+    tpCurrentTopic = tpActiveTopics.join(', ');
+    document.getElementById('tpPageTitle').textContent = 'Mixed Topics Practice';
+    document.getElementById('tpPageSubtitle').textContent = tpActiveTopics.length + ' topics — ' + tpQueue.length + ' question' + (tpQueue.length !== 1 ? 's' : '');
+    let labelHtml = '';
+    tpActiveTopics.forEach(t => {
+      const lv = getTopicLevel(t);
+      const c = levelColors[lv] || levelColors['P6'];
+      const em = topicEmojis[t] || '📘';
+      labelHtml += `<span class="tp-level-badge" style="background:${c.bg};color:${c.fg};margin-right:4px;">${em} ${escapeHtml(t)}</span>`;
+    });
+    document.getElementById('tpCurrentTopicLabel').innerHTML = labelHtml;
+  }
 
   tpLoadNextQuestion();
+}
+
+// Legacy single-topic start (kept for compatibility but routes through multi-select)
+function tpStartTopic(topic) {
+  tpSelectedTopics.clear();
+  tpSelectedTopics.add(topic);
+  tpStartPractice();
 }
 
 function tpLoadNextQuestion() {
   tpIndex++;
   if (tpIndex >= tpQueue.length) {
+    const topicLabel = tpActiveTopics.length === 1
+      ? `<strong>${escapeHtml(tpActiveTopics[0])}</strong>`
+      : `<strong>${tpActiveTopics.length} topics</strong>`;
     document.getElementById('tpContainer').innerHTML = `
       <div class="empty-state" style="padding:40px 20px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="width:56px;height:56px;margin-bottom:14px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         <h3>All Done!</h3>
-        <p>You completed all ${tpQueue.length} question${tpQueue.length !== 1 ? 's' : ''} on <strong>${escapeHtml(tpCurrentTopic)}</strong>. Great work!</p>
+        <p>You completed all ${tpQueue.length} question${tpQueue.length !== 1 ? 's' : ''} from ${topicLabel}. Great work!</p>
         <div style="display:flex;gap:10px;margin-top:16px;justify-content:center;">
           <button class="btn btn-outline" onclick="tpBackToTopics()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
             Back to Topics
           </button>
-          <button class="btn btn-primary" onclick="tpStartTopic('${tpCurrentTopic.replace(/'/g, "\\'")}')">
+          <button class="btn btn-primary" onclick="tpStartPractice()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            Restart Topic
+            Restart
           </button>
         </div>
       </div>`;
@@ -9675,6 +9857,7 @@ function tpBackToTopics() {
   tpIndex = -1;
   tpAnswered = 0;
   tpCurrentTopic = '';
+  tpActiveTopics = [];
   showFirstLetterClues = false;
   tpRenderTopics();
 }
@@ -10556,6 +10739,10 @@ window.saveEditedSchedule = saveEditedSchedule;
 window.deleteScheduledQuestion = deleteScheduledQuestion;
 // Topical Practice
 window.tpRenderTopics = tpRenderTopics;
+window.tpToggleTopic = tpToggleTopic;
+window.tpClearSelection = tpClearSelection;
+window.tpRemoveSelectedTopic = tpRemoveSelectedTopic;
+window.tpStartPractice = tpStartPractice;
 window.tpStartTopic = tpStartTopic;
 window.tpLoadNextQuestion = tpLoadNextQuestion;
 window.tpToggleFirstLetter = tpToggleFirstLetter;
