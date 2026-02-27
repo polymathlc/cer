@@ -2749,6 +2749,191 @@ option {
   background: var(--accent-blue-light);
   color: var(--accent-blue);
 }
+
+/* ========== STUDENT USAGE DASHBOARD ========== */
+.usage-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.usage-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  text-align: center;
+}
+.usage-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+}
+.usage-card-value {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  line-height: 1.2;
+}
+.usage-card-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-weight: 500;
+}
+.usage-section {
+  margin-bottom: 28px;
+}
+.usage-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+.usage-table-wrapper {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.usage-table th {
+  background: var(--surface-alt);
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.usage-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.usage-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.usage-table tbody tr:hover {
+  background: var(--surface-alt);
+}
+
+/* ========== SCHEDULED QUESTIONS ========== */
+.schedule-question-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-alt);
+}
+.schedule-q-item {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.schedule-q-item:last-child {
+  border-bottom: none;
+}
+.schedule-q-item:hover {
+  background: var(--primary-light);
+}
+.schedule-q-item.selected {
+  background: var(--primary-light);
+  border-left: 3px solid var(--primary);
+}
+.schedule-q-item .q-title {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+.schedule-q-item .q-meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+.schedule-selected-card {
+  background: var(--primary-light);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  font-size: 0.88rem;
+}
+.scheduled-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  transition: box-shadow var(--transition);
+}
+.scheduled-card:hover {
+  box-shadow: var(--shadow-sm);
+}
+.scheduled-card .sc-info {
+  flex: 1;
+  min-width: 0;
+}
+.scheduled-card .sc-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+.scheduled-card .sc-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.scheduled-card .sc-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.78rem;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.scheduled-card .sc-date.future {
+  background: var(--accent-blue-light);
+  color: var(--accent-blue);
+}
+.scheduled-card .sc-date.released {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+.scheduled-card .sc-date.today {
+  background: var(--accent-orange-light);
+  color: var(--accent-orange);
+}
+.scheduled-card .sc-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.sc-actions .btn {
+  font-size: 0.78rem;
+  padding: 6px 12px;
+}
 </style>
 </head>
 <body>
@@ -2928,6 +3113,15 @@ option {
       <div class="nav-item admin-only" data-page="practice" onclick="navigateTo('practice')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         Practice Mode
+      </div>
+      <div class="nav-item admin-only" data-page="usage" onclick="navigateTo('usage')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Student Usage
+      </div>
+      <div class="nav-section-label admin-only">Schedule</div>
+      <div class="nav-item admin-only" data-page="scheduled" onclick="navigateTo('scheduled')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/></svg>
+        Scheduled Questions
       </div>
       <!-- Student-only nav items -->
       <div class="nav-section-label student-only" style="display:none;">Worksheets</div>
@@ -3428,6 +3622,178 @@ option {
       </div>
     </div>
 
+    <!-- ===== PAGE: STUDENT USAGE DASHBOARD (Admin Only) ===== -->
+    <div class="page" id="page-usage">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Student Usage Dashboard</h2>
+          </div>
+          <div class="subtitle">Track student logins, registrations, and question activity</div>
+        </div>
+        <button class="btn btn-outline" onclick="loadUsageDashboard()" style="font-size:0.82rem;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          Refresh
+        </button>
+      </div>
+      <div class="page-body" style="max-width:1100px;">
+        <!-- Summary Cards -->
+        <div class="usage-summary-cards" id="usageSummaryCards">
+          <div class="usage-card">
+            <div class="usage-card-icon" style="background:var(--primary-light);color:var(--primary);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div class="usage-card-value" id="usageTotalStudents">--</div>
+            <div class="usage-card-label">Total Students</div>
+          </div>
+          <div class="usage-card">
+            <div class="usage-card-icon" style="background:var(--accent-blue-light);color:var(--accent-blue);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            </div>
+            <div class="usage-card-value" id="usageTotalLogins">--</div>
+            <div class="usage-card-label">Total Logins</div>
+          </div>
+          <div class="usage-card">
+            <div class="usage-card-icon" style="background:var(--accent-orange-light);color:var(--accent-orange);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            </div>
+            <div class="usage-card-value" id="usageTotalAttempts">--</div>
+            <div class="usage-card-label">Questions Attempted</div>
+          </div>
+          <div class="usage-card">
+            <div class="usage-card-icon" style="background:var(--accent-purple-light);color:var(--accent-purple);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div class="usage-card-value" id="usageLoginToday">--</div>
+            <div class="usage-card-label">Logins Today</div>
+          </div>
+        </div>
+
+        <!-- Student Table -->
+        <div class="usage-section">
+          <h3 class="usage-section-title">Student Activity Summary</h3>
+          <div class="usage-table-wrapper">
+            <table class="usage-table" id="usageStudentTable">
+              <thead>
+                <tr>
+                  <th>Student Name</th>
+                  <th>Email</th>
+                  <th>Last Login</th>
+                  <th>Total Logins</th>
+                  <th>Questions Done</th>
+                  <th>Avg Score</th>
+                </tr>
+              </thead>
+              <tbody id="usageStudentBody">
+                <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Recent Logins -->
+        <div class="usage-section">
+          <h3 class="usage-section-title">Recent Login Activity</h3>
+          <div class="usage-table-wrapper">
+            <table class="usage-table" id="usageLoginTable">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Email</th>
+                  <th>Login Time</th>
+                </tr>
+              </thead>
+              <tbody id="usageLoginBody">
+                <tr><td colspan="3" style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: SCHEDULED QUESTIONS (Admin Only) ===== -->
+    <div class="page" id="page-scheduled">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Scheduled Questions</h2>
+          </div>
+          <div class="subtitle">Schedule questions to be released at a future date (12:00 AM SGT)</div>
+        </div>
+        <button class="btn btn-primary" onclick="openScheduleQuestionDialog()" style="font-size:0.82rem;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          Schedule New Question
+        </button>
+      </div>
+      <div class="page-body" style="max-width:1100px;">
+        <div id="scheduledQuestionsContainer">
+          <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <h3>No Scheduled Questions</h3>
+            <p>Click "Schedule New Question" to add a question that will be released at a future date.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==================== SCHEDULE QUESTION DIALOG ==================== -->
+<div class="confirm-overlay" id="scheduleQuestionOverlay">
+  <div class="confirm-dialog" style="max-width:600px;text-align:left;max-height:85vh;overflow-y:auto;">
+    <h3 style="margin-bottom:4px;" id="scheduleDialogTitle">Schedule New Question</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Select a question from the bank and choose when it should be released. Questions are released at 12:00 AM Singapore time (SGT) on the chosen date.</p>
+
+    <div class="form-group">
+      <label class="form-label">Release Date</label>
+      <input type="date" id="scheduleDate" class="form-input" style="max-width:220px;">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Select Question from Bank</label>
+      <input type="text" id="scheduleSearchInput" class="form-input" placeholder="Search questions..." oninput="filterScheduleQuestions()" style="margin-bottom:10px;">
+      <div id="scheduleQuestionList" class="schedule-question-list"></div>
+    </div>
+
+    <div id="scheduleSelectedInfo" style="display:none;margin-bottom:16px;">
+      <label class="form-label">Selected Question</label>
+      <div id="scheduleSelectedCard" class="schedule-selected-card"></div>
+    </div>
+
+    <div class="btn-group" style="justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeScheduleDialog()">Cancel</button>
+      <button class="btn btn-primary" id="scheduleSubmitBtn" onclick="submitScheduledQuestion()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Schedule Question
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== EDIT SCHEDULED QUESTION DIALOG ==================== -->
+<div class="confirm-overlay" id="editScheduleOverlay">
+  <div class="confirm-dialog" style="max-width:500px;text-align:left;">
+    <h3 style="margin-bottom:4px;">Edit Scheduled Release</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Change the release date for this scheduled question.</p>
+
+    <div id="editScheduleQuestionInfo" style="margin-bottom:16px;"></div>
+
+    <div class="form-group">
+      <label class="form-label">New Release Date</label>
+      <input type="date" id="editScheduleDate" class="form-input" style="max-width:220px;">
+    </div>
+
+    <div class="btn-group" style="justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeEditScheduleDialog()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditedSchedule()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
+        Save Changes
+      </button>
+    </div>
   </div>
 </div>
 
@@ -3574,7 +3940,13 @@ import {
   getDoc,
   getDocs,
   setDoc,
-  deleteDoc
+  deleteDoc,
+  addDoc,
+  query,
+  where,
+  orderBy,
+  updateDoc,
+  Timestamp
 } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 
 // Firebase configuration
@@ -3743,6 +4115,29 @@ function getAuthErrorMessage(code) {
 const ADMIN_EMAIL = 'chungzhikai@gmail.com';
 let adminUid = null; // will be loaded for student accounts
 
+async function recordLogin(user) {
+  try {
+    const loginRef = collection(db, 'loginEvents');
+    await addDoc(loginRef, {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName || user.email.split('@')[0],
+      timestamp: Timestamp.now(),
+      userAgent: navigator.userAgent
+    });
+    // Also update the user profile doc with last login
+    await setDoc(doc(db, 'userProfiles', user.uid), {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName || user.email.split('@')[0],
+      lastLogin: Timestamp.now(),
+      role: user.email === ADMIN_EMAIL ? 'admin' : 'student'
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Could not record login:', err);
+  }
+}
+
 async function enterApp(user) {
   const displayName = user.displayName || user.email.split('@')[0];
   const isAdmin = user.email === ADMIN_EMAIL;
@@ -3753,6 +4148,8 @@ async function enterApp(user) {
     role: isAdmin ? 'admin' : 'student'
   };
   showPage('appWrapper');
+  // Record login event for usage tracking
+  recordLogin(user);
   document.querySelector('.avatar').textContent = displayName[0].toUpperCase();
   document.querySelector('.sidebar-footer div div:first-child').textContent = displayName;
 
@@ -3767,6 +4164,8 @@ async function enterApp(user) {
     loadSampleData();
     renderBlocks();
     populatePracticeStudentSelect();
+    // Load scheduled questions and auto-release any due ones
+    loadScheduledQuestions();
     // Prompt student setup only once per user account
     if (!studentSetupSeen) {
       setTimeout(() => openStudentSetup(), 600);
@@ -3910,6 +4309,8 @@ function navigateTo(page) {
   }
   if (page === 'myworksheets') renderSavedWorksheets();
   if (page === 'quickpractice') updateQpProgress();
+  if (page === 'usage') loadUsageDashboard();
+  if (page === 'scheduled') loadScheduledQuestions();
   // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -6097,6 +6498,21 @@ function checkStudentAnswers(qId) {
   
   const pct = Math.round((correct / total) * 100);
   showToast(`Score: ${correct}/${total} (${pct}%)`, correct === total ? 'success' : 'info');
+
+  // Record question attempt for usage tracking
+  if (currentUser && currentUser.role === 'student') {
+    addDoc(collection(db, 'questionAttempts'), {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      displayName: currentUser.name,
+      questionId: qId || '',
+      questionTitle: '',
+      score: correct,
+      totalBlanks: total,
+      timestamp: Timestamp.now(),
+      mode: 'practice'
+    }).catch(err => console.warn('Could not record attempt:', err));
+  }
 }
 
 // =====================================================================
@@ -7959,6 +8375,22 @@ function submitQpAnswers() {
   qpAnswered = Math.max(qpAnswered, qpIndex + 1);
   updateQpProgress();
 
+  // Record question attempt for usage tracking
+  if (currentUser && currentUser.role === 'student') {
+    const currentQ = qpQueue[qpIndex];
+    addDoc(collection(db, 'questionAttempts'), {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      displayName: currentUser.name,
+      questionId: currentQ ? currentQ.id : '',
+      questionTitle: currentQ ? currentQ.title : '',
+      score: total > 0 ? correct : 0,
+      totalBlanks: total,
+      timestamp: Timestamp.now(),
+      mode: 'quickpractice'
+    }).catch(err => console.warn('Could not record attempt:', err));
+  }
+
   // Show score
   const scoreEl = document.getElementById('qpScoreDisplay');
   if (total === 0) {
@@ -8122,6 +8554,496 @@ document.getElementById('registerPassConfirm').addEventListener('keydown', (e) =
 });
 
 // =====================================================================
+// STUDENT USAGE DASHBOARD (Admin Only)
+// =====================================================================
+let usageDashboardLoaded = false;
+
+async function loadUsageDashboard() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+
+  try {
+    // Load all user profiles (students only)
+    const profilesSnap = await getDocs(collection(db, 'userProfiles'));
+    const profiles = {};
+    profilesSnap.forEach(d => {
+      const p = d.data();
+      if (p.role !== 'admin') profiles[p.uid] = p;
+    });
+
+    // Load all login events
+    const loginsSnap = await getDocs(collection(db, 'loginEvents'));
+    const allLogins = [];
+    loginsSnap.forEach(d => {
+      const l = d.data();
+      if (l.email !== ADMIN_EMAIL) allLogins.push(l);
+    });
+
+    // Sort by timestamp descending
+    allLogins.sort((a, b) => {
+      const ta = a.timestamp ? (a.timestamp.toDate ? a.timestamp.toDate() : new Date(a.timestamp)) : new Date(0);
+      const tb = b.timestamp ? (b.timestamp.toDate ? b.timestamp.toDate() : new Date(b.timestamp)) : new Date(0);
+      return tb - ta;
+    });
+
+    // Load all question attempts
+    const attemptsSnap = await getDocs(collection(db, 'questionAttempts'));
+    const allAttempts = [];
+    attemptsSnap.forEach(d => {
+      const a = d.data();
+      allAttempts.push(a);
+    });
+
+    // Compute per-student stats
+    const studentStats = {};
+    // From profiles
+    Object.values(profiles).forEach(p => {
+      studentStats[p.uid] = {
+        uid: p.uid,
+        email: p.email || '',
+        name: p.displayName || p.email || 'Unknown',
+        lastLogin: p.lastLogin ? (p.lastLogin.toDate ? p.lastLogin.toDate() : new Date(p.lastLogin)) : null,
+        loginCount: 0,
+        questionsAttempted: 0,
+        totalScore: 0,
+        totalBlanks: 0
+      };
+    });
+
+    // Count logins per student
+    allLogins.forEach(l => {
+      if (!studentStats[l.uid]) {
+        studentStats[l.uid] = {
+          uid: l.uid,
+          email: l.email || '',
+          name: l.displayName || l.email || 'Unknown',
+          lastLogin: null,
+          loginCount: 0,
+          questionsAttempted: 0,
+          totalScore: 0,
+          totalBlanks: 0
+        };
+      }
+      studentStats[l.uid].loginCount++;
+      const loginDate = l.timestamp ? (l.timestamp.toDate ? l.timestamp.toDate() : new Date(l.timestamp)) : null;
+      if (loginDate && (!studentStats[l.uid].lastLogin || loginDate > studentStats[l.uid].lastLogin)) {
+        studentStats[l.uid].lastLogin = loginDate;
+      }
+    });
+
+    // Count attempts per student
+    allAttempts.forEach(a => {
+      if (!studentStats[a.uid]) {
+        studentStats[a.uid] = {
+          uid: a.uid,
+          email: a.email || '',
+          name: a.displayName || a.email || 'Unknown',
+          lastLogin: null,
+          loginCount: 0,
+          questionsAttempted: 0,
+          totalScore: 0,
+          totalBlanks: 0
+        };
+      }
+      studentStats[a.uid].questionsAttempted++;
+      studentStats[a.uid].totalScore += (a.score || 0);
+      studentStats[a.uid].totalBlanks += (a.totalBlanks || 0);
+    });
+
+    const studentList = Object.values(studentStats).sort((a, b) => {
+      if (b.lastLogin && a.lastLogin) return b.lastLogin - a.lastLogin;
+      if (b.lastLogin) return 1;
+      if (a.lastLogin) return -1;
+      return 0;
+    });
+
+    // Today's logins
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const loginsToday = allLogins.filter(l => {
+      const d = l.timestamp ? (l.timestamp.toDate ? l.timestamp.toDate() : new Date(l.timestamp)) : null;
+      return d && d >= today;
+    }).length;
+
+    // Update summary cards
+    document.getElementById('usageTotalStudents').textContent = studentList.length;
+    document.getElementById('usageTotalLogins').textContent = allLogins.length;
+    document.getElementById('usageTotalAttempts').textContent = allAttempts.length;
+    document.getElementById('usageLoginToday').textContent = loginsToday;
+
+    // Render student table
+    const tbody = document.getElementById('usageStudentBody');
+    if (studentList.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No student data yet. Students will appear here after they log in.</td></tr>';
+    } else {
+      tbody.innerHTML = studentList.map(s => {
+        const lastLoginStr = s.lastLogin ? formatDateTimeSGT(s.lastLogin) : 'Never';
+        const avgScore = s.totalBlanks > 0 ? Math.round((s.totalScore / s.totalBlanks) * 100) + '%' : '--';
+        return `<tr>
+          <td style="font-weight:600;">${escapeHtml(s.name)}</td>
+          <td style="color:var(--text-muted);font-size:0.82rem;">${escapeHtml(s.email)}</td>
+          <td style="font-size:0.82rem;">${lastLoginStr}</td>
+          <td style="text-align:center;"><span style="background:var(--accent-blue-light);color:var(--accent-blue);padding:2px 10px;border-radius:10px;font-family:'Space Mono',monospace;font-size:0.75rem;font-weight:600;">${s.loginCount}</span></td>
+          <td style="text-align:center;"><span style="background:var(--accent-orange-light);color:var(--accent-orange);padding:2px 10px;border-radius:10px;font-family:'Space Mono',monospace;font-size:0.75rem;font-weight:600;">${s.questionsAttempted}</span></td>
+          <td style="text-align:center;font-family:'Space Mono',monospace;font-size:0.82rem;font-weight:600;color:${s.totalBlanks > 0 ? 'var(--primary)' : 'var(--text-muted)'};">${avgScore}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Render recent logins (last 50)
+    const loginBody = document.getElementById('usageLoginBody');
+    const recentLogins = allLogins.slice(0, 50);
+    if (recentLogins.length === 0) {
+      loginBody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:40px;color:var(--text-muted);">No login activity yet.</td></tr>';
+    } else {
+      loginBody.innerHTML = recentLogins.map(l => {
+        const ts = l.timestamp ? (l.timestamp.toDate ? l.timestamp.toDate() : new Date(l.timestamp)) : null;
+        const timeStr = ts ? formatDateTimeSGT(ts) : 'Unknown';
+        return `<tr>
+          <td style="font-weight:600;">${escapeHtml(l.displayName || l.email || 'Unknown')}</td>
+          <td style="color:var(--text-muted);font-size:0.82rem;">${escapeHtml(l.email || '')}</td>
+          <td style="font-size:0.82rem;">${timeStr}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    usageDashboardLoaded = true;
+    showToast('Usage data loaded', 'success');
+  } catch (err) {
+    console.error('loadUsageDashboard failed:', err);
+    showToast('Could not load usage data — check your connection', 'error');
+  }
+}
+
+function formatDateTimeSGT(date) {
+  try {
+    return date.toLocaleString('en-SG', {
+      timeZone: 'Asia/Singapore',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch (e) {
+    return date.toLocaleString();
+  }
+}
+
+// =====================================================================
+// SCHEDULED QUESTIONS
+// =====================================================================
+let scheduledQuestions = []; // [{ id (firestore doc id), questionId, questionTitle, category, topic, releaseDate, released, questionData }]
+let editingScheduleId = null;
+let selectedScheduleQuestionId = null;
+
+async function loadScheduledQuestions() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  try {
+    const schedCol = collection(db, 'users', currentUser.uid, 'scheduledQuestions');
+    const snap = await getDocs(schedCol);
+    scheduledQuestions = [];
+    snap.forEach(d => {
+      const data = d.data();
+      scheduledQuestions.push({ ...data, _docId: d.id });
+    });
+    scheduledQuestions.sort((a, b) => {
+      const da = a.releaseDate || '';
+      const db2 = b.releaseDate || '';
+      return da.localeCompare(db2);
+    });
+    renderScheduledQuestions();
+    // Check and release any due questions
+    await checkAndReleaseScheduledQuestions();
+  } catch (err) {
+    console.error('loadScheduledQuestions failed:', err);
+  }
+}
+
+async function checkAndReleaseScheduledQuestions() {
+  // Get current date in Singapore time
+  const now = new Date();
+  const sgtStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' }); // YYYY-MM-DD format
+
+  for (const sq of scheduledQuestions) {
+    if (!sq.released && sq.releaseDate && sq.releaseDate <= sgtStr) {
+      // Release this question - add to question bank
+      if (sq.questionData) {
+        const q = JSON.parse(JSON.stringify(sq.questionData));
+        // Check if already in bank
+        if (!questionBank.find(existing => existing.id === q.id)) {
+          questionBank.push(normalizeLoadedQuestion(q));
+          await saveQuestion(q);
+        }
+      }
+      // Mark as released
+      sq.released = true;
+      try {
+        const schedRef = doc(db, 'users', currentUser.uid, 'scheduledQuestions', sq._docId);
+        await updateDoc(schedRef, { released: true });
+      } catch (err) {
+        console.warn('Could not mark scheduled question as released:', err);
+      }
+    }
+  }
+  updateCounts();
+  renderScheduledQuestions();
+}
+
+function renderScheduledQuestions() {
+  const container = document.getElementById('scheduledQuestionsContainer');
+  if (!container) return;
+
+  if (scheduledQuestions.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <h3>No Scheduled Questions</h3>
+        <p>Click "Schedule New Question" to add a question that will be released at a future date.</p>
+      </div>`;
+    return;
+  }
+
+  const now = new Date();
+  const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+
+  container.innerHTML = scheduledQuestions.map(sq => {
+    const isReleased = sq.released;
+    const isToday = sq.releaseDate === todayStr;
+    const isFuture = sq.releaseDate > todayStr;
+    let statusClass = 'released';
+    let statusLabel = 'Released';
+    if (isFuture && !isReleased) { statusClass = 'future'; statusLabel = 'Scheduled'; }
+    else if (isToday && !isReleased) { statusClass = 'today'; statusLabel = 'Today'; }
+
+    const dateObj = new Date(sq.releaseDate + 'T00:00:00+08:00');
+    const dateStr = dateObj.toLocaleDateString('en-SG', { timeZone: 'Asia/Singapore', year: 'numeric', month: 'short', day: 'numeric' });
+
+    return `<div class="scheduled-card">
+      <div class="sc-info">
+        <div class="sc-title">${escapeHtml(sq.questionTitle || sq.questionData?.title || 'Untitled')}</div>
+        <div class="sc-meta">
+          <span class="sc-date ${statusClass}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            ${dateStr}
+          </span>
+          <span class="qb-tag category">${escapeHtml(sq.category || sq.questionData?.category || '')}</span>
+          <span class="qb-tag topic">${escapeHtml(sq.topic || sq.questionData?.topic || '')}</span>
+          <span class="sc-date ${statusClass}" style="font-size:0.7rem;">${statusLabel}</span>
+        </div>
+      </div>
+      <div class="sc-actions">
+        ${!isReleased ? `<button class="btn btn-outline" onclick="editScheduledQuestion('${sq._docId}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Edit
+        </button>` : ''}
+        <button class="btn btn-outline" onclick="deleteScheduledQuestion('${sq._docId}')" style="color:var(--accent-red);border-color:var(--accent-red-light);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Delete
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openScheduleQuestionDialog() {
+  selectedScheduleQuestionId = null;
+  document.getElementById('scheduleDialogTitle').textContent = 'Schedule New Question';
+  document.getElementById('scheduleDate').value = '';
+  document.getElementById('scheduleSearchInput').value = '';
+  document.getElementById('scheduleSelectedInfo').style.display = 'none';
+
+  // Set minimum date to tomorrow SGT
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const minDate = tomorrow.toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+  document.getElementById('scheduleDate').min = minDate;
+
+  renderScheduleQuestionList();
+  document.getElementById('scheduleQuestionOverlay').classList.add('active');
+}
+
+function closeScheduleDialog() {
+  document.getElementById('scheduleQuestionOverlay').classList.remove('active');
+}
+
+function filterScheduleQuestions() {
+  renderScheduleQuestionList();
+}
+
+function renderScheduleQuestionList() {
+  const list = document.getElementById('scheduleQuestionList');
+  const searchTerm = (document.getElementById('scheduleSearchInput')?.value || '').toLowerCase().trim();
+
+  let filtered = questionBank.filter(q => {
+    if (searchTerm) {
+      const haystack = (q.title + ' ' + q.topic + ' ' + q.category).toLowerCase();
+      return haystack.includes(searchTerm);
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.85rem;">No questions found in the bank.</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(q => {
+    const isSelected = selectedScheduleQuestionId === q.id;
+    return `<div class="schedule-q-item${isSelected ? ' selected' : ''}" onclick="selectScheduleQuestion('${q.id}')">
+      <div style="flex:1;">
+        <div class="q-title">${escapeHtml(q.title)}</div>
+        <div class="q-meta">
+          <span class="qb-tag category" style="font-size:0.7rem;">${escapeHtml(normalizeCategoryValue(q.category))}</span>
+          <span class="qb-tag topic" style="font-size:0.7rem;">${escapeHtml(q.topic)}</span>
+        </div>
+      </div>
+      ${isSelected ? '<svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5" style="width:18px;height:18px;flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+    </div>`;
+  }).join('');
+}
+
+function selectScheduleQuestion(qId) {
+  selectedScheduleQuestionId = qId;
+  const q = questionBank.find(q => q.id === qId);
+  if (q) {
+    document.getElementById('scheduleSelectedInfo').style.display = '';
+    document.getElementById('scheduleSelectedCard').innerHTML = `
+      <strong>${escapeHtml(q.title)}</strong>
+      <div style="margin-top:4px;">
+        <span class="qb-tag category" style="font-size:0.72rem;">${escapeHtml(normalizeCategoryValue(q.category))}</span>
+        <span class="qb-tag topic" style="font-size:0.72rem;">${escapeHtml(q.topic)}</span>
+      </div>`;
+  }
+  renderScheduleQuestionList();
+}
+
+async function submitScheduledQuestion() {
+  const releaseDate = document.getElementById('scheduleDate').value;
+  if (!releaseDate) {
+    showToast('Please select a release date', 'error');
+    return;
+  }
+  if (!selectedScheduleQuestionId) {
+    showToast('Please select a question', 'error');
+    return;
+  }
+
+  const q = questionBank.find(q => q.id === selectedScheduleQuestionId);
+  if (!q) {
+    showToast('Question not found', 'error');
+    return;
+  }
+
+  try {
+    const schedData = {
+      questionId: q.id,
+      questionTitle: q.title,
+      category: normalizeCategoryValue(q.category),
+      topic: q.topic,
+      releaseDate: releaseDate, // YYYY-MM-DD format
+      released: false,
+      createdAt: Timestamp.now(),
+      questionData: JSON.parse(JSON.stringify(q))
+    };
+
+    // Convert table data for Firestore safety
+    if (schedData.questionData.blocks) {
+      schedData.questionData.blocks.forEach(b => {
+        if (b.type === 'table' && Array.isArray(b.data)) {
+          b.data = tableDataToFirestore(b.data);
+        }
+        if (b.type === 'table' && Array.isArray(b.colWidths)) {
+          const cw = {};
+          b.colWidths.forEach((w, i) => { if (w !== null && w !== undefined) cw[String(i)] = w; });
+          b.colWidths = cw;
+        }
+      });
+    }
+
+    const schedCol = collection(db, 'users', currentUser.uid, 'scheduledQuestions');
+    const docRef = await addDoc(schedCol, schedData);
+    scheduledQuestions.push({ ...schedData, _docId: docRef.id });
+    scheduledQuestions.sort((a, b) => (a.releaseDate || '').localeCompare(b.releaseDate || ''));
+
+    closeScheduleDialog();
+    renderScheduledQuestions();
+    showToast('Question scheduled for ' + releaseDate, 'success');
+  } catch (err) {
+    console.error('submitScheduledQuestion failed:', err);
+    showToast('Could not schedule question — check your connection', 'error');
+  }
+}
+
+function editScheduledQuestion(docId) {
+  const sq = scheduledQuestions.find(s => s._docId === docId);
+  if (!sq) return;
+  editingScheduleId = docId;
+
+  document.getElementById('editScheduleDate').value = sq.releaseDate || '';
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  document.getElementById('editScheduleDate').min = tomorrow.toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' });
+
+  document.getElementById('editScheduleQuestionInfo').innerHTML = `
+    <div class="schedule-selected-card">
+      <strong>${escapeHtml(sq.questionTitle || 'Untitled')}</strong>
+      <div style="margin-top:4px;">
+        <span class="qb-tag category" style="font-size:0.72rem;">${escapeHtml(sq.category || '')}</span>
+        <span class="qb-tag topic" style="font-size:0.72rem;">${escapeHtml(sq.topic || '')}</span>
+      </div>
+      <div style="margin-top:6px;font-size:0.8rem;color:var(--text-muted);">Current release: ${sq.releaseDate}</div>
+    </div>`;
+
+  document.getElementById('editScheduleOverlay').classList.add('active');
+}
+
+function closeEditScheduleDialog() {
+  document.getElementById('editScheduleOverlay').classList.remove('active');
+  editingScheduleId = null;
+}
+
+async function saveEditedSchedule() {
+  if (!editingScheduleId) return;
+  const newDate = document.getElementById('editScheduleDate').value;
+  if (!newDate) {
+    showToast('Please select a new release date', 'error');
+    return;
+  }
+
+  try {
+    const schedRef = doc(db, 'users', currentUser.uid, 'scheduledQuestions', editingScheduleId);
+    await updateDoc(schedRef, { releaseDate: newDate });
+
+    const sq = scheduledQuestions.find(s => s._docId === editingScheduleId);
+    if (sq) sq.releaseDate = newDate;
+    scheduledQuestions.sort((a, b) => (a.releaseDate || '').localeCompare(b.releaseDate || ''));
+
+    closeEditScheduleDialog();
+    renderScheduledQuestions();
+    showToast('Release date updated to ' + newDate, 'success');
+  } catch (err) {
+    console.error('saveEditedSchedule failed:', err);
+    showToast('Could not update schedule — check your connection', 'error');
+  }
+}
+
+function deleteScheduledQuestion(docId) {
+  showConfirm('Delete Scheduled Question', 'Are you sure you want to remove this scheduled question?', async () => {
+    try {
+      const schedRef = doc(db, 'users', currentUser.uid, 'scheduledQuestions', docId);
+      await deleteDoc(schedRef);
+      scheduledQuestions = scheduledQuestions.filter(s => s._docId !== docId);
+      renderScheduledQuestions();
+      showToast('Scheduled question removed', 'success');
+    } catch (err) {
+      console.error('deleteScheduledQuestion failed:', err);
+      showToast('Could not delete — check your connection', 'error');
+    }
+  });
+}
+
+// =====================================================================
 // EXPOSE FUNCTIONS GLOBALLY (required for module scope + onclick handlers)
 // =====================================================================
 window.navigateTo = navigateTo;
@@ -8228,6 +9150,18 @@ window.loadNextQpQuestion = loadNextQpQuestion;
 window.toggleQpFirstLetter = toggleQpFirstLetter;
 window.resetQpAnswers = resetQpAnswers;
 window.submitQpAnswers = submitQpAnswers;
+// Usage Dashboard
+window.loadUsageDashboard = loadUsageDashboard;
+// Scheduled Questions
+window.openScheduleQuestionDialog = openScheduleQuestionDialog;
+window.closeScheduleDialog = closeScheduleDialog;
+window.filterScheduleQuestions = filterScheduleQuestions;
+window.selectScheduleQuestion = selectScheduleQuestion;
+window.submitScheduledQuestion = submitScheduledQuestion;
+window.editScheduledQuestion = editScheduledQuestion;
+window.closeEditScheduleDialog = closeEditScheduleDialog;
+window.saveEditedSchedule = saveEditedSchedule;
+window.deleteScheduledQuestion = deleteScheduledQuestion;
 </script>
 </body>
 </html>
