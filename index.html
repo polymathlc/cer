@@ -1760,6 +1760,69 @@ option {
   to { transform: rotate(360deg); }
 }
 
+/* Image preload overlay */
+.preload-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  transition: opacity 0.4s ease;
+}
+.preload-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.preload-logo {
+  width: 80px;
+  height: 80px;
+  border-radius: 16px;
+  object-fit: contain;
+  animation: preloadPulse 1.2s ease-in-out infinite;
+}
+@keyframes preloadPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.08); opacity: 0.7; }
+}
+.preload-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e7eb;
+  border-top-color: var(--primary, #2d6a4f);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.preload-text {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+}
+.preload-progress-wrap {
+  width: 260px;
+  max-width: 80vw;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.preload-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary, #2d6a4f), #40916c);
+  border-radius: 4px;
+  width: 0%;
+  transition: width 0.2s ease;
+}
+.preload-count {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
 /* Logout button in sidebar */
 .sidebar-logout-btn {
   background: none;
@@ -3380,6 +3443,17 @@ option {
 </head>
 <body>
 
+<!-- ==================== IMAGE PRELOAD OVERLAY ==================== -->
+<div class="preload-overlay" id="preloadOverlay" style="display:none;">
+  <img class="preload-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Loading">
+  <div class="preload-spinner"></div>
+  <div class="preload-text" id="preloadText">Loading images...</div>
+  <div class="preload-progress-wrap">
+    <div class="preload-progress-fill" id="preloadProgressFill"></div>
+  </div>
+  <div class="preload-count" id="preloadCount"></div>
+</div>
+
 <!-- ==================== LANDING PAGE ==================== -->
 <div id="landingPage" class="landing-page">
   <nav class="landing-nav">
@@ -4766,6 +4840,8 @@ async function enterApp(user) {
     // Student: load admin's question bank
     configureSidebarForRole('student');
     await loadAdminQuestions();
+    // Preload all images so they display instantly in practice
+    await preloadAllQuestionImages();
     await loadSavedWorksheets();
     populateWsTopicFilter();
     renderWsQuestions();
@@ -6722,6 +6798,104 @@ function handleImgError(img) {
   wrapper.style.cssText = 'padding:16px;text-align:center;color:var(--text-muted);font-size:0.82rem;border:1.5px dashed var(--border);border-radius:8px;background:var(--surface-alt);';
   wrapper.innerHTML = '<div style="font-size:1.5rem;margin-bottom:4px;">&#x1F5BC;&#xFE0F;</div>Image could not be loaded';
   img.parentNode.replaceChild(wrapper, img);
+}
+
+// =====================================================================
+// IMAGE PRELOADER
+// =====================================================================
+// Collects all image URLs from a list of questions
+function collectImageUrls(questions) {
+  const urls = new Set();
+  questions.forEach(q => {
+    if (!q.blocks) return;
+    q.blocks.forEach(block => {
+      if (block.type === 'image' && block.url) {
+        urls.add(transformImageUrl(block.url));
+      }
+      // Also scan text/answer content for inline <img> tags
+      const htmlFields = [];
+      if (block.type === 'text' && block.content) htmlFields.push(block.content);
+      if (block.type === 'answer') {
+        if (block.claim) htmlFields.push(block.claim);
+        if (block.evidence) htmlFields.push(block.evidence);
+        if (block.reasoning) htmlFields.push(block.reasoning);
+      }
+      if (block.type === 'plainanswer' && block.content) htmlFields.push(block.content);
+      if (block.type === 'explanation' && block.content) htmlFields.push(block.content);
+      htmlFields.forEach(html => {
+        const imgRe = /<img[^>]+src=["']([^"']+)["']/gi;
+        let m;
+        while ((m = imgRe.exec(html)) !== null) {
+          urls.add(transformImageUrl(m[1]));
+        }
+      });
+    });
+  });
+  return Array.from(urls);
+}
+
+// Preloads images with progress UI, returns a Promise
+function preloadImages(urls) {
+  return new Promise(resolve => {
+    if (urls.length === 0) { resolve(); return; }
+
+    const overlay = document.getElementById('preloadOverlay');
+    const fill = document.getElementById('preloadProgressFill');
+    const countEl = document.getElementById('preloadCount');
+    const textEl = document.getElementById('preloadText');
+
+    overlay.style.display = '';
+    overlay.classList.remove('hidden');
+    textEl.textContent = 'Loading images...';
+    fill.style.width = '0%';
+    countEl.textContent = `0 / ${urls.length}`;
+
+    let loaded = 0;
+    const timeout = 8000; // 8s max per image
+
+    function tick() {
+      loaded++;
+      const pct = Math.round((loaded / urls.length) * 100);
+      fill.style.width = pct + '%';
+      countEl.textContent = `${loaded} / ${urls.length}`;
+      if (loaded >= urls.length) finish();
+    }
+
+    function finish() {
+      textEl.textContent = 'Ready!';
+      fill.style.width = '100%';
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+        setTimeout(() => { overlay.style.display = 'none'; }, 400);
+        resolve();
+      }, 300);
+    }
+
+    urls.forEach(url => {
+      const img = new Image();
+      let done = false;
+      const timer = setTimeout(() => {
+        if (!done) { done = true; tick(); } // count as loaded after timeout
+      }, timeout);
+      img.onload = () => { if (!done) { done = true; clearTimeout(timer); tick(); } };
+      img.onerror = () => { if (!done) { done = true; clearTimeout(timer); tick(); } };
+      img.src = url;
+    });
+  });
+}
+
+// Preload all images from the full question bank
+async function preloadAllQuestionImages() {
+  const urls = collectImageUrls(questionBank);
+  if (urls.length === 0) return;
+  await preloadImages(urls);
+}
+
+// Preload images from a specific question queue (for practice sessions)
+async function preloadQueueImages(queue) {
+  const urls = collectImageUrls(queue);
+  if (urls.length === 0) return;
+  await preloadImages(urls);
 }
 
 // =====================================================================
@@ -9135,7 +9309,7 @@ function buildQpQueue(level) {
   return queue;
 }
 
-function startQuickPractice() {
+async function startQuickPractice() {
   qpLevel = document.getElementById('qpLevelSelect').value;
   qpQueue = buildQpQueue(qpLevel);
   qpIndex = -1;
@@ -9150,6 +9324,8 @@ function startQuickPractice() {
     updateQpProgress();
     return;
   }
+  // Preload images before starting
+  await preloadQueueImages(qpQueue);
   loadNextQpQuestion();
 }
 
@@ -9677,7 +9853,7 @@ function tpUpdateSelectionBar() {
   tagsEl.innerHTML = tagsHtml;
 }
 
-function tpStartPractice() {
+async function tpStartPractice() {
   if (tpSelectedTopics.size === 0) {
     showToast('Select at least one topic first', 'error');
     return;
@@ -9755,6 +9931,8 @@ function tpStartPractice() {
     document.getElementById('tpCurrentTopicLabel').innerHTML = labelHtml;
   }
 
+  // Preload all images in the queue before starting
+  await preloadQueueImages(tpQueue);
   tpLoadNextQuestion();
 }
 
