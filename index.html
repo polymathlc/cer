@@ -2423,14 +2423,93 @@ option {
   .sidebar { transform: translateX(-100%); }
   .sidebar.open { transform: translateX(0); }
   .main-content { margin-left: 0; }
-  .page-body { padding: 20px 16px; }
-  .page-header { padding: 16px 20px; }
+  .page-body { padding: 20px 12px; }
+  .page-header { padding: 14px 16px; flex-wrap: wrap; gap: 10px; }
+  .page-header h2 { font-size: 1.1rem; }
   .form-row, .form-row-3 { grid-template-columns: 1fr; }
-  .action-row { flex-direction: column; }
+  .action-row { flex-direction: column; gap: 8px; }
   .action-row .btn { width: 100%; justify-content: center; }
-  .mobile-toggle {
-    display: flex !important;
+  .mobile-toggle { display: flex !important; }
+
+  /* Add-block buttons: 2-column grid on mobile */
+  .add-block-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
   }
+  .add-block-btn { padding: 10px 10px; font-size: 0.78rem; justify-content: center; }
+  .add-block-btn svg { width: 12px; height: 12px; }
+
+  /* Practice card mobile */
+  .practice-card-header { flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px 16px; }
+  .practice-card-body { padding: 16px; }
+  .practice-actions { flex-direction: column; gap: 10px; padding: 14px 16px; }
+  .practice-actions > div { width: 100%; display: flex; flex-wrap: wrap; gap: 6px; }
+  .practice-actions .btn { flex: 1; min-width: 0; justify-content: center; font-size: 0.8rem; padding: 10px 10px; }
+
+  /* Topic grid mobile */
+  .tp-topic-grid { grid-template-columns: 1fr; gap: 8px; }
+  .tp-topic-btn { padding: 12px 14px; }
+  .tp-level-bar { flex-wrap: wrap; padding: 12px 14px; }
+
+  /* Selection bar mobile */
+  .tp-selection-bar { flex-direction: column; gap: 10px; padding: 12px 14px; }
+  .tp-selection-actions { width: 100%; justify-content: stretch; }
+  .tp-selection-actions .btn { flex: 1; justify-content: center; }
+
+  /* Practice bar mobile */
+  .tp-practice-bar { flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px 14px; }
+  .tp-progress { width: 100%; }
+
+  /* Table toolbar mobile: scroll horizontally */
+  .table-advanced-toolbar { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .table-toolbar-group { flex-shrink: 0; }
+
+  /* Preview overlays: full screen on mobile */
+  .preview-panel { width: 100% !important; max-width: 100% !important; height: 100vh !important; max-height: 100vh !important; border-radius: 0 !important; margin: 0 !important; }
+  .preview-body { padding: 16px !important; }
+
+  /* Blank inputs: touch-friendly sizing */
+  .blank-input { min-width: 60px; padding: 6px 4px; font-size: 0.85rem; }
+
+  /* Buttons: larger touch targets */
+  .btn { padding: 12px 16px; font-size: 0.85rem; }
+  .btn-outline { padding: 10px 14px; }
+
+  /* Quick practice mobile */
+  .qp-level-bar { flex-wrap: wrap; gap: 8px; }
+
+  /* Student view card */
+  .student-view-card .student-card-header { flex-direction: column; align-items: flex-start; gap: 6px; }
+
+  /* Images responsive */
+  .image-preview { max-height: 200px; }
+  .image-preview img { max-height: 200px; }
+
+  /* Confirm dialog mobile */
+  .confirm-dialog { margin: 16px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow-y: auto; }
+
+  /* Schedule dialog mobile */
+  .schedule-question-list { max-height: 200px; }
+
+  /* Flag question overlay */
+  .flag-question-btn { padding: 6px 10px; }
+}
+
+/* Small phones */
+@media (max-width: 400px) {
+  .add-block-row { grid-template-columns: 1fr; }
+  .page-body { padding: 16px 10px; }
+  .page-header { padding: 12px 14px; }
+  .tp-topic-btn .tp-topic-name { font-size: 0.82rem; }
+  .btn { padding: 10px 12px; font-size: 0.82rem; }
+}
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 99;
 }
 .mobile-toggle {
   display: none;
@@ -3523,6 +3602,7 @@ option {
       </button>
     </div>
   </aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
 
   <!-- MAIN AREA -->
   <div class="main-content">
@@ -4790,6 +4870,11 @@ function navigateTo(page) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
   document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
+  // Close sidebar on mobile after navigation
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (sidebar) sidebar.classList.remove('open');
+  if (backdrop) backdrop.style.display = 'none';
   if (page === 'create') {
     if (_skipCreateReset) {
       // Coming from editQuestion — switch to edit mode
@@ -4830,7 +4915,12 @@ function navigateTo(page) {
 }
 
 function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  sidebar.classList.toggle('open');
+  if (backdrop) {
+    backdrop.style.display = sidebar.classList.contains('open') ? 'block' : 'none';
+  }
 }
 
 // =====================================================================
@@ -6038,7 +6128,7 @@ function renderBlocks() {
                      oninput="saveBlockContent('${block.id}', 'url', this.value); previewImage('${block.id}', this.value)">
             </div>
             <div class="image-preview" id="imgPreview_${block.id}">
-              ${block.url ? `<img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.parentElement.innerHTML='<div class=\\'image-error\\'><svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><circle cx=\\'12\\' cy=\\'12\\' r=\\'10\\'/><line x1=\\'15\\' y1=\\'9\\' x2=\\'9\\' y2=\\'15\\'/><line x1=\\'9\\' y1=\\'9\\' x2=\\'15\\' y2=\\'15\\'/></svg><div>Image failed to load</div></div>'">` : '<div class="image-error">No image URL provided</div>'}
+              ${block.url ? `<img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy">` : '<div class="image-error">No image URL provided</div>'}
             </div>
           </div>
         `;
@@ -6193,7 +6283,7 @@ function previewImage(blockId, url) {
     container.innerHTML = '<div class="image-error">No image URL provided</div>';
     return;
   }
-  container.innerHTML = `<img src="${escapeHtml(transformImageUrl(url))}" onerror="this.parentElement.innerHTML='<div class=\\'image-error\\'><svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><circle cx=\\'12\\' cy=\\'12\\' r=\\'10\\'/><line x1=\\'15\\' y1=\\'9\\' x2=\\'9\\' y2=\\'15\\'/><line x1=\\'9\\' y1=\\'9\\' x2=\\'15\\' y2=\\'15\\'/></svg><div>Image failed to load</div></div>'">`;
+  container.innerHTML = `<img src="${escapeHtml(transformImageUrl(url))}" onerror="handleImgError(this)" loading="lazy">`;
 }
 
 // =====================================================================
@@ -6288,7 +6378,7 @@ function openPreview() {
       case 'image':
         if (block.url) {
           html += `<div style="margin:14px 0;">
-            <img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);">
+            <img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);">
           </div>`;
         }
         break;
@@ -6477,7 +6567,7 @@ function previewAsStudent() {
         break;
       case 'image':
         if (block.url) {
-          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
         }
         break;
       case 'answer':
@@ -6597,13 +6687,41 @@ function transformImageUrl(url) {
   if (!url) return url;
   try {
     const u = new URL(url);
+    // Dropbox: convert share links to direct download
     if (u.hostname.endsWith('dropbox.com') && u.hostname !== 'dl.dropboxusercontent.com') {
       u.hostname = 'dl.dropboxusercontent.com';
       u.searchParams.delete('dl');
       return u.toString();
     }
+    // Google Drive: convert share/view links to direct image
+    if (u.hostname === 'drive.google.com') {
+      let fileId = null;
+      const pathMatch = u.pathname.match(/\/file\/d\/([^/]+)/);
+      if (pathMatch) fileId = pathMatch[1];
+      if (!fileId) {
+        fileId = u.searchParams.get('id');
+      }
+      if (fileId) {
+        return `https://drive.google.com/uc?export=view&id=${fileId}`;
+      }
+    }
   } catch (e) {}
   return url;
+}
+
+function handleImgError(img) {
+  // Retry once with a cache-bust param
+  if (!img.dataset.retried) {
+    img.dataset.retried = '1';
+    const sep = img.src.includes('?') ? '&' : '?';
+    img.src = img.src + sep + '_retry=' + Date.now();
+    return;
+  }
+  // Show placeholder after retry failure
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'padding:16px;text-align:center;color:var(--text-muted);font-size:0.82rem;border:1.5px dashed var(--border);border-radius:8px;background:var(--surface-alt);';
+  wrapper.innerHTML = '<div style="font-size:1.5rem;margin-bottom:4px;">&#x1F5BC;&#xFE0F;</div>Image could not be loaded';
+  img.parentNode.replaceChild(wrapper, img);
 }
 
 // =====================================================================
@@ -7130,7 +7248,7 @@ function renderStudentView() {
         break;
       case 'image':
         if (block.url) {
-          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
         }
         break;
       case 'answer':
@@ -8309,7 +8427,7 @@ function renderPracticeQuestion(q, student) {
         break;
       case 'image':
         if (block.url) {
-          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
         }
         break;
       case 'answer':
@@ -8508,7 +8626,7 @@ function renderQuestionPreviewHtml(qId) {
         if (block.content) html += `<div style="margin:6px 0;">${block.content}</div>`;
         break;
       case 'image':
-        if (block.url) html += `<div style="margin:8px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:6px;"></div>`;
+        if (block.url) html += `<div style="margin:8px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:6px;"></div>`;
         break;
       case 'answer':
         html += `<div style="margin:8px 0;padding:8px 12px;background:var(--accent-blue-light);border-radius:6px;"><strong style="color:var(--accent-blue);font-size:0.78rem;">Claim:</strong> ${block.claim || '<em>empty</em>'}</div>`;
@@ -9085,7 +9203,7 @@ function renderQpQuestion(q) {
         html += renderStudentText(block.id, block.content, q.blanks);
         break;
       case 'image':
-        if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+        if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
         break;
       case 'answer':
         html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
@@ -9704,7 +9822,7 @@ function tpRenderQuestion(q) {
         html += renderStudentText(block.id, block.content, q.blanks);
         break;
       case 'image':
-        if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.style.display='none'" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+        if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
         break;
       case 'answer':
         html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
@@ -10655,6 +10773,7 @@ window.updateTableDimensions = updateTableDimensions;
 window.execCmd = execCmd;
 window.execCmdVal = execCmdVal;
 window.previewImage = previewImage;
+window.handleImgError = handleImgError;
 window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
 window.togglePrintSelectAll = togglePrintSelectAll;
