@@ -4641,7 +4641,10 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
+  browserPopupRedirectResolver,
   onAuthStateChanged,
   signOut,
   updateProfile
@@ -4679,6 +4682,19 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+
+// Handle pending redirect sign-in (for mobile browsers that used redirect flow)
+getRedirectResult(auth).catch(error => {
+  if (error.code !== 'auth/popup-closed-by-user') {
+    console.warn('Redirect sign-in error:', error.code);
+  }
+});
+
+// Detect mobile/tablet browsers where popups are unreliable
+function isMobileDevice() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    || (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+}
 
 // Expose auth functions globally so onclick handlers work
 window.handleEmailLogin = handleEmailLogin;
@@ -4780,10 +4796,23 @@ async function handleEmailRegister() {
 // =====================================================================
 async function handleGoogleSignIn() {
   try {
-    await signInWithPopup(auth, googleProvider);
+    if (isMobileDevice()) {
+      // Mobile: use redirect flow to avoid popup blockers and storage partitioning issues
+      await signInWithRedirect(auth, googleProvider);
+    } else {
+      // Desktop: use popup flow
+      await signInWithPopup(auth, googleProvider);
+    }
     // onAuthStateChanged will handle the rest
   } catch (error) {
-    if (error.code !== 'auth/popup-closed-by-user') {
+    if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
+      // Popup was blocked — fall back to redirect
+      try {
+        await signInWithRedirect(auth, googleProvider);
+      } catch (redirectError) {
+        showToast(getAuthErrorMessage(redirectError.code), 'error');
+      }
+    } else if (error.code !== 'auth/popup-closed-by-user') {
       showToast(getAuthErrorMessage(error.code), 'error');
     }
   }
