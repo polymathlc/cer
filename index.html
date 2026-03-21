@@ -7,7 +7,90 @@
 <link rel="preconnect" href="https://dl.dropboxusercontent.com" crossorigin>
 <link rel="dns-prefetch" href="https://dl.dropboxusercontent.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<!-- New landing page: fonts, icons, Tailwind -->
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+tailwind.config = {
+  darkMode: "class",
+  corePlugins: { preflight: false },
+  theme: {
+    extend: {
+      colors: {
+        "outline": "#717971",
+        "surface-dim": "#dcdad5",
+        "surface-container-highest": "#e5e2dd",
+        "on-surface-variant": "#414942",
+        "surface-container": "#f0ede8",
+        "on-secondary": "#ffffff",
+        "on-background": "#1c1c19",
+        "surface-container-high": "#ebe8e3",
+        "on-surface": "#1c1c19",
+        "tertiary": "#535b56",
+        "on-secondary-container": "#65625e",
+        "on-primary-fixed": "#00210e",
+        "primary-container": "#4a7c59",
+        "on-error": "#ffffff",
+        "surface-container-lowest": "#ffffff",
+        "surface-container-low": "#f6f3ee",
+        "on-primary": "#ffffff",
+        "background": "#fcf9f4",
+        "surface-bright": "#fcf9f4",
+        "primary": "#316342",
+        "on-primary-container": "#e1ffe5",
+        "secondary-container": "#e4dfda",
+        "secondary": "#615e5a",
+        "primary-fixed": "#b9efc5",
+        "outline-variant": "#c1c9bf",
+        "tertiary-container": "#6b736e",
+        "inverse-on-surface": "#f3f0eb",
+        "inverse-primary": "#9dd3aa",
+        "primary-fixed-dim": "#9dd3aa",
+        "on-primary-fixed-variant": "#1e5031",
+        "inverse-surface": "#31302d",
+        "surface": "#fcf9f4",
+        "surface-variant": "#e5e2dd"
+      },
+      fontFamily: {
+        "headline": ["Space Grotesk", "sans-serif"],
+        "body": ["Plus Jakarta Sans", "sans-serif"],
+        "label": ["Inter", "sans-serif"]
+      },
+      borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }
+    }
+  }
+}
+</script>
 <style>
+/* ========== NEW LANDING PAGE HELPERS ========== */
+@media (min-width: 768px) { .lp-desktop-nav { display: flex !important; } }
+@media (max-width: 767px) {
+  #landingPage section { padding-left: 1rem !important; padding-right: 1rem !important; }
+  #landingPage section > div > div[style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; }
+  #landingPage section > div > div[style*="grid-template-columns:repeat(12"] { grid-template-columns: 1fr !important; }
+  #landingPage section > div > div[style*="grid-template-columns:repeat(12"] > div[style*="grid-column:span 8"],
+  #landingPage section > div > div[style*="grid-template-columns:repeat(12"] > div[style*="grid-column:span 4"],
+  #landingPage section > div > div[style*="grid-template-columns:repeat(12"] > div[style*="grid-column:span 12"] { grid-column: span 1 !important; }
+}
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  display: inline-block;
+  line-height: 1;
+  vertical-align: middle;
+}
+.lp-asymmetric-blob { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+/* Demo toggle active/inactive state for new landing page */
+#landingPage #landingDemoBtnBlanks.active,
+#landingPage #landingDemoBtnOpen.active {
+  background: #316342 !important; color: #ffffff !important; box-shadow: 0 2px 8px rgba(49,99,66,0.25) !important;
+}
+#landingPage #landingDemoBtnBlanks:not(.active),
+#landingPage #landingDemoBtnOpen:not(.active) {
+  background: transparent !important; color: #65625e !important; box-shadow: none !important;
+}
 /* ========== CSS VARIABLES & RESET ========== */
 :root {
   --bg: #f4f1ec;
@@ -3504,47 +3587,168 @@ option {
 </div>
 
 <!-- ==================== LANDING PAGE ==================== -->
-<div id="landingPage" class="landing-page">
-  <nav class="landing-nav">
-    <div class="brand">
-      <img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath" style="width:40px;height:40px;object-fit:contain;border-radius:8px;" loading="eager" fetchpriority="high" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22%3E%3Crect width=%2240%22 height=%2240%22 rx=%228%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2220%22 y=%2229%22 font-family=%22DM Sans,sans-serif%22 font-size=%2224%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
-      <div class="brand-text">
-        <h1>Keywords Learning Portal</h1>
-        <span>Polymath Learning Centre</span>
+<div id="landingPage" style="min-height:100vh;background:#fcf9f4;font-family:'Plus Jakarta Sans',sans-serif;color:#1c1c19;">
+
+  <!-- Top Nav -->
+  <header style="position:sticky;top:0;width:100%;z-index:50;background:rgba(252,249,244,0.85);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);">
+    <nav style="display:flex;justify-content:space-between;align-items:center;max-width:1280px;margin:0 auto;padding:0 2rem;height:80px;">
+      <div style="display:flex;align-items:center;gap:2rem;">
+        <img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Keywords Portal Logo" style="height:48px;width:auto;object-fit:contain;" loading="eager" fetchpriority="high" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2248%22 height=%2248%22 viewBox=%220 0 48 48%22%3E%3Crect width=%2248%22 height=%2248%22 rx=%228%22 fill=%22%23316342%22/%3E%3Ctext x=%2224%22 y=%2234%22 font-family=%22sans-serif%22 font-size=%2228%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
+        <div style="display:none;gap:1.5rem;align-items:center;" class="lp-desktop-nav">
+          <a href="#" style="font-family:'Space Grotesk',sans-serif;font-weight:500;color:#44443f;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#316342'" onmouseout="this.style.color='#44443f'">Courses</a>
+          <a href="#" style="font-family:'Space Grotesk',sans-serif;font-weight:500;color:#44443f;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#316342'" onmouseout="this.style.color='#44443f'">Library</a>
+          <a href="#" style="font-family:'Space Grotesk',sans-serif;font-weight:500;color:#44443f;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#316342'" onmouseout="this.style.color='#44443f'">About</a>
+          <a href="#" style="font-family:'Space Grotesk',sans-serif;font-weight:500;color:#44443f;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#316342'" onmouseout="this.style.color='#44443f'">Pricing</a>
+        </div>
       </div>
-    </div>
-    <div class="nav-actions">
-      <button class="btn btn-outline" onclick="showPage('loginPage')">Sign In</button>
-      <button class="btn btn-primary" onclick="showPage('registerPage')">Get Started</button>
-    </div>
-  </nav>
-  <div class="landing-hero">
-    <div class="landing-hero-inner">
-      <h2>Learn Science Better with <span class="highlight">Scaffolded Practice</span></h2>
-      <p>Students start with guided fill-in-the-blanks, then switch to fully open-ended answers as confidence grows. Try the sample below.</p>
-      <div class="landing-cta-row">
-        <button class="btn btn-primary btn-lg" onclick="showPage('registerPage')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-          Start Student Account
-        </button>
-        <button class="btn btn-outline btn-lg" onclick="showPage('loginPage')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-          Student Sign In
-        </button>
+      <div style="display:flex;align-items:center;gap:1rem;">
+        <button onclick="showPage('loginPage')" style="padding:8px 20px;color:#44443f;font-family:'Plus Jakarta Sans',sans-serif;font-weight:500;background:none;border:none;cursor:pointer;transition:opacity 0.2s;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">Log In</button>
+        <button onclick="showPage('registerPage')" style="padding:10px 24px;background:linear-gradient(135deg,#316342,#4a7c59);color:#ffffff;border:none;border-radius:12px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:0.875rem;cursor:pointer;box-shadow:0 2px 8px rgba(49,99,66,0.2);transition:all 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">Get Started</button>
       </div>
-      <div class="landing-student-demo">
-        <div class="landing-demo-head">
-          <h4>Try a Sample Question</h4>
-          <div class="landing-demo-toggle">
-            <button id="landingDemoBtnBlanks" class="active" onclick="setLandingDemoMode('blanks')">Guided Blanks</button>
-            <button id="landingDemoBtnOpen" onclick="setLandingDemoMode('open')">Fully Open Ended</button>
+    </nav>
+  </header>
+
+  <!-- Hero Section -->
+  <section style="position:relative;overflow:hidden;padding:6rem 2rem 5rem;">
+    <div style="max-width:1280px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center;">
+      <div style="display:flex;flex-direction:column;gap:2rem;">
+        <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:9999px;background:#e4dfda;color:#65625e;font-size:0.75rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;width:fit-content;">
+          <span class="material-symbols-outlined" style="font-size:16px;">school</span>
+          Sage Academic Methodology
+        </div>
+        <h1 style="font-family:'Space Grotesk',sans-serif;font-size:clamp(2.5rem,5vw,4.5rem);font-weight:700;letter-spacing:-0.03em;line-height:1.1;color:#1c1c19;margin:0;">
+          Learn Science Better with <span style="color:#316342;font-style:italic;">Scaffolded Practice</span>
+        </h1>
+        <p style="font-size:1.1rem;color:#414942;max-width:36rem;line-height:1.7;margin:0;opacity:0.9;">
+          Students start with guided fill-in-the-blanks, then switch to fully open-ended answers as confidence grows. Master the language of science through iterative mastery.
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;padding-top:1rem;">
+          <button onclick="showPage('registerPage')" style="display:inline-flex;align-items:center;gap:8px;padding:14px 32px;background:linear-gradient(135deg,#316342,#4a7c59);color:#ffffff;border:none;border-radius:12px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:1.1rem;cursor:pointer;box-shadow:0 4px 16px rgba(49,99,66,0.25);transition:all 0.2s;" onmouseover="this.style.transform='scale(0.98)'" onmouseout="this.style.transform='scale(1)'">
+            Start Student Account
+            <span class="material-symbols-outlined" style="font-size:20px;">arrow_forward</span>
+          </button>
+          <button onclick="showPage('loginPage')" style="padding:14px 32px;background:#e5e2dd;color:#1c1c19;border:none;border-radius:12px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:1.1rem;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#dcdad5'" onmouseout="this.style.background='#e5e2dd'">
+            Student Sign In
+          </button>
+        </div>
+      </div>
+      <div style="position:relative;">
+        <div class="lp-asymmetric-blob" style="position:absolute;top:-3rem;right:-3rem;width:16rem;height:16rem;background:rgba(157,211,170,0.25);filter:blur(48px);z-index:0;pointer-events:none;"></div>
+        <div style="position:relative;background:#ffffff;padding:1.5rem;border-radius:1.5rem;box-shadow:0 20px 60px rgba(0,0,0,0.1);border:1px solid rgba(193,201,191,0.1);z-index:1;">
+          <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBpLdETx2ck_doEsZQdHyErJn22XDpN5x6v07Lp__2czakCz0y7N6dI6v9-EicNp8lRl_F14TAp0HeBcXSpcsFKFnno9m9_X0Vgh6uMPKKHLL0YEpOY37kB7po2oxD07i7i8D4k7C2yuedRzHoxkB9ztvhOOjyJx3YdAk7BSyIdPcjDzByK3racP_9jfGtFxEitQKWdhBHD5kNd66SiOVgtOHBkMMY2nv8bpwoOqYjHmw1XP5Sk3qr-VGkQV5Ckazl_GD8j1PlbQmI" alt="Student using science learning portal" style="width:100%;height:20rem;object-fit:cover;border-radius:12px;" onerror="this.style.display='none'">
+          <div style="margin-top:1.5rem;display:flex;align-items:center;gap:1rem;">
+            <div style="height:8px;flex:1;background:#e5e2dd;border-radius:9999px;overflow:hidden;">
+              <div style="height:100%;width:75%;background:#316342;border-radius:9999px;transition:width 1s;"></div>
+            </div>
+            <span style="font-size:0.75rem;font-weight:700;color:#316342;white-space:nowrap;">75% Mastery</span>
           </div>
         </div>
-        <div class="landing-demo-body" id="landingDemoBody"></div>
-          </div>
+      </div>
     </div>
-  </div>
-  <div class="landing-footer">Polymath Learning Centre &copy; 2026</div>
+  </section>
+
+  <!-- Interactive Demo Section -->
+  <section style="background:#f6f3ee;padding:6rem 2rem;position:relative;">
+    <div style="max-width:56rem;margin:0 auto;">
+      <div style="text-align:center;margin-bottom:3rem;">
+        <h2 style="font-family:'Space Grotesk',sans-serif;font-size:clamp(1.75rem,3vw,2.5rem);font-weight:700;letter-spacing:-0.02em;color:#1c1c19;margin:0 0 1rem;">Experience the Scaffold</h2>
+        <p style="color:#414942;margin:0;">Switch modes to see how we transition learners from guidance to independence.</p>
+      </div>
+      <div style="background:#ffffff;border-radius:1.5rem;padding:2.5rem 3rem;box-shadow:0 2px 8px rgba(0,0,0,0.05);border:1px solid rgba(193,201,191,0.08);">
+        <!-- Toggle -->
+        <div style="display:flex;justify-content:center;margin-bottom:3rem;">
+          <div style="display:inline-flex;padding:6px;background:#e4dfda;border-radius:9999px;gap:2px;">
+            <button id="landingDemoBtnBlanks" onclick="setLandingDemoMode('blanks')" class="active" style="padding:8px 24px;border-radius:9999px;background:#316342;color:#ffffff;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:0.875rem;border:none;cursor:pointer;transition:all 0.2s;box-shadow:0 2px 8px rgba(49,99,66,0.25);">
+              Guided Blanks
+            </button>
+            <button id="landingDemoBtnOpen" onclick="setLandingDemoMode('open')" style="padding:8px 24px;border-radius:9999px;background:transparent;color:#65625e;font-family:'Plus Jakarta Sans',sans-serif;font-weight:500;font-size:0.875rem;border:none;cursor:pointer;transition:all 0.2s;">
+              Fully Open Ended
+            </button>
+          </div>
+        </div>
+        <!-- Dynamic Demo Content -->
+        <div style="display:flex;align-items:flex-start;gap:1rem;">
+          <div style="flex-shrink:0;width:40px;height:40px;border-radius:50%;background:rgba(49,99,66,0.1);color:#316342;display:flex;align-items:center;justify-content:center;font-weight:700;font-family:'Space Grotesk',sans-serif;">Q</div>
+          <div style="flex:1;">
+            <h3 style="font-size:1.1rem;font-weight:600;color:#1c1c19;margin:0 0 1.5rem;font-family:'Plus Jakarta Sans',sans-serif;">Sample Question: Comparing Heat Conductivity</h3>
+            <div id="landingDemoBody"></div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:2rem;">
+          <div style="padding:1rem;border-radius:12px;background:#f0ede8;display:flex;align-items:center;gap:1rem;opacity:0.7;">
+            <span class="material-symbols-outlined" style="color:#316342;font-size:20px;">check_circle</span>
+            <span style="font-size:0.875rem;font-weight:500;color:#1c1c19;">Scaffolding Active: Concept Reinforcement</span>
+          </div>
+          <div style="padding:1rem;border-radius:12px;background:#f0ede8;display:flex;align-items:center;gap:1rem;opacity:0.7;">
+            <span class="material-symbols-outlined" style="color:#316342;font-size:20px;">lightbulb</span>
+            <span style="font-size:0.875rem;font-weight:500;color:#1c1c19;">Keywords identified: Conductor, Heat, Evidence</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Bento Grid Feature Section -->
+  <section style="padding:6rem 2rem;background:#fcf9f4;">
+    <div style="max-width:1280px;margin:0 auto;">
+      <div style="display:grid;grid-template-columns:repeat(12,1fr);grid-template-rows:auto;gap:1.5rem;">
+        <!-- Large Card -->
+        <div style="grid-column:span 8;grid-row:span 2;position:relative;overflow:hidden;background:#ebe8e3;border-radius:1.5rem;padding:2.5rem;display:flex;flex-direction:column;justify-content:flex-end;min-height:400px;">
+          <div style="position:absolute;inset:0;opacity:0.1;overflow:hidden;">
+            <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5rfmdMOZjbqSmrFa1Q0yqJYhuMrMN1frw_l3ytkgbYOGdP5SbrUP2PNgWtW957a0H0LvfeDFLPO5Ey3TnAPNShcw7rniICvJgQZ9fjDcgNwrGA--YeB8BxYMFvz69TTMJBEAcTjCsf6Pl2RBeaRq87SYZ1N4GHCf3jH_4GIiXiemkb9DGdOM7_sLbXF_1-mNS-L4_Y9vG13IJkZJMErhilNnQ-jfvgML9fVbiLwze1FRhn4nIENhlpcXnSxVcWgrfgubA3V88JLE" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">
+          </div>
+          <div style="position:relative;z-index:1;max-width:32rem;">
+            <h3 style="font-family:'Space Grotesk',sans-serif;font-size:2.25rem;font-weight:700;letter-spacing:-0.02em;color:#1c1c19;margin:0 0 1rem;">Adaptive Algorithms</h3>
+            <p style="color:#414942;margin:0 0 1.25rem;line-height:1.6;">Our system tracks every answer to predict which concepts need more reinforcement, automatically adjusting the scaffold level.</p>
+            <a href="#" style="display:inline-flex;align-items:center;gap:8px;color:#316342;font-weight:700;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
+              Explore Analytics <span class="material-symbols-outlined" style="font-size:16px;">arrow_outward</span>
+            </a>
+          </div>
+        </div>
+        <!-- PSLE Card -->
+        <div style="grid-column:span 4;background:#316342;color:#ffffff;border-radius:1.5rem;padding:2rem;display:flex;flex-direction:column;justify-content:space-between;min-height:190px;">
+          <span class="material-symbols-outlined" style="font-size:2.5rem;font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;">verified</span>
+          <div>
+            <h4 style="font-family:'Space Grotesk',sans-serif;font-size:1.5rem;font-weight:700;color:#ffffff;margin:0 0 0.5rem;">PSLE Ready</h4>
+            <p style="font-size:0.875rem;color:#b9efc5;margin:0;">Content curated specifically for MOE syllabus excellence.</p>
+          </div>
+        </div>
+        <!-- Efficiency Card -->
+        <div style="grid-column:span 4;background:#e5e2dd;border-radius:1.5rem;padding:2rem;display:flex;flex-direction:column;justify-content:space-between;min-height:190px;border:1px solid rgba(193,201,191,0.3);">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="material-symbols-outlined" style="color:#615e5a;font-size:20px;">timer</span>
+            <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#615e5a;">Efficiency</span>
+          </div>
+          <h4 style="font-size:1.25rem;font-weight:700;color:#1c1c19;margin:0;font-family:'Space Grotesk',sans-serif;">30% Faster Concept Recall</h4>
+        </div>
+        <!-- CTA Banner -->
+        <div style="grid-column:span 12;background:#f6f3ee;border-radius:1.5rem;padding:2rem 2.5rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1.5rem;border:1px solid rgba(193,201,191,0.3);">
+          <div>
+            <h3 style="font-family:'Space Grotesk',sans-serif;font-size:1.5rem;font-weight:700;color:#1c1c19;margin:0 0 0.25rem;">Ready to transform your Science results?</h3>
+            <p style="color:#414942;margin:0;font-size:0.95rem;">Join over 2,000 students mastering keywords today.</p>
+          </div>
+          <button onclick="showPage('registerPage')" style="padding:14px 40px;background:#316342;color:#ffffff;border:none;border-radius:12px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;box-shadow:0 4px 16px rgba(49,99,66,0.2);white-space:nowrap;transition:all 0.2s;" onmouseover="this.style.background='#4a7c59'" onmouseout="this.style.background='#316342'">Create Account</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer style="background:#f6f3ee;padding:3rem 2rem;">
+    <div style="max-width:1280px;margin:0 auto;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:1.5rem;">
+      <div style="display:flex;flex-direction:column;gap:0.5rem;">
+        <img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Keywords Portal Logo" style="height:40px;width:auto;object-fit:contain;" onerror="this.style.display='none'">
+        <p style="font-family:'Inter',sans-serif;font-size:0.875rem;color:#44443f;margin:0;">© 2026 Keywords Learning Portal. Polymath Learning Centre.</p>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:2rem;">
+        <a href="#" style="color:#44443f;opacity:0.7;font-family:'Inter',sans-serif;font-size:0.875rem;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#316342';this.style.opacity='1'" onmouseout="this.style.color='#44443f';this.style.opacity='0.7'">Privacy Policy</a>
+        <a href="#" style="color:#44443f;opacity:0.7;font-family:'Inter',sans-serif;font-size:0.875rem;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#316342';this.style.opacity='1'" onmouseout="this.style.color='#44443f';this.style.opacity='0.7'">Terms of Service</a>
+        <a href="#" style="color:#44443f;opacity:0.7;font-family:'Inter',sans-serif;font-size:0.875rem;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#316342';this.style.opacity='1'" onmouseout="this.style.color='#44443f';this.style.opacity='0.7'">Help Center</a>
+        <a href="#" style="color:#44443f;opacity:0.7;font-family:'Inter',sans-serif;font-size:0.875rem;text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='#316342';this.style.opacity='1'" onmouseout="this.style.color='#44443f';this.style.opacity='0.7'">Contact Us</a>
+      </div>
+    </div>
+  </footer>
+
 </div>
 
 <!-- ==================== LOGIN PAGE ==================== -->
