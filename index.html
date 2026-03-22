@@ -474,11 +474,13 @@ option {
 /* Content Editable */
 .content-editable {
   min-height: 80px;
-  padding: 12px;
+  padding: 12px 12px 10px;
   outline: none;
   font-size: 0.92rem;
   line-height: 1.7;
   color: var(--text);
+  border-bottom: 2px solid var(--border);
+  transition: border-color var(--transition), background var(--transition);
 }
 .content-editable:empty::before {
   content: attr(data-placeholder);
@@ -486,8 +488,9 @@ option {
   pointer-events: none;
 }
 .content-editable:focus {
-  background: var(--surface-alt);
-  border-radius: var(--radius-sm);
+  border-bottom-color: var(--primary);
+  background: rgba(74, 124, 89, 0.04);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 }
 
 /* Image Block */
@@ -1366,17 +1369,18 @@ option {
   min-width: 120px;
   padding: 3px 8px;
   border: none;
-  border-bottom: 2px solid var(--primary);
-  background: var(--primary-light);
+  border-bottom: 2px solid var(--border);
+  background: transparent;
+  border-radius: 0;
   font-family: inherit;
   font-size: inherit;
   outline: none;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), background var(--transition);
   text-align: center;
 }
 .blank-input:focus {
-  border-bottom-color: var(--accent-blue);
-  background: var(--accent-blue-light);
+  border-bottom-color: var(--primary);
+  background: rgba(74, 124, 89, 0.06);
 }
 
 /* Animated answer check/cross icons */
@@ -1710,27 +1714,33 @@ option {
 .landing-demo-blank {
   width: 120px;
   border: none;
-  border-bottom: 2px solid var(--primary);
-  background: var(--primary-light);
+  border-bottom: 2px solid var(--border);
+  background: transparent;
   border-radius: 0;
   padding: 4px 3px;
   font-size: 0.88rem;
   margin: 0 2px;
+  outline: none;
+  transition: border-color var(--transition), background var(--transition);
 }
 .landing-demo-open {
   width: 100%;
   min-height: 120px;
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-sm);
+  border: none;
+  border-bottom: 2px solid var(--border);
+  border-radius: 0;
   font-family: inherit;
   font-size: 0.9rem;
-  padding: 10px 12px;
+  padding: 10px 0;
   resize: vertical;
   outline: none;
+  background: transparent;
+  transition: border-color var(--transition), background var(--transition);
 }
 .landing-demo-open:focus,
 .landing-demo-blank:focus {
   border-color: var(--primary);
+  background: rgba(74, 124, 89, 0.05);
 }
 .landing-demo-note {
   margin-top: 10px;
