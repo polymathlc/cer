@@ -114,6 +114,10 @@ tailwind.config = {
   --accent-purple-light: #f3eff8;
   --accent-teal: #3d8b8b;
   --accent-teal-light: #ebf5f5;
+  --accent-green: #3a9e5f;
+  --accent-green-light: #e6f5ec;
+  --accent-peach: #d4724a;
+  --accent-peach-light: #fdeee6;
   --yellow-highlight: #fff3a8;
   --yellow-border: #e6d44d;
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
@@ -971,8 +975,11 @@ option {
 .add-block-btn.answer-add:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
 .add-block-btn.explanation-add:hover { border-color: var(--accent-orange); color: var(--accent-orange); background: var(--accent-orange-light); }
 .add-block-btn.video-add:hover { border-color: var(--accent-red); color: var(--accent-red); background: var(--accent-red-light); }
-.add-block-btn.image-add:hover { border-color: var(--accent-purple); color: var(--accent-purple); background: var(--accent-purple-light); }
 .add-block-btn.table-add:hover { border-color: var(--accent-teal); color: var(--accent-teal); background: var(--accent-teal-light); }
+.add-block-btn.plainanswer-add { border-color: var(--accent-green); color: var(--accent-green); background: var(--accent-green-light); }
+.add-block-btn.plainanswer-add:hover { border-color: var(--accent-green); color: #fff; background: var(--accent-green); }
+.add-block-btn.image-add { border-color: var(--accent-peach); color: var(--accent-peach); background: var(--accent-peach-light); }
+.add-block-btn.image-add:hover { border-color: var(--accent-peach); color: #fff; background: var(--accent-peach); }
 
 /* ========== ACTION BUTTONS ========== */
 .action-row {
@@ -4030,7 +4037,7 @@ option {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               &#x1F9EA; Add CER Answer
             </button>
-            <button class="add-block-btn answer-add" onclick="addBlock('plainanswer')" style="border-color:var(--accent-teal-light);">
+            <button class="add-block-btn plainanswer-add" onclick="addBlock('plainanswer')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               &#x2705; Add Answer
             </button>
