@@ -2383,6 +2383,35 @@ option {
     border-top: 1pt solid #ccc;
     margin: 10pt 0;
   }
+
+  /* Page footer — logo + copyright on every printed page */
+  .print-question-page {
+    display: flex;
+    flex-direction: column;
+  }
+  .print-page-content {
+    flex: 1;
+  }
+  .print-page-footer {
+    margin-top: auto;
+    padding-top: 8pt;
+    border-top: 0.5pt solid #ccc;
+    display: flex;
+    align-items: center;
+    gap: 8pt;
+  }
+  .print-page-footer img {
+    width: 22pt;
+    height: 22pt;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .print-page-footer .print-footer-text {
+    font-size: 5.5pt;
+    color: #888;
+    line-height: 1.3;
+    font-style: italic;
+  }
 }
 
 /* ========== PRINT MODE SELECTION ========== */
@@ -8349,12 +8378,19 @@ function autoscaleAndPrint(output) {
   }
 }
 
+function _createPrintPageFooter() {
+  const footer = document.createElement('div');
+  footer.className = 'print-page-footer';
+  footer.innerHTML = `<img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2222%22 height=%2222%22 viewBox=%220 0 22 22%22%3E%3Crect width=%2222%22 height=%2222%22 rx=%224%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2211%22 y=%2216%22 font-family=%22DM Sans,sans-serif%22 font-size=%2214%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';"><span class="print-footer-text">\u00A9 Polymath Learning Centre LLP. No parts of the intellectual property of Polymath Learning Centre can be reproduced in any form without permission from Polymath Learning Centre LLP.</span>`;
+  return footer;
+}
+
 function doScaleAndPrint(output) {
   // Make output visible off-screen so we can measure heights accurately
   output.style.cssText = 'display:block;position:absolute;left:-9999px;top:0;width:178mm;';
 
   requestAnimationFrame(() => {
-    const maxH = 770;
+    const maxH = 740; // reduced from 770 to accommodate page footer
     const separatorH = 30; // approx height of .print-question-separator
     const chunks = Array.from(output.querySelectorAll('.print-question-chunk'));
     const answerKeys = Array.from(output.querySelectorAll('.print-answer-key-page'));
@@ -8363,6 +8399,7 @@ function doScaleAndPrint(output) {
       // Fallback: no question chunks, just scale existing pages
       const pages = output.querySelectorAll('.print-question-page');
       pages.forEach(page => {
+        page.appendChild(_createPrintPageFooter());
         page.style.zoom = '';
         const h = page.scrollHeight;
         if (h > maxH) {
@@ -8418,8 +8455,16 @@ function doScaleAndPrint(output) {
       output.appendChild(page);
     });
 
-    // Re-add answer key pages
-    answerKeys.forEach(ak => output.appendChild(ak));
+    // Add footer to each question page
+    Array.from(output.querySelectorAll('.print-question-page')).forEach(page => {
+      page.appendChild(_createPrintPageFooter());
+    });
+
+    // Re-add answer key pages (also get footer)
+    answerKeys.forEach(ak => {
+      ak.appendChild(_createPrintPageFooter());
+      output.appendChild(ak);
+    });
 
     // Second rAF: measure grouped pages and scale with zoom (not transform)
     // zoom affects layout size directly, so content is never clipped
