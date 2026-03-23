@@ -2048,14 +2048,14 @@ option {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 0;
   flex-wrap: wrap;
   position: sticky;
   top: 0;
-  z-index: 40;
-  background: var(--bg);
-  padding: 14px 0;
-  margin: -14px 0 20px 0;
+  z-index: 45;
+  background: var(--surface);
+  padding: 14px 36px;
+  border-bottom: 1px solid var(--border);
 }
 .print-filter-row {
   display: flex;
@@ -2080,7 +2080,7 @@ option {
   color: var(--text-muted);
 }
 .print-select-card .psc-preview-btn {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 30px;
@@ -2091,14 +2091,17 @@ option {
   cursor: pointer;
   flex-shrink: 0;
   border: none;
-  transition: background 0.15s;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+  pointer-events: none;
 }
 .print-select-card .psc-preview-btn svg {
   width: 16px;
   height: 16px;
 }
 .print-select-card:hover .psc-preview-btn {
-  display: flex;
+  opacity: 1;
+  pointer-events: auto;
 }
 .print-select-card .psc-preview-btn:hover {
   background: var(--primary-dark);
@@ -4419,39 +4422,40 @@ option {
           <div class="subtitle">Select questions and print as a fill-in-the-blank worksheet</div>
         </div>
       </div>
-      <div class="page-body" style="max-width:780px;">
-        <div class="print-toolbar">
-          <div>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;">
-              <input type="checkbox" id="printSelectAll" onchange="togglePrintSelectAll(this.checked)" style="width:16px;height:16px;accent-color:var(--primary);">
-              Select All
-            </label>
-          </div>
-          <div style="display:flex;align-items:center;gap:12px;">
-            <span class="selected-count" id="printSelectedCount">0 selected</span>
-            <button class="btn btn-primary" onclick="printWorksheet()" id="printBtn" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-              Print Worksheet
-            </button>
-          </div>
-          <div class="print-filter-row">
-            <select id="printFilterCategory" onchange="applyPrintFilters()">
-              <option value="">All Skills</option>
-            </select>
-            <select id="printFilterTopic" onchange="applyPrintFilters()">
-              <option value="">All Topics</option>
-            </select>
-          </div>
+      <div class="print-toolbar">
+        <div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;">
+            <input type="checkbox" id="printSelectAll" onchange="togglePrintSelectAll(this.checked)" style="width:16px;height:16px;accent-color:var(--primary);">
+            Select All
+          </label>
         </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span class="selected-count" id="printSelectedCount">0 selected</span>
+          <button class="btn btn-primary" onclick="printWorksheet()" id="printBtn" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print Worksheet
+          </button>
+        </div>
+        <div class="print-filter-row">
+          <select id="printFilterCategory" onchange="applyPrintFilters()">
+            <option value="">All Skills</option>
+          </select>
+          <select id="printFilterTopic" onchange="applyPrintFilters()">
+            <option value="">All Topics</option>
+          </select>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:780px;">
         <div id="printSelectGrid" class="print-select-grid"></div>
       </div>
 
-      <!-- Question Preview Overlay -->
-      <div class="print-preview-overlay" id="printPreviewOverlay" onclick="if(event.target===this)closePrintPreview()">
-        <div class="print-preview-panel">
-          <button class="preview-close" onclick="closePrintPreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-          <div id="printPreviewContent"></div>
-        </div>
+    </div>
+
+    <!-- Question Preview Overlay (outside page for z-index) -->
+    <div class="print-preview-overlay" id="printPreviewOverlay" onclick="if(event.target===this)closePrintPreview()">
+      <div class="print-preview-panel">
+        <button class="preview-close" onclick="closePrintPreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        <div id="printPreviewContent"></div>
       </div>
     </div>
 
@@ -8110,12 +8114,28 @@ function _populatePrintFilters() {
   const topSel = document.getElementById('printFilterTopic');
   if (catSel) {
     const cur = catSel.value;
-    catSel.innerHTML = '<option value="">All Skills</option>' + categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    catSel.innerHTML = '';
+    const defOpt = document.createElement('option');
+    defOpt.value = ''; defOpt.textContent = 'All Skills';
+    catSel.appendChild(defOpt);
+    categories.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      catSel.appendChild(opt);
+    });
     catSel.value = cur;
   }
   if (topSel) {
     const cur = topSel.value;
-    topSel.innerHTML = '<option value="">All Topics</option>' + topics.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    topSel.innerHTML = '';
+    const defOpt = document.createElement('option');
+    defOpt.value = ''; defOpt.textContent = 'All Topics';
+    topSel.appendChild(defOpt);
+    topics.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t; opt.textContent = t;
+      topSel.appendChild(opt);
+    });
     topSel.value = cur;
   }
 }
@@ -8165,8 +8185,8 @@ function renderPrintSelect() {
   filtered.forEach(q => {
     const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
     const checked = printSelectedIds.has(q.id);
-    html += `<label class="print-select-card${checked ? ' selected' : ''}" data-qid="${q.id}">
-      <input type="checkbox" ${checked ? 'checked' : ''} onchange="togglePrintQuestion('${q.id}', this.checked)">
+    html += `<div class="print-select-card${checked ? ' selected' : ''}" data-qid="${q.id}" onclick="togglePrintCardClick('${q.id}', this)">
+      <input type="checkbox" ${checked ? 'checked' : ''} onclick="event.stopPropagation()" onchange="togglePrintQuestion('${q.id}', this.checked)">
       <div class="psc-info">
         <div class="psc-title">${escapeHtml(q.title)}</div>
         <div class="psc-meta">
@@ -8175,14 +8195,21 @@ function renderPrintSelect() {
           ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
         </div>
       </div>
-      <button type="button" class="psc-preview-btn" onclick="event.preventDefault();event.stopPropagation();openPrintPreview('${q.id}')" title="Preview question">
+      <button type="button" class="psc-preview-btn" onclick="event.stopPropagation();openPrintPreview('${q.id}')" title="Preview question">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
       </button>
       <span class="psc-blanks">${q.blocks.length} block${q.blocks.length !== 1 ? 's' : ''}</span>
-    </label>`;
+    </div>`;
   });
   grid.innerHTML = html;
   updatePrintCount();
+}
+
+function togglePrintCardClick(id, cardEl) {
+  const cb = cardEl.querySelector('input[type="checkbox"]');
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  togglePrintQuestion(id, cb.checked);
 }
 
 function togglePrintQuestion(id, checked) {
@@ -8195,8 +8222,9 @@ function togglePrintQuestion(id, checked) {
   const card = document.querySelector(`.print-select-card[data-qid="${id}"]`);
   if (card) card.classList.toggle('selected', checked);
   // Update select-all checkbox
+  const filtered = _getFilteredPrintQuestions();
   const selectAll = document.getElementById('printSelectAll');
-  if (selectAll) selectAll.checked = printSelectedIds.size === questionBank.length && questionBank.length > 0;
+  if (selectAll) selectAll.checked = filtered.length > 0 && filtered.every(q => printSelectedIds.has(q.id));
   updatePrintCount();
 }
 
