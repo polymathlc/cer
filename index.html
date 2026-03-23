@@ -2050,11 +2050,144 @@ option {
   gap: 12px;
   margin-bottom: 20px;
   flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--bg);
+  padding: 14px 0;
+  margin: -14px 0 20px 0;
+}
+.print-filter-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+.print-filter-row select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  min-width: 140px;
 }
 .print-toolbar .selected-count {
   font-family: 'Space Mono', monospace;
   font-size: 0.82rem;
   color: var(--text-muted);
+}
+.print-select-card .psc-preview-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  border: none;
+  transition: background 0.15s;
+}
+.print-select-card .psc-preview-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.print-select-card:hover .psc-preview-btn {
+  display: flex;
+}
+.print-select-card .psc-preview-btn:hover {
+  background: var(--primary-dark);
+}
+/* Question preview overlay */
+.print-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0,0,0,0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  backdrop-filter: blur(3px);
+}
+.print-preview-overlay.active {
+  display: flex;
+}
+.print-preview-panel {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 700px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 28px;
+  position: relative;
+}
+.print-preview-panel .preview-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.print-preview-panel .preview-close:hover {
+  background: var(--border);
+}
+.print-preview-panel h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+.print-preview-panel .preview-meta {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.print-preview-panel .preview-block {
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.print-preview-panel .preview-block img {
+  max-width: 100%;
+  max-height: 250px;
+  border-radius: 6px;
+}
+.print-preview-panel .preview-cer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin: 8px 0;
+}
+.print-preview-panel .preview-cer-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  font-weight: 700;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.print-preview-panel .preview-cer-content {
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  line-height: 1.6;
 }
 .print-no-questions {
   text-align: center;
@@ -4301,8 +4434,24 @@ option {
               Print Worksheet
             </button>
           </div>
+          <div class="print-filter-row">
+            <select id="printFilterCategory" onchange="applyPrintFilters()">
+              <option value="">All Skills</option>
+            </select>
+            <select id="printFilterTopic" onchange="applyPrintFilters()">
+              <option value="">All Topics</option>
+            </select>
+          </div>
         </div>
         <div id="printSelectGrid" class="print-select-grid"></div>
+      </div>
+
+      <!-- Question Preview Overlay -->
+      <div class="print-preview-overlay" id="printPreviewOverlay" onclick="if(event.target===this)closePrintPreview()">
+        <div class="print-preview-panel">
+          <button class="preview-close" onclick="closePrintPreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+          <div id="printPreviewContent"></div>
+        </div>
       </div>
     </div>
 
@@ -7954,9 +8103,42 @@ function checkStudentAnswers(qId) {
 // =====================================================================
 let printSelectedIds = new Set();
 
+function _populatePrintFilters() {
+  const categories = [...new Set(questionBank.map(q => q.category).filter(Boolean))].sort();
+  const topics = [...new Set(questionBank.map(q => q.topic).filter(Boolean))].sort();
+  const catSel = document.getElementById('printFilterCategory');
+  const topSel = document.getElementById('printFilterTopic');
+  if (catSel) {
+    const cur = catSel.value;
+    catSel.innerHTML = '<option value="">All Skills</option>' + categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    catSel.value = cur;
+  }
+  if (topSel) {
+    const cur = topSel.value;
+    topSel.innerHTML = '<option value="">All Topics</option>' + topics.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+    topSel.value = cur;
+  }
+}
+
+function _getFilteredPrintQuestions() {
+  const catFilter = document.getElementById('printFilterCategory')?.value || '';
+  const topFilter = document.getElementById('printFilterTopic')?.value || '';
+  return questionBank.filter(q => {
+    if (catFilter && q.category !== catFilter) return false;
+    if (topFilter && q.topic !== topFilter) return false;
+    return true;
+  });
+}
+
+function applyPrintFilters() {
+  renderPrintSelect();
+}
+
 function renderPrintSelect() {
   const grid = document.getElementById('printSelectGrid');
   if (!grid) return;
+
+  _populatePrintFilters();
 
   if (questionBank.length === 0) {
     grid.innerHTML = `<div class="print-no-questions">
@@ -7968,8 +8150,19 @@ function renderPrintSelect() {
     return;
   }
 
+  const filtered = _getFilteredPrintQuestions();
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div class="print-no-questions">
+      <h3>No matching questions</h3>
+      <p>Try adjusting your filters.</p>
+    </div>`;
+    updatePrintCount();
+    return;
+  }
+
   let html = '';
-  questionBank.forEach(q => {
+  filtered.forEach(q => {
     const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
     const checked = printSelectedIds.has(q.id);
     html += `<label class="print-select-card${checked ? ' selected' : ''}" data-qid="${q.id}">
@@ -7982,6 +8175,9 @@ function renderPrintSelect() {
           ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
         </div>
       </div>
+      <button type="button" class="psc-preview-btn" onclick="event.preventDefault();event.stopPropagation();openPrintPreview('${q.id}')" title="Preview question">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
       <span class="psc-blanks">${q.blocks.length} block${q.blocks.length !== 1 ? 's' : ''}</span>
     </label>`;
   });
@@ -8005,9 +8201,11 @@ function togglePrintQuestion(id, checked) {
 }
 
 function togglePrintSelectAll(checked) {
-  printSelectedIds.clear();
+  const filtered = _getFilteredPrintQuestions();
   if (checked) {
-    questionBank.forEach(q => printSelectedIds.add(q.id));
+    filtered.forEach(q => printSelectedIds.add(q.id));
+  } else {
+    filtered.forEach(q => printSelectedIds.delete(q.id));
   }
   document.querySelectorAll('.print-select-card input[type="checkbox"]').forEach(cb => cb.checked = checked);
   document.querySelectorAll('.print-select-card').forEach(card => card.classList.toggle('selected', checked));
@@ -8019,6 +8217,56 @@ function updatePrintCount() {
   const btn = document.getElementById('printBtn');
   if (countEl) countEl.textContent = printSelectedIds.size + ' selected';
   if (btn) btn.disabled = printSelectedIds.size === 0;
+}
+
+function openPrintPreview(qid) {
+  const q = questionBank.find(x => x.id === qid);
+  if (!q) return;
+  const container = document.getElementById('printPreviewContent');
+  if (!container) return;
+
+  let html = `<h3>${escapeHtml(q.title)}</h3>`;
+  html += `<div class="preview-meta">
+    <span class="qb-tag category">${escapeHtml(q.category)}</span>
+    <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+  </div>`;
+
+  q.blocks.forEach(block => {
+    switch (block.type) {
+      case 'text':
+        html += `<div class="preview-block">${block.content || ''}</div>`;
+        break;
+      case 'image':
+        if (block.url) html += `<div class="preview-block"><img src="${escapeHtml(transformImageUrl(block.url))}" alt="Image"></div>`;
+        break;
+      case 'answer':
+        html += `<div class="preview-cer">`;
+        html += `<div class="preview-cer-label">Claim</div><div class="preview-cer-content">${block.claim || ''}</div>`;
+        html += `<div class="preview-cer-label">Evidence</div><div class="preview-cer-content">${block.evidence || ''}</div>`;
+        html += `<div class="preview-cer-label">Reasoning</div><div class="preview-cer-content">${block.reasoning || ''}</div>`;
+        html += `</div>`;
+        break;
+      case 'plainanswer':
+        html += `<div class="preview-block">${block.content || ''}</div>`;
+        break;
+      case 'table':
+        html += `<div class="preview-block">${renderTableReadonly(block, 'print-table')}</div>`;
+        break;
+      case 'explanation':
+        html += `<div class="preview-block" style="color:var(--text-muted);font-style:italic;">${block.content || ''}</div>`;
+        break;
+      case 'video':
+        if (block.url) html += `<div class="preview-block" style="font-style:italic;color:var(--text-muted);">Video: ${escapeHtml(block.url)}</div>`;
+        break;
+    }
+  });
+
+  container.innerHTML = html;
+  document.getElementById('printPreviewOverlay').classList.add('active');
+}
+
+function closePrintPreview() {
+  document.getElementById('printPreviewOverlay').classList.remove('active');
 }
 
 function renderPrintText(blockId, content, blanks, blankCounter) {
