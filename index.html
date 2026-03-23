@@ -2054,16 +2054,10 @@ option {
   top: 0;
   z-index: 45;
   background: var(--surface);
-  padding: 14px 36px;
+  padding: 12px 36px;
   border-bottom: 1px solid var(--border);
 }
-.print-filter-row {
-  display: flex;
-  gap: 10px;
-  width: 100%;
-  flex-wrap: wrap;
-}
-.print-filter-row select {
+.print-toolbar select {
   padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -2072,14 +2066,19 @@ option {
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
-  min-width: 140px;
+}
 }
 .print-toolbar .selected-count {
   font-family: 'Space Mono', monospace;
   font-size: 0.82rem;
   color: var(--text-muted);
 }
-.print-select-card .psc-preview-btn {
+/* Eye icon wrapper — contains the button + the hover popout */
+.psc-preview-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.psc-preview-wrap .psc-preview-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2089,95 +2088,65 @@ option {
   background: var(--primary);
   color: #fff;
   cursor: pointer;
-  flex-shrink: 0;
   border: none;
   opacity: 0;
-  transition: opacity 0.15s, background 0.15s;
+  transition: opacity 0.15s;
   pointer-events: none;
 }
-.print-select-card .psc-preview-btn svg {
+.psc-preview-wrap .psc-preview-btn svg {
   width: 16px;
   height: 16px;
 }
-.print-select-card:hover .psc-preview-btn {
+.print-select-card:hover .psc-preview-wrap .psc-preview-btn {
   opacity: 1;
   pointer-events: auto;
 }
-.print-select-card .psc-preview-btn:hover {
-  background: var(--primary-dark);
-}
-/* Question preview overlay */
-.print-preview-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgba(0,0,0,0.5);
+/* The hover popout panel */
+.psc-preview-popout {
   display: none;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  backdrop-filter: blur(3px);
-}
-.print-preview-overlay.active {
-  display: flex;
-}
-.print-preview-panel {
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  width: 100%;
-  max-width: 700px;
-  max-height: 80vh;
+  position: fixed;
+  z-index: 999;
+  width: 480px;
+  max-height: 420px;
   overflow-y: auto;
-  padding: 28px;
-  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+  padding: 20px;
+  pointer-events: none;
 }
-.print-preview-panel .preview-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: none;
-  background: var(--bg);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
+.psc-preview-popout.visible {
+  display: block;
 }
-.print-preview-panel .preview-close:hover {
-  background: var(--border);
-}
-.print-preview-panel h3 {
-  font-size: 1.1rem;
+.psc-preview-popout h3 {
+  font-size: 1rem;
   font-weight: 700;
   margin: 0 0 4px;
 }
-.print-preview-panel .preview-meta {
+.psc-preview-popout .preview-meta {
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
-.print-preview-panel .preview-block {
-  margin-bottom: 12px;
-  font-size: 0.9rem;
+.psc-preview-popout .preview-block {
+  margin-bottom: 10px;
+  font-size: 0.85rem;
   line-height: 1.6;
 }
-.print-preview-panel .preview-block img {
+.psc-preview-popout .preview-block img {
   max-width: 100%;
-  max-height: 250px;
+  max-height: 180px;
   border-radius: 6px;
 }
-.print-preview-panel .preview-cer {
+.psc-preview-popout .preview-cer {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
   margin: 8px 0;
 }
-.print-preview-panel .preview-cer-label {
+.psc-preview-popout .preview-cer-label {
   font-family: 'Space Mono', monospace;
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -2187,9 +2156,9 @@ option {
   background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
-.print-preview-panel .preview-cer-content {
+.psc-preview-popout .preview-cer-content {
   padding: 8px 10px;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   line-height: 1.6;
 }
 .print-no-questions {
@@ -4413,7 +4382,7 @@ option {
 
     <!-- ===== PAGE: PRINT WORKSHEET ===== -->
     <div class="page" id="page-print">
-      <div class="page-header">
+      <div class="page-header" id="printPageHeader">
         <div>
           <div style="display:flex;align-items:center;gap:10px;">
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
@@ -4422,12 +4391,18 @@ option {
           <div class="subtitle">Select questions and print as a fill-in-the-blank worksheet</div>
         </div>
       </div>
-      <div class="print-toolbar">
-        <div>
+      <div class="print-toolbar" id="printToolbar">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;">
             <input type="checkbox" id="printSelectAll" onchange="togglePrintSelectAll(this.checked)" style="width:16px;height:16px;accent-color:var(--primary);">
             Select All
           </label>
+          <select id="printFilterCategory" onchange="applyPrintFilters()" style="margin:0;">
+            <option value="">All Skills</option>
+          </select>
+          <select id="printFilterTopic" onchange="applyPrintFilters()" style="margin:0;">
+            <option value="">All Topics</option>
+          </select>
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
           <span class="selected-count" id="printSelectedCount">0 selected</span>
@@ -4436,28 +4411,14 @@ option {
             Print Worksheet
           </button>
         </div>
-        <div class="print-filter-row">
-          <select id="printFilterCategory" onchange="applyPrintFilters()">
-            <option value="">All Skills</option>
-          </select>
-          <select id="printFilterTopic" onchange="applyPrintFilters()">
-            <option value="">All Topics</option>
-          </select>
-        </div>
       </div>
       <div class="page-body" style="max-width:780px;">
         <div id="printSelectGrid" class="print-select-grid"></div>
       </div>
-
     </div>
 
-    <!-- Question Preview Overlay (outside page for z-index) -->
-    <div class="print-preview-overlay" id="printPreviewOverlay" onclick="if(event.target===this)closePrintPreview()">
-      <div class="print-preview-panel">
-        <button class="preview-close" onclick="closePrintPreview()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-        <div id="printPreviewContent"></div>
-      </div>
-    </div>
+    <!-- Floating preview popout for print question cards -->
+    <div class="psc-preview-popout" id="printPreviewPopout"></div>
 
     <!-- ===== PAGE: CREATE WORKSHEET (Students) ===== -->
     <div class="page" id="page-worksheet">
@@ -4954,14 +4915,19 @@ option {
 
 <!-- ==================== PRINT MODE SELECTION OVERLAY ==================== -->
 <div class="confirm-overlay" id="printModeOverlay">
-  <div class="confirm-dialog" style="max-width:420px;text-align:center;">
+  <div class="confirm-dialog" style="max-width:580px;text-align:center;">
     <h3 style="margin-bottom:6px;">Choose Worksheet Format</h3>
     <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:20px;">How should the answer sections appear on the worksheet?</p>
-    <div class="print-mode-options">
+    <div class="print-mode-options" style="flex-wrap:wrap;">
       <button class="print-mode-btn" onclick="confirmPrintMode('blanks')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;margin-bottom:6px;"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h13"/><rect x="16" y="10" width="5" height="4" rx="1" stroke-dasharray="2 1"/></svg>
         <span class="print-mode-title">Fill in the Blanks</span>
         <span class="print-mode-desc">Selected words are blanked out with numbered lines. Answer key lists blanked words.</span>
+      </button>
+      <button class="print-mode-btn" onclick="confirmPrintMode('firstletter')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;margin-bottom:6px;"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h13"/><text x="17" y="14" font-size="8" font-weight="700" fill="currentColor" stroke="none">A_</text></svg>
+        <span class="print-mode-title">First Letter Hint</span>
+        <span class="print-mode-desc">Blanked words show the first letter as a clue. Answer key lists all blanked words.</span>
       </button>
       <button class="print-mode-btn" onclick="confirmPrintMode('open')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;margin-bottom:6px;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10" stroke-dasharray="2 2"/><path d="M7 12h10" stroke-dasharray="2 2"/><path d="M7 16h6" stroke-dasharray="2 2"/></svg>
@@ -5435,7 +5401,15 @@ function navigateTo(page) {
     populateStudentSelect();
     renderStudentView();
   }
-  if (page === 'print') renderPrintSelect();
+  if (page === 'print') {
+    renderPrintSelect();
+    // Position toolbar below the sticky page-header
+    requestAnimationFrame(() => {
+      const hdr = document.getElementById('printPageHeader');
+      const tb = document.getElementById('printToolbar');
+      if (hdr && tb) tb.style.top = hdr.offsetHeight + 'px';
+    });
+  }
   if (page === 'practice') populatePracticeStudentSelect();
   if (page === 'worksheet') {
     populateWsTopicFilter();
@@ -8195,9 +8169,11 @@ function renderPrintSelect() {
           ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
         </div>
       </div>
-      <button type="button" class="psc-preview-btn" onclick="event.stopPropagation();openPrintPreview('${q.id}')" title="Preview question">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-      </button>
+      <div class="psc-preview-wrap" onclick="event.stopPropagation()">
+        <button type="button" class="psc-preview-btn" onmouseenter="showPrintPreview('${q.id}', this)" onmouseleave="hidePrintPreview()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
       <span class="psc-blanks">${q.blocks.length} block${q.blocks.length !== 1 ? 's' : ''}</span>
     </div>`;
   });
@@ -8247,11 +8223,14 @@ function updatePrintCount() {
   if (btn) btn.disabled = printSelectedIds.size === 0;
 }
 
-function openPrintPreview(qid) {
+let _previewHideTimer = null;
+
+function showPrintPreview(qid, btnEl) {
+  clearTimeout(_previewHideTimer);
   const q = questionBank.find(x => x.id === qid);
   if (!q) return;
-  const container = document.getElementById('printPreviewContent');
-  if (!container) return;
+  const popout = document.getElementById('printPreviewPopout');
+  if (!popout) return;
 
   let html = `<h3>${escapeHtml(q.title)}</h3>`;
   html += `<div class="preview-meta">
@@ -8289,12 +8268,26 @@ function openPrintPreview(qid) {
     }
   });
 
-  container.innerHTML = html;
-  document.getElementById('printPreviewOverlay').classList.add('active');
+  popout.innerHTML = html;
+
+  // Position the popout next to the eye icon
+  const rect = btnEl.getBoundingClientRect();
+  let top = rect.top;
+  let left = rect.left - 490; // place to the left of the icon
+  // If it would go off the left edge, place to the right instead
+  if (left < 10) left = rect.right + 10;
+  // If it would go off the bottom, shift up
+  if (top + 420 > window.innerHeight) top = Math.max(10, window.innerHeight - 430);
+  popout.style.top = top + 'px';
+  popout.style.left = left + 'px';
+  popout.classList.add('visible');
 }
 
-function closePrintPreview() {
-  document.getElementById('printPreviewOverlay').classList.remove('active');
+function hidePrintPreview() {
+  _previewHideTimer = setTimeout(() => {
+    const popout = document.getElementById('printPreviewPopout');
+    if (popout) popout.classList.remove('visible');
+  }, 100);
 }
 
 function renderPrintText(blockId, content, blanks, blankCounter) {
@@ -8353,6 +8346,8 @@ function confirmPrintMode(mode) {
   closePrintMode();
   if (mode === 'blanks') {
     doPrintWorksheetBlanks();
+  } else if (mode === 'firstletter') {
+    doPrintWorksheetBlanks(true);
   } else {
     doPrintWorksheetOpen();
   }
@@ -8391,12 +8386,13 @@ function linesForText(text, charsPerLine) {
 }
 
 // ===== FILL IN THE BLANKS MODE =====
-function doPrintWorksheetBlanks() {
+function doPrintWorksheetBlanks(useFirstLetter) {
   const selected = questionBank.filter(q => printSelectedIds.has(q.id));
   const output = document.getElementById('printOutput');
   let allHtml = '';
   const answerKeyData = [];
   let blankCounter = 0;
+  const renderFn = useFirstLetter ? renderPrintTextWithFirstLetter : renderPrintText;
 
   selected.forEach((q, qIndex) => {
     let qHtml = `<div class="print-question-chunk">`;
@@ -8426,7 +8422,7 @@ function doPrintWorksheetBlanks() {
     q.blocks.forEach(block => {
       switch (block.type) {
         case 'text': {
-          const result = renderPrintText(block.id, block.content, q.blanks, blankCounter);
+          const result = renderFn(block.id, block.content, q.blanks, blankCounter);
           blankCounter = result.counter;
           qHtml += `<div class="print-text-block">${result.html}</div>`;
           qAnswers.push(...collectPrintBlanks(block.id, block.content, q.blanks));
@@ -8440,17 +8436,17 @@ function doPrintWorksheetBlanks() {
         }
         case 'answer': {
           qHtml += `<div class="print-cer-section">`;
-          const claimResult = renderPrintText(block.id + '_claim', block.claim, q.blanks, blankCounter);
+          const claimResult = renderFn(block.id + '_claim', block.claim, q.blanks, blankCounter);
           blankCounter = claimResult.counter;
           qHtml += `<div class="print-cer-label">Claim</div><div class="print-cer-content">${claimResult.html}</div>`;
           qAnswers.push(...collectPrintBlanks(block.id + '_claim', block.claim, q.blanks));
 
-          const evResult = renderPrintText(block.id + '_evidence', block.evidence, q.blanks, blankCounter);
+          const evResult = renderFn(block.id + '_evidence', block.evidence, q.blanks, blankCounter);
           blankCounter = evResult.counter;
           qHtml += `<div class="print-cer-label">Evidence</div><div class="print-cer-content">${evResult.html}</div>`;
           qAnswers.push(...collectPrintBlanks(block.id + '_evidence', block.evidence, q.blanks));
 
-          const resResult = renderPrintText(block.id + '_reasoning', block.reasoning, q.blanks, blankCounter);
+          const resResult = renderFn(block.id + '_reasoning', block.reasoning, q.blanks, blankCounter);
           blankCounter = resResult.counter;
           qHtml += `<div class="print-cer-label">Reasoning</div><div class="print-cer-content">${resResult.html}</div>`;
           qAnswers.push(...collectPrintBlanks(block.id + '_reasoning', block.reasoning, q.blanks));
@@ -8459,7 +8455,7 @@ function doPrintWorksheetBlanks() {
           break;
         }
         case 'plainanswer': {
-          const paResult = renderPrintText(block.id, block.content, q.blanks, blankCounter);
+          const paResult = renderFn(block.id, block.content, q.blanks, blankCounter);
           blankCounter = paResult.counter;
           qHtml += `<div class="print-text-block">${paResult.html}</div>`;
           qAnswers.push(...collectPrintBlanks(block.id, block.content, q.blanks));
@@ -11575,6 +11571,10 @@ window.handleImgError = handleImgError;
 window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
 window.togglePrintSelectAll = togglePrintSelectAll;
+window.togglePrintCardClick = togglePrintCardClick;
+window.applyPrintFilters = applyPrintFilters;
+window.showPrintPreview = showPrintPreview;
+window.hidePrintPreview = hidePrintPreview;
 window.printWorksheet = printWorksheet;
 window.confirmPrintMode = confirmPrintMode;
 window.closePrintMode = closePrintMode;
