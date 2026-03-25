@@ -5203,7 +5203,7 @@ function getAuthErrorMessage(code) {
 // =====================================================================
 // AUTH STATE LISTENER
 // =====================================================================
-const ADMIN_EMAIL = 'chungzhikai@gmail.com';
+const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'abigail.yew@stanfordmanpower.com'];
 let adminUid = null; // will be loaded for student accounts
 
 async function recordLogin(user) {
@@ -5222,7 +5222,7 @@ async function recordLogin(user) {
       email: user.email,
       displayName: user.displayName || user.email.split('@')[0],
       lastLogin: Timestamp.now(),
-      role: user.email === ADMIN_EMAIL ? 'admin' : 'student'
+      role: ADMIN_EMAILS.includes(user.email) ? 'admin' : 'student'
     }, { merge: true });
   } catch (err) {
     console.warn('Could not record login:', err);
@@ -5231,7 +5231,7 @@ async function recordLogin(user) {
 
 async function enterApp(user) {
   const displayName = user.displayName || user.email.split('@')[0];
-  const isAdmin = user.email === ADMIN_EMAIL;
+  const isAdmin = ADMIN_EMAILS.includes(user.email);
   currentUser = {
     uid: user.uid,
     email: user.email,
@@ -10796,7 +10796,7 @@ async function loadUsageDashboard() {
     const allLogins = [];
     loginsSnap.forEach(d => {
       const l = d.data();
-      if (l.email !== ADMIN_EMAIL) allLogins.push(l);
+      if (!ADMIN_EMAILS.includes(l.email)) allLogins.push(l);
     });
 
     // Sort by timestamp descending
