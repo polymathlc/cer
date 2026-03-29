@@ -6905,6 +6905,7 @@ function openPreview() {
   blocks.forEach(block => {
     switch (block.type) {
       case 'text':
+        html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
         html += renderSelectableText(block.id, block.content, 'text');
         break;
       case 'image':
@@ -6915,6 +6916,7 @@ function openPreview() {
         }
         break;
       case 'answer':
+        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
         html += `<div class="cer-preview-section">`;
         html += `<div class="cer-preview-label claim-bg">Claim</div>`;
         html += `<div class="cer-preview-content">${renderSelectableText(block.id + '_claim', block.claim, 'claim')}</div>`;
@@ -6929,6 +6931,7 @@ function openPreview() {
         html += `</div>`;
         break;
       case 'plainanswer':
+        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
         html += `<div style="padding:10px 0;">`;
         html += renderSelectableText(block.id, block.content, 'answer');
         html += `</div>`;
@@ -9231,6 +9234,7 @@ function renderPracticeQuestion(q, student) {
   q.blocks.forEach(block => {
     switch (block.type) {
       case 'text':
+        html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
         html += renderStudentText(block.id, block.content, q.blanks);
         break;
       case 'image':
@@ -9239,6 +9243,7 @@ function renderPracticeQuestion(q, student) {
         }
         break;
       case 'answer':
+        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
         html += `<div class="cer-student-section">`;
         html += `<div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
         html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div>`;
@@ -9253,6 +9258,7 @@ function renderPracticeQuestion(q, student) {
         html += `</div>`;
         break;
       case 'plainanswer':
+        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
         html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
         break;
       case 'explanation':
@@ -10012,12 +10018,14 @@ function renderQpQuestion(q) {
   q.blocks.forEach(block => {
     switch (block.type) {
       case 'text':
+        html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
         html += renderStudentText(block.id, block.content, q.blanks);
         break;
       case 'image':
         if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
         break;
       case 'answer':
+        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
         html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
         html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div></div>`;
         html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
@@ -10026,6 +10034,7 @@ function renderQpQuestion(q) {
         html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div></div>`;
         break;
       case 'plainanswer':
+        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
         html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
         break;
       case 'explanation': break;
@@ -10635,12 +10644,14 @@ function tpRenderQuestion(q) {
   q.blocks.forEach(block => {
     switch (block.type) {
       case 'text':
+        html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
         html += renderStudentText(block.id, block.content, q.blanks);
         break;
       case 'image':
         if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
         break;
       case 'answer':
+        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
         html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
         html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div></div>`;
         html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
@@ -10649,6 +10660,7 @@ function tpRenderQuestion(q) {
         html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div></div>`;
         break;
       case 'plainanswer':
+        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
         html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
         break;
       case 'explanation': break;
