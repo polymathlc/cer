@@ -1449,6 +1449,27 @@ option {
   padding: 12px 14px;
   line-height: 1.8;
 }
+.sv-block-tag {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-bottom: 5px;
+}
+.sv-block-tag.question {
+  background: var(--surface-raised, #f0f4f8);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.sv-block-tag.answer {
+  background: var(--surface-raised, #f0f4f8);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
 
 .submit-row {
   display: flex;
@@ -7865,6 +7886,7 @@ function renderStudentView() {
   q.blocks.forEach(block => {
     switch (block.type) {
       case 'text':
+        html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
         html += renderStudentText(block.id, block.content, q.blanks);
         break;
       case 'image':
@@ -7873,6 +7895,7 @@ function renderStudentView() {
         }
         break;
       case 'answer':
+        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
         // Claim
         html += `<div class="cer-student-section">`;
         html += `<div class="cer-student-label claim-bg" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
@@ -7890,6 +7913,7 @@ function renderStudentView() {
         html += `</div>`;
         break;
       case 'plainanswer':
+        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
         html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
         break;
       case 'explanation':
