@@ -9320,9 +9320,17 @@ function checkPracticeAnswers() {
     } else if (userAnswer === '') {
       input.style.borderBottomColor = 'var(--accent-orange)';
       input.style.background = 'var(--accent-orange-light)';
+      const correction = document.createElement('span');
+      correction.style.cssText = 'color:var(--primary);font-weight:600;font-size:0.82rem;margin-left:4px;';
+      correction.textContent = input.dataset.answer;
+      input.parentNode.insertBefore(correction, input.nextSibling);
     } else {
       input.style.borderBottomColor = 'var(--accent-red)';
       input.style.background = 'var(--accent-red-light)';
+      const correction = document.createElement('span');
+      correction.style.cssText = 'color:var(--primary);font-weight:600;font-size:0.82rem;margin-left:4px;';
+      correction.textContent = input.dataset.answer;
+      input.parentNode.insertBefore(correction, input.nextSibling);
       addAnswerIcon(input, false, idx * 80);
     }
   });
