@@ -1289,6 +1289,13 @@ option {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.qb-card-added {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
 .qb-card-actions {
   display: flex;
   gap: 6px;
@@ -7530,6 +7537,13 @@ function saveEditedQuestion() {
   const q = collectQuestionData();
     q.id = currentEditingQuestion;
 
+  // Preserve when/who the question was originally added; track last edit
+  const original = questionBank.find(qb => qb.id === currentEditingQuestion)
+    || vettingList.find(v => v.id === currentEditingQuestion);
+  if (original && original.createdAt) q.createdAt = original.createdAt;
+  if (original && original.createdBy) q.createdBy = original.createdBy;
+  q.updatedAt = new Date().toISOString();
+
   let savedToVetting = false;
   const qIdx = questionBank.findIndex(qb => qb.id === currentEditingQuestion);
   if (qIdx !== -1) {
@@ -7706,8 +7720,16 @@ function renderQuestionBank() {
           </div>
         </div>
         <div class="qb-card-preview">${escapeHtml(preview)}</div>
+        <div class="qb-card-added">Added ${escapeHtml(formatAddedDate(q.createdAt))}${q.createdBy ? ' by ' + escapeHtml(q.createdBy) : ''}</div>
       </div>`;
   }).join('');
+}
+
+function formatAddedDate(iso) {
+  if (!iso) return 'date unknown';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 'date unknown';
+  return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function getQuestionPreview(q) {
@@ -7815,6 +7837,7 @@ function renderVettingList() {
           </div>
         </div>
         <div class="qb-card-preview">${escapeHtml(preview)}</div>
+        <div class="qb-card-added">Added ${escapeHtml(formatAddedDate(q.createdAt))}${q.createdBy ? ' by ' + escapeHtml(q.createdBy) : ''}</div>
       </div>`;
   }).join('');
 }
