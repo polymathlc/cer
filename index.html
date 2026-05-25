@@ -5225,7 +5225,13 @@ function getAuthErrorMessage(code) {
 // AUTH STATE LISTENER
 // =====================================================================
 const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'abigail.yew@stanfordmanpower.com'];
+// Super admin sees questions and vetting from every other admin account.
+const SUPER_ADMIN_EMAIL = 'chungzhikai@gmail.com';
 let adminUid = null; // will be loaded for student accounts
+// Maps question/vetting id -> owning admin's uid. Populated when super admin
+// loads other admins' subcollections so writes/deletes target the right doc.
+const _ownerUidByQuestionId = {};
+const _ownerUidByVettingId  = {};
 
 async function recordLogin(user) {
   try {
@@ -7829,6 +7835,11 @@ function approveVetting(id) {
   renderVettingList();
   updateCounts();
   showToast('Question approved and added to bank', 'success');
+  // If this vetting item belonged to another admin, keep the approved
+  // question in that admin's bank rather than copying it into ours.
+  if (_ownerUidByVettingId[id]) {
+    _ownerUidByQuestionId[id] = _ownerUidByVettingId[id];
+  }
   saveQuestion(q);       // add to questions subcollection
   deleteVettingDoc(id);  // remove from vetting subcollection
 }
@@ -8798,8 +8809,10 @@ function doScaleAndPrint(output) {
 // due to contention or document growth.
 // =====================================================================
 
-function _qRef(id) { return doc(db, 'users', currentUser.uid, 'questions', id); }
-function _vRef(id) { return doc(db, 'users', currentUser.uid, 'vetting',   id); }
+function _qOwner(id) { return _ownerUidByQuestionId[id] || currentUser.uid; }
+function _vOwner(id) { return _ownerUidByVettingId[id]  || currentUser.uid; }
+function _qRef(id) { return doc(db, 'users', _qOwner(id), 'questions', id); }
+function _vRef(id) { return doc(db, 'users', _vOwner(id), 'vetting',   id); }
 function _qCol()   { return collection(db, 'users', currentUser.uid, 'questions'); }
 function _vCol()   { return collection(db, 'users', currentUser.uid, 'vetting');   }
 
@@ -8940,6 +8953,9 @@ async function loadFromStorage() {
     ]);
     questionBank = [];
     vettingList  = [];
+    // Reset owner maps so stale entries from a previous load don't leak through.
+    Object.keys(_ownerUidByQuestionId).forEach(k => delete _ownerUidByQuestionId[k]);
+    Object.keys(_ownerUidByVettingId ).forEach(k => delete _ownerUidByVettingId[k]);
     qSnap.forEach(d => {
       const q = d.data();
       if (q && q.id) questionBank.push(normalizeLoadedQuestion(q));
@@ -8948,6 +8964,47 @@ async function loadFromStorage() {
       const q = d.data();
       if (q && q.id) vettingList.push(normalizeLoadedQuestion(q));
     });
+
+    // Super admin: also load questions and vetting from every other admin
+    // account so they can see and act on Abigail's content too.
+    if (currentUser.email === SUPER_ADMIN_EMAIL) {
+      try {
+        const profilesSnap = await getDocs(collection(db, 'userProfiles'));
+        const otherAdminUids = [];
+        profilesSnap.forEach(d => {
+          const p = d.data();
+          if (p && p.uid && p.uid !== currentUser.uid && ADMIN_EMAILS.includes(p.email)) {
+            otherAdminUids.push(p.uid);
+          }
+        });
+        const seenQ = new Set(questionBank.map(q => q.id));
+        const seenV = new Set(vettingList.map(q => q.id));
+        for (const uid of otherAdminUids) {
+          const [oQ, oV] = await Promise.all([
+            getDocs(collection(db, 'users', uid, 'questions')),
+            getDocs(collection(db, 'users', uid, 'vetting'))
+          ]);
+          oQ.forEach(d => {
+            const q = d.data();
+            if (q && q.id && !seenQ.has(q.id)) {
+              _ownerUidByQuestionId[q.id] = uid;
+              questionBank.push(normalizeLoadedQuestion(q));
+              seenQ.add(q.id);
+            }
+          });
+          oV.forEach(d => {
+            const q = d.data();
+            if (q && q.id && !seenV.has(q.id)) {
+              _ownerUidByVettingId[q.id] = uid;
+              vettingList.push(normalizeLoadedQuestion(q));
+              seenV.add(q.id);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load other admins’ questions:', err);
+      }
+    }
 
   } catch (err) {
     console.error('loadFromStorage failed:', err);
