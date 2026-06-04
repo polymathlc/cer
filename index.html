@@ -5136,9 +5136,11 @@ async function _aiDiagnose() {
 }
 
 // Single swap-point for all model calls. Returns trimmed text.
-async function askGemini(prompt, { maxOutputTokens = 256, temperature = 0.3, json = false } = {}) {
+// thinkingBudget:0 disables Gemini 2.5 "thinking" so the whole token budget
+// goes to the actual answer (faster + cheaper for our short tasks).
+async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, json = false } = {}) {
   if (!geminiModel) throw new Error("AI is not configured yet");
-  const generationConfig = { maxOutputTokens, temperature };
+  const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingBudget: 0 } };
   if (json) generationConfig.responseMimeType = "application/json";
   try {
     const res = await geminiModel.generateContent({
@@ -5151,6 +5153,16 @@ async function askGemini(prompt, { maxOutputTokens = 256, temperature = 0.3, jso
     console.error('askGemini failed:', e, '| diagnostic:', diag);
     throw new Error((e && e.message ? e.message : String(e)) + ' || ' + diag);
   }
+}
+
+// Tolerant JSON parse for model output (strips code fences, finds the array/object).
+function _parseAIJson(raw) {
+  let s = (raw || '').trim();
+  if (!s) throw new Error('empty AI response — please try again');
+  s = s.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const start = s.search(/[\[{]/);
+  if (start > 0) s = s.slice(start);
+  return JSON.parse(s);
 }
 
 // Cache identical requests for the session so repeats are free/instant.
@@ -9624,8 +9636,8 @@ async function markOpenAnswers() {
       `(ignore wording, grammar and spelling — focus on the science). ` +
       `Use verdict "correct", "partial" or "incorrect". Give ONE short feedback sentence (max 22 words) addressed to the student. ` +
       `Return ONLY a JSON array like [{"i":0,"verdict":"partial","feedback":"..."}].\n${list}`;
-    const raw = await askGemini(prompt, { maxOutputTokens: 80 + items.length * 70, temperature: 0.2, json: true });
-    verdicts = JSON.parse(raw);
+    const raw = await askGemini(prompt, { maxOutputTokens: 256 + items.length * 120, temperature: 0.2, json: true });
+    verdicts = _parseAIJson(raw);
   } catch (e) {
     console.error('Open marking error:', e);
     showToast('AI mark error: ' + (e && e.message ? e.message : e), 'error');
@@ -9804,8 +9816,8 @@ function _gradingPrompt(toGrade) {
 
 // Sends the answered blanks to Gemini and returns { idx -> {correct, note} }.
 async function _gradeWithAI(toGrade) {
-  const raw = await askGemini(_gradingPrompt(toGrade), { maxOutputTokens: 60 + toGrade.length * 40, temperature: 0, json: true });
-  const arr = JSON.parse(raw);
+  const raw = await askGemini(_gradingPrompt(toGrade), { maxOutputTokens: 256 + toGrade.length * 60, temperature: 0, json: true });
+  const arr = _parseAIJson(raw);
   const verdicts = {};
   arr.forEach(v => { if (v && typeof v.i === 'number' && toGrade[v.i]) verdicts[toGrade[v.i].idx] = v; });
   return verdicts;
