@@ -5024,8 +5024,8 @@ option {
 
 <!-- ==================== FIREBASE SDK ==================== -->
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-app.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-analytics.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-analytics.js";
 import {
   getAuth,
   createUserWithEmailAndPassword,
@@ -5036,7 +5036,7 @@ import {
   onAuthStateChanged,
   signOut,
   updateProfile
-} from "https://www.gstatic.com/firebasejs/11.3.0/firebase-auth.js";
+} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import {
   getFirestore,
   doc,
@@ -5051,7 +5051,10 @@ import {
   orderBy,
   updateDoc,
   Timestamp
-} from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+// App Check (protects the Gemini quota from abuse) + Firebase AI Logic (free-tier Gemini)
+import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
+import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -5070,6 +5073,65 @@ const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
+
+// =====================================================================
+// AI (Firebase AI Logic + Gemini Flash) — see setup steps below
+// =====================================================================
+// STEP 1: In the Firebase Console, enable "AI Logic" with the Gemini
+//         Developer API (free tier): Build > AI Logic.
+// STEP 2: Enable App Check with reCAPTCHA v3 (Build > App Check),
+//         register domain  polymathlc.github.io  (add localhost too for
+//         local testing), then paste the reCAPTCHA *site key* below.
+//         Until a real key is pasted, App Check stays off and AI still
+//         works while App Check enforcement is disabled.
+const RECAPTCHA_SITE_KEY = "PASTE_YOUR_RECAPTCHA_V3_SITE_KEY_HERE";
+const AI_MODEL = "gemini-2.0-flash"; // cheap + free-tier friendly
+
+if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+  } catch (e) {
+    console.warn("App Check init failed:", e);
+  }
+}
+
+let geminiModel = null;
+try {
+  const ai = getAI(app, { backend: new GoogleAIBackend() });
+  geminiModel = getGenerativeModel(ai, { model: AI_MODEL });
+} catch (e) {
+  console.warn("Firebase AI init failed (Ask AI / AI marking disabled):", e);
+}
+
+// Single swap-point for all model calls. Returns trimmed text.
+async function askGemini(prompt, { maxOutputTokens = 256, temperature = 0.3, json = false } = {}) {
+  if (!geminiModel) throw new Error("AI is not configured yet");
+  const generationConfig = { maxOutputTokens, temperature };
+  if (json) generationConfig.responseMimeType = "application/json";
+  const res = await geminiModel.generateContent({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig
+  });
+  return (res.response.text() || "").trim();
+}
+
+// Cache identical requests for the session so repeats are free/instant.
+function _aiHash(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return "ai:" + (h >>> 0).toString(36);
+}
+async function askGeminiCached(prompt, opts) {
+  const key = _aiHash(prompt);
+  try { const c = sessionStorage.getItem(key); if (c !== null) return c; } catch (e) {}
+  const out = await askGemini(prompt, opts);
+  try { sessionStorage.setItem(key, out); } catch (e) {}
+  return out;
+}
+window.__aiReady = () => !!geminiModel;
 
 // Expose auth functions globally so onclick handlers work
 window.handleEmailLogin = handleEmailLogin;
@@ -9342,6 +9404,10 @@ function renderPracticeQuestion(q, student) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
             ${showFirstLetterClues ? 'Hide Clues' : 'First Letter'}
           </button>
+          <button class="btn btn-outline" id="practiceAskAiBtn" onclick="askAIClue()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+            Ask AI
+          </button>
           <button class="btn btn-outline" onclick="resetStudentAnswers()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             Reset
@@ -9349,6 +9415,10 @@ function renderPracticeQuestion(q, student) {
           <button class="btn btn-blue" onclick="checkPracticeAnswers()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
             Check
+          </button>
+          <button class="btn btn-blue" id="practiceMarkAiBtn" onclick="checkPracticeAnswersAI()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
+            Mark with AI
           </button>
           <button class="btn btn-primary" onclick="loadRandomPracticeQuestion()">
             Next Question &rarr;
@@ -9398,6 +9468,155 @@ function checkPracticeAnswers() {
   } else {
     const pct = Math.round((correct / total) * 100);
     scoreEl.textContent = `Score: ${correct}/${total} (${pct}%)`;
+    scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
+  }
+}
+
+// =====================================================================
+// ASK AI — clues for blanks (Firebase AI Logic + Gemini Flash)
+// =====================================================================
+function _hasClue(input) {
+  const n = input.nextElementSibling;
+  return !!(n && n.classList && n.classList.contains('ai-clue'));
+}
+
+function _showClue(input, text) {
+  if (_hasClue(input)) input.nextElementSibling.remove();
+  const span = document.createElement('span');
+  span.className = 'ai-clue';
+  span.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:2px 8px;border-radius:10px;background:var(--accent-blue-light,#e3f2fd);color:var(--accent-blue,#1565c0);font-size:0.78rem;font-weight:500;';
+  span.textContent = '💡 ' + text;
+  input.insertAdjacentElement('afterend', span);
+}
+
+async function askAIClue() {
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast("Ask AI isn't set up yet — add your reCAPTCHA site key in the code", 'info');
+    return;
+  }
+  const inputs = Array.from(document.querySelectorAll('#practiceContainer .blank-input'));
+  if (!inputs.length) { showToast('No blanks to give clues for', 'info'); return; }
+
+  // Prefer the first empty blank without a clue; otherwise the first without a clue.
+  const target = inputs.find(i => !i.value.trim() && !_hasClue(i)) || inputs.find(i => !_hasClue(i));
+  if (!target) { showToast('A clue is already shown for every blank', 'info'); return; }
+
+  const answer = (target.dataset.answer || '').trim();
+  const titleEl = document.querySelector('#practiceContainer .practice-card-header h3');
+  const topicEl = document.querySelector('#practiceContainer .qb-tag.topic');
+  const title = titleEl ? titleEl.textContent.trim() : '';
+  const topic = topicEl ? topicEl.textContent.trim() : '';
+  const wrapper = target.closest('div[style*="line-height"]') || target.parentElement;
+  const sentence = (wrapper ? wrapper.textContent : '').replace(/\s+/g, ' ').trim();
+
+  const prompt =
+    `You are a friendly tutor helping a student fill in a blank in a keywords/science question.\n` +
+    `Topic: "${topic}". Question: "${title}".\n` +
+    `Sentence (the missing word appears as a gap): "${sentence}".\n` +
+    `The correct word for the gap is "${answer}".\n` +
+    `Give ONE short, encouraging clue (max 18 words) that helps the student recall the word. ` +
+    `Do NOT write the word itself or any obvious form of it. Reply with just the clue text.`;
+
+  const btn = document.getElementById('practiceAskAiBtn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Thinking…'; }
+  try {
+    const clue = await askGeminiCached(prompt, { maxOutputTokens: 60, temperature: 0.5 });
+    _showClue(target, clue);
+    target.focus();
+  } catch (e) {
+    console.error(e);
+    showToast("Couldn't get a clue right now", 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// =====================================================================
+// MARK WITH AI — semantic grading (accepts synonyms / plurals / typos)
+// =====================================================================
+function _aiFeedbackSpan(input, text, color, italic) {
+  const span = document.createElement('span');
+  span.className = 'ai-correction';
+  span.style.cssText = `color:${color};font-size:0.8rem;margin-left:4px;font-weight:600;${italic ? 'font-style:italic;font-weight:500;' : ''}`;
+  span.textContent = text;
+  const after = (input.nextElementSibling && input.nextElementSibling.classList &&
+    input.nextElementSibling.classList.contains('answer-icon')) ? input.nextElementSibling : input;
+  after.insertAdjacentElement('afterend', span);
+}
+
+async function checkPracticeAnswersAI() {
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast("AI marking isn't set up yet — using exact match", 'info');
+    return checkPracticeAnswers();
+  }
+  const inputs = Array.from(document.querySelectorAll('#practiceContainer .blank-input'));
+  const scoreEl = document.getElementById('practiceScoreDisplay');
+  const btn = document.getElementById('practiceMarkAiBtn');
+  if (!inputs.length) { if (scoreEl) scoreEl.textContent = 'No blanks to check'; return; }
+
+  // Clear any feedback from a previous check.
+  document.querySelectorAll('#practiceContainer .ai-correction, #practiceContainer .answer-icon').forEach(el => el.remove());
+
+  const graded = inputs.map((input, idx) => ({
+    input, idx,
+    expected: (input.dataset.answer || '').trim(),
+    student: input.value.trim()
+  }));
+  const toGrade = graded.filter(g => g.student);
+
+  const verdicts = {};
+  if (toGrade.length) {
+    const list = toGrade.map((g, i) => `${i}. expected="${g.expected}" student="${g.student}"`).join('\n');
+    const prompt =
+      `You are marking fill-in-the-blank answers for a student. For EACH item decide if the student's answer is correct. ` +
+      `Accept synonyms, singular/plural, capitalisation differences, and minor spelling/typos, but the meaning must match the expected word. ` +
+      `Return ONLY a JSON array, one object per item, like ` +
+      `[{"i":0,"correct":true,"note":"short reason, max 8 words"}].\n${list}`;
+    const orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
+    if (scoreEl) scoreEl.textContent = 'Marking with AI…';
+    try {
+      const raw = await askGemini(prompt, { maxOutputTokens: 60 + toGrade.length * 40, temperature: 0, json: true });
+      const arr = JSON.parse(raw);
+      arr.forEach(v => { if (v && typeof v.i === 'number' && toGrade[v.i]) verdicts[toGrade[v.i].idx] = v; });
+    } catch (e) {
+      console.error(e);
+      showToast('AI marking failed — using exact match', 'error');
+      if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+      return checkPracticeAnswers();
+    }
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+
+  let correct = 0;
+  const total = inputs.length;
+  graded.forEach(({ input, idx, expected, student }) => {
+    if (!student) {
+      input.style.borderBottomColor = 'var(--accent-orange)';
+      input.style.background = 'var(--accent-orange-light)';
+      _aiFeedbackSpan(input, expected, 'var(--primary)', false);
+      return;
+    }
+    const v = verdicts[idx];
+    const ok = v ? !!v.correct : (student.toLowerCase() === expected.toLowerCase());
+    if (ok) {
+      input.style.borderBottomColor = 'var(--primary)';
+      input.style.background = '#e8f5e9';
+      correct++;
+      addAnswerIcon(input, true, idx * 60);
+      if (v && v.note) _aiFeedbackSpan(input, v.note, 'var(--primary)', true);
+    } else {
+      input.style.borderBottomColor = 'var(--accent-red)';
+      input.style.background = 'var(--accent-red-light)';
+      addAnswerIcon(input, false, idx * 60);
+      _aiFeedbackSpan(input, expected + (v && v.note ? ` — ${v.note}` : ''), 'var(--primary)', false);
+    }
+  });
+
+  if (scoreEl) {
+    const pct = total ? Math.round((correct / total) * 100) : 0;
+    scoreEl.textContent = `AI Score: ${correct}/${total} (${pct}%)`;
     scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
   }
 }
@@ -11718,6 +11937,8 @@ window.skipStudentSetup = skipStudentSetup;
 window.onPracticeStudentChange = onPracticeStudentChange;
 window.loadRandomPracticeQuestion = loadRandomPracticeQuestion;
 window.checkPracticeAnswers = checkPracticeAnswers;
+window.askAIClue = askAIClue;
+window.checkPracticeAnswersAI = checkPracticeAnswersAI;
 window.setLandingDemoMode = setLandingDemoMode;
 // Student worksheet functions
 window.renderWsQuestions = renderWsQuestions;
