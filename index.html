@@ -9729,16 +9729,16 @@ function loadRandomPracticeQuestion() {
 
 let practiceMode = 'blanks';     // 'blanks' | 'open'
 let currentPracticeQ = null;
-let practiceOpenItems = [];      // [{ label, model }] for open-ended marking
+let _openItemsStore = {};        // containerSel -> [{ label, model }] for open-ended marking
 
 function togglePracticeMode() {
   practiceMode = practiceMode === 'blanks' ? 'open' : 'blanks';
   if (currentPracticeQ) renderPracticeQuestion(currentPracticeQ, students[activeStudentIndex]);
 }
 
-function _openSection(label, modelAnswer, bg, fg) {
-  const oidx = practiceOpenItems.length;
-  practiceOpenItems.push({ label: label || 'Answer', model: modelAnswer || '' });
+function _openSection(items, label, modelAnswer, bg, fg) {
+  const oidx = items.length;
+  items.push({ label: label || 'Answer', model: modelAnswer || '' });
   const labelHtml = label ? `<div class="cer-student-label" style="background:${bg};color:${fg};margin-bottom:6px;">${label}</div>` : '';
   return `<div class="open-answer-section" style="margin-bottom:14px;">
       ${labelHtml}
@@ -9748,8 +9748,10 @@ function _openSection(label, modelAnswer, bg, fg) {
     </div>`;
 }
 
-function renderOpenPracticeBody(q) {
-  practiceOpenItems = [];
+// Generic open-ended body for ANY practice surface (Practice / Quick / Topical).
+// Records each textarea's expected (model) answer in _openItemsStore[containerSel].
+function buildOpenBody(q, containerSel) {
+  const items = [];
   let html = '';
   q.blocks.forEach(block => {
     switch (block.type) {
@@ -9762,13 +9764,13 @@ function renderOpenPracticeBody(q) {
         break;
       case 'answer':
         html += `<div style="margin-top:12px;margin-bottom:6px;"><span class="sv-block-tag answer">Your Answer</span></div>`;
-        html += _openSection('Claim', stripHtml(block.claim || ''), 'var(--accent-blue-light)', 'var(--accent-blue)');
-        html += _openSection('Evidence', stripHtml(block.evidence || ''), 'var(--accent-orange-light)', 'var(--accent-orange)');
-        html += _openSection('Reasoning', stripHtml(block.reasoning || ''), 'var(--primary-light)', 'var(--primary)');
+        html += _openSection(items, 'Claim', stripHtml(block.claim || ''), 'var(--accent-blue-light)', 'var(--accent-blue)');
+        html += _openSection(items, 'Evidence', stripHtml(block.evidence || ''), 'var(--accent-orange-light)', 'var(--accent-orange)');
+        html += _openSection(items, 'Reasoning', stripHtml(block.reasoning || ''), 'var(--primary-light)', 'var(--primary)');
         break;
       case 'plainanswer':
         html += `<div style="margin-top:12px;margin-bottom:6px;"><span class="sv-block-tag answer">Your Answer</span></div>`;
-        html += _openSection('', stripHtml(block.content || ''), '', '');
+        html += _openSection(items, '', stripHtml(block.content || ''), '', '');
         break;
       case 'explanation':
         break; // hidden
@@ -9783,11 +9785,14 @@ function renderOpenPracticeBody(q) {
         break;
     }
   });
-  if (practiceOpenItems.length === 0) {
+  if (items.length === 0) {
     html += `<div style="padding:12px;color:var(--text-muted);font-size:0.9rem;">This question has no written-answer section, so open-ended mode has nothing to mark. Switch back to Fill Blanks.</div>`;
   }
+  _openItemsStore[containerSel] = items;
   return html;
 }
+
+function renderOpenPracticeBody(q) { return buildOpenBody(q, '#practiceContainer'); }
 
 function renderPracticeQuestion(q, student) {
   currentPracticeQ = q;
@@ -9919,16 +9924,18 @@ function renderPracticeQuestion(q, student) {
   applyFirstLetterClues();
 }
 
-function resetOpenAnswers() {
-  document.querySelectorAll('#practiceContainer .open-answer').forEach(a => {
+function resetOpenAnswersIn(containerSel, scoreElId) {
+  document.querySelectorAll(containerSel + ' .open-answer').forEach(a => {
     a.value = '';
+    a.disabled = false;
     a.style.borderColor = 'var(--border)';
     const fb = a.parentElement.querySelector('.open-feedback');
     if (fb) fb.innerHTML = '';
   });
-  const scoreEl = document.getElementById('practiceScoreDisplay');
+  const scoreEl = scoreElId ? document.getElementById(scoreElId) : null;
   if (scoreEl) scoreEl.textContent = '';
 }
+function resetOpenAnswers() { resetOpenAnswersIn('#practiceContainer', 'practiceScoreDisplay'); }
 
 function _questionContext(q) {
   const parts = [q.title || ''];
@@ -9936,28 +9943,30 @@ function _questionContext(q) {
   return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 800);
 }
 
-// AI marking for open-ended written answers (verdict: correct / partial / incorrect)
-async function markOpenAnswers() {
+// Generic AI marking for open-ended written answers (correct / partial / incorrect).
+// Returns { score, total, mistakes } on success, or null if nothing was marked.
+async function markOpenAnswersIn(containerSel, q, opts = {}) {
+  const { btnId, scoreElId, scorePrefix = 'AI Score', mode = 'practice-open' } = opts;
   if (!window.__aiReady || !window.__aiReady()) {
     showToast("AI marking isn't set up yet — add your reCAPTCHA site key in the code", 'info');
-    return;
+    return null;
   }
-  const areas = Array.from(document.querySelectorAll('#practiceContainer .open-answer'));
-  if (!areas.length) { showToast('No written-answer sections to mark', 'info'); return; }
+  const areas = Array.from(document.querySelectorAll(containerSel + ' .open-answer'));
+  if (!areas.length) { showToast('No written-answer sections to mark', 'info'); return null; }
 
-  const scoreEl = document.getElementById('practiceScoreDisplay');
-  const btn = document.getElementById('practiceMarkOpenBtn');
-  const ctx = currentPracticeQ ? _questionContext(currentPracticeQ) : '';
+  const items = _openItemsStore[containerSel] || [];
+  const scoreEl = scoreElId ? document.getElementById(scoreElId) : null;
+  const btn = btnId ? document.getElementById(btnId) : null;
+  const ctx = q ? _questionContext(q) : '';
 
-  // Reset previous feedback.
   areas.forEach(a => {
     a.style.borderColor = 'var(--border)';
     const fb = a.parentElement.querySelector('.open-feedback');
     if (fb) fb.innerHTML = '';
   });
 
-  const items = areas.map(a => {
-    const it = practiceOpenItems[parseInt(a.dataset.oidx)] || { label: 'Answer', model: '' };
+  const data = areas.map(a => {
+    const it = items[parseInt(a.dataset.oidx)] || { label: 'Answer', model: '' };
     return { label: it.label, model: it.model, student: a.value.trim() };
   });
 
@@ -9967,23 +9976,23 @@ async function markOpenAnswers() {
 
   let verdicts = [];
   try {
-    const list = items.map((it, i) => `${i}. [${it.label}] expected="${it.model}" student="${it.student || '(blank)'}"`).join('\n');
+    const list = data.map((it, i) => `${i}. [${it.label}] expected="${it.model}" student="${it.student || '(blank)'}"`).join('\n');
     const prompt =
       `You are a science teacher marking a student's open-ended answers. ` +
-      `${_markingPreamble(currentPracticeQ && currentPracticeQ.markingGuide)}\n` +
+      `${_markingPreamble(q && q.markingGuide)}\n` +
       `Question context: "${ctx}".\n` +
       `For EACH item, compare the STUDENT answer to the EXPECTED model answer and judge how well it matches in meaning ` +
       `(ignore wording, grammar and spelling — focus on the science). ` +
       `Use verdict "correct", "partial" or "incorrect". Give ONE short feedback sentence (max 22 words) addressed to the student. ` +
       `Return ONLY a JSON array like [{"i":0,"verdict":"partial","feedback":"..."}].\n${list}`;
-    const raw = await askGemini(prompt, { maxOutputTokens: 256 + items.length * 120, temperature: 0.2, json: true });
+    const raw = await askGemini(prompt, { maxOutputTokens: 256 + data.length * 120, temperature: 0.2, json: true });
     verdicts = _parseAIJson(raw);
   } catch (e) {
     console.error('Open marking error:', e);
     showToast('AI mark error: ' + (e && e.message ? e.message : e), 'error');
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
     if (scoreEl) scoreEl.textContent = '';
-    return;
+    return null;
   }
   if (btn) { btn.disabled = false; btn.innerHTML = orig; }
 
@@ -9991,12 +10000,14 @@ async function markOpenAnswers() {
   verdicts.forEach(v => { if (v && typeof v.i === 'number') byI[v.i] = v; });
 
   let score = 0;
-  items.forEach((it, i) => {
+  const mistakes = [];
+  data.forEach((it, i) => {
     const a = areas[i];
     const v = byI[i];
     const verdict = v ? String(v.verdict || '').toLowerCase() : 'incorrect';
     const pts = verdict === 'correct' ? 1 : verdict === 'partial' ? 0.5 : 0;
     score += pts;
+    if (verdict !== 'correct') mistakes.push({ expected: it.model, student: it.student });
     const color = verdict === 'correct' ? 'var(--primary)' : verdict === 'partial' ? 'var(--accent-orange)' : 'var(--accent-red)';
     const icon = verdict === 'correct' ? '✓' : verdict === 'partial' ? '≈' : '✗';
     a.style.borderColor = color;
@@ -10012,24 +10023,31 @@ async function markOpenAnswers() {
   });
 
   if (scoreEl) {
-    const pct = items.length ? Math.round((score / items.length) * 100) : 0;
-    scoreEl.textContent = `AI Score: ${score}/${items.length} (${pct}%)`;
-    scoreEl.style.color = score === items.length ? 'var(--primary)' : 'var(--accent-orange)';
+    const pct = data.length ? Math.round((score / data.length) * 100) : 0;
+    scoreEl.textContent = `${scorePrefix}: ${score}/${data.length} (${pct}%)`;
+    scoreEl.style.color = score === data.length ? 'var(--primary)' : 'var(--accent-orange)';
   }
 
-  if (currentUser && currentUser.role === 'student' && currentPracticeQ) {
+  if (currentUser && currentUser.role === 'student' && q) {
     addDoc(collection(db, 'questionAttempts'), {
       uid: currentUser.uid,
       email: currentUser.email,
       displayName: currentUser.name,
-      questionId: currentPracticeQ.id || '',
-      questionTitle: currentPracticeQ.title || '',
+      questionId: q.id || '',
+      questionTitle: q.title || '',
       score: score,
-      totalBlanks: items.length,
+      totalBlanks: data.length,
       timestamp: Timestamp.now(),
-      mode: 'practice-open'
+      mode
     }).catch(err => console.warn('Could not record attempt:', err));
   }
+  return { score, total: data.length, mistakes };
+}
+
+function markOpenAnswers() {
+  return markOpenAnswersIn('#practiceContainer', currentPracticeQ, {
+    btnId: 'practiceMarkOpenBtn', scoreElId: 'practiceScoreDisplay', mode: 'practice-open'
+  });
 }
 
 function checkPracticeAnswers() {
@@ -10364,10 +10382,12 @@ async function submitQpAnswersAI() {
   const submitBtn = document.getElementById('qpSubmitBtn');
   const nextBtn = document.getElementById('qpNextBtn');
   const firstLetterBtn = document.getElementById('qpFirstLetterBtn');
+  const modeBtn = document.getElementById('qpModeBtn');
   if (submitBtn) submitBtn.style.display = 'none';
   if (btn) btn.style.display = 'none';
   if (nextBtn) nextBtn.style.display = '';
   if (firstLetterBtn) firstLetterBtn.disabled = true;
+  if (modeBtn) modeBtn.disabled = true;
 }
 
 // =====================================================================
@@ -10714,6 +10734,7 @@ function launchWorksheetPractice(questions) {
   qpIndex = -1;
   qpAnswered = 0;
   qpSessionResults = [];
+  qpMode = 'blanks';
   showFirstLetterClues = false;
   // Navigate to the Quick Practice page
   navigateTo('quickpractice');
@@ -10925,6 +10946,7 @@ let qpIndex = -1;       // current position in queue
 let qpLevel = 'P6';     // selected student level
 let qpAnswered = 0;     // questions answered so far
 let qpSessionResults = []; // per-question results for the end-of-session AI feedback
+let qpMode = 'blanks';     // 'blanks' | 'open'
 
 function onQpLevelChange() {
   qpLevel = document.getElementById('qpLevelSelect').value;
@@ -10933,6 +10955,7 @@ function onQpLevelChange() {
   qpIndex = -1;
   qpAnswered = 0;
   qpSessionResults = [];
+  qpMode = 'blanks';
   updateQpProgress();
   document.getElementById('qpContainer').innerHTML = `
     <div class="empty-state">
@@ -10993,6 +11016,7 @@ async function startQuickPractice() {
   qpIndex = -1;
   qpAnswered = 0;
   qpSessionResults = [];
+  qpMode = 'blanks';
   if (qpQueue.length === 0) {
     document.getElementById('qpContainer').innerHTML = `
       <div class="empty-state">
@@ -11134,11 +11158,17 @@ function updateQpProgress() {
 
 function renderQpQuestion(q) {
   const qLevel = getTopicLevel(q.topic || '');
+  const modeToggleBtn = `
+          <button class="btn btn-outline" id="qpModeBtn" onclick="toggleQpMode()" title="Switch answer mode">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M3 7h13M16 3l4 4-4 4"/><path d="M21 17H8M8 21l-4-4 4-4"/></svg>
+            ${qpMode === 'open' ? 'Fill Blanks' : 'Open-Ended'}
+          </button>`;
   let html = `
     <div class="practice-card">
       <div class="practice-card-header">
         <h3>${escapeHtml(q.title)}</h3>
         <div style="display:flex;gap:6px;align-items:center;">
+          <span class="qb-tag" style="background:var(--surface-container-high,#ebe8e3);">${qpMode === 'open' ? 'Open-Ended' : 'Fill Blanks'}</span>
           <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
           <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
@@ -11146,51 +11176,63 @@ function renderQpQuestion(q) {
       </div>
       <div class="practice-card-body">`;
 
-  q.blocks.forEach(block => {
-    switch (block.type) {
-      case 'text':
-        html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
-        html += renderStudentText(block.id, block.content, q.blanks);
-        break;
-      case 'image':
-        if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
-        break;
-      case 'answer':
-        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div></div>`;
-        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, q.blanks)}</div></div>`;
-        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div></div>`;
-        break;
-      case 'plainanswer':
-        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-        html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
-        break;
-      case 'explanation': break;
-      case 'video':
-        if (block.url) {
-          const embedUrl = getYouTubeEmbedUrl(block.url);
-          if (embedUrl) html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
-        }
-        break;
-      case 'table':
-        html += renderTableReadonly(block, '');
-        break;
-    }
-  });
+  if (qpMode === 'open') {
+    html += buildOpenBody(q, '#qpContainer');
+  } else {
+    q.blocks.forEach(block => {
+      switch (block.type) {
+        case 'text':
+          html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
+          html += renderStudentText(block.id, block.content, q.blanks);
+          break;
+        case 'image':
+          if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+          break;
+        case 'answer':
+          html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
+          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
+          html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div></div>`;
+          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
+          html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, q.blanks)}</div></div>`;
+          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
+          html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div></div>`;
+          break;
+        case 'plainanswer':
+          html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
+          html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
+          break;
+        case 'explanation': break;
+        case 'video':
+          if (block.url) {
+            const embedUrl = getYouTubeEmbedUrl(block.url);
+            if (embedUrl) html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
+          }
+          break;
+        case 'table':
+          html += renderTableReadonly(block, '');
+          break;
+      }
+    });
+  }
 
-  html += `</div>
-      <div class="practice-actions">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div class="practice-score" id="qpScoreDisplay"></div>
-          <button class="flag-question-btn" onclick="openFlagDialog('${q.id}','${escapeHtml(q.title).replace(/'/g,"\\'")}')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
-            Flag
+  let actionsInner;
+  if (qpMode === 'open') {
+    actionsInner = `
+          ${modeToggleBtn}
+          <button class="btn btn-outline" onclick="resetQpOpenAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
           </button>
-        </div>
-        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" id="qpMarkOpenBtn" onclick="submitQpOpenAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
+            Mark with AI
+          </button>
+          <button class="btn btn-primary" id="qpNextBtn" onclick="loadNextQpQuestion()" style="display:none;">
+            Next &rarr;
+          </button>`;
+  } else {
+    actionsInner = `
+          ${modeToggleBtn}
           <button class="btn btn-outline" id="qpFirstLetterBtn" onclick="toggleQpFirstLetter()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
             ${showFirstLetterClues ? 'Hide Clues' : 'First Letter'}
@@ -11213,7 +11255,19 @@ function renderQpQuestion(q) {
           </button>
           <button class="btn btn-primary" id="qpNextBtn" onclick="loadNextQpQuestion()" style="display:none;">
             Next &rarr;
+          </button>`;
+  }
+
+  html += `</div>
+      <div class="practice-actions">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="practice-score" id="qpScoreDisplay"></div>
+          <button class="flag-question-btn" onclick="openFlagDialog('${q.id}','${escapeHtml(q.title).replace(/'/g,"\\'")}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+            Flag
           </button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">${actionsInner}
         </div>
       </div>
     </div>`;
@@ -11222,6 +11276,33 @@ function renderQpQuestion(q) {
   showFirstLetterClues = false;
   document.getElementById('qpContainer').innerHTML = html;
   applyFirstLetterClues();
+}
+
+function toggleQpMode() {
+  qpMode = qpMode === 'blanks' ? 'open' : 'blanks';
+  renderQpQuestion(qpQueue[qpIndex]);
+}
+function resetQpOpenAnswers() {
+  if (qpSubmitted) return;
+  resetOpenAnswersIn('#qpContainer', 'qpScoreDisplay');
+}
+async function submitQpOpenAnswers() {
+  if (qpSubmitted) return;
+  const res = await markOpenAnswersIn('#qpContainer', qpQueue[qpIndex], {
+    btnId: 'qpMarkOpenBtn', scoreElId: 'qpScoreDisplay', scorePrefix: 'AI Score', mode: 'quickpractice-open'
+  });
+  if (!res) return;
+  qpSubmitted = true;
+  document.querySelectorAll('#qpContainer .open-answer').forEach(a => a.disabled = true);
+  _recordQpResult(res.score, res.total, res.mistakes);
+  qpAnswered = Math.max(qpAnswered, qpIndex + 1);
+  updateQpProgress();
+  const markBtn = document.getElementById('qpMarkOpenBtn');
+  const nextBtn = document.getElementById('qpNextBtn');
+  const modeBtn = document.getElementById('qpModeBtn');
+  if (markBtn) markBtn.style.display = 'none';
+  if (modeBtn) modeBtn.disabled = true;
+  if (nextBtn) nextBtn.style.display = '';
 }
 
 function toggleQpFirstLetter() {
@@ -11318,10 +11399,12 @@ function submitQpAnswers() {
   const markAiBtn = document.getElementById('qpMarkAiBtn');
   const nextBtn = document.getElementById('qpNextBtn');
   const firstLetterBtn = document.getElementById('qpFirstLetterBtn');
+  const modeBtn = document.getElementById('qpModeBtn');
   if (submitBtn) submitBtn.style.display = 'none';
   if (markAiBtn) markAiBtn.style.display = 'none';
   if (nextBtn) nextBtn.style.display = '';
   if (firstLetterBtn) firstLetterBtn.disabled = true;
+  if (modeBtn) modeBtn.disabled = true;
 }
 
 // =====================================================================
@@ -11520,6 +11603,7 @@ let tpQueue = [];
 let tpIndex = -1;
 let tpAnswered = 0;
 let tpSubmitted = false;
+let tpMode = 'blanks';     // 'blanks' | 'open'
 let tpCurrentTopic = '';
 let tpSelectedTopics = new Set();
 let tpActiveTopics = []; // topics being practiced in current session
@@ -11684,6 +11768,7 @@ async function tpStartPractice() {
   }
 
   tpQueue = queue;
+  tpMode = 'blanks';
   tpIndex = -1;
   tpAnswered = 0;
 
@@ -11773,11 +11858,17 @@ function tpUpdateProgress() {
 
 function tpRenderQuestion(q) {
   const qLevel = getTopicLevel(q.topic || '');
+  const modeToggleBtn = `
+          <button class="btn btn-outline" id="tpModeBtn" onclick="toggleTpMode()" title="Switch answer mode">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M3 7h13M16 3l4 4-4 4"/><path d="M21 17H8M8 21l-4-4 4-4"/></svg>
+            ${tpMode === 'open' ? 'Fill Blanks' : 'Open-Ended'}
+          </button>`;
   let html = `
     <div class="practice-card">
       <div class="practice-card-header">
         <h3>${escapeHtml(q.title)}</h3>
         <div style="display:flex;gap:6px;align-items:center;">
+          <span class="qb-tag" style="background:var(--surface-container-high,#ebe8e3);">${tpMode === 'open' ? 'Open-Ended' : 'Fill Blanks'}</span>
           <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
           <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
@@ -11785,40 +11876,87 @@ function tpRenderQuestion(q) {
       </div>
       <div class="practice-card-body">`;
 
-  q.blocks.forEach(block => {
-    switch (block.type) {
-      case 'text':
-        html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
-        html += renderStudentText(block.id, block.content, q.blanks);
-        break;
-      case 'image':
-        if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
-        break;
-      case 'answer':
-        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div></div>`;
-        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, q.blanks)}</div></div>`;
-        html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div></div>`;
-        break;
-      case 'plainanswer':
-        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-        html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
-        break;
-      case 'explanation': break;
-      case 'video':
-        if (block.url) {
-          const embedUrl = getYouTubeEmbedUrl(block.url);
-          if (embedUrl) html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
-        }
-        break;
-      case 'table':
-        html += renderTableReadonly(block, '');
-        break;
-    }
-  });
+  if (tpMode === 'open') {
+    html += buildOpenBody(q, '#tpContainer');
+  } else {
+    q.blocks.forEach(block => {
+      switch (block.type) {
+        case 'text':
+          html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
+          html += renderStudentText(block.id, block.content, q.blanks);
+          break;
+        case 'image':
+          if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+          break;
+        case 'answer':
+          html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
+          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
+          html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div></div>`;
+          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
+          html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, q.blanks)}</div></div>`;
+          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
+          html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div></div>`;
+          break;
+        case 'plainanswer':
+          html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
+          html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
+          break;
+        case 'explanation': break;
+        case 'video':
+          if (block.url) {
+            const embedUrl = getYouTubeEmbedUrl(block.url);
+            if (embedUrl) html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
+          }
+          break;
+        case 'table':
+          html += renderTableReadonly(block, '');
+          break;
+      }
+    });
+  }
+
+  let actionsInner;
+  if (tpMode === 'open') {
+    actionsInner = `
+          ${modeToggleBtn}
+          <button class="btn btn-outline" onclick="tpResetOpenAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+          <button class="btn btn-primary" id="tpMarkOpenBtn" onclick="tpSubmitOpenAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
+            Mark with AI
+          </button>
+          <button class="btn btn-primary" id="tpNextBtn" onclick="tpLoadNextQuestion()" style="display:none;">
+            Next &rarr;
+          </button>`;
+  } else {
+    actionsInner = `
+          ${modeToggleBtn}
+          <button class="btn btn-outline" id="tpFirstLetterBtn" onclick="tpToggleFirstLetter()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
+            First Letter
+          </button>
+          <button class="btn btn-outline" id="tpAskAiBtn" onclick="askAIClueTp()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+            Ask AI
+          </button>
+          <button class="btn btn-outline" onclick="tpResetAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+          <button class="btn btn-primary" id="tpSubmitBtn" onclick="tpSubmitAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
+            Submit
+          </button>
+          <button class="btn btn-primary" id="tpMarkAiBtn" onclick="tpSubmitAnswersAI()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
+            Mark with AI
+          </button>
+          <button class="btn btn-primary" id="tpNextBtn" onclick="tpLoadNextQuestion()" style="display:none;">
+            Next &rarr;
+          </button>`;
+  }
 
   html += `</div>
       <div class="practice-actions">
@@ -11829,22 +11967,7 @@ function tpRenderQuestion(q) {
             Flag
           </button>
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline" id="tpFirstLetterBtn" onclick="tpToggleFirstLetter()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
-            First Letter
-          </button>
-          <button class="btn btn-outline" onclick="tpResetAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            Reset
-          </button>
-          <button class="btn btn-primary" id="tpSubmitBtn" onclick="tpSubmitAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
-            Submit
-          </button>
-          <button class="btn btn-primary" id="tpNextBtn" onclick="tpLoadNextQuestion()" style="display:none;">
-            Next &rarr;
-          </button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">${actionsInner}
         </div>
       </div>
     </div>`;
@@ -11853,6 +11976,113 @@ function tpRenderQuestion(q) {
   showFirstLetterClues = false;
   document.getElementById('tpContainer').innerHTML = html;
   applyFirstLetterClues();
+}
+
+function toggleTpMode() {
+  tpMode = tpMode === 'blanks' ? 'open' : 'blanks';
+  tpRenderQuestion(tpQueue[tpIndex]);
+}
+function tpResetOpenAnswers() {
+  if (tpSubmitted) return;
+  resetOpenAnswersIn('#tpContainer', 'tpScoreDisplay');
+}
+function askAIClueTp() { return aiClue('#tpContainer', 'tpAskAiBtn'); }
+
+// Hide the submit/mark buttons and reveal Next after a Topical question is marked.
+function _tpAfterSubmit() {
+  ['tpSubmitBtn', 'tpMarkAiBtn', 'tpMarkOpenBtn'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.style.display = 'none';
+  });
+  const modeBtn = document.getElementById('tpModeBtn');
+  if (modeBtn) modeBtn.disabled = true;
+  const nextBtn = document.getElementById('tpNextBtn');
+  if (nextBtn) nextBtn.style.display = '';
+  const fl = document.getElementById('tpFirstLetterBtn');
+  if (fl) fl.disabled = true;
+}
+
+async function tpSubmitAnswersAI() {
+  if (tpSubmitted) return;
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast("AI marking isn't set up yet — using exact match", 'info');
+    return tpSubmitAnswers();
+  }
+  const inputs = Array.from(document.querySelectorAll('#tpContainer .blank-input'));
+  const btn = document.getElementById('tpMarkAiBtn');
+  const scoreEl = document.getElementById('tpScoreDisplay');
+  const graded = inputs.map((input, idx) => ({ input, idx, expected: input.dataset.answer || '', student: input.value.trim() }));
+  const toGrade = graded.filter(g => g.student);
+
+  let verdicts = {};
+  const orig = btn ? btn.innerHTML : '';
+  if (toGrade.length) {
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
+    if (scoreEl) scoreEl.textContent = 'Marking with AI…';
+    try {
+      const _q = tpQueue[tpIndex];
+      verdicts = await _gradeWithAI(toGrade, _q && _q.markingGuide);
+    } catch (e) {
+      console.error(e);
+      showToast('AI marking failed — using exact match', 'error');
+      if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+      return tpSubmitAnswers();
+    }
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+
+  tpSubmitted = true;
+  let correct = 0;
+  const total = inputs.length;
+  graded.forEach(({ input, idx, expected, student }) => {
+    input.readOnly = true;
+    const v = student ? verdicts[idx] : null;
+    const ok = student ? (v ? !!v.correct : (student.toLowerCase() === expected.toLowerCase().trim())) : false;
+    if (ok) {
+      input.style.borderBottomColor = 'var(--primary)';
+      input.style.background = '#e8f5e9';
+      correct++;
+      addAnswerIcon(input, true, idx * 80);
+      if (v && v.note) _aiFeedbackSpan(input, v.note, 'var(--primary)', true);
+    } else {
+      input.style.borderBottomColor = 'var(--accent-red)';
+      input.style.background = 'var(--accent-red-light)';
+      addAnswerIcon(input, false, idx * 80);
+      _aiFeedbackSpan(input, expected + (v && v.note ? ` — ${v.note}` : ''), 'var(--primary)', false);
+    }
+  });
+
+  tpAnswered = Math.max(tpAnswered, tpIndex + 1);
+  tpUpdateProgress();
+
+  if (currentUser && currentUser.role === 'student') {
+    const cq = tpQueue[tpIndex];
+    addDoc(collection(db, 'questionAttempts'), {
+      uid: currentUser.uid, email: currentUser.email, displayName: currentUser.name,
+      questionId: cq ? cq.id : '', questionTitle: cq ? cq.title : '',
+      score: total > 0 ? correct : 0, totalBlanks: total, timestamp: Timestamp.now(), mode: 'topicalpractice'
+    }).catch(err => console.warn('Could not record attempt:', err));
+  }
+
+  const pct = total ? Math.round((correct / total) * 100) : 0;
+  if (scoreEl) {
+    scoreEl.textContent = total ? `AI Score: ${correct}/${total} (${pct}%)` : 'No blanks to check';
+    if (total) scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
+  }
+  _tpAfterSubmit();
+}
+
+async function tpSubmitOpenAnswers() {
+  if (tpSubmitted) return;
+  const res = await markOpenAnswersIn('#tpContainer', tpQueue[tpIndex], {
+    btnId: 'tpMarkOpenBtn', scoreElId: 'tpScoreDisplay', scorePrefix: 'AI Score', mode: 'topicalpractice-open'
+  });
+  if (!res) return;
+  tpSubmitted = true;
+  document.querySelectorAll('#tpContainer .open-answer').forEach(a => a.disabled = true);
+  tpAnswered = Math.max(tpAnswered, tpIndex + 1);
+  tpUpdateProgress();
+  _tpAfterSubmit();
 }
 
 function tpToggleFirstLetter() {
@@ -11936,12 +12166,7 @@ function tpSubmitAnswers() {
     }
   }
 
-  const submitBtn = document.getElementById('tpSubmitBtn');
-  const nextBtn = document.getElementById('tpNextBtn');
-  const firstLetterBtn = document.getElementById('tpFirstLetterBtn');
-  if (submitBtn) submitBtn.style.display = 'none';
-  if (nextBtn) nextBtn.style.display = '';
-  if (firstLetterBtn) firstLetterBtn.disabled = true;
+  _tpAfterSubmit();
 }
 
 function tpBackToTopics() {
@@ -12809,6 +13034,9 @@ window.askAIClueStudent = askAIClueStudent;
 window.checkStudentAnswersAI = checkStudentAnswersAI;
 window.askAIClueQp = askAIClueQp;
 window.submitQpAnswersAI = submitQpAnswersAI;
+window.toggleQpMode = toggleQpMode;
+window.resetQpOpenAnswers = resetQpOpenAnswers;
+window.submitQpOpenAnswers = submitQpOpenAnswers;
 window.setLandingDemoMode = setLandingDemoMode;
 // Student worksheet functions
 window.renderWsQuestions = renderWsQuestions;
@@ -12857,6 +13085,11 @@ window.tpLoadNextQuestion = tpLoadNextQuestion;
 window.tpToggleFirstLetter = tpToggleFirstLetter;
 window.tpResetAnswers = tpResetAnswers;
 window.tpSubmitAnswers = tpSubmitAnswers;
+window.toggleTpMode = toggleTpMode;
+window.tpResetOpenAnswers = tpResetOpenAnswers;
+window.askAIClueTp = askAIClueTp;
+window.tpSubmitAnswersAI = tpSubmitAnswersAI;
+window.tpSubmitOpenAnswers = tpSubmitOpenAnswers;
 window.tpBackToTopics = tpBackToTopics;
 // Move to Vetting (edit mode)
 window.moveEditToVetting = moveEditToVetting;
