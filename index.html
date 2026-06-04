@@ -11053,64 +11053,88 @@ function _recordQpResult(correct, total, mistakes) {
   });
 }
 
-// End-of-session screen: total score + AI feedback (5 strengths / 5 weaknesses).
-function renderQpSummary() {
-  const totalCorrect = qpSessionResults.reduce((s, r) => s + r.correct, 0);
-  const totalBlanks = qpSessionResults.reduce((s, r) => s + r.total, 0);
+// Shared, styled end-of-practice report (used by Quick/Worksheet and Topical).
+function _reportColor(pct) {
+  return pct >= 80 ? 'var(--primary)' : pct >= 50 ? 'var(--accent-orange)' : 'var(--accent-red)';
+}
+function _fmtScore(n) { return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+
+function renderPracticeReport(containerSel, results, actionsHtml) {
+  const host = document.querySelector(containerSel);
+  if (!host) return;
+  const totalCorrect = results.reduce((s, r) => s + r.correct, 0);
+  const totalBlanks = results.reduce((s, r) => s + r.total, 0);
   const pct = totalBlanks ? Math.round((totalCorrect / totalBlanks) * 100) : 0;
-  const scoreColor = pct >= 80 ? 'var(--primary)' : pct >= 50 ? 'var(--accent-orange)' : 'var(--accent-red)';
+  const color = _reportColor(pct);
 
-  const breakdown = qpSessionResults.map((r, i) =>
-    `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
-       <span style="color:var(--text-muted);">${i + 1}. ${escapeHtml(r.title || r.topic || 'Question')}</span>
-       <span style="font-weight:600;color:${r.total && r.correct === r.total ? 'var(--primary)' : 'var(--accent-orange)'};">${r.correct}/${r.total}</span>
-     </div>`).join('');
+  const R = 52, C = 2 * Math.PI * R, dash = C * (pct / 100);
+  const ring = `
+    <svg viewBox="0 0 120 120" style="width:130px;height:130px;transform:rotate(-90deg);">
+      <circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--surface-container-high,#ebe8e3)" stroke-width="11"/>
+      <circle cx="60" cy="60" r="${R}" fill="none" stroke="${color}" stroke-width="11" stroke-linecap="round"
+              stroke-dasharray="${dash.toFixed(1)} ${(C - dash).toFixed(1)}" style="transition:stroke-dasharray .6s ease;"/>
+    </svg>`;
 
-  document.getElementById('qpContainer').innerHTML = `
-    <div class="practice-card" style="max-width:760px;margin:0 auto;">
-      <div style="text-align:center;padding:8px 0 4px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="width:48px;height:48px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        <h3 style="margin:8px 0 2px;">Practice Complete! 🎉</h3>
-        <div style="font-size:1.6rem;font-weight:700;color:${scoreColor};margin-top:6px;">${totalCorrect} / ${totalBlanks} <span style="font-size:1rem;font-weight:600;">(${pct}%)</span></div>
-        <div style="font-size:0.82rem;color:var(--text-muted);">across ${qpSessionResults.length} question${qpSessionResults.length !== 1 ? 's' : ''}</div>
+  const breakdown = results.map((r, i) => {
+    const full = r.total && r.correct === r.total;
+    const part = r.correct > 0 && !full;
+    const badge = full ? '✓' : part ? '◑' : '✗';
+    const bcol = full ? 'var(--primary)' : part ? 'var(--accent-orange)' : 'var(--accent-red)';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:var(--surface-container-low,#f6f3ee);margin-bottom:6px;">
+        <span style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:${bcol};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700;">${badge}</span>
+        <span style="flex:1;font-size:0.86rem;color:var(--on-surface,#1c1c19);min-width:0;">${i + 1}. ${escapeHtml(r.title || r.topic || 'Question')}</span>
+        <span style="font-weight:700;font-size:0.86rem;color:${bcol};white-space:nowrap;">${_fmtScore(r.correct)}/${r.total}</span>
+      </div>`;
+  }).join('');
+
+  host.innerHTML = `
+    <div class="practice-card" style="max-width:840px;margin:0 auto;padding:0;overflow:hidden;">
+      <div style="text-align:center;padding:28px 20px 20px;background:linear-gradient(180deg,var(--primary-light,#e8f5e9),transparent);">
+        <div style="position:relative;display:inline-block;">
+          ${ring}
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div style="font-size:1.8rem;font-weight:800;color:${color};line-height:1;">${pct}%</div>
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">${_fmtScore(totalCorrect)} / ${totalBlanks}</div>
+          </div>
+        </div>
+        <h3 style="margin:14px 0 2px;font-size:1.3rem;">Practice Complete! 🎉</h3>
+        <div style="font-size:0.85rem;color:var(--text-muted);">across ${results.length} question${results.length !== 1 ? 's' : ''}</div>
       </div>
-      <div style="margin:14px 0;">${breakdown}</div>
-      <div id="qpAiFeedback" style="margin-top:10px;"></div>
-      <div style="text-align:center;margin-top:18px;">
-        <button class="btn btn-primary" onclick="startQuickPractice()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-          Practice Again
-        </button>
+      <div style="padding:4px 20px 0;">
+        <div style="font-weight:700;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin:8px 0 10px;">Question breakdown</div>
+        ${breakdown}
+      </div>
+      <div id="practiceReportFeedback" style="padding:8px 20px 0;"></div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:20px;">
+        ${actionsHtml}
       </div>
     </div>`;
 
-  generateQpFeedback(totalCorrect, totalBlanks, pct);
+  generatePracticeFeedback('practiceReportFeedback', results, totalCorrect, totalBlanks, pct);
 }
 
-async function generateQpFeedback(totalCorrect, totalBlanks, pct) {
-  const box = document.getElementById('qpAiFeedback');
-  if (!box) return;
-  if (!qpSessionResults.length) return;
+async function generatePracticeFeedback(boxId, results, totalCorrect, totalBlanks, pct) {
+  const box = document.getElementById(boxId);
+  if (!box || !results.length) return;
   if (!window.__aiReady || !window.__aiReady()) {
-    box.innerHTML = `<div style="font-size:0.85rem;color:var(--text-muted);text-align:center;">AI feedback isn't set up yet.</div>`;
+    box.innerHTML = `<div style="font-size:0.85rem;color:var(--text-muted);text-align:center;padding:8px;">AI feedback isn't set up yet.</div>`;
     return;
   }
-
-  box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;gap:8px;color:var(--text-muted);font-size:0.88rem;padding:10px;">
+  box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;gap:8px;color:var(--text-muted);font-size:0.88rem;padding:14px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
       Generating your personalised feedback…
     </div>`;
 
-  const lines = qpSessionResults.map((r, i) => {
+  const lines = results.map((r, i) => {
     const m = r.mistakes && r.mistakes.length
       ? r.mistakes.map(x => `${x.expected}→${x.student || '(blank)'}`).join('; ')
       : 'none';
-    return `${i + 1}. Topic "${r.topic}" — score ${r.correct}/${r.total}; mistakes: ${m}`;
+    return `${i + 1}. Topic "${r.topic}" — score ${_fmtScore(r.correct)}/${r.total}; mistakes: ${m}`;
   }).join('\n');
 
   const prompt =
     `You are an encouraging primary-school science tutor giving end-of-practice feedback to a student.\n` +
-    `Overall score: ${totalCorrect}/${totalBlanks} (${pct}%).\n` +
+    `Overall score: ${_fmtScore(totalCorrect)}/${totalBlanks} (${pct}%).\n` +
     `Per-question results (expected→student shows their mistakes):\n${lines}\n\n` +
     `Write feedback addressed directly to the student ("you"). Be specific to the topics and mistakes above, warm and constructive.\n` +
     `Give EXACTLY 5 strengths and EXACTLY 5 weaknesses (areas to improve), each a short specific phrase.\n` +
@@ -11121,30 +11145,39 @@ async function generateQpFeedback(totalCorrect, totalBlanks, pct) {
     const raw = await askGemini(prompt, { maxOutputTokens: 900, temperature: 0.5, json: true });
     fb = _parseAIJson(raw);
   } catch (e) {
-    console.error('QP feedback error:', e);
-    box.innerHTML = `<div style="font-size:0.85rem;color:var(--accent-red);text-align:center;">Couldn't generate feedback: ${escapeHtml(e && e.message ? e.message : String(e))}</div>`;
+    console.error('Practice feedback error:', e);
+    box.innerHTML = `<div style="font-size:0.85rem;color:var(--accent-red);text-align:center;padding:8px;">Couldn't generate feedback: ${escapeHtml(e && e.message ? e.message : String(e))}</div>`;
     return;
   }
 
-  const list = (arr, color, icon) => (Array.isArray(arr) ? arr : []).slice(0, 5).map(t =>
-    `<li style="display:flex;gap:8px;margin-bottom:6px;font-size:0.86rem;line-height:1.4;">
-       <span style="color:${color};flex-shrink:0;">${icon}</span><span>${escapeHtml(String(t))}</span>
+  const items = (arr, color, icon) => (Array.isArray(arr) ? arr : []).slice(0, 5).map(t =>
+    `<li style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:0.85rem;line-height:1.45;">
+       <span style="flex-shrink:0;color:${color};font-weight:800;">${icon}</span><span>${escapeHtml(String(t))}</span>
      </li>`).join('');
 
   box.innerHTML = `
-    <div style="background:var(--surface-container-low,#f6f3ee);border-radius:10px;padding:14px 16px;">
-      ${fb.summary ? `<p style="font-size:0.9rem;line-height:1.5;margin:0 0 12px;">${escapeHtml(fb.summary)}</p>` : ''}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-        <div>
-          <div style="font-weight:700;font-size:0.85rem;color:var(--primary);margin-bottom:8px;">💪 Strengths</div>
-          <ul style="list-style:none;padding:0;margin:0;">${list(fb.strengths, 'var(--primary)', '✓')}</ul>
+    <div style="background:var(--surface-container-low,#f6f3ee);border-radius:14px;padding:16px 18px;">
+      ${fb.summary ? `<p style="font-size:0.92rem;line-height:1.55;margin:0 0 14px;color:var(--on-surface,#1c1c19);">${escapeHtml(fb.summary)}</p>` : ''}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">
+        <div style="background:var(--primary-light,#e8f5e9);border:1px solid var(--primary);border-radius:12px;padding:13px 15px;">
+          <div style="font-weight:800;font-size:0.82rem;color:var(--primary);margin-bottom:9px;">💪 Strengths</div>
+          <ul style="list-style:none;padding:0;margin:0;color:var(--on-surface,#1c1c19);">${items(fb.strengths, 'var(--primary)', '✓')}</ul>
         </div>
-        <div>
-          <div style="font-weight:700;font-size:0.85rem;color:var(--accent-orange);margin-bottom:8px;">🎯 Areas to improve</div>
-          <ul style="list-style:none;padding:0;margin:0;">${list(fb.weaknesses, 'var(--accent-orange)', '→')}</ul>
+        <div style="background:var(--accent-orange-light,#fff3e0);border:1px solid var(--accent-orange);border-radius:12px;padding:13px 15px;">
+          <div style="font-weight:800;font-size:0.82rem;color:var(--accent-orange);margin-bottom:9px;">🎯 Areas to improve</div>
+          <ul style="list-style:none;padding:0;margin:0;color:var(--on-surface,#1c1c19);">${items(fb.weaknesses, 'var(--accent-orange)', '→')}</ul>
         </div>
       </div>
     </div>`;
+}
+
+// Quick Practice / Worksheet end screen.
+function renderQpSummary() {
+  renderPracticeReport('#qpContainer', qpSessionResults, `
+    <button class="btn btn-primary" onclick="startQuickPractice()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+      Practice Again
+    </button>`);
 }
 
 function updateQpProgress() {
@@ -11604,6 +11637,12 @@ let tpIndex = -1;
 let tpAnswered = 0;
 let tpSubmitted = false;
 let tpMode = 'blanks';     // 'blanks' | 'open'
+let tpSessionResults = []; // per-question results for the end-of-session AI report
+
+function _recordTpResult(correct, total, mistakes) {
+  const q = tpQueue[tpIndex] || {};
+  tpSessionResults.push({ title: q.title || '', topic: q.topic || '', correct, total, mistakes: mistakes || [] });
+}
 let tpCurrentTopic = '';
 let tpSelectedTopics = new Set();
 let tpActiveTopics = []; // topics being practiced in current session
@@ -11769,6 +11808,7 @@ async function tpStartPractice() {
 
   tpQueue = queue;
   tpMode = 'blanks';
+  tpSessionResults = [];
   tpIndex = -1;
   tpAnswered = 0;
 
@@ -11822,25 +11862,15 @@ function tpStartTopic(topic) {
 function tpLoadNextQuestion() {
   tpIndex++;
   if (tpIndex >= tpQueue.length) {
-    const topicLabel = tpActiveTopics.length === 1
-      ? `<strong>${escapeHtml(tpActiveTopics[0])}</strong>`
-      : `<strong>${tpActiveTopics.length} topics</strong>`;
-    document.getElementById('tpContainer').innerHTML = `
-      <div class="empty-state" style="padding:40px 20px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="width:56px;height:56px;margin-bottom:14px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        <h3>All Done!</h3>
-        <p>You completed all ${tpQueue.length} question${tpQueue.length !== 1 ? 's' : ''} from ${topicLabel}. Great work!</p>
-        <div style="display:flex;gap:10px;margin-top:16px;justify-content:center;">
-          <button class="btn btn-outline" onclick="tpBackToTopics()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-            Back to Topics
-          </button>
-          <button class="btn btn-primary" onclick="tpStartPractice()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            Restart
-          </button>
-        </div>
-      </div>`;
+    renderPracticeReport('#tpContainer', tpSessionResults, `
+        <button class="btn btn-outline" onclick="tpBackToTopics()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Back to Topics
+        </button>
+        <button class="btn btn-primary" onclick="tpStartPractice()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          Restart
+        </button>`);
     tpUpdateProgress();
     return;
   }
@@ -12034,6 +12064,7 @@ async function tpSubmitAnswersAI() {
   tpSubmitted = true;
   let correct = 0;
   const total = inputs.length;
+  const mistakes = [];
   graded.forEach(({ input, idx, expected, student }) => {
     input.readOnly = true;
     const v = student ? verdicts[idx] : null;
@@ -12049,9 +12080,11 @@ async function tpSubmitAnswersAI() {
       input.style.background = 'var(--accent-red-light)';
       addAnswerIcon(input, false, idx * 80);
       _aiFeedbackSpan(input, expected + (v && v.note ? ` — ${v.note}` : ''), 'var(--primary)', false);
+      mistakes.push({ expected, student });
     }
   });
 
+  _recordTpResult(correct, total, mistakes);
   tpAnswered = Math.max(tpAnswered, tpIndex + 1);
   tpUpdateProgress();
 
@@ -12080,6 +12113,7 @@ async function tpSubmitOpenAnswers() {
   if (!res) return;
   tpSubmitted = true;
   document.querySelectorAll('#tpContainer .open-answer').forEach(a => a.disabled = true);
+  _recordTpResult(res.score, res.total, res.mistakes);
   tpAnswered = Math.max(tpAnswered, tpIndex + 1);
   tpUpdateProgress();
   _tpAfterSubmit();
@@ -12113,6 +12147,7 @@ function tpSubmitAnswers() {
   const inputs = document.querySelectorAll('#tpContainer .blank-input');
   let correct = 0;
   let total = inputs.length;
+  const mistakes = [];
 
   inputs.forEach((input, idx) => {
     const answer = input.dataset.answer;
@@ -12133,9 +12168,11 @@ function tpSubmitAnswers() {
       correction.textContent = answer;
       input.parentNode.insertBefore(correction, input.nextSibling);
       addAnswerIcon(input, false, idx * 80);
+      mistakes.push({ expected: answer, student: input.value.trim() });
     }
   });
 
+  _recordTpResult(correct, total, mistakes);
   tpAnswered = Math.max(tpAnswered, tpIndex + 1);
   tpUpdateProgress();
 
