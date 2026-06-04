@@ -5106,21 +5106,33 @@ try {
   console.warn("Firebase AI init failed (Ask AI / AI marking disabled):", e);
 }
 
-// Diagnostic: hits the Gemini Developer API directly to reveal the real HTTP
-// status/message that the AI Logic SDK hides behind its "reading 'some'" crash.
+// Diagnostic: probes both the AI Logic gateway (what the app uses) and the raw
+// Gemini API to reveal the real HTTP status the SDK hides behind its "some" crash.
 async function _aiDiagnose() {
+  const out = [];
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${firebaseConfig.apiKey}`;
-    const r = await fetch(url, {
+    const u1 = `https://firebasevertexai.googleapis.com/v1beta/projects/${firebaseConfig.projectId}/models/${AI_MODEL}:generateContent`;
+    const r1 = await fetch(u1, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': firebaseConfig.apiKey },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] })
+    });
+    out.push(`gateway ${r1.status}: ${(await r1.text()).slice(0, 160)}`);
+  } catch (e) {
+    out.push('gateway fetch failed: ' + (e && e.message ? e.message : e));
+  }
+  try {
+    const u2 = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${firebaseConfig.apiKey}`;
+    const r2 = await fetch(u2, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] })
     });
-    const t = await r.text();
-    return `direct ${r.status}: ${t.slice(0, 220)}`;
+    out.push(`direct ${r2.status}: ${(await r2.text()).slice(0, 120)}`);
   } catch (e) {
-    return 'direct fetch failed: ' + (e && e.message ? e.message : e);
+    out.push('direct fetch failed: ' + (e && e.message ? e.message : e));
   }
+  return out.join(' || ');
 }
 
 // Single swap-point for all model calls. Returns trimmed text.
