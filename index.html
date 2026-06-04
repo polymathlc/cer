@@ -8017,6 +8017,10 @@ function renderStudentView() {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
       ${showFirstLetterClues ? 'Hide Clues' : 'Show First Letter'}
     </button>
+    <button class="btn btn-outline" id="svAskAiBtn" onclick="askAIClueStudent()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+      Ask AI
+    </button>
     <button class="btn btn-outline" onclick="resetStudentAnswers()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
       Reset
@@ -8024,6 +8028,10 @@ function renderStudentView() {
     <button class="btn btn-primary" onclick="checkStudentAnswers('${qId}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       Check Answers
+    </button>
+    <button class="btn btn-primary" id="svMarkAiBtn" onclick="checkStudentAnswersAI('${qId}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
+      Mark with AI
     </button>
   </div>`;
   
@@ -9473,7 +9481,8 @@ function checkPracticeAnswers() {
 }
 
 // =====================================================================
-// ASK AI — clues for blanks (Firebase AI Logic + Gemini Flash)
+// ASK AI / MARK WITH AI — shared helpers (Firebase AI Logic + Gemini Flash)
+// Used by Practice, Student View, and Quick Practice / Worksheet Practice.
 // =====================================================================
 function _hasClue(input) {
   const n = input.nextElementSibling;
@@ -9489,12 +9498,23 @@ function _showClue(input, text) {
   input.insertAdjacentElement('afterend', span);
 }
 
-async function askAIClue() {
+function _aiFeedbackSpan(input, text, color, italic) {
+  const span = document.createElement('span');
+  span.className = 'ai-correction';
+  span.style.cssText = `color:${color};font-size:0.8rem;margin-left:4px;font-weight:600;${italic ? 'font-style:italic;font-weight:500;' : ''}`;
+  span.textContent = text;
+  const after = (input.nextElementSibling && input.nextElementSibling.classList &&
+    input.nextElementSibling.classList.contains('answer-icon')) ? input.nextElementSibling : input;
+  after.insertAdjacentElement('afterend', span);
+}
+
+// Generic clue: gives a non-revealing hint for the next blank in `containerSel`.
+async function aiClue(containerSel, btnId) {
   if (!window.__aiReady || !window.__aiReady()) {
     showToast("Ask AI isn't set up yet — add your reCAPTCHA site key in the code", 'info');
     return;
   }
-  const inputs = Array.from(document.querySelectorAll('#practiceContainer .blank-input'));
+  const inputs = Array.from(document.querySelectorAll(containerSel + ' .blank-input'));
   if (!inputs.length) { showToast('No blanks to give clues for', 'info'); return; }
 
   // Prefer the first empty blank without a clue; otherwise the first without a clue.
@@ -9502,8 +9522,9 @@ async function askAIClue() {
   if (!target) { showToast('A clue is already shown for every blank', 'info'); return; }
 
   const answer = (target.dataset.answer || '').trim();
-  const titleEl = document.querySelector('#practiceContainer .practice-card-header h3');
-  const topicEl = document.querySelector('#practiceContainer .qb-tag.topic');
+  const titleEl = document.querySelector(containerSel + ' .practice-card-header h3') ||
+                  document.querySelector(containerSel + ' .student-card-header h3');
+  const topicEl = document.querySelector(containerSel + ' .qb-tag.topic');
   const title = titleEl ? titleEl.textContent.trim() : '';
   const topic = topicEl ? topicEl.textContent.trim() : '';
   const wrapper = target.closest('div[style*="line-height"]') || target.parentElement;
@@ -9517,7 +9538,7 @@ async function askAIClue() {
     `Give ONE short, encouraging clue (max 18 words) that helps the student recall the word. ` +
     `Do NOT write the word itself or any obvious form of it. Reply with just the clue text.`;
 
-  const btn = document.getElementById('practiceAskAiBtn');
+  const btn = btnId ? document.getElementById(btnId) : null;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = 'Thinking…'; }
   try {
@@ -9532,31 +9553,40 @@ async function askAIClue() {
   }
 }
 
-// =====================================================================
-// MARK WITH AI — semantic grading (accepts synonyms / plurals / typos)
-// =====================================================================
-function _aiFeedbackSpan(input, text, color, italic) {
-  const span = document.createElement('span');
-  span.className = 'ai-correction';
-  span.style.cssText = `color:${color};font-size:0.8rem;margin-left:4px;font-weight:600;${italic ? 'font-style:italic;font-weight:500;' : ''}`;
-  span.textContent = text;
-  const after = (input.nextElementSibling && input.nextElementSibling.classList &&
-    input.nextElementSibling.classList.contains('answer-icon')) ? input.nextElementSibling : input;
-  after.insertAdjacentElement('afterend', span);
+function _gradingPrompt(toGrade) {
+  const list = toGrade.map((g, i) => `${i}. expected="${g.expected}" student="${g.student}"`).join('\n');
+  return `You are marking fill-in-the-blank answers for a student. For EACH item decide if the student's answer is correct. ` +
+    `Accept synonyms, singular/plural, capitalisation differences, and minor spelling/typos, but the meaning must match the expected word. ` +
+    `Return ONLY a JSON array, one object per item, like ` +
+    `[{"i":0,"correct":true,"note":"short reason, max 8 words"}].\n${list}`;
 }
 
-async function checkPracticeAnswersAI() {
+// Sends the answered blanks to Gemini and returns { idx -> {correct, note} }.
+async function _gradeWithAI(toGrade) {
+  const raw = await askGemini(_gradingPrompt(toGrade), { maxOutputTokens: 60 + toGrade.length * 40, temperature: 0, json: true });
+  const arr = JSON.parse(raw);
+  const verdicts = {};
+  arr.forEach(v => { if (v && typeof v.i === 'number' && toGrade[v.i]) verdicts[toGrade[v.i].idx] = v; });
+  return verdicts;
+}
+
+// Generic semantic marker. opts: { scoreElId, btnId, scorePrefix, fallback, onComplete }
+async function aiMark(containerSel, opts = {}) {
+  const { scoreElId, btnId, scorePrefix = 'AI Score', fallback, onComplete } = opts;
   if (!window.__aiReady || !window.__aiReady()) {
     showToast("AI marking isn't set up yet — using exact match", 'info');
-    return checkPracticeAnswers();
+    return fallback ? fallback() : undefined;
   }
-  const inputs = Array.from(document.querySelectorAll('#practiceContainer .blank-input'));
-  const scoreEl = document.getElementById('practiceScoreDisplay');
-  const btn = document.getElementById('practiceMarkAiBtn');
-  if (!inputs.length) { if (scoreEl) scoreEl.textContent = 'No blanks to check'; return; }
+  const inputs = Array.from(document.querySelectorAll(containerSel + ' .blank-input'));
+  const scoreEl = scoreElId ? document.getElementById(scoreElId) : null;
+  const btn = btnId ? document.getElementById(btnId) : null;
+  if (!inputs.length) {
+    if (scoreEl) scoreEl.textContent = 'No blanks to check'; else showToast('No blanks to check', 'info');
+    return;
+  }
 
   // Clear any feedback from a previous check.
-  document.querySelectorAll('#practiceContainer .ai-correction, #practiceContainer .answer-icon').forEach(el => el.remove());
+  document.querySelectorAll(`${containerSel} .ai-correction, ${containerSel} .answer-icon`).forEach(el => el.remove());
 
   const graded = inputs.map((input, idx) => ({
     input, idx,
@@ -9565,26 +9595,18 @@ async function checkPracticeAnswersAI() {
   }));
   const toGrade = graded.filter(g => g.student);
 
-  const verdicts = {};
+  let verdicts = {};
+  const orig = btn ? btn.innerHTML : '';
   if (toGrade.length) {
-    const list = toGrade.map((g, i) => `${i}. expected="${g.expected}" student="${g.student}"`).join('\n');
-    const prompt =
-      `You are marking fill-in-the-blank answers for a student. For EACH item decide if the student's answer is correct. ` +
-      `Accept synonyms, singular/plural, capitalisation differences, and minor spelling/typos, but the meaning must match the expected word. ` +
-      `Return ONLY a JSON array, one object per item, like ` +
-      `[{"i":0,"correct":true,"note":"short reason, max 8 words"}].\n${list}`;
-    const orig = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
     if (scoreEl) scoreEl.textContent = 'Marking with AI…';
     try {
-      const raw = await askGemini(prompt, { maxOutputTokens: 60 + toGrade.length * 40, temperature: 0, json: true });
-      const arr = JSON.parse(raw);
-      arr.forEach(v => { if (v && typeof v.i === 'number' && toGrade[v.i]) verdicts[toGrade[v.i].idx] = v; });
+      verdicts = await _gradeWithAI(toGrade);
     } catch (e) {
       console.error(e);
       showToast('AI marking failed — using exact match', 'error');
       if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-      return checkPracticeAnswers();
+      return fallback ? fallback() : undefined;
     }
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
@@ -9614,11 +9636,137 @@ async function checkPracticeAnswersAI() {
     }
   });
 
+  const pct = total ? Math.round((correct / total) * 100) : 0;
   if (scoreEl) {
-    const pct = total ? Math.round((correct / total) * 100) : 0;
-    scoreEl.textContent = `AI Score: ${correct}/${total} (${pct}%)`;
+    scoreEl.textContent = `${scorePrefix}: ${correct}/${total} (${pct}%)`;
     scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
+  } else {
+    showToast(`${scorePrefix}: ${correct}/${total} (${pct}%)`, correct === total ? 'success' : 'info');
   }
+  if (onComplete) onComplete(correct, total);
+}
+
+// ---- Practice tab wrappers ----
+function askAIClue() { return aiClue('#practiceContainer', 'practiceAskAiBtn'); }
+function checkPracticeAnswersAI() {
+  return aiMark('#practiceContainer', {
+    scoreElId: 'practiceScoreDisplay',
+    btnId: 'practiceMarkAiBtn',
+    fallback: checkPracticeAnswers
+  });
+}
+
+// ---- Student View wrappers ----
+function askAIClueStudent() { return aiClue('#studentViewContainer', 'svAskAiBtn'); }
+function checkStudentAnswersAI(qId) {
+  return aiMark('#studentViewContainer', {
+    btnId: 'svMarkAiBtn',
+    fallback: () => checkStudentAnswers(qId),
+    onComplete: (correct, total) => {
+      if (currentUser && currentUser.role === 'student') {
+        addDoc(collection(db, 'questionAttempts'), {
+          uid: currentUser.uid,
+          email: currentUser.email,
+          displayName: currentUser.name,
+          questionId: qId || '',
+          questionTitle: '',
+          score: correct,
+          totalBlanks: total,
+          timestamp: Timestamp.now(),
+          mode: 'practice'
+        }).catch(err => console.warn('Could not record attempt:', err));
+      }
+    }
+  });
+}
+
+// ---- Quick Practice / Worksheet Practice wrappers ----
+function askAIClueQp() { return aiClue('#qpContainer', 'qpAskAiBtn'); }
+
+async function submitQpAnswersAI() {
+  if (qpSubmitted) return;
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast("AI marking isn't set up yet — using exact match", 'info');
+    return submitQpAnswers();
+  }
+  const inputs = Array.from(document.querySelectorAll('#qpContainer .blank-input'));
+  const btn = document.getElementById('qpMarkAiBtn');
+  const scoreEl = document.getElementById('qpScoreDisplay');
+  const graded = inputs.map((input, idx) => ({
+    input, idx,
+    expected: input.dataset.answer || '',
+    student: input.value.trim()
+  }));
+  const toGrade = graded.filter(g => g.student);
+
+  let verdicts = {};
+  const orig = btn ? btn.innerHTML : '';
+  if (toGrade.length) {
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
+    if (scoreEl) scoreEl.textContent = 'Marking with AI…';
+    try {
+      verdicts = await _gradeWithAI(toGrade);
+    } catch (e) {
+      console.error(e);
+      showToast('AI marking failed — using exact match', 'error');
+      if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+      return submitQpAnswers();
+    }
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+
+  qpSubmitted = true;
+  let correct = 0;
+  const total = inputs.length;
+  graded.forEach(({ input, idx, expected, student }) => {
+    input.readOnly = true;
+    const v = student ? verdicts[idx] : null;
+    const ok = student ? (v ? !!v.correct : (student.toLowerCase() === expected.toLowerCase().trim())) : false;
+    if (ok) {
+      input.style.borderBottomColor = 'var(--primary)';
+      input.style.background = '#e8f5e9';
+      correct++;
+      addAnswerIcon(input, true, idx * 80);
+      if (v && v.note) _aiFeedbackSpan(input, v.note, 'var(--primary)', true);
+    } else {
+      input.style.borderBottomColor = 'var(--accent-red)';
+      input.style.background = 'var(--accent-red-light)';
+      addAnswerIcon(input, false, idx * 80);
+      _aiFeedbackSpan(input, expected + (v && v.note ? ` — ${v.note}` : ''), 'var(--primary)', false);
+    }
+  });
+
+  qpAnswered = Math.max(qpAnswered, qpIndex + 1);
+  updateQpProgress();
+
+  if (currentUser && currentUser.role === 'student') {
+    const currentQ = qpQueue[qpIndex];
+    addDoc(collection(db, 'questionAttempts'), {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      displayName: currentUser.name,
+      questionId: currentQ ? currentQ.id : '',
+      questionTitle: currentQ ? currentQ.title : '',
+      score: total > 0 ? correct : 0,
+      totalBlanks: total,
+      timestamp: Timestamp.now(),
+      mode: 'quickpractice'
+    }).catch(err => console.warn('Could not record attempt:', err));
+  }
+
+  const pct = total ? Math.round((correct / total) * 100) : 0;
+  if (scoreEl) {
+    scoreEl.textContent = total ? `AI Score: ${correct}/${total} (${pct}%)` : 'No blanks to check';
+    if (total) scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
+  }
+
+  const submitBtn = document.getElementById('qpSubmitBtn');
+  const nextBtn = document.getElementById('qpNextBtn');
+  const firstLetterBtn = document.getElementById('qpFirstLetterBtn');
+  if (submitBtn) submitBtn.style.display = 'none';
+  if (btn) btn.style.display = 'none';
+  if (nextBtn) nextBtn.style.display = '';
+  if (firstLetterBtn) firstLetterBtn.disabled = true;
 }
 
 // =====================================================================
@@ -10348,6 +10496,10 @@ function renderQpQuestion(q) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
             ${showFirstLetterClues ? 'Hide Clues' : 'First Letter'}
           </button>
+          <button class="btn btn-outline" id="qpAskAiBtn" onclick="askAIClueQp()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+            Ask AI
+          </button>
           <button class="btn btn-outline" onclick="resetQpAnswers()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             Reset
@@ -10355,6 +10507,10 @@ function renderQpQuestion(q) {
           <button class="btn btn-primary" id="qpSubmitBtn" onclick="submitQpAnswers()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
             Submit
+          </button>
+          <button class="btn btn-primary" id="qpMarkAiBtn" onclick="submitQpAnswersAI()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
+            Mark with AI
           </button>
           <button class="btn btn-primary" id="qpNextBtn" onclick="loadNextQpQuestion()" style="display:none;">
             Next &rarr;
@@ -10457,9 +10613,11 @@ function submitQpAnswers() {
 
   // Hide submit, show next; disable first-letter and reset
   const submitBtn = document.getElementById('qpSubmitBtn');
+  const markAiBtn = document.getElementById('qpMarkAiBtn');
   const nextBtn = document.getElementById('qpNextBtn');
   const firstLetterBtn = document.getElementById('qpFirstLetterBtn');
   if (submitBtn) submitBtn.style.display = 'none';
+  if (markAiBtn) markAiBtn.style.display = 'none';
   if (nextBtn) nextBtn.style.display = '';
   if (firstLetterBtn) firstLetterBtn.disabled = true;
 }
@@ -11939,6 +12097,10 @@ window.loadRandomPracticeQuestion = loadRandomPracticeQuestion;
 window.checkPracticeAnswers = checkPracticeAnswers;
 window.askAIClue = askAIClue;
 window.checkPracticeAnswersAI = checkPracticeAnswersAI;
+window.askAIClueStudent = askAIClueStudent;
+window.checkStudentAnswersAI = checkStudentAnswersAI;
+window.askAIClueQp = askAIClueQp;
+window.submitQpAnswersAI = submitQpAnswersAI;
 window.setLandingDemoMode = setLandingDemoMode;
 // Student worksheet functions
 window.renderWsQuestions = renderWsQuestions;
