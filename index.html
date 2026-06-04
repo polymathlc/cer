@@ -5106,16 +5106,39 @@ try {
   console.warn("Firebase AI init failed (Ask AI / AI marking disabled):", e);
 }
 
+// Diagnostic: hits the Gemini Developer API directly to reveal the real HTTP
+// status/message that the AI Logic SDK hides behind its "reading 'some'" crash.
+async function _aiDiagnose() {
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${firebaseConfig.apiKey}`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] })
+    });
+    const t = await r.text();
+    return `direct ${r.status}: ${t.slice(0, 220)}`;
+  } catch (e) {
+    return 'direct fetch failed: ' + (e && e.message ? e.message : e);
+  }
+}
+
 // Single swap-point for all model calls. Returns trimmed text.
 async function askGemini(prompt, { maxOutputTokens = 256, temperature = 0.3, json = false } = {}) {
   if (!geminiModel) throw new Error("AI is not configured yet");
   const generationConfig = { maxOutputTokens, temperature };
   if (json) generationConfig.responseMimeType = "application/json";
-  const res = await geminiModel.generateContent({
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig
-  });
-  return (res.response.text() || "").trim();
+  try {
+    const res = await geminiModel.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig
+    });
+    return (res.response.text() || "").trim();
+  } catch (e) {
+    const diag = await _aiDiagnose();
+    console.error('askGemini failed:', e, '| diagnostic:', diag);
+    throw new Error((e && e.message ? e.message : String(e)) + ' || ' + diag);
+  }
 }
 
 // Cache identical requests for the session so repeats are free/instant.
