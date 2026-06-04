@@ -4135,13 +4135,20 @@ option {
 
     <!-- ===== PAGE: CREATE QUESTION ===== -->
     <div class="page active" id="page-create">
-      <div class="page-header">
+      <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
         <div>
           <div style="display:flex;align-items:center;gap:10px;">
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2 id="createPageTitle">Create Question</h2>
           </div>
           <div class="subtitle" id="createPageSubtitle">Build a question with blocks</div>
+        </div>
+        <div>
+          <input type="file" id="aiBuildFile" accept="image/*,application/pdf" style="display:none" onchange="handleAiBuildFile(this.files[0]); this.value='';">
+          <button class="btn btn-primary" id="aiBuildBtn" onclick="document.getElementById('aiBuildFile').click()" title="Upload a screenshot or PDF of an exam question — AI reads it and fills in the question, answer and explanation. You then paste the diagram and save.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+            Build from screenshot / PDF
+          </button>
         </div>
       </div>
       <div class="page-body">
@@ -7123,6 +7130,142 @@ function _readAndUploadImage(blockId, file) {
   reader.readAsDataURL(file);
 }
 const _imagePasteHint = '📋 Click here, then paste a screenshot (Ctrl/⌘+V) — or drop an image to upload it';
+
+// =====================================================================
+// AI QUESTION BUILDER — upload a screenshot/PDF of an exam question;
+// Gemini reads it and fills the editor (question, answer, explanation).
+// The teacher pastes the diagram into the image block, then saves.
+// =====================================================================
+function _fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = String(reader.result || '');
+      const comma = res.indexOf(',');
+      resolve(comma >= 0 ? res.slice(comma + 1) : res);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Multimodal Gemini call: a text prompt plus inline image/PDF parts.
+async function askGeminiVision(prompt, media, { maxOutputTokens = 2048, json = false } = {}) {
+  if (!geminiModel) throw new Error('AI is not configured yet');
+  const parts = [{ text: prompt }];
+  (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
+  const generationConfig = { maxOutputTokens, temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } };
+  if (json) generationConfig.responseMimeType = 'application/json';
+  const res = await geminiModel.generateContent({ contents: [{ role: 'user', parts }], generationConfig });
+  return (res.response.text() || '').trim();
+}
+
+// Convert text with [[keyword]] marks into { content, blanks } where blanks
+// maps the word index of each marked word → true (matches renderStudentText).
+function _markedToBlanks(marked) {
+  const blanks = {};
+  let content = '';
+  let wordIndex = 0;
+  let depth = 0;
+  const wordRe = /([A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*)|(\s+)|([^A-Za-z0-9\s]+)/g;
+  String(marked || '').split(/(\[\[|\]\])/).forEach(part => {
+    if (part === '[[') { depth++; return; }
+    if (part === ']]') { if (depth > 0) depth--; return; }
+    if (!part) return;
+    content += part;
+    let m; wordRe.lastIndex = 0;
+    while ((m = wordRe.exec(part)) !== null) {
+      if (m[1]) { if (depth > 0) blanks[wordIndex] = true; wordIndex++; }
+    }
+  });
+  return { content, blanks };
+}
+
+function _populateEditorFromAi(data) {
+  blocks = [];
+  selectedBlanks = {};
+
+  const qText = String(data.questionText || '').replace(/\[\[|\]\]/g, '').trim();
+  if (qText) blocks.push({ id: generateBlockId(), type: 'text', content: qText });
+
+  if (data.hasDiagram) blocks.push({ id: generateBlockId(), type: 'image', url: '' });
+
+  const answerType = String(data.answerType || 'cer').toLowerCase();
+  if (answerType === 'plain') {
+    const id = generateBlockId();
+    const { content, blanks } = _markedToBlanks(data.answer || '');
+    blocks.push({ id, type: 'plainanswer', content });
+    if (Object.keys(blanks).length) selectedBlanks[id] = blanks;
+  } else {
+    const id = generateBlockId();
+    const claim = _markedToBlanks(data.claim || '');
+    const evidence = _markedToBlanks(data.evidence || '');
+    const reasoning = _markedToBlanks(data.reasoning || '');
+    blocks.push({ id, type: 'answer', claim: claim.content, evidence: evidence.content, reasoning: reasoning.content });
+    if (Object.keys(claim.blanks).length) selectedBlanks[id + '_claim'] = claim.blanks;
+    if (Object.keys(evidence.blanks).length) selectedBlanks[id + '_evidence'] = evidence.blanks;
+    if (Object.keys(reasoning.blanks).length) selectedBlanks[id + '_reasoning'] = reasoning.blanks;
+  }
+
+  const expl = String(data.explanation || '').replace(/\[\[|\]\]/g, '').trim();
+  if (expl) blocks.push({ id: generateBlockId(), type: 'explanation', content: expl });
+
+  const titleEl = document.getElementById('questionTitle');
+  if (titleEl) titleEl.value = data.title || 'Untitled';
+  const catEl = document.getElementById('categorySelect');
+  if (catEl && data.category && Array.from(catEl.options).some(o => o.value === data.category)) catEl.value = data.category;
+  const topEl = document.getElementById('topicSelect');
+  if (topEl && data.topic && Array.from(topEl.options).some(o => o.value === data.topic)) topEl.value = data.topic;
+  const mgEl = document.getElementById('questionMarkingGuide');
+  if (mgEl) mgEl.value = '';
+
+  currentEditingQuestion = null;
+  if (typeof setEditMode === 'function') setEditMode(false);
+  renderBlocks();
+}
+
+async function handleAiBuildFile(file) {
+  if (!file) return;
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast("AI isn't set up yet — add your reCAPTCHA site key in the code", 'info');
+    return;
+  }
+  const isPdf = file.type === 'application/pdf';
+  const isImg = file.type && file.type.startsWith('image/');
+  if (!isPdf && !isImg) { showToast('Please choose an image or a PDF', 'error'); return; }
+  if (file.size > 18 * 1024 * 1024) { showToast('File is too large (max ~18 MB)', 'error'); return; }
+  if (blocks.length > 0 && !confirm('Replace the current question with the one AI builds from this file?')) return;
+
+  const btn = document.getElementById('aiBuildBtn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Reading…'; }
+  showToast('Reading your file with AI…', 'info');
+  try {
+    const b64 = await _fileToBase64(file);
+    const topics = Object.keys(topicLevelMap);
+    const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
+    const prompt =
+      `You are helping a Singapore primary-school science teacher turn an exam question (in the attached ${isPdf ? 'PDF' : 'image'}) into a CER keywords-practice question.\n` +
+      `Read the question carefully, then return ONLY JSON with this exact shape:\n` +
+      `{"title":"short title","topic":"<closest topic>","category":"<closest category>","questionText":"the question stem as plain text","answerType":"cer or plain","claim":"...","evidence":"...","reasoning":"...","answer":"...","explanation":"teacher explanation of the model answer","hasDiagram":true}\n` +
+      `Rules:\n` +
+      `- Write a model PSLE-level answer. For a Claim-Evidence-Reasoning answer set answerType "cer" and fill claim, evidence and reasoning. For a short open answer set answerType "plain" and fill answer (leave claim/evidence/reasoning empty).\n` +
+      `- In the ANSWER fields only (claim/evidence/reasoning or answer), wrap each KEY science keyword a student should recall in [[double brackets]] — whole words only, about 3 to 8 keywords total. Do NOT bracket anything in questionText or explanation.\n` +
+      `- Choose topic from EXACTLY this list: ${topics.join('; ')}.\n` +
+      `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
+      `- Set hasDiagram true if the question refers to a picture, diagram, graph, table or experimental setup (the teacher will paste it in).\n` +
+      `- Use plain text only, no markdown.`;
+    const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 2048, json: true });
+    const parsed = _parseAIJson(raw);
+    _populateEditorFromAi(parsed);
+    showToast('Question built — review it, paste the diagram, then Save', 'success');
+  } catch (e) {
+    console.error('AI build failed:', e);
+    showToast('AI build failed: ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
 
 // =====================================================================
 // DRAG AND DROP
@@ -12606,6 +12749,7 @@ window.execCmdVal = execCmdVal;
 window.previewImage = previewImage;
 window.handleImagePaste = handleImagePaste;
 window.handleImageDrop = handleImageDrop;
+window.handleAiBuildFile = handleAiBuildFile;
 window.handleImgError = handleImgError;
 window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
