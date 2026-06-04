@@ -976,6 +976,68 @@ option {
   padding-top: 20px;
   border-top: 1.5px dashed var(--border);
 }
+
+/* Slim "+" bar between block cards to insert a block at that exact spot. */
+.block-insert-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 2px 0;
+}
+.block-insert-toggle {
+  width: 26px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-container, #f0ede8);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+}
+.block-insert-bar:hover .block-insert-toggle { opacity: 1; }
+.block-insert-toggle:hover {
+  background: var(--primary-light, #e8f5e9);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+.block-insert-bar.open .block-insert-toggle {
+  opacity: 1;
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.block-insert-menu {
+  display: none;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: center;
+  margin-top: 6px;
+  padding: 6px;
+  background: var(--surface-container-low, #f6f3ee);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.block-insert-bar.open .block-insert-menu { display: flex; }
+.block-insert-btn {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 7px;
+  background: var(--surface-container-lowest, #fff);
+  border: 1px solid var(--border);
+  color: var(--on-surface, #1c1c19);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.block-insert-btn:hover {
+  background: var(--primary-light, #e8f5e9);
+  color: var(--primary);
+  border-color: var(--primary);
+}
 .add-block-btn {
   display: flex;
   align-items: center;
@@ -5794,10 +5856,10 @@ function generateBlockId() {
   return 'block_' + (++blockIdCounter) + '_' + Date.now();
 }
 
-function addBlock(type) {
+function createBlock(type) {
   const id = generateBlockId();
   const block = { id, type };
-  
+
   switch (type) {
     case 'text':
       block.content = '';
@@ -5830,8 +5892,19 @@ function addBlock(type) {
       block.rowHeights = {};
       break;
   }
-  
-  blocks.push(block);
+  return block;
+}
+
+function addBlock(type) {
+  blocks.push(createBlock(type));
+  renderBlocks();
+  showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} block added`, 'info');
+}
+
+// Insert a new block at a specific position (used by the "+" bars between blocks).
+function addBlockAt(type, index) {
+  const i = Math.max(0, Math.min(index, blocks.length));
+  blocks.splice(i, 0, createBlock(type));
   renderBlocks();
   showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} block added`, 'info');
 }
@@ -6872,8 +6945,9 @@ function renderAdvancedTableBlock(block) {
 function renderBlocks() {
   const container = document.getElementById('blocksList');
   container.innerHTML = '';
-  
+
   blocks.forEach((block, index) => {
+    container.appendChild(makeBlockInsertBar(index));
     const card = document.createElement('div');
     card.className = 'block-card';
     card.dataset.id = block.id;
@@ -7114,6 +7188,29 @@ function renderBlocks() {
       requestAnimationFrame(() => initTableResizeHandles(block.id));
     }
   });
+
+  // A final bar so you can insert at the very end too.
+  container.appendChild(makeBlockInsertBar(blocks.length));
+}
+
+// A slim "+" bar between block cards that inserts a new block at `index`.
+function makeBlockInsertBar(index) {
+  const bar = document.createElement('div');
+  bar.className = 'block-insert-bar';
+  bar.innerHTML = `
+    <button type="button" class="block-insert-toggle" title="Insert a block here" onclick="this.parentElement.classList.toggle('open')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <div class="block-insert-menu">
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('text', ${index})">📝 Text</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('answer', ${index})">🧪 CER Answer</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('plainanswer', ${index})">✅ Answer</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('explanation', ${index})">💡 Explanation</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('image', ${index})">🖼️ Image</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('video', ${index})">🎬 Video</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('table', ${index})">▦ Table</button>
+    </div>`;
+  return bar;
 }
 
 // =====================================================================
@@ -13091,6 +13188,7 @@ async function deleteFlaggedQuestion(docId) {
 window.navigateTo = navigateTo;
 window.toggleSidebar = toggleSidebar;
 window.addBlock = addBlock;
+window.addBlockAt = addBlockAt;
 window.removeBlock = removeBlock;
 window.moveBlock = moveBlock;
 window.duplicateBlock = duplicateBlock;
