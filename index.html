@@ -5150,35 +5150,6 @@ try {
   console.warn("Firebase AI init failed (Ask AI / AI marking disabled):", e);
 }
 
-// Diagnostic: probes both the AI Logic gateway (what the app uses) and the raw
-// Gemini API to reveal the real HTTP status the SDK hides behind its "some" crash.
-async function _aiDiagnose() {
-  const out = [];
-  try {
-    const u1 = `https://firebasevertexai.googleapis.com/v1beta/projects/${firebaseConfig.projectId}/models/${AI_MODEL}:generateContent`;
-    const r1 = await fetch(u1, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': firebaseConfig.apiKey },
-      body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] })
-    });
-    out.push(`gateway ${r1.status}: ${(await r1.text()).slice(0, 160)}`);
-  } catch (e) {
-    out.push('gateway fetch failed: ' + (e && e.message ? e.message : e));
-  }
-  try {
-    const u2 = `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${firebaseConfig.apiKey}`;
-    const r2 = await fetch(u2, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] })
-    });
-    out.push(`direct ${r2.status}: ${(await r2.text()).slice(0, 120)}`);
-  } catch (e) {
-    out.push('direct fetch failed: ' + (e && e.message ? e.message : e));
-  }
-  return out.join(' || ');
-}
-
 // Single swap-point for all model calls. Returns trimmed text.
 // thinkingBudget:0 disables Gemini 2.5 "thinking" so the whole token budget
 // goes to the actual answer (faster + cheaper for our short tasks).
@@ -5186,17 +5157,11 @@ async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, jso
   if (!geminiModel) throw new Error("AI is not configured yet");
   const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingBudget: 0 } };
   if (json) generationConfig.responseMimeType = "application/json";
-  try {
-    const res = await geminiModel.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig
-    });
-    return (res.response.text() || "").trim();
-  } catch (e) {
-    const diag = await _aiDiagnose();
-    console.error('askGemini failed:', e, '| diagnostic:', diag);
-    throw new Error((e && e.message ? e.message : String(e)) + ' || ' + diag);
-  }
+  const res = await geminiModel.generateContent({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig
+  });
+  return (res.response.text() || "").trim();
 }
 
 // Tolerant JSON parse for model output (strips code fences, finds the array/object).
