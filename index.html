@@ -502,6 +502,29 @@ option {
 .image-url-input input {
   flex: 1;
 }
+.image-paste-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin-bottom: 8px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: var(--surface-alt, #f6f3ee);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.image-paste-zone:hover, .image-paste-zone:focus, .image-paste-zone.dragover {
+  border-color: var(--primary);
+  background: var(--primary-light, #e8f5e9);
+  color: var(--primary);
+}
+.image-paste-zone.uploading {
+  border-style: solid;
+  border-color: var(--accent-blue, #1565c0);
+  color: var(--accent-blue, #1565c0);
+}
 .image-preview {
   margin-top: 10px;
   border-radius: var(--radius-sm);
@@ -5099,6 +5122,8 @@ import {
 // App Check (protects the Gemini quota from abuse) + Firebase AI Logic (free-tier Gemini)
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
+// Cloud Storage — paste/drop images upload here instead of needing a Dropbox link
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -5116,6 +5141,7 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 
 // =====================================================================
@@ -6850,13 +6876,21 @@ function renderBlocks() {
       case 'image':
         bodyHTML = `
           <div class="block-body">
+            <div class="image-paste-zone" id="imgPaste_${block.id}" tabindex="0"
+                 onclick="this.focus()"
+                 onpaste="handleImagePaste('${block.id}', event)"
+                 ondragover="event.preventDefault(); this.classList.add('dragover')"
+                 ondragleave="this.classList.remove('dragover')"
+                 ondrop="handleImageDrop('${block.id}', event)">
+              📋 Click here, then paste a screenshot (Ctrl/⌘+V) — or drop an image to upload it
+            </div>
             <div class="image-url-input">
-              <input class="form-input" type="text" placeholder="https://www.example.com/image.png" 
+              <input class="form-input" id="imgUrlInput_${block.id}" type="text" placeholder="…or paste an image URL (Dropbox, Drive, https://…)"
                      value="${escapeHtml(block.url)}"
                      oninput="saveBlockContent('${block.id}', 'url', this.value); previewImage('${block.id}', this.value)">
             </div>
             <div class="image-preview" id="imgPreview_${block.id}">
-              ${block.url ? `<img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy">` : '<div class="image-error">No image URL provided</div>'}
+              ${block.url ? `<img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy">` : '<div class="image-error">No image yet — paste, drop, or enter a URL</div>'}
             </div>
           </div>
         `;
@@ -7008,11 +7042,87 @@ function previewImage(blockId, url) {
   const container = document.getElementById('imgPreview_' + blockId);
   if (!container) return;
   if (!url.trim()) {
-    container.innerHTML = '<div class="image-error">No image URL provided</div>';
+    container.innerHTML = '<div class="image-error">No image yet</div>';
     return;
   }
   container.innerHTML = `<img src="${escapeHtml(transformImageUrl(url))}" onerror="handleImgError(this)" loading="lazy">`;
 }
+
+// =====================================================================
+// PASTE / DROP IMAGE → upload to Firebase Storage (no Dropbox link needed)
+// Images are content-addressed by SHA-256, so the same image uploads once.
+// =====================================================================
+function _decodeBase64(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function _parseImageDataUrl(dataUrl) {
+  const m = /^data:([^;,]+)?(?:;([^,]+))?,(.*)$/s.exec(dataUrl || '');
+  if (!m) return null;
+  const mime = (m[1] || 'image/png').toLowerCase();
+  const isB64 = (m[2] || '').includes('base64');
+  let bytes;
+  try {
+    bytes = isB64 ? _decodeBase64(m[3]) : new TextEncoder().encode(decodeURIComponent(m[3]));
+  } catch (e) { return null; }
+  const ext = (mime.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
+  return { mime, ext, bytes };
+}
+async function uploadImageDataUrl(dataUrl) {
+  const parsed = _parseImageDataUrl(dataUrl);
+  if (!parsed) throw new Error('That clipboard item is not an image');
+  const buf = await crypto.subtle.digest('SHA-256', parsed.bytes);
+  const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const path = `cer-images/${hash}.${parsed.ext}`;
+  const ref = storageRef(storage, path);
+  await uploadString(ref, dataUrl, 'data_url');
+  return await getDownloadURL(ref);
+}
+
+function handleImagePaste(blockId, e) {
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      e.preventDefault();
+      _readAndUploadImage(blockId, it.getAsFile());
+      return;
+    }
+  }
+}
+function handleImageDrop(blockId, e) {
+  e.preventDefault();
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file && file.type && file.type.startsWith('image/')) _readAndUploadImage(blockId, file);
+  const zone = document.getElementById('imgPaste_' + blockId);
+  if (zone) zone.classList.remove('dragover');
+}
+function _readAndUploadImage(blockId, file) {
+  if (!file) return;
+  const zone = document.getElementById('imgPaste_' + blockId);
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const dataUrl = reader.result;
+    previewImage(blockId, dataUrl); // show it immediately (local), then swap to the hosted URL
+    if (zone) { zone.classList.add('uploading'); zone.textContent = '⏳ Uploading image…'; }
+    try {
+      const url = await uploadImageDataUrl(dataUrl);
+      saveBlockContent(blockId, 'url', url);
+      const input = document.getElementById('imgUrlInput_' + blockId);
+      if (input) input.value = url;
+      previewImage(blockId, url);
+      showToast('Image uploaded', 'success');
+    } catch (err) {
+      console.error('Image upload failed:', err);
+      showToast('Upload failed: ' + (err && err.message ? err.message : err), 'error');
+    } finally {
+      if (zone) { zone.classList.remove('uploading'); zone.textContent = _imagePasteHint; }
+    }
+  };
+  reader.readAsDataURL(file);
+}
+const _imagePasteHint = '📋 Click here, then paste a screenshot (Ctrl/⌘+V) — or drop an image to upload it';
 
 // =====================================================================
 // DRAG AND DROP
@@ -12494,6 +12604,8 @@ window.updateTableDimensions = updateTableDimensions;
 window.execCmd = execCmd;
 window.execCmdVal = execCmdVal;
 window.previewImage = previewImage;
+window.handleImagePaste = handleImagePaste;
+window.handleImageDrop = handleImageDrop;
 window.handleImgError = handleImgError;
 window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
