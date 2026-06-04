@@ -4064,6 +4064,10 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Student Usage
       </div>
+      <div class="nav-item admin-only" onclick="openMarkingSettings()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+        AI Marking Guide
+      </div>
       <div class="nav-section-label admin-only">Schedule</div>
       <div class="nav-item admin-only" data-page="scheduled" onclick="navigateTo('scheduled')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/></svg>
@@ -4184,6 +4188,11 @@ option {
               </optgroup>
             </select>
           </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Marking guide for AI <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+          <textarea id="questionMarkingGuide" class="form-input" rows="2" placeholder="e.g. Accept 'gains heat' or 'absorbs heat'. Reasoning must link cause to effect." style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
         </div>
 
         <!-- Blocks List -->
@@ -4817,6 +4826,41 @@ option {
   </div>
 </div>
 
+<!-- ==================== AI MARKING GUIDE DIALOG ==================== -->
+<div class="confirm-overlay" id="markingSettingsOverlay">
+  <div class="confirm-dialog" style="max-width:560px;text-align:left;max-height:88vh;overflow-y:auto;">
+    <h3 style="margin-bottom:4px;">AI Marking Guide</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Tell the AI how you mark. These instructions are applied to every "Mark with AI" grading across Practice, Student View and Worksheets.</p>
+
+    <div class="form-group">
+      <label class="form-label">Strictness</label>
+      <input type="range" id="mkStrictness" min="1" max="5" step="1" value="3" style="width:100%;" oninput="document.getElementById('mkStrictnessLabel').textContent=['','Very lenient','Lenient','Balanced','Strict','Very strict'][this.value]">
+      <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-muted);"><span>Lenient</span><span id="mkStrictnessLabel" style="font-weight:600;color:var(--primary);">Balanced</span><span>Strict</span></div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Your marking instructions <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+      <textarea id="mkInstructions" class="form-input" rows="6" placeholder="e.g.
+- Accept British or American spelling.
+- For definitions, the key science term must be present.
+- CER reasoning must connect the evidence to the claim with a cause-and-effect link.
+- Give encouraging, age-appropriate feedback for primary-school students." style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">
+        <input type="checkbox" id="mkPerQuestion" checked>
+        Also use each question's own "Marking guide for AI" field when present
+      </label>
+    </div>
+
+    <div class="btn-group" style="justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeMarkingSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMarkingSettings()">Save Marking Guide</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== SCHEDULE QUESTION DIALOG ==================== -->
 <div class="confirm-overlay" id="scheduleQuestionOverlay">
   <div class="confirm-dialog" style="max-width:600px;text-align:left;max-height:85vh;overflow-y:auto;">
@@ -5180,6 +5224,76 @@ async function askGeminiCached(prompt, opts) {
 }
 window.__aiReady = () => !!geminiModel;
 
+// =====================================================================
+// AI MARKING GUIDE — teacher's rubric/style, injected into grading prompts
+// =====================================================================
+let aiMarkingSettings = { instructions: '', strictness: 3, perQuestion: true };
+
+async function loadMarkingSettings() {
+  if (!currentUser) return;
+  // Students read the teacher's (admin's) rubric so marking is consistent.
+  const ownerUid = adminUid || currentUser.uid;
+  try {
+    const snap = await getDoc(doc(db, 'users', ownerUid, 'settings', 'marking'));
+    if (snap.exists()) {
+      const d = snap.data();
+      aiMarkingSettings = {
+        instructions: d.instructions || '',
+        strictness: d.strictness || 3,
+        perQuestion: d.perQuestion !== false
+      };
+    }
+  } catch (e) { console.warn('Could not load marking settings:', e); }
+}
+
+function openMarkingSettings() {
+  document.getElementById('mkInstructions').value = aiMarkingSettings.instructions || '';
+  const sEl = document.getElementById('mkStrictness');
+  sEl.value = aiMarkingSettings.strictness || 3;
+  document.getElementById('mkStrictnessLabel').textContent =
+    ['', 'Very lenient', 'Lenient', 'Balanced', 'Strict', 'Very strict'][sEl.value];
+  document.getElementById('mkPerQuestion').checked = aiMarkingSettings.perQuestion !== false;
+  document.getElementById('markingSettingsOverlay').classList.add('active');
+}
+
+function closeMarkingSettings() {
+  document.getElementById('markingSettingsOverlay').classList.remove('active');
+}
+
+async function saveMarkingSettings() {
+  aiMarkingSettings = {
+    instructions: (document.getElementById('mkInstructions').value || '').trim(),
+    strictness: parseInt(document.getElementById('mkStrictness').value) || 3,
+    perQuestion: document.getElementById('mkPerQuestion').checked
+  };
+  try {
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'marking'), aiMarkingSettings, { merge: true });
+    showToast('Marking guide saved', 'success');
+    closeMarkingSettings();
+  } catch (e) {
+    showToast('Could not save: ' + (e && e.message ? e.message : e), 'error');
+  }
+}
+
+// Builds the instruction block injected before every grading prompt.
+function _markingPreamble(questionGuide) {
+  const sMap = {
+    1: 'Mark VERY leniently: accept any answer showing partial understanding or that is close in meaning.',
+    2: 'Mark leniently: accept answers that capture the main idea even if imprecise or with minor errors.',
+    3: 'Use balanced, fair judgement, like a typical classroom teacher.',
+    4: 'Mark strictly: require accurate, reasonably complete answers containing the correct key idea.',
+    5: 'Mark VERY strictly: require precise, complete answers; do not accept vague or partial ones as fully correct.'
+  };
+  const parts = [sMap[aiMarkingSettings.strictness] || sMap[3]];
+  if (aiMarkingSettings.instructions) {
+    parts.push(`Follow these teacher marking instructions: ${aiMarkingSettings.instructions}`);
+  }
+  if (aiMarkingSettings.perQuestion && questionGuide) {
+    parts.push(`Marking guide specific to THIS question: ${questionGuide}`);
+  }
+  return parts.join(' ');
+}
+
 // Expose auth functions globally so onclick handlers work
 window.handleEmailLogin = handleEmailLogin;
 window.handleEmailRegister = handleEmailRegister;
@@ -5388,6 +5502,7 @@ async function enterApp(user) {
     configureSidebarForRole('admin');
     await loadFromStorage();
     await loadStudentsFromStorage();
+    loadMarkingSettings();
     loadSampleData();
     renderBlocks();
     populatePracticeStudentSelect();
@@ -5459,6 +5574,7 @@ async function loadAdminQuestions() {
     });
     updateCounts();
     populateWsTopicFilter();
+    loadMarkingSettings(); // pick up the teacher's rubric for student practice
   } catch (err) {
     console.error('loadAdminQuestions failed:', err);
     showToast('Could not load questions - check your connection', 'error');
@@ -7589,6 +7705,7 @@ function collectQuestionData() {
     title: document.getElementById('questionTitle').value || 'Untitled',
     category: normalizeCategoryValue(document.getElementById('categorySelect').value),
     topic: document.getElementById('topicSelect').value,
+    markingGuide: (document.getElementById('questionMarkingGuide')?.value || '').trim(),
     blocks: blocksClone,
     blanks: JSON.parse(JSON.stringify(selectedBlanks)),
     createdAt: new Date().toISOString(),
@@ -7708,6 +7825,8 @@ function clearForm() {
     document.getElementById('questionTitle').value = '';
     document.getElementById('categorySelect').value = 'CER';
     document.getElementById('topicSelect').value = 'Heat';
+    const mgEl = document.getElementById('questionMarkingGuide');
+    if (mgEl) mgEl.value = '';
     renderBlocks();
     setEditMode(false);
     showToast('Form cleared', 'info');
@@ -7841,6 +7960,8 @@ function editQuestion(id) {
   currentEditingQuestion = q.id;
   document.getElementById('questionTitle').value = q.title;
   document.getElementById('categorySelect').value = normalizeCategoryValue(q.category);
+  const mgEl = document.getElementById('questionMarkingGuide');
+  if (mgEl) mgEl.value = q.markingGuide || '';
   
   // Try to set topic, handle custom topics
   const topicSelect = document.getElementById('topicSelect');
@@ -9630,7 +9751,8 @@ async function markOpenAnswers() {
   try {
     const list = items.map((it, i) => `${i}. [${it.label}] expected="${it.model}" student="${it.student || '(blank)'}"`).join('\n');
     const prompt =
-      `You are a science teacher marking a student's open-ended answers.\n` +
+      `You are a science teacher marking a student's open-ended answers. ` +
+      `${_markingPreamble(currentPracticeQ && currentPracticeQ.markingGuide)}\n` +
       `Question context: "${ctx}".\n` +
       `For EACH item, compare the STUDENT answer to the EXPECTED model answer and judge how well it matches in meaning ` +
       `(ignore wording, grammar and spelling — focus on the science). ` +
@@ -9806,17 +9928,18 @@ async function aiClue(containerSel, btnId) {
   }
 }
 
-function _gradingPrompt(toGrade) {
+function _gradingPrompt(toGrade, questionGuide) {
   const list = toGrade.map((g, i) => `${i}. expected="${g.expected}" student="${g.student}"`).join('\n');
-  return `You are marking fill-in-the-blank answers for a student. For EACH item decide if the student's answer is correct. ` +
+  return `You are marking fill-in-the-blank answers for a student. ${_markingPreamble(questionGuide)} ` +
+    `For EACH item decide if the student's answer is correct. ` +
     `Accept synonyms, singular/plural, capitalisation differences, and minor spelling/typos, but the meaning must match the expected word. ` +
     `Return ONLY a JSON array, one object per item, like ` +
     `[{"i":0,"correct":true,"note":"short reason, max 8 words"}].\n${list}`;
 }
 
 // Sends the answered blanks to Gemini and returns { idx -> {correct, note} }.
-async function _gradeWithAI(toGrade) {
-  const raw = await askGemini(_gradingPrompt(toGrade), { maxOutputTokens: 256 + toGrade.length * 60, temperature: 0, json: true });
+async function _gradeWithAI(toGrade, questionGuide) {
+  const raw = await askGemini(_gradingPrompt(toGrade, questionGuide), { maxOutputTokens: 256 + toGrade.length * 60, temperature: 0, json: true });
   const arr = _parseAIJson(raw);
   const verdicts = {};
   arr.forEach(v => { if (v && typeof v.i === 'number' && toGrade[v.i]) verdicts[toGrade[v.i].idx] = v; });
@@ -9825,7 +9948,7 @@ async function _gradeWithAI(toGrade) {
 
 // Generic semantic marker. opts: { scoreElId, btnId, scorePrefix, fallback, onComplete }
 async function aiMark(containerSel, opts = {}) {
-  const { scoreElId, btnId, scorePrefix = 'AI Score', fallback, onComplete } = opts;
+  const { scoreElId, btnId, scorePrefix = 'AI Score', fallback, onComplete, questionGuide } = opts;
   if (!window.__aiReady || !window.__aiReady()) {
     showToast("AI marking isn't set up yet — using exact match", 'info');
     return fallback ? fallback() : undefined;
@@ -9854,7 +9977,7 @@ async function aiMark(containerSel, opts = {}) {
     if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
     if (scoreEl) scoreEl.textContent = 'Marking with AI…';
     try {
-      verdicts = await _gradeWithAI(toGrade);
+      verdicts = await _gradeWithAI(toGrade, questionGuide);
     } catch (e) {
       console.error('AI marking error:', e);
       showToast('AI mark error: ' + (e && e.message ? e.message : e), 'error');
@@ -9905,6 +10028,7 @@ function checkPracticeAnswersAI() {
   return aiMark('#practiceContainer', {
     scoreElId: 'practiceScoreDisplay',
     btnId: 'practiceMarkAiBtn',
+    questionGuide: currentPracticeQ && currentPracticeQ.markingGuide,
     fallback: checkPracticeAnswers
   });
 }
@@ -9912,8 +10036,10 @@ function checkPracticeAnswersAI() {
 // ---- Student View wrappers ----
 function askAIClueStudent() { return aiClue('#studentViewContainer', 'svAskAiBtn'); }
 function checkStudentAnswersAI(qId) {
+  const _q = questionBank.find(qb => qb.id === qId);
   return aiMark('#studentViewContainer', {
     btnId: 'svMarkAiBtn',
+    questionGuide: _q && _q.markingGuide,
     fallback: () => checkStudentAnswers(qId),
     onComplete: (correct, total) => {
       if (currentUser && currentUser.role === 'student') {
@@ -9958,7 +10084,8 @@ async function submitQpAnswersAI() {
     if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
     if (scoreEl) scoreEl.textContent = 'Marking with AI…';
     try {
-      verdicts = await _gradeWithAI(toGrade);
+      const _qpQ = qpQueue[qpIndex];
+      verdicts = await _gradeWithAI(toGrade, _qpQ && _qpQ.markingGuide);
     } catch (e) {
       console.error(e);
       showToast('AI marking failed — using exact match', 'error');
@@ -9971,6 +10098,7 @@ async function submitQpAnswersAI() {
   qpSubmitted = true;
   let correct = 0;
   const total = inputs.length;
+  const mistakes = [];
   graded.forEach(({ input, idx, expected, student }) => {
     input.readOnly = true;
     const v = student ? verdicts[idx] : null;
@@ -9986,9 +10114,11 @@ async function submitQpAnswersAI() {
       input.style.background = 'var(--accent-red-light)';
       addAnswerIcon(input, false, idx * 80);
       _aiFeedbackSpan(input, expected + (v && v.note ? ` — ${v.note}` : ''), 'var(--primary)', false);
+      mistakes.push({ expected, student });
     }
   });
 
+  _recordQpResult(correct, total, mistakes);
   qpAnswered = Math.max(qpAnswered, qpIndex + 1);
   updateQpProgress();
 
@@ -10365,6 +10495,7 @@ function launchWorksheetPractice(questions) {
   qpQueue = shuffled;
   qpIndex = -1;
   qpAnswered = 0;
+  qpSessionResults = [];
   showFirstLetterClues = false;
   // Navigate to the Quick Practice page
   navigateTo('quickpractice');
@@ -10575,6 +10706,7 @@ let qpQueue = [];       // ordered array of question objects
 let qpIndex = -1;       // current position in queue
 let qpLevel = 'P6';     // selected student level
 let qpAnswered = 0;     // questions answered so far
+let qpSessionResults = []; // per-question results for the end-of-session AI feedback
 
 function onQpLevelChange() {
   qpLevel = document.getElementById('qpLevelSelect').value;
@@ -10582,6 +10714,7 @@ function onQpLevelChange() {
   qpQueue = [];
   qpIndex = -1;
   qpAnswered = 0;
+  qpSessionResults = [];
   updateQpProgress();
   document.getElementById('qpContainer').innerHTML = `
     <div class="empty-state">
@@ -10641,6 +10774,7 @@ async function startQuickPractice() {
   qpQueue = buildQpQueue(qpLevel);
   qpIndex = -1;
   qpAnswered = 0;
+  qpSessionResults = [];
   if (qpQueue.length === 0) {
     document.getElementById('qpContainer').innerHTML = `
       <div class="empty-state">
@@ -10659,22 +10793,116 @@ async function startQuickPractice() {
 function loadNextQpQuestion() {
   qpIndex++;
   if (qpIndex >= qpQueue.length) {
-    // All done!
-    document.getElementById('qpContainer').innerHTML = `
-      <div class="empty-state" style="padding:40px 20px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="width:56px;height:56px;margin-bottom:14px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        <h3>All Done!</h3>
-        <p>You completed all ${qpQueue.length} question${qpQueue.length !== 1 ? 's' : ''}. Great work!</p>
-        <button class="btn btn-primary" onclick="startQuickPractice()" style="margin-top:16px;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-          Restart Practice
-        </button>
-      </div>`;
+    renderQpSummary();
     updateQpProgress();
     return;
   }
   renderQpQuestion(qpQueue[qpIndex]);
   updateQpProgress();
+}
+
+function _recordQpResult(correct, total, mistakes) {
+  const q = qpQueue[qpIndex] || {};
+  qpSessionResults.push({
+    title: q.title || '',
+    topic: q.topic || '',
+    correct, total,
+    mistakes: mistakes || []
+  });
+}
+
+// End-of-session screen: total score + AI feedback (5 strengths / 5 weaknesses).
+function renderQpSummary() {
+  const totalCorrect = qpSessionResults.reduce((s, r) => s + r.correct, 0);
+  const totalBlanks = qpSessionResults.reduce((s, r) => s + r.total, 0);
+  const pct = totalBlanks ? Math.round((totalCorrect / totalBlanks) * 100) : 0;
+  const scoreColor = pct >= 80 ? 'var(--primary)' : pct >= 50 ? 'var(--accent-orange)' : 'var(--accent-red)';
+
+  const breakdown = qpSessionResults.map((r, i) =>
+    `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
+       <span style="color:var(--text-muted);">${i + 1}. ${escapeHtml(r.title || r.topic || 'Question')}</span>
+       <span style="font-weight:600;color:${r.total && r.correct === r.total ? 'var(--primary)' : 'var(--accent-orange)'};">${r.correct}/${r.total}</span>
+     </div>`).join('');
+
+  document.getElementById('qpContainer').innerHTML = `
+    <div class="practice-card" style="max-width:760px;margin:0 auto;">
+      <div style="text-align:center;padding:8px 0 4px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="width:48px;height:48px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <h3 style="margin:8px 0 2px;">Practice Complete! 🎉</h3>
+        <div style="font-size:1.6rem;font-weight:700;color:${scoreColor};margin-top:6px;">${totalCorrect} / ${totalBlanks} <span style="font-size:1rem;font-weight:600;">(${pct}%)</span></div>
+        <div style="font-size:0.82rem;color:var(--text-muted);">across ${qpSessionResults.length} question${qpSessionResults.length !== 1 ? 's' : ''}</div>
+      </div>
+      <div style="margin:14px 0;">${breakdown}</div>
+      <div id="qpAiFeedback" style="margin-top:10px;"></div>
+      <div style="text-align:center;margin-top:18px;">
+        <button class="btn btn-primary" onclick="startQuickPractice()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          Practice Again
+        </button>
+      </div>
+    </div>`;
+
+  generateQpFeedback(totalCorrect, totalBlanks, pct);
+}
+
+async function generateQpFeedback(totalCorrect, totalBlanks, pct) {
+  const box = document.getElementById('qpAiFeedback');
+  if (!box) return;
+  if (!qpSessionResults.length) return;
+  if (!window.__aiReady || !window.__aiReady()) {
+    box.innerHTML = `<div style="font-size:0.85rem;color:var(--text-muted);text-align:center;">AI feedback isn't set up yet.</div>`;
+    return;
+  }
+
+  box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;gap:8px;color:var(--text-muted);font-size:0.88rem;padding:10px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      Generating your personalised feedback…
+    </div>`;
+
+  const lines = qpSessionResults.map((r, i) => {
+    const m = r.mistakes && r.mistakes.length
+      ? r.mistakes.map(x => `${x.expected}→${x.student || '(blank)'}`).join('; ')
+      : 'none';
+    return `${i + 1}. Topic "${r.topic}" — score ${r.correct}/${r.total}; mistakes: ${m}`;
+  }).join('\n');
+
+  const prompt =
+    `You are an encouraging primary-school science tutor giving end-of-practice feedback to a student.\n` +
+    `Overall score: ${totalCorrect}/${totalBlanks} (${pct}%).\n` +
+    `Per-question results (expected→student shows their mistakes):\n${lines}\n\n` +
+    `Write feedback addressed directly to the student ("you"). Be specific to the topics and mistakes above, warm and constructive.\n` +
+    `Give EXACTLY 5 strengths and EXACTLY 5 weaknesses (areas to improve), each a short specific phrase.\n` +
+    `Return ONLY JSON: {"summary":"2-3 encouraging sentences","strengths":["..."],"weaknesses":["..."]}`;
+
+  let fb;
+  try {
+    const raw = await askGemini(prompt, { maxOutputTokens: 900, temperature: 0.5, json: true });
+    fb = _parseAIJson(raw);
+  } catch (e) {
+    console.error('QP feedback error:', e);
+    box.innerHTML = `<div style="font-size:0.85rem;color:var(--accent-red);text-align:center;">Couldn't generate feedback: ${escapeHtml(e && e.message ? e.message : String(e))}</div>`;
+    return;
+  }
+
+  const list = (arr, color, icon) => (Array.isArray(arr) ? arr : []).slice(0, 5).map(t =>
+    `<li style="display:flex;gap:8px;margin-bottom:6px;font-size:0.86rem;line-height:1.4;">
+       <span style="color:${color};flex-shrink:0;">${icon}</span><span>${escapeHtml(String(t))}</span>
+     </li>`).join('');
+
+  box.innerHTML = `
+    <div style="background:var(--surface-container-low,#f6f3ee);border-radius:10px;padding:14px 16px;">
+      ${fb.summary ? `<p style="font-size:0.9rem;line-height:1.5;margin:0 0 12px;">${escapeHtml(fb.summary)}</p>` : ''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div>
+          <div style="font-weight:700;font-size:0.85rem;color:var(--primary);margin-bottom:8px;">💪 Strengths</div>
+          <ul style="list-style:none;padding:0;margin:0;">${list(fb.strengths, 'var(--primary)', '✓')}</ul>
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:0.85rem;color:var(--accent-orange);margin-bottom:8px;">🎯 Areas to improve</div>
+          <ul style="list-style:none;padding:0;margin:0;">${list(fb.weaknesses, 'var(--accent-orange)', '→')}</ul>
+        </div>
+      </div>
+    </div>`;
 }
 
 function updateQpProgress() {
@@ -10808,6 +11036,7 @@ function submitQpAnswers() {
   const inputs = document.querySelectorAll('#qpContainer .blank-input');
   let correct = 0;
   let total = inputs.length;
+  const mistakes = [];
 
   inputs.forEach((input, idx) => {
     const answer = input.dataset.answer;
@@ -10830,9 +11059,11 @@ function submitQpAnswers() {
       correction.textContent = answer;
       input.parentNode.insertBefore(correction, input.nextSibling);
       addAnswerIcon(input, false, idx * 80);
+      mistakes.push({ expected: answer, student: input.value.trim() });
     }
   });
 
+  _recordQpResult(correct, total, mistakes);
   qpAnswered = Math.max(qpAnswered, qpIndex + 1);
   updateQpProgress();
 
@@ -12411,6 +12642,9 @@ window.moveEditToVetting = moveEditToVetting;
 // Flag Question (student)
 window.openFlagDialog = openFlagDialog;
 window.closeFlagDialog = closeFlagDialog;
+window.openMarkingSettings = openMarkingSettings;
+window.closeMarkingSettings = closeMarkingSettings;
+window.saveMarkingSettings = saveMarkingSettings;
 window.submitFlag = submitFlag;
 // Flagged Questions (admin)
 window.loadFlaggedQuestions = loadFlaggedQuestions;
