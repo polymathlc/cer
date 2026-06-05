@@ -5269,7 +5269,7 @@ const googleProvider = new GoogleAuthProvider();
 //         Until a real key is pasted, App Check stays off and AI still
 //         works while App Check enforcement is disabled.
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-2.5-flash"; // current, cheap, free-tier friendly (2.0 retired Jun 2026)
+const AI_MODEL = "gemini-3.5-flash"; // higher quality (~4x the cost of 2.5 Flash, still <1c/question)
 
 if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
   try {
