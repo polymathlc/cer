@@ -48,293 +48,444 @@ body {
   line-height: 1.6;
   overscroll-behavior: none;
 }
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+a { color: var(--primary); }
 
-/* ========== TOP BAR ========== */
-.topbar {
-  display: flex; align-items: center; gap: 14px;
-  padding: 14px 22px;
-  background: var(--text);
-  color: #fff;
-  position: sticky; top: 0; z-index: 50;
+/* ========== AUTH / LANDING ========== */
+.auth-screen {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: radial-gradient(circle at 20% 20%, #eef3ee 0, var(--bg) 55%);
 }
-.topbar-logo { width: 38px; height: 38px; object-fit: contain; border-radius: 8px; flex-shrink: 0; }
-.topbar-title h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
-.topbar-title span { font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.55); }
+.auth-card {
+  width: 100%; max-width: 420px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); padding: 32px;
+}
+.auth-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.auth-brand img { width: 46px; height: 46px; border-radius: 10px; object-fit: contain; }
+.auth-brand h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.auth-brand span { font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+.auth-sub { color: var(--text-muted); font-size: 0.92rem; margin-bottom: 20px; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; }
+.field input {
+  width: 100%; padding: 11px 13px; font-size: 0.98rem; font-family: inherit;
+  border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface-alt);
+}
+.field input:focus { outline: none; border-color: var(--border-focus); background: #fff; }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--text-light); font-size: 0.8rem; }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.auth-toggle { text-align: center; font-size: 0.86rem; color: var(--text-muted); margin-top: 16px; }
+.auth-toggle a { cursor: pointer; font-weight: 600; }
+.google-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 11px; border: 1.5px solid var(--border); border-radius: var(--radius-md);
+  background: #fff; cursor: pointer; font-weight: 600; font-size: 0.92rem; font-family: inherit;
+}
+.google-btn:hover { background: var(--surface-alt); }
+.google-btn svg { width: 18px; height: 18px; }
+
+/* ========== APP SHELL ========== */
+.app-shell { display: none; }
+.app-shell.show { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 248px; background: var(--text); color: #fff; display: flex; flex-direction: column;
+  position: fixed; top: 0; left: 0; bottom: 0; z-index: 100; transition: transform var(--transition);
+}
+.sidebar-brand { padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 12px; }
+.sidebar-brand img { width: 38px; height: 38px; border-radius: 8px; object-fit: contain; }
+.sidebar-brand h1 { font-size: 1.02rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.sidebar-brand span { font-family: 'Space Mono', monospace; font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.5); }
+.sidebar-nav { padding: 14px 12px; flex: 1; overflow-y: auto; }
+.nav-section { font-family: 'Space Mono', monospace; font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.35); padding: 14px 10px 6px; }
+.nav-item {
+  display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: var(--radius-md);
+  color: rgba(255,255,255,0.75); cursor: pointer; font-size: 0.92rem; font-weight: 500; margin-bottom: 2px; transition: all var(--transition);
+}
+.nav-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+.nav-item.active { background: var(--primary); color: #fff; }
+.nav-item .ico { font-size: 1.05rem; width: 20px; text-align: center; }
+.sidebar-foot { padding: 14px; border-top: 1px solid rgba(255,255,255,0.08); }
+.sidebar-user { font-size: 0.8rem; color: rgba(255,255,255,0.6); margin-bottom: 8px; padding: 0 4px; word-break: break-all; }
+.sidebar-user b { color: #fff; display: block; font-size: 0.86rem; }
+.logout-btn { width: 100%; padding: 9px; background: rgba(255,255,255,0.08); color: #fff; border: none; border-radius: var(--radius-md); cursor: pointer; font-family: inherit; font-size: 0.86rem; font-weight: 600; }
+.logout-btn:hover { background: rgba(255,255,255,0.16); }
+
+.main { margin-left: 248px; flex: 1; min-width: 0; }
+@media (max-width: 820px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+  .main { margin-left: 0; }
+}
+.topbar { display: flex; align-items: center; gap: 14px; padding: 13px 22px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 40; }
+.menu-toggle { display: none; background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--text); }
+@media (max-width: 820px) { .menu-toggle { display: block; } }
+.topbar h2 { font-size: 1.05rem; font-weight: 700; }
 .topbar-spacer { flex: 1; }
-.ai-badge {
-  font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.08em;
-  padding: 5px 10px; border-radius: 999px; background: rgba(255,255,255,0.1);
-  display: flex; align-items: center; gap: 6px;
-}
+.ai-badge { font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.08em; padding: 5px 10px; border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--border); display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
 .ai-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-light); }
-.ai-dot.ready { background: #67d68a; box-shadow: 0 0 0 3px rgba(103,214,138,0.25); }
+.ai-dot.ready { background: #67d68a; box-shadow: 0 0 0 3px rgba(103,214,138,0.2); }
 
-/* ========== LAYOUT ========== */
-.app { max-width: 1200px; margin: 0 auto; padding: 20px; }
+.page { display: none; padding: 22px; max-width: 1180px; margin: 0 auto; }
+.page.active { display: block; }
+.page-head { margin-bottom: 18px; }
+.page-head h3 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
+.page-head p { color: var(--text-muted); font-size: 0.92rem; }
+
+/* ========== CARDS / GRID ========== */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.card-pad { padding: 20px; }
 .grid { display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: start; }
 @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
-.card-pad { padding: 20px; }
-
-.section-label {
-  font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px;
-}
-
-/* ========== QUESTION PANEL ========== */
-.q-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
-.chip {
-  font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.08em;
-  padding: 4px 9px; border-radius: 999px; background: var(--primary-light); color: var(--primary); font-weight: 700;
-}
-.chip.topic { background: var(--accent-blue-light); color: var(--accent-blue); }
-.q-counter { margin-left: auto; font-size: 0.78rem; color: var(--text-muted); font-family: 'Space Mono', monospace; }
-.q-text { font-size: 1.18rem; font-weight: 600; line-height: 1.5; color: var(--text); }
-.q-text .math { font-family: 'Space Grotesk', sans-serif; }
-
-.final-answer { margin-top: 18px; }
-.final-answer label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
-.final-answer input {
-  width: 100%; padding: 11px 13px; font-size: 1.05rem; font-family: 'Space Grotesk', sans-serif;
-  border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface-alt);
-  transition: border-color var(--transition);
-}
-.final-answer input:focus { outline: none; border-color: var(--border-focus); background: #fff; }
-
-.q-nav { display: flex; gap: 10px; margin-top: 16px; }
+.section-label { font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
 
 /* ========== BUTTONS ========== */
-.btn {
-  font-family: 'DM Sans', sans-serif; font-size: 0.92rem; font-weight: 600;
-  padding: 11px 16px; border-radius: var(--radius-md); border: 1.5px solid transparent;
-  cursor: pointer; transition: all var(--transition); display: inline-flex; align-items: center;
-  justify-content: center; gap: 8px; user-select: none;
-}
+.btn { font-family: inherit; font-size: 0.92rem; font-weight: 600; padding: 11px 16px; border-radius: var(--radius-md); border: 1.5px solid transparent; cursor: pointer; transition: all var(--transition); display: inline-flex; align-items: center; justify-content: center; gap: 8px; user-select: none; }
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-primary:hover { background: var(--primary-hover); }
 .btn-primary:disabled { opacity: 0.55; cursor: default; }
 .btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
 .btn-ghost:hover { background: var(--surface-alt); border-color: var(--text-light); }
+.btn-danger { background: var(--accent-red-light); color: var(--accent-red); border-color: transparent; }
+.btn-danger:hover { background: #fbe0e0; }
 .btn-block { width: 100%; }
 .btn-lg { padding: 14px 18px; font-size: 1rem; }
+.btn-sm { padding: 7px 11px; font-size: 0.82rem; }
 
-/* ========== DRAWING / WORKING PANEL ========== */
+/* ========== QUESTION (student practice) ========== */
+.q-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.chip { font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.08em; padding: 4px 9px; border-radius: 999px; background: var(--primary-light); color: var(--primary); font-weight: 700; }
+.chip.topic { background: var(--accent-blue-light); color: var(--accent-blue); }
+.q-counter { margin-left: auto; font-size: 0.78rem; color: var(--text-muted); font-family: 'Space Mono', monospace; }
+.q-body { font-size: 1.12rem; font-weight: 500; line-height: 1.55; color: var(--text); }
+.q-body p { margin-bottom: 8px; }
+.q-body img { max-width: 100%; border-radius: var(--radius-md); margin: 8px 0; border: 1px solid var(--border); }
+.final-answer { margin-top: 18px; }
+.final-answer label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
+.final-answer input { width: 100%; padding: 11px 13px; font-size: 1.05rem; font-family: 'Space Grotesk', sans-serif; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface-alt); }
+.final-answer input:focus { outline: none; border-color: var(--border-focus); background: #fff; }
+.q-nav { display: flex; gap: 10px; margin-top: 16px; }
+.empty-note { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+
+/* ========== WORKING PAD ========== */
 .pad-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .pad-head h2 { font-size: 1rem; font-weight: 700; }
 .pad-hint { font-size: 0.78rem; color: var(--text-muted); margin-left: auto; }
-
-.toolbar {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 10px 12px; background: var(--surface-alt);
-  border: 1px solid var(--border); border-bottom: none;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-}
+.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; background: var(--surface-alt); border: 1px solid var(--border); border-bottom: none; border-radius: var(--radius-md) var(--radius-md) 0 0; }
 .tool-group { display: flex; align-items: center; gap: 6px; }
 .tool-divider { width: 1px; align-self: stretch; background: var(--border); margin: 2px 4px; }
-.tool-btn {
-  width: 38px; height: 38px; border-radius: var(--radius-sm); border: 1.5px solid var(--border);
-  background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-size: 1.05rem; color: var(--text); transition: all var(--transition); padding: 0;
-}
+.tool-btn { width: 38px; height: 38px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; color: var(--text); transition: all var(--transition); padding: 0; }
 .tool-btn:hover { border-color: var(--text-light); }
 .tool-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
-.swatch {
-  width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 2px solid #fff;
-  box-shadow: 0 0 0 1.5px var(--border); transition: transform var(--transition);
-}
+.swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 2px solid #fff; box-shadow: 0 0 0 1.5px var(--border); transition: transform var(--transition); }
 .swatch:hover { transform: scale(1.12); }
 .swatch.active { box-shadow: 0 0 0 2px var(--primary); transform: scale(1.12); }
 .width-range { width: 90px; accent-color: var(--primary); }
-
-.canvas-wrap {
-  position: relative;
-  border: 1px solid var(--border); border-radius: 0 0 var(--radius-md) var(--radius-md);
-  overflow: hidden; background: #fff;
-  background-image:
-    linear-gradient(rgba(74,124,89,0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(74,124,89,0.07) 1px, transparent 1px);
-  background-size: 28px 28px;
-}
+.canvas-wrap { position: relative; border: 1px solid var(--border); border-radius: 0 0 var(--radius-md) var(--radius-md); overflow: hidden; background: #fff; background-image: linear-gradient(rgba(74,124,89,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(74,124,89,0.07) 1px, transparent 1px); background-size: 28px 28px; }
 #padCanvas { display: block; width: 100%; height: 460px; touch-action: none; cursor: crosshair; }
 @media (max-width: 880px) { #padCanvas { height: 56vh; } }
-.canvas-empty {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  pointer-events: none; color: var(--text-light); font-size: 0.95rem; gap: 8px; text-align: center; padding: 20px;
-}
+.canvas-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; color: var(--text-light); font-size: 0.95rem; gap: 8px; text-align: center; padding: 20px; }
 
 /* ========== RESULT ========== */
 .result { margin-top: 18px; display: none; }
 .result.show { display: block; }
-.verdict-banner {
-  display: flex; align-items: center; gap: 14px; padding: 16px 18px;
-  border-radius: var(--radius-md); margin-bottom: 16px;
-}
+.verdict-banner { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: var(--radius-md); margin-bottom: 16px; }
 .verdict-banner.correct { background: var(--accent-green-light); }
 .verdict-banner.partial { background: var(--accent-orange-light); }
 .verdict-banner.incorrect { background: var(--accent-red-light); }
-.verdict-icon {
-  width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  font-size: 1.4rem; font-weight: 700; color: #fff; flex-shrink: 0;
-}
+.verdict-icon { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; font-weight: 700; color: #fff; flex-shrink: 0; }
 .correct .verdict-icon { background: var(--accent-green); }
 .partial .verdict-icon { background: var(--accent-orange); }
 .incorrect .verdict-icon { background: var(--accent-red); }
 .verdict-text h3 { font-size: 1.05rem; font-weight: 700; text-transform: capitalize; }
 .verdict-text .score { font-family: 'Space Mono', monospace; font-size: 0.8rem; color: var(--text-muted); }
-
 .feedback-block { margin-bottom: 14px; }
-.feedback-block h4 {
-  font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--text-muted); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
-}
+.feedback-block h4 { font-family: 'Space Mono', monospace; font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
 .feedback-block p { font-size: 0.95rem; line-height: 1.55; }
 .feedback-block ul { margin: 4px 0 0 18px; }
 .feedback-block li { font-size: 0.92rem; margin-bottom: 4px; }
-
-.captured {
-  margin-top: 4px; border: 1px solid var(--border); border-radius: var(--radius-md);
-  overflow: hidden; background: var(--surface-alt);
-}
+.captured { margin-top: 4px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--surface-alt); }
 .captured img { display: block; width: 100%; }
 .captured-cap { font-size: 0.72rem; color: var(--text-muted); padding: 7px 10px; font-family: 'Space Mono', monospace; }
 
-/* ========== TOAST ========== */
-#toast {
-  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
-  background: var(--text); color: #fff; padding: 12px 18px; border-radius: var(--radius-md);
-  font-size: 0.88rem; box-shadow: var(--shadow-lg); opacity: 0; pointer-events: none;
-  transition: all var(--transition); z-index: 200; max-width: 90vw;
+/* ========== EDITOR ========== */
+.editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 760px) { .editor-grid { grid-template-columns: 1fr; } }
+.editor-field { margin-bottom: 16px; }
+.editor-field > label { display: block; font-size: 0.84rem; font-weight: 600; margin-bottom: 6px; }
+.editor-field input, .editor-field textarea, .editor-field select {
+  width: 100%; padding: 10px 12px; font-size: 0.95rem; font-family: inherit; color: var(--text);
+  border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface-alt);
 }
+.editor-field textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+.editor-field input:focus, .editor-field textarea:focus, .editor-field select:focus { outline: none; border-color: var(--border-focus); background: #fff; }
+.hint { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+
+.block-card { border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 12px; background: var(--surface-alt); overflow: hidden; }
+.block-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #fff; border-bottom: 1px solid var(--border); }
+.block-badge { font-family: 'Space Mono', monospace; font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--primary-light); color: var(--primary); font-weight: 700; }
+.block-badge.image { background: var(--accent-blue-light); color: var(--accent-blue); }
+.block-head-actions { margin-left: auto; display: flex; gap: 4px; }
+.mini-btn { width: 28px; height: 28px; border: 1px solid var(--border); background: #fff; border-radius: var(--radius-sm); cursor: pointer; font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; justify-content: center; }
+.mini-btn:hover { color: var(--text); border-color: var(--text-light); }
+.block-body { padding: 12px; }
+.block-edit { min-height: 50px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; font-size: 0.98rem; line-height: 1.5; outline: none; }
+.block-edit:focus { border-color: var(--border-focus); }
+.block-edit:empty::before { content: attr(data-ph); color: var(--text-light); }
+.img-zone { border: 1.5px dashed var(--border); border-radius: var(--radius-sm); padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.85rem; cursor: pointer; background: #fff; }
+.img-zone:hover { border-color: var(--primary); color: var(--primary); }
+.img-preview { max-width: 100%; border-radius: var(--radius-sm); margin-top: 8px; display: none; }
+.add-block-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 18px; }
+
+/* ========== BANK ========== */
+.bank-item { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 10px; background: var(--surface); }
+.bank-item-main { flex: 1; min-width: 0; }
+.bank-item-main h4 { font-size: 0.98rem; font-weight: 600; }
+.bank-item-main .meta { font-size: 0.8rem; color: var(--text-muted); display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.bank-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* ========== OVERLAYS ========== */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(20,18,16,0.5); z-index: 300; align-items: center; justify-content: center; padding: 20px; }
+.overlay.show { display: flex; }
+.overlay-card { background: var(--surface); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
+.overlay-head { display: flex; align-items: center; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+.overlay-head h3 { font-size: 1.1rem; font-weight: 700; }
+.overlay-head .close { margin-left: auto; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--text-muted); }
+.overlay-body { padding: 22px; }
+.overlay-foot { padding: 16px 22px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+.range-row { display: flex; align-items: center; gap: 12px; }
+.range-row input[type=range] { flex: 1; accent-color: var(--primary); }
+.range-val { font-family: 'Space Mono', monospace; font-weight: 700; color: var(--primary); min-width: 96px; text-align: right; font-size: 0.82rem; }
+.ai-drop { border: 2px dashed var(--border); border-radius: var(--radius-md); padding: 30px 20px; text-align: center; color: var(--text-muted); cursor: pointer; }
+.ai-drop:hover { border-color: var(--primary); color: var(--primary); background: var(--surface-alt); }
+.ai-drop b { color: var(--text); }
+
+/* ========== TOAST / SPINNER ========== */
+#toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: #fff; padding: 12px 18px; border-radius: var(--radius-md); font-size: 0.88rem; box-shadow: var(--shadow-lg); opacity: 0; pointer-events: none; transition: all var(--transition); z-index: 400; max-width: 90vw; }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 #toast.error { background: var(--accent-red); }
 #toast.success { background: var(--primary); }
-
-.spinner {
-  width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff;
-  border-radius: 50%; animation: spin 0.7s linear infinite;
-}
+.spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+.spinner.dark { border-color: rgba(0,0,0,0.15); border-top-color: var(--primary); }
 @keyframes spin { to { transform: rotate(360deg); } }
+.hidden { display: none !important; }
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <img class="topbar-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2238%22 height=%2238%22 viewBox=%220 0 38 38%22%3E%3Crect width=%2238%22 height=%2238%22 rx=%228%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2219%22 y=%2227%22 font-family=%22sans-serif%22 font-size=%2222%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
-  <div class="topbar-title">
-    <h1>Math Practice</h1>
-    <span>Polymath Learning Centre</span>
+<!-- ============================== AUTH SCREEN ============================== -->
+<div class="auth-screen" id="authScreen">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2246%22 height=%2246%22%3E%3Crect width=%2246%22 height=%2246%22 rx=%2210%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2223%22 y=%2232%22 font-family=%22sans-serif%22 font-size=%2226%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
+      <div><h1>Math Practice</h1><span>Polymath Learning Centre</span></div>
+    </div>
+    <p class="auth-sub" id="authSub">Sign in to start practising — write your working and get instant AI marking.</p>
+
+    <button class="google-btn" id="googleBtn">
+      <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.8-6.8C35.6 2.4 30.2 0 24 0 14.6 0 6.4 5.4 2.6 13.2l7.9 6.2C12.3 13.7 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.5 3-2.2 5.5-4.7 7.2l7.3 5.7c4.3-3.9 6.8-9.7 6.8-17.4z"/><path fill="#FBBC05" d="M10.5 28.4c-.5-1.4-.7-2.9-.7-4.4s.3-3 .7-4.4l-7.9-6.2C1 16.5 0 20.1 0 24s1 7.5 2.6 10.6l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.3-5.7c-2 1.4-4.7 2.3-7.9 2.3-6.4 0-11.7-4.2-13.5-9.9l-7.9 6.2C6.4 42.6 14.6 48 24 48z"/></svg>
+      Continue with Google
+    </button>
+
+    <div class="auth-divider">or</div>
+
+    <div id="nameField" class="field hidden">
+      <label>Name</label>
+      <input id="authName" type="text" placeholder="Your name">
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input id="authEmail" type="email" placeholder="you@example.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input id="authPass" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary btn-block" id="authSubmit">Sign in</button>
+    <div class="auth-toggle" id="authToggle">New here? <a id="toggleLink">Create an account</a></div>
   </div>
-  <div class="topbar-spacer"></div>
-  <div class="ai-badge"><span class="ai-dot" id="aiDot"></span><span id="aiStatus">AI starting…</span></div>
 </div>
 
-<div class="app">
-  <div class="grid">
+<!-- ============================== APP SHELL ============================== -->
+<div class="app-shell" id="appShell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2238%22 height=%2238%22%3E%3Crect width=%2238%22 height=%2238%22 rx=%228%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2219%22 y=%2227%22 font-family=%22sans-serif%22 font-size=%2222%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
+      <div><h1>Math Practice</h1><span>Polymath</span></div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active" data-page="practice"><span class="ico">✍️</span> Practice</div>
+      <div class="nav-section admin-only">Admin</div>
+      <div class="nav-item admin-only" data-page="create"><span class="ico">➕</span> Create Question</div>
+      <div class="nav-item admin-only" data-page="bank"><span class="ico">📚</span> Question Bank</div>
+      <div class="nav-item admin-only" id="navMarking"><span class="ico">⚖️</span> AI Marking Guide</div>
+      <div class="nav-item admin-only" id="navGen"><span class="ico">✨</span> AI Generation Guide</div>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="sidebar-user"><b id="userName">—</b><span id="userEmail"></span></div>
+      <button class="logout-btn" id="logoutBtn">Sign out</button>
+    </div>
+  </aside>
 
-    <!-- ===== Question + final answer ===== -->
-    <div>
-      <div class="card card-pad">
-        <div class="section-label">Question</div>
-        <div class="q-meta">
-          <span class="chip" id="qLevel">P5</span>
-          <span class="chip topic" id="qTopic">Topic</span>
-          <span class="q-counter" id="qCounter">1 / 1</span>
+  <div class="main">
+    <div class="topbar">
+      <button class="menu-toggle" id="menuToggle">☰</button>
+      <h2 id="topbarTitle">Practice</h2>
+      <div class="topbar-spacer"></div>
+      <div class="ai-badge"><span class="ai-dot" id="aiDot"></span><span id="aiStatus">AI starting…</span></div>
+    </div>
+
+    <!-- ================= PRACTICE PAGE ================= -->
+    <div class="page active" id="page-practice">
+      <div class="grid">
+        <div>
+          <div class="card card-pad" id="questionCard">
+            <div class="section-label">Question</div>
+            <div class="q-meta" id="qMeta">
+              <span class="chip" id="qLevel">—</span>
+              <span class="chip topic" id="qTopic">—</span>
+              <span class="q-counter" id="qCounter">0 / 0</span>
+            </div>
+            <div class="q-body" id="qBody"></div>
+            <div class="final-answer">
+              <label for="finalAnswer">Your final answer <span style="color:var(--text-light);font-weight:400;">(optional)</span></label>
+              <input id="finalAnswer" type="text" inputmode="text" autocomplete="off" placeholder="e.g. 42 cm²">
+            </div>
+            <div class="q-nav">
+              <button class="btn btn-ghost" id="prevBtn">‹ Prev</button>
+              <button class="btn btn-ghost" id="nextBtn">Next ›</button>
+            </div>
+          </div>
         </div>
-        <div class="q-text" id="qText">Loading…</div>
 
-        <div class="final-answer">
-          <label for="finalAnswer">Your final answer <span style="color:var(--text-light);font-weight:400;">(optional — show working on the right)</span></label>
-          <input id="finalAnswer" type="text" inputmode="text" autocomplete="off" placeholder="e.g. 42 cm²">
-        </div>
+        <div>
+          <div class="card card-pad">
+            <div class="pad-head"><h2>✍️ Your working</h2><span class="pad-hint">Write with Apple Pencil or your finger</span></div>
+            <div class="toolbar">
+              <div class="tool-group">
+                <button class="tool-btn active" id="toolPen" title="Pen">✏️</button>
+                <button class="tool-btn" id="toolEraser" title="Eraser">🧽</button>
+              </div>
+              <div class="tool-divider"></div>
+              <div class="tool-group" id="swatches"></div>
+              <div class="tool-divider"></div>
+              <div class="tool-group"><input class="width-range" id="penWidth" type="range" min="1" max="14" value="3" title="Pen size"></div>
+              <div class="tool-divider"></div>
+              <div class="tool-group">
+                <button class="tool-btn" id="undoBtn" title="Undo">↶</button>
+                <button class="tool-btn" id="redoBtn" title="Redo">↷</button>
+                <button class="tool-btn" id="clearBtn" title="Clear all">🗑️</button>
+              </div>
+            </div>
+            <div class="canvas-wrap">
+              <canvas id="padCanvas"></canvas>
+              <div class="canvas-empty" id="canvasEmpty">Start writing your working here ✦</div>
+            </div>
+            <button class="btn btn-primary btn-block btn-lg" id="submitBtn" style="margin-top:16px;">
+              <span id="submitLabel">📸 Submit for AI marking</span>
+            </button>
 
-        <div class="q-nav">
-          <button class="btn btn-ghost" id="prevBtn">‹ Prev</button>
-          <button class="btn btn-ghost" id="nextBtn">Next ›</button>
+            <div class="result" id="result">
+              <div class="verdict-banner" id="verdictBanner">
+                <div class="verdict-icon" id="verdictIcon">✓</div>
+                <div class="verdict-text"><h3 id="verdictTitle">Correct</h3><div class="score" id="verdictScore"></div></div>
+              </div>
+              <div class="feedback-block"><h4>💬 Feedback</h4><p id="fbFeedback"></p></div>
+              <div class="feedback-block" id="mistakesBlock" style="display:none;"><h4>🔍 What to check</h4><ul id="fbMistakes"></ul></div>
+              <div class="feedback-block" id="nextStepBlock" style="display:none;"><h4>➡️ Next step</h4><p id="fbNextStep"></p></div>
+              <div class="feedback-block"><h4>📸 Working sent to the AI</h4>
+                <div class="captured"><img id="capturedImg" alt="Your working"><div class="captured-cap">This screenshot of your working is what the AI marked.</div></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- ===== Working pad ===== -->
-    <div>
+    <!-- ================= CREATE PAGE (admin) ================= -->
+    <div class="page" id="page-create">
+      <div class="page-head" style="display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;">
+        <div style="flex:1;"><h3 id="createHeading">Create Question</h3><p>Add a math question for your students. They'll see it on the practice pad.</p></div>
+        <button class="btn btn-ghost" id="aiBuildBtn">✨ Build with AI</button>
+      </div>
       <div class="card card-pad">
-        <div class="pad-head">
-          <h2>✍️ Your working</h2>
-          <span class="pad-hint">Write with Apple Pencil or your finger</span>
-        </div>
-
-        <div class="toolbar">
-          <div class="tool-group">
-            <button class="tool-btn active" id="toolPen" title="Pen">✏️</button>
-            <button class="tool-btn" id="toolEraser" title="Eraser">🧽</button>
-          </div>
-          <div class="tool-divider"></div>
-          <div class="tool-group" id="swatches"></div>
-          <div class="tool-divider"></div>
-          <div class="tool-group">
-            <input class="width-range" id="penWidth" type="range" min="1" max="14" value="3" title="Pen size">
-          </div>
-          <div class="tool-divider"></div>
-          <div class="tool-group">
-            <button class="tool-btn" id="undoBtn" title="Undo">↶</button>
-            <button class="tool-btn" id="redoBtn" title="Redo">↷</button>
-            <button class="tool-btn" id="clearBtn" title="Clear all">🗑️</button>
+        <div class="editor-grid">
+          <div class="editor-field"><label>Title</label><input id="qTitleInput" type="text" placeholder="e.g. Fractions — pizza left over"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div class="editor-field" style="margin:0;"><label>Level</label><input id="qLevelInput" type="text" placeholder="e.g. P5"></div>
+            <div class="editor-field" style="margin:0;"><label>Topic</label><input id="qTopicInput" type="text" placeholder="e.g. Fractions"></div>
           </div>
         </div>
 
-        <div class="canvas-wrap">
-          <canvas id="padCanvas"></canvas>
-          <div class="canvas-empty" id="canvasEmpty">Start writing your working here ✦</div>
+        <label style="display:block;font-size:0.84rem;font-weight:600;margin:6px 0;">Question content</label>
+        <div id="blocksList"></div>
+        <div class="add-block-row">
+          <button class="btn btn-ghost btn-sm" id="addTextBtn">＋ Text</button>
+          <button class="btn btn-ghost btn-sm" id="addImageBtn">＋ Image / diagram</button>
         </div>
 
-        <button class="btn btn-primary btn-block btn-lg" id="submitBtn" style="margin-top:16px;">
-          <span id="submitLabel">📸 Submit for AI marking</span>
-        </button>
+        <div class="editor-field"><label>Correct answer</label><input id="qExpectedInput" type="text" placeholder="e.g. 7/20"><div class="hint">The expected final answer. The AI compares the student's working against this.</div></div>
+        <div class="editor-field"><label>Marking guide <span style="color:var(--text-light);font-weight:400;">(per-question)</span></label><textarea id="qGuideInput" placeholder="Worked solution / what to look for in the working. e.g. Common denominator 20; 2/5=8/20, 1/4=5/20; eaten 13/20; left 7/20."></textarea><div class="hint">Private notes for the AI marker — students never see this.</div></div>
 
-        <!-- ===== Result ===== -->
-        <div class="result" id="result">
-          <div class="verdict-banner" id="verdictBanner">
-            <div class="verdict-icon" id="verdictIcon">✓</div>
-            <div class="verdict-text">
-              <h3 id="verdictTitle">Correct</h3>
-              <div class="score" id="verdictScore"></div>
-            </div>
-          </div>
-
-          <div class="feedback-block">
-            <h4>💬 Feedback</h4>
-            <p id="fbFeedback"></p>
-          </div>
-
-          <div class="feedback-block" id="mistakesBlock" style="display:none;">
-            <h4>🔍 What to check</h4>
-            <ul id="fbMistakes"></ul>
-          </div>
-
-          <div class="feedback-block" id="nextStepBlock" style="display:none;">
-            <h4>➡️ Next step</h4>
-            <p id="fbNextStep"></p>
-          </div>
-
-          <div class="feedback-block">
-            <h4>📸 Working sent to the AI</h4>
-            <div class="captured">
-              <img id="capturedImg" alt="Your working">
-              <div class="captured-cap">This screenshot of your working is what the AI marked.</div>
-            </div>
-          </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="saveQBtn">💾 Save to Question Bank</button>
+          <button class="btn btn-ghost" id="clearQBtn">Clear</button>
+          <button class="btn btn-ghost" id="cancelEditBtn" style="display:none;">Cancel edit</button>
         </div>
       </div>
     </div>
 
+    <!-- ================= BANK PAGE (admin) ================= -->
+    <div class="page" id="page-bank">
+      <div class="page-head"><h3>Question Bank</h3><p>All questions your students will practise. <span id="bankCount"></span></p></div>
+      <div class="card card-pad">
+        <div id="bankList"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================== OVERLAYS ============================== -->
+<div class="overlay" id="markingOverlay">
+  <div class="overlay-card">
+    <div class="overlay-head"><h3>⚖️ AI Marking Guide</h3><button class="close" data-close="markingOverlay">×</button></div>
+    <div class="overlay-body">
+      <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:18px;">These rules apply to how the AI marks every student's working. Students inherit your settings automatically.</p>
+      <div class="editor-field"><label>Strictness</label>
+        <div class="range-row"><input id="mkStrictness" type="range" min="1" max="5" value="3"><span class="range-val" id="mkStrictnessLabel">Balanced</span></div>
+      </div>
+      <div class="editor-field"><label>Marking instructions / rubric</label><textarea id="mkInstructions" style="min-height:120px;" placeholder="e.g. Award method marks generously. Penalise missing units. Accept equivalent fractions. Encourage clear step-by-step working."></textarea></div>
+    </div>
+    <div class="overlay-foot"><button class="btn btn-ghost" data-close="markingOverlay">Cancel</button><button class="btn btn-primary" id="saveMarkingBtn">Save</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="genOverlay">
+  <div class="overlay-card">
+    <div class="overlay-head"><h3>✨ AI Generation Guide</h3><button class="close" data-close="genOverlay">×</button></div>
+    <div class="overlay-body">
+      <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:18px;">Guidance the AI follows when turning an uploaded exam question into a practice question.</p>
+      <div class="editor-field"><label>Generation instructions</label><textarea id="genInstructions" style="min-height:130px;" placeholder="e.g. Keep the wording close to the original. Use Singapore primary-school style. Always include units in the answer. Prefer whole-number answers where possible."></textarea></div>
+    </div>
+    <div class="overlay-foot"><button class="btn btn-ghost" data-close="genOverlay">Cancel</button><button class="btn btn-primary" id="saveGenBtn">Save</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="aiBuildOverlay">
+  <div class="overlay-card">
+    <div class="overlay-head"><h3>✨ Build question from a photo</h3><button class="close" data-close="aiBuildOverlay">×</button></div>
+    <div class="overlay-body">
+      <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:16px;">Paste, drop, or choose a photo / screenshot / PDF of an exam question. The AI fills in the editor for you to review.</p>
+      <div class="ai-drop" id="aiBuildZone">
+        <div style="font-size:1.8rem;margin-bottom:6px;">📸</div>
+        <b>Click to choose</b>, or paste (⌘V) / drop a file here<br><span style="font-size:0.8rem;">Image or PDF, up to 18 MB</span>
+      </div>
+      <input id="aiBuildFile" type="file" accept="image/*,application/pdf" class="hidden">
+      <div id="aiBuildStatus" style="margin-top:14px;font-size:0.88rem;color:var(--text-muted);"></div>
+    </div>
   </div>
 </div>
 
@@ -342,11 +493,19 @@ body {
 
 <script type="module">
 // =====================================================================
-// Firebase AI Logic (Gemini Flash) — same backend as the Science app
+// Firebase (shared "mathgen--app" project — math data is namespaced
+// under mathQuestions / mathMarking / mathGeneration / config.mathAdmin
+// so it never collides with the Science app's documents).
 // =====================================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  updateProfile, GoogleAuthProvider, signInWithPopup, signOut, browserPopupRedirectResolver }
+  from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc }
+  from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
@@ -359,30 +518,29 @@ const firebaseConfig = {
 };
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
 const AI_MODEL = "gemini-3.5-flash";
+const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'abigail.yew@stanfordmanpower.com'];
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
+const googleProvider = new GoogleAuthProvider();
 if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
-  try {
-    initializeAppCheck(app, { provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
-  } catch (e) { console.warn("App Check init failed:", e); }
+  try { initializeAppCheck(app, { provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true }); }
+  catch (e) { console.warn("App Check init failed:", e); }
 }
-
 let geminiModel = null;
-try {
-  const ai = getAI(app, { backend: new GoogleAIBackend() });
-  geminiModel = getGenerativeModel(ai, { model: AI_MODEL });
-} catch (e) { console.warn("Firebase AI init failed:", e); }
-
+try { geminiModel = getGenerativeModel(getAI(app, { backend: new GoogleAIBackend() }), { model: AI_MODEL }); }
+catch (e) { console.warn("Firebase AI init failed:", e); }
 const aiReady = () => !!geminiModel;
 
-// Multimodal call: text prompt + one inline image (the working screenshot).
-async function askGeminiVision(prompt, base64Png, { maxOutputTokens = 1024 } = {}) {
+async function askGeminiVision(prompt, media, { maxOutputTokens = 1024, json = true } = {}) {
   if (!geminiModel) throw new Error("AI is not configured yet");
-  const parts = [{ text: prompt }, { inlineData: { mimeType: "image/png", data: base64Png } }];
-  const res = await geminiModel.generateContent({
-    contents: [{ role: "user", parts }],
-    generationConfig: { maxOutputTokens, temperature: 0.2, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } }
-  });
+  const parts = [{ text: prompt }];
+  (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
+  const generationConfig = { maxOutputTokens, temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } };
+  if (json) generationConfig.responseMimeType = "application/json";
+  const res = await geminiModel.generateContent({ contents: [{ role: "user", parts }], generationConfig });
   return (res.response.text() || "").trim();
 }
 function parseAIJson(raw) {
@@ -393,337 +551,612 @@ function parseAIJson(raw) {
   if (start > 0) s = s.slice(start);
   return JSON.parse(s);
 }
+function _fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => { const res = String(r.result || ""); const c = res.indexOf(","); resolve(c >= 0 ? res.slice(c + 1) : res); };
+    r.onerror = reject; r.readAsDataURL(file);
+  });
+}
+const $ = (id) => document.getElementById(id);
+const escapeHtml = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // =====================================================================
-// Question bank — edit / extend freely
+// Built-in starter questions (used as a fallback when the bank is empty)
 // =====================================================================
-const QUESTIONS = [
-  {
-    level: "P5", topic: "Fractions",
-    text: "Jamie ate ⅖ of a pizza and Sam ate ¼ of the same pizza. What fraction of the pizza is left?",
-    expected: "7/20",
-    guide: "Common denominator 20. 2/5 = 8/20, 1/4 = 5/20, eaten = 13/20, left = 7/20."
-  },
-  {
-    level: "P5", topic: "Area",
-    text: "A rectangle is 12 cm long and 7 cm wide. A square of side 3 cm is cut from one corner. What is the area of the remaining shape?",
-    expected: "75 cm²",
-    guide: "Rectangle area 12×7 = 84. Square 3×3 = 9. Remaining 84 − 9 = 75 cm²."
-  },
-  {
-    level: "P6", topic: "Ratio",
-    text: "The ratio of red to blue marbles is 3 : 5. There are 24 red marbles. How many marbles are there altogether?",
-    expected: "64",
-    guide: "1 unit = 24 ÷ 3 = 8. Total units = 3 + 5 = 8. Total = 8 × 8 = 64 marbles."
-  },
-  {
-    level: "P6", topic: "Algebra",
-    text: "Solve for x:  3x + 7 = 25",
-    expected: "x = 6",
-    guide: "3x = 25 − 7 = 18, so x = 18 ÷ 3 = 6."
-  },
-  {
-    level: "P6", topic: "Speed",
-    text: "A car travels 180 km in 2.5 hours. What is its average speed in km/h?",
-    expected: "72 km/h",
-    guide: "Speed = distance ÷ time = 180 ÷ 2.5 = 72 km/h."
-  }
+const STARTER_QUESTIONS = [
+  { id: "starter1", level: "P5", topic: "Fractions", blocks: [{ id: "b1", type: "text", content: "Jamie ate ⅖ of a pizza and Sam ate ¼ of the same pizza. What fraction of the pizza is left?" }], expected: "7/20", markingGuide: "Common denominator 20. 2/5=8/20, 1/4=5/20, eaten 13/20, left 7/20." },
+  { id: "starter2", level: "P6", topic: "Ratio", blocks: [{ id: "b1", type: "text", content: "The ratio of red to blue marbles is 3 : 5. There are 24 red marbles. How many marbles are there altogether?" }], expected: "64", markingGuide: "1 unit = 24÷3 = 8. Total units = 8. Total = 8×8 = 64." },
+  { id: "starter3", level: "P6", topic: "Algebra", blocks: [{ id: "b1", type: "text", content: "Solve for x:  3x + 7 = 25" }], expected: "x = 6", markingGuide: "3x = 18, x = 6." }
 ];
 
 // =====================================================================
-// Drawing pad (high-DPI, Apple-Pencil / touch friendly)
+// Global state
 // =====================================================================
-const canvas = document.getElementById("padCanvas");
-const ctx = canvas.getContext("2d", { willReadFrequently: false });
-const emptyHint = document.getElementById("canvasEmpty");
+let currentUser = null;          // { uid, email, name, role }
+let adminUid = null;             // for students: whose bank to load
+let questionBank = [];           // the active practice questions
+let qIndex = 0;
+let editorBlocks = [];           // editor block list
+let currentEditingId = null;
+let aiMarkingSettings = { instructions: "", strictness: 3 };
+let aiGenSettings = { instructions: "" };
 
+// =====================================================================
+// AUTH
+// =====================================================================
+let authMode = "login"; // or "register"
+function setAuthMode(mode) {
+  authMode = mode;
+  $("nameField").classList.toggle("hidden", mode === "login");
+  $("authSubmit").textContent = mode === "login" ? "Sign in" : "Create account";
+  $("authToggle").innerHTML = mode === "login"
+    ? 'New here? <a id="toggleLink">Create an account</a>'
+    : 'Already have an account? <a id="toggleLink">Sign in</a>';
+  $("toggleLink").onclick = () => setAuthMode(mode === "login" ? "register" : "login");
+}
+$("toggleLink").onclick = () => setAuthMode("register");
+
+$("authSubmit").addEventListener("click", async () => {
+  const email = $("authEmail").value.trim(), pass = $("authPass").value;
+  if (!email || !pass) { toast("Enter your email and password", "error"); return; }
+  try {
+    if (authMode === "login") {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } else {
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      const name = $("authName").value.trim();
+      if (name) await updateProfile(cred.user, { displayName: name });
+    }
+  } catch (e) { toast(_authError(e), "error"); }
+});
+$("googleBtn").addEventListener("click", async () => {
+  try { await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver); }
+  catch (e) { toast(_authError(e), "error"); }
+});
+$("logoutBtn").addEventListener("click", () => signOut(auth));
+function _authError(e) {
+  const c = (e && e.code) || "";
+  if (c.includes("wrong-password") || c.includes("invalid-credential")) return "Wrong email or password";
+  if (c.includes("email-already-in-use")) return "That email is already registered — sign in instead";
+  if (c.includes("weak-password")) return "Password should be at least 6 characters";
+  if (c.includes("popup-closed")) return "Sign-in popup was closed";
+  return (e && e.message) ? e.message.replace("Firebase: ", "") : "Sign-in failed";
+}
+
+onAuthStateChanged(auth, async (user) => {
+  if (user) { await enterApp(user); }
+  else {
+    currentUser = null;
+    $("appShell").classList.remove("show");
+    $("authScreen").style.display = "flex";
+  }
+});
+
+async function enterApp(user) {
+  const isAdmin = ADMIN_EMAILS.includes((user.email || "").toLowerCase());
+  currentUser = { uid: user.uid, email: user.email, name: user.displayName || (user.email || "").split("@")[0], role: isAdmin ? "admin" : "student" };
+
+  $("authScreen").style.display = "none";
+  $("appShell").classList.add("show");
+  $("userName").textContent = currentUser.name;
+  $("userEmail").textContent = currentUser.email;
+  document.querySelectorAll(".admin-only").forEach(el => el.style.display = isAdmin ? "" : "none");
+
+  refreshAiStatus();
+
+  if (isAdmin) {
+    // advertise this admin so students load this bank
+    try { await setDoc(doc(db, "config", "mathAdmin"), { uid: user.uid, email: user.email }, { merge: true }); } catch (e) { console.warn(e); }
+    adminUid = user.uid;
+    await loadMarkingSettings(user.uid);
+    await loadGenSettings(user.uid);
+    await loadBank(user.uid);
+    navigateTo("create");
+  } else {
+    // students discover the admin and load their bank + marking rubric
+    try { const cfg = await getDoc(doc(db, "config", "mathAdmin")); if (cfg.exists()) adminUid = cfg.data().uid; } catch (e) { console.warn(e); }
+    if (adminUid) { await loadMarkingSettings(adminUid); await loadBank(adminUid); }
+    if (!questionBank.length) questionBank = STARTER_QUESTIONS.slice();
+    navigateTo("practice");
+  }
+  renderQuestion();
+}
+
+// =====================================================================
+// NAVIGATION
+// =====================================================================
+function navigateTo(page) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+  const pageEl = $("page-" + page); if (pageEl) pageEl.classList.add("active");
+  const nav = document.querySelector(`.nav-item[data-page="${page}"]`); if (nav) nav.classList.add("active");
+  const titles = { practice: "Practice", create: currentEditingId ? "Edit Question" : "Create Question", bank: "Question Bank" };
+  $("topbarTitle").textContent = titles[page] || "";
+  $("sidebar").classList.remove("open");
+  if (page === "bank") renderBank();
+  if (page === "practice") { renderQuestion(); setupCanvasSize(); }
+}
+document.querySelectorAll(".nav-item[data-page]").forEach(n => n.addEventListener("click", () => navigateTo(n.dataset.page)));
+$("menuToggle").addEventListener("click", () => $("sidebar").classList.toggle("open"));
+$("navMarking").addEventListener("click", openMarking);
+$("navGen").addEventListener("click", openGen);
+
+// =====================================================================
+// MARKING + GENERATION SETTINGS
+// =====================================================================
+const STRICTNESS_LABELS = { 1: "Very lenient", 2: "Lenient", 3: "Balanced", 4: "Strict", 5: "Very strict" };
+async function loadMarkingSettings(uid) {
+  try { const s = await getDoc(doc(db, "users", uid, "settings", "mathMarking")); if (s.exists()) aiMarkingSettings = Object.assign({ instructions: "", strictness: 3 }, s.data()); }
+  catch (e) { console.warn("marking load", e); }
+}
+async function loadGenSettings(uid) {
+  try { const s = await getDoc(doc(db, "users", uid, "settings", "mathGeneration")); if (s.exists()) aiGenSettings = Object.assign({ instructions: "" }, s.data()); }
+  catch (e) { console.warn("gen load", e); }
+}
+function openMarking() {
+  $("mkStrictness").value = aiMarkingSettings.strictness || 3;
+  $("mkStrictnessLabel").textContent = STRICTNESS_LABELS[aiMarkingSettings.strictness || 3];
+  $("mkInstructions").value = aiMarkingSettings.instructions || "";
+  $("markingOverlay").classList.add("show");
+}
+function openGen() { $("genInstructions").value = aiGenSettings.instructions || ""; $("genOverlay").classList.add("show"); }
+$("mkStrictness").addEventListener("input", e => $("mkStrictnessLabel").textContent = STRICTNESS_LABELS[e.target.value]);
+$("saveMarkingBtn").addEventListener("click", async () => {
+  aiMarkingSettings = { strictness: parseInt($("mkStrictness").value, 10) || 3, instructions: $("mkInstructions").value.trim() };
+  try { await setDoc(doc(db, "users", currentUser.uid, "settings", "mathMarking"), aiMarkingSettings, { merge: true }); toast("Marking guide saved", "success"); closeOverlay("markingOverlay"); }
+  catch (e) { toast("Save failed: " + e.message, "error"); }
+});
+$("saveGenBtn").addEventListener("click", async () => {
+  aiGenSettings = { instructions: $("genInstructions").value.trim() };
+  try { await setDoc(doc(db, "users", currentUser.uid, "settings", "mathGeneration"), aiGenSettings, { merge: true }); toast("Generation guide saved", "success"); closeOverlay("genOverlay"); }
+  catch (e) { toast("Save failed: " + e.message, "error"); }
+});
+function markingPreamble(questionGuide) {
+  const sMap = {
+    1: "Be very lenient — reward any reasonable attempt and correct method, overlook small slips.",
+    2: "Be lenient — focus on the method and overall understanding rather than small errors.",
+    3: "Mark fairly and consistently — give method marks but expect the correct final answer for full marks.",
+    4: "Be strict — require correct method, correct units, and the exact final answer.",
+    5: "Be very strict — every step, unit and the final answer must be correct for full marks."
+  };
+  let s = sMap[aiMarkingSettings.strictness] || sMap[3];
+  if (aiMarkingSettings.instructions) s += " Teacher's marking instructions: " + aiMarkingSettings.instructions;
+  if (questionGuide) s += " Marking guide specific to THIS question: " + questionGuide;
+  return s;
+}
+document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => closeOverlay(b.dataset.close)));
+function closeOverlay(id) { $(id).classList.remove("show"); }
+document.querySelectorAll(".overlay").forEach(o => o.addEventListener("click", e => { if (e.target === o) o.classList.remove("show"); }));
+
+// =====================================================================
+// QUESTION BANK (Firestore: users/{uid}/mathQuestions)
+// =====================================================================
+async function loadBank(uid) {
+  questionBank = [];
+  try {
+    const snap = await getDocs(collection(db, "users", uid, "mathQuestions"));
+    snap.forEach(d => questionBank.push(d.data()));
+    questionBank.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+  } catch (e) { console.warn("bank load", e); }
+}
+async function saveQuestionDoc(q) {
+  await setDoc(doc(db, "users", currentUser.uid, "mathQuestions", q.id), q);
+}
+async function deleteQuestionDoc(id) {
+  await deleteDoc(doc(db, "users", currentUser.uid, "mathQuestions", id));
+}
+
+function renderBank() {
+  const list = $("bankList");
+  $("bankCount").textContent = questionBank.length ? `${questionBank.length} question${questionBank.length > 1 ? "s" : ""}.` : "";
+  if (!questionBank.length) { list.innerHTML = `<div class="empty-note">No questions yet. Go to <b>Create Question</b> to add one ✦</div>`; return; }
+  list.innerHTML = "";
+  questionBank.forEach(q => {
+    const firstText = (q.blocks || []).find(b => b.type === "text");
+    const preview = firstText ? stripHtml(firstText.content).slice(0, 90) : "(no text)";
+    const el = document.createElement("div");
+    el.className = "bank-item";
+    el.innerHTML =
+      `<div class="bank-item-main"><h4>${escapeHtml(q.title || "Untitled")}</h4>
+        <div class="meta"><span class="chip">${escapeHtml(q.level || "—")}</span><span class="chip topic">${escapeHtml(q.topic || "—")}</span><span>${escapeHtml(preview)}</span></div></div>
+       <div class="bank-item-actions">
+        <button class="btn btn-ghost btn-sm" data-edit="${q.id}">Edit</button>
+        <button class="btn btn-danger btn-sm" data-del="${q.id}">Delete</button></div>`;
+    list.appendChild(el);
+  });
+  list.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => editQuestion(b.dataset.edit)));
+  list.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => removeQuestion(b.dataset.del)));
+}
+async function removeQuestion(id) {
+  if (!confirm("Delete this question? This cannot be undone.")) return;
+  try {
+    await deleteQuestionDoc(id);
+    questionBank = questionBank.filter(q => q.id !== id);
+    renderBank(); toast("Question deleted", "success");
+  } catch (e) { toast("Delete failed: " + e.message, "error"); }
+}
+
+// =====================================================================
+// EDITOR (blocks)
+// =====================================================================
+const genBlockId = () => "blk_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+
+function addBlock(type) {
+  editorBlocks.push(type === "image" ? { id: genBlockId(), type: "image", url: "" } : { id: genBlockId(), type: "text", content: "" });
+  renderEditorBlocks();
+}
+function removeBlockById(id) { editorBlocks = editorBlocks.filter(b => b.id !== id); renderEditorBlocks(); }
+function moveBlock(id, dir) {
+  const i = editorBlocks.findIndex(b => b.id === id); if (i < 0) return;
+  const j = i + dir; if (j < 0 || j >= editorBlocks.length) return;
+  [editorBlocks[i], editorBlocks[j]] = [editorBlocks[j], editorBlocks[i]]; renderEditorBlocks();
+}
+function setBlockField(id, field, val) { const b = editorBlocks.find(x => x.id === id); if (b) b[field] = val; }
+
+function renderEditorBlocks() {
+  const wrap = $("blocksList");
+  if (!editorBlocks.length) { wrap.innerHTML = `<div class="hint" style="margin-bottom:12px;">No content yet — add a text block or an image below.</div>`; return; }
+  wrap.innerHTML = "";
+  editorBlocks.forEach(b => {
+    const card = document.createElement("div");
+    card.className = "block-card";
+    const isImg = b.type === "image";
+    card.innerHTML = `
+      <div class="block-head">
+        <span class="block-badge ${isImg ? "image" : ""}">${isImg ? "Image" : "Text"}</span>
+        <div class="block-head-actions">
+          <button class="mini-btn" data-up="${b.id}" title="Move up">↑</button>
+          <button class="mini-btn" data-down="${b.id}" title="Move down">↓</button>
+          <button class="mini-btn" data-rm="${b.id}" title="Remove">✕</button>
+        </div>
+      </div>
+      <div class="block-body">${isImg ? imgBlockHtml(b) : textBlockHtml(b)}</div>`;
+    wrap.appendChild(card);
+  });
+  // wire text editing
+  wrap.querySelectorAll(".block-edit").forEach(ed => ed.addEventListener("input", () => setBlockField(ed.dataset.block, "content", ed.innerText)));
+  // wire image url + paste/drop
+  wrap.querySelectorAll("[data-imgurl]").forEach(inp => inp.addEventListener("input", () => { setBlockField(inp.dataset.imgurl, "url", inp.value.trim()); syncImgPreview(inp.dataset.imgurl, inp.value.trim()); }));
+  wrap.querySelectorAll("[data-imgzone]").forEach(z => {
+    z.addEventListener("click", () => { const f = $("blocksList").querySelector(`[data-imgfile="${z.dataset.imgzone}"]`); if (f) f.click(); });
+    z.addEventListener("paste", e => handleImgPaste(z.dataset.imgzone, e));
+    z.addEventListener("dragover", e => e.preventDefault());
+    z.addEventListener("drop", e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) uploadImgFile(z.dataset.imgzone, f); });
+  });
+  wrap.querySelectorAll("[data-imgfile]").forEach(inp => inp.addEventListener("change", e => { const f = e.target.files[0]; if (f) uploadImgFile(inp.dataset.imgfile, f); }));
+  // nav buttons
+  wrap.querySelectorAll("[data-up]").forEach(b => b.addEventListener("click", () => moveBlock(b.dataset.up, -1)));
+  wrap.querySelectorAll("[data-down]").forEach(b => b.addEventListener("click", () => moveBlock(b.dataset.down, 1)));
+  wrap.querySelectorAll("[data-rm]").forEach(b => b.addEventListener("click", () => removeBlockById(b.dataset.rm)));
+}
+function textBlockHtml(b) {
+  return `<div class="block-edit" contenteditable="true" data-block="${b.id}" data-ph="Type the question text…">${escapeHtml(b.content || "")}</div>`;
+}
+function imgBlockHtml(b) {
+  const has = b.url ? "block" : "none";
+  return `<div class="img-zone" data-imgzone="${b.id}" tabindex="0">📎 Click, paste or drop an image / diagram here</div>
+    <input type="file" accept="image/*" class="hidden" data-imgfile="${b.id}">
+    <input type="text" data-imgurl="${b.id}" value="${escapeHtml(b.url || "")}" placeholder="…or paste an image URL" style="width:100%;margin-top:8px;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:0.85rem;">
+    <img class="img-preview" data-imgprev="${b.id}" src="${escapeHtml(b.url || "")}" style="display:${has};">`;
+}
+function syncImgPreview(id, url) { const img = $("blocksList").querySelector(`[data-imgprev="${id}"]`); if (img) { img.src = url; img.style.display = url ? "block" : "none"; } }
+function handleImgPaste(id, e) {
+  const items = (e.clipboardData || {}).items || [];
+  for (const it of items) { if (it.type && it.type.startsWith("image/")) { e.preventDefault(); uploadImgFile(id, it.getAsFile()); return; } }
+}
+async function uploadImgFile(id, file) {
+  if (!file || !file.type.startsWith("image/")) { toast("That's not an image", "error"); return; }
+  if (file.size > 6 * 1024 * 1024) { toast("Image too large (max 6 MB)", "error"); return; }
+  toast("Uploading image…");
+  try {
+    const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+    const path = `mathImages/${currentUser.uid}/${Date.now()}_${Math.random().toString(36).slice(2, 6)}.png`;
+    const sref = storageRef(storage, path);
+    await uploadString(sref, dataUrl, "data_url");
+    const url = await getDownloadURL(sref);
+    setBlockField(id, "url", url);
+    const inp = $("blocksList").querySelector(`[data-imgurl="${id}"]`); if (inp) inp.value = url;
+    syncImgPreview(id, url);
+    toast("Image added", "success");
+  } catch (e) { console.warn(e); toast("Upload failed: " + e.message, "error"); }
+}
+
+$("addTextBtn").addEventListener("click", () => addBlock("text"));
+$("addImageBtn").addEventListener("click", () => addBlock("image"));
+
+function resetEditor() {
+  currentEditingId = null;
+  editorBlocks = [{ id: genBlockId(), type: "text", content: "" }];
+  $("qTitleInput").value = ""; $("qLevelInput").value = ""; $("qTopicInput").value = "";
+  $("qExpectedInput").value = ""; $("qGuideInput").value = "";
+  $("createHeading").textContent = "Create Question";
+  $("saveQBtn").textContent = "💾 Save to Question Bank";
+  $("cancelEditBtn").style.display = "none";
+  renderEditorBlocks();
+}
+$("clearQBtn").addEventListener("click", () => { if (confirm("Clear the editor?")) resetEditor(); });
+$("cancelEditBtn").addEventListener("click", () => { resetEditor(); navigateTo("bank"); });
+
+function editQuestion(id) {
+  const q = questionBank.find(x => x.id === id); if (!q) return;
+  currentEditingId = id;
+  editorBlocks = JSON.parse(JSON.stringify(q.blocks || []));
+  if (!editorBlocks.length) editorBlocks = [{ id: genBlockId(), type: "text", content: "" }];
+  $("qTitleInput").value = q.title || ""; $("qLevelInput").value = q.level || ""; $("qTopicInput").value = q.topic || "";
+  $("qExpectedInput").value = q.expected || ""; $("qGuideInput").value = q.markingGuide || "";
+  $("createHeading").textContent = "Edit Question";
+  $("saveQBtn").textContent = "💾 Save changes";
+  $("cancelEditBtn").style.display = "";
+  renderEditorBlocks();
+  navigateTo("create");
+}
+
+function collectQuestion() {
+  const blocks = editorBlocks
+    .map(b => b.type === "image" ? { id: b.id, type: "image", url: (b.url || "").trim() } : { id: b.id, type: "text", content: (b.content || "").trim() })
+    .filter(b => (b.type === "image" ? b.url : b.content));
+  return {
+    id: currentEditingId || ("mq_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6)),
+    title: $("qTitleInput").value.trim() || "Untitled",
+    level: $("qLevelInput").value.trim(),
+    topic: $("qTopicInput").value.trim(),
+    blocks,
+    expected: $("qExpectedInput").value.trim(),
+    markingGuide: $("qGuideInput").value.trim(),
+    createdAt: currentEditingId ? (questionBank.find(q => q.id === currentEditingId) || {}).createdAt || new Date().toISOString() : new Date().toISOString(),
+    createdBy: currentUser ? currentUser.name : "Admin"
+  };
+}
+$("saveQBtn").addEventListener("click", async () => {
+  const q = collectQuestion();
+  if (!q.blocks.some(b => b.type === "text") && !q.blocks.some(b => b.type === "image")) { toast("Add some question content first", "error"); return; }
+  if (!q.expected) { toast("Enter the correct answer", "error"); return; }
+  const btn = $("saveQBtn"); const orig = btn.textContent; btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    await saveQuestionDoc(q);
+    const i = questionBank.findIndex(x => x.id === q.id);
+    if (i >= 0) questionBank[i] = q; else questionBank.push(q);
+    toast(currentEditingId ? "Question updated" : "Question added to bank", "success");
+    resetEditor();
+    navigateTo("bank");
+  } catch (e) { toast("Save failed: " + e.message, "error"); }
+  finally { btn.disabled = false; btn.textContent = orig; }
+});
+
+// =====================================================================
+// AI GENERATION (build a question from a photo/PDF)
+// =====================================================================
+function genPreamble() { return aiGenSettings.instructions ? ("Follow the teacher's generation guidance: " + aiGenSettings.instructions + " ") : ""; }
+$("aiBuildBtn").addEventListener("click", () => {
+  if (!aiReady()) { toast("AI isn't ready yet — please wait a moment", "error"); return; }
+  $("aiBuildStatus").textContent = ""; $("aiBuildOverlay").classList.add("show");
+});
+$("aiBuildZone").addEventListener("click", () => $("aiBuildFile").click());
+$("aiBuildZone").addEventListener("dragover", e => e.preventDefault());
+$("aiBuildZone").addEventListener("drop", e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleAiBuild(f); });
+$("aiBuildFile").addEventListener("change", e => { const f = e.target.files[0]; if (f) handleAiBuild(f); });
+document.addEventListener("paste", e => {
+  if (!$("aiBuildOverlay").classList.contains("show")) return;
+  const items = (e.clipboardData || {}).items || [];
+  for (const it of items) { if (it.type && it.type.startsWith("image/")) { handleAiBuild(it.getAsFile()); return; } }
+});
+async function handleAiBuild(file) {
+  if (!aiReady()) { toast("AI isn't ready yet", "error"); return; }
+  const isPdf = file.type === "application/pdf";
+  if (!file.type.startsWith("image/") && !isPdf) { toast("Please use an image or PDF", "error"); return; }
+  if (file.size > 18 * 1024 * 1024) { toast("File too large (max 18 MB)", "error"); return; }
+  $("aiBuildStatus").innerHTML = '<span class="spinner dark"></span> Reading the question with AI…';
+  try {
+    const b64 = await _fileToBase64(file);
+    const prompt =
+      `You are helping a Singapore primary-school math teacher turn an exam question (in the attached ${isPdf ? "PDF" : "image"}) into a practice question. ` +
+      genPreamble() +
+      `Read the question carefully and return ONLY JSON in this exact shape:\n` +
+      `{"title":"<short title>","level":"<e.g. P5 or Sec 1>","topic":"<e.g. Fractions>",` +
+      `"questionText":"<the full question text, cleaned up>","expected":"<the correct final answer, with units>",` +
+      `"markingGuide":"<concise worked solution / what to look for in the working>","hasDiagram":<true if the question relies on a figure/diagram, else false>}`;
+    const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 900, json: true });
+    const data = parseAIJson(raw);
+    populateEditorFromAi(data);
+    closeOverlay("aiBuildOverlay");
+    navigateTo("create");
+    toast("Draft created — review and save", "success");
+  } catch (e) { console.error(e); $("aiBuildStatus").textContent = "Couldn't read that — try a clearer image. (" + (e.message || e) + ")"; }
+  finally { $("aiBuildFile").value = ""; }
+}
+function populateEditorFromAi(d) {
+  currentEditingId = null;
+  editorBlocks = [];
+  const qt = String(d.questionText || "").trim();
+  editorBlocks.push({ id: genBlockId(), type: "text", content: qt });
+  if (d.hasDiagram) editorBlocks.push({ id: genBlockId(), type: "image", url: "" });
+  $("qTitleInput").value = d.title || "";
+  $("qLevelInput").value = d.level || "";
+  $("qTopicInput").value = d.topic || "";
+  $("qExpectedInput").value = d.expected || "";
+  $("qGuideInput").value = d.markingGuide || "";
+  $("createHeading").textContent = "Create Question";
+  $("saveQBtn").textContent = "💾 Save to Question Bank";
+  $("cancelEditBtn").style.display = "none";
+  renderEditorBlocks();
+}
+
+// =====================================================================
+// DRAWING PAD
+// =====================================================================
+const canvas = $("padCanvas");
+const ctx = canvas.getContext("2d");
+const emptyHint = $("canvasEmpty");
 let dpr = Math.max(1, window.devicePixelRatio || 1);
-let strokes = [];        // committed strokes: {color, width, eraser, points:[{x,y}]}
-let redoStack = [];
-let current = null;
-let drawing = false;
-let activePointerId = null;
-
-let penColor = "#2c2a27";
-let penWidth = 3;
-let isEraser = false;
-
+let strokes = [], redoStack = [], current = null, drawing = false, activePointerId = null;
+let penColor = "#2c2a27", penWidth = 3, isEraser = false;
 const COLORS = ["#2c2a27", "#4a7c59", "#4a6fa5", "#d94f4f", "#d4882a", "#7b5ea7"];
 
 function setupCanvasSize() {
   const rect = canvas.getBoundingClientRect();
+  if (!rect.width) return;
   dpr = Math.max(1, window.devicePixelRatio || 1);
   canvas.width = Math.round(rect.width * dpr);
   canvas.height = Math.round(rect.height * dpr);
   redraw();
 }
-
 function redraw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const w = canvas.width / dpr, h = canvas.height / dpr;
-  ctx.clearRect(0, 0, w, h);
+  ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
   for (const s of strokes) drawStroke(s);
   emptyHint.style.display = strokes.length || current ? "none" : "flex";
 }
-
 function drawStroke(s) {
   if (!s.points.length) return;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  if (s.eraser) {
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.strokeStyle = "rgba(0,0,0,1)";
-    ctx.lineWidth = s.width * 4;
-  } else {
-    ctx.globalCompositeOperation = "source-over";
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth = s.width;
-  }
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (s.eraser) { ctx.globalCompositeOperation = "destination-out"; ctx.strokeStyle = "rgba(0,0,0,1)"; ctx.lineWidth = s.width * 4; }
+  else { ctx.globalCompositeOperation = "source-over"; ctx.strokeStyle = s.color; ctx.lineWidth = s.width; }
   ctx.beginPath();
-  const p0 = s.points[0];
-  ctx.moveTo(p0.x, p0.y);
-  if (s.points.length === 1) { ctx.lineTo(p0.x + 0.01, p0.y + 0.01); }
+  const p0 = s.points[0]; ctx.moveTo(p0.x, p0.y);
+  if (s.points.length === 1) ctx.lineTo(p0.x + 0.01, p0.y + 0.01);
   for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
   ctx.stroke();
   ctx.globalCompositeOperation = "source-over";
 }
-
-function posFromEvent(e) {
-  const rect = canvas.getBoundingClientRect();
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
-}
-
-canvas.addEventListener("pointerdown", (e) => {
+function posFromEvent(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+canvas.addEventListener("pointerdown", e => {
   if (drawing) return;
-  // Palm-rejection-ish: if an Apple Pencil is in use, ignore finger touches.
-  drawing = true;
-  activePointerId = e.pointerId;
-  canvas.setPointerCapture(e.pointerId);
-  redoStack = [];
+  drawing = true; activePointerId = e.pointerId; canvas.setPointerCapture(e.pointerId); redoStack = [];
   current = { color: penColor, width: penWidth, eraser: isEraser, points: [posFromEvent(e)] };
-  emptyHint.style.display = "none";
-  e.preventDefault();
+  emptyHint.style.display = "none"; e.preventDefault();
 });
-canvas.addEventListener("pointermove", (e) => {
+canvas.addEventListener("pointermove", e => {
   if (!drawing || e.pointerId !== activePointerId) return;
-  // coalesced events give smoother Pencil lines
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
   for (const ev of evs) current.points.push(posFromEvent(ev));
-  redraw();
-  drawStroke(current);
-  e.preventDefault();
+  redraw(); drawStroke(current); e.preventDefault();
 });
 function endStroke(e) {
   if (!drawing || (e && e.pointerId !== activePointerId)) return;
-  drawing = false;
-  activePointerId = null;
-  if (current && current.points.length) { strokes.push(current); }
-  current = null;
-  redraw();
+  drawing = false; activePointerId = null;
+  if (current && current.points.length) strokes.push(current);
+  current = null; redraw();
 }
 canvas.addEventListener("pointerup", endStroke);
 canvas.addEventListener("pointercancel", endStroke);
 canvas.addEventListener("pointerleave", endStroke);
 
-// ---- toolbar wiring ----
-const swatchWrap = document.getElementById("swatches");
+const swatchWrap = $("swatches");
 COLORS.forEach((c, i) => {
   const el = document.createElement("div");
-  el.className = "swatch" + (i === 0 ? " active" : "");
-  el.style.background = c;
-  el.dataset.color = c;
-  el.addEventListener("click", () => {
-    penColor = c; isEraser = false;
-    document.querySelectorAll(".swatch").forEach(s => s.classList.toggle("active", s.dataset.color === c));
-    setTool("pen");
-  });
+  el.className = "swatch" + (i === 0 ? " active" : ""); el.style.background = c; el.dataset.color = c;
+  el.addEventListener("click", () => { penColor = c; document.querySelectorAll(".swatch").forEach(s => s.classList.toggle("active", s.dataset.color === c)); setTool("pen"); });
   swatchWrap.appendChild(el);
 });
-
-const toolPen = document.getElementById("toolPen");
-const toolEraser = document.getElementById("toolEraser");
-function setTool(t) {
-  isEraser = (t === "eraser");
-  toolPen.classList.toggle("active", !isEraser);
-  toolEraser.classList.toggle("active", isEraser);
-}
-toolPen.addEventListener("click", () => setTool("pen"));
-toolEraser.addEventListener("click", () => setTool("eraser"));
-document.getElementById("penWidth").addEventListener("input", (e) => { penWidth = parseInt(e.target.value, 10) || 3; });
-
-document.getElementById("undoBtn").addEventListener("click", () => {
-  if (!strokes.length) return;
-  redoStack.push(strokes.pop());
-  redraw();
-});
-document.getElementById("redoBtn").addEventListener("click", () => {
-  if (!redoStack.length) return;
-  strokes.push(redoStack.pop());
-  redraw();
-});
-document.getElementById("clearBtn").addEventListener("click", () => {
-  if (!strokes.length && !current) return;
-  if (!confirm("Clear all your working?")) return;
-  strokes = []; redoStack = []; current = null; redraw();
-});
-
-window.addEventListener("resize", () => { setupCanvasSize(); });
-
-// Export the working as a flat white PNG (the "screenshot" the AI marks).
+function setTool(t) { isEraser = (t === "eraser"); $("toolPen").classList.toggle("active", !isEraser); $("toolEraser").classList.toggle("active", isEraser); }
+$("toolPen").addEventListener("click", () => setTool("pen"));
+$("toolEraser").addEventListener("click", () => setTool("eraser"));
+$("penWidth").addEventListener("input", e => penWidth = parseInt(e.target.value, 10) || 3);
+$("undoBtn").addEventListener("click", () => { if (strokes.length) { redoStack.push(strokes.pop()); redraw(); } });
+$("redoBtn").addEventListener("click", () => { if (redoStack.length) { strokes.push(redoStack.pop()); redraw(); } });
+$("clearBtn").addEventListener("click", () => { if ((strokes.length || current) && confirm("Clear all your working?")) { strokes = []; redoStack = []; current = null; redraw(); } });
+window.addEventListener("resize", () => setupCanvasSize());
 function exportWorkingPng() {
-  const out = document.createElement("canvas");
-  out.width = canvas.width; out.height = canvas.height;
-  const octx = out.getContext("2d");
-  octx.fillStyle = "#ffffff";
-  octx.fillRect(0, 0, out.width, out.height);
-  octx.drawImage(canvas, 0, 0);
+  const out = document.createElement("canvas"); out.width = canvas.width; out.height = canvas.height;
+  const o = out.getContext("2d"); o.fillStyle = "#fff"; o.fillRect(0, 0, out.width, out.height); o.drawImage(canvas, 0, 0);
   return out.toDataURL("image/png");
 }
 
 // =====================================================================
-// Question rendering + navigation
+// PRACTICE — render question + AI marking
 // =====================================================================
-let qIndex = 0;
-const qText = document.getElementById("qText");
-const qLevel = document.getElementById("qLevel");
-const qTopic = document.getElementById("qTopic");
-const qCounter = document.getElementById("qCounter");
-const finalAnswer = document.getElementById("finalAnswer");
-
+function stripHtml(s) { const d = document.createElement("div"); d.innerHTML = s || ""; return (d.textContent || "").trim(); }
 function renderQuestion() {
-  const q = QUESTIONS[qIndex];
-  qText.textContent = q.text;
-  qLevel.textContent = q.level;
-  qTopic.textContent = q.topic;
-  qCounter.textContent = `${qIndex + 1} / ${QUESTIONS.length}`;
-  finalAnswer.value = "";
-  // fresh pad per question
+  const card = $("questionCard");
+  if (!questionBank.length) {
+    $("qMeta").style.display = "none";
+    $("qBody").innerHTML = `<div class="empty-note">No questions available yet.${currentUser && currentUser.role === "admin" ? " Add some in <b>Create Question</b>." : ""}</div>`;
+    $("finalAnswer").value = ""; return;
+  }
+  $("qMeta").style.display = "flex";
+  if (qIndex >= questionBank.length) qIndex = 0;
+  const q = questionBank[qIndex];
+  $("qLevel").textContent = q.level || "—";
+  $("qTopic").textContent = q.topic || "—";
+  $("qCounter").textContent = `${qIndex + 1} / ${questionBank.length}`;
+  $("qBody").innerHTML = (q.blocks || []).map(b => b.type === "image"
+    ? (b.url ? `<img src="${escapeHtml(b.url)}" alt="diagram">` : "")
+    : `<p>${escapeHtml(b.content || "").replace(/\n/g, "<br>")}</p>`).join("");
+  $("finalAnswer").value = "";
   strokes = []; redoStack = []; current = null; redraw();
   hideResult();
 }
 function changeQuestion(delta) {
-  const ni = qIndex + delta;
-  if (ni < 0 || ni >= QUESTIONS.length) return;
-  if (strokes.length && !confirm("Move to another question? Your current working will be cleared.")) return;
+  const ni = qIndex + delta; if (ni < 0 || ni >= questionBank.length) return;
+  if (strokes.length && !confirm("Move on? Your current working will be cleared.")) return;
   qIndex = ni; renderQuestion();
 }
-document.getElementById("prevBtn").addEventListener("click", () => changeQuestion(-1));
-document.getElementById("nextBtn").addEventListener("click", () => changeQuestion(1));
+$("prevBtn").addEventListener("click", () => changeQuestion(-1));
+$("nextBtn").addEventListener("click", () => changeQuestion(1));
 
-// =====================================================================
-// Result UI
-// =====================================================================
-const resultEl = document.getElementById("result");
-const verdictBanner = document.getElementById("verdictBanner");
-const verdictIcon = document.getElementById("verdictIcon");
-const verdictTitle = document.getElementById("verdictTitle");
-const verdictScore = document.getElementById("verdictScore");
-const fbFeedback = document.getElementById("fbFeedback");
-const mistakesBlock = document.getElementById("mistakesBlock");
-const fbMistakes = document.getElementById("fbMistakes");
-const nextStepBlock = document.getElementById("nextStepBlock");
-const fbNextStep = document.getElementById("fbNextStep");
-const capturedImg = document.getElementById("capturedImg");
-
+const resultEl = $("result");
 function hideResult() { resultEl.classList.remove("show"); }
-function showResult(v, pngDataUrl) {
+function showResult(v, png) {
   const verdict = (v.verdict || "incorrect").toLowerCase();
   const klass = verdict === "correct" ? "correct" : verdict === "partial" ? "partial" : "incorrect";
-  verdictBanner.className = "verdict-banner " + klass;
-  verdictIcon.textContent = verdict === "correct" ? "✓" : verdict === "partial" ? "≈" : "✗";
-  verdictTitle.textContent = verdict === "partial" ? "Almost there" : verdict;
-  verdictScore.textContent = (typeof v.marks === "number" ? `${v.marks} / ${v.outOf || 1} marks` : "");
-
-  fbFeedback.textContent = v.feedback || "";
-
+  $("verdictBanner").className = "verdict-banner " + klass;
+  $("verdictIcon").textContent = verdict === "correct" ? "✓" : verdict === "partial" ? "≈" : "✗";
+  $("verdictTitle").textContent = verdict === "partial" ? "Almost there" : verdict;
+  $("verdictScore").textContent = (typeof v.marks === "number") ? `${v.marks} / ${v.outOf || 1} marks` : "";
+  $("fbFeedback").textContent = v.feedback || "";
   const mistakes = Array.isArray(v.mistakes) ? v.mistakes.filter(Boolean) : [];
-  if (mistakes.length) {
-    fbMistakes.innerHTML = "";
-    mistakes.forEach(m => { const li = document.createElement("li"); li.textContent = m; fbMistakes.appendChild(li); });
-    mistakesBlock.style.display = "block";
-  } else { mistakesBlock.style.display = "none"; }
-
-  if (v.nextStep) { fbNextStep.textContent = v.nextStep; nextStepBlock.style.display = "block"; }
-  else { nextStepBlock.style.display = "none"; }
-
-  capturedImg.src = pngDataUrl;
+  if (mistakes.length) { $("fbMistakes").innerHTML = mistakes.map(m => `<li>${escapeHtml(m)}</li>`).join(""); $("mistakesBlock").style.display = "block"; }
+  else $("mistakesBlock").style.display = "none";
+  if (v.nextStep) { $("fbNextStep").textContent = v.nextStep; $("nextStepBlock").style.display = "block"; } else $("nextStepBlock").style.display = "none";
+  $("capturedImg").src = png;
   resultEl.classList.add("show");
   resultEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-// =====================================================================
-// Submit → screenshot working → AI marking
-// =====================================================================
-const submitBtn = document.getElementById("submitBtn");
-const submitLabel = document.getElementById("submitLabel");
-
-submitBtn.addEventListener("click", async () => {
+$("submitBtn").addEventListener("click", async () => {
   if (!aiReady()) { toast("AI marking isn't ready yet — please wait a moment", "error"); return; }
-  if (!strokes.length && !finalAnswer.value.trim()) {
-    toast("Write your working on the pad (or type a final answer) first", "error");
-    return;
-  }
-
-  const q = QUESTIONS[qIndex];
-  const pngDataUrl = exportWorkingPng();
-  const base64 = pngDataUrl.split(",")[1];
-
-  submitBtn.disabled = true;
-  submitLabel.innerHTML = '<span class="spinner"></span> Marking your working…';
-
+  if (!questionBank.length) return;
+  if (!strokes.length && !$("finalAnswer").value.trim()) { toast("Write your working on the pad (or type a final answer) first", "error"); return; }
+  const q = questionBank[qIndex];
+  const png = exportWorkingPng();
+  const b64 = png.split(",")[1];
+  const btn = $("submitBtn"); btn.disabled = true; $("submitLabel").innerHTML = '<span class="spinner"></span> Marking your working…';
+  const qText = (q.blocks || []).filter(b => b.type === "text").map(b => stripHtml(b.content)).join(" ");
   const prompt =
     `You are a friendly, encouraging Singapore primary-school math teacher marking a student's HANDWRITTEN working. ` +
-    `The attached image is a screenshot of what the student wrote on a digital whiteboard.\n\n` +
-    `QUESTION: "${q.text}"\n` +
+    `The attached image is a screenshot of what the student wrote on a digital whiteboard.\n` +
+    `${markingPreamble(q.markingGuide)}\n\n` +
+    `QUESTION: "${qText}"\n` +
     `CORRECT ANSWER: "${q.expected}"\n` +
-    `MARKING NOTES (for you only): "${q.guide}"\n` +
-    `STUDENT'S TYPED FINAL ANSWER: "${finalAnswer.value.trim() || "(none typed — read it from the working)"}"\n\n` +
+    `STUDENT'S TYPED FINAL ANSWER: "${$("finalAnswer").value.trim() || "(none typed — read it from the working)"}"\n\n` +
     `Read the handwriting carefully, follow the working step by step, and decide if the method and final answer are right. ` +
-    `Award method marks even if the final answer is wrong but the approach is sound. ` +
-    `Be kind and specific; address the student as "you". If you genuinely cannot read the handwriting, say so in the feedback.\n\n` +
-    `Return ONLY JSON in this exact shape:\n` +
-    `{"verdict":"correct"|"partial"|"incorrect","marks":<number>,"outOf":<number>,` +
-    `"feedback":"<2-3 warm sentences on what they did>","mistakes":["<specific slip or misread step>", ...],` +
-    `"nextStep":"<one concrete hint to improve, or empty string if fully correct>"}`;
-
+    `Award method marks even if the final answer is wrong but the approach is sound. Address the student as "you". ` +
+    `If you genuinely cannot read the handwriting, say so in the feedback.\n\n` +
+    `Return ONLY JSON: {"verdict":"correct"|"partial"|"incorrect","marks":<number>,"outOf":<number>,` +
+    `"feedback":"<2-3 warm sentences>","mistakes":["<specific slip or misread step>", ...],` +
+    `"nextStep":"<one concrete hint, or empty string if fully correct>"}`;
   try {
-    const raw = await askGeminiVision(prompt, base64, { maxOutputTokens: 900 });
+    const raw = await askGeminiVision(prompt, [{ mimeType: "image/png", data: b64 }], { maxOutputTokens: 900, json: true });
     const v = parseAIJson(raw);
-    showResult(v, pngDataUrl);
+    showResult(v, png);
     const verdict = (v.verdict || "").toLowerCase();
     toast(verdict === "correct" ? "Great work! 🎉" : "Marked — see the feedback", verdict === "correct" ? "success" : "");
-  } catch (e) {
-    console.error("Marking error:", e);
-    toast("AI mark error: " + (e && e.message ? e.message : e), "error");
-  } finally {
-    submitBtn.disabled = false;
-    submitLabel.innerHTML = "📸 Submit for AI marking";
-  }
+  } catch (e) { console.error(e); toast("AI mark error: " + (e.message || e), "error"); }
+  finally { btn.disabled = false; $("submitLabel").innerHTML = "📸 Submit for AI marking"; }
 });
 
 // =====================================================================
-// Toast + AI status
+// TOAST / STATUS
 // =====================================================================
 let toastTimer = null;
-function toast(msg, type = "") {
-  const el = document.getElementById("toast");
-  el.textContent = msg;
-  el.className = "show " + type;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = ""; }, 3200);
-}
-function refreshAiStatus() {
-  const dot = document.getElementById("aiDot");
-  const status = document.getElementById("aiStatus");
-  if (aiReady()) { dot.classList.add("ready"); status.textContent = "AI ready"; }
-  else { dot.classList.remove("ready"); status.textContent = "AI offline"; }
-}
+function toast(msg, type = "") { const el = $("toast"); el.textContent = msg; el.className = "show " + type; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.className = "", 3200); }
+function refreshAiStatus() { const ok = aiReady(); $("aiDot").classList.toggle("ready", ok); $("aiStatus").textContent = ok ? "AI ready" : "AI offline"; }
 
 // ===== boot =====
-setupCanvasSize();
-renderQuestion();
-refreshAiStatus();
-setTimeout(refreshAiStatus, 1500);
+setAuthMode("login");
+resetEditor();
+refreshAiStatus(); setTimeout(refreshAiStatus, 1500);
 </script>
 </body>
 </html>
