@@ -130,6 +130,8 @@ a { color: var(--primary); }
 
 .page { display: none; padding: 22px; max-width: 1180px; margin: 0 auto; }
 .page.active { display: block; }
+.page.embed { padding: 0; max-width: none; margin: 0; }
+.embed-frame { width: 100%; border: 0; display: block; background: #fff; }
 .page-head { margin-bottom: 18px; }
 .page-head h3 { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
 .page-head p { color: var(--text-muted); font-size: 0.92rem; }
@@ -324,7 +326,7 @@ a { color: var(--primary); }
       <div class="nav-section admin-only">Admin</div>
       <div class="nav-item admin-only" data-page="create"><span class="ico">➕</span> Create Question</div>
       <div class="nav-item admin-only" data-page="bank"><span class="ico">📚</span> Question Bank</div>
-      <a class="nav-item admin-only" href="math-worksheet.html" style="text-decoration:none;" title="Open the standalone Math Worksheet Creator — build, export and load worksheets"><span class="ico">📝</span> Worksheet Creator</a>
+      <div class="nav-item admin-only" data-page="worksheet" title="Math Worksheet Creator — build, export and load worksheets"><span class="ico">📝</span> Worksheet Creator</div>
       <div class="nav-item admin-only" id="navMarking"><span class="ico">⚖️</span> AI Marking Guide</div>
       <div class="nav-item admin-only" id="navGen"><span class="ico">✨</span> AI Generation Guide</div>
     </nav>
@@ -452,6 +454,11 @@ a { color: var(--primary); }
       <div class="card card-pad">
         <div id="bankList"></div>
       </div>
+    </div>
+
+    <!-- ================= WORKSHEET CREATOR PAGE (admin) ================= -->
+    <div class="page embed" id="page-worksheet">
+      <iframe id="worksheetFrame" class="embed-frame" title="Math Worksheet Creator"></iframe>
     </div>
 
   </div>
@@ -680,12 +687,26 @@ function navigateTo(page) {
   document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
   const pageEl = $("page-" + page); if (pageEl) pageEl.classList.add("active");
   const nav = document.querySelector(`.nav-item[data-page="${page}"]`); if (nav) nav.classList.add("active");
-  const titles = { practice: "Practice", create: currentEditingId ? "Edit Question" : "Create Question", bank: "Question Bank" };
+  const titles = { practice: "Practice", create: currentEditingId ? "Edit Question" : "Create Question", bank: "Question Bank", worksheet: "Worksheet Creator" };
   $("topbarTitle").textContent = titles[page] || "";
   $("sidebar").classList.remove("open");
   if (page === "bank") renderBank();
   if (page === "practice") { renderQuestion(); setupCanvasSize(); }
+  if (page === "worksheet") {
+    const f = $("worksheetFrame");
+    if (f && !f.getAttribute("src")) f.setAttribute("src", "math-worksheet.html");
+    sizeWorksheetFrame();
+  }
 }
+function sizeWorksheetFrame() {
+  const f = $("worksheetFrame"); if (!f) return;
+  const tb = document.querySelector(".topbar");
+  f.style.height = (window.innerHeight - (tb ? tb.offsetHeight : 50)) + "px";
+}
+window.addEventListener("resize", () => {
+  const p = $("page-worksheet");
+  if (p && p.classList.contains("active")) sizeWorksheetFrame();
+});
 document.querySelectorAll(".nav-item[data-page]").forEach(n => n.addEventListener("click", () => navigateTo(n.dataset.page)));
 $("menuToggle").addEventListener("click", () => $("sidebar").classList.toggle("open"));
 $("navMarking").addEventListener("click", openMarking);
