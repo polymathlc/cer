@@ -2850,6 +2850,7 @@
         <span class="tb-sep admin-only" aria-hidden="true"></span>
         <button class="btn admin-only" id="saveSystemBtn" title="Save to your account — updates the linked worksheet, or creates a new one if none is linked">☁ Save to System</button>
         <button class="btn admin-only" id="saveAsNewBtn" title="Always save as a brand-new worksheet — never overwrites an existing one">☁＋ Save as New</button>
+        <button class="btn admin-only" id="addToBankBtn" title="Copy this worksheet's questions into your Math Practice Question Bank">➕ Add to Bank</button>
         <button class="btn admin-only" id="activityLogBtn" title="View and restore earlier versions of your worksheet">📜 Activity Log</button>
         <button class="btn btn-newws admin-only" id="newWorksheetBtn" title="Start a brand-new blank worksheet — then use Load JSON to import a file into it">＋ New Worksheet</button>
         <span class="tb-sep admin-only" aria-hidden="true"></span>
@@ -8652,6 +8653,157 @@ function showToast(message, opts) {
     setTimeout(() => el.remove(), 300);
   }
 }
+
+/* ============================================================================
+   ADD TO QUESTION BANK
+   Copy this worksheet's questions into the Math Practice question bank
+   (Firestore: users/{uid}/mathQuestions), converting the rich worksheet
+   element model into the bank's text/image blocks + expected-answer shape.
+   Works whether the creator is open standalone or embedded inside math.html.
+   ========================================================================== */
+(function setupAddToBank() {
+  const BANK_COLLECTION = 'mathQuestions';
+  function bid() { return 'b_' + Math.random().toString(36).slice(2, 9); }
+  function wsStrip(html) {
+    const d = document.createElement('div');
+    d.innerHTML = (html == null ? '' : String(html));
+    return (d.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+  function tableToText(el) {
+    return (el.rows || [])
+      .map(r => (r || []).map(c => wsStrip(c && c.t)).join('  |  '))
+      .filter(line => line.replace(/[|\s]/g, ''))
+      .join('\n');
+  }
+  // Worksheet question -> math bank question (or null if nothing usable).
+  function convert(q, idx, defs) {
+    const blocks = [];
+    const answers = [];
+    let title = '';
+    (q.elements || []).forEach(el => {
+      switch (el && el.type) {
+        case 'text': {
+          const t = wsStrip(el.text);
+          if (t) { blocks.push({ id: bid(), type: 'text', content: t }); if (!title) title = t; }
+          break;
+        }
+        case 'part': {
+          const t = wsStrip(el.text);
+          const lbl = (el.label || '').trim();
+          const line = (lbl ? '(' + lbl + ') ' : '') + t;
+          if (line.trim()) blocks.push({ id: bid(), type: 'text', content: line });
+          break;
+        }
+        case 'image':
+          if (el.dataUrl) blocks.push({ id: bid(), type: 'image', url: el.dataUrl });
+          break;
+        case 'mcq': {
+          const opts = (el.options || []).map((o, i) => String.fromCharCode(65 + i) + '. ' + wsStrip(o.text));
+          if (opts.length) blocks.push({ id: bid(), type: 'text', content: opts.join('\n') });
+          const correct = (el.options || []).find(o => o.id === el.correctId);
+          if (correct) answers.push(wsStrip(correct.text));
+          break;
+        }
+        case 'answer': {
+          const a = wsStrip(el.answer);
+          if (a) answers.push(a);
+          break;
+        }
+        case 'table': {
+          const txt = tableToText(el);
+          if (txt) blocks.push({ id: bid(), type: 'text', content: txt });
+          break;
+        }
+        // skipped (no practice equivalent): video, openLines, workingSpace,
+        // pageBreak, answerKey, studentAnswer, commonMistake
+      }
+    });
+    if (!blocks.length) return null;
+    return {
+      id: 'mq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6) + '_' + idx,
+      title: (title || ('Question ' + (idx + 1))).slice(0, 70),
+      level: (defs.level || '').trim(),
+      topic: (defs.topic || (q.topics && q.topics[0]) || '').trim(),
+      blocks,
+      expected: answers.join('  ;  '),
+      markingGuide: '',
+      createdAt: new Date().toISOString(),
+      createdBy: (currentUser && (currentUser.displayName || currentUser.email)) || 'Admin',
+      source: 'worksheet'
+    };
+  }
+
+  let overlay = null, elCount, elTopic, elLevel;
+  function ensureOverlay() {
+    if (overlay) return;
+    const style = document.createElement('style');
+    style.textContent =
+      '.abk-overlay{position:fixed;inset:0;z-index:6000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);}' +
+      '.abk-card{background:#fff;border-radius:14px;padding:22px 22px 18px;width:min(420px,92vw);box-shadow:0 18px 60px rgba(0,0,0,.3);font-family:var(--font-ui,sans-serif);color:#222;}' +
+      '.abk-card h3{margin:0 0 4px;font-size:1.15rem;}' +
+      '.abk-card p{margin:0 0 6px;color:#555;font-size:.9rem;}' +
+      '.abk-card label{display:block;font-size:.8rem;font-weight:600;margin:10px 0 4px;color:#333;}' +
+      '.abk-card input,.abk-card select{width:100%;padding:9px 10px;border:1px solid #cfcfcf;border-radius:8px;font-size:.92rem;font-family:inherit;box-sizing:border-box;}' +
+      '.abk-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;}';
+    document.head.appendChild(style);
+    overlay = document.createElement('div');
+    overlay.className = 'abk-overlay';
+    overlay.style.display = 'none';
+    overlay.innerHTML =
+      '<div class="abk-card" role="dialog" aria-modal="true">' +
+        '<h3>Add to Question Bank</h3>' +
+        '<p id="abkCount"></p>' +
+        '<label>Topic<input id="abkTopic" type="text" placeholder="e.g. Fractions"></label>' +
+        '<label>Level (optional)<input id="abkLevel" type="text" placeholder="e.g. P5"></label>' +
+        '<div class="abk-actions">' +
+          '<button class="btn" id="abkCancel">Cancel</button>' +
+          '<button class="btn btn-primary" id="abkConfirm">Add to Bank</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    elCount = overlay.querySelector('#abkCount');
+    elTopic = overlay.querySelector('#abkTopic');
+    elLevel = overlay.querySelector('#abkLevel');
+    overlay.querySelector('#abkCancel').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    overlay.querySelector('#abkConfirm').addEventListener('click', run);
+  }
+  function close() { if (overlay) overlay.style.display = 'none'; }
+
+  async function run() {
+    const qs = (state.questions || []).filter(q => !isInstruction(q));
+    if (!qs.length) { showToast('No questions to add', { type: 'error' }); return; }
+    const defs = { topic: elTopic.value, level: elLevel.value };
+    const btn = overlay.querySelector('#abkConfirm');
+    btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Adding…';
+    let added = 0, skipped = 0;
+    for (let i = 0; i < qs.length; i++) {
+      const bankQ = convert(qs[i], i, defs);
+      if (!bankQ) { skipped++; continue; }
+      try { await setDoc(doc(fbDb, 'users', currentUser.uid, BANK_COLLECTION, bankQ.id), bankQ); added++; }
+      catch (e) { console.warn('Add to bank failed', e); skipped++; }
+    }
+    btn.disabled = false; btn.textContent = orig;
+    close();
+    showToast('Added ' + added + ' question' + (added === 1 ? '' : 's') + ' to your Question Bank' + (skipped ? ' — ' + skipped + ' skipped' : ''), { type: 'success', duration: 4200 });
+  }
+
+  function openDialog() {
+    if (typeof isAdmin === 'function' && !isAdmin()) { showToast('Admins only', { type: 'error' }); return; }
+    if (!currentUser) { showToast('Sign in first', { type: 'error' }); return; }
+    const qs = (state.questions || []).filter(q => !isInstruction(q));
+    if (!qs.length) { showToast('No questions to add yet', { type: 'error' }); return; }
+    ensureOverlay();
+    elCount.textContent = qs.length + ' question' + (qs.length === 1 ? '' : 's') + ' will be copied into your Math Practice bank. Unsupported element types are skipped.';
+    const withTopic = qs.find(q => q.topics && q.topics[0]);
+    elTopic.value = (withTopic && withTopic.topics[0]) || '';
+    elLevel.value = '';
+    overlay.style.display = 'flex';
+  }
+
+  const trigger = document.getElementById('addToBankBtn');
+  if (trigger) trigger.addEventListener('click', openDialog);
+})();
 
 /* =========================================================================
    DRAFT SIDEBAR — a docked panel listing every question in the draft, so

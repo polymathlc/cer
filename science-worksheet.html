@@ -2850,6 +2850,7 @@
         <span class="tb-sep admin-only" aria-hidden="true"></span>
         <button class="btn admin-only" id="saveSystemBtn" title="Save to your account — updates the linked worksheet, or creates a new one if none is linked">☁ Save to System</button>
         <button class="btn admin-only" id="saveAsNewBtn" title="Always save as a brand-new worksheet — never overwrites an existing one">☁＋ Save as New</button>
+        <button class="btn admin-only" id="addToBankBtn" title="Copy this worksheet's questions into your Science Question Bank">➕ Add to Bank</button>
         <button class="btn admin-only" id="activityLogBtn" title="View and restore earlier versions of your worksheet">📜 Activity Log</button>
         <button class="btn btn-newws admin-only" id="newWorksheetBtn" title="Start a brand-new blank worksheet — then use Load JSON to import a file into it">＋ New Worksheet</button>
         <span class="tb-sep admin-only" aria-hidden="true"></span>
@@ -8646,6 +8647,168 @@ function showToast(message, opts) {
     setTimeout(() => el.remove(), 300);
   }
 }
+
+/* ============================================================================
+   ADD TO QUESTION BANK
+   Copy this worksheet's questions into the Keywords Portal question bank
+   (Firestore: users/{uid}/questions), converting the rich worksheet element
+   model into the portal's HTML block + answer shape.
+   Works whether the creator is open standalone or embedded inside index.html.
+   ========================================================================== */
+(function setupAddToBank() {
+  const BANK_COLLECTION = 'questions';
+  const CATEGORIES = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
+  function bid() { return 'block_' + Math.random().toString(36).slice(2, 9) + '_' + Date.now(); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function wsStrip(html) {
+    const d = document.createElement('div');
+    d.innerHTML = (html == null ? '' : String(html));
+    return (d.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+  function tableToHtml(el) {
+    const rows = el.rows || [];
+    if (!rows.length) return '';
+    let any = false;
+    const body = rows.map((r, ri) => {
+      const cells = (r || []).map(c => {
+        const t = (c && c.t) || '';
+        if (wsStrip(t)) any = true;
+        const tag = (el.headerRow && ri === 0) ? 'th' : 'td';
+        return '<' + tag + ' style="border:1px solid #ccc;padding:4px 8px;">' + t + '</' + tag + '>';
+      }).join('');
+      return '<tr>' + cells + '</tr>';
+    }).join('');
+    if (!any) return '';
+    return '<table style="border-collapse:collapse;margin:6px 0;">' + body + '</table>';
+  }
+  // Worksheet question -> science bank question (or null if nothing usable).
+  function convert(q, idx, defs) {
+    const blocks = [];
+    const answers = [];
+    let title = '';
+    (q.elements || []).forEach(el => {
+      switch (el && el.type) {
+        case 'text': {
+          const html = (el.text || '').trim();
+          if (html) { blocks.push({ id: bid(), type: 'text', content: html }); if (!title) title = wsStrip(html); }
+          break;
+        }
+        case 'part': {
+          const html = (el.text || '').trim();
+          const lbl = (el.label || '').trim();
+          if (html || lbl) blocks.push({ id: bid(), type: 'text', content: (lbl ? '<b>(' + lbl + ')</b> ' : '') + html });
+          break;
+        }
+        case 'image':
+          if (el.dataUrl) blocks.push({ id: bid(), type: 'image', url: el.dataUrl });
+          break;
+        case 'mcq': {
+          const items = (el.options || []).map((o, i) => '<li>' + String.fromCharCode(65 + i) + '. ' + (o.text || '') + '</li>').join('');
+          if (items) blocks.push({ id: bid(), type: 'text', content: '<ul style="list-style:none;padding-left:0;margin:0;">' + items + '</ul>' });
+          const correct = (el.options || []).find(o => o.id === el.correctId);
+          if (correct) answers.push(wsStrip(correct.text));
+          break;
+        }
+        case 'answer': {
+          const a = wsStrip(el.answer);
+          if (a) answers.push(a);
+          break;
+        }
+        case 'table': {
+          const html = tableToHtml(el);
+          if (html) blocks.push({ id: bid(), type: 'text', content: html });
+          break;
+        }
+        // skipped (no portal equivalent): video, openLines, workingSpace,
+        // pageBreak, answerKey, studentAnswer, commonMistake
+      }
+    });
+    if (!blocks.length) return null;
+    if (answers.length) blocks.push({ id: bid(), type: 'plainanswer', content: answers.map(a => '<p>' + esc(a) + '</p>').join('') });
+    return {
+      id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '_' + idx,
+      title: (title || ('Question ' + (idx + 1))).slice(0, 80),
+      category: defs.category || 'Key Concepts',
+      topic: (defs.topic || (q.topics && q.topics[0]) || '').trim(),
+      markingGuide: '',
+      blocks,
+      blanks: {},
+      createdAt: new Date().toISOString(),
+      createdBy: (currentUser && (currentUser.displayName || currentUser.email)) || 'Admin',
+      source: 'worksheet'
+    };
+  }
+
+  let overlay = null, elCount, elCat, elTopic;
+  function ensureOverlay() {
+    if (overlay) return;
+    const style = document.createElement('style');
+    style.textContent =
+      '.abk-overlay{position:fixed;inset:0;z-index:6000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);}' +
+      '.abk-card{background:#fff;border-radius:14px;padding:22px 22px 18px;width:min(420px,92vw);box-shadow:0 18px 60px rgba(0,0,0,.3);font-family:var(--font-ui,sans-serif);color:#222;}' +
+      '.abk-card h3{margin:0 0 4px;font-size:1.15rem;}' +
+      '.abk-card p{margin:0 0 6px;color:#555;font-size:.9rem;}' +
+      '.abk-card label{display:block;font-size:.8rem;font-weight:600;margin:10px 0 4px;color:#333;}' +
+      '.abk-card input,.abk-card select{width:100%;padding:9px 10px;border:1px solid #cfcfcf;border-radius:8px;font-size:.92rem;font-family:inherit;box-sizing:border-box;}' +
+      '.abk-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;}';
+    document.head.appendChild(style);
+    overlay = document.createElement('div');
+    overlay.className = 'abk-overlay';
+    overlay.style.display = 'none';
+    overlay.innerHTML =
+      '<div class="abk-card" role="dialog" aria-modal="true">' +
+        '<h3>Add to Question Bank</h3>' +
+        '<p id="abkCount"></p>' +
+        '<label>Category<select id="abkCat">' + CATEGORIES.map(c => '<option' + (c === 'Key Concepts' ? ' selected' : '') + '>' + c + '</option>').join('') + '</select></label>' +
+        '<label>Topic<input id="abkTopic" type="text" placeholder="e.g. Heat"></label>' +
+        '<div class="abk-actions">' +
+          '<button class="btn" id="abkCancel">Cancel</button>' +
+          '<button class="btn btn-primary" id="abkConfirm">Add to Bank</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    elCount = overlay.querySelector('#abkCount');
+    elCat = overlay.querySelector('#abkCat');
+    elTopic = overlay.querySelector('#abkTopic');
+    overlay.querySelector('#abkCancel').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    overlay.querySelector('#abkConfirm').addEventListener('click', run);
+  }
+  function close() { if (overlay) overlay.style.display = 'none'; }
+
+  async function run() {
+    const qs = (state.questions || []).filter(q => !isInstruction(q));
+    if (!qs.length) { showToast('No questions to add', { type: 'error' }); return; }
+    const defs = { category: elCat.value, topic: elTopic.value };
+    const btn = overlay.querySelector('#abkConfirm');
+    btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Adding…';
+    let added = 0, skipped = 0;
+    for (let i = 0; i < qs.length; i++) {
+      const bankQ = convert(qs[i], i, defs);
+      if (!bankQ) { skipped++; continue; }
+      try { await setDoc(doc(fbDb, 'users', currentUser.uid, BANK_COLLECTION, bankQ.id), bankQ); added++; }
+      catch (e) { console.warn('Add to bank failed', e); skipped++; }
+    }
+    btn.disabled = false; btn.textContent = orig;
+    close();
+    showToast('Added ' + added + ' question' + (added === 1 ? '' : 's') + ' to your Question Bank' + (skipped ? ' — ' + skipped + ' skipped' : ''), { type: 'success', duration: 4200 });
+  }
+
+  function openDialog() {
+    if (typeof isAdmin === 'function' && !isAdmin()) { showToast('Admins only', { type: 'error' }); return; }
+    if (!currentUser) { showToast('Sign in first', { type: 'error' }); return; }
+    const qs = (state.questions || []).filter(q => !isInstruction(q));
+    if (!qs.length) { showToast('No questions to add yet', { type: 'error' }); return; }
+    ensureOverlay();
+    elCount.textContent = qs.length + ' question' + (qs.length === 1 ? '' : 's') + ' will be copied into your Science Question Bank. Unsupported element types are skipped.';
+    const withTopic = qs.find(q => q.topics && q.topics[0]);
+    elTopic.value = (withTopic && withTopic.topics[0]) || '';
+    overlay.style.display = 'flex';
+  }
+
+  const trigger = document.getElementById('addToBankBtn');
+  if (trigger) trigger.addEventListener('click', openDialog);
+})();
 
 /* =========================================================================
    DRAFT SIDEBAR — a docked panel listing every question in the draft, so
