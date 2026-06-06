@@ -189,8 +189,12 @@ a { color: var(--primary); }
 .canvas-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; color: var(--text-light); font-size: 0.95rem; gap: 8px; text-align: center; padding: 20px; }
 .typed-working { margin-top: 14px; }
 .typed-working label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
-.typed-working textarea { width: 100%; min-height: 90px; resize: vertical; padding: 11px 13px; font-size: 1rem; font-family: 'Space Grotesk', sans-serif; line-height: 1.55; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface-alt); }
+.typed-working textarea { width: 100%; min-height: 90px; resize: vertical; padding: 11px 13px; font-size: 1rem; font-family: 'Space Grotesk', sans-serif; line-height: 1.55; border: 1.5px solid var(--border); border-radius: 0 0 var(--radius-md) var(--radius-md); border-top: none; background: var(--surface-alt); }
 .typed-working textarea:focus { outline: none; border-color: var(--border-focus); background: #fff; }
+.symbol-bar { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 9px; background: var(--surface-alt); border: 1.5px solid var(--border); border-bottom: none; border-radius: var(--radius-md) var(--radius-md) 0 0; }
+.sym-btn { min-width: 34px; height: 34px; padding: 0 7px; border: 1px solid var(--border); background: #fff; border-radius: var(--radius-sm); cursor: pointer; font-family: 'Space Grotesk', sans-serif; font-size: 1rem; color: var(--text); line-height: 1; display: inline-flex; align-items: center; justify-content: center; transition: all var(--transition); }
+.sym-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.sym-btn:active { transform: scale(0.94); }
 
 /* ========== RESULT ========== */
 .result { margin-top: 18px; display: none; }
@@ -389,6 +393,7 @@ a { color: var(--primary); }
             </div>
             <div class="typed-working">
               <label for="typedWorking">⌨️ Or type your working <span style="color:var(--text-light);font-weight:400;">(use this instead of writing if you prefer)</span></label>
+              <div class="symbol-bar" id="symbolBar"></div>
               <textarea id="typedWorking" placeholder="Type your steps here, e.g.&#10;2/5 = 8/20, 1/4 = 5/20&#10;eaten = 13/20&#10;left = 7/20"></textarea>
             </div>
             <button class="btn btn-primary btn-block btn-lg" id="submitBtn" style="margin-top:16px;">
@@ -1108,6 +1113,28 @@ function exportWorkingPng() {
   o.drawImage(canvas, 0, blockH);
   return out.toDataURL("image/png");
 }
+
+// =====================================================================
+// MATH SYMBOL BAR — inserts symbols into the typed-working box at the caret
+// =====================================================================
+const SYMBOLS = ["×", "÷", "½", "⅓", "¼", "¾", "⅔", "√", "π", "²", "³", "°", "≈", "≤", "≥", "≠", "±", "→", "/"];
+function insertSymbol(sym) {
+  const ta = $("typedWorking");
+  const s = ta.selectionStart != null ? ta.selectionStart : ta.value.length;
+  const e = ta.selectionEnd != null ? ta.selectionEnd : ta.value.length;
+  ta.value = ta.value.slice(0, s) + sym + ta.value.slice(e);
+  const pos = s + sym.length;
+  ta.focus();
+  try { ta.setSelectionRange(pos, pos); } catch (_) {}
+}
+const symBar = $("symbolBar");
+SYMBOLS.forEach(sym => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "sym-btn"; b.textContent = sym; b.title = "Insert " + sym;
+  // pointerdown + preventDefault keeps the caret in the textarea (no focus steal)
+  b.addEventListener("pointerdown", e => { e.preventDefault(); insertSymbol(sym); });
+  symBar.appendChild(b);
+});
 
 // =====================================================================
 // PRACTICE — render question + AI marking
