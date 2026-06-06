@@ -7511,6 +7511,23 @@ function markMcqChoice(input) {
 // =====================================================================
 // IMPORT: Worksheet-creator questions → CER question-bank format
 // =====================================================================
+
+// Build a blanks map { wordIndex: true } that marks EVERY word of `content`.
+// Uses the same word tokenizer/indexing as renderStudentText so the blanks
+// line up exactly with the inputs it renders.
+function allWordBlanks(content) {
+  const div = document.createElement('div');
+  div.innerHTML = content || '';
+  const text = div.textContent || '';
+  const wordRe = /([A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*)|(\s+)|([^A-Za-z0-9\s]+)/g;
+  const blanks = {};
+  let idx = 0, m;
+  while ((m = wordRe.exec(text)) !== null) {
+    if (m[1]) blanks[idx++] = true;
+  }
+  return blanks;
+}
+
 function worksheetElementToBlock(el) {
   if (!el || !el.type) return null;
   const id = generateBlockId();
@@ -7523,7 +7540,10 @@ function worksheetElementToBlock(el) {
       opts.forEach(o => { if (o._ws === el.correctId) correctId = o.id; delete o._ws; });
       return { id, type: 'mcq', options: opts, correctId };
     }
-    case 'answer':       return { id, type: 'answerLine', label: el.label || 'Ans:', answer: el.answer || '', lineLength: Number(el.lineLength) || 30 };
+    // A worksheet "answer" carries a known correct answer. Map it to a native
+    // fill-in-the-blanks answer block: the answer words become blanks in
+    // practice, blank lines when printed, and a writing box in open-ended mode.
+    case 'answer':       return { id, type: 'plainanswer', content: el.answer || '', _autoBlank: true };
     case 'answerKey':    return { id, type: 'answerKey', text: el.text || '', url: el.dataUrl || '' };
     case 'openLines':    return { id, type: 'openLines', lines: Number(el.lines) || 4 };
     case 'workingSpace': return { id, type: 'workingSpace', lines: Number(el.lines) || 6 };
@@ -7573,6 +7593,16 @@ function worksheetQuestionToCer(wq, index) {
     if (t) title = stripHtmlToText(t.text).slice(0, 60).trim();
   }
   if (!title) title = 'Imported question' + (index != null ? ' ' + (index + 1) : '');
+  // Auto-mark every word of an imported answer as a blank, so it shows as
+  // fill-in-the-blanks in practice (and as an answer-keyed blank line in print).
+  const blanks = {};
+  blocksOut.forEach(b => {
+    if (b._autoBlank) {
+      const wb = allWordBlanks(b.content);
+      if (Object.keys(wb).length) blanks[b.id] = wb;
+      delete b._autoBlank;
+    }
+  });
   return {
     id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: title,
@@ -7580,7 +7610,7 @@ function worksheetQuestionToCer(wq, index) {
     topic: topic,
     markingGuide: '',
     blocks: blocksOut,
-    blanks: {},
+    blanks: blanks,
     createdAt: new Date().toISOString(),
     createdBy: 'Worksheet Creator',
     source: (wq && wq.source) || '',
@@ -10427,6 +10457,11 @@ function buildOpenBody(q, containerSel) {
       case 'plainanswer':
         html += `<div style="margin-top:12px;margin-bottom:6px;"><span class="sv-block-tag answer">Your Answer</span></div>`;
         html += _openSection(items, '', stripHtml(block.content || ''), '', '');
+        break;
+      case 'openLines':
+      case 'workingSpace':
+        // Open-ended mode: just a writing box (no lines).
+        html += _openSection(items, '', '', '', '');
         break;
       case 'explanation':
         break; // hidden
