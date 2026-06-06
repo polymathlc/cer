@@ -4213,7 +4213,7 @@ option {
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2 id="createPageTitle">Create Question</h2>
           </div>
-          <div class="subtitle" id="createPageSubtitle">Build a question with blocks</div>
+          <div class="subtitle" id="createPageSubtitle">Build a question with blocks. Answers and blanks are optional — every question is marked by AI.</div>
         </div>
         <div>
           <button class="btn btn-primary" id="aiBuildBtn" onclick="openAiBuild()" title="Paste or upload a screenshot/PDF of an exam question — AI reads it and fills in the question, answer and explanation. You then paste the diagram and save.">
@@ -4349,7 +4349,7 @@ option {
           </button>
           <button class="btn btn-orange" onclick="openPreview()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            &#x270F;&#xFE0F; Preview & Select Blanks
+            &#x270F;&#xFE0F; Add Blanks (Optional)
           </button>
           <button class="btn" onclick="previewAsStudent()" style="background:#8b5cf6;color:#fff;">
             &#x1F393; Preview as Student
@@ -4374,7 +4374,7 @@ option {
           </button>
           <button class="btn btn-orange" onclick="openPreview()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            &#x270F;&#xFE0F; Preview & Select Blanks
+            &#x270F;&#xFE0F; Add Blanks (Optional)
           </button>
           <button class="btn" onclick="previewAsStudent()" style="background:#8b5cf6;color:#fff;">
             &#x1F393; Preview as Student
@@ -5081,13 +5081,13 @@ option {
 <div class="preview-overlay" id="previewOverlay">
   <div class="preview-panel">
     <div class="preview-header">
-      <h3>Interactive Preview</h3>
+      <h3>Add Blanks (Optional)</h3>
       <button class="preview-close" onclick="closePreview()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div class="preview-toolbar">
-      <span class="hint">Click on words to convert them to blanks. Bolded words will become fill-in-the-blank fields for students.</span>
+      <span class="hint">Blanks are optional — every question is marked by AI. To add a guided fill-in-the-blanks version, click words to turn them into blanks; leave them as-is for a fully open-ended question.</span>
       <span class="blank-count" id="blankCountBadge">0 blanks</span>
     </div>
     <div class="preview-body" id="previewBody"></div>
@@ -5111,7 +5111,7 @@ option {
       </button>
     </div>
     <div style="padding:10px 28px 4px;background:var(--surface-alt);border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-muted);">
-      This is exactly how students will see this question in practice mode. Try filling in the blanks!
+      This is exactly how students will see this question in practice mode — with fill-in-the-blanks if you added any, or open-ended boxes otherwise.
     </div>
     <div class="preview-body" id="studentPreviewBody" style="padding:20px 28px;"></div>
     <div style="padding:0 28px 20px;display:flex;gap:10px;justify-content:space-between;align-items:center;">
@@ -8159,10 +8159,6 @@ function previewAsStudent() {
     showToast('Add some blocks first before previewing', 'error');
     return;
   }
-  if (Object.keys(selectedBlanks).length === 0) {
-    showToast('Select some blanks first using "Preview & Select Blanks"', 'error');
-    return;
-  }
 
   // Sync DOM content to blocks
   document.querySelectorAll('.content-editable[data-block-id]').forEach(el => {
@@ -8298,10 +8294,6 @@ function checkStudentPreviewAnswers() {
 function openScheduleFromCreate() {
   if (blocks.length === 0) {
     showToast('Add some blocks first', 'error');
-    return;
-  }
-  if (Object.keys(selectedBlanks).length === 0) {
-    showToast('Select some blanks first using "Preview & Select Blanks"', 'error');
     return;
   }
 
@@ -8599,7 +8591,7 @@ function setEditMode(isEditing) {
     editActions.style.display = '';
   } else {
     title.textContent = 'Create Question';
-    subtitle.textContent = 'Build a question with blocks';
+    subtitle.textContent = 'Build a question with blocks. Answers and blanks are optional — every question is marked by AI.';
     createActions.style.display = '';
     editActions.style.display = 'none';
   }
