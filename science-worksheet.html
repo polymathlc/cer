@@ -2854,6 +2854,7 @@
         <button class="btn btn-newws admin-only" id="newWorksheetBtn" title="Start a brand-new blank worksheet — then use Load JSON to import a file into it">＋ New Worksheet</button>
         <span class="tb-sep admin-only" aria-hidden="true"></span>
         <button class="btn admin-only" id="addAllToDraftBtn" title="Copy every question in this worksheet into the draft at once">📋＋ Add all to Draft</button>
+        <button class="btn admin-only" id="addAllToBankBtn" title="Add every question in this worksheet to the CER Question Bank" style="display:none;">🏦 Add all to Question Bank</button>
         <button class="btn admin-only" id="openDraftBtn" title="Open the draft panel — see every question you've collected, preview each one, then build a worksheet or cheat sheet">🗂 Draft (0)</button>
         <button class="btn admin-only" id="clearDraftBtn" title="Clear all questions from the draft" style="display:none;">Clear Draft</button>
         <button class="btn admin-only" id="cheatSheetBtn" title="Lay out the draft questions as drag-and-resize tiles on a printable cheat sheet">🧾 Cheat Sheet (0)</button>
@@ -4639,6 +4640,9 @@ function renderPreviewQuestion(q, qIndex) {
         () => toggleCutQuestion(qIndex)));
     }
     qc.appendChild(makeIconBtn('📋', 'Add this question to the draft (collect it in the 🗂 Draft panel)', () => copyQuestionToDraft(qIndex)));
+    if (inCerBankFrame()) {
+      qc.appendChild(makeIconBtn('🏦', 'Add this question to the CER Question Bank', () => addQuestionToBank(qIndex)));
+    }
     if (!currentSavedLocked) {
       qc.appendChild(makeIconBtn('✕', 'Delete this question', () => {
         if (confirm('Delete this entire question?')) removeQuestion(qIndex);
@@ -8503,6 +8507,58 @@ async function copyQuestionToDraft(qIndex) {
   flashDraftItem(clone.id);
 }
 
+// =========================================================================
+// SEND TO CER QUESTION BANK
+// When this creator is embedded inside the Keywords Portal (index.html), it can
+// push questions straight into the portal's Question Bank via postMessage. The
+// portal converts each worksheet question into its native block format.
+// =========================================================================
+function inCerBankFrame() {
+  try { return window.parent && window.parent !== window; } catch (_) { return false; }
+}
+function questionsForBank(list) {
+  // Deep-clone to a plain, serialisable payload; keep image dataUrls so the
+  // portal can display them. Instruction blocks are skipped.
+  let clean;
+  try { clean = JSON.parse(JSON.stringify(list)); }
+  catch (_) { clean = []; }
+  return clean.filter(q => q && q.kind !== 'instruction' && Array.isArray(q.elements) && q.elements.length);
+}
+function sendQuestionsToBank(list) {
+  if (!inCerBankFrame()) {
+    alert('Open the Worksheet Creator inside the Keywords Portal (the "Worksheet Creator" tab) to add questions to the Question Bank.');
+    return;
+  }
+  const payload = questionsForBank(list);
+  if (!payload.length) {
+    alert('Nothing to add — there are no questions here (instruction blocks are skipped).');
+    return;
+  }
+  window.parent.postMessage({ type: 'cer:addQuestions', source: 'worksheet-creator', questions: payload }, '*');
+  if (typeof showToast === 'function') {
+    showToast(`Sending ${payload.length} question${payload.length === 1 ? '' : 's'} to the Question Bank…`, { type: 'info' });
+  }
+}
+function addQuestionToBank(qIndex) {
+  const q = state.questions[qIndex];
+  if (!q) return;
+  if (isInstruction(q)) { alert('Instruction blocks cannot be added to the Question Bank.'); return; }
+  sendQuestionsToBank([q]);
+}
+function addWorksheetToBank() {
+  const qs = (state.questions || []).filter(q => !isInstruction(q));
+  if (!qs.length) { alert('This worksheet has no questions to add to the Question Bank.'); return; }
+  sendQuestionsToBank(qs);
+}
+// Confirmation from the portal once questions are imported.
+window.addEventListener('message', function (e) {
+  const d = e.data;
+  if (!d || d.type !== 'cer:addQuestions:done') return;
+  if (typeof showToast === 'function') {
+    showToast(`✓ ${d.count} question${d.count === 1 ? '' : 's'} added to the Question Bank`, { type: 'success' });
+  }
+});
+
 // Remember (per browser) whether the user has seen the draft panel, so we only
 // auto-open it the very first time — never naggingly thereafter.
 const DRAFT_PANEL_SEEN_KEY = 'wsgen.draftPanelSeen';
@@ -10695,6 +10751,14 @@ document.getElementById('signOutBtn').addEventListener('click', signOutUser);
 document.getElementById('googleSignInBtn').addEventListener('click', signInGoogle);
 document.getElementById('newWorksheetBtn').addEventListener('click', newWorksheet);
 document.getElementById('addAllToDraftBtn').addEventListener('click', copyWorksheetToDraft);
+(function () {
+  const bankBtn = document.getElementById('addAllToBankBtn');
+  if (!bankBtn) return;
+  if (inCerBankFrame()) {
+    bankBtn.style.display = '';
+    bankBtn.addEventListener('click', addWorksheetToBank);
+  }
+})();
 // The toolbar "🗂 Draft (n)" button now opens the panel so you can SEE what's
 // collected (and preview each question) before turning it into a worksheet.
 document.getElementById('openDraftBtn').addEventListener('click', toggleDraftSidebar);

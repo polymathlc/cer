@@ -5916,6 +5916,49 @@ function createBlock(type) {
       block.colWidths = Array(block.cols).fill(null);
       block.rowHeights = {};
       break;
+    // ── Worksheet-creator block types (full native support) ──────────────
+    case 'part':
+      block.label = '';
+      block.content = '';
+      break;
+    case 'mcq':
+      block.options = [
+        { id: generateBlockId(), text: '' },
+        { id: generateBlockId(), text: '' },
+        { id: generateBlockId(), text: '' },
+        { id: generateBlockId(), text: '' }
+      ];
+      block.correctId = null;
+      break;
+    case 'answerLine':
+      block.label = 'Ans:';
+      block.answer = '';
+      block.lineLength = 30;
+      break;
+    case 'answerKey':
+      block.text = '';
+      block.url = '';
+      break;
+    case 'openLines':
+      block.lines = 4;
+      break;
+    case 'workingSpace':
+      block.lines = 6;
+      break;
+    case 'commonMistake':
+      block.title = 'Common Mistake';
+      block.text = '';
+      block.color = 'teal';
+      break;
+    case 'studentAnswer':
+      block.label = "Student's Answer";
+      block.answer = '';
+      block.whyLines = 2;
+      block.corrected = false;
+      block.correctedLines = 2;
+      break;
+    case 'pageBreak':
+      break;
   }
   return block;
 }
@@ -7026,8 +7069,17 @@ function renderBlocks() {
         badgeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>';
         badgeLabel = 'Table Block';
         break;
+      case 'part':        badgeClass = 'text-badge'; badgeIcon = '🔡'; badgeLabel = 'Part'; break;
+      case 'mcq':         badgeClass = 'answer-badge'; badgeIcon = '🔘'; badgeLabel = 'Multiple Choice'; break;
+      case 'answerLine':  badgeClass = 'plainanswer-badge'; badgeIcon = '✏️'; badgeLabel = 'Answer Line'; break;
+      case 'openLines':   badgeClass = 'plainanswer-badge'; badgeIcon = '📃'; badgeLabel = 'Open Lines'; break;
+      case 'workingSpace':badgeClass = 'plainanswer-badge'; badgeIcon = '🧮'; badgeLabel = 'Working Space'; break;
+      case 'commonMistake':badgeClass = 'explanation-badge'; badgeIcon = '⚠️'; badgeLabel = 'Common Mistake'; break;
+      case 'studentAnswer':badgeClass = 'explanation-badge'; badgeIcon = '🧑‍🎓'; badgeLabel = 'Student Answer'; break;
+      case 'answerKey':   badgeClass = 'explanation-badge'; badgeIcon = '🔑'; badgeLabel = 'Answer Key'; break;
+      case 'pageBreak':   badgeClass = 'text-badge'; badgeIcon = '⤵️'; badgeLabel = 'Page Break'; break;
     }
-    
+
     let bodyHTML = '';
     
     switch (block.type) {
@@ -7178,8 +7230,11 @@ function renderBlocks() {
       case 'table':
         bodyHTML = renderAdvancedTableBlock(block);
         break;
+      default:
+        bodyHTML = renderImportedBlockEditorBody(block);
+        break;
     }
-    
+
     card.innerHTML = `
       <div class="block-header">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -7234,9 +7289,334 @@ function makeBlockInsertBar(index) {
       <button type="button" class="block-insert-btn" onclick="addBlockAt('image', ${index})">🖼️ Image</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('video', ${index})">🎬 Video</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('table', ${index})">▦ Table</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('part', ${index})">🔡 Part (a)</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('mcq', ${index})">🔘 Multiple Choice</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('answerLine', ${index})">✏️ Answer Line</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('openLines', ${index})">📃 Open Lines</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('workingSpace', ${index})">🧮 Working Space</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('commonMistake', ${index})">⚠️ Common Mistake</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('studentAnswer', ${index})">🧑‍🎓 Student Answer</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('answerKey', ${index})">🔑 Answer Key</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('pageBreak', ${index})">⤵️ Page Break</button>
     </div>`;
   return bar;
 }
+
+// =====================================================================
+// WORKSHEET-CREATOR BLOCK TYPES — editor, handlers, student rendering
+// These give the CER app native support for every element type produced
+// by the Science Worksheet Creator (science-worksheet.html).
+// =====================================================================
+
+// Generic field setter for non-contenteditable inputs on a block.
+function saveBlockField(id, field, value) {
+  const block = blocks.find(b => b.id === id);
+  if (block) block[field] = value;
+}
+function saveBlockNum(id, field, value, min, max) {
+  const block = blocks.find(b => b.id === id);
+  if (!block) return;
+  let n = parseInt(value, 10);
+  if (isNaN(n)) n = min ?? 0;
+  if (min != null) n = Math.max(min, n);
+  if (max != null) n = Math.min(max, n);
+  block[field] = n;
+}
+
+// ── MCQ option handlers ──────────────────────────────────────────────
+function mcqSetCorrect(blockId, optId) {
+  const b = blocks.find(x => x.id === blockId);
+  if (b) b.correctId = optId;
+}
+function mcqSetOptionText(blockId, optId, text) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b) return;
+  const o = (b.options || []).find(o => o.id === optId);
+  if (o) o.text = text;
+}
+function mcqAddOption(blockId) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b) return;
+  b.options = b.options || [];
+  b.options.push({ id: generateBlockId(), text: '' });
+  renderBlocks();
+}
+function mcqRemoveOption(blockId, optId) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b) return;
+  b.options = (b.options || []).filter(o => o.id !== optId);
+  if (b.correctId === optId) b.correctId = null;
+  renderBlocks();
+}
+
+const COMMON_MISTAKE_COLORS = { teal: '#0d9488', orange: '#ea580c', red: '#dc2626', purple: '#7c3aed', blue: '#2563eb' };
+
+// Editor body markup for the worksheet-creator block types.
+function renderImportedBlockEditorBody(block) {
+  const id = block.id;
+  switch (block.type) {
+    case 'part':
+      return `
+        <div class="block-body">
+          <input class="form-input" type="text" placeholder="Label (e.g. (a))" style="max-width:160px;margin-bottom:8px;"
+                 value="${escapeHtml(block.label || '')}" oninput="saveBlockField('${id}','label',this.value)">
+          <div class="content-editable" contenteditable="true" data-placeholder="Part text…"
+               data-block-id="${id}" data-field="content"
+               oninput="saveBlockContent('${id}','content',this.innerHTML)">${block.content || ''}</div>
+        </div>`;
+    case 'mcq': {
+      const opts = (block.options || []).map((o, i) => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <input type="radio" name="mcqedit_${id}" ${block.correctId === o.id ? 'checked' : ''}
+                 title="Mark as correct answer" onchange="mcqSetCorrect('${id}','${o.id}')">
+          <span style="font-weight:600;width:18px;">${String.fromCharCode(65 + i)}.</span>
+          <input class="form-input" type="text" style="flex:1;" placeholder="Option text"
+                 value="${escapeHtml(o.text || '')}" oninput="mcqSetOptionText('${id}','${o.id}',this.value)">
+          <button class="block-action-btn delete" title="Remove option" onclick="mcqRemoveOption('${id}','${o.id}')">✕</button>
+        </div>`).join('');
+      return `
+        <div class="block-body">
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Select the radio next to the correct option.</div>
+          ${opts}
+          <button class="btn btn-outline" style="margin-top:4px;" onclick="mcqAddOption('${id}')">+ Add option</button>
+        </div>`;
+    }
+    case 'answerLine':
+      return `
+        <div class="block-body">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input class="form-input" type="text" placeholder="Label (e.g. Ans:)" style="max-width:160px;"
+                   value="${escapeHtml(block.label || '')}" oninput="saveBlockField('${id}','label',this.value)">
+            <input class="form-input" type="text" placeholder="Correct answer (shown when answers revealed)" style="flex:1;min-width:200px;"
+                   value="${escapeHtml(block.answer || '')}" oninput="saveBlockField('${id}','answer',this.value)">
+            <label style="font-size:0.8rem;color:var(--text-muted);">Length
+              <input class="form-input" type="number" min="5" max="120" style="width:70px;"
+                     value="${Number(block.lineLength) || 30}" oninput="saveBlockNum('${id}','lineLength',this.value,5,120)"></label>
+          </div>
+        </div>`;
+    case 'openLines':
+      return `
+        <div class="block-body">
+          <label style="font-size:0.85rem;">Number of blank lines
+            <input class="form-input" type="number" min="1" max="40" style="width:80px;margin-left:8px;"
+                   value="${Number(block.lines) || 4}" oninput="saveBlockNum('${id}','lines',this.value,1,40)"></label>
+        </div>`;
+    case 'workingSpace':
+      return `
+        <div class="block-body">
+          <label style="font-size:0.85rem;">Working-space height (lines)
+            <input class="form-input" type="number" min="1" max="40" style="width:80px;margin-left:8px;"
+                   value="${Number(block.lines) || 6}" oninput="saveBlockNum('${id}','lines',this.value,1,40)"></label>
+        </div>`;
+    case 'commonMistake': {
+      const colorOpts = Object.keys(COMMON_MISTAKE_COLORS).map(c =>
+        `<option value="${c}" ${block.color === c ? 'selected' : ''}>${c.charAt(0).toUpperCase() + c.slice(1)}</option>`).join('');
+      return `
+        <div class="block-body">
+          <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
+            <input class="form-input" type="text" placeholder="Title" style="flex:1;"
+                   value="${escapeHtml(block.title || 'Common Mistake')}" oninput="saveBlockField('${id}','title',this.value)">
+            <select class="form-input" style="max-width:130px;" onchange="saveBlockField('${id}','color',this.value)">${colorOpts}</select>
+          </div>
+          <div class="content-editable" contenteditable="true" data-placeholder="Describe the common mistake…"
+               data-block-id="${id}" data-field="text"
+               oninput="saveBlockContent('${id}','text',this.innerHTML)">${block.text || ''}</div>
+        </div>`;
+    }
+    case 'studentAnswer':
+      return `
+        <div class="block-body">
+          <input class="form-input" type="text" placeholder="Label" style="margin-bottom:8px;"
+                 value="${escapeHtml(block.label || "Student's Answer")}" oninput="saveBlockField('${id}','label',this.value)">
+          <div class="content-editable" contenteditable="true" data-placeholder="Example (often incorrect) answer…"
+               data-block-id="${id}" data-field="answer"
+               oninput="saveBlockContent('${id}','answer',this.innerHTML)">${block.answer || ''}</div>
+        </div>`;
+    case 'answerKey':
+      return `
+        <div class="block-body">
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">🔑 Answer key — hidden from students during practice.</div>
+          <div class="content-editable" contenteditable="true" data-placeholder="Answer key text…"
+               data-block-id="${id}" data-field="text"
+               oninput="saveBlockContent('${id}','text',this.innerHTML)">${block.text || ''}</div>
+          <input class="form-input" type="text" placeholder="…or an answer-key image URL" style="margin-top:8px;"
+                 value="${escapeHtml(block.url || '')}" oninput="saveBlockField('${id}','url',this.value)">
+        </div>`;
+    case 'pageBreak':
+      return `<div class="block-body"><div style="text-align:center;color:var(--text-muted);border-top:2px dashed var(--border);padding-top:8px;font-size:0.85rem;">⤵️ Page break (affects printed worksheets only)</div></div>`;
+    default:
+      return `<div class="block-body"><div style="color:var(--text-muted);font-size:0.85rem;">Unsupported block type: ${escapeHtml(block.type || '')}</div></div>`;
+  }
+}
+
+// Student-facing / preview rendering for the worksheet-creator block types.
+// Used as the `default` branch of every practice/quick/topical render switch.
+function renderImportedBlockStudent(block, q) {
+  switch (block.type) {
+    case 'part':
+      return `<div style="margin:10px 0 4px;font-weight:600;">${block.label ? escapeHtml(block.label) + ' ' : ''}<span style="font-weight:400;">${block.content || ''}</span></div>`;
+    case 'mcq': {
+      const name = 'mcq_' + block.id;
+      let h = `<div class="mcq-block" data-block="${block.id}" style="margin:10px 0;">`;
+      (block.options || []).forEach((o, i) => {
+        h += `<label style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
+          <input type="radio" name="${name}" value="${o.id}" data-correct="${block.correctId === o.id ? '1' : ''}" onchange="markMcqChoice(this)">
+          <span><b>${String.fromCharCode(65 + i)}.</b> ${o.text || ''}</span></label>`;
+      });
+      h += `</div>`;
+      return h;
+    }
+    case 'answerLine':
+      return `<div style="margin:10px 0;">${block.label ? `<span style="font-weight:600;">${escapeHtml(block.label)} </span>` : ''}<input class="ws-answer-line" type="text" placeholder="________" style="border:none;border-bottom:1px solid #999;background:transparent;font-family:inherit;font-size:0.95rem;min-width:${Math.max(120, (Number(block.lineLength) || 30) * 7)}px;"></div>`;
+    case 'openLines':
+      return `<div class="ws-open-lines" style="margin:10px 0;">` +
+        Array.from({ length: Number(block.lines) || 4 }).map(() => `<div style="border-bottom:1px solid #d4d4d4;height:26px;"></div>`).join('') + `</div>`;
+    case 'workingSpace':
+      return `<div class="ws-working" style="margin:10px 0;border:1px dashed #c4c4c4;border-radius:8px;height:${(Number(block.lines) || 6) * 26}px;"></div>`;
+    case 'commonMistake': {
+      const c = COMMON_MISTAKE_COLORS[block.color] || COMMON_MISTAKE_COLORS.teal;
+      return `<div style="margin:10px 0;border-left:4px solid ${c};background:${c}14;padding:8px 12px;border-radius:6px;">
+        <div style="font-weight:700;color:${c};margin-bottom:2px;">⚠ ${escapeHtml(block.title || 'Common Mistake')}</div>
+        <div>${block.text || ''}</div></div>`;
+    }
+    case 'studentAnswer':
+      return `<div style="margin:10px 0;border:1px solid var(--border);border-radius:8px;padding:8px 12px;background:var(--surface-container-high,#f3f1ec);">
+        <div style="font-weight:600;margin-bottom:4px;">${escapeHtml(block.label || "Student's Answer")}</div>
+        <div style="font-style:italic;color:#444;">${block.answer || ''}</div></div>`;
+    case 'image':
+      // Imported images carry an optional caption; render faithfully.
+      if (!block.url) return '';
+      return `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);">${block.caption ? `<div style="font-size:0.85rem;color:var(--text-muted);text-align:center;margin-top:4px;">${escapeHtml(block.caption)}</div>` : ''}</div>`;
+    case 'answerKey':
+      return ''; // hidden from students during practice
+    case 'pageBreak':
+      return ''; // print-only
+    default:
+      return '';
+  }
+}
+
+// Visual feedback when a student picks an MCQ option.
+function markMcqChoice(input) {
+  const wrap = input.closest('.mcq-block');
+  if (!wrap) return;
+  wrap.querySelectorAll('label').forEach(l => { l.style.background = ''; l.style.borderColor = 'var(--border)'; });
+  const lab = input.closest('label');
+  if (!lab) return;
+  const correct = input.getAttribute('data-correct') === '1';
+  lab.style.background = correct ? '#dcfce7' : '#fee2e2';
+  lab.style.borderColor = correct ? '#16a34a' : '#dc2626';
+}
+
+// =====================================================================
+// IMPORT: Worksheet-creator questions → CER question-bank format
+// =====================================================================
+function worksheetElementToBlock(el) {
+  if (!el || !el.type) return null;
+  const id = generateBlockId();
+  switch (el.type) {
+    case 'text':         return { id, type: 'text', content: el.text || '' };
+    case 'part':         return { id, type: 'part', label: el.label || '', content: el.text || '' };
+    case 'mcq': {
+      const opts = (el.options || []).map(o => ({ id: generateBlockId(), text: o.text || '', _ws: o.id }));
+      let correctId = null;
+      opts.forEach(o => { if (o._ws === el.correctId) correctId = o.id; delete o._ws; });
+      return { id, type: 'mcq', options: opts, correctId };
+    }
+    case 'answer':       return { id, type: 'answerLine', label: el.label || 'Ans:', answer: el.answer || '', lineLength: Number(el.lineLength) || 30 };
+    case 'answerKey':    return { id, type: 'answerKey', text: el.text || '', url: el.dataUrl || '' };
+    case 'openLines':    return { id, type: 'openLines', lines: Number(el.lines) || 4 };
+    case 'workingSpace': return { id, type: 'workingSpace', lines: Number(el.lines) || 6 };
+    case 'video':        return { id, type: 'video', url: el.url || '', caption: el.caption || '' };
+    case 'image':        return { id, type: 'image', url: el.dataUrl || '', caption: el.caption || '', scale: Number(el.scale) || 1 };
+    case 'commonMistake':return { id, type: 'commonMistake', title: el.title || 'Common Mistake', text: el.text || '', color: el.color || 'teal' };
+    case 'studentAnswer':return { id, type: 'studentAnswer', label: el.label || "Student's Answer", answer: el.answer || '', whyLines: Number(el.whyLines) || 2, corrected: !!el.corrected, correctedLines: Number(el.correctedLines) || 2 };
+    case 'pageBreak':    return { id, type: 'pageBreak' };
+    case 'table': {
+      const rows = Array.isArray(el.rows) ? el.rows : [];
+      const nrows = Math.max(1, rows.length);
+      let ncols = 1;
+      rows.forEach(r => { if (Array.isArray(r)) ncols = Math.max(ncols, r.length); });
+      const data = [];
+      const cellStyles = {};
+      for (let r = 0; r < nrows; r++) {
+        data[r] = [];
+        for (let c = 0; c < ncols; c++) {
+          const cell = (rows[r] || [])[c] || {};
+          data[r][c] = cell.t || '';
+          const s = {};
+          if (cell.bg) s.backgroundColor = cell.bg;
+          if (cell.align) s.textAlign = cell.align;
+          if (el.headerRow && r === 0) s.fontWeight = 'bold';
+          if (Object.keys(s).length) cellStyles[r + '_' + c] = s;
+        }
+      }
+      return { id, type: 'table', rows: nrows, cols: ncols, data, merges: [], cellStyles, cellPadding: {}, colWidths: Array(ncols).fill(null), rowHeights: {} };
+    }
+    default: return null;
+  }
+}
+
+function worksheetQuestionToCer(wq, index) {
+  const els = (wq && Array.isArray(wq.elements)) ? wq.elements : [];
+  const blocksOut = [];
+  if (wq && wq.kind === 'instruction') {
+    const t = els.find(e => e.type === 'text');
+    blocksOut.push({ id: generateBlockId(), type: 'text', content: t ? (t.text || '') : '' });
+  } else {
+    els.forEach(el => { const b = worksheetElementToBlock(el); if (b) blocksOut.push(b); });
+  }
+  const topic = (wq && Array.isArray(wq.topics) && wq.topics[0]) || '';
+  let title = ((wq && wq.source) || '').trim();
+  if (!title) {
+    const t = els.find(e => e.type === 'text' && e.text);
+    if (t) title = stripHtmlToText(t.text).slice(0, 60).trim();
+  }
+  if (!title) title = 'Imported question' + (index != null ? ' ' + (index + 1) : '');
+  return {
+    id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+    title: title,
+    category: 'CER',
+    topic: topic,
+    markingGuide: '',
+    blocks: blocksOut,
+    blanks: {},
+    createdAt: new Date().toISOString(),
+    createdBy: 'Worksheet Creator',
+    source: (wq && wq.source) || '',
+    concepts: (wq && Array.isArray(wq.concepts)) ? wq.concepts.slice() : []
+  };
+}
+
+function importWorksheetQuestions(wqList) {
+  if (!Array.isArray(wqList) || !wqList.length) return 0;
+  let added = 0;
+  wqList.forEach((wq, i) => {
+    const q = worksheetQuestionToCer(wq, i);
+    if (!q.blocks.length) return;
+    questionBank.push(q);
+    saveQuestion(q); // async; no-op (in-memory only) if not signed in
+    added++;
+  });
+  if (added) { updateCounts(); renderQuestionBank(); }
+  return added;
+}
+
+// Receive questions sent from the embedded Science Worksheet Creator iframe.
+window.addEventListener('message', function (e) {
+  const d = e.data;
+  if (!d || d.type !== 'cer:addQuestions') return;
+  const frame = document.getElementById('scienceWorksheetFrame');
+  if (frame && frame.contentWindow && e.source !== frame.contentWindow) return; // only trust our own iframe
+  const added = importWorksheetQuestions(d.questions || []);
+  if (added) {
+    const note = currentUser ? '' : ' (sign in to save permanently)';
+    showToast(`${added} question${added === 1 ? '' : 's'} added to the bank ✓${note}`, 'success');
+  } else {
+    showToast('Nothing to import from the worksheet', 'error');
+  }
+  try { if (e.source) e.source.postMessage({ type: 'cer:addQuestions:done', count: added }, '*'); } catch (_) {}
+});
 
 // =====================================================================
 // RICH TEXT COMMANDS
@@ -7644,6 +8024,9 @@ function openPreview() {
       case 'table':
         html += renderTableReadonly(block, '');
         break;
+      default:
+        html += renderImportedBlockStudent(block);
+        break;
     }
   });
 
@@ -7824,6 +8207,9 @@ function previewAsStudent() {
         break;
       case 'table':
         html += renderTableReadonly(block, '');
+        break;
+      default:
+        html += renderImportedBlockStudent(block);
         break;
     }
   });
@@ -8322,6 +8708,21 @@ function extractQuestionSearchText(q) {
           if (Array.isArray(row)) row.forEach(cell => parts.push(stripHtmlToText(cell)));
         });
       }
+    } else if (block.type === 'part') {
+      parts.push(block.label || '');
+      parts.push(stripHtmlToText(block.content));
+    } else if (block.type === 'mcq') {
+      (block.options || []).forEach(o => parts.push(stripHtmlToText(o.text)));
+    } else if (block.type === 'answerLine') {
+      parts.push(block.label || '');
+      parts.push(stripHtmlToText(block.answer));
+    } else if (block.type === 'commonMistake') {
+      parts.push(block.title || '');
+      parts.push(stripHtmlToText(block.text));
+    } else if (block.type === 'studentAnswer') {
+      parts.push(stripHtmlToText(block.answer));
+    } else if (block.type === 'answerKey') {
+      parts.push(stripHtmlToText(block.text));
     }
   });
   return parts.join(' ').toLowerCase();
@@ -8403,9 +8804,12 @@ function renderQuestionBank() {
 }
 
 function getQuestionPreview(q) {
+  const clean = s => (s || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
   for (const block of q.blocks) {
-    if (block.type === 'text' && block.content) {
-      return block.content.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 150);
+    if (block.type === 'text' && block.content) return clean(block.content).substring(0, 150);
+    if (block.type === 'part' && block.content) return clean((block.label || '') + ' ' + block.content).substring(0, 150);
+    if (block.type === 'mcq' && (block.options || []).some(o => o.text)) {
+      return clean('Multiple choice: ' + (block.options || []).map(o => o.text).join(' / ')).substring(0, 150);
     }
   }
   return 'No text content';
@@ -8632,11 +9036,14 @@ function renderStudentView() {
       case 'table':
         html += renderTableReadonly(block, '');
         break;
+      default:
+        html += renderImportedBlockStudent(block);
+        break;
     }
   });
 
   html += `</div></div>`;
-  
+
   // Submit button
   html += `<div class="submit-row">
     <button class="btn btn-outline" id="firstLetterToggleBtn" onclick="toggleFirstLetterClues()">
@@ -8999,6 +9406,9 @@ function showPrintPreview(qid, btnEl) {
       case 'video':
         if (block.url) html += `<div class="preview-block" style="font-style:italic;color:var(--text-muted);">Video: ${escapeHtml(block.url)}</div>`;
         break;
+      default:
+        html += `<div class="preview-block">${renderImportedBlockStudent(block)}</div>`;
+        break;
     }
   });
 
@@ -9206,6 +9616,9 @@ function doPrintWorksheetBlanks(useFirstLetter) {
           qHtml += renderTableReadonly(block, 'print-table');
           break;
         }
+        default:
+          qHtml += renderImportedBlockStudent(block);
+          break;
       }
     });
 
@@ -9323,6 +9736,9 @@ function doPrintWorksheetOpen() {
           qHtml += renderTableReadonly(block, 'print-table');
           break;
         }
+        default:
+          qHtml += renderImportedBlockStudent(block);
+          break;
       }
     });
 
@@ -10023,6 +10439,9 @@ function buildOpenBody(q, containerSel) {
       case 'table':
         html += renderTableReadonly(block, '');
         break;
+      default:
+        html += renderImportedBlockStudent(block, q);
+        break;
     }
   });
   if (items.length === 0) {
@@ -10104,6 +10523,9 @@ function renderPracticeQuestion(q, student) {
           break;
         case 'table':
           html += renderTableReadonly(block, '');
+          break;
+        default:
+          html += renderImportedBlockStudent(block, q);
           break;
       }
     });
@@ -10753,6 +11175,9 @@ function renderQuestionPreviewHtml(qId) {
         break;
       case 'explanation':
         break;
+      default:
+        html += renderImportedBlockStudent(block);
+        break;
     }
   });
   return html || '<p style="color:var(--text-muted);font-style:italic;">No content</p>';
@@ -11084,6 +11509,7 @@ function doPrintStudentWorksheet(selected, format, worksheetTitle) {
           case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
           case 'explanation': break;
           case 'video': { if (block.url) qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`; break; }
+          default: qHtml += renderImportedBlockStudent(block); break;
         }
       });
       qHtml += `</div>`;
@@ -11132,6 +11558,7 @@ function doPrintStudentWorksheet(selected, format, worksheetTitle) {
           case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
           case 'explanation': break;
           case 'video': { if (block.url) qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`; break; }
+          default: qHtml += renderImportedBlockStudent(block); break;
         }
       });
       qHtml += `</div>`;
@@ -11483,6 +11910,9 @@ function renderQpQuestion(q) {
           break;
         case 'table':
           html += renderTableReadonly(block, '');
+          break;
+        default:
+          html += renderImportedBlockStudent(block, q);
           break;
       }
     });
@@ -12180,6 +12610,9 @@ function tpRenderQuestion(q) {
           break;
         case 'table':
           html += renderTableReadonly(block, '');
+          break;
+        default:
+          html += renderImportedBlockStudent(block, q);
           break;
       }
     });
