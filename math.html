@@ -187,6 +187,10 @@ a { color: var(--primary); }
 #padCanvas { display: block; width: 100%; height: 460px; touch-action: none; cursor: crosshair; }
 @media (max-width: 880px) { #padCanvas { height: 56vh; } }
 .canvas-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; color: var(--text-light); font-size: 0.95rem; gap: 8px; text-align: center; padding: 20px; }
+.typed-working { margin-top: 14px; }
+.typed-working label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
+.typed-working textarea { width: 100%; min-height: 90px; resize: vertical; padding: 11px 13px; font-size: 1rem; font-family: 'Space Grotesk', sans-serif; line-height: 1.55; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: var(--surface-alt); }
+.typed-working textarea:focus { outline: none; border-color: var(--border-focus); background: #fff; }
 
 /* ========== RESULT ========== */
 .result { margin-top: 18px; display: none; }
@@ -382,6 +386,10 @@ a { color: var(--primary); }
             <div class="canvas-wrap">
               <canvas id="padCanvas"></canvas>
               <div class="canvas-empty" id="canvasEmpty">Start writing your working here ✦</div>
+            </div>
+            <div class="typed-working">
+              <label for="typedWorking">⌨️ Or type your working <span style="color:var(--text-light);font-weight:400;">(use this instead of writing if you prefer)</span></label>
+              <textarea id="typedWorking" placeholder="Type your steps here, e.g.&#10;2/5 = 8/20, 1/4 = 5/20&#10;eaten = 13/20&#10;left = 7/20"></textarea>
             </div>
             <button class="btn btn-primary btn-block btn-lg" id="submitBtn" style="margin-top:16px;">
               <span id="submitLabel">📸 Submit for AI marking</span>
@@ -1055,11 +1063,49 @@ $("toolEraser").addEventListener("click", () => setTool("eraser"));
 $("penWidth").addEventListener("input", e => penWidth = parseInt(e.target.value, 10) || 3);
 $("undoBtn").addEventListener("click", () => { if (strokes.length) { redoStack.push(strokes.pop()); redraw(); } });
 $("redoBtn").addEventListener("click", () => { if (redoStack.length) { strokes.push(redoStack.pop()); redraw(); } });
-$("clearBtn").addEventListener("click", () => { if ((strokes.length || current) && confirm("Clear all your working?")) { strokes = []; redoStack = []; current = null; redraw(); } });
+$("clearBtn").addEventListener("click", () => { if ((strokes.length || current || $("typedWorking").value.trim()) && confirm("Clear all your working?")) { strokes = []; redoStack = []; current = null; $("typedWorking").value = ""; redraw(); } });
 window.addEventListener("resize", () => setupCanvasSize());
+function wrapTextLines(measureCtx, text, maxWidth) {
+  const out = [];
+  String(text || "").split(/\n/).forEach(para => {
+    if (!para.trim()) { out.push(""); return; }
+    let line = "";
+    for (const w of para.split(/\s+/)) {
+      const test = line ? line + " " + w : w;
+      if (measureCtx.measureText(test).width > maxWidth && line) { out.push(line); line = w; }
+      else line = test;
+    }
+    if (line) out.push(line);
+  });
+  return out;
+}
+// Flatten the handwriting (and any typed working) onto a white PNG — this is
+// the "screenshot" the AI marks, so typed text must be baked into the image.
 function exportWorkingPng() {
-  const out = document.createElement("canvas"); out.width = canvas.width; out.height = canvas.height;
-  const o = out.getContext("2d"); o.fillStyle = "#fff"; o.fillRect(0, 0, out.width, out.height); o.drawImage(canvas, 0, 0);
+  const typed = $("typedWorking").value.trim();
+  const out = document.createElement("canvas");
+  const o = out.getContext("2d");
+  const fontPx = Math.round(16 * dpr), lineH = Math.round(25 * dpr);
+  const padX = Math.round(16 * dpr), padY = Math.round(14 * dpr), labelPx = Math.round(11 * dpr);
+  let lines = [], blockH = 0;
+  if (typed) {
+    o.font = `${fontPx}px 'Space Grotesk', sans-serif`;
+    lines = wrapTextLines(o, typed, canvas.width - padX * 2);
+    blockH = padY * 2 + labelPx + Math.round(8 * dpr) + lines.length * lineH;
+  }
+  out.width = canvas.width;
+  out.height = canvas.height + blockH;
+  o.fillStyle = "#fff"; o.fillRect(0, 0, out.width, out.height);
+  if (typed) {
+    o.fillStyle = "#7a756d"; o.font = `${labelPx}px 'Space Mono', monospace`;
+    o.fillText("TYPED WORKING", padX, padY + labelPx);
+    o.fillStyle = "#2c2a27"; o.font = `${fontPx}px 'Space Grotesk', sans-serif`;
+    let y = padY + labelPx + Math.round(8 * dpr) + fontPx;
+    for (const ln of lines) { o.fillText(ln, padX, y); y += lineH; }
+    o.strokeStyle = "#e2ddd5"; o.lineWidth = Math.max(1, dpr);
+    o.beginPath(); o.moveTo(0, blockH); o.lineTo(out.width, blockH); o.stroke();
+  }
+  o.drawImage(canvas, 0, blockH);
   return out.toDataURL("image/png");
 }
 
@@ -1084,12 +1130,13 @@ function renderQuestion() {
     ? (b.url ? `<img src="${escapeHtml(b.url)}" alt="diagram">` : "")
     : `<p>${escapeHtml(b.content || "").replace(/\n/g, "<br>")}</p>`).join("");
   $("finalAnswer").value = "";
+  $("typedWorking").value = "";
   strokes = []; redoStack = []; current = null; redraw();
   hideResult();
 }
 function changeQuestion(delta) {
   const ni = qIndex + delta; if (ni < 0 || ni >= questionBank.length) return;
-  if (strokes.length && !confirm("Move on? Your current working will be cleared.")) return;
+  if ((strokes.length || $("typedWorking").value.trim()) && !confirm("Move on? Your current working will be cleared.")) return;
   qIndex = ni; renderQuestion();
 }
 $("prevBtn").addEventListener("click", () => changeQuestion(-1));
@@ -1117,7 +1164,8 @@ function showResult(v, png) {
 $("submitBtn").addEventListener("click", async () => {
   if (!aiReady()) { toast("AI marking isn't ready yet — please wait a moment", "error"); return; }
   if (!questionBank.length) return;
-  if (!strokes.length && !$("finalAnswer").value.trim()) { toast("Write your working on the pad (or type a final answer) first", "error"); return; }
+  const typedWorking = $("typedWorking").value.trim();
+  if (!strokes.length && !typedWorking && !$("finalAnswer").value.trim()) { toast("Write or type your working first", "error"); return; }
   const q = questionBank[qIndex];
   const png = exportWorkingPng();
   const b64 = png.split(",")[1];
@@ -1125,12 +1173,13 @@ $("submitBtn").addEventListener("click", async () => {
   const qText = (q.blocks || []).filter(b => b.type === "text").map(b => stripHtml(b.content)).join(" ");
   const prompt =
     `You are a friendly, encouraging Singapore primary-school math teacher marking a student's HANDWRITTEN working. ` +
-    `The attached image is a screenshot of what the student wrote on a digital whiteboard.\n` +
+    `The attached image is a screenshot of the student's working on a digital whiteboard — it may contain handwriting, typed text, or both.\n` +
     `${markingPreamble(q.markingGuide)}\n\n` +
     `QUESTION: "${qText}"\n` +
     `CORRECT ANSWER: "${q.expected}"\n` +
+    `STUDENT'S TYPED WORKING (if any): "${typedWorking || "(none — read it from the image)"}"\n` +
     `STUDENT'S TYPED FINAL ANSWER: "${$("finalAnswer").value.trim() || "(none typed — read it from the working)"}"\n\n` +
-    `Read the handwriting carefully, follow the working step by step, and decide if the method and final answer are right. ` +
+    `Read both the handwriting and any typed text carefully, follow the working step by step, and decide if the method and final answer are right. ` +
     `Award method marks even if the final answer is wrong but the approach is sound. Address the student as "you". ` +
     `If you genuinely cannot read the handwriting, say so in the feedback.\n\n` +
     `Return ONLY JSON: {"verdict":"correct"|"partial"|"incorrect","marks":<number>,"outOf":<number>,` +
