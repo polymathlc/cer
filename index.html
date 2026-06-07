@@ -4292,7 +4292,7 @@ option {
         </div>
 
         <div class="form-group">
-          <label class="form-label">Marking guide for AI <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+          <label class="form-label">Marking guide for AI <span style="font-weight:400;color:var(--text-muted);">(optional)</span> <button type="button" class="mic-btn" data-mic="questionMarkingGuide" title="Dictate the marking guide" style="width:26px;height:26px;font-size:0.85rem;vertical-align:middle;">🎤</button></label>
           <textarea id="questionMarkingGuide" class="form-input" rows="2" placeholder="e.g. Accept 'gains heat' or 'absorbs heat'. Reasoning must link cause to effect." style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
         </div>
 
@@ -4955,7 +4955,7 @@ option {
     </div>
 
     <div class="form-group">
-      <label class="form-label">Your marking instructions <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+      <label class="form-label">Your marking instructions <span style="font-weight:400;color:var(--text-muted);">(optional)</span> <button type="button" class="mic-btn" data-mic="mkInstructions" title="Dictate your marking instructions" style="width:26px;height:26px;font-size:0.85rem;vertical-align:middle;">🎤</button></label>
       <textarea id="mkInstructions" class="form-input" rows="6" placeholder="e.g.
 - Accept British or American spelling.
 - For definitions, the key science term must be present.
@@ -7164,20 +7164,20 @@ function renderBlocks() {
               <button class="toolbar-btn" title="Bulleted List" onmousedown="event.preventDefault();execCmd('insertUnorderedList')">•</button>
               <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
             </div>
-            <div class="cer-section">
-              <div class="cer-label claim-label">Claim</div>
+            <div class="cer-section" data-mic-wrap>
+              <div class="cer-label claim-label">Claim ${micButtonHtml('', 'Speak the claim')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the claim answer..."
                    data-block-id="${block.id}" data-field="claim"
                    oninput="saveBlockContent('${block.id}', 'claim', this.innerHTML)">${block.claim || ''}</div>
             </div>
-            <div class="cer-section">
-              <div class="cer-label evidence-label">Evidence</div>
+            <div class="cer-section" data-mic-wrap>
+              <div class="cer-label evidence-label">Evidence ${micButtonHtml('', 'Speak the evidence')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the evidence answer..."
                    data-block-id="${block.id}" data-field="evidence"
                    oninput="saveBlockContent('${block.id}', 'evidence', this.innerHTML)">${block.evidence || ''}</div>
             </div>
-            <div class="cer-section">
-              <div class="cer-label reasoning-label">Reasoning</div>
+            <div class="cer-section" data-mic-wrap>
+              <div class="cer-label reasoning-label">Reasoning ${micButtonHtml('', 'Speak the reasoning')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the reasoning answer..."
                    data-block-id="${block.id}" data-field="reasoning"
                    oninput="saveBlockContent('${block.id}', 'reasoning', this.innerHTML)">${block.reasoning || ''}</div>
@@ -7188,7 +7188,7 @@ function renderBlocks() {
 
       case 'plainanswer':
         bodyHTML = `
-          <div class="block-body">
+          <div class="block-body" data-mic-wrap>
             <div class="text-toolbar">
               <button class="toolbar-btn" title="Bold" onmousedown="event.preventDefault();execCmd('bold')"><b>B</b></button>
               <button class="toolbar-btn" title="Underline" onmousedown="event.preventDefault();execCmd('underline')"><u>U</u></button>
@@ -7197,6 +7197,8 @@ function renderBlocks() {
               <span class="toolbar-divider"></span>
               <button class="toolbar-btn" title="Bulleted List" onmousedown="event.preventDefault();execCmd('insertUnorderedList')">•</button>
               <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
+              <span class="toolbar-divider"></span>
+              ${micButtonHtml('', 'Dictate the answer')}
             </div>
             <div class="content-editable" contenteditable="true" data-placeholder="Enter the answer..."
                  data-block-id="${block.id}" data-field="content"
@@ -7864,6 +7866,114 @@ document.addEventListener('click', function (e) {
   if (enh) { e.preventDefault(); enhanceBlockImage(enh.getAttribute('data-enhance'), enh.getAttribute('data-colour') === '1'); return; }
   const uo = e.target.closest && e.target.closest('[data-use-original]');
   if (uo) { e.preventDefault(); useOriginalImage(uo.getAttribute('data-use-original')); }
+});
+
+// =====================================================================
+// VOICE INPUT — record from the mic, transcribe with Gemini, insert into a
+// field. Used for AI marking guides and open-ended answers (admin + students).
+// A mic button is any element with class "mic-btn"; its target is either
+// data-mic="<element id>" or the field inside the nearest [data-mic-wrap].
+// =====================================================================
+const _voice = { active: false, recorder: null, chunks: [], stream: null, btn: null, target: null, mime: '' };
+(function injectMicStyles() {
+  const css = `
+  .mic-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;min-width:30px;border:1px solid var(--border,#e2ddd5);background:#fff;border-radius:8px;cursor:pointer;font-size:0.95rem;line-height:1;padding:0;vertical-align:middle;}
+  .mic-btn:hover{border-color:var(--primary,#4a7c59);}
+  .mic-btn.recording{background:#fee2e2;border-color:#dc2626;animation:micpulse 1s ease-in-out infinite;}
+  .mic-btn.busy{opacity:.6;cursor:default;}
+  @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5);}50%{box-shadow:0 0 0 5px rgba(220,38,38,0);}}`;
+  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+})();
+function micButtonHtml(targetId, title) {
+  return `<button type="button" class="mic-btn" data-mic="${targetId || ''}" title="${title || 'Voice input — click to speak, click again to stop'}">🎤</button>`;
+}
+function _setMic(btn, state) {
+  if (!btn) return;
+  btn.classList.remove('recording', 'busy');
+  if (state === 'recording') { btn.classList.add('recording'); btn.textContent = '⏹'; btn.title = 'Click to stop and transcribe'; }
+  else if (state === 'busy') { btn.classList.add('busy'); btn.textContent = '⏳'; btn.title = 'Transcribing…'; }
+  else { btn.textContent = '🎤'; btn.title = 'Voice input — click to speak, click again to stop'; }
+}
+function _pickAudioMime() {
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
+  for (const t of types) { if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t; }
+  return '';
+}
+function _blobToB64(blob) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => { const s = String(r.result || ''); const c = s.indexOf(','); res(c >= 0 ? s.slice(c + 1) : s); }; r.onerror = rej; r.readAsDataURL(blob); });
+}
+function _micField(mic) {
+  const id = mic.getAttribute('data-mic');
+  if (id) { const el = document.getElementById(id); if (el) return el; }
+  const wrap = mic.closest('[data-mic-wrap]');
+  if (wrap) return wrap.querySelector('textarea, [contenteditable="true"], input[type="text"]');
+  return null;
+}
+function _insertTranscript(target, text) {
+  const t = (text || '').trim();
+  if (!target || !t) return;
+  if (target.isContentEditable) {
+    target.focus();
+    const sep = target.textContent && !/\s$/.test(target.textContent) ? ' ' : '';
+    try { document.execCommand('insertText', false, sep + t); }
+    catch (_) { target.innerHTML += sep + escapeHtml(t); }
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+  } else {
+    const cur = target.value || '';
+    const sep = cur && !/\s$/.test(cur) ? ' ' : '';
+    target.value = cur + sep + t;
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    target.focus();
+  }
+}
+async function _startVoice(btn, target) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showToast('Microphone not supported in this browser', 'error'); return; }
+  if (!geminiModel) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = _pickAudioMime();
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    _voice.chunks = [];
+    rec.ondataavailable = ev => { if (ev.data && ev.data.size) _voice.chunks.push(ev.data); };
+    rec.onstop = _finishVoice;
+    rec.start();
+    Object.assign(_voice, { active: true, recorder: rec, stream, btn, target, mime: rec.mimeType || mime || 'audio/webm' });
+    _setMic(btn, 'recording');
+    showToast('🎙️ Listening… click the mic again to stop', 'info');
+  } catch (e) { console.warn('mic start failed', e); showToast('Microphone access denied or unavailable', 'error'); }
+}
+function _stopVoice() {
+  if (!_voice.active || !_voice.recorder) return;
+  _voice.active = false;
+  _setMic(_voice.btn, 'busy');
+  showToast('Transcribing…', 'info');
+  try { _voice.recorder.stop(); } catch (_) {}
+}
+async function _finishVoice() {
+  const { btn, target, mime, stream } = _voice;
+  const blob = new Blob(_voice.chunks, { type: mime });
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  _voice.recorder = null; _voice.stream = null; _voice.chunks = [];
+  try {
+    if (!blob.size) throw new Error('no audio captured');
+    const b64 = await _blobToB64(blob);
+    const cleanMime = (mime || 'audio/webm').split(';')[0];
+    const prompt = 'Transcribe the spoken audio to text exactly and accurately. Return ONLY the transcription as plain text with correct spelling, capitalisation and punctuation. Do not translate, summarise, add quotes, labels or commentary. If there is no clear speech, return an empty string.';
+    const text = await askGeminiVision(prompt, [{ mimeType: cleanMime, data: b64 }], { maxOutputTokens: 1024, json: false });
+    const clean = (text || '').trim();
+    if (clean) { _insertTranscript(target, clean); showToast('Transcribed ✓', 'success'); }
+    else showToast('Did not catch any speech — try again', 'error');
+  } catch (e) { console.warn('transcription failed', e); showToast('Transcription failed: ' + (e && e.message ? e.message : e), 'error'); }
+  finally { _setMic(btn, 'idle'); _voice.btn = null; _voice.target = null; }
+}
+document.addEventListener('click', function (e) {
+  const mic = e.target.closest && e.target.closest('.mic-btn');
+  if (!mic) return;
+  e.preventDefault();
+  if (_voice.active) { _stopVoice(); return; }
+  const target = _micField(mic);
+  if (!target) { showToast('No text field found for voice input', 'error'); return; }
+  _startVoice(mic, target);
 });
 
 async function enhanceBlockImage(blockId, colour) {
@@ -10621,10 +10731,13 @@ function _openSection(items, label, modelAnswer, bg, fg) {
   const oidx = items.length;
   items.push({ label: label || 'Answer', model: modelAnswer || '' });
   const labelHtml = label ? `<div class="cer-student-label" style="background:${bg};color:${fg};margin-bottom:6px;">${label}</div>` : '';
-  return `<div class="open-answer-section" style="margin-bottom:14px;">
+  return `<div class="open-answer-section" data-mic-wrap style="margin-bottom:14px;">
       ${labelHtml}
-      <textarea class="open-answer" data-oidx="${oidx}" rows="3" placeholder="Type your answer..."
-        style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.95rem;line-height:1.5;resize:vertical;background:#fff;color:var(--on-surface,#1c1c19);"></textarea>
+      <div style="display:flex;gap:6px;align-items:flex-start;">
+        <textarea class="open-answer" data-oidx="${oidx}" rows="3" placeholder="Type or speak your answer..."
+          style="flex:1;min-width:0;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.95rem;line-height:1.5;resize:vertical;background:#fff;color:var(--on-surface,#1c1c19);"></textarea>
+        ${micButtonHtml('', 'Speak your answer')}
+      </div>
       <div class="open-feedback" style="margin-top:4px;"></div>
     </div>`;
 }
