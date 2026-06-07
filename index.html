@@ -5256,7 +5256,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 // App Check (protects the Gemini quota from abuse) + Firebase AI Logic (free-tier Gemini)
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
-import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
+import { getAI, getGenerativeModel, GoogleAIBackend, ResponseModality } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
 // Cloud Storage — paste/drop images upload here instead of needing a Dropbox link
 import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
@@ -5305,27 +5305,24 @@ if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
 
 let geminiModel = null;
 let _aiInstance = null;
-// Image generation / editing model ("Nano Banana"). Change here if your
-// Firebase AI project exposes a different image-capable model id.
-const AI_IMAGE_MODEL = "gemini-2.5-flash-image";
-let geminiImageModel = null;
+// Image generation / editing models ("Nano Banana"). Tried in order; the
+// first that returns an image wins. Change/extend the list if your Firebase
+// AI project exposes different image-capable model ids.
+const AI_IMAGE_MODELS = ["gemini-3.1-flash-image-preview", "gemini-2.5-flash-image"];
+let geminiImageModels = [];
 try {
   _aiInstance = getAI(app, { backend: new GoogleAIBackend() });
   geminiModel = getGenerativeModel(_aiInstance, { model: AI_MODEL });
 } catch (e) {
   console.warn("Firebase AI init failed (Ask AI / AI marking disabled):", e);
 }
-
-// Lazily create the image model the first time an enhance is requested.
-function _getImageModel() {
-  if (geminiImageModel) return geminiImageModel;
-  if (!_aiInstance) throw new Error('AI is not configured yet');
-  geminiImageModel = getGenerativeModel(_aiInstance, {
-    model: AI_IMAGE_MODEL,
-    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
-  });
-  return geminiImageModel;
-}
+try {
+  if (_aiInstance) geminiImageModels = AI_IMAGE_MODELS.map(model => getGenerativeModel(_aiInstance, {
+    model,
+    generationConfig: { responseModalities: [ResponseModality.TEXT, ResponseModality.IMAGE] }
+  }));
+} catch (e) { console.warn("Firebase image AI init failed:", e); }
+const imageAiReady = () => geminiImageModels.length > 0;
 
 // Single swap-point for all model calls. Returns trimmed text.
 // thinkingBudget:0 disables Gemini 2.5 "thinking" so the whole token budget
@@ -7778,22 +7775,43 @@ const _imagePasteHint = '📋 Click here, then paste a screenshot (Ctrl/⌘+V) �
 // =====================================================================
 const _imgEnhanceState = {}; // blockId -> { originalDataUrl, originalUrl }
 
-// Ask the image model to produce an image; returns a data: URL.
-async function generateEnhancedImageDataUrl(prompt, media) {
-  const model = _getImageModel();
-  const parts = [{ text: prompt }];
-  (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
-  const res = await model.generateContent({ contents: [{ role: 'user', parts }] });
-  const cands = (res && res.response && res.response.candidates) || [];
-  for (const c of cands) {
-    const ps = (c && c.content && c.content.parts) || [];
-    for (const p of ps) {
-      if (p && p.inlineData && p.inlineData.data) {
-        return 'data:' + (p.inlineData.mimeType || 'image/png') + ';base64,' + p.inlineData.data;
-      }
+// Pull a generated image out of a Gemini response (handles the SDK's
+// inlineDataParts() helper plus the raw candidate/part shapes).
+function extractInlineImage(result) {
+  const inlineParts = result?.response?.inlineDataParts ? result.response.inlineDataParts() : [];
+  for (const p of inlineParts || []) {
+    const img = p.inlineData || p;
+    if (img?.data && img?.mimeType?.startsWith('image/')) return img;
+  }
+  const candidates = result?.response?.candidates || result?.candidates || [];
+  for (const c of candidates) {
+    for (const p of (c?.content?.parts || [])) {
+      const img = p.inlineData || p.inline_data;
+      if (img?.data && img?.mimeType?.startsWith('image/')) return img;
+      if (img?.data && img?.mime_type?.startsWith('image/')) return { data: img.data, mimeType: img.mime_type };
     }
   }
-  throw new Error('the AI did not return an image (image model may not be enabled)');
+  return null;
+}
+
+// Ask an image model to produce an image; returns a data: URL.
+// `media` may be a single { mimeType, data } or an array of them.
+async function generateEnhancedImageDataUrl(prompt, media) {
+  if (!imageAiReady()) throw new Error('AI image enhancement is not configured yet');
+  const m = Array.isArray(media) ? media[0] : media;
+  if (!m || !m.data) throw new Error('no image to enhance');
+  const parts = [prompt, { inlineData: { mimeType: m.mimeType, data: m.data } }];
+  let lastError = null;
+  for (const model of geminiImageModels) {
+    try {
+      const result = await model.generateContent(parts);
+      const img = extractInlineImage(result);
+      if (img) return 'data:' + (img.mimeType || 'image/png') + ';base64,' + img.data;
+      const text = result?.response?.text ? result.response.text() : '';
+      throw new Error(text || 'the AI did not return an image');
+    } catch (e) { lastError = e; console.warn('image enhancement model failed', e); }
+  }
+  throw lastError || new Error('AI image enhancement failed');
 }
 
 async function _urlToDataUrl(url) {
@@ -14021,6 +14039,16 @@ window.flagMoveToVetting = flagMoveToVetting;
 window.resolveFlaggedQuestion = resolveFlaggedQuestion;
 window.dismissFlaggedQuestion = dismissFlaggedQuestion;
 window.deleteFlaggedQuestion = deleteFlaggedQuestion;
+// Worksheet-creator block types + AI image enhance (inline handlers)
+window.saveBlockField = saveBlockField;
+window.saveBlockNum = saveBlockNum;
+window.mcqSetCorrect = mcqSetCorrect;
+window.mcqSetOptionText = mcqSetOptionText;
+window.mcqAddOption = mcqAddOption;
+window.mcqRemoveOption = mcqRemoveOption;
+window.markMcqChoice = markMcqChoice;
+window.enhanceBlockImage = enhanceBlockImage;
+window.useOriginalImage = useOriginalImage;
 
 // --- Logo retry logic for unreliable mobile connections ---
 (function() {
