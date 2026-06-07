@@ -7848,19 +7848,35 @@ function renderImgEnhanceBar(blockId) {
   if (!block || !block.url) { bar.innerHTML = ''; return; }
   const st = _imgEnhanceState[blockId];
   const showOriginal = st && st.originalUrl && st.originalUrl !== block.url;
-  const btn = (handler, label) => `<button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" onclick="${handler}">${label}</button>`;
   bar.innerHTML = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
       <span style="font-size:0.78rem;color:var(--text-muted);">AI image:</span>
-      ${showOriginal ? btn(`useOriginalImage('${blockId}')`, '↩ Use original') : ''}
-      ${btn(`enhanceBlockImage('${blockId}', false)`, '✨ Enhance image')}
-      ${btn(`enhanceBlockImage('${blockId}', true)`, '🎨 Enhance with colour')}
+      ${showOriginal ? `<button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-use-original="${blockId}">↩ Use original</button>` : ''}
+      <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-enhance="${blockId}" data-colour="0">✨ Enhance image</button>
+      <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-enhance="${blockId}" data-colour="1">🎨 Enhance with colour</button>
     </div>`;
 }
 
+// Delegated handler so the enhance buttons work regardless of inline-handler
+// scoping (the app runs in a module). Attached once.
+document.addEventListener('click', function (e) {
+  const enh = e.target.closest && e.target.closest('[data-enhance]');
+  if (enh) { e.preventDefault(); enhanceBlockImage(enh.getAttribute('data-enhance'), enh.getAttribute('data-colour') === '1'); return; }
+  const uo = e.target.closest && e.target.closest('[data-use-original]');
+  if (uo) { e.preventDefault(); useOriginalImage(uo.getAttribute('data-use-original')); }
+});
+
 async function enhanceBlockImage(blockId, colour) {
+  console.log('[enhance] clicked', { blockId, colour, imageAiReady: imageAiReady(), models: AI_IMAGE_MODELS });
+  // Immediate, unmissable feedback so it's clear the click registered.
+  showToast(colour ? '🎨 Colourising image with AI…' : '✨ Enhancing image with AI…', 'info');
   const bar = document.getElementById('imgEnhance_' + blockId);
-  if (bar) bar.innerHTML = `<div style="margin-top:8px;font-size:0.8rem;color:var(--text-muted);">⏳ ${colour ? 'Colourising' : 'Enhancing'} image with AI…</div>`;
+  if (bar) bar.innerHTML = `<div style="margin-top:8px;font-size:0.82rem;color:var(--primary);display:flex;align-items:center;gap:8px;"><span class="spinner" style="border-color:rgba(74,124,89,.3);border-top-color:var(--primary);"></span>${colour ? 'Colourising' : 'Enhancing'} image with AI… (can take 10–25s)</div>`;
+  if (!imageAiReady()) {
+    showToast('Image AI model is not available in this project (check AI_IMAGE_MODELS / Firebase AI image access)', 'error');
+    renderImgEnhanceBar(blockId);
+    return;
+  }
   try {
     const media = await _blockImageToInline(blockId);
     const prompt = colour
