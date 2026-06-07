@@ -10789,10 +10789,73 @@ function buildOpenBody(q, containerSel) {
   });
   if (items.length === 0) {
     html += `<div style="padding:12px;color:var(--text-muted);font-size:0.9rem;">This question has no written-answer section, so open-ended mode has nothing to mark. Switch back to Fill Blanks.</div>`;
+  } else {
+    html += openPhotoBarHtml(containerSel);
   }
   _openItemsStore[containerSel] = items;
+  _openPhoto[containerSel] = null; // fresh render — drop any previous photo
   return html;
 }
+
+// =====================================================================
+// PHOTO ANSWER — one photo of the whole page of written answers, sent to the
+// AI so it can read the handwriting and mark each open-ended section.
+// =====================================================================
+const _openPhoto = {}; // containerSel -> { dataUrl, mimeType, data, name }
+function _openPhotoKey(containerSel) { return String(containerSel || '').replace(/[^a-z0-9]/gi, ''); }
+function openPhotoBarHtml(containerSel) {
+  const key = _openPhotoKey(containerSel);
+  return `<div class="open-photo-bar" style="margin:6px 0 14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#faf8f5);">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <span style="font-size:0.85rem;color:var(--text-muted);">📸 Prefer writing on paper? Submit one photo of your whole page of answers and the AI will read and mark it:</span>
+        <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:0.82rem;" data-openphoto-take="${containerSel}">📷 Take photo</button>
+        <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:0.82rem;" data-openphoto-upload="${containerSel}">🖼️ Upload photo</button>
+        <input type="file" accept="image/*" capture="environment" hidden id="openPhotoCam_${key}">
+        <input type="file" accept="image/*" hidden id="openPhotoFile_${key}">
+      </div>
+      <div class="open-photo-preview" id="openPhotoPrev_${key}" style="margin-top:10px;"></div>
+    </div>`;
+}
+function renderOpenPhotoPreview(containerSel) {
+  const key = _openPhotoKey(containerSel);
+  const el = document.getElementById('openPhotoPrev_' + key);
+  if (!el) return;
+  const p = _openPhoto[containerSel];
+  if (!p) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <img src="${p.dataUrl}" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">
+      <span style="font-size:0.82rem;color:var(--primary);">Photo attached — the AI will read it when you tap “Mark with AI”.</span>
+      <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.8rem;" data-openphoto-remove="${containerSel}">Remove</button>
+    </div>`;
+}
+async function attachOpenPhoto(containerSel, file) {
+  if (!file) return;
+  if (!file.type || !file.type.startsWith('image/')) { showToast('Please choose an image', 'error'); return; }
+  if (file.size > 18 * 1024 * 1024) { showToast('Image too large (max 18 MB)', 'error'); return; }
+  try {
+    const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result || '')); r.onerror = () => rej(new Error('could not read the image')); r.readAsDataURL(file); });
+    const m = /^data:([^;,]+)[^,]*,(.*)$/.exec(dataUrl);
+    _openPhoto[containerSel] = { dataUrl, mimeType: (m && m[1]) || file.type || 'image/jpeg', data: (m && m[2]) || '', name: file.name || 'answer photo' };
+    renderOpenPhotoPreview(containerSel);
+    showToast('Answer photo attached ✓', 'success');
+  } catch (e) { showToast('Could not attach photo: ' + (e && e.message ? e.message : e), 'error'); }
+}
+document.addEventListener('click', function (e) {
+  const take = e.target.closest && e.target.closest('[data-openphoto-take]');
+  if (take) { e.preventDefault(); const i = document.getElementById('openPhotoCam_' + _openPhotoKey(take.getAttribute('data-openphoto-take'))); if (i) i.click(); return; }
+  const up = e.target.closest && e.target.closest('[data-openphoto-upload]');
+  if (up) { e.preventDefault(); const i = document.getElementById('openPhotoFile_' + _openPhotoKey(up.getAttribute('data-openphoto-upload'))); if (i) i.click(); return; }
+  const rm = e.target.closest && e.target.closest('[data-openphoto-remove]');
+  if (rm) { e.preventDefault(); const cs = rm.getAttribute('data-openphoto-remove'); _openPhoto[cs] = null; renderOpenPhotoPreview(cs); }
+});
+document.addEventListener('change', function (e) {
+  const t = e.target;
+  if (!t || t.tagName !== 'INPUT' || t.type !== 'file' || !/^openPhoto(Cam|File)_/.test(t.id || '')) return;
+  const containerSel = '#' + t.id.replace(/^openPhoto(Cam|File)_/, '');
+  const file = t.files && t.files[0];
+  if (file) attachOpenPhoto(containerSel, file);
+  t.value = '';
+});
 
 function renderOpenPracticeBody(q) { return buildOpenBody(q, '#practiceContainer'); }
 
@@ -10981,16 +11044,25 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
 
   let verdicts = [];
   try {
-    const list = data.map((it, i) => `${i}. [${it.label}] expected="${it.model}" student="${it.student || '(blank)'}"`).join('\n');
+    const photo = _openPhoto[containerSel];
+    const list = data.map((it, i) => `${i}. [${it.label}] expected="${it.model}" student="${it.student || (photo ? '(see attached photo)' : '(blank)')}"`).join('\n');
     const prompt =
       `You are a science teacher marking a student's open-ended answers. ` +
       `${_markingPreamble(q && q.markingGuide)}\n` +
       `Question context: "${ctx}".\n` +
+      (photo
+        ? `The student handwrote their answers on paper and attached ONE photo of the whole page. Read the photo carefully and find the student's answer for EACH item below, matching by its label (e.g. Claim/Evidence/Reasoning) and order. Treat what you read in the photo as the student's answer; if a typed answer is also given for an item, combine them. Ignore handwriting quality.\n`
+        : ``) +
       `For EACH item, compare the STUDENT answer to the EXPECTED model answer and judge how well it matches in meaning ` +
       `(ignore wording, grammar and spelling — focus on the science). ` +
       `Use verdict "correct", "partial" or "incorrect". Give ONE short feedback sentence (max 22 words) addressed to the student. ` +
       `Return ONLY a JSON array like [{"i":0,"verdict":"partial","feedback":"..."}].\n${list}`;
-    const raw = await askGemini(prompt, { maxOutputTokens: 256 + data.length * 120, temperature: 0.2, json: true });
+    let raw;
+    if (photo && photo.data) {
+      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 256 + data.length * 140, json: true });
+    } else {
+      raw = await askGemini(prompt, { maxOutputTokens: 256 + data.length * 120, temperature: 0.2, json: true });
+    }
     verdicts = _parseAIJson(raw);
   } catch (e) {
     console.error('Open marking error:', e);
