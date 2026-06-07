@@ -11110,6 +11110,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
 
   let verdicts = [];
   let aiExplanation = '';
+  let aiModelAnswer = '';
   try {
     const list = entries.map((e, i) => {
       if (e.kind === 'open') {
@@ -11129,17 +11130,19 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       `For each OPEN item, compare the student's answer to the expected model answer by meaning (ignore wording, grammar and spelling — focus on the science); verdict "correct", "partial" or "incorrect". ` +
       `For each MULTIPLE-CHOICE item, decide which option the student chose and mark "correct" only if it matches the correct option letter, otherwise "incorrect"; also include "chosen":"<the letter the student picked, or empty>". ` +
       `Give ONE short feedback sentence (max 22 words) addressed to the student for each item. ` +
+      `Provide the full correct MODEL ANSWER for the whole question as "modelAnswer" — the ideal answer a student should give (use the expected answers if provided, otherwise generate the correct answer yourself; for multiple choice state the correct option and what it says). ` +
       `Also write a clear overall EXPLANATION (2-4 sentences) addressed to "you" that is SPECIFIC to the answer the student actually gave: explain WHY their answer was marked correct, partial or incorrect — quote or refer to what they wrote, say what they got right, what was missing or wrong, and what a full-mark answer needs. Do NOT just restate the model answer or describe the question in the abstract. ` +
-      `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}],"explanation":"..."}.\n${list}`;
+      `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
     let raw;
     if (photo && photo.data) {
-      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 450 + entries.length * 150, json: true });
+      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 600 + entries.length * 150, json: true });
     } else {
-      raw = await askGemini(prompt, { maxOutputTokens: 450 + entries.length * 130, temperature: 0.2, json: true });
+      raw = await askGemini(prompt, { maxOutputTokens: 600 + entries.length * 130, temperature: 0.2, json: true });
     }
     const parsed = _parseAIJson(raw);
     verdicts = Array.isArray(parsed) ? parsed : ((parsed && parsed.items) || []);
     aiExplanation = (parsed && !Array.isArray(parsed) && parsed.explanation) ? String(parsed.explanation) : '';
+    aiModelAnswer = (parsed && !Array.isArray(parsed) && parsed.modelAnswer) ? String(parsed.modelAnswer) : '';
   } catch (e) {
     console.error('Open marking error:', e);
     showToast('AI mark error: ' + (e && e.message ? e.message : e), 'error');
@@ -11254,7 +11257,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     if (!aiExplanation) aiExplanation = _fallbackExplanation(entries);
   }
 
-  showExplanation(containerSel, q, aiExplanation, scoreElId);
+  showExplanation(containerSel, q, aiExplanation, scoreElId, aiModelAnswer);
   return { score, total, mistakes };
 }
 
@@ -13009,7 +13012,27 @@ async function generateReportNarrative(p, topics) {
 // its own "A.I. Explanation" box. The question's authored explanation block(s)
 // are generic, so they're only shown as a fallback when there's no AI
 // explanation. Placed right after the score so it's visible without scrolling.
-function showExplanation(containerSel, q, aiText, scoreElId) {
+// Build the model answer from the question itself (fallback when the AI did
+// not supply one).
+function _deriveModelAnswer(q) {
+  if (!q || !Array.isArray(q.blocks)) return '';
+  const parts = [];
+  q.blocks.forEach(b => {
+    if (b.type === 'answer') {
+      const c = stripHtml(b.claim || ''), e = stripHtml(b.evidence || ''), r = stripHtml(b.reasoning || '');
+      if (c) parts.push('Claim: ' + c);
+      if (e) parts.push('Evidence: ' + e);
+      if (r) parts.push('Reasoning: ' + r);
+    } else if (b.type === 'plainanswer') {
+      const t = stripHtml(b.content || ''); if (t) parts.push(t);
+    } else if (b.type === 'mcq') {
+      const opt = (b.options || []).find(o => o.id === b.correctId);
+      if (opt && stripHtml(opt.text || '')) parts.push('Correct option: ' + stripHtml(opt.text));
+    }
+  });
+  return parts.join('\n');
+}
+function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
   const c = document.querySelector(containerSel);
   if (!c) return;
   c.querySelectorAll('.post-explanation').forEach(el => el.remove());
@@ -13017,6 +13040,13 @@ function showExplanation(containerSel, q, aiText, scoreElId) {
   const blockHtml = exps.map(b => `<div style="line-height:1.7;margin-bottom:4px;">${b.content}</div>`).join('');
   const aiText2 = (aiText && String(aiText).trim()) ? String(aiText).trim() : '';
   let cards = '';
+  // Model answer card — always shown first so the student sees the correct answer.
+  const model = (modelAnswer && String(modelAnswer).trim()) ? String(modelAnswer).trim() : _deriveModelAnswer(q);
+  if (model) {
+    cards +=
+      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--primary);background:var(--primary-light,#e8f0ea);border-radius:10px;">
+        <div style="font-weight:700;color:var(--primary);margin-bottom:6px;">✅ Model answer</div><div style="line-height:1.7;white-space:pre-wrap;">${escapeHtml(model)}</div></div>`;
+  }
   if (aiText2) {
     cards +=
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
