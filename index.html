@@ -4187,6 +4187,10 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
         Topical Practice
       </div>
+      <div class="nav-item student-only" data-page="myreport" onclick="navigateTo('myreport')" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+        My Report
+      </div>
     </nav>
     <div id="saveStatusIndicator" style="display:none;width:100%;text-align:center;font-size:0.7rem;padding:4px 12px;border-radius:6px;margin:0 8px 6px;font-family:'Space Mono',monospace;letter-spacing:0.03em;"></div>
     <div class="sidebar-footer">
@@ -4760,6 +4764,23 @@ option {
           </div>
           <div id="tpContainer"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: MY REPORT (Student Only) ===== -->
+    <div class="page" id="page-myreport">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>My Report</h2>
+          </div>
+          <div class="subtitle">Your live performance, strengths and areas to improve</div>
+        </div>
+        <button class="btn btn-outline" onclick="loadMyReport()" style="font-size:0.82rem;">↻ Refresh</button>
+      </div>
+      <div class="page-body" style="max-width:900px;">
+        <div id="myReportContainer"></div>
       </div>
     </div>
 
@@ -5702,6 +5723,7 @@ async function enterApp(user) {
     populateWsTopicFilter();
     renderWsQuestions();
     renderSavedWorksheets();
+    await loadCerPerf();
   }
 
   showToast('Welcome, ' + displayName + '!', 'success');
@@ -5849,6 +5871,7 @@ function navigateTo(page) {
   if (page === 'quickpractice') updateQpProgress();
   if (page === 'topicalpractice') tpRenderTopics();
   if (page === 'usage') loadUsageDashboard();
+  if (page === 'myreport') loadMyReport();
   if (page === 'scheduled') loadScheduledQuestions();
   if (page === 'flagged') loadFlaggedQuestions();
   if (page === 'worksheetcreator') {
@@ -11169,6 +11192,8 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       mode
     }).catch(err => console.warn('Could not record attempt:', err));
   }
+  recordCerPerformance(q, score, total, mode);
+  showExplanation(containerSel, q);
   return { score, total, mistakes };
 }
 
@@ -12184,6 +12209,8 @@ function _recordQpResult(correct, total, mistakes) {
     correct, total,
     mistakes: mistakes || []
   });
+  recordCerPerformance(q, correct, total, 'quickpractice');
+  showExplanation('#qpContainer', q);
 }
 
 // Shared, styled end-of-practice report (used by Quick/Worksheet and Topical).
@@ -12778,6 +12805,156 @@ let tpSessionResults = []; // per-question results for the end-of-session AI rep
 function _recordTpResult(correct, total, mistakes) {
   const q = tpQueue[tpIndex] || {};
   tpSessionResults.push({ title: q.title || '', topic: q.topic || '', correct, total, mistakes: mistakes || [] });
+  recordCerPerformance(q, correct, total, 'topicalpractice');
+  showExplanation('#tpContainer', q);
+}
+
+// =====================================================================
+// PERFORMANCE TRACKING + AI REPORT (students) + explanation reveal
+// =====================================================================
+let cerPerf = null; // in-memory performance profile for the signed-in student
+function _emptyPerf() { return { attempts: 0, totalScore: 0, totalPossible: 0, topics: {}, categories: {}, recent: [], score100: 0 }; }
+function _computeScore100(p) {
+  const rec = (p.recent || []).slice(-30);
+  if (rec.length) return Math.round(rec.reduce((s, r) => s + (r.pct || 0), 0) / rec.length);
+  return p.totalPossible ? Math.round(100 * p.totalScore / p.totalPossible) : 0;
+}
+async function loadCerPerf() {
+  if (!currentUser) { cerPerf = _emptyPerf(); return; }
+  try {
+    const s = await getDoc(doc(db, 'users', currentUser.uid, 'stats', 'performance'));
+    cerPerf = s.exists() ? Object.assign(_emptyPerf(), s.data()) : _emptyPerf();
+  } catch (e) { console.warn('perf load', e); cerPerf = _emptyPerf(); }
+}
+// Called after EVERY marking so the report always reflects the latest work.
+function recordCerPerformance(q, score, total, mode) {
+  if (!currentUser || currentUser.role !== 'student' || !q || !total) return;
+  if (!cerPerf) cerPerf = _emptyPerf();
+  const p = cerPerf;
+  const topic = q.topic || 'General';
+  const category = normalizeCategoryValue(q.category) || 'CER';
+  const pct = Math.max(0, Math.min(100, Math.round((score / total) * 100)));
+  p.attempts = (p.attempts || 0) + 1;
+  p.totalScore = (p.totalScore || 0) + score;
+  p.totalPossible = (p.totalPossible || 0) + total;
+  p.topics = p.topics || {}; p.categories = p.categories || {};
+  (p.topics[topic] = p.topics[topic] || { score: 0, possible: 0, attempts: 0 });
+  p.topics[topic].score += score; p.topics[topic].possible += total; p.topics[topic].attempts++;
+  (p.categories[category] = p.categories[category] || { score: 0, possible: 0, attempts: 0 });
+  p.categories[category].score += score; p.categories[category].possible += total; p.categories[category].attempts++;
+  p.recent = p.recent || [];
+  p.recent.push({ pct, topic, category, title: q.title || '', mode: mode || '', at: new Date().toISOString() });
+  if (p.recent.length > 50) p.recent = p.recent.slice(-50);
+  p.score100 = _computeScore100(p);
+  p.updatedAt = new Date().toISOString();
+  setDoc(doc(db, 'users', currentUser.uid, 'stats', 'performance'), p, { merge: true }).catch(e => console.warn('perf save', e));
+  setDoc(doc(db, 'cerLeaderboard', currentUser.uid), {
+    name: currentUser.name || '', email: currentUser.email || '',
+    score100: p.score100, attempts: p.attempts, updatedAt: p.updatedAt
+  }, { merge: true }).catch(e => console.warn('leaderboard save', e));
+}
+function _scoreColor(s) { return s >= 80 ? 'var(--primary)' : s >= 55 ? 'var(--accent-orange)' : 'var(--accent-red)'; }
+function _topicAccuracy(p) {
+  return Object.entries(p.topics || {})
+    .map(([t, d]) => ({ topic: t, acc: d.possible ? Math.round(100 * d.score / d.possible) : 0, n: d.attempts || 0 }))
+    .filter(x => x.n > 0);
+}
+async function loadMyReport() {
+  const c = document.getElementById('myReportContainer');
+  if (!c) return;
+  c.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted);">Loading your report…</div>`;
+  if (!cerPerf) await loadCerPerf();
+  const p = cerPerf || _emptyPerf();
+  if (!p.attempts) {
+    c.innerHTML = `<div class="empty-state"><h3>No practice yet</h3><p>Answer some questions in Quick or Topical Practice and your live report will appear here.</p></div>`;
+    return;
+  }
+  let percentile = null, peers = 0;
+  try {
+    const snap = await getDocs(collection(db, 'cerLeaderboard'));
+    const scores = []; snap.forEach(d => { const v = d.data(); if (v && typeof v.score100 === 'number') scores.push(v.score100); });
+    peers = scores.length;
+    if (peers > 1) { const atOrBelow = scores.filter(s => s <= p.score100).length; percentile = Math.max(1, Math.round(100 * atOrBelow / peers)); }
+  } catch (e) { console.warn('leaderboard read', e); }
+
+  const topics = _topicAccuracy(p).sort((a, b) => b.acc - a.acc);
+  const strengths = topics.slice(0, 3);
+  const improvements = topics.slice().reverse().slice(0, 3);
+  const sc = p.score100 || 0;
+  const overallPct = p.totalPossible ? Math.round(100 * p.totalScore / p.totalPossible) : 0;
+  const chip = (t, color) => `<span style="display:inline-block;padding:5px 10px;border-radius:999px;background:${color}1a;color:${color};font-weight:600;font-size:0.82rem;margin:3px 4px 0 0;">${escapeHtml(t.topic)} — ${t.acc}%</span>`;
+
+  c.innerHTML = `
+    <div class="card card-pad" style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;">
+      <div style="text-align:center;min-width:150px;">
+        <div style="font-size:3.2rem;font-weight:800;line-height:1;color:${_scoreColor(sc)};">${sc}<span style="font-size:1.1rem;color:var(--text-muted);font-weight:600;">/100</span></div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">Performance score</div>
+      </div>
+      <div style="text-align:center;min-width:130px;">
+        <div style="font-size:2.2rem;font-weight:800;line-height:1;color:var(--primary);">${percentile != null ? percentile + '<span style="font-size:0.9rem;color:var(--text-muted);font-weight:600;">th</span>' : '—'}</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">Percentile${peers > 1 ? ' of ' + peers + ' students' : ''}</div>
+      </div>
+      <div style="flex:1;min-width:200px;font-size:0.86rem;color:var(--text-muted);">
+        <div><strong style="color:var(--text);">${p.attempts}</strong> questions practised</div>
+        <div><strong style="color:var(--text);">${overallPct}%</strong> overall accuracy</div>
+        <div style="margin-top:4px;font-size:0.78rem;">Updates automatically and reflects your most recent work.</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;">
+      <div class="card card-pad">
+        <div style="font-weight:700;margin-bottom:8px;color:var(--primary);">💪 Strengths</div>
+        ${strengths.length ? strengths.map(t => chip(t, 'var(--primary)')).join('') : '<span style="color:var(--text-muted);font-size:0.85rem;">Keep practising to reveal your strengths.</span>'}
+      </div>
+      <div class="card card-pad">
+        <div style="font-weight:700;margin-bottom:8px;color:var(--accent-orange);">🎯 Focus areas</div>
+        ${improvements.length ? improvements.map(t => chip(t, 'var(--accent-orange)')).join('') : '<span style="color:var(--text-muted);font-size:0.85rem;">No weak spots yet — great job!</span>'}
+      </div>
+    </div>
+    <div class="card card-pad" style="margin-top:14px;">
+      <div style="font-weight:700;margin-bottom:8px;">🧠 AI coach</div>
+      <div id="reportAiNarrative" style="font-size:0.92rem;line-height:1.6;color:var(--text);"><span style="color:var(--text-muted);">Generating personalised feedback…</span></div>
+    </div>`;
+
+  generateReportNarrative(p, topics);
+}
+async function generateReportNarrative(p, topics) {
+  const el = document.getElementById('reportAiNarrative');
+  if (!el) return;
+  if (!window.__aiReady || !window.__aiReady()) { el.innerHTML = '<span style="color:var(--text-muted);">AI is not ready right now — tap Refresh shortly.</span>'; return; }
+  try {
+    const topicLine = topics.map(t => `${t.topic}: ${t.acc}% over ${t.n}`).join('; ');
+    const recent = (p.recent || []).slice(-12).map(r => `${r.topic} ${r.pct}%`).join(', ');
+    const prompt =
+      `You are an encouraging Singapore primary-school science tutor writing a brief progress report for a student. ` +
+      `Overall performance score ${p.score100}/100 across ${p.attempts} practice questions. ` +
+      `Per-topic accuracy: ${topicLine || 'n/a'}. Recent results: ${recent || 'n/a'}. ` +
+      `Write warm, specific, actionable feedback addressed to "you". ` +
+      `Return ONLY JSON: {"summary":"1-2 sentences","strengths":["..."],"improvements":["..."],"nextSteps":["one concrete action","..."]}. Keep each item under 18 words.`;
+    const raw = await askGemini(prompt, { maxOutputTokens: 500, temperature: 0.4, json: true });
+    const d = _parseAIJson(raw);
+    const list = (arr) => (Array.isArray(arr) && arr.length) ? '<ul style="margin:4px 0 0 18px;">' + arr.map(x => `<li>${escapeHtml(String(x))}</li>`).join('') + '</ul>' : '';
+    el.innerHTML =
+      (d.summary ? `<p style="margin-bottom:8px;">${escapeHtml(d.summary)}</p>` : '') +
+      (d.strengths ? `<div style="margin-bottom:6px;"><strong style="color:var(--primary);">What you're doing well</strong>${list(d.strengths)}</div>` : '') +
+      (d.improvements ? `<div style="margin-bottom:6px;"><strong style="color:var(--accent-orange);">Where to improve</strong>${list(d.improvements)}</div>` : '') +
+      (d.nextSteps ? `<div><strong>Next steps</strong>${list(d.nextSteps)}</div>` : '');
+    if (!el.innerHTML.trim()) el.innerHTML = '<span style="color:var(--text-muted);">No feedback generated — tap Refresh.</span>';
+  } catch (e) {
+    console.warn('report narrative', e);
+    el.innerHTML = '<span style="color:var(--text-muted);">Could not generate feedback right now. Tap Refresh to try again.</span>';
+  }
+}
+// Reveal the question's explanation block(s) after marking.
+function showExplanation(containerSel, q) {
+  const c = document.querySelector(containerSel);
+  if (!c) return;
+  const old = c.querySelector('.post-explanation'); if (old) old.remove();
+  const exps = ((q && q.blocks) || []).filter(b => b.type === 'explanation' && stripHtml(b.content || '').trim());
+  if (!exps.length) return;
+  const body = exps.map(b => `<div style="line-height:1.7;">${b.content}</div>`).join('');
+  c.insertAdjacentHTML('beforeend',
+    `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
+      <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">💡 Explanation</div>${body}</div>`);
 }
 let tpCurrentTopic = '';
 let tpSelectedTopics = new Set();
@@ -14241,6 +14418,7 @@ window.resetQpAnswers = resetQpAnswers;
 window.submitQpAnswers = submitQpAnswers;
 // Usage Dashboard
 window.loadUsageDashboard = loadUsageDashboard;
+window.loadMyReport = loadMyReport;
 // Scheduled Questions
 window.openScheduleQuestionDialog = openScheduleQuestionDialog;
 window.closeScheduleDialog = closeScheduleDialog;
