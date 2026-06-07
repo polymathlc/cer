@@ -4292,7 +4292,7 @@ option {
         </div>
 
         <div class="form-group">
-          <label class="form-label">Marking guide for AI <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+          <label class="form-label">Marking guide for AI <span style="font-weight:400;color:var(--text-muted);">(optional)</span> <button type="button" class="mic-btn" data-mic="questionMarkingGuide" title="Dictate the marking guide" style="width:26px;height:26px;font-size:0.85rem;vertical-align:middle;">🎤</button></label>
           <textarea id="questionMarkingGuide" class="form-input" rows="2" placeholder="e.g. Accept 'gains heat' or 'absorbs heat'. Reasoning must link cause to effect." style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
         </div>
 
@@ -4955,7 +4955,7 @@ option {
     </div>
 
     <div class="form-group">
-      <label class="form-label">Your marking instructions <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+      <label class="form-label">Your marking instructions <span style="font-weight:400;color:var(--text-muted);">(optional)</span> <button type="button" class="mic-btn" data-mic="mkInstructions" title="Dictate your marking instructions" style="width:26px;height:26px;font-size:0.85rem;vertical-align:middle;">🎤</button></label>
       <textarea id="mkInstructions" class="form-input" rows="6" placeholder="e.g.
 - Accept British or American spelling.
 - For definitions, the key science term must be present.
@@ -7164,20 +7164,20 @@ function renderBlocks() {
               <button class="toolbar-btn" title="Bulleted List" onmousedown="event.preventDefault();execCmd('insertUnorderedList')">•</button>
               <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
             </div>
-            <div class="cer-section">
-              <div class="cer-label claim-label">Claim</div>
+            <div class="cer-section" data-mic-wrap>
+              <div class="cer-label claim-label">Claim ${micButtonHtml('', 'Speak the claim')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the claim answer..."
                    data-block-id="${block.id}" data-field="claim"
                    oninput="saveBlockContent('${block.id}', 'claim', this.innerHTML)">${block.claim || ''}</div>
             </div>
-            <div class="cer-section">
-              <div class="cer-label evidence-label">Evidence</div>
+            <div class="cer-section" data-mic-wrap>
+              <div class="cer-label evidence-label">Evidence ${micButtonHtml('', 'Speak the evidence')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the evidence answer..."
                    data-block-id="${block.id}" data-field="evidence"
                    oninput="saveBlockContent('${block.id}', 'evidence', this.innerHTML)">${block.evidence || ''}</div>
             </div>
-            <div class="cer-section">
-              <div class="cer-label reasoning-label">Reasoning</div>
+            <div class="cer-section" data-mic-wrap>
+              <div class="cer-label reasoning-label">Reasoning ${micButtonHtml('', 'Speak the reasoning')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the reasoning answer..."
                    data-block-id="${block.id}" data-field="reasoning"
                    oninput="saveBlockContent('${block.id}', 'reasoning', this.innerHTML)">${block.reasoning || ''}</div>
@@ -7188,7 +7188,7 @@ function renderBlocks() {
 
       case 'plainanswer':
         bodyHTML = `
-          <div class="block-body">
+          <div class="block-body" data-mic-wrap>
             <div class="text-toolbar">
               <button class="toolbar-btn" title="Bold" onmousedown="event.preventDefault();execCmd('bold')"><b>B</b></button>
               <button class="toolbar-btn" title="Underline" onmousedown="event.preventDefault();execCmd('underline')"><u>U</u></button>
@@ -7197,6 +7197,8 @@ function renderBlocks() {
               <span class="toolbar-divider"></span>
               <button class="toolbar-btn" title="Bulleted List" onmousedown="event.preventDefault();execCmd('insertUnorderedList')">•</button>
               <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
+              <span class="toolbar-divider"></span>
+              ${micButtonHtml('', 'Dictate the answer')}
             </div>
             <div class="content-editable" contenteditable="true" data-placeholder="Enter the answer..."
                  data-block-id="${block.id}" data-field="content"
@@ -7864,6 +7866,114 @@ document.addEventListener('click', function (e) {
   if (enh) { e.preventDefault(); enhanceBlockImage(enh.getAttribute('data-enhance'), enh.getAttribute('data-colour') === '1'); return; }
   const uo = e.target.closest && e.target.closest('[data-use-original]');
   if (uo) { e.preventDefault(); useOriginalImage(uo.getAttribute('data-use-original')); }
+});
+
+// =====================================================================
+// VOICE INPUT — record from the mic, transcribe with Gemini, insert into a
+// field. Used for AI marking guides and open-ended answers (admin + students).
+// A mic button is any element with class "mic-btn"; its target is either
+// data-mic="<element id>" or the field inside the nearest [data-mic-wrap].
+// =====================================================================
+const _voice = { active: false, recorder: null, chunks: [], stream: null, btn: null, target: null, mime: '' };
+(function injectMicStyles() {
+  const css = `
+  .mic-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;min-width:30px;border:1px solid var(--border,#e2ddd5);background:#fff;border-radius:8px;cursor:pointer;font-size:0.95rem;line-height:1;padding:0;vertical-align:middle;}
+  .mic-btn:hover{border-color:var(--primary,#4a7c59);}
+  .mic-btn.recording{background:#fee2e2;border-color:#dc2626;animation:micpulse 1s ease-in-out infinite;}
+  .mic-btn.busy{opacity:.6;cursor:default;}
+  @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5);}50%{box-shadow:0 0 0 5px rgba(220,38,38,0);}}`;
+  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+})();
+function micButtonHtml(targetId, title) {
+  return `<button type="button" class="mic-btn" data-mic="${targetId || ''}" title="${title || 'Voice input — click to speak, click again to stop'}">🎤</button>`;
+}
+function _setMic(btn, state) {
+  if (!btn) return;
+  btn.classList.remove('recording', 'busy');
+  if (state === 'recording') { btn.classList.add('recording'); btn.textContent = '⏹'; btn.title = 'Click to stop and transcribe'; }
+  else if (state === 'busy') { btn.classList.add('busy'); btn.textContent = '⏳'; btn.title = 'Transcribing…'; }
+  else { btn.textContent = '🎤'; btn.title = 'Voice input — click to speak, click again to stop'; }
+}
+function _pickAudioMime() {
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
+  for (const t of types) { if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t; }
+  return '';
+}
+function _blobToB64(blob) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => { const s = String(r.result || ''); const c = s.indexOf(','); res(c >= 0 ? s.slice(c + 1) : s); }; r.onerror = rej; r.readAsDataURL(blob); });
+}
+function _micField(mic) {
+  const id = mic.getAttribute('data-mic');
+  if (id) { const el = document.getElementById(id); if (el) return el; }
+  const wrap = mic.closest('[data-mic-wrap]');
+  if (wrap) return wrap.querySelector('textarea, [contenteditable="true"], input[type="text"]');
+  return null;
+}
+function _insertTranscript(target, text) {
+  const t = (text || '').trim();
+  if (!target || !t) return;
+  if (target.isContentEditable) {
+    target.focus();
+    const sep = target.textContent && !/\s$/.test(target.textContent) ? ' ' : '';
+    try { document.execCommand('insertText', false, sep + t); }
+    catch (_) { target.innerHTML += sep + escapeHtml(t); }
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+  } else {
+    const cur = target.value || '';
+    const sep = cur && !/\s$/.test(cur) ? ' ' : '';
+    target.value = cur + sep + t;
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    target.focus();
+  }
+}
+async function _startVoice(btn, target) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showToast('Microphone not supported in this browser', 'error'); return; }
+  if (!geminiModel) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = _pickAudioMime();
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    _voice.chunks = [];
+    rec.ondataavailable = ev => { if (ev.data && ev.data.size) _voice.chunks.push(ev.data); };
+    rec.onstop = _finishVoice;
+    rec.start();
+    Object.assign(_voice, { active: true, recorder: rec, stream, btn, target, mime: rec.mimeType || mime || 'audio/webm' });
+    _setMic(btn, 'recording');
+    showToast('🎙️ Listening… click the mic again to stop', 'info');
+  } catch (e) { console.warn('mic start failed', e); showToast('Microphone access denied or unavailable', 'error'); }
+}
+function _stopVoice() {
+  if (!_voice.active || !_voice.recorder) return;
+  _voice.active = false;
+  _setMic(_voice.btn, 'busy');
+  showToast('Transcribing…', 'info');
+  try { _voice.recorder.stop(); } catch (_) {}
+}
+async function _finishVoice() {
+  const { btn, target, mime, stream } = _voice;
+  const blob = new Blob(_voice.chunks, { type: mime });
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  _voice.recorder = null; _voice.stream = null; _voice.chunks = [];
+  try {
+    if (!blob.size) throw new Error('no audio captured');
+    const b64 = await _blobToB64(blob);
+    const cleanMime = (mime || 'audio/webm').split(';')[0];
+    const prompt = 'Transcribe the spoken audio to text exactly and accurately. Return ONLY the transcription as plain text with correct spelling, capitalisation and punctuation. Do not translate, summarise, add quotes, labels or commentary. If there is no clear speech, return an empty string.';
+    const text = await askGeminiVision(prompt, [{ mimeType: cleanMime, data: b64 }], { maxOutputTokens: 1024, json: false });
+    const clean = (text || '').trim();
+    if (clean) { _insertTranscript(target, clean); showToast('Transcribed ✓', 'success'); }
+    else showToast('Did not catch any speech — try again', 'error');
+  } catch (e) { console.warn('transcription failed', e); showToast('Transcription failed: ' + (e && e.message ? e.message : e), 'error'); }
+  finally { _setMic(btn, 'idle'); _voice.btn = null; _voice.target = null; }
+}
+document.addEventListener('click', function (e) {
+  const mic = e.target.closest && e.target.closest('.mic-btn');
+  if (!mic) return;
+  e.preventDefault();
+  if (_voice.active) { _stopVoice(); return; }
+  const target = _micField(mic);
+  if (!target) { showToast('No text field found for voice input', 'error'); return; }
+  _startVoice(mic, target);
 });
 
 async function enhanceBlockImage(blockId, colour) {
@@ -10611,6 +10721,7 @@ function loadRandomPracticeQuestion() {
 let practiceMode = 'open';     // 'blanks' | 'open'
 let currentPracticeQ = null;
 let _openItemsStore = {};        // containerSel -> [{ label, model }] for open-ended marking
+let _openMcqStore = {};          // containerSel -> [{ blockId, options:[{letter,text,id,correct}] }]
 
 function togglePracticeMode() {
   practiceMode = practiceMode === 'blanks' ? 'open' : 'blanks';
@@ -10621,10 +10732,13 @@ function _openSection(items, label, modelAnswer, bg, fg) {
   const oidx = items.length;
   items.push({ label: label || 'Answer', model: modelAnswer || '' });
   const labelHtml = label ? `<div class="cer-student-label" style="background:${bg};color:${fg};margin-bottom:6px;">${label}</div>` : '';
-  return `<div class="open-answer-section" style="margin-bottom:14px;">
+  return `<div class="open-answer-section" data-mic-wrap style="margin-bottom:14px;">
       ${labelHtml}
-      <textarea class="open-answer" data-oidx="${oidx}" rows="3" placeholder="Type your answer..."
-        style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.95rem;line-height:1.5;resize:vertical;background:#fff;color:var(--on-surface,#1c1c19);"></textarea>
+      <div style="display:flex;gap:6px;align-items:flex-start;">
+        <textarea class="open-answer" data-oidx="${oidx}" rows="3" placeholder="Type or speak your answer..."
+          style="flex:1;min-width:0;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.95rem;line-height:1.5;resize:vertical;background:#fff;color:var(--on-surface,#1c1c19);"></textarea>
+        ${micButtonHtml('', 'Speak your answer')}
+      </div>
       <div class="open-feedback" style="margin-top:4px;"></div>
     </div>`;
 }
@@ -10633,9 +10747,19 @@ function _openSection(items, label, modelAnswer, bg, fg) {
 // Records each textarea's expected (model) answer in _openItemsStore[containerSel].
 function buildOpenBody(q, containerSel) {
   const items = [];
+  const mcqItems = [];
   let html = '';
   q.blocks.forEach(block => {
     switch (block.type) {
+      case 'mcq':
+        html += `<div style="margin-top:12px;margin-bottom:4px;"><span class="sv-block-tag answer">Multiple choice</span></div>`;
+        html += renderImportedBlockStudent(block, q);
+        html += `<div class="mcq-feedback" data-mcq-fb="${block.id}" style="margin:2px 0 12px;"></div>`;
+        mcqItems.push({
+          blockId: block.id,
+          options: (block.options || []).map((o, idx) => ({ letter: String.fromCharCode(65 + idx), text: stripHtml(o.text || ''), id: o.id, correct: block.correctId === o.id }))
+        });
+        break;
       case 'text':
         html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
         html += `<div style="line-height:1.9;margin-bottom:8px;">${block.content || ''}</div>`;
@@ -10674,12 +10798,76 @@ function buildOpenBody(q, containerSel) {
         break;
     }
   });
-  if (items.length === 0) {
+  if (items.length === 0 && mcqItems.length === 0) {
     html += `<div style="padding:12px;color:var(--text-muted);font-size:0.9rem;">This question has no written-answer section, so open-ended mode has nothing to mark. Switch back to Fill Blanks.</div>`;
+  } else {
+    html += openPhotoBarHtml(containerSel);
   }
   _openItemsStore[containerSel] = items;
+  _openMcqStore[containerSel] = mcqItems;
+  _openPhoto[containerSel] = null; // fresh render — drop any previous photo
   return html;
 }
+
+// =====================================================================
+// PHOTO ANSWER — one photo of the whole page of written answers, sent to the
+// AI so it can read the handwriting and mark each open-ended section.
+// =====================================================================
+const _openPhoto = {}; // containerSel -> { dataUrl, mimeType, data, name }
+function _openPhotoKey(containerSel) { return String(containerSel || '').replace(/[^a-z0-9]/gi, ''); }
+function openPhotoBarHtml(containerSel) {
+  const key = _openPhotoKey(containerSel);
+  return `<div class="open-photo-bar" style="margin:6px 0 14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#faf8f5);">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <span style="font-size:0.85rem;color:var(--text-muted);">📸 Prefer writing on paper? Submit one photo of your whole page of answers and the AI will read and mark it:</span>
+        <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:0.82rem;" data-openphoto-take="${containerSel}">📷 Take photo</button>
+        <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:0.82rem;" data-openphoto-upload="${containerSel}">🖼️ Upload photo</button>
+        <input type="file" accept="image/*" capture="environment" hidden id="openPhotoCam_${key}">
+        <input type="file" accept="image/*" hidden id="openPhotoFile_${key}">
+      </div>
+      <div class="open-photo-preview" id="openPhotoPrev_${key}" style="margin-top:10px;"></div>
+    </div>`;
+}
+function renderOpenPhotoPreview(containerSel) {
+  const key = _openPhotoKey(containerSel);
+  const el = document.getElementById('openPhotoPrev_' + key);
+  if (!el) return;
+  const p = _openPhoto[containerSel];
+  if (!p) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <img src="${p.dataUrl}" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">
+      <span style="font-size:0.82rem;color:var(--primary);">Photo attached — the AI will read it when you tap “Mark with AI”.</span>
+      <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.8rem;" data-openphoto-remove="${containerSel}">Remove</button>
+    </div>`;
+}
+async function attachOpenPhoto(containerSel, file) {
+  if (!file) return;
+  if (!file.type || !file.type.startsWith('image/')) { showToast('Please choose an image', 'error'); return; }
+  if (file.size > 18 * 1024 * 1024) { showToast('Image too large (max 18 MB)', 'error'); return; }
+  try {
+    const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result || '')); r.onerror = () => rej(new Error('could not read the image')); r.readAsDataURL(file); });
+    const m = /^data:([^;,]+)[^,]*,(.*)$/.exec(dataUrl);
+    _openPhoto[containerSel] = { dataUrl, mimeType: (m && m[1]) || file.type || 'image/jpeg', data: (m && m[2]) || '', name: file.name || 'answer photo' };
+    renderOpenPhotoPreview(containerSel);
+    showToast('Answer photo attached ✓', 'success');
+  } catch (e) { showToast('Could not attach photo: ' + (e && e.message ? e.message : e), 'error'); }
+}
+document.addEventListener('click', function (e) {
+  const take = e.target.closest && e.target.closest('[data-openphoto-take]');
+  if (take) { e.preventDefault(); const i = document.getElementById('openPhotoCam_' + _openPhotoKey(take.getAttribute('data-openphoto-take'))); if (i) i.click(); return; }
+  const up = e.target.closest && e.target.closest('[data-openphoto-upload]');
+  if (up) { e.preventDefault(); const i = document.getElementById('openPhotoFile_' + _openPhotoKey(up.getAttribute('data-openphoto-upload'))); if (i) i.click(); return; }
+  const rm = e.target.closest && e.target.closest('[data-openphoto-remove]');
+  if (rm) { e.preventDefault(); const cs = rm.getAttribute('data-openphoto-remove'); _openPhoto[cs] = null; renderOpenPhotoPreview(cs); }
+});
+document.addEventListener('change', function (e) {
+  const t = e.target;
+  if (!t || t.tagName !== 'INPUT' || t.type !== 'file' || !/^openPhoto(Cam|File)_/.test(t.id || '')) return;
+  const containerSel = '#' + t.id.replace(/^openPhoto(Cam|File)_/, '');
+  const file = t.files && t.files[0];
+  if (file) attachOpenPhoto(containerSel, file);
+  t.value = '';
+});
 
 function renderOpenPracticeBody(q) { return buildOpenBody(q, '#practiceContainer'); }
 
@@ -10844,22 +11032,34 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     return null;
   }
   const areas = Array.from(document.querySelectorAll(containerSel + ' .open-answer'));
-  if (!areas.length) { showToast('No written-answer sections to mark', 'info'); return null; }
+  const mcqList = _openMcqStore[containerSel] || [];
+  if (!areas.length && !mcqList.length) { showToast('Nothing to mark in this question', 'info'); return null; }
 
   const items = _openItemsStore[containerSel] || [];
   const scoreEl = scoreElId ? document.getElementById(scoreElId) : null;
   const btn = btnId ? document.getElementById(btnId) : null;
   const ctx = q ? _questionContext(q) : '';
+  const photo = _openPhoto[containerSel];
 
+  // Reset visuals
   areas.forEach(a => {
     a.style.borderColor = 'var(--border)';
     const fb = a.parentElement.querySelector('.open-feedback');
     if (fb) fb.innerHTML = '';
   });
+  mcqList.forEach(m => { const fb = document.querySelector(containerSel + ' [data-mcq-fb="' + m.blockId + '"]'); if (fb) fb.innerHTML = ''; });
 
-  const data = areas.map(a => {
+  // Unified list of markable entries: open-text answers + multiple-choice.
+  const entries = [];
+  areas.forEach(a => {
     const it = items[parseInt(a.dataset.oidx)] || { label: 'Answer', model: '' };
-    return { label: it.label, model: it.model, student: a.value.trim() };
+    entries.push({ kind: 'open', label: it.label, model: it.model, student: a.value.trim(), areaEl: a });
+  });
+  mcqList.forEach(m => {
+    const checked = document.querySelector(containerSel + ' input[name="mcq_' + m.blockId + '"]:checked');
+    let studentLetter = '';
+    if (checked) { const o = m.options.find(x => x.id === checked.value); if (o) studentLetter = o.letter; }
+    entries.push({ kind: 'mcq', mcq: m, studentLetter });
   });
 
   const orig = btn ? btn.innerHTML : '';
@@ -10868,16 +11068,31 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
 
   let verdicts = [];
   try {
-    const list = data.map((it, i) => `${i}. [${it.label}] expected="${it.model}" student="${it.student || '(blank)'}"`).join('\n');
+    const list = entries.map((e, i) => {
+      if (e.kind === 'open') {
+        return `${i}. [${e.label}] type=open expected="${e.model}" student="${e.student || (photo ? '(see attached photo)' : '(blank)')}"`;
+      }
+      const opts = e.mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ');
+      const correct = e.mcq.options.find(o => o.correct);
+      return `${i}. [Multiple choice] type=mcq options=[${opts}] correct=${correct ? correct.letter : '?'} studentSelected="${e.studentLetter || (photo ? '(read from photo)' : '(blank)')}"`;
+    }).join('\n');
     const prompt =
-      `You are a science teacher marking a student's open-ended answers. ` +
+      `You are a science teacher marking a student's answers. ` +
       `${_markingPreamble(q && q.markingGuide)}\n` +
       `Question context: "${ctx}".\n` +
-      `For EACH item, compare the STUDENT answer to the EXPECTED model answer and judge how well it matches in meaning ` +
-      `(ignore wording, grammar and spelling — focus on the science). ` +
-      `Use verdict "correct", "partial" or "incorrect". Give ONE short feedback sentence (max 22 words) addressed to the student. ` +
-      `Return ONLY a JSON array like [{"i":0,"verdict":"partial","feedback":"..."}].\n${list}`;
-    const raw = await askGemini(prompt, { maxOutputTokens: 256 + data.length * 120, temperature: 0.2, json: true });
+      (photo
+        ? `The student wrote their answers on paper and attached ONE photo of the whole page. Read the photo carefully and find the student's answer for EACH item below, matching by its label and order. For a multiple-choice item, work out which option letter the student chose (a circled option, a written letter, or a tick) from the photo when they have not selected one on screen. Ignore handwriting quality.\n`
+        : ``) +
+      `For each OPEN item, compare the student's answer to the expected model answer by meaning (ignore wording, grammar and spelling — focus on the science); verdict "correct", "partial" or "incorrect". ` +
+      `For each MULTIPLE-CHOICE item, decide which option the student chose and mark "correct" only if it matches the correct option letter, otherwise "incorrect"; also include "chosen":"<the letter the student picked, or empty>". ` +
+      `Give ONE short feedback sentence (max 22 words) addressed to the student for each item. ` +
+      `Return ONLY a JSON array like [{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}].\n${list}`;
+    let raw;
+    if (photo && photo.data) {
+      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 256 + entries.length * 150, json: true });
+    } else {
+      raw = await askGemini(prompt, { maxOutputTokens: 256 + entries.length * 130, temperature: 0.2, json: true });
+    }
     verdicts = _parseAIJson(raw);
   } catch (e) {
     console.error('Open marking error:', e);
@@ -10893,31 +11108,52 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
 
   let score = 0;
   const mistakes = [];
-  data.forEach((it, i) => {
-    const a = areas[i];
+  entries.forEach((e, i) => {
     const v = byI[i];
     const verdict = v ? String(v.verdict || '').toLowerCase() : 'incorrect';
     const pts = verdict === 'correct' ? 1 : verdict === 'partial' ? 0.5 : 0;
     score += pts;
-    if (verdict !== 'correct') mistakes.push({ expected: it.model, student: it.student });
     const color = verdict === 'correct' ? 'var(--primary)' : verdict === 'partial' ? 'var(--accent-orange)' : 'var(--accent-red)';
     const icon = verdict === 'correct' ? '✓' : verdict === 'partial' ? '≈' : '✗';
-    a.style.borderColor = color;
-    const fb = a.parentElement.querySelector('.open-feedback');
-    if (fb) {
-      let inner = `<span style="color:${color};font-weight:600;font-size:0.85rem;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span>` +
-        `<span style="color:var(--text-muted);font-size:0.85rem;"> — ${escapeHtml(v && v.feedback ? v.feedback : '')}</span>`;
-      if (verdict !== 'correct' && it.model) {
-        inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${escapeHtml(it.model)}</div>`;
+    const fbHead = `<span style="color:${color};font-weight:600;font-size:0.85rem;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span>` +
+      `<span style="color:var(--text-muted);font-size:0.85rem;"> — ${escapeHtml(v && v.feedback ? v.feedback : '')}</span>`;
+    if (e.kind === 'open') {
+      if (verdict !== 'correct') mistakes.push({ expected: e.model, student: e.student });
+      e.areaEl.style.borderColor = color;
+      const fb = e.areaEl.parentElement.querySelector('.open-feedback');
+      if (fb) {
+        let inner = fbHead;
+        if (verdict !== 'correct' && e.model) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${escapeHtml(e.model)}</div>`;
+        fb.innerHTML = inner;
       }
-      fb.innerHTML = inner;
+    } else {
+      const m = e.mcq;
+      const correctOpt = m.options.find(o => o.correct);
+      const chosenLetter = (v && v.chosen) ? String(v.chosen).trim().toUpperCase().charAt(0) : e.studentLetter;
+      if (verdict !== 'correct') mistakes.push({ expected: correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', student: chosenLetter });
+      const wrap = document.querySelector(containerSel + ' .mcq-block[data-block="' + m.blockId + '"]');
+      if (wrap) {
+        wrap.querySelectorAll('label').forEach((lab, idx) => {
+          const o = m.options[idx]; if (!o) return;
+          lab.style.background = ''; lab.style.borderColor = 'var(--border)';
+          if (o.correct) { lab.style.background = '#dcfce7'; lab.style.borderColor = '#16a34a'; }
+          if (chosenLetter && o.letter === chosenLetter && !o.correct) { lab.style.background = '#fee2e2'; lab.style.borderColor = '#dc2626'; }
+        });
+      }
+      const fb = document.querySelector(containerSel + ' [data-mcq-fb="' + m.blockId + '"]');
+      if (fb) {
+        let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(chosenLetter)})</span>` : '');
+        if (verdict !== 'correct' && correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
+        fb.innerHTML = inner;
+      }
     }
   });
 
+  const total = entries.length;
   if (scoreEl) {
-    const pct = data.length ? Math.round((score / data.length) * 100) : 0;
-    scoreEl.textContent = `${scorePrefix}: ${score}/${data.length} (${pct}%)`;
-    scoreEl.style.color = score === data.length ? 'var(--primary)' : 'var(--accent-orange)';
+    const pct = total ? Math.round((score / total) * 100) : 0;
+    scoreEl.textContent = `${scorePrefix}: ${score}/${total} (${pct}%)`;
+    scoreEl.style.color = score === total ? 'var(--primary)' : 'var(--accent-orange)';
   }
 
   if (currentUser && currentUser.role === 'student' && q) {
@@ -10928,12 +11164,12 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       questionId: q.id || '',
       questionTitle: q.title || '',
       score: score,
-      totalBlanks: data.length,
+      totalBlanks: total,
       timestamp: Timestamp.now(),
       mode
     }).catch(err => console.warn('Could not record attempt:', err));
   }
-  return { score, total: data.length, mistakes };
+  return { score, total, mistakes };
 }
 
 function markOpenAnswers() {
