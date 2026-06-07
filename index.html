@@ -10405,7 +10405,7 @@ function loadRandomPracticeQuestion() {
   renderPracticeQuestion(q, student);
 }
 
-let practiceMode = 'blanks';     // 'blanks' | 'open'
+let practiceMode = 'open';     // 'blanks' | 'open'
 let currentPracticeQ = null;
 let _openItemsStore = {};        // containerSel -> [{ label, model }] for open-ended marking
 
@@ -11426,7 +11426,7 @@ function launchWorksheetPractice(questions) {
   qpIndex = -1;
   qpAnswered = 0;
   qpSessionResults = [];
-  qpMode = 'blanks';
+  qpMode = 'open';
   showFirstLetterClues = false;
   // Navigate to the Quick Practice page
   navigateTo('quickpractice');
@@ -11640,7 +11640,7 @@ let qpIndex = -1;       // current position in queue
 let qpLevel = 'P6';     // selected student level
 let qpAnswered = 0;     // questions answered so far
 let qpSessionResults = []; // per-question results for the end-of-session AI feedback
-let qpMode = 'blanks';     // 'blanks' | 'open'
+let qpMode = 'open';     // 'blanks' | 'open'
 
 function onQpLevelChange() {
   qpLevel = document.getElementById('qpLevelSelect').value;
@@ -11649,7 +11649,7 @@ function onQpLevelChange() {
   qpIndex = -1;
   qpAnswered = 0;
   qpSessionResults = [];
-  qpMode = 'blanks';
+  qpMode = 'open';
   updateQpProgress();
   document.getElementById('qpContainer').innerHTML = `
     <div class="empty-state">
@@ -11710,7 +11710,7 @@ async function startQuickPractice() {
   qpIndex = -1;
   qpAnswered = 0;
   qpSessionResults = [];
-  qpMode = 'blanks';
+  qpMode = 'open';
   if (qpQueue.length === 0) {
     document.getElementById('qpContainer').innerHTML = `
       <div class="empty-state">
@@ -12333,7 +12333,7 @@ let tpQueue = [];
 let tpIndex = -1;
 let tpAnswered = 0;
 let tpSubmitted = false;
-let tpMode = 'blanks';     // 'blanks' | 'open'
+let tpMode = 'open';     // 'blanks' | 'open'
 let tpSessionResults = []; // per-question results for the end-of-session AI report
 
 function _recordTpResult(correct, total, mistakes) {
@@ -12504,7 +12504,7 @@ async function tpStartPractice() {
   }
 
   tpQueue = queue;
-  tpMode = 'blanks';
+  tpMode = 'open';
   tpSessionResults = [];
   tpIndex = -1;
   tpAnswered = 0;
