@@ -10721,6 +10721,7 @@ function loadRandomPracticeQuestion() {
 let practiceMode = 'open';     // 'blanks' | 'open'
 let currentPracticeQ = null;
 let _openItemsStore = {};        // containerSel -> [{ label, model }] for open-ended marking
+let _openMcqStore = {};          // containerSel -> [{ blockId, options:[{letter,text,id,correct}] }]
 
 function togglePracticeMode() {
   practiceMode = practiceMode === 'blanks' ? 'open' : 'blanks';
@@ -10746,9 +10747,19 @@ function _openSection(items, label, modelAnswer, bg, fg) {
 // Records each textarea's expected (model) answer in _openItemsStore[containerSel].
 function buildOpenBody(q, containerSel) {
   const items = [];
+  const mcqItems = [];
   let html = '';
   q.blocks.forEach(block => {
     switch (block.type) {
+      case 'mcq':
+        html += `<div style="margin-top:12px;margin-bottom:4px;"><span class="sv-block-tag answer">Multiple choice</span></div>`;
+        html += renderImportedBlockStudent(block, q);
+        html += `<div class="mcq-feedback" data-mcq-fb="${block.id}" style="margin:2px 0 12px;"></div>`;
+        mcqItems.push({
+          blockId: block.id,
+          options: (block.options || []).map((o, idx) => ({ letter: String.fromCharCode(65 + idx), text: stripHtml(o.text || ''), id: o.id, correct: block.correctId === o.id }))
+        });
+        break;
       case 'text':
         html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
         html += `<div style="line-height:1.9;margin-bottom:8px;">${block.content || ''}</div>`;
@@ -10787,12 +10798,13 @@ function buildOpenBody(q, containerSel) {
         break;
     }
   });
-  if (items.length === 0) {
+  if (items.length === 0 && mcqItems.length === 0) {
     html += `<div style="padding:12px;color:var(--text-muted);font-size:0.9rem;">This question has no written-answer section, so open-ended mode has nothing to mark. Switch back to Fill Blanks.</div>`;
   } else {
     html += openPhotoBarHtml(containerSel);
   }
   _openItemsStore[containerSel] = items;
+  _openMcqStore[containerSel] = mcqItems;
   _openPhoto[containerSel] = null; // fresh render — drop any previous photo
   return html;
 }
@@ -11020,22 +11032,34 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     return null;
   }
   const areas = Array.from(document.querySelectorAll(containerSel + ' .open-answer'));
-  if (!areas.length) { showToast('No written-answer sections to mark', 'info'); return null; }
+  const mcqList = _openMcqStore[containerSel] || [];
+  if (!areas.length && !mcqList.length) { showToast('Nothing to mark in this question', 'info'); return null; }
 
   const items = _openItemsStore[containerSel] || [];
   const scoreEl = scoreElId ? document.getElementById(scoreElId) : null;
   const btn = btnId ? document.getElementById(btnId) : null;
   const ctx = q ? _questionContext(q) : '';
+  const photo = _openPhoto[containerSel];
 
+  // Reset visuals
   areas.forEach(a => {
     a.style.borderColor = 'var(--border)';
     const fb = a.parentElement.querySelector('.open-feedback');
     if (fb) fb.innerHTML = '';
   });
+  mcqList.forEach(m => { const fb = document.querySelector(containerSel + ' [data-mcq-fb="' + m.blockId + '"]'); if (fb) fb.innerHTML = ''; });
 
-  const data = areas.map(a => {
+  // Unified list of markable entries: open-text answers + multiple-choice.
+  const entries = [];
+  areas.forEach(a => {
     const it = items[parseInt(a.dataset.oidx)] || { label: 'Answer', model: '' };
-    return { label: it.label, model: it.model, student: a.value.trim() };
+    entries.push({ kind: 'open', label: it.label, model: it.model, student: a.value.trim(), areaEl: a });
+  });
+  mcqList.forEach(m => {
+    const checked = document.querySelector(containerSel + ' input[name="mcq_' + m.blockId + '"]:checked');
+    let studentLetter = '';
+    if (checked) { const o = m.options.find(x => x.id === checked.value); if (o) studentLetter = o.letter; }
+    entries.push({ kind: 'mcq', mcq: m, studentLetter });
   });
 
   const orig = btn ? btn.innerHTML : '';
@@ -11044,24 +11068,30 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
 
   let verdicts = [];
   try {
-    const photo = _openPhoto[containerSel];
-    const list = data.map((it, i) => `${i}. [${it.label}] expected="${it.model}" student="${it.student || (photo ? '(see attached photo)' : '(blank)')}"`).join('\n');
+    const list = entries.map((e, i) => {
+      if (e.kind === 'open') {
+        return `${i}. [${e.label}] type=open expected="${e.model}" student="${e.student || (photo ? '(see attached photo)' : '(blank)')}"`;
+      }
+      const opts = e.mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ');
+      const correct = e.mcq.options.find(o => o.correct);
+      return `${i}. [Multiple choice] type=mcq options=[${opts}] correct=${correct ? correct.letter : '?'} studentSelected="${e.studentLetter || (photo ? '(read from photo)' : '(blank)')}"`;
+    }).join('\n');
     const prompt =
-      `You are a science teacher marking a student's open-ended answers. ` +
+      `You are a science teacher marking a student's answers. ` +
       `${_markingPreamble(q && q.markingGuide)}\n` +
       `Question context: "${ctx}".\n` +
       (photo
-        ? `The student handwrote their answers on paper and attached ONE photo of the whole page. Read the photo carefully and find the student's answer for EACH item below, matching by its label (e.g. Claim/Evidence/Reasoning) and order. Treat what you read in the photo as the student's answer; if a typed answer is also given for an item, combine them. Ignore handwriting quality.\n`
+        ? `The student wrote their answers on paper and attached ONE photo of the whole page. Read the photo carefully and find the student's answer for EACH item below, matching by its label and order. For a multiple-choice item, work out which option letter the student chose (a circled option, a written letter, or a tick) from the photo when they have not selected one on screen. Ignore handwriting quality.\n`
         : ``) +
-      `For EACH item, compare the STUDENT answer to the EXPECTED model answer and judge how well it matches in meaning ` +
-      `(ignore wording, grammar and spelling — focus on the science). ` +
-      `Use verdict "correct", "partial" or "incorrect". Give ONE short feedback sentence (max 22 words) addressed to the student. ` +
-      `Return ONLY a JSON array like [{"i":0,"verdict":"partial","feedback":"..."}].\n${list}`;
+      `For each OPEN item, compare the student's answer to the expected model answer by meaning (ignore wording, grammar and spelling — focus on the science); verdict "correct", "partial" or "incorrect". ` +
+      `For each MULTIPLE-CHOICE item, decide which option the student chose and mark "correct" only if it matches the correct option letter, otherwise "incorrect"; also include "chosen":"<the letter the student picked, or empty>". ` +
+      `Give ONE short feedback sentence (max 22 words) addressed to the student for each item. ` +
+      `Return ONLY a JSON array like [{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}].\n${list}`;
     let raw;
     if (photo && photo.data) {
-      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 256 + data.length * 140, json: true });
+      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 256 + entries.length * 150, json: true });
     } else {
-      raw = await askGemini(prompt, { maxOutputTokens: 256 + data.length * 120, temperature: 0.2, json: true });
+      raw = await askGemini(prompt, { maxOutputTokens: 256 + entries.length * 130, temperature: 0.2, json: true });
     }
     verdicts = _parseAIJson(raw);
   } catch (e) {
@@ -11078,31 +11108,52 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
 
   let score = 0;
   const mistakes = [];
-  data.forEach((it, i) => {
-    const a = areas[i];
+  entries.forEach((e, i) => {
     const v = byI[i];
     const verdict = v ? String(v.verdict || '').toLowerCase() : 'incorrect';
     const pts = verdict === 'correct' ? 1 : verdict === 'partial' ? 0.5 : 0;
     score += pts;
-    if (verdict !== 'correct') mistakes.push({ expected: it.model, student: it.student });
     const color = verdict === 'correct' ? 'var(--primary)' : verdict === 'partial' ? 'var(--accent-orange)' : 'var(--accent-red)';
     const icon = verdict === 'correct' ? '✓' : verdict === 'partial' ? '≈' : '✗';
-    a.style.borderColor = color;
-    const fb = a.parentElement.querySelector('.open-feedback');
-    if (fb) {
-      let inner = `<span style="color:${color};font-weight:600;font-size:0.85rem;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span>` +
-        `<span style="color:var(--text-muted);font-size:0.85rem;"> — ${escapeHtml(v && v.feedback ? v.feedback : '')}</span>`;
-      if (verdict !== 'correct' && it.model) {
-        inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${escapeHtml(it.model)}</div>`;
+    const fbHead = `<span style="color:${color};font-weight:600;font-size:0.85rem;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span>` +
+      `<span style="color:var(--text-muted);font-size:0.85rem;"> — ${escapeHtml(v && v.feedback ? v.feedback : '')}</span>`;
+    if (e.kind === 'open') {
+      if (verdict !== 'correct') mistakes.push({ expected: e.model, student: e.student });
+      e.areaEl.style.borderColor = color;
+      const fb = e.areaEl.parentElement.querySelector('.open-feedback');
+      if (fb) {
+        let inner = fbHead;
+        if (verdict !== 'correct' && e.model) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${escapeHtml(e.model)}</div>`;
+        fb.innerHTML = inner;
       }
-      fb.innerHTML = inner;
+    } else {
+      const m = e.mcq;
+      const correctOpt = m.options.find(o => o.correct);
+      const chosenLetter = (v && v.chosen) ? String(v.chosen).trim().toUpperCase().charAt(0) : e.studentLetter;
+      if (verdict !== 'correct') mistakes.push({ expected: correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', student: chosenLetter });
+      const wrap = document.querySelector(containerSel + ' .mcq-block[data-block="' + m.blockId + '"]');
+      if (wrap) {
+        wrap.querySelectorAll('label').forEach((lab, idx) => {
+          const o = m.options[idx]; if (!o) return;
+          lab.style.background = ''; lab.style.borderColor = 'var(--border)';
+          if (o.correct) { lab.style.background = '#dcfce7'; lab.style.borderColor = '#16a34a'; }
+          if (chosenLetter && o.letter === chosenLetter && !o.correct) { lab.style.background = '#fee2e2'; lab.style.borderColor = '#dc2626'; }
+        });
+      }
+      const fb = document.querySelector(containerSel + ' [data-mcq-fb="' + m.blockId + '"]');
+      if (fb) {
+        let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(chosenLetter)})</span>` : '');
+        if (verdict !== 'correct' && correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
+        fb.innerHTML = inner;
+      }
     }
   });
 
+  const total = entries.length;
   if (scoreEl) {
-    const pct = data.length ? Math.round((score / data.length) * 100) : 0;
-    scoreEl.textContent = `${scorePrefix}: ${score}/${data.length} (${pct}%)`;
-    scoreEl.style.color = score === data.length ? 'var(--primary)' : 'var(--accent-orange)';
+    const pct = total ? Math.round((score / total) * 100) : 0;
+    scoreEl.textContent = `${scorePrefix}: ${score}/${total} (${pct}%)`;
+    scoreEl.style.color = score === total ? 'var(--primary)' : 'var(--accent-orange)';
   }
 
   if (currentUser && currentUser.role === 'student' && q) {
@@ -11113,12 +11164,12 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       questionId: q.id || '',
       questionTitle: q.title || '',
       score: score,
-      totalBlanks: data.length,
+      totalBlanks: total,
       timestamp: Timestamp.now(),
       mode
     }).catch(err => console.warn('Could not record attempt:', err));
   }
-  return { score, total: data.length, mistakes };
+  return { score, total, mistakes };
 }
 
 function markOpenAnswers() {
