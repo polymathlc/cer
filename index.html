@@ -11046,6 +11046,18 @@ function _questionContext(q) {
   return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 800);
 }
 
+// Last-resort explanation built locally from the model answers, used when the
+// AI returns nothing so the A.I. Explanation box is never left empty.
+function _fallbackExplanation(entries) {
+  const parts = (entries || []).map(e => {
+    if (e.kind === 'open') return e.model ? `${e.label || 'Answer'}: ${e.model}` : '';
+    const correct = e.mcq.options.find(o => o.correct);
+    return correct ? `Correct option — ${correct.letter}) ${correct.text}` : '';
+  }).filter(Boolean);
+  if (!parts.length) return 'Compare your response with the model answers shown above to see where the key marks are.';
+  return 'Here are the correct answers to learn from — ' + parts.join('; ') + '.';
+}
+
 // Generic AI marking for open-ended written answers (correct / partial / incorrect).
 // Returns { score, total, mistakes } on success, or null if nothing was marked.
 async function markOpenAnswersIn(containerSel, q, opts = {}) {
@@ -11198,31 +11210,35 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
   }
   recordCerPerformance(q, score, total, mode);
 
-  // The model sometimes returns the items without a usable "explanation" field
+  // Force an A.I. explanation to always exist, by hook or by crook. The model
+  // sometimes returns the marking items without a usable "explanation" field
   // (e.g. it replies with a bare array, or drops it when the token budget is
-  // tight). If there's no AI explanation and the question has no authored
-  // Explanation block, make one small follow-up call just for the explanation
-  // so an explanation always appears after marking.
-  const hasExpBlock = ((q && q.blocks) || []).some(b => b.type === 'explanation' && stripHtml(b.content || '').trim());
-  if (!aiExplanation && !hasExpBlock) {
-    try {
-      const answerLines = entries.map((e, i) => {
-        if (e.kind === 'open') return `${i + 1}. ${e.label || 'Answer'}: ${e.model || '(model answer not provided)'}`;
-        const correct = e.mcq.options.find(o => o.correct);
-        return `${i + 1}. Multiple choice — correct answer: ${correct ? correct.letter + ') ' + correct.text : '(unknown)'}`;
-      }).join('\n');
-      const expPrompt =
-        `You are a science teacher. Write a clear EXPLANATION (2-4 sentences) addressed to "you" (the student) ` +
-        `of the correct answers and the key science behind them, so the student understands the question. ` +
-        `Do not mark or grade — just explain.\n` +
-        `Question context: "${ctx}".\n` +
-        `Correct/model answers:\n${answerLines}\n` +
-        `Return ONLY the explanation text — no JSON, no preamble, no headings.`;
-      const expRaw = await askGemini(expPrompt, { maxOutputTokens: 300, temperature: 0.3 });
-      aiExplanation = (expRaw || '').trim();
-    } catch (e) {
-      console.warn('Explanation follow-up failed:', e);
+  // tight). When that happens, retry with a small follow-up call dedicated to
+  // the explanation; if every attempt still comes back empty, fall back to an
+  // explanation built locally from the model answers — so the A.I. Explanation
+  // box is never empty.
+  if (!aiExplanation) {
+    const answerLines = entries.map((e, i) => {
+      if (e.kind === 'open') return `${i + 1}. ${e.label || 'Answer'}: ${e.model || '(model answer not provided)'}`;
+      const correct = e.mcq.options.find(o => o.correct);
+      return `${i + 1}. Multiple choice — correct answer: ${correct ? correct.letter + ') ' + correct.text : '(unknown)'}`;
+    }).join('\n');
+    const expPrompt =
+      `You are a science teacher. Write a clear EXPLANATION (2-4 sentences) addressed to "you" (the student) ` +
+      `of the correct answers and the key science behind them, so the student understands the question. ` +
+      `Do not mark or grade — just explain.\n` +
+      `Question context: "${ctx}".\n` +
+      `Correct/model answers:\n${answerLines}\n` +
+      `Return ONLY the explanation text — no JSON, no preamble, no headings.`;
+    for (let attempt = 0; attempt < 2 && !aiExplanation; attempt++) {
+      try {
+        const expRaw = await askGemini(expPrompt, { maxOutputTokens: 300, temperature: attempt === 0 ? 0.3 : 0.6 });
+        aiExplanation = (expRaw || '').trim();
+      } catch (e) {
+        console.warn('Explanation follow-up failed (attempt ' + (attempt + 1) + '):', e);
+      }
     }
+    if (!aiExplanation) aiExplanation = _fallbackExplanation(entries);
   }
 
   showExplanation(containerSel, q, aiExplanation, scoreElId);
@@ -12976,23 +12992,32 @@ async function generateReportNarrative(p, topics) {
     el.innerHTML = '<span style="color:var(--text-muted);">Could not generate feedback right now. Tap Refresh to try again.</span>';
   }
 }
-// Reveal an explanation after marking: the question's explanation block(s) if it
-// has any, plus an AI-written explanation so one always appears. Placed right
-// after the score so it's visible without scrolling past the buttons.
+// Reveal an explanation after marking. The AI-written explanation gets its own
+// dedicated "A.I. Explanation" box; the question's authored explanation block(s),
+// if any, are shown in a separate box. Placed right after the score so it's
+// visible without scrolling past the buttons.
 function showExplanation(containerSel, q, aiText, scoreElId) {
   const c = document.querySelector(containerSel);
   if (!c) return;
-  const old = c.querySelector('.post-explanation'); if (old) old.remove();
+  c.querySelectorAll('.post-explanation').forEach(el => el.remove());
   const exps = ((q && q.blocks) || []).filter(b => b.type === 'explanation' && stripHtml(b.content || '').trim());
   const blockHtml = exps.map(b => `<div style="line-height:1.7;margin-bottom:4px;">${b.content}</div>`).join('');
-  const aiHtml = (aiText && String(aiText).trim()) ? `<div style="line-height:1.7;">${escapeHtml(String(aiText).trim())}</div>` : '';
-  if (!blockHtml && !aiHtml) return;
-  const card =
-    `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
-      <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">💡 Explanation</div>${blockHtml}${aiHtml}</div>`;
+  const aiText2 = (aiText && String(aiText).trim()) ? String(aiText).trim() : '';
+  let cards = '';
+  if (aiText2) {
+    cards +=
+      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
+        <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">🤖 A.I. Explanation</div><div style="line-height:1.7;">${escapeHtml(aiText2)}</div></div>`;
+  }
+  if (blockHtml) {
+    cards +=
+      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
+        <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">💡 Explanation</div>${blockHtml}</div>`;
+  }
+  if (!cards) return;
   const anchor = scoreElId ? document.getElementById(scoreElId) : null;
-  if (anchor && c.contains(anchor)) anchor.insertAdjacentHTML('afterend', card);
-  else c.insertAdjacentHTML('beforeend', card);
+  if (anchor && c.contains(anchor)) anchor.insertAdjacentHTML('afterend', cards);
+  else c.insertAdjacentHTML('beforeend', cards);
 }
 let tpCurrentTopic = '';
 let tpSelectedTopics = new Set();
