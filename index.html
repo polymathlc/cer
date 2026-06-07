@@ -5366,7 +5366,37 @@ function _parseAIJson(raw) {
   s = s.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
   const start = s.search(/[\[{]/);
   if (start > 0) s = s.slice(start);
-  return JSON.parse(s);
+  try { return JSON.parse(s); }
+  catch (firstErr) {
+    try { return JSON.parse(_repairAIJson(s)); }
+    catch (_) { throw firstErr; }
+  }
+}
+// Best-effort repair for slightly-malformed or TRUNCATED model JSON: escapes raw
+// newlines/tabs inside strings, closes an unterminated string, balances any open
+// brackets, and drops trailing commas — so a cut-off response still parses.
+function _repairAIJson(s) {
+  let out = '', inString = false, escaped = false;
+  const closers = [];
+  for (const ch of String(s || '')) {
+    if (inString) {
+      if (escaped) { out += ch; escaped = false; continue; }
+      if (ch === '\\') { out += ch; escaped = true; continue; }
+      if (ch === '"') { out += ch; inString = false; continue; }
+      if (ch === '\n') { out += '\\n'; continue; }
+      if (ch === '\r') { continue; }
+      if (ch === '\t') { out += '\\t'; continue; }
+      out += ch; continue;
+    }
+    if (ch === '"') { out += ch; inString = true; continue; }
+    if (ch === '{') closers.push('}');
+    else if (ch === '[') closers.push(']');
+    else if ((ch === '}' || ch === ']') && closers[closers.length - 1] === ch) closers.pop();
+    out += ch;
+  }
+  if (inString) out += '"';
+  while (closers.length) out += closers.pop();
+  return out.replace(/,\s*([}\]])/g, '$1');
 }
 
 // Cache identical requests for the session so repeats are free/instant.
@@ -11135,9 +11165,9 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
     let raw;
     if (photo && photo.data) {
-      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 600 + entries.length * 150, json: true });
+      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 1100 + entries.length * 220, json: true });
     } else {
-      raw = await askGemini(prompt, { maxOutputTokens: 600 + entries.length * 130, temperature: 0.2, json: true });
+      raw = await askGemini(prompt, { maxOutputTokens: 1100 + entries.length * 220, temperature: 0.2, json: true });
     }
     const parsed = _parseAIJson(raw);
     verdicts = Array.isArray(parsed) ? parsed : ((parsed && parsed.items) || []);
