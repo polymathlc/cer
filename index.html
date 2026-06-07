@@ -11090,6 +11090,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
   if (scoreEl) scoreEl.textContent = 'Marking with AI…';
 
   let verdicts = [];
+  let aiExplanation = '';
   try {
     const list = entries.map((e, i) => {
       if (e.kind === 'open') {
@@ -11109,14 +11110,17 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       `For each OPEN item, compare the student's answer to the expected model answer by meaning (ignore wording, grammar and spelling — focus on the science); verdict "correct", "partial" or "incorrect". ` +
       `For each MULTIPLE-CHOICE item, decide which option the student chose and mark "correct" only if it matches the correct option letter, otherwise "incorrect"; also include "chosen":"<the letter the student picked, or empty>". ` +
       `Give ONE short feedback sentence (max 22 words) addressed to the student for each item. ` +
-      `Return ONLY a JSON array like [{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}].\n${list}`;
+      `Also write a clear overall EXPLANATION (2-4 sentences) of the correct answers and the key science behind them, addressed to "you", so the student understands the question. ` +
+      `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}],"explanation":"..."}.\n${list}`;
     let raw;
     if (photo && photo.data) {
-      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 256 + entries.length * 150, json: true });
+      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 450 + entries.length * 150, json: true });
     } else {
-      raw = await askGemini(prompt, { maxOutputTokens: 256 + entries.length * 130, temperature: 0.2, json: true });
+      raw = await askGemini(prompt, { maxOutputTokens: 450 + entries.length * 130, temperature: 0.2, json: true });
     }
-    verdicts = _parseAIJson(raw);
+    const parsed = _parseAIJson(raw);
+    verdicts = Array.isArray(parsed) ? parsed : ((parsed && parsed.items) || []);
+    aiExplanation = (parsed && !Array.isArray(parsed) && parsed.explanation) ? String(parsed.explanation) : '';
   } catch (e) {
     console.error('Open marking error:', e);
     showToast('AI mark error: ' + (e && e.message ? e.message : e), 'error');
@@ -11193,7 +11197,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     }).catch(err => console.warn('Could not record attempt:', err));
   }
   recordCerPerformance(q, score, total, mode);
-  showExplanation(containerSel, q);
+  showExplanation(containerSel, q, aiExplanation, scoreElId);
   return { score, total, mistakes };
 }
 
@@ -12210,7 +12214,7 @@ function _recordQpResult(correct, total, mistakes) {
     mistakes: mistakes || []
   });
   recordCerPerformance(q, correct, total, 'quickpractice');
-  showExplanation('#qpContainer', q);
+  showExplanation('#qpContainer', q, '', 'qpScoreDisplay');
 }
 
 // Shared, styled end-of-practice report (used by Quick/Worksheet and Topical).
@@ -12806,7 +12810,7 @@ function _recordTpResult(correct, total, mistakes) {
   const q = tpQueue[tpIndex] || {};
   tpSessionResults.push({ title: q.title || '', topic: q.topic || '', correct, total, mistakes: mistakes || [] });
   recordCerPerformance(q, correct, total, 'topicalpractice');
-  showExplanation('#tpContainer', q);
+  showExplanation('#tpContainer', q, '', 'tpScoreDisplay');
 }
 
 // =====================================================================
@@ -12944,17 +12948,23 @@ async function generateReportNarrative(p, topics) {
     el.innerHTML = '<span style="color:var(--text-muted);">Could not generate feedback right now. Tap Refresh to try again.</span>';
   }
 }
-// Reveal the question's explanation block(s) after marking.
-function showExplanation(containerSel, q) {
+// Reveal an explanation after marking: the question's explanation block(s) if it
+// has any, plus an AI-written explanation so one always appears. Placed right
+// after the score so it's visible without scrolling past the buttons.
+function showExplanation(containerSel, q, aiText, scoreElId) {
   const c = document.querySelector(containerSel);
   if (!c) return;
   const old = c.querySelector('.post-explanation'); if (old) old.remove();
   const exps = ((q && q.blocks) || []).filter(b => b.type === 'explanation' && stripHtml(b.content || '').trim());
-  if (!exps.length) return;
-  const body = exps.map(b => `<div style="line-height:1.7;">${b.content}</div>`).join('');
-  c.insertAdjacentHTML('beforeend',
+  const blockHtml = exps.map(b => `<div style="line-height:1.7;margin-bottom:4px;">${b.content}</div>`).join('');
+  const aiHtml = (aiText && String(aiText).trim()) ? `<div style="line-height:1.7;">${escapeHtml(String(aiText).trim())}</div>` : '';
+  if (!blockHtml && !aiHtml) return;
+  const card =
     `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
-      <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">💡 Explanation</div>${body}</div>`);
+      <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">💡 Explanation</div>${blockHtml}${aiHtml}</div>`;
+  const anchor = scoreElId ? document.getElementById(scoreElId) : null;
+  if (anchor && c.contains(anchor)) anchor.insertAdjacentHTML('afterend', card);
+  else c.insertAdjacentHTML('beforeend', card);
 }
 let tpCurrentTopic = '';
 let tpSelectedTopics = new Set();
