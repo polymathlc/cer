@@ -5304,11 +5304,27 @@ if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
 }
 
 let geminiModel = null;
+let _aiInstance = null;
+// Image generation / editing model ("Nano Banana"). Change here if your
+// Firebase AI project exposes a different image-capable model id.
+const AI_IMAGE_MODEL = "gemini-2.5-flash-image";
+let geminiImageModel = null;
 try {
-  const ai = getAI(app, { backend: new GoogleAIBackend() });
-  geminiModel = getGenerativeModel(ai, { model: AI_MODEL });
+  _aiInstance = getAI(app, { backend: new GoogleAIBackend() });
+  geminiModel = getGenerativeModel(_aiInstance, { model: AI_MODEL });
 } catch (e) {
   console.warn("Firebase AI init failed (Ask AI / AI marking disabled):", e);
+}
+
+// Lazily create the image model the first time an enhance is requested.
+function _getImageModel() {
+  if (geminiImageModel) return geminiImageModel;
+  if (!_aiInstance) throw new Error('AI is not configured yet');
+  geminiImageModel = getGenerativeModel(_aiInstance, {
+    model: AI_IMAGE_MODEL,
+    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
+  });
+  return geminiImageModel;
 }
 
 // Single swap-point for all model calls. Returns trimmed text.
@@ -7134,6 +7150,7 @@ function renderBlocks() {
             <div class="image-preview" id="imgPreview_${block.id}">
               ${block.url ? `<img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy">` : '<div class="image-error">No image yet — paste, drop, or enter a URL</div>'}
             </div>
+            <div class="img-enhance-bar" id="imgEnhance_${block.id}"></div>
           </div>
         `;
         break;
@@ -7266,6 +7283,10 @@ function renderBlocks() {
     // Initialize drag-to-resize handles for table blocks
     if (block.type === 'table') {
       requestAnimationFrame(() => initTableResizeHandles(block.id));
+    }
+    // Show the AI enhance bar under any image that already has a picture.
+    if (block.type === 'image') {
+      requestAnimationFrame(() => renderImgEnhanceBar(block.id));
     }
   });
 
@@ -7735,6 +7756,9 @@ function _readAndUploadImage(blockId, file) {
       const input = document.getElementById('imgUrlInput_' + blockId);
       if (input) input.value = url;
       previewImage(blockId, url);
+      // Remember the original so the teacher can enhance it or revert.
+      _imgEnhanceState[blockId] = { originalDataUrl: dataUrl, originalUrl: url };
+      renderImgEnhanceBar(blockId);
       showToast('Image uploaded', 'success');
     } catch (err) {
       console.error('Image upload failed:', err);
@@ -7746,6 +7770,110 @@ function _readAndUploadImage(blockId, file) {
   reader.readAsDataURL(file);
 }
 const _imagePasteHint = '📋 Click here, then paste a screenshot (Ctrl/⌘+V) — or drop an image to upload it';
+
+// =====================================================================
+// IMAGE ENHANCE (AI) — after pasting an image into a question, the teacher
+// can keep the original, or have the AI re-render it in high quality (with
+// or without colour). Uses a Gemini image model via the Firebase AI SDK.
+// =====================================================================
+const _imgEnhanceState = {}; // blockId -> { originalDataUrl, originalUrl }
+
+// Ask the image model to produce an image; returns a data: URL.
+async function generateEnhancedImageDataUrl(prompt, media) {
+  const model = _getImageModel();
+  const parts = [{ text: prompt }];
+  (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
+  const res = await model.generateContent({ contents: [{ role: 'user', parts }] });
+  const cands = (res && res.response && res.response.candidates) || [];
+  for (const c of cands) {
+    const ps = (c && c.content && c.content.parts) || [];
+    for (const p of ps) {
+      if (p && p.inlineData && p.inlineData.data) {
+        return 'data:' + (p.inlineData.mimeType || 'image/png') + ';base64,' + p.inlineData.data;
+      }
+    }
+  }
+  throw new Error('the AI did not return an image (image model may not be enabled)');
+}
+
+async function _urlToDataUrl(url) {
+  const resp = await fetch(url, { mode: 'cors' });
+  if (!resp.ok) throw new Error('could not load the image');
+  const blob = await resp.blob();
+  return await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(new Error('could not read the image'));
+    r.readAsDataURL(blob);
+  });
+}
+
+// Get the source image (as base64 inlineData) to enhance for a block.
+async function _blockImageToInline(blockId) {
+  const st = _imgEnhanceState[blockId];
+  let dataUrl = st && st.originalDataUrl;
+  if (!dataUrl) {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block || !block.url) throw new Error('no image to enhance');
+    dataUrl = await _urlToDataUrl(transformImageUrl(block.url));
+  }
+  const parsed = _parseImageDataUrl(dataUrl);
+  if (!parsed) throw new Error('could not read the image');
+  return { mimeType: parsed.mime, data: dataUrl.split(',')[1] || '' };
+}
+
+// Render the [Use original] [Enhance] [Enhance with colour] bar under an image.
+function renderImgEnhanceBar(blockId) {
+  const bar = document.getElementById('imgEnhance_' + blockId);
+  if (!bar) return;
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || !block.url) { bar.innerHTML = ''; return; }
+  const st = _imgEnhanceState[blockId];
+  const showOriginal = st && st.originalUrl && st.originalUrl !== block.url;
+  const btn = (handler, label) => `<button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" onclick="${handler}">${label}</button>`;
+  bar.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+      <span style="font-size:0.78rem;color:var(--text-muted);">AI image:</span>
+      ${showOriginal ? btn(`useOriginalImage('${blockId}')`, '↩ Use original') : ''}
+      ${btn(`enhanceBlockImage('${blockId}', false)`, '✨ Enhance image')}
+      ${btn(`enhanceBlockImage('${blockId}', true)`, '🎨 Enhance with colour')}
+    </div>`;
+}
+
+async function enhanceBlockImage(blockId, colour) {
+  const bar = document.getElementById('imgEnhance_' + blockId);
+  if (bar) bar.innerHTML = `<div style="margin-top:8px;font-size:0.8rem;color:var(--text-muted);">⏳ ${colour ? 'Colourising' : 'Enhancing'} image with AI…</div>`;
+  try {
+    const media = await _blockImageToInline(blockId);
+    const prompt = colour
+      ? 'Recreate this image as a high-resolution, high-quality COLOUR version. Add natural, realistic, appropriate colours. Keep every detail, label, shape, proportion and piece of text exactly the same and in the same positions. Use smooth, clean lines and crisp, clearly legible fonts. Output only the image, same aspect ratio.'
+      : 'Recreate this image in high resolution and high quality with smooth, clean lines and crisp, clearly legible text. Keep every detail, label, shape, proportion and all text exactly the same and in the same positions; do not add colour beyond what is already present. Output only the image, same aspect ratio.';
+    const dataUrl = await generateEnhancedImageDataUrl(prompt, [media]);
+    previewImage(blockId, dataUrl); // show immediately
+    const url = await uploadImageDataUrl(dataUrl);
+    saveBlockContent(blockId, 'url', url);
+    const input = document.getElementById('imgUrlInput_' + blockId);
+    if (input) input.value = url;
+    previewImage(blockId, url);
+    renderImgEnhanceBar(blockId);
+    showToast(colour ? 'Colourised image ready ✓' : 'Enhanced image ready ✓', 'success');
+  } catch (err) {
+    console.error('Image enhance failed:', err);
+    showToast('Enhance failed: ' + (err && err.message ? err.message : err), 'error');
+    renderImgEnhanceBar(blockId);
+  }
+}
+
+function useOriginalImage(blockId) {
+  const st = _imgEnhanceState[blockId];
+  if (!st || !st.originalUrl) return;
+  saveBlockContent(blockId, 'url', st.originalUrl);
+  const input = document.getElementById('imgUrlInput_' + blockId);
+  if (input) input.value = st.originalUrl;
+  previewImage(blockId, st.originalUrl);
+  renderImgEnhanceBar(blockId);
+  showToast('Reverted to the original image', 'info');
+}
 
 // =====================================================================
 // AI QUESTION BUILDER — upload a screenshot/PDF of an exam question;
@@ -7801,30 +7929,62 @@ function _populateEditorFromAi(data) {
   blocks = [];
   selectedBlanks = {};
 
-  const qText = String(data.questionText || '').replace(/\[\[|\]\]/g, '').trim();
-  if (qText) blocks.push({ id: generateBlockId(), type: 'text', content: qText });
+  const stripBrackets = s => String(s || '').replace(/\[\[|\]\]/g, '').trim();
 
-  if (data.hasDiagram) blocks.push({ id: generateBlockId(), type: 'image', url: '' });
-
-  const answerType = String(data.answerType || 'cer').toLowerCase();
-  if (answerType === 'plain') {
+  const pushAnswer = (b) => {
     const id = generateBlockId();
-    const { content, blanks } = _markedToBlanks(data.answer || '');
-    blocks.push({ id, type: 'plainanswer', content });
-    if (Object.keys(blanks).length) selectedBlanks[id] = blanks;
-  } else {
-    const id = generateBlockId();
-    const claim = _markedToBlanks(data.claim || '');
-    const evidence = _markedToBlanks(data.evidence || '');
-    const reasoning = _markedToBlanks(data.reasoning || '');
+    const claim = _markedToBlanks(b.claim || '');
+    const evidence = _markedToBlanks(b.evidence || '');
+    const reasoning = _markedToBlanks(b.reasoning || '');
     blocks.push({ id, type: 'answer', claim: claim.content, evidence: evidence.content, reasoning: reasoning.content });
     if (Object.keys(claim.blanks).length) selectedBlanks[id + '_claim'] = claim.blanks;
     if (Object.keys(evidence.blanks).length) selectedBlanks[id + '_evidence'] = evidence.blanks;
     if (Object.keys(reasoning.blanks).length) selectedBlanks[id + '_reasoning'] = reasoning.blanks;
-  }
+  };
+  const pushPlain = (text) => {
+    const id = generateBlockId();
+    const { content, blanks } = _markedToBlanks(text || '');
+    blocks.push({ id, type: 'plainanswer', content });
+    if (Object.keys(blanks).length) selectedBlanks[id] = blanks;
+  };
 
-  const expl = String(data.explanation || '').replace(/\[\[|\]\]/g, '').trim();
-  if (expl) blocks.push({ id: generateBlockId(), type: 'explanation', content: expl });
+  if (Array.isArray(data.blocks)) {
+    // New ordered-blocks shape: build each block in the AI's sequence.
+    data.blocks.forEach(b => {
+      const t = String((b && b.type) || '').toLowerCase();
+      if (t === 'text') {
+        const txt = stripBrackets(b.text || b.content);
+        if (txt) blocks.push({ id: generateBlockId(), type: 'text', content: txt });
+      } else if (t === 'image') {
+        blocks.push({ id: generateBlockId(), type: 'image', url: '', caption: stripBrackets(b.caption) });
+      } else if (t === 'mcq') {
+        const id = generateBlockId();
+        const opts = (Array.isArray(b.options) ? b.options : [])
+          .map(o => ({ id: generateBlockId(), text: stripBrackets(o == null ? '' : o) }));
+        while (opts.length < 2) opts.push({ id: generateBlockId(), text: '' });
+        let correctId = null;
+        const ci = Number(b.correctIndex);
+        if (Number.isInteger(ci) && ci >= 0 && ci < opts.length) correctId = opts[ci].id;
+        blocks.push({ id, type: 'mcq', options: opts, correctId });
+      } else if (t === 'answer') {
+        pushAnswer(b);
+      } else if (t === 'plainanswer') {
+        pushPlain(b.text || b.answer || b.content);
+      } else if (t === 'explanation') {
+        const expl = stripBrackets(b.text || b.content);
+        if (expl) blocks.push({ id: generateBlockId(), type: 'explanation', content: expl });
+      }
+    });
+  } else {
+    // Legacy flat shape (fallback for older responses).
+    const qText = stripBrackets(data.questionText);
+    if (qText) blocks.push({ id: generateBlockId(), type: 'text', content: qText });
+    if (data.hasDiagram) blocks.push({ id: generateBlockId(), type: 'image', url: '' });
+    if (String(data.answerType || 'cer').toLowerCase() === 'plain') pushPlain(data.answer || '');
+    else pushAnswer(data);
+    const expl = stripBrackets(data.explanation);
+    if (expl) blocks.push({ id: generateBlockId(), type: 'explanation', content: expl });
+  }
 
   const titleEl = document.getElementById('questionTitle');
   if (titleEl) titleEl.value = data.title || 'Untitled';
@@ -7894,18 +8054,27 @@ async function handleAiBuildFile(file) {
     const topics = Object.keys(topicLevelMap);
     const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
     const prompt =
-      `You are helping a Singapore primary-school science teacher turn an exam question (in the attached ${isPdf ? 'PDF' : 'image'}) into a CER keywords-practice question.\n` +
+      `You are helping a Singapore primary-school science teacher turn an exam question (in the attached ${isPdf ? 'PDF' : 'image'}) into a practice question.\n` +
       _genPreamble() +
-      `Read the question carefully, then return ONLY JSON with this exact shape:\n` +
-      `{"title":"short title","topic":"<closest topic>","category":"<closest category>","questionText":"the question stem as plain text","answerType":"cer or plain","claim":"...","evidence":"...","reasoning":"...","answer":"...","explanation":"teacher explanation of the model answer","hasDiagram":true}\n` +
+      `FIRST decide the question type: "mcq" if the question gives a set of answer options to choose from (e.g. (1)(2)(3)(4) or A/B/C/D), otherwise "open".\n` +
+      `Then return ONLY JSON with this exact shape:\n` +
+      `{"title":"short title","topic":"<closest topic>","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
+      `Each item in "blocks" is ONE of these objects:\n` +
+      `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
+      `  {"type":"image"}   (a placeholder marking where a diagram/picture/graph/figure/experimental setup appears — the teacher pastes the real image there)\n` +
+      `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0}\n` +
+      `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
+      `  {"type":"plainanswer","text":"..."}\n` +
+      `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
       `Rules:\n` +
-      `- Write a model PSLE-level answer. For a Claim-Evidence-Reasoning answer set answerType "cer" and fill claim, evidence and reasoning. For a short open answer set answerType "plain" and fill answer (leave claim/evidence/reasoning empty).\n` +
-      `- In the ANSWER fields only (claim/evidence/reasoning or answer), wrap each KEY science keyword a student should recall in [[double brackets]] — whole words only, about 3 to 8 keywords total. Do NOT bracket anything in questionText or explanation.\n` +
+      `- List blocks in the SAME order they appear in the source. Put an "image" placeholder block exactly where each diagram/picture/graph/figure belongs, interleaved with the text blocks.\n` +
+      `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
+      `- If questionType is "open": include ONE answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer. In these answer fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
+      `- Optionally finish with one "explanation" block.\n` +
       `- Choose topic from EXACTLY this list: ${topics.join('; ')}.\n` +
       `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
-      `- Set hasDiagram true if the question refers to a picture, diagram, graph, table or experimental setup (the teacher will paste it in).\n` +
       `- Use plain text only, no markdown.`;
-    const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 2048, json: true });
+    const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 4096, json: true });
     const parsed = _parseAIJson(raw);
     _populateEditorFromAi(parsed);
     showToast('Question built — review it, paste the diagram, then Save', 'success');
