@@ -13005,10 +13005,10 @@ async function generateReportNarrative(p, topics) {
     el.innerHTML = '<span style="color:var(--text-muted);">Could not generate feedback right now. Tap Refresh to try again.</span>';
   }
 }
-// Reveal an explanation after marking. The AI-written explanation gets its own
-// dedicated "A.I. Explanation" box; the question's authored explanation block(s),
-// if any, are shown in a separate box. Placed right after the score so it's
-// visible without scrolling past the buttons.
+// Reveal an explanation after marking. The answer-specific AI explanation gets
+// its own "A.I. Explanation" box. The question's authored explanation block(s)
+// are generic, so they're only shown as a fallback when there's no AI
+// explanation. Placed right after the score so it's visible without scrolling.
 function showExplanation(containerSel, q, aiText, scoreElId) {
   const c = document.querySelector(containerSel);
   if (!c) return;
@@ -13022,7 +13022,10 @@ function showExplanation(containerSel, q, aiText, scoreElId) {
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
         <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">🤖 A.I. Explanation</div><div style="line-height:1.7;">${escapeHtml(aiText2)}</div></div>`;
   }
-  if (blockHtml) {
+  // The question's authored explanation is generic (written at authoring time),
+  // so it's only shown as a fallback when there's no answer-specific A.I.
+  // explanation — e.g. the MCQ / fill-blank paths that don't generate one.
+  if (blockHtml && !aiText2) {
     cards +=
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
         <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">💡 Explanation</div>${blockHtml}</div>`;
