@@ -11197,6 +11197,34 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     }).catch(err => console.warn('Could not record attempt:', err));
   }
   recordCerPerformance(q, score, total, mode);
+
+  // The model sometimes returns the items without a usable "explanation" field
+  // (e.g. it replies with a bare array, or drops it when the token budget is
+  // tight). If there's no AI explanation and the question has no authored
+  // Explanation block, make one small follow-up call just for the explanation
+  // so an explanation always appears after marking.
+  const hasExpBlock = ((q && q.blocks) || []).some(b => b.type === 'explanation' && stripHtml(b.content || '').trim());
+  if (!aiExplanation && !hasExpBlock) {
+    try {
+      const answerLines = entries.map((e, i) => {
+        if (e.kind === 'open') return `${i + 1}. ${e.label || 'Answer'}: ${e.model || '(model answer not provided)'}`;
+        const correct = e.mcq.options.find(o => o.correct);
+        return `${i + 1}. Multiple choice — correct answer: ${correct ? correct.letter + ') ' + correct.text : '(unknown)'}`;
+      }).join('\n');
+      const expPrompt =
+        `You are a science teacher. Write a clear EXPLANATION (2-4 sentences) addressed to "you" (the student) ` +
+        `of the correct answers and the key science behind them, so the student understands the question. ` +
+        `Do not mark or grade — just explain.\n` +
+        `Question context: "${ctx}".\n` +
+        `Correct/model answers:\n${answerLines}\n` +
+        `Return ONLY the explanation text — no JSON, no preamble, no headings.`;
+      const expRaw = await askGemini(expPrompt, { maxOutputTokens: 300, temperature: 0.3 });
+      aiExplanation = (expRaw || '').trim();
+    } catch (e) {
+      console.warn('Explanation follow-up failed:', e);
+    }
+  }
+
   showExplanation(containerSel, q, aiExplanation, scoreElId);
   return { score, total, mistakes };
 }
