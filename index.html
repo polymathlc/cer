@@ -4232,6 +4232,8 @@ option {
           <div class="form-group">
             <label class="form-label">Category</label>
             <select id="categorySelect" class="form-select">
+              <option value="">— None (leave blank) —</option>
+              <option value="MCQs">MCQs</option>
               <optgroup label="── Skills ──">
                 <option value="CER">CER</option>
                 <option value="Single Relationship">Single Relationship</option>
@@ -4417,6 +4419,8 @@ option {
           </select>
           <select id="bankFilterCategory" onchange="renderQuestionBank()">
             <option value="">All Categories</option>
+            <option value="MCQs">MCQs</option>
+            <option value="__blank__">(No category)</option>
             <optgroup label="── Skills ──">
               <option value="CER">CER</option>
               <option value="Single Relationship">Single Relationship</option>
@@ -4582,6 +4586,8 @@ option {
           </select>
           <select id="wsFilterCategory" onchange="renderWsQuestions()">
             <option value="">All Question Types</option>
+            <option value="MCQs">MCQs</option>
+            <option value="__blank__">(No category)</option>
             <optgroup label="── Skills ──">
               <option value="CER">CER</option>
               <option value="Single Relationship">Single Relationship</option>
@@ -5848,15 +5854,31 @@ let _skipCreateReset = false;
 let showFirstLetterClues = false;
 
 function normalizeCategoryValue(category) {
+  // Multiple-choice questions are categorised simply as "MCQs".
+  if (category === 'MCQ' || category === 'MCQs' || category === 'CER (MCQ)') return 'MCQs';
   const legacyCER = new Set([
     'CER (Open Ended)',
     'CER (Fill in Blanks)',
-    'CER (MCQ)',
-    'Open Ended',
-    'MCQ'
+    'Open Ended'
   ]);
   if (legacyCER.has(category)) return 'CER';
-  return category || 'CER';
+  return category || ''; // category may be left blank
+}
+
+// The category to display for a question: MCQ questions always show "MCQs"
+// (derived from their blocks), everything else uses the stored value (which
+// can be blank).
+function categoryLabel(q) {
+  if (q && qpHasMcq(q)) return 'MCQs';
+  return normalizeCategoryValue(q && q.category);
+}
+
+// Category chip HTML — empty string when the category is blank, so no empty
+// tag is rendered.
+function categoryTag(q, extraStyle) {
+  const c = categoryLabel(q);
+  if (!c) return '';
+  return `<span class="qb-tag category"${extraStyle ? ` style="${extraStyle}"` : ''}>${escapeHtml(c)}</span>`;
 }
 
 // =====================================================================
@@ -7697,7 +7719,7 @@ function worksheetQuestionToCer(wq, index) {
   return {
     id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: title,
-    category: 'CER',
+    category: qpHasMcq({ blocks: blocksOut }) ? 'MCQs' : 'CER',
     topic: topic,
     markingGuide: '',
     blocks: blocksOut,
@@ -8601,7 +8623,7 @@ function previewAsStudent() {
   html += `<div class="student-card-header" style="padding:0 0 12px;">
     <h3 style="font-size:1.1rem;">${escapeHtml(title)}</h3>
     <div style="display:flex;gap:8px;">
-      <span class="qb-tag category">${escapeHtml(category)}</span>
+      ${categoryTag({ category, blocks })}
       <span class="qb-tag topic">${escapeHtml(topic)}</span>
     </div>
   </div>`;
@@ -8983,7 +9005,7 @@ function collectQuestionData() {
   return {
     id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: document.getElementById('questionTitle').value || 'Untitled',
-    category: normalizeCategoryValue(document.getElementById('categorySelect').value),
+    category: qpHasMcq({ blocks: blocksClone }) ? 'MCQs' : normalizeCategoryValue(document.getElementById('categorySelect').value),
     topic: document.getElementById('topicSelect').value,
     markingGuide: (document.getElementById('questionMarkingGuide')?.value || '').trim(),
     blocks: blocksClone,
@@ -9185,7 +9207,7 @@ function renderQuestionBank() {
   
   let filtered = questionBank.filter(q => {
     if (topicFilter && q.topic !== topicFilter) return false;
-    if (catFilter && normalizeCategoryValue(q.category) !== catFilter) return false;
+    if (catFilter && (catFilter === '__blank__' ? categoryLabel(q) !== '' : categoryLabel(q) !== catFilter)) return false;
     const qLevel = getTopicLevel(q.topic || '');
     if (levelFilter && qLevel !== levelFilter) return false;
     if (searchTokens.length > 0) {
@@ -9216,7 +9238,7 @@ function renderQuestionBank() {
           <div>
             <div class="qb-card-title">${escapeHtml(q.title)}</div>
             <div class="qb-card-meta">
-              <span class="qb-tag category">${escapeHtml(qCategory)}</span>
+              ${categoryTag(q)}
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
               ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
@@ -9331,7 +9353,7 @@ function renderVettingList() {
           <div>
             <div class="qb-card-title">${escapeHtml(q.title)}</div>
             <div class="qb-card-meta">
-              <span class="qb-tag category">${escapeHtml(q.category)}</span>
+              ${categoryTag(q)}
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               <span class="vetting-badge ${statusClass}">${statusClass.charAt(0).toUpperCase() + statusClass.slice(1)}</span>
             </div>
@@ -9419,7 +9441,7 @@ function renderStudentView() {
   html += `<div class="student-card-header">
     <h3>${escapeHtml(q.title)}</h3>
     <div style="display:flex;gap:8px;">
-      <span class="qb-tag category">${escapeHtml(q.category)}</span>
+      ${categoryTag(q)}
       <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
     </div>
   </div>`;
@@ -9659,7 +9681,7 @@ function checkStudentAnswers(qId) {
 let printSelectedIds = new Set();
 
 function _populatePrintFilters() {
-  const categories = [...new Set(questionBank.map(q => q.category).filter(Boolean))].sort();
+  const categories = [...new Set(questionBank.map(q => categoryLabel(q)).filter(Boolean))].sort();
   const topics = [...new Set(questionBank.map(q => q.topic).filter(Boolean))].sort();
   const catSel = document.getElementById('printFilterCategory');
   const topSel = document.getElementById('printFilterTopic');
@@ -9695,7 +9717,7 @@ function _getFilteredPrintQuestions() {
   const catFilter = document.getElementById('printFilterCategory')?.value || '';
   const topFilter = document.getElementById('printFilterTopic')?.value || '';
   return questionBank.filter(q => {
-    if (catFilter && q.category !== catFilter) return false;
+    if (catFilter && categoryLabel(q) !== catFilter) return false;
     if (topFilter && q.topic !== topFilter) return false;
     return true;
   });
@@ -9741,7 +9763,7 @@ function renderPrintSelect() {
       <div class="psc-info">
         <div class="psc-title">${escapeHtml(q.title)}</div>
         <div class="psc-meta">
-          <span class="qb-tag category">${escapeHtml(q.category)}</span>
+          ${categoryTag(q)}
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
           ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
         </div>
@@ -9811,7 +9833,7 @@ function showPrintPreview(qid, btnEl) {
 
   let html = `<h3>${escapeHtml(q.title)}</h3>`;
   html += `<div class="preview-meta">
-    <span class="qb-tag category">${escapeHtml(q.category)}</span>
+    ${categoryTag(q)}
     <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
   </div>`;
 
@@ -10991,7 +11013,7 @@ function renderPracticeQuestion(q, student) {
         <h3>${escapeHtml(q.title)}</h3>
         <div style="display:flex;gap:6px;align-items:center;">
           <span class="qb-tag" style="background:var(--surface-container-high,#ebe8e3);">${practiceMode === 'open' ? 'Open-Ended' : 'Fill Blanks'}</span>
-          <span class="qb-tag category">${escapeHtml(q.category)}</span>
+          ${categoryTag(q)}
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
         </div>
       </div>
@@ -11715,7 +11737,7 @@ function renderWsQuestions() {
 
   let filtered = questionBank.filter(q => {
     if (topicFilter && q.topic !== topicFilter) return false;
-    if (catFilter && normalizeCategoryValue(q.category) !== catFilter) return false;
+    if (catFilter && (catFilter === '__blank__' ? categoryLabel(q) !== '' : categoryLabel(q) !== catFilter)) return false;
     const qLevel = getTopicLevel(q.topic || '');
     if (levelFilter && qLevel !== levelFilter) return false;
     if (searchRaw) {
@@ -11746,7 +11768,7 @@ function renderWsQuestions() {
         <div class="ws-q-info">
           <div class="ws-q-title">${escapeHtml(q.title)}</div>
           <div class="ws-q-meta">
-            <span class="qb-tag category">${escapeHtml(qCategory)}</span>
+            ${categoryTag(q)}
             <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
             <span class="qb-tag">${escapeHtml(qLevel)}</span>
             ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
@@ -12676,7 +12698,7 @@ function renderQpQuestion(q) {
         <div style="display:flex;gap:6px;align-items:center;">
           <span class="qb-tag" style="background:var(--surface-container-high,#ebe8e3);">${qpMode === 'open' ? 'Open-Ended' : 'Fill Blanks'}</span>
           <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
-          <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
+          ${categoryTag(q)}
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
         </div>
       </div>
@@ -13571,7 +13593,7 @@ function tpRenderQuestion(q) {
         <div style="display:flex;gap:6px;align-items:center;">
           <span class="qb-tag" style="background:var(--surface-container-high,#ebe8e3);">${tpMode === 'open' ? 'Open-Ended' : 'Fill Blanks'}</span>
           <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
-          <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
+          ${categoryTag(q)}
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
         </div>
       </div>
@@ -14164,7 +14186,7 @@ function renderScheduledQuestions() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             ${dateStr}
           </span>
-          <span class="qb-tag category">${escapeHtml(sq.category || sq.questionData?.category || '')}</span>
+          ${categoryTag({ category: sq.category || sq.questionData?.category, blocks: sq.questionData?.blocks })}
           <span class="qb-tag topic">${escapeHtml(sq.topic || sq.questionData?.topic || '')}</span>
           <span class="sc-date ${statusClass}" style="font-size:0.7rem;">${statusLabel}</span>
         </div>
@@ -14231,7 +14253,7 @@ function renderScheduleQuestionList() {
       <div style="flex:1;">
         <div class="q-title">${escapeHtml(q.title)}</div>
         <div class="q-meta">
-          <span class="qb-tag category" style="font-size:0.7rem;">${escapeHtml(normalizeCategoryValue(q.category))}</span>
+          ${categoryTag(q, 'font-size:0.7rem;')}
           <span class="qb-tag topic" style="font-size:0.7rem;">${escapeHtml(q.topic)}</span>
         </div>
       </div>
@@ -14248,7 +14270,7 @@ function selectScheduleQuestion(qId) {
     document.getElementById('scheduleSelectedCard').innerHTML = `
       <strong>${escapeHtml(q.title)}</strong>
       <div style="margin-top:4px;">
-        <span class="qb-tag category" style="font-size:0.72rem;">${escapeHtml(normalizeCategoryValue(q.category))}</span>
+        ${categoryTag(q, 'font-size:0.72rem;')}
         <span class="qb-tag topic" style="font-size:0.72rem;">${escapeHtml(q.topic)}</span>
       </div>`;
   }
@@ -14326,7 +14348,7 @@ function editScheduledQuestion(docId) {
     <div class="schedule-selected-card">
       <strong>${escapeHtml(sq.questionTitle || 'Untitled')}</strong>
       <div style="margin-top:4px;">
-        <span class="qb-tag category" style="font-size:0.72rem;">${escapeHtml(sq.category || '')}</span>
+        ${categoryTag({ category: sq.category, blocks: sq.questionData?.blocks }, 'font-size:0.72rem;')}
         <span class="qb-tag topic" style="font-size:0.72rem;">${escapeHtml(sq.topic || '')}</span>
       </div>
       <div style="margin-top:6px;font-size:0.8rem;color:var(--text-muted);">Current release: ${sq.releaseDate}</div>
