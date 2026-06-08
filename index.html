@@ -13289,30 +13289,37 @@ function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
   const blockHtml = exps.map(b => `<div style="line-height:1.7;margin-bottom:4px;">${b.content}</div>`).join('');
   const aiText2 = (aiText && String(aiText).trim()) ? String(aiText).trim() : '';
   let cards = '';
-  // Model answer card — always shown first so the student sees the correct answer.
+  // A.I. Explanation card on top — the feedback specific to the student's answer.
+  if (aiText2) {
+    cards +=
+      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
+        <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">🤖 A.I. Explanation</div><div style="line-height:1.7;">${escapeHtml(aiText2)}</div></div>`;
+  } else if (blockHtml) {
+    // The question's authored explanation is generic (written at authoring time),
+    // so it's only shown as a fallback when there's no answer-specific A.I.
+    // explanation — e.g. the MCQ / fill-blank paths that don't generate one.
+    cards +=
+      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
+        <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">💡 Explanation</div>${blockHtml}</div>`;
+  }
+  // Model answer card below the explanation, full width and aligned with it.
   const model = (modelAnswer && String(modelAnswer).trim()) ? String(modelAnswer).trim() : _deriveModelAnswer(q);
   if (model) {
     cards +=
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--primary);background:var(--primary-light,#e8f0ea);border-radius:10px;">
         <div style="font-weight:700;color:var(--primary);margin-bottom:6px;">✅ Model answer</div><div style="line-height:1.7;white-space:pre-wrap;">${escapeHtml(model)}</div></div>`;
   }
-  if (aiText2) {
-    cards +=
-      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
-        <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">🤖 A.I. Explanation</div><div style="line-height:1.7;">${escapeHtml(aiText2)}</div></div>`;
-  }
-  // The question's authored explanation is generic (written at authoring time),
-  // so it's only shown as a fallback when there's no answer-specific A.I.
-  // explanation — e.g. the MCQ / fill-blank paths that don't generate one.
-  if (blockHtml && !aiText2) {
-    cards +=
-      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
-        <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">💡 Explanation</div>${blockHtml}</div>`;
-  }
   if (!cards) return;
-  const anchor = scoreElId ? document.getElementById(scoreElId) : null;
-  if (anchor && c.contains(anchor)) anchor.insertAdjacentHTML('afterend', cards);
-  else c.insertAdjacentHTML('beforeend', cards);
+  // Place the cards as a full-width stack below the action bar. Inserting them
+  // after the score element would drop them inside the flex action row, where
+  // they get squashed beside the buttons (the cramped side-by-side layout).
+  const actionsBar = c.querySelector('.practice-actions');
+  if (actionsBar) actionsBar.insertAdjacentHTML('afterend', cards);
+  else {
+    const anchor = scoreElId ? document.getElementById(scoreElId) : null;
+    if (anchor && c.contains(anchor)) anchor.insertAdjacentHTML('afterend', cards);
+    else c.insertAdjacentHTML('beforeend', cards);
+  }
 }
 let tpCurrentTopic = '';
 let tpSelectedTopics = new Set();
