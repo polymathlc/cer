@@ -4682,19 +4682,31 @@ option {
         </div>
       </div>
       <div class="page-body" style="max-width:780px;">
-        <div class="qp-level-bar">
-          <label>Your Level:</label>
+        <div class="qp-level-bar" style="flex-wrap:wrap;">
+          <label>Level:</label>
           <select id="qpLevelSelect" onchange="onQpLevelChange()">
             <option value="P3">P3</option>
             <option value="P4">P4</option>
             <option value="P5">P5</option>
             <option value="P6" selected>P6</option>
           </select>
+          <label>Type:</label>
+          <select id="qpTypeSelect" onchange="onQpFilterChange()">
+            <option value="all" selected>All questions</option>
+            <option value="mcq">MCQ only</option>
+            <option value="written">Written (CER)</option>
+          </select>
+          <label>Topic:</label>
+          <select id="qpTopicSelect" onchange="onQpFilterChange()">
+            <option value="">All topics</option>
+          </select>
+          <button class="btn btn-outline" id="qpAiRecommendBtn" onclick="qpAiRecommend()" style="font-size:0.82rem;" title="Let AI pick your weakest topic and a suitable level based on your past results">✨ AI Recommend</button>
           <div class="qp-progress">
             <span class="qp-progress-text" id="qpProgressText">0 / 0</span>
             <div class="qp-progress-bar"><div class="qp-progress-fill" id="qpProgressFill" style="width:0%;"></div></div>
           </div>
         </div>
+        <div id="qpRecommendBanner" style="display:none;margin-bottom:16px;"></div>
         <div id="qpContainer">
           <div class="empty-state">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
@@ -5898,7 +5910,7 @@ function navigateTo(page) {
     renderWsQuestions();
   }
   if (page === 'myworksheets') renderSavedWorksheets();
-  if (page === 'quickpractice') updateQpProgress();
+  if (page === 'quickpractice') { populateQpControls(); updateQpProgress(); }
   if (page === 'topicalpractice') tpRenderTopics();
   if (page === 'usage') loadUsageDashboard();
   if (page === 'myreport') loadMyReport();
@@ -12200,20 +12212,27 @@ let qpAnswered = 0;     // questions answered so far
 let qpSessionResults = []; // per-question results for the end-of-session AI feedback
 let qpMode = 'open';     // 'blanks' | 'open'
 
-function onQpLevelChange() {
+// Reset the practice session and show the "ready" state. Reused whenever the
+// level, type or topic filter changes.
+function resetQpSession() {
   qpLevel = document.getElementById('qpLevelSelect').value;
-  // Reset practice when level changes
   qpQueue = [];
   qpIndex = -1;
   qpAnswered = 0;
   qpSessionResults = [];
   qpMode = 'open';
+  const banner = document.getElementById('qpRecommendBanner');
+  if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
   updateQpProgress();
-  document.getElementById('qpContainer').innerHTML = `
+  const f = qpFilters();
+  const typeLabel = f.type === 'mcq' ? 'MCQ' : f.type === 'written' ? 'written (CER)' : 'all';
+  const scope = `${escapeHtml(qpLevel)} · ${typeLabel} questions${f.topic ? ' · ' + escapeHtml(f.topic) : ''}`;
+  const container = document.getElementById('qpContainer');
+  if (container) container.innerHTML = `
     <div class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
       <h3>Ready to Practice</h3>
-      <p>Level set to ${escapeHtml(qpLevel)}. Press Start to begin.</p>
+      <p>${scope}. Press Start to begin.</p>
       <button class="btn btn-primary btn-lg" onclick="startQuickPractice()" style="margin-top:16px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         Start Practice
@@ -12221,12 +12240,175 @@ function onQpLevelChange() {
     </div>`;
 }
 
+function onQpLevelChange() {
+  populateQpControls();
+  resetQpSession();
+}
+
+// Type or topic filter changed — refresh the topic list (the available topics
+// depend on the chosen type) and reset the session.
+function onQpFilterChange() {
+  populateQpControls();
+  resetQpSession();
+}
+
+// Let the AI pick the student's weakest topic and a suitable difficulty (level)
+// from their performance history, then set the filters and start practising.
+async function qpAiRecommend() {
+  const btn = document.getElementById('qpAiRecommendBtn');
+  const banner = document.getElementById('qpRecommendBanner');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Thinking…'; }
+  try {
+    if (!cerPerf) await loadCerPerf();
+    const p = cerPerf || _emptyPerf();
+    const f = qpFilters();
+    const counts = qpAvailableTopics(f.type);
+    const available = Object.keys(counts);
+    if (!available.length) {
+      showToast('No questions available to recommend from yet.', 'info');
+      return;
+    }
+
+    // Per-topic accuracy from the student's record, limited to topics we can serve.
+    const accByTopic = {};
+    _topicAccuracy(p).forEach(x => { accByTopic[x.topic] = x; });
+
+    let pick = null;       // { topic, level, reason }
+    const aiReady = window.__aiReady && window.__aiReady();
+    if (aiReady && p.attempts) {
+      const lines = available.map(t => {
+        const a = accByTopic[t];
+        const lvl = getTopicLevel(t);
+        return `- "${t}" (${lvl}, ${counts[t]} questions): ${a ? a.acc + '% over ' + a.n + ' attempts' : 'not attempted yet'}`;
+      }).join('\n');
+      const prompt =
+        `You are an adaptive primary-school science tutor choosing what a student should practise next.\n` +
+        `Their overall mastery score is ${p.score100 || 0}/100 over ${p.attempts} attempts.\n` +
+        `Available topics with the student's accuracy and the topic's syllabus level (P3 easiest … P6 hardest):\n${lines}\n\n` +
+        `Pick the ONE topic the student should practise next — prefer a weak topic (low accuracy) or an important untried one. ` +
+        `Then choose a suitable difficulty as a level from P3 to P6: start a little easier (a lower level) when the student is struggling so they can rebuild confidence, and a higher level when they are doing well. ` +
+        `Return ONLY JSON: {"topic":"<exact topic from the list>","level":"P3|P4|P5|P6","reason":"one short sentence to the student starting with 'Let's'"}`;
+      try {
+        const raw = await askGemini(prompt, { maxOutputTokens: 200, temperature: 0.3, json: true });
+        const parsed = _parseAIJson(raw);
+        if (parsed && parsed.topic && counts[parsed.topic]) {
+          const lvl = /^P[3-6]$/.test(parsed.level) ? parsed.level : getTopicLevel(parsed.topic);
+          pick = { topic: parsed.topic, level: lvl, reason: parsed.reason || '' };
+        }
+      } catch (e) { console.warn('AI recommend failed, using local fallback', e); }
+    }
+
+    // Fallback: lowest-accuracy available topic (or one not yet attempted).
+    if (!pick) {
+      const scored = available.map(t => ({
+        topic: t,
+        acc: accByTopic[t] ? accByTopic[t].acc : -1,  // untried sorts first
+        n: accByTopic[t] ? accByTopic[t].n : 0
+      })).sort((a, b) => a.acc - b.acc);
+      const top = scored[0];
+      const lvl = getTopicLevel(top.topic);
+      // Ease off by one level if they have been scoring low on it.
+      const easedNum = top.acc >= 0 && top.acc < 50 ? Math.max(3, getLevelNumber(lvl) - 1) : getLevelNumber(lvl);
+      pick = {
+        topic: top.topic,
+        level: 'P' + easedNum,
+        reason: top.acc < 0
+          ? `Let's try ${top.topic} — you haven't practised it yet!`
+          : `Let's strengthen ${top.topic}, where you're scoring around ${top.acc}%.`
+      };
+    }
+
+    // Apply the recommendation to the controls.
+    const levelEl = document.getElementById('qpLevelSelect');
+    const topicEl = document.getElementById('qpTopicSelect');
+    if (levelEl) levelEl.value = pick.level;
+    populateQpControls(); // topic options may depend on type
+    if (topicEl && counts[pick.topic]) topicEl.value = pick.topic;
+
+    if (banner) {
+      banner.style.display = '';
+      banner.innerHTML = `
+        <div style="display:flex;gap:10px;align-items:center;padding:12px 14px;border:1.5px solid var(--primary);background:var(--primary-light,#e8f5e9);border-radius:var(--radius-md);">
+          <span style="font-size:1.2rem;">✨</span>
+          <div style="flex:1;min-width:0;font-size:0.88rem;color:var(--on-surface,#1c1c19);">
+            <strong>AI suggestion:</strong> ${escapeHtml(pick.reason)}
+            <span style="color:var(--text-muted);"> (${escapeHtml(pick.topic)} · ${escapeHtml(pick.level)})</span>
+          </div>
+        </div>`;
+    }
+    // Start practising the recommendation straight away.
+    await startQuickPractice();
+  } catch (e) {
+    console.error('qpAiRecommend error', e);
+    showToast('Could not generate a recommendation right now.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// ── Question-type helpers (shared by Quick Practice filters) ──────────
+function qpBlankCount(q) {
+  return q && q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
+}
+function qpHasMcq(q) {
+  return !!(q && Array.isArray(q.blocks) && q.blocks.some(b => b.type === 'mcq'));
+}
+// Does a question match the chosen practice type? ('all' | 'mcq' | 'written')
+function qpMatchesType(q, typeFilter) {
+  const hasMcq = qpHasMcq(q);
+  const hasBlanks = qpBlankCount(q) > 0;
+  if (typeFilter === 'mcq') return hasMcq;
+  if (typeFilter === 'written') return hasBlanks;
+  return hasMcq || hasBlanks; // 'all' — anything practiceable
+}
+
+// Read the current Quick Practice filter selections.
+function qpFilters() {
+  const typeEl = document.getElementById('qpTypeSelect');
+  const topicEl = document.getElementById('qpTopicSelect');
+  return {
+    type: (typeEl && typeEl.value) || 'all',
+    topic: (topicEl && topicEl.value) || ''
+  };
+}
+
+// Topics that currently have practiceable questions for the chosen type,
+// with a question count for each. Used to populate the topic dropdown.
+function qpAvailableTopics(typeFilter) {
+  const counts = {};
+  questionBank.forEach(q => {
+    if (!qpMatchesType(q, typeFilter)) return;
+    const t = q.topic || 'General';
+    counts[t] = (counts[t] || 0) + 1;
+  });
+  return counts;
+}
+
+// Fill the topic dropdown based on the chosen type, preserving the selection
+// when still valid.
+function populateQpControls() {
+  const sel = document.getElementById('qpTopicSelect');
+  if (!sel) return;
+  const prev = sel.value;
+  const counts = qpAvailableTopics(qpFilters().type);
+  const topics = Object.keys(counts).sort();
+  let html = '<option value="">All topics</option>';
+  topics.forEach(t => {
+    html += `<option value="${escapeHtml(t)}">${escapeHtml(t)} (${counts[t]})</option>`;
+  });
+  sel.innerHTML = html;
+  sel.value = (prev && counts[prev]) ? prev : '';
+}
+
 function buildQpQueue(level) {
   const levelNum = getLevelNumber(level);
-  // Collect questions that have blanks, grouped by level
+  const { type, topic } = qpFilters();
+  // Collect practiceable questions matching the chosen type and topic
   const withBlanks = questionBank.filter(q => {
-    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
-    return blankCount > 0;
+    if (!qpMatchesType(q, type)) return false;
+    if (topic && (q.topic || 'General') !== topic) return false;
+    return true;
   });
 
   // Group by level
@@ -12274,7 +12456,7 @@ async function startQuickPractice() {
       <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         <h3>No Questions Available</h3>
-        <p>There are no fill-in-the-blank questions in the question bank yet.</p>
+        <p>No questions match your current filters. Try a different type, topic or level.</p>
       </div>`;
     updateQpProgress();
     return;
@@ -12445,7 +12627,8 @@ function updateQpProgress() {
 
 function renderQpQuestion(q) {
   const qLevel = getTopicLevel(q.topic || '');
-  const modeToggleBtn = `
+  // No blanks to fill (e.g. an MCQ-only question) → don't offer the mode switch.
+  const modeToggleBtn = qpBlankCount(q) === 0 ? '' : `
           <button class="btn btn-outline" id="qpModeBtn" onclick="toggleQpMode()" title="Switch answer mode">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M3 7h13M16 3l4 4-4 4"/><path d="M21 17H8M8 21l-4-4 4-4"/></svg>
             ${qpMode === 'open' ? 'Fill Blanks' : 'Open-Ended'}
@@ -14550,6 +14733,8 @@ window.closeSaveWsDialog = closeSaveWsDialog;
 window.confirmSaveWorksheet = confirmSaveWorksheet;
 // Quick Practice
 window.onQpLevelChange = onQpLevelChange;
+window.onQpFilterChange = onQpFilterChange;
+window.qpAiRecommend = qpAiRecommend;
 window.startQuickPractice = startQuickPractice;
 window.loadNextQpQuestion = loadNextQpQuestion;
 window.toggleQpFirstLetter = toggleQpFirstLetter;
