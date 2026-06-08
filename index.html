@@ -7210,7 +7210,13 @@ function renderBlocks() {
                      oninput="saveBlockContent('${block.id}', 'url', this.value); previewImage('${block.id}', this.value)">
             </div>
             <div class="image-preview" id="imgPreview_${block.id}">
-              ${block.url ? `<img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy">` : '<div class="image-error">No image yet — paste, drop, or enter a URL</div>'}
+              ${block.url ? `<img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)}">` : '<div class="image-error">No image yet — paste, drop, or enter a URL</div>'}
+            </div>
+            <div class="img-size-bar" id="imgSizeBar_${block.id}" style="display:${block.url ? 'flex' : 'none'};align-items:center;gap:8px;margin-top:8px;">
+              <span style="font-size:0.8rem;color:var(--text-muted);">Size</span>
+              <button type="button" class="btn btn-outline" style="padding:2px 12px;font-weight:700;" onclick="adjustImgScale('${block.id}',-1)" title="Smaller (min 30%)">−</button>
+              <span id="imgSizeLabel_${block.id}" style="font-family:'Space Mono',monospace;font-size:0.8rem;min-width:46px;text-align:center;">${Math.round(imgScale(block) * 100)}%</span>
+              <button type="button" class="btn btn-outline" style="padding:2px 12px;font-weight:700;" onclick="adjustImgScale('${block.id}',1)" title="Larger (max 150%)">+</button>
             </div>
             <div class="img-enhance-bar" id="imgEnhance_${block.id}"></div>
           </div>
@@ -7571,7 +7577,7 @@ function renderImportedBlockStudent(block, q) {
     case 'image':
       // Imported images carry an optional caption; render faithfully.
       if (!block.url) return '';
-      return `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);">${block.caption ? `<div style="font-size:0.85rem;color:var(--text-muted);text-align:center;margin-top:4px;">${escapeHtml(block.caption)}</div>` : ''}</div>`;
+      return `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);">${block.caption ? `<div style="font-size:0.85rem;color:var(--text-muted);text-align:center;margin-top:4px;">${escapeHtml(block.caption)}</div>` : ''}</div>`;
     case 'answerKey':
       return ''; // hidden from students during practice
     case 'pageBreak':
@@ -7746,14 +7752,44 @@ function execCmdVal(cmd, val) {
 // =====================================================================
 // IMAGE PREVIEW
 // =====================================================================
+// ── Image sizing (teacher-adjustable, 30%–150% via +/- buttons) ───────
+function imgScale(block) {
+  const s = Number(block && block.scale);
+  return (s && s > 0) ? Math.max(0.3, Math.min(1.5, s)) : 1;
+}
+// Inline style for a rendered image at the block's chosen scale. Scale 1 keeps
+// the original behaviour (natural size, capped to the container width).
+function imgSizeStyle(block) {
+  const sc = imgScale(block);
+  if (sc === 1) return 'max-width:100%';
+  const pct = Math.round(sc * 100);
+  return `width:${pct}%;height:auto;max-width:${sc > 1 ? 'none' : '100%'}`;
+}
+// + / - handler for the image size control in the question editor.
+function adjustImgScale(blockId, dir) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  let next = Math.round(imgScale(block) * 100) + dir * 10; // 10% steps
+  next = Math.max(30, Math.min(150, next));
+  block.scale = next / 100;
+  const label = document.getElementById('imgSizeLabel_' + blockId);
+  if (label) label.textContent = next + '%';
+  const img = document.querySelector('#imgPreview_' + blockId + ' img');
+  if (img) img.setAttribute('style', imgSizeStyle(block));
+}
+
 function previewImage(blockId, url) {
   const container = document.getElementById('imgPreview_' + blockId);
   if (!container) return;
+  const bar = document.getElementById('imgSizeBar_' + blockId);
   if (!url.trim()) {
     container.innerHTML = '<div class="image-error">No image yet</div>';
+    if (bar) bar.style.display = 'none';
     return;
   }
-  container.innerHTML = `<img src="${escapeHtml(transformImageUrl(url))}" onerror="handleImgError(this)" loading="lazy">`;
+  const block = blocks.find(b => b.id === blockId) || {};
+  container.innerHTML = `<img src="${escapeHtml(transformImageUrl(url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)}">`;
+  if (bar) bar.style.display = 'flex';
 }
 
 // =====================================================================
@@ -8388,7 +8424,7 @@ function openPreview() {
       case 'image':
         if (block.url) {
           html += `<div style="margin:14px 0;">
-            <img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);">
+            <img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);">
           </div>`;
         }
         break;
@@ -8578,7 +8614,7 @@ function previewAsStudent() {
         break;
       case 'image':
         if (block.url) {
-          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
         }
         break;
       case 'answer':
@@ -9397,7 +9433,7 @@ function renderStudentView() {
         break;
       case 'image':
         if (block.url) {
-          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
         }
         break;
       case 'answer':
@@ -10830,7 +10866,7 @@ function buildOpenBody(q, containerSel) {
         html += `<div style="line-height:1.9;margin-bottom:8px;">${block.content || ''}</div>`;
         break;
       case 'image':
-        if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+        if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
         break;
       case 'answer':
         html += `<div style="margin-top:12px;margin-bottom:6px;"><span class="sv-block-tag answer">Your Answer</span></div>`;
@@ -10972,7 +11008,7 @@ function renderPracticeQuestion(q, student) {
           break;
         case 'image':
           if (block.url) {
-            html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+            html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
           }
           break;
         case 'answer':
@@ -12656,7 +12692,7 @@ function renderQpQuestion(q) {
           html += renderStudentText(block.id, block.content, q.blanks);
           break;
         case 'image':
-          if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+          if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
           break;
         case 'answer':
           html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
@@ -13551,7 +13587,7 @@ function tpRenderQuestion(q) {
           html += renderStudentText(block.id, block.content, q.blanks);
           break;
         case 'image':
-          if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"></div>`;
+          if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
           break;
         case 'answer':
           html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
@@ -14648,6 +14684,7 @@ window.updateTableDimensions = updateTableDimensions;
 window.execCmd = execCmd;
 window.execCmdVal = execCmdVal;
 window.previewImage = previewImage;
+window.adjustImgScale = adjustImgScale;
 window.handleImagePaste = handleImagePaste;
 window.handleImageDrop = handleImageDrop;
 window.handleAiBuildFile = handleAiBuildFile;
