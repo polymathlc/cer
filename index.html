@@ -4321,6 +4321,10 @@ option {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               &#x2705; Add Answer
             </button>
+            <button class="add-block-btn plainanswer-add" onclick="addBlock('openLines')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              &#x270D;&#xFE0F; Add Open-Ended
+            </button>
             <button class="add-block-btn explanation-add" onclick="addBlock('explanation')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               &#x1F4A1; Add Explanation
@@ -5151,13 +5155,15 @@ option {
       </button>
     </div>
     <div style="padding:10px 28px 4px;background:var(--surface-alt);border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-muted);">
-      This is exactly how students will see this question in practice mode — with fill-in-the-blanks if you added any, or open-ended boxes otherwise.
+      This is exactly how students will see this question in practice mode. Switch to <strong>&#x270D;&#xFE0F; Try Open-Ended</strong> to type answers yourself and have the AI mark them.
     </div>
     <div class="preview-body" id="studentPreviewBody" style="padding:20px 28px;"></div>
     <div style="padding:0 28px 20px;display:flex;gap:10px;justify-content:space-between;align-items:center;">
       <div id="studentPreviewResult" style="font-size:0.85rem;font-weight:600;"></div>
-      <div style="display:flex;gap:10px;">
-        <button class="btn btn-outline" onclick="checkStudentPreviewAnswers()">&#x2705; Check Answers</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-outline" id="studentPreviewModeBtn" onclick="toggleStudentPreviewMode()">&#x270D;&#xFE0F; Try Open-Ended</button>
+        <button class="btn btn-outline" id="studentPreviewCheckBtn" onclick="checkStudentPreviewAnswers()">&#x2705; Check Answers</button>
+        <button class="btn btn-outline" id="studentPreviewAiBtn" style="display:none;" onclick="markStudentPreviewOpen()">&#x1F916; Mark with AI</button>
         <button class="btn btn-primary" onclick="closeStudentPreview()">&#x274C; Close</button>
       </div>
     </div>
@@ -7157,7 +7163,7 @@ function renderBlocks() {
       case 'part':        badgeClass = 'text-badge'; badgeIcon = '🔡'; badgeLabel = 'Part'; break;
       case 'mcq':         badgeClass = 'answer-badge'; badgeIcon = '🔘'; badgeLabel = 'Multiple Choice'; break;
       case 'answerLine':  badgeClass = 'plainanswer-badge'; badgeIcon = '✏️'; badgeLabel = 'Answer Line'; break;
-      case 'openLines':   badgeClass = 'plainanswer-badge'; badgeIcon = '📃'; badgeLabel = 'Open Lines'; break;
+      case 'openLines':   badgeClass = 'plainanswer-badge'; badgeIcon = '✍️'; badgeLabel = 'Open-Ended Answer'; break;
       case 'workingSpace':badgeClass = 'plainanswer-badge'; badgeIcon = '🧮'; badgeLabel = 'Working Space'; break;
       case 'commonMistake':badgeClass = 'explanation-badge'; badgeIcon = '⚠️'; badgeLabel = 'Common Mistake'; break;
       case 'studentAnswer':badgeClass = 'explanation-badge'; badgeIcon = '🧑‍🎓'; badgeLabel = 'Student Answer'; break;
@@ -7390,7 +7396,7 @@ function makeBlockInsertBar(index) {
       <button type="button" class="block-insert-btn" onclick="addBlockAt('part', ${index})">🔡 Part (a)</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('mcq', ${index})">🔘 Multiple Choice</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('answerLine', ${index})">✏️ Answer Line</button>
-      <button type="button" class="block-insert-btn" onclick="addBlockAt('openLines', ${index})">📃 Open Lines</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('openLines', ${index})">✍️ Open-Ended Answer</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('workingSpace', ${index})">🧮 Working Space</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('commonMistake', ${index})">⚠️ Common Mistake</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('studentAnswer', ${index})">🧑‍🎓 Student Answer</button>
@@ -7492,13 +7498,23 @@ function renderImportedBlockEditorBody(block) {
                      value="${Number(block.lineLength) || 30}" oninput="saveBlockNum('${id}','lineLength',this.value,5,120)"></label>
           </div>
         </div>`;
-    case 'openLines':
+    case 'openLines': {
+      const n = Number(block.lines) || 4;
       return `
         <div class="block-body">
-          <label style="font-size:0.85rem;">Number of blank lines
-            <input class="form-input" type="number" min="1" max="40" style="width:80px;margin-left:8px;"
-                   value="${Number(block.lines) || 4}" oninput="saveBlockNum('${id}','lines',this.value,1,40)"></label>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+            <label style="font-size:0.85rem;font-weight:600;">✍️ Lines for the written answer
+              <input class="form-input" type="number" min="1" max="40" style="width:80px;margin-left:8px;"
+                     value="${n}" oninput="saveBlockNum('${id}','lines',this.value,1,40)"></label>
+            <span style="font-size:0.8rem;color:var(--text-muted);">Students get a typing box in practice (marked by AI) and ruled lines on printed worksheets.</span>
+          </div>
+          <div style="border:1px dashed var(--border);border-radius:8px;padding:10px 12px;background:var(--surface-alt,#faf8f5);">
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;">Answer space preview:</div>
+            ${Array.from({ length: Math.min(n, 6) }).map(() => '<div style="border-bottom:1.5px solid #cfcfcf;height:22px;"></div>').join('')}
+            ${n > 6 ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">…and ${n - 6} more line${n - 6 === 1 ? '' : 's'}</div>` : ''}
+          </div>
         </div>`;
+    }
     case 'workingSpace':
       return `
         <div class="block-body">
@@ -8603,10 +8619,27 @@ function previewAsStudent() {
     });
   });
 
-  const title = document.getElementById('questionTitle').value || 'Untitled Question';
-  const category = document.getElementById('categorySelect').value;
-  const topic = document.getElementById('topicSelect').value;
-  const blanks = JSON.parse(JSON.stringify(selectedBlanks));
+  _studentPreviewQ = {
+    id: 'preview',
+    title: document.getElementById('questionTitle').value || 'Untitled Question',
+    category: document.getElementById('categorySelect').value,
+    topic: document.getElementById('topicSelect').value,
+    markingGuide: (document.getElementById('questionMarkingGuide')?.value || '').trim(),
+    blanks: JSON.parse(JSON.stringify(selectedBlanks)),
+    blocks: JSON.parse(JSON.stringify(blocks))
+  };
+  studentPreviewMode = 'blanks';
+  renderStudentPreviewBody();
+  document.getElementById('studentPreviewOverlay').classList.add('active');
+}
+
+let _studentPreviewQ = null;
+let studentPreviewMode = 'blanks'; // 'blanks' | 'open'
+
+function renderStudentPreviewBody() {
+  const q = _studentPreviewQ;
+  if (!q) return;
+  const { title, category, topic, blanks } = q;
 
   let html = `<div class="student-view-card" style="border:none;box-shadow:none;">`;
   html += `<div class="student-card-header" style="padding:0 0 12px;">
@@ -8618,7 +8651,15 @@ function previewAsStudent() {
   </div>`;
   html += `<div class="student-card-body" style="padding:0;">`;
 
-  blocks.forEach(block => {
+  if (studentPreviewMode === 'open') {
+    // The same open-ended answer boxes students get in practice, AI-markable.
+    html += buildOpenBody(q, '#studentPreviewBody');
+    html += `</div></div>`;
+    finishStudentPreviewRender(html);
+    return;
+  }
+
+  q.blocks.forEach(block => {
     switch (block.type) {
       case 'text':
         html += renderStudentText(block.id, block.content, blanks);
@@ -8666,10 +8707,31 @@ function previewAsStudent() {
   });
 
   html += `</div></div>`;
+  finishStudentPreviewRender(html);
+}
 
+function finishStudentPreviewRender(html) {
   document.getElementById('studentPreviewBody').innerHTML = html;
   document.getElementById('studentPreviewResult').innerHTML = '';
-  document.getElementById('studentPreviewOverlay').classList.add('active');
+  const open = studentPreviewMode === 'open';
+  const modeBtn = document.getElementById('studentPreviewModeBtn');
+  if (modeBtn) modeBtn.innerHTML = open ? '&#x1F524; Back to Fill-Blanks' : '&#x270D;&#xFE0F; Try Open-Ended';
+  const checkBtn = document.getElementById('studentPreviewCheckBtn');
+  if (checkBtn) checkBtn.style.display = open ? 'none' : '';
+  const aiBtn = document.getElementById('studentPreviewAiBtn');
+  if (aiBtn) aiBtn.style.display = open ? '' : 'none';
+}
+
+function toggleStudentPreviewMode() {
+  studentPreviewMode = studentPreviewMode === 'open' ? 'blanks' : 'open';
+  renderStudentPreviewBody();
+}
+
+function markStudentPreviewOpen() {
+  if (!_studentPreviewQ) return;
+  markOpenAnswersIn('#studentPreviewBody', _studentPreviewQ, {
+    btnId: 'studentPreviewAiBtn', scoreElId: 'studentPreviewResult', scorePrefix: 'AI Score', mode: 'preview'
+  });
 }
 
 function closeStudentPreview() {
@@ -10966,7 +11028,9 @@ function buildOpenBody(q, containerSel) {
 // AI so it can read the handwriting and mark each open-ended section.
 // =====================================================================
 const _openPhoto = {}; // containerSel -> { dataUrl, mimeType, data, name }
-function _openPhotoKey(containerSel) { return String(containerSel || '').replace(/[^a-z0-9]/gi, ''); }
+// Keep underscores: the file-input "change" handler rebuilds the container
+// selector as '#' + key, so the key must round-trip for ids like wsPreview_q_….
+function _openPhotoKey(containerSel) { return String(containerSel || '').replace(/[^a-z0-9_]/gi, ''); }
 function openPhotoBarHtml(containerSel) {
   const key = _openPhotoKey(containerSel);
   return `<div class="open-photo-bar" style="margin:6px 0 14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#faf8f5);">
@@ -11862,6 +11926,10 @@ function renderQuestionPreviewHtml(qId) {
       case 'video':
         if (block.url) html += `<div style="margin:6px 0;font-style:italic;color:var(--text-muted);font-size:0.82rem;">Video: ${escapeHtml(block.url)}</div>`;
         break;
+      case 'openLines':
+      case 'workingSpace':
+        html += `<div style="margin:8px 0;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--surface-alt,#faf8f5);font-size:0.82rem;color:var(--text-muted);">✍️ Open-ended answer space (${Number(block.lines) || (block.type === 'openLines' ? 4 : 6)} lines)</div>`;
+        break;
       case 'explanation':
         break;
       default:
@@ -11869,7 +11937,46 @@ function renderQuestionPreviewHtml(qId) {
         break;
     }
   });
-  return html || '<p style="color:var(--text-muted);font-style:italic;">No content</p>';
+  if (!html) return '<p style="color:var(--text-muted);font-style:italic;">No content</p>';
+  if (questionHasMarkableAnswer(q)) {
+    html += `<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);">
+      <button class="btn btn-outline" style="padding:6px 14px;font-size:0.84rem;" onclick="wsPreviewTryIt('${qId}')">✍️ Answer it yourself — AI marks it</button>
+    </div>`;
+  }
+  return html;
+}
+
+function questionHasMarkableAnswer(q) {
+  return ((q && q.blocks) || []).some(b => b && ['answer', 'plainanswer', 'openLines', 'workingSpace', 'mcq'].includes(b.type));
+}
+
+// Switch a worksheet-builder preview card into "try it" mode: the same
+// open-ended answer boxes students get in practice, plus AI marking.
+function wsPreviewTryIt(qId) {
+  const q = questionBank.find(qb => qb.id === qId);
+  const el = document.getElementById('wsPreview_' + qId);
+  if (!q || !el) return;
+  el.innerHTML =
+    `<div style="margin-bottom:8px;font-size:0.8rem;color:var(--text-muted);">✍️ Type your answers below, then let the AI mark them — exactly like practice mode.</div>` +
+    buildOpenBody(q, '#wsPreview_' + qId) +
+    `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+      <button class="btn btn-primary" id="wsPrevMark_${qId}" style="padding:7px 16px;font-size:0.85rem;" onclick="wsPreviewMark('${qId}')">🤖 Mark with AI</button>
+      <span id="wsPrevScore_${qId}" style="font-weight:600;font-size:0.9rem;"></span>
+      <button class="btn btn-outline" style="padding:7px 12px;font-size:0.82rem;margin-left:auto;" onclick="wsPreviewBack('${qId}')">↩ Back to preview</button>
+    </div>`;
+}
+
+function wsPreviewBack(qId) {
+  const el = document.getElementById('wsPreview_' + qId);
+  if (el) el.innerHTML = renderQuestionPreviewHtml(qId);
+}
+
+function wsPreviewMark(qId) {
+  const q = questionBank.find(qb => qb.id === qId);
+  if (!q) return;
+  markOpenAnswersIn('#wsPreview_' + qId, q, {
+    btnId: 'wsPrevMark_' + qId, scoreElId: 'wsPrevScore_' + qId, scorePrefix: 'AI Score', mode: 'preview'
+  });
 }
 
 function toggleWsQuestion(id, checked) {
@@ -14720,6 +14827,8 @@ window.closePreview = closePreview;
 window.previewAsStudent = previewAsStudent;
 window.closeStudentPreview = closeStudentPreview;
 window.checkStudentPreviewAnswers = checkStudentPreviewAnswers;
+window.toggleStudentPreviewMode = toggleStudentPreviewMode;
+window.markStudentPreviewOpen = markStudentPreviewOpen;
 window.openScheduleFromCreate = openScheduleFromCreate;
 window.toggleBlank = toggleBlank;
 window.clearAllBlanks = clearAllBlanks;
@@ -14820,6 +14929,9 @@ window.renderWsQuestions = renderWsQuestions;
 window.toggleWsQuestion = toggleWsQuestion;
 window.toggleWsSelectAll = toggleWsSelectAll;
 window.toggleWsPreview = toggleWsPreview;
+window.wsPreviewTryIt = wsPreviewTryIt;
+window.wsPreviewBack = wsPreviewBack;
+window.wsPreviewMark = wsPreviewMark;
 window.onWsCardClick = onWsCardClick;
 window.setWsFormat = setWsFormat;
 window.saveWorksheet = saveWorksheet;
