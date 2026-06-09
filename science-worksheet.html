@@ -8479,8 +8479,10 @@ async function copyQuestionToDraft(qIndex) {
   const q = state.questions[qIndex];
   if (!q) return;
   const clone = reidQuestion(q);
-  // Tag the question with where it came from so the draft worksheet shows it.
+  // Tag the question with where it came from so the draft worksheet shows it,
+  // and remember the exact worksheet title for the portal's Question Bank.
   if (!clone.source) clone.source = deriveSource(state.title);
+  if (!clone.sourceWorksheet) clone.sourceWorksheet = (state.title || '').trim();
   // Offload images to Storage first so the draft stays small (avoids the
   // localStorage quota error when questions carry base64 images).
   await uploadDraftImages([clone]);
@@ -8534,7 +8536,7 @@ function sendQuestionsToBank(list) {
     alert('Nothing to add — there are no questions here (instruction blocks are skipped).');
     return;
   }
-  window.parent.postMessage({ type: 'cer:addQuestions', source: 'worksheet-creator', questions: payload }, '*');
+  window.parent.postMessage({ type: 'cer:addQuestions', source: 'worksheet-creator', worksheetTitle: (state.title || '').trim(), questions: payload }, '*');
   if (typeof showToast === 'function') {
     showToast(`Sending ${payload.length} question${payload.length === 1 ? '' : 's'} to the Question Bank…`, { type: 'info' });
   }
@@ -8597,11 +8599,13 @@ async function copyWorksheetToDraft() {
     return;
   }
   const src = deriveSource(state.title);
+  const wsTitle = (state.title || '').trim();
   let added = 0;
   const clones = [];
   qs.forEach(q => {
     const clone = reidQuestion(q);
     if (!clone.source) clone.source = src;
+    if (!clone.sourceWorksheet) clone.sourceWorksheet = wsTitle;
     clones.push(clone);
     if (!isInstruction(q)) added++;
   });

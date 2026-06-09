@@ -1364,6 +1364,7 @@ option {
 .qb-tag.category { background: var(--accent-blue-light); color: var(--accent-blue); }
 .qb-tag.topic { background: var(--primary-light); color: var(--primary); }
 .qb-tag.blanks { background: var(--yellow-highlight); color: #8a7a10; border: 1px solid var(--yellow-border); }
+.qb-tag.source { background: #f3e8ff; color: #7c3aed; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qb-card-preview {
   font-size: 0.85rem;
   color: var(--text-muted);
@@ -4443,6 +4444,9 @@ option {
             <option value="P5">P5</option>
             <option value="P6">P6</option>
           </select>
+          <select id="bankFilterSource" onchange="renderQuestionBank()">
+            <option value="">All Sources</option>
+          </select>
         </div>
         <div class="question-bank-grid" id="questionBankGrid"></div>
       </div>
@@ -4600,6 +4604,9 @@ option {
             <optgroup label="── Key Concepts ──">
               <option value="Key Concepts">Key Concepts</option>
             </optgroup>
+          </select>
+          <select id="wsFilterSource" onchange="renderWsQuestions()">
+            <option value="">All Sources</option>
           </select>
           <input type="text" id="wsSearch" placeholder="Search questions..." oninput="renderWsQuestions()">
         </div>
@@ -7668,7 +7675,7 @@ function worksheetElementToBlock(el) {
   }
 }
 
-function worksheetQuestionToCer(wq, index) {
+function worksheetQuestionToCer(wq, index, worksheetTitle) {
   const els = (wq && Array.isArray(wq.elements)) ? wq.elements : [];
   const blocksOut = [];
   if (wq && wq.kind === 'instruction') {
@@ -7705,21 +7712,25 @@ function worksheetQuestionToCer(wq, index) {
     createdAt: new Date().toISOString(),
     createdBy: 'Worksheet Creator',
     source: (wq && wq.source) || '',
+    // Remember which worksheet this question came from, so it can be found
+    // again later via the Source filter. A question copied to the draft from
+    // another worksheet keeps its own tag; otherwise use the sending sheet's title.
+    sourceWorksheet: ((wq && wq.sourceWorksheet) || worksheetTitle || '').trim(),
     concepts: (wq && Array.isArray(wq.concepts)) ? wq.concepts.slice() : []
   };
 }
 
-function importWorksheetQuestions(wqList) {
+function importWorksheetQuestions(wqList, worksheetTitle) {
   if (!Array.isArray(wqList) || !wqList.length) return 0;
   let added = 0;
   wqList.forEach((wq, i) => {
-    const q = worksheetQuestionToCer(wq, i);
+    const q = worksheetQuestionToCer(wq, i, worksheetTitle);
     if (!q.blocks.length) return;
     questionBank.push(q);
     saveQuestion(q); // async; no-op (in-memory only) if not signed in
     added++;
   });
-  if (added) { updateCounts(); renderQuestionBank(); }
+  if (added) { updateCounts(); populateTopicFilter(); populateWsTopicFilter(); renderQuestionBank(); }
   return added;
 }
 
@@ -7729,7 +7740,7 @@ window.addEventListener('message', function (e) {
   if (!d || d.type !== 'cer:addQuestions') return;
   const frame = document.getElementById('scienceWorksheetFrame');
   if (frame && frame.contentWindow && e.source !== frame.contentWindow) return; // only trust our own iframe
-  const added = importWorksheetQuestions(d.questions || []);
+  const added = importWorksheetQuestions(d.questions || [], d.worksheetTitle || '');
   if (added) {
     const note = currentUser ? '' : ' (sign in to save permanently)';
     showToast(`${added} question${added === 1 ? '' : 's'} added to the bank ✓${note}`, 'success');
@@ -9030,6 +9041,18 @@ function addToBank() {
   saveQuestion(q); // async, non-blocking
 }
 
+// The editor form has no fields for provenance (worksheet source, citation,
+// concepts), so an edited question is rebuilt without them — carry them over
+// from the stored copy so they survive edits.
+function carryOverQuestionMeta(q) {
+  const prev = questionBank.find(qb => qb.id === q.id) || vettingList.find(v => v.id === q.id);
+  if (!prev) return;
+  if (prev.source) q.source = prev.source;
+  if (prev.sourceWorksheet) q.sourceWorksheet = prev.sourceWorksheet;
+  if (Array.isArray(prev.concepts) && prev.concepts.length) q.concepts = prev.concepts;
+  if (prev.createdAt) q.createdAt = prev.createdAt;
+}
+
 function saveEditedQuestion() {
   if (blocks.length === 0) {
     showToast('Add some blocks before saving', 'error');
@@ -9041,6 +9064,7 @@ function saveEditedQuestion() {
   }
   const q = collectQuestionData();
     q.id = currentEditingQuestion;
+  carryOverQuestionMeta(q);
 
   let savedToVetting = false;
   const qIdx = questionBank.findIndex(qb => qb.id === currentEditingQuestion);
@@ -9126,7 +9150,7 @@ function stripHtmlToText(html) {
 }
 
 function extractQuestionSearchText(q) {
-  const parts = [q.title || '', q.topic || '', q.category || '', getTopicLevel(q.topic || '')];
+  const parts = [q.title || '', q.topic || '', q.category || '', getTopicLevel(q.topic || ''), questionSource(q)];
   (q.blocks || []).forEach(block => {
     if (!block || !block.type) return;
     if (block.type === 'text') parts.push(stripHtmlToText(block.content));
@@ -9182,10 +9206,12 @@ function renderQuestionBank() {
   const topicFilter = document.getElementById('bankFilterTopic')?.value || '';
   const catFilter = document.getElementById('bankFilterCategory')?.value || '';
   const levelFilter = document.getElementById('bankFilterLevel')?.value || '';
-  
+  const sourceFilter = document.getElementById('bankFilterSource')?.value || '';
+
   let filtered = questionBank.filter(q => {
     if (topicFilter && q.topic !== topicFilter) return false;
     if (catFilter && normalizeCategoryValue(q.category) !== catFilter) return false;
+    if (sourceFilter && questionSource(q) !== sourceFilter) return false;
     const qLevel = getTopicLevel(q.topic || '');
     if (levelFilter && qLevel !== levelFilter) return false;
     if (searchTokens.length > 0) {
@@ -9210,6 +9236,7 @@ function renderQuestionBank() {
     const preview = getQuestionPreview(q);
     const qLevel = getTopicLevel(q.topic || '');
     const qCategory = normalizeCategoryValue(q.category);
+    const qSource = questionSource(q);
     return `
       <div class="qb-card" ondblclick="editQuestion('${q.id}')">
         <div class="qb-card-header">
@@ -9220,6 +9247,7 @@ function renderQuestionBank() {
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
               ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
+              ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
             </div>
           </div>
           <div class="qb-card-actions">
@@ -10578,6 +10606,29 @@ function populateTopicFilter() {
     opt.textContent = t;
     sel.appendChild(opt);
   });
+  populateSourceFilters();
+}
+
+// The worksheet a question was imported from (preferred), or its citation.
+function questionSource(q) {
+  return ((q && (q.sourceWorksheet || q.source)) || '').trim();
+}
+
+function populateSourceFilters() {
+  const sources = [...new Set(questionBank.map(questionSource).filter(Boolean))].sort();
+  ['bankFilterSource', 'wsFilterSource'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">All Sources</option>';
+    sources.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      sel.appendChild(opt);
+    });
+    if (prev && sources.includes(prev)) sel.value = prev;
+  });
 }
 
 // =====================================================================
@@ -11703,6 +11754,7 @@ function populateWsTopicFilter() {
     opt.textContent = t;
     sel.appendChild(opt);
   });
+  populateSourceFilters();
 }
 
 function renderWsQuestions() {
@@ -11711,11 +11763,13 @@ function renderWsQuestions() {
   const levelFilter = document.getElementById('wsFilterLevel')?.value || '';
   const topicFilter = document.getElementById('wsFilterTopic')?.value || '';
   const catFilter = document.getElementById('wsFilterCategory')?.value || '';
+  const sourceFilter = document.getElementById('wsFilterSource')?.value || '';
   const searchRaw = (document.getElementById('wsSearch')?.value || '').trim().toLowerCase();
 
   let filtered = questionBank.filter(q => {
     if (topicFilter && q.topic !== topicFilter) return false;
     if (catFilter && normalizeCategoryValue(q.category) !== catFilter) return false;
+    if (sourceFilter && questionSource(q) !== sourceFilter) return false;
     const qLevel = getTopicLevel(q.topic || '');
     if (levelFilter && qLevel !== levelFilter) return false;
     if (searchRaw) {
@@ -11740,6 +11794,7 @@ function renderWsQuestions() {
     const qCategory = normalizeCategoryValue(q.category);
     const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
     const previewText = getQuestionPreview(q);
+    const qSource = questionSource(q);
     return `<div class="ws-q-card${checked ? ' selected' : ''}" data-qid="${q.id}" onclick="onWsCardClick('${q.id}', event)" style="cursor:pointer;">
       <div class="ws-q-top">
         <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleWsQuestion('${q.id}', this.checked)">
@@ -11750,6 +11805,7 @@ function renderWsQuestions() {
             <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
             <span class="qb-tag">${escapeHtml(qLevel)}</span>
             ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
+            ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
           </div>
         </div>
         <button class="ws-q-expand-btn" onclick="event.stopPropagation();toggleWsPreview('${q.id}', this)" title="Preview question">
@@ -14401,6 +14457,7 @@ function moveEditToVetting() {
   }
   const q = collectQuestionData();
   q.id = currentEditingQuestion;
+  carryOverQuestionMeta(q);
 
   // Remove from question bank if it was there
   const qIdx = questionBank.findIndex(qb => qb.id === currentEditingQuestion);
