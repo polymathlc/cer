@@ -11125,22 +11125,101 @@ function _questionContext(q) {
 }
 
 // Last-resort explanation built locally, used when the AI returns nothing so
-// the A.I. Explanation box is never left empty. References the verdict and the
-// model answer so it still speaks to the answer the student gave.
+// the A.I. Explanation box is never left empty. Quotes what the student
+// actually wrote (so it stays specific to their answer) alongside the verdict
+// and the correct/model answer. Handles open, multiple-choice and fill-blank
+// entries.
 function _fallbackExplanation(entries) {
   const verb = { correct: 'was marked correct', partial: 'was marked partially correct', incorrect: 'was marked incorrect' };
+  const said = (txt) => {
+    const t = (txt == null ? '' : String(txt)).trim();
+    return t ? `You wrote "${t}", which` : 'Your answer';
+  };
   const parts = (entries || []).map(e => {
-    const v = e.verdict || 'incorrect';
-    if (e.kind === 'open') {
-      const tail = e.model ? ` A full-mark answer needs: ${e.model}.` : '';
-      return `Your "${e.label || 'answer'}" ${verb[v] || verb.incorrect}.${v === 'correct' ? '' : tail}`;
+    const v = e.verdict || (e.kind === 'blank' ? (e.correct ? 'correct' : 'incorrect') : 'incorrect');
+    if (e.kind === 'mcq') {
+      const correct = e.mcq.options.find(o => o.correct);
+      const tail = correct ? ` The correct option is ${correct.letter}) ${correct.text}.` : '';
+      return `Your multiple-choice answer ${verb[v] || verb.incorrect}.${v === 'correct' ? '' : tail}`;
     }
-    const correct = e.mcq.options.find(o => o.correct);
-    const tail = correct ? ` The correct option is ${correct.letter}) ${correct.text}.` : '';
-    return `Your multiple-choice answer ${verb[v] || verb.incorrect}.${v === 'correct' ? '' : tail}`;
+    if (e.kind === 'blank') {
+      const tail = (v !== 'correct' && e.expected) ? ` The expected answer is "${e.expected}".` : '';
+      return `For ${e.label || 'this blank'}, ${said(e.student)} ${verb[v] || verb.incorrect}.${tail}`;
+    }
+    // open
+    const tail = (v !== 'correct' && e.model) ? ` A full-mark answer needs: ${e.model}.` : '';
+    return `For ${e.label || 'this answer'}, ${said(e.student)} ${verb[v] || verb.incorrect}.${tail}`;
   }).filter(Boolean);
   if (!parts.length) return 'Compare your response with the model answers shown above to see where the key marks are.';
   return parts.join(' ');
+}
+
+// Single shared generator for the tailored "A.I. Explanation". Every marking
+// path (open answers, multiple choice and fill-in-the-blanks) funnels through
+// here so the explanation is ALWAYS present and ALWAYS specific to what the
+// student actually wrote — never a generic restatement of the model answer.
+// `entries` items use the same shapes as the markers:
+//   { kind:'open',  label, model, student, verdict }
+//   { kind:'mcq',   mcq, chosenLetter, verdict }
+//   { kind:'blank', label, expected, student, correct }
+// Falls back to the local, student-quoting explanation if the AI is
+// unavailable or keeps returning nothing.
+async function generateTailoredExplanation(entries, ctx) {
+  if (!entries || !entries.length) return '';
+  const answerLines = entries.map((e, i) => {
+    const n = i + 1;
+    const note = e.feedback ? ` Teacher's note on this item: "${e.feedback}".` : '';
+    if (e.kind === 'mcq') {
+      const correct = e.mcq.options.find(o => o.correct);
+      const verdict = e.verdict || 'incorrect';
+      return `${n}. Multiple choice — marked ${verdict}. Correct answer: ${correct ? correct.letter + ') ' + correct.text : '(unknown)'}. The student chose: ${e.chosenLetter || '(blank)'}.${note}`;
+    }
+    if (e.kind === 'blank') {
+      const verdict = (e.verdict) || (e.correct ? 'correct' : 'incorrect');
+      return `${n}. ${e.label || 'Blank'} — marked ${verdict}. Expected answer: ${e.expected || '(not provided)'}. The student wrote: "${e.student || '(blank)'}".${note}`;
+    }
+    const verdict = e.verdict || 'incorrect';
+    return `${n}. ${e.label || 'Answer'} — marked ${verdict}. Model answer: ${e.model || '(not provided)'}. The student wrote: "${e.student || '(blank)'}".${note}`;
+  }).join('\n');
+  const expPrompt =
+    `You are a science teacher giving feedback to a student on the answer they just gave. ` +
+    `Write a clear EXPLANATION (2-4 sentences) addressed to "you" that is SPECIFIC to the student's actual answer: ` +
+    `quote or refer to what they actually wrote, explain WHY each answer was marked correct, partial or incorrect, say what they got right, what was missing or wrong, and what a full-mark answer needs. ` +
+    `Do NOT just restate the model answer or describe the question in the abstract.\n` +
+    (ctx ? `Question context: "${ctx}".\n` : ``) +
+    `Items (with the verdict, the correct/model answer and what the student wrote):\n${answerLines}\n` +
+    `Return ONLY the explanation text — no JSON, no preamble, no headings.`;
+  if (window.__aiReady && window.__aiReady()) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const expRaw = await askGemini(expPrompt, { maxOutputTokens: 320, temperature: attempt === 0 ? 0.3 : 0.6 });
+        const txt = (expRaw || '').trim();
+        if (txt) return txt;
+      } catch (e) {
+        console.warn('Tailored explanation attempt ' + (attempt + 1) + ' failed:', e);
+      }
+    }
+  }
+  return _fallbackExplanation(entries);
+}
+
+// Build a tailored A.I. Explanation for a set of marked fill-in-the-blanks.
+// `blanks` items: { label?, expected, student, correct }. `useAI` true asks the
+// model (used after AI marking); false uses the instant local explanation
+// (used after exact-match marking so we don't fire an API call the student
+// didn't ask for). Either way the result quotes what the student wrote.
+async function _explainGradedBlanks(blanks, q, useAI) {
+  const entries = (blanks || []).map((b, i) => ({
+    kind: 'blank',
+    label: b.label || ('Blank ' + (i + 1)),
+    expected: b.expected || '',
+    student: b.student || '',
+    correct: !!b.correct
+  }));
+  if (!entries.length) return '';
+  return useAI
+    ? await generateTailoredExplanation(entries, q ? _questionContext(q) : '')
+    : _fallbackExplanation(entries);
 }
 
 // Generic AI marking for open-ended written answers (correct / partial / incorrect).
@@ -11209,8 +11288,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       `For each MULTIPLE-CHOICE item, decide which option the student chose and mark "correct" only if it matches the correct option letter, otherwise "incorrect"; also include "chosen":"<the letter the student picked, or empty>". ` +
       `Give ONE short feedback sentence (max 22 words) addressed to the student for each item. ` +
       `Provide the full correct MODEL ANSWER for the whole question as "modelAnswer" — the ideal answer a student should give (use the expected answers if provided, otherwise generate the correct answer yourself; for multiple choice state the correct option and what it says). ` +
-      `Also write a clear overall EXPLANATION (2-4 sentences) addressed to "you" that is SPECIFIC to the answer the student actually gave: explain WHY their answer was marked correct, partial or incorrect — quote or refer to what they wrote, say what they got right, what was missing or wrong, and what a full-mark answer needs. Do NOT just restate the model answer or describe the question in the abstract. ` +
-      `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
+      `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}],"modelAnswer":"..."}.\n${list}`;
     let raw;
     if (photo && photo.data) {
       raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 1100 + entries.length * 220, json: true });
@@ -11239,6 +11317,10 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     const v = byI[i];
     const verdict = v ? String(v.verdict || '').toLowerCase() : 'incorrect';
     e.verdict = verdict;
+    // Keep the per-item feedback so the tailored explanation stays specific even
+    // when the answer came in as a photo (the typed `student` field is empty but
+    // this note describes what the student actually wrote).
+    e.feedback = (v && v.feedback) ? String(v.feedback) : '';
     const pts = verdict === 'correct' ? 1 : verdict === 'partial' ? 0.5 : 0;
     score += pts;
     const color = verdict === 'correct' ? 'var(--primary)' : verdict === 'partial' ? 'var(--accent-orange)' : 'var(--accent-red)';
@@ -11300,43 +11382,17 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
   }
   recordCerPerformance(q, score, total, mode);
 
-  // Force an A.I. explanation to always exist, by hook or by crook. The model
-  // sometimes returns the marking items without a usable "explanation" field
-  // (e.g. it replies with a bare array, or drops it when the token budget is
-  // tight). When that happens, retry with a small follow-up call dedicated to
-  // the explanation; if every attempt still comes back empty, fall back to an
-  // explanation built locally from the model answers — so the A.I. Explanation
+  // Always build the A.I. Explanation from a dedicated, student-specific call.
+  // The combined marking JSON's "explanation" field is unreliable — it is often
+  // dropped (bare array / tight token budget) or comes back as a generic
+  // restatement of the model answer. A focused follow-up that only has to quote
+  // what the student wrote and justify each verdict is far more consistently
+  // tailored, and it falls back to a local student-quoting explanation so the
   // box is never empty.
-  if (!aiExplanation) {
-    const answerLines = entries.map((e, i) => {
-      const verdict = e.verdict || 'incorrect';
-      if (e.kind === 'open') {
-        return `${i + 1}. ${e.label || 'Answer'} — marked ${verdict}. Model answer: ${e.model || '(not provided)'}. The student wrote: "${e.student || '(blank)'}"`;
-      }
-      const correct = e.mcq.options.find(o => o.correct);
-      return `${i + 1}. Multiple choice — marked ${verdict}. Correct answer: ${correct ? correct.letter + ') ' + correct.text : '(unknown)'}. The student chose: ${e.chosenLetter || '(blank)'}`;
-    }).join('\n');
-    const expPrompt =
-      `You are a science teacher giving feedback to a student on the answer they just gave. ` +
-      `Write a clear EXPLANATION (2-4 sentences) addressed to "you" that is SPECIFIC to the student's actual answer: ` +
-      `explain WHY each answer was marked correct, partial or incorrect — refer to what they actually wrote, say what they got right, what was missing or wrong, and what a full-mark answer needs. ` +
-      `Do NOT just restate the model answer or describe the question in the abstract.\n` +
-      `Question context: "${ctx}".\n` +
-      `Items (with the verdict, the model answer and what the student wrote):\n${answerLines}\n` +
-      `Return ONLY the explanation text — no JSON, no preamble, no headings.`;
-    for (let attempt = 0; attempt < 2 && !aiExplanation; attempt++) {
-      try {
-        const expRaw = await askGemini(expPrompt, { maxOutputTokens: 300, temperature: attempt === 0 ? 0.3 : 0.6 });
-        aiExplanation = (expRaw || '').trim();
-      } catch (e) {
-        console.warn('Explanation follow-up failed (attempt ' + (attempt + 1) + '):', e);
-      }
-    }
-    if (!aiExplanation) aiExplanation = _fallbackExplanation(entries);
-  }
+  aiExplanation = await generateTailoredExplanation(entries, ctx);
 
   showExplanation(containerSel, q, aiExplanation, scoreElId, aiModelAnswer);
-  return { score, total, mistakes };
+  return { score, total, mistakes, explanation: aiExplanation, modelAnswer: aiModelAnswer };
 }
 
 function markOpenAnswers() {
@@ -11349,10 +11405,12 @@ function checkPracticeAnswers() {
   const inputs = document.querySelectorAll('#practiceContainer .blank-input');
   let correct = 0;
   let total = inputs.length;
+  const blanks = [];
 
   inputs.forEach((input, idx) => {
     const answer = input.dataset.answer.toLowerCase().trim();
     const userAnswer = input.value.toLowerCase().trim();
+    blanks.push({ kind: 'blank', label: 'Blank ' + (idx + 1), expected: input.dataset.answer, student: input.value.trim(), correct: userAnswer === answer });
     if (userAnswer === answer) {
       input.style.borderBottomColor = 'var(--primary)';
       input.style.background = '#e8f5e9';
@@ -11384,6 +11442,7 @@ function checkPracticeAnswers() {
     scoreEl.textContent = `Score: ${correct}/${total} (${pct}%)`;
     scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
   }
+  if (total) showExplanation('#practiceContainer', currentPracticeQ, _fallbackExplanation(blanks), 'practiceScoreDisplay');
 }
 
 // =====================================================================
@@ -11477,9 +11536,11 @@ async function _gradeWithAI(toGrade, questionGuide) {
   return verdicts;
 }
 
-// Generic semantic marker. opts: { scoreElId, btnId, scorePrefix, fallback, onComplete }
+// Generic semantic marker. opts: { scoreElId, btnId, scorePrefix, fallback, onComplete, explain, q }
+// When `explain` is set, a tailored A.I. Explanation card (specific to what the
+// student wrote) is rendered below the action bar via showExplanation, using `q`.
 async function aiMark(containerSel, opts = {}) {
-  const { scoreElId, btnId, scorePrefix = 'AI Score', fallback, onComplete, questionGuide } = opts;
+  const { scoreElId, btnId, scorePrefix = 'AI Score', fallback, onComplete, questionGuide, explain, q } = opts;
   if (!window.__aiReady || !window.__aiReady()) {
     showToast("AI marking isn't set up yet — using exact match", 'info');
     return fallback ? fallback() : undefined;
@@ -11520,8 +11581,10 @@ async function aiMark(containerSel, opts = {}) {
 
   let correct = 0;
   const total = inputs.length;
+  const blanks = [];
   graded.forEach(({ input, idx, expected, student }) => {
     if (!student) {
+      blanks.push({ expected, student: '', correct: false });
       input.style.borderBottomColor = 'var(--accent-orange)';
       input.style.background = 'var(--accent-orange-light)';
       _aiFeedbackSpan(input, expected, 'var(--primary)', false);
@@ -11529,6 +11592,7 @@ async function aiMark(containerSel, opts = {}) {
     }
     const v = verdicts[idx];
     const ok = v ? !!v.correct : (student.toLowerCase() === expected.toLowerCase());
+    blanks.push({ expected, student, correct: ok });
     if (ok) {
       input.style.borderBottomColor = 'var(--primary)';
       input.style.background = '#e8f5e9';
@@ -11550,6 +11614,10 @@ async function aiMark(containerSel, opts = {}) {
   } else {
     showToast(`${scorePrefix}: ${correct}/${total} (${pct}%)`, correct === total ? 'success' : 'info');
   }
+  if (explain) {
+    const explanation = await _explainGradedBlanks(blanks, q, true);
+    showExplanation(containerSel, q, explanation, scoreElId);
+  }
   if (onComplete) onComplete(correct, total);
 }
 
@@ -11560,7 +11628,9 @@ function checkPracticeAnswersAI() {
     scoreElId: 'practiceScoreDisplay',
     btnId: 'practiceMarkAiBtn',
     questionGuide: currentPracticeQ && currentPracticeQ.markingGuide,
-    fallback: checkPracticeAnswers
+    fallback: checkPracticeAnswers,
+    explain: true,
+    q: currentPracticeQ
   });
 }
 
@@ -11630,10 +11700,12 @@ async function submitQpAnswersAI() {
   let correct = 0;
   const total = inputs.length;
   const mistakes = [];
+  const blanks = [];
   graded.forEach(({ input, idx, expected, student }) => {
     input.readOnly = true;
     const v = student ? verdicts[idx] : null;
     const ok = student ? (v ? !!v.correct : (student.toLowerCase() === expected.toLowerCase().trim())) : false;
+    blanks.push({ expected, student, correct: ok });
     if (ok) {
       input.style.borderBottomColor = 'var(--primary)';
       input.style.background = '#e8f5e9';
@@ -11649,7 +11721,8 @@ async function submitQpAnswersAI() {
     }
   });
 
-  _recordQpResult(correct, total, mistakes);
+  const qpExplanation = await _explainGradedBlanks(blanks, qpQueue[qpIndex], true);
+  _recordQpResult(correct, total, mistakes, qpExplanation);
   qpAnswered = Math.max(qpAnswered, qpIndex + 1);
   updateQpProgress();
 
@@ -12513,7 +12586,7 @@ function loadNextQpQuestion() {
   updateQpProgress();
 }
 
-function _recordQpResult(correct, total, mistakes) {
+function _recordQpResult(correct, total, mistakes, explanation, modelAnswer) {
   const q = qpQueue[qpIndex] || {};
   qpSessionResults.push({
     title: q.title || '',
@@ -12522,7 +12595,7 @@ function _recordQpResult(correct, total, mistakes) {
     mistakes: mistakes || []
   });
   recordCerPerformance(q, correct, total, 'quickpractice');
-  showExplanation('#qpContainer', q, '', 'qpScoreDisplay');
+  showExplanation('#qpContainer', q, explanation || '', 'qpScoreDisplay', modelAnswer);
 }
 
 // Shared, styled end-of-practice report (used by Quick/Worksheet and Topical).
@@ -12803,7 +12876,7 @@ async function submitQpOpenAnswers() {
   if (!res) return;
   qpSubmitted = true;
   document.querySelectorAll('#qpContainer .open-answer').forEach(a => a.disabled = true);
-  _recordQpResult(res.score, res.total, res.mistakes);
+  _recordQpResult(res.score, res.total, res.mistakes, res.explanation, res.modelAnswer);
   qpAnswered = Math.max(qpAnswered, qpIndex + 1);
   updateQpProgress();
   const markBtn = document.getElementById('qpMarkOpenBtn');
@@ -12845,12 +12918,15 @@ function submitQpAnswers() {
   let correct = 0;
   let total = inputs.length;
   const mistakes = [];
+  const blanks = [];
 
   inputs.forEach((input, idx) => {
     const answer = input.dataset.answer;
     const answerLower = answer.toLowerCase().trim();
     const userAnswer = input.value.toLowerCase().trim();
-    if (userAnswer === answerLower) {
+    const ok = userAnswer === answerLower;
+    blanks.push({ kind: 'blank', label: 'Blank ' + (idx + 1), expected: answer, student: input.value.trim(), correct: ok });
+    if (ok) {
       input.style.borderBottomColor = 'var(--primary)';
       input.style.background = '#e8f5e9';
       input.readOnly = true;
@@ -12871,7 +12947,7 @@ function submitQpAnswers() {
     }
   });
 
-  _recordQpResult(correct, total, mistakes);
+  _recordQpResult(correct, total, mistakes, _fallbackExplanation(blanks));
   qpAnswered = Math.max(qpAnswered, qpIndex + 1);
   updateQpProgress();
 
@@ -13115,11 +13191,11 @@ let tpSubmitted = false;
 let tpMode = 'open';     // 'blanks' | 'open'
 let tpSessionResults = []; // per-question results for the end-of-session AI report
 
-function _recordTpResult(correct, total, mistakes) {
+function _recordTpResult(correct, total, mistakes, explanation, modelAnswer) {
   const q = tpQueue[tpIndex] || {};
   tpSessionResults.push({ title: q.title || '', topic: q.topic || '', correct, total, mistakes: mistakes || [] });
   recordCerPerformance(q, correct, total, 'topicalpractice');
-  showExplanation('#tpContainer', q, '', 'tpScoreDisplay');
+  showExplanation('#tpContainer', q, explanation || '', 'tpScoreDisplay', modelAnswer);
 }
 
 // =====================================================================
@@ -13746,10 +13822,12 @@ async function tpSubmitAnswersAI() {
   let correct = 0;
   const total = inputs.length;
   const mistakes = [];
+  const blanks = [];
   graded.forEach(({ input, idx, expected, student }) => {
     input.readOnly = true;
     const v = student ? verdicts[idx] : null;
     const ok = student ? (v ? !!v.correct : (student.toLowerCase() === expected.toLowerCase().trim())) : false;
+    blanks.push({ expected, student, correct: ok });
     if (ok) {
       input.style.borderBottomColor = 'var(--primary)';
       input.style.background = '#e8f5e9';
@@ -13765,7 +13843,8 @@ async function tpSubmitAnswersAI() {
     }
   });
 
-  _recordTpResult(correct, total, mistakes);
+  const tpExplanation = await _explainGradedBlanks(blanks, tpQueue[tpIndex], true);
+  _recordTpResult(correct, total, mistakes, tpExplanation);
   tpAnswered = Math.max(tpAnswered, tpIndex + 1);
   tpUpdateProgress();
 
@@ -13794,7 +13873,7 @@ async function tpSubmitOpenAnswers() {
   if (!res) return;
   tpSubmitted = true;
   document.querySelectorAll('#tpContainer .open-answer').forEach(a => a.disabled = true);
-  _recordTpResult(res.score, res.total, res.mistakes);
+  _recordTpResult(res.score, res.total, res.mistakes, res.explanation, res.modelAnswer);
   tpAnswered = Math.max(tpAnswered, tpIndex + 1);
   tpUpdateProgress();
   _tpAfterSubmit();
@@ -13829,12 +13908,15 @@ function tpSubmitAnswers() {
   let correct = 0;
   let total = inputs.length;
   const mistakes = [];
+  const blanks = [];
 
   inputs.forEach((input, idx) => {
     const answer = input.dataset.answer;
     const answerLower = answer.toLowerCase().trim();
     const userAnswer = input.value.toLowerCase().trim();
-    if (userAnswer === answerLower) {
+    const ok = userAnswer === answerLower;
+    blanks.push({ kind: 'blank', label: 'Blank ' + (idx + 1), expected: answer, student: input.value.trim(), correct: ok });
+    if (ok) {
       input.style.borderBottomColor = 'var(--primary)';
       input.style.background = '#e8f5e9';
       input.readOnly = true;
@@ -13853,7 +13935,7 @@ function tpSubmitAnswers() {
     }
   });
 
-  _recordTpResult(correct, total, mistakes);
+  _recordTpResult(correct, total, mistakes, _fallbackExplanation(blanks));
   tpAnswered = Math.max(tpAnswered, tpIndex + 1);
   tpUpdateProgress();
 
