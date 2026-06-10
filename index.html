@@ -4018,7 +4018,7 @@ option {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
     </div>
     <h2>Welcome Back, Learner</h2>
-    <p class="auth-sub">Sign in to continue scaffolded Science practice with blanks and open-ended modes.</p>
+    <p class="auth-sub">Sign in to continue open-ended Science practice with AI marking.</p>
 
     <button class="btn-google" onclick="handleGoogleSignIn()">
       <svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
@@ -4356,10 +4356,6 @@ option {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             &#x1F5D1;&#xFE0F; Clear Form
           </button>
-          <button class="btn btn-orange" onclick="openPreview()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            &#x270F;&#xFE0F; Add Blanks (Optional)
-          </button>
           <button class="btn" onclick="previewAsStudent()" style="background:#8b5cf6;color:#fff;">
             &#x1F393; Preview as Student
           </button>
@@ -4380,10 +4376,6 @@ option {
           <button class="btn btn-secondary" onclick="cancelEdit()" style="background:#6b7280;color:#fff;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             &#x274C; Cancel Edit
-          </button>
-          <button class="btn btn-orange" onclick="openPreview()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            &#x270F;&#xFE0F; Add Blanks (Optional)
           </button>
           <button class="btn" onclick="previewAsStudent()" style="background:#8b5cf6;color:#fff;">
             &#x1F393; Preview as Student
@@ -4480,7 +4472,7 @@ option {
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>Student View</h2>
           </div>
-          <div class="subtitle">Preview how students see the questions with blanks</div>
+          <div class="subtitle">Preview how students see the questions</div>
         </div>
         <div>
           <select id="studentQuestionSelect" class="form-select" onchange="renderStudentView()" style="min-width:220px;">
@@ -4501,7 +4493,7 @@ option {
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>Practice Mode</h2>
           </div>
-          <div class="subtitle">Fill in the blanks to practice questions</div>
+          <div class="subtitle">Answer questions and let the AI mark them</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           <select id="practiceStudentSelect" class="form-select" onchange="onPracticeStudentChange()" style="min-width:160px;">
@@ -4531,7 +4523,7 @@ option {
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>Print Worksheet</h2>
           </div>
-          <div class="subtitle">Select questions and print as a fill-in-the-blank worksheet</div>
+          <div class="subtitle">Select questions and print as an open-ended worksheet</div>
         </div>
       </div>
       <div class="print-toolbar" id="printToolbar">
@@ -4624,27 +4616,6 @@ option {
         </div>
 
         <div class="ws-question-grid" id="wsQuestionGrid"></div>
-
-        <div class="ws-format-section">
-          <h4>Answer Format</h4>
-          <div class="ws-format-options">
-            <button class="ws-format-btn active" data-format="blanks" onclick="setWsFormat('blanks')">
-              <span class="ws-fmt-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;display:inline;"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h13"/><rect x="16" y="10" width="5" height="4" rx="1" stroke-dasharray="2 1"/></svg></span>
-              <span class="ws-fmt-title">Blanks</span>
-              <span class="ws-fmt-desc">Fill in the blank fields</span>
-            </button>
-            <button class="ws-format-btn" data-format="firstletter" onclick="setWsFormat('firstletter')">
-              <span class="ws-fmt-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;display:inline;"><path d="M4 7h16"/><path d="M4 12h6"/><path d="M12 12h2" stroke-dasharray="1 1"/><path d="M4 17h8"/><path d="M14 17h2" stroke-dasharray="1 1"/></svg></span>
-              <span class="ws-fmt-title">Blanks + First Letter</span>
-              <span class="ws-fmt-desc">First letter hint shown</span>
-            </button>
-            <button class="ws-format-btn" data-format="open" onclick="setWsFormat('open')">
-              <span class="ws-fmt-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;display:inline;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10" stroke-dasharray="2 2"/><path d="M7 12h10" stroke-dasharray="2 2"/><path d="M7 16h6" stroke-dasharray="2 2"/></svg></span>
-              <span class="ws-fmt-title">Full Open Ended</span>
-              <span class="ws-fmt-desc">Blank writing boxes</span>
-            </button>
-          </div>
-        </div>
 
         <div class="ws-actions-bar">
           <div style="display:flex;gap:8px;">
@@ -5121,30 +5092,6 @@ option {
 <!-- ==================== PRINT OUTPUT (hidden, rendered for window.print) ==================== -->
 <div id="printOutput" style="display:none;"></div>
 
-<!-- ==================== PREVIEW OVERLAY ==================== -->
-<div class="preview-overlay" id="previewOverlay">
-  <div class="preview-panel">
-    <div class="preview-header">
-      <h3>Add Blanks (Optional)</h3>
-      <button class="preview-close" onclick="closePreview()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="preview-toolbar">
-      <span class="hint">Blanks are optional — every question is marked by AI. To add a guided fill-in-the-blanks version, click words to turn them into blanks; leave them as-is for a fully open-ended question.</span>
-      <span class="blank-count" id="blankCountBadge">0 blanks</span>
-    </div>
-    <div class="preview-body" id="previewBody"></div>
-    <div style="padding:0 28px 20px;display:flex;gap:10px;justify-content:flex-end;">
-      <button class="btn btn-outline" onclick="clearAllBlanks()">Clear All Blanks</button>
-      <button class="btn btn-primary" onclick="confirmBlanks()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        Confirm Blanks
-      </button>
-    </div>
-  </div>
-</div>
-
 <!-- ==================== STUDENT PREVIEW OVERLAY ==================== -->
 <div class="preview-overlay" id="studentPreviewOverlay">
   <div class="preview-panel" style="max-width:800px;">
@@ -5155,15 +5102,13 @@ option {
       </button>
     </div>
     <div style="padding:10px 28px 4px;background:var(--surface-alt);border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-muted);">
-      This is exactly how students will see this question in practice mode. Switch to <strong>&#x270D;&#xFE0F; Try Open-Ended</strong> to type answers yourself and have the AI mark them.
+      This is exactly how students will see this question in practice mode — type answers yourself and have the AI mark them.
     </div>
     <div class="preview-body" id="studentPreviewBody" style="padding:20px 28px;"></div>
     <div style="padding:0 28px 20px;display:flex;gap:10px;justify-content:space-between;align-items:center;">
       <div id="studentPreviewResult" style="font-size:0.85rem;font-weight:600;"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn-outline" id="studentPreviewModeBtn" onclick="toggleStudentPreviewMode()">&#x270D;&#xFE0F; Try Open-Ended</button>
-        <button class="btn btn-outline" id="studentPreviewCheckBtn" onclick="checkStudentPreviewAnswers()">&#x2705; Check Answers</button>
-        <button class="btn btn-outline" id="studentPreviewAiBtn" style="display:none;" onclick="markStudentPreviewOpen()">&#x1F916; Mark with AI</button>
+        <button class="btn btn-outline" id="studentPreviewAiBtn" onclick="markStudentPreviewOpen()">&#x1F916; Mark with AI</button>
         <button class="btn btn-primary" onclick="closeStudentPreview()">&#x274C; Close</button>
       </div>
     </div>
@@ -5179,32 +5124,6 @@ option {
       <button class="btn btn-outline" onclick="closeConfirm()">Cancel</button>
       <button class="btn btn-danger" id="confirmAction" onclick="closeConfirm()">Delete</button>
     </div>
-  </div>
-</div>
-
-<!-- ==================== PRINT MODE SELECTION OVERLAY ==================== -->
-<div class="confirm-overlay" id="printModeOverlay">
-  <div class="confirm-dialog" style="max-width:580px;text-align:center;">
-    <h3 style="margin-bottom:6px;">Choose Worksheet Format</h3>
-    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:20px;">How should the answer sections appear on the worksheet?</p>
-    <div class="print-mode-options" style="flex-wrap:wrap;">
-      <button class="print-mode-btn" onclick="confirmPrintMode('blanks')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;margin-bottom:6px;"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h13"/><rect x="16" y="10" width="5" height="4" rx="1" stroke-dasharray="2 1"/></svg>
-        <span class="print-mode-title">Fill in the Blanks</span>
-        <span class="print-mode-desc">Selected words are blanked out with numbered lines. Answer key lists blanked words.</span>
-      </button>
-      <button class="print-mode-btn" onclick="confirmPrintMode('firstletter')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;margin-bottom:6px;"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h13"/><text x="17" y="14" font-size="8" font-weight="700" fill="currentColor" stroke="none">A_</text></svg>
-        <span class="print-mode-title">First Letter Hint</span>
-        <span class="print-mode-desc">Blanked words show the first letter as a clue. Answer key lists all blanked words.</span>
-      </button>
-      <button class="print-mode-btn" onclick="confirmPrintMode('open')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:28px;height:28px;margin-bottom:6px;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10" stroke-dasharray="2 2"/><path d="M7 12h10" stroke-dasharray="2 2"/><path d="M7 16h6" stroke-dasharray="2 2"/></svg>
-        <span class="print-mode-title">Open Ended</span>
-        <span class="print-mode-desc">Answer sections are blank writing boxes. Answer key shows the full answer text.</span>
-      </button>
-    </div>
-    <button class="btn btn-outline" onclick="closePrintMode()" style="margin-top:16px;font-size:0.82rem;">Cancel</button>
   </div>
 </div>
 
@@ -5236,26 +5155,6 @@ option {
     <div style="margin-bottom:16px;">
       <label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:6px;">Worksheet Name</label>
       <input type="text" id="saveWsName" class="ws-title-input" placeholder="e.g. Heat Practice 1" style="width:100%;margin-bottom:0;">
-    </div>
-    <div style="margin-bottom:20px;">
-      <label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:8px;">Answer Format</label>
-      <div class="save-ws-format-options">
-        <button class="save-ws-format-btn active" data-format="blanks" onclick="setSaveWsFormat('blanks')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px;"><path d="M4 7h16"/><path d="M4 12h10"/><path d="M4 17h13"/><rect x="16" y="10" width="5" height="4" rx="1" stroke-dasharray="2 1"/></svg>
-          <span class="save-ws-fmt-title">Blanks</span>
-          <span class="save-ws-fmt-desc">Fill in the blank fields</span>
-        </button>
-        <button class="save-ws-format-btn" data-format="firstletter" onclick="setSaveWsFormat('firstletter')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px;"><path d="M4 7h16"/><path d="M4 12h6"/><path d="M12 12h2" stroke-dasharray="1 1"/><path d="M4 17h8"/><path d="M14 17h2" stroke-dasharray="1 1"/></svg>
-          <span class="save-ws-fmt-title">Blanks + First Letter</span>
-          <span class="save-ws-fmt-desc">First letter hint shown</span>
-        </button>
-        <button class="save-ws-format-btn" data-format="open" onclick="setSaveWsFormat('open')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:22px;height:22px;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10" stroke-dasharray="2 2"/><path d="M7 12h10" stroke-dasharray="2 2"/><path d="M7 16h6" stroke-dasharray="2 2"/></svg>
-          <span class="save-ws-fmt-title">Full Open Ended</span>
-          <span class="save-ws-fmt-desc">Blank writing boxes</span>
-        </button>
-      </div>
     </div>
     <div class="btn-group" style="justify-content:flex-end;">
       <button class="btn btn-outline" onclick="closeSaveWsDialog()">Cancel</button>
@@ -5858,7 +5757,6 @@ let vettingList = [];
 let selectedBlanks = {}; // { blockId: { wordIndex: true } }
 let currentEditingQuestion = null;
 let _skipCreateReset = false;
-let showFirstLetterClues = false;
 
 function normalizeCategoryValue(category) {
   const legacyCER = new Set([
@@ -7626,22 +7524,6 @@ function markMcqChoice(input) {
 // IMPORT: Worksheet-creator questions → CER question-bank format
 // =====================================================================
 
-// Build a blanks map { wordIndex: true } that marks EVERY word of `content`.
-// Uses the same word tokenizer/indexing as renderStudentText so the blanks
-// line up exactly with the inputs it renders.
-function allWordBlanks(content) {
-  const div = document.createElement('div');
-  div.innerHTML = content || '';
-  const text = div.textContent || '';
-  const wordRe = /([A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*)|(\s+)|([^A-Za-z0-9\s]+)/g;
-  const blanks = {};
-  let idx = 0, m;
-  while ((m = wordRe.exec(text)) !== null) {
-    if (m[1]) blanks[idx++] = true;
-  }
-  return blanks;
-}
-
 function worksheetElementToBlock(el) {
   if (!el || !el.type) return null;
   const id = generateBlockId();
@@ -7655,9 +7537,9 @@ function worksheetElementToBlock(el) {
       return { id, type: 'mcq', options: opts, correctId };
     }
     // A worksheet "answer" carries a known correct answer. Map it to a native
-    // fill-in-the-blanks answer block: the answer words become blanks in
-    // practice, blank lines when printed, and a writing box in open-ended mode.
-    case 'answer':       return { id, type: 'plainanswer', content: el.answer || '', _autoBlank: true };
+    // answer block: the model answer the AI marks against in practice, and a
+    // writing box on printed worksheets.
+    case 'answer':       return { id, type: 'plainanswer', content: el.answer || '' };
     case 'answerKey':    return { id, type: 'answerKey', text: el.text || '', url: el.dataUrl || '' };
     case 'openLines':    return { id, type: 'openLines', lines: Number(el.lines) || 4 };
     case 'workingSpace': return { id, type: 'workingSpace', lines: Number(el.lines) || 6 };
@@ -7707,16 +7589,6 @@ function worksheetQuestionToCer(wq, index, worksheetTitle) {
     if (t) title = stripHtmlToText(t.text).slice(0, 60).trim();
   }
   if (!title) title = 'Imported question' + (index != null ? ' ' + (index + 1) : '');
-  // Auto-mark every word of an imported answer as a blank, so it shows as
-  // fill-in-the-blanks in practice (and as an answer-keyed blank line in print).
-  const blanks = {};
-  blocksOut.forEach(b => {
-    if (b._autoBlank) {
-      const wb = allWordBlanks(b.content);
-      if (Object.keys(wb).length) blanks[b.id] = wb;
-      delete b._autoBlank;
-    }
-  });
   return {
     id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: title,
@@ -7724,7 +7596,7 @@ function worksheetQuestionToCer(wq, index, worksheetTitle) {
     topic: topic,
     markingGuide: '',
     blocks: blocksOut,
-    blanks: blanks,
+    blanks: {},
     createdAt: new Date().toISOString(),
     createdBy: 'Worksheet Creator',
     source: (wq && wq.source) || '',
@@ -8424,174 +8296,6 @@ function handleDragEnd() {
 // =====================================================================
 // PREVIEW & SELECT BLANKS
 // =====================================================================
-function openPreview() {
-  if (blocks.length === 0) {
-    showToast('Add some blocks first before previewing', 'error');
-    return;
-  }
-  
-  const title = document.getElementById('questionTitle').value || 'Untitled Question';
-  const category = document.getElementById('categorySelect').value;
-  const topic = document.getElementById('topicSelect').value;
-  
-  let html = '';
-  html += `<div class="preview-question-title">${escapeHtml(title)}</div>`;
-  html += `<div class="preview-meta">
-    <span class="tag">${escapeHtml(category)}</span>
-    <span class="tag">${escapeHtml(topic)}</span>
-  </div>`;
-  html += `<div class="preview-content">`;
-  
-  blocks.forEach(block => {
-    switch (block.type) {
-      case 'text':
-        html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
-        html += renderSelectableText(block.id, block.content, 'text');
-        break;
-      case 'image':
-        if (block.url) {
-          html += `<div style="margin:14px 0;">
-            <img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);">
-          </div>`;
-        }
-        break;
-      case 'answer':
-        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-        html += `<div class="cer-preview-section">`;
-        html += `<div class="cer-preview-label claim-bg">Claim</div>`;
-        html += `<div class="cer-preview-content">${renderSelectableText(block.id + '_claim', block.claim, 'claim')}</div>`;
-        html += `</div>`;
-        html += `<div class="cer-preview-section">`;
-        html += `<div class="cer-preview-label evidence-bg">Evidence</div>`;
-        html += `<div class="cer-preview-content">${renderSelectableText(block.id + '_evidence', block.evidence, 'evidence')}</div>`;
-        html += `</div>`;
-        html += `<div class="cer-preview-section">`;
-        html += `<div class="cer-preview-label reasoning-bg">Reasoning</div>`;
-        html += `<div class="cer-preview-content">${renderSelectableText(block.id + '_reasoning', block.reasoning, 'reasoning')}</div>`;
-        html += `</div>`;
-        break;
-      case 'plainanswer':
-        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-        html += `<div style="padding:10px 0;">`;
-        html += renderSelectableText(block.id, block.content, 'answer');
-        html += `</div>`;
-        break;
-      case 'explanation':
-        html += `<div class="explanation-preview">
-          <div class="exp-label">Explanation</div>
-          ${renderSelectableText(block.id, block.content, 'explanation')}
-        </div>`;
-        break;
-      case 'video':
-        if (block.url) {
-          const embedUrl = getYouTubeEmbedUrl(block.url);
-          if (embedUrl) {
-            html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
-          } else {
-            html += `<div class="video-url-display">Video: ${escapeHtml(block.url)}</div>`;
-          }
-        }
-        break;
-      case 'table':
-        html += renderTableReadonly(block, '');
-        break;
-      default:
-        html += renderImportedBlockStudent(block);
-        break;
-    }
-  });
-
-  html += `</div>`;
-
-  document.getElementById('previewBody').innerHTML = html;
-  document.getElementById('previewOverlay').classList.add('active');
-  updateBlankCount();
-}
-
-// Tokenize text for blank selection:
-// - punctuation is NOT part of words
-// - hyphenated/apostrophe words remain single words (e.g. man-made, it's)
-function tokenizeBlankText(content) {
-  const textOnly = (content || '')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!textOnly) return [];
-
-  const tokens = [];
-  let wordIndex = 0;
-  const re = /([A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*)|(\s+)|([^A-Za-z0-9\s]+)/g;
-  let m;
-  while ((m = re.exec(textOnly)) !== null) {
-    if (m[1]) tokens.push({ type: 'word', text: m[1], wordIndex: wordIndex++ });
-    else tokens.push({ type: 'sep', text: m[0] });
-  }
-  return tokens;
-}
-
-function renderSelectableText(blockId, content, sectionType) {
-  if (!content) return '';
-  const tokens = tokenizeBlankText(content);
-  if (tokens.length === 0) return '';
-  
-  let html = '<div style="line-height:2;">';
-  
-  tokens.forEach(tok => {
-    if (tok.type === 'word') {
-      const idx = tok.wordIndex;
-    const isBlanked = selectedBlanks[blockId] && selectedBlanks[blockId][idx];
-    html += `<span class="selectable-word${isBlanked ? ' blanked' : ''}" 
-                  data-block="${blockId}" data-word-index="${idx}"
-                  onclick="toggleBlank('${blockId}', ${idx}, this)">${escapeHtml(tok.text)}</span>`;
-    } else {
-      html += escapeHtml(tok.text);
-    }
-  });
-  
-  html += '</div>';
-  return html;
-}
-
-function toggleBlank(blockId, wordIndex, el) {
-  if (!selectedBlanks[blockId]) selectedBlanks[blockId] = {};
-  
-  if (selectedBlanks[blockId][wordIndex]) {
-    delete selectedBlanks[blockId][wordIndex];
-    el.classList.remove('blanked');
-  } else {
-    selectedBlanks[blockId][wordIndex] = true;
-    el.classList.add('blanked');
-  }
-  
-  updateBlankCount();
-}
-
-function clearAllBlanks() {
-  selectedBlanks = {};
-  document.querySelectorAll('.selectable-word.blanked').forEach(el => el.classList.remove('blanked'));
-  updateBlankCount();
-  showToast('All blanks cleared', 'info');
-}
-
-function updateBlankCount() {
-  let count = 0;
-  Object.values(selectedBlanks).forEach(blk => {
-    count += Object.keys(blk).length;
-  });
-  document.getElementById('blankCountBadge').textContent = count + ' blank' + (count !== 1 ? 's' : '');
-}
-
-function confirmBlanks() {
-  closePreview();
-  const count = Object.values(selectedBlanks).reduce((sum, blk) => sum + Object.keys(blk).length, 0);
-  showToast(`${count} blank(s) confirmed for this question`, 'success');
-}
-
-function closePreview() {
-  document.getElementById('previewOverlay').classList.remove('active');
-}
-
 // =====================================================================
 // STUDENT PREVIEW (how students see the question in practice mode)
 // =====================================================================
@@ -8625,106 +8329,31 @@ function previewAsStudent() {
     category: document.getElementById('categorySelect').value,
     topic: document.getElementById('topicSelect').value,
     markingGuide: (document.getElementById('questionMarkingGuide')?.value || '').trim(),
-    blanks: JSON.parse(JSON.stringify(selectedBlanks)),
     blocks: JSON.parse(JSON.stringify(blocks))
   };
-  studentPreviewMode = 'blanks';
   renderStudentPreviewBody();
   document.getElementById('studentPreviewOverlay').classList.add('active');
 }
 
 let _studentPreviewQ = null;
-let studentPreviewMode = 'blanks'; // 'blanks' | 'open'
 
 function renderStudentPreviewBody() {
   const q = _studentPreviewQ;
   if (!q) return;
-  const { title, category, topic, blanks } = q;
-
   let html = `<div class="student-view-card" style="border:none;box-shadow:none;">`;
   html += `<div class="student-card-header" style="padding:0 0 12px;">
-    <h3 style="font-size:1.1rem;">${escapeHtml(title)}</h3>
+    <h3 style="font-size:1.1rem;">${escapeHtml(q.title)}</h3>
     <div style="display:flex;gap:8px;">
-      <span class="qb-tag category">${escapeHtml(category)}</span>
-      <span class="qb-tag topic">${escapeHtml(topic)}</span>
+      <span class="qb-tag category">${escapeHtml(q.category)}</span>
+      <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
     </div>
   </div>`;
   html += `<div class="student-card-body" style="padding:0;">`;
-
-  if (studentPreviewMode === 'open') {
-    // The same open-ended answer boxes students get in practice, AI-markable.
-    html += buildOpenBody(q, '#studentPreviewBody');
-    html += `</div></div>`;
-    finishStudentPreviewRender(html);
-    return;
-  }
-
-  q.blocks.forEach(block => {
-    switch (block.type) {
-      case 'text':
-        html += renderStudentText(block.id, block.content, blanks);
-        break;
-      case 'image':
-        if (block.url) {
-          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
-        }
-        break;
-      case 'answer':
-        html += `<div class="cer-student-section">`;
-        html += `<div class="cer-student-label claim-bg" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, blanks)}</div>`;
-        html += `</div>`;
-        html += `<div class="cer-student-section">`;
-        html += `<div class="cer-student-label evidence-bg" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, blanks)}</div>`;
-        html += `</div>`;
-        html += `<div class="cer-student-section">`;
-        html += `<div class="cer-student-label reasoning-bg" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, blanks)}</div>`;
-        html += `</div>`;
-        break;
-      case 'plainanswer':
-        html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, blanks)}</div>`;
-        break;
-      case 'explanation':
-        // Hidden from students
-        break;
-      case 'video':
-        if (block.url) {
-          const embedUrl = getYouTubeEmbedUrl(block.url);
-          if (embedUrl) {
-            html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
-          }
-        }
-        break;
-      case 'table':
-        html += renderTableReadonly(block, '');
-        break;
-      default:
-        html += renderImportedBlockStudent(block);
-        break;
-    }
-  });
-
+  // The same open-ended answer boxes students get in practice, AI-markable.
+  html += buildOpenBody(q, '#studentPreviewBody');
   html += `</div></div>`;
-  finishStudentPreviewRender(html);
-}
-
-function finishStudentPreviewRender(html) {
   document.getElementById('studentPreviewBody').innerHTML = html;
   document.getElementById('studentPreviewResult').innerHTML = '';
-  const open = studentPreviewMode === 'open';
-  const modeBtn = document.getElementById('studentPreviewModeBtn');
-  if (modeBtn) modeBtn.innerHTML = open ? '&#x1F524; Back to Fill-Blanks' : '&#x270D;&#xFE0F; Try Open-Ended';
-  const checkBtn = document.getElementById('studentPreviewCheckBtn');
-  if (checkBtn) checkBtn.style.display = open ? 'none' : '';
-  const aiBtn = document.getElementById('studentPreviewAiBtn');
-  if (aiBtn) aiBtn.style.display = open ? '' : 'none';
-}
-
-function toggleStudentPreviewMode() {
-  studentPreviewMode = studentPreviewMode === 'open' ? 'blanks' : 'open';
-  renderStudentPreviewBody();
 }
 
 function markStudentPreviewOpen() {
@@ -8736,45 +8365,6 @@ function markStudentPreviewOpen() {
 
 function closeStudentPreview() {
   document.getElementById('studentPreviewOverlay').classList.remove('active');
-}
-
-function addAnswerIcon(input, isCorrect, delay) {
-  const prev = input.nextElementSibling;
-  if (prev && prev.classList.contains('answer-icon')) prev.remove();
-  const icon = document.createElement('span');
-  icon.className = 'answer-icon ' + (isCorrect ? 'correct' : 'wrong');
-  icon.textContent = isCorrect ? '✓' : '✗';
-  if (delay) icon.style.animationDelay = delay + 'ms';
-  input.insertAdjacentElement('afterend', icon);
-}
-
-function checkStudentPreviewAnswers() {
-  const container = document.getElementById('studentPreviewBody');
-  const inputs = container.querySelectorAll('.blank-input');
-  let correct = 0, total = inputs.length;
-
-  inputs.forEach((input, idx) => {
-    const answer = input.getAttribute('data-answer');
-    const userVal = input.value.trim();
-    if (userVal.toLowerCase() === answer.toLowerCase()) {
-      input.style.border = '2px solid #10b981';
-      input.style.background = '#d1fae5';
-      correct++;
-      addAnswerIcon(input, true, idx * 80);
-    } else {
-      input.style.border = '2px solid #ef4444';
-      input.style.background = '#fee2e2';
-      addAnswerIcon(input, false, idx * 80);
-    }
-  });
-
-  const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
-  const resultEl = document.getElementById('studentPreviewResult');
-  if (pct === 100) {
-    resultEl.innerHTML = `<span style="color:#10b981;">&#x1F389; ${correct}/${total} correct (${pct}%) - Perfect!</span>`;
-  } else {
-    resultEl.innerHTML = `<span style="color:#f59e0b;">${correct}/${total} correct (${pct}%)</span>`;
-  }
 }
 
 // Schedule question from create page (saves to bank then opens schedule dialog)
@@ -9294,7 +8884,6 @@ function renderQuestionBank() {
   }
   
   container.innerHTML = filtered.map(q => {
-    const blankCount = Object.values(q.blanks || {}).reduce((sum, blk) => sum + Object.keys(blk).length, 0);
     const preview = getQuestionPreview(q);
     const qLevel = getTopicLevel(q.topic || '');
     const qCategory = normalizeCategoryValue(q.category);
@@ -9308,7 +8897,6 @@ function renderQuestionBank() {
               <span class="qb-tag category">${escapeHtml(qCategory)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
-              ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
               ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
             </div>
           </div>
@@ -9514,233 +9102,35 @@ function renderStudentView() {
     </div>
   </div>`;
   html += `<div class="student-card-body">`;
-  
-  q.blocks.forEach(block => {
-    switch (block.type) {
-      case 'text':
-        html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
-        html += renderStudentText(block.id, block.content, q.blanks);
-        break;
-      case 'image':
-        if (block.url) {
-          html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
-        }
-        break;
-      case 'answer':
-        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-        // Claim
-        html += `<div class="cer-student-section">`;
-        html += `<div class="cer-student-label claim-bg" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div>`;
-        html += `</div>`;
-        // Evidence
-        html += `<div class="cer-student-section">`;
-        html += `<div class="cer-student-label evidence-bg" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, q.blanks)}</div>`;
-        html += `</div>`;
-        // Reasoning
-        html += `<div class="cer-student-section">`;
-        html += `<div class="cer-student-label reasoning-bg" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
-        html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div>`;
-        html += `</div>`;
-        break;
-      case 'plainanswer':
-        html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-        html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
-        break;
-      case 'explanation':
-        // Hidden from students by default
-        break;
-      case 'video':
-        if (block.url) {
-          const embedUrl = getYouTubeEmbedUrl(block.url);
-          if (embedUrl) {
-            html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
-          }
-        }
-        break;
-      case 'table':
-        html += renderTableReadonly(block, '');
-        break;
-      default:
-        html += renderImportedBlockStudent(block);
-        break;
-    }
-  });
-
+  // The same open-ended answer boxes students get in practice, AI-markable.
+  html += buildOpenBody(q, '#studentViewContainer');
   html += `</div></div>`;
 
-  // Submit button
   html += `<div class="submit-row">
-    <button class="btn btn-outline" id="firstLetterToggleBtn" onclick="toggleFirstLetterClues()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
-      ${showFirstLetterClues ? 'Hide Clues' : 'Show First Letter'}
-    </button>
-    <button class="btn btn-outline" id="svAskAiBtn" onclick="askAIClueStudent()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
-      Ask AI
-    </button>
-    <button class="btn btn-outline" onclick="resetStudentAnswers()">
+    <span class="practice-score" id="svScoreDisplay" style="margin-right:auto;"></span>
+    <button class="btn btn-outline" onclick="resetStudentViewAnswers()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
       Reset
     </button>
-    <button class="btn btn-primary" onclick="checkStudentAnswers('${qId}')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      Check Answers
-    </button>
-    <button class="btn btn-primary" id="svMarkAiBtn" onclick="checkStudentAnswersAI('${qId}')">
+    <button class="btn btn-primary" id="svMarkAiBtn" onclick="markStudentViewAnswers('${qId}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
       Mark with AI
     </button>
   </div>`;
-  
+
   container.innerHTML = html;
-  applyFirstLetterClues();
 }
 
-function renderStudentText(blockId, content, blanks) {
-  if (!content) return '';
-  const blockBlanks = blanks?.[blockId] || {};
-  
-  // Preserve original HTML structure (e.g. <ol>/<ul>/<li>) while replacing
-  // selected words with blank inputs by global word index.
-  const root = document.createElement('div');
-  root.innerHTML = content;
-  let wordIndex = 0;
-  const wordRe = /([A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*)|(\s+)|([^A-Za-z0-9\s]+)/g;
-
-  function buildFragmentFromText(text) {
-    const frag = document.createDocumentFragment();
-    let m;
-    while ((m = wordRe.exec(text)) !== null) {
-      if (m[1]) {
-        const word = m[1];
-        const idx = wordIndex++;
-    if (blockBlanks[idx]) {
-          const input = document.createElement('input');
-          input.className = 'blank-input';
-          input.setAttribute('data-answer', word);
-          input.setAttribute('data-block', blockId);
-          input.setAttribute('data-idx', String(idx));
-          input.setAttribute('placeholder', '________');
-          input.style.width = `${Math.max(80, word.length * 12)}px`;
-          frag.appendChild(input);
-    } else {
-          frag.appendChild(document.createTextNode(word));
-        }
-      } else {
-        frag.appendChild(document.createTextNode(m[0]));
-      }
-    }
-    return frag;
-  }
-
-  function walk(node) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const repl = buildFragmentFromText(node.nodeValue || '');
-      node.parentNode.replaceChild(repl, node);
-      return;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    const children = Array.from(node.childNodes);
-    children.forEach(walk);
-  }
-
-  walk(root);
-  return `<div style="line-height:2.2;">${root.innerHTML}</div>`;
+function resetStudentViewAnswers() {
+  resetOpenAnswersIn('#studentViewContainer', 'svScoreDisplay');
 }
 
-function resetStudentAnswers() {
-  document.querySelectorAll('.blank-input').forEach(input => {
-    input.value = '';
-    input.style.borderBottomColor = 'var(--primary)';
-    input.style.background = 'var(--primary-light)';
+function markStudentViewAnswers(qId) {
+  const q = questionBank.find(qb => qb.id === qId);
+  if (!q) return;
+  return markOpenAnswersIn('#studentViewContainer', q, {
+    btnId: 'svMarkAiBtn', scoreElId: 'svScoreDisplay', scorePrefix: 'AI Score', mode: 'practice'
   });
-  applyFirstLetterClues();
-  showToast('Answers reset', 'info');
-}
-
-function applyFirstLetterClues() {
-  document.querySelectorAll('.blank-input').forEach(input => {
-    const ans = input.dataset.answer || '';
-    if (!ans) return;
-    if (showFirstLetterClues && ans.length > 1) {
-      const first = ans.charAt(0);
-      const rest = '_'.repeat(Math.max(3, ans.length - 1));
-      input.placeholder = `${first}${rest}`;
-    } else {
-      input.placeholder = '________';
-    }
-  });
-
-  const btn = document.getElementById('firstLetterToggleBtn');
-  if (btn) {
-    btn.innerHTML = `${showFirstLetterClues
-      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> Hide Clues'
-      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> Show First Letter'
-    }`;
-  }
-
-  const pBtn = document.getElementById('practiceFirstLetterToggleBtn');
-  if (pBtn) {
-    pBtn.innerHTML = `${showFirstLetterClues
-      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> Hide Clues'
-      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> First Letter'
-    }`;
-  }
-}
-
-function toggleFirstLetterClues() {
-  showFirstLetterClues = !showFirstLetterClues;
-  applyFirstLetterClues();
-}
-
-function checkStudentAnswers(qId) {
-  const inputs = document.querySelectorAll('.blank-input');
-  let correct = 0;
-  let total = inputs.length;
-  
-  inputs.forEach((input, idx) => {
-    const answer = input.dataset.answer.toLowerCase().trim();
-    const userAnswer = input.value.toLowerCase().trim();
-
-    if (userAnswer === answer) {
-      input.style.borderBottomColor = 'var(--primary)';
-      input.style.background = '#e8f5e9';
-      correct++;
-      addAnswerIcon(input, true, idx * 80);
-    } else if (userAnswer === '') {
-      input.style.borderBottomColor = 'var(--accent-orange)';
-      input.style.background = 'var(--accent-orange-light)';
-    } else {
-      input.style.borderBottomColor = 'var(--accent-red)';
-      input.style.background = 'var(--accent-red-light)';
-      addAnswerIcon(input, false, idx * 80);
-    }
-  });
-
-  if (total === 0) {
-    showToast('No blanks to check in this question', 'info');
-    return;
-  }
-  
-  const pct = Math.round((correct / total) * 100);
-  showToast(`Score: ${correct}/${total} (${pct}%)`, correct === total ? 'success' : 'info');
-
-  // Record question attempt for usage tracking
-  if (currentUser && currentUser.role === 'student') {
-    addDoc(collection(db, 'questionAttempts'), {
-      uid: currentUser.uid,
-      email: currentUser.email,
-      displayName: currentUser.name,
-      questionId: qId || '',
-      questionTitle: '',
-      score: correct,
-      totalBlanks: total,
-      timestamp: Timestamp.now(),
-      mode: 'practice'
-    }).catch(err => console.warn('Could not record attempt:', err));
-  }
 }
 
 // =====================================================================
@@ -9824,7 +9214,6 @@ function renderPrintSelect() {
 
   let html = '';
   filtered.forEach(q => {
-    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
     const checked = printSelectedIds.has(q.id);
     html += `<div class="print-select-card${checked ? ' selected' : ''}" data-qid="${q.id}" onclick="togglePrintCardClick('${q.id}', this)">
       <input type="checkbox" ${checked ? 'checked' : ''} onclick="event.stopPropagation()" onchange="togglePrintQuestion('${q.id}', this.checked)">
@@ -9833,7 +9222,6 @@ function renderPrintSelect() {
         <div class="psc-meta">
           <span class="qb-tag category">${escapeHtml(q.category)}</span>
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
-          ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
         </div>
       </div>
       <div class="psc-preview-wrap" onclick="event.stopPropagation()">
@@ -9960,67 +9348,12 @@ function hidePrintPreview() {
   }, 100);
 }
 
-function renderPrintText(blockId, content, blanks, blankCounter) {
-  if (!content) return { html: '', counter: blankCounter };
-  const tokens = tokenizeBlankText(content);
-  if (tokens.length === 0) return { html: '', counter: blankCounter };
-  const blockBlanks = blanks?.[blockId] || {};
-  let html = '';
-  let counter = blankCounter;
-  tokens.forEach(tok => {
-    if (tok.type === 'word') {
-      const idx = tok.wordIndex;
-      const word = tok.text;
-    if (blockBlanks[idx]) {
-      counter++;
-      const width = Math.max(60, word.length * 8);
-        html += `<span class="print-blank-numbered" style="min-width:${width}pt;"><span class="print-blank-line"></span><span class="print-blank-num">(${counter})</span></span>`;
-    } else {
-        html += escapeHtml(word);
-      }
-    } else {
-      html += escapeHtml(tok.text);
-    }
-  });
-  return { html, counter };
-}
-
-function collectPrintBlanks(blockId, content, blanks) {
-  if (!content) return [];
-  const tokens = tokenizeBlankText(content);
-  if (tokens.length === 0) return [];
-  const blockBlanks = blanks?.[blockId] || {};
-  const result = [];
-  tokens.forEach(tok => {
-    if (tok.type === 'word' && blockBlanks[tok.wordIndex]) {
-      result.push(tok.text);
-    }
-  });
-  return result;
-}
-
 function printWorksheet() {
   if (printSelectedIds.size === 0) {
     showToast('Select at least one question to print', 'info');
     return;
   }
-  // Show mode selection overlay
-  document.getElementById('printModeOverlay').classList.add('active');
-}
-
-function closePrintMode() {
-  document.getElementById('printModeOverlay').classList.remove('active');
-}
-
-function confirmPrintMode(mode) {
-  closePrintMode();
-  if (mode === 'blanks') {
-    doPrintWorksheetBlanks();
-  } else if (mode === 'firstletter') {
-    doPrintWorksheetBlanks(true);
-  } else {
-    doPrintWorksheetOpen();
-  }
+  doPrintWorksheetOpen();
 }
 
 // Helper: generate dotted writing lines for open-ended boxes
@@ -10053,128 +9386,6 @@ function linesForText(text, charsPerLine) {
   if (!text) return 3;
   const plain = stripHtml(text);
   return Math.max(3, Math.ceil(plain.length / (charsPerLine || 60)));
-}
-
-// ===== FILL IN THE BLANKS MODE =====
-function doPrintWorksheetBlanks(useFirstLetter) {
-  const selected = questionBank.filter(q => printSelectedIds.has(q.id));
-  const output = document.getElementById('printOutput');
-  let allHtml = '';
-  const answerKeyData = [];
-  let blankCounter = 0;
-  const renderFn = useFirstLetter ? renderPrintTextWithFirstLetter : renderPrintText;
-
-  selected.forEach((q, qIndex) => {
-    let qHtml = `<div class="print-question-chunk">`;
-
-    if (qIndex === 0) {
-      qHtml += `<div class="print-worksheet-header">
-        <img class="print-worksheet-header-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2252%22 height=%2252%22 viewBox=%220 0 52 52%22%3E%3Crect width=%2252%22 height=%2252%22 rx=%2210%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2226%22 y=%2237%22 font-family=%22DM Sans,sans-serif%22 font-size=%2232%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
-        <div class="print-worksheet-header-text">
-        <h1>CER Worksheet</h1>
-        <p>Polymath Learning Centre</p>
-        </div>
-      </div>
-      <div class="print-student-info">
-        <span>Name: ___________________________</span>
-        <span>Date: _______________</span>
-        <span>Class: ___________</span>
-      </div>`;
-    }
-
-    qHtml += `<div class="print-q-header">
-      <h2>${escapeHtml(q.title)}</h2>
-      <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
-    </div>`;
-
-    const qAnswers = [];
-
-    q.blocks.forEach(block => {
-      switch (block.type) {
-        case 'text': {
-          const result = renderFn(block.id, block.content, q.blanks, blankCounter);
-          blankCounter = result.counter;
-          qHtml += `<div class="print-text-block">${result.html}</div>`;
-          qAnswers.push(...collectPrintBlanks(block.id, block.content, q.blanks));
-          break;
-        }
-        case 'image': {
-          if (block.url) {
-            qHtml += `<div class="print-text-block"><img src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="max-width:100%;max-height:200pt;"></div>`;
-          }
-          break;
-        }
-        case 'answer': {
-          qHtml += `<div class="print-cer-section">`;
-          const claimResult = renderFn(block.id + '_claim', block.claim, q.blanks, blankCounter);
-          blankCounter = claimResult.counter;
-          qHtml += `<div class="print-cer-label">Claim</div><div class="print-cer-content">${claimResult.html}</div>`;
-          qAnswers.push(...collectPrintBlanks(block.id + '_claim', block.claim, q.blanks));
-
-          const evResult = renderFn(block.id + '_evidence', block.evidence, q.blanks, blankCounter);
-          blankCounter = evResult.counter;
-          qHtml += `<div class="print-cer-label">Evidence</div><div class="print-cer-content">${evResult.html}</div>`;
-          qAnswers.push(...collectPrintBlanks(block.id + '_evidence', block.evidence, q.blanks));
-
-          const resResult = renderFn(block.id + '_reasoning', block.reasoning, q.blanks, blankCounter);
-          blankCounter = resResult.counter;
-          qHtml += `<div class="print-cer-label">Reasoning</div><div class="print-cer-content">${resResult.html}</div>`;
-          qAnswers.push(...collectPrintBlanks(block.id + '_reasoning', block.reasoning, q.blanks));
-
-          qHtml += `</div>`;
-          break;
-        }
-        case 'plainanswer': {
-          const paResult = renderFn(block.id, block.content, q.blanks, blankCounter);
-          blankCounter = paResult.counter;
-          qHtml += `<div class="print-text-block">${paResult.html}</div>`;
-          qAnswers.push(...collectPrintBlanks(block.id, block.content, q.blanks));
-          break;
-        }
-        case 'explanation': break;
-        case 'video': {
-          if (block.url) {
-            qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`;
-          }
-          break;
-        }
-        case 'table': {
-          qHtml += renderTableReadonly(block, 'print-table');
-          break;
-        }
-        default:
-          qHtml += renderImportedBlockStudent(block);
-          break;
-      }
-    });
-
-    qHtml += `</div>`;
-    allHtml += qHtml;
-    answerKeyData.push({ title: q.title, answers: qAnswers });
-  });
-
-  // Answer Key Page (fill in blanks — numbered words)
-  const hasAnyBlanks = answerKeyData.some(d => d.answers.length > 0);
-  if (hasAnyBlanks) {
-    allHtml += `<div class="print-question-page print-answer-key-page">`;
-    allHtml += `<h2>Answer Key</h2>`;
-    let globalNum = 0;
-    answerKeyData.forEach(qData => {
-      if (qData.answers.length === 0) return;
-      allHtml += `<div class="print-ak-question">`;
-      allHtml += `<h4>${escapeHtml(qData.title)}</h4>`;
-      allHtml += `<div class="print-ak-answers">`;
-      qData.answers.forEach(word => {
-        globalNum++;
-        allHtml += `<div class="ak-item"><span class="ak-num">${globalNum}.</span> <span class="ak-word">${escapeHtml(word)}</span></div>`;
-      });
-      allHtml += `</div></div>`;
-    });
-    allHtml += `</div>`;
-  }
-
-  output.innerHTML = allHtml;
-  autoscaleAndPrint(output);
 }
 
 // ===== OPEN ENDED MODE =====
@@ -10901,9 +10112,8 @@ function renderPracticeReady() {
 function getQuestionsForLevel(level) {
   const maxLevel = getLevelNumber(level);
   return questionBank.filter(q => {
-    // Only include questions that have blanks
-    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
-    if (blankCount === 0) return false;
+    // Only include questions with something the AI can mark
+    if (!questionHasMarkableAnswer(q)) return false;
     const qLevel = getLevelNumber(getTopicLevel(q.topic));
     return qLevel <= maxLevel;
   });
@@ -10923,7 +10133,7 @@ function loadRandomPracticeQuestion() {
       <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         <h3>No Questions Available</h3>
-        <p>There are no fill-in-the-blank questions for ${escapeHtml(student.level)} level or below. Add questions with blanks to the Question Bank first.</p>
+        <p>There are no questions for ${escapeHtml(student.level)} level or below yet. Add questions to the Question Bank first.</p>
       </div>`;
     return;
   }
@@ -10932,15 +10142,9 @@ function loadRandomPracticeQuestion() {
   renderPracticeQuestion(q, student);
 }
 
-let practiceMode = 'open';     // 'blanks' | 'open'
 let currentPracticeQ = null;
 let _openItemsStore = {};        // containerSel -> [{ label, model }] for open-ended marking
 let _openMcqStore = {};          // containerSel -> [{ blockId, options:[{letter,text,id,correct}] }]
-
-function togglePracticeMode() {
-  practiceMode = practiceMode === 'blanks' ? 'open' : 'blanks';
-  if (currentPracticeQ) renderPracticeQuestion(currentPracticeQ, students[activeStudentIndex]);
-}
 
 function _openSection(items, label, modelAnswer, bg, fg) {
   const oidx = items.length;
@@ -11013,7 +10217,7 @@ function buildOpenBody(q, containerSel) {
     }
   });
   if (items.length === 0 && mcqItems.length === 0) {
-    html += `<div style="padding:12px;color:var(--text-muted);font-size:0.9rem;">This question has no written-answer section, so open-ended mode has nothing to mark. Switch back to Fill Blanks.</div>`;
+    html += `<div style="padding:12px;color:var(--text-muted);font-size:0.9rem;">This question has no answer section for the AI to mark.</div>`;
   } else {
     html += openPhotoBarHtml(containerSel);
   }
@@ -11089,11 +10293,6 @@ function renderOpenPracticeBody(q) { return buildOpenBody(q, '#practiceContainer
 
 function renderPracticeQuestion(q, student) {
   currentPracticeQ = q;
-  const modeToggleBtn = `
-          <button class="btn btn-outline" onclick="togglePracticeMode()" title="Switch answer mode">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M3 7h13M16 3l4 4-4 4"/><path d="M21 17H8M8 21l-4-4 4-4"/></svg>
-            ${practiceMode === 'open' ? 'Fill Blanks' : 'Open-Ended'}
-          </button>`;
 
   let html = `
     <div class="practice-student-info">
@@ -11105,70 +10304,18 @@ function renderPracticeQuestion(q, student) {
       <div class="practice-card-header">
         <h3>${escapeHtml(q.title)}</h3>
         <div style="display:flex;gap:6px;align-items:center;">
-          <span class="qb-tag" style="background:var(--surface-container-high,#ebe8e3);">${practiceMode === 'open' ? 'Open-Ended' : 'Fill Blanks'}</span>
           <span class="qb-tag category">${escapeHtml(q.category)}</span>
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
         </div>
       </div>
       <div class="practice-card-body">`;
 
-  if (practiceMode === 'open') {
-    html += renderOpenPracticeBody(q);
-  } else {
-    q.blocks.forEach(block => {
-      switch (block.type) {
-        case 'text':
-          html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
-          html += renderStudentText(block.id, block.content, q.blanks);
-          break;
-        case 'image':
-          if (block.url) {
-            html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
-          }
-          break;
-        case 'answer':
-          html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-          html += `<div class="cer-student-section">`;
-          html += `<div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
-          html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div>`;
-          html += `</div>`;
-          html += `<div class="cer-student-section">`;
-          html += `<div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
-          html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, q.blanks)}</div>`;
-          html += `</div>`;
-          html += `<div class="cer-student-section">`;
-          html += `<div class="cer-student-label" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
-          html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div>`;
-          html += `</div>`;
-          break;
-        case 'plainanswer':
-          html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-          html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
-          break;
-        case 'explanation':
-          break; // hidden
-        case 'video':
-          if (block.url) {
-            const embedUrl = getYouTubeEmbedUrl(block.url);
-            if (embedUrl) {
-              html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
-            }
-          }
-          break;
-        case 'table':
-          html += renderTableReadonly(block, '');
-          break;
-        default:
-          html += renderImportedBlockStudent(block, q);
-          break;
-      }
-    });
-  }
+  html += renderOpenPracticeBody(q);
 
-  let actionsInner;
-  if (practiceMode === 'open') {
-    actionsInner = `
-          ${modeToggleBtn}
+  html += `</div>
+      <div class="practice-actions">
+        <div class="practice-score" id="practiceScoreDisplay"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
           <button class="btn btn-outline" onclick="resetOpenAnswers()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             Reset
@@ -11179,45 +10326,12 @@ function renderPracticeQuestion(q, student) {
           </button>
           <button class="btn btn-primary" onclick="loadRandomPracticeQuestion()">
             Next Question &rarr;
-          </button>`;
-  } else {
-    actionsInner = `
-          ${modeToggleBtn}
-          <button class="btn btn-outline" id="practiceFirstLetterToggleBtn" onclick="toggleFirstLetterClues()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
-            ${showFirstLetterClues ? 'Hide Clues' : 'First Letter'}
           </button>
-          <button class="btn btn-outline" id="practiceAskAiBtn" onclick="askAIClue()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
-            Ask AI
-          </button>
-          <button class="btn btn-outline" onclick="resetStudentAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            Reset
-          </button>
-          <button class="btn btn-blue" onclick="checkPracticeAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
-            Check
-          </button>
-          <button class="btn btn-blue" id="practiceMarkAiBtn" onclick="checkPracticeAnswersAI()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
-            Mark with AI
-          </button>
-          <button class="btn btn-primary" onclick="loadRandomPracticeQuestion()">
-            Next Question &rarr;
-          </button>`;
-  }
-
-  html += `</div>
-      <div class="practice-actions">
-        <div class="practice-score" id="practiceScoreDisplay"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">${actionsInner}
         </div>
       </div>
     </div>`;
 
   document.getElementById('practiceContainer').innerHTML = html;
-  applyFirstLetterClues();
 }
 
 function resetOpenAnswersIn(containerSel, scoreElId) {
@@ -11460,351 +10574,10 @@ function markOpenAnswers() {
   });
 }
 
-function checkPracticeAnswers() {
-  const inputs = document.querySelectorAll('#practiceContainer .blank-input');
-  let correct = 0;
-  let total = inputs.length;
-
-  inputs.forEach((input, idx) => {
-    const answer = input.dataset.answer.toLowerCase().trim();
-    const userAnswer = input.value.toLowerCase().trim();
-    if (userAnswer === answer) {
-      input.style.borderBottomColor = 'var(--primary)';
-      input.style.background = '#e8f5e9';
-      correct++;
-      addAnswerIcon(input, true, idx * 80);
-    } else if (userAnswer === '') {
-      input.style.borderBottomColor = 'var(--accent-orange)';
-      input.style.background = 'var(--accent-orange-light)';
-      const correction = document.createElement('span');
-      correction.style.cssText = 'color:var(--primary);font-weight:600;font-size:0.82rem;margin-left:4px;';
-      correction.textContent = input.dataset.answer;
-      input.parentNode.insertBefore(correction, input.nextSibling);
-    } else {
-      input.style.borderBottomColor = 'var(--accent-red)';
-      input.style.background = 'var(--accent-red-light)';
-      const correction = document.createElement('span');
-      correction.style.cssText = 'color:var(--primary);font-weight:600;font-size:0.82rem;margin-left:4px;';
-      correction.textContent = input.dataset.answer;
-      input.parentNode.insertBefore(correction, input.nextSibling);
-      addAnswerIcon(input, false, idx * 80);
-    }
-  });
-
-  const scoreEl = document.getElementById('practiceScoreDisplay');
-  if (total === 0) {
-    scoreEl.textContent = 'No blanks to check';
-  } else {
-    const pct = Math.round((correct / total) * 100);
-    scoreEl.textContent = `Score: ${correct}/${total} (${pct}%)`;
-    scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
-  }
-}
-
-// =====================================================================
-// ASK AI / MARK WITH AI — shared helpers (Firebase AI Logic + Gemini Flash)
-// Used by Practice, Student View, and Quick Practice / Worksheet Practice.
-// =====================================================================
-function _hasClue(input) {
-  const n = input.nextElementSibling;
-  return !!(n && n.classList && n.classList.contains('ai-clue'));
-}
-
-function _showClue(input, text) {
-  if (_hasClue(input)) input.nextElementSibling.remove();
-  const span = document.createElement('span');
-  span.className = 'ai-clue';
-  span.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:2px 8px;border-radius:10px;background:var(--accent-blue-light,#e3f2fd);color:var(--accent-blue,#1565c0);font-size:0.78rem;font-weight:500;';
-  span.textContent = '💡 ' + text;
-  input.insertAdjacentElement('afterend', span);
-}
-
-function _aiFeedbackSpan(input, text, color, italic) {
-  const span = document.createElement('span');
-  span.className = 'ai-correction';
-  span.style.cssText = `color:${color};font-size:0.8rem;margin-left:4px;font-weight:600;${italic ? 'font-style:italic;font-weight:500;' : ''}`;
-  span.textContent = text;
-  const after = (input.nextElementSibling && input.nextElementSibling.classList &&
-    input.nextElementSibling.classList.contains('answer-icon')) ? input.nextElementSibling : input;
-  after.insertAdjacentElement('afterend', span);
-}
-
-// Generic clue: gives a non-revealing hint for the next blank in `containerSel`.
-async function aiClue(containerSel, btnId) {
-  if (!window.__aiReady || !window.__aiReady()) {
-    showToast("Ask AI isn't set up yet — add your reCAPTCHA site key in the code", 'info');
-    return;
-  }
-  const inputs = Array.from(document.querySelectorAll(containerSel + ' .blank-input'));
-  if (!inputs.length) { showToast('No blanks to give clues for', 'info'); return; }
-
-  // Prefer the first empty blank without a clue; otherwise the first without a clue.
-  const target = inputs.find(i => !i.value.trim() && !_hasClue(i)) || inputs.find(i => !_hasClue(i));
-  if (!target) { showToast('A clue is already shown for every blank', 'info'); return; }
-
-  const answer = (target.dataset.answer || '').trim();
-  const titleEl = document.querySelector(containerSel + ' .practice-card-header h3') ||
-                  document.querySelector(containerSel + ' .student-card-header h3');
-  const topicEl = document.querySelector(containerSel + ' .qb-tag.topic');
-  const title = titleEl ? titleEl.textContent.trim() : '';
-  const topic = topicEl ? topicEl.textContent.trim() : '';
-  const wrapper = target.closest('div[style*="line-height"]') || target.parentElement;
-  const sentence = (wrapper ? wrapper.textContent : '').replace(/\s+/g, ' ').trim();
-
-  const prompt =
-    `You are a friendly tutor helping a student fill in a blank in a keywords/science question.\n` +
-    `Topic: "${topic}". Question: "${title}".\n` +
-    `Sentence (the missing word appears as a gap): "${sentence}".\n` +
-    `The correct word for the gap is "${answer}".\n` +
-    `Give ONE short, encouraging clue (max 18 words) that helps the student recall the word. ` +
-    `Do NOT write the word itself or any obvious form of it. Reply with just the clue text.`;
-
-  const btn = btnId ? document.getElementById(btnId) : null;
-  const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = 'Thinking…'; }
-  try {
-    const clue = await askGeminiCached(prompt, { maxOutputTokens: 60, temperature: 0.5 });
-    _showClue(target, clue);
-    target.focus();
-  } catch (e) {
-    console.error('AI clue error:', e);
-    showToast('Clue error: ' + (e && e.message ? e.message : e), 'error');
-  } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-  }
-}
-
-function _gradingPrompt(toGrade, questionGuide) {
-  const list = toGrade.map((g, i) => `${i}. expected="${g.expected}" student="${g.student}"`).join('\n');
-  return `You are marking fill-in-the-blank answers for a student. ${_markingPreamble(questionGuide)} ` +
-    `For EACH item decide if the student's answer is correct. ` +
-    `Accept synonyms, singular/plural, capitalisation differences, and minor spelling/typos, but the meaning must match the expected word. ` +
-    `Return ONLY a JSON array, one object per item, like ` +
-    `[{"i":0,"correct":true,"note":"short reason, max 8 words"}].\n${list}`;
-}
-
-// Sends the answered blanks to Gemini and returns { idx -> {correct, note} }.
-async function _gradeWithAI(toGrade, questionGuide) {
-  const raw = await askGemini(_gradingPrompt(toGrade, questionGuide), { maxOutputTokens: 256 + toGrade.length * 60, temperature: 0, json: true });
-  const arr = _parseAIJson(raw);
-  const verdicts = {};
-  arr.forEach(v => { if (v && typeof v.i === 'number' && toGrade[v.i]) verdicts[toGrade[v.i].idx] = v; });
-  return verdicts;
-}
-
-// Generic semantic marker. opts: { scoreElId, btnId, scorePrefix, fallback, onComplete }
-async function aiMark(containerSel, opts = {}) {
-  const { scoreElId, btnId, scorePrefix = 'AI Score', fallback, onComplete, questionGuide } = opts;
-  if (!window.__aiReady || !window.__aiReady()) {
-    showToast("AI marking isn't set up yet — using exact match", 'info');
-    return fallback ? fallback() : undefined;
-  }
-  const inputs = Array.from(document.querySelectorAll(containerSel + ' .blank-input'));
-  const scoreEl = scoreElId ? document.getElementById(scoreElId) : null;
-  const btn = btnId ? document.getElementById(btnId) : null;
-  if (!inputs.length) {
-    if (scoreEl) scoreEl.textContent = 'No blanks to check'; else showToast('No blanks to check', 'info');
-    return;
-  }
-
-  // Clear any feedback from a previous check.
-  document.querySelectorAll(`${containerSel} .ai-correction, ${containerSel} .answer-icon`).forEach(el => el.remove());
-
-  const graded = inputs.map((input, idx) => ({
-    input, idx,
-    expected: (input.dataset.answer || '').trim(),
-    student: input.value.trim()
-  }));
-  const toGrade = graded.filter(g => g.student);
-
-  let verdicts = {};
-  const orig = btn ? btn.innerHTML : '';
-  if (toGrade.length) {
-    if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
-    if (scoreEl) scoreEl.textContent = 'Marking with AI…';
-    try {
-      verdicts = await _gradeWithAI(toGrade, questionGuide);
-    } catch (e) {
-      console.error('AI marking error:', e);
-      showToast('AI mark error: ' + (e && e.message ? e.message : e), 'error');
-      if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-      return fallback ? fallback() : undefined;
-    }
-    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-  }
-
-  let correct = 0;
-  const total = inputs.length;
-  graded.forEach(({ input, idx, expected, student }) => {
-    if (!student) {
-      input.style.borderBottomColor = 'var(--accent-orange)';
-      input.style.background = 'var(--accent-orange-light)';
-      _aiFeedbackSpan(input, expected, 'var(--primary)', false);
-      return;
-    }
-    const v = verdicts[idx];
-    const ok = v ? !!v.correct : (student.toLowerCase() === expected.toLowerCase());
-    if (ok) {
-      input.style.borderBottomColor = 'var(--primary)';
-      input.style.background = '#e8f5e9';
-      correct++;
-      addAnswerIcon(input, true, idx * 60);
-      if (v && v.note) _aiFeedbackSpan(input, v.note, 'var(--primary)', true);
-    } else {
-      input.style.borderBottomColor = 'var(--accent-red)';
-      input.style.background = 'var(--accent-red-light)';
-      addAnswerIcon(input, false, idx * 60);
-      _aiFeedbackSpan(input, expected + (v && v.note ? ` — ${v.note}` : ''), 'var(--primary)', false);
-    }
-  });
-
-  const pct = total ? Math.round((correct / total) * 100) : 0;
-  if (scoreEl) {
-    scoreEl.textContent = `${scorePrefix}: ${correct}/${total} (${pct}%)`;
-    scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
-  } else {
-    showToast(`${scorePrefix}: ${correct}/${total} (${pct}%)`, correct === total ? 'success' : 'info');
-  }
-  if (onComplete) onComplete(correct, total);
-}
-
-// ---- Practice tab wrappers ----
-function askAIClue() { return aiClue('#practiceContainer', 'practiceAskAiBtn'); }
-function checkPracticeAnswersAI() {
-  return aiMark('#practiceContainer', {
-    scoreElId: 'practiceScoreDisplay',
-    btnId: 'practiceMarkAiBtn',
-    questionGuide: currentPracticeQ && currentPracticeQ.markingGuide,
-    fallback: checkPracticeAnswers
-  });
-}
-
-// ---- Student View wrappers ----
-function askAIClueStudent() { return aiClue('#studentViewContainer', 'svAskAiBtn'); }
-function checkStudentAnswersAI(qId) {
-  const _q = questionBank.find(qb => qb.id === qId);
-  return aiMark('#studentViewContainer', {
-    btnId: 'svMarkAiBtn',
-    questionGuide: _q && _q.markingGuide,
-    fallback: () => checkStudentAnswers(qId),
-    onComplete: (correct, total) => {
-      if (currentUser && currentUser.role === 'student') {
-        addDoc(collection(db, 'questionAttempts'), {
-          uid: currentUser.uid,
-          email: currentUser.email,
-          displayName: currentUser.name,
-          questionId: qId || '',
-          questionTitle: '',
-          score: correct,
-          totalBlanks: total,
-          timestamp: Timestamp.now(),
-          mode: 'practice'
-        }).catch(err => console.warn('Could not record attempt:', err));
-      }
-    }
-  });
-}
-
-// ---- Quick Practice / Worksheet Practice wrappers ----
-function askAIClueQp() { return aiClue('#qpContainer', 'qpAskAiBtn'); }
-
-async function submitQpAnswersAI() {
-  if (qpSubmitted) return;
-  if (!window.__aiReady || !window.__aiReady()) {
-    showToast("AI marking isn't set up yet — using exact match", 'info');
-    return submitQpAnswers();
-  }
-  const inputs = Array.from(document.querySelectorAll('#qpContainer .blank-input'));
-  const btn = document.getElementById('qpMarkAiBtn');
-  const scoreEl = document.getElementById('qpScoreDisplay');
-  const graded = inputs.map((input, idx) => ({
-    input, idx,
-    expected: input.dataset.answer || '',
-    student: input.value.trim()
-  }));
-  const toGrade = graded.filter(g => g.student);
-
-  let verdicts = {};
-  const orig = btn ? btn.innerHTML : '';
-  if (toGrade.length) {
-    if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
-    if (scoreEl) scoreEl.textContent = 'Marking with AI…';
-    try {
-      const _qpQ = qpQueue[qpIndex];
-      verdicts = await _gradeWithAI(toGrade, _qpQ && _qpQ.markingGuide);
-    } catch (e) {
-      console.error(e);
-      showToast('AI marking failed — using exact match', 'error');
-      if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-      return submitQpAnswers();
-    }
-    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-  }
-
-  qpSubmitted = true;
-  let correct = 0;
-  const total = inputs.length;
-  const mistakes = [];
-  graded.forEach(({ input, idx, expected, student }) => {
-    input.readOnly = true;
-    const v = student ? verdicts[idx] : null;
-    const ok = student ? (v ? !!v.correct : (student.toLowerCase() === expected.toLowerCase().trim())) : false;
-    if (ok) {
-      input.style.borderBottomColor = 'var(--primary)';
-      input.style.background = '#e8f5e9';
-      correct++;
-      addAnswerIcon(input, true, idx * 80);
-      if (v && v.note) _aiFeedbackSpan(input, v.note, 'var(--primary)', true);
-    } else {
-      input.style.borderBottomColor = 'var(--accent-red)';
-      input.style.background = 'var(--accent-red-light)';
-      addAnswerIcon(input, false, idx * 80);
-      _aiFeedbackSpan(input, expected + (v && v.note ? ` — ${v.note}` : ''), 'var(--primary)', false);
-      mistakes.push({ expected, student });
-    }
-  });
-
-  _recordQpResult(correct, total, mistakes);
-  qpAnswered = Math.max(qpAnswered, qpIndex + 1);
-  updateQpProgress();
-
-  if (currentUser && currentUser.role === 'student') {
-    const currentQ = qpQueue[qpIndex];
-    addDoc(collection(db, 'questionAttempts'), {
-      uid: currentUser.uid,
-      email: currentUser.email,
-      displayName: currentUser.name,
-      questionId: currentQ ? currentQ.id : '',
-      questionTitle: currentQ ? currentQ.title : '',
-      score: total > 0 ? correct : 0,
-      totalBlanks: total,
-      timestamp: Timestamp.now(),
-      mode: 'quickpractice'
-    }).catch(err => console.warn('Could not record attempt:', err));
-  }
-
-  const pct = total ? Math.round((correct / total) * 100) : 0;
-  if (scoreEl) {
-    scoreEl.textContent = total ? `AI Score: ${correct}/${total} (${pct}%)` : 'No blanks to check';
-    if (total) scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
-  }
-
-  const submitBtn = document.getElementById('qpSubmitBtn');
-  const nextBtn = document.getElementById('qpNextBtn');
-  const firstLetterBtn = document.getElementById('qpFirstLetterBtn');
-  const modeBtn = document.getElementById('qpModeBtn');
-  if (submitBtn) submitBtn.style.display = 'none';
-  if (btn) btn.style.display = 'none';
-  if (nextBtn) nextBtn.style.display = '';
-  if (firstLetterBtn) firstLetterBtn.disabled = true;
-  if (modeBtn) modeBtn.disabled = true;
-}
-
 // =====================================================================
 // STUDENT WORKSHEET CREATOR
 // =====================================================================
 let wsSelectedIds = new Set();
-let wsFormat = 'blanks'; // 'blanks' | 'firstletter' | 'open'
 let savedWorksheets = [];
 
 function populateWsTopicFilter() {
@@ -11856,7 +10629,6 @@ function renderWsQuestions() {
     const checked = wsSelectedIds.has(q.id);
     const qLevel = getTopicLevel(q.topic || '');
     const qCategory = normalizeCategoryValue(q.category);
-    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
     const previewText = getQuestionPreview(q);
     const qSource = questionSource(q);
     return `<div class="ws-q-card${checked ? ' selected' : ''}" data-qid="${q.id}" onclick="onWsCardClick('${q.id}', event)" style="cursor:pointer;">
@@ -11868,7 +10640,6 @@ function renderWsQuestions() {
             <span class="qb-tag category">${escapeHtml(qCategory)}</span>
             <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
             <span class="qb-tag">${escapeHtml(qLevel)}</span>
-            ${blankCount > 0 ? `<span class="qb-tag blanks">${blankCount} blank${blankCount !== 1 ? 's' : ''}</span>` : ''}
             ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
           </div>
         </div>
@@ -12020,18 +10791,9 @@ function updateWsCount() {
   if (countEl) countEl.textContent = wsSelectedIds.size + ' selected';
 }
 
-function setWsFormat(format) {
-  wsFormat = format;
-  document.querySelectorAll('.ws-format-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.format === format);
-  });
-}
-
 // ---- Save worksheets to Firestore ----
 function _wsCol() { return collection(db, 'users', currentUser.uid, 'worksheets'); }
 function _wsRef(id) { return doc(db, 'users', currentUser.uid, 'worksheets', id); }
-
-let saveWsDialogFormat = 'blanks';
 
 function saveWorksheet() {
   if (wsSelectedIds.size === 0) {
@@ -12041,20 +10803,8 @@ function saveWorksheet() {
   // Pre-fill from current state
   const nameInput = document.getElementById('saveWsName');
   nameInput.value = (document.getElementById('wsTitle')?.value || '').trim();
-  saveWsDialogFormat = wsFormat;
-  // Update active button in dialog
-  document.querySelectorAll('.save-ws-format-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.format === saveWsDialogFormat);
-  });
   document.getElementById('saveWsOverlay').classList.add('active');
   nameInput.focus();
-}
-
-function setSaveWsFormat(format) {
-  saveWsDialogFormat = format;
-  document.querySelectorAll('.save-ws-format-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.format === format);
-  });
 }
 
 function closeSaveWsDialog() {
@@ -12072,7 +10822,7 @@ async function confirmSaveWorksheet() {
     id: 'ws_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: title,
     questionIds: Array.from(wsSelectedIds),
-    format: saveWsDialogFormat,
+    format: 'open',
     createdAt: new Date().toISOString()
   };
   savedWorksheets.push(ws);
@@ -12112,12 +10862,11 @@ function renderSavedWorksheets() {
     return;
   }
   grid.innerHTML = savedWorksheets.map(ws => {
-    const formatLabels = { blanks: 'Blanks', firstletter: 'Blanks + First Letter', open: 'Open Ended' };
     const date = ws.createdAt ? new Date(ws.createdAt).toLocaleDateString() : '';
     return `<div class="ws-saved-card">
       <div class="ws-saved-info">
         <h4>${escapeHtml(ws.title)}</h4>
-        <p>${ws.questionIds.length} question${ws.questionIds.length !== 1 ? 's' : ''} &middot; ${formatLabels[ws.format] || ws.format} &middot; ${date}</p>
+        <p>${ws.questionIds.length} question${ws.questionIds.length !== 1 ? 's' : ''} &middot; ${date}</p>
       </div>
       <div class="ws-saved-actions">
         <button class="btn btn-outline" onclick="reprintWorksheet('${ws.id}')" title="Print">
@@ -12155,7 +10904,7 @@ function reprintWorksheet(id) {
     showToast('Questions no longer available', 'error');
     return;
   }
-  doPrintStudentWorksheet(selected, ws.format, ws.title);
+  doPrintStudentWorksheet(selected, ws.title);
 }
 
 // ---- Practice worksheet questions ----
@@ -12195,8 +10944,6 @@ function launchWorksheetPractice(questions) {
   qpIndex = -1;
   qpAnswered = 0;
   qpSessionResults = [];
-  qpMode = 'open';
-  showFirstLetterClues = false;
   // Navigate to the Quick Practice page
   navigateTo('quickpractice');
   // Start practicing with these questions
@@ -12211,43 +10958,13 @@ function printStudentWorksheet() {
   }
   const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
-  doPrintStudentWorksheet(selected, wsFormat, title);
+  doPrintStudentWorksheet(selected, title);
 }
 
-function renderPrintTextWithFirstLetter(blockId, content, blanks, blankCounter) {
-  if (!content) return { html: '', counter: blankCounter };
-  const tokens = tokenizeBlankText(content);
-  if (tokens.length === 0) return { html: '', counter: blankCounter };
-  const blockBlanks = blanks?.[blockId] || {};
-  let html = '';
-  let counter = blankCounter;
-  tokens.forEach(tok => {
-    if (tok.type === 'word') {
-      const idx = tok.wordIndex;
-      const word = tok.text;
-      if (blockBlanks[idx]) {
-        counter++;
-        const firstLetter = word.charAt(0);
-        const rest = '_'.repeat(Math.max(3, word.length - 1));
-        const width = Math.max(60, word.length * 8);
-        html += `<span class="print-blank-numbered" style="min-width:${width}pt;"><span class="print-blank-line">${escapeHtml(firstLetter)}${rest}</span><span class="print-blank-num">(${counter})</span></span>`;
-      } else {
-        html += escapeHtml(word);
-      }
-    } else {
-      html += escapeHtml(tok.text);
-    }
-  });
-  return { html, counter };
-}
-
-function doPrintStudentWorksheet(selected, format, worksheetTitle) {
+function doPrintStudentWorksheet(selected, worksheetTitle) {
   const output = document.getElementById('printOutput');
   let allHtml = '';
   const answerKeyData = [];
-  let blankCounter = 0;
-
-  const renderFn = format === 'firstletter' ? renderPrintTextWithFirstLetter : renderPrintText;
 
   selected.forEach((q, qIndex) => {
     let qHtml = `<div class="print-question-chunk">`;
@@ -12272,8 +10989,8 @@ function doPrintStudentWorksheet(selected, format, worksheetTitle) {
       <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
     </div>`;
 
-    if (format === 'open') {
-      // Open ended mode
+    // Open ended writing boxes
+    {
       const qSections = [];
       q.blocks.forEach(block => {
         switch (block.type) {
@@ -12311,60 +11028,12 @@ function doPrintStudentWorksheet(selected, format, worksheetTitle) {
       qHtml += `</div>`;
       allHtml += qHtml;
       answerKeyData.push({ title: q.title, type: 'open', sections: qSections });
-    } else {
-      // Blanks or Blanks with first letter mode
-      const qAnswers = [];
-      q.blocks.forEach(block => {
-        switch (block.type) {
-          case 'text': {
-            const result = renderFn(block.id, block.content, q.blanks, blankCounter);
-            blankCounter = result.counter;
-            qHtml += `<div class="print-text-block">${result.html}</div>`;
-            qAnswers.push(...collectPrintBlanks(block.id, block.content, q.blanks));
-            break;
-          }
-          case 'image': {
-            if (block.url) qHtml += `<div class="print-text-block"><img src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="max-width:100%;max-height:200pt;"></div>`;
-            break;
-          }
-          case 'answer': {
-            qHtml += `<div class="print-cer-section">`;
-            const claimResult = renderFn(block.id + '_claim', block.claim, q.blanks, blankCounter);
-            blankCounter = claimResult.counter;
-            qHtml += `<div class="print-cer-label">Claim</div><div class="print-cer-content">${claimResult.html}</div>`;
-            qAnswers.push(...collectPrintBlanks(block.id + '_claim', block.claim, q.blanks));
-            const evResult = renderFn(block.id + '_evidence', block.evidence, q.blanks, blankCounter);
-            blankCounter = evResult.counter;
-            qHtml += `<div class="print-cer-label">Evidence</div><div class="print-cer-content">${evResult.html}</div>`;
-            qAnswers.push(...collectPrintBlanks(block.id + '_evidence', block.evidence, q.blanks));
-            const resResult = renderFn(block.id + '_reasoning', block.reasoning, q.blanks, blankCounter);
-            blankCounter = resResult.counter;
-            qHtml += `<div class="print-cer-label">Reasoning</div><div class="print-cer-content">${resResult.html}</div>`;
-            qAnswers.push(...collectPrintBlanks(block.id + '_reasoning', block.reasoning, q.blanks));
-            qHtml += `</div>`;
-            break;
-          }
-          case 'plainanswer': {
-            const paResult = renderFn(block.id, block.content, q.blanks, blankCounter);
-            blankCounter = paResult.counter;
-            qHtml += `<div class="print-text-block">${paResult.html}</div>`;
-            qAnswers.push(...collectPrintBlanks(block.id, block.content, q.blanks));
-            break;
-          }
-          case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
-          case 'explanation': break;
-          case 'video': { if (block.url) qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`; break; }
-          default: qHtml += renderImportedBlockStudent(block); break;
-        }
-      });
-      qHtml += `</div>`;
-      allHtml += qHtml;
-      answerKeyData.push({ title: q.title, type: 'blanks', answers: qAnswers });
     }
   });
 
+
   // Answer Key Page
-  if (format === 'open') {
+  {
     const hasAny = answerKeyData.some(d => d.sections && d.sections.length > 0);
     if (hasAny) {
       allHtml += `<div class="print-question-page print-answer-key-page"><h2>Answer Key</h2>`;
@@ -12374,22 +11043,6 @@ function doPrintStudentWorksheet(selected, format, worksheetTitle) {
         qData.sections.forEach(sec => {
           if (sec.label) allHtml += `<div class="ak-sublabel">${escapeHtml(sec.label)}</div>`;
           allHtml += `<div class="ak-fullcontent">${sec.content}</div>`;
-        });
-        allHtml += `</div></div>`;
-      });
-      allHtml += `</div>`;
-    }
-  } else {
-    const hasAny = answerKeyData.some(d => d.answers && d.answers.length > 0);
-    if (hasAny) {
-      allHtml += `<div class="print-question-page print-answer-key-page"><h2>Answer Key</h2>`;
-      let globalNum = 0;
-      answerKeyData.forEach(qData => {
-        if (!qData.answers || qData.answers.length === 0) return;
-        allHtml += `<div class="print-ak-question"><h4>${escapeHtml(qData.title)}</h4><div class="print-ak-answers">`;
-        qData.answers.forEach(word => {
-          globalNum++;
-          allHtml += `<div class="ak-item"><span class="ak-num">${globalNum}.</span> <span class="ak-word">${escapeHtml(word)}</span></div>`;
         });
         allHtml += `</div></div>`;
       });
@@ -12409,7 +11062,6 @@ let qpIndex = -1;       // current position in queue
 let qpLevel = 'P6';     // selected student level
 let qpAnswered = 0;     // questions answered so far
 let qpSessionResults = []; // per-question results for the end-of-session AI feedback
-let qpMode = 'open';     // 'blanks' | 'open'
 
 // Reset the practice session and show the "ready" state. Reused whenever the
 // level, type or topic filter changes.
@@ -12419,7 +11071,6 @@ function resetQpSession() {
   qpIndex = -1;
   qpAnswered = 0;
   qpSessionResults = [];
-  qpMode = 'open';
   const banner = document.getElementById('qpRecommendBanner');
   if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
   updateQpProgress();
@@ -12547,19 +11198,17 @@ async function qpAiRecommend() {
 }
 
 // ── Question-type helpers (shared by Quick Practice filters) ──────────
-function qpBlankCount(q) {
-  return q && q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
+function qpHasWritten(q) {
+  return !!(q && Array.isArray(q.blocks) && q.blocks.some(b => b && ['answer', 'plainanswer', 'openLines', 'workingSpace'].includes(b.type)));
 }
 function qpHasMcq(q) {
   return !!(q && Array.isArray(q.blocks) && q.blocks.some(b => b.type === 'mcq'));
 }
 // Does a question match the chosen practice type? ('all' | 'mcq' | 'written')
 function qpMatchesType(q, typeFilter) {
-  const hasMcq = qpHasMcq(q);
-  const hasBlanks = qpBlankCount(q) > 0;
-  if (typeFilter === 'mcq') return hasMcq;
-  if (typeFilter === 'written') return hasBlanks;
-  return hasMcq || hasBlanks; // 'all' — anything practiceable
+  if (typeFilter === 'mcq') return qpHasMcq(q);
+  if (typeFilter === 'written') return qpHasWritten(q);
+  return qpHasMcq(q) || qpHasWritten(q); // 'all' — anything practiceable
 }
 
 // Read the current Quick Practice filter selections.
@@ -12649,7 +11298,6 @@ async function startQuickPractice() {
   qpIndex = -1;
   qpAnswered = 0;
   qpSessionResults = [];
-  qpMode = 'open';
   if (qpQueue.length === 0) {
     document.getElementById('qpContainer').innerHTML = `
       <div class="empty-state">
@@ -12685,7 +11333,6 @@ function _recordQpResult(correct, total, mistakes) {
     mistakes: mistakes || []
   });
   recordCerPerformance(q, correct, total, 'quickpractice');
-  showExplanation('#qpContainer', q, '', 'qpScoreDisplay');
 }
 
 // Shared, styled end-of-practice report (used by Quick/Worksheet and Topical).
@@ -12826,18 +11473,11 @@ function updateQpProgress() {
 
 function renderQpQuestion(q) {
   const qLevel = getTopicLevel(q.topic || '');
-  // No blanks to fill (e.g. an MCQ-only question) → don't offer the mode switch.
-  const modeToggleBtn = qpBlankCount(q) === 0 ? '' : `
-          <button class="btn btn-outline" id="qpModeBtn" onclick="toggleQpMode()" title="Switch answer mode">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M3 7h13M16 3l4 4-4 4"/><path d="M21 17H8M8 21l-4-4 4-4"/></svg>
-            ${qpMode === 'open' ? 'Fill Blanks' : 'Open-Ended'}
-          </button>`;
   let html = `
     <div class="practice-card">
       <div class="practice-card-header">
         <h3>${escapeHtml(q.title)}</h3>
         <div style="display:flex;gap:6px;align-items:center;">
-          <span class="qb-tag" style="background:var(--surface-container-high,#ebe8e3);">${qpMode === 'open' ? 'Open-Ended' : 'Fill Blanks'}</span>
           <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
           <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
@@ -12845,90 +11485,7 @@ function renderQpQuestion(q) {
       </div>
       <div class="practice-card-body">`;
 
-  if (qpMode === 'open') {
-    html += buildOpenBody(q, '#qpContainer');
-  } else {
-    q.blocks.forEach(block => {
-      switch (block.type) {
-        case 'text':
-          html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
-          html += renderStudentText(block.id, block.content, q.blanks);
-          break;
-        case 'image':
-          if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
-          break;
-        case 'answer':
-          html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
-          html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div></div>`;
-          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
-          html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, q.blanks)}</div></div>`;
-          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
-          html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div></div>`;
-          break;
-        case 'plainanswer':
-          html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-          html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
-          break;
-        case 'explanation': break;
-        case 'video':
-          if (block.url) {
-            const embedUrl = getYouTubeEmbedUrl(block.url);
-            if (embedUrl) html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
-          }
-          break;
-        case 'table':
-          html += renderTableReadonly(block, '');
-          break;
-        default:
-          html += renderImportedBlockStudent(block, q);
-          break;
-      }
-    });
-  }
-
-  let actionsInner;
-  if (qpMode === 'open') {
-    actionsInner = `
-          ${modeToggleBtn}
-          <button class="btn btn-outline" onclick="resetQpOpenAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            Reset
-          </button>
-          <button class="btn btn-primary" id="qpMarkOpenBtn" onclick="submitQpOpenAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
-            Mark with AI
-          </button>
-          <button class="btn btn-primary" id="qpNextBtn" onclick="loadNextQpQuestion()" style="display:none;">
-            Next &rarr;
-          </button>`;
-  } else {
-    actionsInner = `
-          ${modeToggleBtn}
-          <button class="btn btn-outline" id="qpFirstLetterBtn" onclick="toggleQpFirstLetter()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
-            ${showFirstLetterClues ? 'Hide Clues' : 'First Letter'}
-          </button>
-          <button class="btn btn-outline" id="qpAskAiBtn" onclick="askAIClueQp()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
-            Ask AI
-          </button>
-          <button class="btn btn-outline" onclick="resetQpAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            Reset
-          </button>
-          <button class="btn btn-primary" id="qpSubmitBtn" onclick="submitQpAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
-            Submit
-          </button>
-          <button class="btn btn-primary" id="qpMarkAiBtn" onclick="submitQpAnswersAI()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
-            Mark with AI
-          </button>
-          <button class="btn btn-primary" id="qpNextBtn" onclick="loadNextQpQuestion()" style="display:none;">
-            Next &rarr;
-          </button>`;
-  }
+  html += buildOpenBody(q, '#qpContainer');
 
   html += `</div>
       <div class="practice-actions">
@@ -12939,21 +11496,26 @@ function renderQpQuestion(q) {
             Flag
           </button>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">${actionsInner}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn btn-outline" onclick="resetQpOpenAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+          <button class="btn btn-primary" id="qpMarkOpenBtn" onclick="submitQpOpenAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
+            Mark with AI
+          </button>
+          <button class="btn btn-primary" id="qpNextBtn" onclick="loadNextQpQuestion()" style="display:none;">
+            Next &rarr;
+          </button>
         </div>
       </div>
     </div>`;
 
   qpSubmitted = false;
-  showFirstLetterClues = false;
   document.getElementById('qpContainer').innerHTML = html;
-  applyFirstLetterClues();
 }
 
-function toggleQpMode() {
-  qpMode = qpMode === 'blanks' ? 'open' : 'blanks';
-  renderQpQuestion(qpQueue[qpIndex]);
-}
 function resetQpOpenAnswers() {
   if (qpSubmitted) return;
   resetOpenAnswersIn('#qpContainer', 'qpScoreDisplay');
@@ -12971,113 +11533,11 @@ async function submitQpOpenAnswers() {
   updateQpProgress();
   const markBtn = document.getElementById('qpMarkOpenBtn');
   const nextBtn = document.getElementById('qpNextBtn');
-  const modeBtn = document.getElementById('qpModeBtn');
   if (markBtn) markBtn.style.display = 'none';
-  if (modeBtn) modeBtn.disabled = true;
   if (nextBtn) nextBtn.style.display = '';
-}
-
-function toggleQpFirstLetter() {
-  showFirstLetterClues = !showFirstLetterClues;
-  applyFirstLetterClues();
-  const btn = document.getElementById('qpFirstLetterBtn');
-  if (btn) {
-    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> ${showFirstLetterClues ? 'Hide Clues' : 'First Letter'}`;
-  }
-}
-
-function resetQpAnswers() {
-  if (qpSubmitted) return; // Can't reset after submission
-  document.querySelectorAll('#qpContainer .blank-input').forEach(input => {
-    input.value = '';
-    input.style.borderBottomColor = 'var(--primary)';
-    input.style.background = 'var(--primary-light)';
-  });
-  applyFirstLetterClues();
-  const scoreEl = document.getElementById('qpScoreDisplay');
-  if (scoreEl) scoreEl.textContent = '';
 }
 
 let qpSubmitted = false;
-
-function submitQpAnswers() {
-  if (qpSubmitted) return;
-  qpSubmitted = true;
-
-  const inputs = document.querySelectorAll('#qpContainer .blank-input');
-  let correct = 0;
-  let total = inputs.length;
-  const mistakes = [];
-
-  inputs.forEach((input, idx) => {
-    const answer = input.dataset.answer;
-    const answerLower = answer.toLowerCase().trim();
-    const userAnswer = input.value.toLowerCase().trim();
-    if (userAnswer === answerLower) {
-      input.style.borderBottomColor = 'var(--primary)';
-      input.style.background = '#e8f5e9';
-      input.readOnly = true;
-      correct++;
-      addAnswerIcon(input, true, idx * 80);
-    } else {
-      // Show the correct answer for wrong/empty blanks
-      input.style.borderBottomColor = 'var(--accent-red)';
-      input.style.background = 'var(--accent-red-light)';
-      input.readOnly = true;
-      // Insert a correction label after the input
-      const correction = document.createElement('span');
-      correction.style.cssText = 'color:var(--primary);font-weight:600;font-size:0.82rem;margin-left:4px;';
-      correction.textContent = answer;
-      input.parentNode.insertBefore(correction, input.nextSibling);
-      addAnswerIcon(input, false, idx * 80);
-      mistakes.push({ expected: answer, student: input.value.trim() });
-    }
-  });
-
-  _recordQpResult(correct, total, mistakes);
-  qpAnswered = Math.max(qpAnswered, qpIndex + 1);
-  updateQpProgress();
-
-  // Record question attempt for usage tracking
-  if (currentUser && currentUser.role === 'student') {
-    const currentQ = qpQueue[qpIndex];
-    addDoc(collection(db, 'questionAttempts'), {
-      uid: currentUser.uid,
-      email: currentUser.email,
-      displayName: currentUser.name,
-      questionId: currentQ ? currentQ.id : '',
-      questionTitle: currentQ ? currentQ.title : '',
-      score: total > 0 ? correct : 0,
-      totalBlanks: total,
-      timestamp: Timestamp.now(),
-      mode: 'quickpractice'
-    }).catch(err => console.warn('Could not record attempt:', err));
-  }
-
-  // Show score
-  const scoreEl = document.getElementById('qpScoreDisplay');
-  if (total === 0) {
-    if (scoreEl) scoreEl.textContent = 'No blanks to check';
-  } else {
-    const pct = Math.round((correct / total) * 100);
-    if (scoreEl) {
-      scoreEl.textContent = `Score: ${correct}/${total} (${pct}%)`;
-      scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
-    }
-  }
-
-  // Hide submit, show next; disable first-letter and reset
-  const submitBtn = document.getElementById('qpSubmitBtn');
-  const markAiBtn = document.getElementById('qpMarkAiBtn');
-  const nextBtn = document.getElementById('qpNextBtn');
-  const firstLetterBtn = document.getElementById('qpFirstLetterBtn');
-  const modeBtn = document.getElementById('qpModeBtn');
-  if (submitBtn) submitBtn.style.display = 'none';
-  if (markAiBtn) markAiBtn.style.display = 'none';
-  if (nextBtn) nextBtn.style.display = '';
-  if (firstLetterBtn) firstLetterBtn.disabled = true;
-  if (modeBtn) modeBtn.disabled = true;
-}
 
 // =====================================================================
 // SAMPLE DATA LOADER — adds one demo question to get started
@@ -13179,7 +11639,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // Close overlays on escape
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    closePreview();
     closeConfirm();
     document.getElementById('studentSetupOverlay').classList.remove('active');
     document.querySelectorAll('.table-grid-popup.active').forEach(p => p.classList.remove('active'));
@@ -13203,11 +11662,6 @@ document.addEventListener('paste', (e) => {
 });
 
 // Close preview on outside click
-document.getElementById('previewOverlay').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('previewOverlay')) {
-    closePreview();
-  }
-});
 document.getElementById('studentPreviewOverlay').addEventListener('click', (e) => {
   if (e.target === document.getElementById('studentPreviewOverlay')) {
     closeStudentPreview();
@@ -13275,14 +11729,12 @@ let tpQueue = [];
 let tpIndex = -1;
 let tpAnswered = 0;
 let tpSubmitted = false;
-let tpMode = 'open';     // 'blanks' | 'open'
 let tpSessionResults = []; // per-question results for the end-of-session AI report
 
 function _recordTpResult(correct, total, mistakes) {
   const q = tpQueue[tpIndex] || {};
   tpSessionResults.push({ title: q.title || '', topic: q.topic || '', correct, total, mistakes: mistakes || [] });
   recordCerPerformance(q, correct, total, 'topicalpractice');
-  showExplanation('#tpContainer', q, '', 'tpScoreDisplay');
 }
 
 // =====================================================================
@@ -13502,11 +11954,10 @@ function tpRenderTopics() {
   const studentLevel = document.getElementById('tpLevelSelect').value;
   const studentLevelNum = getLevelNumber(studentLevel);
 
-  // Count questions per topic (only those with blanks)
+  // Count questions per topic (only those the AI can mark)
   const topicCounts = {};
   questionBank.forEach(q => {
-    const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
-    if (blankCount > 0) {
+    if (questionHasMarkableAnswer(q)) {
       const t = q.topic || '';
       topicCounts[t] = (topicCounts[t] || 0) + 1;
     }
@@ -13619,16 +12070,13 @@ async function tpStartPractice() {
   // Gather questions per topic, each shuffled independently
   const questionsByTopic = {};
   tpActiveTopics.forEach(topic => {
-    const withBlanks = questionBank.filter(q => {
-      const blankCount = q.blanks ? Object.values(q.blanks).reduce((s, b) => s + Object.keys(b).length, 0) : 0;
-      return blankCount > 0 && q.topic === topic;
-    });
+    const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && q.topic === topic);
     // Shuffle
-    for (let i = withBlanks.length - 1; i > 0; i--) {
+    for (let i = markable.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [withBlanks[i], withBlanks[j]] = [withBlanks[j], withBlanks[i]];
+      [markable[i], markable[j]] = [markable[j], markable[i]];
     }
-    questionsByTopic[topic] = withBlanks;
+    questionsByTopic[topic] = markable;
   });
 
   // Interleave: round-robin across topics, skip exhausted topics
@@ -13648,13 +12096,12 @@ async function tpStartPractice() {
   }
 
   tpQueue = queue;
-  tpMode = 'open';
   tpSessionResults = [];
   tpIndex = -1;
   tpAnswered = 0;
 
   if (tpQueue.length === 0) {
-    showToast('No questions with blanks found for the selected topics', 'error');
+    showToast('No markable questions found for the selected topics', 'error');
     return;
   }
 
@@ -13729,17 +12176,11 @@ function tpUpdateProgress() {
 
 function tpRenderQuestion(q) {
   const qLevel = getTopicLevel(q.topic || '');
-  const modeToggleBtn = `
-          <button class="btn btn-outline" id="tpModeBtn" onclick="toggleTpMode()" title="Switch answer mode">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M3 7h13M16 3l4 4-4 4"/><path d="M21 17H8M8 21l-4-4 4-4"/></svg>
-            ${tpMode === 'open' ? 'Fill Blanks' : 'Open-Ended'}
-          </button>`;
   let html = `
     <div class="practice-card">
       <div class="practice-card-header">
         <h3>${escapeHtml(q.title)}</h3>
         <div style="display:flex;gap:6px;align-items:center;">
-          <span class="qb-tag" style="background:var(--surface-container-high,#ebe8e3);">${tpMode === 'open' ? 'Open-Ended' : 'Fill Blanks'}</span>
           <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
           <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
@@ -13747,90 +12188,7 @@ function tpRenderQuestion(q) {
       </div>
       <div class="practice-card-body">`;
 
-  if (tpMode === 'open') {
-    html += buildOpenBody(q, '#tpContainer');
-  } else {
-    q.blocks.forEach(block => {
-      switch (block.type) {
-        case 'text':
-          html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
-          html += renderStudentText(block.id, block.content, q.blanks);
-          break;
-        case 'image':
-          if (block.url) html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
-          break;
-        case 'answer':
-          html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-blue-light);color:var(--accent-blue);">Claim</div>`;
-          html += `<div class="cer-student-content">${renderStudentText(block.id + '_claim', block.claim, q.blanks)}</div></div>`;
-          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--accent-orange-light);color:var(--accent-orange);">Evidence</div>`;
-          html += `<div class="cer-student-content">${renderStudentText(block.id + '_evidence', block.evidence, q.blanks)}</div></div>`;
-          html += `<div class="cer-student-section"><div class="cer-student-label" style="background:var(--primary-light);color:var(--primary);">Reasoning</div>`;
-          html += `<div class="cer-student-content">${renderStudentText(block.id + '_reasoning', block.reasoning, q.blanks)}</div></div>`;
-          break;
-        case 'plainanswer':
-          html += `<div style="margin-top:12px;margin-bottom:2px;"><span class="sv-block-tag answer">Answer</span></div>`;
-          html += `<div style="padding:8px 0;">${renderStudentText(block.id, block.content, q.blanks)}</div>`;
-          break;
-        case 'explanation': break;
-        case 'video':
-          if (block.url) {
-            const embedUrl = getYouTubeEmbedUrl(block.url);
-            if (embedUrl) html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
-          }
-          break;
-        case 'table':
-          html += renderTableReadonly(block, '');
-          break;
-        default:
-          html += renderImportedBlockStudent(block, q);
-          break;
-      }
-    });
-  }
-
-  let actionsInner;
-  if (tpMode === 'open') {
-    actionsInner = `
-          ${modeToggleBtn}
-          <button class="btn btn-outline" onclick="tpResetOpenAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            Reset
-          </button>
-          <button class="btn btn-primary" id="tpMarkOpenBtn" onclick="tpSubmitOpenAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
-            Mark with AI
-          </button>
-          <button class="btn btn-primary" id="tpNextBtn" onclick="tpLoadNextQuestion()" style="display:none;">
-            Next &rarr;
-          </button>`;
-  } else {
-    actionsInner = `
-          ${modeToggleBtn}
-          <button class="btn btn-outline" id="tpFirstLetterBtn" onclick="tpToggleFirstLetter()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg>
-            First Letter
-          </button>
-          <button class="btn btn-outline" id="tpAskAiBtn" onclick="askAIClueTp()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
-            Ask AI
-          </button>
-          <button class="btn btn-outline" onclick="tpResetAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            Reset
-          </button>
-          <button class="btn btn-primary" id="tpSubmitBtn" onclick="tpSubmitAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg>
-            Submit
-          </button>
-          <button class="btn btn-primary" id="tpMarkAiBtn" onclick="tpSubmitAnswersAI()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
-            Mark with AI
-          </button>
-          <button class="btn btn-primary" id="tpNextBtn" onclick="tpLoadNextQuestion()" style="display:none;">
-            Next &rarr;
-          </button>`;
-  }
+  html += buildOpenBody(q, '#tpContainer');
 
   html += `</div>
       <div class="practice-actions">
@@ -13841,112 +12199,37 @@ function tpRenderQuestion(q) {
             Flag
           </button>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">${actionsInner}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn btn-outline" onclick="tpResetOpenAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+          <button class="btn btn-primary" id="tpMarkOpenBtn" onclick="tpSubmitOpenAnswers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
+            Mark with AI
+          </button>
+          <button class="btn btn-primary" id="tpNextBtn" onclick="tpLoadNextQuestion()" style="display:none;">
+            Next &rarr;
+          </button>
         </div>
       </div>
     </div>`;
 
   tpSubmitted = false;
-  showFirstLetterClues = false;
   document.getElementById('tpContainer').innerHTML = html;
-  applyFirstLetterClues();
 }
 
-function toggleTpMode() {
-  tpMode = tpMode === 'blanks' ? 'open' : 'blanks';
-  tpRenderQuestion(tpQueue[tpIndex]);
-}
 function tpResetOpenAnswers() {
   if (tpSubmitted) return;
   resetOpenAnswersIn('#tpContainer', 'tpScoreDisplay');
 }
-function askAIClueTp() { return aiClue('#tpContainer', 'tpAskAiBtn'); }
 
-// Hide the submit/mark buttons and reveal Next after a Topical question is marked.
+// Hide the mark button and reveal Next after a Topical question is marked.
 function _tpAfterSubmit() {
-  ['tpSubmitBtn', 'tpMarkAiBtn', 'tpMarkOpenBtn'].forEach(id => {
-    const b = document.getElementById(id);
-    if (b) b.style.display = 'none';
-  });
-  const modeBtn = document.getElementById('tpModeBtn');
-  if (modeBtn) modeBtn.disabled = true;
+  const b = document.getElementById('tpMarkOpenBtn');
+  if (b) b.style.display = 'none';
   const nextBtn = document.getElementById('tpNextBtn');
   if (nextBtn) nextBtn.style.display = '';
-  const fl = document.getElementById('tpFirstLetterBtn');
-  if (fl) fl.disabled = true;
-}
-
-async function tpSubmitAnswersAI() {
-  if (tpSubmitted) return;
-  if (!window.__aiReady || !window.__aiReady()) {
-    showToast("AI marking isn't set up yet — using exact match", 'info');
-    return tpSubmitAnswers();
-  }
-  const inputs = Array.from(document.querySelectorAll('#tpContainer .blank-input'));
-  const btn = document.getElementById('tpMarkAiBtn');
-  const scoreEl = document.getElementById('tpScoreDisplay');
-  const graded = inputs.map((input, idx) => ({ input, idx, expected: input.dataset.answer || '', student: input.value.trim() }));
-  const toGrade = graded.filter(g => g.student);
-
-  let verdicts = {};
-  const orig = btn ? btn.innerHTML : '';
-  if (toGrade.length) {
-    if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
-    if (scoreEl) scoreEl.textContent = 'Marking with AI…';
-    try {
-      const _q = tpQueue[tpIndex];
-      verdicts = await _gradeWithAI(toGrade, _q && _q.markingGuide);
-    } catch (e) {
-      console.error(e);
-      showToast('AI marking failed — using exact match', 'error');
-      if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-      return tpSubmitAnswers();
-    }
-    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-  }
-
-  tpSubmitted = true;
-  let correct = 0;
-  const total = inputs.length;
-  const mistakes = [];
-  graded.forEach(({ input, idx, expected, student }) => {
-    input.readOnly = true;
-    const v = student ? verdicts[idx] : null;
-    const ok = student ? (v ? !!v.correct : (student.toLowerCase() === expected.toLowerCase().trim())) : false;
-    if (ok) {
-      input.style.borderBottomColor = 'var(--primary)';
-      input.style.background = '#e8f5e9';
-      correct++;
-      addAnswerIcon(input, true, idx * 80);
-      if (v && v.note) _aiFeedbackSpan(input, v.note, 'var(--primary)', true);
-    } else {
-      input.style.borderBottomColor = 'var(--accent-red)';
-      input.style.background = 'var(--accent-red-light)';
-      addAnswerIcon(input, false, idx * 80);
-      _aiFeedbackSpan(input, expected + (v && v.note ? ` — ${v.note}` : ''), 'var(--primary)', false);
-      mistakes.push({ expected, student });
-    }
-  });
-
-  _recordTpResult(correct, total, mistakes);
-  tpAnswered = Math.max(tpAnswered, tpIndex + 1);
-  tpUpdateProgress();
-
-  if (currentUser && currentUser.role === 'student') {
-    const cq = tpQueue[tpIndex];
-    addDoc(collection(db, 'questionAttempts'), {
-      uid: currentUser.uid, email: currentUser.email, displayName: currentUser.name,
-      questionId: cq ? cq.id : '', questionTitle: cq ? cq.title : '',
-      score: total > 0 ? correct : 0, totalBlanks: total, timestamp: Timestamp.now(), mode: 'topicalpractice'
-    }).catch(err => console.warn('Could not record attempt:', err));
-  }
-
-  const pct = total ? Math.round((correct / total) * 100) : 0;
-  if (scoreEl) {
-    scoreEl.textContent = total ? `AI Score: ${correct}/${total} (${pct}%)` : 'No blanks to check';
-    if (total) scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
-  }
-  _tpAfterSubmit();
 }
 
 async function tpSubmitOpenAnswers() {
@@ -13963,100 +12246,12 @@ async function tpSubmitOpenAnswers() {
   _tpAfterSubmit();
 }
 
-function tpToggleFirstLetter() {
-  showFirstLetterClues = !showFirstLetterClues;
-  applyFirstLetterClues();
-  const btn = document.getElementById('tpFirstLetterBtn');
-  if (btn) {
-    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M4 20h16"/><path d="M12 4v16"/><path d="M8 12h8"/></svg> ${showFirstLetterClues ? 'Hide Clues' : 'First Letter'}`;
-  }
-}
-
-function tpResetAnswers() {
-  if (tpSubmitted) return;
-  document.querySelectorAll('#tpContainer .blank-input').forEach(input => {
-    input.value = '';
-    input.style.borderBottomColor = 'var(--primary)';
-    input.style.background = 'var(--primary-light)';
-  });
-  applyFirstLetterClues();
-  const scoreEl = document.getElementById('tpScoreDisplay');
-  if (scoreEl) scoreEl.textContent = '';
-}
-
-function tpSubmitAnswers() {
-  if (tpSubmitted) return;
-  tpSubmitted = true;
-
-  const inputs = document.querySelectorAll('#tpContainer .blank-input');
-  let correct = 0;
-  let total = inputs.length;
-  const mistakes = [];
-
-  inputs.forEach((input, idx) => {
-    const answer = input.dataset.answer;
-    const answerLower = answer.toLowerCase().trim();
-    const userAnswer = input.value.toLowerCase().trim();
-    if (userAnswer === answerLower) {
-      input.style.borderBottomColor = 'var(--primary)';
-      input.style.background = '#e8f5e9';
-      input.readOnly = true;
-      correct++;
-      addAnswerIcon(input, true, idx * 80);
-    } else {
-      input.style.borderBottomColor = 'var(--accent-red)';
-      input.style.background = 'var(--accent-red-light)';
-      input.readOnly = true;
-      const correction = document.createElement('span');
-      correction.style.cssText = 'color:var(--primary);font-weight:600;font-size:0.82rem;margin-left:4px;';
-      correction.textContent = answer;
-      input.parentNode.insertBefore(correction, input.nextSibling);
-      addAnswerIcon(input, false, idx * 80);
-      mistakes.push({ expected: answer, student: input.value.trim() });
-    }
-  });
-
-  _recordTpResult(correct, total, mistakes);
-  tpAnswered = Math.max(tpAnswered, tpIndex + 1);
-  tpUpdateProgress();
-
-  // Record question attempt for usage tracking
-  if (currentUser && currentUser.role === 'student') {
-    const currentQ = tpQueue[tpIndex];
-    addDoc(collection(db, 'questionAttempts'), {
-      uid: currentUser.uid,
-      email: currentUser.email,
-      displayName: currentUser.name,
-      questionId: currentQ ? currentQ.id : '',
-      questionTitle: currentQ ? currentQ.title : '',
-      score: total > 0 ? correct : 0,
-      totalBlanks: total,
-      timestamp: Timestamp.now(),
-      mode: 'topicalpractice'
-    }).catch(err => console.warn('Could not record attempt:', err));
-  }
-
-  const scoreEl = document.getElementById('tpScoreDisplay');
-  if (total === 0) {
-    if (scoreEl) scoreEl.textContent = 'No blanks to check';
-  } else {
-    const pct = Math.round((correct / total) * 100);
-    if (scoreEl) {
-      scoreEl.textContent = `Score: ${correct}/${total} (${pct}%)`;
-      scoreEl.style.color = correct === total ? 'var(--primary)' : 'var(--accent-orange)';
-    }
-  }
-
-  _tpAfterSubmit();
-}
-
 function tpBackToTopics() {
   tpQueue = [];
   tpIndex = -1;
   tpAnswered = 0;
   tpCurrentTopic = '';
   tpActiveTopics = [];
-  showFirstLetterClues = false;
   tpRenderTopics();
 }
 
@@ -14822,17 +13017,12 @@ window.addBlockAt = addBlockAt;
 window.removeBlock = removeBlock;
 window.moveBlock = moveBlock;
 window.duplicateBlock = duplicateBlock;
-window.openPreview = openPreview;
-window.closePreview = closePreview;
 window.previewAsStudent = previewAsStudent;
 window.closeStudentPreview = closeStudentPreview;
-window.checkStudentPreviewAnswers = checkStudentPreviewAnswers;
-window.toggleStudentPreviewMode = toggleStudentPreviewMode;
 window.markStudentPreviewOpen = markStudentPreviewOpen;
+window.resetStudentViewAnswers = resetStudentViewAnswers;
+window.markStudentViewAnswers = markStudentViewAnswers;
 window.openScheduleFromCreate = openScheduleFromCreate;
-window.toggleBlank = toggleBlank;
-window.clearAllBlanks = clearAllBlanks;
-window.confirmBlanks = confirmBlanks;
 window.addToBank = addToBank;
 window.saveEditedQuestion = saveEditedQuestion;
 window.cancelEdit = cancelEdit;
@@ -14843,9 +13033,6 @@ window.duplicateQuestion = duplicateQuestion;
 window.deleteQuestion = deleteQuestion;
 window.approveVetting = approveVetting;
 window.deleteVetting = deleteVetting;
-window.resetStudentAnswers = resetStudentAnswers;
-window.checkStudentAnswers = checkStudentAnswers;
-window.toggleFirstLetterClues = toggleFirstLetterClues;
 window.showToast = showToast;
 window.showConfirm = showConfirm;
 window.closeConfirm = closeConfirm;
@@ -14870,8 +13057,6 @@ window.applyPrintFilters = applyPrintFilters;
 window.showPrintPreview = showPrintPreview;
 window.hidePrintPreview = hidePrintPreview;
 window.printWorksheet = printWorksheet;
-window.confirmPrintMode = confirmPrintMode;
-window.closePrintMode = closePrintMode;
 window.toggleTableGridPopup = toggleTableGridPopup;
 window.addTableWithSize = addTableWithSize;
 window.handleTableCellClick = handleTableCellClick;
@@ -14910,17 +13095,8 @@ window.saveStudentSetup = saveStudentSetup;
 window.skipStudentSetup = skipStudentSetup;
 window.onPracticeStudentChange = onPracticeStudentChange;
 window.loadRandomPracticeQuestion = loadRandomPracticeQuestion;
-window.checkPracticeAnswers = checkPracticeAnswers;
-window.askAIClue = askAIClue;
-window.checkPracticeAnswersAI = checkPracticeAnswersAI;
-window.togglePracticeMode = togglePracticeMode;
 window.resetOpenAnswers = resetOpenAnswers;
 window.markOpenAnswers = markOpenAnswers;
-window.askAIClueStudent = askAIClueStudent;
-window.checkStudentAnswersAI = checkStudentAnswersAI;
-window.askAIClueQp = askAIClueQp;
-window.submitQpAnswersAI = submitQpAnswersAI;
-window.toggleQpMode = toggleQpMode;
 window.resetQpOpenAnswers = resetQpOpenAnswers;
 window.submitQpOpenAnswers = submitQpOpenAnswers;
 window.setLandingDemoMode = setLandingDemoMode;
@@ -14933,7 +13109,6 @@ window.wsPreviewTryIt = wsPreviewTryIt;
 window.wsPreviewBack = wsPreviewBack;
 window.wsPreviewMark = wsPreviewMark;
 window.onWsCardClick = onWsCardClick;
-window.setWsFormat = setWsFormat;
 window.saveWorksheet = saveWorksheet;
 window.printStudentWorksheet = printStudentWorksheet;
 window.renderSavedWorksheets = renderSavedWorksheets;
@@ -14941,7 +13116,6 @@ window.deleteWorksheet = deleteWorksheet;
 window.reprintWorksheet = reprintWorksheet;
 window.practiceCurrentWorksheet = practiceCurrentWorksheet;
 window.practiceSavedWorksheet = practiceSavedWorksheet;
-window.setSaveWsFormat = setSaveWsFormat;
 window.closeSaveWsDialog = closeSaveWsDialog;
 window.confirmSaveWorksheet = confirmSaveWorksheet;
 // Quick Practice
@@ -14950,9 +13124,6 @@ window.onQpFilterChange = onQpFilterChange;
 window.qpAiRecommend = qpAiRecommend;
 window.startQuickPractice = startQuickPractice;
 window.loadNextQpQuestion = loadNextQpQuestion;
-window.toggleQpFirstLetter = toggleQpFirstLetter;
-window.resetQpAnswers = resetQpAnswers;
-window.submitQpAnswers = submitQpAnswers;
 // Usage Dashboard
 window.loadUsageDashboard = loadUsageDashboard;
 window.loadMyReport = loadMyReport;
@@ -14974,13 +13145,7 @@ window.tpRemoveSelectedTopic = tpRemoveSelectedTopic;
 window.tpStartPractice = tpStartPractice;
 window.tpStartTopic = tpStartTopic;
 window.tpLoadNextQuestion = tpLoadNextQuestion;
-window.tpToggleFirstLetter = tpToggleFirstLetter;
-window.tpResetAnswers = tpResetAnswers;
-window.tpSubmitAnswers = tpSubmitAnswers;
-window.toggleTpMode = toggleTpMode;
 window.tpResetOpenAnswers = tpResetOpenAnswers;
-window.askAIClueTp = askAIClueTp;
-window.tpSubmitAnswersAI = tpSubmitAnswersAI;
 window.tpSubmitOpenAnswers = tpSubmitOpenAnswers;
 window.tpBackToTopics = tpBackToTopics;
 // Move to Vetting (edit mode)
