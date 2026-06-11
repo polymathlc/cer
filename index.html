@@ -4961,7 +4961,7 @@ option {
 <div class="confirm-overlay" id="markingSettingsOverlay">
   <div class="confirm-dialog" style="max-width:560px;text-align:left;max-height:88vh;overflow-y:auto;">
     <h3 style="margin-bottom:4px;">AI Marking Guide</h3>
-    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Tell the AI how you mark. These instructions are applied to every "Mark with AI" grading across Practice, Student View and Worksheets.</p>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Tell the AI how you mark. These instructions are applied to every "AI Mark" grading across Practice, Student View and Worksheets.</p>
 
     <div class="form-group">
       <label class="form-label">Strictness</label>
@@ -5102,13 +5102,12 @@ option {
       </button>
     </div>
     <div style="padding:10px 28px 4px;background:var(--surface-alt);border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-muted);">
-      This is exactly how students will see this question in practice mode — type answers yourself and have the AI mark them.
+      This is exactly how students will see this question in practice mode — each part has its own 💡 Hint and 🤖 AI Mark buttons, so try answering yourself.
     </div>
     <div class="preview-body" id="studentPreviewBody" style="padding:20px 28px;"></div>
     <div style="padding:0 28px 20px;display:flex;gap:10px;justify-content:space-between;align-items:center;">
       <div id="studentPreviewResult" style="font-size:0.85rem;font-weight:600;"></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn-outline" id="studentPreviewAiBtn" onclick="markStudentPreviewOpen()">&#x1F916; Mark with AI</button>
         <button class="btn btn-primary" onclick="closeStudentPreview()">&#x274C; Close</button>
       </div>
     </div>
@@ -8349,18 +8348,14 @@ function renderStudentPreviewBody() {
     </div>
   </div>`;
   html += `<div class="student-card-body" style="padding:0;">`;
-  // The same open-ended answer boxes students get in practice, AI-markable.
-  html += buildOpenBody(q, '#studentPreviewBody');
+  // The same open-ended answer boxes students get in practice — every part has
+  // its own AI Mark + Hint buttons.
+  html += buildOpenBody(q, '#studentPreviewBody', {
+    scoreElId: 'studentPreviewResult', scorePrefix: 'AI Score', mode: 'preview'
+  });
   html += `</div></div>`;
   document.getElementById('studentPreviewBody').innerHTML = html;
   document.getElementById('studentPreviewResult').innerHTML = '';
-}
-
-function markStudentPreviewOpen() {
-  if (!_studentPreviewQ) return;
-  markOpenAnswersIn('#studentPreviewBody', _studentPreviewQ, {
-    btnId: 'studentPreviewAiBtn', scoreElId: 'studentPreviewResult', scorePrefix: 'AI Score', mode: 'preview'
-  });
 }
 
 function closeStudentPreview() {
@@ -9102,8 +9097,11 @@ function renderStudentView() {
     </div>
   </div>`;
   html += `<div class="student-card-body">`;
-  // The same open-ended answer boxes students get in practice, AI-markable.
-  html += buildOpenBody(q, '#studentViewContainer');
+  // The same open-ended answer boxes students get in practice — every part has
+  // its own AI Mark + Hint buttons.
+  html += buildOpenBody(q, '#studentViewContainer', {
+    scoreElId: 'svScoreDisplay', scorePrefix: 'AI Score', mode: 'practice'
+  });
   html += `</div></div>`;
 
   html += `<div class="submit-row">
@@ -9112,10 +9110,6 @@ function renderStudentView() {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
       Reset
     </button>
-    <button class="btn btn-primary" id="svMarkAiBtn" onclick="markStudentViewAnswers('${qId}')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
-      Mark with AI
-    </button>
   </div>`;
 
   container.innerHTML = html;
@@ -9123,14 +9117,6 @@ function renderStudentView() {
 
 function resetStudentViewAnswers() {
   resetOpenAnswersIn('#studentViewContainer', 'svScoreDisplay');
-}
-
-function markStudentViewAnswers(qId) {
-  const q = questionBank.find(qb => qb.id === qId);
-  if (!q) return;
-  return markOpenAnswersIn('#studentViewContainer', q, {
-    btnId: 'svMarkAiBtn', scoreElId: 'svScoreDisplay', scorePrefix: 'AI Score', mode: 'practice'
-  });
 }
 
 // =====================================================================
@@ -10145,8 +10131,22 @@ function loadRandomPracticeQuestion() {
 let currentPracticeQ = null;
 let _openItemsStore = {};        // containerSel -> [{ label, model }] for open-ended marking
 let _openMcqStore = {};          // containerSel -> [{ blockId, options:[{letter,text,id,correct}] }]
+let _openQStore = {};            // containerSel -> the question being answered (context for per-part AI calls)
+let _openSurfaceCfg = {};        // containerSel -> { scoreElId, scorePrefix, mode, onAllMarked }
+let _openPartResults = {};       // containerSel -> { 'open:<oidx>'|'mcq:<blockId>': { verdict, pts, expected, student } }
+let _openFinalized = {};         // containerSel -> true once the attempt has been recorded
 
-function _openSection(items, label, modelAnswer, bg, fg) {
+// Hint + AI Mark buttons for ONE part of a question (an answer box or an MCQ),
+// plus the box the hint is written into.
+function _partActionsHtml(containerSel, kind, pid) {
+  return `<div class="part-actions" style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+      <button type="button" class="btn btn-outline part-ai-btn" style="padding:5px 12px;font-size:0.8rem;" data-part-hint="${containerSel}" data-kind="${kind}" data-pid="${pid}" title="Get a hint for this part — it won't give away the answer">💡 Hint</button>
+      <button type="button" class="btn btn-blue part-ai-btn" style="padding:5px 12px;font-size:0.8rem;" data-part-mark="${containerSel}" data-kind="${kind}" data-pid="${pid}" title="Have the AI mark this part">🤖 AI Mark</button>
+    </div>
+    <div class="part-hint-box" data-hint-for="${kind}:${pid}" style="display:none;margin-top:6px;padding:8px 12px;border:1px solid var(--accent-orange);background:var(--accent-orange-light,#fff3e0);border-radius:8px;font-size:0.85rem;line-height:1.55;"></div>`;
+}
+
+function _openSection(items, label, modelAnswer, bg, fg, containerSel) {
   const oidx = items.length;
   items.push({ label: label || 'Answer', model: modelAnswer || '' });
   const labelHtml = label ? `<div class="cer-student-label" style="background:${bg};color:${fg};margin-bottom:6px;">${label}</div>` : '';
@@ -10157,13 +10157,17 @@ function _openSection(items, label, modelAnswer, bg, fg) {
           style="flex:1;min-width:0;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.95rem;line-height:1.5;resize:vertical;background:#fff;color:var(--on-surface,#1c1c19);"></textarea>
         ${micButtonHtml('', 'Speak your answer')}
       </div>
+      ${_partActionsHtml(containerSel, 'open', oidx)}
       <div class="open-feedback" style="margin-top:4px;"></div>
     </div>`;
 }
 
 // Generic open-ended body for ANY practice surface (Practice / Quick / Topical).
 // Records each textarea's expected (model) answer in _openItemsStore[containerSel].
-function buildOpenBody(q, containerSel) {
+// markCfg ({ scoreElId, scorePrefix, mode, onAllMarked }) tells the per-part
+// AI Mark buttons where to show the running score and what to do once every
+// part of the question has been marked.
+function buildOpenBody(q, containerSel, markCfg) {
   const items = [];
   const mcqItems = [];
   let html = '';
@@ -10172,6 +10176,7 @@ function buildOpenBody(q, containerSel) {
       case 'mcq':
         html += `<div style="margin-top:12px;margin-bottom:4px;"><span class="sv-block-tag answer">Multiple choice</span></div>`;
         html += renderImportedBlockStudent(block, q);
+        html += _partActionsHtml(containerSel, 'mcq', block.id);
         html += `<div class="mcq-feedback" data-mcq-fb="${block.id}" style="margin:2px 0 12px;"></div>`;
         mcqItems.push({
           blockId: block.id,
@@ -10187,18 +10192,18 @@ function buildOpenBody(q, containerSel) {
         break;
       case 'answer':
         html += `<div style="margin-top:12px;margin-bottom:6px;"><span class="sv-block-tag answer">Your Answer</span></div>`;
-        html += _openSection(items, 'Claim', stripHtml(block.claim || ''), 'var(--accent-blue-light)', 'var(--accent-blue)');
-        html += _openSection(items, 'Evidence', stripHtml(block.evidence || ''), 'var(--accent-orange-light)', 'var(--accent-orange)');
-        html += _openSection(items, 'Reasoning', stripHtml(block.reasoning || ''), 'var(--primary-light)', 'var(--primary)');
+        html += _openSection(items, 'Claim', stripHtml(block.claim || ''), 'var(--accent-blue-light)', 'var(--accent-blue)', containerSel);
+        html += _openSection(items, 'Evidence', stripHtml(block.evidence || ''), 'var(--accent-orange-light)', 'var(--accent-orange)', containerSel);
+        html += _openSection(items, 'Reasoning', stripHtml(block.reasoning || ''), 'var(--primary-light)', 'var(--primary)', containerSel);
         break;
       case 'plainanswer':
         html += `<div style="margin-top:12px;margin-bottom:6px;"><span class="sv-block-tag answer">Your Answer</span></div>`;
-        html += _openSection(items, '', stripHtml(block.content || ''), '', '');
+        html += _openSection(items, '', stripHtml(block.content || ''), '', '', containerSel);
         break;
       case 'openLines':
       case 'workingSpace':
         // Open-ended mode: just a writing box (no lines).
-        html += _openSection(items, '', '', '', '');
+        html += _openSection(items, '', '', '', '', containerSel);
         break;
       case 'explanation':
         break; // hidden
@@ -10223,6 +10228,10 @@ function buildOpenBody(q, containerSel) {
   }
   _openItemsStore[containerSel] = items;
   _openMcqStore[containerSel] = mcqItems;
+  _openQStore[containerSel] = q;
+  _openSurfaceCfg[containerSel] = markCfg || {};
+  _openPartResults[containerSel] = {};
+  _openFinalized[containerSel] = false;
   _openPhoto[containerSel] = null; // fresh render — drop any previous photo
   return html;
 }
@@ -10239,7 +10248,7 @@ function openPhotoBarHtml(containerSel) {
   const key = _openPhotoKey(containerSel);
   return `<div class="open-photo-bar" style="margin:6px 0 14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#faf8f5);">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <span style="font-size:0.85rem;color:var(--text-muted);">📸 Prefer writing on paper? Submit one photo of your whole page of answers and the AI will read and mark it:</span>
+        <span style="font-size:0.85rem;color:var(--text-muted);">📸 Prefer writing on paper? Submit one photo of your whole page of answers and the AI will read and mark every part at once:</span>
         <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:0.82rem;" data-openphoto-take="${containerSel}">📷 Take photo</button>
         <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:0.82rem;" data-openphoto-upload="${containerSel}">🖼️ Upload photo</button>
         <input type="file" accept="image/*" capture="environment" hidden id="openPhotoCam_${key}">
@@ -10256,7 +10265,8 @@ function renderOpenPhotoPreview(containerSel) {
   if (!p) { el.innerHTML = ''; return; }
   el.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <img src="${p.dataUrl}" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">
-      <span style="font-size:0.82rem;color:var(--primary);">Photo attached — the AI will read it when you tap “Mark with AI”.</span>
+      <span style="font-size:0.82rem;color:var(--primary);">Photo attached — the AI can read it for a single part (🤖 AI Mark) or mark the whole page:</span>
+      <button type="button" class="btn btn-blue part-ai-btn" id="openPhotoMarkBtn_${key}" data-openphoto-markall="${containerSel}" style="padding:6px 14px;font-size:0.82rem;">🤖 Mark all parts from photo</button>
       <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.8rem;" data-openphoto-remove="${containerSel}">Remove</button>
     </div>`;
 }
@@ -10278,7 +10288,13 @@ document.addEventListener('click', function (e) {
   const up = e.target.closest && e.target.closest('[data-openphoto-upload]');
   if (up) { e.preventDefault(); const i = document.getElementById('openPhotoFile_' + _openPhotoKey(up.getAttribute('data-openphoto-upload'))); if (i) i.click(); return; }
   const rm = e.target.closest && e.target.closest('[data-openphoto-remove]');
-  if (rm) { e.preventDefault(); const cs = rm.getAttribute('data-openphoto-remove'); _openPhoto[cs] = null; renderOpenPhotoPreview(cs); }
+  if (rm) { e.preventDefault(); const cs = rm.getAttribute('data-openphoto-remove'); _openPhoto[cs] = null; renderOpenPhotoPreview(cs); return; }
+  const pm = e.target.closest && e.target.closest('[data-openphoto-markall]');
+  if (pm) { e.preventDefault(); markAllPartsFromPhoto(pm.getAttribute('data-openphoto-markall')); return; }
+  const mk = e.target.closest && e.target.closest('[data-part-mark]');
+  if (mk) { e.preventDefault(); markQuestionPart(mk.getAttribute('data-part-mark'), mk.getAttribute('data-kind'), mk.getAttribute('data-pid'), mk); return; }
+  const ht = e.target.closest && e.target.closest('[data-part-hint]');
+  if (ht) { e.preventDefault(); hintQuestionPart(ht.getAttribute('data-part-hint'), ht.getAttribute('data-kind'), ht.getAttribute('data-pid'), ht); }
 });
 document.addEventListener('change', function (e) {
   const t = e.target;
@@ -10289,7 +10305,11 @@ document.addEventListener('change', function (e) {
   t.value = '';
 });
 
-function renderOpenPracticeBody(q) { return buildOpenBody(q, '#practiceContainer'); }
+function renderOpenPracticeBody(q) {
+  return buildOpenBody(q, '#practiceContainer', {
+    scoreElId: 'practiceScoreDisplay', scorePrefix: 'AI Score', mode: 'practice-open'
+  });
+}
 
 function renderPracticeQuestion(q, student) {
   currentPracticeQ = q;
@@ -10320,10 +10340,6 @@ function renderPracticeQuestion(q, student) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             Reset
           </button>
-          <button class="btn btn-blue" id="practiceMarkOpenBtn" onclick="markOpenAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
-            Mark with AI
-          </button>
           <button class="btn btn-primary" onclick="loadRandomPracticeQuestion()">
             Next Question &rarr;
           </button>
@@ -10339,9 +10355,16 @@ function resetOpenAnswersIn(containerSel, scoreElId) {
     a.value = '';
     a.disabled = false;
     a.style.borderColor = 'var(--border)';
-    const fb = a.parentElement.querySelector('.open-feedback');
-    if (fb) fb.innerHTML = '';
   });
+  document.querySelectorAll(containerSel + ' .open-feedback, ' + containerSel + ' .mcq-feedback').forEach(fb => { fb.innerHTML = ''; });
+  document.querySelectorAll(containerSel + ' .part-hint-box').forEach(h => { h.style.display = 'none'; h.innerHTML = ''; });
+  document.querySelectorAll(containerSel + ' .part-ai-btn').forEach(b => { b.disabled = false; });
+  document.querySelectorAll(containerSel + ' .mcq-block label').forEach(l => { l.style.background = ''; l.style.borderColor = 'var(--border)'; });
+  document.querySelectorAll(containerSel + ' .mcq-block input[type="radio"]').forEach(r => { r.checked = false; });
+  const c = document.querySelector(containerSel);
+  if (c) c.querySelectorAll('.post-explanation').forEach(el => el.remove());
+  _openPartResults[containerSel] = {};
+  _openFinalized[containerSel] = false;
   const scoreEl = scoreElId ? document.getElementById(scoreElId) : null;
   if (scoreEl) scoreEl.textContent = '';
 }
@@ -10393,7 +10416,8 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
   // Reset visuals
   areas.forEach(a => {
     a.style.borderColor = 'var(--border)';
-    const fb = a.parentElement.querySelector('.open-feedback');
+    const sec = a.closest('.open-answer-section');
+    const fb = sec && sec.querySelector('.open-feedback');
     if (fb) fb.innerHTML = '';
   });
   mcqList.forEach(m => { const fb = document.querySelector(containerSel + ' [data-mcq-fb="' + m.blockId + '"]'); if (fb) fb.innerHTML = ''; });
@@ -10477,12 +10501,14 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     if (e.kind === 'open') {
       if (verdict !== 'correct') mistakes.push({ expected: e.model, student: e.student });
       e.areaEl.style.borderColor = color;
-      const fb = e.areaEl.parentElement.querySelector('.open-feedback');
+      const sec = e.areaEl.closest('.open-answer-section');
+      const fb = sec && sec.querySelector('.open-feedback');
       if (fb) {
         let inner = fbHead;
         if (verdict !== 'correct' && e.model) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${escapeHtml(e.model)}</div>`;
         fb.innerHTML = inner;
       }
+      _setPartResult(containerSel, 'open:' + (e.areaEl.dataset.oidx || ''), verdict, pts, e.model, e.student);
     } else {
       const m = e.mcq;
       const correctOpt = m.options.find(o => o.correct);
@@ -10504,6 +10530,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         if (verdict !== 'correct' && correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
         fb.innerHTML = inner;
       }
+      _setPartResult(containerSel, 'mcq:' + m.blockId, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter);
     }
   });
 
@@ -10528,6 +10555,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     }).catch(err => console.warn('Could not record attempt:', err));
   }
   recordCerPerformance(q, score, total, mode);
+  _openFinalized[containerSel] = true; // attempt recorded — per-part marking must not record it again
 
   // Force an A.I. explanation to always exist, by hook or by crook. The model
   // sometimes returns the marking items without a usable "explanation" field
@@ -10568,10 +10596,227 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
   return { score, total, mistakes };
 }
 
-function markOpenAnswers() {
-  return markOpenAnswersIn('#practiceContainer', currentPracticeQ, {
-    btnId: 'practiceMarkOpenBtn', scoreElId: 'practiceScoreDisplay', mode: 'practice-open'
+// =====================================================================
+// PER-PART AI MARKING + HINTS — every answer box / MCQ gets its own
+// "🤖 AI Mark" and "💡 Hint" buttons instead of one big per-question button.
+// =====================================================================
+function _setPartResult(containerSel, key, verdict, pts, expected, student) {
+  (_openPartResults[containerSel] = _openPartResults[containerSel] || {})[key] = { verdict, pts, expected, student };
+}
+
+// Once a part is marked, refresh the running score; when EVERY part of the
+// question has a verdict, record the attempt and hand over to the surface
+// (Quick/Topical practice use this to reveal their Next button).
+function _checkAllPartsMarked(containerSel) {
+  const totalParts = (_openItemsStore[containerSel] || []).length + (_openMcqStore[containerSel] || []).length;
+  if (!totalParts) return;
+  const results = _openPartResults[containerSel] || {};
+  const marked = Object.keys(results).length;
+  const cfg = _openSurfaceCfg[containerSel] || {};
+  const scoreEl = cfg.scoreElId ? document.getElementById(cfg.scoreElId) : null;
+  let score = 0;
+  const mistakes = [];
+  Object.values(results).forEach(r => {
+    score += r.pts || 0;
+    if (r.verdict !== 'correct') mistakes.push({ expected: r.expected, student: r.student });
   });
+  if (marked < totalParts) {
+    if (scoreEl) {
+      scoreEl.textContent = `${marked} / ${totalParts} parts marked`;
+      scoreEl.style.color = 'var(--text-muted)';
+    }
+    return;
+  }
+  if (scoreEl) {
+    const pct = Math.round((score / totalParts) * 100);
+    scoreEl.textContent = `${cfg.scorePrefix || 'AI Score'}: ${score}/${totalParts} (${pct}%)`;
+    scoreEl.style.color = score === totalParts ? 'var(--primary)' : 'var(--accent-orange)';
+  }
+  if (_openFinalized[containerSel]) return;
+  _openFinalized[containerSel] = true;
+  const q = _openQStore[containerSel];
+  if (currentUser && currentUser.role === 'student' && q) {
+    addDoc(collection(db, 'questionAttempts'), {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      displayName: currentUser.name,
+      questionId: q.id || '',
+      questionTitle: q.title || '',
+      score: score,
+      totalBlanks: totalParts,
+      timestamp: Timestamp.now(),
+      mode: cfg.mode || 'practice-open'
+    }).catch(err => console.warn('Could not record attempt:', err));
+  }
+  recordCerPerformance(q, score, totalParts, cfg.mode || 'practice-open');
+  if (typeof cfg.onAllMarked === 'function') cfg.onAllMarked({ score, total: totalParts, mistakes });
+}
+
+// Mark ONE part of the question (an open answer box or one MCQ) with the AI.
+async function markQuestionPart(containerSel, kind, pid, btn) {
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast("AI marking isn't set up yet — add your reCAPTCHA site key in the code", 'info');
+    return;
+  }
+  const q = _openQStore[containerSel];
+  const ctx = q ? _questionContext(q) : '';
+  const photo = _openPhoto[containerSel];
+
+  let areaEl = null, fbEl = null, mcq = null, correctOpt = null;
+  let label = 'Answer', model = '', student = '', studentLetter = '';
+  if (kind === 'open') {
+    areaEl = document.querySelector(containerSel + ' .open-answer[data-oidx="' + pid + '"]');
+    if (!areaEl) return;
+    const it = (_openItemsStore[containerSel] || [])[parseInt(pid, 10)] || {};
+    label = it.label || 'Answer';
+    model = it.model || '';
+    student = areaEl.value.trim();
+    if (!student && !photo) { showToast('Type an answer for this part first — or attach a photo of your written work', 'info'); return; }
+    const sec = areaEl.closest('.open-answer-section');
+    fbEl = sec && sec.querySelector('.open-feedback');
+  } else {
+    mcq = (_openMcqStore[containerSel] || []).find(m => m.blockId === pid);
+    if (!mcq) return;
+    correctOpt = mcq.options.find(o => o.correct);
+    const checked = document.querySelector(containerSel + ' input[name="mcq_' + pid + '"]:checked');
+    if (checked) { const o = mcq.options.find(x => x.id === checked.value); if (o) studentLetter = o.letter; }
+    if (!studentLetter && !photo) { showToast('Choose an option first — or attach a photo of your written work', 'info'); return; }
+    fbEl = document.querySelector(containerSel + ' [data-mcq-fb="' + pid + '"]');
+  }
+
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
+  if (fbEl) fbEl.innerHTML = '';
+
+  let parsed = null;
+  try {
+    let item;
+    if (kind === 'open') {
+      item = `Part: [${label}] type=open expected="${model || '(none provided — work out the correct answer from the question context)'}" student="${student || '(see attached photo)'}"`;
+    } else {
+      const optsTxt = mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ');
+      item = `Part: [Multiple choice] type=mcq options=[${optsTxt}] correct=${correctOpt ? correctOpt.letter : '?'} studentSelected="${studentLetter || '(read from photo)'}"`;
+    }
+    const prompt =
+      `You are a science teacher marking ONE part of a student's answer to a question. ` +
+      `${_markingPreamble(q && q.markingGuide)}\n` +
+      `Question context: "${ctx}".\n` +
+      (photo
+        ? `The student wrote their answers on paper and attached ONE photo of the whole page. Find the student's answer for THIS part in the photo, matching by its label and order${kind === 'mcq' ? ' (a circled option, a written letter, or a tick)' : ''}. Ignore handwriting quality.\n`
+        : ``) +
+      (kind === 'open'
+        ? `Compare the student's answer to the expected model answer by meaning (ignore wording, grammar and spelling — focus on the science); verdict "correct", "partial" or "incorrect". `
+        : `Decide which option the student chose and mark "correct" only if it matches the correct option letter, otherwise "incorrect"; also include "chosen":"<the letter the student picked, or empty>". `) +
+      `Give ONE short feedback sentence (max 22 words) addressed to the student. ` +
+      `Provide the full correct answer for THIS part as "modelAnswer"${kind === 'mcq' ? ' (state the correct option letter and what it says)' : ' (use the expected answer if provided, otherwise generate the correct answer yourself)'}. ` +
+      `Return ONLY JSON: {"verdict":"correct","feedback":"...","modelAnswer":"..."${kind === 'mcq' ? ',"chosen":"B"' : ''}}.\n${item}`;
+    let raw;
+    if (photo && photo.data) {
+      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 500, json: true });
+    } else {
+      raw = await askGemini(prompt, { maxOutputTokens: 500, temperature: 0.2, json: true });
+    }
+    parsed = _parseAIJson(raw);
+    if (Array.isArray(parsed)) parsed = parsed[0];
+  } catch (e) {
+    console.error('Part marking error:', e);
+    showToast('AI mark error: ' + (e && e.message ? e.message : e), 'error');
+  }
+  if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  if (!parsed || typeof parsed !== 'object') return;
+
+  const v = String(parsed.verdict || '').toLowerCase();
+  const verdict = v === 'correct' ? 'correct' : v === 'partial' ? 'partial' : 'incorrect';
+  const pts = verdict === 'correct' ? 1 : verdict === 'partial' ? 0.5 : 0;
+  const color = verdict === 'correct' ? 'var(--primary)' : verdict === 'partial' ? 'var(--accent-orange)' : 'var(--accent-red)';
+  const icon = verdict === 'correct' ? '✓' : verdict === 'partial' ? '≈' : '✗';
+  const fbHead = `<span style="color:${color};font-weight:600;font-size:0.85rem;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span>` +
+    `<span style="color:var(--text-muted);font-size:0.85rem;"> — ${escapeHtml(parsed.feedback || '')}</span>`;
+
+  if (kind === 'open') {
+    areaEl.style.borderColor = color;
+    const modelShown = model || String(parsed.modelAnswer || '').trim();
+    if (fbEl) {
+      let inner = fbHead;
+      if (modelShown) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${escapeHtml(modelShown)}</div>`;
+      fbEl.innerHTML = inner;
+    }
+    _setPartResult(containerSel, 'open:' + pid, verdict, pts, model, student);
+  } else {
+    const chosenLetter = parsed.chosen ? String(parsed.chosen).trim().toUpperCase().charAt(0) : studentLetter;
+    const wrap = document.querySelector(containerSel + ' .mcq-block[data-block="' + pid + '"]');
+    if (wrap) {
+      wrap.querySelectorAll('label').forEach((lab, idx) => {
+        const o = mcq.options[idx]; if (!o) return;
+        lab.style.background = ''; lab.style.borderColor = 'var(--border)';
+        if (o.correct) { lab.style.background = '#dcfce7'; lab.style.borderColor = '#16a34a'; }
+        if (chosenLetter && o.letter === chosenLetter && !o.correct) { lab.style.background = '#fee2e2'; lab.style.borderColor = '#dc2626'; }
+      });
+    }
+    if (fbEl) {
+      let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(chosenLetter)})</span>` : '');
+      if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
+      fbEl.innerHTML = inner;
+    }
+    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', chosenLetter);
+  }
+  _checkAllPartsMarked(containerSel);
+}
+
+// Give the student a nudge on ONE part without revealing the answer.
+async function hintQuestionPart(containerSel, kind, pid, btn) {
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast("AI hints aren't set up yet — add your reCAPTCHA site key in the code", 'info');
+    return;
+  }
+  const q = _openQStore[containerSel];
+  const ctx = q ? _questionContext(q) : '';
+  const box = document.querySelector(containerSel + ' .part-hint-box[data-hint-for="' + kind + ':' + pid + '"]');
+
+  let partDesc;
+  if (kind === 'open') {
+    const it = (_openItemsStore[containerSel] || [])[parseInt(pid, 10)] || {};
+    partDesc = `The part the student is stuck on: "${it.label || 'Answer'}". The model answer (do NOT reveal it): "${it.model || '(none provided — infer the correct answer from the question context)'}".`;
+  } else {
+    const mcq = (_openMcqStore[containerSel] || []).find(m => m.blockId === pid);
+    if (!mcq) return;
+    const correct = mcq.options.find(o => o.correct);
+    partDesc = `The part is a multiple-choice question with options: ${mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ')}. The correct option (do NOT reveal it or its letter): ${correct ? correct.letter : '?'}.`;
+  }
+
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Thinking…'; }
+  try {
+    const prompt =
+      `You are a science teacher. A student is stuck on ONE part of a question and asked for a hint.\n` +
+      `Question context: "${ctx}".\n${partDesc}\n` +
+      `Give ONE short hint (1-2 sentences, max 35 words) addressed to "you" that nudges the student toward the answer — point at the science concept to think about or where in the question to look. ` +
+      `Do NOT state the answer, the model answer's wording, or the correct option letter. Return ONLY the hint text — no preamble.`;
+    const raw = await askGemini(prompt, { maxOutputTokens: 200, temperature: 0.5 });
+    const hint = (raw || '').trim();
+    if (box) {
+      box.style.display = '';
+      box.innerHTML = `<strong style="color:var(--accent-orange);">💡 Hint:</strong> ${escapeHtml(hint || 'Re-read the question and think about which science idea it is testing.')}`;
+    }
+  } catch (e) {
+    console.error('Hint error:', e);
+    showToast('Could not get a hint: ' + (e && e.message ? e.message : e), 'error');
+  }
+  if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+}
+
+// Whole-page marking for the photo flow: one photo covers every part, so it is
+// still marked in a single AI call, then handed to the surface's completion hook.
+async function markAllPartsFromPhoto(containerSel) {
+  if (!_openPhoto[containerSel]) { showToast('Attach a photo of your answers first', 'info'); return; }
+  const cfg = _openSurfaceCfg[containerSel] || {};
+  const alreadyFinalized = !!_openFinalized[containerSel];
+  const res = await markOpenAnswersIn(containerSel, _openQStore[containerSel], {
+    btnId: 'openPhotoMarkBtn_' + _openPhotoKey(containerSel),
+    scoreElId: cfg.scoreElId, scorePrefix: cfg.scorePrefix || 'AI Score', mode: cfg.mode || 'practice-open'
+  });
+  if (!res) return;
+  if (!alreadyFinalized && typeof cfg.onAllMarked === 'function') cfg.onAllMarked(res);
 }
 
 // =====================================================================
@@ -10728,10 +10973,11 @@ function wsPreviewTryIt(qId) {
   const el = document.getElementById('wsPreview_' + qId);
   if (!q || !el) return;
   el.innerHTML =
-    `<div style="margin-bottom:8px;font-size:0.8rem;color:var(--text-muted);">✍️ Type your answers below, then let the AI mark them — exactly like practice mode.</div>` +
-    buildOpenBody(q, '#wsPreview_' + qId) +
+    `<div style="margin-bottom:8px;font-size:0.8rem;color:var(--text-muted);">✍️ Type your answers below — each part has its own 💡 Hint and 🤖 AI Mark buttons, exactly like practice mode.</div>` +
+    buildOpenBody(q, '#wsPreview_' + qId, {
+      scoreElId: 'wsPrevScore_' + qId, scorePrefix: 'AI Score', mode: 'preview'
+    }) +
     `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;">
-      <button class="btn btn-primary" id="wsPrevMark_${qId}" style="padding:7px 16px;font-size:0.85rem;" onclick="wsPreviewMark('${qId}')">🤖 Mark with AI</button>
       <span id="wsPrevScore_${qId}" style="font-weight:600;font-size:0.9rem;"></span>
       <button class="btn btn-outline" style="padding:7px 12px;font-size:0.82rem;margin-left:auto;" onclick="wsPreviewBack('${qId}')">↩ Back to preview</button>
     </div>`;
@@ -10740,14 +10986,6 @@ function wsPreviewTryIt(qId) {
 function wsPreviewBack(qId) {
   const el = document.getElementById('wsPreview_' + qId);
   if (el) el.innerHTML = renderQuestionPreviewHtml(qId);
-}
-
-function wsPreviewMark(qId) {
-  const q = questionBank.find(qb => qb.id === qId);
-  if (!q) return;
-  markOpenAnswersIn('#wsPreview_' + qId, q, {
-    btnId: 'wsPrevMark_' + qId, scoreElId: 'wsPrevScore_' + qId, scorePrefix: 'AI Score', mode: 'preview'
-  });
 }
 
 function toggleWsQuestion(id, checked) {
@@ -11485,7 +11723,9 @@ function renderQpQuestion(q) {
       </div>
       <div class="practice-card-body">`;
 
-  html += buildOpenBody(q, '#qpContainer');
+  html += buildOpenBody(q, '#qpContainer', {
+    scoreElId: 'qpScoreDisplay', scorePrefix: 'AI Score', mode: 'quickpractice-open', onAllMarked: _qpAllPartsMarked
+  });
 
   html += `</div>
       <div class="practice-actions">
@@ -11501,10 +11741,6 @@ function renderQpQuestion(q) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             Reset
           </button>
-          <button class="btn btn-primary" id="qpMarkOpenBtn" onclick="submitQpOpenAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
-            Mark with AI
-          </button>
           <button class="btn btn-primary" id="qpNextBtn" onclick="loadNextQpQuestion()" style="display:none;">
             Next &rarr;
           </button>
@@ -11514,26 +11750,27 @@ function renderQpQuestion(q) {
 
   qpSubmitted = false;
   document.getElementById('qpContainer').innerHTML = html;
+  // Nothing for the AI to mark — let the student move on straight away.
+  if (!questionHasMarkableAnswer(q)) {
+    const nextBtn = document.getElementById('qpNextBtn');
+    if (nextBtn) nextBtn.style.display = '';
+  }
 }
 
 function resetQpOpenAnswers() {
   if (qpSubmitted) return;
   resetOpenAnswersIn('#qpContainer', 'qpScoreDisplay');
 }
-async function submitQpOpenAnswers() {
+// Every part of the current Quick Practice question has been AI-marked.
+function _qpAllPartsMarked(res) {
   if (qpSubmitted) return;
-  const res = await markOpenAnswersIn('#qpContainer', qpQueue[qpIndex], {
-    btnId: 'qpMarkOpenBtn', scoreElId: 'qpScoreDisplay', scorePrefix: 'AI Score', mode: 'quickpractice-open'
-  });
-  if (!res) return;
   qpSubmitted = true;
   document.querySelectorAll('#qpContainer .open-answer').forEach(a => a.disabled = true);
+  document.querySelectorAll('#qpContainer .part-ai-btn').forEach(b => b.disabled = true);
   _recordQpResult(res.score, res.total, res.mistakes);
   qpAnswered = Math.max(qpAnswered, qpIndex + 1);
   updateQpProgress();
-  const markBtn = document.getElementById('qpMarkOpenBtn');
   const nextBtn = document.getElementById('qpNextBtn');
-  if (markBtn) markBtn.style.display = 'none';
   if (nextBtn) nextBtn.style.display = '';
 }
 
@@ -12188,7 +12425,9 @@ function tpRenderQuestion(q) {
       </div>
       <div class="practice-card-body">`;
 
-  html += buildOpenBody(q, '#tpContainer');
+  html += buildOpenBody(q, '#tpContainer', {
+    scoreElId: 'tpScoreDisplay', scorePrefix: 'AI Score', mode: 'topicalpractice-open', onAllMarked: _tpAllPartsMarked
+  });
 
   html += `</div>
       <div class="practice-actions">
@@ -12204,10 +12443,6 @@ function tpRenderQuestion(q) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             Reset
           </button>
-          <button class="btn btn-primary" id="tpMarkOpenBtn" onclick="tpSubmitOpenAnswers()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/></svg>
-            Mark with AI
-          </button>
           <button class="btn btn-primary" id="tpNextBtn" onclick="tpLoadNextQuestion()" style="display:none;">
             Next &rarr;
           </button>
@@ -12217,6 +12452,11 @@ function tpRenderQuestion(q) {
 
   tpSubmitted = false;
   document.getElementById('tpContainer').innerHTML = html;
+  // Nothing for the AI to mark — let the student move on straight away.
+  if (!questionHasMarkableAnswer(q)) {
+    const nextBtn = document.getElementById('tpNextBtn');
+    if (nextBtn) nextBtn.style.display = '';
+  }
 }
 
 function tpResetOpenAnswers() {
@@ -12224,26 +12464,17 @@ function tpResetOpenAnswers() {
   resetOpenAnswersIn('#tpContainer', 'tpScoreDisplay');
 }
 
-// Hide the mark button and reveal Next after a Topical question is marked.
-function _tpAfterSubmit() {
-  const b = document.getElementById('tpMarkOpenBtn');
-  if (b) b.style.display = 'none';
-  const nextBtn = document.getElementById('tpNextBtn');
-  if (nextBtn) nextBtn.style.display = '';
-}
-
-async function tpSubmitOpenAnswers() {
+// Every part of the current Topical Practice question has been AI-marked.
+function _tpAllPartsMarked(res) {
   if (tpSubmitted) return;
-  const res = await markOpenAnswersIn('#tpContainer', tpQueue[tpIndex], {
-    btnId: 'tpMarkOpenBtn', scoreElId: 'tpScoreDisplay', scorePrefix: 'AI Score', mode: 'topicalpractice-open'
-  });
-  if (!res) return;
   tpSubmitted = true;
   document.querySelectorAll('#tpContainer .open-answer').forEach(a => a.disabled = true);
+  document.querySelectorAll('#tpContainer .part-ai-btn').forEach(b => b.disabled = true);
   _recordTpResult(res.score, res.total, res.mistakes);
   tpAnswered = Math.max(tpAnswered, tpIndex + 1);
   tpUpdateProgress();
-  _tpAfterSubmit();
+  const nextBtn = document.getElementById('tpNextBtn');
+  if (nextBtn) nextBtn.style.display = '';
 }
 
 function tpBackToTopics() {
@@ -13019,9 +13250,7 @@ window.moveBlock = moveBlock;
 window.duplicateBlock = duplicateBlock;
 window.previewAsStudent = previewAsStudent;
 window.closeStudentPreview = closeStudentPreview;
-window.markStudentPreviewOpen = markStudentPreviewOpen;
 window.resetStudentViewAnswers = resetStudentViewAnswers;
-window.markStudentViewAnswers = markStudentViewAnswers;
 window.openScheduleFromCreate = openScheduleFromCreate;
 window.addToBank = addToBank;
 window.saveEditedQuestion = saveEditedQuestion;
@@ -13096,9 +13325,7 @@ window.skipStudentSetup = skipStudentSetup;
 window.onPracticeStudentChange = onPracticeStudentChange;
 window.loadRandomPracticeQuestion = loadRandomPracticeQuestion;
 window.resetOpenAnswers = resetOpenAnswers;
-window.markOpenAnswers = markOpenAnswers;
 window.resetQpOpenAnswers = resetQpOpenAnswers;
-window.submitQpOpenAnswers = submitQpOpenAnswers;
 window.setLandingDemoMode = setLandingDemoMode;
 // Student worksheet functions
 window.renderWsQuestions = renderWsQuestions;
@@ -13107,7 +13334,6 @@ window.toggleWsSelectAll = toggleWsSelectAll;
 window.toggleWsPreview = toggleWsPreview;
 window.wsPreviewTryIt = wsPreviewTryIt;
 window.wsPreviewBack = wsPreviewBack;
-window.wsPreviewMark = wsPreviewMark;
 window.onWsCardClick = onWsCardClick;
 window.saveWorksheet = saveWorksheet;
 window.printStudentWorksheet = printStudentWorksheet;
@@ -13146,7 +13372,6 @@ window.tpStartPractice = tpStartPractice;
 window.tpStartTopic = tpStartTopic;
 window.tpLoadNextQuestion = tpLoadNextQuestion;
 window.tpResetOpenAnswers = tpResetOpenAnswers;
-window.tpSubmitOpenAnswers = tpSubmitOpenAnswers;
 window.tpBackToTopics = tpBackToTopics;
 // Move to Vetting (edit mode)
 window.moveEditToVetting = moveEditToVetting;
