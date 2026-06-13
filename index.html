@@ -5355,7 +5355,7 @@ option {
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>🏰 Endless Dungeon</h2>
           </div>
-          <div class="subtitle">Your hero fights automatically — weapon skills and pet abilities fire on cooldown. Beat each floor boss to descend deeper, where monsters grow ever stronger and richer. How far can your build go? 3 raids a day.</div>
+          <div class="subtitle">Your hero fights automatically — weapon skills and pet abilities fire on cooldown. Beat each floor boss to descend deeper, where monsters grow ever stronger and richer. Each raid advances up to 3 floors, then you make camp — your progress is saved and the next raid carries on from there. 3 raids a day.</div>
         </div>
       </div>
       <div class="page-body">
@@ -14893,7 +14893,7 @@ function rpgStorageKey() { return "scienceQuestRpg:" + (currentUser ? currentUse
 function rpgDefaults() {
   return {
     v: 2, gold: 60, xp: 0, hp: null, hidden: false,
-    monthKey: null, monthXp: 0, lastMonthKey: null, lastMonthXp: 0, advRuns: null,
+    monthKey: null, monthXp: 0, lastMonthKey: null, lastMonthXp: 0, advRuns: null, dungeonFloor: 1,
     inventory: { wood_sword: 1, cloth_tunic: 1 },
     equipment: { weapon: "wood_sword", shield: null, armor: "cloth_tunic", helmet: null, accessory: null, pet: null },
     battle: null, upgrades: {}, clazz: null, skills: {}, paths: {}, affixes: {}, petBond: {}, daily: null, streak: null, packCoupon: 0, rebirths: 0, xpBaseline: 0, shards: 0, star: { gold: 0, learn: 0, raids: 0, nova: false }, kills: {}, seenQ: {},
@@ -16747,7 +16747,7 @@ async function rpgRenderLeaderboard(force = false) {
 }
 
 // ---- Adventure mode (idle side-scrolling auto-battler, MOBA-style skills) ----
-const ADV_MAX_RUNS = 3, ADV_WAVES = 5;
+const ADV_MAX_RUNS = 3, ADV_WAVES = 5, ADV_FLOORS_PER_RAID = 3;
 const ADV_TICK_MS = 100, ADV_HERO_ATK_MS = 1100;
 let adv = null;       // active run state
 let advToken = 0;     // invalidates timers from finished/abandoned runs
@@ -16761,6 +16761,9 @@ function advRunsUsed() {
   return r && r.day === advToday() ? (r.used || 0) : 0;
 }
 function advRunsLeft() { return Math.max(0, ADV_MAX_RUNS + ((rpgState && rpgState.star && rpgState.star.raids) || 0) - advRunsUsed()); }
+// The floor the next raid resumes on. Saved across raids/days so the dungeon is
+// a continuous climb — each raid advances it by up to ADV_FLOORS_PER_RAID.
+function advDungeonFloor() { return Math.max(1, Math.floor((rpgState && rpgState.dungeonFloor) || 1)); }
 function advAfter(ms, fn) {
   const t = advToken;
   setTimeout(() => { if (adv && advToken === t) fn(); }, ms);
@@ -16940,9 +16943,10 @@ function rpgRenderAdventure() {
   $("advStartBtn").style.display = "";
   $("advStage").classList.remove("walking");
   const best = (rpgState.stats && rpgState.stats.bestFloor) || 0;
+  const floor = advDungeonFloor();
   advOverlay(advRunsLeft() > 0 || rpgCanPreview()
-    ? `<div><h4>🏰 The Endless Dungeon awaits!</h4><p>Your hero fights on their own — skills and pet abilities cast automatically. Beat each floor boss to descend deeper, where monsters grow stronger and pay more. The dungeon never ends… your gear decides how far you go.${best ? ` Your best: <b>Floor ${best}</b>.` : ""}</p></div>`
-    : `<div><h4>🛌 No raids left today</h4><p>You've used all ${ADV_MAX_RUNS} dungeon raids for today. Rest up, hero — come back tomorrow!</p></div>`);
+    ? `<div><h4>🏰 The Dungeon awaits — Floor ${floor}</h4><p>Your hero fights on their own — skills and pet abilities cast automatically. Each raid you descend up to <b>${ADV_FLOORS_PER_RAID} floors</b>, then make camp; your progress is saved and the next raid continues from where you stopped.${best > 1 ? ` Your deepest: <b>Floor ${best}</b>.` : ""}</p></div>`
+    : `<div><h4>🛌 No raids left today</h4><p>You've used all ${ADV_MAX_RUNS} dungeon raids for today. Your progress is saved — come back tomorrow to descend from <b>Floor ${floor}</b>.</p></div>`);
 }
 function advStart() {
   if (!rpgState || adv) return;
@@ -16953,7 +16957,8 @@ function advStart() {
   }
   advToken++;
   const stats = rpgPlayerStats();
-  adv = { phase: "walk", wave: 0, floor: 1, tiers: advWaveTiers(0), stats, heroHp: stats.maxHp, heroMax: stats.maxHp,
+  const startFloor = advDungeonFloor(); // resume the climb from where the last raid stopped
+  adv = { phase: "walk", wave: 0, floor: startFloor, startFloor, tiers: advWaveTiers(startFloor - 1), stats, heroHp: stats.maxHp, heroMax: stats.maxHp,
     foes: [], skills: advEquippedSkills(), shield: 0, heroNextAtk: 0, heroX: 0, heroInRange: false, worldX: 0, scroll: 0, lurch: 0, gold: 0, xp: 0, kills: 0, loopId: 0, rafOn: false, mods: { atkPct: 0, goldPct: 0, cdr: 0, dr: 0, leech: 0, el: {} } };
   adv.loopId = setInterval(advTick, ADV_TICK_MS);
   adv.rafOn = true;
@@ -17424,7 +17429,46 @@ function advFloorClear() {
   rpgState.stats.floorsCleared = (rpgState.stats.floorsCleared || 0) + 1;
   if (rpgState.equipment.pet) rpgState.petBond[rpgState.equipment.pet] = (rpgState.petBond[rpgState.equipment.pet] || 0) + 1;
   $("advStatus").textContent = `🏰 Floor ${adv.floor} cleared! +🪙${bonusGold} +✨${bonusXp}`;
-  advAfter(900, advShowDraft);
+  // Save progress immediately so the next raid resumes past this floor even if
+  // the hero retreats or navigates away during the blessing draft.
+  rpgState.dungeonFloor = adv.floor + 1;
+  rpgSave();
+  // A raid may advance at most ADV_FLOORS_PER_RAID floors. Once the cap is hit
+  // the hero makes camp and the run ends — come back for the next raid to
+  // continue the climb from here.
+  if ((adv.floor - (adv.startFloor || adv.floor) + 1) >= ADV_FLOORS_PER_RAID) advAfter(900, advRaidComplete);
+  else advAfter(900, advShowDraft);
+}
+// Raid hit its floor cap — bank the rewards, save progress, and invite the
+// hero back for the next available raid.
+function advRaidComplete() {
+  if (!adv) return;
+  advStopLoop();
+  const fromFloor = adv.startFloor || adv.floor, lastCleared = adv.floor, nextFloor = adv.floor + 1;
+  const gold = adv.gold, xp = adv.xp;
+  const lvl = (gold || xp) ? rpgApplyRewards(gold, xp) : { levelsGained: 0, newLevel: rpgLevelInfo().level };
+  rpgState.stats.advRunsDone = (rpgState.stats.advRunsDone || 0) + 1;
+  rpgState.stats.bestFloor = Math.max((rpgState.stats.bestFloor || 0), nextFloor);
+  rpgState.dungeonFloor = nextFloor;
+  rpgSave();
+  rpgPublishLeaderboard();
+  adv = null;
+  advToken++;
+  $("advQuitBtn").style.display = "none";
+  $("advStartBtn").style.display = "";
+  $("advStage").classList.remove("walking");
+  const heRC = $("advHero");
+  if (heRC && heRC.style) heRC.style.transform = "";
+  $("advStatus").textContent = "";
+  advUpdateRunsChip();
+  const left = advRunsLeft();
+  const cleared = lastCleared - fromFloor + 1;
+  advOverlay(`<div>
+    <h4>🏁 Raid complete — ${cleared} floor${cleared === 1 ? "" : "s"} cleared!</h4>
+    <p>You cleared Floor ${fromFloor}${cleared > 1 ? `–${lastCleared}` : ""} and made camp. Your progress is saved — your next raid resumes at <b>Floor ${nextFloor}</b>.${rpgCanPreview() ? "" : (left > 0 ? ` ${left} raid${left === 1 ? "" : "s"} left today.` : " No raids left today — come back tomorrow to descend further.")}</p>
+    <div class="rpg-reward-stats"><span>🏰 Floor ${nextFloor} next</span><span>🪙 +${gold} gold</span><span>✨ +${xp} XP</span></div>
+    ${lvl.levelsGained > 0 ? `<div class="rpg-reward-stats"><span>⬆️ LEVEL UP — now Lv ${lvl.newLevel}!</span></div>` : ""}
+  </div>`);
 }
 function advFoeBolt(i) {
   const layer = $("advFx"), stage = $("advStage");
@@ -17652,7 +17696,8 @@ function advEnd() {
   if (!adv) return;
   advStopLoop();
   const floor = adv.floor, kills = adv.kills;
-  const floorsCleared = floor - 1;
+  const startFloor = adv.startFloor || 1;
+  const floorsCleared = Math.max(0, floor - startFloor); // floors cleared THIS raid
   const gold = adv.gold, xp = adv.xp;
   const lvl = (gold || xp) ? rpgApplyRewards(gold, xp) : { levelsGained: 0, newLevel: rpgLevelInfo().level };
   rpgState.stats.advRunsDone = (rpgState.stats.advRunsDone || 0) + 1;
@@ -17671,7 +17716,7 @@ function advEnd() {
   const best = rpgState.stats.bestFloor || 0;
   advOverlay(`<div>
     <h4>🪦 You fell on Floor ${floor}…</h4>
-    <p>${floorsCleared > 0 ? `${floorsCleared} floor${floorsCleared === 1 ? "" : "s"} cleared and ${kills} monsters slain` : `${kills} monsters slain`} — everything you earned is yours to keep. ${best > floor ? `Your record is Floor ${best}.` : "A new personal best!"} Upgrade your gear and dive again!</p>
+    <p>${floorsCleared > 0 ? `${floorsCleared} floor${floorsCleared === 1 ? "" : "s"} cleared this raid and ${kills} monsters slain` : `${kills} monsters slain`} — everything you earned is yours to keep, and your progress is saved. Your next raid resumes at <b>Floor ${floor}</b>.${best > floor ? ` Your record is Floor ${best}.` : ""}</p>
     <div class="rpg-reward-stats"><span>🏰 Floor ${floor}</span><span>🪙 +${gold} gold</span><span>✨ +${xp} XP</span></div>
     ${lvl.levelsGained > 0 ? `<div class="rpg-reward-stats"><span>⬆️ LEVEL UP — now Lv ${lvl.newLevel}!</span></div>` : ""}
   </div>`);
