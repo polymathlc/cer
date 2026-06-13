@@ -3845,6 +3845,11 @@ option {
 .btn-sm { padding: 7px 11px; font-size: 0.82rem; }
 .hint { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
 .nav-item .ico { font-size: 1.05rem; width: 20px; text-align: center; }
+/* display:contents removes this wrapper's own box so the sticky battle strip
+   uses the tall .page-body as its containing block (this wrapper is only as
+   tall as the strip, which left sticky with no room to travel — the strip
+   scrolled away instead of pinning). */
+.rpg-battle-host { display: contents; }
 .rpg-battle-host:empty { display: none; }
 .rpg-battle { margin-bottom: 14px; }
 /* Generic overlay dialog used by the game's pack & reward popups */
@@ -3886,6 +3891,17 @@ option {
 .rpg-bar-row .rpg-bar-cap { display: flex; justify-content: space-between; font-family: 'Space Mono', monospace; font-size: 0.6rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px; }
 /* battle banner — pinned below the sticky page header while the page scrolls */
 .rpg-battle { position: sticky; top: var(--rpg-strip-top, 0px); z-index: 40; margin: 0; padding-bottom: 14px; background: var(--bg); }
+/* Pinned strip stays short (small vertically) and full-width (long horizontally)
+   so students can still see the fight while scrolling through the question. */
+.rpg-battle .rpg-battle-card { padding: 9px 14px; }
+.rpg-battle .rpg-battle-sub { display: none; }
+.rpg-battle .rpg-arena { margin-top: 8px; gap: 8px; align-items: center; }
+.rpg-battle .rpg-fighter { padding: 6px 10px; gap: 9px; }
+.rpg-battle .rpg-fighter-art { width: 42px; height: 42px; }
+.rpg-battle .rpg-foe-emoji { font-size: 2rem; }
+.rpg-battle .rpg-fighter-name { font-size: 0.85rem; }
+.rpg-battle .rpg-fighter-lv { font-size: 0.68rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rpg-battle .rpg-log { margin-top: 6px; font-size: 0.74rem; max-height: 3.4em; overflow: hidden; }
 .rpg-battle-card { border-radius: var(--radius-lg); background: linear-gradient(135deg, #2b2640 0%, #1f2937 100%); color: #fff; padding: 14px 16px; box-shadow: var(--shadow-md); border: 1px solid #3a3553; }
 .rpg-battle-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rpg-battle-title { font-weight: 700; letter-spacing: -0.01em; }
@@ -12447,7 +12463,9 @@ function _recordQpResult(correct, total, mistakes) {
     correct, total,
     mistakes: mistakes || []
   });
-  recordCerPerformance(q, correct, total, 'quickpractice');
+  // Performance + the battle round are already recorded by the marking flow
+  // (markOpenAnswersIn / _checkAllPartsMarked). Recording again here ran the
+  // battle TWICE per question — double XP/gold and an extra enemy hit.
 }
 
 // Shared, styled end-of-practice report (used by Quick/Worksheet and Topical).
@@ -12848,7 +12866,7 @@ let tpSessionResults = []; // per-question results for the end-of-session AI rep
 function _recordTpResult(correct, total, mistakes) {
   const q = tpQueue[tpIndex] || {};
   tpSessionResults.push({ title: q.title || '', topic: q.topic || '', correct, total, mistakes: mistakes || [] });
-  recordCerPerformance(q, correct, total, 'topicalpractice');
+  // Battle + performance already recorded by the marking flow — see _recordQpResult.
 }
 
 // =====================================================================
