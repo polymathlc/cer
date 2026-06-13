@@ -15609,6 +15609,7 @@ function rpgOnMarked(q, score, total, opts = {}) {
     try { rpgSurgeNote(credit); } catch (_) {}
   }
 
+  rpgEnsureBattle(); // a foe is always present, so every answer lands on an enemy
   const round = rpgState.battle ? rpgBattleRound(credit) : null;
   if (round && round.victory) { gold += round.victory.gold; xp += round.victory.xp; }
   const lvl = rpgApplyRewards(gold, xp);
@@ -15620,7 +15621,9 @@ function rpgOnMarked(q, score, total, opts = {}) {
   if (document.querySelector("#page-character.active")) rpgRenderCharacterPage();
 
   if (round) {
-    if (round.foeDmg) { rpgFloat("rpgFoeTile", `-${round.foeDmg}`, "dmg"); rpgHitFlash("rpgFoeTile"); }
+    // On a kill the arena already re-rendered with the next foe, so don't splash
+    // the killing blow's damage onto the freshly spawned enemy.
+    if (round.foeDmg && !round.victory) { rpgFloat("rpgFoeTile", `-${round.foeDmg}`, "dmg"); rpgHitFlash("rpgFoeTile"); }
     if (round.heroDmg) { rpgFloat("rpgHeroTile", `-${round.heroDmg}`, "hurt"); rpgHitFlash("rpgHeroTile"); }
     if (round.lines.length) rpgSetLog(round.lines.join(" "));
   }
@@ -15665,6 +15668,15 @@ function rpgStartBattle() {
   rpgSave();
   rpgRenderBattle();
   rpgSetLog(`A wild <b>${escapeHtml(enemy.name)}</b> appears! ${escapeHtml(enemy.flavor)} Answer the question below to attack.`);
+}
+// An enemy is always waiting: spawn one whenever the arena is empty so students
+// can attack just by answering questions — no "Start battle" click needed.
+function rpgEnsureBattle() {
+  if (!rpgState || rpgState.hidden || rpgState.battle) return false;
+  const enemy = rpgPickEnemy();
+  rpgState.battle = { enemyId: enemy.id, enemyHp: enemy.maxHp, rounds: 0, startedAt: new Date().toISOString() };
+  rpgSave();
+  return true;
 }
 function rpgFlee() {
   if (!rpgState || !rpgState.battle) return;
@@ -15735,6 +15747,7 @@ function rpgRenderBattle() {
   wrap.style.display = "";
   rpgSyncStripTop();
   requestAnimationFrame(rpgSyncStripTop);
+  rpgEnsureBattle(); // an enemy is always on the field — no "Start battle" click needed
   const stats = rpgPlayerStats();
   const info = rpgLevelInfo();
   const battle = rpgState.battle;
@@ -15930,9 +15943,14 @@ function rpgItemCardHtml(it, mode) {
       ? `<button class="btn btn-ghost" type="button" disabled>Owned ✓</button>`
       : `<button class="btn btn-ghost" type="button" disabled>🎁 Pack only</button>`;
   } else {
+    // Keep the Buy button clickable even when you can't afford it yet — rpgBuy()
+    // shows a helpful toast ("Not enough gold"). Level-locked items show a clear
+    // lock chip instead of a dead "Buy" button.
     action = owned
       ? `<button class="btn btn-ghost" type="button" disabled>Owned</button>`
-      : `<button class="btn btn-primary" type="button" data-rpg-buy="${it.id}" ${rpgState.gold < it.price || locked ? "disabled" : ""}>Buy · 🪙 ${it.price}</button>`;
+      : locked
+        ? `<button class="btn btn-ghost" type="button" disabled>🔒 Needs Lv ${it.levelReq}</button>`
+        : `<button class="btn btn-primary" type="button" data-rpg-buy="${it.id}"${rpgState.gold < it.price ? ' style="opacity:.6"' : ""}>Buy · 🪙 ${it.price}</button>`;
   }
   return `<div class="rpg-item ${locked ? "locked" : ""}" style="--rar:${rar.color};">
     ${equipped ? `<span class="rpg-item-badge">Equipped</span>` : (mode === "shop" && owned ? `<span class="rpg-item-badge">Owned</span>` : "")}
