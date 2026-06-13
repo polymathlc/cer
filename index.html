@@ -3884,8 +3884,8 @@ option {
 .rpg-bar-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Space Mono', monospace; font-size: 0.58rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.45); letter-spacing: 0.04em; }
 .rpg-bar-row { margin-bottom: 8px; }
 .rpg-bar-row .rpg-bar-cap { display: flex; justify-content: space-between; font-family: 'Space Mono', monospace; font-size: 0.6rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px; }
-/* battle banner */
-.rpg-battle { margin-bottom: 14px; }
+/* battle banner — pinned below the sticky page header while the page scrolls */
+.rpg-battle { position: sticky; top: var(--rpg-strip-top, 0px); z-index: 40; margin: 0; padding-bottom: 14px; background: var(--bg); }
 .rpg-battle-card { border-radius: var(--radius-lg); background: linear-gradient(135deg, #2b2640 0%, #1f2937 100%); color: #fff; padding: 14px 16px; box-shadow: var(--shadow-md); border: 1px solid #3a3553; }
 .rpg-battle-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rpg-battle-title { font-weight: 700; letter-spacing: -0.01em; }
@@ -15711,6 +15711,15 @@ function rpgSimRowHtml() {
     <button type="button" data-rpg-act="sim-reset">reset hero</button>
   </div>`;
 }
+// Pin the battle strip just below the active page's sticky header by
+// measuring the header height into a CSS variable (adapts across breakpoints).
+function rpgSyncStripTop() {
+  const host = document.querySelector(".page.active .rpg-battle-host");
+  const page = host && host.closest(".page");
+  const hdr = page && page.querySelector(".page-header");
+  const h = hdr ? Math.round(hdr.getBoundingClientRect().height) : 0;
+  document.documentElement.style.setProperty("--rpg-strip-top", h + "px");
+}
 function rpgRenderBattle() {
   const host = document.querySelector(".page.active .rpg-battle-host");
   let wrap = $("rpgBattle");
@@ -15724,6 +15733,8 @@ function rpgRenderBattle() {
   if (host && wrap.parentElement !== host) host.appendChild(wrap);
   if (!rpgState || rpgState.hidden || !wrap.parentElement) { wrap.style.display = "none"; wrap.innerHTML = ""; return; }
   wrap.style.display = "";
+  rpgSyncStripTop();
+  requestAnimationFrame(rpgSyncStripTop);
   const stats = rpgPlayerStats();
   const info = rpgLevelInfo();
   const battle = rpgState.battle;
@@ -17375,6 +17386,7 @@ function advArrow(i, fx, miss) {
 // ---- Static event wiring (elements live in the game pages / sidebar) ----
 function rpgWireStaticEvents() {
   const wire = (id, fn) => { const el = $(id); if (el) el.addEventListener("click", fn); };
+  window.addEventListener("resize", rpgSyncStripTop);
   wire("rpgSide", () => navigateTo("character"));
   wire("rpgHideToggle", () => rpgSetHidden(!rpgGameHidden()));
   wire("rpgBoardRefresh", () => rpgRenderLeaderboard(true));
