@@ -690,7 +690,7 @@ function navigateTo(page) {
   const titles = { practice: "Practice", create: currentEditingId ? "Edit Question" : "Create Question", bank: "Question Bank", worksheet: "Worksheet Creator" };
   $("topbarTitle").textContent = titles[page] || "";
   $("sidebar").classList.remove("open");
-  if (page === "bank") renderBank();
+  if (page === "bank") { renderBank(); loadBank(adminUid || (currentUser && currentUser.uid)).then(renderBank).catch(() => {}); }
   if (page === "practice") { renderQuestion(); setupCanvasSize(); }
   if (page === "worksheet") {
     const f = $("worksheetFrame");
