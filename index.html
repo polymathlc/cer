@@ -16748,6 +16748,12 @@ async function rpgRenderLeaderboard(force = false) {
 
 // ---- Adventure mode (idle side-scrolling auto-battler, MOBA-style skills) ----
 const ADV_MAX_RUNS = 3, ADV_WAVES = 5, ADV_FLOORS_PER_RAID = 3;
+// Dungeon reward pacing. The auto-battler is an idle BONUS — answering
+// questions is the real road to level 99 (~165k XP total). These scale the
+// raid payouts right down, fodder gives gold but no XP, and the floor-clear
+// bonus is capped, so a pure-dungeon climb to 99 takes well over a year of
+// daily raids while still rewarding automated play. Tune these to taste.
+const ADV_XP_SCALE = 0.03, ADV_GOLD_SCALE = 0.15;
 const ADV_TICK_MS = 100, ADV_HERO_ATK_MS = 1100;
 let adv = null;       // active run state
 let advToken = 0;     // invalidates timers from finished/abandoned runs
@@ -17364,7 +17370,10 @@ function advFoeDie(i) {
   f.dead = true;
   adv.kills++;
   try { rpgCreditKill(f.e.id); } catch (_) {}
-  const mult = (f.boss ? 2 : f.minion ? 0.35 : 1) * (f.scale || 1) * (1 + adv.mods.goldPct) * (1 + 0.2 * ((f.affixes || []).length));
+  // Reward weight by enemy role + elite affixes. Deliberately NOT scaled by
+  // f.scale (deep-floor power) so payouts stay bounded as the dungeon gets
+  // harder; gold-find is applied to gold only, below.
+  const mult = (f.boss ? 2 : f.minion ? 0.35 : 1) * (1 + 0.2 * ((f.affixes || []).length));
   if (f.splitting && adv.foes.length < 9 && adv.phase === "fight") {
     for (let s = 0; s < 2; s++) {
       const e2 = rpgEnemiesOfTier(1)[0];
@@ -17376,12 +17385,13 @@ function advFoeDie(i) {
     }
     adv.slotsDirty = true;
   }
-  const g = Math.round(f.e.gold * mult), x = Math.round(f.e.xp * mult);
+  const g = Math.round(f.e.gold * mult * (1 + adv.mods.goldPct) * ADV_GOLD_SCALE);
+  const x = f.minion ? 0 : Math.round(f.e.xp * mult * ADV_XP_SCALE); // fodder pays gold, not XP
   adv.gold += g;
   adv.xp += x;
   const el = advFoeEl(i);
   if (el) {
-    advFloat(el, `+${g}🪙 +${x}✨`, "heal");
+    advFloat(el, x > 0 ? `+${g}🪙 +${x}✨` : `+${g}🪙`, "heal");
     advParticles(el, "🪙", 4);
     if (el.classList) el.classList.remove("marching");
     if (el.style) {
@@ -17404,8 +17414,11 @@ function advFoeDie(i) {
 }
 function advFloorClear() {
   // boss down — bonus, heal, then descend to a tougher floor
-  const bonusGold = 18 + adv.floor * 12;
-  const bonusXp = 20 + adv.floor * 12;
+  // Floor-clear bonus is the main dungeon XP source. Small and capped after
+  // floor 20 so the climb stays paced (was 20 + floor*12, which ballooned).
+  const fb = Math.min(adv.floor, 20);
+  const bonusGold = 12 + fb * 3;
+  const bonusXp = 5 + fb;
   adv.gold += bonusGold;
   adv.xp += bonusXp;
   const heal = Math.round(adv.heroMax * 0.35);
