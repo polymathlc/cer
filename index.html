@@ -4823,6 +4823,9 @@ option {
           </div>
           <div class="subtitle">Questions pending review before adding to the bank</div>
         </div>
+        <div>
+          <button class="btn btn-primary" id="aiAutoVetBtn" onclick="aiAutoVetAll()" title="Use AI to classify each pending question's topic & category, write or fix the model answers, add any missing question wording, then approve them all into the bank.">✨ AI Auto-Vet All</button>
+        </div>
       </div>
       <div class="page-body" style="max-width:960px;">
         <div class="question-bank-grid" id="vettingListGrid"></div>
@@ -5656,6 +5659,24 @@ option {
     <div class="overlay-head"><h3 id="rpgRewardTitle">Victory!</h3><button class="close" data-close="rpgRewardOverlay" type="button">×</button></div>
     <div class="overlay-body" id="rpgRewardBody"></div>
     <div class="overlay-foot"><button class="btn btn-primary" data-close="rpgRewardOverlay" type="button">Continue</button></div>
+  </div>
+</div>
+
+<!-- ==================== AI AUTO-VET PROGRESS ==================== -->
+<div class="overlay" id="autoVetOverlay">
+  <div class="overlay-card" style="max-width:460px;">
+    <div class="overlay-head"><h3 id="autoVetTitle">✨ AI Auto-Vet in progress</h3></div>
+    <div class="overlay-body">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="spinner" id="autoVetSpinner"></div>
+        <div id="autoVetStatus" style="font-size:0.95rem;">Starting…</div>
+      </div>
+      <div style="margin-top:16px;height:8px;background:var(--border);border-radius:99px;overflow:hidden;">
+        <div id="autoVetBar" style="height:100%;width:0%;background:var(--primary);transition:width 0.3s ease;"></div>
+      </div>
+      <p style="margin-top:14px;font-size:0.8rem;color:var(--text-muted);">AI is classifying each question's topic &amp; category, writing the model answers, and adding any missing wording before moving it into the bank.</p>
+    </div>
+    <div class="overlay-foot"><button class="btn btn-primary" id="autoVetCloseBtn" onclick="closeAutoVet()" style="display:none;">Done</button></div>
   </div>
 </div>
 
@@ -9559,6 +9580,228 @@ function deleteVetting(id) {
     showToast('Question removed from vetting list', 'info');
     deleteVettingDoc(id);
   });
+}
+
+// =====================================================================
+// AI AUTO-VET
+// Walks the vetting list and, for each pending question, asks the AI to pick
+// the best topic + category, write/fix the model answers, fill an empty
+// marking guide, and supply a question prompt when the question is answer-only
+// — then approves the whole batch into the bank. Questions are handled by a
+// small pool of concurrent AI workers (the "subagents").
+// =====================================================================
+const AUTOVET_CONCURRENCY = 3;
+const AUTOVET_CATEGORIES = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
+// Lazy: topicLevelMap is declared further down the module, so reading it at
+// call time (not module-eval time) avoids the temporal-dead-zone error.
+function autoVetTopics() { return Object.keys(topicLevelMap); }
+
+// The editable model-answer slots in a question, in document order. Each slot
+// points back at its block + field so the AI's text lands where the marker reads it.
+function _vetAnswerSlots(q) {
+  const slots = [];
+  (q.blocks || []).forEach(b => {
+    if (b.type === 'answer') {
+      ['claim', 'evidence', 'reasoning'].forEach(f =>
+        slots.push({ block: b, field: f, kind: f, current: stripHtml(b[f] || '') }));
+    } else if (b.type === 'plainanswer' || b.type === 'explanation') {
+      slots.push({ block: b, field: 'content', kind: b.type, current: stripHtml(b.content || '') });
+    }
+  });
+  return slots;
+}
+
+// True when the question already shows the student some wording (so we don't
+// bolt on a redundant intro).
+function _vetHasPrompt(q) {
+  return (q.blocks || []).some(b =>
+    (b.type === 'text' && stripHtml(b.content || '').trim()) ||
+    (b.type === 'part' && (stripHtml(b.content || '').trim() || (b.label || '').trim())) ||
+    (b.type === 'mcq' && (b.options || []).some(o => stripHtml(o.text || '').trim())));
+}
+
+function _vetMcqBlock(q) {
+  return (q.blocks || []).find(b => b.type === 'mcq' && (b.options || []).some(o => stripHtml(o.text || '').trim()));
+}
+
+function _vetBuildPrompt(q, slots, mcq) {
+  const ctx = _questionContext(q);
+  const labelFor = k => k === 'claim' ? 'Claim' : k === 'evidence' ? 'Evidence' : k === 'reasoning' ? 'Reasoning' : k === 'explanation' ? 'Explanation' : 'Answer';
+  const slotLines = slots.map((s, i) => `  ${i}. [${labelFor(s.kind)}] current: ${s.current ? JSON.stringify(s.current) : '(empty)'}`).join('\n');
+  const mcqLines = mcq ? 'MULTIPLE-CHOICE OPTIONS:\n' + mcq.options.map((o, i) => `  ${i}. ${stripHtml(o.text || '')}`).join('\n') + '\n' : '';
+  return `You are helping a Singapore primary-school science teacher vet a practice question before it goes into the question bank.
+
+QUESTION TITLE: ${q.title || '(untitled)'}
+CURRENT TOPIC: ${q.topic || '(none)'}
+CURRENT CATEGORY: ${q.category || '(none)'}
+QUESTION CONTENT: ${ctx || '(no wording provided)'}
+${mcqLines}ANSWER SLOTS (write the ideal model answer for each — improve weak ones, fill empty ones):
+${slotLines || '  (none)'}
+
+Return ONLY JSON with this exact shape:
+{
+  "topic": "<the single closest topic from the list>",
+  "category": "<the single closest category from the list>",
+  "markingGuide": "<one or two sentences telling the AI marker what a full-mark answer must contain, including accepted alternative wording>",
+  "needsIntro": <true ONLY if QUESTION CONTENT above is empty/missing, otherwise false>,
+  "introText": "<if needsIntro: a short, clear question prompt a P3-P6 student would read; otherwise an empty string>",
+  "answers": [<one model-answer string per slot, in the same order; for a Claim/Evidence/Reasoning slot write only that portion; 1-3 sentences each>],
+  "mcqCorrectIndex": <0-based index of the correct option above, or -1 if there is no multiple-choice block>
+}
+Rules:
+- topic MUST be exactly one of: ${autoVetTopics().join('; ')}.
+- category MUST be exactly one of: ${AUTOVET_CATEGORIES.join('; ')}.
+- "answers" MUST contain exactly ${slots.length} item(s) in order. If there are 0 slots, return [].
+- Write the actual answer text itself, not advice or instructions. Plain text only — no markdown, no [[brackets]].`;
+}
+
+// Run the AI for one question and apply its result in place. Resolves on success,
+// rejects on AI/parse error (the question is then left in the vetting list).
+async function _autoVetOne(q) {
+  const slots = _vetAnswerSlots(q);
+  const mcq = _vetMcqBlock(q);
+  const prompt = _vetBuildPrompt(q, slots, mcq);
+  const raw = await askGemini(prompt, { maxOutputTokens: 420 + slots.length * 170, temperature: 0.2, json: true });
+  const data = _parseAIJson(raw);
+
+  // Topic / category — accept only values from the allowed lists.
+  if (data.topic && autoVetTopics().includes(data.topic)) q.topic = data.topic;
+  if (data.category && AUTOVET_CATEGORIES.includes(data.category)) q.category = normalizeCategoryValue(data.category);
+
+  // Fill an empty marking guide (don't clobber one the admin wrote by hand).
+  if (!String(q.markingGuide || '').trim() && data.markingGuide && String(data.markingGuide).trim()) {
+    q.markingGuide = String(data.markingGuide).trim();
+  }
+
+  // Model answers — write each back to its block field (stored as plain text,
+  // matching the inline "edit / AI-regenerate" flow).
+  if (Array.isArray(data.answers)) {
+    slots.forEach((s, i) => {
+      const val = (data.answers[i] == null ? '' : String(data.answers[i])).trim();
+      if (val) s.block[s.field] = val;
+    });
+  }
+
+  // Correct MCQ option.
+  if (mcq && Number.isInteger(data.mcqCorrectIndex) && data.mcqCorrectIndex >= 0 && mcq.options[data.mcqCorrectIndex]) {
+    mcq.correctId = mcq.options[data.mcqCorrectIndex].id;
+  }
+
+  // Add a question prompt when the question is answer-only.
+  if (data.needsIntro && data.introText && String(data.introText).trim() && !_vetHasPrompt(q)) {
+    q.blocks.unshift({ id: generateBlockId(), type: 'text', content: escapeHtml(String(data.introText).trim()) });
+  }
+  return true;
+}
+
+// Runs `worker` over `items`, at most `limit` at a time; reports progress.
+async function _autoVetPool(items, limit, worker, onProgress) {
+  let idx = 0, done = 0;
+  const results = new Array(items.length);
+  async function runner() {
+    while (idx < items.length) {
+      const my = idx++;
+      try { await worker(items[my]); results[my] = { ok: true }; }
+      catch (e) { results[my] = { ok: false, error: e }; }
+      if (onProgress) onProgress(++done, items.length);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runner));
+  return results;
+}
+
+let _autoVetRunning = false;
+
+function aiAutoVetAll() {
+  if (_autoVetRunning) return;
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast('AI is not ready yet — try again in a moment', 'error');
+    return;
+  }
+  const queue = vettingList.filter(q => {
+    const s = q.status || 'pending';
+    return s !== 'approved' && s !== 'rejected';
+  });
+  if (queue.length === 0) {
+    showToast('Nothing to vet — no pending questions in the list', 'info');
+    return;
+  }
+  showConfirm(
+    'AI Auto-Vet All',
+    `AI will classify the topic & category, write or fix the model answers, add any missing question wording, then approve all ${queue.length} pending question(s) into the bank. Continue?`,
+    () => { _runAutoVet(queue); }
+  );
+}
+
+async function _runAutoVet(queue) {
+  _autoVetRunning = true;
+  const btn = document.getElementById('aiAutoVetBtn');
+  if (btn) btn.disabled = true;
+  _openAutoVetModal(queue.length);
+
+  // 1) AI pass — parallel pool; each worker mutates its question in place.
+  const results = await _autoVetPool(queue, AUTOVET_CONCURRENCY, _autoVetOne,
+    (done, total) => _setAutoVetStatus(`Analysing questions… ${done} / ${total}`, done, total));
+
+  // 2) Approve every question the AI handled, into the bank.
+  let approved = 0, failed = 0;
+  results.forEach((r, i) => {
+    const q = queue[i];
+    if (!r || !r.ok) { failed++; if (r) console.error('auto-vet failed for', q && q.id, r.error); return; }
+    const idx = vettingList.findIndex(v => v.id === q.id);
+    if (idx === -1) return;
+    q.status = 'approved';
+    questionBank.push(q);
+    vettingList.splice(idx, 1);
+    // Keep an approved question under its original admin's namespace.
+    if (_ownerUidByVettingId[q.id]) _ownerUidByQuestionId[q.id] = _ownerUidByVettingId[q.id];
+    saveQuestion(q);        // async, retries internally
+    deleteVettingDoc(q.id); // remove from the vetting subcollection
+    approved++;
+  });
+
+  renderVettingList();
+  renderQuestionBank();
+  updateCounts();
+  _finishAutoVetModal(approved, failed);
+  if (approved) showToast(`Auto-vetted ${approved} question${approved === 1 ? '' : 's'} into the bank ✓`, 'success');
+  if (failed) showToast(`${failed} question${failed === 1 ? '' : 's'} could not be processed — left in vetting`, 'error');
+
+  if (btn) btn.disabled = false;
+  _autoVetRunning = false;
+}
+
+function _openAutoVetModal(total) {
+  const ov = document.getElementById('autoVetOverlay');
+  if (!ov) return;
+  document.getElementById('autoVetTitle').textContent = '✨ AI Auto-Vet in progress';
+  document.getElementById('autoVetStatus').textContent = `Analysing questions… 0 / ${total}`;
+  document.getElementById('autoVetBar').style.width = '0%';
+  document.getElementById('autoVetSpinner').style.display = '';
+  document.getElementById('autoVetCloseBtn').style.display = 'none';
+  ov.classList.add('show');
+}
+
+function _setAutoVetStatus(msg, done, total) {
+  const s = document.getElementById('autoVetStatus');
+  if (s) s.textContent = msg;
+  const bar = document.getElementById('autoVetBar');
+  if (bar && total) bar.style.width = Math.round((done / total) * 100) + '%';
+}
+
+function _finishAutoVetModal(approved, failed) {
+  document.getElementById('autoVetTitle').textContent = 'Auto-Vet complete';
+  document.getElementById('autoVetSpinner').style.display = 'none';
+  document.getElementById('autoVetBar').style.width = '100%';
+  document.getElementById('autoVetStatus').innerHTML =
+    `Added <strong>${approved}</strong> question${approved === 1 ? '' : 's'} to the bank.` +
+    (failed ? ` <span style="color:var(--accent-red);">${failed} left in vetting (AI error).</span>` : '');
+  document.getElementById('autoVetCloseBtn').style.display = '';
+}
+
+function closeAutoVet() {
+  const ov = document.getElementById('autoVetOverlay');
+  if (ov) ov.classList.remove('show');
 }
 
 // =====================================================================
@@ -17656,6 +17899,8 @@ window.duplicateQuestion = duplicateQuestion;
 window.deleteQuestion = deleteQuestion;
 window.approveVetting = approveVetting;
 window.deleteVetting = deleteVetting;
+window.aiAutoVetAll = aiAutoVetAll;
+window.closeAutoVet = closeAutoVet;
 window.showToast = showToast;
 window.showConfirm = showConfirm;
 window.closeConfirm = closeConfirm;
