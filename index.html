@@ -3885,6 +3885,7 @@ option {
 .rpg-bar-row { margin-bottom: 8px; }
 .rpg-bar-row .rpg-bar-cap { display: flex; justify-content: space-between; font-family: 'Space Mono', monospace; font-size: 0.6rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px; }
 /* battle banner */
+.rpg-battle { margin-bottom: 14px; }
 .rpg-battle-card { border-radius: var(--radius-lg); background: linear-gradient(135deg, #2b2640 0%, #1f2937 100%); color: #fff; padding: 14px 16px; box-shadow: var(--shadow-md); border: 1px solid #3a3553; }
 .rpg-battle-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rpg-battle-title { font-weight: 700; letter-spacing: -0.01em; }
@@ -3946,6 +3947,12 @@ option {
 .rpg-filter-chip { font-family: 'Space Mono', monospace; font-size: 0.64rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border); background: #fff; color: var(--text-muted); cursor: pointer; transition: all var(--transition); }
 .rpg-filter-chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
 /* leaderboard */
+.rpg-raid { display: flex; align-items: center; gap: 14px; padding: 12px 16px; margin-bottom: 14px; border-radius: var(--radius-md); background: linear-gradient(135deg, #2b2640, #3d1f2a); color: #fff; border: 1px solid #5c3a4a; }
+.rpg-raid-boss { font-size: 44px; line-height: 1; animation: rpgBob 2.4s ease-in-out infinite; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5)); }
+.rpg-raid-main { flex: 1; min-width: 0; }
+.rpg-raid-name { font-size: 0.95rem; margin-bottom: 6px; }
+.rpg-raid-sub { font-size: 0.74rem; color: rgba(255,255,255,0.65); margin-top: 5px; }
+.rpg-raid .rpg-bar { background: rgba(0,0,0,0.4); border-color: rgba(0,0,0,0.3); height: 14px; }
 .rpg-prize-banner { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; margin-bottom: 16px; border-radius: var(--radius-md); background: linear-gradient(135deg, #fdf3d8, #fbe7c2); border: 1px solid #ecd29a; font-size: 0.9rem; line-height: 1.5; }
 .rpg-prize-line b { color: #8a5a13; }
 .rpg-board-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 14px; }
@@ -3991,21 +3998,25 @@ option {
 .adv-stage.walking .adv-ground { animation: advGround 0.55s linear infinite; }
 @keyframes advGround { to { background-position: -60px 0, -84px 0; } }
 .adv-actor { position: absolute; bottom: 40px; text-align: center; z-index: 3; }
-.adv-hero { left: 5%; width: 140px; }
+.adv-hero { left: 5%; width: 140px; will-change: transform; }
+#advFoes { position: absolute; inset: 0; will-change: transform; pointer-events: none; }
+.adv-foe { will-change: transform; transition: transform 0.12s linear; }
+@keyframes advStep { 0%, 100% { transform: translateY(0) rotate(-1.4deg); } 50% { transform: translateY(-6px) rotate(1.4deg); } }
+.adv-hero svg, .adv-foe .adv-foe-emoji { animation: advStep 0.5s ease-in-out infinite; }
 .adv-hero svg { width: 122px; height: auto; display: block; margin: 0 auto; }
-.adv-foe { right: -30%; min-width: 96px; transition: right 0.85s ease-out; }
+.adv-foe { left: 0; min-width: 70px; }
 .adv-foe.poisoned .adv-foe-emoji { filter: drop-shadow(0 0 9px #3a9e5f) hue-rotate(40deg) saturate(1.3); }
 .adv-foe.burning .adv-foe-emoji { filter: drop-shadow(0 0 10px #ff6b35) saturate(1.5); }
 .adv-foe.chilled .adv-foe-emoji { filter: drop-shadow(0 0 9px #8fd4ee) saturate(0.55); animation-duration: 4.4s; }
 .adv-foe.stunned .adv-foe-emoji { animation: none; transform: rotate(12deg); opacity: 0.85; }
 .adv-chain { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
 .adv-stage.shake { animation: rpgShake 0.35s ease; }
+.adv-stage.low-hp { box-shadow: inset 0 0 60px 18px rgba(226,60,60,0.45); animation: lowHpPulse 1.1s ease-in-out infinite; }
+@keyframes lowHpPulse { 0%, 100% { box-shadow: inset 0 0 50px 14px rgba(226,60,60,0.35); } 50% { box-shadow: inset 0 0 70px 24px rgba(226,60,60,0.55); } }
 .adv-foe-emoji { display: inline-block; line-height: 1.05; animation: rpgBob 2.2s ease-in-out infinite; filter: drop-shadow(0 5px 7px rgba(0,0,0,0.3)); }
 .adv-foe.dead { animation: advDie 0.8s ease-in forwards; }
 @keyframes advDie { 40% { transform: rotate(16deg); } 100% { transform: translateY(28px) rotate(80deg); opacity: 0; } }
-.adv-stage.walking .adv-hero { animation: advWalkBob 0.5s ease-in-out infinite; }
-@keyframes advWalkBob { 0%, 100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-7px) rotate(1.5deg); } }
-.adv-hero.hit, .adv-foe.hit { animation: rpgShake 0.4s ease; }
+.adv-hero.hit svg, .adv-foe.hit .adv-foe-emoji { animation: rpgShake 0.4s ease; }
 .adv-tag { font-family: 'Space Mono', monospace; font-size: 0.6rem; font-weight: 700; color: #2c2a27; background: rgba(255,255,255,0.88); border-radius: 999px; padding: 2px 9px; display: inline-block; margin-bottom: 3px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .adv-bar { height: 9px; width: 112px; margin: 5px auto 0; background: rgba(0,0,0,0.28); border-color: rgba(0,0,0,0.2); }
 .adv-actor .rpg-float { font-size: 1.05rem; }
@@ -4021,6 +4032,20 @@ option {
 .adv-pop { position: absolute; z-index: 6; font-size: 17px; pointer-events: none; animation: advPop 0.95s ease-out forwards; }
 @keyframes advPop { to { transform: translate(var(--dx, 0), var(--dy, -60px)) scale(0.5); opacity: 0; } }
 .adv-slash { position: absolute; left: 6%; top: 14%; width: 86px; height: 86px; z-index: 5; pointer-events: none; animation: advSlashA 0.45s ease-out forwards; }
+.adv-arrow { position: absolute; z-index: 5; font-size: 15px; line-height: 1; pointer-events: none; }
+.adv-bolt { position: absolute; z-index: 5; width: 4px; height: 150px; border-radius: 2px; pointer-events: none; animation: advBoltA 0.42s ease-out forwards; transform-origin: top; }
+@keyframes advBoltA { 0% { opacity: 0; transform: scaleY(0.2); } 25% { opacity: 1; transform: scaleY(1); } 70% { opacity: 0.9; } 100% { opacity: 0; } }
+.adv-cloud2 { position: absolute; z-index: 5; font-size: 26px; pointer-events: none; }
+.adv-fall { position: absolute; z-index: 5; font-size: 17px; pointer-events: none; animation: advFallA 0.95s linear forwards; }
+.adv-ghost { display: inline-block; width: 96px; transform: scaleX(-1); }
+.adv-ghost svg { width: 100%; height: auto; opacity: 0.92; filter: drop-shadow(0 0 10px rgba(155,127,212,0.8)); }
+.adv-draft-row { display: flex; gap: 10px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+.adv-draft-card { width: 130px; padding: 12px 8px; border-radius: 12px; border: 2px solid #ffd76a; background: rgba(255,255,255,0.08); color: #fff; cursor: pointer; display: flex; flex-direction: column; gap: 6px; align-items: center; font-family: inherit; transition: all var(--transition); }
+.adv-draft-card:hover { background: rgba(255,215,106,0.22); transform: translateY(-3px); }
+.adv-draft-card .adv-draft-ico { font-size: 30px; line-height: 1; }
+.adv-draft-card b { font-size: 0.85rem; }
+.adv-draft-card span:last-child { font-size: 0.68rem; opacity: 0.85; line-height: 1.35; }
+@keyframes advFallA { to { transform: translateY(225px); opacity: 0.15; } }
 @keyframes advSlashA { from { opacity: 0; transform: rotate(-55deg) scale(0.55); } 30% { opacity: 1; } to { opacity: 0; transform: rotate(30deg) scale(1.2); } }
 .adv-skillbar { display: flex; gap: 12px; justify-content: center; align-items: flex-start; margin-top: 14px; flex-wrap: wrap; min-height: 84px; }
 .adv-skill { position: relative; width: 66px; text-align: center; }
@@ -4042,6 +4067,25 @@ option {
 .rpg-set-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .rpg-set-chip { font-family: 'Space Mono', monospace; font-size: 0.6rem; font-weight: 700; padding: 4px 9px; border-radius: 999px; border: 1px dashed var(--border); color: var(--text-muted); background: #fff; }
 .rpg-set-chip.on { border-style: solid; border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.rpg-quest { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; margin-bottom: 6px; font-size: 0.82rem; }
+.rpg-quest.done { border-color: var(--primary); background: var(--primary-light); }
+.rpg-quest.claimed { opacity: 0.55; }
+.rpg-quest-ico { font-size: 1.05rem; }
+.rpg-quest-name { flex: 1; min-width: 0; }
+.rpg-quest-reward, .rpg-quest-claimed { font-family: 'Space Mono', monospace; font-size: 0.66rem; color: var(--text-muted); white-space: nowrap; }
+.rpg-quest .btn-sm { padding: 4px 8px; font-size: 0.7rem; }
+.cdx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.cdx-beast { border: 1px solid var(--border); border-radius: 8px; background: #fff; text-align: center; padding: 6px 2px; }
+.cdx-beast.unknown { opacity: 0.45; filter: grayscale(1); }
+.cdx-emoji { font-size: 22px; display: block; }
+.cdx-count { font-family: 'Space Mono', monospace; font-size: 0.6rem; color: var(--text-muted); display: block; }
+.cdx-stars { font-size: 0.6rem; color: var(--accent-orange); display: block; min-height: 0.8em; }
+.rpg-houses { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 12px; background: var(--surface-alt); }
+.rpg-house-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; margin: 4px 0; }
+.rpg-house-row > span { width: 96px; }
+.rpg-house-row b { font-family: 'Space Mono', monospace; font-size: 0.7rem; width: 52px; text-align: right; }
+.rpg-house-bar { flex: 1; height: 10px; border-radius: 999px; background: #eee9e1; overflow: hidden; }
+.rpg-house-bar > div { height: 100%; border-radius: 999px; transition: width 0.6s ease; }
 /* booster packs */
 .pack-hero { display: flex; align-items: center; gap: 16px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: linear-gradient(135deg, #2b2640, #1f2937); color: #fff; }
 .pack-hero h4 { font-size: 1.1rem; margin-bottom: 3px; }
@@ -4086,6 +4130,19 @@ option {
 .sk-rank { position: absolute; top: 4px; right: 6px; font-family: 'Space Mono', monospace; font-size: 0.56rem; font-weight: 700; color: var(--text-muted); }
 .sk-name { display: block; font-weight: 700; font-size: 0.68rem; line-height: 1.25; margin-top: 3px; }
 .sk-lvl { display: block; font-family: 'Space Mono', monospace; font-size: 0.52rem; color: var(--text-light); margin-top: 1px; }
+.sk-base { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+@media (max-width: 720px) { .sk-base { grid-template-columns: repeat(3, 1fr); } }
+.sk-path-head { font-family: 'Space Mono', monospace; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; text-align: center; padding: 6px 4px; border-radius: 8px; background: var(--surface-alt); border: 1px dashed var(--border); color: var(--text-muted); }
+.sk-path-head.on { background: var(--primary-light); border: 1.5px solid var(--primary); color: var(--primary); }
+.sk-path-head.off { background: #f3f0ea; color: var(--text-light); }
+.sk-col.sealed-col .sk-node { opacity: 0.35; filter: grayscale(0.9); cursor: default; }
+.sk-node.sealed { opacity: 0.35; filter: grayscale(0.9); cursor: default; }
+.sk-pair { display: flex; align-items: stretch; gap: 4px; }
+.sk-pair .sk-node { flex: 1; min-width: 0; }
+.sk-or { align-self: center; font-size: 0.62rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; flex: none; }
+.sk-node.sk-ks { border-color: var(--accent-orange); background: #fff8ec; }
+.sk-node.sk-ks.maxed { border-color: var(--accent-orange); background: var(--accent-orange-light); }
+.sk-node.sk-cap { border-width: 2px; border-color: var(--accent-purple); }
 @media (max-width: 640px) { .adv-stage { height: 238px; } .adv-hero svg { width: 94px; } .adv-hero { width: 108px; } .adv-bar { width: 86px; } .adv-skill { width: 56px; } .adv-skill-tile { width: 48px; height: 48px; font-size: 23px; } }
 .rpg-gold-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-family: 'Space Mono', monospace; font-size: 0.8rem; color: var(--text-muted); }
 .rpg-gold-row b { color: var(--text); font-size: 0.95rem; }
@@ -5263,6 +5320,7 @@ option {
               <button class="rpg-tab" data-rpgtab="shop" type="button">🏪 Shop</button>
               <button class="rpg-tab" data-rpgtab="packs" type="button">🎁 Packs</button>
               <button class="rpg-tab" data-rpgtab="skills" type="button">🌳 Skills</button>
+              <button class="rpg-tab" data-rpgtab="codex" type="button">📖 Codex</button>
             </div>
             <div id="rpgTabBody"></div>
           </div>
@@ -5321,6 +5379,7 @@ option {
         </div>
       </div>
       <div class="page-body">
+        <div id="rpgRaidSlot"></div>
         <div class="rpg-prize-banner">
           <span class="rpg-prize-line">🎁 <b>Monthly prize:</b> the top 10 XP earners each month win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 all-time XP earners win <b>$200, $100 and $50 Popular vouchers</b>.</span>
@@ -5631,6 +5690,7 @@ import {
   where,
   orderBy,
   updateDoc,
+  increment,
   Timestamp
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 // App Check (protects the Gemini quota from abuse) + Firebase AI Logic (free-tier Gemini)
@@ -13969,6 +14029,15 @@ function svgHalberd() {
     `<path d="M-3 -60 L-14 -56 L-3 -52 Z" fill="${rpgGrad("#aab4bf")}" ${RPG_O_THIN}/>` +
     `<rect x="-7" y="-66" width="14" height="4" rx="2" fill="${rpgGrad("#caa53d")}" ${RPG_O_THIN}/>`;
 }
+function svgBow(limb, string, glow) {
+  return (glow ? `<circle cx="8" cy="-10" r="16" fill="${glow}" opacity="0.3">${svgPulse(0.18, 0.4)}</circle>` : "") +
+    `<line x1="1" y1="-35" x2="1" y2="17" stroke="${string}" stroke-width="1.4"/>` +
+    `<path d="M1 -36 Q26 -9 1 18" fill="none" stroke="${RPG_OUT}" stroke-width="6.6" stroke-linecap="round"/>` +
+    `<path d="M1 -36 Q26 -9 1 18" fill="none" stroke="${rpgGrad(limb)}" stroke-width="4.4" stroke-linecap="round"/>` +
+    `<line x1="-8" y1="-9" x2="22" y2="-9" stroke="#8a6b46" stroke-width="2.6"/>` +
+    `<polygon points="28,-9 20,-13 20,-5" fill="${rpgGrad("#aab4bf")}" ${RPG_O_THIN}/>` +
+    `<path d="M-8 -13 L-3 -9 L-8 -5 Z" fill="${string}"/>`;
+}
 // Shields: origin = centre of the hero's off-hand.
 function svgShieldArt(base, trim, emblem) {
   return `<path d="M0 -24 L19 -16 L19 2 Q19 17 0 27 Q-19 17 -19 2 L-19 -16 Z" fill="${rpgGrad(base)}" stroke="${rpgGrad(trim)}" stroke-width="2.6"/>` +
@@ -14276,6 +14345,19 @@ const RPG_ITEMS = [
   { id: "reaper_scythe", name: "Grim Scythe", slot: "weapon", rarity: "epic", atk: 19, crit: 7, price: 780, levelReq: 7, art: () => svgScythe("#2c2a3a", "#b9c2cc") },
   { id: "golden_trident", name: "Golden Trident", slot: "weapon", rarity: "legendary", atk: 22, crit: 12, price: 1450, levelReq: 9, art: () => svgTrident("#caa53d", "#ffd76a", "#ffe9a3") },
   { id: "crown_halberd", name: "Halberd of the Crown", slot: "weapon", rarity: "legendary", atk: 22, crit: 14, price: 1700, levelReq: 10, art: () => svgHalberd() },
+  // Weapons — bows (ranged) & elemental blades
+  { id: "shortbow", name: "Hunter's Shortbow", slot: "weapon", rarity: "common", atk: 4, crit: 3, price: 65, levelReq: 1, art: () => svgBow("#8a6b46", "#d8c39a") },
+  { id: "longbow", name: "Longbow", slot: "weapon", rarity: "uncommon", atk: 7, crit: 5, price: 165, levelReq: 2, art: () => svgBow("#6f4f28", "#d8c39a") },
+  { id: "elven_bow", name: "Elven Warbow", slot: "weapon", rarity: "rare", atk: 11, crit: 8, price: 350, levelReq: 4, art: () => svgBow("#3a9e5f", "#e8f6ec") },
+  { id: "shadow_bow", name: "Nightwhisper Bow", slot: "weapon", rarity: "rare", atk: 10, crit: 12, price: 360, levelReq: 4, art: () => svgBow("#2c2a3a", "#9b7fd4") },
+  { id: "frostfang_bow", name: "Frostfang Bow", slot: "weapon", rarity: "epic", atk: 15, crit: 10, price: 740, levelReq: 6, art: () => svgBow("#6fb3d9", "#e8f6fc", "#8fd4ee") },
+  { id: "stormpiercer", name: "Stormpiercer", slot: "weapon", rarity: "legendary", atk: 22, crit: 14, price: 1600, levelReq: 9, art: () => svgBow("#caa53d", "#ffd76a", "#ffe9a3") },
+  { id: "ember_dagger", name: "Ember Dagger", slot: "weapon", rarity: "rare", atk: 10, crit: 12, price: 340, levelReq: 3, art: () => svgDagger("#ff8c42", "#9c2c2c", "#5b1f1f", "#ff6b35") },
+  { id: "glacier_spear", name: "Glacier Spear", slot: "weapon", rarity: "uncommon", atk: 7, price: 175, levelReq: 2, art: () => svgSpear("#7a8694", "#bfe9f7") },
+  { id: "elven_rapier", name: "Elven Rapier", slot: "weapon", rarity: "rare", atk: 9, crit: 9, price: 330, levelReq: 3, art: () => svgRapier("#eef6ee", "#3a9e5f", "#2f5a3e") },
+  { id: "sunblade", name: "Sunblade", slot: "weapon", rarity: "epic", atk: 16, crit: 8, price: 730, levelReq: 6, art: () => svgSword("#fff6db", "#e8b41f", "#b8860b", "#ffe9a3") },
+  { id: "obsidian_axe", name: "Obsidian Axe", slot: "weapon", rarity: "epic", atk: 17, price: 740, levelReq: 6, art: () => svgAxe("#1d1c28", "#4b4a5e") },
+  { id: "starfall_katana", name: "Starfall Katana", slot: "weapon", rarity: "rare", atk: 11, crit: 9, price: 350, levelReq: 4, art: () => svgKatana("#e8e2f4", "#caa53d", "#4b3a63", "#ffd76a") },
   // Shields & off-hands
   { id: "wooden_shield", name: "Wooden Shield", slot: "shield", rarity: "common", def: 2, price: 45, levelReq: 1, art: () => svgShieldArt("#b07b3f", "#7a4f23") },
   { id: "swift_buckler", name: "Swift Buckler", slot: "shield", rarity: "common", def: 2, crit: 3, price: 60, levelReq: 1, art: () => svgBuckler("#aab4bf", "#69737e") },
@@ -14358,7 +14440,9 @@ const RPG_ITEMS = [
   { id: "dawnforged_plate", name: "Dawnforged Plate", slot: "armor", rarity: "mythic", def: 16, hp: 40, crit: 8, price: 2800, levelReq: 1, packOnly: true, art: () => svgArmorSpiked("#3a2740", "#e84393", "#ff7ab8") },
   { id: "crown_infinity", name: "Crown of Infinity", slot: "helmet", rarity: "mythic", def: 8, crit: 18, hp: 20, price: 2800, levelReq: 1, packOnly: true, box: "60 40 80 40", art: () => svgCirclet("#e8c8dc", "#e84393") + `<g>${svgStar(100, 48, 6, 2.6, "#e84393")}${svgTwinkle(1.6)}</g><g>${svgStar(84, 56, 3, 1.3, "#ffd76a")}${svgTwinkle(2.1)}</g>` },
   { id: "wings_eternity", name: "Wings of Eternity", slot: "accessory", layer: "back", rarity: "mythic", hp: 35, def: 6, crit: 10, atk: 5, price: 2800, levelReq: 1, packOnly: true, box: "20 34 160 100", art: () => svgWings("#ffd9ec", "#e84393") },
-  { id: "eternal_phoenix", name: "Eternal Phoenix", slot: "pet", rarity: "mythic", atk: 8, crit: 12, hp: 20, price: 3000, levelReq: 1, packOnly: true, box: "12 86 44 44", art: () => svgPetEmoji("🐦‍🔥") }
+  { id: "eternal_phoenix", name: "Eternal Phoenix", slot: "pet", rarity: "mythic", atk: 8, crit: 12, hp: 20, price: 3000, levelReq: 1, packOnly: true, box: "12 86 44 44", art: () => svgPetEmoji("🐦‍🔥") },
+  { id: "streak_sprite", name: "Streak Sprite", slot: "pet", rarity: "epic", crit: 6, hp: 8, price: 0, levelReq: 1, box: "12 86 44 44", art: () => svgPetEmoji("🔥") },
+  { id: "nova_dragon", name: "Nova", slot: "pet", rarity: "mythic", atk: 6, crit: 10, hp: 15, price: 0, levelReq: 1, box: "12 86 44 44", art: () => svgPetEmoji("🌟") }
 ];
 const RPG_ITEMS_BY_ID = Object.fromEntries(RPG_ITEMS.map(i => [i.id, i]));
 
@@ -14397,11 +14481,21 @@ const RPG_ENEMIES = [
 ].map(e => Object.assign(e, {
   maxHp: 18 + e.tier * 12,
   atk: 3 + e.tier * 2,
-  gold: 12 + e.tier * 9,
+  gold: 15 + e.tier * 10,
   xp: 22 + e.tier * 12,
   lootMax: e.tier <= 2 ? 1 : e.tier <= 4 ? 2 : e.tier <= 6 ? 3 : e.tier <= 8 ? 4 : 5
 }));
 const RPG_ENEMIES_BY_ID = Object.fromEntries(RPG_ENEMIES.map(e => [e.id, e]));
+const RPG_ELITE_AFFIXES = {
+  shielded: { badge: "🛡️", apply: f => { f.shieldHits = 3; } },
+  vampiric: { badge: "🩸", apply: f => { f.vampiric = true; } },
+  hasted: { badge: "⚡", apply: f => { f.atkMs = Math.round(f.atkMs * 0.55); } },
+  splitting: { badge: "🔀", apply: f => { f.splitting = true; } },
+  enraged: { badge: "🔴", apply: f => { f.enraged = true; } },
+  juggernaut: { badge: "💪", apply: f => { f.juggernaut = true; } }
+};
+const RPG_RANGED_ENEMIES = new Set(["witch", "cursed_genie", "wyvern", "restless_ghost", "storm_talon", "web_spinner", "angry_shroom", "lich_lord", "deep_kraken"]);
+function rpgElColor(el) { return { fire: "#ff6b35", ice: "#8fd4ee", nature: "#3a9e5f", shadow: "#9b7fd4", holy: "#ffd76a", arcane: "#b79ae0" }[el] || "#cfd8e3"; }
 
 // ---- State & storage ----
 let rpgState = null;
@@ -14412,11 +14506,11 @@ let rpgShopSlot = "all";
 function rpgStorageKey() { return "scienceQuestRpg:" + (currentUser ? currentUser.uid : "anon"); }
 function rpgDefaults() {
   return {
-    v: 1, gold: 60, xp: 0, hp: null, hidden: false,
+    v: 2, gold: 60, xp: 0, hp: null, hidden: false,
     monthKey: null, monthXp: 0, lastMonthKey: null, lastMonthXp: 0, advRuns: null,
     inventory: { wood_sword: 1, cloth_tunic: 1 },
     equipment: { weapon: "wood_sword", shield: null, armor: "cloth_tunic", helmet: null, accessory: null, pet: null },
-    battle: null, upgrades: {}, clazz: null, skills: {}, seenQ: {},
+    battle: null, upgrades: {}, clazz: null, skills: {}, paths: {}, affixes: {}, petBond: {}, daily: null, streak: null, packCoupon: 0, rebirths: 0, xpBaseline: 0, shards: 0, star: { gold: 0, learn: 0, raids: 0, nova: false }, kills: {}, seenQ: {},
     stats: { wins: 0, defeats: 0, marked: 0, correct: 0, goldEarned: 0 }
   };
 }
@@ -14443,8 +14537,25 @@ function rpgHydrate(saved) {
   st.stats = Object.assign(rpgDefaults().stats, (saved && saved.stats) || {});
   st.upgrades = Object.assign({}, (saved && saved.upgrades) || {});
   st.skills = Object.assign({}, (saved && saved.skills) || {});
+  st.paths = Object.assign({}, (saved && saved.paths) || {});
+  st.affixes = Object.assign({}, (saved && saved.affixes) || {});
+  st.petBond = Object.assign({}, (saved && saved.petBond) || {});
+  st.star = Object.assign({ gold: 0, learn: 0, raids: 0, nova: false }, (saved && saved.star) || {});
+  st.kills = Object.assign({}, (saved && saved.kills) || {});
   st.seenQ = Object.assign({}, (saved && saved.seenQ) || {});
+  if (!Number.isFinite(st.xpBaseline)) st.xpBaseline = 0;
+  if ((saved && saved.v || 1) < 2) { st.skills = {}; st.paths = {}; st.v = 2; } // tree rework: full free refund
+  Object.keys(st.skills).forEach(id => {
+    const n = RPG_TREE_BY_ID[id];
+    if (!n) delete st.skills[id];
+    else st.skills[id] = Math.min(st.skills[id], n.max);
+  });
   if (st.clazz && !["warrior", "rogue", "mage"].includes(st.clazz)) st.clazz = null;
+  if (st.clazz && st.equipment.weapon) {
+    const w = RPG_ITEMS_BY_ID[st.equipment.weapon];
+    const kind = w ? rpgWeaponFx(w.id).kind : "";
+    if (w && ((st.clazz === "warrior" && (kind === "ranged" || kind === "magic")) || (st.clazz === "mage" && kind !== "magic" && kind !== "ranged"))) st.equipment.weapon = null;
+  }
   RPG_SLOTS.forEach(slot => {
     const it = RPG_ITEMS_BY_ID[st.equipment[slot]];
     if (!it || it.slot !== slot || !st.inventory[it.id]) st.equipment[slot] = null;
@@ -14453,6 +14564,20 @@ function rpgHydrate(saved) {
   if (!Number.isFinite(st.gold)) st.gold = 0;
   if (!Number.isFinite(st.xp)) st.xp = 0;
   if (!Number.isFinite(st.monthXp)) st.monthXp = 0;
+  if (!st.cap99Fix) {
+    // one-time rebalance: heroes parked at the level cap without a rebirth are
+    // set back to level 60, the Starfall threshold, so prestige is the next step
+    st.cap99Fix = true;
+    let lvl = 1, rem = Math.max(0, st.xp - (st.xpBaseline || 0));
+    while (lvl < 99 && rem >= rpgXpToNext(lvl)) { rem -= rpgXpToNext(lvl); lvl++; }
+    if (lvl >= 99 && !(st.rebirths > 0)) {
+      let need = 0;
+      for (let l = 1; l < 60; l++) need += rpgXpToNext(l);
+      st.xp = (st.xpBaseline || 0) + need;
+      const spent = Object.values(st.skills).reduce((a, b) => a + b, 0);
+      if (spent > 45) { st.skills = {}; if (st.clazz) delete st.paths[st.clazz]; } // over level-60 budget: free refund
+    }
+  }
   return st;
 }
 function rpgSave() {
@@ -14497,18 +14622,107 @@ function rpgSetCounts() {
   const eq = rpgState ? Object.values(rpgState.equipment || {}).filter(Boolean) : [];
   return RPG_SETS.map(s => ({ set: s, count: s.items.filter(i => eq.includes(i)).length }));
 }
+// ---- Pet evolution (stages at +3/+6 upgrades) and dungeon bond ----
+const RPG_PET_EVO = {
+  loyal_pup: [["Brave Hound", "🐕"], ["Celestial Wolf", "🐺"]],
+  shadow_cat: [["Midnight Panther", "🐈‍⬛"], ["Spectral Wraith", "🐯"]],
+  tortoise_knight: [["Titan Shell", "🐢"], ["Diamond Guardian", "🛡️"]],
+  frost_penguin: [["Glacial Sentinel", "🐧"], ["Eternal Frost", "🧊"]],
+  wisp_familiar: [["Spirit Beacon", null], ["Celestial Oracle", null]],
+  ember_fox: [["Infernal Vixen", "🦊"], ["Pyric Shade", "🔥"]],
+  storm_chick: [["Thunder Raptor", "🐔"], ["Sky Sovereign", "🦅"]],
+  owl_familiar: [["Regal Strix", null], ["Nocturnal Oracle", null]],
+  star_unicorn: [["Celestial Monarch", "🦄"], ["Eternal Starlight", "🌟"]],
+  pocket_dragon: [["Wyrm Lord", null], ["Draconic Sovereign", null]],
+  eternal_phoenix: [["Solar Phoenix", "🐦‍🔥"], ["Cosmic Firebird", "🐦‍🔥"]]
+};
+function rpgPetStage(it) {
+  if (!it || it.slot !== "pet") return 0;
+  const up = rpgUpgradeLevel(it.id);
+  return up >= 6 ? 2 : up >= 3 ? 1 : 0;
+}
+function rpgPetDisplayName(it) {
+  const st = rpgPetStage(it);
+  const evo = RPG_PET_EVO[it.id];
+  return st && evo ? evo[st - 1][0] : it.name;
+}
+function rpgPetEvoEmoji(it) {
+  const st = rpgPetStage(it);
+  const evo = RPG_PET_EVO[it.id];
+  return st && evo ? evo[st - 1][1] : null;
+}
+function rpgPetSkillMult(it) { return [1, 1.2, 1.45][rpgPetStage(it)] || 1; }
+function rpgPetBondPct(petId) {
+  const f = (rpgState && rpgState.petBond && rpgState.petBond[petId]) || 0;
+  return Math.min(10, Math.floor(f / 10));
+}
+// ---- Item affixes: drops & pack pulls roll bonus names/stats (shop items are clean) ----
+const RPG_PREFIXES = {
+  flaming: { name: "Flaming", atk: 2 }, icy: { name: "Icy", def: 2 }, shadowed: { name: "Shadowed", crit: 3 },
+  radiant: { name: "Radiant", hp: 4 }, cursed: { name: "Cursed", atk: 3, def: -1 }, swift: { name: "Swift", crit: 2, atk: 1 },
+  stalwart: { name: "Stalwart", def: 2, hp: 2 }, mystic: { name: "Mystic", crit: 1, hp: 2 }, verdant: { name: "Verdant", hp: 5, atk: -1 },
+  void: { name: "Void-touched", atk: 3, hp: -2 }, gilded: { name: "Gilded", hp: 1, crit: 1 }, ancient: { name: "Ancient", atk: 1, def: 1, hp: 1 }
+};
+const RPG_SUFFIXES = {
+  power: { name: "of Power", atk: 2 }, walls: { name: "of Walls", def: 2 }, fox: { name: "of the Fox", crit: 3 },
+  bear: { name: "of the Bear", hp: 5 }, viper: { name: "of the Viper", atk: 2, crit: 1 }, owl: { name: "of the Owl", crit: 2, hp: 2 },
+  oak: { name: "of the Oak", def: 1, hp: 3 }, storm: { name: "of Storms", atk: 1, crit: 2 }, dawn: { name: "of Dawn", hp: 3, def: 1 },
+  night: { name: "of Night", crit: 4, def: -1 }, kings: { name: "of Kings", atk: 1, def: 1, crit: 1 }, titans: { name: "of Titans", atk: 3, def: 1 }
+};
+function rpgAffixScale(it) { return 0.75 + RPG_RARITY[it.rarity].rank * 0.25; }
+function rpgRollAffixes(it, fromPack) {
+  if (!rpgState) return;
+  const roll = Math.random();
+  const dual = roll < (fromPack ? 0.55 : 0.25);
+  const single = !dual && roll < 0.9;
+  const pick = obj => { const k = Object.keys(obj); return k[Math.floor(Math.random() * k.length)]; };
+  const pre = dual || (single && Math.random() < 0.5) ? pick(RPG_PREFIXES) : null;
+  const suf = dual || (single && !pre) ? pick(RPG_SUFFIXES) : null;
+  if (pre || suf) rpgState.affixes[it.id] = [pre, suf];
+}
+function rpgItemAffixes(it) {
+  const a = rpgState && rpgState.affixes && rpgState.affixes[it.id];
+  return a ? { pre: a[0] ? RPG_PREFIXES[a[0]] : null, suf: a[1] ? RPG_SUFFIXES[a[1]] : null } : { pre: null, suf: null };
+}
+function rpgDisplayName(it) {
+  const { pre, suf } = rpgItemAffixes(it);
+  return `${pre ? pre.name + " " : ""}${rpgPetDisplayName ? rpgPetDisplayName(it) : it.name}${suf ? " " + suf.name : ""}`;
+}
+function rpgRerollCost(it) { return 40 + (it.levelReq || 1) * 25; }
+function rpgRerollAffixes(id) {
+  const it = RPG_ITEMS_BY_ID[id];
+  if (!it || !rpgState || !rpgState.inventory[id]) return;
+  const cost = rpgRerollCost(it);
+  if (rpgState.gold < cost) { toast(`Need 🪙 ${cost} to reroll`, "error"); return; }
+  rpgState.gold -= cost;
+  delete rpgState.affixes[id];
+  rpgRollAffixes(it, true);
+  rpgSave();
+  rpgRenderCharacterPage();
+  const { pre, suf } = rpgItemAffixes(it);
+  toast(pre || suf ? `🔮 ${rpgDisplayName(it)}!` : "🔮 The magic fizzled — plain item", pre || suf ? "success" : "");
+}
 const RPG_UPGRADE_MAX = 9, RPG_UPGRADE_STEP = 0.08;
 function rpgUpgradeLevel(id) {
   const lvl = (rpgState && rpgState.upgrades && rpgState.upgrades[id]) || 0;
   return Math.max(0, Math.min(RPG_UPGRADE_MAX, lvl));
 }
 function rpgUpgradeCost(it) {
-  return Math.max(20, Math.round((it.price || 80) * 0.25 * (rpgUpgradeLevel(it.id) + 1)));
+  return Math.max(20, Math.round((it.price || 80) * 0.2 * (rpgUpgradeLevel(it.id) + 1)));
 }
 function rpgItemStats(it) { // effective stats including +N upgrade and class synergy
   const m = 1 + RPG_UPGRADE_STEP * rpgUpgradeLevel(it.id);
   const v = k => it[k] ? Math.round(it[k] * m) : 0;
   const s = { atk: v("atk"), def: v("def"), crit: v("crit"), hp: v("hp") };
+  const { pre, suf } = rpgItemAffixes(it);
+  const ax = rpgAffixScale(it);
+  [pre, suf].forEach(a => {
+    if (!a) return;
+    s.atk += Math.round((a.atk || 0) * ax);
+    s.def += Math.round((a.def || 0) * ax);
+    s.crit += Math.round((a.crit || 0) * ax);
+    s.hp += Math.round((a.hp || 0) * ax);
+  });
   if (it.classBonus && rpgState && rpgState.clazz === it.classBonus.clazz) {
     s.atk += it.classBonus.atk || 0;
     s.def += it.classBonus.def || 0;
@@ -14540,55 +14754,167 @@ const RPG_CLASSES = {
   mage: { name: "Mage", icon: "🔮", desc: "Wielder of the elements. All skills hit 15% harder, staffs and wands gain 10% ATK — spec into Fire, Frost or Arcane." }
 };
 // node: p = passive per-rank stats; a = auto-cast active (mult grows by "per" each rank)
+// node: br = display column (0 base, 1-3 path columns); path = exclusive path id; ks = keystone
+// node: riv = rival skill — every tier is a two-way choice, learning one seals the other
+// node: req may be an array — either prerequisite unlocks the tier below
+const RPG_PATH_NAMES = {
+  warrior: ["Guardian", "Berserker", "Warlord"],
+  rogue: ["Assassin", "Shadow", "Trickster"],
+  mage: ["Pyromancer", "Cryomancer", "Stormcaller"]
+};
 const RPG_TREE = {
   warrior: [
-    { id: "w_tough", name: "Toughness", icon: "🛡️", br: 0, lvl: 2, max: 5, p: { hp: 6 } },
-    { id: "w_iron", name: "Iron Skin", icon: "🪨", br: 0, lvl: 6, max: 5, req: "w_tough", p: { def: 2 } },
-    { id: "w_stand", name: "Last Stand", icon: "⛨", br: 0, lvl: 14, max: 5, req: "w_iron", p: { hpPct: 0.03 } },
-    { id: "w_jugg", name: "Juggernaut", icon: "🏔️", br: 0, lvl: 30, max: 5, req: "w_stand", p: { def: 3, hp: 10 } },
-    { id: "w_immortal", name: "Immortal", icon: "💎", br: 0, lvl: 55, max: 5, req: "w_jugg", p: { hpPct: 0.05, defPct: 0.04 } },
-    { id: "w_mastery", name: "Weapon Mastery", icon: "⚔️", br: 1, lvl: 4, max: 5, p: { atkPct: 0.03 } },
-    { id: "w_cry", name: "Battle Cry", icon: "📣", br: 1, lvl: 10, max: 5, req: "w_mastery", p: { atkPct: 0.02, defPct: 0.02 } },
-    { id: "w_slam", name: "Shield Slam", icon: "💥", br: 1, lvl: 8, max: 3, req: "w_mastery", a: { kind: "hit", mult: 1.5, per: 0.35, stun: true, cd: 11 } },
-    { id: "w_whirl", name: "Whirlwind", icon: "🌪️", br: 2, lvl: 16, max: 3, req: "w_slam", a: { kind: "aoe", mult: 1.1, per: 0.25, cd: 12 } },
-    { id: "w_berserk", name: "Berserk", icon: "😤", br: 2, lvl: 28, max: 3, req: "w_whirl", a: { kind: "hit", mult: 2.0, per: 0.4, cd: 13 } },
-    { id: "w_titan", name: "Titan's Wrath", icon: "⚡", br: 2, lvl: 50, max: 3, req: "w_berserk", a: { kind: "aoe", mult: 1.8, per: 0.35, stun: true, cd: 14 } },
-    { id: "w_avatar", name: "Avatar of War", icon: "🔱", br: 2, lvl: 90, max: 1, req: "w_titan", a: { kind: "aoe", mult: 3.0, per: 0, pierce: true, stun: true, cd: 16 } }
+    { id: "w_train", name: "Warrior Training", icon: "⚔️", br: 0, lvl: 2, max: 5, p: { atkPct: 0.02 } },
+    { id: "w_tough", name: "Toughness", icon: "🛡️", br: 0, lvl: 3, max: 5, p: { hp: 6 } },
+    { id: "w_iron", name: "Iron Skin", icon: "🪨", br: 0, lvl: 5, max: 5, req: "w_tough", p: { def: 2 } },
+    { id: "w_grit", name: "Grit", icon: "💪", br: 0, lvl: 7, max: 5, req: "w_train", p: { hpPct: 0.02 } },
+    { id: "w_disc", name: "Discipline", icon: "📘", br: 0, lvl: 9, max: 5, req: "w_iron", p: { defPct: 0.03 } },
+    { id: "w_vet", name: "Veteran", icon: "🎖️", br: 0, lvl: 12, max: 5, req: "w_grit", p: { atk: 2 } },
+    { id: "g_wall", name: "Shield Wall", icon: "🧱", br: 1, path: 1, lvl: 10, max: 5, p: { def: 2, hp: 4 } },
+    { id: "g_thorns", name: "Thorned Armor", icon: "🌹", br: 1, path: 1, lvl: 14, max: 3, req: "g_wall", riv: "g_slam", p: { thorns: 0.1 } },
+    { id: "g_slam", name: "Shield Slam", icon: "💥", br: 1, path: 1, lvl: 14, max: 3, req: "g_wall", riv: "g_thorns", a: { kind: "hit", mult: 1.4, per: 0.3, stun: true, cd: 11 } },
+    { id: "g_bulwark", name: "Bulwark", icon: "🔒", br: 1, path: 1, lvl: 22, max: 5, req: ["g_thorns", "g_slam"], riv: "g_vital", p: { defPct: 0.05 } },
+    { id: "g_vital", name: "Vitality", icon: "❤️", br: 1, path: 1, lvl: 22, max: 5, req: ["g_thorns", "g_slam"], riv: "g_bulwark", p: { hpPct: 0.04 } },
+    { id: "g_ks", name: "Guardian Stone", icon: "💎", br: 1, path: 1, lvl: 35, max: 1, ks: true, req: ["g_bulwark", "g_vital"], p: { defPct: 0.3, hpPct: 0.15, atkPct: -0.2 } },
+    { id: "g_ring", name: "Ring of Steel", icon: "⚡", br: 1, path: 1, lvl: 42, max: 3, req: "g_ks", riv: "g_smite", a: { kind: "aoe", mult: 1.1, per: 0.25, stun: true, cd: 13 } },
+    { id: "g_smite", name: "Retribution", icon: "🔨", br: 1, path: 1, lvl: 42, max: 3, req: "g_ks", riv: "g_ring", a: { kind: "hit", mult: 1.8, per: 0.35, cd: 11 } },
+    { id: "g_fort", name: "Fortress", icon: "🏰", br: 1, path: 1, lvl: 55, max: 5, req: ["g_ring", "g_smite"], riv: "g_spikes", p: { def: 3, hp: 8 } },
+    { id: "g_spikes", name: "Spiked Carapace", icon: "🦔", br: 1, path: 1, lvl: 55, max: 5, req: ["g_ring", "g_smite"], riv: "g_fort", p: { thorns: 0.08, def: 1 } },
+    { id: "g_anchor", name: "Unmoving Anchor", icon: "⚓", br: 1, path: 1, lvl: 70, max: 5, req: ["g_fort", "g_spikes"], riv: "g_colossus", p: { hpPct: 0.05 } },
+    { id: "g_colossus", name: "Colossus", icon: "🗿", br: 1, path: 1, lvl: 70, max: 5, req: ["g_fort", "g_spikes"], riv: "g_anchor", p: { atkPct: 0.04, hp: 4 } },
+    { id: "g_cap", name: "Unbreakable", icon: "✨", br: 1, path: 1, lvl: 90, max: 1, req: ["g_anchor", "g_colossus"], a: { kind: "aoe", mult: 2.2, per: 0, pierce: true, healPct: 0.25, cd: 16 } },
+    { id: "b_fury", name: "Fury", icon: "😤", br: 2, path: 2, lvl: 10, max: 5, p: { atkPct: 0.04 } },
+    { id: "b_crit", name: "Sharpened Edge", icon: "⚡", br: 2, path: 2, lvl: 14, max: 5, req: "b_fury", riv: "b_whirl", p: { crit: 2 } },
+    { id: "b_whirl", name: "Whirlwind", icon: "🌪️", br: 2, path: 2, lvl: 14, max: 3, req: "b_fury", riv: "b_crit", a: { kind: "aoe", mult: 1.0, per: 0.25, cd: 11 } },
+    { id: "b_blood", name: "Blood Rage", icon: "🩸", br: 2, path: 2, lvl: 22, max: 5, req: ["b_crit", "b_whirl"], riv: "b_leech", p: { critMult: 0.08 } },
+    { id: "b_leech", name: "Savage Feast", icon: "🧛", br: 2, path: 2, lvl: 22, max: 3, req: ["b_crit", "b_whirl"], riv: "b_blood", p: { leechPct: 0.02 } },
+    { id: "b_ks", name: "Berserk Fury", icon: "😡", br: 2, path: 2, lvl: 35, max: 1, ks: true, req: ["b_blood", "b_leech"], p: { atkPct: 0.45, hpPct: -0.25 } },
+    { id: "b_exec", name: "Executioner", icon: "🪓", br: 2, path: 2, lvl: 42, max: 3, req: "b_ks", riv: "b_cleave", a: { kind: "hit", mult: 2.0, per: 0.4, exec: true, cd: 12 } },
+    { id: "b_cleave", name: "Reckless Cleave", icon: "🪃", br: 2, path: 2, lvl: 42, max: 3, req: "b_ks", riv: "b_exec", a: { kind: "aoe", mult: 1.3, per: 0.3, cd: 12 } },
+    { id: "b_rampage", name: "Rampage", icon: "💥", br: 2, path: 2, lvl: 55, max: 3, req: ["b_exec", "b_cleave"], riv: "b_thirst", a: { kind: "aoe", mult: 1.5, per: 0.3, cd: 13 } },
+    { id: "b_thirst", name: "Bloodthirst", icon: "🧪", br: 2, path: 2, lvl: 55, max: 5, req: ["b_exec", "b_cleave"], riv: "b_rampage", p: { leechPct: 0.02, atkPct: 0.02 } },
+    { id: "b_edge", name: "Deathbringer", icon: "🗡️", br: 2, path: 2, lvl: 70, max: 5, req: ["b_rampage", "b_thirst"], riv: "b_frenzy", p: { atkPct: 0.03, critMult: 0.05 } },
+    { id: "b_frenzy", name: "Frenzy", icon: "🌋", br: 2, path: 2, lvl: 70, max: 5, req: ["b_rampage", "b_thirst"], riv: "b_edge", p: { crit: 2, cdr: 0.01 } },
+    { id: "b_cap", name: "Warlord's End", icon: "🔥", br: 2, path: 2, lvl: 90, max: 1, req: ["b_edge", "b_frenzy"], a: { kind: "hit", mult: 3.5, per: 0, pierce: true, exec: true, cd: 15 } },
+    { id: "t_tactics", name: "Tactics", icon: "📊", br: 3, path: 3, lvl: 10, max: 5, p: { atkPct: 0.02, defPct: 0.02 } },
+    { id: "t_banner", name: "Rally Banner", icon: "🚩", br: 3, path: 3, lvl: 14, max: 3, req: "t_tactics", riv: "t_sweep", a: { kind: "heal", pct: 0.1, per: 0.04, cd: 12 } },
+    { id: "t_sweep", name: "Sweeping Blow", icon: "🌊", br: 3, path: 3, lvl: 14, max: 3, req: "t_tactics", riv: "t_banner", a: { kind: "aoe", mult: 1.0, per: 0.2, cd: 10 } },
+    { id: "t_drill", name: "Drillmaster", icon: "🎺", br: 3, path: 3, lvl: 22, max: 5, req: ["t_banner", "t_sweep"], riv: "t_loot", p: { cdr: 0.02 } },
+    { id: "t_loot", name: "Spoils of War", icon: "💰", br: 3, path: 3, lvl: 22, max: 5, req: ["t_banner", "t_sweep"], riv: "t_drill", p: { goldPct: 0.03 } },
+    { id: "t_ks", name: "Commander's Oath", icon: "👑", br: 3, path: 3, lvl: 35, max: 1, ks: true, req: ["t_drill", "t_loot"], p: { cdr: 0.1, goldPct: 0.15, hpPct: -0.15 } },
+    { id: "t_volley", name: "War Volley", icon: "🏹", br: 3, path: 3, lvl: 42, max: 3, req: "t_ks", riv: "t_decree", a: { kind: "chain", mult: 1.0, per: 0.25, jumps: 3, cd: 13 } },
+    { id: "t_decree", name: "Battle Decree", icon: "📜", br: 3, path: 3, lvl: 42, max: 3, req: "t_ks", riv: "t_volley", a: { kind: "hit", mult: 2.0, per: 0.35, stun: true, cd: 13 } },
+    { id: "t_inspire", name: "Inspire", icon: "📈", br: 3, path: 3, lvl: 55, max: 5, req: ["t_volley", "t_decree"], riv: "t_plunder", p: { atkPct: 0.03, spellPct: 0.03 } },
+    { id: "t_plunder", name: "Plunder", icon: "🏴‍☠️", br: 3, path: 3, lvl: 55, max: 5, req: ["t_volley", "t_decree"], riv: "t_inspire", p: { goldPct: 0.04, atk: 2 } },
+    { id: "t_phalanx", name: "Phalanx", icon: "⚔️", br: 3, path: 3, lvl: 70, max: 5, req: ["t_inspire", "t_plunder"], riv: "t_vanguard", p: { def: 2, cdr: 0.01 } },
+    { id: "t_vanguard", name: "Vanguard", icon: "🛡️", br: 3, path: 3, lvl: 70, max: 5, req: ["t_inspire", "t_plunder"], riv: "t_phalanx", p: { atkPct: 0.03, hpPct: 0.03 } },
+    { id: "t_cap", name: "Field Marshal", icon: "🏆", br: 3, path: 3, lvl: 90, max: 1, req: ["t_phalanx", "t_vanguard"], a: { kind: "aoe", mult: 2.4, per: 0, stun: true, cd: 16 } }
   ],
   rogue: [
     { id: "r_eye", name: "Keen Eye", icon: "👁️", br: 0, lvl: 2, max: 5, p: { crit: 2 } },
-    { id: "r_precision", name: "Deadly Precision", icon: "🎯", br: 0, lvl: 8, max: 5, req: "r_eye", p: { critMult: 0.06 } },
-    { id: "r_poison", name: "Poison Blades", icon: "☠️", br: 0, lvl: 12, max: 3, req: "r_precision", p: { poisonOnHit: 1 } },
-    { id: "r_mark", name: "Death Mark", icon: "💀", br: 0, lvl: 55, max: 3, req: "r_poison", a: { kind: "hit", mult: 2.2, per: 0.4, pierce: true, poison: true, cd: 13 } },
-    { id: "r_foot", name: "Light Footed", icon: "🪶", br: 1, lvl: 4, max: 5, req: "r_eye", p: { dodge: 2 } },
-    { id: "r_knives", name: "Fan of Knives", icon: "🔪", br: 1, lvl: 16, max: 3, req: "r_foot", a: { kind: "aoe", mult: 1.0, per: 0.25, cd: 11 } },
-    { id: "r_shadowstep", name: "Shadowstep", icon: "🌫️", br: 1, lvl: 20, max: 3, req: "r_knives", a: { kind: "hit", mult: 1.7, per: 0.4, pierce: true, cd: 10 } },
-    { id: "r_phantom", name: "Phantom", icon: "👻", br: 1, lvl: 70, max: 5, req: "r_shadowstep", p: { dodge: 2, critMult: 0.04 } },
-    { id: "r_lucky", name: "Lucky Strike", icon: "🍀", br: 2, lvl: 10, max: 5, p: { goldPct: 0.02 } },
-    { id: "r_ambush", name: "Ambush", icon: "🗡️", br: 2, lvl: 32, max: 3, req: "r_lucky", a: { kind: "hit", mult: 2.2, per: 0.4, exec: true, cd: 12 } },
-    { id: "r_thief", name: "Master Thief", icon: "💰", br: 2, lvl: 44, max: 5, req: "r_lucky", p: { goldPct: 0.03, crit: 1 } },
-    { id: "r_cuts", name: "Thousand Cuts", icon: "🌀", br: 2, lvl: 90, max: 1, req: "r_ambush", a: { kind: "multi", mult: 1.0, per: 0, hits: 5, cd: 16 } }
+    { id: "r_foot", name: "Light Footed", icon: "🪶", br: 0, lvl: 3, max: 5, p: { dodge: 2 } },
+    { id: "r_precision", name: "Deadly Precision", icon: "🎯", br: 0, lvl: 5, max: 5, req: "r_eye", p: { critMult: 0.05 } },
+    { id: "r_reflex", name: "Combat Reflex", icon: "⚡", br: 0, lvl: 7, max: 5, req: "r_foot", p: { cdr: 0.015 } },
+    { id: "r_tools", name: "Tools of the Trade", icon: "🗡️", br: 0, lvl: 9, max: 5, req: "r_precision", p: { atk: 2 } },
+    { id: "r_insight", name: "Criminal Insight", icon: "💡", br: 0, lvl: 12, max: 5, req: "r_reflex", p: { crit: 1, dodge: 1 } },
+    { id: "a_stalk", name: "Stalker", icon: "🐾", br: 1, path: 1, lvl: 10, max: 5, p: { crit: 1, critMult: 0.04 } },
+    { id: "a_mark", name: "Death Mark", icon: "💀", br: 1, path: 1, lvl: 14, max: 3, req: "a_stalk", riv: "a_shadowalk", a: { kind: "hit", mult: 2.0, per: 0.35, pierce: true, poison: true, cd: 13 } },
+    { id: "a_shadowalk", name: "Shadow Walk", icon: "🌫️", br: 1, path: 1, lvl: 14, max: 5, req: "a_stalk", riv: "a_mark", p: { critMult: 0.06, dodge: 1 } },
+    { id: "a_blade", name: "Swift Blades", icon: "⚔️", br: 1, path: 1, lvl: 24, max: 3, req: ["a_mark", "a_shadowalk"], riv: "a_predator", a: { kind: "multi", mult: 1.1, per: 0.2, hits: 3, cd: 12 } },
+    { id: "a_predator", name: "Predator", icon: "🦅", br: 1, path: 1, lvl: 24, max: 5, req: ["a_mark", "a_shadowalk"], riv: "a_blade", p: { crit: 2, critMult: 0.05 } },
+    { id: "a_ks", name: "Bloodlust", icon: "💉", br: 1, path: 1, lvl: 35, max: 1, ks: true, req: ["a_blade", "a_predator"], p: { critMult: 0.6, crit: 10, dodge: -8 } },
+    { id: "a_deathblow", name: "Deathblow", icon: "🔪", br: 1, path: 1, lvl: 42, max: 3, req: "a_ks", riv: "a_fan", a: { kind: "hit", mult: 2.4, per: 0.4, exec: true, cd: 11 } },
+    { id: "a_fan", name: "Fan of Knives", icon: "🌀", br: 1, path: 1, lvl: 42, max: 3, req: "a_ks", riv: "a_deathblow", a: { kind: "aoe", mult: 1.2, per: 0.25, cd: 12 } },
+    { id: "a_crimson", name: "Crimson Edge", icon: "🩸", br: 1, path: 1, lvl: 55, max: 5, req: ["a_deathblow", "a_fan"], riv: "a_veil", p: { critMult: 0.08 } },
+    { id: "a_veil", name: "Smoke Veil", icon: "💨", br: 1, path: 1, lvl: 55, max: 5, req: ["a_deathblow", "a_fan"], riv: "a_crimson", p: { dodge: 2, crit: 1 } },
+    { id: "a_momentum", name: "Momentum", icon: "🌪️", br: 1, path: 1, lvl: 70, max: 5, req: ["a_crimson", "a_veil"], riv: "a_killer", p: { atkPct: 0.04 } },
+    { id: "a_killer", name: "Killer Instinct", icon: "🎯", br: 1, path: 1, lvl: 70, max: 5, req: ["a_crimson", "a_veil"], riv: "a_momentum", p: { critMult: 0.06, crit: 1 } },
+    { id: "a_cap", name: "Execution", icon: "☠️", br: 1, path: 1, lvl: 90, max: 1, req: ["a_momentum", "a_killer"], a: { kind: "hit", mult: 4.0, per: 0, exec: true, pierce: true, cd: 18 } },
+    { id: "s_venom", name: "Envenom", icon: "☠️", br: 2, path: 2, lvl: 10, max: 5, p: { poisonOnHit: 1 } },
+    { id: "s_phantasm", name: "Phantasm", icon: "👻", br: 2, path: 2, lvl: 14, max: 5, req: "s_venom", riv: "s_strike", p: { dodge: 2 } },
+    { id: "s_strike", name: "Venom Strike", icon: "🐍", br: 2, path: 2, lvl: 14, max: 3, req: "s_venom", riv: "s_phantasm", a: { kind: "hit", mult: 1.6, per: 0.3, poison: true, cd: 10 } },
+    { id: "s_toxin", name: "Toxic Mastery", icon: "🧪", br: 2, path: 2, lvl: 24, max: 5, req: ["s_phantasm", "s_strike"], riv: "s_clone", p: { poisonOnHit: 1, spellPct: 0.02 } },
+    { id: "s_clone", name: "Shadow Clone", icon: "🌑", br: 2, path: 2, lvl: 24, max: 5, req: ["s_phantasm", "s_strike"], riv: "s_toxin", p: { dodge: 2, defPct: 0.03 } },
+    { id: "s_ks", name: "Death Coil", icon: "💀", br: 2, path: 2, lvl: 35, max: 1, ks: true, req: ["s_toxin", "s_clone"], p: { poisonOnHit: 3, spellPct: 0.15, atkPct: -0.15 } },
+    { id: "s_nova", name: "Toxin Nova", icon: "🟢", br: 2, path: 2, lvl: 42, max: 3, req: "s_ks", riv: "s_fang", a: { kind: "aoe", mult: 1.3, per: 0.25, poison: true, cd: 12 } },
+    { id: "s_fang", name: "Serpent Fang", icon: "🦷", br: 2, path: 2, lvl: 42, max: 3, req: "s_ks", riv: "s_nova", a: { kind: "hit", mult: 2.2, per: 0.35, poison: true, exec: true, cd: 12 } },
+    { id: "s_plague", name: "Plague Bearer", icon: "🦠", br: 2, path: 2, lvl: 55, max: 5, req: ["s_nova", "s_fang"], riv: "s_blight", p: { poisonOnHit: 1, dodge: 1 } },
+    { id: "s_blight", name: "Creeping Blight", icon: "🍂", br: 2, path: 2, lvl: 55, max: 5, req: ["s_nova", "s_fang"], riv: "s_plague", p: { spellPct: 0.03, critMult: 0.04 } },
+    { id: "s_mirage", name: "Mirage", icon: "✨", br: 2, path: 2, lvl: 70, max: 5, req: ["s_plague", "s_blight"], riv: "s_reaper", p: { dodge: 2, critMult: 0.04 } },
+    { id: "s_reaper", name: "Reaper's Shroud", icon: "🌒", br: 2, path: 2, lvl: 70, max: 5, req: ["s_plague", "s_blight"], riv: "s_mirage", p: { atkPct: 0.03, poisonOnHit: 1 } },
+    { id: "s_cap", name: "Nightfall", icon: "🌙", br: 2, path: 2, lvl: 90, max: 1, req: ["s_mirage", "s_reaper"], a: { kind: "aoe", mult: 2.2, per: 0, poison: true, lifesteal: 0.25, cd: 16 } },
+    { id: "k_lucky", name: "Lucky Strike", icon: "🍀", br: 3, path: 3, lvl: 10, max: 5, p: { goldPct: 0.03, crit: 1 } },
+    { id: "k_gambit", name: "Gambit", icon: "🎲", br: 3, path: 3, lvl: 14, max: 5, req: "k_lucky", riv: "k_volley", p: { crit: 2, dodge: 1 } },
+    { id: "k_volley", name: "Rapid Volley", icon: "🏹", br: 3, path: 3, lvl: 14, max: 3, req: "k_lucky", riv: "k_gambit", a: { kind: "volley", mult: 0.9, per: 0.2, hits: 5, cd: 11 } },
+    { id: "k_thief", name: "Master Thief", icon: "💰", br: 3, path: 3, lvl: 24, max: 5, req: ["k_gambit", "k_volley"], riv: "k_trickshot", p: { goldPct: 0.05 } },
+    { id: "k_trickshot", name: "Trick Shot", icon: "🎪", br: 3, path: 3, lvl: 24, max: 3, req: ["k_gambit", "k_volley"], riv: "k_thief", a: { kind: "chain", mult: 1.1, per: 0.25, jumps: 2, cd: 12 } },
+    { id: "k_ks", name: "Jackpot", icon: "🎰", br: 3, path: 3, lvl: 35, max: 1, ks: true, req: ["k_thief", "k_trickshot"], p: { goldPct: 0.35, crit: 6, hpPct: -0.15 } },
+    { id: "k_cut", name: "Cutthroat", icon: "🔪", br: 3, path: 3, lvl: 42, max: 3, req: "k_ks", riv: "k_dice", a: { kind: "hit", mult: 1.9, per: 0.35, cd: 10 } },
+    { id: "k_dice", name: "Loaded Dice", icon: "🎯", br: 3, path: 3, lvl: 42, max: 3, req: "k_ks", riv: "k_cut", a: { kind: "chain", mult: 1.2, per: 0.25, jumps: 3, cd: 12 } },
+    { id: "k_bonanza", name: "Bonanza", icon: "💎", br: 3, path: 3, lvl: 55, max: 5, req: ["k_cut", "k_dice"], riv: "k_sleight", p: { goldPct: 0.04, atkPct: 0.03 } },
+    { id: "k_sleight", name: "Sleight of Hand", icon: "🤹", br: 3, path: 3, lvl: 55, max: 5, req: ["k_cut", "k_dice"], riv: "k_bonanza", p: { cdr: 0.02, crit: 1 } },
+    { id: "k_fortune", name: "Fortune's Favor", icon: "🌟", br: 3, path: 3, lvl: 70, max: 5, req: ["k_bonanza", "k_sleight"], riv: "k_midas", p: { crit: 3 } },
+    { id: "k_midas", name: "Midas Touch", icon: "👑", br: 3, path: 3, lvl: 70, max: 5, req: ["k_bonanza", "k_sleight"], riv: "k_fortune", p: { goldPct: 0.05, atkPct: 0.02 } },
+    { id: "k_cap", name: "Grand Heist", icon: "💸", br: 3, path: 3, lvl: 90, max: 1, req: ["k_fortune", "k_midas"], a: { kind: "volley", mult: 1.2, per: 0, hits: 8, cd: 15 } }
   ],
   mage: [
     { id: "m_intellect", name: "Arcane Intellect", icon: "📖", br: 0, lvl: 2, max: 5, p: { spellPct: 0.03 } },
-    { id: "m_firebolt", name: "Firebolt", icon: "🔥", br: 0, lvl: 8, max: 3, req: "m_intellect", a: { kind: "hit", mult: 1.5, per: 0.3, burn: true, element: "fire", cd: 9 } },
-    { id: "m_pyro", name: "Pyromania", icon: "🕯️", br: 0, lvl: 14, max: 3, req: "m_firebolt", p: { spellPct: 0.05 } },
-    { id: "m_meteor", name: "Meteor", icon: "☄️", br: 0, lvl: 30, max: 3, req: "m_pyro", a: { kind: "aoe", mult: 1.7, per: 0.3, burn: true, element: "fire", cd: 14 } },
-    { id: "m_shield", name: "Mana Shield", icon: "🔵", br: 1, lvl: 4, max: 5, req: "m_intellect", p: { hp: 5 } },
-    { id: "m_icelance", name: "Ice Lance", icon: "❄️", br: 1, lvl: 8, max: 3, req: "m_shield", a: { kind: "hit", mult: 1.6, per: 0.3, chill: true, element: "ice", cd: 9 } },
-    { id: "m_freeze", name: "Deep Freeze", icon: "🧊", br: 1, lvl: 14, max: 3, req: "m_icelance", p: { def: 2 } },
-    { id: "m_avalanche", name: "Avalanche", icon: "🌨️", br: 1, lvl: 30, max: 3, req: "m_freeze", a: { kind: "aoe", mult: 1.5, per: 0.3, chill: true, element: "ice", cd: 14 } },
-    { id: "m_missiles", name: "Arcane Missiles", icon: "💫", br: 2, lvl: 20, max: 3, req: "m_intellect", a: { kind: "multi", mult: 0.8, per: 0.15, hits: 3, element: "arcane", cd: 11 } },
-    { id: "m_warp", name: "Time Warp", icon: "⏳", br: 2, lvl: 40, max: 5, req: "m_missiles", p: { cdr: 0.04 } },
-    { id: "m_archmage", name: "Archmage", icon: "🧙", br: 2, lvl: 60, max: 5, req: "m_warp", p: { spellPct: 0.04 } },
-    { id: "m_singularity", name: "Singularity", icon: "🌌", br: 2, lvl: 90, max: 1, req: "m_archmage", a: { kind: "aoe", mult: 2.6, per: 0, lifesteal: 0.3, element: "arcane", cd: 16 } }
+    { id: "m_shield", name: "Mana Shield", icon: "🔵", br: 0, lvl: 3, max: 5, p: { hp: 5 } },
+    { id: "m_focus", name: "Focus", icon: "⚡", br: 0, lvl: 5, max: 5, req: "m_intellect", p: { crit: 1, cdr: 0.01 } },
+    { id: "m_runes", name: "Runecraft", icon: "🔣", br: 0, lvl: 7, max: 5, req: "m_shield", p: { spellPct: 0.02, crit: 1 } },
+    { id: "m_ward", name: "Warding", icon: "🛡️", br: 0, lvl: 9, max: 5, req: "m_focus", p: { def: 1, hp: 3 } },
+    { id: "m_clarity", name: "Clarity", icon: "💧", br: 0, lvl: 12, max: 5, req: "m_runes", p: { cdr: 0.02 } },
+    { id: "p_spark", name: "Kindling", icon: "🔥", br: 1, path: 1, lvl: 10, max: 5, p: { spellPct: 0.03 } },
+    { id: "p_bolt", name: "Firebolt", icon: "🔥", br: 1, path: 1, lvl: 14, max: 3, req: "p_spark", riv: "p_pyro", a: { kind: "hit", mult: 1.5, per: 0.3, burn: true, element: "fire", cd: 9 } },
+    { id: "p_pyro", name: "Pyromania", icon: "🕯️", br: 1, path: 1, lvl: 14, max: 5, req: "p_spark", riv: "p_bolt", p: { spellPct: 0.04 } },
+    { id: "p_burnout", name: "Burnout", icon: "♨️", br: 1, path: 1, lvl: 24, max: 5, req: ["p_bolt", "p_pyro"], riv: "p_meteor", p: { crit: 2 } },
+    { id: "p_meteor", name: "Meteor", icon: "☄️", br: 1, path: 1, lvl: 24, max: 3, req: ["p_bolt", "p_pyro"], riv: "p_burnout", a: { kind: "aoe", mult: 1.6, per: 0.3, burn: true, element: "fire", cd: 14, vfx: "shower" } },
+    { id: "p_ks", name: "Combustion", icon: "💥", br: 1, path: 1, lvl: 35, max: 1, ks: true, req: ["p_burnout", "p_meteor"], p: { spellPct: 0.3, defPct: -0.2 } },
+    { id: "p_inferno", name: "Inferno", icon: "🌋", br: 1, path: 1, lvl: 42, max: 3, req: "p_ks", riv: "p_lance", a: { kind: "aoe", mult: 1.9, per: 0.3, burn: true, element: "fire", cd: 13, vfx: "sky" } },
+    { id: "p_lance", name: "Flame Lance", icon: "🔱", br: 1, path: 1, lvl: 42, max: 3, req: "p_ks", riv: "p_inferno", a: { kind: "pierce", mult: 2.2, per: 0.35, burn: true, element: "fire", cd: 12 } },
+    { id: "p_blaze", name: "Blaze Mastery", icon: "🔆", br: 1, path: 1, lvl: 55, max: 5, req: ["p_inferno", "p_lance"], riv: "p_ember", p: { spellPct: 0.04 } },
+    { id: "p_ember", name: "Ember Harvest", icon: "🎇", br: 1, path: 1, lvl: 55, max: 5, req: ["p_inferno", "p_lance"], riv: "p_blaze", p: { crit: 2, spellPct: 0.02 } },
+    { id: "p_phoenix", name: "Phoenix Heart", icon: "🐦", br: 1, path: 1, lvl: 70, max: 5, req: ["p_blaze", "p_ember"], riv: "p_wildfire", p: { hpPct: 0.04, spellPct: 0.02 } },
+    { id: "p_wildfire", name: "Wildfire", icon: "🔥", br: 1, path: 1, lvl: 70, max: 5, req: ["p_blaze", "p_ember"], riv: "p_phoenix", p: { spellPct: 0.03, critMult: 0.05 } },
+    { id: "p_cap", name: "Cataclysm", icon: "🌠", br: 1, path: 1, lvl: 90, max: 1, req: ["p_phoenix", "p_wildfire"], a: { kind: "aoe", mult: 3.0, per: 0, burn: true, element: "fire", cd: 17, vfx: "sky" } },
+    { id: "c_lance", name: "Ice Lance", icon: "❄️", br: 2, path: 2, lvl: 10, max: 3, a: { kind: "hit", mult: 1.5, per: 0.3, chill: true, element: "ice", cd: 9 } },
+    { id: "c_frost", name: "Permafrost", icon: "🧊", br: 2, path: 2, lvl: 14, max: 5, req: "c_lance", riv: "c_bite", p: { def: 2 } },
+    { id: "c_bite", name: "Frostbite", icon: "🥶", br: 2, path: 2, lvl: 14, max: 5, req: "c_lance", riv: "c_frost", p: { spellPct: 0.03 } },
+    { id: "c_dance", name: "Winter's Dance", icon: "💃", br: 2, path: 2, lvl: 24, max: 5, req: ["c_frost", "c_bite"], riv: "c_avalanche", p: { dodge: 2 } },
+    { id: "c_avalanche", name: "Avalanche", icon: "🌨️", br: 2, path: 2, lvl: 24, max: 3, req: ["c_frost", "c_bite"], riv: "c_dance", a: { kind: "aoe", mult: 1.5, per: 0.3, chill: true, element: "ice", cd: 14, vfx: "shower" } },
+    { id: "c_ks", name: "Absolute Zero", icon: "🧿", br: 2, path: 2, lvl: 35, max: 1, ks: true, req: ["c_dance", "c_avalanche"], p: { crit: 8, critMult: 0.3, hpPct: -0.15 } },
+    { id: "c_glaciate", name: "Glaciate", icon: "💠", br: 2, path: 2, lvl: 42, max: 3, req: "c_ks", riv: "c_comet", a: { kind: "chain", mult: 1.5, per: 0.3, jumps: 3, chill: true, element: "ice", cd: 13 } },
+    { id: "c_comet", name: "Comet Shard", icon: "☄️", br: 2, path: 2, lvl: 42, max: 3, req: "c_ks", riv: "c_glaciate", a: { kind: "hit", mult: 2.4, per: 0.4, chill: true, element: "ice", cd: 12 } },
+    { id: "c_mastery", name: "Ice Mastery", icon: "❄️", br: 2, path: 2, lvl: 55, max: 5, req: ["c_glaciate", "c_comet"], riv: "c_rime", p: { spellPct: 0.04 } },
+    { id: "c_rime", name: "Rimeguard", icon: "🧤", br: 2, path: 2, lvl: 55, max: 5, req: ["c_glaciate", "c_comet"], riv: "c_mastery", p: { def: 2, dodge: 1 } },
+    { id: "c_armor", name: "Glacial Armor", icon: "🛡️", br: 2, path: 2, lvl: 70, max: 5, req: ["c_mastery", "c_rime"], riv: "c_deepfreeze", p: { def: 2, hpPct: 0.03 } },
+    { id: "c_deepfreeze", name: "Deep Freeze", icon: "🥶", br: 2, path: 2, lvl: 70, max: 5, req: ["c_mastery", "c_rime"], riv: "c_armor", p: { spellPct: 0.03, critMult: 0.05 } },
+    { id: "c_cap", name: "Eternal Winter", icon: "🌌", br: 2, path: 2, lvl: 90, max: 1, req: ["c_armor", "c_deepfreeze"], a: { kind: "aoe", mult: 2.6, per: 0, chill: true, element: "ice", cd: 17, vfx: "shower" } },
+    { id: "st_missiles", name: "Arcane Missiles", icon: "💫", br: 3, path: 3, lvl: 10, max: 3, a: { kind: "multi", mult: 0.8, per: 0.15, hits: 3, element: "arcane", cd: 11 } },
+    { id: "st_amp", name: "Amplify", icon: "🔮", br: 3, path: 3, lvl: 14, max: 5, req: "st_missiles", riv: "st_surge", p: { spellPct: 0.04 } },
+    { id: "st_surge", name: "Static Surge", icon: "⚡", br: 3, path: 3, lvl: 14, max: 5, req: "st_missiles", riv: "st_amp", p: { crit: 2 } },
+    { id: "st_torrent", name: "Arcane Torrent", icon: "🌀", br: 3, path: 3, lvl: 24, max: 3, req: ["st_amp", "st_surge"], riv: "st_tempo", a: { kind: "volley", mult: 1.0, per: 0.2, hits: 4, element: "arcane", cd: 13 } },
+    { id: "st_tempo", name: "Tempo", icon: "⏱️", br: 3, path: 3, lvl: 24, max: 5, req: ["st_amp", "st_surge"], riv: "st_torrent", p: { cdr: 0.02 } },
+    { id: "st_ks", name: "Overcharge", icon: "🔋", br: 3, path: 3, lvl: 35, max: 1, ks: true, req: ["st_torrent", "st_tempo"], p: { cdr: 0.15, spellPct: 0.15, hpPct: -0.2 } },
+    { id: "st_lance", name: "Storm Lance", icon: "🌩️", br: 3, path: 3, lvl: 42, max: 3, req: "st_ks", riv: "st_field", a: { kind: "pierce", mult: 2.0, per: 0.35, element: "arcane", cd: 12 } },
+    { id: "st_field", name: "Static Field", icon: "🌐", br: 3, path: 3, lvl: 42, max: 3, req: "st_ks", riv: "st_lance", a: { kind: "aoe", mult: 1.4, per: 0.3, element: "arcane", cd: 13 } },
+    { id: "st_mastery", name: "Storm Mastery", icon: "🧙", br: 3, path: 3, lvl: 55, max: 5, req: ["st_lance", "st_field"], riv: "st_conduit", p: { spellPct: 0.04, cdr: 0.01 } },
+    { id: "st_conduit", name: "Conduit", icon: "🔌", br: 3, path: 3, lvl: 55, max: 5, req: ["st_lance", "st_field"], riv: "st_mastery", p: { crit: 2, cdr: 0.01 } },
+    { id: "st_echo", name: "Echoing Power", icon: "📡", br: 3, path: 3, lvl: 70, max: 5, req: ["st_mastery", "st_conduit"], riv: "st_ion", p: { critMult: 0.06 } },
+    { id: "st_ion", name: "Ion Charge", icon: "⚡", br: 3, path: 3, lvl: 70, max: 5, req: ["st_mastery", "st_conduit"], riv: "st_echo", p: { spellPct: 0.04, crit: 1 } },
+    { id: "st_cap", name: "Singularity", icon: "🌌", br: 3, path: 3, lvl: 90, max: 1, req: ["st_echo", "st_ion"], a: { kind: "aoe", mult: 2.8, per: 0, lifesteal: 0.4, element: "arcane", cd: 17, vfx: "sky" } }
   ]
 };
 const RPG_TREE_BY_ID = {};
 Object.keys(RPG_TREE).forEach(c => RPG_TREE[c].forEach(n => { n.clazz = c; RPG_TREE_BY_ID[n.id] = n; }));
 function rpgSkillRank(id) { return (rpgState && rpgState.skills && rpgState.skills[id]) || 0; }
 function rpgSkillPointsSpent() { return rpgState ? Object.values(rpgState.skills || {}).reduce((a, b) => a + b, 0) : 0; }
-function rpgSkillPoints() { return Math.max(0, rpgLevelInfo().level - 1 - rpgSkillPointsSpent()); }
+function rpgSkillPointsEarned() {
+  const L = rpgLevelInfo().level;
+  return Math.min(L - 1, 30) + Math.max(0, Math.floor((L - 30) / 2));
+}
+function rpgSkillPoints() { return Math.max(0, rpgSkillPointsEarned() - rpgSkillPointsSpent()); }
+function rpgPathOf(clazz) { return (rpgState && rpgState.paths && rpgState.paths[clazz]) || 0; }
 function rpgTreePassives() {
   const out = {};
   if (!rpgState || !rpgState.clazz) return out;
@@ -14604,18 +14930,37 @@ function rpgTreeActiveDef(n) {
   const a = n.a;
   return { name: n.name, icon: n.icon, cd: a.cd, kind: a.kind, mult: a.mult != null ? Math.round((a.mult + a.per * (r - 1)) * 100) / 100 : undefined,
     hits: a.hits, jumps: a.jumps, pct: a.pct, stun: a.stun, burn: a.burn, chill: a.chill, poison: a.poison, pierce: a.pierce,
-    lifesteal: a.lifesteal, healPct: a.healPct, exec: a.exec, element: a.element };
+    lifesteal: a.lifesteal, healPct: a.healPct, exec: a.exec, element: a.element, vfx: a.vfx };
 }
 function rpgClassActives() {
   if (!rpgState || !rpgState.clazz) return [];
   return (RPG_TREE[rpgState.clazz] || []).filter(n => n.a && rpgSkillRank(n.id) > 0);
+}
+function rpgClassCanEquip(it) {
+  if (!it || it.slot !== "weapon" || !rpgState || !rpgState.clazz) return true;
+  const kind = rpgWeaponFx(it.id).kind;
+  if (rpgState.clazz === "warrior") return kind !== "ranged" && kind !== "magic"; // face-to-face only
+  if (rpgState.clazz === "mage") return kind === "magic" || kind === "ranged";   // never melee
+  return true; // rogues use everything
+}
+function rpgClassEquipNote(it) {
+  if (rpgClassCanEquip(it)) return "";
+  return rpgState.clazz === "warrior" ? "Warriors fight face to face — no ranged or magic weapons" : "Mages can't wield melee weapons";
+}
+function rpgEnforceClassWeapon() {
+  if (!rpgState) return;
+  const w = RPG_ITEMS_BY_ID[rpgState.equipment.weapon];
+  if (w && !rpgClassCanEquip(w)) {
+    rpgState.equipment.weapon = null;
+    toast(`${w.name} unequipped — ${rpgClassEquipNote(w)}`, "error");
+  }
 }
 function rpgClassWeaponAffinity() {
   if (!rpgState || !rpgState.clazz || !rpgState.equipment.weapon) return false;
   const id = rpgState.equipment.weapon;
   const kind = rpgWeaponFx(id).kind;
   if (rpgState.clazz === "warrior") return kind === "slash" || kind === "chop" || kind === "thrust";
-  if (rpgState.clazz === "rogue") return /dagger|rapier|cutlass|katana|blade/.test(id) && kind !== "magic";
+  if (rpgState.clazz === "rogue") return kind === "ranged" || (/dagger|rapier|cutlass|katana|blade/.test(id) && kind !== "magic");
   return kind === "magic";
 }
 function rpgChooseClass(c) {
@@ -14623,6 +14968,7 @@ function rpgChooseClass(c) {
   if (rpgState.clazz && !confirm(`Switch to ${RPG_CLASSES[c].name}? Your skill points will be refunded.`)) return;
   rpgState.clazz = c;
   rpgState.skills = {};
+  rpgEnforceClassWeapon();
   rpgSave();
   rpgPublishLeaderboard();
   rpgRenderCharacterPage();
@@ -14634,8 +14980,21 @@ function rpgSkillUp(id) {
   const r = rpgSkillRank(id);
   if (r >= n.max) { toast("Skill already at max rank", "error"); return; }
   if (rpgLevelInfo().level < n.lvl) { toast(`Requires hero level ${n.lvl}`, "error"); return; }
-  if (n.req && rpgSkillRank(n.req) < 1) { toast(`Learn ${RPG_TREE_BY_ID[n.req].name} first`, "error"); return; }
+  const reqs = n.req ? [].concat(n.req) : [];
+  if (reqs.length && !reqs.some(rid => rpgSkillRank(rid) > 0)) { toast(`Learn ${reqs.map(rid => RPG_TREE_BY_ID[rid].name).join(" or ")} first`, "error"); return; }
+  if (n.riv && r === 0 && rpgSkillRank(n.riv) > 0) { toast(`${RPG_TREE_BY_ID[n.riv].name} seals this skill — each tier is a choice!`, "error"); return; }
   if (rpgSkillPoints() < 1) { toast("No skill points — level up by earning XP!", "error"); return; }
+  if (n.riv && r === 0 && !confirm(`Choose ${n.name}? Its rival ${RPG_TREE_BY_ID[n.riv].name} will be SEALED on this path.`)) return;
+  if (n.path) {
+    const cur = rpgPathOf(rpgState.clazz);
+    if (cur && cur !== n.path) { toast(`That path is sealed — you walk the ${RPG_PATH_NAMES[rpgState.clazz][cur - 1]} path!`, "error"); return; }
+    if (!cur) {
+      const pn = RPG_PATH_NAMES[rpgState.clazz][n.path - 1];
+      if (!confirm(`Walk the path of the ${pn}? The other two paths will be LOCKED until you refund your points. This defines your build!`)) return;
+      rpgState.paths[rpgState.clazz] = n.path;
+      toast(`🛤️ You walk the path of the ${pn}!`, "success");
+    }
+  }
   rpgState.skills[id] = r + 1;
   rpgSave();
   rpgRenderCharacterPage();
@@ -14643,34 +15002,43 @@ function rpgSkillUp(id) {
   toast(`${n.icon} ${n.name} → rank ${r + 1}`, "success");
 }
 function rpgResetSkills() {
-  if (!rpgState || !confirm("Refund all skill points?")) return;
+  if (!rpgState || !confirm("Refund all skill points? Your path choice is also unsealed.")) return;
   rpgState.skills = {};
+  if (rpgState.clazz) delete rpgState.paths[rpgState.clazz];
   rpgSave();
   rpgRenderCharacterPage();
   toast("Skill points refunded", "success");
 }
 function rpgPassiveDesc(p) {
+  const sg = v => (v > 0 ? "+" : "") + v;
   const L = [];
-  if (p.atk) L.push(`+${p.atk} ATK`);
-  if (p.def) L.push(`+${p.def} DEF`);
-  if (p.hp) L.push(`+${p.hp} HP`);
-  if (p.crit) L.push(`+${p.crit}% CRIT`);
-  if (p.atkPct) L.push(`+${Math.round(p.atkPct * 100)}% ATK`);
-  if (p.defPct) L.push(`+${Math.round(p.defPct * 100)}% DEF`);
-  if (p.hpPct) L.push(`+${Math.round(p.hpPct * 100)}% max HP`);
-  if (p.critMult) L.push(`+${p.critMult.toFixed(2)}× crit damage`);
-  if (p.dodge) L.push(`+${p.dodge}% dodge`);
-  if (p.goldPct) L.push(`+${Math.round(p.goldPct * 100)}% gold`);
-  if (p.spellPct) L.push(`+${Math.round(p.spellPct * 100)}% skill power`);
+  if (p.atk) L.push(`${sg(p.atk)} ATK`);
+  if (p.def) L.push(`${sg(p.def)} DEF`);
+  if (p.hp) L.push(`${sg(p.hp)} HP`);
+  if (p.crit) L.push(`${sg(p.crit)}% CRIT`);
+  if (p.atkPct) L.push(`${sg(Math.round(p.atkPct * 100))}% ATK`);
+  if (p.defPct) L.push(`${sg(Math.round(p.defPct * 100))}% DEF`);
+  if (p.hpPct) L.push(`${sg(Math.round(p.hpPct * 100))}% max HP`);
+  if (p.critMult) L.push(`${sg(Math.round(p.critMult * 100) / 100)}× crit damage`);
+  if (p.dodge) L.push(`${sg(p.dodge)}% dodge`);
+  if (p.goldPct) L.push(`${sg(Math.round(p.goldPct * 100))}% gold`);
+  if (p.spellPct) L.push(`${sg(Math.round(p.spellPct * 100))}% skill power`);
   if (p.cdr) L.push(`-${Math.round(p.cdr * 100)}% cooldowns`);
+  if (p.thorns) L.push(`reflect ${Math.round(p.thorns * 100)}% of damage taken`);
+  if (p.leechPct) L.push(`heal ${Math.round(p.leechPct * 100)}% of attack damage`);
   if (p.poisonOnHit) L.push("basic attacks poison");
   return L.join(", ") + " per rank";
 }
 
 // ---- Derived stats ----
-function rpgXpToNext(level) { return 60 + (level - 1) * 45; }
+function rpgXpToNext(level) {
+  // fast hook to 30, steady to 70, aspirational to 99 (~a school year)
+  if (level <= 30) return 40 + level * 14;
+  if (level <= 70) return 460 + (level - 30) * 40;
+  return 2060 + (level - 70) * 120;
+}
 function rpgLevelInfo() {
-  let level = 1, rem = Math.max(0, rpgState ? rpgState.xp : 0);
+  let level = 1, rem = Math.max(0, rpgState ? rpgState.xp - (rpgState.xpBaseline || 0) : 0);
   while (level < 99 && rem >= rpgXpToNext(level)) { rem -= rpgXpToNext(level); level++; }
   return { level, into: rem, need: rpgXpToNext(level) };
 }
@@ -14695,6 +15063,13 @@ function rpgPlayerStats() {
     if (b.hp) hp += b.hp;
     if (b.goldPct) goldPct += b.goldPct;
   });
+  // star souls: +2% all stats per rebirth (cap 10)
+  const souls = Math.min(10, (rpgState && rpgState.rebirths) || 0);
+  if (souls) { atk = Math.round(atk * (1 + souls * 0.02)); def = Math.round(def * (1 + souls * 0.02)); hp = Math.round(hp * (1 + souls * 0.02)); }
+  goldPct += 0.05 * ((rpgState && rpgState.star && rpgState.star.gold) || 0);
+  // pet bond: +1% ATK/HP per 10 floors cleared together (cap 10%)
+  const pb = rpgState && rpgState.equipment.pet ? rpgPetBondPct(rpgState.equipment.pet) : 0;
+  if (pb) { atk = Math.round(atk * (1 + pb / 100)); hp = Math.round(hp * (1 + pb / 100)); }
   // class identity
   const clazz = rpgState && rpgState.clazz;
   if (clazz === "warrior") { hp = Math.round(hp * 1.1); def = Math.round(def * 1.15) + 1; }
@@ -14709,12 +15084,14 @@ function rpgPlayerStats() {
   if (tp.hpPct) hp = Math.round(hp * (1 + tp.hpPct));
   critMult += tp.critMult || 0;
   dodge += tp.dodge || 0;
+  const thorns = tp.thorns || 0;
+  const leechPct = tp.leechPct || 0;
   goldPct += tp.goldPct || 0;
   spellPct += tp.spellPct || 0;
   cdr += tp.cdr || 0;
   poisonOnHit += tp.poisonOnHit || 0;
-  return { level, atk, def, crit: Math.min(75, crit), maxHp: hp, goldPct,
-    critMult: Math.round(critMult * 100) / 100, dodge: Math.min(35, dodge), spellPct, cdr: Math.min(0.35, cdr), poisonOnHit };
+  return { level, atk: Math.max(1, atk), def: Math.max(0, def), crit: Math.min(75, Math.max(0, crit)), maxHp: Math.max(10, hp), goldPct,
+    critMult: Math.round(critMult * 100) / 100, dodge: Math.min(35, Math.max(0, dodge)), spellPct, cdr: Math.min(0.4, cdr), poisonOnHit, thorns, leechPct };
 }
 function rpgStatLine(it) {
   const s = rpgItemStats(it);
@@ -14729,7 +15106,15 @@ function rpgStatLine(it) {
 // ---- Avatar (layered SVG paper doll; equipment renders on the hero) ----
 function rpgItemArt(slot, eq) {
   const it = RPG_ITEMS_BY_ID[(eq || {})[slot]];
-  return it && it.art ? it.art() : "";
+  if (!it || !it.art) return "";
+  if (slot === "pet") {
+    const evoEmoji = rpgPetEvoEmoji(it);
+    const st = rpgPetStage(it);
+    const halo = st ? `<circle cx="33" cy="104" r="${16 + st * 3}" fill="#ffd76a" opacity="${st === 2 ? 0.3 : 0.18}">${svgPulse(0.12, 0.3)}</circle>` : "";
+    if (evoEmoji) return halo + svgPetEmoji(evoEmoji);
+    return halo + it.art();
+  }
+  return it.art();
 }
 function rpgAvatarSvg(equipment) {
   const eq = equipment || (rpgState && rpgState.equipment) || {};
@@ -14738,6 +15123,7 @@ function rpgAvatarSvg(equipment) {
   const frontAccArt = acc && acc.layer === "front" ? acc.art() : "";
   return `<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Your hero avatar">
     <ellipse cx="100" cy="222" rx="46" ry="9" fill="rgba(0,0,0,0.10)"/>
+    ${rpgState && rpgState.auraGold ? `<ellipse cx="100" cy="130" rx="78" ry="96" fill="#ffd76a" opacity="0.16">${svgPulse(0.1, 0.22)}</ellipse>` : ""}
     ${capeArt}
     <rect x="84" y="180" width="11" height="30" rx="5" fill="${rpgGrad("#4b4339", "h")}" ${RPG_O_THIN}/>
     <rect x="105" y="180" width="11" height="30" rx="5" fill="${rpgGrad("#4b4339", "h")}" ${RPG_O_THIN}/>
@@ -14781,9 +15167,231 @@ function rpgItemIconSvg(it) {
   const spark = rank >= 5
     ? `<g>${svgStar(bx + bw * 0.18, by + bh * 0.22, bw * 0.05, bw * 0.022, "#fff")}${svgTwinkle(2)}</g><g>${svgStar(bx + bw * 0.84, by + bh * 0.58, bw * 0.04, bw * 0.018, rank === 6 ? "#ff9ad1" : "#ffe9a3")}${svgTwinkle(1.5)}</g>${rank === 6 ? `<g>${svgStar(bx + bw * 0.78, by + bh * 0.18, bw * 0.045, bw * 0.02, "#ffd76a")}${svgTwinkle(1.2)}</g>` : ""}`
     : "";
-  return `<svg viewBox="${box}" xmlns="http://www.w3.org/2000/svg">${aura}${it.art()}${spark}</svg>`;
+  const art = it.slot === "pet" && rpgPetEvoEmoji(it) ? svgPetEmoji(rpgPetEvoEmoji(it)) : it.art();
+  return `<svg viewBox="${box}" xmlns="http://www.w3.org/2000/svg">${aura}${art}${spark}</svg>`;
 }
 
+// ---- Codex: bestiary tiers, titles, houses ----
+function rpgKillTier(enemyId) {
+  const k = (rpgState && rpgState.kills && rpgState.kills[enemyId]) || 0;
+  return k >= 500 ? 3 : k >= 100 ? 2 : k >= 10 ? 1 : 0;
+}
+function rpgCreditKill(enemyId) {
+  if (!rpgState || !enemyId) return;
+  const before = rpgKillTier(enemyId);
+  rpgState.kills[enemyId] = (rpgState.kills[enemyId] || 0) + 1;
+  const after = rpgKillTier(enemyId);
+  if (after > before) {
+    const e = RPG_ENEMIES_BY_ID[enemyId];
+    toast(`📖 Bestiary: ${e ? e.name : enemyId} mastery ${"★".repeat(after)} — +${after}% damage vs them!`, "success");
+  }
+}
+const RPG_TITLES = [
+  { id: "slayer1", name: "Monster Hunter", icon: "⚔️", test: () => Object.values(rpgState.kills || {}).reduce((a, b) => a + b, 0) >= 100 },
+  { id: "slayer2", name: "Centurion", icon: "🏛️", test: () => Object.values(rpgState.kills || {}).reduce((a, b) => a + b, 0) >= 1000 },
+  { id: "crawler", name: "Floor Crawler", icon: "🪜", test: () => (rpgState.stats.bestFloor || 0) >= 10 },
+  { id: "delver", name: "Deep Delver", icon: "🏰", test: () => (rpgState.stats.bestFloor || 0) >= 25 },
+  { id: "mythic", name: "Mythic Hunter", icon: "✦", test: () => RPG_ITEMS.some(it => it.rarity === "mythic" && rpgState.inventory[it.id]) },
+  { id: "collect", name: "Collector", icon: "📦", test: () => Object.keys(rpgState.inventory || {}).length >= 50 },
+  { id: "packrat", name: "Pack Rat", icon: "🎁", test: () => (rpgState.stats.packsOpened || 0) >= 20 },
+  { id: "duelist", name: "Duelist", icon: "👻", test: () => (rpgState.stats.arenaWins || 0) >= 10 },
+  { id: "scholar", name: "Grand Scholar", icon: "📚", test: () => (rpgState.stats.marked || 0) >= 500 },
+  { id: "reborn", name: "Starborn", icon: "🌠", test: () => (rpgState.rebirths || 0) >= 1 }
+];
+function rpgEarnedTitles() { return rpgState ? RPG_TITLES.filter(t => { try { return t.test(); } catch (_) { return false; } }) : []; }
+const RPG_HOUSES = [
+  { id: "dragons", name: "Dragons", icon: "🐉", color: "#9c2c2c" },
+  { id: "phoenix", name: "Phoenix", icon: "🔥", color: "#d4882a" },
+  { id: "griffins", name: "Griffins", icon: "🦅", color: "#27406b" },
+  { id: "krakens", name: "Krakens", icon: "🐙", color: "#4b3a63" }
+];
+function rpgHouseOf(uid) {
+  let h = 0;
+  String(uid || "").split("").forEach(ch => { h = (h * 31 + ch.charCodeAt(0)) % 9973; });
+  return RPG_HOUSES[h % 4];
+}
+function rpgCodexTabHtml() {
+  const totalKills = Object.values(rpgState.kills || {}).reduce((a, b) => a + b, 0);
+  const beasts = RPG_ENEMIES.map(e => {
+    const k = (rpgState.kills || {})[e.id] || 0;
+    const tier = rpgKillTier(e.id);
+    return `<div class="cdx-beast ${k ? "" : "unknown"}" title="${escapeHtml(e.name)} — ${k} slain${tier ? `, +${tier}% damage` : ""}">
+      <span class="cdx-emoji">${k ? e.emoji : "❔"}</span>
+      <span class="cdx-count">${k ? k : "?"}</span>
+      <span class="cdx-stars">${"★".repeat(tier)}</span>
+    </div>`;
+  }).join("");
+  const ranks = ["common", "uncommon", "rare", "epic", "legendary", "mythic"].map(r => {
+    const all = RPG_ITEMS.filter(it => it.rarity === r && (it.price > 0 || it.packOnly));
+    const own = all.filter(it => rpgState.inventory[it.id]).length;
+    return `<div class="rpg-quest"><span class="rpg-quest-ico" style="color:${RPG_RARITY[r].color};">●</span><span class="rpg-quest-name">${RPG_RARITY[r].label} <b>${own}/${all.length}</b></span><span class="rpg-quest-reward">${Math.round(own / Math.max(1, all.length) * 100)}%</span></div>`;
+  }).join("");
+  const titles = RPG_TITLES.map(t => {
+    const got = rpgEarnedTitles().some(x => x.id === t.id);
+    return `<span class="rpg-set-chip ${got ? "on" : ""}">${t.icon} ${t.name}</span>`;
+  }).join("");
+  const house = rpgHouseOf(currentUser && currentUser.uid);
+  return `<div class="section-label">Your house</div>
+    <div class="rpg-quest"><span class="rpg-quest-ico">${house.icon}</span><span class="rpg-quest-name">House <b>${house.name}</b> — earn XP to win the monthly house race!</span></div>
+    <div class="section-label" style="margin-top:12px;">Bestiary — ${totalKills} monsters slain (mastery = bonus damage)</div>
+    <div class="cdx-grid">${beasts}</div>
+    <div class="section-label" style="margin-top:12px;">Collection</div>${ranks}
+    <div class="section-label" style="margin-top:12px;">Titles</div><div class="rpg-set-row">${titles}</div>`;
+}
+// ---- Starfall rebirth (prestige at level 60+) ----
+function rpgRebirth() {
+  if (!rpgState) return;
+  const lvl = rpgLevelInfo().level;
+  if (lvl < 60) { toast("Starfall unlocks at level 60", "error"); return; }
+  let shards = (lvl - 50) + Math.floor((rpgState.stats.bestFloor || 0) / 10);
+  if (lvl >= 99) shards = Math.round(shards * 1.5);
+  if (!confirm(`⭐ STARFALL — begin again at level 1 for ${shards} Star Shards?\n\nYOU KEEP: all items, gold, pets, upgrades, collections.\nRESETS: level, skill points (refunded), path seal, daily raids.\nYour gear remembers you — level requirements no longer apply.`)) return;
+  rpgState.shards = (rpgState.shards || 0) + shards;
+  rpgState.rebirths = (rpgState.rebirths || 0) + 1;
+  rpgState.xpBaseline = rpgState.xp;
+  rpgState.skills = {};
+  rpgState.paths = {};
+  rpgState.advRuns = null;
+  rpgState.hp = rpgPlayerStats().maxHp;
+  rpgSave();
+  rpgPublishLeaderboard();
+  rpgRenderCharacterPage();
+  rpgRenderSide();
+  toast(`⭐ STARFALL! +${shards} Star Shards — Rebirth ${rpgState.rebirths}`, "success");
+}
+const RPG_STAR_SHOP = [
+  { id: "gold", name: "Stargold", icon: "🪙", desc: "+5% gold per rank", max: 10, cost: r => 5 * (r + 1) },
+  { id: "learn", name: "Starlearn", icon: "📚", desc: "+5% XP per rank", max: 10, cost: r => 5 * (r + 1) },
+  { id: "raids", name: "Star Raids", icon: "🏰", desc: "+1 dungeon raid per day", max: 2, cost: () => 40 },
+  { id: "nova", name: "Nova the Star-Dragon", icon: "🌟", desc: "Exclusive mythic pet", max: 1, cost: () => 100 }
+];
+function rpgBuyStar(id) {
+  const s = RPG_STAR_SHOP.find(x => x.id === id);
+  if (!s || !rpgState) return;
+  const cur = id === "nova" ? (rpgState.star.nova ? 1 : 0) : (rpgState.star[id] || 0);
+  if (cur >= s.max) return;
+  const cost = s.cost(cur);
+  if ((rpgState.shards || 0) < cost) { toast(`Need ${cost} Star Shards — rebirth to earn more!`, "error"); return; }
+  rpgState.shards -= cost;
+  if (id === "nova") { rpgState.star.nova = true; rpgState.inventory.nova_dragon = 1; }
+  else rpgState.star[id] = cur + 1;
+  rpgSave();
+  rpgRenderCharacterPage();
+  toast(`⭐ ${s.name}!`, "success");
+}
+function rpgStarShopHtml() {
+  if (!rpgState || (rpgLevelInfo().level < 60 && !(rpgState.rebirths > 0))) return "";
+  const rows = RPG_STAR_SHOP.map(s => {
+    const cur = s.id === "nova" ? (rpgState.star.nova ? 1 : 0) : (rpgState.star[s.id] || 0);
+    const maxed = cur >= s.max;
+    return `<div class="rpg-quest"><span class="rpg-quest-ico">${s.icon}</span>
+      <span class="rpg-quest-name">${s.name} <b>${cur}/${s.max}</b> — ${s.desc}</span>
+      ${maxed ? `<span class="rpg-quest-claimed">MAX</span>` : `<button class="btn btn-ghost btn-sm" type="button" data-rpg-star="${s.id}">⭐ ${s.cost(cur)}</button>`}</div>`;
+  }).join("");
+  return `<div class="section-label" style="margin-top:16px;">⭐ Starfall — rebirth ${rpgState.rebirths || 0} · ${rpgState.shards || 0} shards</div>
+    ${rows}
+    <button class="btn btn-primary" type="button" data-rpg-rebirth style="margin-top:8px;">🌠 STARFALL — rebirth for Star Shards</button>`;
+}
+// ---- Daily quests & practice streak ----
+const RPG_QUESTS = [
+  { id: "q_mark5", icon: "✍️", name: "Answer 5 questions", key: "marked", need: 5, gold: 50 },
+  { id: "q_correct3", icon: "✅", name: "Get 3 questions right", key: "correct", need: 3, gold: 60 },
+  { id: "q_wins4", icon: "⚔️", name: "Win 4 battles", key: "wins", need: 4, gold: 45 },
+  { id: "q_raid", icon: "🏰", name: "Finish a dungeon raid", key: "advRunsDone", need: 1, gold: 55 },
+  { id: "q_floors3", icon: "🪜", name: "Clear 3 dungeon floors", key: "floorsCleared", need: 3, gold: 60 },
+  { id: "q_duel", icon: "👻", name: "Win an arena duel", key: "arenaWins", need: 1, gold: 50 },
+  { id: "q_gold150", icon: "🪙", name: "Earn 150 gold", key: "goldEarned", need: 150, gold: 45 },
+  { id: "q_packs", icon: "🎁", name: "Open a booster pack", key: "packsOpened", need: 1, gold: 40 }
+];
+function rpgEnsureDaily() {
+  if (!rpgState) return;
+  const day = advToday();
+  if (rpgState.daily && rpgState.daily.day === day) return;
+  const seed = day.split("-").join("") * 7 + (currentUser ? currentUser.uid.length : 0);
+  const picks = [];
+  for (let i = 0; picks.length < 3 && i < 24; i++) {
+    const q = RPG_QUESTS[(seed + i * 5) % RPG_QUESTS.length];
+    if (!picks.includes(q.id)) picks.push(q.id);
+  }
+  const base = {};
+  RPG_QUESTS.forEach(q => { base[q.key] = (rpgState.stats && rpgState.stats[q.key]) || 0; });
+  rpgState.daily = { day, quests: picks, base, claimed: [false, false, false] };
+  rpgSave();
+}
+function rpgQuestProgress(q) {
+  const cur = (rpgState.stats && rpgState.stats[q.key]) || 0;
+  return Math.max(0, cur - ((rpgState.daily.base && rpgState.daily.base[q.key]) || 0));
+}
+function rpgClaimQuest(i) {
+  rpgEnsureDaily();
+  const d = rpgState.daily;
+  const q = RPG_QUESTS.find(x => x.id === d.quests[i]);
+  if (!q || d.claimed[i] || rpgQuestProgress(q) < q.need) return;
+  d.claimed[i] = true;
+  if (i === 2) {
+    rpgState.packCoupon = 1;
+    toast("🎟️ Quest complete — your next booster pack is HALF PRICE!", "success");
+  } else {
+    rpgState.gold += q.gold;
+    toast(`📜 Quest complete: +🪙 ${q.gold}!`, "success");
+  }
+  rpgSave();
+  rpgRenderCharacterPage();
+}
+function rpgQuestsHtml() {
+  rpgEnsureDaily();
+  const s = rpgState.streak || { count: 0, best: 0 };
+  const rows = rpgState.daily.quests.map((qid, i) => {
+    const q = RPG_QUESTS.find(x => x.id === qid);
+    const prog = Math.min(q.need, rpgQuestProgress(q));
+    const done = prog >= q.need;
+    const claimed = rpgState.daily.claimed[i];
+    const reward = i === 2 ? "🎟️ ½-price pack" : `🪙 ${q.gold}`;
+    return `<div class="rpg-quest ${claimed ? "claimed" : done ? "done" : ""}">
+      <span class="rpg-quest-ico">${q.icon}</span>
+      <span class="rpg-quest-name">${escapeHtml(q.name)} <b>${prog}/${q.need}</b></span>
+      ${claimed ? `<span class="rpg-quest-claimed">✓</span>` : done ? `<button class="btn btn-primary btn-sm" type="button" data-rpg-quest="${i}">Claim ${reward}</button>` : `<span class="rpg-quest-reward">${reward}</span>`}
+    </div>`;
+  }).join("");
+  return `<div class="section-label" style="margin-top:14px;">Daily quests · 🔥 streak ${s.count || 0}${s.freezes ? ` (🧊×${s.freezes})` : ""}</div>${rows}`;
+}
+function rpgCreditStreakDay() {
+  const day = advToday();
+  let s = rpgState.streak || { count: 0, best: 0, lastDay: null, freezes: 0, freezeProg: 0, dayMarks: 0, milestones: [] };
+  if (s.lastDay === day) return;
+  const yest = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
+  if (s.lastDay === yest || !s.lastDay) s.count = (s.lastDay ? s.count : 0) + 1;
+  else if (s.freezes > 0) { s.freezes--; s.count++; toast("🧊 Streak freeze used — your flame survives!", ""); }
+  else s.count = 1;
+  s.lastDay = day;
+  s.best = Math.max(s.best || 0, s.count);
+  s.milestones = s.milestones || [];
+  if (s.count >= 7 && !s.milestones.includes(7)) {
+    s.milestones.push(7);
+    rpgState.inventory.streak_sprite = 1;
+    toast("🔥 7-day practice streak — the Streak Sprite pet joins you!", "success");
+  }
+  if (s.count >= 30 && !s.milestones.includes(30)) {
+    s.milestones.push(30);
+    rpgState.auraGold = true;
+    toast("🔥 30-day streak — your hero now glows with a golden aura!", "success");
+  }
+  rpgState.streak = s;
+  toast(`🔥 Practice streak: ${s.count} day${s.count === 1 ? "" : "s"}!`, "success");
+}
+function rpgNoteStreakActivity(correct) {
+  if (!rpgState) return;
+  rpgEnsureDaily();
+  let s = rpgState.streak || { count: 0, best: 0, lastDay: null, freezes: 0, freezeProg: 0, dayMarks: 0, dayKey: null, milestones: [] };
+  if (s.dayKey !== advToday()) { s.dayKey = advToday(); s.dayMarks = 0; }
+  s.dayMarks = (s.dayMarks || 0) + 1;
+  if (correct) {
+    s.freezeProg = (s.freezeProg || 0) + 1;
+    if (s.freezeProg >= 15 && (s.freezes || 0) < 2) { s.freezeProg = 0; s.freezes = (s.freezes || 0) + 1; toast("🧊 Earned a streak freeze!", "success"); }
+  }
+  rpgState.streak = s;
+  if (s.dayMarks >= 3) rpgCreditStreakDay();
+}
 // ---- Lifecycle ----
 async function rpgInit() {
   if (!currentUser) return;
@@ -14860,6 +15468,9 @@ function rpgRolloverMonth() {
   rpgState.monthXp = 0;
 }
 function rpgApplyRewards(gold, xp) {
+  const learn = (rpgState && rpgState.star && rpgState.star.learn) || 0;
+  if (learn && xp > 0) xp = Math.round(xp * (1 + 0.05 * learn));
+  try { rpgRaidContribute(xp); } catch (_) {}
   const before = rpgLevelInfo().level;
   const goldPct = rpgPlayerStats().goldPct || 0;
   if (goldPct && gold > 0) gold = Math.round(gold * (1 + goldPct));
@@ -14873,7 +15484,7 @@ function rpgApplyRewards(gold, xp) {
   return { levelsGained: after - before, newLevel: after };
 }
 function rpgRollLoot(enemy) {
-  if (Math.random() > 0.45) return null;
+  if (Math.random() > 0.45 + rpgSurgeBonus("loot")) return null;
   const level = rpgLevelInfo().level;
   const pool = RPG_ITEMS.filter(it => it.price > 0 && !rpgState.inventory[it.id] &&
     RPG_RARITY[it.rarity].rank <= enemy.lootMax && it.levelReq <= level + 1);
@@ -14888,7 +15499,7 @@ function rpgBattleRound(credit) {
   const stats = rpgPlayerStats();
   battle.rounds = (battle.rounds || 0) + 1;
   if (credit > 0) {
-    let dmg = stats.atk * (0.9 + Math.random() * 0.35);
+    let dmg = stats.atk * (0.9 + Math.random() * 0.35) * (1 + rpgSurgeBonus("dmg"));
     let note = "";
     const wel = rpgWeaponElement(rpgState.equipment.weapon);
     if (RPG_COUNTERS[wel] === enemy.el) { dmg *= 1.25; note += ` — ${RPG_ELEMENTS[wel].icon} super effective!`; }
@@ -14901,8 +15512,12 @@ function rpgBattleRound(credit) {
     out.lines.push(`You strike <b>${escapeHtml(enemy.name)}</b> for <b>${dmg}</b> damage${note}.`);
     if (battle.enemyHp <= 0) {
       rpgState.stats.wins++;
+      try { rpgCreditKill(enemy.id); } catch (_) {}
       const loot = rpgRollLoot(enemy);
-      if (loot) rpgState.inventory[loot.id] = (rpgState.inventory[loot.id] || 0) + 1;
+      if (loot) {
+        if (!rpgState.inventory[loot.id]) rpgRollAffixes(loot, false);
+        rpgState.inventory[loot.id] = (rpgState.inventory[loot.id] || 0) + 1;
+      }
       out.victory = { gold: enemy.gold, xp: enemy.xp, loot, enemy };
       rpgState.battle = null;
       rpgState.hp = Math.min(stats.maxHp, rpgState.hp + Math.round(stats.maxHp * 0.3));
@@ -14926,6 +15541,51 @@ function rpgBattleRound(credit) {
   }
   return out;
 }
+// ---- Surge: every 3 correct answers in a row, pick 1 of 3 session boosts.
+// Session-only on purpose — skill earns power right now, missing a day costs nothing.
+let rpgSurge = { streak: 0, boosts: [] };
+const RPG_SURGE_POOL = [
+  { id: "gold", icon: "🪙", name: "Gold Rush", desc: "+15% gold this session", v: 0.15 },
+  { id: "xp", icon: "📚", name: "Insight", desc: "+10% XP this session", v: 0.1 },
+  { id: "dmg", icon: "⚔️", name: "Battle Fury", desc: "+12% battle damage this session", v: 0.12 },
+  { id: "loot", icon: "🎁", name: "Lucky Find", desc: "+10% loot drop chance this session", v: 0.1 },
+  { id: "heal", icon: "💚", name: "Second Wind", desc: "Restore 35% HP right now", v: 0.35 }
+];
+function rpgSurgeBonus(id) { return rpgSurge.boosts.filter(b => b.id === id).reduce((a, b) => a + b.v, 0); }
+function rpgSurgeNote(credit) {
+  rpgSurge.streak = credit >= 0.95 ? rpgSurge.streak + 1 : 0;
+  if (rpgSurge.streak > 0 && rpgSurge.streak % 3 === 0) rpgSurgeOffer();
+}
+function rpgSurgeOffer() {
+  if (!rpgState || rpgGameHidden() || $("rpgSurgeCard")) return;
+  const picks = RPG_SURGE_POOL.slice().sort(() => Math.random() - 0.5).slice(0, 3);
+  const wrap = document.createElement("div");
+  wrap.id = "rpgSurgeCard";
+  wrap.style.cssText = "position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,0.55);";
+  wrap.innerHTML = `<div style="background:#fff;border-radius:14px;padding:18px 20px;max-width:420px;width:92%;box-shadow:0 18px 50px rgba(0,0,0,0.3);">
+      <h4 style="margin:0 0 4px;">🔥 SURGE! ${rpgSurge.streak} correct in a row</h4>
+      <p class="hint" style="margin:0 0 12px;">Your focus is on fire — choose one boost:</p>
+      <div style="display:grid;gap:8px;">${picks.map((s, i) =>
+        `<button class="btn btn-ghost" type="button" data-surge="${i}" style="justify-content:flex-start;text-align:left;">
+          <b>${s.icon} ${s.name}</b>&nbsp;— ${s.desc}</button>`).join("")}</div>
+      <button class="btn btn-ghost btn-sm" type="button" data-surge-skip style="margin-top:10px;">Skip</button>
+    </div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener("click", e => {
+    if (e.target.closest("[data-surge-skip]")) { wrap.remove(); return; }
+    const b = e.target.closest("[data-surge]");
+    if (!b) return;
+    const s = picks[Number(b.dataset.surge)];
+    if (s.id === "heal") {
+      const max = rpgPlayerStats().maxHp;
+      rpgState.hp = Math.min(max, (rpgState.hp || 0) + Math.round(max * s.v));
+      rpgSave();
+      rpgRenderBattle();
+    } else rpgSurge.boosts.push(s);
+    toast(`🔥 Surge: ${s.name}!`, "success");
+    wrap.remove();
+  });
+}
 // Hook called from recordCerPerformance after EVERY AI-marked question:
 // score / total is the marked result for the whole question.
 function rpgOnMarked(q, score, total, opts = {}) {
@@ -14936,12 +15596,18 @@ function rpgOnMarked(q, score, total, opts = {}) {
   const seen = rpgState.seenQ || (rpgState.seenQ = {});
   const repeatAttempt = !opts.simulated && qid && (seen[qid] || 0) > 0;
   if (!opts.simulated && qid) seen[qid] = (seen[qid] || 0) + 1;
-  let gold = Math.round((5 + diff / 120) * credit);
+  let gold = Math.round((6 + diff / 100) * credit);
   let xp = Math.round((16 + diff / 45) * credit);
   if (credit <= 0) { gold = 0; xp = 3; } // effort XP — progress never stalls completely
   if (repeatAttempt) { gold = Math.round(gold * 0.4); xp = Math.round(xp * 0.5); }
+  if (gold > 0 && rpgSurgeBonus("gold")) gold = Math.round(gold * (1 + rpgSurgeBonus("gold")));
+  if (xp > 0 && rpgSurgeBonus("xp")) xp = Math.round(xp * (1 + rpgSurgeBonus("xp")));
   rpgState.stats.marked++;
   if (credit >= 0.95) rpgState.stats.correct++;
+  if (!opts.simulated) {
+    try { rpgNoteStreakActivity(credit >= 0.95); } catch (_) {}
+    try { rpgSurgeNote(credit); } catch (_) {}
+  }
 
   const round = rpgState.battle ? rpgBattleRound(credit) : null;
   if (round && round.victory) { gold += round.victory.gold; xp += round.victory.xp; }
@@ -15152,7 +15818,7 @@ function rpgLootCardHtml(loot) {
   return `<div class="rpg-loot-card" style="--rar:${rar.color};">
     <div class="rpg-item-art t-${loot.rarity}">${rpgItemIconSvg(loot)}</div>
     <div><div class="rpg-item-rarity" style="--rar:${rar.color};">${rar.label} drop!</div>
-    <div class="rpg-item-name">${escapeHtml(loot.name)}</div>
+    <div class="rpg-item-name">${escapeHtml(rpgDisplayName(loot))}</div>
     <div class="rpg-item-stats">${escapeHtml(rpgStatLine(loot))} — added to your inventory</div></div>
   </div>`;
 }
@@ -15205,7 +15871,7 @@ function rpgRenderCharacterPage() {
     <div class="rpg-stat-chip"><b>${stats.def}</b><span>🛡️ Defence</span></div>
     <div class="rpg-stat-chip"><b>${stats.crit}%</b><span>✨ Crit</span></div>
     <div class="rpg-stat-chip"><b>${rpgState.gold}</b><span>🪙 Gold</span></div>` +
-    (setsHtml ? `<div class="rpg-set-row">${setsHtml}</div>` : "");
+    (setsHtml ? `<div class="rpg-set-row">${setsHtml}</div>` : "") + rpgQuestsHtml();
   $("rpgEquipRow").innerHTML = RPG_SLOTS.map(slot => {
     const it = RPG_ITEMS_BY_ID[rpgState.equipment[slot]];
     const meta = RPG_SLOT_META[slot];
@@ -15241,10 +15907,13 @@ function rpgItemCardHtml(it, mode) {
       ? `<button class="btn btn-ghost" type="button" data-rpg-unequip="${it.slot}">Unequip</button>`
       : locked
         ? `<button class="btn btn-ghost" type="button" disabled>Needs Lv ${it.levelReq}</button>`
-        : `<button class="btn btn-primary" type="button" data-rpg-equip="${it.id}">Equip</button>`;
+        : !rpgClassCanEquip(it)
+          ? `<button class="btn btn-ghost" type="button" disabled>🚫 ${RPG_CLASSES[rpgState.clazz].name}</button>`
+          : `<button class="btn btn-primary" type="button" data-rpg-equip="${it.id}">Equip</button>`;
     action += up >= RPG_UPGRADE_MAX
       ? `<button class="btn btn-ghost" type="button" disabled>⚒️ MAX</button>`
       : `<button class="btn btn-ghost" type="button" data-rpg-upgrade="${it.id}" ${rpgState.gold < rpgUpgradeCost(it) ? "disabled" : ""} title="+8% to all stats per upgrade level">⚒️ +${up + 1} · 🪙 ${rpgUpgradeCost(it)}</button>`;
+    action += `<button class="btn btn-ghost" type="button" data-rpg-reroll="${it.id}" ${rpgState.gold < rpgRerollCost(it) ? "disabled" : ""} title="Reroll this item's magic prefix/suffix">🔮 🪙 ${rpgRerollCost(it)}</button>`;
   } else if (mode === "showcase") {
     action = owned
       ? `<button class="btn btn-ghost" type="button" disabled>Owned ✓</button>`
@@ -15258,8 +15927,8 @@ function rpgItemCardHtml(it, mode) {
     ${equipped ? `<span class="rpg-item-badge">Equipped</span>` : (mode === "shop" && owned ? `<span class="rpg-item-badge">Owned</span>` : "")}
     <div class="rpg-item-art t-${it.rarity}">${rpgItemIconSvg(it)}</div>
     <div class="rpg-item-rarity">${rar.label} · ${RPG_SLOT_META[it.slot].label}${el !== "neutral" ? ` · ${RPG_ELEMENTS[el].icon}` : ""}</div>
-    <div class="rpg-item-name">${escapeHtml(it.name)}${up ? ` <span class="rpg-item-up">+${up}</span>` : ""}</div>
-    <div class="rpg-item-stats">${escapeHtml(rpgStatLine(it))}${RPG_SKILLS[it.id] ? `<div class="rpg-item-skill">${RPG_SKILLS[it.id].icon} ${escapeHtml(RPG_SKILLS[it.id].name)} · ${RPG_SKILLS[it.id].cd}s</div>` : ""}${setOf ? `<div class="rpg-item-setline" title="${escapeHtml(setOf.name)} (${setOf.need} pieces): ${escapeHtml(setOf.text)}">${setOf.icon} ${escapeHtml(setOf.name)} ${setCount}/${setOf.need}</div>` : ""}${it.classBonus ? `<div class="rpg-item-setline">${RPG_CLASSES[it.classBonus.clazz].icon} ${RPG_CLASSES[it.classBonus.clazz].name} synergy${rpgState.clazz === it.classBonus.clazz ? " ✓" : ""}</div>` : ""}${rpgCompareHtml(it)}${locked ? `<div class="rpg-item-req">Requires Lv ${it.levelReq}</div>` : ""}</div>
+    <div class="rpg-item-name">${escapeHtml(rpgDisplayName(it))}${up ? ` <span class="rpg-item-up">+${up}</span>` : ""}</div>
+    <div class="rpg-item-stats">${escapeHtml(rpgStatLine(it))}${RPG_SKILLS[it.id] ? `<div class="rpg-item-skill">${RPG_SKILLS[it.id].icon} ${escapeHtml(RPG_SKILLS[it.id].name)} · ${RPG_SKILLS[it.id].cd}s</div>` : ""}${it.slot === "pet" && rpgPetStage(it) ? `<div class="rpg-item-setline">⭐ Stage ${rpgPetStage(it) + 1}${rpgPetBondPct(it.id) ? ` · Bond +${rpgPetBondPct(it.id)}%` : ""}</div>` : ""}${setOf ? `<div class="rpg-item-setline" title="${escapeHtml(setOf.name)} (${setOf.need} pieces): ${escapeHtml(setOf.text)}">${setOf.icon} ${escapeHtml(setOf.name)} ${setCount}/${setOf.need}</div>` : ""}${it.classBonus ? `<div class="rpg-item-setline">${RPG_CLASSES[it.classBonus.clazz].icon} ${RPG_CLASSES[it.classBonus.clazz].name} synergy${rpgState.clazz === it.classBonus.clazz ? " ✓" : ""}</div>` : ""}${rpgCompareHtml(it)}${!rpgClassCanEquip(it) ? `<div class="rpg-item-req">${rpgClassEquipNote(it)}</div>` : ""}${locked ? `<div class="rpg-item-req">Requires Lv ${it.levelReq}</div>` : ""}</div>
     ${action}
   </div>`;
 }
@@ -15277,6 +15946,10 @@ function rpgRenderTab() {
     body.innerHTML = rpgSkillsTabHtml();
     return;
   }
+  if (rpgCharTab === "codex") {
+    body.innerHTML = rpgCodexTabHtml();
+    return;
+  }
   if (rpgCharTab === "packs") {
     body.innerHTML = goldRow + rpgPacksTabHtml();
     return;
@@ -15292,7 +15965,7 @@ function rpgRenderTab() {
     body.innerHTML = goldRow + rpgShopFilterHtml() + `<div class="rpg-grid">${sorted.map(it => rpgItemCardHtml(it, "shop")).join("")}</div>`;
   }
 }
-const RPG_PACK_COST = 300;
+const RPG_PACK_COST = 275;
 const RPG_PACK_RATES = [["mythic", 1], ["legendary", 5], ["epic", 10], ["rare", 22], ["uncommon", 27], ["common", 35]];
 let rpgPackToken = 0;
 function rpgSkillsTabHtml() {
@@ -15309,38 +15982,69 @@ function rpgSkillsTabHtml() {
   const c = RPG_CLASSES[rpgState.clazz];
   const level = rpgLevelInfo().level;
   const nodes = RPG_TREE[rpgState.clazz];
-  const cols = [[], [], []];
-  nodes.forEach(n => cols[n.br].push(n));
-  const colHtml = cols.map(list => `<div class="sk-col">` + list.sort((a, b) => a.lvl - b.lvl).map(n => {
+  const chosen = rpgPathOf(rpgState.clazz);
+  const nodeHtml = n => {
     const r = rpgSkillRank(n.id);
-    const reqOk = !n.req || rpgSkillRank(n.req) > 0;
+    const reqs = n.req ? [].concat(n.req) : [];
+    const reqOk = !reqs.length || reqs.some(rid => rpgSkillRank(rid) > 0);
     const lvlOk = level >= n.lvl;
-    const state = r >= n.max ? "maxed" : (reqOk && lvlOk && rpgSkillPoints() > 0 ? "avail" : "locked");
+    const pathLocked = n.path && chosen && chosen !== n.path;
+    const rivLocked = n.riv && r === 0 && rpgSkillRank(n.riv) > 0;
+    const state = pathLocked || rivLocked ? "sealed" : r >= n.max ? "maxed" : (reqOk && lvlOk && rpgSkillPoints() > 0 ? "avail" : "locked");
     const eff = n.p ? rpgPassiveDesc(n.p) : advSkillDesc(rpgTreeActiveDef(Object.assign({}, n)));
-    const tip = `${n.name} (${r}/${n.max}) — ${eff}. Requires level ${n.lvl}${n.req ? ` and ${RPG_TREE_BY_ID[n.req].name}` : ""}.`;
-    return `<div class="sk-node ${state}" data-rpg-skill="${n.id}" title="${escapeHtml(tip)}">
+    const tip = pathLocked
+      ? `${n.name} — sealed: you walk the ${RPG_PATH_NAMES[rpgState.clazz][chosen - 1]} path.`
+      : rivLocked
+      ? `${n.name} — sealed: you chose ${RPG_TREE_BY_ID[n.riv].name} for this tier.`
+      : `${n.name} (${r}/${n.max}) — ${eff}. Requires level ${n.lvl}${reqs.length ? ` and ${reqs.map(rid => RPG_TREE_BY_ID[rid].name).join(" or ")}` : ""}.${n.riv ? ` CHOICE: rival of ${RPG_TREE_BY_ID[n.riv].name}.` : ""}${n.ks ? " KEYSTONE: power at a price!" : ""}`;
+    return `<div class="sk-node ${state}${n.ks ? " sk-ks" : ""}${n.lvl >= 90 ? " sk-cap" : ""}" data-rpg-skill="${n.id}" title="${escapeHtml(tip)}">
       <span class="sk-ico">${n.icon}</span>
       <span class="sk-rank">${r}/${n.max}</span>
       <span class="sk-name">${escapeHtml(n.name)}</span>
-      <span class="sk-lvl">Lv ${n.lvl}${n.a ? " · AUTO" : ""}</span>
+      <span class="sk-lvl">${n.ks ? "KEYSTONE" : n.lvl >= 90 ? "CAPSTONE" : `Lv ${n.lvl}`}${n.a ? " · AUTO" : ""}</span>
     </div>`;
-  }).join("") + `</div>`).join("");
+  };
+  const base = nodes.filter(n => !n.path).sort((a, b) => a.lvl - b.lvl);
+  const pathCols = [1, 2, 3].map(p => {
+    const list = nodes.filter(n => n.path === p).sort((a, b) => a.lvl - b.lvl);
+    const name = RPG_PATH_NAMES[rpgState.clazz][p - 1];
+    const head = chosen === p ? `<div class="sk-path-head on">🛤️ ${name} — YOUR PATH</div>`
+      : chosen ? `<div class="sk-path-head off">🔒 ${name}</div>`
+      : `<div class="sk-path-head">${name}</div>`;
+    // rival skills render side by side as a "pick one" tier
+    const seen = new Set();
+    const rows = list.map(n => {
+      if (seen.has(n.id)) return "";
+      seen.add(n.id);
+      const rv = n.riv && list.find(m => m.id === n.riv && !seen.has(m.id));
+      if (!rv) return nodeHtml(n);
+      seen.add(rv.id);
+      return `<div class="sk-pair">${nodeHtml(n)}<span class="sk-or">or</span>${nodeHtml(rv)}</div>`;
+    }).join("");
+    return `<div class="sk-col ${chosen && chosen !== p ? "sealed-col" : ""}">${head}${rows}</div>`;
+  }).join("");
+  const earned = rpgSkillPointsEarned();
   return `<div class="sk-head">
       <span class="chip">${c.icon} ${c.name}</span>
-      <span class="chip topic">✦ ${rpgSkillPoints()} skill point${rpgSkillPoints() === 1 ? "" : "s"}</span>
+      <span class="chip topic">✦ ${rpgSkillPoints()} of ${earned} point${earned === 1 ? "" : "s"} free</span>
+      ${chosen ? `<span class="chip" style="background:var(--accent-orange-light);color:#9a5a13;">🛤️ ${RPG_PATH_NAMES[rpgState.clazz][chosen - 1]}</span>` : `<span class="chip" style="background:var(--accent-red-light);color:var(--accent-red);">Choose ONE path — the others lock!</span>`}
       <span style="flex:1;"></span>
       <button class="btn btn-ghost btn-sm" type="button" data-rpg-skillreset>↩️ Refund points</button>
       <button class="btn btn-ghost btn-sm" type="button" data-rpg-classreset>🔄 Change class</button>
     </div>
-    <div class="sk-tree">${colHtml}</div>
-    <p class="hint" style="margin-top:10px;">1 point per level (max 99). Click a glowing skill to learn it — AUTO skills cast themselves in the dungeon.</p>`;
+    <div class="section-label">Core training (always open)</div>
+    <div class="sk-base">${base.map(nodeHtml).join("")}</div>
+    <div class="section-label" style="margin-top:12px;">Specialisation paths — pick one, live with it</div>
+    <div class="sk-tree">${pathCols}</div>
+    ${rpgStarShopHtml()}
+    <p class="hint" style="margin-top:10px;">Points are scarce: 1 per level to 30, then 1 every 2 levels. Every tier on your path is a CHOICE — pick one of two rival skills and the other seals. Keystones trade a weakness for great power. Refunding is free and unseals your tier choices (but not your path until you re-choose).</p>`;
 }
 function rpgPacksTabHtml() {
   const mythics = RPG_ITEMS.filter(it => it.rarity === "mythic");
   return `<div class="pack-shop">
     <div class="pack-hero"><span class="pack-hero-box">🎁</span>
       <div><h4>Booster Pack</h4><p>One random item from the entire armoury — and the <b class="pack-mythic-text">only</b> way to get Mythic gear.</p>
-      <button class="btn btn-primary" type="button" data-rpg-pack ${rpgState.gold < RPG_PACK_COST ? "disabled" : ""}>Open pack · 🪙 ${RPG_PACK_COST}</button></div>
+      <button class="btn btn-primary" type="button" data-rpg-pack ${rpgState.gold < rpgPackPrice() ? "disabled" : ""}>Open pack · 🪙 ${rpgPackPrice()}${rpgState.packCoupon ? " (½ price!)" : ""}</button></div>
     </div>
     <div class="pack-rates">${RPG_PACK_RATES.map(([r, p]) => `<span class="pack-rate" style="border-color:${RPG_RARITY[r].color};color:${RPG_RARITY[r].color};">${RPG_RARITY[r].label} ${p}%</span>`).join("")}<span class="pack-rate">Duplicates refund gold</span></div>
     <div class="section-label" style="margin-top:16px;">Mythic treasures</div>
@@ -15353,17 +16057,20 @@ function rpgRollPackRarity() {
   for (const [rar, p] of RPG_PACK_RATES) { acc += p; if (roll < acc) return rar; }
   return "common";
 }
+function rpgPackPrice() { return rpgState && rpgState.packCoupon ? Math.round(RPG_PACK_COST / 2) : RPG_PACK_COST; }
 function rpgOpenPack() {
   if (!rpgState) return;
-  if (rpgState.gold < RPG_PACK_COST) { toast(`A pack costs 🪙 ${RPG_PACK_COST} — solve more questions!`, "error"); return; }
-  rpgState.gold -= RPG_PACK_COST;
+  const price = rpgPackPrice();
+  if (rpgState.gold < price) { toast(`A pack costs 🪙 ${price} — solve more questions!`, "error"); return; }
+  rpgState.gold -= price;
+  if (rpgState.packCoupon) { rpgState.packCoupon = 0; toast("🎟️ Half-price coupon used!", ""); }
   const rarity = rpgRollPackRarity();
   const pool = RPG_ITEMS.filter(it => it.rarity === rarity && (it.packOnly || it.price > 0));
   const it = pool[Math.floor(Math.random() * pool.length)];
   const dup = !!rpgState.inventory[it.id];
   let refund = 0;
   if (dup) { refund = Math.max(30, Math.round((it.price || 1500) * 0.4)); rpgState.gold += refund; }
-  else rpgState.inventory[it.id] = 1;
+  else { rpgState.inventory[it.id] = 1; rpgRollAffixes(it, true); }
   rpgState.stats.packsOpened = (rpgState.stats.packsOpened || 0) + 1;
   rpgSave();
   rpgPublishLeaderboard();
@@ -15385,7 +16092,7 @@ function rpgPackReveal(it, dup, refund) {
     <div class="pack-reveal">
       <div class="pack-rarity ${mythic ? "pack-mythic-text" : ""}" style="${mythic ? "" : `color:${rar.color};`}">${mythic ? "✦ MYTHIC ✦" : rar.label}</div>
       <div class="pack-item-art t-${it.rarity}">${rpgItemIconSvg(it)}</div>
-      <div class="pack-name">${escapeHtml(it.name)}</div>
+      <div class="pack-name">${escapeHtml(rpgDisplayName(it))}</div>
       <div class="pack-sub">${escapeHtml(rpgStatLine(it))}${RPG_SKILLS[it.id] ? ` · ${RPG_SKILLS[it.id].icon} ${escapeHtml(RPG_SKILLS[it.id].name)}` : ""}</div>
       <div class="pack-sub">${dup ? `Duplicate — refunded <b>🪙 ${refund}</b>` : "✨ Added to your inventory!"}</div>
     </div>
@@ -15412,8 +16119,8 @@ function rpgPackReveal(it, dup, refund) {
   const again = $("rpgPackAgain");
   if (again) {
     again.style.display = "";
-    again.disabled = rpgState.gold < RPG_PACK_COST;
-    again.textContent = `Open another · 🪙 ${RPG_PACK_COST}`;
+    again.disabled = rpgState.gold < rpgPackPrice();
+    again.textContent = `Open another · 🪙 ${rpgPackPrice()}`;
   }
   if (document.querySelector("#page-character.active")) rpgRenderCharacterPage();
   toast(dup ? `Duplicate ${it.name} → +🪙 ${refund}` : `${rar.label} pull: ${it.name}!`, rank >= 5 ? "success" : "");
@@ -15421,7 +16128,8 @@ function rpgPackReveal(it, dup, refund) {
 function rpgEquip(itemId) {
   const it = RPG_ITEMS_BY_ID[itemId];
   if (!it || !rpgState.inventory[itemId]) return;
-  if (it.levelReq > rpgLevelInfo().level) { toast(`Reach Lv ${it.levelReq} to equip ${it.name}`, "error"); return; }
+  if (it.levelReq > rpgLevelInfo().level && !(rpgState.rebirths > 0)) { toast(`Reach Lv ${it.levelReq} to equip ${it.name}`, "error"); return; }
+  if (!rpgClassCanEquip(it)) { toast(rpgClassEquipNote(it), "error"); return; }
   rpgState.equipment[it.slot] = itemId;
   rpgState.hp = Math.min(rpgState.hp, rpgPlayerStats().maxHp);
   rpgSave();
@@ -15474,11 +16182,54 @@ function rpgPublishLeaderboard() {
       lastMonthKey: rpgState.lastMonthKey || null,
       wins: (rpgState.stats && rpgState.stats.wins) || 0,
       bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
+      arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0,
+      rebirths: rpgState.rebirths || 0,
+      house: rpgHouseOf(currentUser.uid).id,
       clazz: rpgState.clazz || null,
       equipment: rpgState.equipment,
       updatedAt: new Date().toISOString()
     }).catch(e => console.warn("leaderboard publish", e));
   }, 1200);
+}
+// ---- Class raid boss: one shared weekly HP pool the whole class chips away ----
+const RAID_MAX_HP = 20000, RAID_BOUNTY = 250;
+function rpgRaidWeek() { return "W" + Math.floor(Date.now() / 604800000); }
+let rpgRaidPending = 0, rpgRaidTimer = null, rpgRaidCache = null;
+function rpgRaidContribute(points) {
+  if (!points || !currentUser || RPG_STORAGE_MODE !== "firestore" || currentUser.role !== "student") return;
+  rpgRaidPending += Math.round(points);
+  clearTimeout(rpgRaidTimer);
+  rpgRaidTimer = setTimeout(() => {
+    const pts = rpgRaidPending;
+    rpgRaidPending = 0;
+    setDoc(doc(db, "scienceRaidBoss", "current"), { weekKey: rpgRaidWeek(), maxHp: RAID_MAX_HP, name: "Ancient Science Devourer", emoji: "🐲", dealt: increment(pts) }, { merge: true })
+      .catch(e => console.warn("raid", e));
+  }, 4000);
+}
+async function rpgRaidHtml() {
+  if (RPG_STORAGE_MODE !== "firestore") return "";
+  try {
+    const snap = await getDoc(doc(db, "scienceRaidBoss", "current"));
+    let d = snap.exists() ? snap.data() : null;
+    if (!d || d.weekKey !== rpgRaidWeek()) {
+      d = { weekKey: rpgRaidWeek(), maxHp: RAID_MAX_HP, dealt: 0, name: "Ancient Science Devourer", emoji: "🐲" };
+      setDoc(doc(db, "scienceRaidBoss", "current"), d).catch(() => {});
+    }
+    rpgRaidCache = d;
+    const left = Math.max(0, (d.maxHp || RAID_MAX_HP) - (d.dealt || 0));
+    const pct = Math.round(left / (d.maxHp || RAID_MAX_HP) * 100);
+    const dead = left <= 0;
+    const claimed = rpgState && rpgState.raidClaim === rpgRaidWeek();
+    return `<div class="rpg-raid">
+      <span class="rpg-raid-boss">${d.emoji || "🐲"}</span>
+      <div class="rpg-raid-main">
+        <div class="rpg-raid-name">${escapeHtml(d.name || "Raid Boss")} — <b>class raid</b> ${dead ? "· DEFEATED! 🎉" : ""}</div>
+        <div class="rpg-bar light"><div class="rpg-bar-fill hp" style="width:${pct}%;"></div><div class="rpg-bar-label">${left} / ${d.maxHp}</div></div>
+        <div class="rpg-raid-sub">Every XP your class earns is damage. New boss every week.</div>
+      </div>
+      ${dead && !claimed && rpgState ? `<button class="btn btn-primary btn-sm" type="button" data-rpg-raidclaim>🎁 Claim 🪙 ${RAID_BOUNTY}</button>` : ""}
+    </div>`;
+  } catch (e) { console.warn("raid load", e); return ""; }
 }
 let rpgBoardTab = "month";
 let rpgBoardRows = null;
@@ -15518,6 +16269,7 @@ async function rpgRenderLeaderboard(force = false) {
   if (!body) return;
   document.querySelectorAll("[data-rpgboard]").forEach(b => b.classList.toggle("active", b.dataset.rpgboard === rpgBoardTab));
   if (!rpgBoardRows) body.innerHTML = `<div class="empty-note">Loading leaderboard…</div>`;
+  rpgRaidHtml().then(h => { const el = $("rpgRaidSlot"); if (el) el.innerHTML = h; });
   const fetched = await rpgFetchLeaderboard(force);
   if (fetched === null) {
     body.innerHTML = `<div class="empty-note">Couldn't load the leaderboard. Ensure your Firestore rules let signed-in users read the <b>scienceGameLeaderboard</b> collection.</div>`;
@@ -15532,6 +16284,8 @@ async function rpgRenderLeaderboard(force = false) {
       monthXp: rpgState.monthXp || 0, monthKey: rpgState.monthKey || rpgMonthKey(),
       lastMonthXp: rpgState.lastMonthXp || 0, lastMonthKey: rpgState.lastMonthKey || null,
       wins: (rpgState.stats && rpgState.stats.wins) || 0, bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
+      arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0, rebirths: rpgState.rebirths || 0,
+      house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null,
       equipment: rpgState.equipment,
       updatedAt: new Date().toISOString()
     };
@@ -15550,7 +16304,16 @@ async function rpgRenderLeaderboard(force = false) {
   }
   const myUid = currentUser && currentUser.uid;
   const label = rpgBoardTab === "month" ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : "all-time";
-  body.innerHTML = list.slice(0, 50).map((r, i) => {
+  // house race: this month's XP summed by house
+  let houseBar = "";
+  if (rpgBoardTab === "month") {
+    const tot = {};
+    rows.forEach(r => { const h = r.house || rpgHouseOf(r.uid).id; tot[h] = (tot[h] || 0) + (r.monthKey === rpgMonthKey() ? r.monthXp || 0 : 0); });
+    const maxT = Math.max(1, ...RPG_HOUSES.map(h => tot[h.id] || 0));
+    houseBar = `<div class="rpg-houses">` + RPG_HOUSES.map(h =>
+      `<div class="rpg-house-row"><span>${h.icon} ${h.name}</span><div class="rpg-house-bar"><div style="width:${Math.round((tot[h.id] || 0) / maxT * 100)}%;background:${h.color};"></div></div><b>${tot[h.id] || 0}</b></div>`).join("") + `</div>`;
+  }
+  body.innerHTML = houseBar + list.slice(0, 50).map((r, i) => {
     const rank = i + 1;
     const me = r.uid === myUid;
     const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : rank;
@@ -15558,10 +16321,11 @@ async function rpgRenderLeaderboard(force = false) {
       <div class="rpg-board-rank">${medal}</div>
       <div class="rpg-board-ava">${rpgAvatarSvg(r.equipment || {})}</div>
       <div class="rpg-board-main">
-        <div class="rpg-board-name">${r.clazz && RPG_CLASSES[r.clazz] ? RPG_CLASSES[r.clazz].icon + " " : ""}${escapeHtml(r.name)}${me ? `<span class="rpg-you-tag">You</span>` : ""}</div>
-        <div class="rpg-board-meta">Lv ${r.level || 1} · ${r.wins || 0} battles won${r.bestFloor ? ` · 🏰 F${r.bestFloor}` : ""}</div>
+        <div class="rpg-board-name">${r.clazz && RPG_CLASSES[r.clazz] ? RPG_CLASSES[r.clazz].icon + " " : ""}${escapeHtml(r.name)}${r.rebirths ? ` <span class="rpg-item-up" title="Starfall rebirths">R${r.rebirths}</span>` : ""}${me ? `<span class="rpg-you-tag">You</span>` : ""}</div>
+        <div class="rpg-board-meta">${(RPG_HOUSES.find(h => h.id === (r.house || rpgHouseOf(r.uid).id)) || RPG_HOUSES[0]).icon} Lv ${r.level || 1} · ${r.wins || 0} battles won${r.bestFloor ? ` · 🏰 F${r.bestFloor}` : ""}${r.arenaWins ? ` · ⚔️ ${r.arenaWins}W` : ""}</div>
       </div>
       ${rpgPrizeBadge(rank)}
+      ${!me && r.equipment && currentUser && currentUser.role === "student" ? `<button class="btn btn-ghost btn-sm" type="button" data-rpg-duel="${escapeHtml(r.uid)}">⚔️ Duel</button>` : ""}
       <div class="rpg-board-xp">${r.shownXp} XP<span>${label}</span></div>
     </div>`;
   }).join("");
@@ -15581,7 +16345,7 @@ function advRunsUsed() {
   const r = rpgState && rpgState.advRuns;
   return r && r.day === advToday() ? (r.used || 0) : 0;
 }
-function advRunsLeft() { return Math.max(0, ADV_MAX_RUNS - advRunsUsed()); }
+function advRunsLeft() { return Math.max(0, ADV_MAX_RUNS + ((rpgState && rpgState.star && rpgState.star.raids) || 0) - advRunsUsed()); }
 function advAfter(ms, fn) {
   const t = advToken;
   setTimeout(() => { if (adv && advToken === t) fn(); }, ms);
@@ -15591,6 +16355,7 @@ function rpgWeaponFx(itemId) {
   const id = String(itemId || "");
   let kind = "slash";
   if (!id) kind = "punch";
+  else if (/bow|piercer/.test(id)) kind = "ranged";
   else if (/staff|wand|scepter|crook/.test(id)) kind = "magic";
   else if (/axe|hammer|scythe/.test(id)) kind = "chop";
   else if (/spear|trident|halberd/.test(id)) kind = "thrust";
@@ -15626,12 +16391,12 @@ const RPG_SKILLS = {
   ember_staff:         { name: "Fireball", icon: "🔥", cd: 8, kind: "hit", mult: 1.7, burn: true },
   sprout_staff:        { name: "Regrowth", icon: "💚", cd: 10, kind: "heal", pct: 0.18 },
   arcane_staff:        { name: "Arcane Barrage", icon: "💫", cd: 9, kind: "multi", mult: 0.9, hits: 3 },
-  glacier_staff:       { name: "Blizzard", icon: "❄️", cd: 11, kind: "aoe", mult: 1.2, chill: true },
+  glacier_staff:       { name: "Blizzard", icon: "❄️", cd: 11, kind: "aoe", mult: 1.2, chill: true, vfx: "shower" },
   rune_staff:          { name: "Rune Detonation", icon: "🟩", cd: 10, kind: "aoe", mult: 1.5 },
   crystal_staff:       { name: "Prism Beam", icon: "🔷", cd: 9, kind: "pierce", mult: 2.4 },
   void_staff:          { name: "Void Drain", icon: "🌀", cd: 10, kind: "hit", mult: 2.0, lifesteal: 0.5 },
   royal_crook:         { name: "King's Blessing", icon: "👑", cd: 12, kind: "heal", pct: 0.22 },
-  sun_scepter:         { name: "Solar Flare", icon: "☀️", cd: 11, kind: "aoe", mult: 1.6, burn: true },
+  sun_scepter:         { name: "Solar Flare", icon: "☀️", cd: 11, kind: "aoe", mult: 1.6, burn: true, vfx: "sky" },
   star_wand:           { name: "Star Bolt", icon: "⭐", cd: 7, kind: "chain", mult: 1.3, jumps: 1 },
   comet_wand:          { name: "Comet Crash", icon: "☄️", cd: 10, kind: "chain", mult: 1.6, jumps: 2 },
   soldier_spear:       { name: "Skewer", icon: "🎯", cd: 7, kind: "pierce", mult: 2.0 },
@@ -15650,16 +16415,31 @@ const RPG_SKILLS = {
   storm_chick:         { name: "Mini Bolt", icon: "⚡", cd: 9, kind: "chain", mult: 1.1, jumps: 2 },
   owl_familiar:        { name: "Night Swoop", icon: "🦉", cd: 8, kind: "pierce", mult: 1.3 },
   star_unicorn:        { name: "Starlight Heal", icon: "🌟", cd: 10, kind: "heal", pct: 0.15 },
-  pocket_dragon:       { name: "Dragonfire", icon: "🔥", cd: 10, kind: "aoe", mult: 1.0, burn: true },
+  pocket_dragon:       { name: "Dragonfire", icon: "🔥", cd: 10, kind: "aoe", mult: 1.0, burn: true, vfx: "shower" },
+  streak_sprite:       { name: "Kindled Spirit", icon: "🔥", cd: 9, kind: "hit", mult: 1.0, burn: true },
+  nova_dragon:         { name: "Supernova", icon: "🌟", cd: 11, kind: "aoe", mult: 1.4, element: "holy", vfx: "sky" },
   worldender:          { name: "Apocalypse", icon: "🌋", cd: 12, kind: "aoe", mult: 2.2, burn: true, stun: true },
   staff_of_creation:   { name: "Big Bang", icon: "💥", cd: 12, kind: "chain", mult: 2.0, jumps: 3, healPct: 0.1 },
   eclipse_reaper:      { name: "Eclipse", icon: "🌒", cd: 12, kind: "aoe", mult: 1.9, lifesteal: 0.4 },
-  eternal_phoenix:     { name: "Rebirth", icon: "🔥", cd: 14, kind: "aoe", mult: 1.2, burn: true, healPct: 0.2 }
+  eternal_phoenix:     { name: "Rebirth", icon: "🔥", cd: 14, kind: "aoe", mult: 1.2, burn: true, healPct: 0.2, vfx: "shower" },
+  shortbow:            { name: "Double Shot", icon: "🏹", cd: 7, kind: "volley", mult: 1.0, hits: 2 },
+  longbow:             { name: "Power Shot", icon: "🎯", cd: 8, kind: "pierce", mult: 2.0 },
+  elven_bow:           { name: "Arrow Rain", icon: "🏹", cd: 10, kind: "volley", mult: 0.8, hits: 5, poison: true },
+  shadow_bow:          { name: "Shadow Volley", icon: "🌑", cd: 9, kind: "volley", mult: 0.9, hits: 3, poison: true },
+  frostfang_bow:       { name: "Glacial Volley", icon: "❄️", cd: 10, kind: "volley", mult: 0.9, hits: 4, chill: true },
+  stormpiercer:        { name: "Lightning Barrage", icon: "⚡", cd: 11, kind: "volley", mult: 0.85, hits: 6 },
+  ember_dagger:        { name: "Cinder Stab", icon: "🔥", cd: 8, kind: "hit", mult: 1.5, burn: true },
+  glacier_spear:       { name: "Frost Skewer", icon: "❄️", cd: 8, kind: "pierce", mult: 1.8, chill: true },
+  elven_rapier:        { name: "Thorn Flurry", icon: "🍃", cd: 8, kind: "multi", mult: 1.1, hits: 2, poison: true },
+  sunblade:            { name: "Radiant Slash", icon: "✨", cd: 9, kind: "hit", mult: 1.9, healPct: 0.05 },
+  obsidian_axe:        { name: "Umbral Chop", icon: "🌀", cd: 10, kind: "aoe", mult: 1.5, lifesteal: 0.25 },
+  starfall_katana:     { name: "Star Slash", icon: "⭐", cd: 8, kind: "multi", mult: 1.1, hits: 2 }
 };
 function advSkillDesc(d) {
   const bits = [];
   if (d.kind === "hit") bits.push(`strikes for ${Math.round(d.mult * 100)}% damage`);
   if (d.kind === "multi") bits.push(`${d.hits} quick strikes of ${Math.round(d.mult * 100)}%`);
+  if (d.kind === "volley") bits.push(`fires ${d.hits} arrows of ${Math.round(d.mult * 100)}% at random enemies (some may miss)`);
   if (d.kind === "aoe") bits.push(`hits ALL enemies for ${Math.round(d.mult * 100)}%`);
   if (d.kind === "chain") bits.push(`chain lightning across ${d.jumps + 1} enemies`);
   if (d.kind === "pierce") bits.push(`pierces armour for ${Math.round(d.mult * 100)}%`);
@@ -15677,18 +16457,22 @@ function advSkillDesc(d) {
   return `${d.name} (${d.cd}s): ` + bits.join(", ");
 }
 function advWaveTiers(floorOffset = 0) {
-  // raw tiers may exceed 10 on deep floors — enemies are picked at tier 10
-  // and scaled up instead, so the dungeon never stops getting harder
-  const L = rpgLevelInfo().level;
-  return [L - 1, L, L, L + 1, L + 2].map(t => Math.max(1, t + floorOffset));
+  // difficulty follows the FLOOR, not the hero's level — levelling up must
+  // always make earlier floors easier. Raw tiers may exceed 10 on deep
+  // floors — enemies are picked at tier 10 and scaled up instead, so the
+  // dungeon never stops getting harder.
+  const f = floorOffset + 1;
+  return [f - 1, f, f, f + 1, f + 2].map(t => Math.max(1, t));
 }
-// packs: later waves bring 2-3 enemies so AOE and chain skills shine
+// hordes: waves are packed with weak fodder so AOE, chain and volleys mow them down
 function advWaveComp(w) {
   const t = adv.tiers[w], mt = Math.max(1, t - 1);
-  if (w === ADV_WAVES - 1) return [{ tier: t, boss: true }, { tier: mt, minion: true }];
-  if (w === 0) return [{ tier: t }];
-  if (w < 3) return [{ tier: t }, { tier: mt, minion: true }];
-  return [{ tier: t }, { tier: mt, minion: true }, { tier: mt, minion: true }];
+  const fodder = n => Array.from({ length: n }, () => ({ tier: mt, minion: true }));
+  if (w === ADV_WAVES - 1) return [{ tier: t, boss: true }].concat(fodder(4));
+  if (w === 0) return fodder(3);
+  if (w === 1) return [{ tier: t }].concat(fodder(3));
+  if (w === 2) return [{ tier: t }].concat(fodder(4));
+  return [{ tier: t }].concat(fodder(5));
 }
 function advBarHtml(id) { return `<div class="rpg-bar adv-bar"><div class="rpg-bar-fill hp" id="${id}" style="width:100%;"></div></div>`; }
 function advSetBar(id, frac) { const el = $(id); if (el) el.style.width = Math.max(0, Math.round(frac * 100)) + "%"; }
@@ -15709,7 +16493,12 @@ function advEquippedSkills() {
   const out = [];
   const w = rpgState.equipment.weapon, p = rpgState.equipment.pet;
   if (w && RPG_SKILLS[w]) out.push({ owner: "weapon", id: w, def: RPG_SKILLS[w], readyAt: 0 });
-  if (p && RPG_SKILLS[p]) out.push({ owner: "pet", id: p, def: RPG_SKILLS[p], readyAt: 0 });
+  if (p && RPG_SKILLS[p]) {
+    const base = RPG_SKILLS[p];
+    const m = rpgPetSkillMult(RPG_ITEMS_BY_ID[p]);
+    const def = m > 1 ? Object.assign({}, base, { mult: base.mult != null ? Math.round(base.mult * m * 100) / 100 : undefined, pct: base.pct != null ? Math.round(base.pct * m * 100) / 100 : undefined }) : base;
+    out.push({ owner: "pet", id: p, def, readyAt: 0 });
+  }
   rpgClassActives().forEach(n => out.push({ owner: "class", id: n.id, def: rpgTreeActiveDef(n), readyAt: 0 }));
   return out;
 }
@@ -15727,6 +16516,8 @@ function rpgRenderAdventure() {
   advUpdateRunsChip();
   $("advHero").innerHTML = advHeroHtml();
   $("advFoes").innerHTML = "";
+  const wEl = $("advFoes");
+  if (wEl && wEl.style) wEl.style.transform = "";
   $("advSkillbar").innerHTML = advSkillbarHtml(advEquippedSkills());
   $("advStatus").textContent = "";
   $("advWaveChip").style.display = "none";
@@ -15748,8 +16539,11 @@ function advStart() {
   advToken++;
   const stats = rpgPlayerStats();
   adv = { phase: "walk", wave: 0, floor: 1, tiers: advWaveTiers(0), stats, heroHp: stats.maxHp, heroMax: stats.maxHp,
-    foes: [], skills: advEquippedSkills(), shield: 0, heroNextAtk: 0, gold: 0, xp: 0, kills: 0, loopId: 0 };
+    foes: [], skills: advEquippedSkills(), shield: 0, heroNextAtk: 0, heroX: 0, heroInRange: false, worldX: 0, scroll: 0, lurch: 0, gold: 0, xp: 0, kills: 0, loopId: 0, rafOn: false, mods: { atkPct: 0, goldPct: 0, cdr: 0, dr: 0, leech: 0, el: {} } };
   adv.loopId = setInterval(advTick, ADV_TICK_MS);
+  adv.rafOn = true;
+  advRafLast = 0;
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(advRaf);
   advOverlay("");
   advUpdateRunsChip();
   $("advStartBtn").style.display = "none";
@@ -15758,48 +16552,219 @@ function advStart() {
   $("advSkillbar").innerHTML = advSkillbarHtml(adv.skills);
   advWalk();
 }
+const RPG_DRAFTS = [
+  { id: "fire", icon: "🔥", name: "Flame Soul", desc: "+30% fire damage this run", el: "fire" },
+  { id: "ice", icon: "❄️", name: "Frost Soul", desc: "+30% ice damage this run", el: "ice" },
+  { id: "nature", icon: "🍃", name: "Wild Soul", desc: "+30% nature damage this run", el: "nature" },
+  { id: "shadow", icon: "🌑", name: "Night Soul", desc: "+30% shadow damage this run", el: "shadow" },
+  { id: "holy", icon: "✨", name: "Radiant Soul", desc: "+30% holy damage this run", el: "holy" },
+  { id: "arcane", icon: "💫", name: "Storm Soul", desc: "+30% arcane damage this run", el: "arcane" },
+  { id: "blood", icon: "⚔️", name: "Bloodlust", desc: "+15% ALL damage this run", atkPct: 0.15 },
+  { id: "greed", icon: "🪙", name: "Greed", desc: "+35% gold this run", goldPct: 0.35 },
+  { id: "haste", icon: "⏩", name: "Haste", desc: "Skills cool down 20% faster", cdr: 0.2 },
+  { id: "mend", icon: "💚", name: "Mend", desc: "Heal 50% of max HP right now", healNow: 0.5 },
+  { id: "stone", icon: "🪨", name: "Stoneskin", desc: "Take 3 less damage from every hit", dr: 3 },
+  { id: "leech", icon: "🩸", name: "Vampirism", desc: "Basic attacks heal 4% of damage", leech: 0.04 },
+  { id: "dedge", icon: "⚔️", name: "Double Edge", desc: "+40% damage, but you take +15%", atkPct: 0.4, vuln: 0.15, tier: 2 },
+  { id: "cgold", icon: "💰", name: "Cursed Gold", desc: "+60% gold, but you take +20%", goldPct: 0.6, vuln: 0.2, tier: 2 },
+  { id: "fbite", icon: "🥶", name: "Deep Frostbite", desc: "Chilled enemies take +30% damage", chillBonus: 0.3, tier: 2 },
+  { id: "exec", icon: "🎯", name: "Executioner", desc: "Enemies below 35% HP take double damage", exePower: 2, tier: 2 },
+  { id: "rshell", icon: "🔄", name: "Reflect Shell", desc: "Return 30% of damage you take", reflect: 0.3, tier: 2 },
+  { id: "ldrain", icon: "🧛", name: "Greater Vampirism", desc: "8% lifesteal, but you take +10%", leech: 0.08, vuln: 0.1, tier: 3 },
+  { id: "abyss", icon: "🕳️", name: "Abyssal Hunger", desc: "+3% damage per floor reached this run", scalingFloor: true, tier: 3 },
+  { id: "titan", icon: "🗿", name: "Titan Blood", desc: "Take 5 less damage from every hit, -10% damage", dr: 5, atkPct: -0.1, tier: 3 }
+];
+function advShowDraft() {
+  adv.phase = "draft";
+  adv.scrollTarget = 0;
+  const pool = RPG_DRAFTS.filter(d => !d.tier || (d.tier === 2 && adv.floor >= 4) || (d.tier === 3 && adv.floor >= 8));
+  const picks = pool.slice().sort(() => Math.random() - 0.5).slice(0, 3);
+  adv.draftOffer = picks;
+  advOverlay(`<div><h4>🏕️ Floor ${adv.floor} cleared — choose a blessing</h4>
+    <div class="adv-draft-row">${picks.map((d, i) =>
+      `<button class="adv-draft-card" type="button" data-rpg-draft="${i}"><span class="adv-draft-ico">${d.icon}</span><b>${escapeHtml(d.name)}</b><span>${escapeHtml(d.desc)}</span></button>`).join("")}</div></div>`);
+}
+function advPickDraft(i) {
+  if (!adv || adv.phase !== "draft" || !adv.draftOffer) return;
+  const d = adv.draftOffer[i];
+  if (!d) return;
+  const m = adv.mods;
+  if (d.el) m.el[d.el] = (m.el[d.el] || 0) + 0.3;
+  if (d.atkPct) m.atkPct += d.atkPct;
+  if (d.goldPct) m.goldPct += d.goldPct;
+  if (d.cdr) m.cdr = Math.min(0.5, m.cdr + d.cdr);
+  if (d.dr) m.dr += d.dr;
+  if (d.leech) m.leech += d.leech;
+  if (d.vuln) m.vuln = (m.vuln || 0) + d.vuln;
+  if (d.chillBonus) m.chillBonus = (m.chillBonus || 0) + d.chillBonus;
+  if (d.exePower) m.exePower = Math.max(m.exePower || 0, d.exePower);
+  if (d.reflect) m.reflect = (m.reflect || 0) + d.reflect;
+  if (d.scalingFloor) m.scalingFloor = true;
+  if (d.healNow) advHeal(adv.heroMax * d.healNow, d.icon);
+  adv.draftOffer = null;
+  advOverlay("");
+  toast(`${d.icon} ${d.name}!`, "success");
+  adv.floor++;
+  adv.wave = 0;
+  adv.tiers = advWaveTiers(adv.floor - 1);
+  adv.phase = "between";
+  advAfter(700, advWalk);
+}
+// ---- Ghost Arena: duel an AI copy of a classmate's published build ----
+function rpgGhostStats(row) {
+  const lvl = Math.max(1, row.level || 1);
+  const eq = row.equipment || {};
+  let atk = 4 + lvl, def = 0, crit = 5, hp = 40 + lvl * 10;
+  Object.values(eq).filter(Boolean).forEach(id => {
+    const it = RPG_ITEMS_BY_ID[id];
+    if (!it) return;
+    atk += it.atk || 0; def += it.def || 0; crit += it.crit || 0; hp += it.hp || 0;
+  });
+  if (row.clazz === "warrior") { hp = Math.round(hp * 1.1); def = Math.round(def * 1.15) + 1; }
+  if (row.clazz === "rogue") crit += 8;
+  return { atk, def, crit: Math.min(75, crit), maxHp: hp, weapon: eq.weapon || null };
+}
+function advStartArena(row) {
+  if (!rpgState || adv) { if (adv) { toast("Finish your current run first!", "error"); return; } }
+  navigateTo("adventure");
+  advToken++;
+  const stats = rpgPlayerStats();
+  const g = rpgGhostStats(row);
+  const gKind = rpgWeaponFx(g.weapon).kind;
+  adv = { phase: "fight", wave: 0, floor: 1, tiers: [1, 1, 1, 1, 1], stats, heroHp: stats.maxHp, heroMax: stats.maxHp,
+    foes: [], skills: advEquippedSkills(), shield: 0, heroNextAtk: Date.now() + 1600, heroX: 0, heroInRange: false,
+    worldX: 0, scroll: 0, lurch: 0, gold: 0, xp: 0, kills: 0, loopId: 0, rafOn: false,
+    mods: { atkPct: 0, goldPct: 0, cdr: 0, dr: 0, leech: 0, el: {} },
+    arena: { row, stats: g, skill: g.weapon && RPG_SKILLS[g.weapon] ? { def: RPG_SKILLS[g.weapon], readyAt: Date.now() + 4000 } : null } };
+  adv.loopId = setInterval(advTick, ADV_TICK_MS);
+  adv.rafOn = true;
+  advRafLast = 0;
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(advRaf);
+  advOverlay("");
+  $("advStartBtn").style.display = "none";
+  $("advQuitBtn").style.display = "";
+  $("advHero").innerHTML = advHeroHtml();
+  $("advSkillbar").innerHTML = advSkillbarHtml(adv.skills);
+  const w = advStageW();
+  adv.foes = [{ e: { id: "ghost", name: row.name || "Ghost", emoji: "", atk: g.atk, el: rpgWeaponElement(g.weapon), gold: 0, xp: 0 },
+    boss: false, minion: false, hp: g.maxHp, max: g.maxHp, scale: 1, ranged: gKind === "magic" || gKind === "ranged",
+    wx: Math.round(w * 0.66), reached: false, slot: 0, speed: 0.07, armor: Math.floor(g.def * 0.4),
+    atkMs: 1500, nextAtk: Date.now() + 2200, dots: [], chillUntil: 0, stunned: 0, dead: false, ghost: true }];
+  const chip = $("advWaveChip");
+  chip.style.display = "";
+  chip.textContent = "👻 Arena duel";
+  $("advFoes").innerHTML = `<div class="adv-actor adv-foe" id="advFoeEl0" style="transform:translateX(${adv.foes[0].wx}px);">
+    <div class="adv-tag">👻 ${escapeHtml(row.name || "Ghost")}</div>
+    <span class="adv-ghost">${rpgAvatarSvg(row.equipment || {})}</span>
+    ${advBarHtml("advFoeHp0")}</div>`;
+  $("advStatus").textContent = `Duel vs ${row.name}'s build — Lv ${row.level || 1} ${row.clazz ? RPG_CLASSES[row.clazz].name : "hero"}!`;
+}
+function advArenaEnd(won) {
+  if (!adv || !adv.arena) return;
+  const name = adv.arena.row.name || "the ghost";
+  advStopLoop();
+  adv = null;
+  advToken++;
+  if (won) {
+    rpgState.stats.arenaWins = (rpgState.stats.arenaWins || 0) + 1;
+    rpgApplyRewards(30, 25);
+  } else {
+    rpgState.stats.arenaLosses = (rpgState.stats.arenaLosses || 0) + 1;
+  }
+  rpgSave();
+  rpgPublishLeaderboard();
+  $("advQuitBtn").style.display = "none";
+  $("advStartBtn").style.display = "";
+  advUpdateRunsChip();
+  advOverlay(`<div><h4>${won ? "🏆 Duel won!" : "💀 Duel lost…"}</h4>
+    <p>${won ? `You defeated ${escapeHtml(name)}'s build! +🪙 30, +✨ 25 — your arena record grows.` : `${escapeHtml(name)}'s build was stronger this time. Upgrade and challenge them again — duels are free!`}</p>
+    <div class="rpg-reward-stats"><span>Arena record: ${rpgState.stats.arenaWins || 0}W – ${rpgState.stats.arenaLosses || 0}L</span></div></div>`);
+}
+const ADV_BEAT_EPOCH = Date.now();
+let advRafLast = 0;
+function advRaf(ts) {
+  if (!adv || !adv.rafOn) return;
+  const dt = Math.max(0, Math.min(60, advRafLast ? ts - advRafLast : 16));
+  advRafLast = ts;
+  // ease scroll speed toward its target; consume kill-lurch boosts
+  const target = adv.phase === "fight" || adv.phase === "between" ? adv.scrollTarget || 0 : 0;
+  adv.scroll += (target - adv.scroll) * Math.min(1, dt / 220);
+  adv.scroll = Math.max(0, Math.min(160, adv.scroll));
+  let dx = adv.scroll * dt / 1000;
+  if (adv.lurch > 0) { const l = Math.min(adv.lurch, dt * 0.12); dx += l; adv.lurch -= l; }
+  if (dx) adv.worldX += dx;
+  if (!Number.isFinite(adv.worldX)) adv.worldX = 0;
+  const wEl = $("advFoes");
+  if (wEl && wEl.style) wEl.style.transform = `translate3d(${-Math.round(adv.worldX)}px,0,0)`;
+  const stage = $("advStage");
+  if (stage && stage.classList) stage.classList.toggle("walking", adv.scroll > 12);
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(advRaf);
+}
+function advStageW() {
+  const s = $("advStage");
+  const w = s && s.clientWidth;
+  if (w > 50) { if (adv) adv.stageW = w; return w; }
+  return (adv && adv.stageW) || 600;
+}
+function advHeroScreenX() {
+  const hero = $("advHero");
+  return ((hero && hero.offsetLeft != null) ? hero.offsetLeft : 30) + 100;
+}
+function advFoeScreenX(i) { const f = adv.foes[i]; return f ? f.wx - adv.worldX : 400; }
 function advWalk() {
-  adv.phase = "walk";
-  adv.foes = [];
-  $("advFoes").innerHTML = "";
-  $("advStage").classList.add("walking");
-  $("advStatus").textContent = `Floor ${adv.floor} — marching to wave ${adv.wave + 1}…`;
-  advAfter(1300, advSpawnWave);
+  // no dead walking phase: the next wave spawns ahead and the squad marches into it
+  adv.phase = "fight";
+  $("advStatus").textContent = `Floor ${adv.floor} — wave ${adv.wave + 1} ahead!`;
+  advSpawnWave();
 }
 function advSpawnWave() {
-  $("advStage").classList.remove("walking");
   const comp = advWaveComp(adv.wave);
   const now = Date.now();
+  const w = advStageW();
+  const aheadBase = adv.worldX + w + 80;
   adv.foes = comp.map((c, i) => {
     const tier = Math.max(1, Math.min(10, c.tier));
     const over = Math.max(0, c.tier - 10);
-    const scale = 1 + 0.22 * over;
+    const scale = 1 + 0.25 * over;
     const e = rpgRandomEnemy(tier);
-    const max = Math.round(e.maxHp * scale * (c.boss ? 1.5 : c.minion ? 0.7 : 1));
-    return { e, boss: !!c.boss, minion: !!c.minion, hp: max, max, scale,
+    const max = Math.round(e.maxHp * scale * (c.boss ? 1.5 : c.minion ? 0.45 : 1));
+    return { e, boss: !!c.boss, minion: !!c.minion, hp: max, max, scale, ranged: RPG_RANGED_ENEMIES.has(e.id),
+      wx: aheadBase + i * 95 + Math.random() * 40, bandWx: aheadBase + i * 95 - 240, reached: false, slot: i,
+      speed: c.boss ? 0.05 : c.minion ? 0.085 : 0.065,
       armor: Math.floor(tier / 2) + (c.boss ? 2 : 0) + Math.ceil(over / 2),
-      atkMs: c.boss ? 1500 : c.minion ? 2300 : 1900,
-      nextAtk: now + 1900 + i * 650 + Math.random() * 400,
-      dots: [], chillUntil: 0, stunned: 0, dead: false };
+      atkMs: c.boss ? 1500 : c.minion ? 2700 : 1900,
+      nextAtk: now + 2400 + i * 600 + Math.random() * 400,
+      dots: [], chillUntil: 0, stunned: 0, dead: false, affixes: [] };
+  });
+  // elites and bosses roll affixes on deeper floors — harder, but they pay more
+  adv.foes.forEach(f => {
+    if (f.minion) return;
+    const keys = Object.keys(RPG_ELITE_AFFIXES);
+    const count = (adv.floor >= 3 && Math.random() < 0.55 ? 1 : 0) + (adv.floor >= 8 && Math.random() < 0.4 ? 1 : 0);
+    for (let k = 0; k < count; k++) {
+      const key = keys[Math.floor(Math.random() * keys.length)];
+      if (f.affixes.includes(key)) continue;
+      f.affixes.push(key);
+      RPG_ELITE_AFFIXES[key].apply(f);
+    }
   });
   const chip = $("advWaveChip");
   chip.style.display = "";
   chip.textContent = `Floor ${adv.floor} · Wave ${adv.wave + 1}/${ADV_WAVES}${adv.foes.some(f => f.boss) ? " — BOSS" : ""}`;
+  const beatDelay = -((Date.now() - ADV_BEAT_EPOCH) % 500);
   $("advFoes").innerHTML = adv.foes.map((f, i) => {
-    const size = f.boss ? 84 : f.minion ? 46 : 62;
-    return `<div class="adv-actor adv-foe" id="advFoeEl${i}" style="right:-28%;">
-      <div class="adv-tag">${f.boss ? "👑 " : ""}${escapeHtml(f.e.name)}${RPG_ELEMENTS[f.e.el] && RPG_ELEMENTS[f.e.el].icon ? " " + RPG_ELEMENTS[f.e.el].icon : ""}</div>
-      <span class="adv-foe-emoji" style="font-size:${size}px;">${f.e.emoji}</span>
+    const size = f.boss ? 84 : f.minion ? 38 : 60;
+    return `<div class="adv-actor adv-foe" id="advFoeEl${i}" style="transform:translateX(${Math.round(f.wx)}px);transition:none;">
+      <div class="adv-tag">${f.boss ? "👑 " : ""}${(f.affixes || []).map(a => RPG_ELITE_AFFIXES[a].badge).join("")}${escapeHtml(f.e.name)}${RPG_ELEMENTS[f.e.el] && RPG_ELEMENTS[f.e.el].icon ? " " + RPG_ELEMENTS[f.e.el].icon : ""}</div>
+      <span class="adv-foe-emoji" style="font-size:${size}px;animation-delay:${beatDelay}ms;">${f.e.emoji}</span>
       ${advBarHtml("advFoeHp" + i)}</div>`;
   }).join("");
-  const targets = [30, 16, 4];
-  adv.foes.forEach((f, i) => {
-    const el = advFoeEl(i);
-    if (el && el.style) advAfter(60 + i * 170, () => { const e2 = advFoeEl(i); if (e2 && e2.style) e2.style.right = (targets[i] != null ? targets[i] : 4) + "%"; });
-  });
+  advAfter(80, () => adv.foes.forEach((f, i) => { const el = advFoeEl(i); if (el && el.style) el.style.transition = ""; }));
   adv.phase = "fight";
-  adv.heroNextAtk = now + 1600;
-  $("advStatus").textContent = adv.foes.length > 1 ? `${adv.foes.length} enemies approach!` : `${escapeHtml(adv.foes[0].e.name)} approaches — ${escapeHtml(adv.foes[0].e.flavor)}`;
+  adv.slotsDirty = true;
+  adv.scrollTarget = 90;
+  adv.heroNextAtk = now + 1400;
+  $("advStatus").textContent = adv.foes.length > 1 ? `${adv.foes.length} enemies ahead!` : `${escapeHtml(adv.foes[0].e.name)} ahead — ${escapeHtml(adv.foes[0].e.flavor)}`;
 }
 function advFoeEl(i) { return $("advFoeEl" + i); }
 function advFrontFoe() { return adv.foes.findIndex(f => !f.dead); }
@@ -15815,16 +16780,60 @@ function advTick() {
     if (tile && tile.classList) tile.classList.toggle("ready", remain <= 0);
   });
   if (adv.phase !== "fight") return;
-  if (now >= adv.heroNextAtk && advFrontFoe() >= 0) {
+  const heroKind = rpgWeaponFx(rpgState.equipment.weapon).kind;
+  const heroMelee = heroKind !== "magic" && heroKind !== "ranged";
+  const heroSX = advHeroScreenX();
+  const dt = ADV_TICK_MS;
+  // contact slots are reassigned only when the pack changes (no per-tick churn)
+  if (adv.slotsDirty !== false) {
+    const meleeIdx = advLivingFoes().filter(i => !adv.foes[i].ranged).sort((a, b) => adv.foes[a].wx - adv.foes[b].wx);
+    meleeIdx.forEach((idx, k) => { adv.foes[idx].slot = k; });
+    adv.slotsDirty = false;
+  }
+  const STANDOFF = 95; // foes face the hero across a visible gap — never on top of him
+  let frontGap = Infinity;
+  adv.foes.forEach((f, i) => {
+    if (f.dead) return;
+    let desired;
+    if (f.ranged) {
+      // ranged hold a world-anchored band: they stop retreating once at their anchor
+      desired = Math.min(f.bandWx || f.wx, adv.worldX + heroSX + 330 + (i % 3) * 44);
+    } else {
+      desired = adv.worldX + heroSX + STANDOFF + (Math.min(f.slot, 2) * 40) + Math.max(0, f.slot - 2) * 32 + (f.boss ? 24 : 0);
+    }
+    const gap = f.wx - desired;
+    if (!f.ranged) frontGap = Math.min(frontGap, gap);
+    if (gap > 8 && now >= (f.stunned || 0)) {
+      const sp = f.speed * (now < f.chillUntil ? 0.5 : 1) * dt;
+      f.wx = Math.max(desired, f.wx - sp);
+      f.reached = false;
+    } else if (gap < -10 && f.ranged) {
+      f.wx = Math.min(f.wx + 14, desired); // damped kite — no teleporting
+    } else if (!f.ranged && gap <= 8) {
+      f.reached = true;
+    }
+    // hard floor: nothing may ever stand left of the hero's front line
+    f.wx = Math.max(f.wx, adv.worldX + heroSX + (f.ranged ? 120 : STANDOFF - 6));
+    const el = advFoeEl(i);
+    if (el && el.style) el.style.transform = `translateX(${Math.round(f.wx)}px)`;
+  });
+  const fi0 = advFrontFoe();
+  const frontOnScreen = fi0 >= 0 && advFoeScreenX(fi0) < (advStageW() * 0.92);
+  // engage: stop the march when the line meets; push on when only ranged remain in reach
+  adv.scrollTarget = (fi0 >= 0 && (frontGap < 150 || (adv.foes[fi0].ranged && advFoeScreenX(fi0) - heroSX < 340))) ? 0 : 90;
+  adv.heroInRange = fi0 >= 0 && (!heroMelee ? frontOnScreen : (adv.foes[fi0].ranged ? advFoeScreenX(fi0) - heroSX < 130 : adv.foes[fi0].reached));
+  if (now >= adv.heroNextAtk && adv.heroInRange) {
     adv.heroNextAtk = now + ADV_HERO_ATK_MS;
     advAutoAttack();
   }
   adv.skills.forEach((s, i) => {
     if (now >= s.readyAt && (advFrontFoe() >= 0 || s.def.kind === "heal" || s.def.kind === "block")) {
-      s.readyAt = now + s.def.cd * 1000 * (1 - (adv.stats.cdr || 0));
+      s.readyAt = now + s.def.cd * 1000 * (1 - Math.min(0.6, (adv.stats.cdr || 0) + adv.mods.cdr));
       advCast(s, i);
     }
   });
+  const stageHp = $("advStage");
+  if (stageHp && stageHp.classList) stageHp.classList.toggle("low-hp", adv.heroHp / adv.heroMax < 0.25);
   adv.foes.forEach((f, i) => {
     if (f.dead) return;
     f.dots = f.dots.filter(d => {
@@ -15839,7 +16848,16 @@ function advTick() {
       el.classList.toggle("chilled", now < f.chillUntil);
       el.classList.toggle("stunned", now < f.stunned);
     }
+    if (f.ghost && adv.arena && adv.arena.skill && now >= adv.arena.skill.readyAt) {
+      adv.arena.skill.readyAt = now + adv.arena.skill.def.cd * 1000;
+      const sd = Math.max(1, Math.round(adv.arena.stats.atk * (adv.arena.skill.def.mult || 1.5) - adv.stats.def * 0.5));
+      advFloat($("advHero"), `${adv.arena.skill.def.icon} -${sd}`, "hurt");
+      adv.heroHp = Math.max(0, adv.heroHp - sd);
+      advSetBar("advHeroHp", adv.heroHp / adv.heroMax);
+      if (adv.heroHp <= 0) { adv.phase = "between"; advAfter(500, () => advArenaEnd(false)); return; }
+    }
     if (now >= f.nextAtk) {
+      if (!f.ranged && !f.reached) { f.nextAtk = now + 350; return; }
       f.nextAtk = now + f.atkMs * (now < f.chillUntil ? 1.7 : 1) * (0.9 + Math.random() * 0.3);
       if (now < f.stunned) return;
       advFoeAttack(i);
@@ -15850,7 +16868,7 @@ function advAnimate(el, frames, opts) { try { if (el && el.animate) el.animate(f
 function advSwingAnim(kind) {
   const hero = $("advHero");
   if (!hero || !hero.querySelector) return;
-  const cls = kind === "magic" ? ".av-anim-raise" : kind === "chop" ? ".av-anim-chop" : ".av-anim-slash";
+  const cls = (kind === "magic" || kind === "ranged") ? ".av-anim-raise" : kind === "chop" ? ".av-anim-chop" : ".av-anim-slash";
   const el = hero.querySelector(cls);
   if (el && el.beginElement) { try { el.beginElement(); } catch (_) {} }
 }
@@ -15860,26 +16878,45 @@ function advAutoAttack() {
   const fx = rpgWeaponFx(rpgState.equipment.weapon);
   advSwingAnim(fx.kind);
   const hero = $("advHero");
-  if (fx.kind === "thrust" || fx.kind === "punch") {
-    advAnimate(hero, [{ transform: "translateX(0)" }, { transform: "translateX(48px)" }, { transform: "translateX(0)" }], { duration: 460, easing: "ease-in-out" });
-  } else if (fx.kind === "magic") {
-    advProjectile(fx);
+  if (fx.kind === "magic") {
+    advProjectile(fx); // casters bombard from the back line
+  } else if (fx.kind === "ranged") {
+    advArrow(fi, fx, false); // archers shoot from afar
   } else {
-    advAnimate(hero, [{ transform: "translateX(0)" }, { transform: "translateX(24px)" }, { transform: "translateX(0)" }], { duration: 430, easing: "ease-in-out" });
+    // melee: already standing at the front line — strike in place
+    const hx = Math.round(adv.heroX);
+    advAnimate(hero, [
+      { transform: `translateX(${hx}px)` },
+      { transform: `translateX(${hx + 52}px)`, offset: 0.45 },
+      { transform: `translateX(${hx}px)` }
+    ], { duration: 360, easing: "ease-in-out" });
   }
-  let dmg = adv.stats.atk * (0.9 + Math.random() * 0.3);
+  let dmg = adv.stats.atk * (0.9 + Math.random() * 0.3) * (1 + adv.mods.atkPct + (adv.mods.el[rpgWeaponElement(rpgState.equipment.weapon)] || 0));
   const crit = Math.random() * 100 < adv.stats.crit;
   if (crit) dmg *= (adv.stats.critMult || 2);
-  advAfter(fx.kind === "magic" ? 480 : 300, () => {
-    advHurtFoe(fi, dmg, { crit, fx, element: rpgWeaponElement(rpgState.equipment.weapon) });
+  advAfter(fx.kind === "magic" ? 480 : fx.kind === "ranged" ? 430 : 300, () => {
+    const dealtB = advHurtFoe(fi, dmg, { crit, fx, element: rpgWeaponElement(rpgState.equipment.weapon) });
+    const totalLeech = (adv ? adv.mods.leech : 0) + (adv ? (adv.stats.leechPct || 0) : 0);
+    if (adv && totalLeech && dealtB) advHeal(dealtB * totalLeech, "🩸");
     if (adv && adv.stats.poisonOnHit) advAddDot(fi, "poison", Math.max(1, Math.round(adv.stats.atk * 0.12 * adv.stats.poisonOnHit)), 3, "#3a9e5f");
   });
 }
 function advHurtFoe(i, dmg, opts = {}) {
   const f = adv.foes[i];
   if (!f || f.dead) return 0;
+  if (f.shieldHits > 0 && !opts.dot) {
+    f.shieldHits--;
+    const elS = advFoeEl(i);
+    if (elS) advFloat(elS, "🛡️ BLOCKED", "heal");
+    return 0;
+  }
   let superHit = false;
+  const bTier = rpgKillTier(f.e.id);
+  if (bTier) dmg *= 1 + 0.01 * bTier;
   if (opts.element && RPG_COUNTERS[opts.element] === f.e.el) { dmg *= 1.25; superHit = true; }
+  if (adv.mods.exePower && f.hp / f.max < 0.35) dmg *= adv.mods.exePower;
+  if (adv.mods.chillBonus && Date.now() < (f.chillUntil || 0)) dmg *= 1 + adv.mods.chillBonus;
+  if (adv.mods.scalingFloor) dmg *= 1 + 0.03 * (adv.floor - 1);
   let final = Math.max(1, Math.round(dmg - (opts.pierce ? 0 : f.armor)));
   if (opts.exec && f.hp / f.max < 0.35) final *= 2;
   f.hp = Math.max(0, f.hp - final);
@@ -15906,15 +16943,38 @@ function advFoeDie(i) {
   if (f.dead) return;
   f.dead = true;
   adv.kills++;
-  const mult = (f.boss ? 2 : f.minion ? 0.6 : 1) * (f.scale || 1);
+  try { rpgCreditKill(f.e.id); } catch (_) {}
+  const mult = (f.boss ? 2 : f.minion ? 0.35 : 1) * (f.scale || 1) * (1 + adv.mods.goldPct) * (1 + 0.2 * ((f.affixes || []).length));
+  if (f.splitting && adv.foes.length < 9 && adv.phase === "fight") {
+    for (let s = 0; s < 2; s++) {
+      const e2 = rpgEnemiesOfTier(1)[0];
+      adv.foes.push({ e: e2, boss: false, minion: true, hp: 18, max: 18, scale: 1, ranged: false, wx: f.wx + 40 + s * 50,
+        reached: false, slot: 5, speed: 0.09, armor: 0, atkMs: 2800, nextAtk: Date.now() + 1500, dots: [], chillUntil: 0, stunned: 0, dead: false, affixes: [], baseLeft: 540 });
+      const host = $("advFoes");
+      if (host && host.insertAdjacentHTML) host.insertAdjacentHTML("beforeend",
+        `<div class="adv-actor adv-foe" id="advFoeEl${adv.foes.length - 1}" style="transform:translateX(${Math.round(f.wx + 40 + s * 50)}px);"><div class="adv-tag">${escapeHtml(e2.name)}</div><span class="adv-foe-emoji" style="font-size:34px;">${e2.emoji}</span>${advBarHtml("advFoeHp" + (adv.foes.length - 1))}</div>`);
+    }
+    adv.slotsDirty = true;
+  }
   const g = Math.round(f.e.gold * mult), x = Math.round(f.e.xp * mult);
   adv.gold += g;
   adv.xp += x;
   const el = advFoeEl(i);
   if (el) {
     advFloat(el, `+${g}🪙 +${x}✨`, "heal");
-    if (el.classList) el.classList.add("dead");
+    advParticles(el, "🪙", 4);
+    if (el.classList) el.classList.remove("marching");
+    if (el.style) {
+      el.style.transition = "transform 0.7s ease-in, opacity 0.7s ease-in";
+      el.style.transform = `translateX(${Math.round(f.wx)}px) translateY(26px) rotate(75deg)`;
+      el.style.opacity = "0";
+    } else if (el.classList) {
+      el.classList.add("dead");
+    }
   }
+  adv.slotsDirty = true;
+  adv.lurch += 28; // the line surges forward on a kill
+  if (adv.arena) { adv.phase = "between"; advAfter(700, () => advArenaEnd(true)); return; }
   if (advFrontFoe() < 0 && adv.phase === "fight") {
     adv.phase = "between";
     adv.wave++;
@@ -15924,7 +16984,7 @@ function advFoeDie(i) {
 }
 function advFloorClear() {
   // boss down — bonus, heal, then descend to a tougher floor
-  const bonusGold = 15 + adv.floor * 10;
+  const bonusGold = 18 + adv.floor * 12;
   const bonusXp = 20 + adv.floor * 12;
   adv.gold += bonusGold;
   adv.xp += bonusXp;
@@ -15932,23 +16992,59 @@ function advFloorClear() {
   adv.heroHp = Math.min(adv.heroMax, adv.heroHp + heal);
   advSetBar("advHeroHp", adv.heroHp / adv.heroMax);
   advFloat($("advHero"), `+${heal} 💚`, "heal");
-  const loot = rpgRollLoot(rpgEnemiesOfTier(Math.min(10, adv.tiers[ADV_WAVES - 1]))[0]);
+  let loot = rpgRollLoot(rpgEnemiesOfTier(Math.min(10, adv.tiers[ADV_WAVES - 1]))[0]);
+  if (adv.floor % 10 === 0 || adv.floor === 25 || adv.floor === 50) {
+    // milestone chest: guaranteed drop with a rarity floor
+    const minRank = adv.floor >= 50 ? 5 : adv.floor >= 25 ? 4 : 3;
+    const pool = RPG_ITEMS.filter(it => it.price > 0 && !it.packOnly && !rpgState.inventory[it.id] && RPG_RARITY[it.rarity].rank >= minRank);
+    if (pool.length) loot = pool[Math.floor(Math.random() * pool.length)];
+  }
   if (loot) {
+    if (!rpgState.inventory[loot.id]) rpgRollAffixes(loot, false);
     rpgState.inventory[loot.id] = (rpgState.inventory[loot.id] || 0) + 1;
     rpgSave();
-    toast(`Floor ${adv.floor} chest: ${loot.name}! (${RPG_RARITY[loot.rarity].label})`, "success");
+    toast(`Floor ${adv.floor} chest: ${rpgDisplayName(loot)}! (${RPG_RARITY[loot.rarity].label})`, "success");
   }
   rpgState.stats.bestFloor = Math.max((rpgState.stats.bestFloor || 0), adv.floor + 1);
-  $("advStatus").textContent = `🏰 Floor ${adv.floor} cleared! +🪙${bonusGold} +✨${bonusXp} — descending…`;
-  adv.floor++;
-  adv.wave = 0;
-  adv.tiers = advWaveTiers(adv.floor - 1);
-  advAfter(1500, advWalk);
+  rpgState.stats.floorsCleared = (rpgState.stats.floorsCleared || 0) + 1;
+  if (rpgState.equipment.pet) rpgState.petBond[rpgState.equipment.pet] = (rpgState.petBond[rpgState.equipment.pet] || 0) + 1;
+  $("advStatus").textContent = `🏰 Floor ${adv.floor} cleared! +🪙${bonusGold} +✨${bonusXp}`;
+  advAfter(900, advShowDraft);
+}
+function advFoeBolt(i) {
+  const layer = $("advFx"), stage = $("advStage");
+  if (!layer || !layer.appendChild) return;
+  const f = adv.foes[i], el = advFoeEl(i);
+  const w = (stage && stage.clientWidth) || 600;
+  const x = Math.max(60, Math.min(w - 30, advFoeScreenX(i) + 20));
+  const dx = -(x - w * 0.18);
+  const col = rpgElColor(f.e.el);
+  const p = document.createElement("span");
+  p.className = "adv-proj";
+  if (p.style) { p.style.left = x + "px"; p.style.top = "46%"; p.style.background = col; p.style.boxShadow = `0 0 12px 4px ${col}`; }
+  layer.appendChild(p);
+  advAnimate(p, [
+    { transform: "translate(0,0) scale(0.7)" },
+    { transform: `translate(${Math.round(dx * 0.5)}px, -20px)`, offset: 0.5 },
+    { transform: `translate(${Math.round(dx)}px, 6px) scale(1.1)` }
+  ], { duration: 420, easing: "linear" });
+  setTimeout(() => p.remove(), 460);
 }
 function advFoeAttack(i) {
   const f = adv.foes[i];
-  advAnimate(advFoeEl(i), [{ transform: "translateX(0)" }, { transform: "translateX(-56px)" }, { transform: "translateX(0)" }], { duration: 520, easing: "ease-in-out" });
-  advAfter(260, () => {
+  const el = advFoeEl(i);
+  if (f.ranged) {
+    advFoeBolt(i); // ranged monsters cast from where they stand
+  } else {
+    // melee monster strikes from where it stands (it marched here)
+    const fx0 = Math.round(f.wx);
+    advAnimate(el, [
+      { transform: `translateX(${fx0}px)` },
+      { transform: `translateX(${fx0 - 56}px)`, offset: 0.45 },
+      { transform: `translateX(${fx0}px)` }
+    ], { duration: 360, easing: "ease-in-out" });
+  }
+  advAfter(f.ranged ? 440 : 240, () => {
     if (!adv || adv.phase !== "fight") return;
     const hero = $("advHero");
     if (Math.random() * 100 < (adv.stats.dodge || 0)) {
@@ -15960,13 +17056,22 @@ function advFoeAttack(i) {
       advFloat(hero, "🛡️ Blocked!", "heal");
       return;
     }
-    const dmg = Math.max(1, Math.round(f.e.atk * 0.6 * (f.scale || 1) * (f.boss ? 1.2 : 1) * (0.85 + Math.random() * 0.3) - adv.stats.def * 0.5));
+    let dmg = Math.max(1, Math.round(f.e.atk * 0.6 * (f.scale || 1) * (f.boss ? 1.2 : f.minion ? 0.55 : 1) * (0.85 + Math.random() * 0.3) - adv.stats.def * 0.5 - adv.mods.dr));
+    if (f.enraged && f.hp / f.max < 0.3) dmg = Math.round(dmg * 1.5);
+    if (adv.mods.vuln) dmg = Math.round(dmg * (1 + adv.mods.vuln));
+    if (f.vampiric) { f.hp = Math.min(f.max, f.hp + Math.round(dmg * 0.5)); advSetBar("advFoeHp" + i, f.hp / f.max); }
     if (hero.classList) { hero.classList.add("hit"); advAfter(380, () => hero.classList && hero.classList.remove("hit")); }
     advFloat(hero, "-" + dmg, "hurt");
     advBurst(hero, "#e25c5c");
+    adv.worldX -= f.boss ? 16 : 6; // shoved back
     adv.heroHp = Math.max(0, adv.heroHp - dmg);
+    const totalReflect = (adv.stats.thorns || 0) + (adv.mods.reflect || 0);
+    if (totalReflect && !f.dead) {
+      const ref = Math.max(1, Math.round(dmg * totalReflect));
+      advAfter(120, () => advHurtFoe(i, ref + (adv.foes[i] ? adv.foes[i].armor : 0), { dot: true }));
+    }
     advSetBar("advHeroHp", adv.heroHp / adv.heroMax);
-    if (adv.heroHp <= 0) { adv.phase = "between"; advAfter(600, advEnd); }
+    if (adv.heroHp <= 0) { adv.phase = "between"; advAfter(600, adv.arena ? () => advArenaEnd(false) : advEnd); }
   });
 }
 function advHeal(amount, label) {
@@ -15988,8 +17093,8 @@ function advCastRiders(d, i, dealt) {
   const atk = adv.stats.atk;
   if (d.poison) advAddDot(i, "poison", Math.round(atk * 0.35), 4, "#3a9e5f");
   if (d.burn) advAddDot(i, "burn", Math.round(atk * 0.45), 3, "#ff6b35");
-  if (d.chill) { const f = adv.foes[i]; if (f && !f.dead) { f.chillUntil = Date.now() + 4000; advParticles(advFoeEl(i), "❄️", 3); } }
-  if (d.stun) { const f = adv.foes[i]; if (f && !f.dead) { f.stunned = Date.now() + 2200; advFloat(advFoeEl(i), "💫", "dmg"); } }
+  if (d.chill) { const f = adv.foes[i]; if (f && !f.dead && !f.juggernaut) { f.chillUntil = Date.now() + 4000; advParticles(advFoeEl(i), "❄️", 3); } }
+  if (d.stun) { const f = adv.foes[i]; if (f && !f.dead && !f.juggernaut) { f.stunned = Date.now() + 2200; advFloat(advFoeEl(i), "💫", "dmg"); } }
   if (d.lifesteal && dealt) advHeal(dealt * d.lifesteal, "🩸");
   if (d.healPct) advHeal(adv.heroMax * d.healPct);
 }
@@ -15997,7 +17102,7 @@ function advCast(s, idx) {
   const d = s.def;
   const tile = $("advSkill" + idx);
   if (tile && tile.classList) { tile.classList.add("casting"); advAfter(430, () => tile.classList && tile.classList.remove("casting")); }
-  const atk = adv.stats.atk * (1 + (adv.stats.spellPct || 0));
+  const atk = adv.stats.atk * (1 + (adv.stats.spellPct || 0)) * (1 + adv.mods.atkPct + (adv.mods.el[s.def.element || rpgWeaponElement(s.id)] || 0));
   const front = advFrontFoe();
   const stage = $("advStage");
   const wfx = rpgWeaponFx(s.id);
@@ -16005,7 +17110,8 @@ function advCast(s, idx) {
   switch (d.kind) {
     case "hit":
       advSwingAnim(s.owner === "pet" ? "magic" : wfx.kind);
-      advAfter(280, () => { const t = advFrontFoe(); if (t >= 0) { const dealt = advHurtFoe(t, atk * d.mult, { fx: wfx, exec: d.exec, pierce: d.pierce, element: wel }); advCastRiders(d, t, dealt); } });
+      if (wfx.kind === "magic" || d.element) advProjectile({ color: rpgElColor(wel), emoji: wfx.emoji, kind: "magic" });
+      advAfter(wfx.kind === "magic" || d.element ? 460 : 280, () => { const t = advFrontFoe(); if (t >= 0) { const dealt = advHurtFoe(t, atk * d.mult, { fx: wfx, exec: d.exec, pierce: d.pierce, element: wel }); advCastRiders(d, t, dealt); } });
       break;
     case "multi":
       for (let h = 0; h < d.hits; h++) {
@@ -16018,9 +17124,14 @@ function advCast(s, idx) {
       break;
     case "aoe":
       advSwingAnim(s.owner === "pet" ? "magic" : "chop");
+      if (d.vfx === "shower") advShower(wfx.emoji, 12);
       if (stage && stage.classList) { stage.classList.add("shake"); advAfter(380, () => stage.classList.remove("shake")); }
-      advAfter(300, () => advLivingFoes().forEach((i, k) =>
-        advAfter(k * 100, () => { const dealt = advHurtFoe(i, atk * d.mult, { fx: wfx, pierce: d.pierce, element: wel }); advCastRiders(d, i, dealt); })));
+      advAfter(d.vfx ? 480 : 300, () => advLivingFoes().forEach((i, k) =>
+        advAfter(k * 100, () => {
+          if (d.vfx === "sky") advSkyBolt(i, rpgElColor(wel));
+          const dealt = advHurtFoe(i, atk * d.mult, { fx: wfx, pierce: d.pierce, element: wel });
+          advCastRiders(d, i, dealt);
+        })));
       break;
     case "chain": {
       const targets = advLivingFoes().slice(0, d.jumps + 1);
@@ -16036,10 +17147,30 @@ function advCast(s, idx) {
       advAnimate($("advHero"), [{ transform: "translateX(0)" }, { transform: "translateX(62px)" }, { transform: "translateX(0)" }], { duration: 520, easing: "ease-in-out" });
       advAfter(280, () => { const t = advFrontFoe(); if (t >= 0) { const dealt = advHurtFoe(t, atk * d.mult, { pierce: true, fx: wfx, element: wel }); advCastRiders(d, t, dealt); } });
       break;
+    case "volley":
+      advSwingAnim("ranged");
+      for (let h = 0; h < (d.hits || 3); h++) {
+        advAfter(140 + h * 140, () => {
+          const live = advLivingFoes();
+          if (!live.length) return;
+          const t = live[Math.floor(Math.random() * live.length)];
+          const miss = Math.random() < 0.18;
+          advArrow(t, wfx, miss);
+          advAfter(400, () => {
+            const f2 = adv && adv.foes[t];
+            if (!f2 || f2.dead) return;
+            if (miss) { advFloat(advFoeEl(t), "MISS", "heal"); return; }
+            const dealt = advHurtFoe(t, atk * d.mult, { fx: wfx, element: wel });
+            advCastRiders(d, t, dealt);
+          });
+        });
+      }
+      break;
     case "heal":
       advHeal(adv.heroMax * d.pct, d.icon);
       break;
     case "slow": {
+      advShower("❄️", 9);
       const until = Date.now() + 4500;
       advLivingFoes().forEach(i => { adv.foes[i].chillUntil = until; advParticles(advFoeEl(i), "❄️", 3); });
       break;
@@ -16050,14 +17181,48 @@ function advCast(s, idx) {
       break;
   }
 }
+function advSkyBolt(i, color) {
+  const layer = $("advFx"), stage = $("advStage");
+  if (!layer || !layer.appendChild) return;
+  const el = advFoeEl(i);
+  const x = Math.max(60, advFoeScreenX(i) + 32);
+  const c = document.createElement("span");
+  c.className = "adv-cloud2";
+  c.textContent = "☁️";
+  if (c.style) { c.style.left = (x - 16) + "px"; c.style.top = "4px"; }
+  layer.appendChild(c);
+  setTimeout(() => c.remove(), 750);
+  const b = document.createElement("span");
+  b.className = "adv-bolt";
+  if (b.style) { b.style.left = x + "px"; b.style.top = "24px"; b.style.background = `linear-gradient(${color}, transparent)`; b.style.boxShadow = `0 0 10px 2px ${color}`; }
+  layer.appendChild(b);
+  setTimeout(() => b.remove(), 460);
+}
+function advShower(emoji, n) {
+  const layer = $("advFx"), stage = $("advStage");
+  if (!layer || !layer.appendChild) return;
+  const w = (stage && stage.clientWidth) || 600;
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement("span");
+    s.className = "adv-fall";
+    s.textContent = emoji;
+    if (s.style) {
+      s.style.left = Math.round(w * 0.42 + Math.random() * w * 0.52) + "px";
+      s.style.top = "-22px";
+      s.style.animationDelay = (Math.random() * 0.45).toFixed(2) + "s";
+    }
+    layer.appendChild(s);
+    setTimeout(() => s.remove(), 1500);
+  }
+}
 function advChainFx(indices) {
   const layer = $("advFx"), stage = $("advStage");
   if (!layer || !stage || !stage.clientWidth) return;
   try {
     const pts = [];
     const hero = $("advHero");
-    if (hero && hero.offsetLeft != null) pts.push([hero.offsetLeft + 92, (stage.clientHeight || 300) - 150]);
-    indices.forEach(i => { const el = advFoeEl(i); if (el && el.offsetLeft != null) pts.push([el.offsetLeft + 42, (stage.clientHeight || 300) - 150]); });
+    pts.push([advHeroScreenX() - 8, (stage.clientHeight || 300) - 150]);
+    indices.forEach(i => pts.push([advFoeScreenX(i) + 42, (stage.clientHeight || 300) - 150]));
     if (pts.length < 2) return;
     const seg = pts.map((p, k) => (k ? "L" : "M") + Math.round(p[0]) + " " + Math.round(p[1])).join(" ");
     const c = document.createElement("div");
@@ -16067,7 +17232,7 @@ function advChainFx(indices) {
     setTimeout(() => c.remove(), 420);
   } catch (_) {}
 }
-function advStopLoop() { if (adv && adv.loopId) { clearInterval(adv.loopId); adv.loopId = 0; } }
+function advStopLoop() { if (adv) { adv.rafOn = false; if (adv.loopId) clearInterval(adv.loopId); adv.loopId = 0; } advRafLast = 0; const wEl = $("advFoes"); if (wEl && wEl.style) wEl.style.transform = ""; }
 function advEnd() {
   if (!adv) return;
   advStopLoop();
@@ -16084,6 +17249,8 @@ function advEnd() {
   $("advQuitBtn").style.display = "none";
   $("advStartBtn").style.display = "";
   $("advStage").classList.remove("walking");
+  const heEnd = $("advHero");
+  if (heEnd && heEnd.style) heEnd.style.transform = "";
   $("advStatus").textContent = "";
   advUpdateRunsChip();
   const best = rpgState.stats.bestFloor || 0;
@@ -16109,11 +17276,13 @@ function advAbandon(manual = false) {
   toast(gold || xp ? `Retreated from Floor ${floor} — you kept 🪙 ${gold} and ✨ ${xp} XP` : "Retreated from the dungeon", "");
 }
 // FX helpers (spawned inside the actor tiles so positioning is free)
+function advAbbrev(n) { return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n); }
 function advFloat(host, text, cls) {
   if (!host || !host.appendChild) return;
   const el = document.createElement("span");
   el.className = "rpg-float " + cls;
-  el.textContent = text;
+  if (el.style && /^💥/.test(String(text))) el.style.fontSize = "1.5rem";
+  el.textContent = String(text).replace(/-(\d{4,})/, (m, num) => "-" + advAbbrev(Number(num)));
   host.appendChild(el);
   setTimeout(() => el.remove(), 1200);
 }
@@ -16150,6 +17319,11 @@ function advSlashFx(host, color) {
   host.appendChild(a);
   setTimeout(() => a.remove(), 520);
 }
+function advProjDrop(stage, fromFrac) {
+  // foes stand ~70px above the stage floor; shots launch at fromFrac of the
+  // stage height and must drop down to the foes' torso line, not fly overhead
+  return Math.max(0, Math.round((stage.clientHeight || 300) * (1 - fromFrac) - 70));
+}
 function advProjectile(fx) {
   const layer = $("advFx"), stage = $("advStage");
   if (!layer || !stage || !layer.appendChild) return;
@@ -16163,8 +17337,39 @@ function advProjectile(fx) {
   }
   layer.appendChild(p);
   const dist = Math.round((stage.clientWidth || 600) * 0.5);
-  advAnimate(p, [{ transform: "translateX(0) scale(0.7)", opacity: 1 }, { transform: `translateX(${dist}px) scale(1.15)`, opacity: 1 }], { duration: 460, easing: "ease-in" });
+  const drop = advProjDrop(stage, 0.47);
+  advAnimate(p, [
+    { transform: "translate(0, 0) scale(0.7)", offset: 0 },
+    { transform: `translate(${Math.round(dist * 0.5)}px, ${Math.round(drop * 0.5) - 24}px) scale(1)`, offset: 0.5 },
+    { transform: `translate(${dist}px, ${drop}px) scale(1.15)`, offset: 1 }
+  ], { duration: 460, easing: "linear" });
   setTimeout(() => p.remove(), 500);
+}
+function advArrow(i, fx, miss) {
+  const layer = $("advFx"), stage = $("advStage");
+  if (!layer || !stage || !layer.appendChild) return;
+  const p = document.createElement("span");
+  p.className = "adv-arrow";
+  p.textContent = "➤";
+  if (p.style) {
+    p.style.left = "17%";
+    p.style.top = "50%";
+    p.style.color = fx.color === "#dbe3ea" ? "#8a6b46" : fx.color;
+    p.style.textShadow = `0 0 6px ${fx.color}`;
+  }
+  layer.appendChild(p);
+  const w = stage.clientWidth || 600;
+  const el = advFoeEl(i);
+  let dx = Math.max(60, advFoeScreenX(i) + 26) - w * 0.17;
+  if (miss) dx += 64;
+  const arc = 24 + Math.random() * 36;
+  const drop = advProjDrop(stage, 0.5);
+  advAnimate(p, [
+    { transform: "translate(0, 0) rotate(-18deg)", offset: 0 },
+    { transform: `translate(${Math.round(dx * 0.5)}px, ${Math.round(drop * 0.5 - arc)}px) rotate(0deg)`, offset: 0.5 },
+    { transform: `translate(${Math.round(dx)}px, ${drop + 8}px) rotate(28deg)`, offset: 1 }
+  ], { duration: 400, easing: "linear" });
+  setTimeout(() => p.remove(), 440);
 }
 
 // ---- Static event wiring (elements live in the game pages / sidebar) ----
@@ -16173,9 +17378,30 @@ function rpgWireStaticEvents() {
   wire("rpgSide", () => navigateTo("character"));
   wire("rpgHideToggle", () => rpgSetHidden(!rpgGameHidden()));
   wire("rpgBoardRefresh", () => rpgRenderLeaderboard(true));
+  document.addEventListener("click", e => {
+    if (e.target.closest && e.target.closest("[data-rpg-raidclaim]")) {
+      if (!rpgState || rpgState.raidClaim === rpgRaidWeek()) return;
+      rpgState.raidClaim = rpgRaidWeek();
+      rpgState.gold += RAID_BOUNTY;
+      rpgSave();
+      toast(`🎁 Raid bounty claimed: +🪙 ${RAID_BOUNTY}!`, "success");
+      rpgRenderLeaderboard();
+    }
+  });
+  const boardBody = $("rpgBoardBody");
+  if (boardBody) boardBody.addEventListener("click", e => {
+    const d = e.target.closest("[data-rpg-duel]");
+    if (!d || !rpgBoardRows) return;
+    const row = rpgBoardRows.find(r => r.uid === d.dataset.rpgDuel);
+    if (row) advStartArena(row);
+  });
   wire("advStartBtn", advStart);
   wire("advQuitBtn", () => advAbandon(true));
+  document.addEventListener("visibilitychange", () => { advRafLast = 0; });
+  const advOverlayEl = $("advOverlay");
+  if (advOverlayEl) advOverlayEl.addEventListener("click", e => { const d = e.target.closest("[data-rpg-draft]"); if (d) advPickDraft(Number(d.dataset.rpgDraft)); });
   document.querySelectorAll("[data-rpgboard]").forEach(b => b.addEventListener("click", () => { rpgBoardTab = b.dataset.rpgboard; rpgRenderLeaderboard(); }));
+  wire("rpgTopChip", () => navigateTo("character"));
   wire("rpgPackAgain", rpgOpenPack);
   setInterval(() => {
     if (Math.random() > 0.45 || !document.querySelector("#page-adventure.active")) return;
@@ -16211,17 +17437,24 @@ function rpgWireStaticEvents() {
     if (filter) { rpgShopSlot = filter.dataset.rpgFilter; rpgRenderTab(); return; }
     const pack = e.target.closest("[data-rpg-pack]");
     if (pack) { rpgOpenPack(); return; }
+    const quest = e.target.closest("[data-rpg-quest]");
+    if (quest) { rpgClaimQuest(Number(quest.dataset.rpgQuest)); return; }
+    const star = e.target.closest("[data-rpg-star]");
+    if (star) { rpgBuyStar(star.dataset.rpgStar); return; }
+    if (e.target.closest("[data-rpg-rebirth]")) { rpgRebirth(); return; }
     const cls = e.target.closest("[data-rpg-class]");
     if (cls) { rpgChooseClass(cls.dataset.rpgClass); return; }
     const skl = e.target.closest("[data-rpg-skill]");
     if (skl) { rpgSkillUp(skl.dataset.rpgSkill); return; }
     if (e.target.closest("[data-rpg-skillreset]")) { rpgResetSkills(); return; }
     if (e.target.closest("[data-rpg-classreset]")) {
-      if (rpgState && confirm("Change class? Your skill points will be refunded.")) { rpgState.clazz = null; rpgState.skills = {}; rpgSave(); rpgRenderCharacterPage(); }
+      if (rpgState && confirm("Change class? Your skill points will be refunded.")) { rpgState.clazz = null; rpgState.skills = {}; rpgState.paths = {}; rpgSave(); rpgRenderCharacterPage(); }
       return;
     }
     const upgrade = e.target.closest("[data-rpg-upgrade]");
     if (upgrade) { rpgUpgradeItem(upgrade.dataset.rpgUpgrade); return; }
+    const reroll = e.target.closest("[data-rpg-reroll]");
+    if (reroll) { rpgRerollAffixes(reroll.dataset.rpgReroll); return; }
     const equip = e.target.closest("[data-rpg-equip]");
     if (equip) { rpgEquip(equip.dataset.rpgEquip); return; }
     const unequip = e.target.closest("[data-rpg-unequip]");
