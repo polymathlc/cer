@@ -4620,7 +4620,11 @@ option {
           </div>
           <div class="subtitle" id="createPageSubtitle">Build a question with blocks. Answers and blanks are optional — every question is marked by AI.</div>
         </div>
-        <div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn btn-outline" id="aiAnswerBtn" onclick="aiAnswerAndExplain()" title="Read the whole question (text, picture and options) and let AI write the model answer and the explanation. Review and edit before saving.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            ✨ AI answer &amp; explanation
+          </button>
           <button class="btn btn-primary" id="aiBuildBtn" onclick="openAiBuild()" title="Paste or upload a screenshot/PDF of an exam question — AI reads it and fills in the question, answer and explanation. You then paste the diagram and save.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
             Build from screenshot / PDF
@@ -6327,7 +6331,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.0.9';
+const APP_VERSION = 'v1.1.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9280,6 +9284,93 @@ function _openBulkImport(msg) {
 }
 function _setBulkImport(msg) { const s = document.getElementById('bulkImportStatus'); if (s) s.textContent = msg; }
 function _closeBulkImport() { const ov = document.getElementById('bulkImportOverlay'); if (ov) ov.classList.remove('show'); }
+
+// Read the WHOLE question currently in the editor (title, text, options and the
+// diagram if present) and let AI write the model answer + explanation, filling
+// the answer block(s) / correct MCQ option and the explanation block.
+async function aiAnswerAndExplain() {
+  if (!blocks.length) { showToast('Build the question first (text / picture / options), then generate the answer', 'error'); return; }
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+  const btn = document.getElementById('aiAnswerBtn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '✨ Thinking…'; }
+  try {
+    // Assemble the question for the AI.
+    const parts = [];
+    const titleEl = document.getElementById('questionTitle');
+    const topicEl = document.getElementById('topicSelect');
+    if (titleEl && titleEl.value.trim()) parts.push('Title: ' + titleEl.value.trim());
+    if (topicEl && topicEl.value) parts.push('Topic: ' + topicEl.value);
+    let mcqBlock = null;
+    blocks.forEach(b => {
+      if (b.type === 'text') { const t = stripHtml(b.content || '').trim(); if (t) parts.push(t); }
+      else if (b.type === 'part') { const t = ((b.label || '') + ' ' + stripHtml(b.content || '')).trim(); if (t) parts.push(t); }
+      else if (b.type === 'mcq') { mcqBlock = b; parts.push('Options:\n' + (b.options || []).map((o, i) => `(${i + 1}) ${stripHtml(o.text || '')}`).join('\n')); }
+      else if (b.type === 'image') parts.push('[a diagram is shown' + (b.caption ? ': ' + b.caption : '') + ']');
+      else if (b.type === 'table') parts.push('[a table is shown]');
+    });
+    const hasCER = blocks.some(b => b.type === 'answer');
+    const hasPlain = blocks.some(b => ['plainanswer', 'openLines', 'workingSpace'].includes(b.type));
+    const context = parts.join('\n');
+    // Include the diagram (multimodal) so the AI can read it.
+    let media = [];
+    const imgBlock = blocks.find(b => b.type === 'image' && b.url);
+    if (imgBlock) { try { media = [await _blockImageToInline(imgBlock.id)]; } catch (e) { console.warn('image for AI answer', e); } }
+    // Ask only for the fields this question needs.
+    const wants = [];
+    if (hasCER) wants.push('"claim":"...","evidence":"...","reasoning":"..."');
+    if (hasPlain || (!hasCER && !mcqBlock)) wants.push('"answer":"the full model answer, 1-3 sentences"');
+    if (mcqBlock) wants.push('"mcqCorrectIndex":<0-based index of the correct option listed above>');
+    wants.push('"explanation":"a clear teacher explanation (2-4 sentences) of WHY the answer is correct, for a P3-P6 student"');
+    const mg = ((document.getElementById('questionMarkingGuide') || {}).value || '').trim();
+    const prompt =
+      `You are a Singapore primary-school science teacher. Read this WHOLE question` + (media.length ? ' (a diagram is attached — study it)' : '') + ` and work out the correct answer and an explanation for a P3–P6 student.\n` +
+      (mg ? `Teacher marking guide (follow it): ${mg}\n` : '') +
+      `QUESTION:\n${context}\n\n` +
+      `Return ONLY JSON: { ${wants.join(', ')} }. Plain text only — no markdown, no [[brackets]].`;
+    const raw = media.length
+      ? await askGeminiVision(prompt, media, { maxOutputTokens: 700, json: true })
+      : await askGemini(prompt, { maxOutputTokens: 700, temperature: 0.2, json: true });
+    const r = _parseAIJson(raw);
+    if (!r || typeof r !== 'object') { showToast('AI did not return an answer — try again', 'error'); return; }
+    // Apply the answer to whatever answer blocks exist.
+    let applied = false;
+    blocks.forEach(b => {
+      if (b.type === 'answer') {
+        if (r.claim) b.claim = String(r.claim).trim();
+        if (r.evidence) b.evidence = String(r.evidence).trim();
+        if (r.reasoning) b.reasoning = String(r.reasoning).trim();
+        if (!r.claim && r.answer) b.claim = String(r.answer).trim();
+        applied = true;
+      } else if (['plainanswer', 'openLines', 'workingSpace'].includes(b.type)) {
+        const a = (r.answer && String(r.answer).trim()) || [r.claim, r.evidence, r.reasoning].filter(Boolean).join(' ');
+        if (a) { b.content = a; applied = true; }
+      } else if (b.type === 'mcq' && Number.isInteger(r.mcqCorrectIndex) && b.options[r.mcqCorrectIndex]) {
+        b.correctId = b.options[r.mcqCorrectIndex].id;
+        applied = true;
+      }
+    });
+    // No answer box yet → add a short-answer box with the AI's answer.
+    if (!applied && r.answer && String(r.answer).trim()) {
+      blocks.push({ id: generateBlockId(), type: 'plainanswer', content: String(r.answer).trim() });
+      applied = true;
+    }
+    // Explanation block — update the existing one or add a new one.
+    if (r.explanation && String(r.explanation).trim()) {
+      const expl = escapeHtml(String(r.explanation).trim());
+      const exB = blocks.find(b => b.type === 'explanation');
+      if (exB) exB.content = expl;
+      else blocks.push({ id: generateBlockId(), type: 'explanation', content: expl });
+    }
+    renderBlocks();
+    showToast('AI added the answer & explanation ✓ — review and edit before saving', 'success');
+  } catch (e) {
+    console.error('AI answer & explanation failed', e);
+    showToast('AI failed: ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
 
 function openAiBuild() {
   document.getElementById('aiBuildOverlay').classList.add('active');
@@ -18922,6 +19013,7 @@ window.handleImagePaste = handleImagePaste;
 window.handleImageDrop = handleImageDrop;
 window.handleAiBuildFile = handleAiBuildFile;
 window.handleBulkAiFile = handleBulkAiFile;
+window.aiAnswerAndExplain = aiAnswerAndExplain;
 window.handleImgError = handleImgError;
 window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
