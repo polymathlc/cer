@@ -239,6 +239,13 @@ body {
   font-size: 0.82rem;
   color: rgba(255,255,255,0.5);
 }
+.app-version-badge {
+  padding: 0 20px 12px;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  color: rgba(255,255,255,0.4);
+}
 .avatar {
   width: 32px; height: 32px;
   border-radius: 50%;
@@ -4585,6 +4592,7 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </button>
     </div>
+    <div class="app-version-badge admin-only" id="appVersionBadge" title="App version — bumps with every update so you can confirm the latest build is live"></div>
   </aside>
   <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar()"></div>
 
@@ -6263,7 +6271,12 @@ async function enterApp(user) {
   showToast('Welcome, ' + displayName + '!', 'success');
 }
 
+// App version shown to admins in the sidebar. BUMP THIS on every change you
+// deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
+const APP_VERSION = 'v1.0.0';
 function configureSidebarForRole(role) {
+  const vb = document.getElementById('appVersionBadge');
+  if (vb) vb.textContent = APP_VERSION;
   const adminItems = document.querySelectorAll('.admin-only');
   const studentItems = document.querySelectorAll('.student-only');
   if (role === 'admin') {
