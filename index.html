@@ -6331,7 +6331,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.1.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -8573,7 +8573,23 @@ function renderImgEnhanceBar(blockId) {
   if (!block || !block.url) { bar.innerHTML = ''; return; }
   const st = _imgEnhanceState[blockId];
   const showOriginal = st && st.originalUrl && st.originalUrl !== block.url;
-  bar.innerHTML = `
+  // While there's an edited version, show the single preview as a side-by-side
+  // comparison instead, so the teacher can judge if the original changed too much.
+  const previewEl = document.getElementById('imgPreview_' + blockId);
+  if (previewEl) previewEl.style.display = showOriginal ? 'none' : '';
+  const compare = showOriginal ? `
+    <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1;min-width:140px;text-align:center;">
+        <div style="font-size:0.72rem;font-weight:600;color:var(--text-muted);margin-bottom:4px;">Original</div>
+        <img src="${escapeHtml(transformImageUrl(st.originalUrl))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;max-height:240px;border:1px solid var(--border);border-radius:8px;background:#fff;">
+      </div>
+      <div style="flex:1;min-width:140px;text-align:center;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--primary);margin-bottom:4px;">In use ✓</div>
+        <img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" style="max-width:100%;max-height:240px;border:2px solid var(--primary);border-radius:8px;background:#fff;">
+      </div>
+    </div>
+    <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 2px;text-align:center;">Compare the two — if the edited one changed too much, tap “↩ Use original”.</div>` : '';
+  bar.innerHTML = compare + `
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
       <span style="font-size:0.78rem;color:var(--text-muted);">Image:</span>
       <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-crop-open="${blockId}">✂️ Crop / reposition</button>
