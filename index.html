@@ -4555,6 +4555,10 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         Quick Practice
       </div>
+      <div class="nav-item student-only" onclick="startMcqPractice()" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.4"/></svg>
+        MCQ Practice
+      </div>
       <div class="nav-item student-only" data-page="topicalpractice" onclick="navigateTo('topicalpractice')" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
         Topical Practice
@@ -6273,7 +6277,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.0.3';
+const APP_VERSION = 'v1.0.4';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -12036,6 +12040,33 @@ function _checkAllPartsMarked(containerSel) {
   }
   recordCerPerformance(q, score, totalParts, cfg.mode || 'practice-open');
   if (typeof cfg.onAllMarked === 'function') cfg.onAllMarked({ score, total: totalParts, mistakes });
+  // Show the "why": an A.I. explanation of the answers. The photo/bulk path makes
+  // its own; the click-to-mark path (including MCQ) didn't — so generate one here.
+  _genAndShowExplanation(containerSel, q, results, cfg.scoreElId);
+}
+
+// Build an answer-specific explanation from the marked parts and show it (falls
+// back to the question's authored explanation block if the AI is unavailable).
+async function _genAndShowExplanation(containerSel, q, results, scoreElId) {
+  const entries = Object.entries(results || {});
+  if (!entries.length || !q) return;
+  let aiText = '';
+  try {
+    if (window.__aiReady && window.__aiReady()) {
+      const ctx = _questionContext(q);
+      const lines = entries.map(([key, r], i) => {
+        const kind = key.indexOf('mcq') === 0 ? 'Multiple choice' : 'Open answer';
+        return `${i + 1}. ${kind} — marked ${r.verdict}. Correct/model answer: ${r.expected || '(none)'}. The student gave: ${r.student || '(blank)'}`;
+      }).join('\n');
+      const prompt =
+        `You are a science teacher giving feedback to a Singapore primary-school student on the question they just answered. ` +
+        `Write a clear EXPLANATION (2-4 sentences) addressed to "you" that says WHY the correct answer is correct and, where the student was wrong, names the likely misconception and what to remember. Be specific to this question; do not merely restate the model answer.\n` +
+        `Question: "${ctx}".\nItems:\n${lines}\n` +
+        `Return ONLY the explanation text — no JSON, no preamble, no headings.`;
+      aiText = (await askGemini(prompt, { maxOutputTokens: 320, temperature: 0.3 }) || '').trim();
+    }
+  } catch (e) { console.warn('explanation gen failed', e); }
+  try { showExplanation(containerSel, q, aiText, scoreElId, ''); } catch (e) { console.warn('showExplanation', e); }
 }
 
 // Mark ONE part of the question (an open answer box or one MCQ) with the AI.
@@ -12757,19 +12788,26 @@ async function qpAiRecommend() {
         const lvl = getTopicLevel(t);
         return `- "${t}" (${lvl}, ${counts[t]} questions): ${a ? a.acc + '% over ' + a.n + ' attempts' : 'not attempted yet'}`;
       }).join('\n');
+      // The rest of the student's weakness profile: skill category + question type.
+      const catAcc = Object.entries(p.categories || {}).map(([c, d]) => ({ name: c, acc: d.possible ? Math.round(100 * d.score / d.possible) : 0, n: d.attempts || 0 })).filter(x => x.n > 0).sort((a, b) => a.acc - b.acc);
+      const typeAcc = Object.entries(p.types || {}).map(([t, d]) => ({ name: t, acc: d.possible ? Math.round(100 * d.score / d.possible) : 0, n: d.attempts || 0 })).filter(x => x.n > 0);
       const prompt =
         `You are an adaptive primary-school science tutor choosing what a student should practise next.\n` +
         `Their overall mastery score is ${p.score100 || 0}/100 over ${p.attempts} attempts.\n` +
-        `Available topics with the student's accuracy and the topic's syllabus level (P3 easiest … P6 hardest):\n${lines}\n\n` +
-        `Pick the ONE topic the student should practise next — prefer a weak topic (low accuracy) or an important untried one. ` +
-        `Then choose a suitable difficulty as a level from P3 to P6: start a little easier (a lower level) when the student is struggling so they can rebuild confidence, and a higher level when they are doing well. ` +
-        `Return ONLY JSON: {"topic":"<exact topic from the list>","level":"P3|P4|P5|P6","reason":"one short sentence to the student starting with 'Let's'"}`;
+        `Available topics with the student's accuracy and the topic's syllabus level (P3 easiest … P6 hardest):\n${lines}\n` +
+        `Accuracy by skill category (weakest first): ${catAcc.length ? catAcc.map(c => c.name + ' ' + c.acc + '%').join(', ') : 'none yet'}.\n` +
+        `Accuracy by question type: ${typeAcc.length ? typeAcc.map(t => (t.name === 'open' ? 'open-ended' : 'MCQ') + ' ' + t.acc + '%').join(', ') : 'none yet'}.\n\n` +
+        `Pick the ONE topic the student should practise next — prefer a weak topic (low accuracy) or an important untried one, keeping their weak skill categories in mind. ` +
+        `Choose a difficulty level P3–P6: easier when struggling, harder when doing well. ` +
+        `Also choose a question "type": "mcq", "written" (open-ended) or "all" — target the student's weaker type when there is a clear gap, otherwise "all". ` +
+        `Return ONLY JSON: {"topic":"<exact topic from the list>","level":"P3|P4|P5|P6","type":"mcq|written|all","reason":"one short sentence to the student starting with 'Let's'"}`;
       try {
-        const raw = await askGemini(prompt, { maxOutputTokens: 200, temperature: 0.3, json: true });
+        const raw = await askGemini(prompt, { maxOutputTokens: 220, temperature: 0.3, json: true });
         const parsed = _parseAIJson(raw);
         if (parsed && parsed.topic && counts[parsed.topic]) {
           const lvl = /^P[3-6]$/.test(parsed.level) ? parsed.level : getTopicLevel(parsed.topic);
-          pick = { topic: parsed.topic, level: lvl, reason: parsed.reason || '' };
+          const ty = /^(mcq|written|all)$/.test(parsed.type) ? parsed.type : 'all';
+          pick = { topic: parsed.topic, level: lvl, type: ty, reason: parsed.reason || '' };
         }
       } catch (e) { console.warn('AI recommend failed, using local fallback', e); }
     }
@@ -12788,6 +12826,7 @@ async function qpAiRecommend() {
       pick = {
         topic: top.topic,
         level: 'P' + easedNum,
+        type: 'all',
         reason: top.acc < 0
           ? `Let's try ${top.topic} — you haven't practised it yet!`
           : `Let's strengthen ${top.topic}, where you're scoring around ${top.acc}%.`
@@ -12797,9 +12836,13 @@ async function qpAiRecommend() {
     // Apply the recommendation to the controls.
     const levelEl = document.getElementById('qpLevelSelect');
     const topicEl = document.getElementById('qpTopicSelect');
+    const typeEl = document.getElementById('qpTypeSelect');
     if (levelEl) levelEl.value = pick.level;
-    populateQpControls(); // topic options may depend on type
-    if (topicEl && counts[pick.topic]) topicEl.value = pick.topic;
+    if (typeEl && pick.type) typeEl.value = pick.type;
+    // If the chosen type can't serve this topic, fall back to "all" so we still practise it.
+    if (typeEl && pick.topic && !qpAvailableTopics(typeEl.value)[pick.topic]) typeEl.value = 'all';
+    populateQpControls(); // topic options depend on the type filter
+    if (topicEl && qpAvailableTopics((typeEl && typeEl.value) || 'all')[pick.topic]) topicEl.value = pick.topic;
 
     if (banner) {
       banner.style.display = '';
@@ -12917,6 +12960,14 @@ function buildQpQueue(level) {
   return queue;
 }
 
+// Student shortcut: jump straight into MCQ-only Quick Practice.
+function startMcqPractice() {
+  navigateTo('quickpractice');
+  const typeEl = document.getElementById('qpTypeSelect');
+  if (typeEl) typeEl.value = 'mcq';
+  if (typeof onQpFilterChange === 'function') onQpFilterChange();
+  startQuickPractice();
+}
 async function startQuickPractice() {
   qpLevel = document.getElementById('qpLevelSelect').value;
   qpQueue = buildQpQueue(qpLevel);
@@ -13398,8 +13449,13 @@ function recordCerPerformance(q, score, total, mode) {
   p.topics[topic].score += score; p.topics[topic].possible += total; p.topics[topic].attempts++;
   (p.categories[category] = p.categories[category] || { score: 0, possible: 0, attempts: 0 });
   p.categories[category].score += score; p.categories[category].possible += total; p.categories[category].attempts++;
+  // Track strength by question type too (mcq vs open) — part of the weakness profile.
+  const qType = qpHasMcq(q) ? 'mcq' : 'open';
+  p.types = p.types || {};
+  (p.types[qType] = p.types[qType] || { score: 0, possible: 0, attempts: 0 });
+  p.types[qType].score += score; p.types[qType].possible += total; p.types[qType].attempts++;
   p.recent = p.recent || [];
-  p.recent.push({ pct, topic, category, title: q.title || '', mode: mode || '', at: new Date().toISOString() });
+  p.recent.push({ pct, topic, category, type: qType, title: q.title || '', mode: mode || '', at: new Date().toISOString() });
   if (p.recent.length > 50) p.recent = p.recent.slice(-50);
   p.score100 = _computeScore100(p);
   p.updatedAt = new Date().toISOString();
@@ -18572,6 +18628,7 @@ window.onQpLevelChange = onQpLevelChange;
 window.onQpFilterChange = onQpFilterChange;
 window.qpAiRecommend = qpAiRecommend;
 window.startQuickPractice = startQuickPractice;
+window.startMcqPractice = startMcqPractice;
 window.loadNextQpQuestion = loadNextQpQuestion;
 // Usage Dashboard
 window.loadUsageDashboard = loadUsageDashboard;
