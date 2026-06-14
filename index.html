@@ -8763,12 +8763,52 @@ async function handleAiBuildFile(file) {
     const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 4096, json: true });
     const parsed = _parseAIJson(raw);
     _populateEditorFromAi(parsed);
-    showToast('Question built — review it, paste the diagram, then Save', 'success');
+    const hasImageBlock = blocks.some(b => b.type === 'image');
+    if (isImg && hasImageBlock && imageAiReady()) {
+      showToast('Question built ✓ — generating the diagram next…', 'success');
+      _autoFillDiagramFromUpload(file.type, b64); // async: fills the image block in HQ + adds the colour button
+    } else {
+      showToast('Question built — review it' + (hasImageBlock ? ', paste the diagram,' : '') + ' then Save', 'success');
+    }
   } catch (e) {
     console.error('AI build failed:', e);
     showToast('AI build failed: ' + (e && e.message ? e.message : e), 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// After the AI lays out the question, regenerate JUST the diagram from the
+// uploaded screenshot — the printed question text is excluded, the picture is
+// redrawn in high quality with its details unchanged — and drop it into the
+// first image block. The teacher then gets the existing "🎨 Enhance with
+// colour" button on it. Runs async so the question is usable straight away
+// (image generation can take 10–25s). Images only; PDFs keep manual paste.
+async function _autoFillDiagramFromUpload(mimeType, b64) {
+  if (!imageAiReady()) return;
+  const imgBlock = blocks.find(b => b.type === 'image');
+  if (!imgBlock) return;
+  const bar = document.getElementById('imgEnhance_' + imgBlock.id);
+  if (bar) bar.innerHTML = `<div style="margin-top:8px;font-size:0.82rem;color:var(--primary);display:flex;align-items:center;gap:8px;"><span class="spinner" style="border-color:rgba(74,124,89,.3);border-top-color:var(--primary);"></span>Generating the diagram in high quality… (10–25s)</div>`;
+  showToast('🖼️ Generating the diagram in high quality…', 'info');
+  try {
+    const prompt = 'Reproduce ONLY the scientific diagram, figure, illustration or experimental setup shown in this exam question, as a clean high-resolution image. EXCLUDE all printed question text, instructions, question numbers and multiple-choice options — keep only the labels, arrows and annotations that are part of the diagram itself. Preserve every shape, proportion, label and detail exactly as shown; do not add, remove or change anything. Use crisp, clean lines and clearly legible text on a plain white background so it looks freshly drawn, not photocopied or scanned. Output only the image, same aspect ratio.';
+    const dataUrl = await generateEnhancedImageDataUrl(prompt, [{ mimeType, data: b64 }]);
+    const url = await uploadImageDataUrl(dataUrl);
+    if (!blocks.includes(imgBlock)) return; // the editor moved on while we waited
+    saveBlockContent(imgBlock.id, 'url', url);
+    const input = document.getElementById('imgUrlInput_' + imgBlock.id);
+    if (input) input.value = url;
+    previewImage(imgBlock.id, url);
+    // Treat the clean extract as this image's "original" so colourising runs on
+    // it (not on the text-filled screenshot) and "Use original" reverts to it.
+    _imgEnhanceState[imgBlock.id] = { originalDataUrl: dataUrl, originalUrl: url };
+    renderImgEnhanceBar(imgBlock.id);
+    showToast('Diagram added in high quality ✓ — tap 🎨 Enhance with colour to colourise', 'success');
+  } catch (e) {
+    console.warn('auto diagram extract failed', e);
+    if (document.getElementById('imgEnhance_' + imgBlock.id)) renderImgEnhanceBar(imgBlock.id);
+    showToast('Could not auto-generate the diagram — paste it into the image block instead', 'info');
   }
 }
 
