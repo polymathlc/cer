@@ -6273,7 +6273,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.0.1';
+const APP_VERSION = 'v1.0.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -8358,8 +8358,8 @@ function _readAndUploadImage(blockId, file) {
       const input = document.getElementById('imgUrlInput_' + blockId);
       if (input) input.value = url;
       previewImage(blockId, url);
-      // Remember the original so the teacher can enhance, crop or revert.
-      _imgEnhanceState[blockId] = { originalDataUrl: dataUrl, originalUrl: url, cropSourceDataUrl: dataUrl };
+      // Remember it as both the original (for revert) and the current image.
+      _imgEnhanceState[blockId] = { originalDataUrl: dataUrl, originalUrl: url, currentDataUrl: dataUrl };
       renderImgEnhanceBar(blockId);
       showToast('Image uploaded', 'success');
     } catch (err) {
@@ -8378,7 +8378,7 @@ const _imagePasteHint = '📋 Click here, then paste a screenshot (Ctrl/⌘+V) �
 // can keep the original, or have the AI re-render it in high quality (with
 // or without colour). Uses a Gemini image model via the Firebase AI SDK.
 // =====================================================================
-const _imgEnhanceState = {}; // blockId -> { originalDataUrl, originalUrl }
+const _imgEnhanceState = {}; // blockId -> { originalDataUrl, originalUrl, currentDataUrl }
 
 // Pull a generated image out of a Gemini response (handles the SDK's
 // inlineDataParts() helper plus the raw candidate/part shapes).
@@ -8434,7 +8434,7 @@ async function _urlToDataUrl(url) {
 // Get the source image (as base64 inlineData) to enhance for a block.
 async function _blockImageToInline(blockId) {
   const st = _imgEnhanceState[blockId];
-  let dataUrl = st && st.originalDataUrl;
+  let dataUrl = st && (st.currentDataUrl || st.originalDataUrl);
   if (!dataUrl) {
     const block = blocks.find(b => b.id === blockId);
     if (!block || !block.url) throw new Error('no image to enhance');
@@ -8599,8 +8599,8 @@ async function enhanceBlockImage(blockId, colour) {
   try {
     const media = await _blockImageToInline(blockId);
     const prompt = colour
-      ? 'Recreate this image as a high-resolution, high-quality COLOUR version. Add natural, realistic, appropriate colours. Keep every detail, label, shape, proportion and piece of text exactly the same and in the same positions. Use smooth, clean lines and crisp, clearly legible fonts. Output only the image, same aspect ratio.'
-      : 'Recreate this image in high resolution and high quality with smooth, clean lines and crisp, clearly legible text. Keep every detail, label, shape, proportion and all text exactly the same and in the same positions; do not add colour beyond what is already present. Output only the image, same aspect ratio.';
+      ? 'Add colour to this diagram. Keep it the EXACT same line drawing — identical lines, shapes, labels, text, proportions and positions — and simply fill the existing shapes with flat, natural colours like a clean textbook illustration. Do NOT make it photo-realistic, do NOT add shading, gradients, 3D rendering, textures or a new style, and do NOT redraw, add, remove or move anything. Output only the image, same aspect ratio.'
+      : 'Clean up this image into a sharp BLACK-AND-WHITE line diagram: keep every line, shape, label, text, proportion and position EXACTLY the same, just make the lines crisp and the text clearly legible like a freshly printed textbook figure. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT redraw, add, remove or move anything. Output only the image, same aspect ratio.';
     const dataUrl = await generateEnhancedImageDataUrl(prompt, [media]);
     previewImage(blockId, dataUrl); // show immediately
     const url = await uploadImageDataUrl(dataUrl);
@@ -8608,6 +8608,10 @@ async function enhanceBlockImage(blockId, colour) {
     const input = document.getElementById('imgUrlInput_' + blockId);
     if (input) input.value = url;
     previewImage(blockId, url);
+    // The enhanced/colourised image is now the current image; keep the first
+    // image as the "original" so "Use original" can revert.
+    const prevE = _imgEnhanceState[blockId] || {};
+    _imgEnhanceState[blockId] = { originalDataUrl: prevE.originalDataUrl || dataUrl, originalUrl: prevE.originalUrl || url, currentDataUrl: dataUrl };
     renderImgEnhanceBar(blockId);
     showToast(colour ? 'Colourised image ready ✓' : 'Enhanced image ready ✓', 'success');
   } catch (err) {
@@ -8620,6 +8624,7 @@ async function enhanceBlockImage(blockId, colour) {
 function useOriginalImage(blockId) {
   const st = _imgEnhanceState[blockId];
   if (!st || !st.originalUrl) return;
+  st.currentDataUrl = st.originalDataUrl; // the current image is the original again
   saveBlockContent(blockId, 'url', st.originalUrl);
   const input = document.getElementById('imgUrlInput_' + blockId);
   if (input) input.value = st.originalUrl;
@@ -8651,8 +8656,8 @@ let _cropper = null;
 function openCropTool(blockId) {
   const st = _imgEnhanceState[blockId] || {};
   const block = blocks.find(b => b.id === blockId);
-  // Prefer the full uncropped source so a bad auto-crop can be widened again.
-  const srcP = st.cropSourceDataUrl ? Promise.resolve(st.cropSourceDataUrl)
+  // Crop the image currently shown in the block (the enhanced one), not a stale source.
+  const srcP = st.currentDataUrl ? Promise.resolve(st.currentDataUrl)
     : st.originalDataUrl ? Promise.resolve(st.originalDataUrl)
     : (block && block.url) ? _urlToDataUrl(transformImageUrl(block.url))
     : Promise.reject(new Error('no image to crop'));
@@ -8663,10 +8668,7 @@ function openCropTool(blockId) {
     imgEl.onload = () => requestAnimationFrame(() => {
       const dispW = imgEl.clientWidth, dispH = imgEl.clientHeight;
       if (!dispW || !dispH) return;
-      const cb = st.cropBox;
-      const box = (cb && ['x0', 'y0', 'x1', 'y1'].every(k => typeof cb[k] === 'number'))
-        ? { x: cb.x0 * dispW, y: cb.y0 * dispH, w: (cb.x1 - cb.x0) * dispW, h: (cb.y1 - cb.y0) * dispH }
-        : { x: dispW * 0.08, y: dispH * 0.08, w: dispW * 0.84, h: dispH * 0.84 };
+      const box = { x: dispW * 0.08, y: dispH * 0.08, w: dispW * 0.84, h: dispH * 0.84 };
       _cropper = { blockId, srcUrl, natW: imgEl.naturalWidth, natH: imgEl.naturalHeight, dispW, dispH, box, mode: null, handle: null };
       _cropRender();
     });
@@ -8732,7 +8734,6 @@ async function applyCropTool() {
   const { blockId, srcUrl, box, dispW, dispH, natW, natH } = _cropper;
   const sx = Math.round(box.x / dispW * natW), sy = Math.round(box.y / dispH * natH);
   const sw = Math.max(1, Math.round(box.w / dispW * natW)), sh = Math.max(1, Math.round(box.h / dispH * natH));
-  const usedBox = { x0: box.x / dispW, y0: box.y / dispH, x1: (box.x + box.w) / dispW, y1: (box.y + box.h) / dispH };
   closeCropTool();
   showToast('✂️ Cropping…', 'info');
   try {
@@ -8748,9 +8749,10 @@ async function applyCropTool() {
     const input = document.getElementById('imgUrlInput_' + blockId);
     if (input) input.value = url;
     previewImage(blockId, url);
-    // Keep the full source + last box so the user can re-crop; the crop becomes
-    // the base the Enhance / colour buttons act on.
-    _imgEnhanceState[blockId] = { originalDataUrl: cropDataUrl, originalUrl: url, cropSourceDataUrl: srcUrl, cropBox: usedBox };
+    // The crop is now the current image (crop / enhance / colour / touch-up all
+    // chain on it); keep the first image as the "original" for revert.
+    const prev = _imgEnhanceState[blockId] || {};
+    _imgEnhanceState[blockId] = { originalDataUrl: prev.originalDataUrl || cropDataUrl, originalUrl: prev.originalUrl || url, currentDataUrl: cropDataUrl };
     renderImgEnhanceBar(blockId);
     showToast('Cropped ✓', 'success');
   } catch (e) { console.warn('crop apply failed', e); showToast('Crop failed: ' + (e && e.message ? e.message : e), 'error'); }
@@ -8778,7 +8780,13 @@ let _annot = null;
 function openAnnotTool(blockId) {
   const block = blocks.find(b => b.id === blockId);
   if (!block || !block.url) { showToast('Add an image first, then touch it up', 'info'); return; }
-  _urlToDataUrl(transformImageUrl(block.url)).then(_loadImageEl).then(img => {
+  const st = _imgEnhanceState[blockId] || {};
+  // Use the stored data URL of the current image (avoids a CORS-blocked fetch);
+  // only fall back to fetching the hosted URL if we have nothing cached.
+  const srcP = st.currentDataUrl ? Promise.resolve(st.currentDataUrl)
+    : st.originalDataUrl ? Promise.resolve(st.originalDataUrl)
+    : _urlToDataUrl(transformImageUrl(block.url));
+  srcP.then(_loadImageEl).then(img => {
     const canvas = document.getElementById('annotCanvas');
     const cap = 1600; // keep the working canvas (and undo snapshots) sane
     const scale = Math.min(1, cap / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
@@ -8904,8 +8912,10 @@ async function applyAnnotTool() {
     const input = document.getElementById('imgUrlInput_' + blockId);
     if (input) input.value = url;
     previewImage(blockId, url);
-    // The touched-up image becomes the base for further crop/enhance/touch-up.
-    _imgEnhanceState[blockId] = { originalDataUrl: dataUrl, originalUrl: url, cropSourceDataUrl: dataUrl };
+    // The touched-up image is now the current image for further crop / enhance /
+    // colour / touch-up; keep the first image as the "original" for revert.
+    const prev = _imgEnhanceState[blockId] || {};
+    _imgEnhanceState[blockId] = { originalDataUrl: prev.originalDataUrl || dataUrl, originalUrl: prev.originalUrl || url, currentDataUrl: dataUrl };
     renderImgEnhanceBar(blockId);
     showToast('Touch-ups applied ✓', 'success');
   } catch (e) { console.warn('annot apply failed', e); showToast('Could not save touch-ups: ' + (e && e.message ? e.message : e), 'error'); }
@@ -9171,8 +9181,8 @@ async function _autoFillDiagramFromUpload(mimeType, b64) {
     const input = document.getElementById('imgUrlInput_' + imgBlock.id);
     if (input) input.value = url;
     previewImage(imgBlock.id, url);
-    // This image is the base for crop / enhance / colour / touch-up.
-    _imgEnhanceState[imgBlock.id] = { originalDataUrl: dataUrl, originalUrl: url, cropSourceDataUrl: dataUrl };
+    // This image is the base (original + current) for crop / enhance / colour / touch-up.
+    _imgEnhanceState[imgBlock.id] = { originalDataUrl: dataUrl, originalUrl: url, currentDataUrl: dataUrl };
     renderImgEnhanceBar(imgBlock.id);
     return true;
   };
@@ -9185,7 +9195,7 @@ async function _autoFillDiagramFromUpload(mimeType, b64) {
   setBar(`<div style="margin-top:8px;font-size:0.82rem;color:var(--primary);display:flex;align-items:center;gap:8px;"><span class="spinner" style="border-color:rgba(74,124,89,.3);border-top-color:var(--primary);"></span>Enhancing the image (black &amp; white)… (10–25s)</div>`);
   showToast('🖼️ Enhancing the whole image in high quality (black & white)…', 'info');
   try {
-    const prompt = 'Recreate this ENTIRE image as a clean, high-resolution BLACK-AND-WHITE (monochrome) version: crisp black line-work and text on a white background, like a freshly printed textbook figure rather than a photocopy or scan. Keep every diagram, detail, label, shape, proportion and all text exactly the same and in the same positions — do not add, remove, recolour or move anything. Output only the image, same aspect ratio.';
+    const prompt = 'Clean up this ENTIRE image into a sharp BLACK-AND-WHITE line diagram: crisp black line-work and text on a white background, like a freshly printed textbook figure rather than a photocopy or scan. Keep every diagram, detail, label, shape, proportion and all text EXACTLY the same and in the same positions. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT redraw, add, remove or move anything. Output only the image, same aspect ratio.';
     const enhanced = await generateEnhancedImageDataUrl(prompt, [{ mimeType, data: b64 }]);
     if (await place(enhanced)) showToast('Enhanced in black & white ✓ — tap ✂️ Crop / reposition to crop to the picture', 'success');
   } catch (e) {
