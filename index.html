@@ -5543,8 +5543,8 @@ option {
 <!-- ==================== AI BUILD (paste / drop / upload) DIALOG ==================== -->
 <div class="confirm-overlay" id="aiBuildOverlay">
   <div class="confirm-dialog" style="max-width:520px;text-align:left;">
-    <h3 style="margin-bottom:4px;">Build question from screenshot / PDF</h3>
-    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste a screenshot (Ctrl/⌘+V), drop an image or PDF, or choose a file. AI reads it and fills in the question, answer and explanation.</p>
+    <h3 style="margin-bottom:4px;">Build from screenshot / PDF</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste a screenshot (Ctrl/⌘+V), drop an image or PDF, or choose a file — AI fills in ONE question. To import a whole paper at once, use Bulk import below.</p>
     <div class="image-paste-zone" id="aiBuildZone" tabindex="0" style="padding:28px 16px;"
          onclick="this.focus()"
          onpaste="aiBuildPaste(event)"
@@ -5554,9 +5554,15 @@ option {
       📋 Click here, then paste your screenshot (Ctrl/⌘+V)<br>— or drop an image / PDF here
     </div>
     <input type="file" id="aiBuildFile" accept="image/*,application/pdf" style="display:none" onchange="const f=this.files[0]; this.value=''; if(f){ closeAiBuild(); handleAiBuildFile(f); }">
+    <input type="file" id="aiBuildBulkFile" accept="image/*,application/pdf" style="display:none" onchange="const f=this.files[0]; this.value=''; if(f){ closeAiBuild(); handleBulkAiFile(f); }">
+    <div style="margin-top:14px;padding:12px 14px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#faf8f5);">
+      <div style="font-size:0.86rem;font-weight:700;margin-bottom:4px;">📚 Bulk import a whole paper</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;">Upload a PDF (or image) with many questions — AI splits them into separate questions and adds them all to your <b>Vetting</b> list, where you format each and add pictures, then approve into the bank.</div>
+      <button class="btn btn-primary" onclick="document.getElementById('aiBuildBulkFile').click()">📚 Bulk import many questions…</button>
+    </div>
     <div class="btn-group" style="justify-content:flex-end;margin-top:14px;">
       <button class="btn btn-outline" onclick="closeAiBuild()">Cancel</button>
-      <button class="btn btn-outline" onclick="document.getElementById('aiBuildFile').click()">Choose file…</button>
+      <button class="btn btn-outline" onclick="document.getElementById('aiBuildFile').click()">Choose file (1 question)…</button>
     </div>
   </div>
 </div>
@@ -5622,7 +5628,7 @@ option {
   <div class="wspv-bar">
     <button class="btn btn-outline" type="button" onclick="closeWorksheetPreview()">← Back</button>
     <span class="wspv-title">Worksheet preview <span class="wspv-count" id="wsPreviewPageCount"></span></span>
-    <span class="wspv-hint">Click a question's “⤓ break before” to push it onto a new page — the preview updates live.</span>
+    <span class="wspv-hint">⬆ pulls a question onto the previous page (fit 2+ per page) · ⤓ pushes it onto a new page · updates live.</span>
     <button class="btn btn-primary" type="button" onclick="printFromPreview()">🖨️ Print / Save PDF</button>
   </div>
   <div class="wspv-stage"><iframe id="wsPreviewFrame" title="Worksheet preview"></iframe></div>
@@ -5781,6 +5787,20 @@ option {
     <div class="overlay-foot">
       <button class="btn btn-ghost" onclick="closeAnnotTool()" type="button">Cancel</button>
       <button class="btn btn-primary" onclick="applyAnnotTool()" type="button">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== BULK IMPORT PROGRESS ==================== -->
+<div class="overlay" id="bulkImportOverlay">
+  <div class="overlay-card" style="max-width:440px;">
+    <div class="overlay-head"><h3>📚 Bulk import</h3></div>
+    <div class="overlay-body">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="spinner"></div>
+        <div id="bulkImportStatus" style="font-size:0.95rem;">Reading your paper…</div>
+      </div>
+      <p style="margin-top:12px;font-size:0.8rem;color:var(--text-muted);">AI is splitting the document into separate questions. A long paper can take up to a minute — you'll land in the Vetting list when it's done.</p>
     </div>
   </div>
 </div>
@@ -6307,7 +6327,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.0.6';
+const APP_VERSION = 'v1.0.9';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9082,10 +9102,11 @@ function _markedToBlanks(marked) {
   return { content, blanks };
 }
 
-function _populateEditorFromAi(data) {
-  blocks = [];
-  selectedBlanks = {};
-
+// Turn an AI question object (ordered "blocks", or the legacy flat shape) into
+// editor blocks + blanks. Pure: returns fresh objects, mutates nothing global.
+function buildBlocksFromAi(data) {
+  const blocks = [];
+  const selectedBlanks = {};
   const stripBrackets = s => String(s || '').replace(/\[\[|\]\]/g, '').trim();
 
   const pushAnswer = (b) => {
@@ -9106,7 +9127,6 @@ function _populateEditorFromAi(data) {
   };
 
   if (Array.isArray(data.blocks)) {
-    // New ordered-blocks shape: build each block in the AI's sequence.
     data.blocks.forEach(b => {
       const t = String((b && b.type) || '').toLowerCase();
       if (t === 'text') {
@@ -9133,7 +9153,6 @@ function _populateEditorFromAi(data) {
       }
     });
   } else {
-    // Legacy flat shape (fallback for older responses).
     const qText = stripBrackets(data.questionText);
     if (qText) blocks.push({ id: generateBlockId(), type: 'text', content: qText });
     if (data.hasDiagram) blocks.push({ id: generateBlockId(), type: 'image', url: '' });
@@ -9142,6 +9161,31 @@ function _populateEditorFromAi(data) {
     const expl = stripBrackets(data.explanation);
     if (expl) blocks.push({ id: generateBlockId(), type: 'explanation', content: expl });
   }
+  return { blocks, selectedBlanks };
+}
+
+// Build a full pending question object from one AI question (used by bulk import).
+function buildQuestionFromAi(data) {
+  const built = buildBlocksFromAi(data || {});
+  return {
+    id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+    title: (data && data.title) || 'Untitled',
+    category: normalizeCategoryValue(data && data.category),
+    topic: (data && data.topic) || 'Heat',
+    markingGuide: '',
+    blocks: built.blocks,
+    blanks: built.selectedBlanks,
+    status: 'pending',
+    topicConfidence: (data && /^(high|medium|low)$/.test(data.topicConfidence)) ? data.topicConfidence : '',
+    createdAt: new Date().toISOString(),
+    createdBy: (currentUser && currentUser.name) || 'Admin'
+  };
+}
+
+function _populateEditorFromAi(data) {
+  const built = buildBlocksFromAi(data);
+  blocks = built.blocks;
+  selectedBlanks = built.selectedBlanks;
 
   const titleEl = document.getElementById('questionTitle');
   if (titleEl) titleEl.value = data.title || 'Untitled';
@@ -9156,6 +9200,86 @@ function _populateEditorFromAi(data) {
   if (typeof setEditMode === 'function') setEditMode(false);
   renderBlocks();
 }
+
+// Bulk import: upload a PDF/image with MANY questions; AI splits them into
+// separate questions and drops them all into the Vetting list to format + add
+// pictures (each gets image placeholders where diagrams belong).
+async function handleBulkAiFile(file) {
+  if (!file) return;
+  if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't set up yet — add your reCAPTCHA site key in the code", 'info'); return; }
+  const isPdf = file.type === 'application/pdf';
+  const isImg = file.type && file.type.startsWith('image/');
+  if (!isPdf && !isImg) { showToast('Please choose a PDF or an image', 'error'); return; }
+  if (file.size > 18 * 1024 * 1024) { showToast('File is too large (max ~18 MB)', 'error'); return; }
+  const btn = document.getElementById('aiBuildBtn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Importing…'; }
+  _openBulkImport('Reading your paper and extracting every question…');
+  try {
+    const b64 = await _fileToBase64(file);
+    const topics = Object.keys(topicLevelMap);
+    const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
+    const prompt =
+      `You are importing EVERY question from the attached ${isPdf ? 'PDF' : 'image'} (a Singapore primary-school science paper) into a question bank.\n` +
+      _genPreamble() +
+      `Split the document into its separate questions (by question number or clear boundaries) and return EACH as its own entry.\n` +
+      `Return ONLY JSON: {"questions":[ {"title":"short title","topic":"<closest topic>","topicConfidence":"high|medium|low","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
+      `Each item in "blocks" is ONE of:\n` +
+      `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
+      `  {"type":"image"}   (a placeholder where a diagram/picture/graph/figure appears — the teacher adds the real image later)\n` +
+      `  {"type":"mcq","options":["option 1","option 2","option 3","option 4"],"correctIndex":0}\n` +
+      `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
+      `  {"type":"plainanswer","text":"..."}\n` +
+      `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
+      `Rules:\n` +
+      `- ONE entry per question, in document order. Put an "image" placeholder exactly where each diagram/figure belongs, interleaved with the text.\n` +
+      `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, set "correctIndex" to the 0-based correct option; no "answer"/"plainanswer".\n` +
+      `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
+      `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
+      `- "topicConfidence": how sure you are the chosen topic is right — "high" (clearly this topic), "medium" (likely), "low" (a guess).\n` +
+      `- topic from EXACTLY: ${topics.join('; ')}.\n` +
+      `- category from EXACTLY: ${categories.join('; ')}.\n` +
+      `- Plain text only, no markdown.`;
+    const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 8192, json: true });
+    const parsed = _parseAIJson(raw);
+    const list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.questions) ? parsed.questions : []);
+    if (!list.length) { _closeBulkImport(); showToast('AI did not find any questions in that file', 'error'); return; }
+    _setBulkImport('Found ' + list.length + ' question' + (list.length === 1 ? '' : 's') + ' — adding to Vetting…');
+    let added = 0;
+    list.forEach(qd => {
+      try {
+        const q = buildQuestionFromAi(qd);
+        if (!q.blocks.length) return;
+        vettingList.push(q);
+        saveVettingQuestion(q); // async, non-blocking
+        added++;
+      } catch (e) { console.warn('bulk question build failed', e); }
+    });
+    updateCounts();
+    renderVettingList();
+    _closeBulkImport();
+    if (added) {
+      navigateTo('vetting');
+      showToast(`Imported ${added} question${added === 1 ? '' : 's'} to Vetting — format each & add pictures, then approve ✓`, 'success');
+    } else {
+      showToast('Could not build any questions from that file', 'error');
+    }
+  } catch (e) {
+    _closeBulkImport();
+    console.error('Bulk AI import failed:', e);
+    showToast('Bulk import failed: ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+function _openBulkImport(msg) {
+  const ov = document.getElementById('bulkImportOverlay');
+  if (!ov) return;
+  _setBulkImport(msg || 'Reading your paper…');
+  ov.classList.add('show');
+}
+function _setBulkImport(msg) { const s = document.getElementById('bulkImportStatus'); if (s) s.textContent = msg; }
+function _closeBulkImport() { const ov = document.getElementById('bulkImportOverlay'); if (ov) ov.classList.remove('show'); }
 
 function openAiBuild() {
   document.getElementById('aiBuildOverlay').classList.add('active');
@@ -10078,6 +10202,7 @@ function renderVettingList() {
             <div class="qb-card-meta">
               <span class="qb-tag category">${escapeHtml(q.category)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+              ${q.topicConfidence === 'low' ? '<span class="qb-tag" style="background:#fee2e2;color:#dc2626;" title="AI was unsure of this topic — please check it">⚠ check topic</span>' : q.topicConfidence === 'medium' ? '<span class="qb-tag" style="background:#fef3c7;color:#b45309;" title="AI was fairly sure of this topic — worth a glance">~ topic?</span>' : ''}
               <span class="vetting-badge ${statusClass}">${statusClass.charAt(0).toUpperCase() + statusClass.slice(1)}</span>
             </div>
           </div>
@@ -10824,19 +10949,23 @@ function _createPrintPageFooter() {
   return footer;
 }
 
-// Greedily group chunk indices into pages (chunk 0 always alone on page 1).
-// A new page is forced whenever the next chunk would overflow maxH OR its
-// forcedFlags[i] is set (a manual page break before that question). Shared by
-// the printer and the live preview so both paginate identically.
-function packChunkIndices(heights, forcedFlags, maxH, separatorH) {
-  if (!heights.length) return [];
-  const pageGroups = [[0]];
+// Greedily group chunk indices into A4 pages (filling each page as full as it
+// fits so questions aren't left alone with big gaps). A new page starts before
+// chunk i when forcedFlags[i] is set (manual break) OR it would overflow maxH —
+// UNLESS mergeFlags[i] is set, which keeps i on the previous page (the teacher's
+// "move to previous page" override). Shared by the printer and the live preview
+// so both paginate identically.
+function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH) {
+  const pageGroups = [];
+  if (!heights.length) return pageGroups;
   let currentGroup = [];
   let currentHeight = 0;
-  for (let i = 1; i < heights.length; i++) {
+  for (let i = 0; i < heights.length; i++) {
     const addedHeight = (currentGroup.length > 0 ? separatorH : 0) + heights[i];
     const forced = !!(forcedFlags && forcedFlags[i]);
-    if (currentGroup.length > 0 && (forced || currentHeight + addedHeight > maxH)) {
+    const merge = !!(mergeFlags && mergeFlags[i]);
+    const breakHere = currentGroup.length > 0 && (forced || (!merge && currentHeight + addedHeight > maxH));
+    if (breakHere) {
       pageGroups.push(currentGroup);
       currentGroup = [i];
       currentHeight = heights[i];
@@ -10882,8 +11011,10 @@ function doScaleAndPrint(output, opts) {
     // Group into pages, honouring any manual page breaks (forced before the
     // questions whose ids are in opts.forcedBreakIds).
     const forced = (opts && opts.forcedBreakIds) || null;
+    const merge = (opts && opts.mergeUpIds) || null;
     const forcedFlags = chunks.map(c => !!(forced && forced.has(c.dataset.qid)));
-    const pageGroups = packChunkIndices(heights, forcedFlags, maxH, separatorH);
+    const mergeFlags = chunks.map(c => !!(merge && merge.has(c.dataset.qid)));
+    const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH);
 
     // Detach all chunks and answer keys from current DOM positions
     chunks.forEach(c => c.remove());
@@ -12285,6 +12416,7 @@ async function markAllPartsFromPhoto(containerSel) {
 // =====================================================================
 let wsSelectedIds = new Set();
 let wsManualBreaks = new Set(); // question ids forced to start a new page (preview + print)
+let wsMergeUp = new Set();       // question ids forced to stay on the previous page
 let savedWorksheets = [];
 
 function populateWsTopicFilter() {
@@ -12777,7 +12909,7 @@ function buildWorksheetHtml(selected, worksheetTitle) {
 function doPrintStudentWorksheet(selected, worksheetTitle) {
   const output = document.getElementById('printOutput');
   output.innerHTML = buildWorksheetHtml(selected, worksheetTitle);
-  autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks });
+  autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
 }
 
 // =====================================================================
@@ -12811,7 +12943,9 @@ const WS_PREVIEW_CSS = `
   .wspv-pageno{ position:absolute; left:0; right:0; bottom:7mm; text-align:center; font-size:8pt; color:#b3b3b3; }
   .print-question-chunk{ position:relative; }
   .wspv-brk{ position:absolute; top:5px; right:6px; z-index:9; font:600 11px 'DM Sans',sans-serif; border:1px solid #cfcfcf; background:#fff; color:#555; border-radius:6px; padding:2px 9px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.2); }
-  .wspv-brk.on{ background:#4a7c59; color:#fff; border-color:#4a7c59; }`;
+  .wspv-brk.on{ background:#4a7c59; color:#fff; border-color:#4a7c59; }
+  .wspv-brk.up{ color:#2563eb; border-color:#9bb8f0; }
+  .wspv-brk.up:hover{ background:#2563eb; color:#fff; }`;
 
 // Copy the app stylesheet but unwrap the `@media print { … }` block (balanced
 // braces) so its rules apply on the iframe's screen — single source of truth,
@@ -12841,9 +12975,16 @@ function closeWorksheetPreview() {
   const ov = document.getElementById('wsPreviewOverlay');
   if (ov) ov.classList.remove('show');
 }
-function wsToggleBreak(qid) {
+function wsBreakBefore(qid) { // push this question onto a new page
   if (!qid) return;
-  if (wsManualBreaks.has(qid)) wsManualBreaks.delete(qid); else wsManualBreaks.add(qid);
+  wsMergeUp.delete(qid);
+  wsManualBreaks.add(qid);
+  renderWsPreview();
+}
+function wsPullUp(qid) { // pull this question onto the previous page
+  if (!qid) return;
+  wsManualBreaks.delete(qid);
+  wsMergeUp.add(qid);
   renderWsPreview();
 }
 function printFromPreview() { printStudentWorksheet(); }
@@ -12888,7 +13029,8 @@ function _wsPreviewPack(doc) {
   if (!chunks.length) { measure.style.display = 'none'; return; }
   const heights = chunks.map(c => c.scrollHeight);
   const forcedFlags = chunks.map(c => wsManualBreaks.has(c.dataset.qid));
-  const pageGroups = packChunkIndices(heights, forcedFlags, maxH, separatorH);
+  const mergeFlags = chunks.map(c => wsMergeUp.has(c.dataset.qid));
+  const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH);
   measure.style.display = 'none';
   const totalPages = pageGroups.length + answerKeys.length;
   let pageNo = 0;
@@ -12908,14 +13050,21 @@ function _wsPreviewPack(doc) {
     group.forEach((idx, pos) => {
       if (pos > 0) { const sep = doc.createElement('div'); sep.className = 'print-question-separator'; content.appendChild(sep); }
       const chunk = chunks[idx];
-      if (idx !== 0) { // can't break before the very first question
-        const qid = chunk.dataset.qid, on = wsManualBreaks.has(qid);
+      if (idx !== 0) { // nothing precedes the very first question
+        const qid = chunk.dataset.qid;
         const btn = doc.createElement('button');
         btn.type = 'button';
-        btn.className = 'wspv-brk' + (on ? ' on' : '');
-        btn.textContent = on ? '⤓ new page ✓' : '⤓ break before';
-        btn.title = 'Force this question to start a new page';
-        btn.setAttribute('onclick', "parent.wsToggleBreak('" + qid + "')");
+        if (pos === 0) { // this question starts a page — offer to pull it onto the previous one
+          btn.className = 'wspv-brk up';
+          btn.textContent = '⬆ move to previous page';
+          btn.title = 'Pull this question onto the previous page (fit more per page)';
+          btn.setAttribute('onclick', "parent.wsPullUp('" + qid + "')");
+        } else { // mid-page — offer to push it onto a new page
+          btn.className = 'wspv-brk';
+          btn.textContent = '⤓ break before';
+          btn.title = 'Push this question onto a new page';
+          btn.setAttribute('onclick', "parent.wsBreakBefore('" + qid + "')");
+        }
         chunk.appendChild(btn);
       }
       content.appendChild(chunk);
@@ -18772,6 +18921,7 @@ window.adjustImgScale = adjustImgScale;
 window.handleImagePaste = handleImagePaste;
 window.handleImageDrop = handleImageDrop;
 window.handleAiBuildFile = handleAiBuildFile;
+window.handleBulkAiFile = handleBulkAiFile;
 window.handleImgError = handleImgError;
 window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
@@ -18834,7 +18984,8 @@ window.saveWorksheet = saveWorksheet;
 window.printStudentWorksheet = printStudentWorksheet;
 window.openWorksheetPreview = openWorksheetPreview;
 window.closeWorksheetPreview = closeWorksheetPreview;
-window.wsToggleBreak = wsToggleBreak;
+window.wsBreakBefore = wsBreakBefore;
+window.wsPullUp = wsPullUp;
 window.printFromPreview = printFromPreview;
 window.renderSavedWorksheets = renderSavedWorksheets;
 window.deleteWorksheet = deleteWorksheet;
