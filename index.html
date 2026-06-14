@@ -5622,7 +5622,7 @@ option {
   <div class="wspv-bar">
     <button class="btn btn-outline" type="button" onclick="closeWorksheetPreview()">← Back</button>
     <span class="wspv-title">Worksheet preview <span class="wspv-count" id="wsPreviewPageCount"></span></span>
-    <span class="wspv-hint">Click a question's “⤓ break before” to push it onto a new page — the preview updates live.</span>
+    <span class="wspv-hint">⬆ pulls a question onto the previous page (fit 2+ per page) · ⤓ pushes it onto a new page · updates live.</span>
     <button class="btn btn-primary" type="button" onclick="printFromPreview()">🖨️ Print / Save PDF</button>
   </div>
   <div class="wspv-stage"><iframe id="wsPreviewFrame" title="Worksheet preview"></iframe></div>
@@ -6307,7 +6307,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.0.6';
+const APP_VERSION = 'v1.0.7';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -10824,19 +10824,23 @@ function _createPrintPageFooter() {
   return footer;
 }
 
-// Greedily group chunk indices into pages (chunk 0 always alone on page 1).
-// A new page is forced whenever the next chunk would overflow maxH OR its
-// forcedFlags[i] is set (a manual page break before that question). Shared by
-// the printer and the live preview so both paginate identically.
-function packChunkIndices(heights, forcedFlags, maxH, separatorH) {
-  if (!heights.length) return [];
-  const pageGroups = [[0]];
+// Greedily group chunk indices into A4 pages (filling each page as full as it
+// fits so questions aren't left alone with big gaps). A new page starts before
+// chunk i when forcedFlags[i] is set (manual break) OR it would overflow maxH —
+// UNLESS mergeFlags[i] is set, which keeps i on the previous page (the teacher's
+// "move to previous page" override). Shared by the printer and the live preview
+// so both paginate identically.
+function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH) {
+  const pageGroups = [];
+  if (!heights.length) return pageGroups;
   let currentGroup = [];
   let currentHeight = 0;
-  for (let i = 1; i < heights.length; i++) {
+  for (let i = 0; i < heights.length; i++) {
     const addedHeight = (currentGroup.length > 0 ? separatorH : 0) + heights[i];
     const forced = !!(forcedFlags && forcedFlags[i]);
-    if (currentGroup.length > 0 && (forced || currentHeight + addedHeight > maxH)) {
+    const merge = !!(mergeFlags && mergeFlags[i]);
+    const breakHere = currentGroup.length > 0 && (forced || (!merge && currentHeight + addedHeight > maxH));
+    if (breakHere) {
       pageGroups.push(currentGroup);
       currentGroup = [i];
       currentHeight = heights[i];
@@ -10882,8 +10886,10 @@ function doScaleAndPrint(output, opts) {
     // Group into pages, honouring any manual page breaks (forced before the
     // questions whose ids are in opts.forcedBreakIds).
     const forced = (opts && opts.forcedBreakIds) || null;
+    const merge = (opts && opts.mergeUpIds) || null;
     const forcedFlags = chunks.map(c => !!(forced && forced.has(c.dataset.qid)));
-    const pageGroups = packChunkIndices(heights, forcedFlags, maxH, separatorH);
+    const mergeFlags = chunks.map(c => !!(merge && merge.has(c.dataset.qid)));
+    const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH);
 
     // Detach all chunks and answer keys from current DOM positions
     chunks.forEach(c => c.remove());
@@ -12285,6 +12291,7 @@ async function markAllPartsFromPhoto(containerSel) {
 // =====================================================================
 let wsSelectedIds = new Set();
 let wsManualBreaks = new Set(); // question ids forced to start a new page (preview + print)
+let wsMergeUp = new Set();       // question ids forced to stay on the previous page
 let savedWorksheets = [];
 
 function populateWsTopicFilter() {
@@ -12777,7 +12784,7 @@ function buildWorksheetHtml(selected, worksheetTitle) {
 function doPrintStudentWorksheet(selected, worksheetTitle) {
   const output = document.getElementById('printOutput');
   output.innerHTML = buildWorksheetHtml(selected, worksheetTitle);
-  autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks });
+  autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
 }
 
 // =====================================================================
@@ -12811,7 +12818,9 @@ const WS_PREVIEW_CSS = `
   .wspv-pageno{ position:absolute; left:0; right:0; bottom:7mm; text-align:center; font-size:8pt; color:#b3b3b3; }
   .print-question-chunk{ position:relative; }
   .wspv-brk{ position:absolute; top:5px; right:6px; z-index:9; font:600 11px 'DM Sans',sans-serif; border:1px solid #cfcfcf; background:#fff; color:#555; border-radius:6px; padding:2px 9px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.2); }
-  .wspv-brk.on{ background:#4a7c59; color:#fff; border-color:#4a7c59; }`;
+  .wspv-brk.on{ background:#4a7c59; color:#fff; border-color:#4a7c59; }
+  .wspv-brk.up{ color:#2563eb; border-color:#9bb8f0; }
+  .wspv-brk.up:hover{ background:#2563eb; color:#fff; }`;
 
 // Copy the app stylesheet but unwrap the `@media print { … }` block (balanced
 // braces) so its rules apply on the iframe's screen — single source of truth,
@@ -12841,9 +12850,16 @@ function closeWorksheetPreview() {
   const ov = document.getElementById('wsPreviewOverlay');
   if (ov) ov.classList.remove('show');
 }
-function wsToggleBreak(qid) {
+function wsBreakBefore(qid) { // push this question onto a new page
   if (!qid) return;
-  if (wsManualBreaks.has(qid)) wsManualBreaks.delete(qid); else wsManualBreaks.add(qid);
+  wsMergeUp.delete(qid);
+  wsManualBreaks.add(qid);
+  renderWsPreview();
+}
+function wsPullUp(qid) { // pull this question onto the previous page
+  if (!qid) return;
+  wsManualBreaks.delete(qid);
+  wsMergeUp.add(qid);
   renderWsPreview();
 }
 function printFromPreview() { printStudentWorksheet(); }
@@ -12888,7 +12904,8 @@ function _wsPreviewPack(doc) {
   if (!chunks.length) { measure.style.display = 'none'; return; }
   const heights = chunks.map(c => c.scrollHeight);
   const forcedFlags = chunks.map(c => wsManualBreaks.has(c.dataset.qid));
-  const pageGroups = packChunkIndices(heights, forcedFlags, maxH, separatorH);
+  const mergeFlags = chunks.map(c => wsMergeUp.has(c.dataset.qid));
+  const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH);
   measure.style.display = 'none';
   const totalPages = pageGroups.length + answerKeys.length;
   let pageNo = 0;
@@ -12908,14 +12925,21 @@ function _wsPreviewPack(doc) {
     group.forEach((idx, pos) => {
       if (pos > 0) { const sep = doc.createElement('div'); sep.className = 'print-question-separator'; content.appendChild(sep); }
       const chunk = chunks[idx];
-      if (idx !== 0) { // can't break before the very first question
-        const qid = chunk.dataset.qid, on = wsManualBreaks.has(qid);
+      if (idx !== 0) { // nothing precedes the very first question
+        const qid = chunk.dataset.qid;
         const btn = doc.createElement('button');
         btn.type = 'button';
-        btn.className = 'wspv-brk' + (on ? ' on' : '');
-        btn.textContent = on ? '⤓ new page ✓' : '⤓ break before';
-        btn.title = 'Force this question to start a new page';
-        btn.setAttribute('onclick', "parent.wsToggleBreak('" + qid + "')");
+        if (pos === 0) { // this question starts a page — offer to pull it onto the previous one
+          btn.className = 'wspv-brk up';
+          btn.textContent = '⬆ move to previous page';
+          btn.title = 'Pull this question onto the previous page (fit more per page)';
+          btn.setAttribute('onclick', "parent.wsPullUp('" + qid + "')");
+        } else { // mid-page — offer to push it onto a new page
+          btn.className = 'wspv-brk';
+          btn.textContent = '⤓ break before';
+          btn.title = 'Push this question onto a new page';
+          btn.setAttribute('onclick', "parent.wsBreakBefore('" + qid + "')");
+        }
         chunk.appendChild(btn);
       }
       content.appendChild(chunk);
@@ -18834,7 +18858,8 @@ window.saveWorksheet = saveWorksheet;
 window.printStudentWorksheet = printStudentWorksheet;
 window.openWorksheetPreview = openWorksheetPreview;
 window.closeWorksheetPreview = closeWorksheetPreview;
-window.wsToggleBreak = wsToggleBreak;
+window.wsBreakBefore = wsBreakBefore;
+window.wsPullUp = wsPullUp;
 window.printFromPreview = printFromPreview;
 window.renderSavedWorksheets = renderSavedWorksheets;
 window.deleteWorksheet = deleteWorksheet;
