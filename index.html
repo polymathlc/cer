@@ -6273,7 +6273,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.0.0';
+const APP_VERSION = 'v1.0.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9130,8 +9130,8 @@ async function handleAiBuildFile(file) {
     _populateEditorFromAi(parsed);
     const hasImageBlock = blocks.some(b => b.type === 'image');
     if (isImg && hasImageBlock) {
-      showToast('Question built ✓ — finding the picture next…', 'success');
-      _autoFillDiagramFromUpload(file.type, b64); // async: crops the first picture into the image block
+      showToast('Question built ✓ — enhancing the image next…', 'success');
+      _autoFillDiagramFromUpload(file.type, b64); // async: enhances the whole image to B&W; crop it from there
     } else {
       showToast('Question built — review it' + (hasImageBlock ? ', paste the diagram,' : '') + ' then Save', 'success');
     }
@@ -9152,65 +9152,46 @@ function _loadImageEl(src) {
     img.src = src;
   });
 }
-// Crop a data: URL to a fractional box {x0,y0,x1,y1} (0–1). Returns a PNG data URL.
-async function _cropImageToDataUrl(srcDataUrl, box) {
-  const img = await _loadImageEl(srcDataUrl);
-  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
-  const pad = 0.012; // a hair of margin so edges/labels aren't clipped
-  const x0 = Math.max(0, box.x0 - pad), y0 = Math.max(0, box.y0 - pad);
-  const x1 = Math.min(1, box.x1 + pad), y1 = Math.min(1, box.y1 + pad);
-  const sx = Math.round(x0 * W), sy = Math.round(y0 * H);
-  const sw = Math.max(1, Math.round((x1 - x0) * W)), sh = Math.max(1, Math.round((y1 - y0) * H));
-  const canvas = document.createElement('canvas');
-  canvas.width = sw; canvas.height = sh;
-  canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-  return canvas.toDataURL('image/png');
-}
 
-// After the AI lays out the question, take a clean screenshot of ONLY the first
-// picture in the upload: the vision model locates the figure, then we crop the
-// ORIGINAL screenshot to that box client-side — exact pixels, no surrounding
-// paragraphs, details untouched — and drop it into the first image block. The
-// teacher then gets the existing "Enhance image" / "Enhance with colour"
-// buttons on the crop. Runs async; images only (PDFs keep manual paste).
+// After the AI lays out the question, enhance the WHOLE uploaded screenshot to
+// a clean, high-quality BLACK-AND-WHITE image and drop it into the first image
+// block. The teacher then crops to just the picture with "✂️ Crop / reposition"
+// (which works off this enhanced image) and can colourise or touch it up. No
+// auto-isolation — that was unreliable. Runs async; images only.
 async function _autoFillDiagramFromUpload(mimeType, b64) {
   const imgBlock = blocks.find(b => b.type === 'image');
   if (!imgBlock) return;
   const setBar = (html) => { const bar = document.getElementById('imgEnhance_' + imgBlock.id); if (bar) bar.innerHTML = html; };
-  setBar(`<div style="margin-top:8px;font-size:0.82rem;color:var(--primary);display:flex;align-items:center;gap:8px;"><span class="spinner" style="border-color:rgba(74,124,89,.3);border-top-color:var(--primary);"></span>Finding &amp; cropping the picture…</div>`);
-  showToast('🔍 Finding the picture in your screenshot…', 'info');
-  try {
-    // 1) Locate the FIRST picture as a tight bounding box, excluding the text.
-    const boxPrompt = 'The attached image is a printed exam question. Find the FIRST picture / diagram / figure / illustration / photo / graph / experimental setup in it — NOT the printed question wording, instructions or multiple-choice options. Return ONLY JSON {"found":true,"x0":0.00,"y0":0.00,"x1":0.00,"y1":0.00}: a TIGHT bounding box around just that picture, where (x0,y0) is its top-left corner and (x1,y1) its bottom-right, each a fraction 0–1 of the image width and height. Exclude the surrounding paragraphs and answer options. If there is genuinely no picture, return {"found":false}.';
-    const box = _parseAIJson(await askGeminiVision(boxPrompt, [{ mimeType, data: b64 }], { maxOutputTokens: 200, json: true }));
-    const ok = box && box.found !== false &&
-      ['x0', 'y0', 'x1', 'y1'].every(k => typeof box[k] === 'number' && box[k] >= 0 && box[k] <= 1) &&
-      box.x1 > box.x0 && box.y1 > box.y0 &&
-      (box.x1 - box.x0) * (box.y1 - box.y0) < 0.95; // a near-full box means it failed to isolate the picture
-    if (!ok) {
-      setBar('');
-      showToast("Couldn't isolate a picture — paste the diagram into the image block", 'info');
-      return;
-    }
-    // 2) Crop the ORIGINAL screenshot to that box — exact pixels, no redraw.
-    const fullDataUrl = 'data:' + mimeType + ';base64,' + b64;
-    const cropDataUrl = await _cropImageToDataUrl(fullDataUrl, box);
-    const cropUrl = await uploadImageDataUrl(cropDataUrl);
-    if (!blocks.includes(imgBlock)) return; // the editor moved on while we waited
-    saveBlockContent(imgBlock.id, 'url', cropUrl);
+  const fullDataUrl = 'data:' + mimeType + ';base64,' + b64;
+  // Put a data URL into the image block and wire up crop / enhance state.
+  const place = async (dataUrl) => {
+    const url = await uploadImageDataUrl(dataUrl);
+    if (!blocks.includes(imgBlock)) return false; // the editor moved on while we waited
+    saveBlockContent(imgBlock.id, 'url', url);
     const input = document.getElementById('imgUrlInput_' + imgBlock.id);
-    if (input) input.value = cropUrl;
-    previewImage(imgBlock.id, cropUrl);
-    // Keep the FULL screenshot + the detected box so "✂️ Crop / reposition" can
-    // re-crop from the whole image and fix this auto-crop by hand.
-    _imgEnhanceState[imgBlock.id] = { originalDataUrl: cropDataUrl, originalUrl: cropUrl, cropSourceDataUrl: fullDataUrl, cropBox: box };
+    if (input) input.value = url;
+    previewImage(imgBlock.id, url);
+    // This image is the base for crop / enhance / colour / touch-up.
+    _imgEnhanceState[imgBlock.id] = { originalDataUrl: dataUrl, originalUrl: url, cropSourceDataUrl: dataUrl };
     renderImgEnhanceBar(imgBlock.id);
-    showToast('Picture cropped ✓ — tap ✂️ Crop / reposition to fine-tune the area', 'success');
+    return true;
+  };
+  // No image model available → drop the raw screenshot in so it can be cropped.
+  if (!imageAiReady()) {
+    try { if (await place(fullDataUrl)) showToast('Image added — tap ✂️ Crop / reposition to crop to the picture', 'info'); }
+    catch (e) { console.warn('place raw image failed', e); }
+    return;
+  }
+  setBar(`<div style="margin-top:8px;font-size:0.82rem;color:var(--primary);display:flex;align-items:center;gap:8px;"><span class="spinner" style="border-color:rgba(74,124,89,.3);border-top-color:var(--primary);"></span>Enhancing the image (black &amp; white)… (10–25s)</div>`);
+  showToast('🖼️ Enhancing the whole image in high quality (black & white)…', 'info');
+  try {
+    const prompt = 'Recreate this ENTIRE image as a clean, high-resolution BLACK-AND-WHITE (monochrome) version: crisp black line-work and text on a white background, like a freshly printed textbook figure rather than a photocopy or scan. Keep every diagram, detail, label, shape, proportion and all text exactly the same and in the same positions — do not add, remove, recolour or move anything. Output only the image, same aspect ratio.';
+    const enhanced = await generateEnhancedImageDataUrl(prompt, [{ mimeType, data: b64 }]);
+    if (await place(enhanced)) showToast('Enhanced in black & white ✓ — tap ✂️ Crop / reposition to crop to the picture', 'success');
   } catch (e) {
-    console.warn('auto diagram crop failed', e);
-    setBar('');
-    if (document.getElementById('imgEnhance_' + imgBlock.id)) renderImgEnhanceBar(imgBlock.id);
-    showToast('Could not auto-extract the diagram — paste it into the image block instead', 'info');
+    console.warn('whole-image B&W enhance failed', e);
+    try { if (await place(fullDataUrl)) showToast('Enhance failed — added the original image; crop it by hand', 'info'); }
+    catch (e2) { setBar(''); showToast('Could not add the image — paste it into the image block manually', 'info'); }
   }
 }
 
