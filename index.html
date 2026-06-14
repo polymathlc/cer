@@ -6453,11 +6453,12 @@ function createBlock(type) {
       block.content = '';
       break;
     case 'mcq':
+      // Default to the numbered options used most often — (1) (2) (3) (4).
       block.options = [
-        { id: generateBlockId(), text: '' },
-        { id: generateBlockId(), text: '' },
-        { id: generateBlockId(), text: '' },
-        { id: generateBlockId(), text: '' }
+        { id: generateBlockId(), text: '(1)' },
+        { id: generateBlockId(), text: '(2)' },
+        { id: generateBlockId(), text: '(3)' },
+        { id: generateBlockId(), text: '(4)' }
       ];
       block.correctId = null;
       break;
@@ -7882,7 +7883,7 @@ function mcqAddOption(blockId) {
   const b = blocks.find(x => x.id === blockId);
   if (!b) return;
   b.options = b.options || [];
-  b.options.push({ id: generateBlockId(), text: '' });
+  b.options.push({ id: generateBlockId(), text: `(${b.options.length + 1})` }); // continue the numbering
   renderBlocks();
 }
 function mcqRemoveOption(blockId, optId) {
