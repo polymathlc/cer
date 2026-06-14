@@ -17246,7 +17246,12 @@ function advTick() {
   const fi0 = advFrontFoe();
   const frontOnScreen = fi0 >= 0 && advFoeScreenX(fi0) < (advStageW() * 0.92);
   // engage: stop the march when the line meets; push on when only ranged remain in reach
-  adv.scrollTarget = (fi0 >= 0 && (frontGap < 150 || (adv.foes[fi0].ranged && advFoeScreenX(fi0) - heroSX < 340))) ? 0 : 90;
+  // A melee hero must close right up to a ranged foe to land a hit. Ranged foes
+  // kite, but their world-anchored band lets the hero corner them — so keep
+  // marching until they're within melee reach (~130px) instead of stopping at the
+  // 340px a ranged/magic hero shoots from. (Fixes "can't reach ranged enemies".)
+  const rangedStopGap = heroMelee ? 130 : 340;
+  adv.scrollTarget = (fi0 >= 0 && (frontGap < 150 || (adv.foes[fi0].ranged && advFoeScreenX(fi0) - heroSX < rangedStopGap))) ? 0 : 90;
   adv.heroInRange = fi0 >= 0 && (!heroMelee ? frontOnScreen : (adv.foes[fi0].ranged ? advFoeScreenX(fi0) - heroSX < 130 : adv.foes[fi0].reached));
   if (now >= adv.heroNextAtk && adv.heroInRange) {
     adv.heroNextAtk = now + ADV_HERO_ATK_MS;
