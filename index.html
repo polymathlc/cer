@@ -5791,6 +5791,20 @@ option {
   </div>
 </div>
 
+<!-- ==================== BULK IMPORT PROGRESS ==================== -->
+<div class="overlay" id="bulkImportOverlay">
+  <div class="overlay-card" style="max-width:440px;">
+    <div class="overlay-head"><h3>📚 Bulk import</h3></div>
+    <div class="overlay-body">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="spinner"></div>
+        <div id="bulkImportStatus" style="font-size:0.95rem;">Reading your paper…</div>
+      </div>
+      <p style="margin-top:12px;font-size:0.8rem;color:var(--text-muted);">AI is splitting the document into separate questions. A long paper can take up to a minute — you'll land in the Vetting list when it's done.</p>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== TOAST CONTAINER ==================== -->
 <div class="toast-container" id="toastContainer"></div>
 
@@ -6313,7 +6327,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.0.8';
+const APP_VERSION = 'v1.0.9';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9162,6 +9176,7 @@ function buildQuestionFromAi(data) {
     blocks: built.blocks,
     blanks: built.selectedBlanks,
     status: 'pending',
+    topicConfidence: (data && /^(high|medium|low)$/.test(data.topicConfidence)) ? data.topicConfidence : '',
     createdAt: new Date().toISOString(),
     createdBy: (currentUser && currentUser.name) || 'Admin'
   };
@@ -9199,7 +9214,7 @@ async function handleBulkAiFile(file) {
   const btn = document.getElementById('aiBuildBtn');
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Importing…'; }
-  showToast('Reading the file — extracting every question…', 'info');
+  _openBulkImport('Reading your paper and extracting every question…');
   try {
     const b64 = await _fileToBase64(file);
     const topics = Object.keys(topicLevelMap);
@@ -9208,7 +9223,7 @@ async function handleBulkAiFile(file) {
       `You are importing EVERY question from the attached ${isPdf ? 'PDF' : 'image'} (a Singapore primary-school science paper) into a question bank.\n` +
       _genPreamble() +
       `Split the document into its separate questions (by question number or clear boundaries) and return EACH as its own entry.\n` +
-      `Return ONLY JSON: {"questions":[ {"title":"short title","topic":"<closest topic>","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
+      `Return ONLY JSON: {"questions":[ {"title":"short title","topic":"<closest topic>","topicConfidence":"high|medium|low","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
       `Each item in "blocks" is ONE of:\n` +
       `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
       `  {"type":"image"}   (a placeholder where a diagram/picture/graph/figure appears — the teacher adds the real image later)\n` +
@@ -9221,13 +9236,15 @@ async function handleBulkAiFile(file) {
       `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, set "correctIndex" to the 0-based correct option; no "answer"/"plainanswer".\n` +
       `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
       `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
+      `- "topicConfidence": how sure you are the chosen topic is right — "high" (clearly this topic), "medium" (likely), "low" (a guess).\n` +
       `- topic from EXACTLY: ${topics.join('; ')}.\n` +
       `- category from EXACTLY: ${categories.join('; ')}.\n` +
       `- Plain text only, no markdown.`;
     const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 8192, json: true });
     const parsed = _parseAIJson(raw);
     const list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.questions) ? parsed.questions : []);
-    if (!list.length) { showToast('AI did not find any questions in that file', 'error'); return; }
+    if (!list.length) { _closeBulkImport(); showToast('AI did not find any questions in that file', 'error'); return; }
+    _setBulkImport('Found ' + list.length + ' question' + (list.length === 1 ? '' : 's') + ' — adding to Vetting…');
     let added = 0;
     list.forEach(qd => {
       try {
@@ -9240,6 +9257,7 @@ async function handleBulkAiFile(file) {
     });
     updateCounts();
     renderVettingList();
+    _closeBulkImport();
     if (added) {
       navigateTo('vetting');
       showToast(`Imported ${added} question${added === 1 ? '' : 's'} to Vetting — format each & add pictures, then approve ✓`, 'success');
@@ -9247,12 +9265,21 @@ async function handleBulkAiFile(file) {
       showToast('Could not build any questions from that file', 'error');
     }
   } catch (e) {
+    _closeBulkImport();
     console.error('Bulk AI import failed:', e);
     showToast('Bulk import failed: ' + (e && e.message ? e.message : e), 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
 }
+function _openBulkImport(msg) {
+  const ov = document.getElementById('bulkImportOverlay');
+  if (!ov) return;
+  _setBulkImport(msg || 'Reading your paper…');
+  ov.classList.add('show');
+}
+function _setBulkImport(msg) { const s = document.getElementById('bulkImportStatus'); if (s) s.textContent = msg; }
+function _closeBulkImport() { const ov = document.getElementById('bulkImportOverlay'); if (ov) ov.classList.remove('show'); }
 
 function openAiBuild() {
   document.getElementById('aiBuildOverlay').classList.add('active');
@@ -10175,6 +10202,7 @@ function renderVettingList() {
             <div class="qb-card-meta">
               <span class="qb-tag category">${escapeHtml(q.category)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+              ${q.topicConfidence === 'low' ? '<span class="qb-tag" style="background:#fee2e2;color:#dc2626;" title="AI was unsure of this topic — please check it">⚠ check topic</span>' : q.topicConfidence === 'medium' ? '<span class="qb-tag" style="background:#fef3c7;color:#b45309;" title="AI was fairly sure of this topic — worth a glance">~ topic?</span>' : ''}
               <span class="vetting-badge ${statusClass}">${statusClass.charAt(0).toUpperCase() + statusClass.slice(1)}</span>
             </div>
           </div>
