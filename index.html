@@ -5696,6 +5696,29 @@ option {
   </div>
 </div>
 
+<!-- ==================== IMAGE CROP / REPOSITION ==================== -->
+<div class="overlay" id="cropOverlay">
+  <div class="overlay-card" style="max-width:94vw;width:auto;">
+    <div class="overlay-head"><h3>✂️ Crop &amp; reposition</h3><button class="close" onclick="closeCropTool()" type="button">×</button></div>
+    <div class="overlay-body" style="text-align:center;">
+      <div id="cropStage">
+        <img id="cropImg" alt="">
+        <div id="cropBox">
+          <span class="crop-h" data-h="nw"></span><span class="crop-h" data-h="n"></span><span class="crop-h" data-h="ne"></span>
+          <span class="crop-h" data-h="w"></span><span class="crop-h" data-h="e"></span>
+          <span class="crop-h" data-h="sw"></span><span class="crop-h" data-h="s"></span><span class="crop-h" data-h="se"></span>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:10px;">Drag the box to move it; drag a handle to resize. Then tap Apply crop.</p>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-ghost" onclick="closeCropTool()" type="button">Cancel</button>
+      <button class="btn btn-outline" onclick="cropToolReset()" type="button">⤢ Whole image</button>
+      <button class="btn btn-primary" onclick="applyCropTool()" type="button">✂️ Apply crop</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== TOAST CONTAINER ==================== -->
 <div class="toast-container" id="toastContainer"></div>
 
@@ -8298,8 +8321,8 @@ function _readAndUploadImage(blockId, file) {
       const input = document.getElementById('imgUrlInput_' + blockId);
       if (input) input.value = url;
       previewImage(blockId, url);
-      // Remember the original so the teacher can enhance it or revert.
-      _imgEnhanceState[blockId] = { originalDataUrl: dataUrl, originalUrl: url };
+      // Remember the original so the teacher can enhance, crop or revert.
+      _imgEnhanceState[blockId] = { originalDataUrl: dataUrl, originalUrl: url, cropSourceDataUrl: dataUrl };
       renderImgEnhanceBar(blockId);
       showToast('Image uploaded', 'success');
     } catch (err) {
@@ -8395,7 +8418,8 @@ function renderImgEnhanceBar(blockId) {
   const showOriginal = st && st.originalUrl && st.originalUrl !== block.url;
   bar.innerHTML = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
-      <span style="font-size:0.78rem;color:var(--text-muted);">AI image:</span>
+      <span style="font-size:0.78rem;color:var(--text-muted);">Image:</span>
+      <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-crop-open="${blockId}">✂️ Crop / reposition</button>
       ${showOriginal ? `<button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-use-original="${blockId}">↩ Use original</button>` : ''}
       <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-enhance="${blockId}" data-colour="0">✨ Enhance image</button>
       <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-enhance="${blockId}" data-colour="1">🎨 Enhance with colour</button>
@@ -8408,7 +8432,9 @@ document.addEventListener('click', function (e) {
   const enh = e.target.closest && e.target.closest('[data-enhance]');
   if (enh) { e.preventDefault(); enhanceBlockImage(enh.getAttribute('data-enhance'), enh.getAttribute('data-colour') === '1'); return; }
   const uo = e.target.closest && e.target.closest('[data-use-original]');
-  if (uo) { e.preventDefault(); useOriginalImage(uo.getAttribute('data-use-original')); }
+  if (uo) { e.preventDefault(); useOriginalImage(uo.getAttribute('data-use-original')); return; }
+  const cr = e.target.closest && e.target.closest('[data-crop-open]');
+  if (cr) { e.preventDefault(); openCropTool(cr.getAttribute('data-crop-open')); }
 });
 
 // =====================================================================
@@ -8560,6 +8586,134 @@ function useOriginalImage(blockId) {
   previewImage(blockId, st.originalUrl);
   renderImgEnhanceBar(blockId);
   showToast('Reverted to the original image', 'info');
+}
+
+// =====================================================================
+// IMAGE CROP / REPOSITION — drag a box over the image to crop it. Works on any
+// image block; for AI-built questions it crops the FULL original screenshot, so
+// an imperfect auto-crop can be fixed by hand without losing anything.
+// =====================================================================
+(function injectCropStyles() {
+  const css = `
+  #cropStage { position:relative; display:inline-block; max-width:100%; line-height:0; touch-action:none; user-select:none; -webkit-user-select:none; overflow:hidden; }
+  #cropImg { display:block; max-width:82vw; max-height:60vh; }
+  #cropBox { position:absolute; box-sizing:border-box; border:2px solid var(--primary,#4a7c59); box-shadow:0 0 0 9999px rgba(0,0,0,0.5); cursor:move; }
+  .crop-h { position:absolute; width:16px; height:16px; background:#fff; border:2px solid var(--primary,#4a7c59); border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+  .crop-h[data-h="nw"]{left:-9px;top:-9px;cursor:nwse-resize;} .crop-h[data-h="ne"]{right:-9px;top:-9px;cursor:nesw-resize;}
+  .crop-h[data-h="sw"]{left:-9px;bottom:-9px;cursor:nesw-resize;} .crop-h[data-h="se"]{right:-9px;bottom:-9px;cursor:nwse-resize;}
+  .crop-h[data-h="n"]{left:calc(50% - 8px);top:-9px;cursor:ns-resize;} .crop-h[data-h="s"]{left:calc(50% - 8px);bottom:-9px;cursor:ns-resize;}
+  .crop-h[data-h="w"]{left:-9px;top:calc(50% - 8px);cursor:ew-resize;} .crop-h[data-h="e"]{right:-9px;top:calc(50% - 8px);cursor:ew-resize;}`;
+  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+})();
+
+let _cropper = null;
+
+function openCropTool(blockId) {
+  const st = _imgEnhanceState[blockId] || {};
+  const block = blocks.find(b => b.id === blockId);
+  // Prefer the full uncropped source so a bad auto-crop can be widened again.
+  const srcP = st.cropSourceDataUrl ? Promise.resolve(st.cropSourceDataUrl)
+    : st.originalDataUrl ? Promise.resolve(st.originalDataUrl)
+    : (block && block.url) ? _urlToDataUrl(transformImageUrl(block.url))
+    : Promise.reject(new Error('no image to crop'));
+  srcP.then(srcUrl => {
+    const overlay = document.getElementById('cropOverlay');
+    const imgEl = document.getElementById('cropImg');
+    overlay.classList.add('show');
+    imgEl.onload = () => requestAnimationFrame(() => {
+      const dispW = imgEl.clientWidth, dispH = imgEl.clientHeight;
+      if (!dispW || !dispH) return;
+      const cb = st.cropBox;
+      const box = (cb && ['x0', 'y0', 'x1', 'y1'].every(k => typeof cb[k] === 'number'))
+        ? { x: cb.x0 * dispW, y: cb.y0 * dispH, w: (cb.x1 - cb.x0) * dispW, h: (cb.y1 - cb.y0) * dispH }
+        : { x: dispW * 0.08, y: dispH * 0.08, w: dispW * 0.84, h: dispH * 0.84 };
+      _cropper = { blockId, srcUrl, natW: imgEl.naturalWidth, natH: imgEl.naturalHeight, dispW, dispH, box, mode: null, handle: null };
+      _cropRender();
+    });
+    imgEl.src = srcUrl;
+  }).catch(e => { console.warn('open cropper', e); showToast('Could not open the cropper for this image', 'error'); });
+}
+function _cropRender() {
+  if (!_cropper) return;
+  const el = document.getElementById('cropBox'); if (!el) return;
+  const b = _cropper.box;
+  el.style.left = Math.round(b.x) + 'px'; el.style.top = Math.round(b.y) + 'px';
+  el.style.width = Math.round(b.w) + 'px'; el.style.height = Math.round(b.h) + 'px';
+}
+function _cropDown(e) {
+  if (!_cropper) return;
+  const h = e.target && e.target.getAttribute && e.target.getAttribute('data-h');
+  if (!(h || (e.target && e.target.id === 'cropBox'))) return;
+  e.preventDefault();
+  _cropper.mode = h ? 'resize' : 'move';
+  _cropper.handle = h || null;
+  _cropper.sx = e.clientX; _cropper.sy = e.clientY;
+  _cropper.start = Object.assign({}, _cropper.box);
+}
+function _cropMove(e) {
+  if (!_cropper || !_cropper.mode) return;
+  e.preventDefault();
+  const dx = e.clientX - _cropper.sx, dy = e.clientY - _cropper.sy;
+  const s = _cropper.start, DW = _cropper.dispW, DH = _cropper.dispH, MIN = 24;
+  let { x, y, w, h } = s;
+  if (_cropper.mode === 'move') {
+    x = Math.max(0, Math.min(DW - s.w, s.x + dx));
+    y = Math.max(0, Math.min(DH - s.h, s.y + dy));
+  } else {
+    const H = _cropper.handle;
+    if (H.includes('e')) w = Math.max(MIN, Math.min(DW - s.x, s.w + dx));
+    if (H.includes('s')) h = Math.max(MIN, Math.min(DH - s.y, s.h + dy));
+    if (H.includes('w')) { const nx = Math.max(0, Math.min(s.x + s.w - MIN, s.x + dx)); w = s.x + s.w - nx; x = nx; }
+    if (H.includes('n')) { const ny = Math.max(0, Math.min(s.y + s.h - MIN, s.y + dy)); h = s.y + s.h - ny; y = ny; }
+  }
+  _cropper.box = { x, y, w, h };
+  _cropRender();
+}
+function _cropUp() { if (_cropper) { _cropper.mode = null; _cropper.handle = null; } }
+document.addEventListener('pointermove', _cropMove);
+document.addEventListener('pointerup', _cropUp);
+document.addEventListener('pointerdown', function (e) {
+  const stage = document.getElementById('cropStage');
+  if (_cropper && stage && stage.contains(e.target)) _cropDown(e);
+});
+
+function cropToolReset() {
+  if (!_cropper) return;
+  _cropper.box = { x: 0, y: 0, w: _cropper.dispW, h: _cropper.dispH };
+  _cropRender();
+}
+function closeCropTool() {
+  const o = document.getElementById('cropOverlay'); if (o) o.classList.remove('show');
+  const img = document.getElementById('cropImg'); if (img) img.removeAttribute('src'); // so reopening refires onload
+  _cropper = null;
+}
+async function applyCropTool() {
+  if (!_cropper) return;
+  const { blockId, srcUrl, box, dispW, dispH, natW, natH } = _cropper;
+  const sx = Math.round(box.x / dispW * natW), sy = Math.round(box.y / dispH * natH);
+  const sw = Math.max(1, Math.round(box.w / dispW * natW)), sh = Math.max(1, Math.round(box.h / dispH * natH));
+  const usedBox = { x0: box.x / dispW, y0: box.y / dispH, x1: (box.x + box.w) / dispW, y1: (box.y + box.h) / dispH };
+  closeCropTool();
+  showToast('✂️ Cropping…', 'info');
+  try {
+    const img = await _loadImageEl(srcUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = sw; canvas.height = sh;
+    canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+    const cropDataUrl = canvas.toDataURL('image/png');
+    const url = await uploadImageDataUrl(cropDataUrl);
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+    saveBlockContent(blockId, 'url', url);
+    const input = document.getElementById('imgUrlInput_' + blockId);
+    if (input) input.value = url;
+    previewImage(blockId, url);
+    // Keep the full source + last box so the user can re-crop; the crop becomes
+    // the base the Enhance / colour buttons act on.
+    _imgEnhanceState[blockId] = { originalDataUrl: cropDataUrl, originalUrl: url, cropSourceDataUrl: srcUrl, cropBox: usedBox };
+    renderImgEnhanceBar(blockId);
+    showToast('Cropped ✓', 'success');
+  } catch (e) { console.warn('crop apply failed', e); showToast('Crop failed: ' + (e && e.message ? e.message : e), 'error'); }
 }
 
 // =====================================================================
@@ -8829,18 +8983,19 @@ async function _autoFillDiagramFromUpload(mimeType, b64) {
       return;
     }
     // 2) Crop the ORIGINAL screenshot to that box — exact pixels, no redraw.
-    const cropDataUrl = await _cropImageToDataUrl('data:' + mimeType + ';base64,' + b64, box);
+    const fullDataUrl = 'data:' + mimeType + ';base64,' + b64;
+    const cropDataUrl = await _cropImageToDataUrl(fullDataUrl, box);
     const cropUrl = await uploadImageDataUrl(cropDataUrl);
     if (!blocks.includes(imgBlock)) return; // the editor moved on while we waited
     saveBlockContent(imgBlock.id, 'url', cropUrl);
     const input = document.getElementById('imgUrlInput_' + imgBlock.id);
     if (input) input.value = cropUrl;
     previewImage(imgBlock.id, cropUrl);
-    // The clean crop is this image's "original", so the Enhance / Enhance-with-
-    // colour buttons (already shown for any image) operate on just the picture.
-    _imgEnhanceState[imgBlock.id] = { originalDataUrl: cropDataUrl, originalUrl: cropUrl };
+    // Keep the FULL screenshot + the detected box so "✂️ Crop / reposition" can
+    // re-crop from the whole image and fix this auto-crop by hand.
+    _imgEnhanceState[imgBlock.id] = { originalDataUrl: cropDataUrl, originalUrl: cropUrl, cropSourceDataUrl: fullDataUrl, cropBox: box };
     renderImgEnhanceBar(imgBlock.id);
-    showToast('Cropped the picture from the question ✓ — tap ✨ Enhance / 🎨 Enhance with colour if you want', 'success');
+    showToast('Picture cropped ✓ — tap ✂️ Crop / reposition to fine-tune the area', 'success');
   } catch (e) {
     console.warn('auto diagram crop failed', e);
     setBar('');
@@ -18059,6 +18214,10 @@ window.approveVetting = approveVetting;
 window.deleteVetting = deleteVetting;
 window.aiAutoVetAll = aiAutoVetAll;
 window.closeAutoVet = closeAutoVet;
+window.openCropTool = openCropTool;
+window.closeCropTool = closeCropTool;
+window.cropToolReset = cropToolReset;
+window.applyCropTool = applyCropTool;
 window.showToast = showToast;
 window.showConfirm = showConfirm;
 window.closeConfirm = closeConfirm;
