@@ -8765,9 +8765,9 @@ async function handleAiBuildFile(file) {
     const parsed = _parseAIJson(raw);
     _populateEditorFromAi(parsed);
     const hasImageBlock = blocks.some(b => b.type === 'image');
-    if (isImg && hasImageBlock && imageAiReady()) {
-      showToast('Question built ✓ — generating the diagram next…', 'success');
-      _autoFillDiagramFromUpload(file.type, b64); // async: fills the image block in HQ + adds the colour button
+    if (isImg && hasImageBlock) {
+      showToast('Question built ✓ — finding the picture next…', 'success');
+      _autoFillDiagramFromUpload(file.type, b64); // async: crops the first picture into the image block
     } else {
       showToast('Question built — review it' + (hasImageBlock ? ', paste the diagram,' : '') + ' then Save', 'success');
     }
@@ -8779,37 +8779,73 @@ async function handleAiBuildFile(file) {
   }
 }
 
-// After the AI lays out the question, regenerate JUST the diagram from the
-// uploaded screenshot — the printed question text is excluded, the picture is
-// redrawn in high quality with its details unchanged — and drop it into the
-// first image block. The teacher then gets the existing "🎨 Enhance with
-// colour" button on it. Runs async so the question is usable straight away
-// (image generation can take 10–25s). Images only; PDFs keep manual paste.
+// Load a data: URL into an <img> so it can be cropped on a canvas.
+function _loadImageEl(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('could not load the image'));
+    img.src = src;
+  });
+}
+// Crop a data: URL to a fractional box {x0,y0,x1,y1} (0–1). Returns a PNG data URL.
+async function _cropImageToDataUrl(srcDataUrl, box) {
+  const img = await _loadImageEl(srcDataUrl);
+  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+  const pad = 0.012; // a hair of margin so edges/labels aren't clipped
+  const x0 = Math.max(0, box.x0 - pad), y0 = Math.max(0, box.y0 - pad);
+  const x1 = Math.min(1, box.x1 + pad), y1 = Math.min(1, box.y1 + pad);
+  const sx = Math.round(x0 * W), sy = Math.round(y0 * H);
+  const sw = Math.max(1, Math.round((x1 - x0) * W)), sh = Math.max(1, Math.round((y1 - y0) * H));
+  const canvas = document.createElement('canvas');
+  canvas.width = sw; canvas.height = sh;
+  canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+  return canvas.toDataURL('image/png');
+}
+
+// After the AI lays out the question, take a clean screenshot of ONLY the first
+// picture in the upload: the vision model locates the figure, then we crop the
+// ORIGINAL screenshot to that box client-side — exact pixels, no surrounding
+// paragraphs, details untouched — and drop it into the first image block. The
+// teacher then gets the existing "Enhance image" / "Enhance with colour"
+// buttons on the crop. Runs async; images only (PDFs keep manual paste).
 async function _autoFillDiagramFromUpload(mimeType, b64) {
-  if (!imageAiReady()) return;
   const imgBlock = blocks.find(b => b.type === 'image');
   if (!imgBlock) return;
-  const bar = document.getElementById('imgEnhance_' + imgBlock.id);
-  if (bar) bar.innerHTML = `<div style="margin-top:8px;font-size:0.82rem;color:var(--primary);display:flex;align-items:center;gap:8px;"><span class="spinner" style="border-color:rgba(74,124,89,.3);border-top-color:var(--primary);"></span>Generating the diagram in high quality… (10–25s)</div>`;
-  showToast('🖼️ Generating the diagram in high quality…', 'info');
+  const setBar = (html) => { const bar = document.getElementById('imgEnhance_' + imgBlock.id); if (bar) bar.innerHTML = html; };
+  setBar(`<div style="margin-top:8px;font-size:0.82rem;color:var(--primary);display:flex;align-items:center;gap:8px;"><span class="spinner" style="border-color:rgba(74,124,89,.3);border-top-color:var(--primary);"></span>Finding &amp; cropping the picture…</div>`);
+  showToast('🔍 Finding the picture in your screenshot…', 'info');
   try {
-    const prompt = 'Reproduce ONLY the scientific diagram, figure, illustration or experimental setup shown in this exam question, as a clean high-resolution image. EXCLUDE all printed question text, instructions, question numbers and multiple-choice options — keep only the labels, arrows and annotations that are part of the diagram itself. Preserve every shape, proportion, label and detail exactly as shown; do not add, remove or change anything. Use crisp, clean lines and clearly legible text on a plain white background so it looks freshly drawn, not photocopied or scanned. Output only the image, same aspect ratio.';
-    const dataUrl = await generateEnhancedImageDataUrl(prompt, [{ mimeType, data: b64 }]);
-    const url = await uploadImageDataUrl(dataUrl);
+    // 1) Locate the FIRST picture as a tight bounding box, excluding the text.
+    const boxPrompt = 'The attached image is a printed exam question. Find the FIRST picture / diagram / figure / illustration / photo / graph / experimental setup in it — NOT the printed question wording, instructions or multiple-choice options. Return ONLY JSON {"found":true,"x0":0.00,"y0":0.00,"x1":0.00,"y1":0.00}: a TIGHT bounding box around just that picture, where (x0,y0) is its top-left corner and (x1,y1) its bottom-right, each a fraction 0–1 of the image width and height. Exclude the surrounding paragraphs and answer options. If there is genuinely no picture, return {"found":false}.';
+    const box = _parseAIJson(await askGeminiVision(boxPrompt, [{ mimeType, data: b64 }], { maxOutputTokens: 200, json: true }));
+    const ok = box && box.found !== false &&
+      ['x0', 'y0', 'x1', 'y1'].every(k => typeof box[k] === 'number' && box[k] >= 0 && box[k] <= 1) &&
+      box.x1 > box.x0 && box.y1 > box.y0 &&
+      (box.x1 - box.x0) * (box.y1 - box.y0) < 0.95; // a near-full box means it failed to isolate the picture
+    if (!ok) {
+      setBar('');
+      showToast("Couldn't isolate a picture — paste the diagram into the image block", 'info');
+      return;
+    }
+    // 2) Crop the ORIGINAL screenshot to that box — exact pixels, no redraw.
+    const cropDataUrl = await _cropImageToDataUrl('data:' + mimeType + ';base64,' + b64, box);
+    const cropUrl = await uploadImageDataUrl(cropDataUrl);
     if (!blocks.includes(imgBlock)) return; // the editor moved on while we waited
-    saveBlockContent(imgBlock.id, 'url', url);
+    saveBlockContent(imgBlock.id, 'url', cropUrl);
     const input = document.getElementById('imgUrlInput_' + imgBlock.id);
-    if (input) input.value = url;
-    previewImage(imgBlock.id, url);
-    // Treat the clean extract as this image's "original" so colourising runs on
-    // it (not on the text-filled screenshot) and "Use original" reverts to it.
-    _imgEnhanceState[imgBlock.id] = { originalDataUrl: dataUrl, originalUrl: url };
+    if (input) input.value = cropUrl;
+    previewImage(imgBlock.id, cropUrl);
+    // The clean crop is this image's "original", so the Enhance / Enhance-with-
+    // colour buttons (already shown for any image) operate on just the picture.
+    _imgEnhanceState[imgBlock.id] = { originalDataUrl: cropDataUrl, originalUrl: cropUrl };
     renderImgEnhanceBar(imgBlock.id);
-    showToast('Diagram added in high quality ✓ — tap 🎨 Enhance with colour to colourise', 'success');
+    showToast('Cropped the picture from the question ✓ — tap ✨ Enhance / 🎨 Enhance with colour if you want', 'success');
   } catch (e) {
-    console.warn('auto diagram extract failed', e);
+    console.warn('auto diagram crop failed', e);
+    setBar('');
     if (document.getElementById('imgEnhance_' + imgBlock.id)) renderImgEnhanceBar(imgBlock.id);
-    showToast('Could not auto-generate the diagram — paste it into the image block instead', 'info');
+    showToast('Could not auto-extract the diagram — paste it into the image block instead', 'info');
   }
 }
 
