@@ -5030,7 +5030,11 @@ option {
         <div class="ws-question-grid" id="wsQuestionGrid"></div>
 
         <div class="ws-actions-bar">
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-outline" onclick="openWorksheetPreview()" id="wsPreviewBtn" title="Live A4 preview — add page breaks, then print or export PDF">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              Preview
+            </button>
             <button class="btn btn-outline" onclick="saveWorksheet()" id="wsSaveBtn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
               Save Worksheet
@@ -5613,6 +5617,17 @@ option {
 </div>
 
 <!-- ==================== PRINT OUTPUT (hidden, rendered for window.print) ==================== -->
+<!-- ==================== WORKSHEET LIVE PREVIEW ==================== -->
+<div class="wspv-overlay" id="wsPreviewOverlay">
+  <div class="wspv-bar">
+    <button class="btn btn-outline" type="button" onclick="closeWorksheetPreview()">← Back</button>
+    <span class="wspv-title">Worksheet preview <span class="wspv-count" id="wsPreviewPageCount"></span></span>
+    <span class="wspv-hint">Click a question's “⤓ break before” to push it onto a new page — the preview updates live.</span>
+    <button class="btn btn-primary" type="button" onclick="printFromPreview()">🖨️ Print / Save PDF</button>
+  </div>
+  <div class="wspv-stage"><iframe id="wsPreviewFrame" title="Worksheet preview"></iframe></div>
+</div>
+
 <div id="printOutput" style="display:none;"></div>
 
 <!-- ==================== STUDENT PREVIEW OVERLAY ==================== -->
@@ -6292,7 +6307,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.0.5';
+const APP_VERSION = 'v1.0.6';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -10775,7 +10790,7 @@ function doPrintWorksheetOpen() {
 }
 
 // ===== SHARED: Auto-scale pages and trigger print =====
-function autoscaleAndPrint(output) {
+function autoscaleAndPrint(output, opts) {
   // Wait for all images to load before printing
   const images = Array.from(output.querySelectorAll('img'));
   const unloaded = images.filter(img => !img.complete);
@@ -10784,7 +10799,7 @@ function autoscaleAndPrint(output) {
     let remaining = unloaded.length;
     const onReady = () => {
       remaining--;
-      if (remaining <= 0) doScaleAndPrint(output);
+      if (remaining <= 0) doScaleAndPrint(output, opts);
     };
     unloaded.forEach(img => {
       img.addEventListener('load', onReady, { once: true });
@@ -10794,11 +10809,11 @@ function autoscaleAndPrint(output) {
     setTimeout(() => {
       if (remaining > 0) {
         remaining = 0;
-        doScaleAndPrint(output);
+        doScaleAndPrint(output, opts);
       }
     }, 5000);
   } else {
-    doScaleAndPrint(output);
+    doScaleAndPrint(output, opts);
   }
 }
 
@@ -10809,7 +10824,32 @@ function _createPrintPageFooter() {
   return footer;
 }
 
-function doScaleAndPrint(output) {
+// Greedily group chunk indices into pages (chunk 0 always alone on page 1).
+// A new page is forced whenever the next chunk would overflow maxH OR its
+// forcedFlags[i] is set (a manual page break before that question). Shared by
+// the printer and the live preview so both paginate identically.
+function packChunkIndices(heights, forcedFlags, maxH, separatorH) {
+  if (!heights.length) return [];
+  const pageGroups = [[0]];
+  let currentGroup = [];
+  let currentHeight = 0;
+  for (let i = 1; i < heights.length; i++) {
+    const addedHeight = (currentGroup.length > 0 ? separatorH : 0) + heights[i];
+    const forced = !!(forcedFlags && forcedFlags[i]);
+    if (currentGroup.length > 0 && (forced || currentHeight + addedHeight > maxH)) {
+      pageGroups.push(currentGroup);
+      currentGroup = [i];
+      currentHeight = heights[i];
+    } else {
+      currentGroup.push(i);
+      currentHeight += addedHeight;
+    }
+  }
+  if (currentGroup.length > 0) pageGroups.push(currentGroup);
+  return pageGroups;
+}
+
+function doScaleAndPrint(output, opts) {
   // Make output visible off-screen so we can measure heights accurately
   output.style.cssText = 'display:block;position:absolute;left:-9999px;top:0;width:178mm;';
 
@@ -10839,23 +10879,11 @@ function doScaleAndPrint(output) {
     // Measure each chunk's natural height
     const heights = chunks.map(c => c.scrollHeight);
 
-    // First chunk (with worksheet header) always gets its own page
-    const pageGroups = [[0]];
-    let currentGroup = [];
-    let currentHeight = 0;
-
-    for (let i = 1; i < chunks.length; i++) {
-      const addedHeight = (currentGroup.length > 0 ? separatorH : 0) + heights[i];
-      if (currentGroup.length > 0 && currentHeight + addedHeight > maxH) {
-        pageGroups.push(currentGroup);
-        currentGroup = [i];
-        currentHeight = heights[i];
-      } else {
-        currentGroup.push(i);
-        currentHeight += addedHeight;
-      }
-    }
-    if (currentGroup.length > 0) pageGroups.push(currentGroup);
+    // Group into pages, honouring any manual page breaks (forced before the
+    // questions whose ids are in opts.forcedBreakIds).
+    const forced = (opts && opts.forcedBreakIds) || null;
+    const forcedFlags = chunks.map(c => !!(forced && forced.has(c.dataset.qid)));
+    const pageGroups = packChunkIndices(heights, forcedFlags, maxH, separatorH);
 
     // Detach all chunks and answer keys from current DOM positions
     chunks.forEach(c => c.remove());
@@ -12256,6 +12284,7 @@ async function markAllPartsFromPhoto(containerSel) {
 // STUDENT WORKSHEET CREATOR
 // =====================================================================
 let wsSelectedIds = new Set();
+let wsManualBreaks = new Set(); // question ids forced to start a new page (preview + print)
 let savedWorksheets = [];
 
 function populateWsTopicFilter() {
@@ -12651,13 +12680,15 @@ function printStudentWorksheet() {
   doPrintStudentWorksheet(selected, title);
 }
 
-function doPrintStudentWorksheet(selected, worksheetTitle) {
-  const output = document.getElementById('printOutput');
+// Build the worksheet print HTML (question chunks + answer key). Shared by the
+// printer and the live preview so the two render identically. Each chunk carries
+// data-qid so the packer can honour manual page breaks keyed by question.
+function buildWorksheetHtml(selected, worksheetTitle) {
   let allHtml = '';
   const answerKeyData = [];
 
   selected.forEach((q, qIndex) => {
-    let qHtml = `<div class="print-question-chunk">`;
+    let qHtml = `<div class="print-question-chunk" data-qid="${escapeHtml(String(q.id || ''))}">`;
 
     if (qIndex === 0) {
       qHtml += `<div class="print-worksheet-header">
@@ -12740,8 +12771,159 @@ function doPrintStudentWorksheet(selected, worksheetTitle) {
     }
   }
 
-  output.innerHTML = allHtml;
-  autoscaleAndPrint(output);
+  return allHtml;
+}
+
+function doPrintStudentWorksheet(selected, worksheetTitle) {
+  const output = document.getElementById('printOutput');
+  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle);
+  autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks });
+}
+
+// =====================================================================
+// WORKSHEET LIVE PREVIEW — renders the exact print layout in an isolated
+// iframe (the @media print rules, unwrapped, apply on screen there), lets the
+// teacher force a page break before any question, updates live, and prints the
+// identical layout. WYSIWYG because preview + print share buildWorksheetHtml +
+// packChunkIndices + the same wsManualBreaks.
+// =====================================================================
+(function injectWsPreviewStyles() {
+  const css = `
+  .wspv-overlay{ display:none; position:fixed; inset:0; z-index:400; background:#525659; flex-direction:column; }
+  .wspv-overlay.show{ display:flex; }
+  .wspv-bar{ display:flex; align-items:center; gap:14px; padding:10px 16px; background:var(--surface,#fff); border-bottom:1px solid var(--border,#e2ddd5); flex-wrap:wrap; }
+  .wspv-bar .wspv-title{ font-weight:700; }
+  .wspv-bar .wspv-count{ font-weight:500; color:var(--text-muted,#7a756d); font-size:0.85rem; }
+  .wspv-bar .wspv-hint{ flex:1; min-width:120px; font-size:0.8rem; color:var(--text-muted,#7a756d); }
+  .wspv-stage{ flex:1; overflow:hidden; }
+  #wsPreviewFrame{ width:100%; height:100%; border:0; display:block; background:#525659; }
+  @media print { .wspv-overlay{ display:none !important; } }`;
+  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+})();
+
+// Styles written INTO the preview iframe (on top of the app's print CSS).
+const WS_PREVIEW_CSS = `
+  html,body{ margin:0; background:#525659; }
+  #wsMeasure{ position:absolute; left:-9999px; top:0; width:178mm; }
+  #wsPages{ padding:22px 0; }
+  .wspv-sheet{ position:relative; width:210mm; min-height:297mm; box-sizing:border-box; padding:18mm 16mm 20mm; background:#fff; margin:0 auto 20px; box-shadow:0 3px 16px rgba(0,0,0,.45); }
+  .wspv-content{ position:relative; }
+  .wspv-pageno{ position:absolute; left:0; right:0; bottom:7mm; text-align:center; font-size:8pt; color:#b3b3b3; }
+  .print-question-chunk{ position:relative; }
+  .wspv-brk{ position:absolute; top:5px; right:6px; z-index:9; font:600 11px 'DM Sans',sans-serif; border:1px solid #cfcfcf; background:#fff; color:#555; border-radius:6px; padding:2px 9px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+  .wspv-brk.on{ background:#4a7c59; color:#fff; border-color:#4a7c59; }`;
+
+// Copy the app stylesheet but unwrap the `@media print { … }` block (balanced
+// braces) so its rules apply on the iframe's screen — single source of truth,
+// no duplication, and the host page's real print is untouched.
+function _wsAppCssForPreview() {
+  const styleEl = document.querySelector('style');
+  let css = (styleEl && styleEl.textContent) || '';
+  const i = css.indexOf('@media print');
+  if (i >= 0) {
+    const open = css.indexOf('{', i);
+    if (open >= 0) {
+      let depth = 0, j = open;
+      for (; j < css.length; j++) { const ch = css[j]; if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth === 0) break; } }
+      if (depth === 0) css = css.slice(0, i) + css.slice(open + 1, j) + css.slice(j + 1);
+    }
+  }
+  return css;
+}
+
+function openWorksheetPreview() {
+  if (!wsSelectedIds.size) { showToast('Select at least one question first', 'error'); return; }
+  const ov = document.getElementById('wsPreviewOverlay');
+  if (ov) ov.classList.add('show');
+  renderWsPreview();
+}
+function closeWorksheetPreview() {
+  const ov = document.getElementById('wsPreviewOverlay');
+  if (ov) ov.classList.remove('show');
+}
+function wsToggleBreak(qid) {
+  if (!qid) return;
+  if (wsManualBreaks.has(qid)) wsManualBreaks.delete(qid); else wsManualBreaks.add(qid);
+  renderWsPreview();
+}
+function printFromPreview() { printStudentWorksheet(); }
+
+function renderWsPreview() {
+  const frame = document.getElementById('wsPreviewFrame');
+  if (!frame) return;
+  const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
+  const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
+  const html = buildWorksheetHtml(selected, title);
+  const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"],link[rel="preconnect"]')).map(l => l.outerHTML).join('');
+  const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+  if (!doc) return;
+  doc.open();
+  doc.write('<!DOCTYPE html><html><head><meta charset="utf-8">' + fontLinks +
+    '<style>' + _wsAppCssForPreview() + WS_PREVIEW_CSS + '</style></head><body>' +
+    '<div id="printOutput"><div id="wsMeasure">' + html + '</div><div id="wsPages"></div></div></body></html>');
+  doc.close();
+  _wsPreviewWhenReady(doc, () => _wsPreviewPack(doc));
+}
+
+function _wsPreviewWhenReady(doc, cb) {
+  let done = false;
+  const go = () => { if (done) return; done = true; (doc.defaultView || window).requestAnimationFrame(cb); };
+  try {
+    const fontsP = (doc.fonts && doc.fonts.ready) ? doc.fonts.ready : Promise.resolve();
+    const pending = Array.from(doc.images || []).filter(im => !im.complete);
+    if (!pending.length) { fontsP.then(go); }
+    else { let rem = pending.length; const one = () => { if (--rem <= 0) fontsP.then(go); }; pending.forEach(im => { im.addEventListener('load', one, { once: true }); im.addEventListener('error', one, { once: true }); }); }
+    setTimeout(go, 4500); // safety net
+  } catch (e) { setTimeout(go, 300); }
+}
+
+function _wsPreviewPack(doc) {
+  const measure = doc.getElementById('wsMeasure');
+  const pagesEl = doc.getElementById('wsPages');
+  if (!measure || !pagesEl) return;
+  const maxH = 740, separatorH = 30;
+  const chunks = Array.from(measure.querySelectorAll('.print-question-chunk'));
+  const answerKeys = Array.from(measure.querySelectorAll('.print-answer-key-page'));
+  pagesEl.innerHTML = '';
+  if (!chunks.length) { measure.style.display = 'none'; return; }
+  const heights = chunks.map(c => c.scrollHeight);
+  const forcedFlags = chunks.map(c => wsManualBreaks.has(c.dataset.qid));
+  const pageGroups = packChunkIndices(heights, forcedFlags, maxH, separatorH);
+  measure.style.display = 'none';
+  const totalPages = pageGroups.length + answerKeys.length;
+  let pageNo = 0;
+  const addSheet = (build) => {
+    pageNo++;
+    const sheet = doc.createElement('div'); sheet.className = 'wspv-sheet';
+    const content = doc.createElement('div'); content.className = 'wspv-content';
+    build(content);
+    sheet.appendChild(content);
+    const pno = doc.createElement('div'); pno.className = 'wspv-pageno'; pno.textContent = 'Page ' + pageNo + ' of ' + totalPages;
+    sheet.appendChild(pno);
+    pagesEl.appendChild(sheet);
+    content.style.zoom = '';
+    if (content.scrollHeight > maxH) content.style.zoom = Math.max(0.7, maxH / content.scrollHeight); // match print scaling
+  };
+  pageGroups.forEach(group => addSheet(content => {
+    group.forEach((idx, pos) => {
+      if (pos > 0) { const sep = doc.createElement('div'); sep.className = 'print-question-separator'; content.appendChild(sep); }
+      const chunk = chunks[idx];
+      if (idx !== 0) { // can't break before the very first question
+        const qid = chunk.dataset.qid, on = wsManualBreaks.has(qid);
+        const btn = doc.createElement('button');
+        btn.type = 'button';
+        btn.className = 'wspv-brk' + (on ? ' on' : '');
+        btn.textContent = on ? '⤓ new page ✓' : '⤓ break before';
+        btn.title = 'Force this question to start a new page';
+        btn.setAttribute('onclick', "parent.wsToggleBreak('" + qid + "')");
+        chunk.appendChild(btn);
+      }
+      content.appendChild(chunk);
+    });
+  }));
+  answerKeys.forEach(ak => addSheet(content => content.appendChild(ak)));
+  const cnt = document.getElementById('wsPreviewPageCount');
+  if (cnt) cnt.textContent = '· ' + totalPages + ' page' + (totalPages === 1 ? '' : 's');
 }
 
 // =====================================================================
@@ -18650,6 +18832,10 @@ window.wsPreviewBack = wsPreviewBack;
 window.onWsCardClick = onWsCardClick;
 window.saveWorksheet = saveWorksheet;
 window.printStudentWorksheet = printStudentWorksheet;
+window.openWorksheetPreview = openWorksheetPreview;
+window.closeWorksheetPreview = closeWorksheetPreview;
+window.wsToggleBreak = wsToggleBreak;
+window.printFromPreview = printFromPreview;
 window.renderSavedWorksheets = renderSavedWorksheets;
 window.deleteWorksheet = deleteWorksheet;
 window.reprintWorksheet = reprintWorksheet;
