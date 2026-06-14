@@ -4693,8 +4693,8 @@ option {
                 <option value="Food Chains and Webs">Food Chains and Webs</option>
                 <option value="Humans and the Environment">Humans and the Environment</option>
               </optgroup>
-              <optgroup label="── Custom ──">
-                <option value="__custom__">+ Add Custom Topic</option>
+              <optgroup label="── Manage ──">
+                <option value="__custom__">⚙ Add / remove topics…</option>
               </optgroup>
             </select>
           </div>
@@ -5663,6 +5663,29 @@ option {
 </div>
 
 <!-- ==================== CONFIRM DIALOG ==================== -->
+<!-- ==================== MANAGE TOPICS ==================== -->
+<div class="confirm-overlay" id="manageTopicsOverlay">
+  <div class="confirm-dialog" style="max-width:520px;text-align:left;max-height:85vh;overflow-y:auto;">
+    <h3 style="margin-bottom:4px;">Manage topics</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Add a custom topic under a level, or remove topics you don't use. Questions already saved keep their topic.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+      <div style="flex:1;min-width:160px;">
+        <label class="form-label">New topic</label>
+        <input id="newTopicName" class="form-input" type="text" placeholder="e.g. Air" onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomTopic();}">
+      </div>
+      <div>
+        <label class="form-label">Level</label>
+        <select id="newTopicLevel" class="form-select" style="min-width:90px;"><option>P3</option><option>P4</option><option selected>P5</option><option>P6</option></select>
+      </div>
+      <button class="btn btn-primary" onclick="addCustomTopic()">+ Add</button>
+    </div>
+    <div id="manageTopicsList"></div>
+    <div class="btn-group" style="justify-content:flex-end;margin-top:14px;">
+      <button class="btn btn-outline" onclick="closeManageTopics()">Done</button>
+    </div>
+  </div>
+</div>
+
 <div class="confirm-overlay" id="confirmOverlay">
   <div class="confirm-dialog">
     <h3 id="confirmTitle">Are you sure?</h3>
@@ -6331,10 +6354,12 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.1.1';
+const APP_VERSION = 'v1.2.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
+  loadCustomTopics();
+  rebuildTopicSelect();
   const adminItems = document.querySelectorAll('.admin-only');
   const studentItems = document.querySelectorAll('.student-only');
   if (role === 'admin') {
@@ -6507,19 +6532,14 @@ function toggleSidebar() {
 // =====================================================================
 // TOPIC CUSTOM HANDLER
 // =====================================================================
+let _lastTopicValue = 'Heat';
 document.getElementById('topicSelect').addEventListener('change', function() {
   if (this.value === '__custom__') {
-    const custom = prompt('Enter custom topic name:');
-    if (custom && custom.trim()) {
-      const opt = document.createElement('option');
-      opt.value = custom.trim();
-      opt.textContent = custom.trim();
-      const customGroup = this.querySelector('optgroup[label="── Custom ──"]');
-      customGroup.insertBefore(opt, customGroup.querySelector('option[value="__custom__"]'));
-      this.value = custom.trim();
-    } else {
-      this.value = 'Heat';
-    }
+    // Restore the previous real selection, then open the topic manager.
+    this.value = (_lastTopicValue && Array.from(this.options).some(o => o.value === _lastTopicValue && o.value !== '__custom__')) ? _lastTopicValue : (currentTopics()[0] || '');
+    openManageTopics();
+  } else {
+    _lastTopicValue = this.value;
   }
 });
 
@@ -9237,7 +9257,7 @@ async function handleBulkAiFile(file) {
   _openBulkImport('Reading your paper and extracting every question…');
   try {
     const b64 = await _fileToBase64(file);
-    const topics = Object.keys(topicLevelMap);
+    const topics = currentTopics();
     const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
     const prompt =
       `You are importing EVERY question from the attached ${isPdf ? 'PDF' : 'image'} (a Singapore primary-school science paper) into a question bank.\n` +
@@ -9439,7 +9459,7 @@ async function handleAiBuildFile(file) {
   showToast('Reading your file with AI…', 'info');
   try {
     const b64 = await _fileToBase64(file);
-    const topics = Object.keys(topicLevelMap);
+    const topics = currentTopics();
     const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
     const prompt =
       `You are helping a Singapore primary-school science teacher turn an exam question (in the attached ${isPdf ? 'PDF' : 'image'}) into a practice question.\n` +
@@ -10240,14 +10260,17 @@ function editQuestion(id) {
   // Try to set topic, handle custom topics
   const topicSelect = document.getElementById('topicSelect');
   const existingOption = Array.from(topicSelect.options).find(opt => opt.value === q.topic);
-  if (!existingOption) {
-    const customGroup = topicSelect.querySelector('optgroup[label="── Custom ──"]');
+  if (!existingOption && q.topic) {
+    // The question's topic isn't in the current list (e.g. it was removed) —
+    // add a one-off option so it still shows, without persisting it.
     const opt = document.createElement('option');
     opt.value = q.topic;
     opt.textContent = q.topic;
-    customGroup.insertBefore(opt, customGroup.querySelector('option[value="__custom__"]'));
+    const manageGroup = topicSelect.querySelector('optgroup[label="── Manage ──"]');
+    if (manageGroup) topicSelect.insertBefore(opt, manageGroup); else topicSelect.appendChild(opt);
   }
   topicSelect.value = q.topic;
+  _lastTopicValue = q.topic;
   
   blocks = JSON.parse(JSON.stringify(q.blocks));
   selectedBlanks = JSON.parse(JSON.stringify(q.blanks || {}));
@@ -10371,7 +10394,7 @@ const AUTOVET_CONCURRENCY = 3;
 const AUTOVET_CATEGORIES = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
 // Lazy: topicLevelMap is declared further down the module, so reading it at
 // call time (not module-eval time) avoids the temporal-dead-zone error.
-function autoVetTopics() { return Object.keys(topicLevelMap); }
+function autoVetTopics() { return currentTopics(); }
 
 // The editable model-answer slots in a question, in document order. Each slot
 // points back at its block + field so the AI's text lands where the marker reads it.
@@ -11501,8 +11524,102 @@ const topicLevelMap = {
   'Living Together': 'P6', 'Food Chains and Webs': 'P6', 'Humans and the Environment': 'P6'
 };
 
+// ── Custom topic management — the authoring dropdown is the defaults above plus
+// the admin's custom topics, minus any they removed; persisted per user. ──────
+const TOPIC_LEVELS = ['P3', 'P4', 'P5', 'P6'];
+let customTopics = {};   // { 'Topic name': 'P3'|'P4'|'P5'|'P6' }
+let removedTopics = [];  // default topic names hidden from the dropdown
+function _topicsStoreKey() { return 'cerTopics:' + (currentUser ? currentUser.uid : 'anon'); }
+function loadCustomTopics() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(_topicsStoreKey()) || '{}');
+    customTopics = (raw && typeof raw.custom === 'object' && raw.custom) ? raw.custom : {};
+    removedTopics = Array.isArray(raw && raw.removed) ? raw.removed : [];
+  } catch (_) { customTopics = {}; removedTopics = []; }
+}
+function saveCustomTopics() {
+  try { localStorage.setItem(_topicsStoreKey(), JSON.stringify({ custom: customTopics, removed: removedTopics })); } catch (_) {}
+}
+function currentTopicsByLevel() {
+  const byLevel = { P3: [], P4: [], P5: [], P6: [] };
+  Object.keys(topicLevelMap).forEach(t => { if (!removedTopics.includes(t)) byLevel[topicLevelMap[t]].push(t); });
+  Object.keys(customTopics).forEach(t => { const lv = customTopics[t]; if (byLevel[lv] && !byLevel[lv].includes(t)) byLevel[lv].push(t); });
+  return byLevel;
+}
+function currentTopics() {
+  const byLevel = currentTopicsByLevel();
+  return TOPIC_LEVELS.reduce((a, lv) => a.concat(byLevel[lv]), []);
+}
 function getTopicLevel(topic) {
-  return topicLevelMap[topic] || 'P6'; // default to P6 for custom topics
+  return customTopics[topic] || topicLevelMap[topic] || 'P6'; // default to P6 for unknown/custom topics
+}
+function rebuildTopicSelect() {
+  const sel = document.getElementById('topicSelect');
+  if (!sel) return;
+  const cur = (sel.value && sel.value !== '__custom__') ? sel.value : '';
+  const byLevel = currentTopicsByLevel();
+  let html = '';
+  TOPIC_LEVELS.forEach(lv => {
+    html += `<optgroup label="── ${lv} ──">`;
+    byLevel[lv].forEach(t => { html += `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`; });
+    html += `</optgroup>`;
+  });
+  html += `<optgroup label="── Manage ──"><option value="__custom__">⚙ Add / remove topics…</option></optgroup>`;
+  sel.innerHTML = html;
+  if (cur && Array.from(sel.options).some(o => o.value === cur && o.value !== '__custom__')) sel.value = cur;
+  else { const all = currentTopics(); sel.value = all.includes('Heat') ? 'Heat' : (all[0] || ''); }
+}
+function openManageTopics() {
+  renderManageTopicsList();
+  const nm = document.getElementById('newTopicName'); if (nm) nm.value = '';
+  const lv = document.getElementById('newTopicLevel'); if (lv) lv.value = 'P5';
+  const ov = document.getElementById('manageTopicsOverlay'); if (ov) ov.classList.add('active');
+}
+function closeManageTopics() {
+  const ov = document.getElementById('manageTopicsOverlay'); if (ov) ov.classList.remove('active');
+}
+function renderManageTopicsList() {
+  const wrap = document.getElementById('manageTopicsList');
+  if (!wrap) return;
+  const byLevel = currentTopicsByLevel();
+  wrap.innerHTML = TOPIC_LEVELS.map(lv => {
+    const rows = byLevel[lv].map(t => {
+      const isCustom = !!customTopics[t];
+      const safe = escapeHtml(t).replace(/'/g, "\\'");
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px;">
+        <span style="flex:1;font-size:0.88rem;">${escapeHtml(t)}${isCustom ? ' <span style="font-size:0.7rem;color:var(--primary);">(custom)</span>' : ''}</span>
+        <button class="btn btn-outline" style="padding:2px 9px;font-size:0.78rem;color:var(--accent-red);border-color:#f0b9b9;" onclick="removeTopic('${safe}')">✕ Remove</button>
+      </div>`;
+    }).join('') || `<div style="font-size:0.8rem;color:var(--text-muted);padding:4px 0;">No topics</div>`;
+    return `<div style="margin-bottom:10px;"><div style="font-size:0.72rem;font-weight:700;letter-spacing:0.05em;color:var(--text-muted);text-transform:uppercase;margin-bottom:5px;">${lv}</div>${rows}</div>`;
+  }).join('');
+}
+function addCustomTopic() {
+  const nameEl = document.getElementById('newTopicName');
+  const lvlEl = document.getElementById('newTopicLevel');
+  const name = (nameEl ? nameEl.value : '').trim();
+  const lvl = lvlEl ? lvlEl.value : 'P5';
+  if (!name) { showToast('Type a topic name first', 'error'); return; }
+  if (!TOPIC_LEVELS.includes(lvl)) return;
+  if (currentTopics().includes(name)) { showToast('That topic already exists', 'info'); return; }
+  customTopics[name] = lvl;
+  removedTopics = removedTopics.filter(t => t !== name); // un-hide if it was a removed default
+  saveCustomTopics();
+  rebuildTopicSelect();
+  renderManageTopicsList();
+  if (nameEl) nameEl.value = '';
+  showToast(`Added “${name}” under ${lvl} ✓`, 'success');
+}
+function removeTopic(topic) {
+  if (!topic) return;
+  showConfirm('Remove topic', `Remove “${topic}” from the topic list? Questions already saved with this topic keep it — this only hides it from the dropdown.`, () => {
+    if (customTopics[topic]) delete customTopics[topic];
+    else if (topicLevelMap[topic] && !removedTopics.includes(topic)) removedTopics.push(topic);
+    saveCustomTopics();
+    rebuildTopicSelect();
+    renderManageTopicsList();
+    showToast(`Removed “${topic}”`, 'info');
+  });
 }
 
 function getLevelNumber(level) {
@@ -19030,6 +19147,10 @@ window.handleImageDrop = handleImageDrop;
 window.handleAiBuildFile = handleAiBuildFile;
 window.handleBulkAiFile = handleBulkAiFile;
 window.aiAnswerAndExplain = aiAnswerAndExplain;
+window.openManageTopics = openManageTopics;
+window.closeManageTopics = closeManageTopics;
+window.addCustomTopic = addCustomTopic;
+window.removeTopic = removeTopic;
 window.handleImgError = handleImgError;
 window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
