@@ -5543,8 +5543,8 @@ option {
 <!-- ==================== AI BUILD (paste / drop / upload) DIALOG ==================== -->
 <div class="confirm-overlay" id="aiBuildOverlay">
   <div class="confirm-dialog" style="max-width:520px;text-align:left;">
-    <h3 style="margin-bottom:4px;">Build question from screenshot / PDF</h3>
-    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste a screenshot (Ctrl/⌘+V), drop an image or PDF, or choose a file. AI reads it and fills in the question, answer and explanation.</p>
+    <h3 style="margin-bottom:4px;">Build from screenshot / PDF</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste a screenshot (Ctrl/⌘+V), drop an image or PDF, or choose a file — AI fills in ONE question. To import a whole paper at once, use Bulk import below.</p>
     <div class="image-paste-zone" id="aiBuildZone" tabindex="0" style="padding:28px 16px;"
          onclick="this.focus()"
          onpaste="aiBuildPaste(event)"
@@ -5554,9 +5554,15 @@ option {
       📋 Click here, then paste your screenshot (Ctrl/⌘+V)<br>— or drop an image / PDF here
     </div>
     <input type="file" id="aiBuildFile" accept="image/*,application/pdf" style="display:none" onchange="const f=this.files[0]; this.value=''; if(f){ closeAiBuild(); handleAiBuildFile(f); }">
+    <input type="file" id="aiBuildBulkFile" accept="image/*,application/pdf" style="display:none" onchange="const f=this.files[0]; this.value=''; if(f){ closeAiBuild(); handleBulkAiFile(f); }">
+    <div style="margin-top:14px;padding:12px 14px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#faf8f5);">
+      <div style="font-size:0.86rem;font-weight:700;margin-bottom:4px;">📚 Bulk import a whole paper</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;">Upload a PDF (or image) with many questions — AI splits them into separate questions and adds them all to your <b>Vetting</b> list, where you format each and add pictures, then approve into the bank.</div>
+      <button class="btn btn-primary" onclick="document.getElementById('aiBuildBulkFile').click()">📚 Bulk import many questions…</button>
+    </div>
     <div class="btn-group" style="justify-content:flex-end;margin-top:14px;">
       <button class="btn btn-outline" onclick="closeAiBuild()">Cancel</button>
-      <button class="btn btn-outline" onclick="document.getElementById('aiBuildFile').click()">Choose file…</button>
+      <button class="btn btn-outline" onclick="document.getElementById('aiBuildFile').click()">Choose file (1 question)…</button>
     </div>
   </div>
 </div>
@@ -6307,7 +6313,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.0.7';
+const APP_VERSION = 'v1.0.8';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9082,10 +9088,11 @@ function _markedToBlanks(marked) {
   return { content, blanks };
 }
 
-function _populateEditorFromAi(data) {
-  blocks = [];
-  selectedBlanks = {};
-
+// Turn an AI question object (ordered "blocks", or the legacy flat shape) into
+// editor blocks + blanks. Pure: returns fresh objects, mutates nothing global.
+function buildBlocksFromAi(data) {
+  const blocks = [];
+  const selectedBlanks = {};
   const stripBrackets = s => String(s || '').replace(/\[\[|\]\]/g, '').trim();
 
   const pushAnswer = (b) => {
@@ -9106,7 +9113,6 @@ function _populateEditorFromAi(data) {
   };
 
   if (Array.isArray(data.blocks)) {
-    // New ordered-blocks shape: build each block in the AI's sequence.
     data.blocks.forEach(b => {
       const t = String((b && b.type) || '').toLowerCase();
       if (t === 'text') {
@@ -9133,7 +9139,6 @@ function _populateEditorFromAi(data) {
       }
     });
   } else {
-    // Legacy flat shape (fallback for older responses).
     const qText = stripBrackets(data.questionText);
     if (qText) blocks.push({ id: generateBlockId(), type: 'text', content: qText });
     if (data.hasDiagram) blocks.push({ id: generateBlockId(), type: 'image', url: '' });
@@ -9142,6 +9147,30 @@ function _populateEditorFromAi(data) {
     const expl = stripBrackets(data.explanation);
     if (expl) blocks.push({ id: generateBlockId(), type: 'explanation', content: expl });
   }
+  return { blocks, selectedBlanks };
+}
+
+// Build a full pending question object from one AI question (used by bulk import).
+function buildQuestionFromAi(data) {
+  const built = buildBlocksFromAi(data || {});
+  return {
+    id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+    title: (data && data.title) || 'Untitled',
+    category: normalizeCategoryValue(data && data.category),
+    topic: (data && data.topic) || 'Heat',
+    markingGuide: '',
+    blocks: built.blocks,
+    blanks: built.selectedBlanks,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    createdBy: (currentUser && currentUser.name) || 'Admin'
+  };
+}
+
+function _populateEditorFromAi(data) {
+  const built = buildBlocksFromAi(data);
+  blocks = built.blocks;
+  selectedBlanks = built.selectedBlanks;
 
   const titleEl = document.getElementById('questionTitle');
   if (titleEl) titleEl.value = data.title || 'Untitled';
@@ -9155,6 +9184,74 @@ function _populateEditorFromAi(data) {
   currentEditingQuestion = null;
   if (typeof setEditMode === 'function') setEditMode(false);
   renderBlocks();
+}
+
+// Bulk import: upload a PDF/image with MANY questions; AI splits them into
+// separate questions and drops them all into the Vetting list to format + add
+// pictures (each gets image placeholders where diagrams belong).
+async function handleBulkAiFile(file) {
+  if (!file) return;
+  if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't set up yet — add your reCAPTCHA site key in the code", 'info'); return; }
+  const isPdf = file.type === 'application/pdf';
+  const isImg = file.type && file.type.startsWith('image/');
+  if (!isPdf && !isImg) { showToast('Please choose a PDF or an image', 'error'); return; }
+  if (file.size > 18 * 1024 * 1024) { showToast('File is too large (max ~18 MB)', 'error'); return; }
+  const btn = document.getElementById('aiBuildBtn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Importing…'; }
+  showToast('Reading the file — extracting every question…', 'info');
+  try {
+    const b64 = await _fileToBase64(file);
+    const topics = Object.keys(topicLevelMap);
+    const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
+    const prompt =
+      `You are importing EVERY question from the attached ${isPdf ? 'PDF' : 'image'} (a Singapore primary-school science paper) into a question bank.\n` +
+      _genPreamble() +
+      `Split the document into its separate questions (by question number or clear boundaries) and return EACH as its own entry.\n` +
+      `Return ONLY JSON: {"questions":[ {"title":"short title","topic":"<closest topic>","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
+      `Each item in "blocks" is ONE of:\n` +
+      `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
+      `  {"type":"image"}   (a placeholder where a diagram/picture/graph/figure appears — the teacher adds the real image later)\n` +
+      `  {"type":"mcq","options":["option 1","option 2","option 3","option 4"],"correctIndex":0}\n` +
+      `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
+      `  {"type":"plainanswer","text":"..."}\n` +
+      `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
+      `Rules:\n` +
+      `- ONE entry per question, in document order. Put an "image" placeholder exactly where each diagram/figure belongs, interleaved with the text.\n` +
+      `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, set "correctIndex" to the 0-based correct option; no "answer"/"plainanswer".\n` +
+      `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
+      `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
+      `- topic from EXACTLY: ${topics.join('; ')}.\n` +
+      `- category from EXACTLY: ${categories.join('; ')}.\n` +
+      `- Plain text only, no markdown.`;
+    const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 8192, json: true });
+    const parsed = _parseAIJson(raw);
+    const list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.questions) ? parsed.questions : []);
+    if (!list.length) { showToast('AI did not find any questions in that file', 'error'); return; }
+    let added = 0;
+    list.forEach(qd => {
+      try {
+        const q = buildQuestionFromAi(qd);
+        if (!q.blocks.length) return;
+        vettingList.push(q);
+        saveVettingQuestion(q); // async, non-blocking
+        added++;
+      } catch (e) { console.warn('bulk question build failed', e); }
+    });
+    updateCounts();
+    renderVettingList();
+    if (added) {
+      navigateTo('vetting');
+      showToast(`Imported ${added} question${added === 1 ? '' : 's'} to Vetting — format each & add pictures, then approve ✓`, 'success');
+    } else {
+      showToast('Could not build any questions from that file', 'error');
+    }
+  } catch (e) {
+    console.error('Bulk AI import failed:', e);
+    showToast('Bulk import failed: ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
 }
 
 function openAiBuild() {
@@ -18796,6 +18893,7 @@ window.adjustImgScale = adjustImgScale;
 window.handleImagePaste = handleImagePaste;
 window.handleImageDrop = handleImageDrop;
 window.handleAiBuildFile = handleAiBuildFile;
+window.handleBulkAiFile = handleBulkAiFile;
 window.handleImgError = handleImgError;
 window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
