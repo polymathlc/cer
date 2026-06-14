@@ -5719,6 +5719,30 @@ option {
   </div>
 </div>
 
+<!-- ==================== IMAGE TOUCH-UP & LABELS ==================== -->
+<div class="overlay" id="annotOverlay">
+  <div class="overlay-card" style="max-width:96vw;width:auto;">
+    <div class="overlay-head"><h3>✏️ Touch up &amp; label</h3><button class="close" onclick="closeAnnotTool()" type="button">×</button></div>
+    <div class="overlay-body" style="text-align:center;">
+      <div class="annot-tools">
+        <button type="button" class="annot-tool" data-atool="erase" title="Paint white over words to erase them">🩹 Erase</button>
+        <button type="button" class="annot-tool" data-atool="paint" title="Paint over with the chosen colour">🖌️ Paint</button>
+        <button type="button" class="annot-tool" data-atool="line" title="Drag to draw a straight label line">📏 Line</button>
+        <button type="button" class="annot-tool" data-atool="text" title="Click to drop a text label">🔤 Text</button>
+        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Colour <input type="color" id="annotColor" value="#e23c3c" style="width:34px;height:28px;padding:0;border:1px solid var(--border);border-radius:6px;"></label>
+        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Size <input type="range" id="annotSize" min="2" max="40" value="8"></label>
+        <button type="button" class="btn btn-outline" style="padding:5px 10px;font-size:0.8rem;" onclick="annotUndo()">↶ Undo</button>
+      </div>
+      <div id="annotStage"><canvas id="annotCanvas"></canvas></div>
+      <p class="hint" style="margin-top:10px;">Erase / Paint: drag over the image. Line: drag from start to end. Text: click where the label goes, type, then Enter.</p>
+    </div>
+    <div class="overlay-foot">
+      <button class="btn btn-ghost" onclick="closeAnnotTool()" type="button">Cancel</button>
+      <button class="btn btn-primary" onclick="applyAnnotTool()" type="button">Apply</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== TOAST CONTAINER ==================== -->
 <div class="toast-container" id="toastContainer"></div>
 
@@ -8420,6 +8444,7 @@ function renderImgEnhanceBar(blockId) {
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
       <span style="font-size:0.78rem;color:var(--text-muted);">Image:</span>
       <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-crop-open="${blockId}">✂️ Crop / reposition</button>
+      <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-annot-open="${blockId}">✏️ Touch up &amp; label</button>
       ${showOriginal ? `<button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-use-original="${blockId}">↩ Use original</button>` : ''}
       <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-enhance="${blockId}" data-colour="0">✨ Enhance image</button>
       <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-enhance="${blockId}" data-colour="1">🎨 Enhance with colour</button>
@@ -8434,7 +8459,9 @@ document.addEventListener('click', function (e) {
   const uo = e.target.closest && e.target.closest('[data-use-original]');
   if (uo) { e.preventDefault(); useOriginalImage(uo.getAttribute('data-use-original')); return; }
   const cr = e.target.closest && e.target.closest('[data-crop-open]');
-  if (cr) { e.preventDefault(); openCropTool(cr.getAttribute('data-crop-open')); }
+  if (cr) { e.preventDefault(); openCropTool(cr.getAttribute('data-crop-open')); return; }
+  const an = e.target.closest && e.target.closest('[data-annot-open]');
+  if (an) { e.preventDefault(); openAnnotTool(an.getAttribute('data-annot-open')); }
 });
 
 // =====================================================================
@@ -8715,6 +8742,176 @@ async function applyCropTool() {
     showToast('Cropped ✓', 'success');
   } catch (e) { console.warn('crop apply failed', e); showToast('Crop failed: ' + (e && e.message ? e.message : e), 'error'); }
 }
+
+// =====================================================================
+// IMAGE TOUCH-UP & LABELS — erase (paint white) or paint over words, draw
+// straight label lines, and drop text labels onto an image block; then flatten
+// the canvas and re-upload. Works on the image currently in the block.
+// =====================================================================
+(function injectAnnotStyles() {
+  const css = `
+  .annot-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:center; margin-bottom:12px; }
+  .annot-tool { padding:6px 12px; border:1.5px solid var(--border,#e2ddd5); background:#fff; border-radius:8px; cursor:pointer; font-size:0.82rem; }
+  .annot-tool:hover { border-color:var(--primary,#4a7c59); }
+  .annot-tool.active { border-color:var(--primary,#4a7c59); background:var(--primary-light,#e8f3ec); color:var(--primary,#4a7c59); font-weight:700; }
+  #annotStage { position:relative; display:inline-block; max-width:100%; line-height:0; }
+  #annotCanvas { max-width:84vw; max-height:54vh; touch-action:none; cursor:crosshair; border:1px solid var(--border,#e2ddd5); border-radius:6px; }
+  .annot-textbox { position:absolute; z-index:5; border:1px dashed var(--primary,#4a7c59); background:rgba(255,255,255,0.9); font-family:'DM Sans',sans-serif; font-weight:600; padding:0 2px; outline:none; line-height:1.1; min-width:40px; }`;
+  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+})();
+
+let _annot = null;
+
+function openAnnotTool(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || !block.url) { showToast('Add an image first, then touch it up', 'info'); return; }
+  _urlToDataUrl(transformImageUrl(block.url)).then(_loadImageEl).then(img => {
+    const canvas = document.getElementById('annotCanvas');
+    const cap = 1600; // keep the working canvas (and undo snapshots) sane
+    const scale = Math.min(1, cap / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+    canvas.width = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
+    canvas.height = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    _annot = { blockId, canvas, ctx, tool: 'erase', color: '#e23c3c', size: 8, drawing: false, history: [], start: null, snap: null };
+    _annotSyncControls();
+    _annotSetTool('erase');
+    document.getElementById('annotOverlay').classList.add('show');
+  }).catch(e => { console.warn('open annot', e); showToast('Could not open touch-up for this image', 'error'); });
+}
+function _annotSyncControls() {
+  if (!_annot) return;
+  const col = document.getElementById('annotColor'), sz = document.getElementById('annotSize');
+  if (col) _annot.color = col.value || _annot.color;
+  if (sz) _annot.size = parseInt(sz.value, 10) || _annot.size;
+}
+function _annotSetTool(t) {
+  if (_annot) _annot.tool = t;
+  document.querySelectorAll('.annot-tool').forEach(b => b.classList.toggle('active', b.getAttribute('data-atool') === t));
+  const c = document.getElementById('annotCanvas');
+  if (c) c.style.cursor = t === 'text' ? 'text' : 'crosshair';
+}
+function _annotPushHistory() {
+  if (!_annot) return;
+  try {
+    _annot.history.push(_annot.ctx.getImageData(0, 0, _annot.canvas.width, _annot.canvas.height));
+    if (_annot.history.length > 10) _annot.history.shift();
+  } catch (_) {}
+}
+function annotUndo() {
+  if (_annot && _annot.history.length) _annot.ctx.putImageData(_annot.history.pop(), 0, 0);
+}
+function _annotPt(e) {
+  const c = _annot.canvas, r = c.getBoundingClientRect();
+  const scale = c.width / r.width;
+  return { x: (e.clientX - r.left) * scale, y: (e.clientY - r.top) * (c.height / r.height), dispX: e.clientX - r.left, dispY: e.clientY - r.top, scale };
+}
+function _annotDown(e) {
+  if (!_annot) return;
+  e.preventDefault();
+  _annotSyncControls();
+  const p = _annotPt(e), ctx = _annot.ctx;
+  if (_annot.tool === 'text') { _annotPlaceText(p); return; }
+  _annotPushHistory();
+  if (_annot.tool === 'line') {
+    _annot.start = p;
+    _annot.snap = ctx.getImageData(0, 0, _annot.canvas.width, _annot.canvas.height);
+    _annot.drawing = true;
+    return;
+  }
+  // erase / paint brush
+  _annot.drawing = true;
+  const lw = Math.max(1, Math.round(_annot.size * p.scale));
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = _annot.tool === 'erase' ? '#ffffff' : _annot.color;
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.arc(p.x, p.y, lw / 2, 0, Math.PI * 2); ctx.fill(); // a click paints a dot
+  ctx.beginPath(); ctx.moveTo(p.x, p.y);
+}
+function _annotMove(e) {
+  if (!_annot || !_annot.drawing) return;
+  e.preventDefault();
+  const p = _annotPt(e), ctx = _annot.ctx;
+  if (_annot.tool === 'line') {
+    ctx.putImageData(_annot.snap, 0, 0);
+    ctx.strokeStyle = _annot.color; ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(1, Math.round(_annot.size * p.scale));
+    ctx.beginPath(); ctx.moveTo(_annot.start.x, _annot.start.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    return;
+  }
+  ctx.lineTo(p.x, p.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(p.x, p.y);
+}
+function _annotUp() { if (_annot) { _annot.drawing = false; _annot.start = null; _annot.snap = null; } }
+function _annotPlaceText(p) {
+  const stage = document.getElementById('annotStage');
+  if (!stage) return;
+  const fontNat = Math.max(14, _annot.size * 2.6);
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'annot-textbox';
+  input.style.left = p.dispX + 'px';
+  input.style.top = p.dispY + 'px';
+  input.style.color = _annot.color;
+  input.style.fontSize = Math.max(10, Math.round(fontNat / p.scale)) + 'px';
+  stage.appendChild(input);
+  setTimeout(() => input.focus(), 0);
+  let done = false;
+  const commit = () => {
+    if (done) return; done = true;
+    const val = input.value.trim();
+    if (val) {
+      _annotPushHistory();
+      const ctx = _annot.ctx;
+      ctx.fillStyle = _annot.color;
+      ctx.textBaseline = 'top';
+      ctx.font = `600 ${Math.round(fontNat)}px 'DM Sans', sans-serif`;
+      ctx.fillText(val, p.x, p.y);
+    }
+    if (input.parentNode) input.parentNode.removeChild(input);
+  };
+  input.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+    else if (ev.key === 'Escape') { done = true; if (input.parentNode) input.parentNode.removeChild(input); }
+  });
+  input.addEventListener('blur', commit);
+}
+async function applyAnnotTool() {
+  if (!_annot) return;
+  const { blockId, canvas } = _annot;
+  const dataUrl = canvas.toDataURL('image/png');
+  closeAnnotTool();
+  showToast('✏️ Saving touch-ups…', 'info');
+  try {
+    const url = await uploadImageDataUrl(dataUrl);
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+    saveBlockContent(blockId, 'url', url);
+    const input = document.getElementById('imgUrlInput_' + blockId);
+    if (input) input.value = url;
+    previewImage(blockId, url);
+    // The touched-up image becomes the base for further crop/enhance/touch-up.
+    _imgEnhanceState[blockId] = { originalDataUrl: dataUrl, originalUrl: url, cropSourceDataUrl: dataUrl };
+    renderImgEnhanceBar(blockId);
+    showToast('Touch-ups applied ✓', 'success');
+  } catch (e) { console.warn('annot apply failed', e); showToast('Could not save touch-ups: ' + (e && e.message ? e.message : e), 'error'); }
+}
+function closeAnnotTool() {
+  const o = document.getElementById('annotOverlay'); if (o) o.classList.remove('show');
+  const s = document.getElementById('annotStage'); if (s) s.querySelectorAll('.annot-textbox').forEach(el => el.remove());
+  _annot = null;
+}
+document.addEventListener('click', function (e) {
+  const t = e.target.closest && e.target.closest('[data-atool]');
+  if (t) { e.preventDefault(); _annotSetTool(t.getAttribute('data-atool')); }
+});
+document.addEventListener('pointerdown', function (e) {
+  const c = document.getElementById('annotCanvas');
+  if (_annot && c && e.target === c) _annotDown(e);
+});
+document.addEventListener('pointermove', function (e) { if (_annot && _annot.drawing) _annotMove(e); });
+document.addEventListener('pointerup', function () { _annotUp(); });
 
 // =====================================================================
 // AI QUESTION BUILDER — upload a screenshot/PDF of an exam question;
@@ -18218,6 +18415,10 @@ window.openCropTool = openCropTool;
 window.closeCropTool = closeCropTool;
 window.cropToolReset = cropToolReset;
 window.applyCropTool = applyCropTool;
+window.openAnnotTool = openAnnotTool;
+window.closeAnnotTool = closeAnnotTool;
+window.annotUndo = annotUndo;
+window.applyAnnotTool = applyAnnotTool;
 window.showToast = showToast;
 window.showConfirm = showConfirm;
 window.closeConfirm = closeConfirm;
