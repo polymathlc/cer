@@ -4686,7 +4686,7 @@ option {
         </div>
 
         <div class="form-group">
-          <label class="form-label">Marking guide for AI <span style="font-weight:400;color:var(--text-muted);">(optional)</span> <button type="button" class="mic-btn" data-mic="questionMarkingGuide" title="Dictate the marking guide" style="width:26px;height:26px;font-size:0.85rem;vertical-align:middle;">🎤</button></label>
+          <label class="form-label">Marking guide for AI <span style="font-weight:400;color:var(--text-muted);">(optional)</span> <button type="button" class="mic-btn" data-mic="questionMarkingGuide" title="Dictate the marking guide" style="width:26px;height:26px;font-size:0.85rem;vertical-align:middle;">🎤</button> <button type="button" class="improve-btn" data-improve-el="questionMarkingGuide" title="Improve grammar, phrasing and sentence structure with AI — keeps your meaning">✨ Improve</button></label>
           <textarea id="questionMarkingGuide" class="form-input" rows="2" placeholder="e.g. Accept 'gains heat' or 'absorbs heat'. Reasoning must link cause to effect." style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
         </div>
 
@@ -6273,7 +6273,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.0.2';
+const APP_VERSION = 'v1.0.3';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7700,6 +7700,8 @@ function renderBlocks() {
               <option value="h3">Heading</option>
               <option value="p">Normal</option>
             </select>
+            <span class="toolbar-divider"></span>
+            ${improveBtnHtml(block.id, 'content')}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Enter question text..."
                data-block-id="${block.id}" data-field="content"
@@ -7750,19 +7752,19 @@ function renderBlocks() {
               <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
             </div>
             <div class="cer-section" data-mic-wrap>
-              <div class="cer-label claim-label">Claim ${micButtonHtml('', 'Speak the claim')}</div>
+              <div class="cer-label claim-label">Claim ${micButtonHtml('', 'Speak the claim')} ${improveBtnHtml(block.id, 'claim')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the claim answer..."
                    data-block-id="${block.id}" data-field="claim"
                    oninput="saveBlockContent('${block.id}', 'claim', this.innerHTML)">${block.claim || ''}</div>
             </div>
             <div class="cer-section" data-mic-wrap>
-              <div class="cer-label evidence-label">Evidence ${micButtonHtml('', 'Speak the evidence')}</div>
+              <div class="cer-label evidence-label">Evidence ${micButtonHtml('', 'Speak the evidence')} ${improveBtnHtml(block.id, 'evidence')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the evidence answer..."
                    data-block-id="${block.id}" data-field="evidence"
                    oninput="saveBlockContent('${block.id}', 'evidence', this.innerHTML)">${block.evidence || ''}</div>
             </div>
             <div class="cer-section" data-mic-wrap>
-              <div class="cer-label reasoning-label">Reasoning ${micButtonHtml('', 'Speak the reasoning')}</div>
+              <div class="cer-label reasoning-label">Reasoning ${micButtonHtml('', 'Speak the reasoning')} ${improveBtnHtml(block.id, 'reasoning')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the reasoning answer..."
                    data-block-id="${block.id}" data-field="reasoning"
                    oninput="saveBlockContent('${block.id}', 'reasoning', this.innerHTML)">${block.reasoning || ''}</div>
@@ -7784,6 +7786,7 @@ function renderBlocks() {
               <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
               <span class="toolbar-divider"></span>
               ${micButtonHtml('', 'Dictate the answer')}
+              ${improveBtnHtml(block.id, 'content')}
             </div>
             <div class="content-editable" contenteditable="true" data-placeholder="Enter the answer..."
                  data-block-id="${block.id}" data-field="content"
@@ -7809,6 +7812,8 @@ function renderBlocks() {
               <option value="h3">Heading</option>
               <option value="p">Normal</option>
             </select>
+            <span class="toolbar-divider"></span>
+            ${improveBtnHtml(block.id, 'content')}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Enter explanation text..."
                data-block-id="${block.id}" data-field="content"
@@ -7953,6 +7958,62 @@ function mcqRemoveOption(blockId, optId) {
   if (b.correctId === optId) b.correctId = null;
   renderBlocks();
 }
+// One click: set every option's text to (1) (2) (3) (4)… — the most common form.
+function mcqNumberOptions(blockId) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b || !Array.isArray(b.options)) return;
+  b.options.forEach((o, i) => { o.text = `(${i + 1})`; });
+  renderBlocks();
+}
+
+// "✨ Improve" button shown on every editable text box in the creation menu.
+function improveBtnHtml(blockId, field) {
+  return `<button type="button" class="improve-btn" data-improve-block="${blockId}" data-improve-field="${field}" title="Improve grammar, phrasing and sentence structure with AI — keeps your meaning">✨ Improve</button>`;
+}
+(function injectEditorToolStyles() {
+  const css = `
+  .mcq-correct-radio { appearance:none; -webkit-appearance:none; width:20px; height:20px; flex-shrink:0; margin:0; border:2px solid #9aa0a6; border-radius:50%; background:#fff; cursor:pointer; transition:border-color .15s, background .15s; }
+  .mcq-correct-radio:hover { border-color:var(--primary,#4a7c59); }
+  .mcq-correct-radio:checked { border-color:var(--primary,#4a7c59); background:var(--primary,#4a7c59); box-shadow:inset 0 0 0 3px #fff; }
+  .improve-btn { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border:1px solid var(--border,#e2ddd5); background:#fff; border-radius:8px; cursor:pointer; font-size:0.72rem; font-weight:600; color:var(--primary,#4a7c59); vertical-align:middle; }
+  .improve-btn:hover { border-color:var(--primary,#4a7c59); background:var(--primary-light,#e8f3ec); }
+  .improve-btn:disabled { opacity:.6; cursor:default; }`;
+  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+})();
+// Delegated handler: rewrite the box's current text with better grammar /
+// phrasing / sentence structure (same meaning). Works on block content-editables
+// (data-improve-block + data-improve-field) and plain inputs/textareas (data-improve-el).
+document.addEventListener('click', async function (e) {
+  const btn = e.target.closest && e.target.closest('.improve-btn');
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
+  const blockId = btn.getAttribute('data-improve-block');
+  const field = btn.getAttribute('data-improve-field');
+  const elId = btn.getAttribute('data-improve-el');
+  let getText, setText;
+  if (blockId && field) {
+    const el = document.querySelector('.content-editable[data-block-id="' + blockId + '"][data-field="' + field + '"]');
+    if (!el) return;
+    getText = () => stripHtml(el.innerHTML || '');
+    setText = (t) => { el.innerHTML = escapeHtml(t).replace(/\n+/g, '<br>'); saveBlockContent(blockId, field, el.innerHTML); };
+  } else if (elId) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    getText = () => el.value || '';
+    setText = (t) => { el.value = t; };
+  } else return;
+  const text = (getText() || '').trim();
+  if (!text) { showToast('Type something in the box first, then Improve', 'info'); return; }
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '✨ …';
+  try {
+    const prompt = 'Improve the writing of the text below (it is from a Singapore primary-school science question or its answer). Fix grammar, spelling and punctuation, and improve the sentence structure and phrasing so it reads clearly and naturally. Keep the EXACT same meaning and all science facts and keywords — do not add new information, do not answer or extend it, and do not add quotation marks, labels or commentary. Return ONLY the improved text.\n\nText:\n' + text;
+    const out = (await askGemini(prompt, { maxOutputTokens: 500, temperature: 0.3 }) || '').trim();
+    if (out) { setText(out); showToast('Improved with AI ✓', 'success'); }
+    else showToast('AI returned nothing — try again', 'error');
+  } catch (err) { console.error('improve failed', err); showToast('Improve failed: ' + (err && err.message ? err.message : err), 'error'); }
+  finally { btn.disabled = false; btn.innerHTML = orig; }
+});
 
 const COMMON_MISTAKE_COLORS = { teal: '#0d9488', orange: '#ea580c', red: '#dc2626', purple: '#7c3aed', blue: '#2563eb' };
 
@@ -7972,7 +8033,7 @@ function renderImportedBlockEditorBody(block) {
     case 'mcq': {
       const opts = (block.options || []).map((o, i) => `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-          <input type="radio" name="mcqedit_${id}" ${block.correctId === o.id ? 'checked' : ''}
+          <input type="radio" class="mcq-correct-radio" name="mcqedit_${id}" ${block.correctId === o.id ? 'checked' : ''}
                  title="Mark as correct answer" onchange="mcqSetCorrect('${id}','${o.id}')">
           <span style="font-weight:600;width:18px;">${String.fromCharCode(65 + i)}.</span>
           <input class="form-input" type="text" style="flex:1;" placeholder="Option text"
@@ -7984,6 +8045,7 @@ function renderImportedBlockEditorBody(block) {
           <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Select the radio next to the correct option.</div>
           ${opts}
           <button class="btn btn-outline" style="margin-top:4px;" onclick="mcqAddOption('${id}')">+ Add option</button>
+          <button class="btn btn-outline" style="margin-top:4px;margin-left:8px;" onclick="mcqNumberOptions('${id}')" title="Set all options to (1) (2) (3) (4)…">＃ Make (1)(2)(3)(4)</button>
         </div>`;
     }
     case 'answerLine':
@@ -18563,6 +18625,7 @@ window.saveBlockNum = saveBlockNum;
 window.mcqSetCorrect = mcqSetCorrect;
 window.mcqSetOptionText = mcqSetOptionText;
 window.mcqAddOption = mcqAddOption;
+window.mcqNumberOptions = mcqNumberOptions;
 window.mcqRemoveOption = mcqRemoveOption;
 window.markMcqChoice = markMcqChoice;
 window.enhanceBlockImage = enhanceBlockImage;
