@@ -6354,7 +6354,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.2.0';
+const APP_VERSION = 'v1.2.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9144,6 +9144,28 @@ function _markedToBlanks(marked) {
 
 // Turn an AI question object (ordered "blocks", or the legacy flat shape) into
 // editor blocks + blanks. Pure: returns fresh objects, mutates nothing global.
+// When AI extracts a question whose statements/options are written inline
+// (e.g. "... are correct? A: ... B: ... C: ... D: ..."), put each labelled
+// option on its own line so they read as a list instead of one run-on
+// paragraph. Only acts when 2+ list-style labels are present. A label is a
+// single letter or 1–2 digits, optionally wrapped in (), followed by ":" or ")"
+// — e.g. A: B) (1) (a) 3). Returns HTML with <br> separators.
+function _separateOptionLines(text) {
+  let s = String(text == null ? '' : text).trim();
+  if (!s) return s;
+  // Normalise any real newlines the AI used into <br> first.
+  s = s.replace(/\r\n?|\n/g, '<br>');
+  const labelToken = '(?:\\((?:[A-Za-z]|\\d{1,2})\\)|(?:[A-Za-z]|\\d{1,2})[:)])';
+  // Count labels that look like list markers: at a start/space/break boundary
+  // and followed by a space + some option text.
+  const countRe = new RegExp('(?:^|\\s|>)' + labelToken + '\\s+\\S', 'g');
+  const matches = s.match(countRe);
+  if (!matches || matches.length < 2) return s;
+  // Put a line break before each label that is preceded by whitespace.
+  const splitRe = new RegExp('\\s+(?=' + labelToken + '\\s)', 'g');
+  return s.replace(splitRe, '<br>');
+}
+
 function buildBlocksFromAi(data) {
   const blocks = [];
   const selectedBlanks = {};
@@ -9170,7 +9192,7 @@ function buildBlocksFromAi(data) {
     data.blocks.forEach(b => {
       const t = String((b && b.type) || '').toLowerCase();
       if (t === 'text') {
-        const txt = stripBrackets(b.text || b.content);
+        const txt = _separateOptionLines(stripBrackets(b.text || b.content));
         if (txt) blocks.push({ id: generateBlockId(), type: 'text', content: txt });
       } else if (t === 'image') {
         blocks.push({ id: generateBlockId(), type: 'image', url: '', caption: stripBrackets(b.caption) });
@@ -9193,7 +9215,7 @@ function buildBlocksFromAi(data) {
       }
     });
   } else {
-    const qText = stripBrackets(data.questionText);
+    const qText = _separateOptionLines(stripBrackets(data.questionText));
     if (qText) blocks.push({ id: generateBlockId(), type: 'text', content: qText });
     if (data.hasDiagram) blocks.push({ id: generateBlockId(), type: 'image', url: '' });
     if (String(data.answerType || 'cer').toLowerCase() === 'plain') pushPlain(data.answer || '');
@@ -9273,6 +9295,7 @@ async function handleBulkAiFile(file) {
       `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
       `Rules:\n` +
       `- ONE entry per question, in document order. Put an "image" placeholder exactly where each diagram/figure belongs, interleaved with the text.\n` +
+      `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
       `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, set "correctIndex" to the 0-based correct option; no "answer"/"plainanswer".\n` +
       `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
       `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
@@ -9476,6 +9499,7 @@ async function handleAiBuildFile(file) {
       `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
       `Rules:\n` +
       `- List blocks in the SAME order they appear in the source. Put an "image" placeholder block exactly where each diagram/picture/graph/figure belongs, interleaved with the text blocks.\n` +
+      `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
       `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
       `- If questionType is "open": include ONE answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer. In these answer fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
       `- Optionally finish with one "explanation" block.\n` +
@@ -10958,10 +10982,11 @@ function doPrintWorksheetOpen() {
     q.blocks.forEach(block => {
       switch (block.type) {
         case 'text': {
-          // Text blocks are shown normally (questions / instructions)
-          const textOnly = stripHtml(block.content);
-          if (textOnly) {
-            qHtml += `<div class="print-text-block">${escapeHtml(textOnly)}</div>`;
+          // Text blocks are shown normally (questions / instructions),
+          // keeping line breaks so inline option lists stay separated.
+          const textHtml = escapeHtmlKeepLines(block.content);
+          if (textHtml) {
+            qHtml += `<div class="print-text-block">${textHtml}</div>`;
           }
           break;
         }
@@ -11467,6 +11492,23 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.appendChild(document.createTextNode(str));
   return div.innerHTML;
+}
+
+// Escape a text block's HTML for print while KEEPING its line breaks (so
+// inline option lists like "A: …<br>B: …" don't collapse onto one line).
+// <br> and block-level closings become newlines; other tags are stripped.
+function escapeHtmlKeepLines(content) {
+  if (!content) return '';
+  const withBreaks = String(content)
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6])\s*>/gi, '\n');
+  const lines = withBreaks
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .split('\n')
+    .map(l => l.replace(/[ \t]+/g, ' ').trim())
+    .filter(l => l.length);
+  return lines.map(escapeHtml).join('<br>');
 }
 
 function showToast(message, type = 'info') {
@@ -13072,8 +13114,8 @@ function buildWorksheetHtml(selected, worksheetTitle) {
       q.blocks.forEach(block => {
         switch (block.type) {
           case 'text': {
-            const textOnly = stripHtml(block.content);
-            if (textOnly) qHtml += `<div class="print-text-block">${escapeHtml(textOnly)}</div>`;
+            const textHtml = escapeHtmlKeepLines(block.content);
+            if (textHtml) qHtml += `<div class="print-text-block">${textHtml}</div>`;
             break;
           }
           case 'image': {
