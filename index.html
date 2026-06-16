@@ -6354,7 +6354,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.2.1';
+const APP_VERSION = 'v1.2.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -8215,7 +8215,7 @@ function renderImportedBlockStudent(block, q) {
       let h = `<div class="mcq-block" data-block="${block.id}" style="margin:10px 0;">`;
       (block.options || []).forEach((o, i) => {
         h += `<label style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
-          <input type="radio" name="${name}" value="${o.id}" data-correct="${block.correctId === o.id ? '1' : ''}" onchange="markMcqChoice(this)">
+          <input type="radio" name="${name}" value="${o.id}" onchange="markMcqChoice(this)">
           <span><b>${String.fromCharCode(65 + i)}.</b> ${o.text || ''}</span></label>`;
       });
       h += `</div>`;
@@ -8251,16 +8251,18 @@ function renderImportedBlockStudent(block, q) {
   }
 }
 
-// Visual feedback when a student picks an MCQ option.
+// Visual feedback when a student picks an MCQ option. Show a NEUTRAL "selected"
+// highlight only — never reveal correctness here, or we'd give the answer away
+// before the student checks. Right/wrong colouring happens after AI Mark/check
+// (see markOpenQuestion / markQuestionPart).
 function markMcqChoice(input) {
   const wrap = input.closest('.mcq-block');
   if (!wrap) return;
   wrap.querySelectorAll('label').forEach(l => { l.style.background = ''; l.style.borderColor = 'var(--border)'; });
   const lab = input.closest('label');
   if (!lab) return;
-  const correct = input.getAttribute('data-correct') === '1';
-  lab.style.background = correct ? '#dcfce7' : '#fee2e2';
-  lab.style.borderColor = correct ? '#16a34a' : '#dc2626';
+  lab.style.background = 'var(--accent-blue-light)';
+  lab.style.borderColor = 'var(--accent-blue)';
 }
 
 // =====================================================================
