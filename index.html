@@ -4566,6 +4566,10 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.4"/></svg>
         MCQ Practice
       </div>
+      <div class="nav-item student-only" data-page="snapmark" onclick="navigateTo('snapmark')" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Snap &amp; Mark
+      </div>
       <div class="nav-item student-only" data-page="topicalpractice" onclick="navigateTo('topicalpractice')" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
         Topical Practice
@@ -5121,6 +5125,40 @@ option {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: SNAP & MARK (Student Only) ===== -->
+    <div class="page" id="page-snapmark">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Snap &amp; Mark</h2>
+          </div>
+          <div class="subtitle">Photograph a question with your answer — we'll find it and mark it</div>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:780px;">
+        <div id="snapIntro" style="border:1px dashed var(--border);border-radius:14px;padding:26px 20px;text-align:center;background:var(--surface-alt,#faf8f5);">
+          <div style="font-size:42px;line-height:1;margin-bottom:8px;">📸</div>
+          <h3 style="margin:0 0 6px;">Take a photo of your question</h3>
+          <p style="color:var(--text-muted);font-size:0.9rem;margin:0 auto 16px;max-width:460px;line-height:1.6;">
+            Capture the whole question along with your handwritten answer. We'll find the matching question in your practice bank, mark your answer and explain how you did.
+          </p>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="document.getElementById('snapCam').click()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              Take photo
+            </button>
+            <button class="btn btn-outline" onclick="document.getElementById('snapFile').click()">🖼️ Upload photo</button>
+          </div>
+          <input type="file" accept="image/*" capture="environment" hidden id="snapCam" onchange="snapHandleFile(this.files && this.files[0])">
+          <input type="file" accept="image/*" hidden id="snapFile" onchange="snapHandleFile(this.files && this.files[0])">
+          <div id="snapPreview" style="margin-top:18px;"></div>
+          <div id="snapStatus" style="margin-top:14px;font-size:0.9rem;color:var(--text-muted);min-height:18px;"></div>
+        </div>
+        <div id="snapResult" style="margin-top:18px;"></div>
       </div>
     </div>
 
@@ -6354,7 +6392,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.2.2';
+const APP_VERSION = 'v1.3.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -6503,6 +6541,7 @@ function navigateTo(page) {
   }
   if (page === 'myworksheets') renderSavedWorksheets();
   if (page === 'quickpractice') { populateQpControls(); updateQpProgress(); }
+  if (page === 'snapmark') snapInit();
   if (page === 'topicalpractice') tpRenderTopics();
   if (page === 'usage') loadUsageDashboard();
   if (page === 'myreport') loadMyReport();
@@ -12677,6 +12716,182 @@ async function markAllPartsFromPhoto(containerSel) {
   });
   if (!res) return;
   if (!alreadyFinalized && typeof cfg.onAllMarked === 'function') cfg.onAllMarked(res);
+}
+
+// =====================================================================
+// SNAP & MARK (student): photograph a question + handwritten answer, find the
+// matching bank question, then mark the answer from the SAME photo. Reuses the
+// open-question marking engine (buildOpenBody + _openPhoto + markAllPartsFromPhoto),
+// so per-part feedback, the score, the A.I. explanation and progress recording
+// all come for free.
+// =====================================================================
+let _snapPhoto = null; // { dataUrl, mimeType, data, name }
+
+const _SNAP_STOP = new Set('the a an of to in on for and or is are was were be been which what why how does do did with as at by from this that these those it its their his her them they you your we our not can will would should could than then so if'.split(' '));
+function _snapTokens(s) {
+  return new Set(String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !_SNAP_STOP.has(w)));
+}
+// Compact "what is being asked" text for a question — question / part / MCQ-option
+// text only (NOT the model answer), used for AI matching and the fallback ranking.
+function _snapCandidateText(q) {
+  const bits = [];
+  (q.blocks || []).forEach(b => {
+    if (!b || !b.type) return;
+    if (b.type === 'text') bits.push(stripHtmlToText(b.content));
+    else if (b.type === 'part') { bits.push(b.label || ''); bits.push(stripHtmlToText(b.content)); }
+    else if (b.type === 'mcq') (b.options || []).forEach(o => bits.push(stripHtmlToText(o.text)));
+    else if (b.type === 'image' && b.caption) bits.push(stripHtmlToText(b.caption));
+  });
+  return bits.join(' ').replace(/\s+/g, ' ').trim();
+}
+function _snapSim(aSet, q) {
+  const b = _snapTokens(_snapCandidateText(q) + ' ' + (q.title || ''));
+  if (!aSet.size || !b.size) return 0;
+  let inter = 0; aSet.forEach(t => { if (b.has(t)) inter++; });
+  return inter / Math.min(aSet.size, b.size); // overlap coefficient
+}
+
+function setSnapStatus(msg, busy) {
+  const el = document.getElementById('snapStatus');
+  if (!el) return;
+  el.innerHTML = msg ? (busy ? '⏳ ' : '') + escapeHtml(msg) : '';
+}
+function renderSnapPreview() {
+  const el = document.getElementById('snapPreview');
+  if (!el) return;
+  if (!_snapPhoto) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="display:inline-flex;flex-direction:column;gap:12px;align-items:center;">
+      <img src="${_snapPhoto.dataUrl}" style="max-width:300px;max-height:300px;border-radius:10px;border:1px solid var(--border);">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+        <button class="btn btn-primary" onclick="snapFindAndMark()">🔎 Find &amp; mark this</button>
+        <button class="btn btn-outline" onclick="snapClearPhoto()">Remove</button>
+      </div>
+    </div>`;
+}
+async function snapHandleFile(file) {
+  if (!file) return;
+  if (!file.type || !file.type.startsWith('image/')) { showToast('Please choose an image', 'error'); return; }
+  if (file.size > 18 * 1024 * 1024) { showToast('Image too large (max 18 MB)', 'error'); return; }
+  try {
+    const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result || '')); r.onerror = () => rej(new Error('could not read the image')); r.readAsDataURL(file); });
+    const m = /^data:([^;,]+)[^,]*,(.*)$/.exec(dataUrl);
+    _snapPhoto = { dataUrl, mimeType: (m && m[1]) || file.type || 'image/jpeg', data: (m && m[2]) || '', name: file.name || 'photo' };
+    const r = document.getElementById('snapResult'); if (r) r.innerHTML = '';
+    setSnapStatus('', false);
+    renderSnapPreview();
+  } catch (e) { showToast('Could not read photo: ' + (e && e.message ? e.message : e), 'error'); }
+}
+function snapClearPhoto() {
+  _snapPhoto = null; renderSnapPreview(); setSnapStatus('', false);
+  const c = document.getElementById('snapCam'), f = document.getElementById('snapFile');
+  if (c) c.value = ''; if (f) f.value = '';
+}
+function snapReset() {
+  const r = document.getElementById('snapResult'); if (r) r.innerHTML = '';
+  snapClearPhoto();
+}
+function snapInit() { snapReset(); }
+
+async function snapFindAndMark() {
+  if (!_snapPhoto) { showToast('Take or upload a photo first', 'info'); return; }
+  if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't ready yet — try again in a moment", 'info'); return; }
+  if (!questionBank.length) { showToast('No practice questions are loaded yet', 'info'); return; }
+
+  setSnapStatus('Reading your photo and finding the matching question…', true);
+  const cand = questionBank.map((q, i) =>
+    `${i}\t${(q.title || '').slice(0, 70)} | ${q.topic || ''} | ${_snapCandidateText(q).slice(0, 200)}`
+  ).join('\n');
+  const prompt =
+    `You match a photographed exam/worksheet question to one in a question bank.\n` +
+    `The photo may also contain the student's handwritten answer — IGNORE the answer; match ONLY on the question being asked (its wording, numbers, multiple-choice options, diagram).\n` +
+    `Numbered question bank (index<TAB>title | topic | text):\n${cand}\n\n` +
+    `Which bank question is the SAME question shown in the photo?\n` +
+    `Return ONLY JSON: {"match": <index, or -1 if none clearly match>, "confidence": "high|medium|low", "questionText": "<transcribe the question from the photo as plain text>"}`;
+
+  let data;
+  try {
+    const raw = await askGeminiVision(prompt, [{ mimeType: _snapPhoto.mimeType, data: _snapPhoto.data }], { maxOutputTokens: 800, json: true });
+    data = _parseAIJson(raw);
+  } catch (e) {
+    setSnapStatus('Could not read the photo — please try a clearer picture. (' + (e && e.message ? e.message : e) + ')', false);
+    return;
+  }
+  const idx = Number.isInteger(data && data.match) ? data.match : -1;
+  const conf = String((data && data.confidence) || '').toLowerCase();
+  if (idx >= 0 && idx < questionBank.length && conf !== 'low') {
+    await snapMarkQuestion(questionBank[idx]);
+  } else {
+    snapShowSuggestions(String((data && data.questionText) || ''));
+  }
+}
+
+function snapShowSuggestions(questionText) {
+  setSnapStatus('', false);
+  const host = document.getElementById('snapResult');
+  if (!host) return;
+  const aSet = _snapTokens(questionText);
+  const ranked = questionBank.map(q => ({ q, s: _snapSim(aSet, q) }))
+    .sort((a, b) => b.s - a.s).filter(x => x.s > 0.12).slice(0, 3);
+  if (!ranked.length) {
+    host.innerHTML = `<div class="practice-card"><div class="practice-card-body">
+        <p style="margin:0 0 6px;font-weight:600;">No matching question found</p>
+        <p style="color:var(--text-muted);font-size:0.9rem;margin:0;">We couldn't match this photo to a question in your practice bank. Try a clearer photo of the full question, or use Quick Practice.</p>
+        ${questionText ? `<div style="margin-top:10px;font-size:0.85rem;color:var(--text-muted);"><strong>What we read:</strong> ${escapeHtml(questionText.slice(0, 300))}</div>` : ''}
+      </div></div>`;
+    return;
+  }
+  host.innerHTML = `<div class="practice-card"><div class="practice-card-body">
+      <p style="margin:0 0 10px;font-weight:600;">We weren't completely sure — did you mean one of these?</p>
+      ${ranked.map(x => `<button class="btn btn-outline" style="display:block;width:100%;text-align:left;margin-bottom:8px;" onclick="snapMarkById('${x.q.id}')">
+          <strong>${escapeHtml(x.q.title || 'Question')}</strong><span style="color:var(--text-muted);font-size:0.82rem;"> — ${escapeHtml(x.q.topic || '')}</span>
+        </button>`).join('')}
+      <button class="btn btn-outline" style="margin-top:2px;font-size:0.82rem;" onclick="snapReset()">None of these — try another photo</button>
+    </div></div>`;
+}
+function snapMarkById(id) {
+  const q = questionBank.find(x => x.id === id);
+  if (q) snapMarkQuestion(q);
+}
+
+async function snapMarkQuestion(q) {
+  const sel = '#snapResult';
+  const host = document.getElementById('snapResult');
+  if (!host) return;
+  if (!_snapPhoto) { showToast('Take or upload a photo first', 'info'); return; }
+  const qLevel = getTopicLevel(q.topic || '');
+  let html = `<div class="practice-card">
+      <div class="practice-card-header">
+        <h3>${escapeHtml(q.title || 'Question')}</h3>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
+          <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
+          <span class="qb-tag topic">${escapeHtml(q.topic || '')}</span>
+        </div>
+      </div>
+      <div class="practice-card-body">
+        <div id="snapMatchNote" style="margin-bottom:12px;padding:8px 12px;border-radius:8px;background:var(--primary-light);color:var(--primary);font-size:0.88rem;">✓ Matched from your photo — reading your answer and marking…</div>`;
+  html += buildOpenBody(q, sel, { scoreElId: 'snapScore', scorePrefix: 'Score', mode: 'snapmark-open' });
+  html += `</div>
+      <div class="practice-actions">
+        <div class="practice-score" id="snapScore"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="flag-question-btn" onclick="openFlagDialog('${q.id}','${escapeHtml(q.title || '').replace(/'/g, "\\'")}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+            Flag
+          </button>
+          <button class="btn btn-outline" onclick="snapReset()">📸 Mark another</button>
+        </div>
+      </div>
+    </div>`;
+  host.innerHTML = html;
+  setSnapStatus('', false);
+  try { host.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+  // Attach the SAME photo to the result container, then auto-mark every part.
+  _openPhoto[sel] = Object.assign({}, _snapPhoto);
+  renderOpenPhotoPreview(sel);
+  await markAllPartsFromPhoto(sel);
+  const note = document.getElementById('snapMatchNote');
+  if (note) note.innerHTML = "✓ Matched from your photo. Here's your feedback — review each part below.";
 }
 
 // =====================================================================
@@ -19273,6 +19488,11 @@ window.onQpFilterChange = onQpFilterChange;
 window.qpAiRecommend = qpAiRecommend;
 window.startQuickPractice = startQuickPractice;
 window.startMcqPractice = startMcqPractice;
+window.snapHandleFile = snapHandleFile;
+window.snapFindAndMark = snapFindAndMark;
+window.snapClearPhoto = snapClearPhoto;
+window.snapReset = snapReset;
+window.snapMarkById = snapMarkById;
 window.loadNextQpQuestion = loadNextQpQuestion;
 // Usage Dashboard
 window.loadUsageDashboard = loadUsageDashboard;
