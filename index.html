@@ -4637,6 +4637,10 @@ option {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
             Build from screenshot / PDF
           </button>
+          <button class="btn btn-orange" id="rapidAddBtn" onclick="openRapidAdd()" title="Open a paste pad, then just paste screenshots one after another (Ctrl/⌘+V). Each one is read by AI, enhanced to black &amp; white, and dropped straight into your Vetting list in the background — no editor stop.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            ⚡ Rapid add
+          </button>
         </div>
       </div>
       <div class="page-body">
@@ -5614,6 +5618,30 @@ option {
   </div>
 </div>
 
+<!-- ==================== RAPID ADD (paste → vetting, background) DIALOG ==================== -->
+<div class="confirm-overlay" id="rapidAddOverlay">
+  <div class="confirm-dialog" style="max-width:560px;text-align:left;">
+    <h3 style="margin-bottom:4px;">⚡ Rapid add to vetting</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste a screenshot (Ctrl/⌘+V). AI reads it, enhances the whole picture to black &amp; white, and drops the question straight into your <b>Vetting</b> list — no editor stop. Keep pasting to add more; they all process in the background.</p>
+    <div class="image-paste-zone" id="rapidPasteZone" tabindex="0" style="padding:40px 16px;"
+         onclick="this.focus()"
+         onpaste="rapidPaste(event)"
+         ondragover="event.preventDefault(); this.classList.add('dragover')"
+         ondragleave="this.classList.remove('dragover')"
+         ondrop="rapidDrop(event)">
+      📋 Paste your screenshot here (Ctrl/⌘+V)<br>— then paste the next one, and the next…
+    </div>
+    <div id="rapidStatus" style="margin-top:12px;font-size:0.84rem;color:var(--text-muted);min-height:1.2em;">Click the box above, then paste.</div>
+    <div class="btn-group" style="justify-content:space-between;align-items:center;margin-top:14px;">
+      <span style="font-size:0.82rem;color:var(--text-muted);">Added <b id="rapidAddedCount" style="color:var(--primary);">0</b> · Processing <b id="rapidProcCount" style="color:var(--accent-orange);">0</b></span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" onclick="navigateTo('vetting'); closeRapidAdd();">View vetting →</button>
+        <button class="btn btn-outline" onclick="closeRapidAdd()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== SCHEDULE QUESTION DIALOG ==================== -->
 <div class="confirm-overlay" id="scheduleQuestionOverlay">
   <div class="confirm-dialog" style="max-width:600px;text-align:left;max-height:85vh;overflow-y:auto;">
@@ -6429,7 +6457,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.4.0';
+const APP_VERSION = 'v1.5.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -6506,6 +6534,11 @@ let blocks = [];
 let blockIdCounter = 0;
 let questionBank = [];
 let vettingList = [];
+// Rapid add: live placeholder cards for screenshots still being processed in the
+// background. Each: { id, status:'processing'|'error', title, sub, error }.
+let rapidJobs = [];
+let _rapidSeq = 0;
+let _rapidAddedCount = 0;
 let selectedBlanks = {}; // { blockId: { wordIndex: true } }
 let currentEditingQuestion = null;
 let _skipCreateReset = false;
@@ -9542,6 +9575,38 @@ function aiBuildDrop(e) {
   }
 }
 
+// The exact prompt used to turn one screenshot/PDF into a question. Shared by
+// "Build from screenshot" (handleAiBuildFile) and "Rapid add" (processRapidJob)
+// so both produce identical-quality questions.
+function _aiBuildQuestionPrompt(isPdf) {
+  const topics = currentTopics();
+  const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
+  return `You are helping a Singapore primary-school science teacher turn an exam question (in the attached ${isPdf ? 'PDF' : 'image'}) into a practice question.\n` +
+    _genPreamble() +
+    `FIRST decide the question type: "mcq" if the question gives a set of answer options to choose from (e.g. (1)(2)(3)(4) or A/B/C/D), otherwise "open".\n` +
+    `Then return ONLY JSON with this exact shape:\n` +
+    `{"title":"short title","topic":"<closest topic>","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
+    `Each item in "blocks" is ONE of these objects:\n` +
+    `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
+    `  {"type":"image"}   (a placeholder marking where a diagram/picture/graph/figure/experimental setup appears — the teacher pastes the real image there)\n` +
+    `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0}\n` +
+    `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
+    `  {"type":"plainanswer","text":"..."}\n` +
+    `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
+    `Rules:\n` +
+    `- List blocks in the SAME order they appear in the source. Put an "image" placeholder block exactly where each diagram/picture/graph/figure belongs, interleaved with the text blocks.\n` +
+    `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
+    `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
+    `- If questionType is "open": include ONE answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer. In these answer fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
+    `- Optionally finish with one "explanation" block.\n` +
+    `- Choose topic from EXACTLY this list: ${topics.join('; ')}.\n` +
+    `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
+    `- Use plain text only, no markdown.`;
+}
+
+// The prompt used to clean a whole screenshot into a crisp black-and-white figure.
+const _BW_ENHANCE_PROMPT = 'Clean up this ENTIRE image into a sharp BLACK-AND-WHITE line diagram: crisp black line-work and text on a white background, like a freshly printed textbook figure rather than a photocopy or scan. Keep every diagram, detail, label, shape, proportion and all text EXACTLY the same and in the same positions. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT redraw, add, remove or move anything. Output only the image, same aspect ratio.';
+
 async function handleAiBuildFile(file) {
   if (!file) return;
   if (!window.__aiReady || !window.__aiReady()) {
@@ -9560,30 +9625,7 @@ async function handleAiBuildFile(file) {
   showToast('Reading your file with AI…', 'info');
   try {
     const b64 = await _fileToBase64(file);
-    const topics = currentTopics();
-    const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
-    const prompt =
-      `You are helping a Singapore primary-school science teacher turn an exam question (in the attached ${isPdf ? 'PDF' : 'image'}) into a practice question.\n` +
-      _genPreamble() +
-      `FIRST decide the question type: "mcq" if the question gives a set of answer options to choose from (e.g. (1)(2)(3)(4) or A/B/C/D), otherwise "open".\n` +
-      `Then return ONLY JSON with this exact shape:\n` +
-      `{"title":"short title","topic":"<closest topic>","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
-      `Each item in "blocks" is ONE of these objects:\n` +
-      `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
-      `  {"type":"image"}   (a placeholder marking where a diagram/picture/graph/figure/experimental setup appears — the teacher pastes the real image there)\n` +
-      `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0}\n` +
-      `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
-      `  {"type":"plainanswer","text":"..."}\n` +
-      `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
-      `Rules:\n` +
-      `- List blocks in the SAME order they appear in the source. Put an "image" placeholder block exactly where each diagram/picture/graph/figure belongs, interleaved with the text blocks.\n` +
-      `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
-      `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
-      `- If questionType is "open": include ONE answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer. In these answer fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
-      `- Optionally finish with one "explanation" block.\n` +
-      `- Choose topic from EXACTLY this list: ${topics.join('; ')}.\n` +
-      `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
-      `- Use plain text only, no markdown.`;
+    const prompt = _aiBuildQuestionPrompt(isPdf);
     const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 4096, json: true });
     const parsed = _parseAIJson(raw);
     _populateEditorFromAi(parsed);
@@ -9644,14 +9686,181 @@ async function _autoFillDiagramFromUpload(mimeType, b64) {
   setBar(`<div style="margin-top:8px;font-size:0.82rem;color:var(--primary);display:flex;align-items:center;gap:8px;"><span class="spinner" style="border-color:rgba(74,124,89,.3);border-top-color:var(--primary);"></span>Enhancing the image (black &amp; white)… (10–25s)</div>`);
   showToast('🖼️ Enhancing the whole image in high quality (black & white)…', 'info');
   try {
-    const prompt = 'Clean up this ENTIRE image into a sharp BLACK-AND-WHITE line diagram: crisp black line-work and text on a white background, like a freshly printed textbook figure rather than a photocopy or scan. Keep every diagram, detail, label, shape, proportion and all text EXACTLY the same and in the same positions. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT redraw, add, remove or move anything. Output only the image, same aspect ratio.';
-    const enhanced = await generateEnhancedImageDataUrl(prompt, [{ mimeType, data: b64 }]);
+    const enhanced = await generateEnhancedImageDataUrl(_BW_ENHANCE_PROMPT, [{ mimeType, data: b64 }]);
     if (await place(enhanced)) showToast('Enhanced in black & white ✓ — tap ✂️ Crop / reposition to crop to the picture', 'success');
   } catch (e) {
     console.warn('whole-image B&W enhance failed', e);
     try { if (await place(fullDataUrl)) showToast('Enhance failed — added the original image; crop it by hand', 'info'); }
     catch (e2) { setBar(''); showToast('Could not add the image — paste it into the image block manually', 'info'); }
   }
+}
+
+// =====================================================================
+// RAPID ADD — paste screenshots straight into the Vetting list (background)
+// Click the button once, then just paste (Ctrl/⌘+V) screenshot after
+// screenshot. Each paste fires a background job: AI reads the question into
+// blocks, the whole picture is enhanced to black & white, and the result is
+// dropped straight into Vetting — no editor stop. A live placeholder card
+// shows in the Vetting list while each job runs.
+// =====================================================================
+function openRapidAdd() {
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast("AI isn't set up yet — add your reCAPTCHA site key in the code", 'info');
+    return;
+  }
+  if (typeof closeAiBuild === 'function') closeAiBuild();
+  document.getElementById('rapidAddOverlay').classList.add('active');
+  _updateRapidCounts();
+  const zone = document.getElementById('rapidPasteZone');
+  if (zone) setTimeout(() => zone.focus(), 50);
+}
+function closeRapidAdd() {
+  document.getElementById('rapidAddOverlay').classList.remove('active');
+}
+function rapidPaste(e) {
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  let found = 0;
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      e.preventDefault();
+      const file = it.getAsFile();
+      if (file) { startRapidJob(file); found++; }
+    }
+  }
+  if (found) {
+    _setRapidStatus(`Queued ${found} screenshot${found > 1 ? 's' : ''} — paste the next one…`);
+    const zone = document.getElementById('rapidPasteZone');
+    if (zone) setTimeout(() => zone.focus(), 30); // stay armed for the next paste
+  } else {
+    _setRapidStatus('That paste had no image — copy a screenshot and try again.');
+  }
+}
+function rapidDrop(e) {
+  e.preventDefault();
+  const zone = document.getElementById('rapidPasteZone');
+  if (zone) zone.classList.remove('dragover');
+  const files = (e.dataTransfer && e.dataTransfer.files) || [];
+  let found = 0;
+  for (const file of files) {
+    if (file.type && (file.type.startsWith('image/') || file.type === 'application/pdf')) { startRapidJob(file); found++; }
+  }
+  if (!found) showToast('Please drop an image or a PDF', 'error');
+  else if (zone) setTimeout(() => zone.focus(), 30);
+}
+
+function startRapidJob(file) {
+  if (file.size > 18 * 1024 * 1024) { showToast('That image is too large (max ~18 MB)', 'error'); return; }
+  const jobId = 'rapid_' + (++_rapidSeq);
+  rapidJobs.unshift({ id: jobId, status: 'processing', title: 'Reading screenshot…', sub: 'AI is reading the question…' });
+  _updateRapidCounts();
+  renderVettingList(); // show the loading card immediately
+  processRapidJob(jobId, file); // fire-and-forget; runs in the background
+}
+
+async function processRapidJob(jobId, file) {
+  try {
+    const isPdf = file.type === 'application/pdf';
+    const isImg = file.type && file.type.startsWith('image/');
+    if (!isPdf && !isImg) throw new Error('not an image or PDF');
+
+    // 1) Read the question into blocks (same prompt as Build from screenshot).
+    const b64 = await _fileToBase64(file);
+    const raw = await askGeminiVision(_aiBuildQuestionPrompt(isPdf), [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 4096, json: true });
+    const q = buildQuestionFromAi(_parseAIJson(raw));
+
+    // 2) Enhance the WHOLE picture to black & white and attach it to the first
+    //    image block. Falls back to the original screenshot if enhancing fails.
+    if (isImg) {
+      const imgBlock = q.blocks.find(b => b.type === 'image');
+      if (imgBlock) {
+        _setRapidJobState(jobId, { title: q.title || 'Question', sub: 'Enhancing the image (black & white)…' });
+        renderVettingList();
+        const original = 'data:' + file.type + ';base64,' + b64;
+        try {
+          const dataUrl = imageAiReady()
+            ? await generateEnhancedImageDataUrl(_BW_ENHANCE_PROMPT, [{ mimeType: file.type, data: b64 }])
+            : original;
+          imgBlock.url = await uploadImageDataUrl(dataUrl);
+        } catch (imgErr) {
+          console.warn('rapid B&W enhance failed; attaching original screenshot', imgErr);
+          try { imgBlock.url = await uploadImageDataUrl(original); } catch (e2) { /* leave url empty; paste manually later */ }
+        }
+      }
+    }
+
+    // 3) Promote to a real Vetting question (newest first) and persist.
+    _removeRapidJob(jobId);
+    vettingList.unshift(q);
+    _rapidAddedCount++;
+    updateCounts();
+    _updateRapidCounts();
+    renderVettingList();
+    saveVettingQuestion(q); // async, non-blocking
+    _setRapidStatus('✓ Added "' + (q.title || 'question') + '" to vetting.');
+    showToast('Added "' + (q.title || 'question') + '" to vetting ✓', 'success');
+  } catch (err) {
+    console.error('rapid job failed:', err);
+    const job = rapidJobs.find(j => j.id === jobId);
+    if (job) { job.status = 'error'; job.title = "Couldn't read this screenshot"; job.error = (err && err.message) ? err.message : String(err); }
+    _updateRapidCounts();
+    renderVettingList();
+    _setRapidStatus('⚠ One screenshot could not be read — see the red card in vetting.');
+    showToast('A screenshot could not be read — see the red card in vetting', 'error');
+  }
+}
+
+function _setRapidJobState(jobId, patch) {
+  const job = rapidJobs.find(j => j.id === jobId);
+  if (job) Object.assign(job, patch);
+}
+function _removeRapidJob(jobId) {
+  rapidJobs = rapidJobs.filter(j => j.id !== jobId);
+}
+function dismissRapidJob(jobId) {
+  rapidJobs = rapidJobs.filter(j => j.id !== jobId);
+  _updateRapidCounts();
+  renderVettingList();
+}
+function _setRapidStatus(msg) {
+  const el = document.getElementById('rapidStatus');
+  if (el) el.textContent = msg;
+}
+function _updateRapidCounts() {
+  const proc = rapidJobs.filter(j => j.status === 'processing').length;
+  const p = document.getElementById('rapidProcCount'); if (p) p.textContent = proc;
+  const a = document.getElementById('rapidAddedCount'); if (a) a.textContent = _rapidAddedCount;
+}
+
+// One placeholder card in the Vetting grid for a screenshot still processing
+// (or one that failed, with a dismiss button).
+function _rapidJobCardHtml(job) {
+  if (job.status === 'error') {
+    return `
+      <div class="qb-card" style="border-color:var(--accent-red);background:var(--accent-red-light);">
+        <div class="qb-card-header">
+          <div>
+            <div class="qb-card-title" style="color:var(--accent-red);">⚠ ${escapeHtml(job.title || "Couldn't read screenshot")}</div>
+            <div class="qb-card-meta"><span class="vetting-badge" style="background:#fee2e2;color:#dc2626;">Failed</span></div>
+          </div>
+          <div class="qb-card-actions">
+            <button class="qb-action-btn delete-qb" title="Dismiss" onclick="dismissRapidJob('${job.id}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="qb-card-preview">${escapeHtml(job.error || 'AI could not read this image.')} — try a clearer screenshot, or use "Build from screenshot".</div>
+      </div>`;
+  }
+  return `
+    <div class="qb-card" style="border-color:var(--primary);">
+      <div class="qb-card-header">
+        <div>
+          <div class="qb-card-title" style="display:flex;align-items:center;gap:8px;"><span class="spinner" style="border-color:rgba(74,124,89,.3);border-top-color:var(--primary);"></span>${escapeHtml(job.title || 'Processing…')}</div>
+          <div class="qb-card-meta"><span class="vetting-badge" style="background:var(--primary-light);color:var(--primary);">Processing…</span></div>
+        </div>
+      </div>
+      <div class="qb-card-preview" style="color:var(--text-muted);">${escapeHtml(job.sub || 'AI is reading the question and enhancing the image…')}</div>
+    </div>`;
 }
 
 // =====================================================================
@@ -10412,8 +10621,10 @@ function deleteQuestion(id) {
 // =====================================================================
 function renderVettingList() {
   const container = document.getElementById('vettingListGrid');
-  
-  if (vettingList.length === 0) {
+  // Live "processing" / "failed" placeholders from Rapid add, shown on top.
+  const jobCards = rapidJobs.map(_rapidJobCardHtml).join('');
+
+  if (vettingList.length === 0 && rapidJobs.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -10422,8 +10633,8 @@ function renderVettingList() {
       </div>`;
     return;
   }
-  
-  container.innerHTML = vettingList.map(q => {
+
+  const qCards = vettingList.map(q => {
     const statusClass = q.status || 'pending';
     const preview = getQuestionPreview(q);
     return `
@@ -10453,6 +10664,7 @@ function renderVettingList() {
         <div class="qb-card-preview">${escapeHtml(preview)}</div>
       </div>`;
   }).join('');
+  container.innerHTML = jobCards + qCards;
 }
 
 function approveVetting(id) {
@@ -19673,6 +19885,11 @@ window.openAiBuild = openAiBuild;
 window.closeAiBuild = closeAiBuild;
 window.aiBuildPaste = aiBuildPaste;
 window.aiBuildDrop = aiBuildDrop;
+window.openRapidAdd = openRapidAdd;
+window.closeRapidAdd = closeRapidAdd;
+window.rapidPaste = rapidPaste;
+window.rapidDrop = rapidDrop;
+window.dismissRapidJob = dismissRapidJob;
 window.submitFlag = submitFlag;
 // Flagged Questions (admin)
 window.loadFlaggedQuestions = loadFlaggedQuestions;
