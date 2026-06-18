@@ -4670,7 +4670,7 @@ option {
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Question Title</label>
+            <label class="form-label">Question Title <button type="button" class="mic-btn" data-mic="questionTitle" title="Dictate the question title" style="width:26px;height:26px;font-size:0.85rem;vertical-align:middle;">🎤</button></label>
             <input id="questionTitle" class="form-input" type="text" placeholder="e.g. Question 1">
           </div>
           <div class="form-group">
@@ -6461,7 +6461,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.6.0';
+const APP_VERSION = 'v1.7.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7895,6 +7895,7 @@ function renderBlocks() {
               <option value="p">Normal</option>
             </select>
             <span class="toolbar-divider"></span>
+            ${micForBlockHtml(block.id, 'content', 'Dictate the question text')}
             ${improveBtnHtml(block.id, 'content')}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Enter question text..."
@@ -8007,6 +8008,7 @@ function renderBlocks() {
               <option value="p">Normal</option>
             </select>
             <span class="toolbar-divider"></span>
+            ${micForBlockHtml(block.id, 'content', 'Dictate the explanation')}
             ${improveBtnHtml(block.id, 'content')}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Enter explanation text..."
@@ -8220,18 +8222,20 @@ function renderImportedBlockEditorBody(block) {
         <div class="block-body">
           <input class="form-input" type="text" placeholder="Label (e.g. (a))" style="max-width:160px;margin-bottom:8px;"
                  value="${escapeHtml(block.label || '')}" oninput="saveBlockField('${id}','label',this.value)">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">${micForBlockHtml(id, 'content', 'Dictate the part text')}</div>
           <div class="content-editable" contenteditable="true" data-placeholder="Part text…"
                data-block-id="${id}" data-field="content"
                oninput="saveBlockContent('${id}','content',this.innerHTML)">${block.content || ''}</div>
         </div>`;
     case 'mcq': {
       const opts = (block.options || []).map((o, i) => `
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;" data-mic-wrap>
           <input type="radio" class="mcq-correct-radio" name="mcqedit_${id}" ${block.correctId === o.id ? 'checked' : ''}
                  title="Mark as correct answer" onchange="mcqSetCorrect('${id}','${o.id}')">
           <span style="font-weight:600;width:18px;">${String.fromCharCode(65 + i)}.</span>
           <input class="form-input" type="text" style="flex:1;" placeholder="Option text"
                  value="${escapeHtml(o.text || '')}" oninput="mcqSetOptionText('${id}','${o.id}',this.value)">
+          ${micButtonHtml('', 'Speak this option')}
           <button class="block-action-btn delete" title="Remove option" onclick="mcqRemoveOption('${id}','${o.id}')">✕</button>
         </div>`).join('');
       return `
@@ -8288,6 +8292,7 @@ function renderImportedBlockEditorBody(block) {
             <input class="form-input" type="text" placeholder="Title" style="flex:1;"
                    value="${escapeHtml(block.title || 'Common Mistake')}" oninput="saveBlockField('${id}','title',this.value)">
             <select class="form-input" style="max-width:130px;" onchange="saveBlockField('${id}','color',this.value)">${colorOpts}</select>
+            ${micForBlockHtml(id, 'text', 'Dictate the common mistake')}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Describe the common mistake…"
                data-block-id="${id}" data-field="text"
@@ -8299,6 +8304,7 @@ function renderImportedBlockEditorBody(block) {
         <div class="block-body">
           <input class="form-input" type="text" placeholder="Label" style="margin-bottom:8px;"
                  value="${escapeHtml(block.label || "Student's Answer")}" oninput="saveBlockField('${id}','label',this.value)">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">${micForBlockHtml(id, 'answer', 'Dictate the student answer')}</div>
           <div class="content-editable" contenteditable="true" data-placeholder="Example (often incorrect) answer…"
                data-block-id="${id}" data-field="answer"
                oninput="saveBlockContent('${id}','answer',this.innerHTML)">${block.answer || ''}</div>
@@ -8306,7 +8312,10 @@ function renderImportedBlockEditorBody(block) {
     case 'answerKey':
       return `
         <div class="block-body">
-          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">🔑 Answer key — hidden from students during practice.</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="font-size:0.8rem;color:var(--text-muted);">🔑 Answer key — hidden from students during practice.</span>
+            ${micForBlockHtml(id, 'text', 'Dictate the answer key')}
+          </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Answer key text…"
                data-block-id="${id}" data-field="text"
                oninput="saveBlockContent('${id}','text',this.innerHTML)">${block.text || ''}</div>
@@ -8770,6 +8779,11 @@ const _voice = { active: false, recorder: null, chunks: [], stream: null, btn: n
 function micButtonHtml(targetId, title) {
   return `<button type="button" class="mic-btn" data-mic="${targetId || ''}" title="${title || 'Voice input — click to speak, click again to stop'}">🎤</button>`;
 }
+// Mic button that targets a block's content-editable by its data-block-id +
+// data-field (unambiguous even when a block has several editable fields).
+function micForBlockHtml(blockId, field, title) {
+  return `<button type="button" class="mic-btn" data-mic-block="${blockId}" data-mic-field="${field}" title="${title || 'Voice input — click to speak, click again to stop'}">🎤</button>`;
+}
 function _setMic(btn, state) {
   if (!btn) return;
   btn.classList.remove('recording', 'busy');
@@ -8788,6 +8802,12 @@ function _blobToB64(blob) {
 function _micField(mic) {
   const id = mic.getAttribute('data-mic');
   if (id) { const el = document.getElementById(id); if (el) return el; }
+  const bId = mic.getAttribute('data-mic-block');
+  const bField = mic.getAttribute('data-mic-field');
+  if (bId && bField) {
+    const el = document.querySelector('.content-editable[data-block-id="' + bId + '"][data-field="' + bField + '"]');
+    if (el) return el;
+  }
   const wrap = mic.closest('[data-mic-wrap]');
   if (wrap) return wrap.querySelector('textarea, [contenteditable="true"], input[type="text"]');
   return null;
