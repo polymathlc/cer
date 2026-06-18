@@ -3428,6 +3428,10 @@ option {
 .usage-table tbody tr:hover {
   background: var(--surface-alt);
 }
+.usage-table tbody tr.clickable { cursor: pointer; }
+.usage-table tbody tr.attempt-rapid { background: var(--accent-red-light); }
+.usage-table tbody tr.attempt-rapid:hover { background: var(--accent-red-light); }
+.usage-open-hint { color: var(--primary); font-weight: 600; font-size: 0.8rem; white-space: nowrap; }
 
 /* ========== SCHEDULED QUESTIONS ========== */
 .schedule-question-list {
@@ -5299,10 +5303,11 @@ option {
                   <th>Total Logins</th>
                   <th>Questions Done</th>
                   <th>Avg Score</th>
+                  <th>Activity Log</th>
                 </tr>
               </thead>
               <tbody id="usageStudentBody">
-                <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</td></tr>
+                <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</td></tr>
               </tbody>
             </table>
           </div>
@@ -5731,6 +5736,38 @@ option {
     <div class="btn-group">
       <button class="btn btn-outline" onclick="closeConfirm()">Cancel</button>
       <button class="btn btn-danger" id="confirmAction" onclick="closeConfirm()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== STUDENT ACTIVITY DETAIL OVERLAY (Admin Only) ==================== -->
+<div class="confirm-overlay" id="studentDetailOverlay">
+  <div class="confirm-dialog" style="max-width:900px;width:96%;text-align:left;max-height:90vh;overflow-y:auto;padding:24px;">
+    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:4px;">
+      <div style="flex:1;min-width:0;">
+        <h3 id="studentDetailName" style="margin-bottom:2px;">Student</h3>
+        <div id="studentDetailEmail" style="color:var(--text-muted);font-size:0.82rem;"></div>
+      </div>
+      <button class="btn btn-outline" onclick="closeStudentDetail()" style="font-size:0.8rem;padding:6px 12px;">Close</button>
+    </div>
+    <p style="color:var(--text-muted);font-size:0.82rem;margin:10px 0 16px;">Every question this student attempted, in order, with the exact time (Singapore time). Attempts answered less than 15&nbsp;seconds after the previous one are highlighted in red — rapid-fire answers can be a sign of copying.</p>
+    <div id="studentDetailSummary" class="usage-summary-cards" style="margin-bottom:18px;"></div>
+    <div class="usage-table-wrapper">
+      <table class="usage-table">
+        <thead>
+          <tr>
+            <th style="width:34px;">#</th>
+            <th>Date &amp; Time (SGT)</th>
+            <th>Question</th>
+            <th style="text-align:center;">Score</th>
+            <th>Mode</th>
+            <th>Gap</th>
+          </tr>
+        </thead>
+        <tbody id="studentDetailBody">
+          <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -6392,7 +6429,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.3.0';
+const APP_VERSION = 'v1.4.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -14786,6 +14823,11 @@ function tpBackToTopics() {
 // STUDENT USAGE DASHBOARD (Admin Only)
 // =====================================================================
 let usageDashboardLoaded = false;
+// Cache of the latest per-student stats (keyed by uid) so the drill-in modal
+// can show name/email without re-fetching profiles.
+let _usageStudentStats = {};
+// Two consecutive attempts closer than this are flagged as suspiciously fast.
+const RAPID_ATTEMPT_MS = 15000;
 
 async function loadUsageDashboard() {
   if (!currentUser || currentUser.role !== 'admin') return;
@@ -14878,6 +14920,9 @@ async function loadUsageDashboard() {
       studentStats[a.uid].totalBlanks += (a.totalBlanks || 0);
     });
 
+    // Cache so the per-student drill-in (showStudentDetail) can read name/email.
+    _usageStudentStats = studentStats;
+
     const studentList = Object.values(studentStats).sort((a, b) => {
       if (b.lastLogin && a.lastLogin) return b.lastLogin - a.lastLogin;
       if (b.lastLogin) return 1;
@@ -14902,18 +14947,19 @@ async function loadUsageDashboard() {
     // Render student table
     const tbody = document.getElementById('usageStudentBody');
     if (studentList.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No student data yet. Students will appear here after they log in.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No student data yet. Students will appear here after they log in.</td></tr>';
     } else {
       tbody.innerHTML = studentList.map(s => {
         const lastLoginStr = s.lastLogin ? formatDateTimeSGT(s.lastLogin) : 'Never';
         const avgScore = s.totalBlanks > 0 ? Math.round((s.totalScore / s.totalBlanks) * 100) + '%' : '--';
-        return `<tr>
+        return `<tr class="clickable" onclick="showStudentDetail('${escapeHtml(s.uid)}')" title="Click to see every question this student attempted, with times">
           <td style="font-weight:600;">${escapeHtml(s.name)}</td>
           <td style="color:var(--text-muted);font-size:0.82rem;">${escapeHtml(s.email)}</td>
           <td style="font-size:0.82rem;">${lastLoginStr}</td>
           <td style="text-align:center;"><span style="background:var(--accent-blue-light);color:var(--accent-blue);padding:2px 10px;border-radius:10px;font-family:'Space Mono',monospace;font-size:0.75rem;font-weight:600;">${s.loginCount}</span></td>
           <td style="text-align:center;"><span style="background:var(--accent-orange-light);color:var(--accent-orange);padding:2px 10px;border-radius:10px;font-family:'Space Mono',monospace;font-size:0.75rem;font-weight:600;">${s.questionsAttempted}</span></td>
           <td style="text-align:center;font-family:'Space Mono',monospace;font-size:0.82rem;font-weight:600;color:${s.totalBlanks > 0 ? 'var(--primary)' : 'var(--text-muted)'};">${avgScore}</td>
+          <td style="text-align:center;"><span class="usage-open-hint">View log&nbsp;›</span></td>
         </tr>`;
       }).join('');
     }
@@ -14957,6 +15003,99 @@ function formatDateTimeSGT(date) {
   } catch (e) {
     return date.toLocaleString();
   }
+}
+
+// Milliseconds for a question-attempt's timestamp (Firestore Timestamp or raw).
+function attemptTime(a) {
+  if (!a || !a.timestamp) return 0;
+  return a.timestamp.toDate ? a.timestamp.toDate().getTime() : new Date(a.timestamp).getTime();
+}
+
+// Human-friendly gap between two attempts: "8s", "3m 12s", "2h 5m", "1d".
+function formatGap(ms) {
+  if (ms == null) return '—';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60), rs = s % 60;
+  if (m < 60) return rs ? `${m}m ${rs}s` : `${m}m`;
+  const h = Math.floor(m / 60), rm = m % 60;
+  if (h < 24) return rm ? `${h}h ${rm}m` : `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
+// Drill into one student: list every question they attempted, in order, with the
+// exact time (SGT). Consecutive attempts under RAPID_ATTEMPT_MS apart are flagged
+// red so a teacher can spot rapid-fire (potentially copied) answers.
+async function showStudentDetail(uid) {
+  const s = _usageStudentStats[uid] || { uid, name: 'Student', email: '' };
+  document.getElementById('studentDetailName').textContent = s.name || 'Student';
+  document.getElementById('studentDetailEmail').textContent = s.email || '';
+  document.getElementById('studentDetailSummary').innerHTML = '';
+  document.getElementById('studentDetailBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</td></tr>';
+  document.getElementById('studentDetailOverlay').classList.add('active');
+
+  try {
+    // Single-field equality query — no composite index needed; we sort client-side.
+    const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', uid)));
+    const attempts = [];
+    snap.forEach(d => attempts.push(d.data()));
+    // Chronological order so we can measure the gap between consecutive attempts.
+    attempts.sort((a, b) => attemptTime(a) - attemptTime(b));
+
+    let prev = null, rapidCount = 0, totalScore = 0, totalBlanks = 0;
+    attempts.forEach(a => {
+      const t = attemptTime(a);
+      a._date = t ? new Date(t) : null;
+      a._gapMs = prev != null ? (t - prev) : null;
+      if (a._gapMs != null && a._gapMs < RAPID_ATTEMPT_MS) rapidCount++;
+      totalScore += (a.score || 0);
+      totalBlanks += (a.totalBlanks || 0);
+      prev = t;
+    });
+
+    const last = attempts.length ? attempts[attempts.length - 1]._date : null;
+    const avgPct = totalBlanks > 0 ? Math.round((totalScore / totalBlanks) * 100) + '%' : '--';
+
+    const cards = [
+      { label: 'Questions Attempted', value: attempts.length, color: 'var(--accent-orange)' },
+      { label: 'Average Score', value: avgPct, color: 'var(--primary)' },
+      { label: 'Rapid (&lt;15s apart)', value: rapidCount, color: rapidCount ? 'var(--accent-red)' : 'var(--text-muted)' },
+      { label: 'Last Active', value: last ? formatDateTimeSGT(last) : '--', color: 'var(--accent-blue)', small: true }
+    ];
+    document.getElementById('studentDetailSummary').innerHTML = cards.map(c =>
+      `<div class="usage-card"><div class="usage-card-value" style="color:${c.color};${c.small ? 'font-size:0.8rem;line-height:1.35;' : ''}">${c.value}</div><div class="usage-card-label">${c.label}</div></div>`
+    ).join('');
+
+    const tbody = document.getElementById('studentDetailBody');
+    if (!attempts.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No question attempts recorded for this student yet.</td></tr>';
+      return;
+    }
+    // Display newest first, but the gap was already computed in chronological order.
+    tbody.innerHTML = attempts.slice().reverse().map((a, i) => {
+      const n = attempts.length - i; // attempt number in chronological order
+      const timeStr = a._date ? formatDateTimeSGT(a._date) : 'Unknown';
+      const pct = a.totalBlanks > 0 ? Math.round((a.score / a.totalBlanks) * 100) : null;
+      const scoreStr = a.totalBlanks > 0 ? `${a.score}/${a.totalBlanks} (${pct}%)` : (a.score != null ? String(a.score) : '--');
+      const rapid = a._gapMs != null && a._gapMs < RAPID_ATTEMPT_MS;
+      const gapStr = a._gapMs == null ? '—' : formatGap(a._gapMs);
+      return `<tr${rapid ? ' class="attempt-rapid"' : ''}>
+        <td style="color:var(--text-muted);font-family:'Space Mono',monospace;font-size:0.78rem;">${n}</td>
+        <td style="font-size:0.82rem;white-space:nowrap;">${timeStr}</td>
+        <td style="font-weight:600;font-size:0.85rem;">${escapeHtml(a.questionTitle || a.questionId || 'Untitled question')}</td>
+        <td style="text-align:center;font-family:'Space Mono',monospace;font-size:0.8rem;font-weight:600;color:${pct != null ? (pct >= 50 ? 'var(--primary)' : 'var(--accent-orange)') : 'var(--text-muted)'};">${scoreStr}</td>
+        <td style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml(a.mode || '—')}</td>
+        <td style="font-size:0.78rem;${rapid ? 'color:var(--accent-red);font-weight:700;' : 'color:var(--text-muted);'}">${rapid ? '⚡ ' : ''}${gapStr}</td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    console.error('showStudentDetail failed:', err);
+    document.getElementById('studentDetailBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--accent-red);">Could not load this student\'s attempts — check your connection.</td></tr>';
+  }
+}
+
+function closeStudentDetail() {
+  document.getElementById('studentDetailOverlay').classList.remove('active');
 }
 
 // =====================================================================
@@ -19496,6 +19635,8 @@ window.snapMarkById = snapMarkById;
 window.loadNextQpQuestion = loadNextQpQuestion;
 // Usage Dashboard
 window.loadUsageDashboard = loadUsageDashboard;
+window.showStudentDetail = showStudentDetail;
+window.closeStudentDetail = closeStudentDetail;
 window.loadMyReport = loadMyReport;
 // Scheduled Questions
 window.openScheduleQuestionDialog = openScheduleQuestionDialog;
