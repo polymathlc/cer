@@ -4804,6 +4804,10 @@ option {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             &#x1F4BE; Save Question
           </button>
+          <button class="btn btn-primary" onclick="saveEditToBank()" title="Save your edits straight into the Question Bank (the live database). If this question is in the vetting list, it is approved out of vetting in one step.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            &#x2705; Save to Question Bank
+          </button>
         </div>
       </div>
     </div>
@@ -6457,7 +6461,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.5.1';
+const APP_VERSION = 'v1.6.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9784,9 +9788,15 @@ async function processRapidJob(jobId, file) {
             ? await generateEnhancedImageDataUrl(_BW_ENHANCE_PROMPT, [{ mimeType: file.type, data: b64 }])
             : original;
           imgBlock.url = await uploadImageDataUrl(dataUrl);
+          // Seed in-session image state so Crop / Touch up / Enhance work when this
+          // question is opened in the editor (mirrors Build-from-screenshot).
+          _imgEnhanceState[imgBlock.id] = { originalDataUrl: dataUrl, originalUrl: imgBlock.url, currentDataUrl: dataUrl };
         } catch (imgErr) {
           console.warn('rapid B&W enhance failed; attaching original screenshot', imgErr);
-          try { imgBlock.url = await uploadImageDataUrl(original); } catch (e2) { /* leave url empty; paste manually later */ }
+          try {
+            imgBlock.url = await uploadImageDataUrl(original);
+            _imgEnhanceState[imgBlock.id] = { originalDataUrl: original, originalUrl: imgBlock.url, currentDataUrl: original };
+          } catch (e2) { /* leave url empty; paste manually later */ }
         }
       }
     }
@@ -10373,6 +10383,42 @@ function saveEditedQuestion() {
   navigateTo('bank');
   if (savedToVetting) saveVettingQuestion(q);
   else saveQuestion(q);
+}
+
+// Edit mode: commit the current edits straight into the Question Bank (the live
+// database students see). If the question is in the vetting list, it's approved
+// out of vetting in the same step — no separate trip back to approve it.
+function saveEditToBank() {
+  if (blocks.length === 0) { showToast('Add some blocks before saving', 'error'); return; }
+  if (!currentEditingQuestion) { showToast('No question being edited', 'error'); return; }
+  const id = currentEditingQuestion;
+  const q = collectQuestionData();
+  q.id = id;
+  carryOverQuestionMeta(q);
+  q.status = 'approved';
+
+  const wasVetting = vettingList.some(v => v.id === id);
+  if (wasVetting) {
+    vettingList = vettingList.filter(v => v.id !== id);
+    // Keep an approved question in its original owner's bank, like approveVetting.
+    if (_ownerUidByVettingId[id]) _ownerUidByQuestionId[id] = _ownerUidByVettingId[id];
+  }
+  const bIdx = questionBank.findIndex(qb => qb.id === id);
+  if (bIdx !== -1) questionBank[bIdx] = q; else questionBank.push(q);
+  _rapidJustAdded.delete(id);
+
+  currentEditingQuestion = null;
+  setEditMode(false);
+  blocks = [];
+  selectedBlanks = {};
+  renderBlocks();
+  updateCounts();
+  renderQuestionBank();
+  renderVettingList();
+  showToast('Saved to question bank ✓', 'success');
+  navigateTo('bank');
+  saveQuestion(q);                       // upsert into the questions subcollection
+  if (wasVetting) deleteVettingDoc(id);  // remove from the vetting subcollection
 }
 
 function cancelEdit() {
@@ -19739,6 +19785,7 @@ window.resetStudentViewAnswers = resetStudentViewAnswers;
 window.openScheduleFromCreate = openScheduleFromCreate;
 window.addToBank = addToBank;
 window.saveEditedQuestion = saveEditedQuestion;
+window.saveEditToBank = saveEditToBank;
 window.cancelEdit = cancelEdit;
 window.addToVetting = addToVetting;
 window.clearForm = clearForm;
