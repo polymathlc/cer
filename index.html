@@ -4637,7 +4637,7 @@ option {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
             Build from screenshot / PDF
           </button>
-          <button class="btn btn-orange" id="rapidAddBtn" onclick="openRapidAdd()" title="Open a paste pad, then just paste screenshots one after another (Ctrl/⌘+V). Each one is read by AI, enhanced to black &amp; white, and dropped straight into your Vetting list in the background — no editor stop.">
+          <button class="btn btn-orange" id="rapidAddBtn" onclick="openRapidAdd()" title="Open a paste pad, then just paste screenshots one after another (Ctrl/⌘+V). Each one is read by AI, enhanced to black &amp; white, and dropped straight into your Vetting list in the background — no editor stop. Shortcut: Ctrl/⌘+Shift+V from anywhere.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             ⚡ Rapid add
           </button>
@@ -4803,6 +4803,10 @@ option {
           <button class="btn btn-primary" onclick="saveEditedQuestion()" style="background:#10b981;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             &#x1F4BE; Save Question
+          </button>
+          <button class="btn btn-primary" onclick="saveEditToBank()" title="Save your edits straight into the Question Bank (the live database). If this question is in the vetting list, it is approved out of vetting in one step.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            &#x2705; Save to Question Bank
           </button>
         </div>
       </div>
@@ -5622,7 +5626,7 @@ option {
 <div class="confirm-overlay" id="rapidAddOverlay">
   <div class="confirm-dialog" style="max-width:560px;text-align:left;">
     <h3 style="margin-bottom:4px;">⚡ Rapid add to vetting</h3>
-    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste a screenshot (Ctrl/⌘+V). AI reads it, enhances the whole picture to black &amp; white, and drops the question straight into your <b>Vetting</b> list — no editor stop. Keep pasting to add more; they all process in the background.</p>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste a screenshot (Ctrl/⌘+V). AI reads it, enhances the whole picture to black &amp; white, and drops the question straight into your <b>Vetting</b> list — no editor stop. Keep pasting to add more; they all process in the background. <span style="color:var(--text-muted);opacity:0.85;">Tip: open this from anywhere with <b>Ctrl/⌘+Shift+V</b>.</span></p>
     <div class="image-paste-zone" id="rapidPasteZone" tabindex="0" style="padding:40px 16px;"
          onclick="this.focus()"
          onpaste="rapidPaste(event)"
@@ -6457,7 +6461,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.5.0';
+const APP_VERSION = 'v1.6.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -6539,6 +6543,9 @@ let vettingList = [];
 let rapidJobs = [];
 let _rapidSeq = 0;
 let _rapidAddedCount = 0;
+// IDs of questions added via Rapid add this session — highlighted in the vetting
+// grid with a badge + "Open in editor" link. Session-only; never saved to Firestore.
+let _rapidJustAdded = new Set();
 let selectedBlanks = {}; // { blockId: { wordIndex: true } }
 let currentEditingQuestion = null;
 let _skipCreateReset = false;
@@ -9781,9 +9788,15 @@ async function processRapidJob(jobId, file) {
             ? await generateEnhancedImageDataUrl(_BW_ENHANCE_PROMPT, [{ mimeType: file.type, data: b64 }])
             : original;
           imgBlock.url = await uploadImageDataUrl(dataUrl);
+          // Seed in-session image state so Crop / Touch up / Enhance work when this
+          // question is opened in the editor (mirrors Build-from-screenshot).
+          _imgEnhanceState[imgBlock.id] = { originalDataUrl: dataUrl, originalUrl: imgBlock.url, currentDataUrl: dataUrl };
         } catch (imgErr) {
           console.warn('rapid B&W enhance failed; attaching original screenshot', imgErr);
-          try { imgBlock.url = await uploadImageDataUrl(original); } catch (e2) { /* leave url empty; paste manually later */ }
+          try {
+            imgBlock.url = await uploadImageDataUrl(original);
+            _imgEnhanceState[imgBlock.id] = { originalDataUrl: original, originalUrl: imgBlock.url, currentDataUrl: original };
+          } catch (e2) { /* leave url empty; paste manually later */ }
         }
       }
     }
@@ -9791,6 +9804,7 @@ async function processRapidJob(jobId, file) {
     // 3) Promote to a real Vetting question (newest first) and persist.
     _removeRapidJob(jobId);
     vettingList.unshift(q);
+    _rapidJustAdded.add(q.id);
     _rapidAddedCount++;
     updateCounts();
     _updateRapidCounts();
@@ -10371,6 +10385,42 @@ function saveEditedQuestion() {
   else saveQuestion(q);
 }
 
+// Edit mode: commit the current edits straight into the Question Bank (the live
+// database students see). If the question is in the vetting list, it's approved
+// out of vetting in the same step — no separate trip back to approve it.
+function saveEditToBank() {
+  if (blocks.length === 0) { showToast('Add some blocks before saving', 'error'); return; }
+  if (!currentEditingQuestion) { showToast('No question being edited', 'error'); return; }
+  const id = currentEditingQuestion;
+  const q = collectQuestionData();
+  q.id = id;
+  carryOverQuestionMeta(q);
+  q.status = 'approved';
+
+  const wasVetting = vettingList.some(v => v.id === id);
+  if (wasVetting) {
+    vettingList = vettingList.filter(v => v.id !== id);
+    // Keep an approved question in its original owner's bank, like approveVetting.
+    if (_ownerUidByVettingId[id]) _ownerUidByQuestionId[id] = _ownerUidByVettingId[id];
+  }
+  const bIdx = questionBank.findIndex(qb => qb.id === id);
+  if (bIdx !== -1) questionBank[bIdx] = q; else questionBank.push(q);
+  _rapidJustAdded.delete(id);
+
+  currentEditingQuestion = null;
+  setEditMode(false);
+  blocks = [];
+  selectedBlanks = {};
+  renderBlocks();
+  updateCounts();
+  renderQuestionBank();
+  renderVettingList();
+  showToast('Saved to question bank ✓', 'success');
+  navigateTo('bank');
+  saveQuestion(q);                       // upsert into the questions subcollection
+  if (wasVetting) deleteVettingDoc(id);  // remove from the vetting subcollection
+}
+
 function cancelEdit() {
   showConfirm('Cancel Edit', 'Discard changes and go back to the question bank?', () => {
     currentEditingQuestion = null;
@@ -10636,15 +10686,17 @@ function renderVettingList() {
 
   const qCards = vettingList.map(q => {
     const statusClass = q.status || 'pending';
+    const isNew = _rapidJustAdded.has(q.id); // freshly added via Rapid add this session
     const preview = getQuestionPreview(q);
     return `
-      <div class="qb-card">
+      <div class="qb-card"${isNew ? ' style="border-color:var(--accent-orange);box-shadow:0 0 0 1px var(--accent-orange);"' : ''}>
         <div class="qb-card-header">
           <div>
             <div class="qb-card-title">${escapeHtml(q.title)}</div>
             <div class="qb-card-meta">
               <span class="qb-tag category">${escapeHtml(q.category)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+              ${isNew ? '<span class="qb-tag" style="background:var(--accent-orange-light);color:var(--accent-orange);" title="Just added by Rapid add — review and approve">⚡ Just added</span>' : ''}
               ${q.topicConfidence === 'low' ? '<span class="qb-tag" style="background:#fee2e2;color:#dc2626;" title="AI was unsure of this topic — please check it">⚠ check topic</span>' : q.topicConfidence === 'medium' ? '<span class="qb-tag" style="background:#fef3c7;color:#b45309;" title="AI was fairly sure of this topic — worth a glance">~ topic?</span>' : ''}
               <span class="vetting-badge ${statusClass}">${statusClass.charAt(0).toUpperCase() + statusClass.slice(1)}</span>
             </div>
@@ -10662,6 +10714,7 @@ function renderVettingList() {
           </div>
         </div>
         <div class="qb-card-preview">${escapeHtml(preview)}</div>
+        ${isNew ? `<div style="margin-top:10px;"><button class="btn btn-outline" style="font-size:0.78rem;padding:5px 12px;" onclick="editQuestion('${q.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;vertical-align:-2px;margin-right:4px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Open in editor</button></div>` : ''}
       </div>`;
   }).join('');
   container.innerHTML = jobCards + qCards;
@@ -14418,6 +14471,16 @@ document.addEventListener('keydown', (e) => {
     document.getElementById('studentSetupOverlay').classList.remove('active');
     document.querySelectorAll('.table-grid-popup.active').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.special-chars-popup.active').forEach(p => p.classList.remove('active'));
+    closeRapidAdd();
+  }
+  // Ctrl/⌘+Shift+V — open Rapid add from anywhere (admin only). Ignored while
+  // typing in a field so it doesn't hijack paste-as-plain-text.
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'v' || e.key === 'V')) {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    e.preventDefault();
+    openRapidAdd();
   }
 });
 
@@ -19722,6 +19785,7 @@ window.resetStudentViewAnswers = resetStudentViewAnswers;
 window.openScheduleFromCreate = openScheduleFromCreate;
 window.addToBank = addToBank;
 window.saveEditedQuestion = saveEditedQuestion;
+window.saveEditToBank = saveEditToBank;
 window.cancelEdit = cancelEdit;
 window.addToVetting = addToVetting;
 window.clearForm = clearForm;
