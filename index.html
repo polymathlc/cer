@@ -5339,6 +5339,29 @@ option {
             </table>
           </div>
         </div>
+
+        <!-- Prize claims (monthly voucher winners) -->
+        <div class="usage-section">
+          <h3 class="usage-section-title">🎁 Prize claims — monthly $10 voucher winners</h3>
+          <div class="usage-table-wrapper">
+            <table class="usage-table" id="usagePrizeTable">
+              <thead>
+                <tr>
+                  <th>Winner</th>
+                  <th>Month</th>
+                  <th>Rank</th>
+                  <th>Questions</th>
+                  <th>Contact no.</th>
+                  <th>Address</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="usagePrizeBody">
+                <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -5480,13 +5503,13 @@ option {
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>🏆 Leaderboard</h2>
           </div>
-          <div class="subtitle">Earn XP by solving questions — climb the board to win Popular vouchers.</div>
+          <div class="subtitle">Do the most questions to top the monthly board and win Popular vouchers.</div>
         </div>
       </div>
       <div class="page-body">
         <div id="rpgRaidSlot"></div>
         <div class="rpg-prize-banner">
-          <span class="rpg-prize-line">🎁 <b>Monthly prize:</b> the top 10 XP earners each month win a <b>$10 Popular voucher</b> each.</span>
+          <span class="rpg-prize-line">🎁 <b>Monthly prize:</b> the top 5 students with the most <b>questions done</b> each month win a <b>$10 Popular voucher</b> each. Questions only count once, and need a genuine answer.</span>
           <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 all-time XP earners win <b>$200, $100 and $50 Popular vouchers</b>.</span>
         </div>
         <div class="card card-pad">
@@ -5757,6 +5780,22 @@ option {
     <div id="manageTopicsList"></div>
     <div class="btn-group" style="justify-content:flex-end;margin-top:14px;">
       <button class="btn btn-outline" onclick="closeManageTopics()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MONTH-END PRIZE CLAIM (student) ==================== -->
+<div class="confirm-overlay" id="prizeClaimOverlay">
+  <div class="confirm-dialog" style="max-width:440px;text-align:left;">
+    <h3 style="margin-bottom:6px;">🎉 You won a $10 voucher!</h3>
+    <p id="prizeClaimMsg" style="font-size:0.88rem;color:var(--text-muted);margin-bottom:14px;">You're a monthly top-5 winner — enter your details to claim your $10 Popular voucher.</p>
+    <label class="form-label">Contact number</label>
+    <input id="prizePhone" class="form-input" type="tel" placeholder="e.g. 9123 4567" style="margin-bottom:12px;">
+    <label class="form-label">Mailing address</label>
+    <textarea id="prizeAddress" class="form-input" rows="3" placeholder="Block/house, street, unit number, postal code" style="resize:vertical;margin-bottom:16px;"></textarea>
+    <div class="btn-group" style="justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="dismissPrizeClaim()">Maybe later</button>
+      <button class="btn btn-primary" onclick="submitPrizeClaim()">🎁 Claim my voucher</button>
     </div>
   </div>
 </div>
@@ -6461,7 +6500,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.7.0';
+const APP_VERSION = 'v1.8.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -12734,6 +12773,9 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     scoreEl.style.color = score === total ? 'var(--primary)' : 'var(--accent-orange)';
   }
 
+  // The student's written (open) answers — used to fingerprint the attempt and
+  // to enforce "unique answers" for the monthly questions-done leaderboard.
+  const answerText = entries.filter(e => e.kind === 'open').map(e => e.student || '').join(' ¶ ');
   if (currentUser && currentUser.role === 'student' && q) {
     addDoc(collection(db, 'questionAttempts'), {
       uid: currentUser.uid,
@@ -12743,11 +12785,12 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       questionTitle: q.title || '',
       score: score,
       totalBlanks: total,
+      answerHash: rpgAnswerFingerprint(answerText),
       timestamp: Timestamp.now(),
       mode
     }).catch(err => console.warn('Could not record attempt:', err));
   }
-  recordCerPerformance(q, score, total, mode);
+  recordCerPerformance(q, score, total, mode, answerText);
   _openFinalized[containerSel] = true; // attempt recorded — per-part marking must not record it again
 
   // Force an A.I. explanation to always exist, by hook or by crook. The model
@@ -12828,6 +12871,7 @@ function _checkAllPartsMarked(containerSel) {
   if (_openFinalized[containerSel]) return;
   _openFinalized[containerSel] = true;
   const q = _openQStore[containerSel];
+  const answerText = Object.values(results || {}).map(r => (r && r.student) || '').join(' ¶ ');
   if (currentUser && currentUser.role === 'student' && q) {
     addDoc(collection(db, 'questionAttempts'), {
       uid: currentUser.uid,
@@ -12837,11 +12881,12 @@ function _checkAllPartsMarked(containerSel) {
       questionTitle: q.title || '',
       score: score,
       totalBlanks: totalParts,
+      answerHash: rpgAnswerFingerprint(answerText),
       timestamp: Timestamp.now(),
       mode: cfg.mode || 'practice-open'
     }).catch(err => console.warn('Could not record attempt:', err));
   }
-  recordCerPerformance(q, score, totalParts, cfg.mode || 'practice-open');
+  recordCerPerformance(q, score, totalParts, cfg.mode || 'practice-open', answerText);
   if (typeof cfg.onAllMarked === 'function') cfg.onAllMarked({ score, total: totalParts, mistakes });
   // Show the "why": an A.I. explanation of the answers. The photo/bulk path makes
   // its own; the click-to-mark path (including MCQ) didn't — so generate one here.
@@ -14613,8 +14658,8 @@ async function loadCerPerf() {
   } catch (e) { console.warn('perf load', e); cerPerf = _emptyPerf(); }
 }
 // Called after EVERY marking so the report always reflects the latest work.
-function recordCerPerformance(q, score, total, mode) {
-  try { rpgOnMarked(q, score, total, { mode }); } catch (e) { console.warn('rpg reward', e); }
+function recordCerPerformance(q, score, total, mode, answerText) {
+  try { rpgOnMarked(q, score, total, { mode, answerText }); } catch (e) { console.warn('rpg reward', e); }
   if (!currentUser || currentUser.role !== 'student' || !q || !total) return;
   if (!cerPerf) cerPerf = _emptyPerf();
   const p = cerPerf;
@@ -15276,12 +15321,55 @@ async function loadUsageDashboard() {
       }).join('');
     }
 
+    // Prize claims (monthly $10 voucher winners) — loaded alongside the rest.
+    try {
+      const claimsSnap = await getDocs(collection(db, 'prizeClaims'));
+      _usagePrizeClaims = [];
+      claimsSnap.forEach(d => _usagePrizeClaims.push(Object.assign({ _id: d.id }, d.data())));
+      _usagePrizeClaims.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    } catch (e) { console.warn('prize claims load', e); _usagePrizeClaims = []; }
+    renderPrizeClaims();
+
     usageDashboardLoaded = true;
     showToast('Usage data loaded', 'success');
   } catch (err) {
     console.error('loadUsageDashboard failed:', err);
     showToast('Could not load usage data — check your connection', 'error');
   }
+}
+
+// Monthly voucher winners' submitted contact details (admin view).
+let _usagePrizeClaims = [];
+function renderPrizeClaims() {
+  const tbody = document.getElementById('usagePrizeBody');
+  if (!tbody) return;
+  if (!_usagePrizeClaims.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No prize claims yet. Monthly top-5 winners will appear here once they claim.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _usagePrizeClaims.map(c => {
+    const sent = c.status === 'sent';
+    return `<tr${sent ? ' style="opacity:0.6;"' : ''}>
+      <td style="font-weight:600;">${escapeHtml(c.name || '')}<div style="font-weight:400;color:var(--text-muted);font-size:0.78rem;">${escapeHtml(c.email || '')}</div></td>
+      <td style="font-size:0.82rem;white-space:nowrap;">${escapeHtml(c.monthKey || '')}</td>
+      <td style="text-align:center;font-family:'Space Mono',monospace;">#${c.rank || '—'}</td>
+      <td style="text-align:center;font-family:'Space Mono',monospace;">${c.questions != null ? c.questions : '—'}</td>
+      <td style="font-size:0.82rem;white-space:nowrap;">${escapeHtml(c.phone || '')}</td>
+      <td style="font-size:0.82rem;max-width:240px;">${escapeHtml(c.address || '')}</td>
+      <td style="text-align:center;white-space:nowrap;">${sent
+        ? '<span style="color:var(--primary);font-weight:600;font-size:0.8rem;">✓ Sent</span>'
+        : `<button class="btn btn-outline" style="font-size:0.74rem;padding:4px 10px;" onclick="markPrizeSent('${escapeHtml(c._id)}')">Mark sent</button>`}</td>
+    </tr>`;
+  }).join('');
+}
+async function markPrizeSent(id) {
+  try {
+    await setDoc(doc(db, 'prizeClaims', id), { status: 'sent', sentAt: new Date().toISOString() }, { merge: true });
+    const c = _usagePrizeClaims.find(x => x._id === id);
+    if (c) c.status = 'sent';
+    renderPrizeClaims();
+    showToast('Marked as sent ✓', 'success');
+  } catch (e) { console.warn('mark sent', e); showToast('Could not update — check your connection', 'error'); }
 }
 
 function formatDateTimeSGT(date) {
@@ -16727,6 +16815,7 @@ function rpgDefaults() {
   return {
     v: 2, gold: 60, xp: 0, hp: null, hidden: false,
     monthKey: null, monthXp: 0, lastMonthKey: null, lastMonthXp: 0, advRuns: null, dungeonFloor: 1,
+    monthQ: 0, lastMonthQ: 0, monthQids: {}, monthPrints: {}, prizeAck: {},
     inventory: { wood_sword: 1, cloth_tunic: 1 },
     equipment: { weapon: "wood_sword", shield: null, armor: "cloth_tunic", helmet: null, accessory: null, pet: null },
     battle: null, upgrades: {}, clazz: null, skills: {}, paths: {}, affixes: {}, petBond: {}, daily: null, streak: null, packCoupon: 0, rebirths: 0, xpBaseline: 0, shards: 0, star: { gold: 0, learn: 0, raids: 0, nova: false }, kills: {}, seenQ: {},
@@ -17629,6 +17718,7 @@ async function rpgInit() {
   if (document.querySelector("#page-character.active")) rpgRenderCharacterPage();
   rpgSave();
   rpgPublishLeaderboard();
+  setTimeout(() => { rpgCheckPrizeClaim(); }, 2500); // auto-prompt month-end winners
 }
 function rpgOnSignOut() {
   advToken++; adv = null;
@@ -17679,12 +17769,57 @@ function rpgResetHero() {
 function rpgRolloverMonth() {
   const key = rpgMonthKey();
   if (rpgState.monthKey === key) return;
-  if (rpgState.monthKey && (rpgState.monthXp || 0) > 0) {
+  if (rpgState.monthKey && ((rpgState.monthXp || 0) > 0 || (rpgState.monthQ || 0) > 0)) {
     rpgState.lastMonthKey = rpgState.monthKey;   // keep final standings for prize awarding
-    rpgState.lastMonthXp = rpgState.monthXp;
+    rpgState.lastMonthXp = rpgState.monthXp || 0;
+    rpgState.lastMonthQ = rpgState.monthQ || 0;  // last month's unique-question total
   }
   rpgState.monthKey = key;
   rpgState.monthXp = 0;
+  rpgState.monthQ = 0;
+  rpgState.monthQids = {};
+  rpgState.monthPrints = {};
+}
+
+// Count one answered question toward THIS month's leaderboard. A question counts
+// at most once per month (no repeats); and to stop a student pasting the SAME
+// open answer into many questions, an open answer must be non-empty and not a
+// duplicate of one already counted this month. Updates state only — the caller
+// (rpgOnMarked) saves & republishes.
+function rpgNoteUniqueQuestion(qid, answerText) {
+  qid = String(qid || "");
+  if (!rpgState || !qid) return;
+  rpgRolloverMonth();
+  if (!rpgState.monthQids) rpgState.monthQids = {};
+  if (!rpgState.monthPrints) rpgState.monthPrints = {};
+  if (rpgState.monthQids[qid]) return;                  // this question already counted this month
+  const print = rpgAnswerFingerprint(answerText);
+  if (print) {
+    if (rpgState.monthPrints[print]) return;            // identical answer already used — likely gaming
+    rpgState.monthPrints[print] = 1;
+  }
+  rpgState.monthQids[qid] = 1;
+  rpgState.monthQ = (rpgState.monthQ || 0) + 1;
+}
+
+// A small, stable fingerprint of an open answer (letters/digits only). Empty for
+// blank or very short answers (e.g. pure multiple-choice) so those count on the
+// unique-question rule alone.
+function rpgAnswerFingerprint(text) {
+  const s = String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (s.length < 4) return "";
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
+  return "p" + (h >>> 0).toString(36);
+}
+
+// Questions a player did in the PREVIOUS calendar month (handles both the
+// not-yet-rolled-over and rolled-over cases), used for month-end prize ranking.
+function rpgLastMonthQ(r) {
+  const prev = rpgPrevMonthKey();
+  if (r.monthKey === prev) return r.monthQ || 0;
+  if (r.lastMonthKey === prev) return r.lastMonthQ || 0;
+  return 0;
 }
 function rpgApplyRewards(gold, xp) {
   const learn = (rpgState && rpgState.star && rpgState.star.learn) || 0;
@@ -17832,6 +17967,7 @@ function rpgOnMarked(q, score, total, opts = {}) {
   const round = rpgState.battle ? rpgBattleRound(credit) : null;
   if (round && round.victory) { gold += round.victory.gold; xp += round.victory.xp; }
   const lvl = rpgApplyRewards(gold, xp);
+  if (!opts.simulated) rpgNoteUniqueQuestion(qid, opts.answerText);
   rpgHintUsedQ = false;
   rpgSave();
   rpgPublishLeaderboard();
@@ -18428,6 +18564,8 @@ function rpgPublishLeaderboard() {
       monthKey: rpgState.monthKey || rpgMonthKey(),
       lastMonthXp: rpgState.lastMonthXp || 0,
       lastMonthKey: rpgState.lastMonthKey || null,
+      monthQ: rpgState.monthQ || 0,
+      lastMonthQ: rpgState.lastMonthQ || 0,
       wins: (rpgState.stats && rpgState.stats.wins) || 0,
       bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0,
@@ -18491,25 +18629,26 @@ async function rpgFetchLeaderboard(force) {
   rpgBoardRows = rows;
   return rows;
 }
-function rpgBoardXp(r) {
-  if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey() ? (r.monthXp || 0) : 0;
-  if (rpgBoardTab === "lastmonth") {
-    const prev = rpgPrevMonthKey();
-    if (r.monthKey === prev) return r.monthXp || 0;          // not active yet this month
-    if (r.lastMonthKey === prev) return r.lastMonthXp || 0;  // rolled over
-    return 0;
-  }
-  return r.xp || 0;
+// Monthly tabs rank by UNIQUE QUESTIONS DONE; the all-time tab still ranks by XP.
+function rpgBoardMetric(r) {
+  if (rpgBoardTab === "alltime") return r.xp || 0;
+  if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey() ? (r.monthQ || 0) : 0;
+  // lastmonth
+  const prev = rpgPrevMonthKey();
+  if (r.monthKey === prev) return r.monthQ || 0;          // not active yet this month
+  if (r.lastMonthKey === prev) return r.lastMonthQ || 0;  // rolled over
+  return 0;
 }
+function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : "questions"; }
 function rpgPrizeBadge(rank) {
-  if (rpgBoardTab !== "alltime") return rank <= 10 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
+  if (rpgBoardTab !== "alltime") return rank <= 5 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rank === 1) return `<span class="rpg-board-prize">🏆 $200 voucher</span>`;
   if (rank === 2) return `<span class="rpg-board-prize">🥈 $100 voucher</span>`;
   if (rank === 3) return `<span class="rpg-board-prize">🥉 $50 voucher</span>`;
   return "";
 }
 function rpgRowClass(rank) {
-  if (rpgBoardTab !== "alltime") return rank <= 10 ? "prize-month" : "";
+  if (rpgBoardTab !== "alltime") return rank <= 5 ? "prize-month" : "";
   return rank <= 3 ? `prize-${rank}` : "";
 }
 async function rpgRenderLeaderboard(force = false) {
@@ -18531,6 +18670,7 @@ async function rpgRenderLeaderboard(force = false) {
       level: rpgLevelInfo().level, xp: rpgState.xp,
       monthXp: rpgState.monthXp || 0, monthKey: rpgState.monthKey || rpgMonthKey(),
       lastMonthXp: rpgState.lastMonthXp || 0, lastMonthKey: rpgState.lastMonthKey || null,
+      monthQ: rpgState.monthQ || 0, lastMonthQ: rpgState.lastMonthQ || 0,
       wins: (rpgState.stats && rpgState.stats.wins) || 0, bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0, rebirths: rpgState.rebirths || 0,
       house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null,
@@ -18540,23 +18680,24 @@ async function rpgRenderLeaderboard(force = false) {
     const i = rows.findIndex(r => r.uid === currentUser.uid);
     if (i >= 0) rows[i] = mine; else rows.push(mine);
   }
-  const list = rows.map(r => Object.assign({}, r, { shownXp: rpgBoardXp(r) }))
-    .filter(r => r.shownXp > 0)
-    .sort((a, b) => b.shownXp - a.shownXp || String(a.updatedAt || "").localeCompare(String(b.updatedAt || "")));
+  const list = rows.map(r => Object.assign({}, r, { shownVal: rpgBoardMetric(r) }))
+    .filter(r => r.shownVal > 0)
+    .sort((a, b) => b.shownVal - a.shownVal || String(a.updatedAt || "").localeCompare(String(b.updatedAt || "")));
   if (!list.length) {
-    const why = rpgBoardTab === "month" ? "No XP earned this month yet — be the first on the board!"
-      : rpgBoardTab === "lastmonth" ? "No XP was recorded last month."
+    const why = rpgBoardTab === "month" ? "No questions done this month yet — be the first on the board!"
+      : rpgBoardTab === "lastmonth" ? "No questions were recorded last month."
       : "No heroes on the board yet — solve questions to earn XP!";
     body.innerHTML = `<div class="empty-note">${why}</div>`;
     return;
   }
   const myUid = currentUser && currentUser.uid;
+  const unit = rpgBoardUnit();
   const label = rpgBoardTab === "month" ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : "all-time";
-  // house race: this month's XP summed by house
+  // house race: this month's questions done summed by house
   let houseBar = "";
   if (rpgBoardTab === "month") {
     const tot = {};
-    rows.forEach(r => { const h = r.house || rpgHouseOf(r.uid).id; tot[h] = (tot[h] || 0) + (r.monthKey === rpgMonthKey() ? r.monthXp || 0 : 0); });
+    rows.forEach(r => { const h = r.house || rpgHouseOf(r.uid).id; tot[h] = (tot[h] || 0) + (r.monthKey === rpgMonthKey() ? r.monthQ || 0 : 0); });
     const maxT = Math.max(1, ...RPG_HOUSES.map(h => tot[h.id] || 0));
     houseBar = `<div class="rpg-houses">` + RPG_HOUSES.map(h =>
       `<div class="rpg-house-row"><span>${h.icon} ${h.name}</span><div class="rpg-house-bar"><div style="width:${Math.round((tot[h.id] || 0) / maxT * 100)}%;background:${h.color};"></div></div><b>${tot[h.id] || 0}</b></div>`).join("") + `</div>`;
@@ -18574,9 +18715,75 @@ async function rpgRenderLeaderboard(force = false) {
       </div>
       ${rpgPrizeBadge(rank)}
       ${!me && r.equipment && currentUser && currentUser.role === "student" ? `<button class="btn btn-ghost btn-sm" type="button" data-rpg-duel="${escapeHtml(r.uid)}">⚔️ Duel</button>` : ""}
-      <div class="rpg-board-xp">${r.shownXp} XP<span>${label}</span></div>
+      <div class="rpg-board-xp">${r.shownVal} ${unit}<span>${label}</span></div>
     </div>`;
   }).join("");
+  rpgCheckPrizeClaim();
+}
+
+// ---- Month-end prize claim: last month's top 5 by questions done win $10 ----
+let _prizePromptShown = false;
+let _prizeClaimCtx = null;
+async function rpgCheckPrizeClaim() {
+  try {
+    if (_prizePromptShown || !rpgState || !currentUser || currentUser.role !== "student" || RPG_STORAGE_MODE !== "firestore") return;
+    const prev = rpgPrevMonthKey();
+    rpgState.prizeAck = rpgState.prizeAck || {};
+    if (rpgState.prizeAck[prev]) return;                 // already claimed / handled
+    const rows = await rpgFetchLeaderboard(false);
+    if (!rows) return;
+    const ranked = rows.map(r => ({ uid: r.uid, q: rpgLastMonthQ(r) }))
+      .filter(r => r.q > 0)
+      .sort((a, b) => b.q - a.q);
+    const idx = ranked.findIndex(r => r.uid === currentUser.uid);
+    if (idx < 0 || idx >= 5) return;                     // not in last month's top 5
+    try {
+      const snap = await getDoc(doc(db, "prizeClaims", currentUser.uid + "_" + prev));
+      if (snap.exists()) { rpgState.prizeAck[prev] = "claimed"; rpgSave(); return; }
+    } catch (_) {}
+    _prizePromptShown = true;
+    _showPrizeClaim(prev, idx + 1, ranked[idx].q);
+  } catch (e) { console.warn("prize claim check", e); }
+}
+function _showPrizeClaim(monthKey, rank, questions) {
+  _prizeClaimCtx = { monthKey, rank, questions };
+  const ord = rank === 1 ? "1st" : rank === 2 ? "2nd" : rank === 3 ? "3rd" : rank + "th";
+  const el = id => document.getElementById(id);
+  if (el("prizeClaimMsg")) el("prizeClaimMsg").innerHTML =
+    `You finished <b>${ord}</b> last month with <b>${questions}</b> question${questions === 1 ? "" : "s"} done — the <b>top 5</b>! Enter your details and we'll send your <b>$10 Popular voucher</b>.`;
+  if (el("prizePhone")) el("prizePhone").value = "";
+  if (el("prizeAddress")) el("prizeAddress").value = "";
+  if (el("prizeClaimOverlay")) el("prizeClaimOverlay").classList.add("active");
+}
+function _closePrizeClaim() {
+  const o = document.getElementById("prizeClaimOverlay");
+  if (o) o.classList.remove("active");
+}
+function dismissPrizeClaim() { _closePrizeClaim(); } // closes for now; re-prompts next sign-in
+async function submitPrizeClaim() {
+  if (!_prizeClaimCtx || !currentUser) return;
+  const phone = (document.getElementById("prizePhone").value || "").trim();
+  const address = (document.getElementById("prizeAddress").value || "").trim();
+  if (!phone || !address) { showToast("Please enter your contact number and address", "error"); return; }
+  const ctx = _prizeClaimCtx;
+  try {
+    await setDoc(doc(db, "prizeClaims", currentUser.uid + "_" + ctx.monthKey), {
+      uid: currentUser.uid,
+      name: currentUser.name || "",
+      email: currentUser.email || "",
+      monthKey: ctx.monthKey,
+      rank: ctx.rank,
+      questions: ctx.questions,
+      phone, address,
+      status: "pending",
+      createdAt: new Date().toISOString()
+    });
+    rpgState.prizeAck = rpgState.prizeAck || {};
+    rpgState.prizeAck[ctx.monthKey] = "claimed";
+    rpgSave();
+    _closePrizeClaim();
+    showToast("🎉 Claim submitted — we'll send your $10 voucher soon!", "success");
+  } catch (e) { console.warn("prize claim save", e); showToast("Could not submit — check your connection and try again", "error"); }
 }
 
 // ---- Adventure mode (idle side-scrolling auto-battler, MOBA-style skills) ----
@@ -19933,6 +20140,9 @@ window.loadNextQpQuestion = loadNextQpQuestion;
 window.loadUsageDashboard = loadUsageDashboard;
 window.showStudentDetail = showStudentDetail;
 window.closeStudentDetail = closeStudentDetail;
+window.markPrizeSent = markPrizeSent;
+window.submitPrizeClaim = submitPrizeClaim;
+window.dismissPrizeClaim = dismissPrizeClaim;
 window.loadMyReport = loadMyReport;
 // Scheduled Questions
 window.openScheduleQuestionDialog = openScheduleQuestionDialog;
