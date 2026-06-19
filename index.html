@@ -3919,6 +3919,7 @@ option {
 .rpg-battle-card { border-radius: var(--radius-lg); background: linear-gradient(135deg, #2b2640 0%, #1f2937 100%); color: #fff; padding: 14px 16px; box-shadow: var(--shadow-md); border: 1px solid #3a3553; }
 .rpg-battle-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rpg-battle-title { font-weight: 700; letter-spacing: -0.01em; }
+.rpg-mini-gold { margin-left: auto; font-family: 'Space Mono', monospace; font-weight: 700; color: #ffd76a; font-size: 0.9rem; white-space: nowrap; }
 .rpg-battle-sub { color: rgba(255,255,255,0.65); font-size: 0.84rem; flex: 1; min-width: 160px; }
 .rpg-battle-head .btn { border: 1.5px solid rgba(255,255,255,0.25); color: #fff; background: rgba(255,255,255,0.08); }
 .rpg-battle-head .btn:hover { background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.4); }
@@ -6504,7 +6505,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.9.0';
+const APP_VERSION = 'v1.9.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -16817,7 +16818,7 @@ let rpgShopSlot = "all";
 function rpgStorageKey() { return "scienceQuestRpg:" + (currentUser ? currentUser.uid : "anon"); }
 function rpgDefaults() {
   return {
-    v: 2, gold: 60, xp: 0, hp: null, hidden: false,
+    v: 2, gold: 60, xp: 0, hp: null, hidden: false, battleMin: false,
     monthKey: null, monthXp: 0, lastMonthKey: null, lastMonthXp: 0, advRuns: null, dungeonFloor: 1,
     monthQ: 0, lastMonthQ: 0, monthQids: {}, monthPrints: {}, prizeAck: {},
     inventory: { wood_sword: 1, cloth_tunic: 1 },
@@ -18000,9 +18001,11 @@ function rpgOnMarked(q, score, total, opts = {}) {
     lineEl.style.display = "flex";
   }
 
-  if (round && round.victory) rpgShowVictory(round.victory, lvl);
-  else if (round && round.defeat) rpgShowDefeat(round);
-  else if (lvl.levelsGained > 0) rpgShowLevelUp(lvl.newLevel);
+  if (!rpgState.battleMin) { // keep the big pop-ups out of view while hidden
+    if (round && round.victory) rpgShowVictory(round.victory, lvl);
+    else if (round && round.defeat) rpgShowDefeat(round);
+    else if (lvl.levelsGained > 0) rpgShowLevelUp(lvl.newLevel);
+  }
 }
 
 // ---- Battle control ----
@@ -18112,6 +18115,18 @@ function rpgRenderBattle() {
   const battle = rpgState.battle;
   const enemy = battle && RPG_ENEMIES_BY_ID[battle.enemyId];
   const rewardLine = `<div class="rpg-reward-line" id="rpgRewardLine" style="display:none;"></div>`;
+  if (rpgState.battleMin) {
+    // Hidden from view, but the game goes on — the gold earned shows as a small
+    // number here, and #rpgRewardLine still flashes each +gold/+XP after answers.
+    wrap.innerHTML = `<div class="rpg-battle-card">
+      <div class="rpg-battle-head">
+        <span class="rpg-battle-title">⚔️ Battle hidden</span>
+        <span class="rpg-mini-gold">🪙 ${(rpgState.gold || 0).toLocaleString()}</span>
+        <button class="btn btn-sm" type="button" data-rpg-act="max" title="Show the battle again">👁️ Show</button>
+      </div>
+    </div>${rewardLine}`;
+    return;
+  }
   if (!battle || !enemy) {
     wrap.innerHTML = `<div class="rpg-battle-card">
       <div class="rpg-battle-head">
@@ -18119,6 +18134,7 @@ function rpgRenderBattle() {
         <span class="rpg-battle-sub">Fight monsters by solving questions — correct answers attack, wrong answers let the enemy strike.</span>
         <button class="btn btn-sm" type="button" data-rpg-act="character">🛡️ Lv ${info.level}</button>
         <button class="btn btn-primary btn-sm" type="button" data-rpg-act="start">Start battle</button>
+        <button class="btn btn-sm" type="button" data-rpg-act="min" title="Hide the game — keep earning gold in a small strip">🙈 Hide</button>
       </div>
       ${rpgSimRowHtml()}
     </div>${rewardLine}`;
@@ -18129,6 +18145,7 @@ function rpgRenderBattle() {
       <span class="rpg-battle-title">⚔️ Battle!</span>
       <span class="rpg-battle-sub">Submit your answers — a correct answer is an attack.</span>
       <button class="btn btn-sm" type="button" data-rpg-act="flee">🏃 Flee</button>
+      <button class="btn btn-sm" type="button" data-rpg-act="min" title="Hide the game — keep earning gold in a small strip">🙈 Hide</button>
     </div>
     <div class="rpg-arena">
       <div class="rpg-fighter" id="rpgHeroTile">
@@ -18159,6 +18176,8 @@ function rpgBattleClick(e) {
   const act = btn.dataset.rpgAct;
   if (act === "start") rpgStartBattle();
   else if (act === "flee") rpgFlee();
+  else if (act === "min") { rpgState.battleMin = true; rpgSave(); rpgRenderBattle(); toast("Battle hidden — you're still earning gold & XP 🪙", ""); }
+  else if (act === "max") { rpgState.battleMin = false; rpgSave(); rpgRenderBattle(); }
   else if (act === "character") navigateTo("character");
   else if (act === "sim-correct") rpgSimulate("correct");
   else if (act === "sim-partial") rpgSimulate("partial");
