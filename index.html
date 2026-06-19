@@ -4672,6 +4672,9 @@ option {
               <optgroup label="── Key Concepts ──">
                 <option value="Key Concepts">Key Concepts</option>
               </optgroup>
+              <optgroup label="── Question Type ──">
+                <option value="Multiple Choice Question">Multiple Choice Question</option>
+              </optgroup>
             </select>
           </div>
           <div class="form-group">
@@ -4857,6 +4860,9 @@ option {
             <optgroup label="── Key Concepts ──">
               <option value="Key Concepts">Key Concepts</option>
             </optgroup>
+            <optgroup label="── Question Type ──">
+              <option value="Multiple Choice Question">Multiple Choice Question</option>
+            </optgroup>
           </select>
           <select id="bankFilterLevel" onchange="renderQuestionBank()">
             <option value="">All Levels</option>
@@ -5028,6 +5034,9 @@ option {
             </optgroup>
             <optgroup label="── Key Concepts ──">
               <option value="Key Concepts">Key Concepts</option>
+            </optgroup>
+            <optgroup label="── Question Type ──">
+              <option value="Multiple Choice Question">Multiple Choice Question</option>
             </optgroup>
           </select>
           <select id="wsFilterSource" onchange="renderWsQuestions()">
@@ -6505,7 +6514,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.9.1';
+const APP_VERSION = 'v1.9.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -6604,6 +6613,14 @@ function normalizeCategoryValue(category) {
   ]);
   if (legacyCER.has(category)) return 'CER';
   return category || 'CER';
+}
+
+// Every question that contains a multiple-choice block is categorised under the
+// "Multiple Choice Question" category, regardless of any other category picked.
+const MCQ_CATEGORY = 'Multiple Choice Question';
+function applyMcqCategory(q) {
+  if (q && qpHasMcq(q)) q.category = MCQ_CATEGORY;
+  return q;
 }
 
 // =====================================================================
@@ -9411,7 +9428,7 @@ function buildBlocksFromAi(data) {
 // Build a full pending question object from one AI question (used by bulk import).
 function buildQuestionFromAi(data) {
   const built = buildBlocksFromAi(data || {});
-  return {
+  return applyMcqCategory({
     id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
     title: (data && data.title) || 'Untitled',
     category: normalizeCategoryValue(data && data.category),
@@ -9423,7 +9440,7 @@ function buildQuestionFromAi(data) {
     topicConfidence: (data && /^(high|medium|low)$/.test(data.topicConfidence)) ? data.topicConfidence : '',
     createdAt: new Date().toISOString(),
     createdBy: (currentUser && currentUser.name) || 'Admin'
-  };
+  });
 }
 
 function _populateEditorFromAi(data) {
@@ -10290,6 +10307,7 @@ function tableDataFromFirestore(data) {
 function normalizeLoadedQuestion(q) {
   if (!q || !Array.isArray(q.blocks)) return q;
   q.category = normalizeCategoryValue(q.category);
+  applyMcqCategory(q); // MCQ questions always sit in the Multiple Choice Question category
   q.blocks.forEach(block => {
     if (block.type !== 'table') return;
     // Restore data
@@ -10350,7 +10368,7 @@ function collectQuestionData() {
     }
   });
   
-  return {
+  return applyMcqCategory({
     id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: document.getElementById('questionTitle').value || 'Untitled',
     category: normalizeCategoryValue(document.getElementById('categorySelect').value),
@@ -10360,7 +10378,7 @@ function collectQuestionData() {
     blanks: JSON.parse(JSON.stringify(selectedBlanks)),
     createdAt: new Date().toISOString(),
     createdBy: currentUser?.name || 'Admin'
-  };
+  });
 }
 
 function setEditMode(isEditing) {
@@ -10898,6 +10916,7 @@ async function _autoVetOne(q) {
   // Topic / category — accept only values from the allowed lists.
   if (data.topic && autoVetTopics().includes(data.topic)) q.topic = data.topic;
   if (data.category && AUTOVET_CATEGORIES.includes(data.category)) q.category = normalizeCategoryValue(data.category);
+  applyMcqCategory(q); // keep MCQ questions in the Multiple Choice Question category
 
   // Fill an empty marking guide (don't clobber one the admin wrote by hand).
   if (!String(q.markingGuide || '').trim() && data.markingGuide && String(data.markingGuide).trim()) {
