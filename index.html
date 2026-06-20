@@ -4974,11 +4974,15 @@ option {
             <option value="">All Topics</option>
           </select>
         </div>
-        <div style="display:flex;align-items:center;gap:12px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <span class="selected-count" id="printSelectedCount">0 selected</span>
-          <button class="btn btn-primary" onclick="printWorksheet()" id="printBtn" disabled>
+          <button class="btn btn-outline" onclick="printWorksheet('plain')" id="printBtn" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-            Print Worksheet
+            Export — no answers
+          </button>
+          <button class="btn btn-primary" onclick="printWorksheet('ai')" id="printBtnAi" disabled title="AI writes a short answer key — at most 3–4 sentences per question">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Export with answers
           </button>
         </div>
       </div>
@@ -6514,7 +6518,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.9.2';
+const APP_VERSION = 'v1.10.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11259,8 +11263,11 @@ function togglePrintSelectAll(checked) {
 function updatePrintCount() {
   const countEl = document.getElementById('printSelectedCount');
   const btn = document.getElementById('printBtn');
+  const btnAi = document.getElementById('printBtnAi');
   if (countEl) countEl.textContent = printSelectedIds.size + ' selected';
-  if (btn) btn.disabled = printSelectedIds.size === 0;
+  const disabled = printSelectedIds.size === 0;
+  if (btn) btn.disabled = disabled;
+  if (btnAi) btnAi.disabled = disabled;
 }
 
 let _previewHideTimer = null;
@@ -11333,12 +11340,73 @@ function hidePrintPreview() {
   }, 100);
 }
 
-function printWorksheet() {
+async function printWorksheet(mode) {
   if (printSelectedIds.size === 0) {
     showToast('Select at least one question to print', 'info');
     return;
   }
-  doPrintWorksheetOpen();
+  if (mode !== 'ai') { doPrintWorksheetOpen({ withAnswers: false }); return; }
+
+  // "Export with answers": let AI write a short answer key first.
+  const selected = questionBank.filter(q => printSelectedIds.has(q.id));
+  const btn = document.getElementById('printBtnAi');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Writing answers…'; }
+  showToast('Analysing the questions and writing a short answer key…', 'info');
+  try {
+    const aiAnswers = await generateWorksheetAnswers(selected);
+    doPrintWorksheetOpen({ withAnswers: true, aiAnswers });
+  } catch (e) {
+    console.warn('AI answer key failed', e);
+    showToast('Could not write the answer key — exporting the questions only', 'error');
+    doPrintWorksheetOpen({ withAnswers: false });
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// Build a concise AI answer key: one short answer (≤3–4 sentences) per question.
+// Returns a map of questionId → answer text.
+async function generateWorksheetAnswers(selected) {
+  if (!window.__aiReady || !window.__aiReady()) throw new Error('AI is not ready');
+  const items = selected.map((q, i) => {
+    const parts = [];
+    (q.blocks || []).forEach(b => {
+      if (b.type === 'text') { const t = stripHtml(b.content); if (t) parts.push(t); }
+      else if (b.type === 'mcq') {
+        const opts = (b.options || []).map((o, idx) => `(${idx + 1}) ${stripHtml(o.text)}`).join('  ');
+        if (opts) parts.push('Options: ' + opts);
+        const correct = (b.options || []).find(o => o.id === b.correctId);
+        if (correct) parts.push('Correct option: ' + stripHtml(correct.text));
+      }
+      else if (b.type === 'answer') {
+        const cer = [['Claim', b.claim], ['Evidence', b.evidence], ['Reasoning', b.reasoning]]
+          .map(([k, v]) => stripHtml(v) ? k + ': ' + stripHtml(v) : '').filter(Boolean).join('; ');
+        if (cer) parts.push('Model answer — ' + cer);
+      }
+      else if (b.type === 'plainanswer') { const t = stripHtml(b.content); if (t) parts.push('Model answer: ' + t); }
+      else if (b.type === 'explanation') { const t = stripHtml(b.content); if (t) parts.push('Note: ' + t); }
+      else if (b.type === 'image') { parts.push('[the question includes a diagram]'); }
+    });
+    return { n: i + 1, title: stripHtml(q.title), body: parts.join('\n').slice(0, 1400) };
+  });
+  const prompt =
+    'You are a Singapore primary-school science teacher writing a concise ANSWER KEY for a worksheet. ' +
+    'For EACH question, give the correct answer in AT MOST 3 to 4 short sentences — clear, accurate and to the point. ' +
+    'Keep it short and sweet: do NOT restate the question and do NOT show working. ' +
+    'For multiple-choice, state the correct option and a one-line reason. If a model answer is provided, just condense it. ' +
+    'Return ONLY JSON of the form {"answers":[{"n":1,"answer":"..."},{"n":2,"answer":"..."}]} with exactly one entry per question, in order.\n\n' +
+    items.map(it => `Q${it.n}: ${it.title}\n${it.body}`).join('\n\n');
+  const raw = await askGemini(prompt, { maxOutputTokens: Math.min(6000, 400 + selected.length * 200), temperature: 0.2, json: true });
+  const data = _parseAIJson(raw);
+  const map = {};
+  if (data && Array.isArray(data.answers)) {
+    data.answers.forEach(a => {
+      const idx = Number(a && a.n) - 1;
+      if (selected[idx] && a && a.answer) map[selected[idx].id] = String(a.answer).trim();
+    });
+  }
+  return map;
 }
 
 // Helper: generate dotted writing lines for open-ended boxes
@@ -11374,7 +11442,8 @@ function linesForText(text, charsPerLine) {
 }
 
 // ===== OPEN ENDED MODE =====
-function doPrintWorksheetOpen() {
+// opts: { withAnswers:boolean, aiAnswers:{ [questionId]: answerText } }
+function doPrintWorksheetOpen(opts = {}) {
   const selected = questionBank.filter(q => printSelectedIds.has(q.id));
   const output = document.getElementById('printOutput');
   let allHtml = '';
@@ -11467,25 +11536,30 @@ function doPrintWorksheetOpen() {
 
     qHtml += `</div>`;
     allHtml += qHtml;
-    answerKeyData.push({ title: q.title, sections: qSections });
+    answerKeyData.push({ id: q.id, title: q.title, sections: qSections });
   });
 
-  // Answer Key Page (open ended — full answer text)
-  const hasAnySections = answerKeyData.some(d => d.sections.length > 0);
-  if (hasAnySections) {
+  // Answer Key Page — only when exporting "with answers". Uses the short AI
+  // answer per question, falling back to any authored model answer.
+  if (opts.withAnswers) {
+    const aiAnswers = opts.aiAnswers || {};
     allHtml += `<div class="print-question-page print-answer-key-page">`;
     allHtml += `<h2>Answer Key</h2>`;
     answerKeyData.forEach(qData => {
-      if (qData.sections.length === 0) return;
       allHtml += `<div class="print-ak-question">`;
       allHtml += `<h4>${escapeHtml(qData.title)}</h4>`;
       allHtml += `<div class="print-ak-fulltext">`;
-      qData.sections.forEach(sec => {
-        if (sec.label) {
-          allHtml += `<div class="ak-sublabel">${escapeHtml(sec.label)}</div>`;
-        }
-        allHtml += `<div class="ak-fullcontent">${sec.content}</div>`;
-      });
+      const ai = aiAnswers[qData.id];
+      if (ai) {
+        allHtml += `<div class="ak-fullcontent">${escapeHtml(ai).replace(/\n+/g, '<br>')}</div>`;
+      } else if (qData.sections.length) {
+        qData.sections.forEach(sec => {
+          if (sec.label) allHtml += `<div class="ak-sublabel">${escapeHtml(sec.label)}</div>`;
+          allHtml += `<div class="ak-fullcontent">${sec.content}</div>`;
+        });
+      } else {
+        allHtml += `<div class="ak-fullcontent" style="color:#777;font-style:italic;">No answer available.</div>`;
+      }
       allHtml += `</div></div>`;
     });
     allHtml += `</div>`;
