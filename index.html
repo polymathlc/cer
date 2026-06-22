@@ -6514,7 +6514,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.9.2';
+const APP_VERSION = 'v1.9.3';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -16854,11 +16854,14 @@ function rpgWriteLocal() {
 }
 async function rpgLoadState() {
   if (RPG_STORAGE_MODE === "firestore") {
-    try {
-      const snap = await getDoc(doc(db, "users", currentUser.uid, "settings", "scienceRpg"));
-      if (snap.exists()) return snap.data();
-      return rpgReadLocal(); // one-time migration from a local preview
-    } catch (e) { console.warn("rpg load", e); return rpgReadLocal(); }
+    // NOTE: let read errors propagate to the caller. We must NOT silently fall
+    // back to (possibly empty/stale) local data here — rpgInit saves right after
+    // loading, so a swallowed network error would overwrite the good cloud save
+    // with blank/old data (lost upgrades, rebirths, levels). Only fall back to
+    // local when the cloud genuinely has no document yet (first-time migration).
+    const snap = await getDoc(doc(db, "users", currentUser.uid, "settings", "scienceRpg"));
+    if (snap.exists()) return snap.data();
+    return rpgReadLocal(); // one-time migration from a local preview
   }
   return rpgReadLocal();
 }
@@ -17728,8 +17731,22 @@ function rpgNoteStreakActivity(correct) {
 async function rpgInit() {
   if (!currentUser) return;
   const uid = currentUser.uid;
-  const saved = await rpgLoadState();
+  // Load with retry/backoff. If the cloud read keeps failing we must BAIL rather
+  // than continue — initialising from blank/stale data and then saving would wipe
+  // the student's real progress in Firestore. Better to ask them to refresh.
+  let saved, loadOk = false;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try { saved = await rpgLoadState(); loadOk = true; break; }
+    catch (e) { console.warn("rpg load attempt " + (attempt + 1) + " failed", e); }
+    if (!currentUser || currentUser.uid !== uid) return; // signed out while loading
+    await new Promise(r => setTimeout(r, 800 * Math.pow(2, attempt)));
+  }
   if (!currentUser || currentUser.uid !== uid) return; // signed out while loading
+  if (!loadOk) {
+    // Do NOT touch rpgState / save / publish — that would clobber the cloud save.
+    toast("Couldn't reach your saved hero — your progress is safe. Please check your connection and refresh.", "error");
+    return;
+  }
   rpgState = rpgHydrate(saved);
   const stats = rpgPlayerStats();
   if (!Number.isFinite(rpgState.hp) || rpgState.hp === null) rpgState.hp = stats.maxHp;
