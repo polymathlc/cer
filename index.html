@@ -5825,6 +5825,23 @@ option {
   </div>
 </div>
 
+<!-- ==================== REGENERATE QUESTION OVERLAY (Admin Only) ==================== -->
+<div class="confirm-overlay" id="regenOverlay">
+  <div class="confirm-dialog" style="max-width:560px;width:96%;text-align:left;">
+    <h3 style="margin-bottom:6px;">Regenerate question</h3>
+    <p style="color:var(--text-muted);font-size:0.86rem;margin-bottom:14px;">
+      This makes a <strong>new copy</strong> of the question. The picture stays exactly the same and the original is never changed. Tell the AI how you want the new copy to differ.
+    </p>
+    <label for="regenRemark" style="display:block;font-weight:600;font-size:0.85rem;margin-bottom:6px;">Instructions for the AI</label>
+    <textarea id="regenRemark" rows="5" placeholder="e.g. Change the numbers and keep the same idea, make the wording simpler, swap the context to a different animal, increase the difficulty…" style="width:100%;padding:10px 12px;border:1px solid var(--border,#d0d5dd);border-radius:8px;font-family:inherit;font-size:0.9rem;resize:vertical;box-sizing:border-box;"></textarea>
+    <div id="regenStatus" style="font-size:0.82rem;color:var(--text-muted);min-height:18px;margin-top:8px;"></div>
+    <div class="btn-group" style="margin-top:14px;">
+      <button class="btn btn-outline" id="regenCancelBtn" onclick="closeRegenerateModal()">Cancel</button>
+      <button class="btn btn-primary" id="regenConfirmBtn" onclick="confirmRegenerate()">Regenerate copy</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== STUDENT ACTIVITY DETAIL OVERLAY (Admin Only) ==================== -->
 <div class="confirm-overlay" id="studentDetailOverlay">
   <div class="confirm-dialog" style="max-width:900px;width:96%;text-align:left;max-height:90vh;overflow-y:auto;padding:24px;">
@@ -6514,7 +6531,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.9.3';
+const APP_VERSION = 'v1.10.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -10668,6 +10685,9 @@ function renderQuestionBank() {
             <button class="qb-action-btn" title="Duplicate" onclick="event.stopPropagation();duplicateQuestion('${q.id}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
+            <button class="qb-action-btn" title="Regenerate with AI (keeps the picture, makes a new copy)" onclick="event.stopPropagation();openRegenerateModal('${q.id}')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
             <button class="qb-action-btn delete-qb" title="Delete" onclick="event.stopPropagation();deleteQuestion('${q.id}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
@@ -10736,6 +10756,156 @@ function duplicateQuestion(id) {
   updateCounts();
   showToast('Question duplicated', 'success');
   saveQuestion(clone);
+}
+
+// ── Regenerate: clone a question with AI, keeping the same picture, applying
+// teacher instructions. The original question is never overwritten. ──────────
+let _regenSourceId = null;
+
+function openRegenerateModal(id) {
+  const q = questionBank.find(qb => qb.id === id) || vettingList.find(v => v.id === id);
+  if (!q) { showToast('Question not found', 'error'); return; }
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast("AI isn't set up yet — add your reCAPTCHA site key in the code", 'info');
+    return;
+  }
+  _regenSourceId = id;
+  const ta = document.getElementById('regenRemark');
+  if (ta) ta.value = '';
+  const status = document.getElementById('regenStatus');
+  if (status) status.textContent = '';
+  const btn = document.getElementById('regenConfirmBtn');
+  if (btn) { btn.disabled = false; btn.textContent = 'Regenerate copy'; }
+  document.getElementById('regenOverlay').classList.add('active');
+  if (ta) setTimeout(() => ta.focus(), 50);
+}
+
+function closeRegenerateModal() {
+  document.getElementById('regenOverlay').classList.remove('active');
+  _regenSourceId = null;
+}
+
+// Turn an existing question into plain text the AI can read and rewrite.
+function _serializeQuestionForRegen(q) {
+  const lines = [];
+  if (q.title) lines.push('Title: ' + q.title);
+  if (q.topic) lines.push('Topic: ' + q.topic);
+  if (q.category) lines.push('Category: ' + normalizeCategoryValue(q.category));
+  lines.push('Blocks (in order):');
+  (q.blocks || []).forEach((b, i) => {
+    const n = i + 1;
+    if (b.type === 'text') lines.push(`${n}. TEXT: ${stripHtml(b.content || '')}`);
+    else if (b.type === 'part') lines.push(`${n}. TEXT: ${((b.label || '') + ' ' + stripHtml(b.content || '')).trim()}`);
+    else if (b.type === 'image') lines.push(`${n}. IMAGE PLACEHOLDER${b.caption ? ' (caption: ' + stripHtml(b.caption) + ')' : ''}`);
+    else if (b.type === 'mcq') {
+      const opts = (b.options || []);
+      const correct = opts.findIndex(o => o.id === b.correctId);
+      lines.push(`${n}. MCQ options:`);
+      opts.forEach((o, oi) => lines.push(`     (${oi + 1}) ${stripHtml(o.text || '')}${oi === correct ? '  <-- correct' : ''}`));
+    }
+    else if (b.type === 'answer') lines.push(`${n}. ANSWER (Claim/Evidence/Reasoning): Claim: ${stripHtml(b.claim || '')} | Evidence: ${stripHtml(b.evidence || '')} | Reasoning: ${stripHtml(b.reasoning || '')}`);
+    else if (b.type === 'plainanswer') lines.push(`${n}. PLAIN ANSWER: ${stripHtml(b.content || b.text || '')}`);
+    else if (b.type === 'explanation') lines.push(`${n}. EXPLANATION: ${stripHtml(b.content || '')}`);
+  });
+  return lines.join('\n');
+}
+
+function _regenPrompt(q, remark) {
+  const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
+  return `You are helping a Singapore primary-school science teacher create a NEW VARIATION of an existing practice question.\n` +
+    _genPreamble() +
+    `TEACHER'S INSTRUCTIONS for this new copy (follow them closely): ${remark || 'Create a fresh variation that tests the same concept; vary the wording and any numbers but keep the same difficulty.'}\n\n` +
+    `Here is the ORIGINAL question — do NOT copy it word-for-word; produce a fresh variation that follows the instructions above while keeping the SAME overall structure, topic, answer type and any diagram placeholders in the same positions:\n` +
+    `------------------\n${_serializeQuestionForRegen(q)}\n------------------\n\n` +
+    `Return ONLY JSON with this exact shape:\n` +
+    `{"title":"short title","topic":"<closest topic>","category":"<closest category>","blocks":[ ...ordered blocks... ]}\n` +
+    `Each item in "blocks" is ONE of these objects:\n` +
+    `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
+    `  {"type":"image"}   (a placeholder marking where the diagram/picture goes — keep one for EVERY image placeholder the original had, in the same position; the teacher's original picture is reused automatically)\n` +
+    `  {"type":"mcq","options":["option 1","option 2","option 3","option 4"],"correctIndex":0}\n` +
+    `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
+    `  {"type":"plainanswer","text":"..."}\n` +
+    `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
+    `Rules:\n` +
+    `- Keep the SAME block types in the SAME order as the original (same number of image placeholders, same answer type, mcq stays mcq).\n` +
+    `- If a text block lists labelled items or options inline, put EACH on its own line separated by a real line break ("\\n").\n` +
+    `- For "answer"/"plainanswer" fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
+    `- Choose topic from EXACTLY this list: ${currentTopics().join('; ')}.\n` +
+    `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
+    `- Use plain text only, no markdown.`;
+}
+
+async function confirmRegenerate() {
+  const id = _regenSourceId;
+  const orig = questionBank.find(qb => qb.id === id) || vettingList.find(v => v.id === id);
+  if (!orig) { showToast('Question not found', 'error'); closeRegenerateModal(); return; }
+  const remark = (document.getElementById('regenRemark')?.value || '').trim();
+  const status = document.getElementById('regenStatus');
+  const btn = document.getElementById('regenConfirmBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Regenerating…'; }
+  if (status) status.textContent = 'Asking the AI to build a new copy…';
+  try {
+    // Give the AI the original picture (if any) so the variation fits the diagram.
+    let media = [];
+    const srcImg = (orig.blocks || []).find(b => b.type === 'image' && b.url);
+    if (srcImg) {
+      try {
+        const dataUrl = await _urlToDataUrl(transformImageUrl(srcImg.url));
+        const parsed = _parseImageDataUrl(dataUrl);
+        if (parsed) media = [{ mimeType: parsed.mime, data: dataUrl.split(',')[1] || '' }];
+      } catch (e) { console.warn('regen image for AI', e); }
+    }
+    const prompt = _regenPrompt(orig, remark);
+    const raw = media.length
+      ? await askGeminiVision(prompt, media, { maxOutputTokens: 4096, json: true })
+      : await askGemini(prompt, { maxOutputTokens: 4096, temperature: 0.5, json: true });
+    const parsed = _parseAIJson(raw);
+    if (!parsed || typeof parsed !== 'object') { showToast('AI did not return a question — try again', 'error'); if (status) status.textContent = ''; if (btn) { btn.disabled = false; btn.textContent = 'Regenerate copy'; } return; }
+    const built = buildBlocksFromAi(parsed);
+    const newBlocks = built.blocks;
+
+    // Re-attach the ORIGINAL pictures so they stay exactly the same.
+    const origImages = (orig.blocks || []).filter(b => b.type === 'image');
+    let imgIdx = 0;
+    newBlocks.forEach(b => {
+      if (b.type === 'image' && imgIdx < origImages.length) {
+        const src = origImages[imgIdx++];
+        b.url = src.url || '';
+        if (src.caption) b.caption = src.caption;
+        if (src.scale) b.scale = src.scale;
+      }
+    });
+    // Safety net: never lose a picture if the AI dropped a placeholder.
+    while (imgIdx < origImages.length) {
+      const src = origImages[imgIdx++];
+      newBlocks.push({ id: generateBlockId(), type: 'image', url: src.url || '', caption: src.caption || '', scale: src.scale || 1 });
+    }
+
+    const clone = {
+      id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
+      title: (parsed.title ? String(parsed.title) : orig.title) + ' (Regenerated)',
+      category: normalizeCategoryValue(orig.category),
+      topic: orig.topic,
+      markingGuide: orig.markingGuide || '',
+      blocks: newBlocks,
+      blanks: built.selectedBlanks,
+      status: orig.status || 'approved',
+      createdAt: new Date().toISOString(),
+      createdBy: (currentUser && currentUser.name) || orig.createdBy || 'Admin',
+      regeneratedFrom: orig.id
+    };
+    questionBank.push(clone);
+    renderQuestionBank();
+    updateCounts();
+    saveQuestion(clone);
+    closeRegenerateModal();
+    showToast('New copy created — review and edit it; the original is untouched', 'success');
+  } catch (e) {
+    console.error('Regenerate failed:', e);
+    showToast('Regenerate failed: ' + (e && e.message ? e.message : e), 'error');
+    if (status) status.textContent = '';
+    if (btn) { btn.disabled = false; btn.textContent = 'Regenerate copy'; }
+  }
 }
 
 function deleteQuestion(id) {
@@ -20173,6 +20343,9 @@ window.addToVetting = addToVetting;
 window.clearForm = clearForm;
 window.editQuestion = editQuestion;
 window.duplicateQuestion = duplicateQuestion;
+window.openRegenerateModal = openRegenerateModal;
+window.closeRegenerateModal = closeRegenerateModal;
+window.confirmRegenerate = confirmRegenerate;
 window.deleteQuestion = deleteQuestion;
 window.approveVetting = approveVetting;
 window.deleteVetting = deleteVetting;
