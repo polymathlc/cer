@@ -4634,6 +4634,10 @@ option {
           <div class="subtitle" id="createPageSubtitle">Build a question with blocks. Answers and blanks are optional — every question is marked by AI.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn btn-outline" id="regenInlineBtn" onclick="openRegenerateModal()" style="display:none;" title="Make a NEW copy of this question with AI. The picture stays the same, you give instructions on what to change, and the original is never overwritten.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            🔄 Regenerate
+          </button>
           <button class="btn btn-outline" id="aiAnswerBtn" onclick="aiAnswerAndExplain()" title="Read the whole question (text, picture and options) and let AI write the model answer and the explanation. Review and edit before saving.">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             ✨ AI answer &amp; explanation
@@ -6531,7 +6535,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.10.0';
+const APP_VERSION = 'v1.10.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -10403,16 +10407,19 @@ function setEditMode(isEditing) {
   const subtitle = document.getElementById('createPageSubtitle');
   const createActions = document.getElementById('createModeActions');
   const editActions = document.getElementById('editModeActions');
+  const regenBtn = document.getElementById('regenInlineBtn');
   if (isEditing) {
     title.textContent = 'Edit Question';
     subtitle.textContent = 'Modify and save your question';
     createActions.style.display = 'none';
     editActions.style.display = '';
+    if (regenBtn) regenBtn.style.display = '';
   } else {
     title.textContent = 'Create Question';
     subtitle.textContent = 'Build a question with blocks. Answers and blanks are optional — every question is marked by AI.';
     createActions.style.display = '';
     editActions.style.display = 'none';
+    if (regenBtn) regenBtn.style.display = 'none';
   }
 }
 
@@ -10685,9 +10692,6 @@ function renderQuestionBank() {
             <button class="qb-action-btn" title="Duplicate" onclick="event.stopPropagation();duplicateQuestion('${q.id}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
-            <button class="qb-action-btn" title="Regenerate with AI (keeps the picture, makes a new copy)" onclick="event.stopPropagation();openRegenerateModal('${q.id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            </button>
             <button class="qb-action-btn delete-qb" title="Delete" onclick="event.stopPropagation();deleteQuestion('${q.id}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
@@ -10758,18 +10762,24 @@ function duplicateQuestion(id) {
   saveQuestion(clone);
 }
 
-// ── Regenerate: clone a question with AI, keeping the same picture, applying
-// teacher instructions. The original question is never overwritten. ──────────
-let _regenSourceId = null;
+// ── Regenerate: clone the question currently open in the editor with AI,
+// keeping the same picture, applying teacher instructions. Uses the live
+// editor context (what's on screen) and NEVER overwrites the original. ───────
+let _regenSource = null;       // snapshot of the question being regenerated
+let _regenSourceOrigId = null; // id of the original (currentEditingQuestion)
 
-function openRegenerateModal(id) {
-  const q = questionBank.find(qb => qb.id === id) || vettingList.find(v => v.id === id);
-  if (!q) { showToast('Question not found', 'error'); return; }
+function openRegenerateModal() {
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    showToast('Open a question first, then Regenerate', 'info');
+    return;
+  }
   if (!window.__aiReady || !window.__aiReady()) {
     showToast("AI isn't set up yet — add your reCAPTCHA site key in the code", 'info');
     return;
   }
-  _regenSourceId = id;
+  // Snapshot exactly what's on screen so the AI uses this question's context.
+  _regenSource = collectQuestionData();
+  _regenSourceOrigId = currentEditingQuestion || null;
   const ta = document.getElementById('regenRemark');
   if (ta) ta.value = '';
   const status = document.getElementById('regenStatus');
@@ -10782,7 +10792,8 @@ function openRegenerateModal(id) {
 
 function closeRegenerateModal() {
   document.getElementById('regenOverlay').classList.remove('active');
-  _regenSourceId = null;
+  _regenSource = null;
+  _regenSourceOrigId = null;
 }
 
 // Turn an existing question into plain text the AI can read and rewrite.
@@ -10836,8 +10847,7 @@ function _regenPrompt(q, remark) {
 }
 
 async function confirmRegenerate() {
-  const id = _regenSourceId;
-  const orig = questionBank.find(qb => qb.id === id) || vettingList.find(v => v.id === id);
+  const orig = _regenSource;
   if (!orig) { showToast('Question not found', 'error'); closeRegenerateModal(); return; }
   const remark = (document.getElementById('regenRemark')?.value || '').trim();
   const status = document.getElementById('regenStatus');
@@ -10881,6 +10891,7 @@ async function confirmRegenerate() {
       newBlocks.push({ id: generateBlockId(), type: 'image', url: src.url || '', caption: src.caption || '', scale: src.scale || 1 });
     }
 
+    const origInBank = _regenSourceOrigId ? questionBank.find(q => q.id === _regenSourceOrigId) : null;
     const clone = {
       id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
       title: (parsed.title ? String(parsed.title) : orig.title) + ' (Regenerated)',
@@ -10889,17 +10900,17 @@ async function confirmRegenerate() {
       markingGuide: orig.markingGuide || '',
       blocks: newBlocks,
       blanks: built.selectedBlanks,
-      status: orig.status || 'approved',
+      status: (origInBank && origInBank.status) || 'approved',
       createdAt: new Date().toISOString(),
       createdBy: (currentUser && currentUser.name) || orig.createdBy || 'Admin',
-      regeneratedFrom: orig.id
+      regeneratedFrom: _regenSourceOrigId || orig.id
     };
     questionBank.push(clone);
     renderQuestionBank();
     updateCounts();
     saveQuestion(clone);
     closeRegenerateModal();
-    showToast('New copy created — review and edit it; the original is untouched', 'success');
+    showToast('New copy created in the bank — the original is untouched', 'success');
   } catch (e) {
     console.error('Regenerate failed:', e);
     showToast('Regenerate failed: ' + (e && e.message ? e.message : e), 'error');
