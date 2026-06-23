@@ -6535,7 +6535,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.10.1';
+const APP_VERSION = 'v1.10.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -13538,7 +13538,7 @@ function renderWsQuestions() {
     return;
   }
 
-  grid.innerHTML = filtered.map(q => {
+  grid.innerHTML = filtered.map((q, i) => {
     const checked = wsSelectedIds.has(q.id);
     const qLevel = getTopicLevel(q.topic || '');
     const qCategory = normalizeCategoryValue(q.category);
@@ -13548,7 +13548,7 @@ function renderWsQuestions() {
       <div class="ws-q-top">
         <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleWsQuestion('${q.id}', this.checked)">
         <div class="ws-q-info">
-          <div class="ws-q-title">${escapeHtml(q.title)}</div>
+          <div class="ws-q-title">${i + 1}.</div>
           <div class="ws-q-meta">
             <span class="qb-tag category">${escapeHtml(qCategory)}</span>
             <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
@@ -13893,7 +13893,7 @@ function buildWorksheetHtml(selected, worksheetTitle) {
     }
 
     qHtml += `<div class="print-q-header">
-      <h2>${escapeHtml(q.title)}</h2>
+      <h2>Question ${qIndex + 1}</h2>
       <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
     </div>`;
 
@@ -13945,9 +13945,9 @@ function buildWorksheetHtml(selected, worksheetTitle) {
     const hasAny = answerKeyData.some(d => d.sections && d.sections.length > 0);
     if (hasAny) {
       allHtml += `<div class="print-question-page print-answer-key-page"><h2>Answer Key</h2>`;
-      answerKeyData.forEach(qData => {
+      answerKeyData.forEach((qData, akIndex) => {
         if (!qData.sections || qData.sections.length === 0) return;
-        allHtml += `<div class="print-ak-question"><h4>${escapeHtml(qData.title)}</h4><div class="print-ak-fulltext">`;
+        allHtml += `<div class="print-ak-question"><h4>Question ${akIndex + 1}</h4><div class="print-ak-fulltext">`;
         qData.sections.forEach(sec => {
           if (sec.label) allHtml += `<div class="ak-sublabel">${escapeHtml(sec.label)}</div>`;
           allHtml += `<div class="ak-fullcontent">${sec.content}</div>`;
@@ -15827,28 +15827,29 @@ function filterScheduleQuestions() {
   renderScheduleQuestionList();
 }
 
-function renderScheduleQuestionList() {
-  const list = document.getElementById('scheduleQuestionList');
+function getScheduleFilteredQuestions() {
   const searchTerm = (document.getElementById('scheduleSearchInput')?.value || '').toLowerCase().trim();
-
-  let filtered = questionBank.filter(q => {
+  return questionBank.filter(q => {
     if (searchTerm) {
       const haystack = (q.title + ' ' + q.topic + ' ' + q.category).toLowerCase();
       return haystack.includes(searchTerm);
     }
     return true;
   });
+}
+
+function renderScheduleQuestionList() {
+  const list = document.getElementById('scheduleQuestionList');
+  const filtered = getScheduleFilteredQuestions();
 
   if (filtered.length === 0) {
     list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.85rem;">No questions found in the bank.</div>';
-    return;
-  }
-
-  list.innerHTML = filtered.map(q => {
-    const isSelected = selectedScheduleQuestionId === q.id;
-    return `<div class="schedule-q-item${isSelected ? ' selected' : ''}" onclick="selectScheduleQuestion('${q.id}')">
+  } else {
+    list.innerHTML = filtered.map((q, i) => {
+      const isSelected = selectedScheduleQuestionId === q.id;
+      return `<div class="schedule-q-item${isSelected ? ' selected' : ''}" onclick="selectScheduleQuestion('${q.id}')">
       <div style="flex:1;">
-        <div class="q-title">${escapeHtml(q.title)}</div>
+        <div class="q-title">${i + 1}.</div>
         <div class="q-meta">
           <span class="qb-tag category" style="font-size:0.7rem;">${escapeHtml(normalizeCategoryValue(q.category))}</span>
           <span class="qb-tag topic" style="font-size:0.7rem;">${escapeHtml(q.topic)}</span>
@@ -15856,21 +15857,28 @@ function renderScheduleQuestionList() {
       </div>
       ${isSelected ? '<svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5" style="width:18px;height:18px;flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
     </div>`;
-  }).join('');
-}
+    }).join('');
+  }
 
-function selectScheduleQuestion(qId) {
-  selectedScheduleQuestionId = qId;
-  const q = questionBank.find(q => q.id === qId);
-  if (q) {
-    document.getElementById('scheduleSelectedInfo').style.display = '';
-    document.getElementById('scheduleSelectedCard').innerHTML = `
-      <strong>${escapeHtml(q.title)}</strong>
+  // Keep the "selected" confirmation card numbered to match the list above.
+  const card = document.getElementById('scheduleSelectedCard');
+  if (card && selectedScheduleQuestionId) {
+    const q = questionBank.find(x => x.id === selectedScheduleQuestionId);
+    const idx = filtered.findIndex(x => x.id === selectedScheduleQuestionId);
+    if (q) {
+      card.innerHTML = `
+      <strong>${idx >= 0 ? 'Question ' + (idx + 1) : 'Selected question'}</strong>
       <div style="margin-top:4px;">
         <span class="qb-tag category" style="font-size:0.72rem;">${escapeHtml(normalizeCategoryValue(q.category))}</span>
         <span class="qb-tag topic" style="font-size:0.72rem;">${escapeHtml(q.topic)}</span>
       </div>`;
+    }
   }
+}
+
+function selectScheduleQuestion(qId) {
+  selectedScheduleQuestionId = qId;
+  document.getElementById('scheduleSelectedInfo').style.display = '';
   renderScheduleQuestionList();
 }
 
