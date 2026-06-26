@@ -4587,6 +4587,10 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
         My Report
       </div>
+      <!-- Science Defenders — Tower Defense MCQ mini-game (always available) -->
+      <div class="nav-item" data-page="defenders" onclick="navigateTo('defenders')" title="Science Defenders — Tower Defense MCQ game. Answer 3 science questions before each round to earn gold.">
+        <span class="ico">🧪</span> Science Defenders
+      </div>
       <!-- Science Quest game nav (shown once the hero loads, hidden via "Hide game") -->
       <div class="nav-section-label rpg-el" style="display:none;">Game</div>
       <div class="nav-item rpg-el" data-page="character" onclick="navigateTo('character')" style="display:none;">
@@ -5556,6 +5560,20 @@ option {
         <a class="btn btn-outline" href="science-worksheet.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
       </div>
       <iframe id="scienceWorksheetFrame" class="embed-frame" title="Science Worksheet Creator"></iframe>
+    </div>
+
+    <div class="page page-embed" id="page-defenders">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Science Defenders</h2>
+          </div>
+          <div class="subtitle">Tower Defense MCQ — answer 3 science questions before each round to earn gold</div>
+        </div>
+        <a class="btn btn-outline" href="science-defenders.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+      </div>
+      <iframe id="defendersFrame" class="embed-frame" title="Science Defenders — Tower Defense MCQ"></iframe>
     </div>
 
   </div>
@@ -6535,7 +6553,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.10.1';
+const APP_VERSION = 'v1.11.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -6713,6 +6731,10 @@ function navigateTo(page) {
   if (page === 'worksheetcreator') {
     const f = document.getElementById('scienceWorksheetFrame');
     if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-worksheet.html');
+  }
+  if (page === 'defenders') {
+    const f = document.getElementById('defendersFrame');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html');
   }
   // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
