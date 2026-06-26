@@ -6553,7 +6553,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.11.1';
+const APP_VERSION = 'v1.12.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20353,6 +20353,52 @@ function rpgWireStaticEvents() {
   });
 }
 rpgWireStaticEvents();
+
+// =====================================================================
+// SCIENCE DEFENDERS BRIDGE
+// The Tower-Defense mini-game runs in an iframe (science-defenders.html) and
+// must use REAL vetted MCQ questions from the bank — not built-in samples.
+// We extract text-only multiple-choice questions from `questionBank` and hand
+// them to the game over postMessage when it asks.
+// =====================================================================
+function _sdExtractMcq(q) {
+  const blocks = (q && q.blocks) || [];
+  const mcq = blocks.find(b => b.type === 'mcq' && (b.options || []).length >= 2);
+  if (!mcq) return null;
+  // Need a defined correct option.
+  const answer = (mcq.options || []).findIndex(o => o.id === mcq.correctId);
+  if (answer < 0) return null;
+  // The game is text-only — skip questions that depend on a diagram/image.
+  if (blocks.some(b => b.type === 'image' && b.url)) return null;
+  // Build the stem from the title + text/part blocks that appear before the options.
+  const stem = [];
+  if (q.title && String(q.title).trim()) stem.push(String(q.title).trim());
+  for (const b of blocks) {
+    if (b.type === 'mcq') break;
+    if (b.type === 'text') { const t = stripHtmlToText(b.content || '').trim(); if (t) stem.push(t); }
+    else if (b.type === 'part') { const t = ((b.label || '') + ' ' + stripHtmlToText(b.content || '')).trim(); if (t) stem.push(t); }
+  }
+  const qtext = stem.join(' ').replace(/\s+/g, ' ').trim();
+  if (!qtext) return null;
+  const options = mcq.options.map(o => stripHtmlToText(o.text || '').trim());
+  if (options.length < 2 || options.some(o => !o)) return null;
+  const exB = blocks.find(b => b.type === 'explanation');
+  const explain = exB ? stripHtmlToText(exB.content || '').trim() : '';
+  return { q: qtext, options, answer, explain, topic: (q.topic || 'Science') };
+}
+function buildDefenderQuestions() {
+  return (questionBank || [])
+    .filter(q => q && q.status !== 'pending')
+    .map(_sdExtractMcq)
+    .filter(Boolean);
+}
+window.addEventListener('message', function (ev) {
+  const d = ev && ev.data;
+  if (!d || d.type !== 'SD_REQUEST_QUESTIONS') return;
+  let questions = [];
+  try { questions = buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
+  try { ev.source && ev.source.postMessage({ type: 'SD_QUESTIONS', questions }, '*'); } catch (e) {}
+});
 
 // =====================================================================
 // EXPOSE FUNCTIONS GLOBALLY (required for module scope + onclick handlers)
