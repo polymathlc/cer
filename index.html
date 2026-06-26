@@ -6553,7 +6553,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.12.1';
+const APP_VERSION = 'v1.13.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20358,8 +20358,9 @@ rpgWireStaticEvents();
 // SCIENCE DEFENDERS BRIDGE
 // The Tower-Defense mini-game runs in an iframe (science-defenders.html) and
 // must use REAL vetted MCQ questions from the bank — not built-in samples.
-// We extract text-only multiple-choice questions from `questionBank` and hand
-// them to the game over postMessage when it asks.
+// We render each multiple-choice question's full stem (text + diagram image +
+// data table, in order) to self-contained HTML and hand it, with the options
+// and correct answer, to the game over postMessage when it asks.
 // =====================================================================
 function _sdExtractMcq(q) {
   const blocks = (q && q.blocks) || [];
@@ -20368,23 +20369,36 @@ function _sdExtractMcq(q) {
   // Need a defined correct option.
   const answer = (mcq.options || []).findIndex(o => o.id === mcq.correctId);
   if (answer < 0) return null;
-  // The game is text-only — skip questions that depend on a diagram/image.
-  if (blocks.some(b => b.type === 'image' && b.url)) return null;
-  // Build the stem from the title + text/part blocks that appear before the options.
-  const stem = [];
-  if (q.title && String(q.title).trim()) stem.push(String(q.title).trim());
+  // Build the FULL question stem as self-contained HTML — text, the diagram
+  // image(s) and any data table, in their original order. Styles are inlined
+  // and image URLs fully resolved so it renders correctly inside the iframe
+  // (which doesn't share the app's CSS variables or helper functions).
+  let html = '';
+  const plain = [];
   for (const b of blocks) {
-    if (b.type === 'mcq') break;
-    if (b.type === 'text') { const t = stripHtmlToText(b.content || '').trim(); if (t) stem.push(t); }
-    else if (b.type === 'part') { const t = ((b.label || '') + ' ' + stripHtmlToText(b.content || '')).trim(); if (t) stem.push(t); }
+    if (b.type === 'text') {
+      if (b.content) { html += `<div style="margin:6px 0;">${b.content}</div>`; const t = stripHtmlToText(b.content).trim(); if (t) plain.push(t); }
+    } else if (b.type === 'part') {
+      if (b.content || b.label) {
+        const lab = b.label ? `<strong>${escapeHtml(b.label)}</strong> ` : '';
+        html += `<div style="margin:6px 0;">${lab}${b.content || ''}</div>`;
+        const t = ((b.label || '') + ' ' + stripHtmlToText(b.content || '')).trim(); if (t) plain.push(t);
+      }
+    } else if (b.type === 'image') {
+      if (b.url) { html += `<div style="margin:10px 0;text-align:center;"><img src="${escapeHtml(transformImageUrl(b.url))}" style="max-width:100%;height:auto;border-radius:8px;" onerror="this.style.display='none'"></div>`; plain.push('[diagram]'); }
+    } else if (b.type === 'table') {
+      try { html += `<div style="margin:10px 0;overflow-x:auto;">${renderTableReadonly(b, '')}</div>`; plain.push('[table]'); } catch (e) {}
+    }
   }
-  const qtext = stem.join(' ').replace(/\s+/g, ' ').trim();
-  if (!qtext) return null;
-  const options = mcq.options.map(o => stripHtmlToText(o.text || '').trim());
-  if (options.length < 2 || options.some(o => !o)) return null;
+  if (!html.trim()) return null; // nothing to show
+  // Options keep their authored formatting; require each to have real text.
+  const optionsHtml = mcq.options.map(o => String(o.text || '').trim());
+  if (optionsHtml.length < 2 || mcq.options.some(o => !stripHtmlToText(o.text || '').trim())) return null;
   const exB = blocks.find(b => b.type === 'explanation');
+  const explainHtml = exB && exB.content ? String(exB.content) : '';
   const explain = exB ? stripHtmlToText(exB.content || '').trim() : '';
-  return { q: qtext, options, answer, explain, topic: (q.topic || 'Science') };
+  const qtext = plain.join(' ').replace(/\s+/g, ' ').trim() || (q.title || 'See the diagram');
+  return { q: qtext, html, options: optionsHtml, answer, explain, explainHtml, topic: (q.topic || 'Science') };
 }
 function buildDefenderQuestions() {
   return (questionBank || [])
