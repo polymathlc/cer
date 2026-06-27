@@ -4587,10 +4587,6 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
         My Report
       </div>
-      <!-- Science Defenders — Tower Defense MCQ mini-game (always available) -->
-      <div class="nav-item" data-page="defenders" onclick="navigateTo('defenders')" title="Science Defenders — Tower Defense MCQ game. Answer 3 science questions before each round to earn gold.">
-        <span class="ico">🧪</span> Science Defenders
-      </div>
       <!-- Science Quest game nav (shown once the hero loads, hidden via "Hide game") -->
       <div class="nav-section-label rpg-el" style="display:none;">Game</div>
       <div class="nav-item rpg-el" data-page="character" onclick="navigateTo('character')" style="display:none;">
@@ -4601,6 +4597,13 @@ option {
       </div>
       <div class="nav-item rpg-el" data-page="adventure" onclick="navigateTo('adventure')" style="display:none;">
         <span class="ico">🏰</span> Dungeon
+      </div>
+      <!-- Arcade mini-games — share the question bank, hidden together via "Hide game" -->
+      <div class="nav-item rpg-el" data-page="defenders" onclick="navigateTo('defenders')" style="display:none;" title="Science Defenders — Tower Defense MCQ game. Answer science questions to earn gold and build towers.">
+        <span class="ico">🧪</span> Science Defenders
+      </div>
+      <div class="nav-item rpg-el" data-page="raiders" onclick="navigateTo('raiders')" style="display:none;" title="Science Raiders — roguelite top-down shooter. Clear rooms, answer science questions to pick power-ups.">
+        <span class="ico">👾</span> Science Raiders
       </div>
       <div class="nav-item" id="rpgHideToggle" style="display:none;"><span class="ico">🙈</span> Hide game</div>
     </nav>
@@ -5574,6 +5577,20 @@ option {
         <a class="btn btn-outline" href="science-defenders.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
       </div>
       <iframe id="defendersFrame" class="embed-frame" title="Science Defenders — Tower Defense MCQ"></iframe>
+    </div>
+
+    <div class="page page-embed" id="page-raiders">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Science Raiders</h2>
+          </div>
+          <div class="subtitle">Roguelite top-down shooter — clear rooms, answer science questions to pick power-ups</div>
+        </div>
+        <a class="btn btn-outline" href="science-raiders.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+      </div>
+      <iframe id="raidersFrame" class="embed-frame" title="Science Raiders — Roguelite Shooter MCQ"></iframe>
     </div>
 
   </div>
@@ -6553,7 +6570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.14.1';
+const APP_VERSION = 'v1.15.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -6668,7 +6685,7 @@ function applyMcqCategory(q) {
 function navigateTo(page) {
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
-  if ((page === 'character' || page === 'leaderboard' || page === 'adventure') && rpgGameHidden()) page = rpgHomePage();
+  if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'defenders' || page === 'raiders') && rpgGameHidden()) page = rpgHomePage();
   if (page !== 'adventure') advAbandon();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -6735,6 +6752,10 @@ function navigateTo(page) {
   if (page === 'defenders') {
     const f = document.getElementById('defendersFrame');
     if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-defenders.html');
+  }
+  if (page === 'raiders') {
+    const f = document.getElementById('raidersFrame');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-raiders.html');
   }
   // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
@@ -20355,9 +20376,10 @@ function rpgWireStaticEvents() {
 rpgWireStaticEvents();
 
 // =====================================================================
-// SCIENCE DEFENDERS BRIDGE
-// The Tower-Defense mini-game runs in an iframe (science-defenders.html) and
-// must use REAL vetted MCQ questions from the bank — not built-in samples.
+// SCIENCE DEFENDERS / RAIDERS BRIDGE
+// The arcade mini-games run in iframes (science-defenders.html tower defense,
+// science-raiders.html roguelite shooter) and share one question protocol.
+// Both must use REAL vetted MCQ questions from the bank — not built-in samples.
 // We render each multiple-choice question's full stem (text + diagram image +
 // data table, in order) to self-contained HTML and hand it, with the options
 // and correct answer, to the game over postMessage when it asks.
@@ -20423,7 +20445,7 @@ async function _sdSeenQuestionIds() {
     if (!currentUser || !currentUser.uid) return [];
     const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', currentUser.uid)));
     const ids = new Set();
-    snap.forEach(doc => { const a = doc.data(); if (a && a.mode === 'defenders' && a.questionId) ids.add(a.questionId); });
+    snap.forEach(doc => { const a = doc.data(); if (a && (a.mode === 'defenders' || a.mode === 'raiders') && a.questionId) ids.add(a.questionId); });
     return Array.from(ids);
   } catch (e) { console.warn('SD seen-ids read failed', e); return []; }
 }
@@ -20442,7 +20464,7 @@ function _sdRecordAttempt(d) {
       totalBlanks: 1,
       answerHash: '',
       timestamp: Timestamp.now(),
-      mode: 'defenders'
+      mode: (d.mode === 'raiders' ? 'raiders' : 'defenders')
     }).catch(err => console.warn('SD record attempt failed', err));
   } catch (e) {}
 }
