@@ -6553,7 +6553,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.14.0';
+const APP_VERSION = 'v1.14.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20385,7 +20385,7 @@ function _sdExtractMcq(q) {
         const t = ((b.label || '') + ' ' + stripHtmlToText(b.content || '')).trim(); if (t) plain.push(t);
       }
     } else if (b.type === 'image') {
-      if (b.url) { html += `<div style="margin:10px 0;text-align:center;"><img src="${escapeHtml(transformImageUrl(b.url))}" style="max-width:100%;height:auto;border-radius:8px;" onerror="this.style.display='none'"></div>`; plain.push('[diagram]'); }
+      if (b.url) { html += `<div style="margin:10px 0;text-align:center;"><img src="${escapeHtml(transformImageUrl(b.url))}" loading="eager" decoding="async" style="max-width:100%;height:auto;border-radius:8px;" onerror="if(window.sdImgError)sdImgError(this)"></div>`; plain.push('[diagram]'); }
     } else if (b.type === 'table') {
       try { html += `<div style="margin:10px 0;overflow-x:auto;">${renderTableReadonly(b, '')}</div>`; plain.push('[table]'); } catch (e) {}
     }
