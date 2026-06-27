@@ -258,6 +258,9 @@ html, body {
 .upcard .umile { margin-top: 5px; font-size: var(--font-size-xs); font-weight: 800; color: #8a5a13; }
 .upcard .unext { margin-top: 5px; font-size: var(--font-size-xs); color: var(--text-tertiary); }
 .upcard.elem { border-color: var(--accent-light); }
+.upcard.wvar { border-color: #5C6BC0; background: linear-gradient(160deg, #eef0fb, #fff); }
+.upcard.wvar:hover { border-color: #3949AB; background: linear-gradient(160deg, #e3e7f9, #fff); }
+.upcard.wvar .uname { color: #3949AB; }
 .upcard.trade { border-color: #E64A19; background: linear-gradient(160deg, #fff4ee, #fff); }
 .upcard.trade:hover { border-color: #d84315; background: linear-gradient(160deg, #ffe9e0, #fff); }
 .upcard.trade .uname { color: #d84315; }
@@ -587,6 +590,95 @@ var ELEM_UPGRADES = ELEM_KEYS.map(elemUpgrade);
 // Support upgrades = stat boosts + utility boons + high-risk trade-offs.
 var SUPPORT_UPGRADES = UPGRADES.concat(SPECIAL_UPGRADES).concat(TRADEOFFS);
 
+/* ---------------- 3d. WEAPON VARIANTS (forks) ----------------
+ * Ten powerful weapon lines. Each line forks into TWO variants (e.g. Archery →
+ * Shortbow: many weaker arrows, or Crossbow: one strong slow bolt). You commit
+ * to ONE variant per line for the run; it levels up like an element, with
+ * MILESTONE power spikes at level 5 and 10 — each milestone plays its own
+ * animation. `per(p,lvl)` applies every level; m5/m10 add the milestone bonus. */
+function wv(id, name, icon, blurb, anim, per, m5, m5d, m10, m10d){
+  return { id: id, type: 'wvar', name: name, icon: icon, blurb: blurb, anim: anim, per: per, m5: m5, m5d: m5d, m10: m10, m10d: m10d };
+}
+var WEAPON_LINES = [
+  { id: 'archery', name: 'Archery',
+    a: wv('shortbow', 'Shortbow', '🏹', 'Many arrows at once — each one weaker', 'bloom',
+        function(p){ p.shots += 1; p.dmgMul *= 0.92; }, function(p){ p.shots += 1; }, '+1 arrow',
+        function(p){ p.shots += 2; p.dmgMul *= 1.25; }, '+2 arrows & regain damage'),
+    b: wv('crossbow', 'Crossbow', '🎯', 'One powerful, slow, piercing bolt', 'beam',
+        function(p, lvl){ p.dmgMul *= 1.20; p.rateMul *= 0.95; if (lvl % 2 === 0) p.pierce += 1; },
+        function(p){ p.dmgMul *= 1.4; p.pierce += 2; }, '+40% damage & +2 pierce',
+        function(p){ p.dmgMul *= 1.6; p.pierce += 3; }, 'huge damage & pierce') },
+  { id: 'barrel', name: 'Barrel',
+    a: wv('longbarrel', 'Long Barrel', '📏', 'Faster, longer-range bolts', 'rays',
+        function(p){ p.bSpeedMul *= 1.15; p.dmgMul *= 1.05; }, function(p){ p.bSpeedMul *= 1.4; p.pierce += 1; }, '+pierce & speed',
+        function(p){ p.dmgMul *= 1.3; }, '+30% damage'),
+    b: wv('sawnoff', 'Sawn-off', '🔫', 'Rapid bursts of shots', 'sparks',
+        function(p, lvl){ p.rateMul *= 1.10; if (lvl % 2 === 0) p.shots += 1; }, function(p){ p.rateMul *= 1.3; }, '+30% fire rate',
+        function(p){ p.shots += 2; }, '+2 shots') },
+  { id: 'rounds', name: 'Rounds',
+    a: wv('hollow', 'Hollow Point', '✨', 'High critical-hit chance', 'shards',
+        function(p){ p.crit += 0.08; }, function(p){ p.crit += 0.15; }, '+15% crit',
+        function(p){ p.crit += 0.2; }, '+20% crit'),
+    b: wv('slug', 'Heavy Slug', '🪨', 'Heavy hits — slugs explode at max level', 'quake',
+        function(p){ p.dmgMul *= 1.16; p.bSpeedMul *= 0.97; }, function(p){ p.dmgMul *= 1.4; }, '+40% damage',
+        function(p){ p.dmgMul *= 1.5; p.explosive += 1; }, 'slugs explode on hit') },
+  { id: 'frame', name: 'Frame',
+    a: wv('light', 'Light Frame', '🦿', 'Quick on your feet, faster fire', 'spiral',
+        function(p){ p.speedMul *= 1.08; p.rateMul *= 1.04; }, function(p){ p.speedMul *= 1.2; }, '+20% move speed',
+        function(p){ p.rateMul *= 1.2; }, '+20% fire rate'),
+    b: wv('heavy', 'Heavy Frame', '🛡️', 'A walking tank', 'halo',
+        function(p){ p.maxHp += 18; p.hp += 18; }, function(p){ p.maxHp += 40; p.hp += 40; }, '+40 max HP',
+        function(p){ p.maxHp += 60; p.hp = p.maxHp; p.dmgMul *= 1.15; }, '+60 HP, full heal & +damage') },
+  { id: 'ammo', name: 'Ammo',
+    a: wv('explosive', 'Explosive Ammo', '💥', 'Shots burst for area damage', 'ring',
+        function(p){ p.explosive += 1; p.dmgMul *= 0.98; }, function(p){ p.explosive += 1; }, 'bigger blasts',
+        function(p){ p.explosive += 2; }, 'huge blasts'),
+    b: wv('piercer', 'Piercing Ammo', '🪡', 'Shots punch through ranks', 'beam',
+        function(p){ p.pierce += 1; }, function(p){ p.pierce += 2; }, '+2 pierce',
+        function(p){ p.pierce += 3; p.dmgMul *= 1.2; }, '+3 pierce & damage') },
+  { id: 'target', name: 'Targeting',
+    a: wv('homing', 'Homing Rounds', '🧲', 'Your shots curve toward foes', 'spiral',
+        function(p){ p.homingShot += 1; }, function(p){ p.homingShot += 1; }, 'sharper tracking',
+        function(p){ p.homingShot += 1; p.dmgMul *= 1.15; }, 'relentless tracking & +damage'),
+    b: wv('volley', 'Wide Volley', '🎆', 'A spreading wall of shots', 'bloom',
+        function(p){ p.shots += 1; p.dmgMul *= 0.94; }, function(p){ p.shots += 1; }, '+1 shot',
+        function(p){ p.shots += 2; }, '+2 shots') },
+  { id: 'core', name: 'Core',
+    a: wv('vampiric', 'Vampiric Core', '🩸', 'Heal as you slay', 'halo',
+        function(p){ p.lifesteal += 1; }, function(p){ p.lifesteal += 2; }, 'stronger lifesteal',
+        function(p){ p.lifesteal += 2; p.maxHp += 30; p.hp += 30; }, 'lifesteal & +max HP'),
+    b: wv('berserk', 'Berserk Core', '😤', 'Damage soars as your HP drops', 'quake',
+        function(p){ p.berserk += 1; }, function(p){ p.berserk += 2; }, 'more low-HP damage',
+        function(p){ p.berserk += 2; p.rateMul *= 1.15; }, 'frenzied low-HP damage') },
+  { id: 'coolant', name: 'Coolant',
+    a: wv('overclock', 'Overclock', '⚡', 'Pure fire-rate boost', 'sparks',
+        function(p){ p.rateMul *= 1.12; }, function(p){ p.rateMul *= 1.25; }, '+25% fire rate',
+        function(p){ p.rateMul *= 1.3; }, '+30% fire rate'),
+    b: wv('stabiliser', 'Stabiliser', '🎯', 'Steady damage & crit', 'rays',
+        function(p){ p.dmgMul *= 1.10; p.crit += 0.04; }, function(p){ p.dmgMul *= 1.25; }, '+25% damage',
+        function(p){ p.crit += 0.2; }, '+20% crit') },
+  { id: 'plating', name: 'Plating',
+    a: wv('reactive', 'Reactive Plate', '🛰️', 'Hits you take blast back', 'ring',
+        function(p){ p.nova += 1; }, function(p){ p.nova += 1; }, 'stronger shockwave',
+        function(p){ p.nova += 2; }, 'devastating shockwave'),
+    b: wv('regenplate', 'Regen Plate', '➕', 'Steadily mend your wounds', 'halo',
+        function(p){ p.regen += 1.2; }, function(p){ p.regen += 2; }, 'faster regen',
+        function(p){ p.regen += 2; p.maxHp += 30; p.hp = p.maxHp; }, 'fast regen & +max HP') },
+  { id: 'velocity', name: 'Velocity',
+    a: wv('railshot', 'Railshot', '🚄', 'Fast, hard-hitting rounds', 'beam',
+        function(p){ p.bSpeedMul *= 1.12; p.dmgMul *= 1.10; }, function(p){ p.dmgMul *= 1.4; p.pierce += 2; }, '+damage & pierce',
+        function(p){ p.dmgMul *= 1.6; }, 'overwhelming damage'),
+    b: wv('stormshot', 'Stormshot', '🌪️', 'A relentless storm of fire', 'sparkstorm',
+        function(p, lvl){ p.rateMul *= 1.08; if (lvl % 3 === 0) p.shots += 1; }, function(p){ p.rateMul *= 1.3; }, '+30% fire rate',
+        function(p){ p.shots += 2; p.rateMul *= 1.2; }, '+2 shots & fire rate') }
+];
+// Flatten variant lookup + helpers
+var WVAR_BY_ID = {}, WLINE_BY_VAR = {};
+WEAPON_LINES.forEach(function(L){ [L.a, L.b].forEach(function(v){ WVAR_BY_ID[v.id] = v; WLINE_BY_VAR[v.id] = L; }); });
+function wpnLevel(id){ return (G && G.player.wpn[id]) || 0; }
+// Which variant (if any) of a line is locked in.
+function lineChosen(L){ return wpnLevel(L.a.id) > 0 ? L.a : (wpnLevel(L.b.id) > 0 ? L.b : null); }
+
 var MAX_UPGRADES = 10;        // run-long cap on upgrades taken
 var ORBIT_R = 42;             // Orbital Guard orbit radius
 function isElemMilestone(lvl){ return lvl === 5 || lvl === 10; }
@@ -633,7 +725,9 @@ function newPlayer(clazz){
     upgrades: 0,                       // total upgrades taken (caps at MAX_UPGRADES)
     orbit: 0, orbAng: 0, orbCd: 0,     // Orbital Guard special
     nova: 0,                           // Nova Shield special
-    elem: { poison: 0, ice: 0, chain: 0, laser: 0 } // projectile element levels
+    elem: { poison: 0, ice: 0, chain: 0, laser: 0 }, // projectile element levels
+    wpn: {},                           // weapon-variant levels (id -> level); siblings lock
+    explosive: 0, homingShot: 0, lifesteal: 0, berserk: 0  // weapon mechanic flags
   };
 }
 
@@ -648,9 +742,10 @@ function startRun(){
     coins: 0,
     bannerT: 0, shakeT: 0, shakeMag: 0,
     walls: [], door: null, doorOpen: false,
-    spawnFx: 0, shockwaves: [], lightning: [],
+    spawnFx: 0, shockwaves: [], lightning: [], anims: [],
     skill: { id: chosenSkill, level: 1, cd: 0 },   // the one skill chosen for this run
-    mortars: [], blackholes: [], allies: []
+    mortars: [], blackholes: [], allies: [],
+    pending: [], spawnTimer: 0, spawnBudget: 0     // periodic enemy spawning
   };
   buildRoom();
   hideAll();
@@ -665,37 +760,54 @@ function buildRoom(){
   G.enemies = []; G.bullets = []; G.ebullets = []; G.particles = []; G.pickups = [];
   G.doorOpen = false;
   G.player.x = VIEW_W/2; G.player.y = VIEW_H - 70;
-  spawnEnemies();
+  queueRoomEnemies();
   G.spawnFx = 0.6;
 }
 
-function spawnEnemies(){
+// Build the room's enemy QUEUE (they spawn periodically — see pumpSpawns — so
+// they arrive in waves from spread-out spots instead of clumping into one ball).
+function queueRoomEnemies(){
   var f = G.floor, d = G.diff;
+  G.pending = []; G.spawnTimer = 0;
   var isBossRoom = (G.room === ROOMS_PER_FLOOR) && (f % 2 === 0);
   if (isBossRoom){
     spawnEnemy('boss', VIEW_W/2, 130, f);
-    var adds = Math.round(4 * d.count); // 2× the boss-room adds
-    for (var a = 0; a < adds; a++) spawnEnemy('swarm', rand(80, VIEW_W-80), rand(80, 200), f);
+    var adds = Math.round(7 * d.count);
+    for (var a = 0; a < adds; a++) G.pending.push('swarm');
     return;
   }
-  // Difficulty budget grows with floor & room — doubled for a denser swarm.
-  var budget = Math.round((4 + f * 1.6 + G.room * 0.8) * d.count * 2);
+  // +80% more enemies than before (old 2× → 3.6×), trickled in over the room.
+  var budget = Math.round((4 + f * 1.6 + G.room * 0.8) * d.count * 3.6);
   var pool = ['slime', 'swarm'];
   if (f >= 2) pool.push('turret', 'drone', 'spitter');
   if (f >= 3) pool.push('brute', 'sniper', 'bomber');
   if (f >= 4) pool.push('seeker');
   var costMap = { slime: 1, swarm: 1, turret: 2, drone: 2, spitter: 2, sniper: 2, bomber: 3, seeker: 3, brute: 3 };
   var guard = 0;
-  while (budget > 0 && guard++ < 140){
+  while (budget > 0 && guard++ < 300){
     var t = choice(pool);
     var cost = costMap[t];
     if (cost > budget && t !== 'slime' && t !== 'swarm') continue;
-    var px, py, tries = 0;
-    do { px = rand(70, VIEW_W-70); py = rand(70, VIEW_H-160); tries++; }
-    while (dist2(px, py, G.player.x, G.player.y) < 200*200 && tries < 20);
-    spawnEnemy(t, px, py, f);
-    budget -= cost;
+    G.pending.push(t); budget -= cost;
   }
+}
+
+// Spawn enemies from the queue in periodic batches at spread-out positions, while
+// keeping the on-screen count under a cap so the arena never turns into one blob.
+function pumpSpawns(dt){
+  if (!G.pending.length) return;
+  G.spawnTimer -= dt;
+  var cap = 14 + G.floor * 2;
+  if (G.spawnTimer > 0 || G.enemies.length >= cap) return;
+  var batch = Math.min(G.pending.length, 5);
+  for (var i = 0; i < batch && G.enemies.length < cap; i++){
+    var t = G.pending.shift();
+    var px, py, tries = 0;
+    do { px = rand(70, VIEW_W - 70); py = rand(70, VIEW_H - 150); tries++; }
+    while (dist2(px, py, G.player.x, G.player.y) < 175 * 175 && tries < 24);
+    spawnEnemy(t, px, py, G.floor);
+  }
+  G.spawnTimer = 1.4;
 }
 
 var ENEMY_HP_MULT = 1.5;      // +50% enemy health
@@ -839,13 +951,15 @@ function update(dt){
   updateSkills(dt);
   updateShockwaves(dt);
   updateLightning(dt);
+  updateAnims(dt);
   reapEnemies();          // resolve all deferred deaths before the room-clear check
+  pumpSpawns(dt);         // trickle in queued enemies
   updateParticles(dt);
   updateFloaters(dt);
   updatePickups(dt);
 
-  // room cleared?
-  if (G.enemies.length === 0 && G.ebullets.length < 90 && G.state === 'play'){
+  // room cleared? (queue drained AND nothing left alive)
+  if (G.pending.length === 0 && G.enemies.length === 0 && G.ebullets.length < 90 && G.state === 'play'){
     onRoomCleared();
   }
 }
@@ -887,6 +1001,7 @@ function weaponProfile(){
     if (L.laser >= 5) pierce += 2;             // L5 milestone: pierce far more
     if (L.laser >= 10) dmgMul *= 1.5;          // L10 milestone: massive damage
   }
+  if (p.berserk > 0){ var missing = 1 - clamp(p.hp / p.maxHp, 0, 1); dmgMul *= (1 + p.berserk * 0.5 * missing); } // Berserk Core
   return { dmgMul: dmgMul, pierce: pierce, laser: laser, col: bulletColor(L), L: L };
 }
 // Spawn one of the player's bolts travelling along angle `a` (carries element effects).
@@ -900,7 +1015,8 @@ function spawnBolt(a, wp){
     vx: Math.cos(a) * bspeed, vy: Math.sin(a) * bspeed,
     r: (wp.laser ? 6 : 4) + (crit ? 2 : 0), dmg: dmg, crit: crit, pierce: wp.pierce, hits: [], life: wp.laser ? 1.1 : 1.4,
     color: crit ? '#FFB300' : wp.col, laser: wp.laser,
-    elem: { poison: wp.L.poison, ice: wp.L.ice, chain: wp.L.chain, laser: wp.L.laser }
+    elem: { poison: wp.L.poison, ice: wp.L.ice, chain: wp.L.chain, laser: wp.L.laser },
+    explosive: p.explosive, homing: p.homingShot > 0
   });
 }
 function fire(){
@@ -917,6 +1033,12 @@ function fire(){
 function updateBullets(dt){
   for (var i = G.bullets.length - 1; i >= 0; i--){
     var b = G.bullets[i];
+    if (b.homing){ // Homing Rounds — curve toward the nearest foe
+      var tgt = nearestEnemy(b.x, b.y);
+      if (tgt){ var sp = Math.hypot(b.vx, b.vy) || 1, cur = Math.atan2(b.vy, b.vx);
+        var want = Math.atan2(tgt.y - b.y, tgt.x - b.x), diff = Math.atan2(Math.sin(want - cur), Math.cos(want - cur));
+        var na = cur + clamp(diff, -3.4 * dt, 3.4 * dt); b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp; }
+    }
     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
     if (b.x < -20 || b.x > VIEW_W+20 || b.y < -20 || b.y > VIEW_H+20 || b.life <= 0){ G.bullets.splice(i, 1); continue; }
     var removed = false;
@@ -928,6 +1050,7 @@ function updateBullets(dt){
       if (dist2(b.x, b.y, e.x, e.y) <= rr*rr){
         damageEnemy(e, b.dmg, b.crit);
         applyElementsOnHit(b, e);
+        if (b.explosive > 0) aoeBlast(b.x, b.y, 38 + 12 * b.explosive, b.dmg * 0.5, '#FF7043'); // Explosive Ammo
         b.hits.push(e);
         for (var k = 0; k < 4; k++) addParticle(b.x, b.y, b.color || e.color, 1.1);
         if (b.hits.length > b.pierce){ G.bullets.splice(i, 1); removed = true; break; }
@@ -1031,6 +1154,7 @@ function onEnemyDeath(e){
     var need = Math.max(1, Math.round(4 / p.vamp));
     if (p.vampCount >= need){ p.vampCount = 0; p.hp = Math.min(p.maxHp, p.hp + 1); }
   }
+  if (p.lifesteal > 0) p.hp = Math.min(p.maxHp, p.hp + 1.2 * p.lifesteal); // Vampiric Core
 }
 
 function updateEnemies(dt){
@@ -1218,6 +1342,72 @@ function updateShockwaves(dt){
     s.r = s.max * (1 - s.life / s.maxLife);
     if (s.life <= 0) G.shockwaves.splice(i, 1);
   }
+}
+
+/* ---------------- 7d. WEAPON VARIANTS + MILESTONE ANIMATIONS ---------------- */
+var ANIM_COLOR = { bloom:'#7E57C2', beam:'#FF5252', rays:'#FFD54F', sparks:'#4DD0E1', shards:'#FFB300', quake:'#8D6E63', spiral:'#EC407A', halo:'#66BB6A', ring:'#FF7043', sparkstorm:'#42A5F5' };
+function playMilestoneAnim(kind){
+  var p = G.player;
+  G.anims.push({ kind: kind, x: p.x, y: p.y, color: ANIM_COLOR[kind] || '#FFD54F', t: 0, life: 0.9 });
+  if (kind === 'quake'){ G.shakeT = 0.4; G.shakeMag = 9; } else { G.shakeT = Math.max(G.shakeT, 0.18); G.shakeMag = 6; }
+}
+function updateAnims(dt){
+  for (var i = G.anims.length - 1; i >= 0; i--){ if ((G.anims[i].t += dt) >= G.anims[i].life) G.anims.splice(i, 1); }
+}
+function renderAnims(){
+  for (var i = 0; i < G.anims.length; i++){
+    var a = G.anims[i], f = clamp(a.t / a.life, 0, 1), fade = 1 - f, x = a.x, y = a.y, c = a.color, k = a.kind, j;
+    ctx.save();
+    if (k === 'ring' || k === 'quake'){
+      for (j = 0; j < (k === 'quake' ? 3 : 2); j++){
+        var rr = (40 + j * 30) + f * (k === 'quake' ? 160 : 120);
+        ctx.globalAlpha = fade * 0.8; ctx.strokeStyle = c; ctx.lineWidth = k === 'quake' ? 6 : 4;
+        ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.stroke();
+      }
+    } else if (k === 'beam'){
+      ctx.globalAlpha = fade * 0.85;
+      for (j = -2; j <= 2; j++){ var bx = x + j * 16; ctx.fillStyle = c; ctx.fillRect(bx - 2, 0, 4, VIEW_H); }
+      ctx.globalAlpha = fade * 0.4; ctx.fillStyle = '#fff'; ctx.fillRect(x - 30, 0, 60, VIEW_H);
+    } else if (k === 'rays' || k === 'spiral'){
+      var n = 14, rot = (k === 'spiral' ? f * 6 : 0);
+      ctx.globalAlpha = fade * 0.9; ctx.strokeStyle = c; ctx.lineWidth = 3;
+      for (j = 0; j < n; j++){ var ang = (j / n) * TAU + rot; var r0 = 18 + f * 30, r1 = 30 + f * 120;
+        ctx.beginPath(); ctx.moveTo(x + Math.cos(ang) * r0, y + Math.sin(ang) * r0); ctx.lineTo(x + Math.cos(ang) * r1, y + Math.sin(ang) * r1); ctx.stroke(); }
+    } else if (k === 'halo'){
+      ctx.globalAlpha = fade * 0.9; ctx.strokeStyle = c; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(x, y, 30 + f * 50, f * 6, f * 6 + 5.2); ctx.stroke();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 30 + f * 50, -f * 6, -f * 6 + 3); ctx.stroke();
+    } else if (k === 'shards'){
+      var m = 9; ctx.globalAlpha = fade; ctx.fillStyle = c;
+      for (j = 0; j < m; j++){ var sa = (j / m) * TAU + f * 2, sd = 24 + f * 110, sx = x + Math.cos(sa) * sd, sy = y + Math.sin(sa) * sd;
+        ctx.save(); ctx.translate(sx, sy); ctx.rotate(sa + f * 4);
+        ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 5); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    } else if (k === 'bloom'){
+      var pn = 12; ctx.globalAlpha = fade;
+      for (j = 0; j < pn; j++){ var pa = (j / pn) * TAU, pd = 14 + f * 80;
+        ctx.fillStyle = j % 2 ? c : '#fff'; ctx.beginPath();
+        ctx.ellipse(x + Math.cos(pa) * pd, y + Math.sin(pa) * pd, 7 * fade + 2, 3.5 * fade + 1.5, pa, 0, TAU); ctx.fill(); }
+    } else { // sparks / sparkstorm
+      var sn = k === 'sparkstorm' ? 26 : 16; ctx.globalAlpha = fade;
+      for (j = 0; j < sn; j++){ var ka = (j / sn) * TAU + (j * 1.7), kd = (10 + (j % 5) * 8) + f * (90 + (j % 7) * 10);
+        ctx.fillStyle = j % 3 ? c : '#fff'; var px = x + Math.cos(ka) * kd, py = y + Math.sin(ka) * kd;
+        ctx.fillRect(px - 2, py - 2, 4, 4); }
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+// Level a weapon variant (sibling already locked by offer logic). Fires milestone
+// bonuses + animation at level 5 and 10.
+function levelWeaponVariant(v){
+  var p = G.player;
+  var lvl = (p.wpn[v.id] || 0) + 1;
+  p.wpn[v.id] = lvl;
+  v.per(p, lvl);
+  if (lvl === 5){ v.m5(p); playMilestoneAnim(v.anim); toast('🌟 ' + v.name + ' Lv 5 — ' + v.m5d + '!', 'good'); }
+  else if (lvl === 10){ v.m10(p); playMilestoneAnim(v.anim); toast('🌟 ' + v.name + ' Lv 10 — ' + v.m10d + '!', 'good'); }
+  else toast(v.icon + ' ' + v.name + ' Lv ' + lvl, 'good');
+  p.hp = Math.min(p.maxHp, p.hp);
 }
 
 /* ---------------- 7c. ACTIVE SKILLS ---------------- */
@@ -1542,6 +1732,8 @@ function render(){
     ctx.fillText(fl.text, fl.x, fl.y);
   }
   ctx.globalAlpha = 1;
+
+  renderAnims(); // milestone celebration effects (in world space)
   ctx.restore();
 
   // Boss HP bar — fixed across the top of the arena while a boss is alive.
@@ -1725,7 +1917,7 @@ function updateHud(){
   if (!G) return;
   $('hudFloor').textContent = G.floor;
   $('hudRoom').textContent = G.room + '/' + ROOMS_PER_FLOOR;
-  $('hudEnemies').textContent = G.enemies.length;
+  $('hudEnemies').textContent = G.enemies.length + (G.pending ? G.pending.length : 0);
   $('hudCoins').textContent = G.coins;
   var p = G.player;
   var frac = clamp(p.hp / p.maxHp, 0, 1);
@@ -1988,17 +2180,36 @@ function skillUpgradeOption(){
            desc: 'Level up your ' + def.name + ' skill to Lv ' + nl + ' — stronger effect & shorter cooldown',
            apply: function(){ G.skill.level += 1; } };
 }
-// Three distinct choices. Guarantee the player's strongest in-progress element so
-// a specialised build is always continuable; the chosen skill's upgrade is always
-// in the running pool; fill the rest at random.
-function buildUpgradeOffer(){
+// An offer card that levels one weapon variant.
+function weaponVariantCard(v){
+  return { id: v.id, type: 'wvar', variant: v, icon: v.icon, name: v.name, blurb: v.blurb, m5d: v.m5d, m10d: v.m10d,
+           apply: function(){ levelWeaponVariant(v); } };
+}
+// Level-up cards for weapon variants already locked in (and not maxed).
+function availableWeaponLevelups(){
+  var out = [];
+  WEAPON_LINES.forEach(function(L){ var v = lineChosen(L); if (v && wpnLevel(v.id) < 10) out.push(weaponVariantCard(v)); });
+  return out;
+}
+// Two variant cards from a random not-yet-started weapon line (a fork choice).
+function buildWeaponFork(){
+  var fresh = WEAPON_LINES.filter(function(L){ return !lineChosen(L); });
+  if (!fresh.length) return null;
+  var L = fresh[Math.floor(Math.random() * fresh.length)];
+  return [weaponVariantCard(L.a), weaponVariantCard(L.b)];
+}
+// Up to n distinct cards: guarantee the player's top element (when n>1), then fill
+// from elements + support + skill + chosen-weapon level-ups.
+function buildUpgradeOffer(n){
+  n = n || 3;
   var p = G.player, offer = [];
   var topKey = null, topLvl = 0;
   ELEM_KEYS.forEach(function(k){ if ((p.elem[k] || 0) > topLvl){ topLvl = p.elem[k]; topKey = k; } });
-  if (topKey) offer.push(elemUpgradeByKey(topKey));
-  var pool = ELEM_UPGRADES.concat(availableSupport()).concat([skillUpgradeOption()]).filter(function(u){ return offer.indexOf(u) < 0; });
+  if (topKey && n > 1) offer.push(elemUpgradeByKey(topKey));
+  var pool = ELEM_UPGRADES.concat(availableSupport()).concat([skillUpgradeOption()]).concat(availableWeaponLevelups())
+    .filter(function(u){ return !offer.some(function(o){ return o.id === u.id; }); });
   pool.sort(function(){ return Math.random() - 0.5; });
-  for (var i = 0; i < pool.length && offer.length < 3; i++) offer.push(pool[i]);
+  for (var i = 0; i < pool.length && offer.length < n; i++) offer.push(pool[i]);
   return offer;
 }
 
@@ -2010,26 +2221,30 @@ function openUpgrade(){
   $('upTitle').textContent = 'Choose an upgrade';
   $('upQuality').textContent = '✅ Upgrade ' + nextNum + ' / ' + MAX_UPGRADES;
   $('upQuality').style.background = '#E8F5E9'; $('upQuality').style.color = '#2E7D32';
-  $('upSub').textContent = 'Specialise: level an element to 5 and 10 for milestone power.';
-  var offer = buildUpgradeOffer();
+  // ~42% of the time present a fresh weapon FORK (pick one of two variants).
+  var fork = (Math.random() < 0.42) ? buildWeaponFork() : null;
+  var offer;
+  if (fork){ offer = fork.concat(buildUpgradeOffer(1)).slice(0, 3); $('upSub').textContent = '⚒️ Weapon forge — pick ONE variant; the other locks for this run.'; }
+  else { offer = buildUpgradeOffer(3); $('upSub').textContent = 'Specialise: level elements & weapons to 5 and 10 for milestone power.'; }
   var wrap = $('upgradeCards'); wrap.innerHTML = '';
   if (!offer.length){ p.hp = p.maxHp; updateHud(); hide('upgradeOverlay'); advanceRoom(); return; }
   offer.forEach(function(u){
-    var isElem = u.type === 'elem';
-    var lvl = isElem ? (p.elem[u.key] || 0) : 0;
+    var isElem = u.type === 'elem', isWvar = u.type === 'wvar', leveled = isElem || isWvar;
+    var lvl = isElem ? (p.elem[u.key] || 0) : (isWvar ? wpnLevel(u.id) : 0);
     var nextLvl = lvl + 1;
-    var milestone = isElem && isElemMilestone(nextLvl);
+    var milestone = leveled && isElemMilestone(nextLvl);
     var desc, tag = '';
-    if (isElem){
-      var E = ELEMENTS[u.key];
-      desc = E.blurb;
-      if (milestone) tag = '<div class="umile">🌟 Lv ' + nextLvl + ' milestone: ' + E.milestone[nextLvl] + '</div>';
-      else if (nextLvl < 5) tag = '<div class="unext">Lv 5: ' + E.milestone[5] + '</div>';
-      else if (nextLvl < 10) tag = '<div class="unext">Lv 10: ' + E.milestone[10] + '</div>';
+    if (leveled){
+      var blurb = isElem ? ELEMENTS[u.key].blurb : u.blurb;
+      var m5 = isElem ? ELEMENTS[u.key].milestone[5] : u.m5d, m10 = isElem ? ELEMENTS[u.key].milestone[10] : u.m10d;
+      desc = blurb;
+      if (milestone) tag = '<div class="umile">🌟 Lv ' + nextLvl + ' milestone: ' + (nextLvl === 5 ? m5 : m10) + '</div>';
+      else if (nextLvl < 5) tag = '<div class="unext">Lv 5: ' + m5 + '</div>';
+      else if (nextLvl < 10) tag = '<div class="unext">Lv 10: ' + m10 + '</div>';
     } else { desc = u.desc; if (u.trade) tag = '<div class="utrade">⚠ High-risk trade-off</div>'; }
     var card = document.createElement('div');
-    card.className = 'upcard' + (milestone ? ' special' : '') + (isElem ? ' elem' : '') + (u.trade ? ' trade' : '');
-    var lvlTag = isElem ? ' <span class="ulvl">Lv ' + lvl + '→' + nextLvl + '</span>' : '';
+    card.className = 'upcard' + (milestone ? ' special' : '') + (isElem ? ' elem' : '') + (isWvar ? ' wvar' : '') + (u.trade ? ' trade' : '');
+    var lvlTag = leveled ? ' <span class="ulvl">Lv ' + lvl + '→' + nextLvl + '</span>' : '';
     card.innerHTML = '<div class="uico">' + u.icon + '</div><div class="uname">' + u.name + lvlTag + '</div><div class="udesc">' + desc + '</div>' + tag;
     card.addEventListener('click', function(){ chooseUpgrade(u); });
     wrap.appendChild(card);
@@ -2042,7 +2257,7 @@ function chooseUpgrade(u){
   if (!p._counts) p._counts = {};
   p._counts[u.id] = (p._counts[u.id] || 0) + 1;
   p.upgrades = (p.upgrades || 0) + 1;          // counts toward the cap
-  u.apply(p);
+  u.apply(p);                                  // wvar/skill/elem apply handle their own effects
   p.hp = Math.min(p.maxHp, p.hp);              // clamp hp
   updateHud();
   if (u.type === 'elem'){
@@ -2051,7 +2266,7 @@ function chooseUpgrade(u){
     else toast(u.icon + ' ' + u.name + ' Lv ' + lvl, 'good');
   } else if (u.type === 'skill'){
     toast(u.icon + ' ' + skillDef(G.skill.id).name + ' skill → Lv ' + G.skill.level, 'good');
-  } else {
+  } else if (u.type !== 'wvar'){               // wvar already toasted in levelWeaponVariant
     toast(u.icon + ' ' + u.name + ' acquired!', 'good');
   }
   hide('upgradeOverlay');
