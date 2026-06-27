@@ -258,6 +258,10 @@ html, body {
 .upcard .umile { margin-top: 5px; font-size: var(--font-size-xs); font-weight: 800; color: #8a5a13; }
 .upcard .unext { margin-top: 5px; font-size: var(--font-size-xs); color: var(--text-tertiary); }
 .upcard.elem { border-color: var(--accent-light); }
+.upcard.trade { border-color: #E64A19; background: linear-gradient(160deg, #fff4ee, #fff); }
+.upcard.trade:hover { border-color: #d84315; background: linear-gradient(160deg, #ffe9e0, #fff); }
+.upcard.trade .uname { color: #d84315; }
+.upcard .utrade { margin-top: 5px; font-size: var(--font-size-xs); font-weight: 800; color: #d84315; }
 
 /* ---- Question modal (mirrors Science Defenders) ---- */
 .q-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -496,25 +500,54 @@ var TILE = 36;
 var ENEMY_TYPES = {
   slime:  { name: 'Lab Slime',  hp: 22,  speed: 1.15, dmg: 8,  r: 14, color: '#66BB6A', dark: '#388E3C', behavior: 'chase', score: 1 },
   swarm:  { name: 'Nanobot',    hp: 10,  speed: 2.0,  dmg: 6,  r: 9,  color: '#EF5350', dark: '#C62828', behavior: 'chase', score: 1 },
-  turret: { name: 'Sentry',     hp: 28,  speed: 0.0,  dmg: 10, r: 15, color: '#5C6BC0', dark: '#303F9F', behavior: 'shoot', range: 320, fireRate: 1.1, score: 2 },
-  drone:  { name: 'Drone',      hp: 20,  speed: 1.5,  dmg: 9,  r: 12, color: '#26C6DA', dark: '#00838F', behavior: 'strafe', range: 250, fireRate: 0.8, score: 2 },
+  turret: { name: 'Sentry',     hp: 28,  speed: 0.0,  dmg: 10, r: 15, color: '#5C6BC0', dark: '#303F9F', behavior: 'shoot',  range: 340, fireRate: 1.9, shot: 'single', score: 2 },
+  drone:  { name: 'Drone',      hp: 20,  speed: 1.5,  dmg: 9,  r: 12, color: '#26C6DA', dark: '#00838F', behavior: 'strafe', range: 260, fireRate: 1.5, shot: 'spread3', score: 2 },
+  spitter:{ name: 'Spitter',    hp: 26,  speed: 0.9,  dmg: 7,  r: 14, color: '#26A69A', dark: '#00695C', behavior: 'strafe', range: 290, fireRate: 1.6, shot: 'spread5', score: 2 },
+  sniper: { name: 'Sniper',     hp: 18,  speed: 0.6,  dmg: 13, r: 13, color: '#7E57C2', dark: '#4527A0', behavior: 'shoot',  range: 460, fireRate: 1.0, shot: 'fast',   score: 3 },
+  bomber: { name: 'Bomber',     hp: 46,  speed: 0.95, dmg: 14, r: 18, color: '#FF7043', dark: '#D84315', behavior: 'strafe', range: 270, fireRate: 0.9, shot: 'heavy',  score: 3 },
+  seeker: { name: 'Seeker',     hp: 24,  speed: 1.2,  dmg: 9,  r: 12, color: '#EC407A', dark: '#AD1457', behavior: 'strafe', range: 330, fireRate: 1.1, shot: 'homing', score: 3 },
   brute:  { name: 'Brute',      hp: 70,  speed: 0.85, dmg: 16, r: 22, color: '#8D6E63', dark: '#4E342E', behavior: 'chase', score: 3 },
-  boss:   { name: 'Core Guardian', hp: 420, speed: 1.0, dmg: 20, r: 34, color: '#AB47BC', dark: '#6A1B9A', behavior: 'boss', range: 360, fireRate: 1.4, score: 12 }
+  boss:   { name: 'Core Guardian', hp: 420, speed: 1.0, dmg: 20, r: 34, color: '#AB47BC', dark: '#6A1B9A', behavior: 'boss', range: 380, fireRate: 2.6, shot: 'spread3', score: 12 }
 };
 
 /* ---------------- 3. UPGRADE POOL ---------------- */
+// shave a % off max HP (drawback helper), never below a floor
+function _cutMaxHp(p, pct){ var nm = Math.max(40, Math.round(p.maxHp * (1 - pct))); p.maxHp = nm; if (p.hp > nm) p.hp = nm; }
+
 var UPGRADES = [
-  { id: 'dmg',    icon: '🔥', name: 'Overcharge',  desc: '+25% damage', apply: function(p){ p.dmgMul *= 1.25; } },
-  { id: 'rate',   icon: '⚡', name: 'Rapid Coils', desc: '+22% fire rate', apply: function(p){ p.rateMul *= 1.22; } },
-  { id: 'hp',     icon: '❤️', name: 'Reinforce',   desc: '+25 max HP & heal', apply: function(p){ p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25); } },
-  { id: 'speed',  icon: '🏃', name: 'Light Boots', desc: '+12% move speed', apply: function(p){ p.speedMul *= 1.12; } },
-  { id: 'multi',  icon: '🌟', name: 'Split Shot',  desc: '+1 projectile', max: 4, apply: function(p){ p.shots += 1; } },
-  { id: 'pierce', icon: '🪡', name: 'Piercing',    desc: 'Shots pass through +1 enemy', max: 4, apply: function(p){ p.pierce += 1; } },
-  { id: 'crit',   icon: '🎯', name: 'Precision',   desc: '+12% crit (2× dmg)', max: 5, apply: function(p){ p.crit += 0.12; } },
-  { id: 'bspeed', icon: '🚀', name: 'Velocity',    desc: '+20% bullet speed', apply: function(p){ p.bSpeedMul *= 1.2; } },
-  { id: 'vamp',   icon: '🩸', name: 'Leech',       desc: 'Heal 1 HP per 4 kills', max: 3, apply: function(p){ p.vamp += 1; } },
-  { id: 'heal',   icon: '💚', name: 'Full Repair', desc: 'Heal to full HP', apply: function(p){ p.hp = p.maxHp; } }
+  // --- straightforward boosts ---
+  { id: 'dmg',    icon: '🔥', name: 'Overcharge',   desc: '+25% damage', apply: function(p){ p.dmgMul *= 1.25; } },
+  { id: 'power',  icon: '🔆', name: 'Hot Rounds',   desc: '+15% damage', apply: function(p){ p.dmgMul *= 1.15; } },
+  { id: 'rate',   icon: '⚡', name: 'Rapid Coils',  desc: '+22% fire rate', apply: function(p){ p.rateMul *= 1.22; } },
+  { id: 'haste',  icon: '💨', name: 'Overdrive',    desc: '+12% fire rate', apply: function(p){ p.rateMul *= 1.12; } },
+  { id: 'hp',     icon: '❤️', name: 'Reinforce',    desc: '+25 max HP & heal', apply: function(p){ p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25); } },
+  { id: 'guard',  icon: '🩹', name: 'Plating',      desc: '+18% max HP & heal', apply: function(p){ var a = Math.round(p.maxHp * 0.18); p.maxHp += a; p.hp = Math.min(p.maxHp, p.hp + a); } },
+  { id: 'regen',  icon: '➕', name: 'Regeneration', desc: 'Regenerate 1.5 HP/sec', max: 4, apply: function(p){ p.regen += 1.5; } },
+  { id: 'speed',  icon: '🏃', name: 'Light Boots',  desc: '+12% move speed', apply: function(p){ p.speedMul *= 1.12; } },
+  { id: 'multi',  icon: '🌟', name: 'Split Shot',   desc: '+1 projectile', max: 5, apply: function(p){ p.shots += 1; } },
+  { id: 'pierce', icon: '🪡', name: 'Piercing',     desc: 'Shots pass through +1 enemy', max: 5, apply: function(p){ p.pierce += 1; } },
+  { id: 'crit',   icon: '🎯', name: 'Precision',    desc: '+12% crit (2× dmg)', max: 5, apply: function(p){ p.crit += 0.12; } },
+  { id: 'crit2',  icon: '✨', name: 'Keen Edge',    desc: '+8% crit', max: 6, apply: function(p){ p.crit += 0.08; } },
+  { id: 'bspeed', icon: '🚀', name: 'Velocity',     desc: '+20% bullet speed', apply: function(p){ p.bSpeedMul *= 1.2; } },
+  { id: 'vamp',   icon: '🩸', name: 'Leech',        desc: 'Heal 1 HP per 4 kills', max: 4, apply: function(p){ p.vamp += 1; } },
+  { id: 'cryo',   icon: '🧊', name: 'Frost Coating',desc: 'All shots also slow foes (stacks with Cryo)', max: 3, apply: function(p){ p.slowShot += 1; } },
+  { id: 'heal',   icon: '💚', name: 'Full Repair',  desc: 'Heal to full HP', apply: function(p){ p.hp = p.maxHp; } }
 ];
+
+// Powerful upgrades with a real drawback — high-risk build pieces.
+var TRADEOFFS = [
+  { id: 't_glass',  icon: '💢', name: 'Glass Cannon',  desc: '+40% damage, −15% fire rate', apply: function(p){ p.dmgMul *= 1.40; p.rateMul *= 0.85; } },
+  { id: 't_scatter',icon: '🎇', name: 'Scattergun',    desc: '+2 projectiles, −20% damage', apply: function(p){ p.shots += 2; p.dmgMul *= 0.80; } },
+  { id: 't_frenzy', icon: '🌀', name: 'Frenzy',        desc: '+40% fire rate, −15% damage', apply: function(p){ p.rateMul *= 1.40; p.dmgMul *= 0.85; } },
+  { id: 't_heavy',  icon: '🏋️', name: 'Heavy Rounds',  desc: '+50% damage, −20% bullet speed', apply: function(p){ p.dmgMul *= 1.50; p.bSpeedMul *= 0.80; } },
+  { id: 't_berserk',icon: '😡', name: 'Berserker',     desc: '+30% fire rate, −12% max HP', apply: function(p){ p.rateMul *= 1.30; _cutMaxHp(p, 0.12); } },
+  { id: 't_blood',  icon: '🩸', name: 'Blood Pact',    desc: '+35% damage, −15 max HP', apply: function(p){ p.dmgMul *= 1.35; p.maxHp = Math.max(40, p.maxHp - 15); if (p.hp > p.maxHp) p.hp = p.maxHp; } },
+  { id: 't_glegs',  icon: '🦿', name: 'Glass Legs',    desc: '+25% move & +15% fire rate, −20% max HP', apply: function(p){ p.speedMul *= 1.25; p.rateMul *= 1.15; _cutMaxHp(p, 0.20); } },
+  { id: 't_railgun',icon: '🎯', name: 'Railgun',       desc: '+60% bullet speed & +25% damage, −1 projectile', apply: function(p){ p.bSpeedMul *= 1.60; p.dmgMul *= 1.25; p.shots = Math.max(1, p.shots - 1); } },
+  { id: 't_jugg',   icon: '🛡️', name: 'Juggernaut',    desc: '+50 max HP & +20% damage, −15% move speed', apply: function(p){ p.maxHp += 50; p.hp += 50; p.dmgMul *= 1.20; p.speedMul *= 0.85; } },
+  { id: 't_pierce', icon: '🗡️', name: 'Spearhead',     desc: '+3 pierce, −10% damage', apply: function(p){ p.pierce += 3; p.dmgMul *= 0.90; } }
+];
+TRADEOFFS.forEach(function(t){ t.trade = true; });
 
 // Strong utility boons — folded into the normal support pool.
 var SPECIAL_UPGRADES = [
@@ -551,8 +584,8 @@ function elemUpgrade(key){
            apply: function(p){ p.elem[key] = (p.elem[key] || 0) + 1; } };
 }
 var ELEM_UPGRADES = ELEM_KEYS.map(elemUpgrade);
-// Support upgrades = the stat boosts + the old utility boons, all max-gated.
-var SUPPORT_UPGRADES = UPGRADES.concat(SPECIAL_UPGRADES);
+// Support upgrades = stat boosts + utility boons + high-risk trade-offs.
+var SUPPORT_UPGRADES = UPGRADES.concat(SPECIAL_UPGRADES).concat(TRADEOFFS);
 
 var MAX_UPGRADES = 10;        // run-long cap on upgrades taken
 var ORBIT_R = 42;             // Orbital Guard orbit radius
@@ -593,6 +626,7 @@ function newPlayer(clazz){
     baseRate: c.fireRate, rateMul: 1,
     baseBSpeed: c.bulletSpeed, bSpeedMul: 1,
     shots: 1, pierce: 0, crit: 0, vamp: 0, vampCount: 0,
+    regen: 0, slowShot: 0,             // regen HP/sec; slow-on-every-shot stacks
     cd: 0, aim: 0, facing: 0,
     iframes: 0, dashCd: 0, dashTime: 0, hurtFlash: 0,
     moving: false,
@@ -647,10 +681,10 @@ function spawnEnemies(){
   // Difficulty budget grows with floor & room — doubled for a denser swarm.
   var budget = Math.round((4 + f * 1.6 + G.room * 0.8) * d.count * 2);
   var pool = ['slime', 'swarm'];
-  if (f >= 2) pool.push('turret');
-  if (f >= 2) pool.push('drone');
-  if (f >= 3) pool.push('brute');
-  var costMap = { slime: 1, swarm: 1, turret: 2, drone: 2, brute: 3 };
+  if (f >= 2) pool.push('turret', 'drone', 'spitter');
+  if (f >= 3) pool.push('brute', 'sniper', 'bomber');
+  if (f >= 4) pool.push('seeker');
+  var costMap = { slime: 1, swarm: 1, turret: 2, drone: 2, spitter: 2, sniper: 2, bomber: 3, seeker: 3, brute: 3 };
   var guard = 0;
   while (budget > 0 && guard++ < 140){
     var t = choice(pool);
@@ -676,7 +710,7 @@ function spawnEnemy(type, x, y, floor){
     hp: hp, maxHp: hp,
     speed: base.speed * ENEMY_SPEED_MULT, dmg: base.dmg * d.enemyDmg,
     behavior: base.behavior, color: base.color, dark: base.dark,
-    range: base.range || 0, fireRate: base.fireRate || 0,
+    range: base.range || 0, fireRate: base.fireRate || 0, shot: base.shot || 'single',
     fireCd: rand(0.3, 1.2), score: base.score,
     spawnT: 0.5, wob: rand(0, TAU), hitFlash: 0,
     strafeDir: Math.random() < 0.5 ? 1 : -1, bossPhase: 0, bossCd: 2,
@@ -763,6 +797,7 @@ function update(dt){
 
   // timers
   p.cd -= dt; p.iframes -= dt; p.dashCd -= dt; p.hurtFlash -= dt;
+  if (p.regen > 0 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
   if (G.bannerT > 0) G.bannerT -= dt;
   if (G.shakeT > 0) G.shakeT -= dt;
   if (G.spawnFx > 0) G.spawnFx -= dt;
@@ -810,7 +845,7 @@ function update(dt){
   updatePickups(dt);
 
   // room cleared?
-  if (G.enemies.length === 0 && G.ebullets.length < 40 && G.state === 'play'){
+  if (G.enemies.length === 0 && G.ebullets.length < 90 && G.state === 'play'){
     onRoomCleared();
   }
 }
@@ -914,6 +949,13 @@ function damageEnemy(e, dmg, crit){
 }
 
 // Apply elemental on-hit effects from a bullet to the enemy it struck.
+// Slow STACKS: each source multiplies the enemy's current slow (capped at 80%),
+// and slow / freeze / poison all coexist with one another.
+function applySlow(e, factor, dur){
+  var cur = (e.slowT > 0) ? e.slowFactor : 1;
+  e.slowFactor = Math.max(0.20, cur * factor);
+  e.slowT = Math.max(e.slowT || 0, dur);
+}
 function applyElementsOnHit(b, e){
   var el = b.elem; if (!el) return;
   var p = G.player, base = p.baseDmg * p.dmgMul;
@@ -925,12 +967,12 @@ function applyElementsOnHit(b, e){
     e.poisonSrc = Math.max(e.poisonSrc || 0, el.poison);
   }
   if (el.ice > 0){
-    e.slowFactor = clamp(1 - (0.15 + 0.035 * el.ice), 0.25, 1);
-    e.slowT = 1.5;
+    applySlow(e, 1 - (0.12 + 0.03 * el.ice), 1.6);     // stacks with other slows
     var freezeChance = el.ice >= 5 ? (0.10 + 0.02 * el.ice) : 0; // L5: can freeze
     if (el.ice >= 10) freezeChance += 0.12;
     if (e.type !== 'boss' && Math.random() < freezeChance) e.frozenT = Math.max(e.frozenT || 0, 0.9);
   }
+  if (p.slowShot > 0) applySlow(e, 1 - 0.08 * p.slowShot, 1.2); // Frost Coating — stacks on top
   if (el.chain > 0) chainLightning(e, el.chain);
 }
 
@@ -1066,29 +1108,56 @@ function updateBoss(e, dt, ang, d, p){
   // drift toward player slowly
   e.x += Math.cos(ang) * e.speed * 60 * dt * 0.5;
   e.y += Math.sin(ang) * e.speed * 60 * dt * 0.5;
-  if (e.fireCd <= 0){ enemyShoot(e, ang); e.fireCd = 1 / e.fireRate; }
+  if (e.fireCd <= 0){ enemyShoot(e, ang); e.fireCd = 1 / e.fireRate; }   // aimed 3-spread, often
   if (e.bossCd <= 0){
-    // radial burst
-    var n = 14;
-    for (var i = 0; i < n; i++){
-      var a = (i/n) * TAU + e.wob;
-      G.ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a)*3.2*60, vy: Math.sin(a)*3.2*60, r: 6, dmg: e.dmg*0.6, life: 3, color: '#CE93D8' });
+    // alternate a big radial burst with a sweeping spiral — faster & denser
+    e.bossPhase = (e.bossPhase + 1) % 2;
+    if (e.bossPhase === 0){
+      var n = 22;
+      for (var i = 0; i < n; i++){
+        var a = (i/n) * TAU + e.wob;
+        G.ebullets.push({ x: e.x, y: e.y, vx: Math.cos(a)*3.4*60, vy: Math.sin(a)*3.4*60, r: 6, dmg: e.dmg*0.55, life: 3.2, color: '#CE93D8' });
+      }
+    } else {
+      for (var s = 0; s < 12; s++){
+        var sa = e.wob * 2 + s * 0.52;
+        G.ebullets.push({ x: e.x, y: e.y, vx: Math.cos(sa)*3.0*60, vy: Math.sin(sa)*3.0*60, r: 5, dmg: e.dmg*0.5, life: 3.2, color: '#F48FB1', homing: s % 4 === 0 });
+      }
     }
     G.shakeT = 0.2; G.shakeMag = 5;
-    e.bossCd = rand(2.4, 3.6);
+    e.bossCd = rand(1.4, 2.4);
   }
 }
 
+// Enemies fire different projectile patterns based on their `shot` type.
 function enemyShoot(e, ang){
-  var sp = 3.6 * 60;
-  G.ebullets.push({ x: e.x + Math.cos(ang)*e.r, y: e.y + Math.sin(ang)*e.r, vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp, r: 5, dmg: e.dmg*0.7, life: 3, color: e.dark });
-  muzzle(e.x + Math.cos(ang)*e.r, e.y + Math.sin(ang)*e.r, ang, e.color);
+  var ox = e.x + Math.cos(ang) * e.r, oy = e.y + Math.sin(ang) * e.r;
+  function shot(a, sp, r, dmgMul, color, life, homing){
+    G.ebullets.push({ x: ox, y: oy, vx: Math.cos(a) * sp * 60, vy: Math.sin(a) * sp * 60, r: r, dmg: e.dmg * dmgMul, life: life || 3, color: color, homing: !!homing });
+  }
+  var st = e.shot || 'single';
+  if (st === 'single'){ shot(ang, 3.6, 5, 0.7, e.dark); }
+  else if (st === 'fast'){ shot(ang, 7.2, 4, 0.85, '#9575CD', 2.6); }                 // sniper: quick bolt
+  else if (st === 'spread3'){ for (var i = -1; i <= 1; i++) shot(ang + i * 0.22, 3.4, 5, 0.6, e.dark); }
+  else if (st === 'spread5'){ for (var j = -2; j <= 2; j++) shot(ang + j * 0.17, 3.3, 5, 0.55, e.dark); }
+  else if (st === 'heavy'){ shot(ang, 2.2, 9, 1.15, '#FF8A65', 4.5); }                // bomber: slow heavy ball
+  else if (st === 'homing'){ shot(ang, 3.0, 6, 0.7, '#F06292', 4, true); }            // seeker: tracks you
+  else { shot(ang, 3.6, 5, 0.7, e.dark); }
+  muzzle(ox, oy, ang, e.color);
 }
 
 function updateEnemyBullets(dt){
   var p = G.player;
   for (var i = G.ebullets.length - 1; i >= 0; i--){
     var b = G.ebullets[i];
+    if (b.homing){ // steer gradually toward the player
+      var sp = Math.hypot(b.vx, b.vy) || 1;
+      var cur = Math.atan2(b.vy, b.vx);
+      var want = Math.atan2(p.y - b.y, p.x - b.x);
+      var diff = Math.atan2(Math.sin(want - cur), Math.cos(want - cur));
+      var na = cur + clamp(diff, -2.6 * dt, 2.6 * dt);
+      b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp;
+    }
     b.x += b.vx*dt; b.y += b.vy*dt; b.life -= dt;
     if (b.x < -20 || b.x > VIEW_W+20 || b.y < -20 || b.y > VIEW_H+20 || b.life <= 0){ G.ebullets.splice(i, 1); continue; }
     var rr = b.r + p.r;
@@ -1957,9 +2026,9 @@ function openUpgrade(){
       if (milestone) tag = '<div class="umile">🌟 Lv ' + nextLvl + ' milestone: ' + E.milestone[nextLvl] + '</div>';
       else if (nextLvl < 5) tag = '<div class="unext">Lv 5: ' + E.milestone[5] + '</div>';
       else if (nextLvl < 10) tag = '<div class="unext">Lv 10: ' + E.milestone[10] + '</div>';
-    } else { desc = u.desc; }
+    } else { desc = u.desc; if (u.trade) tag = '<div class="utrade">⚠ High-risk trade-off</div>'; }
     var card = document.createElement('div');
-    card.className = 'upcard' + (milestone ? ' special' : '') + (isElem ? ' elem' : '');
+    card.className = 'upcard' + (milestone ? ' special' : '') + (isElem ? ' elem' : '') + (u.trade ? ' trade' : '');
     var lvlTag = isElem ? ' <span class="ulvl">Lv ' + lvl + '→' + nextLvl + '</span>' : '';
     card.innerHTML = '<div class="uico">' + u.icon + '</div><div class="uname">' + u.name + lvlTag + '</div><div class="udesc">' + desc + '</div>' + tag;
     card.addEventListener('click', function(){ chooseUpgrade(u); });
