@@ -2833,6 +2833,9 @@ option {
 .vetting-badge.pending { background: var(--accent-orange-light); color: var(--accent-orange); }
 .vetting-badge.approved { background: var(--primary-light); color: var(--primary); }
 .vetting-badge.rejected { background: var(--accent-red-light); color: var(--accent-red); }
+.vetting-badge.flagged { background: #fee2e2; color: #dc2626; }
+.vetting-flag-note { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; font-size: 0.78rem; line-height: 1.4; }
+.vetting-flag-note .vfn-comment { margin-top: 4px; color: #7f1d1d; font-style: italic; }
 
 /* ========== FILTER BAR ========== */
 .filter-bar {
@@ -5374,8 +5377,9 @@ option {
                 <tr>
                   <th>Winner</th>
                   <th>Month</th>
+                  <th>Prize</th>
                   <th>Rank</th>
-                  <th>Questions</th>
+                  <th>Result</th>
                   <th>Contact no.</th>
                   <th>Address</th>
                   <th>Status</th>
@@ -5535,6 +5539,7 @@ option {
         <div id="rpgRaidSlot"></div>
         <div class="rpg-prize-banner">
           <span class="rpg-prize-line">🎁 <b>Monthly prize:</b> the top 5 students with the most <b>questions done</b> each month win a <b>$10 Popular voucher</b> each. Questions only count once, and need a genuine answer.</span>
+          <span class="rpg-prize-line">🕹️ <b>Arcade prizes:</b> the top 3 each month in <b>Science Defenders</b> and <b>Science Raiders</b> also win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 all-time XP earners win <b>$200, $100 and $50 Popular vouchers</b>.</span>
         </div>
         <div class="card card-pad">
@@ -5543,6 +5548,8 @@ option {
               <button class="rpg-tab active" data-rpgboard="month" type="button">📅 This Month</button>
               <button class="rpg-tab" data-rpgboard="lastmonth" type="button">🗓️ Last Month</button>
               <button class="rpg-tab" data-rpgboard="alltime" type="button">⭐ All-Time</button>
+              <button class="rpg-tab" data-rpgboard="td" type="button">🧪 Tower Defense</button>
+              <button class="rpg-tab" data-rpgboard="raid" type="button">👾 Raiders</button>
             </div>
             <button class="btn btn-ghost btn-sm" id="rpgBoardRefresh" type="button">Refresh</button>
           </div>
@@ -6570,7 +6577,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.16.0';
+const APP_VERSION = 'v1.17.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11020,6 +11027,7 @@ function renderVettingList() {
           </div>
         </div>
         <div class="qb-card-preview">${escapeHtml(preview)}</div>
+        ${q.status === 'flagged' && q._flag ? `<div class="vetting-flag-note">🚩 <b>Flagged by ${escapeHtml(q._flag.by || 'a student')}</b>${q._flag.when ? ' · ' + escapeHtml(q._flag.when) : ''}${q._flag.comment ? `<div class="vfn-comment">“${escapeHtml(q._flag.comment)}”</div>` : ''}</div>` : ''}
         ${isNew ? `<div style="margin-top:10px;"><button class="btn btn-outline" style="font-size:0.78rem;padding:5px 12px;" onclick="editQuestion('${q.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;vertical-align:-2px;margin-right:4px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Open in editor</button></div>` : ''}
       </div>`;
   }).join('');
@@ -11031,6 +11039,7 @@ function approveVetting(id) {
   if (idx === -1) return;
   const q = vettingList[idx];
   q.status = 'approved';
+  if (q._flag) { delete q._flag; _resolveFlagsForQuestion(id); } // re-approved a flagged question
   questionBank.push(q);
   vettingList.splice(idx, 1);
   renderVettingList();
@@ -15592,16 +15601,21 @@ function renderPrizeClaims() {
   const tbody = document.getElementById('usagePrizeBody');
   if (!tbody) return;
   if (!_usagePrizeClaims.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No prize claims yet. Monthly top-5 winners will appear here once they claim.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No prize claims yet. Monthly winners will appear here once they claim.</td></tr>';
     return;
   }
+  const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders' : '🎁 Questions';
+  const _prizeResult = c => (c.category === 'defenders' || c.category === 'raiders')
+    ? escapeHtml(c.scoreLabel || (c.score != null ? c.score + ' pts' : '—'))
+    : (c.questions != null ? c.questions + ' Q' : '—');
   tbody.innerHTML = _usagePrizeClaims.map(c => {
     const sent = c.status === 'sent';
     return `<tr${sent ? ' style="opacity:0.6;"' : ''}>
       <td style="font-weight:600;">${escapeHtml(c.name || '')}<div style="font-weight:400;color:var(--text-muted);font-size:0.78rem;">${escapeHtml(c.email || '')}</div></td>
       <td style="font-size:0.82rem;white-space:nowrap;">${escapeHtml(c.monthKey || '')}</td>
+      <td style="font-size:0.8rem;white-space:nowrap;">${_prizeLabel(c)}</td>
       <td style="text-align:center;font-family:'Space Mono',monospace;">#${c.rank || '—'}</td>
-      <td style="text-align:center;font-family:'Space Mono',monospace;">${c.questions != null ? c.questions : '—'}</td>
+      <td style="text-align:center;font-size:0.8rem;">${_prizeResult(c)}</td>
       <td style="font-size:0.82rem;white-space:nowrap;">${escapeHtml(c.phone || '')}</td>
       <td style="font-size:0.82rem;max-width:240px;">${escapeHtml(c.address || '')}</td>
       <td style="text-align:center;white-space:nowrap;">${sent
@@ -16156,6 +16170,7 @@ async function loadFlaggedQuestions() {
       const tb = b.timestamp ? (b.timestamp.toDate ? b.timestamp.toDate() : new Date(b.timestamp)) : new Date(0);
       return tb - ta;
     });
+    _autoVetFlagged();   // pull any newly-flagged bank questions out for review
     updateFlaggedCount();
     renderFlaggedQuestions();
   } catch (err) {
@@ -16168,6 +16183,46 @@ function updateFlaggedCount() {
   const openCount = flaggedQuestions.filter(f => f.status === 'open').length;
   const el = document.getElementById('flaggedCount');
   if (el) el.textContent = openCount;
+}
+
+// When a student flags a question (from practice or either mini-game) it lands
+// in the global `flaggedQuestions` collection. The owning admin can't be reached
+// at flag time (Firestore rules), so we reconcile here, on the admin's own
+// client: any open-flag question still live in this admin's bank is pulled OUT
+// of the bank and dropped into the Vetting list with a 'flagged' status so it
+// stops appearing in practice / the games until it's reviewed and re-approved.
+function _autoVetFlagged() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  let moved = 0;
+  flaggedQuestions.filter(f => f && f.status === 'open' && f.questionId).forEach(f => {
+    // Already pulled out (in vetting) — make sure it carries the latest flag note.
+    const vq = vettingList.find(v => v.id === f.questionId);
+    if (vq) {
+      if (vq.status === 'flagged' && !vq._flag) vq._flag = _flagInfo(f);
+      return;
+    }
+    const idx = questionBank.findIndex(q => q.id === f.questionId);
+    if (idx === -1) return;                              // not in our active bank
+    if (_ownerUidByQuestionId[f.questionId]) return;     // belongs to another admin — they'll reconcile
+    const q = questionBank[idx];
+    q.status = 'flagged';
+    q._flag = _flagInfo(f);
+    vettingList.unshift(q);
+    questionBank.splice(idx, 1);
+    saveVettingQuestion(q);     // write to the vetting subcollection
+    deleteQuestionDoc(q.id);    // remove from the live questions subcollection
+    moved++;
+  });
+  if (moved) {
+    updateCounts();
+    if (document.querySelector('#page-vetting.active')) renderVettingList();
+    showToast(`${moved} flagged question${moved === 1 ? '' : 's'} moved to Vetting for review`, 'info');
+  }
+}
+function _flagInfo(f) {
+  let when = '';
+  try { const d = f.timestamp ? (f.timestamp.toDate ? f.timestamp.toDate() : new Date(f.timestamp)) : null; if (d) when = d.toLocaleDateString(); } catch (e) {}
+  return { comment: f.comment || '', by: f.flaggedBy || 'a student', when };
 }
 
 function renderFlaggedQuestions() {
@@ -16273,6 +16328,13 @@ async function resolveFlaggedQuestion(docId) {
 async function dismissFlaggedQuestion(docId) {
   await updateFlagStatus(docId, 'dismissed');
   showToast('Flag dismissed', 'info');
+}
+
+// Resolve every open flag tied to a question (used when a flagged question has
+// been reviewed and re-approved back into the bank).
+function _resolveFlagsForQuestion(questionId) {
+  flaggedQuestions.filter(f => f && f.questionId === questionId && f.status === 'open' && f._docId)
+    .forEach(f => { updateFlagStatus(f._docId, 'resolved'); });
 }
 
 async function updateFlagStatus(docId, status) {
@@ -17064,6 +17126,8 @@ function rpgDefaults() {
     v: 2, gold: 60, xp: 0, hp: null, hidden: false, battleMin: false,
     monthKey: null, monthXp: 0, lastMonthKey: null, lastMonthXp: 0, advRuns: null, dungeonFloor: 1,
     monthQ: 0, lastMonthQ: 0, monthQids: {}, monthPrints: {}, prizeAck: {},
+    gameScores: { defenders: { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null },
+                  raiders:   { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null } },
     inventory: { wood_sword: 1, cloth_tunic: 1 },
     equipment: { weapon: "wood_sword", shield: null, armor: "cloth_tunic", helmet: null, accessory: null, pet: null },
     battle: null, upgrades: {}, clazz: null, skills: {}, paths: {}, affixes: {}, petBond: {}, daily: null, streak: null, packCoupon: 0, rebirths: 0, xpBaseline: 0, shards: 0, star: { gold: 0, learn: 0, raids: 0, nova: false }, kills: {}, seenQ: {},
@@ -18044,6 +18108,30 @@ function rpgRolloverMonth() {
   rpgState.monthQ = 0;
   rpgState.monthQids = {};
   rpgState.monthPrints = {};
+  rpgRolloverGameScores(key);
+}
+
+// Make sure the mini-game score store exists and its month bucket is current.
+function rpgEnsureGameScores() {
+  if (!rpgState) return null;
+  if (!rpgState.gameScores) rpgState.gameScores = {};
+  ["defenders", "raiders"].forEach(k => {
+    if (!rpgState.gameScores[k]) rpgState.gameScores[k] = { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null };
+  });
+  rpgRolloverGameScores(rpgMonthKey());
+  return rpgState.gameScores;
+}
+// Roll each mini-game's month-best into "last month" when the calendar month turns.
+function rpgRolloverGameScores(key) {
+  if (!rpgState || !rpgState.gameScores) return;
+  ["defenders", "raiders"].forEach(k => {
+    const g = rpgState.gameScores[k]; if (!g) return;
+    if (g.monthKey && g.monthKey !== key) {
+      g.lastBest = g.monthBest || 0; g.lastLabel = g.monthLabel || ""; g.lastKey = g.monthKey;
+      g.monthBest = 0; g.monthLabel = "";
+    }
+    g.monthKey = key;
+  });
 }
 
 // Count one answered question toward THIS month's leaderboard. A question counts
@@ -18925,6 +19013,16 @@ function rpgBuy(itemId) {
 // users and write only to your own doc.
 function rpgMonthKey(d = new Date()) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
 function rpgPrevMonthKey() { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return rpgMonthKey(d); }
+// Compact per-game leaderboard payload (best score all-time + this/last month).
+function rpgGameBoardData(key) {
+  rpgEnsureGameScores();
+  const g = (rpgState.gameScores && rpgState.gameScores[key]) || {};
+  return {
+    best: g.best || 0, bestLabel: g.bestLabel || "",
+    month: g.monthBest || 0, monthLabel: g.monthLabel || "", monthKey: g.monthKey || null,
+    last: g.lastBest || 0, lastLabel: g.lastLabel || "", lastKey: g.lastKey || null
+  };
+}
 let rpgPublishTimer = null;
 function rpgPublishLeaderboard() {
   if (!rpgState || !currentUser || currentUser.role !== "student" || RPG_STORAGE_MODE !== "firestore") return;
@@ -18949,6 +19047,8 @@ function rpgPublishLeaderboard() {
       house: rpgHouseOf(currentUser.uid).id,
       clazz: rpgState.clazz || null,
       equipment: rpgState.equipment,
+      td: rpgGameBoardData("defenders"),
+      raid: rpgGameBoardData("raiders"),
       updatedAt: new Date().toISOString()
     }).catch(e => console.warn("leaderboard publish", e));
   }, 1200);
@@ -19005,18 +19105,35 @@ async function rpgFetchLeaderboard(force) {
   rpgBoardRows = rows;
   return rows;
 }
-// Monthly tabs rank by UNIQUE QUESTIONS DONE; the all-time tab still ranks by XP.
+// The "td" / "raid" tabs rank by this month's best mini-game score; "month" /
+// "lastmonth" rank by UNIQUE QUESTIONS DONE; "alltime" ranks by XP.
+function rpgIsGameTab() { return rpgBoardTab === "td" || rpgBoardTab === "raid"; }
 function rpgBoardMetric(r) {
   if (rpgBoardTab === "alltime") return r.xp || 0;
   if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey() ? (r.monthQ || 0) : 0;
+  if (rpgIsGameTab()) {
+    const g = r[rpgBoardTab]; // r.td / r.raid
+    return g && g.monthKey === rpgMonthKey() ? (g.month || 0) : 0;
+  }
   // lastmonth
   const prev = rpgPrevMonthKey();
   if (r.monthKey === prev) return r.monthQ || 0;          // not active yet this month
   if (r.lastMonthKey === prev) return r.lastMonthQ || 0;  // rolled over
   return 0;
 }
-function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : "questions"; }
+function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : rpgIsGameTab() ? "pts" : "questions"; }
+// Pretty value for a row: game tabs show the run's label (e.g. "Floor 7 · 142 kills").
+function rpgBoardValueHtml(r) {
+  const sub = rpgBoardTab === "month" ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : rpgIsGameTab() ? "best this month" : "all-time";
+  if (rpgIsGameTab()) {
+    const g = r[rpgBoardTab] || {};
+    const lbl = (g.monthKey === rpgMonthKey() && g.monthLabel) ? g.monthLabel : (r.shownVal + " pts");
+    return `${escapeHtml(lbl)}<span>${sub}</span>`;
+  }
+  return `${r.shownVal} ${rpgBoardUnit()}<span>${sub}</span>`;
+}
 function rpgPrizeBadge(rank) {
+  if (rpgIsGameTab()) return rank <= 3 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rpgBoardTab !== "alltime") return rank <= 5 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rank === 1) return `<span class="rpg-board-prize">🏆 $200 voucher</span>`;
   if (rank === 2) return `<span class="rpg-board-prize">🥈 $100 voucher</span>`;
@@ -19024,6 +19141,7 @@ function rpgPrizeBadge(rank) {
   return "";
 }
 function rpgRowClass(rank) {
+  if (rpgIsGameTab()) return rank <= 3 ? `prize-${rank}` : "";
   if (rpgBoardTab !== "alltime") return rank <= 5 ? "prize-month" : "";
   return rank <= 3 ? `prize-${rank}` : "";
 }
@@ -19051,6 +19169,7 @@ async function rpgRenderLeaderboard(force = false) {
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0, rebirths: rpgState.rebirths || 0,
       house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null,
       equipment: rpgState.equipment,
+      td: rpgGameBoardData("defenders"), raid: rpgGameBoardData("raiders"),
       updatedAt: new Date().toISOString()
     };
     const i = rows.findIndex(r => r.uid === currentUser.uid);
@@ -19062,13 +19181,13 @@ async function rpgRenderLeaderboard(force = false) {
   if (!list.length) {
     const why = rpgBoardTab === "month" ? "No questions done this month yet — be the first on the board!"
       : rpgBoardTab === "lastmonth" ? "No questions were recorded last month."
+      : rpgBoardTab === "td" ? "No Science Defenders runs this month yet — play to claim the top spot!"
+      : rpgBoardTab === "raid" ? "No Science Raiders runs this month yet — dive in to top the board!"
       : "No heroes on the board yet — solve questions to earn XP!";
     body.innerHTML = `<div class="empty-note">${why}</div>`;
     return;
   }
   const myUid = currentUser && currentUser.uid;
-  const unit = rpgBoardUnit();
-  const label = rpgBoardTab === "month" ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : "all-time";
   // house race: this month's questions done summed by house
   let houseBar = "";
   if (rpgBoardTab === "month") {
@@ -19091,42 +19210,74 @@ async function rpgRenderLeaderboard(force = false) {
       </div>
       ${rpgPrizeBadge(rank)}
       ${!me && r.equipment && currentUser && currentUser.role === "student" ? `<button class="btn btn-ghost btn-sm" type="button" data-rpg-duel="${escapeHtml(r.uid)}">⚔️ Duel</button>` : ""}
-      <div class="rpg-board-xp">${r.shownVal} ${unit}<span>${label}</span></div>
+      <div class="rpg-board-xp">${rpgBoardValueHtml(r)}</div>
     </div>`;
   }).join("");
   rpgCheckPrizeClaim();
 }
 
-// ---- Month-end prize claim: last month's top 5 by questions done win $10 ----
+// ---- Month-end prize claim ---------------------------------------------
+// Three monthly $10 prizes, each prompting last month's winners to claim:
+//   • questions: top 5 by unique questions done
+//   • td:        top 3 by best Science Defenders score
+//   • raid:      top 3 by best Science Raiders score
+// Each category is acknowledged separately (prizeAck[<key>]) and stored as its
+// own prizeClaims doc (uid_<key>) so a student can win more than one.
 let _prizePromptShown = false;
 let _prizeClaimCtx = null;
+function rpgLastMonthGame(r, key) { // key: "td" | "raid"
+  const g = r[key]; if (!g) return 0;
+  const prev = rpgPrevMonthKey();
+  if (g.monthKey === prev) return g.month || 0;   // not yet rolled over
+  if (g.lastKey === prev) return g.last || 0;     // rolled over
+  return 0;
+}
+function rpgLastMonthGameLabel(r, key) {
+  const g = r[key]; if (!g) return "";
+  const prev = rpgPrevMonthKey();
+  if (g.monthKey === prev) return g.monthLabel || "";
+  if (g.lastKey === prev) return g.lastLabel || "";
+  return "";
+}
 async function rpgCheckPrizeClaim() {
   try {
     if (_prizePromptShown || !rpgState || !currentUser || currentUser.role !== "student" || RPG_STORAGE_MODE !== "firestore") return;
     const prev = rpgPrevMonthKey();
     rpgState.prizeAck = rpgState.prizeAck || {};
-    if (rpgState.prizeAck[prev]) return;                 // already claimed / handled
     const rows = await rpgFetchLeaderboard(false);
     if (!rows) return;
-    const ranked = rows.map(r => ({ uid: r.uid, q: rpgLastMonthQ(r) }))
-      .filter(r => r.q > 0)
-      .sort((a, b) => b.q - a.q);
-    const idx = ranked.findIndex(r => r.uid === currentUser.uid);
-    if (idx < 0 || idx >= 5) return;                     // not in last month's top 5
-    try {
-      const snap = await getDoc(doc(db, "prizeClaims", currentUser.uid + "_" + prev));
-      if (snap.exists()) { rpgState.prizeAck[prev] = "claimed"; rpgSave(); return; }
-    } catch (_) {}
-    _prizePromptShown = true;
-    _showPrizeClaim(prev, idx + 1, ranked[idx].q);
+    const cats = [
+      { key: prev,          topN: 5, noun: "questions done", game: "the leaderboard",
+        rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthQ(r) })) },
+      { key: prev + "_td",  topN: 3, noun: "in Science Defenders", game: "Science Defenders",
+        rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthGame(r, "td"),   detail: rpgLastMonthGameLabel(r, "td") })) },
+      { key: prev + "_raid",topN: 3, noun: "in Science Raiders", game: "Science Raiders",
+        rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthGame(r, "raid"), detail: rpgLastMonthGameLabel(r, "raid") })) }
+    ];
+    for (const c of cats) {
+      if (rpgState.prizeAck[c.key]) continue;
+      const ranked = c.rank.filter(r => r.v > 0).sort((a, b) => b.v - a.v);
+      const idx = ranked.findIndex(r => r.uid === currentUser.uid);
+      if (idx < 0 || idx >= c.topN) continue;
+      try {
+        const snap = await getDoc(doc(db, "prizeClaims", currentUser.uid + "_" + c.key));
+        if (snap.exists()) { rpgState.prizeAck[c.key] = "claimed"; rpgSave(); continue; }
+      } catch (_) {}
+      _prizePromptShown = true;
+      _showPrizeClaim(c, idx + 1, ranked[idx]);
+      return; // one prompt at a time; others re-checked next sign-in
+    }
   } catch (e) { console.warn("prize claim check", e); }
 }
-function _showPrizeClaim(monthKey, rank, questions) {
-  _prizeClaimCtx = { monthKey, rank, questions };
+function _showPrizeClaim(cat, rank, entry) {
+  _prizeClaimCtx = { ackKey: cat.key, monthKey: rpgPrevMonthKey(), rank, value: entry.v, noun: cat.noun, game: cat.game, detail: entry.detail || "" };
   const ord = rank === 1 ? "1st" : rank === 2 ? "2nd" : rank === 3 ? "3rd" : rank + "th";
   const el = id => document.getElementById(id);
+  const what = cat.key === rpgPrevMonthKey()
+    ? `with <b>${entry.v}</b> question${entry.v === 1 ? "" : "s"} done — the <b>top 5</b>!`
+    : `in <b>${escapeHtml(cat.game)}</b>${entry.detail ? ` (<b>${escapeHtml(entry.detail)}</b>)` : ""} — the <b>top 3</b>!`;
   if (el("prizeClaimMsg")) el("prizeClaimMsg").innerHTML =
-    `You finished <b>${ord}</b> last month with <b>${questions}</b> question${questions === 1 ? "" : "s"} done — the <b>top 5</b>! Enter your details and we'll send your <b>$10 Popular voucher</b>.`;
+    `You finished <b>${ord}</b> last month ${what} Enter your details and we'll send your <b>$10 Popular voucher</b>.`;
   if (el("prizePhone")) el("prizePhone").value = "";
   if (el("prizeAddress")) el("prizeAddress").value = "";
   if (el("prizeClaimOverlay")) el("prizeClaimOverlay").classList.add("active");
@@ -19143,22 +19294,27 @@ async function submitPrizeClaim() {
   if (!phone || !address) { showToast("Please enter your contact number and address", "error"); return; }
   const ctx = _prizeClaimCtx;
   try {
-    await setDoc(doc(db, "prizeClaims", currentUser.uid + "_" + ctx.monthKey), {
+    await setDoc(doc(db, "prizeClaims", currentUser.uid + "_" + ctx.ackKey), {
       uid: currentUser.uid,
       name: currentUser.name || "",
       email: currentUser.email || "",
       monthKey: ctx.monthKey,
+      category: ctx.ackKey === ctx.monthKey ? "questions" : (ctx.ackKey.endsWith("_td") ? "defenders" : "raiders"),
       rank: ctx.rank,
-      questions: ctx.questions,
+      questions: ctx.ackKey === ctx.monthKey ? ctx.value : 0,
+      score: ctx.value,
+      scoreLabel: ctx.detail || "",
       phone, address,
       status: "pending",
       createdAt: new Date().toISOString()
     });
     rpgState.prizeAck = rpgState.prizeAck || {};
-    rpgState.prizeAck[ctx.monthKey] = "claimed";
+    rpgState.prizeAck[ctx.ackKey] = "claimed";
     rpgSave();
     _closePrizeClaim();
+    _prizePromptShown = false;       // allow another category's prompt this session
     showToast("🎉 Claim submitted — we'll send your $10 voucher soon!", "success");
+    setTimeout(() => { try { rpgCheckPrizeClaim(); } catch (_) {} }, 800);
   } catch (e) { console.warn("prize claim save", e); showToast("Could not submit — check your connection and try again", "error"); }
 }
 
@@ -20421,7 +20577,12 @@ function _sdExtractMcq(q) {
   const explainHtml = exB && exB.content ? String(exB.content) : '';
   const explain = exB ? stripHtmlToText(exB.content || '').trim() : '';
   const qtext = plain.join(' ').replace(/\s+/g, ' ').trim() || (q.title || 'See the diagram');
-  return { id: q.id, q: qtext, html, options: optionsHtml, answer, explain, explainHtml, topic: (q.topic || 'Science'), seedElo: _sdSeedElo(q) };
+  // Complexity/length proxy so the games can serve longer, meatier questions on
+  // a hot streak: stem length + per-option text + a weight for diagrams/tables.
+  const mediaCount = blocks.filter(b => b.type === 'image' || b.type === 'table').length;
+  const optChars = optionsHtml.reduce((n, o) => n + stripHtmlToText(o).length, 0);
+  const len = qtext.length + optChars + mediaCount * 220 + optionsHtml.length * 8;
+  return { id: q.id, q: qtext, html, options: optionsHtml, answer, explain, explainHtml, topic: (q.topic || 'Science'), seedElo: _sdSeedElo(q), len: len };
 }
 // Starting difficulty rating for a question's Elo (it then evolves with play).
 function _sdSeedElo(q) {
@@ -20433,7 +20594,7 @@ function _sdSeedElo(q) {
 }
 function buildDefenderQuestions() {
   return (questionBank || [])
-    .filter(q => q && q.status !== 'pending')
+    .filter(q => q && q.status !== 'pending' && q.status !== 'flagged')
     .map(_sdExtractMcq)
     .filter(Boolean);
 }
@@ -20513,8 +20674,28 @@ window.addEventListener('message', function (ev) {
     _sdRecordAttempt(d);
   } else if (d.type === 'SD_FLAG') {
     _sdRecordFlag(d, ev.source);
+  } else if (d.type === 'SD_SCORE') {
+    _sdRecordScore(d);
   }
 });
+
+// Record a finished mini-game run's score so it can rank on the leaderboard.
+// Best score is kept all-time AND per-month (the month bests drive the monthly
+// $10 vouchers). Stored on the hero state and republished to the shared board.
+function _sdRecordScore(d) {
+  try {
+    if (!rpgState || !currentUser || currentUser.role !== 'student') return;
+    const key = d && d.mode === 'raiders' ? 'raiders' : 'defenders';
+    const score = Math.max(0, Math.round(Number(d && d.score) || 0));
+    if (!score) return;
+    rpgEnsureGameScores();
+    const g = rpgState.gameScores[key];
+    if (score > (g.best || 0)) { g.best = score; g.bestLabel = (d.label || '') + ''; }
+    if (score > (g.monthBest || 0)) { g.monthBest = score; g.monthLabel = (d.label || '') + ''; }
+    rpgSave();
+    rpgPublishLeaderboard();
+  } catch (e) { console.warn('SD score record failed', e); }
+}
 
 // =====================================================================
 // EXPOSE FUNCTIONS GLOBALLY (required for module scope + onclick handlers)
