@@ -231,6 +231,9 @@ html, body {
 .upcard .udesc { font-size: var(--font-size-xs); color: var(--text-tertiary); line-height: 1.35; }
 .upcard.locked { opacity: .5; cursor: not-allowed; }
 .upcard.locked:hover { transform: none; box-shadow: none; border-color: var(--border-medium); background: var(--bg-primary); }
+.upcard.special { border-color: #e8b41f; background: linear-gradient(160deg, #fff9e8, #fff); box-shadow: 0 0 0 1px #f0c44a inset; }
+.upcard.special:hover { border-color: #d39e0a; background: linear-gradient(160deg, #fff3cd, #fff); }
+.upcard.special .uname { color: #8a5a13; }
 
 /* ---- Question modal (mirrors Science Defenders) ---- */
 .q-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -485,6 +488,19 @@ var UPGRADES = [
   { id: 'heal',   icon: '💚', name: 'Full Repair', desc: 'Heal to full HP', apply: function(p){ p.hp = p.maxHp; } }
 ];
 
+// Powerful boons offered ONLY at the 5th and 10th upgrade milestones.
+var SPECIAL_UPGRADES = [
+  { id: 'orbit', icon: '🛰️', name: 'Orbital Guard', desc: 'A defense drone orbits you, zapping foes it touches', apply: function(p){ p.orbit += 1; } },
+  { id: 'nova',  icon: '💥', name: 'Nova Shield',   desc: 'Every hit you take detonates a damaging shockwave', apply: function(p){ p.nova += 1; } },
+  { id: 'twin',  icon: '🔱', name: 'Twin Cannons',  desc: '+2 projectiles and +15% damage', apply: function(p){ p.shots += 2; p.dmgMul *= 1.15; } },
+  { id: 'titan', icon: '🛡️', name: 'Titan Core',    desc: '+60 max HP, full heal and +20% speed', apply: function(p){ p.maxHp += 60; p.hp = p.maxHp; p.speedMul *= 1.2; } },
+  { id: 'exec',  icon: '☠️', name: 'Executioner',   desc: '+35% damage and +20% crit chance', apply: function(p){ p.dmgMul *= 1.35; p.crit += 0.2; } }
+];
+
+var MAX_UPGRADES = 10;        // run-long cap on upgrades taken
+var ORBIT_R = 42;             // Orbital Guard orbit radius
+function isSpecialMilestone(n){ return n === 5 || n === 10; } // 1-based upgrade number
+
 /* ---------------- 4. GAME STATE ---------------- */
 var G = null;          // active run, or null on menus
 var paused = false;
@@ -504,7 +520,10 @@ function newPlayer(clazz){
     shots: 1, pierce: 0, crit: 0, vamp: 0, vampCount: 0,
     cd: 0, aim: 0, facing: 0,
     iframes: 0, dashCd: 0, dashTime: 0, hurtFlash: 0,
-    moving: false
+    moving: false,
+    upgrades: 0,                       // total upgrades taken (caps at MAX_UPGRADES)
+    orbit: 0, orbAng: 0, orbCd: 0,     // Orbital Guard special
+    nova: 0                            // Nova Shield special
   };
 }
 
@@ -519,7 +538,7 @@ function startRun(){
     coins: 0,
     bannerT: 0, shakeT: 0, shakeMag: 0,
     walls: [], door: null, doorOpen: false,
-    spawnFx: 0
+    spawnFx: 0, shockwaves: []
   };
   buildRoom();
   hideAll();
@@ -542,19 +561,19 @@ function spawnEnemies(){
   var isBossRoom = (G.room === ROOMS_PER_FLOOR) && (f % 2 === 0);
   if (isBossRoom){
     spawnEnemy('boss', VIEW_W/2, 130, f);
-    var adds = Math.round(2 * d.count);
+    var adds = Math.round(4 * d.count); // 2× the boss-room adds
     for (var a = 0; a < adds; a++) spawnEnemy('swarm', rand(80, VIEW_W-80), rand(80, 200), f);
     return;
   }
-  // Difficulty budget grows with floor & room.
-  var budget = Math.round((4 + f * 1.6 + G.room * 0.8) * d.count);
+  // Difficulty budget grows with floor & room — doubled for a denser swarm.
+  var budget = Math.round((4 + f * 1.6 + G.room * 0.8) * d.count * 2);
   var pool = ['slime', 'swarm'];
   if (f >= 2) pool.push('turret');
   if (f >= 2) pool.push('drone');
   if (f >= 3) pool.push('brute');
   var costMap = { slime: 1, swarm: 1, turret: 2, drone: 2, brute: 3 };
   var guard = 0;
-  while (budget > 0 && guard++ < 60){
+  while (budget > 0 && guard++ < 140){
     var t = choice(pool);
     var cost = costMap[t];
     if (cost > budget && t !== 'slime' && t !== 'swarm') continue;
@@ -697,6 +716,8 @@ function update(dt){
   updateBullets(dt);
   updateEnemies(dt);
   updateEnemyBullets(dt);
+  updateOrbit(dt);
+  updateShockwaves(dt);
   updateParticles(dt);
   updateFloaters(dt);
   updatePickups(dt);
@@ -881,9 +902,51 @@ function hurtPlayer(amount){
   if (p.iframes > 0 || p.dashTime > 0) return;
   p.hp -= amount;
   p.hurtFlash = 0.18;
-  if (amount >= 4){ p.iframes = 0.25; G.shakeT = 0.16; G.shakeMag = 5; }
+  if (amount >= 4){ p.iframes = 0.25; G.shakeT = 0.16; G.shakeMag = 5; if (p.nova) novaBlast(); }
   updateHud();
   if (p.hp <= 0){ p.hp = 0; gameOver(); }
+}
+
+/* ---- Special: Orbital Guard — orbiting drones that zap nearby enemies ---- */
+function updateOrbit(dt){
+  var p = G.player;
+  if (!p.orbit) return;
+  p.orbAng += dt * 2.6;
+  p.orbCd -= dt;
+  if (p.orbCd > 0) return;
+  p.orbCd = 0.28;
+  for (var oi = 0; oi < p.orbit; oi++){
+    var oa = p.orbAng + oi * (TAU / p.orbit);
+    var ox = p.x + Math.cos(oa) * ORBIT_R, oy = p.y + Math.sin(oa) * ORBIT_R;
+    for (var ei = 0; ei < G.enemies.length; ei++){
+      var en = G.enemies[ei];
+      if (en.spawnT > 0) continue;
+      if (dist2(ox, oy, en.x, en.y) <= (en.r + 11) * (en.r + 11)){
+        damageEnemy(en, p.baseDmg * p.dmgMul * 0.9, false);
+        for (var z = 0; z < 3; z++) addParticle(ox, oy, '#80DEEA', 1.2);
+        break; // one foe per drone per tick
+      }
+    }
+  }
+}
+/* ---- Special: Nova Shield — a shockwave that damages enemies around you ---- */
+function novaBlast(){
+  var p = G.player;
+  var radius = 78 + p.nova * 22;
+  var dmg = p.baseDmg * p.dmgMul * (1.6 + p.nova * 0.6);
+  G.enemies.slice().forEach(function(e){
+    if (e.spawnT > 0) return;
+    if (dist2(e.x, e.y, p.x, p.y) <= radius * radius) damageEnemy(e, dmg, false);
+  });
+  G.shockwaves.push({ x: p.x, y: p.y, r: 12, max: radius, life: 0.34, maxLife: 0.34 });
+}
+function updateShockwaves(dt){
+  for (var i = G.shockwaves.length - 1; i >= 0; i--){
+    var s = G.shockwaves[i];
+    s.life -= dt;
+    s.r = s.max * (1 - s.life / s.maxLife);
+    if (s.life <= 0) G.shockwaves.splice(i, 1);
+  }
 }
 
 /* ---------------- 8. PARTICLES / FLOATERS / PICKUPS ---------------- */
@@ -961,6 +1024,17 @@ function render(){
   drawFloor();
   if (!G){ ctx.restore(); return; }
 
+  // nova shockwaves (under actors)
+  for (var sw = 0; sw < G.shockwaves.length; sw++){
+    var s = G.shockwaves[sw];
+    ctx.globalAlpha = clamp(s.life / s.maxLife, 0, 1) * 0.7;
+    ctx.strokeStyle = '#FFD54F'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r * 0.82, 0, TAU); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
   // pickups
   for (var i = 0; i < G.pickups.length; i++){ var k = G.pickups[i]; drawHeart(k.x, k.y + Math.sin(k.t*4)*2, 9); }
 
@@ -975,6 +1049,17 @@ function render(){
 
   // player
   drawPlayer(G.player);
+
+  // orbital guard drones (on top of the player)
+  if (G.player.orbit){
+    for (var od = 0; od < G.player.orbit; od++){
+      var oa = G.player.orbAng + od * (TAU / G.player.orbit);
+      var ox = G.player.x + Math.cos(oa) * ORBIT_R, oy = G.player.y + Math.sin(oa) * ORBIT_R;
+      ctx.fillStyle = 'rgba(128,222,234,0.35)'; ctx.beginPath(); ctx.arc(ox, oy, 9, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#26C6DA'; ctx.beginPath(); ctx.arc(ox, oy, 5.5, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#E0F7FA'; ctx.beginPath(); ctx.arc(ox - 1.5, oy - 1.5, 2, 0, TAU); ctx.fill();
+    }
+  }
 
   // particles
   for (var pt = 0; pt < G.particles.length; pt++){
@@ -996,6 +1081,20 @@ function render(){
   }
   ctx.globalAlpha = 1;
   ctx.restore();
+
+  // Boss HP bar — fixed across the top of the arena while a boss is alive.
+  var boss = null;
+  for (var bi = 0; bi < G.enemies.length; bi++){ if (G.enemies[bi].type === 'boss'){ boss = G.enemies[bi]; break; } }
+  if (boss){
+    var bw = VIEW_W - 120, bx = 60, by = 22, bh = 16;
+    ctx.fillStyle = 'rgba(26,16,48,0.85)'; pxRoundRect(bx - 3, by - 3, bw + 6, bh + 6, 6);
+    ctx.fillStyle = '#3a2a55'; pxRoundRect(bx, by, bw, bh, 5);
+    var bf = clamp(boss.hp / boss.maxHp, 0, 1);
+    ctx.fillStyle = '#AB47BC'; pxRoundRect(bx, by, bw * bf, bh, 5);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(bx + 2, by + 2, (bw - 4) * bf, 3);
+    ctx.fillStyle = '#fff'; ctx.font = "800 11px 'RobotoQuestion', system-ui, sans-serif"; ctx.textAlign = 'center';
+    ctx.fillText('☠ CORE GUARDIAN', VIEW_W / 2, by + 12);
+  }
 }
 
 function drawFloor(){
@@ -1050,6 +1149,13 @@ function drawPlayer(p){
     ctx.strokeStyle = 'rgba(179,157,219,0.5)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.r+6, -Math.PI/2, -Math.PI/2 + TAU*(1 - p.dashCd/0.9)); ctx.stroke();
   }
+
+  // floating HP bar above the hero so health is readable in the thick of it
+  var hbw = 34, hbh = 5, hbx = p.x - hbw/2, hby = p.y - p.r - 13;
+  var frac = clamp(p.hp / p.maxHp, 0, 1);
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(hbx - 1, hby - 1, hbw + 2, hbh + 2);
+  ctx.fillStyle = '#2a1f3d'; ctx.fillRect(hbx, hby, hbw, hbh);
+  ctx.fillStyle = frac > 0.35 ? '#66BB6A' : '#EF5350'; ctx.fillRect(hbx, hby, hbw * frac, hbh);
 }
 
 function drawEnemy(e){
@@ -1361,8 +1467,13 @@ function answerQuestion(idx, btnEl){
   G.coins += reward; updateHud();
   $('qReward').textContent = (correct ? '✅ +' : '❌ +') + reward + ' 🪙';
 
+  var p = G.player;
+  var capped = (p.upgrades || 0) >= MAX_UPGRADES;
+  var grantsUpgrade = correct && !capped;       // ONLY a correct answer earns an upgrade
+  var special = grantsUpgrade && isSpecialMilestone((p.upgrades || 0) + 1);
+
   var ex = $('qExplain');
-  var head = correct ? '<b>Correct!</b> ' : '<b>Not quite.</b> ';
+  var head = correct ? '<b>Correct!</b> ' : '<b>Not quite.</b> No upgrade this time — answer correctly to earn one. ';
   var body = q.explainHtml ? q.explainHtml : (q.explain || 'Review this concept in your notes.');
   ex.innerHTML = head + body;
   ex.className = 'q-explain show';
@@ -1372,11 +1483,17 @@ function answerQuestion(idx, btnEl){
 
   var btn = $('qContinueBtn');
   btn.style.display = 'inline-flex';
-  btn.textContent = correct ? 'Choose a power-up →' : 'Choose a small boost →';
+  btn.textContent = grantsUpgrade ? (special ? '🌟 Claim special upgrade →' : 'Choose a power-up →') : 'Continue →';
   btn.onclick = function(){
     qState.active = false;
     hide('questionOverlay');
-    openUpgrade(correct);
+    if (grantsUpgrade){ openUpgrade(); }
+    else {
+      // Wrong answer (no upgrade) or fully upgraded — just press on, with a small
+      // heal if you're already maxed out so a correct answer still helps.
+      if (correct && capped){ p.hp = Math.min(p.maxHp, p.hp + 20); updateHud(); toast('Max power — patched +20 HP', 'good'); }
+      advanceRoom();
+    }
   };
 }
 
@@ -1389,26 +1506,32 @@ function availableUpgrades(){
   });
 }
 
-function openUpgrade(correct){
+function openUpgrade(){
   G.state = 'upgrade';
-  var pool = availableUpgrades();
-  // shuffle
-  pool = pool.slice().sort(function(){ return Math.random() - 0.5; });
-  var n = correct ? Math.min(3, pool.length) : Math.min(1, pool.length);
-  var choices = pool.slice(0, n);
-  $('upTitle').textContent = correct ? 'Choose a power-up' : 'A small boost';
-  $('upQuality').textContent = correct ? '✅ Great answer!' : '— Keep trying';
-  $('upQuality').style.background = correct ? '#E8F5E9' : '#FFEBEE';
-  $('upQuality').style.color = correct ? '#2E7D32' : '#C62828';
-  $('upSub').textContent = correct ? 'Pick one boon to carry into the next room.' : 'A wrong answer still earns you one boost — pick it.';
+  var p = G.player;
+  var nextNum = (p.upgrades || 0) + 1;        // which upgrade this will be (1-based)
+  var special = isSpecialMilestone(nextNum);
+  var pool = (special ? SPECIAL_UPGRADES : availableUpgrades()).slice().sort(function(){ return Math.random() - 0.5; });
+  var choices = pool.slice(0, Math.min(3, pool.length));
+  if (special){
+    $('upTitle').textContent = '🌟 Special upgrade — milestone ' + nextNum + '!';
+    $('upQuality').textContent = nextNum >= MAX_UPGRADES ? 'Final boon' : 'Rare boon';
+    $('upQuality').style.background = '#FFF3CD'; $('upQuality').style.color = '#8a5a13';
+    $('upSub').textContent = "You've earned a powerful special upgrade — choose one.";
+  } else {
+    $('upTitle').textContent = 'Choose a power-up';
+    $('upQuality').textContent = '✅ Upgrade ' + nextNum + ' / ' + MAX_UPGRADES;
+    $('upQuality').style.background = '#E8F5E9'; $('upQuality').style.color = '#2E7D32';
+    $('upSub').textContent = 'Pick one boon to carry into the next room.';
+  }
   var wrap = $('upgradeCards'); wrap.innerHTML = '';
-  if (choices.length === 0){ // everything maxed — heal instead
-    G.player.hp = G.player.maxHp; toast('All upgrades maxed — full heal!', 'good');
-    setTimeout(function(){ hide('upgradeOverlay'); advanceRoom(); }, 300);
+  if (choices.length === 0){ // nothing left to offer — heal and move on
+    p.hp = p.maxHp; updateHud(); toast('All upgrades maxed — full heal!', 'good');
+    hide('upgradeOverlay'); advanceRoom(); return;
   }
   choices.forEach(function(u){
     var card = document.createElement('div');
-    card.className = 'upcard';
+    card.className = 'upcard' + (special ? ' special' : '');
     card.innerHTML = '<div class="uico">' + u.icon + '</div><div class="uname">' + u.name + '</div><div class="udesc">' + u.desc + '</div>';
     card.addEventListener('click', function(){ chooseUpgrade(u); });
     wrap.appendChild(card);
@@ -1420,9 +1543,9 @@ function chooseUpgrade(u){
   var p = G.player;
   if (!p._counts) p._counts = {};
   p._counts[u.id] = (p._counts[u.id] || 0) + 1;
+  p.upgrades = (p.upgrades || 0) + 1;          // counts toward the milestone/cap
   u.apply(p);
-  // clamp hp
-  p.hp = Math.min(p.maxHp, p.hp);
+  p.hp = Math.min(p.maxHp, p.hp);              // clamp hp
   updateHud();
   toast(u.icon + ' ' + u.name + ' acquired!', 'good');
   hide('upgradeOverlay');
