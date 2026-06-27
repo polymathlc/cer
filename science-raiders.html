@@ -234,6 +234,10 @@ html, body {
 .upcard.special { border-color: #e8b41f; background: linear-gradient(160deg, #fff9e8, #fff); box-shadow: 0 0 0 1px #f0c44a inset; }
 .upcard.special:hover { border-color: #d39e0a; background: linear-gradient(160deg, #fff3cd, #fff); }
 .upcard.special .uname { color: #8a5a13; }
+.upcard .ulvl { font-size: var(--font-size-xs); font-weight: 800; color: var(--accent-dark); background: var(--accent-bg); padding: 1px 6px; border-radius: 999px; }
+.upcard .umile { margin-top: 5px; font-size: var(--font-size-xs); font-weight: 800; color: #8a5a13; }
+.upcard .unext { margin-top: 5px; font-size: var(--font-size-xs); color: var(--text-tertiary); }
+.upcard.elem { border-color: var(--accent-light); }
 
 /* ---- Question modal (mirrors Science Defenders) ---- */
 .q-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -308,6 +312,7 @@ html, body {
     <div class="stat"><span class="lbl">Room</span><span id="hudRoom">1</span></div>
     <div class="stat" title="Enemies remaining">💀 <span id="hudEnemies">0</span></div>
     <div class="stat" title="Coins earned by answering questions">🪙 <span id="hudCoins">0</span></div>
+    <div class="stat" id="hudBuild" title="Your projectile element build" style="display:none;"></div>
     <div class="hud spacer" style="padding:0;border:0;background:none;"></div>
     <div class="hpwrap">
       <div class="hpbar" id="hpBar"><i id="hpFill"></i><div class="hptext" id="hpText">100 / 100</div></div>
@@ -488,7 +493,7 @@ var UPGRADES = [
   { id: 'heal',   icon: '💚', name: 'Full Repair', desc: 'Heal to full HP', apply: function(p){ p.hp = p.maxHp; } }
 ];
 
-// Powerful boons offered ONLY at the 5th and 10th upgrade milestones.
+// Strong utility boons — folded into the normal support pool.
 var SPECIAL_UPGRADES = [
   { id: 'orbit', icon: '🛰️', name: 'Orbital Guard', desc: 'A defense drone orbits you, zapping foes it touches', apply: function(p){ p.orbit += 1; } },
   { id: 'nova',  icon: '💥', name: 'Nova Shield',   desc: 'Every hit you take detonates a damaging shockwave', apply: function(p){ p.nova += 1; } },
@@ -497,9 +502,38 @@ var SPECIAL_UPGRADES = [
   { id: 'exec',  icon: '☠️', name: 'Executioner',   desc: '+35% damage and +20% crit chance', apply: function(p){ p.dmgMul *= 1.35; p.crit += 0.2; } }
 ];
 
+/* ---------------- 3b. PROJECTILE ELEMENTS ----------------
+ * Four upgradeable weapon elements. Each level deepens the effect; reaching
+ * level 5 and level 10 in an element is a MILESTONE power spike — so a student
+ * can pour picks into one element for a specialised build. Powerful elements
+ * (laser) trade away fire rate. Effects scale live from the element's level. */
+var ELEMENTS = {
+  poison: { icon: '🧪', name: 'Toxin Rounds', color: '#9CCC65', dark: '#558B2F',
+            blurb: 'Shots poison foes for damage over time',
+            milestone: { 5: 'longer, stronger poison', 10: 'dying foes burst into a toxic cloud' } },
+  ice:    { icon: '❄️', name: 'Cryo Rounds',  color: '#4FC3F7', dark: '#0277BD',
+            blurb: 'Shots slow foes — and may freeze them solid',
+            milestone: { 5: 'higher freeze chance', 10: 'frozen foes shatter for bonus damage' } },
+  chain:  { icon: '⚡', name: 'Tesla Rounds', color: '#FFD54F', dark: '#F9A825',
+            blurb: 'Hits arc lightning to nearby foes',
+            milestone: { 5: '+1 chain jump', 10: 'chains also stun' } },
+  laser:  { icon: '🔆', name: 'Laser Lance',  color: '#FF5252', dark: '#C62828',
+            blurb: 'Piercing high-damage bolts — but a slower fire rate',
+            milestone: { 5: 'pierces far more', 10: 'massive damage & crit' } }
+};
+var ELEM_KEYS = ['poison', 'ice', 'chain', 'laser'];
+function elemUpgrade(key){
+  var E = ELEMENTS[key];
+  return { id: 'elem_' + key, type: 'elem', key: key, icon: E.icon, name: E.name,
+           apply: function(p){ p.elem[key] = (p.elem[key] || 0) + 1; } };
+}
+var ELEM_UPGRADES = ELEM_KEYS.map(elemUpgrade);
+// Support upgrades = the stat boosts + the old utility boons, all max-gated.
+var SUPPORT_UPGRADES = UPGRADES.concat(SPECIAL_UPGRADES);
+
 var MAX_UPGRADES = 10;        // run-long cap on upgrades taken
 var ORBIT_R = 42;             // Orbital Guard orbit radius
-function isSpecialMilestone(n){ return n === 5 || n === 10; } // 1-based upgrade number
+function isElemMilestone(lvl){ return lvl === 5 || lvl === 10; }
 
 /* ---------------- 4. GAME STATE ---------------- */
 var G = null;          // active run, or null on menus
@@ -523,7 +557,8 @@ function newPlayer(clazz){
     moving: false,
     upgrades: 0,                       // total upgrades taken (caps at MAX_UPGRADES)
     orbit: 0, orbAng: 0, orbCd: 0,     // Orbital Guard special
-    nova: 0                            // Nova Shield special
+    nova: 0,                           // Nova Shield special
+    elem: { poison: 0, ice: 0, chain: 0, laser: 0 } // projectile element levels
   };
 }
 
@@ -538,7 +573,7 @@ function startRun(){
     coins: 0,
     bannerT: 0, shakeT: 0, shakeMag: 0,
     walls: [], door: null, doorOpen: false,
-    spawnFx: 0, shockwaves: []
+    spawnFx: 0, shockwaves: [], lightning: []
   };
   buildRoom();
   hideAll();
@@ -585,20 +620,24 @@ function spawnEnemies(){
   }
 }
 
+var ENEMY_HP_MULT = 1.5;     // +50% enemy health
+var ENEMY_SPEED_MULT = 1.3;  // +30% enemy movement speed
 function spawnEnemy(type, x, y, floor){
   var base = ENEMY_TYPES[type];
   var d = G.diff;
   var floorScale = 1 + (floor - 1) * 0.16;
+  var hp = base.hp * floorScale * d.enemyHp * ENEMY_HP_MULT;
   var e = {
     type: type, x: x, y: y, r: base.r,
-    hp: base.hp * floorScale * d.enemyHp,
-    maxHp: base.hp * floorScale * d.enemyHp,
-    speed: base.speed, dmg: base.dmg * d.enemyDmg,
+    hp: hp, maxHp: hp,
+    speed: base.speed * ENEMY_SPEED_MULT, dmg: base.dmg * d.enemyDmg,
     behavior: base.behavior, color: base.color, dark: base.dark,
     range: base.range || 0, fireRate: base.fireRate || 0,
     fireCd: rand(0.3, 1.2), score: base.score,
     spawnT: 0.5, wob: rand(0, TAU), hitFlash: 0,
-    strafeDir: Math.random() < 0.5 ? 1 : -1, bossPhase: 0, bossCd: 2
+    strafeDir: Math.random() < 0.5 ? 1 : -1, bossPhase: 0, bossCd: 2,
+    // status effects from elemental shots
+    poisonT: 0, poisonDps: 0, poisonSrc: 0, slowT: 0, slowFactor: 1, frozenT: 0, dead: false
   };
   G.enemies.push(e);
 }
@@ -710,7 +749,7 @@ function update(dt){
   // auto-fire while enemies present
   if (p.cd <= 0 && G.enemies.length > 0){
     fire();
-    p.cd = 1 / (p.baseRate * p.rateMul);
+    p.cd = 1 / effectiveRate();
   }
 
   updateBullets(dt);
@@ -718,6 +757,8 @@ function update(dt){
   updateEnemyBullets(dt);
   updateOrbit(dt);
   updateShockwaves(dt);
+  updateLightning(dt);
+  reapEnemies();          // resolve all deferred deaths before the room-clear check
   updateParticles(dt);
   updateFloaters(dt);
   updatePickups(dt);
@@ -732,28 +773,55 @@ function nearestEnemy(x, y){
   var best = null, bd = Infinity;
   for (var i = 0; i < G.enemies.length; i++){
     var e = G.enemies[i];
+    if (e.dead) continue;
     var d = dist2(x, y, e.x, e.y);
     if (d < bd){ bd = d; best = e; }
   }
   return best;
 }
 
+// Effective fire rate — powerful elements (laser) trade away rate of fire.
+function effectiveRate(){
+  var p = G.player, L = p.elem;
+  var rate = p.baseRate * p.rateMul;
+  if (L.laser > 0) rate *= Math.max(0.40, 1 - 0.09 * L.laser); // big damage, much slower
+  if (L.chain > 0) rate *= Math.max(0.78, 1 - 0.03 * L.chain); // slight cost for the arcs
+  return rate;
+}
+// Dominant element drives the bolt colour (laser > chain > ice > poison > none).
+function bulletColor(L){
+  if (L.laser > 0) return ELEMENTS.laser.color;
+  if (L.chain > 0) return ELEMENTS.chain.color;
+  if (L.ice > 0) return ELEMENTS.ice.color;
+  if (L.poison > 0) return ELEMENTS.poison.color;
+  return '#B39DDB';
+}
 function fire(){
-  var p = G.player;
+  var p = G.player, L = p.elem;
   var n = p.shots;
   var spread = (n - 1) * 0.12;
   var bspeed = p.baseBSpeed * p.bSpeedMul * 60;
+  var dmgMul = p.dmgMul, pierce = p.pierce, laser = L.laser > 0;
+  if (laser){
+    dmgMul *= (1 + 0.40 * L.laser);            // powerful
+    pierce += 1 + Math.floor(L.laser / 2);     // pierces
+    if (L.laser >= 5) pierce += 2;             // L5 milestone: pierce far more
+    if (L.laser >= 10) dmgMul *= 1.5;          // L10 milestone: massive damage
+  }
+  var col = bulletColor(L);
   for (var i = 0; i < n; i++){
     var a = p.aim - spread/2 + (n > 1 ? spread * (i/(n-1)) : 0);
-    var crit = Math.random() < p.crit;
-    var dmg = p.baseDmg * p.dmgMul * (crit ? 2 : 1);
+    var crit = Math.random() < (p.crit + (laser && L.laser >= 10 ? 0.15 : 0));
+    var dmg = p.baseDmg * dmgMul * (crit ? 2 : 1);
     G.bullets.push({
       x: p.x + Math.cos(p.aim)*16, y: p.y + Math.sin(p.aim)*16,
       vx: Math.cos(a) * bspeed, vy: Math.sin(a) * bspeed,
-      r: crit ? 6 : 4, dmg: dmg, crit: crit, pierce: p.pierce, hits: [], life: 1.4
+      r: (laser ? 6 : 4) + (crit ? 2 : 0), dmg: dmg, crit: crit, pierce: pierce, hits: [], life: laser ? 1.1 : 1.4,
+      color: crit ? '#FFB300' : col, laser: laser,
+      elem: { poison: L.poison, ice: L.ice, chain: L.chain, laser: L.laser }
     });
   }
-  muzzle(p.x + Math.cos(p.aim)*16, p.y + Math.sin(p.aim)*16, p.aim);
+  muzzle(p.x + Math.cos(p.aim)*16, p.y + Math.sin(p.aim)*16, p.aim, col);
 }
 
 function updateBullets(dt){
@@ -764,13 +832,14 @@ function updateBullets(dt){
     var removed = false;
     for (var j = 0; j < G.enemies.length; j++){
       var e = G.enemies[j];
-      if (e.spawnT > 0) continue;
+      if (e.spawnT > 0 || e.dead) continue;
       if (b.hits.indexOf(e) >= 0) continue;
       var rr = (b.r + e.r);
       if (dist2(b.x, b.y, e.x, e.y) <= rr*rr){
         damageEnemy(e, b.dmg, b.crit);
+        applyElementsOnHit(b, e);
         b.hits.push(e);
-        for (var k = 0; k < 4; k++) addParticle(b.x, b.y, e.color, 1.1);
+        for (var k = 0; k < 4; k++) addParticle(b.x, b.y, b.color || e.color, 1.1);
         if (b.hits.length > b.pierce){ G.bullets.splice(i, 1); removed = true; break; }
       }
     }
@@ -778,21 +847,87 @@ function updateBullets(dt){
   }
 }
 
+// Deal damage to an enemy. Death is deferred (a `dead` flag) and resolved by
+// reapEnemies() once per frame, so chain/poison/nova can damage other enemies
+// mid-iteration without corrupting any loop.
 function damageEnemy(e, dmg, crit){
+  if (e.dead) return;
+  if (e.frozenT > 0 && G.player.elem.ice >= 10) dmg *= 1.5; // L10 ice: frozen foes shatter
   e.hp -= dmg; e.hitFlash = 0.12;
   addFloater(e.x, e.y - e.r - 4, Math.round(dmg), crit ? '#FFB300' : '#fff', crit);
-  if (e.hp <= 0) killEnemy(e);
+  if (e.hp <= 0) e.dead = true;
 }
 
-function killEnemy(e){
-  var idx = G.enemies.indexOf(e);
-  if (idx < 0) return;
-  G.enemies.splice(idx, 1);
+// Apply elemental on-hit effects from a bullet to the enemy it struck.
+function applyElementsOnHit(b, e){
+  var el = b.elem; if (!el) return;
+  var p = G.player, base = p.baseDmg * p.dmgMul;
+  if (el.poison > 0){
+    var dps = 2 + 1.1 * el.poison + base * 0.04;
+    var dur = 2 + (el.poison >= 5 ? 1.6 : 0);          // L5: longer/stronger
+    if (dps > (e.poisonDps || 0)) e.poisonDps = dps;   // strongest stack wins
+    e.poisonT = Math.max(e.poisonT || 0, dur);
+    e.poisonSrc = Math.max(e.poisonSrc || 0, el.poison);
+  }
+  if (el.ice > 0){
+    e.slowFactor = clamp(1 - (0.15 + 0.035 * el.ice), 0.25, 1);
+    e.slowT = 1.5;
+    var freezeChance = el.ice >= 5 ? (0.10 + 0.02 * el.ice) : 0; // L5: can freeze
+    if (el.ice >= 10) freezeChance += 0.12;
+    if (e.type !== 'boss' && Math.random() < freezeChance) e.frozenT = Math.max(e.frozenT || 0, 0.9);
+  }
+  if (el.chain > 0) chainLightning(e, el.chain);
+}
+
+// Lightning arcs from the struck enemy to nearby foes.
+function chainLightning(origin, lvl){
+  var chains = 1 + Math.floor(lvl / 2) + (lvl >= 5 ? 1 : 0);  // L5: +1 jump
+  var dmg = G.player.baseDmg * G.player.dmgMul * (0.35 + 0.04 * lvl);
+  var hit = [origin], src = origin;
+  for (var c = 0; c < chains; c++){
+    var next = null, nd = 175 * 175;
+    for (var j = 0; j < G.enemies.length; j++){
+      var en = G.enemies[j];
+      if (en.spawnT > 0 || en.dead || hit.indexOf(en) >= 0) continue;
+      var dd = dist2(src.x, src.y, en.x, en.y);
+      if (dd < nd){ nd = dd; next = en; }
+    }
+    if (!next) break;
+    G.lightning.push({ x1: src.x, y1: src.y, x2: next.x, y2: next.y, life: 0.16, maxLife: 0.16 });
+    damageEnemy(next, dmg, false);
+    if (lvl >= 10) next.frozenT = Math.max(next.frozenT || 0, 0.3); // L10: chains stun
+    hit.push(next); src = next;
+  }
+}
+
+function updateLightning(dt){
+  for (var i = G.lightning.length - 1; i >= 0; i--){ if ((G.lightning[i].life -= dt) <= 0) G.lightning.splice(i, 1); }
+}
+
+// Remove dead enemies once per frame and pay out their rewards.
+function reapEnemies(){
+  var died = false;
+  for (var i = G.enemies.length - 1; i >= 0; i--){
+    var e = G.enemies[i];
+    if (e.dead || e.hp <= 0){ onEnemyDeath(e); G.enemies.splice(i, 1); died = true; }
+  }
+  if (died) updateHud();
+}
+
+function onEnemyDeath(e){
   G.kills += 1;
-  updateHud();
   for (var i = 0; i < 14; i++) addParticle(e.x, e.y, e.color, rand(1.4, 2.6));
   G.shakeT = 0.12; G.shakeMag = Math.min(6, e.r * 0.18);
-  // leech
+  // Poison L10 milestone: a poisoned foe bursts into a toxic cloud on death.
+  if (e.poisonSrc >= 10 && e.poisonT > 0){
+    var cloudDmg = G.player.baseDmg * G.player.dmgMul * 0.8;
+    for (var j = 0; j < G.enemies.length; j++){
+      var o = G.enemies[j];
+      if (o === e || o.dead || o.spawnT > 0) continue;
+      if (dist2(e.x, e.y, o.x, o.y) <= 70 * 70){ o.poisonDps = Math.max(o.poisonDps || 0, cloudDmg * 0.5); o.poisonT = Math.max(o.poisonT || 0, 2); damageEnemy(o, cloudDmg, false); }
+    }
+    for (var k = 0; k < 16; k++) addParticle(e.x + rand(-20, 20), e.y + rand(-20, 20), '#9CCC65', 1.2);
+  }
   var p = G.player;
   if (p.vamp > 0){
     p.vampCount += 1;
@@ -806,30 +941,42 @@ function updateEnemies(dt){
   for (var i = 0; i < G.enemies.length; i++){
     var e = G.enemies[i];
     if (e.spawnT > 0){ e.spawnT -= dt; continue; }
+    if (e.dead) continue;
     e.hitFlash -= dt; e.wob += dt * 6;
+
+    // --- elemental status effects ---
+    if (e.poisonT > 0){
+      e.poisonT -= dt;
+      e.hp -= e.poisonDps * dt;
+      if (Math.random() < dt * 5) addParticle(e.x + rand(-5, 5), e.y - rand(0, 6), '#9CCC65', 0.5);
+      if (e.hp <= 0){ e.dead = true; continue; } // reaped this frame
+    }
+    if (e.frozenT > 0){ e.frozenT -= dt; }
+    if (e.slowT > 0){ e.slowT -= dt; }
+    var frozen = e.frozenT > 0;
+    var spdMul = frozen ? 0 : (e.slowT > 0 ? e.slowFactor : 1);
+
     var ang = Math.atan2(p.y - e.y, p.x - e.x);
     var d = Math.sqrt(dist2(e.x, e.y, p.x, p.y));
 
     if (e.behavior === 'chase'){
-      e.x += Math.cos(ang) * e.speed * 60 * dt;
-      e.y += Math.sin(ang) * e.speed * 60 * dt;
+      e.x += Math.cos(ang) * e.speed * 60 * dt * spdMul;
+      e.y += Math.sin(ang) * e.speed * 60 * dt * spdMul;
     } else if (e.behavior === 'shoot'){
-      // hold position, fire when in range
-      e.fireCd -= dt;
-      if (d < e.range && e.fireCd <= 0){ enemyShoot(e, ang); e.fireCd = 1 / e.fireRate; }
+      // hold position, fire when in range (frozen enemies can't fire)
+      if (!frozen){ e.fireCd -= dt; if (d < e.range && e.fireCd <= 0){ enemyShoot(e, ang); e.fireCd = 1 / e.fireRate; } }
     } else if (e.behavior === 'strafe'){
       // keep mid distance, circle, and fire
       var ideal = e.range * 0.6;
       var move = d > ideal + 30 ? 1 : (d < ideal - 30 ? -1 : 0);
-      e.x += Math.cos(ang) * e.speed * 60 * dt * move;
-      e.y += Math.sin(ang) * e.speed * 60 * dt * move;
+      e.x += Math.cos(ang) * e.speed * 60 * dt * move * spdMul;
+      e.y += Math.sin(ang) * e.speed * 60 * dt * move * spdMul;
       var perp = ang + Math.PI/2 * e.strafeDir;
-      e.x += Math.cos(perp) * e.speed * 35 * dt;
-      e.y += Math.sin(perp) * e.speed * 35 * dt;
-      e.fireCd -= dt;
-      if (d < e.range && e.fireCd <= 0){ enemyShoot(e, ang); e.fireCd = 1 / e.fireRate; }
+      e.x += Math.cos(perp) * e.speed * 35 * dt * spdMul;
+      e.y += Math.sin(perp) * e.speed * 35 * dt * spdMul;
+      if (!frozen){ e.fireCd -= dt; if (d < e.range && e.fireCd <= 0){ enemyShoot(e, ang); e.fireCd = 1 / e.fireRate; } }
     } else if (e.behavior === 'boss'){
-      updateBoss(e, dt, ang, d, p);
+      if (!frozen) updateBoss(e, dt, ang, d, p);
     }
 
     // keep in bounds
@@ -920,7 +1067,7 @@ function updateOrbit(dt){
     var ox = p.x + Math.cos(oa) * ORBIT_R, oy = p.y + Math.sin(oa) * ORBIT_R;
     for (var ei = 0; ei < G.enemies.length; ei++){
       var en = G.enemies[ei];
-      if (en.spawnT > 0) continue;
+      if (en.spawnT > 0 || en.dead) continue;
       if (dist2(ox, oy, en.x, en.y) <= (en.r + 11) * (en.r + 11)){
         damageEnemy(en, p.baseDmg * p.dmgMul * 0.9, false);
         for (var z = 0; z < 3; z++) addParticle(ox, oy, '#80DEEA', 1.2);
@@ -935,7 +1082,7 @@ function novaBlast(){
   var radius = 78 + p.nova * 22;
   var dmg = p.baseDmg * p.dmgMul * (1.6 + p.nova * 0.6);
   G.enemies.slice().forEach(function(e){
-    if (e.spawnT > 0) return;
+    if (e.spawnT > 0 || e.dead) return;
     if (dist2(e.x, e.y, p.x, p.y) <= radius * radius) damageEnemy(e, dmg, false);
   });
   G.shockwaves.push({ x: p.x, y: p.y, r: 12, max: radius, life: 0.34, maxLife: 0.34 });
@@ -1044,8 +1191,28 @@ function render(){
   // enemy bullets
   for (var b = 0; b < G.ebullets.length; b++){ var eb = G.ebullets[b]; drawBullet(eb.x, eb.y, eb.r, eb.color, true); }
 
-  // player bullets
-  for (var pb = 0; pb < G.bullets.length; pb++){ var pp = G.bullets[pb]; drawBullet(pp.x, pp.y, pp.r, pp.crit ? '#FFB300' : '#B39DDB', false); }
+  // player bullets (tinted by element)
+  for (var pb = 0; pb < G.bullets.length; pb++){
+    var pp = G.bullets[pb];
+    if (pp.laser){ // draw a short beam streak
+      ctx.strokeStyle = pp.color; ctx.lineWidth = pp.r; ctx.lineCap = 'round';
+      var bl = 12; ctx.beginPath(); ctx.moveTo(pp.x, pp.y); ctx.lineTo(pp.x - pp.vx * 0.012 * bl, pp.y - pp.vy * 0.012 * bl); ctx.stroke();
+    }
+    drawBullet(pp.x, pp.y, pp.r, pp.color || (pp.crit ? '#FFB300' : '#B39DDB'), false);
+  }
+
+  // chain lightning arcs
+  for (var lg = 0; lg < G.lightning.length; lg++){
+    var ln = G.lightning[lg];
+    ctx.globalAlpha = clamp(ln.life / ln.maxLife, 0, 1);
+    ctx.strokeStyle = '#FFF59D'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(ln.x1, ln.y1);
+    var mx = (ln.x1 + ln.x2) / 2 + rand(-8, 8), my = (ln.y1 + ln.y2) / 2 + rand(-8, 8);
+    ctx.lineTo(mx, my); ctx.lineTo(ln.x2, ln.y2); ctx.stroke();
+    ctx.strokeStyle = '#FFD54F'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(ln.x1, ln.y1); ctx.lineTo(mx, my); ctx.lineTo(ln.x2, ln.y2); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
 
   // player
   drawPlayer(G.player);
@@ -1170,7 +1337,9 @@ function drawEnemy(e){
   ctx.globalAlpha *= 1; ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath(); ctx.ellipse(0, e.r+2, e.r*0.9, e.r*0.4, 0, 0, TAU); ctx.fill();
 
-  var body = e.hitFlash > 0 ? '#fff' : e.color;
+  var body = e.hitFlash > 0 ? '#fff'
+    : e.frozenT > 0 ? '#B3E5FC'                                   // frozen → icy blue
+    : (e.poisonT > 0 ? _tintToxic(e.color) : e.color);           // poisoned → sickly green
   if (e.type === 'turret'){
     ctx.fillStyle = e.dark; pxCircle(0, 0, e.r);
     ctx.fillStyle = body; pxCircle(0, 0, e.r*0.6);
@@ -1248,6 +1417,9 @@ function drawHeart(x, y, s){
   ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); ctx.arc(x - s*0.35, y - s*0.3, s*0.18, 0, TAU); ctx.fill();
 }
 
+// Sickly-green tint to signal a poisoned enemy (kept simple — a flat overlay hue).
+function _tintToxic(c){ return '#A4C84A'; }
+
 /* pixel-ish primitives */
 function pxCircle(x, y, r){ ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); }
 function pxDiamond(x, y, r){ ctx.beginPath(); ctx.moveTo(x, y-r); ctx.lineTo(x+r, y); ctx.lineTo(x, y+r); ctx.lineTo(x-r, y); ctx.closePath(); ctx.fill(); }
@@ -1267,6 +1439,14 @@ function updateHud(){
   $('hpText').textContent = Math.ceil(p.hp) + ' / ' + p.maxHp;
   // xp bar shows progress through current floor's rooms
   $('xpFill').style.width = ((G.room-1)/ROOMS_PER_FLOOR*100) + '%';
+  // projectile build readout (element icons + levels)
+  var bd = $('hudBuild');
+  if (bd){
+    var parts = [];
+    ELEM_KEYS.forEach(function(k){ if (p.elem && p.elem[k] > 0) parts.push(ELEMENTS[k].icon + p.elem[k]); });
+    if (parts.length){ bd.style.display = ''; bd.innerHTML = parts.join(' '); }
+    else bd.style.display = 'none';
+  }
 }
 
 var bannerTimer = null;
@@ -1470,7 +1650,6 @@ function answerQuestion(idx, btnEl){
   var p = G.player;
   var capped = (p.upgrades || 0) >= MAX_UPGRADES;
   var grantsUpgrade = correct && !capped;       // ONLY a correct answer earns an upgrade
-  var special = grantsUpgrade && isSpecialMilestone((p.upgrades || 0) + 1);
 
   var ex = $('qExplain');
   var head = correct ? '<b>Correct!</b> ' : '<b>Not quite.</b> No upgrade this time — answer correctly to earn one. ';
@@ -1483,7 +1662,7 @@ function answerQuestion(idx, btnEl){
 
   var btn = $('qContinueBtn');
   btn.style.display = 'inline-flex';
-  btn.textContent = grantsUpgrade ? (special ? '🌟 Claim special upgrade →' : 'Choose a power-up →') : 'Continue →';
+  btn.textContent = grantsUpgrade ? 'Choose an upgrade →' : 'Continue →';
   btn.onclick = function(){
     qState.active = false;
     hide('questionOverlay');
@@ -1497,42 +1676,57 @@ function answerQuestion(idx, btnEl){
   };
 }
 
-/* ---- Upgrade picker (correct = 3 choices, wrong = 1 random weaker) ---- */
-function availableUpgrades(){
+/* ---- Upgrade picker — element builds with per-element 5/10 milestones ---- */
+function elemUpgradeByKey(k){ return ELEM_UPGRADES[ELEM_KEYS.indexOf(k)]; }
+function availableSupport(){
   var p = G.player;
-  return UPGRADES.filter(function(u){
+  return SUPPORT_UPGRADES.filter(function(u){
     if (!u.max) return true;
     return (p._counts && p._counts[u.id] ? p._counts[u.id] : 0) < u.max;
   });
+}
+// Three distinct choices. Guarantee the player's strongest in-progress element so
+// a specialised build is always continuable; fill the rest at random.
+function buildUpgradeOffer(){
+  var p = G.player, offer = [];
+  var topKey = null, topLvl = 0;
+  ELEM_KEYS.forEach(function(k){ if ((p.elem[k] || 0) > topLvl){ topLvl = p.elem[k]; topKey = k; } });
+  if (topKey) offer.push(elemUpgradeByKey(topKey));
+  var pool = ELEM_UPGRADES.concat(availableSupport()).filter(function(u){ return offer.indexOf(u) < 0; });
+  pool.sort(function(){ return Math.random() - 0.5; });
+  for (var i = 0; i < pool.length && offer.length < 3; i++) offer.push(pool[i]);
+  return offer;
 }
 
 function openUpgrade(){
   G.state = 'upgrade';
   var p = G.player;
-  var nextNum = (p.upgrades || 0) + 1;        // which upgrade this will be (1-based)
-  var special = isSpecialMilestone(nextNum);
-  var pool = (special ? SPECIAL_UPGRADES : availableUpgrades()).slice().sort(function(){ return Math.random() - 0.5; });
-  var choices = pool.slice(0, Math.min(3, pool.length));
-  if (special){
-    $('upTitle').textContent = '🌟 Special upgrade — milestone ' + nextNum + '!';
-    $('upQuality').textContent = nextNum >= MAX_UPGRADES ? 'Final boon' : 'Rare boon';
-    $('upQuality').style.background = '#FFF3CD'; $('upQuality').style.color = '#8a5a13';
-    $('upSub').textContent = "You've earned a powerful special upgrade — choose one.";
-  } else {
-    $('upTitle').textContent = 'Choose a power-up';
-    $('upQuality').textContent = '✅ Upgrade ' + nextNum + ' / ' + MAX_UPGRADES;
-    $('upQuality').style.background = '#E8F5E9'; $('upQuality').style.color = '#2E7D32';
-    $('upSub').textContent = 'Pick one boon to carry into the next room.';
-  }
+  if ((p.upgrades || 0) >= MAX_UPGRADES){ p.hp = p.maxHp; updateHud(); toast('Max power — full heal!', 'good'); hide('upgradeOverlay'); advanceRoom(); return; }
+  var nextNum = (p.upgrades || 0) + 1;
+  $('upTitle').textContent = 'Choose an upgrade';
+  $('upQuality').textContent = '✅ Upgrade ' + nextNum + ' / ' + MAX_UPGRADES;
+  $('upQuality').style.background = '#E8F5E9'; $('upQuality').style.color = '#2E7D32';
+  $('upSub').textContent = 'Specialise: level an element to 5 and 10 for milestone power.';
+  var offer = buildUpgradeOffer();
   var wrap = $('upgradeCards'); wrap.innerHTML = '';
-  if (choices.length === 0){ // nothing left to offer — heal and move on
-    p.hp = p.maxHp; updateHud(); toast('All upgrades maxed — full heal!', 'good');
-    hide('upgradeOverlay'); advanceRoom(); return;
-  }
-  choices.forEach(function(u){
+  if (!offer.length){ p.hp = p.maxHp; updateHud(); hide('upgradeOverlay'); advanceRoom(); return; }
+  offer.forEach(function(u){
+    var isElem = u.type === 'elem';
+    var lvl = isElem ? (p.elem[u.key] || 0) : 0;
+    var nextLvl = lvl + 1;
+    var milestone = isElem && isElemMilestone(nextLvl);
+    var desc, tag = '';
+    if (isElem){
+      var E = ELEMENTS[u.key];
+      desc = E.blurb;
+      if (milestone) tag = '<div class="umile">🌟 Lv ' + nextLvl + ' milestone: ' + E.milestone[nextLvl] + '</div>';
+      else if (nextLvl < 5) tag = '<div class="unext">Lv 5: ' + E.milestone[5] + '</div>';
+      else if (nextLvl < 10) tag = '<div class="unext">Lv 10: ' + E.milestone[10] + '</div>';
+    } else { desc = u.desc; }
     var card = document.createElement('div');
-    card.className = 'upcard' + (special ? ' special' : '');
-    card.innerHTML = '<div class="uico">' + u.icon + '</div><div class="uname">' + u.name + '</div><div class="udesc">' + u.desc + '</div>';
+    card.className = 'upcard' + (milestone ? ' special' : '') + (isElem ? ' elem' : '');
+    var lvlTag = isElem ? ' <span class="ulvl">Lv ' + lvl + '→' + nextLvl + '</span>' : '';
+    card.innerHTML = '<div class="uico">' + u.icon + '</div><div class="uname">' + u.name + lvlTag + '</div><div class="udesc">' + desc + '</div>' + tag;
     card.addEventListener('click', function(){ chooseUpgrade(u); });
     wrap.appendChild(card);
   });
@@ -1543,11 +1737,17 @@ function chooseUpgrade(u){
   var p = G.player;
   if (!p._counts) p._counts = {};
   p._counts[u.id] = (p._counts[u.id] || 0) + 1;
-  p.upgrades = (p.upgrades || 0) + 1;          // counts toward the milestone/cap
+  p.upgrades = (p.upgrades || 0) + 1;          // counts toward the cap
   u.apply(p);
   p.hp = Math.min(p.maxHp, p.hp);              // clamp hp
   updateHud();
-  toast(u.icon + ' ' + u.name + ' acquired!', 'good');
+  if (u.type === 'elem'){
+    var lvl = p.elem[u.key];
+    if (isElemMilestone(lvl)) toast('🌟 ' + u.name + ' Lv ' + lvl + ' — ' + ELEMENTS[u.key].milestone[lvl] + '!', 'good');
+    else toast(u.icon + ' ' + u.name + ' Lv ' + lvl, 'good');
+  } else {
+    toast(u.icon + ' ' + u.name + ' acquired!', 'good');
+  }
   hide('upgradeOverlay');
   advanceRoom();
 }
