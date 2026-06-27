@@ -6553,7 +6553,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.13.1';
+const APP_VERSION = 'v1.14.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20391,6 +20391,7 @@ function _sdExtractMcq(q) {
     }
   }
   if (!html.trim()) return null; // nothing to show
+  if (!q.id) return null;        // need a stable id to record responses / no-repeat
   // Options keep their authored formatting; require each to have real text.
   const optionsHtml = mcq.options.map(o => String(o.text || '').trim());
   if (optionsHtml.length < 2 || mcq.options.some(o => !stripHtmlToText(o.text || '').trim())) return null;
@@ -20398,7 +20399,15 @@ function _sdExtractMcq(q) {
   const explainHtml = exB && exB.content ? String(exB.content) : '';
   const explain = exB ? stripHtmlToText(exB.content || '').trim() : '';
   const qtext = plain.join(' ').replace(/\s+/g, ' ').trim() || (q.title || 'See the diagram');
-  return { q: qtext, html, options: optionsHtml, answer, explain, explainHtml, topic: (q.topic || 'Science') };
+  return { id: q.id, q: qtext, html, options: optionsHtml, answer, explain, explainHtml, topic: (q.topic || 'Science'), seedElo: _sdSeedElo(q) };
+}
+// Starting difficulty rating for a question's Elo (it then evolves with play).
+function _sdSeedElo(q) {
+  const d = q && (q.difficulty || q.d);
+  if (typeof d === 'number' && isFinite(d)) return Math.max(800, Math.min(1800, d));
+  if (d === 'easy') return 1050;
+  if (d === 'hard') return 1400;
+  return 1200;
 }
 function buildDefenderQuestions() {
   return (questionBank || [])
@@ -20406,12 +20415,57 @@ function buildDefenderQuestions() {
     .map(_sdExtractMcq)
     .filter(Boolean);
 }
+// Question ids the current student has already answered in the Tower-Defense
+// game (read from the shared questionAttempts log) so the game never repeats
+// a question across devices. Best-effort: returns [] if the read is denied.
+async function _sdSeenQuestionIds() {
+  try {
+    if (!currentUser || !currentUser.uid) return [];
+    const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', currentUser.uid)));
+    const ids = new Set();
+    snap.forEach(doc => { const a = doc.data(); if (a && a.mode === 'defenders' && a.questionId) ids.add(a.questionId); });
+    return Array.from(ids);
+  } catch (e) { console.warn('SD seen-ids read failed', e); return []; }
+}
+// Record one Tower-Defense MCQ response into the same teacher-visible log the
+// rest of the app uses (shows up in the Usage dashboard).
+function _sdRecordAttempt(d) {
+  try {
+    if (!currentUser || currentUser.role !== 'student' || !d || !d.questionId) return;
+    addDoc(collection(db, 'questionAttempts'), {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      displayName: currentUser.name,
+      questionId: d.questionId,
+      questionTitle: d.questionTitle || '',
+      score: d.correct ? 1 : 0,
+      totalBlanks: 1,
+      answerHash: '',
+      timestamp: Timestamp.now(),
+      mode: 'defenders'
+    }).catch(err => console.warn('SD record attempt failed', err));
+  } catch (e) {}
+}
 window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
-  if (!d || d.type !== 'SD_REQUEST_QUESTIONS') return;
-  let questions = [];
-  try { questions = buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
-  try { ev.source && ev.source.postMessage({ type: 'SD_QUESTIONS', questions }, '*'); } catch (e) {}
+  if (!d) return;
+  if (d.type === 'SD_REQUEST_QUESTIONS') {
+    (async () => {
+      let questions = [];
+      try { questions = buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
+      const seenIds = await _sdSeenQuestionIds();
+      const payload = {
+        type: 'SD_QUESTIONS',
+        questions,
+        seenIds,
+        studentKey: (currentUser && currentUser.uid) || 'guest',
+        studentName: (currentUser && currentUser.name) || ''
+      };
+      try { ev.source && ev.source.postMessage(payload, '*'); } catch (e) {}
+    })();
+  } else if (d.type === 'SD_RECORD') {
+    _sdRecordAttempt(d);
+  }
 });
 
 // =====================================================================
