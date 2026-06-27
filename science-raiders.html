@@ -503,35 +503,64 @@ var CLASS_SPR = { ranger:98, tank:96, scout:112 };
 var _tc = document.createElement('canvas'); _tc.width = 16; _tc.height = 16;
 var _tx = _tc.getContext('2d'); _tx.imageSmoothingEnabled = false;
 
-// Draw tile `idx` from a 12-col/16px sheet centred at (cx,cy), scaled to `size`.
-// opts: {flip, tint, tintA, alpha}
-function drawSprite(img, idx, cx, cy, size, opts){
+/* ---- Admin sprite OVERRIDES (custom PNGs pasted in the parent app) ----
+   The parent posts {type:'raidersAssets', overrides:{objectId:url}} and we draw
+   the override image (whole image = one sprite) in place of the sheet tile.
+   We never read canvas pixels back, so cross-origin override URLs are safe. */
+var OVR = {};
+function _ovrSet(map){
+  map = map || {};
+  Object.keys(map).forEach(function(id){
+    var url = map[id];
+    if (!url){ delete OVR[id]; return; }
+    if (OVR[id] && OVR[id].src === url) return;
+    var im = new Image();
+    im.src = url;                 // no crossOrigin — we never read pixels back
+    OVR[id] = { img: im, src: url };
+  });
+  Object.keys(OVR).forEach(function(id){ if (!map[id]) delete OVR[id]; });
+}
+function ovr(id){ var o = OVR[id]; return (o && o.img.complete && o.img.naturalWidth > 0) ? o.img : null; }
+
+// Core blit: draw a source rect of `img` centred at (cx,cy), fit into a size
+// box (aspect-preserved), with optional flip and a composited tint colour.
+function _blit(img, sx, sy, sw, sh, cx, cy, size, opts){
   opts = opts || {};
-  var ts = 16, cols = 12;
-  var sx = (idx % cols) * ts, sy = ((idx / cols) | 0) * ts;
   var prevA = ctx.globalAlpha;
   if (opts.alpha != null) ctx.globalAlpha = prevA * opts.alpha;
+  var dw = size, dh = size;
+  if (sw && sh && sw !== sh){ if (sw > sh) dh = size * sh / sw; else dw = size * sw / sh; }
   ctx.save();
   ctx.translate(cx, cy);
   if (opts.flip) ctx.scale(-1, 1);
   if (opts.tint){
-    _tx.clearRect(0, 0, ts, ts);
+    if (_tc.width !== sw || _tc.height !== sh){ _tc.width = sw; _tc.height = sh; _tx.imageSmoothingEnabled = false; }
+    _tx.clearRect(0, 0, sw, sh);
     _tx.globalCompositeOperation = 'source-over'; _tx.globalAlpha = 1;
-    _tx.drawImage(img, sx, sy, ts, ts, 0, 0, ts, ts);
+    _tx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
     _tx.globalCompositeOperation = 'source-atop';
     _tx.globalAlpha = opts.tintA != null ? opts.tintA : 0.6;
-    _tx.fillStyle = opts.tint; _tx.fillRect(0, 0, ts, ts);
+    _tx.fillStyle = opts.tint; _tx.fillRect(0, 0, sw, sh);
     _tx.globalCompositeOperation = 'source-over'; _tx.globalAlpha = 1;
-    ctx.drawImage(_tc, -size/2, -size/2, size, size);
+    ctx.drawImage(_tc, -dw/2, -dh/2, dw, dh);
   } else {
-    ctx.drawImage(img, sx, sy, ts, ts, -size/2, -size/2, size, size);
+    ctx.drawImage(img, sx, sy, sw, sh, -dw/2, -dh/2, dw, dh);
   }
   ctx.restore();
   ctx.globalAlpha = prevA;
 }
+// Draw tile `idx` from a 12-col/16px sheet centred at (cx,cy), scaled to `size`.
+// opts: {flip, tint, tintA, alpha}
+function drawSprite(img, idx, cx, cy, size, opts){
+  _blit(img, (idx % 12) * 16, ((idx / 12) | 0) * 16, 16, 16, cx, cy, size, opts);
+}
+// Draw an override image (used as a whole) centred at (cx,cy).
+function drawOverride(img, cx, cy, size, opts){
+  _blit(img, 0, 0, img.naturalWidth, img.naturalHeight, cx, cy, size, opts);
+}
 
 // ---- New sprite-based renderers (fall back to the *Proc versions) ----
-function _treeAt(x, y){ drawSprite(IMG_TOWN, 3, x, y, 30, {}); }
+function _treeAt(x, y){ var o = ovr('tree'); if (o) drawOverride(o, x, y, 30, {}); else drawSprite(IMG_TOWN, 3, x, y, 30, {}); }
 
 function drawFloor(){
   if (!_townReady()){ drawFloorProc(); return; }
@@ -540,7 +569,9 @@ function drawFloor(){
     for (var c = 0; c < cols; c++){
       var h = ((c * 73856093) ^ (r * 19349663)) >>> 0, k = h % 28;
       var idx = k === 0 ? 2 : (k < 4 ? 1 : 0);   // grass: mostly plain, some detail, rare flowers
-      ctx.drawImage(IMG_TOWN, (idx % 12) * 16, ((idx / 12) | 0) * 16, 16, 16, c*S, r*S, S, S);
+      var go = ovr('grass_' + idx);
+      if (go) ctx.drawImage(go, 0, 0, go.naturalWidth, go.naturalHeight, c*S, r*S, S, S);
+      else ctx.drawImage(IMG_TOWN, (idx % 12) * 16, ((idx / 12) | 0) * 16, 16, 16, c*S, r*S, S, S);
     }
   }
   // a little foliage in the corners (purely decorative, drawn under the actors)
@@ -561,8 +592,10 @@ function drawPlayer(p){
   var tint = null, ta = 0, al = 1;
   if (p.hurtFlash > 0){ tint = '#ffffff'; ta = 0.9; }
   else if (fx){ al = 0.5; }
-  drawSprite(IMG_DUNGEON, idx, p.x, p.y - p.r*0.2, p.r*2.8,
-             { flip: Math.cos(p.aim) < 0, tint: tint, tintA: ta, alpha: al });
+  var po = ovr(p.clazz);
+  var pOpts = { flip: Math.cos(p.aim) < 0, tint: tint, tintA: ta, alpha: al };
+  if (po) drawOverride(po, p.x, p.y - p.r*0.2, p.r*2.8, pOpts);
+  else drawSprite(IMG_DUNGEON, idx, p.x, p.y - p.r*0.2, p.r*2.8, pOpts);
   if (p.dashCd > 0){
     ctx.strokeStyle = 'rgba(179,157,219,0.5)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(p.x, p.y, p.r+6, -Math.PI/2, -Math.PI/2 + TAU*(1 - p.dashCd/0.9)); ctx.stroke();
@@ -589,8 +622,10 @@ function drawEnemy(e){
   else if (e.frozenT > 0){ tint = '#4FC3F7'; ta = 0.55; }
   else if (e.poisonT > 0){ tint = '#A4C84A'; ta = 0.5; }
   var bossMul = e.type === 'boss' ? 1.15 : 1;
-  drawSprite(IMG_DUNGEON, idx, e.x, e.y - e.r*0.15 + bob, e.r*2.7*sc*bossMul,
-             { flip: (e.type !== 'turret') && (G.player.x < e.x), tint: tint, tintA: ta, alpha: 1 });
+  var eo = ovr(e.type);
+  var eOpts = { flip: (e.type !== 'turret') && (G.player.x < e.x), tint: tint, tintA: ta, alpha: 1 };
+  if (eo) drawOverride(eo, e.x, e.y - e.r*0.15 + bob, e.r*2.7*sc*bossMul, eOpts);
+  else drawSprite(IMG_DUNGEON, idx, e.x, e.y - e.r*0.15 + bob, e.r*2.7*sc*bossMul, eOpts);
   ctx.restore();
   if (!spawn && e.hp < e.maxHp){
     var w = e.r*2, h = 4;
@@ -2470,6 +2505,22 @@ window.addEventListener('message', function(ev){
   }
 });
 
+// Ask the parent app for any admin-set custom sprite overrides, then listen for
+// them (also pushed live when the admin changes a sprite).
+var _assetReqTries = 0;
+function requestAssetOverrides(){
+  if (!(window.parent && window.parent !== window)) return;
+  try { window.parent.postMessage({ type:'RAIDERS_REQUEST_ASSETS' }, '*'); } catch(e){}
+  _assetReqTries++;
+  if (_assetReqTries < 5) setTimeout(requestAssetOverrides, 1500);
+}
+window.addEventListener('message', function(ev){
+  var d = ev && ev.data;
+  if (!d || d.type !== 'raidersAssets') return;
+  _assetReqTries = 99;            // got them — stop retrying
+  _ovrSet(d.overrides);
+});
+
 /* ---------------- 14b. FLAG A QUESTION ----------------
  * Lets students report a bad question after answering. The game can't reach
  * Firestore directly, so it posts the flag to the parent app, which writes it
@@ -2621,6 +2672,7 @@ function init(){
   wireUI();
   loadAdaptiveState();
   requestBankQuestions();
+  requestAssetOverrides();
   fitCanvas();
   lastTime = performance.now();
   requestAnimationFrame(loop);
