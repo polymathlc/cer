@@ -778,10 +778,21 @@ function queueRoomEnemies(){
   }
   // +80% more enemies than before (old 2× → 3.6×), trickled in over the room.
   var budget = Math.round((4 + f * 1.6 + G.room * 0.8) * d.count * 3.6);
-  var pool = ['slime', 'swarm'];
-  if (f >= 2) pool.push('turret', 'drone', 'spitter');
-  if (f >= 3) pool.push('brute', 'sniper', 'bomber');
-  if (f >= 4) pool.push('seeker');
+  // Weighted spawn pool. The screen was getting flooded with projectiles from
+  // the "special" shooters (spread/heavy/homing), so they're toned down while
+  // the plain single-shot 'turret' is doubled. Melee types stay at baseline 2;
+  // turret = 4 (double); special shooters = 1 (roughly half the old share).
+  var weights = {
+    slime: 2, swarm: 2, brute: 2,   // melee — unchanged baseline
+    turret: 4,                       // normal single-shot — doubled
+    drone: 1, spitter: 1, sniper: 1, bomber: 1, seeker: 1  // specials — lowered
+  };
+  var pool = [];
+  function addType(t){ for (var w = 0; w < weights[t]; w++) pool.push(t); }
+  addType('slime'); addType('swarm');
+  if (f >= 2){ addType('turret'); addType('drone'); addType('spitter'); }
+  if (f >= 3){ addType('brute'); addType('sniper'); addType('bomber'); }
+  if (f >= 4){ addType('seeker'); }
   var costMap = { slime: 1, swarm: 1, turret: 2, drone: 2, spitter: 2, sniper: 2, bomber: 3, seeker: 3, brute: 3 };
   var guard = 0;
   while (budget > 0 && guard++ < 300){
