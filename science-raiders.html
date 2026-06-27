@@ -173,6 +173,25 @@ html, body {
 }
 @media (max-width: 640px){ .hint-bar { display: none; } }
 
+/* ---- Active-skill bar ---- */
+.skillbar { position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%); display: flex; gap: 9px; z-index: 6; }
+.skill {
+  position: relative; width: 54px; height: 54px; border-radius: 12px;
+  background: rgba(26,21,48,0.82); border: 1.5px solid rgba(255,255,255,0.16);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #fff; cursor: pointer; overflow: hidden; user-select: none; -webkit-user-select: none;
+  transition: border-color .12s ease, box-shadow .12s ease, transform .06s ease;
+}
+.skill:active { transform: translateY(1px); }
+.skill .sk-ico { font-size: 20px; line-height: 1; }
+.skill .sk-key { position: absolute; top: 2px; left: 5px; font-size: 10px; font-weight: 800; color: rgba(255,255,255,0.55); }
+.skill .sk-name { font-size: 8.5px; font-weight: 700; margin-top: 2px; letter-spacing: .02em; opacity: 0.85; }
+.skill .sk-cdfill { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.62); pointer-events: none; }
+.skill .sk-cdnum { position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; font-weight: 800; pointer-events: none; }
+.skill.ready { border-color: var(--accent-base); box-shadow: 0 0 0 1px var(--accent-light); }
+.skill.ready:hover { background: rgba(126,87,194,0.55); }
+@media (max-width: 640px){ .skillbar { bottom: 8px; } .skill { width: 48px; height: 48px; } }
+
 /* ---- Overlays (intro / gameover / upgrade / question) ---- */
 .overlay {
   position: absolute; inset: 0; z-index: 30;
@@ -326,7 +345,8 @@ html, body {
   <div class="stage">
     <canvas id="game" width="720" height="540"></canvas>
     <div class="banner" id="banner"></div>
-    <div class="hint-bar" id="hintBar">Move: <b>WASD / Arrows</b> &nbsp;·&nbsp; Aim &amp; fire: <b>mouse</b> &nbsp;·&nbsp; Dash: <b>Space / Shift</b></div>
+    <div class="skillbar" id="skillBar"></div>
+    <div class="hint-bar" id="hintBar">Move: <b>WASD / Arrows</b> &nbsp;·&nbsp; Aim &amp; fire: <b>mouse</b> &nbsp;·&nbsp; Dash: <b>Space / Shift</b> &nbsp;·&nbsp; Skills: <b>1-4</b></div>
     <div class="toast-wrap" id="toastWrap"></div>
 
     <!-- INTRO -->
@@ -535,6 +555,18 @@ var MAX_UPGRADES = 10;        // run-long cap on upgrades taken
 var ORBIT_R = 42;             // Orbital Guard orbit radius
 function isElemMilestone(lvl){ return lvl === 5 || lvl === 10; }
 
+/* ---------------- 3c. ACTIVE SPECIAL SKILLS ----------------
+ * Four tactical abilities available from the start, each on a cooldown.
+ * Trigger with number keys 1-4 or by tapping the skill bar. Damage scales with
+ * the player's current gun damage so they stay relevant as you upgrade. */
+var SKILLS = [
+  { id: 'mortar',       key: '1', icon: '💣', name: 'Mortar',  cd: 6,  targeted: true,  cast: castMortar },
+  { id: 'nuke',         key: '2', icon: '☢️', name: 'Nuke',    cd: 24, targeted: false, cast: castNuke },
+  { id: 'blackhole',    key: '3', icon: '🕳️', name: 'Blackhole', cd: 17, targeted: true, cast: castBlackhole },
+  { id: 'interceptors', key: '4', icon: '🛸', name: 'Drones',  cd: 14, targeted: false, cast: castInterceptors }
+];
+var SKILL_BY_KEY = {}; SKILLS.forEach(function(s){ SKILL_BY_KEY[s.key] = s; });
+
 /* ---------------- 4. GAME STATE ---------------- */
 var G = null;          // active run, or null on menus
 var paused = false;
@@ -573,11 +605,14 @@ function startRun(){
     coins: 0,
     bannerT: 0, shakeT: 0, shakeMag: 0,
     walls: [], door: null, doorOpen: false,
-    spawnFx: 0, shockwaves: [], lightning: []
+    spawnFx: 0, shockwaves: [], lightning: [],
+    skillCd: { mortar: 0, nuke: 0, blackhole: 0, interceptors: 0 },
+    mortars: [], blackholes: [], allies: [], nukeFlash: 0
   };
   buildRoom();
   hideAll();
   paused = false;
+  initSkillBar();
   updateHud();
   banner('Floor 1 · Room 1', 1200);
 }
@@ -620,8 +655,8 @@ function spawnEnemies(){
   }
 }
 
-var ENEMY_HP_MULT = 1.5;     // +50% enemy health
-var ENEMY_SPEED_MULT = 1.3;  // +30% enemy movement speed
+var ENEMY_HP_MULT = 1.5;      // +50% enemy health
+var ENEMY_SPEED_MULT = 0.78;  // net move speed: the +30% boost, then reduced 40% (1.3 × 0.6)
 function spawnEnemy(type, x, y, floor){
   var base = ENEMY_TYPES[type];
   var d = G.diff;
@@ -650,6 +685,7 @@ window.addEventListener('keydown', function(e){
   var k = e.key.toLowerCase();
   keys[k] = true;
   if ((k === ' ' || k === 'shift') && G && G.state === 'play') { e.preventDefault(); tryDash(); }
+  if (SKILL_BY_KEY[k] && G && G.state === 'play' && !paused) { e.preventDefault(); triggerSkill(SKILL_BY_KEY[k].id); }
   if (k === 'p') togglePause();
   if (k === 'escape' && G && G.state === 'play') togglePause();
   if ([ 'arrowup','arrowdown','arrowleft','arrowright',' ' ].indexOf(e.key.toLowerCase()) >= 0) e.preventDefault();
@@ -756,6 +792,7 @@ function update(dt){
   updateEnemies(dt);
   updateEnemyBullets(dt);
   updateOrbit(dt);
+  updateSkills(dt);
   updateShockwaves(dt);
   updateLightning(dt);
   reapEnemies();          // resolve all deferred deaths before the room-clear check
@@ -1096,6 +1133,135 @@ function updateShockwaves(dt){
   }
 }
 
+/* ---------------- 7c. ACTIVE SKILLS ---------------- */
+function gunDamage(){ return G.player.baseDmg * G.player.dmgMul; }
+// Where a targeted skill lands: the mouse if it's over the arena, else the
+// nearest enemy, else the upper-middle of the room.
+function skillTarget(){
+  if (mouse.active) return { x: clamp(mouse.x, 20, VIEW_W - 20), y: clamp(mouse.y, 20, VIEW_H - 20) };
+  var e = nearestEnemy(G.player.x, G.player.y);
+  if (e) return { x: e.x, y: e.y };
+  return { x: VIEW_W / 2, y: VIEW_H / 3 };
+}
+function triggerSkill(id){
+  if (!G || G.state !== 'play') return;
+  if ((G.skillCd[id] || 0) > 0){ toast('On cooldown', 'bad'); return; }
+  var def = null; for (var i = 0; i < SKILLS.length; i++) if (SKILLS[i].id === id) def = SKILLS[i];
+  if (!def) return;
+  var t = def.targeted ? skillTarget() : null;
+  def.cast(t);
+  G.skillCd[id] = def.cd;
+}
+// Generic area blast — damages enemies in radius and spawns a shockwave + sparks.
+function aoeBlast(x, y, radius, dmg, color){
+  G.enemies.slice().forEach(function(e){ if (e.spawnT > 0 || e.dead) return; if (dist2(e.x, e.y, x, y) <= radius * radius) damageEnemy(e, dmg, false); });
+  G.shockwaves.push({ x: x, y: y, r: 14, max: radius, life: 0.4, maxLife: 0.4, color: color || '#FF7043' });
+  for (var i = 0; i < 18; i++) addParticle(x + rand(-radius/3, radius/3), y + rand(-radius/3, radius/3), color || '#FF7043', rand(1, 2.4));
+  G.shakeT = 0.2; G.shakeMag = 6;
+}
+function castMortar(t){
+  // a shell that arcs from the player to the target, then explodes
+  G.mortars.push({ sx: G.player.x, sy: G.player.y, tx: t.x, ty: t.y, x: G.player.x, y: G.player.y, t: 0, total: 0.55, dmg: gunDamage() * 4 + 30, radius: 95 });
+}
+function updateMortars(dt){
+  for (var i = G.mortars.length - 1; i >= 0; i--){
+    var m = G.mortars[i];
+    m.t += dt;
+    var f = Math.min(1, m.t / m.total);
+    m.x = lerp(m.sx, m.tx, f); m.y = lerp(m.sy, m.ty, f);
+    if (f >= 1){ aoeBlast(m.tx, m.ty, m.radius, m.dmg, '#FF7043'); G.mortars.splice(i, 1); }
+  }
+}
+function castNuke(){
+  var dmg = gunDamage() * 8 + 80;
+  G.enemies.slice().forEach(function(e){ if (e.spawnT > 0 || e.dead) return; damageEnemy(e, dmg, false); });
+  G.nukeFlash = 0.5; G.shakeT = 0.45; G.shakeMag = 11;
+  for (var i = 0; i < 50; i++) addParticle(rand(0, VIEW_W), rand(0, VIEW_H), i % 2 ? '#FFE082' : '#FFAB40', rand(1, 3));
+  toast('☢️ NUKE!', 'energy');
+}
+function castBlackhole(t){
+  G.blackholes.push({ x: t.x, y: t.y, life: 3.2, maxLife: 3.2, dmg: gunDamage(), spin: 0 });
+}
+function updateBlackholes(dt){
+  for (var i = G.blackholes.length - 1; i >= 0; i--){
+    var bh = G.blackholes[i];
+    bh.life -= dt; bh.spin += dt * 6;
+    var pullR = 165, killR = 30;
+    for (var j = 0; j < G.enemies.length; j++){
+      var e = G.enemies[j];
+      if (e.spawnT > 0 || e.dead) continue;
+      var dd = dist2(e.x, e.y, bh.x, bh.y);
+      if (dd < pullR * pullR){
+        var dl = Math.sqrt(dd) || 1;
+        var pull = (e.type === 'boss' ? 30 : 130) * (1 - dl / pullR);
+        e.x += (bh.x - e.x) / dl * pull * dt;
+        e.y += (bh.y - e.y) / dl * pull * dt;
+        if (dl < killR) damageEnemy(e, bh.dmg * 3 * dt, false);
+      }
+    }
+    if (Math.random() < dt * 30) addParticle(bh.x + rand(-40, 40), bh.y + rand(-40, 40), '#7E57C2', 0.4);
+    if (bh.life <= 0) G.blackholes.splice(i, 1);
+  }
+}
+function castInterceptors(){
+  var p = G.player;
+  for (var i = 0; i < 3; i++) G.allies.push({ x: p.x + rand(-24, 24), y: p.y + rand(-24, 24), vx: 0, vy: 0, life: 8.5, cd: rand(0, 0.4) });
+  toast('🛸 Interceptors online', 'good');
+}
+function updateAllies(dt){
+  var p = G.player;
+  for (var i = G.allies.length - 1; i >= 0; i--){
+    var a = G.allies[i];
+    a.life -= dt; a.cd -= dt;
+    var target = nearestEnemy(a.x, a.y);
+    // hover near the player, drift toward target a bit
+    var hx = p.x + Math.cos(a.life * 2 + i) * 46, hy = p.y + Math.sin(a.life * 2 + i) * 46;
+    var gx = target ? (target.x * 0.5 + hx * 0.5) : hx, gy = target ? (target.y * 0.5 + hy * 0.5) : hy;
+    a.x += (gx - a.x) * Math.min(1, dt * 3); a.y += (gy - a.y) * Math.min(1, dt * 3);
+    if (target && a.cd <= 0){
+      a.cd = 0.45;
+      var ang = Math.atan2(target.y - a.y, target.x - a.x);
+      var sp = 8 * 60;
+      G.bullets.push({ x: a.x, y: a.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: 4, dmg: gunDamage() * 0.8, crit: false, pierce: 0, hits: [], life: 1.2, color: '#4DD0E1', laser: false, elem: null });
+    }
+    if (a.life <= 0) G.allies.splice(i, 1);
+  }
+}
+function updateSkills(dt){
+  for (var k in G.skillCd){ if (G.skillCd[k] > 0) G.skillCd[k] -= dt; }
+  if (G.nukeFlash > 0) G.nukeFlash -= dt;
+  updateMortars(dt); updateBlackholes(dt); updateAllies(dt);
+}
+// Build the skill bar buttons once (idempotent).
+function initSkillBar(){
+  var bar = $('skillBar'); if (!bar) return;
+  bar.style.display = 'flex';
+  if (bar.childElementCount) return;
+  SKILLS.forEach(function(s){
+    var el = document.createElement('div');
+    el.className = 'skill'; el.dataset.skill = s.id;
+    el.innerHTML = '<span class="sk-key">' + s.key + '</span><span class="sk-ico">' + s.icon + '</span><span class="sk-name">' + s.name + '</span>' +
+      '<div class="sk-cdfill"></div><div class="sk-cdnum"></div>';
+    el.title = s.name + (s.targeted ? ' — aim with the mouse' : '') + ' (key ' + s.key + ', ' + s.cd + 's cooldown)';
+    el.addEventListener('click', function(){ triggerSkill(s.id); });
+    bar.appendChild(el);
+  });
+}
+// Update the cooldown overlay on each skill button every frame.
+function renderSkillBar(){
+  var bar = $('skillBar'); if (!bar) return;
+  if (!G || G.state === 'over'){ bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  SKILLS.forEach(function(s){
+    var el = bar.querySelector('[data-skill="' + s.id + '"]'); if (!el) return;
+    var cd = (G.skillCd && G.skillCd[s.id]) || 0;
+    var frac = clamp(cd / s.cd, 0, 1);
+    el.classList.toggle('ready', cd <= 0);
+    el.querySelector('.sk-cdfill').style.height = (frac * 100) + '%';
+    el.querySelector('.sk-cdnum').textContent = cd > 0 ? Math.ceil(cd) : '';
+  });
+}
+
 /* ---------------- 8. PARTICLES / FLOATERS / PICKUPS ---------------- */
 function addParticle(x, y, color, speed){
   var a = rand(0, TAU);
@@ -1171,22 +1337,48 @@ function render(){
   drawFloor();
   if (!G){ ctx.restore(); return; }
 
-  // nova shockwaves (under actors)
+  // shockwaves (nova / mortar / explosions) under actors
   for (var sw = 0; sw < G.shockwaves.length; sw++){
     var s = G.shockwaves[sw];
     ctx.globalAlpha = clamp(s.life / s.maxLife, 0, 1) * 0.7;
-    ctx.strokeStyle = '#FFD54F'; ctx.lineWidth = 4;
+    ctx.strokeStyle = s.color || '#FFD54F'; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.stroke();
     ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(s.x, s.y, s.r * 0.82, 0, TAU); ctx.stroke();
   }
   ctx.globalAlpha = 1;
 
+  // black holes (under actors — they suck enemies in)
+  for (var bh = 0; bh < G.blackholes.length; bh++){
+    var h = G.blackholes[bh];
+    var a = clamp(h.life / h.maxLife, 0, 1);
+    ctx.globalAlpha = a;
+    // swirling accretion ring
+    ctx.strokeStyle = 'rgba(149,117,205,0.7)'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(h.x, h.y, 26 + Math.sin(h.spin) * 3, h.spin, h.spin + 5.2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(206,147,216,0.5)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(h.x, h.y, 40, -h.spin, -h.spin + 4.5); ctx.stroke();
+    // dark core
+    ctx.fillStyle = '#120a22'; ctx.beginPath(); ctx.arc(h.x, h.y, 16, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
   // pickups
   for (var i = 0; i < G.pickups.length; i++){ var k = G.pickups[i]; drawHeart(k.x, k.y + Math.sin(k.t*4)*2, 9); }
 
   // enemies
   for (var e = 0; e < G.enemies.length; e++) drawEnemy(G.enemies[e]);
+
+  // mortar shells in flight (+ a target marker on the ground)
+  for (var mi = 0; mi < G.mortars.length; mi++){
+    var m = G.mortars[mi];
+    ctx.strokeStyle = 'rgba(255,112,67,0.6)'; ctx.lineWidth = 2; ctx.setLineDash([4, 5]);
+    ctx.beginPath(); ctx.arc(m.tx, m.ty, m.radius, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+    var arc = Math.sin((m.t / m.total) * Math.PI) * 26; // visual lob height
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(m.x, m.y, 6, 3, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#FF7043'; ctx.beginPath(); ctx.arc(m.x, m.y - arc, 5, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#FFCCBC'; ctx.beginPath(); ctx.arc(m.x - 1.5, m.y - arc - 1.5, 2, 0, TAU); ctx.fill();
+  }
 
   // enemy bullets
   for (var b = 0; b < G.ebullets.length; b++){ var eb = G.ebullets[b]; drawBullet(eb.x, eb.y, eb.r, eb.color, true); }
@@ -1228,6 +1420,17 @@ function render(){
     }
   }
 
+  // interceptor drones
+  for (var ai = 0; ai < G.allies.length; ai++){
+    var al = G.allies[ai];
+    var fade = al.life < 1.5 && Math.floor(al.life * 10) % 2 === 0; // blink as they expire
+    if (fade) continue;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(al.x, al.y + 7, 7, 3, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#4DD0E1'; pxDiamond(al.x, al.y, 7);
+    ctx.fillStyle = '#006064'; ctx.fillRect(al.x - 2, al.y - 1, 4, 2);
+    ctx.fillStyle = '#E0F7FA'; ctx.fillRect(al.x - 1, al.y - 3, 2, 1.5);
+  }
+
   // particles
   for (var pt = 0; pt < G.particles.length; pt++){
     var q = G.particles[pt];
@@ -1248,6 +1451,13 @@ function render(){
   }
   ctx.globalAlpha = 1;
   ctx.restore();
+
+  // nuke screen flash
+  if (G.nukeFlash > 0){
+    ctx.globalAlpha = clamp(G.nukeFlash / 0.5, 0, 1) * 0.7;
+    ctx.fillStyle = '#FFF8E1'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.globalAlpha = 1;
+  }
 
   // Boss HP bar — fixed across the top of the arena while a boss is alive.
   var boss = null;
@@ -1936,6 +2146,7 @@ function loop(now){
   lastTime = now;
   update(dt);
   render();
+  renderSkillBar();
   requestAnimationFrame(loop);
 }
 
