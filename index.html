@@ -6570,7 +6570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.15.0';
+const APP_VERSION = 'v1.16.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20468,6 +20468,30 @@ function _sdRecordAttempt(d) {
     }).catch(err => console.warn('SD record attempt failed', err));
   } catch (e) {}
 }
+// Flag a question from inside a mini-game (tower defense / roguelite). Writes to
+// the same `flaggedQuestions` collection the in-app flag dialog uses so it shows
+// up on the admin "Flagged Questions" page. Acks back so the game can confirm.
+async function _sdRecordFlag(d, source) {
+  function ack(ok, msg) { try { source && source.postMessage({ type: 'SD_FLAG_RESULT', ok: ok, message: msg || '' }, '*'); } catch (e) {} }
+  try {
+    const comment = (d && typeof d.comment === 'string') ? d.comment.trim() : '';
+    if (!comment) { ack(false, 'Please describe the issue'); return; }
+    if (!currentUser || !d || !d.questionId) { ack(false, 'Sign in to flag a question'); return; }
+    const game = d.mode === 'raiders' ? 'Science Raiders' : 'Science Defenders';
+    await addDoc(collection(db, 'flaggedQuestions'), {
+      questionId: d.questionId,
+      questionTitle: d.questionTitle || '',
+      comment: `[${game}] ${comment}`,
+      flaggedBy: currentUser.name,
+      flaggedByEmail: currentUser.email,
+      flaggedByUid: currentUser.uid,
+      timestamp: Timestamp.now(),
+      status: 'open'
+    });
+    if (currentUser.role === 'admin') { try { loadFlaggedQuestions(); } catch (e) {} }
+    ack(true);
+  } catch (e) { console.warn('SD flag failed', e); ack(false, 'Could not submit — check your connection'); }
+}
 window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
   if (!d) return;
@@ -20487,6 +20511,8 @@ window.addEventListener('message', function (ev) {
     })();
   } else if (d.type === 'SD_RECORD') {
     _sdRecordAttempt(d);
+  } else if (d.type === 'SD_FLAG') {
+    _sdRecordFlag(d, ev.source);
   }
 });
 
