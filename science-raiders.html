@@ -188,6 +188,7 @@ html, body {
 .skill .sk-name { font-size: 8.5px; font-weight: 700; margin-top: 2px; letter-spacing: .02em; opacity: 0.85; }
 .skill .sk-cdfill { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.62); pointer-events: none; }
 .skill .sk-cdnum { position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; font-weight: 800; pointer-events: none; }
+.skill .sk-lvl { position: absolute; top: 1px; right: 4px; font-size: 9px; font-weight: 800; color: #FFD54F; pointer-events: none; }
 .skill.ready { border-color: var(--accent-base); box-shadow: 0 0 0 1px var(--accent-light); }
 .skill.ready:hover { background: rgba(126,87,194,0.55); }
 @media (max-width: 640px){ .skillbar { bottom: 8px; } .skill { width: 48px; height: 48px; } }
@@ -358,11 +359,13 @@ html, body {
         <ul class="how">
           <li data-ico="🕹️">Move with <strong>WASD / arrow keys</strong>. Your blaster auto-fires toward your <strong>mouse</strong> (or the nearest enemy on touch).</li>
           <li data-ico="💨">Tap <strong>Space</strong> or <strong>Shift</strong> to dash through danger (brief invulnerability).</li>
-          <li data-ico="🧪">Clear a room to trigger a <strong>science MCQ</strong>. Answer correctly to pick a strong upgrade — a wrong answer still lets you pick a weaker one.</li>
-          <li data-ico="🏚️">Survive <strong id="introRooms">4</strong> rooms to descend a floor. Enemies get tougher the deeper you raid.</li>
+          <li data-ico="🧪">Clear a room to trigger a <strong>science MCQ</strong>. Answer correctly to choose an upgrade — level an element to 5/10, or <strong>level up your skill</strong>.</li>
+          <li data-ico="🎯">Pick <strong>one skill</strong> below — it's the only one you'll wield this run. Fire it with <strong>key 1</strong>.</li>
         </ul>
         <div style="font-weight:800;font-size:var(--font-size-sm);margin-bottom:6px;">Pick your raider</div>
         <div class="pills" id="classPills"></div>
+        <div style="font-weight:800;font-size:var(--font-size-sm);margin-bottom:6px;">Choose your skill <span style="font-weight:600;color:var(--text-tertiary);">(one per run)</span></div>
+        <div class="pills" id="skillPills"></div>
         <div style="font-weight:800;font-size:var(--font-size-sm);margin-bottom:6px;">Difficulty</div>
         <div class="pills" id="diffPills"></div>
         <div class="row">
@@ -559,13 +562,18 @@ function isElemMilestone(lvl){ return lvl === 5 || lvl === 10; }
  * Four tactical abilities available from the start, each on a cooldown.
  * Trigger with number keys 1-4 or by tapping the skill bar. Damage scales with
  * the player's current gun damage so they stay relevant as you upgrade. */
+// The student picks ONE skill at the start and uses only it for the whole run.
+// Upgrading the skill (offered as an upgrade choice) raises its level — stronger
+// effect and a shorter cooldown.
 var SKILLS = [
-  { id: 'mortar',       key: '1', icon: '💣', name: 'Mortar',  cd: 6,  targeted: true,  cast: castMortar },
-  { id: 'nuke',         key: '2', icon: '☢️', name: 'Nuke',    cd: 24, targeted: false, cast: castNuke },
-  { id: 'blackhole',    key: '3', icon: '🕳️', name: 'Blackhole', cd: 17, targeted: true, cast: castBlackhole },
-  { id: 'interceptors', key: '4', icon: '🛸', name: 'Drones',  cd: 14, targeted: false, cast: castInterceptors }
+  { id: 'mortar',       icon: '💣', name: 'Mortar',  cd: 6,  targeted: true,  cast: castMortar,       desc: 'Lob a shell to the aimed spot for an area blast.' },
+  { id: 'nuke',         icon: '☢️', name: 'Nuke',    cd: 24, targeted: false, cast: castNuke,         desc: 'Devastate every enemy on screen. Long cooldown.' },
+  { id: 'blackhole',    icon: '🕳️', name: 'Blackhole', cd: 17, targeted: true, cast: castBlackhole,    desc: 'Spawn a singularity that pulls foes in and grinds them.' },
+  { id: 'interceptors', icon: '🛸', name: 'Drones',  cd: 14, targeted: false, cast: castInterceptors, desc: 'Deploy drones that seek and shoot enemies for a while.' }
 ];
-var SKILL_BY_KEY = {}; SKILLS.forEach(function(s){ SKILL_BY_KEY[s.key] = s; });
+var SKILL_BY_ID = {}; SKILLS.forEach(function(s){ SKILL_BY_ID[s.id] = s; });
+function skillDef(id){ return SKILL_BY_ID[id]; }
+function effectiveSkillCd(def, level){ return def.cd * Math.max(0.45, 1 - 0.08 * ((level || 1) - 1)); }
 
 /* ---------------- 4. GAME STATE ---------------- */
 var G = null;          // active run, or null on menus
@@ -573,6 +581,7 @@ var paused = false;
 var lastTime = 0;
 var chosenClass = 'ranger';
 var chosenDiff = 'raider';
+var chosenSkill = 'mortar';
 
 function newPlayer(clazz){
   var c = CLASSES[clazz];
@@ -606,7 +615,7 @@ function startRun(){
     bannerT: 0, shakeT: 0, shakeMag: 0,
     walls: [], door: null, doorOpen: false,
     spawnFx: 0, shockwaves: [], lightning: [],
-    skillCd: { mortar: 0, nuke: 0, blackhole: 0, interceptors: 0 },
+    skill: { id: chosenSkill, level: 1, cd: 0 },   // the one skill chosen for this run
     mortars: [], blackholes: [], allies: [], nukeFlash: 0
   };
   buildRoom();
@@ -685,7 +694,7 @@ window.addEventListener('keydown', function(e){
   var k = e.key.toLowerCase();
   keys[k] = true;
   if ((k === ' ' || k === 'shift') && G && G.state === 'play') { e.preventDefault(); tryDash(); }
-  if (SKILL_BY_KEY[k] && G && G.state === 'play' && !paused) { e.preventDefault(); triggerSkill(SKILL_BY_KEY[k].id); }
+  if ((k === '1' || k === 'q') && G && G.state === 'play' && !paused) { e.preventDefault(); triggerSkill(); }
   if (k === 'p') togglePause();
   if (k === 'escape' && G && G.state === 'play') togglePause();
   if ([ 'arrowup','arrowdown','arrowleft','arrowright',' ' ].indexOf(e.key.toLowerCase()) >= 0) e.preventDefault();
@@ -1143,15 +1152,16 @@ function skillTarget(){
   if (e) return { x: e.x, y: e.y };
   return { x: VIEW_W / 2, y: VIEW_H / 3 };
 }
-function triggerSkill(id){
-  if (!G || G.state !== 'play') return;
-  if ((G.skillCd[id] || 0) > 0){ toast('On cooldown', 'bad'); return; }
-  var def = null; for (var i = 0; i < SKILLS.length; i++) if (SKILLS[i].id === id) def = SKILLS[i];
-  if (!def) return;
+// Fire the run's chosen skill (the only one available).
+function triggerSkill(){
+  if (!G || G.state !== 'play' || !G.skill) return;
+  if (G.skill.cd > 0){ toast('On cooldown', 'bad'); return; }
+  var def = skillDef(G.skill.id); if (!def) return;
   var t = def.targeted ? skillTarget() : null;
   def.cast(t);
-  G.skillCd[id] = def.cd;
+  G.skill.cd = effectiveSkillCd(def, G.skill.level);
 }
+function skillLevel(){ return (G && G.skill) ? G.skill.level : 1; }
 // Generic area blast — damages enemies in radius and spawns a shockwave + sparks.
 function aoeBlast(x, y, radius, dmg, color){
   G.enemies.slice().forEach(function(e){ if (e.spawnT > 0 || e.dead) return; if (dist2(e.x, e.y, x, y) <= radius * radius) damageEnemy(e, dmg, false); });
@@ -1161,7 +1171,8 @@ function aoeBlast(x, y, radius, dmg, color){
 }
 function castMortar(t){
   // a shell that arcs from the player to the target, then explodes
-  G.mortars.push({ sx: G.player.x, sy: G.player.y, tx: t.x, ty: t.y, x: G.player.x, y: G.player.y, t: 0, total: 0.55, dmg: gunDamage() * 4 + 30, radius: 95 });
+  var lv = skillLevel();
+  G.mortars.push({ sx: G.player.x, sy: G.player.y, tx: t.x, ty: t.y, x: G.player.x, y: G.player.y, t: 0, total: 0.55, dmg: gunDamage() * (4 + lv) + 30, radius: 95 + lv * 8 });
 }
 function updateMortars(dt){
   for (var i = G.mortars.length - 1; i >= 0; i--){
@@ -1173,14 +1184,16 @@ function updateMortars(dt){
   }
 }
 function castNuke(){
-  var dmg = gunDamage() * 8 + 80;
+  var lv = skillLevel();
+  var dmg = gunDamage() * (8 + 2 * lv) + 80;
   G.enemies.slice().forEach(function(e){ if (e.spawnT > 0 || e.dead) return; damageEnemy(e, dmg, false); });
   G.nukeFlash = 0.5; G.shakeT = 0.45; G.shakeMag = 11;
   for (var i = 0; i < 50; i++) addParticle(rand(0, VIEW_W), rand(0, VIEW_H), i % 2 ? '#FFE082' : '#FFAB40', rand(1, 3));
   toast('☢️ NUKE!', 'energy');
 }
 function castBlackhole(t){
-  G.blackholes.push({ x: t.x, y: t.y, life: 3.2, maxLife: 3.2, dmg: gunDamage(), spin: 0 });
+  var lv = skillLevel();
+  G.blackholes.push({ x: t.x, y: t.y, life: 3.2 + lv * 0.4, maxLife: 3.2 + lv * 0.4, dmg: gunDamage() * (1 + 0.2 * lv), spin: 0 });
 }
 function updateBlackholes(dt){
   for (var i = G.blackholes.length - 1; i >= 0; i--){
@@ -1204,8 +1217,9 @@ function updateBlackholes(dt){
   }
 }
 function castInterceptors(){
-  var p = G.player;
-  for (var i = 0; i < 3; i++) G.allies.push({ x: p.x + rand(-24, 24), y: p.y + rand(-24, 24), vx: 0, vy: 0, life: 8.5, cd: rand(0, 0.4) });
+  var p = G.player, lv = skillLevel();
+  var count = 3 + Math.floor(lv / 2), life = 8.5 + lv;
+  for (var i = 0; i < count; i++) G.allies.push({ x: p.x + rand(-24, 24), y: p.y + rand(-24, 24), vx: 0, vy: 0, life: life, cd: rand(0, 0.4) });
   toast('🛸 Interceptors online', 'good');
 }
 function updateAllies(dt){
@@ -1228,38 +1242,36 @@ function updateAllies(dt){
   }
 }
 function updateSkills(dt){
-  for (var k in G.skillCd){ if (G.skillCd[k] > 0) G.skillCd[k] -= dt; }
+  if (G.skill && G.skill.cd > 0) G.skill.cd -= dt;
   if (G.nukeFlash > 0) G.nukeFlash -= dt;
   updateMortars(dt); updateBlackholes(dt); updateAllies(dt);
 }
-// Build the skill bar buttons once (idempotent).
+// Build the skill bar — a single button for the run's chosen skill.
 function initSkillBar(){
-  var bar = $('skillBar'); if (!bar) return;
-  bar.style.display = 'flex';
-  if (bar.childElementCount) return;
-  SKILLS.forEach(function(s){
-    var el = document.createElement('div');
-    el.className = 'skill'; el.dataset.skill = s.id;
-    el.innerHTML = '<span class="sk-key">' + s.key + '</span><span class="sk-ico">' + s.icon + '</span><span class="sk-name">' + s.name + '</span>' +
-      '<div class="sk-cdfill"></div><div class="sk-cdnum"></div>';
-    el.title = s.name + (s.targeted ? ' — aim with the mouse' : '') + ' (key ' + s.key + ', ' + s.cd + 's cooldown)';
-    el.addEventListener('click', function(){ triggerSkill(s.id); });
-    bar.appendChild(el);
-  });
+  var bar = $('skillBar'); if (!bar || !G || !G.skill) return;
+  bar.style.display = 'flex'; bar.innerHTML = '';
+  var def = skillDef(G.skill.id); if (!def) return;
+  var el = document.createElement('div');
+  el.className = 'skill'; el.dataset.skill = def.id;
+  el.innerHTML = '<span class="sk-key">1</span><span class="sk-ico">' + def.icon + '</span><span class="sk-name">' + def.name + '</span>' +
+    '<div class="sk-cdfill"></div><div class="sk-cdnum"></div><span class="sk-lvl"></span>';
+  el.title = def.name + (def.targeted ? ' — aim with the mouse' : '') + ' (key 1)';
+  el.addEventListener('click', function(){ triggerSkill(); });
+  bar.appendChild(el);
 }
-// Update the cooldown overlay on each skill button every frame.
+// Update the chosen skill's cooldown overlay + level badge every frame.
 function renderSkillBar(){
   var bar = $('skillBar'); if (!bar) return;
-  if (!G || G.state === 'over'){ bar.style.display = 'none'; return; }
+  if (!G || !G.skill || G.state === 'over'){ bar.style.display = 'none'; return; }
   bar.style.display = 'flex';
-  SKILLS.forEach(function(s){
-    var el = bar.querySelector('[data-skill="' + s.id + '"]'); if (!el) return;
-    var cd = (G.skillCd && G.skillCd[s.id]) || 0;
-    var frac = clamp(cd / s.cd, 0, 1);
-    el.classList.toggle('ready', cd <= 0);
-    el.querySelector('.sk-cdfill').style.height = (frac * 100) + '%';
-    el.querySelector('.sk-cdnum').textContent = cd > 0 ? Math.ceil(cd) : '';
-  });
+  var def = skillDef(G.skill.id);
+  var el = bar.querySelector('[data-skill="' + G.skill.id + '"]');
+  if (!el || !def) return;
+  var cd = G.skill.cd || 0, cdMax = effectiveSkillCd(def, G.skill.level);
+  el.classList.toggle('ready', cd <= 0);
+  el.querySelector('.sk-cdfill').style.height = (clamp(cd / cdMax, 0, 1) * 100) + '%';
+  el.querySelector('.sk-cdnum').textContent = cd > 0 ? Math.ceil(cd) : '';
+  var lvEl = el.querySelector('.sk-lvl'); if (lvEl) lvEl.textContent = G.skill.level > 1 ? ('L' + G.skill.level) : '';
 }
 
 /* ---------------- 8. PARTICLES / FLOATERS / PICKUPS ---------------- */
@@ -1895,14 +1907,23 @@ function availableSupport(){
     return (p._counts && p._counts[u.id] ? p._counts[u.id] : 0) < u.max;
   });
 }
+// An upgrade card that levels up the run's chosen active skill.
+function skillUpgradeOption(){
+  var def = skillDef(G.skill.id);
+  var nl = G.skill.level + 1;
+  return { id: 'skill_up', type: 'skill', icon: def.icon, name: def.name + ' +',
+           desc: 'Level up your ' + def.name + ' skill to Lv ' + nl + ' — stronger effect & shorter cooldown',
+           apply: function(){ G.skill.level += 1; } };
+}
 // Three distinct choices. Guarantee the player's strongest in-progress element so
-// a specialised build is always continuable; fill the rest at random.
+// a specialised build is always continuable; the chosen skill's upgrade is always
+// in the running pool; fill the rest at random.
 function buildUpgradeOffer(){
   var p = G.player, offer = [];
   var topKey = null, topLvl = 0;
   ELEM_KEYS.forEach(function(k){ if ((p.elem[k] || 0) > topLvl){ topLvl = p.elem[k]; topKey = k; } });
   if (topKey) offer.push(elemUpgradeByKey(topKey));
-  var pool = ELEM_UPGRADES.concat(availableSupport()).filter(function(u){ return offer.indexOf(u) < 0; });
+  var pool = ELEM_UPGRADES.concat(availableSupport()).concat([skillUpgradeOption()]).filter(function(u){ return offer.indexOf(u) < 0; });
   pool.sort(function(){ return Math.random() - 0.5; });
   for (var i = 0; i < pool.length && offer.length < 3; i++) offer.push(pool[i]);
   return offer;
@@ -1955,6 +1976,8 @@ function chooseUpgrade(u){
     var lvl = p.elem[u.key];
     if (isElemMilestone(lvl)) toast('🌟 ' + u.name + ' Lv ' + lvl + ' — ' + ELEMENTS[u.key].milestone[lvl] + '!', 'good');
     else toast(u.icon + ' ' + u.name + ' Lv ' + lvl, 'good');
+  } else if (u.type === 'skill'){
+    toast(u.icon + ' ' + skillDef(G.skill.id).name + ' skill → Lv ' + G.skill.level, 'good');
   } else {
     toast(u.icon + ' ' + u.name + ' acquired!', 'good');
   }
@@ -2122,11 +2145,20 @@ function renderDiffPills(){
     wrap.appendChild(el);
   });
 }
+function renderSkillPills(){
+  var wrap = $('skillPills'); if (!wrap) return; wrap.innerHTML = '';
+  SKILLS.forEach(function(s){
+    var el = document.createElement('button');
+    el.className = 'pill' + (s.id === chosenSkill ? ' sel' : '');
+    el.innerHTML = '<div class="pname">' + s.icon + ' ' + s.name + '</div><div class="pdesc">' + s.desc + '</div>';
+    el.addEventListener('click', function(){ chosenSkill = s.id; renderSkillPills(); });
+    wrap.appendChild(el);
+  });
+}
 
 function wireUI(){
-  renderClassPills(); renderDiffPills();
+  renderClassPills(); renderSkillPills(); renderDiffPills();
   wireFlag();
-  $('introRooms').textContent = ROOMS_PER_FLOOR;
   $('startBtn').addEventListener('click', function(){ startRun(); });
   $('againBtn').addEventListener('click', function(){ hide('overOverlay'); startRun(); });
   $('pauseBtn').addEventListener('click', togglePause);
