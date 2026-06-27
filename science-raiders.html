@@ -269,6 +269,17 @@ html, body {
 .q-explain.show { display: block; }
 .q-explain b { color: var(--text-primary); }
 
+/* flag-a-question UI (shown after answering) */
+.flagbox { flex: 1 1 auto; min-width: 0; }
+.flag-link { background: none; border: none; color: var(--text-tertiary); font-family: inherit; font-size: var(--font-size-xs); font-weight: 700; cursor: pointer; padding: 6px 0; text-decoration: underline; text-underline-offset: 2px; }
+.flag-link:hover { color: var(--danger); }
+.flag-form { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; max-width: 380px; }
+.flag-form textarea { width: 100%; border: 1.5px solid var(--border-medium); border-radius: 10px; padding: 8px 10px; font-family: inherit; font-size: var(--font-size-sm); color: var(--text-primary); resize: vertical; }
+.flag-form textarea:focus { outline: none; border-color: var(--accent-base); }
+.flag-actions { display: flex; gap: 8px; }
+.flag-actions .btn { padding: 6px 14px; }
+.flag-done { font-size: var(--font-size-xs); color: var(--good); font-weight: 800; padding: 6px 0; }
+
 .toast-wrap { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
 .toast {
   background: rgba(26,21,48,0.92); color: #fff; padding: 8px 16px; border-radius: 999px;
@@ -356,8 +367,19 @@ html, body {
         <div class="q-stem" id="qStem"></div>
         <div class="q-options" id="qOptions"></div>
         <div class="q-explain" id="qExplain"></div>
-        <div class="row" style="margin-top:14px;justify-content:flex-end;">
-          <button class="btn btn-primary" id="qContinueBtn" type="button" style="display:none;">Continue →</button>
+        <div class="row" style="margin-top:14px;justify-content:space-between;align-items:flex-start;gap:10px;">
+          <div class="flagbox" id="flagBox" style="display:none;">
+            <button class="flag-link" id="flagToggle" type="button">⚑ Flag this question</button>
+            <div class="flag-form" id="flagForm" style="display:none;">
+              <textarea id="flagComment" rows="3" placeholder="What's wrong? (e.g. wrong answer, typo, unclear diagram)"></textarea>
+              <div class="flag-actions">
+                <button class="btn btn-outline" id="flagCancel" type="button">Cancel</button>
+                <button class="btn btn-primary" id="flagSubmit" type="button">Submit flag</button>
+              </div>
+            </div>
+            <div class="flag-done" id="flagDone" style="display:none;">✓ Thanks — your teacher will review this question.</div>
+          </div>
+          <button class="btn btn-primary" id="qContinueBtn" type="button" style="display:none;flex:0 0 auto;">Continue →</button>
         </div>
       </div></div>
     </div>
@@ -1292,6 +1314,7 @@ function openQuestion(){
   var ex = $('qExplain'); ex.className = 'q-explain'; ex.innerHTML = '';
   $('qContinueBtn').style.display = 'none';
   $('qReward').textContent = 'Room cleared!';
+  resetFlagUI();
   show('questionOverlay');
 }
 
@@ -1321,6 +1344,8 @@ function answerQuestion(idx, btnEl){
   ex.innerHTML = head + body;
   ex.className = 'q-explain show';
   wireQuestionImages(ex);
+
+  maybeShowFlag(q);
 
   var btn = $('qContinueBtn');
   btn.style.display = 'inline-flex';
@@ -1444,6 +1469,79 @@ window.addEventListener('message', function(ev){
   }
 });
 
+/* ---------------- 14b. FLAG A QUESTION ----------------
+ * Lets students report a bad question after answering. The game can't reach
+ * Firestore directly, so it posts the flag to the parent app, which writes it
+ * to the same `flaggedQuestions` collection the in-app flag dialog uses. */
+var flagState = { q: null, busy: false };
+
+function embedded(){ return !!(window.parent && window.parent !== window); }
+
+function resetFlagUI(){
+  flagState.q = null; flagState.busy = false;
+  $('flagBox').style.display = 'none';
+  $('flagForm').style.display = 'none';
+  $('flagDone').style.display = 'none';
+  $('flagToggle').style.display = '';
+  $('flagComment').value = '';
+  var sb = $('flagSubmit'); sb.disabled = false; sb.textContent = 'Submit flag';
+}
+
+/* Only offer flagging for real bank questions while embedded in the app. */
+function maybeShowFlag(q){
+  if (!q || !q.id || !usingBankQuestions || !embedded()) return;
+  flagState.q = q;
+  $('flagBox').style.display = '';
+}
+
+function wireFlag(){
+  $('flagToggle').addEventListener('click', function(){
+    $('flagToggle').style.display = 'none';
+    $('flagForm').style.display = 'flex';
+    $('flagComment').focus();
+  });
+  $('flagCancel').addEventListener('click', function(){
+    $('flagForm').style.display = 'none';
+    $('flagToggle').style.display = '';
+    $('flagComment').value = '';
+  });
+  $('flagSubmit').addEventListener('click', submitFlag);
+}
+
+function submitFlag(){
+  if (flagState.busy || !flagState.q) return;
+  var comment = $('flagComment').value.trim();
+  if (!comment){ toast('Please describe the issue', 'bad'); $('flagComment').focus(); return; }
+  flagState.busy = true;
+  var sb = $('flagSubmit'); sb.disabled = true; sb.textContent = 'Submitting…';
+  try {
+    window.parent.postMessage({ type:'SD_FLAG', mode:'raiders', questionId:flagState.q.id, questionTitle:(flagState.q.q||'').slice(0,140), comment:comment }, '*');
+  } catch(e){ flagFailed('Could not submit — try again'); }
+  // Fallback if the parent never answers (e.g. older app build).
+  flagState.timeout = setTimeout(function(){ if (flagState.busy) flagSucceeded(); }, 4000);
+}
+
+function flagSucceeded(){
+  if (flagState.timeout) clearTimeout(flagState.timeout);
+  flagState.busy = false;
+  $('flagForm').style.display = 'none';
+  $('flagToggle').style.display = 'none';
+  $('flagDone').style.display = 'block';
+  toast('⚑ Question flagged — thanks!', 'good');
+}
+function flagFailed(msg){
+  if (flagState.timeout) clearTimeout(flagState.timeout);
+  flagState.busy = false;
+  var sb = $('flagSubmit'); sb.disabled = false; sb.textContent = 'Submit flag';
+  toast(msg || 'Could not submit the flag', 'bad');
+}
+
+window.addEventListener('message', function(ev){
+  var d = ev && ev.data;
+  if (!d || d.type !== 'SD_FLAG_RESULT') return;
+  if (d.ok) flagSucceeded(); else flagFailed(d.message);
+});
+
 /* ---------------- 15. MENU WIRING ---------------- */
 function renderClassPills(){
   var wrap = $('classPills'); wrap.innerHTML = '';
@@ -1470,6 +1568,7 @@ function renderDiffPills(){
 
 function wireUI(){
   renderClassPills(); renderDiffPills();
+  wireFlag();
   $('introRooms').textContent = ROOMS_PER_FLOOR;
   $('startBtn').addEventListener('click', function(){ startRun(); });
   $('againBtn').addEventListener('click', function(){ hide('overOverlay'); startRun(); });
