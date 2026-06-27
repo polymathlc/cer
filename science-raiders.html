@@ -567,7 +567,7 @@ function isElemMilestone(lvl){ return lvl === 5 || lvl === 10; }
 // effect and a shorter cooldown.
 var SKILLS = [
   { id: 'mortar',       icon: '💣', name: 'Mortar',  cd: 6,  targeted: true,  cast: castMortar,       desc: 'Lob a shell to the aimed spot for an area blast.' },
-  { id: 'nuke',         icon: '☢️', name: 'Nuke',    cd: 24, targeted: false, cast: castNuke,         desc: 'Devastate every enemy on screen. Long cooldown.' },
+  { id: 'starburst',    icon: '✴️', name: 'Starburst', cd: 9, targeted: false, cast: castStarburst,    desc: 'Fire a ring of your own bolts in every direction at once.' },
   { id: 'blackhole',    icon: '🕳️', name: 'Blackhole', cd: 17, targeted: true, cast: castBlackhole,    desc: 'Spawn a singularity that pulls foes in and grinds them.' },
   { id: 'interceptors', icon: '🛸', name: 'Drones',  cd: 14, targeted: false, cast: castInterceptors, desc: 'Deploy drones that seek and shoot enemies for a while.' }
 ];
@@ -616,7 +616,7 @@ function startRun(){
     walls: [], door: null, doorOpen: false,
     spawnFx: 0, shockwaves: [], lightning: [],
     skill: { id: chosenSkill, level: 1, cd: 0 },   // the one skill chosen for this run
-    mortars: [], blackholes: [], allies: [], nukeFlash: 0
+    mortars: [], blackholes: [], allies: []
   };
   buildRoom();
   hideAll();
@@ -842,11 +842,9 @@ function bulletColor(L){
   if (L.poison > 0) return ELEMENTS.poison.color;
   return '#B39DDB';
 }
-function fire(){
+// The player's current weapon stats, with all element modifiers folded in.
+function weaponProfile(){
   var p = G.player, L = p.elem;
-  var n = p.shots;
-  var spread = (n - 1) * 0.12;
-  var bspeed = p.baseBSpeed * p.bSpeedMul * 60;
   var dmgMul = p.dmgMul, pierce = p.pierce, laser = L.laser > 0;
   if (laser){
     dmgMul *= (1 + 0.40 * L.laser);            // powerful
@@ -854,20 +852,31 @@ function fire(){
     if (L.laser >= 5) pierce += 2;             // L5 milestone: pierce far more
     if (L.laser >= 10) dmgMul *= 1.5;          // L10 milestone: massive damage
   }
-  var col = bulletColor(L);
+  return { dmgMul: dmgMul, pierce: pierce, laser: laser, col: bulletColor(L), L: L };
+}
+// Spawn one of the player's bolts travelling along angle `a` (carries element effects).
+function spawnBolt(a, wp){
+  var p = G.player;
+  var bspeed = p.baseBSpeed * p.bSpeedMul * 60;
+  var crit = Math.random() < (p.crit + (wp.laser && wp.L.laser >= 10 ? 0.15 : 0));
+  var dmg = p.baseDmg * wp.dmgMul * (crit ? 2 : 1);
+  G.bullets.push({
+    x: p.x + Math.cos(a)*16, y: p.y + Math.sin(a)*16,
+    vx: Math.cos(a) * bspeed, vy: Math.sin(a) * bspeed,
+    r: (wp.laser ? 6 : 4) + (crit ? 2 : 0), dmg: dmg, crit: crit, pierce: wp.pierce, hits: [], life: wp.laser ? 1.1 : 1.4,
+    color: crit ? '#FFB300' : wp.col, laser: wp.laser,
+    elem: { poison: wp.L.poison, ice: wp.L.ice, chain: wp.L.chain, laser: wp.L.laser }
+  });
+}
+function fire(){
+  var p = G.player, wp = weaponProfile();
+  var n = p.shots;
+  var spread = (n - 1) * 0.12;
   for (var i = 0; i < n; i++){
     var a = p.aim - spread/2 + (n > 1 ? spread * (i/(n-1)) : 0);
-    var crit = Math.random() < (p.crit + (laser && L.laser >= 10 ? 0.15 : 0));
-    var dmg = p.baseDmg * dmgMul * (crit ? 2 : 1);
-    G.bullets.push({
-      x: p.x + Math.cos(p.aim)*16, y: p.y + Math.sin(p.aim)*16,
-      vx: Math.cos(a) * bspeed, vy: Math.sin(a) * bspeed,
-      r: (laser ? 6 : 4) + (crit ? 2 : 0), dmg: dmg, crit: crit, pierce: pierce, hits: [], life: laser ? 1.1 : 1.4,
-      color: crit ? '#FFB300' : col, laser: laser,
-      elem: { poison: L.poison, ice: L.ice, chain: L.chain, laser: L.laser }
-    });
+    spawnBolt(a, wp);
   }
-  muzzle(p.x + Math.cos(p.aim)*16, p.y + Math.sin(p.aim)*16, p.aim, col);
+  muzzle(p.x + Math.cos(p.aim)*16, p.y + Math.sin(p.aim)*16, p.aim, wp.col);
 }
 
 function updateBullets(dt){
@@ -1183,13 +1192,16 @@ function updateMortars(dt){
     if (f >= 1){ aoeBlast(m.tx, m.ty, m.radius, m.dmg, '#FF7043'); G.mortars.splice(i, 1); }
   }
 }
-function castNuke(){
-  var lv = skillLevel();
-  var dmg = gunDamage() * (8 + 2 * lv) + 80;
-  G.enemies.slice().forEach(function(e){ if (e.spawnT > 0 || e.dead) return; damageEnemy(e, dmg, false); });
-  G.nukeFlash = 0.5; G.shakeT = 0.45; G.shakeMag = 11;
-  for (var i = 0; i < 50; i++) addParticle(rand(0, VIEW_W), rand(0, VIEW_H), i % 2 ? '#FFE082' : '#FFAB40', rand(1, 3));
-  toast('☢️ NUKE!', 'energy');
+// Starburst — fire the player's OWN bolts (with all element effects) evenly in a
+// full circle. More bolts per skill level.
+function castStarburst(){
+  var p = G.player, lv = skillLevel();
+  var count = 16 + lv * 4;
+  var wp = weaponProfile();
+  for (var i = 0; i < count; i++) spawnBolt((i / count) * TAU, wp);
+  G.shockwaves.push({ x: p.x, y: p.y, r: 14, max: 72, life: 0.3, maxLife: 0.3, color: wp.col });
+  G.shakeT = 0.14; G.shakeMag = 4;
+  toast('✴️ Starburst!', 'energy');
 }
 function castBlackhole(t){
   var lv = skillLevel();
@@ -1243,7 +1255,6 @@ function updateAllies(dt){
 }
 function updateSkills(dt){
   if (G.skill && G.skill.cd > 0) G.skill.cd -= dt;
-  if (G.nukeFlash > 0) G.nukeFlash -= dt;
   updateMortars(dt); updateBlackholes(dt); updateAllies(dt);
 }
 // Build the skill bar — a single button for the run's chosen skill.
@@ -1463,13 +1474,6 @@ function render(){
   }
   ctx.globalAlpha = 1;
   ctx.restore();
-
-  // nuke screen flash
-  if (G.nukeFlash > 0){
-    ctx.globalAlpha = clamp(G.nukeFlash / 0.5, 0, 1) * 0.7;
-    ctx.fillStyle = '#FFF8E1'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    ctx.globalAlpha = 1;
-  }
 
   // Boss HP bar — fixed across the top of the arena while a boss is alive.
   var boss = null;
