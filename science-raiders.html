@@ -940,6 +940,7 @@ function advanceRoom(){
     banner('Descending to Floor ' + G.floor, 1400);
     // heal a little on floor descend
     var p = G.player; p.hp = Math.min(p.maxHp, p.hp + Math.round(p.maxHp * 0.15));
+    reportScore(); // bank progress on the leaderboard even if they quit later
   } else {
     G.room += 1;
     banner('Floor ' + G.floor + ' · Room ' + G.room, 1100);
@@ -1195,7 +1196,17 @@ function togglePause(){
 }
 
 /* ---------------- 13. GAME OVER ---------------- */
+/* Composite score: depth dominates, kills break ties. Reported to the parent
+ * app for the monthly Science Raiders leaderboard ($10 voucher for top 3). */
+function raidScore(){ return (G.floor * 1000) + G.kills; }
+function raidScoreLabel(){ return 'Floor ' + G.floor + ' · ' + G.kills + ' kills'; }
+function reportScore(){
+  if (!embedded()) return;
+  try { window.parent.postMessage({ type:'SD_SCORE', mode:'raiders', score: raidScore(), label: raidScoreLabel() }, '*'); } catch(e){}
+}
+
 function gameOver(){
+  reportScore();
   G.state = 'over';
   $('overSub').textContent = 'You fell on Floor ' + G.floor + ', Room ' + G.room + '.';
   $('overFloor').textContent = G.floor;
@@ -1256,9 +1267,20 @@ function pickQuestion(){
   var pool = allDone ? QUESTION_BANK.slice() : unseen;
   var fresh = pool.filter(function(q){ return sessionAsked.indexOf(q.id) === -1; });
   if (fresh.length) pool = fresh;
-  var target = student.ability + 40;
-  pool.sort(function(a, b){ return Math.abs(questionElo(a) - target) - Math.abs(questionElo(b) - target); });
-  var k = Math.min(3, pool.length);
+  // On a correct streak (3+ in a row) aim well above the student's ability and
+  // bias toward LONGER, meatier questions; otherwise stay near their level.
+  var streak = student.streak || 0;
+  var hot = streak >= 3;
+  var target = student.ability + 40 + (hot ? 160 + Math.min(300, (streak - 3) * 60) : 0);
+  var maxLen = 1;
+  pool.forEach(function(q){ if ((q.len || 0) > maxLen) maxLen = q.len || 0; });
+  pool.forEach(function(q){
+    var eloDist = Math.abs(questionElo(q) - target);
+    q._pickScore = eloDist - (hot ? ((q.len || 0) / maxLen) * 300 : 0); // longer → lower score → preferred
+  });
+  pool.sort(function(a, b){ return a._pickScore - b._pickScore; });
+  // Pick randomly among the best few so questions never come in a fixed sequence.
+  var k = Math.min(hot ? 4 : 3, pool.length);
   var ch = pool[Math.floor(Math.random() * k)];
   if (allDone && usingBankQuestions && !pickQuestion._warned){ pickQuestion._warned = true; toast("You've answered them all — revisiting earlier questions", 'energy'); }
   sessionAsked.push(ch.id); if (sessionAsked.length > 6) sessionAsked.shift();
@@ -1275,6 +1297,7 @@ function recordAnswer(q, correct){
   var rec = student.seen[q.id] || { n:0, correct:0 };
   rec.n++; if (correct) rec.correct++; rec.lastTs = Date.now();
   student.seen[q.id] = rec;
+  student.streak = correct ? (student.streak || 0) + 1 : 0; // drives harder/longer questions
   saveStudent(); saveQElo();
   try {
     if (window.parent && window.parent !== window){
@@ -1442,7 +1465,8 @@ function applyBankQuestions(list){
   }).map(function(q){
     return { id:q.id || '', q:q.q || '', html:q.html || '', options:q.options, answer:q.answer,
       explain:q.explain || 'Review this concept in your notes.', explainHtml:q.explainHtml || '',
-      topic:q.topic || 'Science', seedElo:(typeof q.seedElo === 'number' ? q.seedElo : 1200) };
+      topic:q.topic || 'Science', seedElo:(typeof q.seedElo === 'number' ? q.seedElo : 1200),
+      len:(typeof q.len === 'number' ? q.len : (q.q || '').length) };
   });
   if (!cleaned.length) return;
   QUESTION_BANK.length = 0;

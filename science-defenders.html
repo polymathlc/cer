@@ -1920,9 +1920,20 @@ function pickQuestion(){
   // Don't re-ask the last few questions when there's a choice.
   var fresh = pool.filter(function(q){ return sessionAsked.indexOf(q.id) === -1; });
   if(fresh.length) pool = fresh;
-  var target = student.ability + 40;            // aim just above current ability
-  pool.sort(function(a,b){ return Math.abs(questionElo(a) - target) - Math.abs(questionElo(b) - target); });
-  var k = Math.min(3, pool.length);
+  // On a correct streak (3+ in a row) aim well above the student's ability and
+  // prefer LONGER, meatier questions; otherwise stay just above their level.
+  var streak = student.streak || 0;
+  var hot = streak >= 3;
+  var target = student.ability + 40 + (hot ? 160 + Math.min(300, (streak - 3) * 60) : 0);
+  var maxLen = 1;
+  pool.forEach(function(q){ if((q.len || 0) > maxLen) maxLen = q.len || 0; });
+  pool.forEach(function(q){
+    var eloDist = Math.abs(questionElo(q) - target);
+    q._pickScore = eloDist - (hot ? ((q.len || 0) / maxLen) * 300 : 0); // longer → preferred when hot
+  });
+  pool.sort(function(a,b){ return a._pickScore - b._pickScore; });
+  // Pick among the best few so questions never come in a fixed sequence.
+  var k = Math.min(hot ? 4 : 3, pool.length);
   var choice = pool[Math.floor(Math.random() * k)];
   if(allDone && usingBankQuestions && !pickQuestion._warned){
     pickQuestion._warned = true;
@@ -2237,7 +2248,17 @@ function endGame(victory){
   var acc = G.stats.answered? Math.round(G.stats.correct/G.stats.answered*100):0;
   document.getElementById('rsAccuracy').textContent = acc + '%';
   overlay.classList.add('show');
+  reportScore(victory);
   if(victory){ sndCorrect(); setTimeout(sndCorrect,200);} else sndExplode();
+}
+
+/* Report this run's score to the parent app for the monthly Science Defenders
+ * leaderboard ($10 voucher for the top 3). Score is the in-game score; the
+ * label shows the wave reached. */
+function reportScore(victory){
+  if(!flagEmbedded()) return;
+  var wavesCleared = victory ? G.totalWaves : (G.wave-1<0?0:(G.waveInProgress?G.wave-1:G.wave));
+  try { window.parent.postMessage({ type:'SD_SCORE', mode:'defenders', score: Math.round(G.score||0), label: fmt(G.score||0) + ' pts · Wave ' + wavesCleared }, '*'); } catch(e){}
 }
 
 /* ------------------------------------------------------------------ *
@@ -2471,6 +2492,7 @@ function recordAnswer(q, correct){
   var rec = student.seen[q.id] || { n:0, correct:0 };
   rec.n++; if(correct) rec.correct++; rec.lastTs = Date.now();
   student.seen[q.id] = rec;
+  student.streak = correct ? (student.streak || 0) + 1 : 0; // drives harder/longer questions
   saveStudent(); saveQElo();
   try{
     if(window.parent && window.parent !== window){
@@ -2491,7 +2513,8 @@ function applyBankQuestions(list){
              explain:q.explain || 'Review this concept in your notes.',
              explainHtml:q.explainHtml || '',
              topic:q.topic || 'Science', d:q.d || 'normal',
-             seedElo:(typeof q.seedElo === 'number' ? q.seedElo : 1200) };
+             seedElo:(typeof q.seedElo === 'number' ? q.seedElo : 1200),
+             len:(typeof q.len === 'number' ? q.len : (q.q || '').length) };
   });
   if(!cleaned.length) return;
   QUESTION_BANK.length = 0;
