@@ -6683,7 +6683,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.30.0';
+const APP_VERSION = 'v1.31.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20926,6 +20926,29 @@ async function _sdRecordFlag(d, source) {
     ack(true);
   } catch (e) { console.warn('SD flag failed', e); ack(false, 'Could not submit — check your connection'); }
 }
+// Students may play each mini-game at most this many times per day (so they
+// don't over-do it). Counts persist on the hero state (Firestore), reset daily.
+const GAME_PLAY_LIMIT = 2;
+function _todayKey() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function _gamePlaysToday() {
+  if (!rpgState) return { day: _todayKey(), defenders: 0, raiders: 0 };
+  const today = _todayKey();
+  if (!rpgState.gamePlays || rpgState.gamePlays.day !== today) rpgState.gamePlays = { day: today, defenders: 0, raiders: 0 };
+  return rpgState.gamePlays;
+}
+function _gamePlaysLeft(mode) {
+  if (!currentUser || currentUser.role !== 'student') return 99; // no limit for admins / preview
+  const gp = _gamePlaysToday(), m = mode === 'raiders' ? 'raiders' : 'defenders';
+  return Math.max(0, GAME_PLAY_LIMIT - (gp[m] || 0));
+}
+function _noteGamePlay(mode) {
+  if (!currentUser || currentUser.role !== 'student' || !rpgState) return;
+  const gp = _gamePlaysToday(), m = mode === 'raiders' ? 'raiders' : 'defenders';
+  gp[m] = (gp[m] || 0) + 1;
+  try { rpgSave(); } catch (e) {}
+}
+function _playsLeftPayload() { return { defenders: _gamePlaysLeft('defenders'), raiders: _gamePlaysLeft('raiders') }; }
+
 window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
   if (!d) return;
@@ -20939,7 +20962,9 @@ window.addEventListener('message', function (ev) {
         questions,
         seenIds,
         studentKey: (currentUser && currentUser.uid) || 'guest',
-        studentName: (currentUser && currentUser.name) || ''
+        studentName: (currentUser && currentUser.name) || '',
+        playLimit: GAME_PLAY_LIMIT,
+        playsLeft: _playsLeftPayload()
       };
       try { ev.source && ev.source.postMessage(payload, '*'); } catch (e) {}
     })();
@@ -20954,6 +20979,9 @@ window.addEventListener('message', function (ev) {
       const overrides = await loadRaidersOverrides();
       try { ev.source && ev.source.postMessage({ type: 'raidersAssets', overrides }, '*'); } catch (e) {}
     })();
+  } else if (d.type === 'SD_PLAY_START') {
+    _noteGamePlay(d.mode);
+    try { ev.source && ev.source.postMessage({ type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() }, '*'); } catch (e) {}
   }
 });
 
