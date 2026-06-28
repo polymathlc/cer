@@ -1157,7 +1157,7 @@ function bulletColor(L){
   if (L.chain > 0) return ELEMENTS.chain.color;
   if (L.ice > 0) return ELEMENTS.ice.color;
   if (L.poison > 0) return ELEMENTS.poison.color;
-  return '#B39DDB';
+  return '#0D47A1';   // default bolt: dark blue (was a faint lavender, hard to see)
 }
 // The player's current weapon stats, with all element modifiers folded in.
 function weaponProfile(){
@@ -2055,7 +2055,7 @@ function drawBullet(x, y, r, color, enemy){
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
   ctx.beginPath(); ctx.arc(x - r*0.3, y - r*0.3, r*0.4, 0, TAU); ctx.fill();
   if (!enemy){
-    ctx.strokeStyle = 'rgba(179,157,219,0.4)'; ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(124,176,255,0.7)'; ctx.lineWidth = 1;   // light-blue glow keeps the dark-blue bolt readable
     ctx.beginPath(); ctx.arc(x, y, r+2, 0, TAU); ctx.stroke();
   }
 }
