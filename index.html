@@ -4528,6 +4528,11 @@ option {
         Flagged Questions
         <span class="badge" id="flaggedCount">0</span>
       </div>
+      <div class="nav-item admin-only" data-page="messages" onclick="navigateTo('messages')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Messages
+        <span class="badge" id="msgUnreadAdmin" style="display:none;">0</span>
+      </div>
       <div class="nav-section-label admin-only">Preview</div>
       <div class="nav-item admin-only" data-page="student" onclick="navigateTo('student')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -4589,6 +4594,11 @@ option {
       <div class="nav-item student-only" data-page="myreport" onclick="navigateTo('myreport')" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
         My Report
+      </div>
+      <div class="nav-item student-only" data-page="messages" onclick="navigateTo('messages')" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Messages
+        <span class="badge" id="msgUnreadStudent" style="display:none;">0</span>
       </div>
       <!-- Science Quest game nav (shown once the hero loads, hidden via "Hide game") -->
       <div class="nav-section-label rpg-el" style="display:none;">Game</div>
@@ -5457,6 +5467,41 @@ option {
             <p>Questions flagged by students will appear here for review.</p>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: MESSAGES (admin ↔ students) ===== -->
+    <div class="page" id="page-messages">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Messages</h2>
+          </div>
+          <div class="subtitle" id="messagesSubtitle">Send and receive messages</div>
+        </div>
+        <button class="btn btn-outline" onclick="loadMessagesPage()" style="font-size:0.82rem;">↻ Refresh</button>
+      </div>
+      <div class="page-body" style="max-width:860px;">
+        <style>
+          .msg-card{border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;margin-bottom:14px;}
+          .msg-card-title{font-weight:700;font-size:0.9rem;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+          .msg-unread-dot{background:#ef4444;color:#fff;font-size:0.66rem;font-weight:700;border-radius:10px;padding:1px 8px;}
+          .msg-thread{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto;padding:4px;}
+          .msg-row{display:flex;}
+          .msg-row.mine{justify-content:flex-end;}
+          .msg-bubble{max-width:78%;background:#f1f5f9;border-radius:12px;padding:8px 11px;}
+          .msg-bubble.mine{background:#e0e7ff;}
+          .msg-who{font-size:0.68rem;font-weight:700;color:#64748b;margin-bottom:2px;}
+          .msg-text{font-size:0.86rem;white-space:pre-wrap;word-break:break-word;}
+          .msg-time{font-size:0.64rem;color:#94a3b8;margin-top:3px;text-align:right;}
+          .msg-ctx{font-size:0.68rem;color:#7c3aed;background:#f5f3ff;border-radius:6px;padding:2px 7px;margin-bottom:5px;display:inline-block;}
+          .msg-compose{display:flex;gap:8px;align-items:flex-end;margin-top:12px;}
+          .msg-input{flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:8px 10px;font-size:0.86rem;font-family:inherit;resize:vertical;outline:none;}
+          .msg-input:focus{border-color:#6366f1;}
+          .msg-empty{color:#94a3b8;padding:20px;text-align:center;}
+        </style>
+        <div id="messagesContainer"><div class="msg-empty">Loading…</div></div>
       </div>
     </div>
 
@@ -6621,12 +6666,15 @@ async function enterApp(user) {
 
   rpgInit().catch(e => console.warn('rpg init', e));
 
+  // Load message inbox so the unread badge shows on the Messages nav item.
+  loadMessages().then(updateMsgBadge).catch(e => console.warn('messages init', e));
+
   showToast('Welcome, ' + displayName + '!', 'success');
 }
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.26.0';
+const APP_VERSION = 'v1.27.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -6818,6 +6866,7 @@ function navigateTo(page) {
     else pushRaidersAssets();
   }
   if (page === 'gameassets') loadGameAssets();
+  if (page === 'messages') loadMessagesPage();
   // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -16345,6 +16394,13 @@ function renderFlaggedQuestions() {
           </button>
         `}
       </div>
+      <div class="fc-reply" style="margin-top:10px;border-top:1px solid #f1f5f9;padding-top:10px;">
+        ${f.reply ? `<div style="font-size:0.78rem;color:#16a34a;background:#f0fdf4;border-radius:6px;padding:6px 9px;">↩ You replied: “${escapeHtml(f.reply)}”</div>` : ''}
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <input id="flagReply_${f._docId}" placeholder="Reply to ${escapeHtml(f.flaggedBy || 'student')} — e.g. why this isn't an error…" style="flex:1;font-size:0.8rem;padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;outline:none;">
+          <button class="btn btn-primary" onclick="replyToFlag('${f._docId}')" style="font-size:0.78rem;white-space:nowrap;">↩ Reply</button>
+        </div>
+      </div>
     </div>`;
   }).join('');
 }
@@ -20958,8 +21014,178 @@ async function resetRaidersObj(objId){
 }
 
 // =====================================================================
+// MESSAGING — admin <-> students (top-level `messages` collection, mirrors how
+// `flaggedQuestions` is used: authenticated users create docs and query them).
+// A message: { fromUid, fromName, fromRole, toUid ('all' = broadcast), text,
+// ts, read, kind ('dm'|'flagReply'), flagId?, questionTitle? }.
+// =====================================================================
+let _messages = [];
+function _myUid() { return currentUser && currentUser.uid; }
+function _teacherUid() { return (currentUser && currentUser.role === 'admin') ? currentUser.uid : adminUid; }
+function _msgTime(m) { try { return m.ts ? (m.ts.toDate ? m.ts.toDate().getTime() : new Date(m.ts).getTime()) : 0; } catch (e) { return 0; } }
+
+async function _fetchMsgs(field, value) {
+  try {
+    const snap = await getDocs(query(collection(db, 'messages'), where(field, '==', value)));
+    return snap.docs.map(d => ({ ...d.data(), _id: d.id }));
+  } catch (e) { console.warn('messages query failed', field, e); return []; }
+}
+async function loadMessages() {
+  const uid = _myUid(); if (!uid) return [];
+  const parts = await Promise.all([_fetchMsgs('toUid', uid), _fetchMsgs('fromUid', uid), _fetchMsgs('toUid', 'all')]);
+  const map = {};
+  parts.flat().forEach(m => { map[m._id] = m; });
+  _messages = Object.values(map).sort((a, b) => _msgTime(a) - _msgTime(b));
+  return _messages;
+}
+async function sendMessageDoc(toUid, toName, text, extra) {
+  const t = (text || '').trim(); if (!t) return false;
+  const u = currentUser; if (!u) return false;
+  const data = Object.assign({
+    fromUid: u.uid, fromName: u.name || '', fromRole: u.role || 'student',
+    toUid: toUid, toName: toName || '', text: t, ts: Timestamp.now(), read: false, kind: 'dm'
+  }, extra || {});
+  try { await addDoc(collection(db, 'messages'), data); return true; }
+  catch (e) { console.error('sendMessage failed', e); showToast('Message failed: ' + (e && e.message ? e.message : e), 'error'); return false; }
+}
+function _isIncomingUnread(m) {
+  const uid = _myUid();
+  return !m.read && m.fromUid !== uid && (m.toUid === uid || (currentUser.role === 'student' && m.toUid === 'all'));
+}
+function unreadCount() { return _messages.filter(_isIncomingUnread).length; }
+function updateMsgBadge() {
+  const n = unreadCount();
+  ['msgUnreadAdmin', 'msgUnreadStudent'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = n; el.style.display = n ? '' : 'none'; }
+  });
+}
+async function _markRead(filterFn) {
+  const toMark = _messages.filter(m => _isIncomingUnread(m) && filterFn(m));
+  await Promise.all(toMark.map(m => updateDoc(doc(db, 'messages', m._id), { read: true }).then(() => { m.read = true; }).catch(() => {})));
+  updateMsgBadge();
+}
+
+function _msgBubble(m, mine) {
+  const who = mine ? 'You' : (m.fromName || (m.fromRole === 'admin' ? 'Teacher' : 'Student'));
+  const ctx = (m.kind === 'flagReply' && m.questionTitle) ? `<div class="msg-ctx">Re: flagged “${escapeHtml(m.questionTitle)}”</div>` : '';
+  const time = _msgTime(m) ? formatDateTimeSGT(new Date(_msgTime(m))) : '';
+  return `<div class="msg-row ${mine ? 'mine' : ''}"><div class="msg-bubble ${mine ? 'mine' : ''}">${ctx}<div class="msg-who">${escapeHtml(who)}</div><div class="msg-text">${escapeHtml(m.text || '')}</div><div class="msg-time">${escapeHtml(time)}</div></div></div>`;
+}
+
+async function loadMessagesPage() {
+  const sub = document.getElementById('messagesSubtitle');
+  if (sub) sub.textContent = currentUser && currentUser.role === 'admin'
+    ? 'Reply to students, or broadcast an announcement to everyone'
+    : 'Message your teacher — replies and announcements appear here';
+  await loadMessages();
+  if (currentUser && currentUser.role === 'admin') renderAdminMessages(); else renderStudentMessages();
+  updateMsgBadge();
+}
+
+function renderStudentMessages() {
+  const c = document.getElementById('messagesContainer'); if (!c) return;
+  const uid = currentUser.uid;
+  const msgs = _messages.slice().sort((a, b) => _msgTime(a) - _msgTime(b));
+  const bubbles = msgs.length ? msgs.map(m => _msgBubble(m, m.fromUid === uid)).join('') : '<div class="msg-empty">No messages yet. Say hello to your teacher 👋</div>';
+  const teacher = _teacherUid();
+  c.innerHTML = `<div class="msg-card">
+      <div class="msg-card-title">💬 Your teacher</div>
+      <div class="msg-thread" id="msgThreadScroll">${bubbles}</div>
+      <div class="msg-compose">
+        <textarea id="studentMsgInput" class="msg-input" rows="2" placeholder="${teacher ? 'Message your teacher…' : 'Teacher not set up yet'}"${teacher ? '' : ' disabled'}></textarea>
+        <button class="btn btn-primary" onclick="sendStudentMsg()"${teacher ? '' : ' disabled'}>Send</button>
+      </div>
+    </div>`;
+  const sc = document.getElementById('msgThreadScroll'); if (sc) sc.scrollTop = sc.scrollHeight;
+  _markRead(m => m.toUid === uid || m.toUid === 'all');
+}
+
+function renderAdminMessages() {
+  const c = document.getElementById('messagesContainer'); if (!c) return;
+  const me = currentUser.uid;
+  const threads = {};
+  _messages.forEach(m => {
+    let other, name;
+    if (m.toUid === 'all') { other = 'all'; name = '📢 All students'; }
+    else if (m.fromUid === me) { other = m.toUid; name = m.toName || m.toUid; }
+    else { other = m.fromUid; name = m.fromName || m.fromUid; }
+    if (!threads[other]) threads[other] = { uid: other, name, msgs: [] };
+    if (name && name !== other) threads[other].name = name;
+    threads[other].msgs.push(m);
+  });
+  const list = Object.values(threads).sort((a, b) => _msgTime(b.msgs[b.msgs.length - 1]) - _msgTime(a.msgs[a.msgs.length - 1]));
+  let html = `<div class="msg-card">
+      <div class="msg-card-title">📢 Broadcast to all students</div>
+      <div class="msg-compose">
+        <textarea id="adminBroadcastInput" class="msg-input" rows="2" placeholder="Announcement sent to every student…"></textarea>
+        <button class="btn btn-primary" onclick="sendBroadcast()">Send to all</button>
+      </div>
+    </div>`;
+  if (!list.length) html += '<div class="msg-empty">No conversations yet. Student messages and your flag replies will appear here.</div>';
+  list.forEach(t => {
+    const bubbles = t.msgs.slice().sort((a, b) => _msgTime(a) - _msgTime(b)).map(m => _msgBubble(m, m.fromUid === me)).join('');
+    if (t.uid === 'all') {
+      html += `<div class="msg-card"><div class="msg-card-title">📢 Broadcast history</div><div class="msg-thread">${bubbles}</div></div>`;
+      return;
+    }
+    const unread = t.msgs.filter(m => !m.read && m.fromUid === t.uid).length;
+    html += `<div class="msg-card">
+        <div class="msg-card-title">${escapeHtml(t.name)} ${unread ? `<span class="msg-unread-dot">${unread} new</span>` : ''}</div>
+        <div class="msg-thread">${bubbles}</div>
+        <div class="msg-compose">
+          <input id="threadInput_${escapeHtml(t.uid)}" class="msg-input" placeholder="Reply to ${escapeHtml(t.name)}…">
+          <button class="btn btn-primary" onclick="sendThreadReply('${escapeHtml(t.uid)}')">Send</button>
+        </div>
+      </div>`;
+  });
+  c.innerHTML = html;
+  _markRead(m => m.toUid === me);
+}
+
+async function sendStudentMsg() {
+  const t = _teacherUid();
+  if (!t) { showToast('Teacher not available yet', 'error'); return; }
+  const el = document.getElementById('studentMsgInput'); const text = el ? el.value.trim() : '';
+  if (!text) return;
+  if (await sendMessageDoc(t, 'Teacher', text)) { el.value = ''; await loadMessagesPage(); }
+}
+async function sendBroadcast() {
+  const el = document.getElementById('adminBroadcastInput'); const text = el ? el.value.trim() : '';
+  if (!text) return;
+  if (await sendMessageDoc('all', 'All students', text)) { el.value = ''; showToast('Broadcast sent', 'success'); await loadMessagesPage(); }
+}
+async function sendThreadReply(uid) {
+  const el = document.getElementById('threadInput_' + uid); const text = el ? el.value.trim() : '';
+  if (!text) return;
+  const ref = _messages.find(m => m.fromUid === uid || m.toUid === uid);
+  const name = ref ? (ref.fromUid === uid ? ref.fromName : ref.toName) : '';
+  if (await sendMessageDoc(uid, name || '', text)) { el.value = ''; await loadMessagesPage(); }
+}
+
+// Reply to a flagged question — sends a message to the student who flagged it.
+async function replyToFlag(docId) {
+  const f = flaggedQuestions.find(x => x._docId === docId); if (!f) return;
+  const input = document.getElementById('flagReply_' + docId);
+  const text = input ? input.value.trim() : '';
+  if (!text) { showToast('Type a reply first', 'error'); return; }
+  if (!f.flaggedByUid) { showToast('No student account on this flag', 'error'); return; }
+  const ok = await sendMessageDoc(f.flaggedByUid, f.flaggedBy || '', text, { kind: 'flagReply', flagId: docId, questionTitle: f.questionTitle || '' });
+  if (!ok) return;
+  try { await updateDoc(doc(db, 'flaggedQuestions', docId), { reply: text, repliedAt: Timestamp.now() }); } catch (e) {}
+  f.reply = text;
+  showToast('Reply sent to ' + (f.flaggedBy || 'student'), 'success');
+  renderFlaggedQuestions();
+}
+
+// =====================================================================
 // EXPOSE FUNCTIONS GLOBALLY (required for module scope + onclick handlers)
 // =====================================================================
+window.loadMessagesPage = loadMessagesPage;
+window.sendStudentMsg = sendStudentMsg;
+window.sendBroadcast = sendBroadcast;
+window.sendThreadReply = sendThreadReply;
+window.replyToFlag = replyToFlag;
 window.loadGameAssets = loadGameAssets;
 window.onRaidersObjPaste = onRaidersObjPaste;
 window.onRaidersObjDrop = onRaidersObjDrop;
