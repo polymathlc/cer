@@ -617,6 +617,7 @@ function drawEnemy(e){
   var tint = null, ta = 0;
   if (e.hitFlash > 0){ tint = '#ffffff'; ta = 0.85; }
   else if (e.frozenT > 0){ tint = '#4FC3F7'; ta = 0.55; }
+  else if (e.burnT > 0){ tint = '#FF7043'; ta = 0.5; }
   else if (e.poisonT > 0){ tint = '#A4C84A'; ta = 0.5; }
   var bossMul = e.type === 'boss' ? 1.15 : 1;
   var eo = ovr(e.type);
@@ -713,8 +714,34 @@ var SPECIAL_UPGRADES = [
   { id: 'twin',  icon: '🔱', name: 'Twin Cannons',  desc: '+2 projectiles and +15% damage', apply: function(p){ p.shots += 2; p.dmgMul *= 1.15; } },
   { id: 'titan', icon: '🛡️', name: 'Titan Core',    desc: '+60 max HP, full heal and +20% speed', apply: function(p){ p.maxHp += 60; p.hp = p.maxHp; p.speedMul *= 1.2; } },
   { id: 'exec',  icon: '☠️', name: 'Executioner',   desc: '+35% damage and +20% crit chance', apply: function(p){ p.dmgMul *= 1.35; p.crit += 0.2; } },
-  { id: 'zeus',  icon: '⚡', name: 'Zeus',           desc: 'Lightning periodically strikes random enemies', max: 6, apply: function(p){ p.zeus += 1; } }
+  { id: 'zeus',  icon: '⚡', name: 'Zeus',           desc: 'Lightning periodically strikes random enemies', max: 6, apply: function(p){ p.zeus += 1; } },
+  { id: 'odin',  icon: '🦅', name: 'Odin',           desc: 'Periodically hurls Gungnir — a spear that pierces every foe in a line', max: 6, apply: function(p){ p.odin += 1; } }
 ];
+
+/* ---------------- 3b-2. DIVINE COMBOS ----------------
+ * These appear in the upgrade picker ONLY once you already own BOTH prerequisite
+ * gods. Each fuses the two into a stronger passive (one-time pick). */
+function hasGod(p, key){
+  if (key === 'zeus') return p.zeus > 0;
+  if (key === 'odin') return p.odin > 0;
+  return (p.elem[key] || 0) > 0;
+}
+var COMBOS = [
+  { id: 'c_solar',     icon: '🔆', name: 'Solar Storm',        needs: ['zeus', 'apollo'],     desc: 'Zeus strikes erupt in solar fire — each bolt ignites and scorches a wide ring' },
+  { id: 'c_asgard',    icon: '🛡️', name: "Asgard's Fury",      needs: ['thor', 'odin'],       desc: 'Odin & Thor unite — spears chain & stun, and the hammer leaps to far more foes' },
+  { id: 'c_trickster', icon: '🃏', name: "Trickster's Thunder",needs: ['loki', 'thor'],       desc: 'Loki bends the storm — hammer hits spit homing chaos shards that also chain' },
+  { id: 'c_tempest',   icon: '⛈️', name: 'Tempest',            needs: ['zeus', 'poseidon'],   desc: 'Sky meets sea — Zeus strikes blast a thunderous wave that hurls foes back' },
+  { id: 'c_steam',     icon: '♨️', name: 'Scalding Steam',     needs: ['apollo', 'poseidon'], desc: 'Fire boils water — splashes burn, and clinging flames also slow' }
+];
+COMBOS.forEach(function(c){ c.type = 'combo'; c.apply = (function(id){ return function(p){ p.combos[id] = true; }; })(c.id); });
+function comboById(id){ for (var i = 0; i < COMBOS.length; i++) if (COMBOS[i].id === id) return COMBOS[i]; return null; }
+function availableCombos(){
+  var p = G.player;
+  return COMBOS.filter(function(c){
+    if (p.combos && p.combos[c.id]) return false;
+    return c.needs.every(function(k){ return hasGod(p, k); });
+  });
+}
 
 /* ---------------- 3b. PROJECTILE ELEMENTS ----------------
  * Four upgradeable weapon elements. Each level deepens the effect; reaching
@@ -743,9 +770,15 @@ var ELEMENTS = {
                milestone: { 5: 'bigger vortex pulls from farther', 10: 'storms fling enemies together' } },
   thor:      { icon: '🔨', name: 'Thor', color: '#FFCA28', dark: '#FF8F00',
                blurb: 'Shots become a hammer that chains & stuns',
-               milestone: { 5: 'extra chain jumps', 10: 'thunderous chains & longer stun' } }
+               milestone: { 5: 'extra chain jumps', 10: 'thunderous chains & longer stun' } },
+  apollo:    { icon: '☀️', name: 'Apollo', color: '#FF7043', dark: '#E64A19',
+               blurb: 'Shots gout sun-fire that ignites foes and scorches a flame cone',
+               milestone: { 5: 'longer, hotter burn', 10: 'a bonfire engulfs whole packs' } },
+  loki:      { icon: '🎭', name: 'Loki', color: '#CE93D8', dark: '#8E24AA',
+               blurb: 'Shots sow chaos: a random curse on hit, splitting into homing shards',
+               milestone: { 5: 'more chaos shards', 10: 'mayhem — shards everywhere' } }
 };
-var ELEM_KEYS = ['poison', 'ice', 'chain', 'laser', 'poseidon', 'hurricane', 'thor'];
+var ELEM_KEYS = ['poison', 'ice', 'chain', 'laser', 'poseidon', 'hurricane', 'thor', 'apollo', 'loki'];
 function elemUpgrade(key){
   var E = ELEMENTS[key];
   return { id: 'elem_' + key, type: 'elem', key: key, icon: E.icon, name: E.name,
@@ -891,7 +924,9 @@ function newPlayer(clazz){
     orbit: 0, orbAng: 0, orbCd: 0,     // Orbital Guard special
     nova: 0,                           // Nova Shield special
     zeus: 0, zeusCd: 0,                // Zeus — periodic lightning on random foes
-    elem: { poison: 0, ice: 0, chain: 0, laser: 0, poseidon: 0, hurricane: 0, thor: 0 }, // projectile element levels
+    odin: 0, odinCd: 0,                // Odin — periodic Gungnir spear line
+    combos: {},                        // divine combo flags (id -> true)
+    elem: { poison: 0, ice: 0, chain: 0, laser: 0, poseidon: 0, hurricane: 0, thor: 0, apollo: 0, loki: 0 }, // projectile element levels
     wpn: {},                           // weapon-variant levels (id -> level); siblings lock
     explosive: 0, homingShot: 0, lifesteal: 0, berserk: 0  // weapon mechanic flags
   };
@@ -1004,7 +1039,7 @@ function spawnEnemy(type, x, y, floor){
     spawnT: 0.5, wob: rand(0, TAU), hitFlash: 0,
     strafeDir: Math.random() < 0.5 ? 1 : -1, bossPhase: 0, bossCd: 2,
     // status effects from elemental shots
-    poisonT: 0, poisonDps: 0, poisonSrc: 0, slowT: 0, slowFactor: 1, frozenT: 0, dead: false
+    poisonT: 0, poisonDps: 0, poisonSrc: 0, burnT: 0, burnDps: 0, slowT: 0, slowFactor: 1, frozenT: 0, dead: false
   };
   G.enemies.push(e);
 }
@@ -1088,6 +1123,7 @@ function update(dt){
   p.cd -= dt; p.iframes -= dt; p.dashCd -= dt; p.hurtFlash -= dt;
   if (p.regen > 0 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
   if (p.zeus > 0){ p.zeusCd -= dt; if (p.zeusCd <= 0){ if (G.enemies.length) zeusStrike(p.zeus); p.zeusCd = Math.max(0.6, 1.9 - 0.16 * p.zeus); } }
+  if (p.odin > 0){ p.odinCd -= dt; if (p.odinCd <= 0){ if (G.enemies.length) odinSpear(p.odin); p.odinCd = Math.max(0.8, 2.4 - 0.18 * p.odin); } }
   if (G.bannerT > 0) G.bannerT -= dt;
   if (G.shakeT > 0) G.shakeT -= dt;
   if (G.spawnFx > 0) G.spawnFx -= dt;
@@ -1163,6 +1199,8 @@ function effectiveRate(){
 }
 // Dominant element drives the bolt colour (laser > chain > ice > poison > none).
 function bulletColor(L){
+  if (L.apollo > 0) return ELEMENTS.apollo.color;      // sun-fire orange
+  if (L.loki > 0) return ELEMENTS.loki.color;          // chaos violet
   if (L.thor > 0) return ELEMENTS.thor.color;          // Mjölnir gold
   if (L.poseidon > 0) return ELEMENTS.poseidon.color;  // water blue
   if (L.hurricane > 0) return ELEMENTS.hurricane.color; // storm teal
@@ -1281,6 +1319,75 @@ function applyElementsOnHit(b, e){
   if (el.poseidon > 0) poseidonSplash(b, e, el.poseidon);
   if (el.hurricane > 0) hurricaneSwirl(b, el.hurricane);
   if (el.thor > 0) thorHammer(e, el.thor);
+  if (el.apollo > 0) apolloFlame(b, e, el.apollo);
+  if (el.loki > 0) lokiChaos(b, e, el.loki);
+}
+
+// Apply a fire burn DOT to an enemy (Apollo / Loki).
+function ignite(e, dps, dur){
+  if (dps > (e.burnDps || 0)) e.burnDps = dps;
+  e.burnT = Math.max(e.burnT || 0, dur);
+}
+
+// Apollo — sun-fire: ignite the struck foe and scorch a flame cone of nearby foes.
+function apolloFlame(b, e, lvl){
+  var p = G.player, base = p.baseDmg * p.dmgMul;
+  var dps = 3 + 1.3 * lvl + base * 0.05, dur = 2 + (lvl >= 5 ? 1.6 : 0);
+  ignite(e, dps, dur);
+  if (p.combos.c_steam) applySlow(e, 0.75, 1.2);                 // Scalding Steam: flames also slow
+  var fr = 34 + 7 * lvl + (p.combos.c_solar ? 20 : 0), fd = base * (0.25 + 0.05 * lvl);
+  for (var i = 0; i < G.enemies.length; i++){
+    var o = G.enemies[i];
+    if (o === e || o.dead || o.spawnT > 0) continue;
+    if (dist2(b.x, b.y, o.x, o.y) <= fr * fr){
+      damageEnemy(o, fd, false); ignite(o, dps * 0.7, 1.5);
+      if (p.combos.c_steam) applySlow(o, 0.8, 1.0);
+    }
+  }
+  for (var k = 0; k < 9; k++) addParticle(b.x + rand(-fr/3, fr/3), b.y + rand(-fr/3, fr/3), Math.random() < 0.5 ? '#FF7043' : '#FFC107', rand(1.3, 2.6));
+}
+
+// Loki — chaos: a random curse on the struck foe, then split into homing shards.
+function lokiChaos(b, e, lvl){
+  var p = G.player, roll = Math.floor(Math.random() * 3);
+  if (roll === 0) ignite(e, p.baseDmg * p.dmgMul * 0.05 + 2, 1.5);
+  else if (roll === 1) applySlow(e, 0.7, 1.2);
+  else e.frozenT = Math.max(e.frozenT || 0, 0.25);
+  var shards = 1 + Math.floor(lvl / 3);
+  if (Math.random() < 0.4 + 0.05 * lvl){
+    for (var s = 0; s < shards; s++){
+      var a = rand(0, TAU), sp = 7 * 60;
+      G.bullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: 4,
+        dmg: p.baseDmg * p.dmgMul * 0.5, crit: false, pierce: 0, hits: [], life: 1.0,
+        color: '#CE93D8', laser: false, homing: true,
+        elem: p.combos.c_trickster ? { chain: Math.max(1, p.elem.thor || 1) } : null });  // Trickster's Thunder: shards chain
+    }
+  }
+  for (var k = 0; k < 6; k++) addParticle(e.x + rand(-8, 8), e.y + rand(-8, 8), '#CE93D8', rand(1, 2));
+}
+
+// Point-to-segment distance (for Odin's spear line).
+function _distToSeg(px, py, x1, y1, x2, y2){
+  var dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
+  if (l2 === 0) return Math.sqrt(dist2(px, py, x1, y1));
+  var t = clamp(((px - x1) * dx + (py - y1) * dy) / l2, 0, 1);
+  return Math.sqrt(dist2(px, py, x1 + t * dx, y1 + t * dy));
+}
+
+// Odin — hurl Gungnir along the aim: a piercing spear that hits every foe on the line.
+function odinSpear(lvl){
+  var p = G.player, a = p.aim, dmg = p.baseDmg * p.dmgMul * (1.8 + 0.5 * lvl);
+  var ex = p.x + Math.cos(a) * 900, ey = p.y + Math.sin(a) * 900;
+  for (var i = 0; i < G.enemies.length; i++){
+    var e = G.enemies[i];
+    if (e.dead || e.spawnT > 0) continue;
+    if (_distToSeg(e.x, e.y, p.x, p.y, ex, ey) <= e.r + 16){
+      damageEnemy(e, dmg, true);
+      if (p.combos.c_asgard){ chainLightning(e, Math.max(1, p.elem.thor || 1)); e.frozenT = Math.max(e.frozenT || 0, 0.35); } // Asgard's Fury: spear chains & stuns
+    }
+  }
+  G.lightning.push({ x1: p.x, y1: p.y, x2: p.x + Math.cos(a) * 640, y2: p.y + Math.sin(a) * 640, life: 0.18, maxLife: 0.18 });
+  for (var k = 0; k < 12; k++){ var t = rand(40, 600); addParticle(p.x + Math.cos(a) * t, p.y + Math.sin(a) * t, '#FFF9C4', rand(1, 2)); }
 }
 
 // Push an enemy away from (fx,fy) by `amt` px, clamped to the arena (bosses resist).
@@ -1298,10 +1405,11 @@ function poseidonSplash(b, e, lvl){
   knockback(e, b.x, b.y, 16 + 6 * lvl);
   applySlow(e, 0.8, 0.8);
   var sr = 40 + 8 * lvl, sd = base * (0.3 + 0.05 * lvl);
+  if (p.combos.c_steam) ignite(e, base * 0.05 + 2, 1.6);          // Scalding Steam: splashes burn
   for (var i = 0; i < G.enemies.length; i++){
     var o = G.enemies[i];
     if (o === e || o.dead || o.spawnT > 0) continue;
-    if (dist2(b.x, b.y, o.x, o.y) <= sr * sr){ damageEnemy(o, sd, false); knockback(o, b.x, b.y, 10 + 4 * lvl); }
+    if (dist2(b.x, b.y, o.x, o.y) <= sr * sr){ damageEnemy(o, sd, false); knockback(o, b.x, b.y, 10 + 4 * lvl); if (p.combos.c_steam) ignite(o, base * 0.04 + 1.5, 1.4); }
   }
   G.shockwaves.push({ x: b.x, y: b.y, r: 8, max: sr, life: 0.28, maxLife: 0.28, color: '#29B6F6' });
   for (var k = 0; k < 9; k++) addParticle(b.x + rand(-sr/3, sr/3), b.y + rand(-sr/3, sr/3), '#4FC3F7', rand(1.2, 2.2));
@@ -1328,7 +1436,9 @@ function hurricaneSwirl(b, lvl){
 
 // Thor — Mjölnir leaps between foes, dealing damage, a brief stun and knockback.
 function thorHammer(origin, lvl){
-  var chains = 2 + Math.floor(lvl / 2), dmg = G.player.baseDmg * G.player.dmgMul * (0.6 + 0.08 * lvl);
+  var P = G.player;
+  var chains = 2 + Math.floor(lvl / 2) + (P.combos.c_asgard ? 2 : 0);  // Asgard's Fury: more chain jumps
+  var dmg = P.baseDmg * P.dmgMul * (0.6 + 0.08 * lvl);
   var stun = 0.25 + 0.03 * lvl, hit = [origin], src = origin;
   origin.frozenT = Math.max(origin.frozenT || 0, stun);   // hammer stun on the struck foe
   for (var c = 0; c < chains; c++){
@@ -1344,6 +1454,12 @@ function thorHammer(origin, lvl){
     damageEnemy(next, dmg, false);
     next.frozenT = Math.max(next.frozenT || 0, stun);
     knockback(next, src.x, src.y, 10 + 2 * lvl);
+    if (P.combos.c_trickster){                       // Trickster's Thunder: each hit spits a chaos shard
+      var aa = rand(0, TAU), sp = 7 * 60;
+      G.bullets.push({ x: next.x, y: next.y, vx: Math.cos(aa) * sp, vy: Math.sin(aa) * sp, r: 4,
+        dmg: P.baseDmg * P.dmgMul * 0.5, crit: false, pierce: 0, hits: [], life: 0.9,
+        color: '#CE93D8', laser: false, homing: true, elem: null });
+    }
     hit.push(next); src = next;
   }
   for (var k = 0; k < 8; k++) addParticle(origin.x, origin.y, '#FFE082', rand(1.4, 2.6));
@@ -1351,9 +1467,10 @@ function thorHammer(origin, lvl){
 
 // Zeus — bolts fall from the sky onto random foes, with a small splash.
 function zeusStrike(lvl){
+  var p = G.player;
   var alive = G.enemies.filter(function(e){ return !e.dead && e.spawnT <= 0; });
   if (!alive.length) return;
-  var strikes = 1 + Math.floor(lvl / 3), dmg = G.player.baseDmg * G.player.dmgMul * (1.4 + 0.5 * lvl);
+  var strikes = 1 + Math.floor(lvl / 3), dmg = p.baseDmg * p.dmgMul * (1.4 + 0.5 * lvl);
   for (var s = 0; s < strikes && alive.length; s++){
     var e = alive.splice(Math.floor(Math.random() * alive.length), 1)[0];
     G.lightning.push({ x1: e.x + rand(-6, 6), y1: 0, x2: e.x, y2: e.y, life: 0.22, maxLife: 0.22 });
@@ -1366,6 +1483,21 @@ function zeusStrike(lvl){
     }
     G.shockwaves.push({ x: e.x, y: e.y, r: 8, max: r, life: 0.25, maxLife: 0.25, color: '#FFF59D' });
     for (var k = 0; k < 10; k++) addParticle(e.x + rand(-14, 14), e.y + rand(-10, 10), '#FFF59D', rand(1.2, 2.4));
+    if (p.combos.c_solar){                                // Solar Storm: strikes ignite a fire ring
+      ignite(e, p.baseDmg * p.dmgMul * 0.06 + 3, 2);
+      for (var fj = 0; fj < G.enemies.length; fj++){
+        var fo = G.enemies[fj]; if (fo === e || fo.dead || fo.spawnT > 0) continue;
+        if (dist2(e.x, e.y, fo.x, fo.y) <= (r + 18) * (r + 18)){ ignite(fo, p.baseDmg * p.dmgMul * 0.04 + 2, 1.6); damageEnemy(fo, dmg * 0.3, false); }
+      }
+      for (var fk = 0; fk < 8; fk++) addParticle(e.x + rand(-18, 18), e.y + rand(-12, 12), '#FF7043', rand(1.2, 2.2));
+    }
+    if (p.combos.c_tempest){                              // Tempest: a thunderous wave hurls foes back & chains
+      for (var tj = 0; tj < G.enemies.length; tj++){
+        var to = G.enemies[tj]; if (to === e || to.dead || to.spawnT > 0) continue;
+        if (dist2(e.x, e.y, to.x, to.y) <= (r + 12) * (r + 12)) knockback(to, e.x, e.y, 22);
+      }
+      chainLightning(e, 2);
+    }
   }
 }
 
@@ -1441,6 +1573,12 @@ function updateEnemies(dt){
       e.hp -= e.poisonDps * dt;
       if (Math.random() < dt * 5) addParticle(e.x + rand(-5, 5), e.y - rand(0, 6), '#9CCC65', 0.5);
       if (e.hp <= 0){ e.dead = true; continue; } // reaped this frame
+    }
+    if (e.burnT > 0){
+      e.burnT -= dt;
+      e.hp -= e.burnDps * dt;
+      if (Math.random() < dt * 6) addParticle(e.x + rand(-5, 5), e.y - rand(0, 8), Math.random() < 0.5 ? '#FF7043' : '#FFC107', 0.5);
+      if (e.hp <= 0){ e.dead = true; continue; }
     }
     if (e.frozenT > 0){ e.frozenT -= dt; }
     if (e.slowT > 0){ e.slowT -= dt; }
@@ -2476,7 +2614,10 @@ function buildUpgradeOffer(n){
   var topKey = null, topLvl = 0;
   ELEM_KEYS.forEach(function(k){ if ((p.elem[k] || 0) > topLvl){ topLvl = p.elem[k]; topKey = k; } });
   if (topKey && n > 1) offer.push(elemUpgradeByKey(topKey));
-  var pool = ELEM_UPGRADES.concat(availableSupport()).concat([skillUpgradeOption()]).concat(availableWeaponLevelups())
+  // When a divine combo is unlocked (you own both gods), make sure one shows up.
+  var combos = availableCombos();
+  if (combos.length && n > 1) offer.push(combos[Math.floor(Math.random() * combos.length)]);
+  var pool = ELEM_UPGRADES.concat(availableSupport()).concat([skillUpgradeOption()]).concat(availableWeaponLevelups()).concat(availableCombos())
     .filter(function(u){ return !offer.some(function(o){ return o.id === u.id; }); });
   pool.sort(function(){ return Math.random() - 0.5; });
   for (var i = 0; i < pool.length && offer.length < n; i++) offer.push(pool[i]);
@@ -2511,9 +2652,9 @@ function openUpgrade(){
       if (milestone) tag = '<div class="umile">🌟 Lv ' + nextLvl + ' milestone: ' + (nextLvl === 5 ? m5 : m10) + '</div>';
       else if (nextLvl < 5) tag = '<div class="unext">Lv 5: ' + m5 + '</div>';
       else if (nextLvl < 10) tag = '<div class="unext">Lv 10: ' + m10 + '</div>';
-    } else { desc = u.desc; if (u.trade) tag = '<div class="utrade">⚠ High-risk trade-off</div>'; }
+    } else { desc = u.desc; if (u.trade) tag = '<div class="utrade">⚠ High-risk trade-off</div>'; else if (u.type === 'combo') tag = '<div class="umile">✦ Divine combo</div>'; }
     var card = document.createElement('div');
-    card.className = 'upcard' + (milestone ? ' special' : '') + (isElem ? ' elem' : '') + (isWvar ? ' wvar' : '') + (u.trade ? ' trade' : '');
+    card.className = 'upcard' + (milestone || u.type === 'combo' ? ' special' : '') + (isElem ? ' elem' : '') + (isWvar ? ' wvar' : '') + (u.trade ? ' trade' : '');
     var lvlTag = leveled ? ' <span class="ulvl">Lv ' + lvl + '→' + nextLvl + '</span>' : '';
     card.innerHTML = '<div class="uico">' + u.icon + '</div><div class="uname">' + u.name + lvlTag + '</div><div class="udesc">' + desc + '</div>' + tag;
     card.addEventListener('click', function(){ chooseUpgrade(u); });
