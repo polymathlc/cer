@@ -354,7 +354,7 @@ html, body {
     <canvas id="game" width="720" height="540"></canvas>
     <div class="banner" id="banner"></div>
     <div class="skillbar" id="skillBar"></div>
-    <div class="hint-bar" id="hintBar">Move: <b>WASD / Arrows</b> &nbsp;·&nbsp; Aim &amp; fire: <b>mouse</b> &nbsp;·&nbsp; Dash: <b>Space / Shift</b> &nbsp;·&nbsp; Skills: <b>1-4</b></div>
+    <div class="hint-bar" id="hintBar">Move: <b>WASD / Arrows</b> &nbsp;·&nbsp; Aim &amp; fire: <b>mouse</b> &nbsp;·&nbsp; Dash: <b>Space / Shift</b> &nbsp;·&nbsp; Skill: <b>Q</b></div>
     <div class="toast-wrap" id="toastWrap"></div>
 
     <!-- INTRO -->
@@ -367,7 +367,7 @@ html, body {
           <li data-ico="🕹️">Move with <strong>WASD / arrow keys</strong>. Your blaster auto-fires toward your <strong>mouse</strong> (or the nearest enemy on touch).</li>
           <li data-ico="💨">Tap <strong>Space</strong> or <strong>Shift</strong> to dash through danger (brief invulnerability).</li>
           <li data-ico="🧪">Clear a room to trigger a <strong>science MCQ</strong>. Answer correctly to choose an upgrade — level an element to 5/10, or <strong>level up your skill</strong>.</li>
-          <li data-ico="🎯">Pick <strong>one skill</strong> below — it's the only one you'll wield this run. Fire it with <strong>key 1</strong>.</li>
+          <li data-ico="🎯">Pick <strong>one skill</strong> below — it's the only one you'll wield this run. Fire it with <strong>key Q</strong>.</li>
         </ul>
         <div style="font-weight:800;font-size:var(--font-size-sm);margin-bottom:6px;">Pick your raider</div>
         <div class="pills" id="classPills"></div>
@@ -1005,7 +1005,7 @@ window.addEventListener('keydown', function(e){
   var k = e.key.toLowerCase();
   keys[k] = true;
   if ((k === ' ' || k === 'shift') && G && G.state === 'play') { e.preventDefault(); tryDash(); }
-  if ((k === '1' || k === 'q') && G && G.state === 'play' && !paused) { e.preventDefault(); triggerSkill(); }
+  if (k === 'q' && G && G.state === 'play' && !paused) { e.preventDefault(); triggerSkill(); }
   if (k === 'p') togglePause();
   if (k === 'escape' && G && G.state === 'play') togglePause();
   if ([ 'arrowup','arrowdown','arrowleft','arrowright',' ' ].indexOf(e.key.toLowerCase()) >= 0) e.preventDefault();
@@ -1688,7 +1688,7 @@ function initSkillBar(){
   var def = skillDef(G.skill.id); if (!def) return;
   var el = document.createElement('div');
   el.className = 'skill'; el.dataset.skill = def.id;
-  el.innerHTML = '<span class="sk-key">1</span><span class="sk-ico">' + def.icon + '</span><span class="sk-name">' + def.name + '</span>' +
+  el.innerHTML = '<span class="sk-key">Q</span><span class="sk-ico">' + def.icon + '</span><span class="sk-name">' + def.name + '</span>' +
     '<div class="sk-cdfill"></div><div class="sk-cdnum"></div><span class="sk-lvl"></span>';
   el.title = def.name + (def.targeted ? ' — aim with the mouse' : '') + ' (key 1)';
   el.addEventListener('click', function(){ triggerSkill(); });
