@@ -6681,7 +6681,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.28.1';
+const APP_VERSION = 'v1.29.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -13034,10 +13034,6 @@ function _fallbackExplanation(entries) {
 // Returns { score, total, mistakes } on success, or null if nothing was marked.
 async function markOpenAnswersIn(containerSel, q, opts = {}) {
   const { btnId, scoreElId, scorePrefix = 'AI Score', mode = 'practice-open' } = opts;
-  if (!window.__aiReady || !window.__aiReady()) {
-    showToast("AI marking isn't set up yet — add your reCAPTCHA site key in the code", 'info');
-    return null;
-  }
   const areas = Array.from(document.querySelectorAll(containerSel + ' .open-answer'));
   const mcqList = _openMcqStore[containerSel] || [];
   if (!areas.length && !mcqList.length) { showToast('Nothing to mark in this question', 'info'); return null; }
@@ -13070,56 +13066,79 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     entries.push({ kind: 'mcq', mcq: m, studentLetter });
   });
 
-  const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
-  if (scoreEl) scoreEl.textContent = 'Marking with AI…';
-
-  let verdicts = [];
-  let aiExplanation = '';
-  let aiModelAnswer = '';
-  try {
-    const list = entries.map((e, i) => {
-      if (e.kind === 'open') {
-        return `${i}. [${e.label}] type=open expected="${e.model}" student="${e.student || (photo ? '(see attached photo)' : '(blank)')}"`;
-      }
-      const opts = e.mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ');
-      const correct = e.mcq.options.find(o => o.correct);
-      return `${i}. [Multiple choice] type=mcq options=[${opts}] correct=${correct ? correct.letter : '?'} studentSelected="${e.studentLetter || (photo ? '(read from photo)' : '(blank)')}"`;
-    }).join('\n');
-    const prompt =
-      `You are a science teacher marking a student's answers. ` +
-      `${_markingPreamble(q && q.markingGuide)}\n` +
-      `Question context: "${ctx}".\n` +
-      (photo
-        ? `The student wrote their answers on paper and attached ONE photo of the whole page. Read the photo carefully and find the student's answer for EACH item below, matching by its label and order. For a multiple-choice item, work out which option letter the student chose (a circled option, a written letter, or a tick) from the photo when they have not selected one on screen. Ignore handwriting quality.\n`
-        : ``) +
-      `For each OPEN item, compare the student's answer to the expected model answer by meaning (ignore wording, grammar and spelling — focus on the science); verdict "correct", "partial" or "incorrect". ` +
-      `For each MULTIPLE-CHOICE item, decide which option the student chose and mark "correct" only if it matches the correct option letter, otherwise "incorrect"; also include "chosen":"<the letter the student picked, or empty>". ` +
-      `Give ONE short feedback sentence (max 22 words) addressed to the student for each item. ` +
-      `Provide the full correct MODEL ANSWER for the whole question as "modelAnswer" — the ideal answer a student should give (use the expected answers if provided, otherwise generate the correct answer yourself; for multiple choice state the correct option and what it says). ` +
-      `Also write a clear overall EXPLANATION (2-4 sentences) addressed to "you" that is SPECIFIC to the answer the student actually gave: explain WHY their answer was marked correct, partial or incorrect — quote or refer to what they wrote, say what they got right, what was missing or wrong, and what a full-mark answer needs. Do NOT just restate the model answer or describe the question in the abstract. ` +
-      `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
-    let raw;
-    if (photo && photo.data) {
-      raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 1100 + entries.length * 220, json: true });
-    } else {
-      raw = await askGemini(prompt, { maxOutputTokens: 1100 + entries.length * 220, temperature: 0.2, json: true });
-    }
-    const parsed = _parseAIJson(raw);
-    verdicts = Array.isArray(parsed) ? parsed : ((parsed && parsed.items) || []);
-    aiExplanation = (parsed && !Array.isArray(parsed) && parsed.explanation) ? String(parsed.explanation) : '';
-    aiModelAnswer = (parsed && !Array.isArray(parsed) && parsed.modelAnswer) ? String(parsed.modelAnswer) : '';
-  } catch (e) {
-    console.error('Open marking error:', e);
-    showToast('AI mark error: ' + (e && e.message ? e.message : e), 'error');
-    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-    if (scoreEl) scoreEl.textContent = '';
+  // MCQs are marked LOCALLY — the correct option is already in the bank, so they
+  // never need an AI call. Only OPEN answers go to the AI (plus an MCQ whose
+  // choice must be read from a photo, i.e. handwritten with nothing picked on
+  // screen). A pure multiple-choice question shows the bank's stored explanation.
+  const hasOpen = entries.some(e => e.kind === 'open');
+  const aiEntries = [];
+  entries.forEach((e, i) => {
+    if (e.kind === 'open') aiEntries.push({ e, i });
+    else if (e.kind === 'mcq' && photo && !e.studentLetter) aiEntries.push({ e, i });
+  });
+  const needAi = aiEntries.length > 0;
+  if (needAi && (!window.__aiReady || !window.__aiReady())) {
+    showToast("AI marking isn't set up yet — add your reCAPTCHA site key in the code", 'info');
     return null;
   }
-  if (btn) { btn.disabled = false; btn.innerHTML = orig; }
 
   const byI = {};
-  verdicts.forEach(v => { if (v && typeof v.i === 'number') byI[v.i] = v; });
+  // Deterministic marking for on-screen multiple-choice (no AI needed).
+  entries.forEach((e, i) => {
+    if (e.kind === 'mcq' && !(photo && !e.studentLetter)) {
+      const correctOpt = e.mcq.options.find(o => o.correct);
+      const ok = !!(e.studentLetter && correctOpt && e.studentLetter === correctOpt.letter);
+      byI[i] = { i: i, verdict: ok ? 'correct' : 'incorrect', chosen: e.studentLetter };
+    }
+  });
+
+  let aiExplanation = '';
+  let aiModelAnswer = '';
+  if (needAi) {
+    const orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
+    if (scoreEl) scoreEl.textContent = 'Marking with AI…';
+    try {
+      const list = aiEntries.map(({ e, i }) => {
+        if (e.kind === 'open') {
+          return `${i}. [${e.label}] type=open expected="${e.model}" student="${e.student || (photo ? '(see attached photo)' : '(blank)')}"`;
+        }
+        const opts = e.mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ');
+        const correct = e.mcq.options.find(o => o.correct);
+        return `${i}. [Multiple choice] type=mcq options=[${opts}] correct=${correct ? correct.letter : '?'} studentSelected="${e.studentLetter || (photo ? '(read from photo)' : '(blank)')}"`;
+      }).join('\n');
+      const prompt =
+        `You are a science teacher marking a student's answers. ` +
+        `${_markingPreamble(q && q.markingGuide)}\n` +
+        `Question context: "${ctx}".\n` +
+        (photo
+          ? `The student wrote their answers on paper and attached ONE photo of the whole page. Read the photo carefully and find the student's answer for EACH item below, matching by its label and order. For a multiple-choice item, work out which option letter the student chose (a circled option, a written letter, or a tick) from the photo when they have not selected one on screen. Ignore handwriting quality.\n`
+          : ``) +
+        `For each OPEN item, compare the student's answer to the expected model answer by meaning (ignore wording, grammar and spelling — focus on the science); verdict "correct", "partial" or "incorrect". ` +
+        `For each MULTIPLE-CHOICE item, decide which option the student chose and mark "correct" only if it matches the correct option letter, otherwise "incorrect"; also include "chosen":"<the letter the student picked, or empty>". ` +
+        `Give ONE short feedback sentence (max 22 words) addressed to the student for each item. ` +
+        `Provide the full correct MODEL ANSWER for the whole question as "modelAnswer" — the ideal answer a student should give (use the expected answers if provided, otherwise generate the correct answer yourself; for multiple choice state the correct option and what it says). ` +
+        `Also write a clear overall EXPLANATION (2-4 sentences) addressed to "you" that is SPECIFIC to the answer the student actually gave: explain WHY their answer was marked correct, partial or incorrect — quote or refer to what they wrote, say what they got right, what was missing or wrong, and what a full-mark answer needs. Do NOT just restate the model answer or describe the question in the abstract. ` +
+        `Return ONLY JSON: {"items":[{"i":0,"verdict":"correct","feedback":"...","chosen":"B"}],"modelAnswer":"...","explanation":"..."}.\n${list}`;
+      let raw;
+      if (photo && photo.data) {
+        raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 1100 + aiEntries.length * 220, json: true });
+      } else {
+        raw = await askGemini(prompt, { maxOutputTokens: 1100 + aiEntries.length * 220, temperature: 0.2, json: true });
+      }
+      const parsed = _parseAIJson(raw);
+      (Array.isArray(parsed) ? parsed : ((parsed && parsed.items) || [])).forEach(v => { if (v && typeof v.i === 'number') byI[v.i] = v; });
+      aiExplanation = (parsed && !Array.isArray(parsed) && parsed.explanation) ? String(parsed.explanation) : '';
+      aiModelAnswer = (parsed && !Array.isArray(parsed) && parsed.modelAnswer) ? String(parsed.modelAnswer) : '';
+    } catch (e) {
+      console.error('Open marking error:', e);
+      showToast('AI mark error: ' + (e && e.message ? e.message : e), 'error');
+      if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+      if (scoreEl) scoreEl.textContent = '';
+      return null;
+    }
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
 
   let score = 0;
   const mistakes = [];
@@ -13202,8 +13221,9 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
   // tight). When that happens, retry with a small follow-up call dedicated to
   // the explanation; if every attempt still comes back empty, fall back to an
   // explanation built locally from the model answers — so the A.I. Explanation
-  // box is never empty.
-  if (!aiExplanation) {
+  // box is never empty. (MCQ-only questions skip this entirely and instead show
+  // the bank's stored explanation block — see showExplanation.)
+  if (hasOpen && !aiExplanation) {
     const answerLines = entries.map((e, i) => {
       const verdict = e.verdict || 'incorrect';
       if (e.kind === 'open') {
@@ -13301,9 +13321,12 @@ function _checkAllPartsMarked(containerSel) {
 async function _genAndShowExplanation(containerSel, q, results, scoreElId) {
   const entries = Object.entries(results || {});
   if (!entries.length || !q) return;
+  // MCQ-only questions show the bank's stored explanation (no AI). Only generate
+  // an answer-specific AI explanation when there's at least one open answer.
+  const hasOpen = entries.some(([key]) => key.indexOf('open') === 0);
   let aiText = '';
   try {
-    if (window.__aiReady && window.__aiReady()) {
+    if (hasOpen && window.__aiReady && window.__aiReady()) {
       const ctx = _questionContext(q);
       const lines = entries.map(([key, r], i) => {
         const kind = key.indexOf('mcq') === 0 ? 'Multiple choice' : 'Open answer';
@@ -13322,10 +13345,6 @@ async function _genAndShowExplanation(containerSel, q, results, scoreElId) {
 
 // Mark ONE part of the question (an open answer box or one MCQ) with the AI.
 async function markQuestionPart(containerSel, kind, pid, btn) {
-  if (!window.__aiReady || !window.__aiReady()) {
-    showToast("AI marking isn't set up yet — add your reCAPTCHA site key in the code", 'info');
-    return;
-  }
   const q = _openQStore[containerSel];
   const ctx = q ? _questionContext(q) : '';
   const photo = _openPhoto[containerSel];
@@ -13350,6 +13369,35 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     if (checked) { const o = mcq.options.find(x => x.id === checked.value); if (o) studentLetter = o.letter; }
     if (!studentLetter && !photo) { showToast('Choose an option first — or attach a photo of your written work', 'info'); return; }
     fbEl = document.querySelector(containerSel + ' [data-mcq-fb="' + pid + '"]');
+  }
+
+  // Multiple-choice is deterministic — mark it locally (no AI) unless the choice
+  // has to be read from a photo.
+  if (kind === 'mcq' && !photo) {
+    const verdict = (studentLetter && correctOpt && studentLetter === correctOpt.letter) ? 'correct' : 'incorrect';
+    const pts = verdict === 'correct' ? 1 : 0;
+    const color = verdict === 'correct' ? 'var(--primary)' : 'var(--accent-red)';
+    const icon = verdict === 'correct' ? '✓' : '✗';
+    const wrap = document.querySelector(containerSel + ' .mcq-block[data-block="' + pid + '"]');
+    if (wrap) wrap.querySelectorAll('label').forEach((lab, idx) => {
+      const o = mcq.options[idx]; if (!o) return;
+      lab.style.background = ''; lab.style.borderColor = 'var(--border)';
+      if (o.correct) { lab.style.background = '#dcfce7'; lab.style.borderColor = '#16a34a'; }
+      if (studentLetter && o.letter === studentLetter && !o.correct) { lab.style.background = '#fee2e2'; lab.style.borderColor = '#dc2626'; }
+    });
+    if (fbEl) {
+      let inner = `<span style="color:${color};font-weight:600;font-size:0.85rem;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span>` +
+        (studentLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(studentLetter)})</span>` : '');
+      if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
+      fbEl.innerHTML = inner;
+    }
+    _setPartResult(containerSel, 'mcq:' + pid, verdict, pts, correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', studentLetter);
+    _checkAllPartsMarked(containerSel);
+    return;
+  }
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast("AI marking isn't set up yet — add your reCAPTCHA site key in the code", 'info');
+    return;
   }
 
   const orig = btn ? btn.innerHTML : '';
