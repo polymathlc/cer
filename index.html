@@ -6674,7 +6674,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.27.1';
+const APP_VERSION = 'v1.27.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9299,7 +9299,9 @@ async function applyCropTool() {
   .annot-tool.active { border-color:var(--primary,#4a7c59); background:var(--primary-light,#e8f3ec); color:var(--primary,#4a7c59); font-weight:700; }
   #annotStage { position:relative; display:inline-block; max-width:100%; line-height:0; }
   #annotCanvas { max-width:84vw; max-height:54vh; touch-action:none; cursor:crosshair; border:1px solid var(--border,#e2ddd5); border-radius:6px; }
-  .annot-textbox { position:absolute; z-index:5; border:1px dashed var(--primary,#4a7c59); background:rgba(255,255,255,0.9); font-family:'DM Sans',sans-serif; font-weight:600; padding:0 2px; outline:none; line-height:1.1; min-width:40px; }`;
+  .annot-textbox { position:absolute; z-index:5; }
+  .annot-textbox-input { border:1px dashed var(--primary,#4a7c59); background:rgba(255,255,255,0.92); border-radius:4px; outline:none; font-family:'DM Sans',sans-serif; font-weight:600; padding:1px 4px; line-height:1.3; min-width:60px; color:inherit; }
+  .annot-textbox-handle { position:absolute; top:-19px; left:-1px; cursor:move; user-select:none; touch-action:none; background:var(--primary,#4a7c59); color:#fff; font-size:11px; line-height:1; padding:3px 6px; border-radius:4px 4px 0 0; white-space:nowrap; }`;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
 })();
 
@@ -9397,37 +9399,72 @@ function _annotPlaceText(p) {
   const stage = document.getElementById('annotStage');
   if (!stage) return;
   const fontNat = Math.max(14, _annot.size * 2.6);
+  // A draggable label: a wrapper holding a "move" handle + the text input. The
+  // teacher can reposition it freely, and it burns onto the canvas wherever the
+  // input ends up (not the original click point).
+  const box = document.createElement('div');
+  box.className = 'annot-textbox';
+  box.style.left = p.dispX + 'px';
+  box.style.top = p.dispY + 'px';
+  const handle = document.createElement('div');
+  handle.className = 'annot-textbox-handle';
+  handle.textContent = '✥ drag';
   const input = document.createElement('input');
   input.type = 'text';
-  input.className = 'annot-textbox';
-  input.style.left = p.dispX + 'px';
-  input.style.top = p.dispY + 'px';
+  input.className = 'annot-textbox-input';
   input.style.color = _annot.color;
   input.style.fontSize = Math.max(10, Math.round(fontNat / p.scale)) + 'px';
-  stage.appendChild(input);
+  box.appendChild(handle);
+  box.appendChild(input);
+  stage.appendChild(box);
   setTimeout(() => input.focus(), 0);
+
+  // --- drag to reposition (grab the handle) ---
+  let drag = null;
+  handle.addEventListener('pointerdown', ev => {
+    ev.preventDefault(); ev.stopPropagation();   // keep input focus; don't draw on the canvas
+    drag = { dx: ev.clientX - box.offsetLeft, dy: ev.clientY - box.offsetTop };
+    try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
+  });
+  handle.addEventListener('pointermove', ev => {
+    if (!drag) return;
+    const sr = stage.getBoundingClientRect();
+    let nx = ev.clientX - drag.dx, ny = ev.clientY - drag.dy;
+    nx = Math.max(0, Math.min(sr.width - 10, nx));
+    ny = Math.max(19, Math.min(sr.height - 6, ny));   // keep the handle on-screen
+    box.style.left = nx + 'px'; box.style.top = ny + 'px';
+  });
+  handle.addEventListener('pointerup', ev => { drag = null; try { handle.releasePointerCapture(ev.pointerId); } catch (e) {} input.focus(); });
+
   let done = false;
   const commit = () => {
     if (done) return; done = true;
     const val = input.value.trim();
     if (val) {
       _annotPushHistory();
+      const c = _annot.canvas, cr = c.getBoundingClientRect(), ir = input.getBoundingClientRect();
+      const sx = c.width / cr.width, sy = c.height / cr.height;
+      // input's content start = border-box left/top + ~border+padding (1px+4px / 1px+1px)
+      const x = (ir.left - cr.left) * sx + 5 * sx;
+      const y = (ir.top - cr.top) * sy + 2 * sy;
       const ctx = _annot.ctx;
       ctx.fillStyle = _annot.color;
       ctx.textBaseline = 'top';
       ctx.font = `600 ${Math.round(fontNat)}px 'DM Sans', sans-serif`;
-      ctx.fillText(val, p.x, p.y);
+      ctx.fillText(val, x, y);
     }
-    if (input.parentNode) input.parentNode.removeChild(input);
+    if (box.parentNode) box.parentNode.removeChild(box);
   };
   input.addEventListener('keydown', ev => {
     if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
-    else if (ev.key === 'Escape') { done = true; if (input.parentNode) input.parentNode.removeChild(input); }
+    else if (ev.key === 'Escape') { done = true; if (box.parentNode) box.parentNode.removeChild(box); }
   });
-  input.addEventListener('blur', commit);
+  input.addEventListener('blur', () => { if (!drag) commit(); });   // don't commit while mid-drag
 }
 async function applyAnnotTool() {
   if (!_annot) return;
+  // Burn any label that's still being edited so it isn't lost on Apply.
+  document.querySelectorAll('#annotStage .annot-textbox-input').forEach(i => i.blur());
   const { blockId, canvas } = _annot;
   const dataUrl = canvas.toDataURL('image/png');
   closeAnnotTool();
