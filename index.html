@@ -4692,6 +4692,10 @@ option {
               <optgroup label="── Question Type ──">
                 <option value="Multiple Choice Question">Multiple Choice Question</option>
               </optgroup>
+              <optgroup label="── PSLE ──">
+                <option value="PSLE - MCQ">PSLE - MCQ</option>
+                <option value="PSLE - OEQ">PSLE - OEQ</option>
+              </optgroup>
             </select>
           </div>
           <div class="form-group">
@@ -4880,6 +4884,10 @@ option {
             <optgroup label="── Question Type ──">
               <option value="Multiple Choice Question">Multiple Choice Question</option>
             </optgroup>
+            <optgroup label="── PSLE ──">
+              <option value="PSLE - MCQ">PSLE - MCQ</option>
+              <option value="PSLE - OEQ">PSLE - OEQ</option>
+            </optgroup>
           </select>
           <select id="bankFilterLevel" onchange="renderQuestionBank()">
             <option value="">All Levels</option>
@@ -5054,6 +5062,10 @@ option {
             </optgroup>
             <optgroup label="── Question Type ──">
               <option value="Multiple Choice Question">Multiple Choice Question</option>
+            </optgroup>
+            <optgroup label="── PSLE ──">
+              <option value="PSLE - MCQ">PSLE - MCQ</option>
+              <option value="PSLE - OEQ">PSLE - OEQ</option>
             </optgroup>
           </select>
           <select id="wsFilterSource" onchange="renderWsQuestions()">
@@ -6614,7 +6626,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.25.0';
+const APP_VERSION = 'v1.26.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -6716,10 +6728,13 @@ function normalizeCategoryValue(category) {
 }
 
 // Every question that contains a multiple-choice block is categorised under the
-// "Multiple Choice Question" category, regardless of any other category picked.
+// "Multiple Choice Question" category, regardless of any other category picked —
+// EXCEPT when the author deliberately filed it under a PSLE category, which we
+// keep as chosen (PSLE - MCQ questions legitimately contain MCQ blocks).
 const MCQ_CATEGORY = 'Multiple Choice Question';
+const PSLE_CATEGORIES = new Set(['PSLE - MCQ', 'PSLE - OEQ']);
 function applyMcqCategory(q) {
-  if (q && qpHasMcq(q)) q.category = MCQ_CATEGORY;
+  if (q && qpHasMcq(q) && !(q.category && PSLE_CATEGORIES.has(q.category))) q.category = MCQ_CATEGORY;
   return q;
 }
 
