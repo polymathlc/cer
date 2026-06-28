@@ -5945,10 +5945,12 @@ option {
     <label class="form-label">Contact number</label>
     <input id="prizePhone" class="form-input" type="tel" placeholder="e.g. 9123 4567" style="margin-bottom:12px;">
     <label class="form-label">Mailing address</label>
-    <textarea id="prizeAddress" class="form-input" rows="3" placeholder="Block/house, street, unit number, postal code" style="resize:vertical;margin-bottom:16px;"></textarea>
-    <div class="btn-group" style="justify-content:flex-end;">
+    <textarea id="prizeAddress" class="form-input" rows="3" placeholder="Block/house, street, unit number, postal code" style="resize:vertical;margin-bottom:10px;"></textarea>
+    <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:14px;">Attend class in person? You can collect your voucher in class instead — no address needed, just confirm below.</div>
+    <div class="btn-group" style="justify-content:flex-end;flex-wrap:wrap;gap:8px;">
       <button class="btn btn-outline" onclick="dismissPrizeClaim()">Maybe later</button>
-      <button class="btn btn-primary" onclick="submitPrizeClaim()">🎁 Claim my voucher</button>
+      <button class="btn btn-outline" onclick="claimPhysical()">🏫 I'm a physical student</button>
+      <button class="btn btn-primary" onclick="submitPrizeClaim()">🎁 Mail my voucher</button>
     </div>
   </div>
 </div>
@@ -6681,7 +6683,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.29.0';
+const APP_VERSION = 'v1.30.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15811,7 +15813,7 @@ function renderPrizeClaims() {
       <td style="text-align:center;font-family:'Space Mono',monospace;">#${c.rank || '—'}</td>
       <td style="text-align:center;font-size:0.8rem;">${_prizeResult(c)}</td>
       <td style="font-size:0.82rem;white-space:nowrap;">${escapeHtml(c.phone || '')}</td>
-      <td style="font-size:0.82rem;max-width:240px;">${escapeHtml(c.address || '')}</td>
+      <td style="font-size:0.82rem;max-width:240px;">${c.physical ? '<span style="color:var(--accent-blue);font-weight:600;">🏫 Physical student — collect in class</span>' : escapeHtml(c.address || '')}</td>
       <td style="text-align:center;white-space:nowrap;">${sent
         ? '<span style="color:var(--primary);font-weight:600;font-size:0.8rem;">✓ Sent</span>'
         : `<button class="btn btn-outline" style="font-size:0.74rem;padding:4px 10px;" onclick="markPrizeSent('${escapeHtml(c._id)}')">Mark sent</button>`}</td>
@@ -19510,6 +19512,7 @@ async function submitPrizeClaim() {
       score: ctx.value,
       scoreLabel: ctx.detail || "",
       phone, address,
+      physical: false, deliveryMethod: "mail",
       status: "pending",
       createdAt: new Date().toISOString()
     });
@@ -19521,6 +19524,37 @@ async function submitPrizeClaim() {
     showToast("🎉 Claim submitted — we'll send your $10 voucher soon!", "success");
     setTimeout(() => { try { rpgCheckPrizeClaim(); } catch (_) {} }, 800);
   } catch (e) { console.warn("prize claim save", e); showToast("Could not submit — check your connection and try again", "error"); }
+}
+// Physical (in-person) students collect the voucher in class — confirm here
+// instead of giving a mailing address.
+async function claimPhysical() {
+  if (!_prizeClaimCtx || !currentUser) return;
+  const phone = (document.getElementById("prizePhone").value || "").trim();
+  const ctx = _prizeClaimCtx;
+  try {
+    await setDoc(doc(db, "prizeClaims", currentUser.uid + "_" + ctx.ackKey), {
+      uid: currentUser.uid,
+      name: currentUser.name || "",
+      email: currentUser.email || "",
+      monthKey: ctx.monthKey,
+      category: ctx.ackKey === ctx.monthKey ? "questions" : (ctx.ackKey.endsWith("_td") ? "defenders" : "raiders"),
+      rank: ctx.rank,
+      questions: ctx.ackKey === ctx.monthKey ? ctx.value : 0,
+      score: ctx.value,
+      scoreLabel: ctx.detail || "",
+      phone, address: "",
+      physical: true, deliveryMethod: "collect",
+      status: "pending",
+      createdAt: new Date().toISOString()
+    });
+    rpgState.prizeAck = rpgState.prizeAck || {};
+    rpgState.prizeAck[ctx.ackKey] = "claimed";
+    rpgSave();
+    _closePrizeClaim();
+    _prizePromptShown = false;       // allow another category's prompt this session
+    showToast("🏫 Confirmed — collect your $10 voucher in class!", "success");
+    setTimeout(() => { try { rpgCheckPrizeClaim(); } catch (_) {} }, 800);
+  } catch (e) { console.warn("physical claim save", e); showToast("Could not submit — check your connection and try again", "error"); }
 }
 
 // ---- Adventure mode (idle side-scrolling auto-battler, MOBA-style skills) ----
@@ -21441,6 +21475,7 @@ window.showStudentDetail = showStudentDetail;
 window.closeStudentDetail = closeStudentDetail;
 window.markPrizeSent = markPrizeSent;
 window.submitPrizeClaim = submitPrizeClaim;
+window.claimPhysical = claimPhysical;
 window.dismissPrizeClaim = dismissPrizeClaim;
 window.loadMyReport = loadMyReport;
 // Scheduled Questions
