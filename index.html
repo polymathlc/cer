@@ -6669,12 +6669,19 @@ async function enterApp(user) {
   // Load message inbox so the unread badge shows on the Messages nav item.
   loadMessages().then(updateMsgBadge).catch(e => console.warn('messages init', e));
 
+  // Deep-link: a game tab's "Open in the app" button links to index.html#raiders
+  // / #defenders — jump straight to that game page once we're signed in.
+  const hash = (location.hash || '').replace('#', '');
+  if (hash === 'raiders' || hash === 'defenders') {
+    setTimeout(() => { try { navigateTo(hash); } catch (e) {} }, 300);
+  }
+
   showToast('Welcome, ' + displayName + '!', 'success');
 }
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.27.2';
+const APP_VERSION = 'v1.28.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20762,9 +20769,14 @@ async function _sdSeenQuestionIds() {
 }
 // Record one Tower-Defense MCQ response into the same teacher-visible log the
 // rest of the app uses (shows up in the Usage dashboard).
+// A question answered faster than this (ms on screen) doesn't count toward the
+// monthly "unique questions done" total — rushing through to farm the prize is
+// treated as cheating. The attempt is still logged for the admin's records.
+const MIN_GAME_ANSWER_MS = 4000;
 function _sdRecordAttempt(d) {
   try {
     if (!currentUser || currentUser.role !== 'student' || !d || !d.questionId) return;
+    const ms = Math.max(0, Math.round(Number(d.ms) || 0));
     addDoc(collection(db, 'questionAttempts'), {
       uid: currentUser.uid,
       email: currentUser.email,
@@ -20774,9 +20786,17 @@ function _sdRecordAttempt(d) {
       score: d.correct ? 1 : 0,
       totalBlanks: 1,
       answerHash: '',
+      ms: ms,
       timestamp: Timestamp.now(),
       mode: (d.mode === 'raiders' ? 'raiders' : 'defenders')
     }).catch(err => console.warn('SD record attempt failed', err));
+    // Count this game MCQ toward the monthly unique-questions total — but only if
+    // the student actually spent time on it (too fast = cheating, see above).
+    if (ms >= MIN_GAME_ANSWER_MS && rpgState) {
+      const before = rpgState.monthQ || 0;
+      rpgNoteUniqueQuestion(d.questionId, '');   // MCQ → no answer fingerprint; counts by unique question id
+      if ((rpgState.monthQ || 0) > before) { rpgSave(); rpgPublishLeaderboard(); }
+    }
   } catch (e) {}
 }
 // A student may flag at most this many questions per calendar day (across
