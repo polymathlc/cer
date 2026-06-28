@@ -712,7 +712,8 @@ var SPECIAL_UPGRADES = [
   { id: 'nova',  icon: '💥', name: 'Nova Shield',   desc: 'Every hit you take detonates a damaging shockwave', apply: function(p){ p.nova += 1; } },
   { id: 'twin',  icon: '🔱', name: 'Twin Cannons',  desc: '+2 projectiles and +15% damage', apply: function(p){ p.shots += 2; p.dmgMul *= 1.15; } },
   { id: 'titan', icon: '🛡️', name: 'Titan Core',    desc: '+60 max HP, full heal and +20% speed', apply: function(p){ p.maxHp += 60; p.hp = p.maxHp; p.speedMul *= 1.2; } },
-  { id: 'exec',  icon: '☠️', name: 'Executioner',   desc: '+35% damage and +20% crit chance', apply: function(p){ p.dmgMul *= 1.35; p.crit += 0.2; } }
+  { id: 'exec',  icon: '☠️', name: 'Executioner',   desc: '+35% damage and +20% crit chance', apply: function(p){ p.dmgMul *= 1.35; p.crit += 0.2; } },
+  { id: 'zeus',  icon: '⚡', name: 'Zeus',           desc: 'Lightning periodically strikes random enemies', max: 6, apply: function(p){ p.zeus += 1; } }
 ];
 
 /* ---------------- 3b. PROJECTILE ELEMENTS ----------------
@@ -732,9 +733,19 @@ var ELEMENTS = {
             milestone: { 5: '+1 chain jump', 10: 'chains also stun' } },
   laser:  { icon: '🔆', name: 'Laser Lance',  color: '#FF5252', dark: '#C62828',
             blurb: 'Piercing high-damage bolts — but a slower fire rate',
-            milestone: { 5: 'pierces far more', 10: 'massive damage & crit' } }
+            milestone: { 5: 'pierces far more', 10: 'massive damage & crit' } },
+  // --- mythic projectile changes ---
+  poseidon:  { icon: '🌊', name: 'Poseidon', color: '#29B6F6', dark: '#0277BD',
+               blurb: 'Shots burst into a water splash that knocks foes back',
+               milestone: { 5: 'wider splash & stronger knockback', 10: 'tidal blast hurls whole packs' } },
+  hurricane: { icon: '🌪️', name: 'Hurricane', color: '#80DEEA', dark: '#00838F',
+               blurb: 'Shots spawn tornadoes that swirl & slow foes',
+               milestone: { 5: 'bigger vortex pulls from farther', 10: 'storms fling enemies together' } },
+  thor:      { icon: '🔨', name: 'Thor', color: '#FFCA28', dark: '#FF8F00',
+               blurb: 'Shots become a hammer that chains & stuns',
+               milestone: { 5: 'extra chain jumps', 10: 'thunderous chains & longer stun' } }
 };
-var ELEM_KEYS = ['poison', 'ice', 'chain', 'laser'];
+var ELEM_KEYS = ['poison', 'ice', 'chain', 'laser', 'poseidon', 'hurricane', 'thor'];
 function elemUpgrade(key){
   var E = ELEMENTS[key];
   return { id: 'elem_' + key, type: 'elem', key: key, icon: E.icon, name: E.name,
@@ -833,7 +844,7 @@ function wpnLevel(id){ return (G && G.player.wpn[id]) || 0; }
 // Which variant (if any) of a line is locked in.
 function lineChosen(L){ return wpnLevel(L.a.id) > 0 ? L.a : (wpnLevel(L.b.id) > 0 ? L.b : null); }
 
-var MAX_UPGRADES = 10;        // run-long cap on upgrades taken
+var MAX_UPGRADES = 30;        // run-long cap on upgrades taken (tripled)
 var ORBIT_R = 42;             // Orbital Guard orbit radius
 function isElemMilestone(lvl){ return lvl === 5 || lvl === 10; }
 
@@ -879,7 +890,8 @@ function newPlayer(clazz){
     upgrades: 0,                       // total upgrades taken (caps at MAX_UPGRADES)
     orbit: 0, orbAng: 0, orbCd: 0,     // Orbital Guard special
     nova: 0,                           // Nova Shield special
-    elem: { poison: 0, ice: 0, chain: 0, laser: 0 }, // projectile element levels
+    zeus: 0, zeusCd: 0,                // Zeus — periodic lightning on random foes
+    elem: { poison: 0, ice: 0, chain: 0, laser: 0, poseidon: 0, hurricane: 0, thor: 0 }, // projectile element levels
     wpn: {},                           // weapon-variant levels (id -> level); siblings lock
     explosive: 0, homingShot: 0, lifesteal: 0, berserk: 0  // weapon mechanic flags
   };
@@ -930,8 +942,8 @@ function queueRoomEnemies(){
     for (var a = 0; a < adds; a++) G.pending.push('swarm');
     return;
   }
-  // +80% more enemies than before (old 2× → 3.6×), trickled in over the room.
-  var budget = Math.round((4 + f * 1.6 + G.room * 0.8) * d.count * 3.6);
+  // Enemy count: 3.6× base, then a further +20% per the latest tuning.
+  var budget = Math.round((4 + f * 1.6 + G.room * 0.8) * d.count * 3.6 * 1.2);
   // Weighted spawn pool. The screen was getting flooded with projectiles from
   // the "special" shooters (spread/heavy/homing), so they're toned down while
   // the plain single-shot 'turret' is doubled. Melee types stay at baseline 2;
@@ -1075,6 +1087,7 @@ function update(dt){
   // timers
   p.cd -= dt; p.iframes -= dt; p.dashCd -= dt; p.hurtFlash -= dt;
   if (p.regen > 0 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt);
+  if (p.zeus > 0){ p.zeusCd -= dt; if (p.zeusCd <= 0){ if (G.enemies.length) zeusStrike(p.zeus); p.zeusCd = Math.max(0.6, 1.9 - 0.16 * p.zeus); } }
   if (G.bannerT > 0) G.bannerT -= dt;
   if (G.shakeT > 0) G.shakeT -= dt;
   if (G.spawnFx > 0) G.spawnFx -= dt;
@@ -1150,6 +1163,9 @@ function effectiveRate(){
 }
 // Dominant element drives the bolt colour (laser > chain > ice > poison > none).
 function bulletColor(L){
+  if (L.thor > 0) return ELEMENTS.thor.color;          // Mjölnir gold
+  if (L.poseidon > 0) return ELEMENTS.poseidon.color;  // water blue
+  if (L.hurricane > 0) return ELEMENTS.hurricane.color; // storm teal
   if (L.laser > 0) return ELEMENTS.laser.color;
   if (L.chain > 0) return ELEMENTS.chain.color;
   if (L.ice > 0) return ELEMENTS.ice.color;
@@ -1180,7 +1196,7 @@ function spawnBolt(a, wp){
     vx: Math.cos(a) * bspeed, vy: Math.sin(a) * bspeed,
     r: (wp.laser ? 6 : 4) + (crit ? 2 : 0), dmg: dmg, crit: crit, pierce: wp.pierce, hits: [], life: wp.laser ? 1.1 : 1.4,
     color: crit ? '#FFB300' : wp.col, laser: wp.laser,
-    elem: { poison: wp.L.poison, ice: wp.L.ice, chain: wp.L.chain, laser: wp.L.laser },
+    elem: Object.assign({}, wp.L),   // carry every element level (poison…thor) on the bolt
     explosive: p.explosive, homing: p.homingShot > 0
   });
 }
@@ -1262,6 +1278,95 @@ function applyElementsOnHit(b, e){
   }
   if (p.slowShot > 0) applySlow(e, 1 - 0.08 * p.slowShot, 1.2); // Frost Coating — stacks on top
   if (el.chain > 0) chainLightning(e, el.chain);
+  if (el.poseidon > 0) poseidonSplash(b, e, el.poseidon);
+  if (el.hurricane > 0) hurricaneSwirl(b, el.hurricane);
+  if (el.thor > 0) thorHammer(e, el.thor);
+}
+
+// Push an enemy away from (fx,fy) by `amt` px, clamped to the arena (bosses resist).
+function knockback(e, fx, fy, amt){
+  if (e.type === 'boss') amt *= 0.3;
+  var a = Math.atan2(e.y - fy, e.x - fx);
+  e.x = clamp(e.x + Math.cos(a) * amt, 16, VIEW_W - 16);
+  e.y = clamp(e.y + Math.sin(a) * amt, 16, VIEW_H - 16);
+}
+
+// Poseidon — a water splash that knocks the struck foe back and shoves/damages
+// nearby foes in a radius.
+function poseidonSplash(b, e, lvl){
+  var p = G.player, base = p.baseDmg * p.dmgMul;
+  knockback(e, b.x, b.y, 16 + 6 * lvl);
+  applySlow(e, 0.8, 0.8);
+  var sr = 40 + 8 * lvl, sd = base * (0.3 + 0.05 * lvl);
+  for (var i = 0; i < G.enemies.length; i++){
+    var o = G.enemies[i];
+    if (o === e || o.dead || o.spawnT > 0) continue;
+    if (dist2(b.x, b.y, o.x, o.y) <= sr * sr){ damageEnemy(o, sd, false); knockback(o, b.x, b.y, 10 + 4 * lvl); }
+  }
+  G.shockwaves.push({ x: b.x, y: b.y, r: 8, max: sr, life: 0.28, maxLife: 0.28, color: '#29B6F6' });
+  for (var k = 0; k < 9; k++) addParticle(b.x + rand(-sr/3, sr/3), b.y + rand(-sr/3, sr/3), '#4FC3F7', rand(1.2, 2.2));
+}
+
+// Hurricane — a tornado that swirls nearby foes around the impact point and slows
+// them (sucking them inward as it spins).
+function hurricaneSwirl(b, lvl){
+  var p = G.player, hr = 55 + 10 * lvl, hd = (p.baseDmg * p.dmgMul) * (0.18 + 0.04 * lvl);
+  for (var i = 0; i < G.enemies.length; i++){
+    var w = G.enemies[i];
+    if (w.dead || w.spawnT > 0 || w.type === 'boss') continue;
+    var dd = dist2(b.x, b.y, w.x, w.y);
+    if (dd > hr * hr) continue;
+    var ang = Math.atan2(w.y - b.y, w.x - b.x) + 0.6;   // rotate around the vortex
+    var d = Math.sqrt(dd) * 0.82 + 3;                    // pull inward a little
+    w.x = clamp(b.x + Math.cos(ang) * d, 16, VIEW_W - 16);
+    w.y = clamp(b.y + Math.sin(ang) * d, 16, VIEW_H - 16);
+    applySlow(w, 0.7, 1.0);
+    damageEnemy(w, hd, false);
+  }
+  for (var k = 0; k < 8; k++){ var a = rand(0, TAU), r = rand(8, hr * 0.6); addParticle(b.x + Math.cos(a) * r, b.y + Math.sin(a) * r, '#B2EBF2', rand(1, 2)); }
+}
+
+// Thor — Mjölnir leaps between foes, dealing damage, a brief stun and knockback.
+function thorHammer(origin, lvl){
+  var chains = 2 + Math.floor(lvl / 2), dmg = G.player.baseDmg * G.player.dmgMul * (0.6 + 0.08 * lvl);
+  var stun = 0.25 + 0.03 * lvl, hit = [origin], src = origin;
+  origin.frozenT = Math.max(origin.frozenT || 0, stun);   // hammer stun on the struck foe
+  for (var c = 0; c < chains; c++){
+    var next = null, nd = 190 * 190;
+    for (var j = 0; j < G.enemies.length; j++){
+      var en = G.enemies[j];
+      if (en.spawnT > 0 || en.dead || hit.indexOf(en) >= 0) continue;
+      var dd = dist2(src.x, src.y, en.x, en.y);
+      if (dd < nd){ nd = dd; next = en; }
+    }
+    if (!next) break;
+    G.lightning.push({ x1: src.x, y1: src.y, x2: next.x, y2: next.y, life: 0.18, maxLife: 0.18 });
+    damageEnemy(next, dmg, false);
+    next.frozenT = Math.max(next.frozenT || 0, stun);
+    knockback(next, src.x, src.y, 10 + 2 * lvl);
+    hit.push(next); src = next;
+  }
+  for (var k = 0; k < 8; k++) addParticle(origin.x, origin.y, '#FFE082', rand(1.4, 2.6));
+}
+
+// Zeus — bolts fall from the sky onto random foes, with a small splash.
+function zeusStrike(lvl){
+  var alive = G.enemies.filter(function(e){ return !e.dead && e.spawnT <= 0; });
+  if (!alive.length) return;
+  var strikes = 1 + Math.floor(lvl / 3), dmg = G.player.baseDmg * G.player.dmgMul * (1.4 + 0.5 * lvl);
+  for (var s = 0; s < strikes && alive.length; s++){
+    var e = alive.splice(Math.floor(Math.random() * alive.length), 1)[0];
+    G.lightning.push({ x1: e.x + rand(-6, 6), y1: 0, x2: e.x, y2: e.y, life: 0.22, maxLife: 0.22 });
+    damageEnemy(e, dmg, false);
+    var r = 46;
+    for (var j = 0; j < G.enemies.length; j++){
+      var o = G.enemies[j];
+      if (o === e || o.dead || o.spawnT > 0) continue;
+      if (dist2(e.x, e.y, o.x, o.y) <= r * r) damageEnemy(o, dmg * 0.5, false);
+    }
+    G.shockwaves.push({ x: e.x, y: e.y, r: 8, max: r, life: 0.25, maxLife: 0.25, color: '#FFF59D' });
+    for (var k = 0; k < 10; k++) addParticle(e.x + rand(-14, 14), e.y + rand(-10, 10), '#FFF59D', rand(1.2, 2.4));
+  }
 }
 
 // Lightning arcs from the struck enemy to nearby foes.
