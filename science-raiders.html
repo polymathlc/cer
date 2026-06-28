@@ -2912,7 +2912,24 @@ function fitCanvas(){
 window.addEventListener('resize', fitCanvas);
 
 /* ---------------- 18. INIT ---------------- */
+// When the game is opened in its OWN TAB (not embedded in the app), it has no
+// link to the database — no class questions, and no saving of progress/prizes.
+// Show a banner that routes the student back into the app where it works fully.
+function maybeStandaloneNotice(){
+  if (window.parent && window.parent !== window) return;     // embedded — all good
+  if (document.getElementById('standaloneNotice')) return;
+  var bar = document.createElement('div');
+  bar.id = 'standaloneNotice';
+  bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#7c2d12;color:#fff;font:600 13px/1.4 system-ui,-apple-system,sans-serif;padding:10px 14px;display:flex;align-items:center;gap:12px;justify-content:center;flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,0.35);';
+  bar.innerHTML = '<span>⚠️ You’re playing outside the app — your class questions, progress and prizes won’t be saved here.</span>'
+    + '<a href="index.html#raiders" style="background:#fff;color:#7c2d12;text-decoration:none;font-weight:700;padding:6px 14px;border-radius:8px;white-space:nowrap;">Open in the app →</a>'
+    + '<button type="button" aria-label="Dismiss" style="background:transparent;border:0;color:#fff;font-size:18px;cursor:pointer;line-height:1;padding:0 4px;">×</button>';
+  bar.querySelector('button').addEventListener('click', function(){ bar.remove(); });
+  document.body.appendChild(bar);
+}
+
 function init(){
+  maybeStandaloneNotice();
   wireUI();
   loadAdaptiveState();
   requestBankQuestions();

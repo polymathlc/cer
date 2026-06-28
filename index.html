@@ -6669,12 +6669,19 @@ async function enterApp(user) {
   // Load message inbox so the unread badge shows on the Messages nav item.
   loadMessages().then(updateMsgBadge).catch(e => console.warn('messages init', e));
 
+  // Deep-link: a game tab's "Open in the app" button links to index.html#raiders
+  // / #defenders — jump straight to that game page once we're signed in.
+  const hash = (location.hash || '').replace('#', '');
+  if (hash === 'raiders' || hash === 'defenders') {
+    setTimeout(() => { try { navigateTo(hash); } catch (e) {} }, 300);
+  }
+
   showToast('Welcome, ' + displayName + '!', 'success');
 }
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.28.0';
+const APP_VERSION = 'v1.28.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
