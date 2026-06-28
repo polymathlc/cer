@@ -4608,6 +4608,9 @@ option {
       <div class="nav-item rpg-el" data-page="raiders" onclick="navigateTo('raiders')" style="display:none;" title="Science Raiders — roguelite top-down shooter. Clear rooms, answer science questions to pick power-ups.">
         <span class="ico">👾</span> Science Raiders
       </div>
+      <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any Science Raiders sprite (enemies, heroes, tiles).">
+        <span class="ico">🎨</span> Game Objects
+      </div>
       <div class="nav-item" id="rpgHideToggle" style="display:none;"><span class="ico">🙈</span> Hide game</div>
     </nav>
     <div class="rpg-side rpg-el" id="rpgSide" style="display:none;" title="Open your character page">
@@ -5600,6 +5603,39 @@ option {
       <iframe id="raidersFrame" class="embed-frame" title="Science Raiders — Roguelite Shooter MCQ"></iframe>
     </div>
 
+    <!-- ===== PAGE: GAME OBJECTS (Admin Only) — sprite override manager ===== -->
+    <div class="page" id="page-gameassets">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Game Objects</h2>
+          </div>
+          <div class="subtitle">Replace any Science Raiders sprite — click a tile's box and paste a PNG (Ctrl/⌘+V), drop a file, or use Upload. Big images are scaled down automatically and saved to Firebase, then the game updates live.</div>
+        </div>
+        <button class="btn btn-outline" onclick="loadGameAssets()" style="font-size:0.82rem;">↻ Refresh</button>
+      </div>
+      <div class="page-body" style="max-width:1100px;">
+        <style>
+          .ga-cat{margin:18px 0 8px;font-size:0.95rem;color:#475569;font-weight:700;}
+          .ga-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:14px;}
+          .ga-card{border:1px solid #e2e8f0;border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:8px;}
+          .ga-prev{width:72px;height:72px;display:flex;align-items:center;justify-content:center;background:#f1f5f9;border-radius:8px;}
+          .ga-prev img{max-width:64px;max-height:64px;object-fit:contain;image-rendering:pixelated;}
+          .ga-name{font-weight:600;font-size:0.85rem;text-align:center;}
+          .ga-zone{font-size:0.72rem;color:#64748b;text-align:center;border:1.5px dashed #cbd5e1;border-radius:8px;padding:8px;width:100%;cursor:text;outline:none;}
+          .ga-zone:focus{border-color:#6366f1;background:#eef2ff;color:#4338ca;}
+          .ga-zone.drag{border-color:#6366f1;background:#eef2ff;}
+          .ga-actions{display:flex;gap:6px;align-items:center;}
+          .ga-mini{font-size:0.72rem;padding:4px 10px;cursor:pointer;}
+          .ga-status{font-size:0.7rem;color:#94a3b8;}
+          .ga-status.custom{color:#16a34a;font-weight:600;}
+          .ga-loading{color:#94a3b8;padding:20px;}
+        </style>
+        <div id="gameAssetsGrid"><div class="ga-loading">Loading…</div></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -6081,6 +6117,7 @@ import {
   getDocs,
   setDoc,
   deleteDoc,
+  deleteField,
   addDoc,
   query,
   where,
@@ -6577,7 +6614,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.24.0';
+const APP_VERSION = 'v1.25.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -6762,8 +6799,10 @@ function navigateTo(page) {
   }
   if (page === 'raiders') {
     const f = document.getElementById('raidersFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-raiders.html');
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html'); f.addEventListener('load', pushRaidersAssets); }
+    else pushRaidersAssets();
   }
+  if (page === 'gameassets') loadGameAssets();
   // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -20701,6 +20740,11 @@ window.addEventListener('message', function (ev) {
     _sdRecordFlag(d, ev.source);
   } else if (d.type === 'SD_SCORE') {
     _sdRecordScore(d);
+  } else if (d.type === 'RAIDERS_REQUEST_ASSETS') {
+    (async () => {
+      const overrides = await loadRaidersOverrides();
+      try { ev.source && ev.source.postMessage({ type: 'raidersAssets', overrides }, '*'); } catch (e) {}
+    })();
   }
 });
 
@@ -20723,8 +20767,189 @@ function _sdRecordScore(d) {
 }
 
 // =====================================================================
+// GAME OBJECTS (admin) — replace Science Raiders sprites by pasting a PNG.
+// Each "object" maps to a tile in the game's embedded Kenney sheets. An
+// override is one PNG (auto scaled-down), uploaded to Firebase Storage; the
+// {objectId: downloadURL} map is saved to the admin's settings doc (students
+// read the admin's doc, same pattern as the marking rubric) and pushed to the
+// running game via postMessage.
+// =====================================================================
+const RAIDERS_SHEETS = { dungeon: 'assets/raiders/tiny-dungeon.png', town: 'assets/raiders/tiny-town.png' };
+const _raidersSheetImg = {};
+const RAIDERS_OBJECTS = [
+  { cat:'Enemies', id:'slime',   label:'Lab Slime',     sheet:'dungeon', idx:108 },
+  { cat:'Enemies', id:'swarm',   label:'Nanobot',       sheet:'dungeon', idx:122 },
+  { cat:'Enemies', id:'turret',  label:'Sentry',        sheet:'dungeon', idx:97  },
+  { cat:'Enemies', id:'drone',   label:'Drone',         sheet:'dungeon', idx:120 },
+  { cat:'Enemies', id:'spitter', label:'Spitter',       sheet:'dungeon', idx:110 },
+  { cat:'Enemies', id:'sniper',  label:'Sniper',        sheet:'dungeon', idx:100 },
+  { cat:'Enemies', id:'bomber',  label:'Bomber',        sheet:'dungeon', idx:109 },
+  { cat:'Enemies', id:'seeker',  label:'Seeker',        sheet:'dungeon', idx:99  },
+  { cat:'Enemies', id:'brute',   label:'Brute',         sheet:'dungeon', idx:88  },
+  { cat:'Enemies', id:'boss',    label:'Core Guardian', sheet:'dungeon', idx:121 },
+  { cat:'Heroes',  id:'ranger',  label:'Ranger',        sheet:'dungeon', idx:98  },
+  { cat:'Heroes',  id:'tank',    label:'Bulwark',       sheet:'dungeon', idx:96  },
+  { cat:'Heroes',  id:'scout',   label:'Scout',         sheet:'dungeon', idx:112 },
+  { cat:'Terrain', id:'grass_0', label:'Grass',         sheet:'town',    idx:0   },
+  { cat:'Terrain', id:'grass_1', label:'Grass (detail)',sheet:'town',    idx:1   },
+  { cat:'Terrain', id:'grass_2', label:'Grass (flowers)',sheet:'town',   idx:2   },
+  { cat:'Terrain', id:'tree',    label:'Tree',          sheet:'town',    idx:3   },
+];
+const RAIDERS_MAX_SIDE = 256; // px — auto scale-down ceiling for uploaded art
+let _raidersOverridesCache = null; // {id:url}
+
+function _raidersOwnerUid(){ return (typeof adminUid !== 'undefined' && adminUid) || (currentUser && currentUser.uid) || null; }
+function _raidersDocRef(uid){ return doc(db, 'users', uid, 'settings', 'raidersSprites'); }
+
+async function loadRaidersOverrides(force){
+  if (_raidersOverridesCache && !force) return _raidersOverridesCache;
+  const uid = _raidersOwnerUid();
+  if (!uid){ _raidersOverridesCache = {}; return _raidersOverridesCache; }
+  try {
+    const snap = await getDoc(_raidersDocRef(uid));
+    _raidersOverridesCache = (snap.exists() && snap.data().overrides) ? snap.data().overrides : {};
+  } catch (e) { console.warn('raiders overrides load failed', e); _raidersOverridesCache = _raidersOverridesCache || {}; }
+  return _raidersOverridesCache;
+}
+
+async function pushRaidersAssets(){
+  const overrides = await loadRaidersOverrides();
+  const f = document.getElementById('raidersFrame');
+  try { f && f.contentWindow && f.contentWindow.postMessage({ type: 'raidersAssets', overrides }, '*'); } catch (e) {}
+}
+
+function _loadRaidersSheet(key){
+  return new Promise((res, rej) => {
+    if (_raidersSheetImg[key]) return res(_raidersSheetImg[key]);
+    const im = new Image();
+    im.onload = () => { _raidersSheetImg[key] = im; res(im); };
+    im.onerror = rej;
+    im.src = RAIDERS_SHEETS[key];
+  });
+}
+function _raidersTileThumb(sheetImg, idx, size){
+  const c = document.createElement('canvas'); c.width = size; c.height = size;
+  const cx = c.getContext('2d'); cx.imageSmoothingEnabled = false;
+  cx.drawImage(sheetImg, (idx % 12) * 16, ((idx / 12) | 0) * 16, 16, 16, 0, 0, size, size);
+  return c.toDataURL('image/png');
+}
+
+async function loadGameAssets(){
+  const host = document.getElementById('gameAssetsGrid');
+  if (!host) return;
+  host.innerHTML = '<div class="ga-loading">Loading…</div>';
+  try { await Promise.all([_loadRaidersSheet('dungeon'), _loadRaidersSheet('town')]); } catch (e) { console.warn('sheet load failed', e); }
+  await loadRaidersOverrides(true);
+  const cats = {};
+  RAIDERS_OBJECTS.forEach(o => { (cats[o.cat] = cats[o.cat] || []).push(o); });
+  let html = '';
+  Object.keys(cats).forEach(cat => {
+    html += '<h3 class="ga-cat">' + cat + '</h3><div class="ga-cards">';
+    cats[cat].forEach(o => {
+      const ov = _raidersOverridesCache[o.id];
+      const sheet = _raidersSheetImg[o.sheet];
+      const thumb = ov ? ov : (sheet ? _raidersTileThumb(sheet, o.idx, 64) : '');
+      html += '<div class="ga-card" id="gacard-' + o.id + '">'
+        + '<div class="ga-prev">' + (thumb ? '<img src="' + thumb + '" alt="' + o.label + '">' : '') + '</div>'
+        + '<div class="ga-name">' + o.label + '</div>'
+        + '<div class="ga-zone" id="gazone-' + o.id + '" tabindex="0"'
+        +   ' onpaste="onRaidersObjPaste(\'' + o.id + '\', event)"'
+        +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
+        +   ' ondragleave="this.classList.remove(\'drag\')"'
+        +   ' ondrop="onRaidersObjDrop(\'' + o.id + '\', event)"'
+        +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
+        + '<div class="ga-actions">'
+        +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onRaidersObjPick(\'' + o.id + '\', event)"></label>'
+        +   (ov ? '<button class="btn btn-ghost ga-mini" onclick="resetRaidersObj(\'' + o.id + '\')">Reset</button>' : '')
+        + '</div>'
+        + '<div class="ga-status ' + (ov ? 'custom' : '') + '" id="gastatus-' + o.id + '">' + (ov ? '● Custom' : 'Default') + '</div>'
+        + '</div>';
+    });
+    html += '</div>';
+  });
+  host.innerHTML = html;
+}
+
+async function _scaleDownDataUrl(dataUrl, maxSide){
+  const img = await _loadImageEl(dataUrl);
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  if (Math.max(w, h) <= maxSide) return dataUrl;
+  const s = maxSide / Math.max(w, h);
+  const cw = Math.max(1, Math.round(w * s)), ch = Math.max(1, Math.round(h * s));
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  c.getContext('2d').drawImage(img, 0, 0, cw, ch);
+  return c.toDataURL('image/png');
+}
+
+async function _raidersApplyImage(objId, dataUrl){
+  const status = document.getElementById('gastatus-' + objId);
+  try {
+    if (status) status.textContent = 'Uploading…';
+    if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
+    const scaled = await _scaleDownDataUrl(dataUrl, RAIDERS_MAX_SIDE);
+    const url = await uploadImageDataUrl(scaled);
+    const uid = _raidersOwnerUid();
+    if (!uid) throw new Error('Not signed in');
+    await setDoc(_raidersDocRef(uid), { overrides: { [objId]: url } }, { merge: true });
+    _raidersOverridesCache = _raidersOverridesCache || {};
+    _raidersOverridesCache[objId] = url;
+    await pushRaidersAssets();
+    await loadGameAssets();
+    showToast('Sprite updated', 'success');
+  } catch (e) {
+    console.error('raiders sprite update failed', e);
+    showToast('Update failed: ' + (e && e.message ? e.message : e), 'error');
+    if (status) status.textContent = 'Failed';
+  }
+}
+
+function _raidersFileToDataUrl(file, cb){
+  if (!file || !/^image\//.test(file.type)) { showToast('That is not an image', 'error'); return; }
+  const r = new FileReader();
+  r.onload = () => cb(r.result);
+  r.readAsDataURL(file);
+}
+function onRaidersObjPaste(objId, e){
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items){
+    if (it.type && it.type.startsWith('image/')){
+      e.preventDefault();
+      _raidersFileToDataUrl(it.getAsFile(), du => _raidersApplyImage(objId, du));
+      return;
+    }
+  }
+  showToast('No image in clipboard — copy a PNG first', 'error');
+}
+function onRaidersObjDrop(objId, e){
+  e.preventDefault();
+  const zone = document.getElementById('gazone-' + objId); if (zone) zone.classList.remove('drag');
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  _raidersFileToDataUrl(file, du => _raidersApplyImage(objId, du));
+}
+function onRaidersObjPick(objId, e){
+  const file = e.target && e.target.files && e.target.files[0];
+  _raidersFileToDataUrl(file, du => _raidersApplyImage(objId, du));
+  if (e.target) e.target.value = '';
+}
+async function resetRaidersObj(objId){
+  try {
+    const uid = _raidersOwnerUid(); if (!uid) return;
+    await setDoc(_raidersDocRef(uid), { overrides: { [objId]: deleteField() } }, { merge: true });
+    if (_raidersOverridesCache) delete _raidersOverridesCache[objId];
+    await pushRaidersAssets();
+    await loadGameAssets();
+    showToast('Reset to default', 'success');
+  } catch (e) { console.error('raiders reset failed', e); showToast('Reset failed', 'error'); }
+}
+
+// =====================================================================
 // EXPOSE FUNCTIONS GLOBALLY (required for module scope + onclick handlers)
 // =====================================================================
+window.loadGameAssets = loadGameAssets;
+window.onRaidersObjPaste = onRaidersObjPaste;
+window.onRaidersObjDrop = onRaidersObjDrop;
+window.onRaidersObjPick = onRaidersObjPick;
+window.resetRaidersObj = resetRaidersObj;
 window.navigateTo = navigateTo;
 window.toggleSidebar = toggleSidebar;
 window.addBlock = addBlock;
