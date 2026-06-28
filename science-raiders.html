@@ -574,9 +574,6 @@ function drawFloor(){
       else ctx.drawImage(IMG_TOWN, (idx % 12) * 16, ((idx / 12) | 0) * 16, 16, 16, c*S, r*S, S, S);
     }
   }
-  // a little foliage in the corners (purely decorative, drawn under the actors)
-  _treeAt(20, 18); _treeAt(VIEW_W - 20, 18);
-  _treeAt(24, VIEW_H - 22); _treeAt(VIEW_W - 24, VIEW_H - 22);
   // earthy border so the arena bounds stay readable
   var bw = 10; ctx.fillStyle = 'rgba(35,28,18,0.45)';
   ctx.fillRect(0, 0, VIEW_W, bw); ctx.fillRect(0, VIEW_H - bw, VIEW_W, bw);
@@ -1603,7 +1600,7 @@ function aoeBlast(x, y, radius, dmg, color){
   G.enemies.slice().forEach(function(e){ if (e.spawnT > 0 || e.dead) return; if (dist2(e.x, e.y, x, y) <= radius * radius) damageEnemy(e, dmg, false); });
   G.shockwaves.push({ x: x, y: y, r: 14, max: radius, life: 0.4, maxLife: 0.4, color: color || '#FF7043' });
   for (var i = 0; i < 18; i++) addParticle(x + rand(-radius/3, radius/3), y + rand(-radius/3, radius/3), color || '#FF7043', rand(1, 2.4));
-  G.shakeT = 0.2; G.shakeMag = 6;
+  // (screen-shake removed — explosions no longer vibrate the view)
 }
 function castMortar(t){
   // a shell that arcs from the player to the target, then explodes
