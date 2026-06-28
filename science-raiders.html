@@ -2482,7 +2482,7 @@ function recordAnswer(q, correct){
   saveStudent(); saveQElo();
   try {
     if (window.parent && window.parent !== window){
-      window.parent.postMessage({ type:'SD_RECORD', mode:'raiders', questionId:q.id, questionTitle:(q.q||'').slice(0,140), correct:!!correct, topic:q.topic||'' }, '*');
+      window.parent.postMessage({ type:'SD_RECORD', mode:'raiders', questionId:q.id, questionTitle:(q.q||'').slice(0,140), correct:!!correct, topic:q.topic||'', ms:(qState.shownAt ? Math.round(performance.now() - qState.shownAt) : 0) }, '*');
     }
   } catch(e){}
 }
@@ -2498,6 +2498,7 @@ function openQuestion(){
     return;
   }
   qState.current = q; qState.answered = false; qState.active = true;
+  qState.shownAt = performance.now();   // for the anti-rush "questions done" gate
 
   $('qTopic').textContent = q.topic || 'Science';
   var qStem = $('qStem');
