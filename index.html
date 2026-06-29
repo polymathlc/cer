@@ -6689,7 +6689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.34.0';
+const APP_VERSION = 'v1.34.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -17992,16 +17992,30 @@ function rpgStatLine(it) {
 }
 
 // ---- Avatar (layered SVG paper doll; equipment renders on the hero) ----
+// A custom PNG override (_rpgArt[id]) is dropped in as an <image> at the item's
+// box — the same rectangle the inventory icon uses — so it lands in the right
+// avatar slot. For weapon/shield the box is local space and the avatar wraps the
+// art in a translated/animated <g>, so the override inherits the swing animation.
+function rpgItemArtImage(it) {
+  const box = it.box || RPG_SLOT_META[it.slot].box;
+  const [bx, by, bw, bh] = box.split(" ").map(Number);
+  return `<image href="${escapeHtml(_rpgArt[it.id])}" x="${bx}" y="${by}" width="${bw}" height="${bh}" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated;"/>`;
+}
 function rpgItemArt(slot, eq) {
   const it = RPG_ITEMS_BY_ID[(eq || {})[slot]];
-  if (!it || !it.art) return "";
+  if (!it) return "";
+  const custom = _rpgArt[it.id];
   if (slot === "pet") {
-    const evoEmoji = rpgPetEvoEmoji(it);
     const st = rpgPetStage(it);
     const halo = st ? `<circle cx="33" cy="104" r="${16 + st * 3}" fill="#ffd76a" opacity="${st === 2 ? 0.3 : 0.18}">${svgPulse(0.12, 0.3)}</circle>` : "";
+    if (custom) return halo + rpgItemArtImage(it);
+    if (!it.art) return halo;
+    const evoEmoji = rpgPetEvoEmoji(it);
     if (evoEmoji) return halo + svgPetEmoji(evoEmoji);
     return halo + it.art();
   }
+  if (custom) return rpgItemArtImage(it);
+  if (!it.art) return "";
   return it.art();
 }
 function rpgAvatarSvg(equipment) {
