@@ -3965,6 +3965,10 @@ option {
 .rpg-stat-chip { background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 4px; text-align: center; }
 .rpg-stat-chip b { display: block; font-size: 1rem; }
 .rpg-stat-chip span { display: block; font-family: 'Space Mono', monospace; font-size: 0.54rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-top: 1px; }
+.rpg-gender-row { display: flex; gap: 8px; justify-content: center; margin: 8px 0 2px; }
+.rpg-gender-btn { flex: 0 1 120px; padding: 7px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: #fff; color: var(--text); font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all var(--transition); }
+.rpg-gender-btn:hover { border-color: var(--text-light); }
+.rpg-gender-btn.on { border-color: var(--accent-orange, #f59e0b); background: var(--accent-orange, #f59e0b); color: #fff; }
 .rpg-equip-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
 @media (max-width: 560px) { .rpg-equip-row { grid-template-columns: repeat(3, 1fr); } }
 .rpg-slot { position: relative; aspect-ratio: 1; border: 1.5px dashed var(--border); border-radius: var(--radius-md); background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all var(--transition); overflow: hidden; }
@@ -5521,6 +5525,7 @@ option {
         <div class="rpg-char-grid">
           <div class="card card-pad rpg-hero-card">
             <div class="rpg-avatar-frame" id="rpgAvatarFrame"></div>
+            <div class="rpg-gender-row" id="rpgGenderRow"></div>
             <div class="rpg-hero-name" id="rpgHeroName">—</div>
             <div id="rpgHeroBars"></div>
             <div class="rpg-stat-chips" id="rpgHeroStats"></div>
@@ -6689,7 +6694,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.34.1';
+const APP_VERSION = 'v1.35.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -17388,7 +17393,7 @@ let rpgShopSlot = "all";
 function rpgStorageKey() { return "scienceQuestRpg:" + (currentUser ? currentUser.uid : "anon"); }
 function rpgDefaults() {
   return {
-    v: 2, gold: 60, xp: 0, hp: null, hidden: false, battleMin: false,
+    v: 2, gold: 60, xp: 0, hp: null, hidden: false, battleMin: false, gender: null,
     monthKey: null, monthXp: 0, lastMonthKey: null, lastMonthXp: 0, advRuns: null, dungeonFloor: 1,
     monthQ: 0, lastMonthQ: 0, monthQids: {}, monthPrints: {}, prizeAck: {},
     gameScores: { defenders: { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null },
@@ -17478,6 +17483,13 @@ function rpgSave() {
     rpgWriteLocal();
   }
   rpgRenderSide();
+}
+function rpgSetGender(g) {
+  if (!rpgState) return;
+  rpgState.gender = (g === "male" || g === "female") ? g : null;
+  rpgSave();
+  rpgRenderCharacterPage();
+  try { rpgRenderBattle(); } catch (_) {}
 }
 
 // ---- Elements, sets & upgrades ----
@@ -18018,8 +18030,17 @@ function rpgItemArt(slot, eq) {
   if (!it.art) return "";
   return it.art();
 }
-function rpgAvatarSvg(equipment) {
-  if (_rpgArt._character) return `<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg"><image href="${escapeHtml(_rpgArt._character)}" x="0" y="0" width="200" height="240" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated;"/></svg>`;
+// Which hero PNG to show: the student's chosen male/female sprite, falling back
+// to the generic _character override (and vice-versa) so partial setups still work.
+function rpgCharacterArtUrl(gender) {
+  const g = gender !== undefined ? gender : ((rpgState && rpgState.gender) || null);
+  if (g === "female") return _rpgArt._character_female || _rpgArt._character || null;
+  if (g === "male") return _rpgArt._character_male || _rpgArt._character || null;
+  return _rpgArt._character || _rpgArt._character_male || _rpgArt._character_female || null;
+}
+function rpgAvatarSvg(equipment, gender) {
+  const charUrl = rpgCharacterArtUrl(gender);
+  if (charUrl) return `<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg"><image href="${escapeHtml(charUrl)}" x="0" y="0" width="200" height="240" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated;"/></svg>`;
   const eq = equipment || (rpgState && rpgState.equipment) || {};
   const acc = RPG_ITEMS_BY_ID[eq.accessory];
   const capeArt = acc && acc.layer === "back" ? acc.art() : "";
@@ -18891,6 +18912,11 @@ function rpgRenderCharacterPage() {
   const info = rpgLevelInfo();
   rpgState.hp = Math.min(rpgState.hp, stats.maxHp);
   $("rpgAvatarFrame").innerHTML = rpgAvatarSvg();
+  const _g = rpgState.gender || null;
+  const _genderRow = $("rpgGenderRow");
+  if (_genderRow) _genderRow.innerHTML =
+    `<button type="button" class="rpg-gender-btn${_g === "male" ? " on" : ""}" onclick="rpgSetGender('male')">👦 Male</button>
+     <button type="button" class="rpg-gender-btn${_g === "female" ? " on" : ""}" onclick="rpgSetGender('female')">👧 Female</button>`;
   $("rpgHeroName").textContent = (currentUser && currentUser.name) || "Hero";
   $("rpgHeroBars").innerHTML =
     `<div class="rpg-hero-title">Lv ${info.level} science adventurer · ${rpgState.stats.wins} battles won${rpgState.stats.bestFloor ? ` · 🏰 best floor ${rpgState.stats.bestFloor}` : ``} · ${rpgState.monthXp || 0} XP this month</div>
@@ -21216,7 +21242,14 @@ async function loadGameAssets(){
       + '</div>';
   };
   html += '<h2 class="ga-game">🧍 Avatar &amp; Items <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— replace the ragdoll SVGs with pixel-art PNGs</span></h2>';
-  html += '<h3 class="ga-cat">Hero character</h3><div class="ga-cards">' + _rpgCard('_character', 'Hero character', rpgAvatarSvg({})) + '</div>';
+  const _charPrev = (key, gender) => _rpgArt[key]
+    ? '<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg"><image href="' + escapeHtml(_rpgArt[key]) + '" x="0" y="0" width="200" height="240" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated;"/></svg>'
+    : rpgAvatarSvg({}, gender);
+  html += '<h3 class="ga-cat">Hero character <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— students pick Male or Female on their hero page</span></h3><div class="ga-cards">'
+    + _rpgCard('_character_male', '👦 Hero — Male', _charPrev('_character_male', 'male'))
+    + _rpgCard('_character_female', '👧 Hero — Female', _charPrev('_character_female', 'female'))
+    + _rpgCard('_character', 'Hero — Default (no choice yet)', _charPrev('_character', null))
+    + '</div>';
   const bySlot = {};
   RPG_ITEMS.forEach(it => { (bySlot[it.slot] = bySlot[it.slot] || []).push(it); });
   ['weapon', 'shield', 'armor', 'helmet', 'accessory', 'pet'].forEach(slot => {
@@ -21507,6 +21540,7 @@ window.sendBroadcast = sendBroadcast;
 window.sendThreadReply = sendThreadReply;
 window.replyToFlag = replyToFlag;
 window.loadGameAssets = loadGameAssets;
+window.rpgSetGender = rpgSetGender;
 window.onRpgArtPaste = onRpgArtPaste;
 window.onRpgArtDrop = onRpgArtDrop;
 window.onRpgArtPick = onRpgArtPick;
