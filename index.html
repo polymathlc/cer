@@ -5381,6 +5381,35 @@ option {
           </div>
         </div>
 
+        <!-- Practice reminders -->
+        <div class="usage-section">
+          <h3 class="usage-section-title">📣 Practice reminders — nudge students who've gone quiet</h3>
+          <p style="color:var(--text-muted);font-size:0.84rem;margin:-6px 0 12px;">Students below haven't practised in <b>3+ days</b> (or never have). Send them the reminder with a one-click practice link. Tip: <b>Copy emails</b> then paste into the <b>BCC</b> field of your mail app for a class-wide send.</p>
+          <div id="reminderControls" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;">
+            <span id="reminderCount" style="font-size:0.84rem;color:var(--text-muted);"></span>
+            <span style="flex:1;"></span>
+            <button class="btn btn-outline" type="button" onclick="copyReminderEmails()">📋 Copy emails (BCC)</button>
+            <button class="btn btn-primary" type="button" onclick="composeReminderEmail()">✉️ Open email draft</button>
+          </div>
+          <div class="usage-table-wrapper">
+            <table class="usage-table" id="reminderTable">
+              <thead>
+                <tr>
+                  <th style="width:34px;text-align:center;"><input type="checkbox" id="reminderSelAll" onchange="toggleReminderSelAll(this.checked)" checked></th>
+                  <th>Student</th>
+                  <th>Email</th>
+                  <th>Last practised</th>
+                  <th>Days ago</th>
+                  <th>Questions</th>
+                </tr>
+              </thead>
+              <tbody id="reminderBody">
+                <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- Recent Logins -->
         <div class="usage-section">
           <h3 class="usage-section-title">Recent Login Activity</h3>
@@ -6702,7 +6731,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.36.0';
+const APP_VERSION = 'v1.37.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15782,6 +15811,8 @@ async function loadUsageDashboard() {
       studentStats[a.uid].questionsAttempted++;
       studentStats[a.uid].totalScore += (a.score || 0);
       studentStats[a.uid].totalBlanks += (a.totalBlanks || 0);
+      const at = a.timestamp ? (a.timestamp.toDate ? a.timestamp.toDate() : new Date(a.timestamp)) : null;
+      if (at && (!studentStats[a.uid].lastAttempt || at > studentStats[a.uid].lastAttempt)) studentStats[a.uid].lastAttempt = at;
     });
 
     // Cache so the per-student drill-in (showStudentDetail) can read name/email.
@@ -15853,6 +15884,7 @@ async function loadUsageDashboard() {
       _usagePrizeClaims.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
     } catch (e) { console.warn('prize claims load', e); _usagePrizeClaims = []; }
     renderPrizeClaims();
+    renderPracticeReminders();
 
     usageDashboardLoaded = true;
     showToast('Usage data loaded', 'success');
@@ -15901,6 +15933,97 @@ async function markPrizeSent(id) {
     renderPrizeClaims();
     showToast('Marked as sent ✓', 'success');
   } catch (e) { console.warn('mark sent', e); showToast('Could not update — check your connection', 'error'); }
+}
+
+// ---- Practice reminders (admin) ------------------------------------------
+// Reuses the usage dashboard's per-student stats (lastAttempt from the
+// questionAttempts log) to surface students who haven't practised in 3+ days,
+// then helps the admin email them a one-click #practice link.
+const REMINDER_DAYS = 3;
+function _practiceLink() { return location.origin + location.pathname + '#practice'; }
+function _reminderEmailTemplate() {
+  const subject = '🔬 Time to practise on Science Quest — win prizes!';
+  const body = [
+    'Hi!',
+    '',
+    "It's been a few days since your last Science Quest practice. Jump back in and answer a few questions to climb the leaderboard.",
+    '',
+    '🎟️ Practise 10+ questions a day for 30 days in a row to win a $10 Popular voucher.',
+    '🎁 The top 5 students each month (most questions done) also win a $10 Popular voucher each.',
+    '',
+    '👉 Practise now: ' + _practiceLink(),
+    '',
+    'See you in class!'
+  ].join('\n');
+  return { subject, body };
+}
+function _reminderList() {
+  const now = Date.now();
+  return Object.values(_usageStudentStats || {})
+    .filter(s => s.email)
+    .map(s => {
+      const last = s.lastAttempt ? (s.lastAttempt.getTime ? s.lastAttempt.getTime() : new Date(s.lastAttempt).getTime()) : null;
+      const days = last ? Math.floor((now - last) / 86400000) : null;
+      return { uid: s.uid, name: s.name, email: s.email, last, days, q: s.questionsAttempted || 0 };
+    })
+    .filter(r => r.days === null || r.days >= REMINDER_DAYS)
+    .sort((a, b) => (b.days === null ? Infinity : b.days) - (a.days === null ? Infinity : a.days));
+}
+function renderPracticeReminders() {
+  const body = document.getElementById('reminderBody');
+  if (!body) return;
+  const list = _reminderList();
+  const cnt = document.getElementById('reminderCount');
+  if (cnt) cnt.textContent = list.length ? `${list.length} student${list.length === 1 ? '' : 's'} to remind` : 'Everyone is up to date 🎉';
+  if (!list.length) {
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted);">No students are overdue — every active student practised within the last 3 days. 🎉</td></tr>';
+    return;
+  }
+  body.innerHTML = list.map(r => {
+    const lastStr = r.last ? formatDateTimeSGT(new Date(r.last)) : 'Never';
+    const daysStr = r.days === null ? 'Never' : r.days + 'd';
+    return `<tr>
+      <td style="text-align:center;"><input type="checkbox" class="reminder-cb" data-email="${escapeHtml(r.email)}" checked></td>
+      <td style="font-weight:600;">${escapeHtml(r.name)}</td>
+      <td style="color:var(--text-muted);font-size:0.82rem;">${escapeHtml(r.email)}</td>
+      <td style="font-size:0.82rem;">${lastStr}</td>
+      <td style="text-align:center;font-family:'Space Mono',monospace;font-size:0.82rem;font-weight:600;color:var(--accent-orange);">${daysStr}</td>
+      <td style="text-align:center;font-family:'Space Mono',monospace;font-size:0.8rem;">${r.q}</td>
+    </tr>`;
+  }).join('');
+  const sa = document.getElementById('reminderSelAll'); if (sa) sa.checked = true;
+}
+function toggleReminderSelAll(on) {
+  document.querySelectorAll('#reminderBody .reminder-cb').forEach(cb => { cb.checked = on; });
+}
+function _selectedReminderEmails() {
+  return Array.from(document.querySelectorAll('#reminderBody .reminder-cb'))
+    .filter(cb => cb.checked).map(cb => cb.dataset.email).filter(Boolean);
+}
+function _fallbackCopy(text) {
+  try { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); } catch (_) {}
+}
+function copyReminderEmails() {
+  const emails = _selectedReminderEmails();
+  if (!emails.length) { showToast('Select at least one student first', 'error'); return; }
+  const text = emails.join(', ');
+  const done = () => showToast(`Copied ${emails.length} email${emails.length === 1 ? '' : 's'} — paste into your BCC field`, 'success');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(() => { _fallbackCopy(text); done(); });
+  else { _fallbackCopy(text); done(); }
+}
+function composeReminderEmail() {
+  const emails = _selectedReminderEmails();
+  if (!emails.length) { showToast('Select at least one student first', 'error'); return; }
+  const t = _reminderEmailTemplate();
+  const url = 'mailto:?bcc=' + encodeURIComponent(emails.join(',')) + '&subject=' + encodeURIComponent(t.subject) + '&body=' + encodeURIComponent(t.body);
+  // mailto URLs choke past ~2000 chars; for a big class, copy the BCC list instead.
+  if (url.length > 1900 && emails.length > 1) {
+    _fallbackCopy(emails.join(', '));
+    showToast(`${emails.length} recipients is too many for one draft — emails copied; paste into BCC`, '');
+    window.location.href = 'mailto:?subject=' + encodeURIComponent(t.subject) + '&body=' + encodeURIComponent(t.body);
+    return;
+  }
+  window.location.href = url;
 }
 
 function formatDateTimeSGT(date) {
@@ -21764,6 +21887,9 @@ window.loadUsageDashboard = loadUsageDashboard;
 window.showStudentDetail = showStudentDetail;
 window.closeStudentDetail = closeStudentDetail;
 window.markPrizeSent = markPrizeSent;
+window.copyReminderEmails = copyReminderEmails;
+window.composeReminderEmail = composeReminderEmail;
+window.toggleReminderSelAll = toggleReminderSelAll;
 window.submitPrizeClaim = submitPrizeClaim;
 window.claimPhysical = claimPhysical;
 window.dismissPrizeClaim = dismissPrizeClaim;
