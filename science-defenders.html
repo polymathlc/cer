@@ -2347,8 +2347,9 @@ function wireUI(){
   document.getElementById('qSkipBtn').addEventListener('click', function(){ closeQuestion(); });
 
   document.getElementById('resultPlayAgain').addEventListener('click', function(){
+    if(!_canPlayGame()){ _showPlayLimit(); return; }
     document.getElementById('resultOverlay').classList.remove('show');
-    resetGame();
+    resetGame(); _noteGamePlayStart();
   });
 
   document.getElementById('muteBtn').addEventListener('click', function(){
@@ -2369,10 +2370,11 @@ function wireUI(){
   });
 
   document.getElementById('introStartBtn').addEventListener('click', function(){
+    if(!_canPlayGame()){ _showPlayLimit(); return; }
     G.topic = document.getElementById('topicSelect').value;
     document.getElementById('introOverlay').classList.add('hide');
     if(audio && audio.state==='suspended') audio.resume();
-    resetGame();
+    resetGame(); _noteGamePlayStart();
   });
 
   document.addEventListener('keydown', function(e){
@@ -2556,10 +2558,24 @@ function requestBankQuestions(){
   }
 }
 
+// Daily play limit (set by the parent app). null = unknown / not embedded = no limit.
+var _gPlaysLeft = null;
+function _canPlayGame(){ return _gPlaysLeft == null || _gPlaysLeft > 0; }
+function _noteGamePlayStart(){
+  if (window.parent && window.parent !== window){ try { window.parent.postMessage({ type:'SD_PLAY_START', mode:'defenders' }, '*'); } catch(e){} }
+  if (_gPlaysLeft != null && _gPlaysLeft > 0) _gPlaysLeft--;
+}
+function _showPlayLimit(){ toast("That's your 2 Science Defenders plays for today — come back tomorrow!", 'bad'); }
+window.addEventListener('message', function(ev){
+  var d = ev && ev.data;
+  if(!d || d.type !== 'SD_PLAYS_LEFT') return;
+  if (d.playsLeft && typeof d.playsLeft.defenders === 'number') _gPlaysLeft = d.playsLeft.defenders;
+});
 window.addEventListener('message', function(ev){
   var d = ev && ev.data;
   if(!d || d.type !== 'SD_QUESTIONS') return;
   if(d.studentKey){ studentKey = String(d.studentKey); loadAdaptiveState(); }
+  if (d.playsLeft && typeof d.playsLeft.defenders === 'number') _gPlaysLeft = d.playsLeft.defenders;
   applyBankQuestions(d.questions);
   // Merge in questions already answered on other devices so we don't repeat them.
   if(Array.isArray(d.seenIds)){

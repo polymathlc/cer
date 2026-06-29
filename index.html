@@ -5679,6 +5679,9 @@ option {
           .ga-card{border:1px solid #e2e8f0;border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column;align-items:center;gap:8px;}
           .ga-prev{width:72px;height:72px;display:flex;align-items:center;justify-content:center;background:#f1f5f9;border-radius:8px;}
           .ga-prev img{max-width:64px;max-height:64px;object-fit:contain;image-rendering:pixelated;}
+          .ga-prev svg{max-width:64px;max-height:64px;width:100%;height:100%;}
+          .ga-game{margin:24px 0 6px;font-size:1.05rem;font-weight:800;color:#334155;border-top:1px solid #e2e8f0;padding-top:18px;}
+          .ga-game:first-child{border-top:none;padding-top:0;margin-top:0;}
           .ga-name{font-weight:600;font-size:0.85rem;text-align:center;}
           .ga-zone{font-size:0.72rem;color:#64748b;text-align:center;border:1.5px dashed #cbd5e1;border-radius:8px;padding:8px;width:100%;cursor:text;outline:none;}
           .ga-zone:focus{border-color:#6366f1;background:#eef2ff;color:#4338ca;}
@@ -6671,6 +6674,9 @@ async function enterApp(user) {
   // Load message inbox so the unread badge shows on the Messages nav item.
   loadMessages().then(updateMsgBadge).catch(e => console.warn('messages init', e));
 
+  // Load any custom avatar / item art so the hero and shop render the PNG overrides.
+  loadRpgArtOverrides().catch(e => console.warn('rpg art init', e));
+
   // Deep-link: a game tab's "Open in the app" button links to index.html#raiders
   // / #defenders — jump straight to that game page once we're signed in.
   const hash = (location.hash || '').replace('#', '');
@@ -6683,7 +6689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.30.0';
+const APP_VERSION = 'v1.32.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -17947,6 +17953,7 @@ function rpgItemArt(slot, eq) {
   return it.art();
 }
 function rpgAvatarSvg(equipment) {
+  if (_rpgArt._character) return `<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg"><image href="${escapeHtml(_rpgArt._character)}" x="0" y="0" width="200" height="240" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated;"/></svg>`;
   const eq = equipment || (rpgState && rpgState.equipment) || {};
   const acc = RPG_ITEMS_BY_ID[eq.accessory];
   const capeArt = acc && acc.layer === "back" ? acc.art() : "";
@@ -17987,6 +17994,10 @@ function rpgAvatarSvg(equipment) {
 }
 function rpgItemIconSvg(it) {
   const box = it.box || RPG_SLOT_META[it.slot].box;
+  if (_rpgArt[it.id]) {
+    const [bx, by, bw, bh] = box.split(" ").map(Number);
+    return `<svg viewBox="${box}" xmlns="http://www.w3.org/2000/svg"><image href="${escapeHtml(_rpgArt[it.id])}" x="${bx}" y="${by}" width="${bw}" height="${bh}" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated;"/></svg>`;
+  }
   const rank = RPG_RARITY[it.rarity].rank;
   const [bx, by, bw, bh] = box.split(" ").map(Number);
   const cx = bx + bw / 2, cy = by + bh / 2;
@@ -20926,6 +20937,29 @@ async function _sdRecordFlag(d, source) {
     ack(true);
   } catch (e) { console.warn('SD flag failed', e); ack(false, 'Could not submit — check your connection'); }
 }
+// Students may play each mini-game at most this many times per day (so they
+// don't over-do it). Counts persist on the hero state (Firestore), reset daily.
+const GAME_PLAY_LIMIT = 2;
+function _todayKey() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function _gamePlaysToday() {
+  if (!rpgState) return { day: _todayKey(), defenders: 0, raiders: 0 };
+  const today = _todayKey();
+  if (!rpgState.gamePlays || rpgState.gamePlays.day !== today) rpgState.gamePlays = { day: today, defenders: 0, raiders: 0 };
+  return rpgState.gamePlays;
+}
+function _gamePlaysLeft(mode) {
+  if (!currentUser || currentUser.role !== 'student') return 99; // no limit for admins / preview
+  const gp = _gamePlaysToday(), m = mode === 'raiders' ? 'raiders' : 'defenders';
+  return Math.max(0, GAME_PLAY_LIMIT - (gp[m] || 0));
+}
+function _noteGamePlay(mode) {
+  if (!currentUser || currentUser.role !== 'student' || !rpgState) return;
+  const gp = _gamePlaysToday(), m = mode === 'raiders' ? 'raiders' : 'defenders';
+  gp[m] = (gp[m] || 0) + 1;
+  try { rpgSave(); } catch (e) {}
+}
+function _playsLeftPayload() { return { defenders: _gamePlaysLeft('defenders'), raiders: _gamePlaysLeft('raiders') }; }
+
 window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
   if (!d) return;
@@ -20939,7 +20973,9 @@ window.addEventListener('message', function (ev) {
         questions,
         seenIds,
         studentKey: (currentUser && currentUser.uid) || 'guest',
-        studentName: (currentUser && currentUser.name) || ''
+        studentName: (currentUser && currentUser.name) || '',
+        playLimit: GAME_PLAY_LIMIT,
+        playsLeft: _playsLeftPayload()
       };
       try { ev.source && ev.source.postMessage(payload, '*'); } catch (e) {}
     })();
@@ -20954,6 +20990,9 @@ window.addEventListener('message', function (ev) {
       const overrides = await loadRaidersOverrides();
       try { ev.source && ev.source.postMessage({ type: 'raidersAssets', overrides }, '*'); } catch (e) {}
     })();
+  } else if (d.type === 'SD_PLAY_START') {
+    _noteGamePlay(d.mode);
+    try { ev.source && ev.source.postMessage({ type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() }, '*'); } catch (e) {}
   }
 });
 
@@ -21010,6 +21049,20 @@ let _raidersOverridesCache = null; // {id:url}
 function _raidersOwnerUid(){ return (typeof adminUid !== 'undefined' && adminUid) || (currentUser && currentUser.uid) || null; }
 function _raidersDocRef(uid){ return doc(db, 'users', uid, 'settings', 'raidersSprites'); }
 
+// ---- RPG avatar / item art overrides (paste a PNG to replace the ragdoll SVG) ----
+// Stored at users/{adminUid}/settings/rpgArt as { overrides: { itemId|_character : url } }.
+// Read directly when rendering (the avatar & shop live in this page), so no iframe
+// messaging is needed — a saved override shows everywhere the SVG was used.
+let _rpgArt = {};
+function _rpgArtOwnerUid(){ return (typeof adminUid !== 'undefined' && adminUid) || (currentUser && currentUser.uid) || null; }
+async function loadRpgArtOverrides(force){
+  if (!force && Object.keys(_rpgArt).length) return _rpgArt;
+  const uid = _rpgArtOwnerUid(); if (!uid) return _rpgArt;
+  try { const snap = await getDoc(doc(db, 'users', uid, 'settings', 'rpgArt')); _rpgArt = (snap.exists() && snap.data().overrides) ? snap.data().overrides : {}; }
+  catch (e) { console.warn('rpg art load', e); }
+  return _rpgArt;
+}
+
 async function loadRaidersOverrides(force){
   if (_raidersOverridesCache && !force) return _raidersOverridesCache;
   const uid = _raidersOwnerUid();
@@ -21051,7 +21104,7 @@ async function loadGameAssets(){
   await loadRaidersOverrides(true);
   const cats = {};
   RAIDERS_OBJECTS.forEach(o => { (cats[o.cat] = cats[o.cat] || []).push(o); });
-  let html = '';
+  let html = '<h2 class="ga-game">👾 Science Raiders</h2>';
   Object.keys(cats).forEach(cat => {
     html += '<h3 class="ga-cat">' + cat + '</h3><div class="ga-cards">';
     cats[cat].forEach(o => {
@@ -21076,7 +21129,70 @@ async function loadGameAssets(){
     });
     html += '</div>';
   });
+
+  // ===== Avatar & Items — replace the hero ragdoll + gear SVGs with PNGs =====
+  await loadRpgArtOverrides(true);
+  const _rpgCard = (id, label, thumbHtml) => {
+    const custom = !!_rpgArt[id];
+    return '<div class="ga-card">'
+      + '<div class="ga-prev">' + thumbHtml + '</div>'
+      + '<div class="ga-name">' + escapeHtml(label) + '</div>'
+      + '<div class="ga-zone" tabindex="0"'
+      +   ' onpaste="onRpgArtPaste(\'' + id + '\', event)"'
+      +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
+      +   ' ondragleave="this.classList.remove(\'drag\')"'
+      +   ' ondrop="onRpgArtDrop(\'' + id + '\', event)"'
+      +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
+      + '<div class="ga-actions"><label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onRpgArtPick(\'' + id + '\', event)"></label>'
+      +   (custom ? '<button class="btn btn-ghost ga-mini" onclick="resetRpgArt(\'' + id + '\')">Reset</button>' : '')
+      + '</div>'
+      + '<div class="ga-status ' + (custom ? 'custom' : '') + '">' + (custom ? '● Custom' : 'Default') + '</div>'
+      + '</div>';
+  };
+  html += '<h2 class="ga-game">🧍 Avatar &amp; Items <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— replace the ragdoll SVGs with pixel-art PNGs</span></h2>';
+  html += '<h3 class="ga-cat">Hero character</h3><div class="ga-cards">' + _rpgCard('_character', 'Hero character', rpgAvatarSvg({})) + '</div>';
+  const bySlot = {};
+  RPG_ITEMS.forEach(it => { (bySlot[it.slot] = bySlot[it.slot] || []).push(it); });
+  ['weapon', 'shield', 'armor', 'helmet', 'accessory', 'pet'].forEach(slot => {
+    const list = bySlot[slot]; if (!list || !list.length) return;
+    const meta = RPG_SLOT_META[slot] || { label: slot, icon: '' };
+    html += '<h3 class="ga-cat">' + (meta.icon || '') + ' ' + escapeHtml(meta.label || slot) + ' (' + list.length + ')</h3><div class="ga-cards">';
+    list.forEach(it => { html += _rpgCard(it.id, it.name, rpgItemIconSvg(it)); });
+    html += '</div>';
+  });
+
   host.innerHTML = html;
+}
+
+async function _rpgArtApply(id, dataUrl){
+  try {
+    if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
+    const scaled = await _scaleDownDataUrl(dataUrl, 256);
+    const url = await uploadImageDataUrl(scaled);
+    const uid = _rpgArtOwnerUid(); if (!uid) throw new Error('Not signed in');
+    await setDoc(doc(db, 'users', uid, 'settings', 'rpgArt'), { overrides: { [id]: url } }, { merge: true });
+    _rpgArt[id] = url;
+    await loadGameAssets();
+    try { if (document.querySelector('#page-character.active')) rpgRenderCharacterPage(); } catch (e) {}
+    showToast('Art updated', 'success');
+  } catch (e) { console.error('rpg art update', e); showToast('Update failed: ' + (e && e.message ? e.message : e), 'error'); }
+}
+function onRpgArtPaste(id, e){
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items){ if (it.type && it.type.startsWith('image/')){ e.preventDefault(); _raidersFileToDataUrl(it.getAsFile(), du => _rpgArtApply(id, du)); return; } }
+  showToast('No image in clipboard — copy a PNG first', 'error');
+}
+function onRpgArtDrop(id, e){ e.preventDefault(); if (e.currentTarget) e.currentTarget.classList.remove('drag'); const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; _raidersFileToDataUrl(file, du => _rpgArtApply(id, du)); }
+function onRpgArtPick(id, e){ const file = e.target && e.target.files && e.target.files[0]; _raidersFileToDataUrl(file, du => _rpgArtApply(id, du)); if (e.target) e.target.value = ''; }
+async function resetRpgArt(id){
+  try {
+    const uid = _rpgArtOwnerUid(); if (!uid) return;
+    await setDoc(doc(db, 'users', uid, 'settings', 'rpgArt'), { overrides: { [id]: deleteField() } }, { merge: true });
+    delete _rpgArt[id];
+    await loadGameAssets();
+    try { if (document.querySelector('#page-character.active')) rpgRenderCharacterPage(); } catch (e) {}
+    showToast('Reset to default', 'success');
+  } catch (e) { console.error('rpg art reset', e); showToast('Reset failed', 'error'); }
 }
 
 async function _scaleDownDataUrl(dataUrl, maxSide){
@@ -21325,6 +21441,10 @@ window.sendBroadcast = sendBroadcast;
 window.sendThreadReply = sendThreadReply;
 window.replyToFlag = replyToFlag;
 window.loadGameAssets = loadGameAssets;
+window.onRpgArtPaste = onRpgArtPaste;
+window.onRpgArtDrop = onRpgArtDrop;
+window.onRpgArtPick = onRpgArtPick;
+window.resetRpgArt = resetRpgArt;
 window.onRaidersObjPaste = onRaidersObjPaste;
 window.onRaidersObjDrop = onRaidersObjDrop;
 window.onRaidersObjPick = onRaidersObjPick;
