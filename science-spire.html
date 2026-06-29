@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Polymath Science Spire — Deck-Building MCQ Roguelike</title>
+<!--
+   POLYMATH SCIENCE SPIRE — a Slay-the-Spire-style deck-building dungeon crawler.
+   Single-file build. Procedural / emoji art by default; every character object
+   (player + enemies) supports pasted PNG overrides per animation state
+   (idle / attack / hurt / death) pushed from the parent app via postMessage.
+   Shares the question bank + play-limit + scoring protocol with the other games.
+-->
+<style>
+:root{
+  --bg:#15121f; --panel:#211b30; --panel2:#2b2440; --ink:#f4f1fb; --muted:#b6add0;
+  --gold:#ffd76a; --hp:#e8584f; --block:#7fb6ff; --energy:#ffd76a; --line:#3a3354;
+  --common:#cfd6e2; --uncommon:#7be0a2; --rare:#6fb3ff; --epic:#b79ae0; --legendary:#ffce5a;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;}
+body{background:radial-gradient(900px 500px at 50% -8%,#241c38,#15121f) fixed, var(--bg);color:var(--ink);
+  font-family:'DM Sans',system-ui,-apple-system,sans-serif;overflow:hidden;}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;}
+.hud{display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(0,0,0,0.25);border-bottom:1px solid var(--line);flex-wrap:wrap;}
+.hud .brand{font-weight:800;letter-spacing:.02em;font-size:0.95rem;}
+.hud .logo{font-size:1.1rem;}
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:0.82rem;font-weight:700;}
+.chip.hp{color:var(--hp);} .chip.gold{color:var(--gold);} .chip.floor{color:var(--muted);}
+.hud .spacer{flex:1;}
+.btn{border:none;border-radius:9px;padding:8px 14px;font-weight:700;font-size:0.85rem;cursor:pointer;font-family:inherit;background:var(--panel2);color:var(--ink);border:1px solid var(--line);}
+.btn:hover{filter:brightness(1.12);}
+.btn.primary{background:linear-gradient(160deg,#6c5cc4,#4a3f8f);border-color:#7d6fd0;}
+.btn.gold{background:linear-gradient(160deg,#e8b41f,#b8860b);color:#3a2b00;border:none;}
+.btn:disabled{opacity:0.45;cursor:not-allowed;}
+.stage{flex:1;position:relative;display:flex;flex-direction:column;min-height:0;}
+/* enemies */
+.enemy-row{flex:1;display:flex;align-items:flex-end;justify-content:center;gap:26px;padding:18px 14px 4px;min-height:0;flex-wrap:wrap;}
+.enemy{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;position:relative;transition:transform .12s;}
+.enemy.targetable:hover{transform:translateY(-4px);}
+.enemy.dead{opacity:0;transform:scale(.6);pointer-events:none;}
+.enemy.hit{animation:shake .28s;}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
+.enemy .art,.hero .art{font-size:62px;line-height:1;filter:drop-shadow(0 6px 8px rgba(0,0,0,.4));user-select:none;}
+.enemy .art img,.hero .art img{height:84px;width:auto;max-width:120px;object-fit:contain;image-rendering:pixelated;display:block;}
+.enemy .intent{font-size:0.82rem;font-weight:800;background:rgba(0,0,0,.4);border:1px solid var(--line);border-radius:999px;padding:2px 9px;min-height:22px;}
+.bar{width:96px;height:11px;border-radius:6px;background:#3a2230;overflow:hidden;position:relative;border:1px solid rgba(0,0,0,.3);}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,#e8584f,#ff7a72);}
+.bar .txt{position:absolute;inset:0;font-size:0.62rem;font-weight:800;display:flex;align-items:center;justify-content:center;color:#fff;text-shadow:0 1px 2px #000;}
+.eblock{position:absolute;top:-6px;right:-6px;background:var(--block);color:#10233f;font-size:0.66rem;font-weight:800;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:2px solid #10233f;}
+.statuses{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;min-height:16px;}
+.status{font-size:0.66rem;font-weight:800;border-radius:5px;padding:1px 5px;background:#3a3354;}
+.status.vuln{background:#6e2f2f;color:#ffc9c2;} .status.weak{background:#5a4a2a;color:#ffe6a3;} .status.str{background:#2f5a3a;color:#bff0cf;}
+/* hero panel */
+.hero-row{display:flex;align-items:flex-end;gap:14px;padding:0 14px 6px;}
+.hero{display:flex;flex-direction:column;align-items:center;gap:5px;position:relative;}
+.hero.hit{animation:shake .28s;}
+.hero .art{font-size:54px;}
+.hpwrap{display:flex;flex-direction:column;align-items:center;gap:3px;}
+.hpbar{width:140px;height:16px;border-radius:8px;background:#3a2230;overflow:hidden;position:relative;border:1px solid rgba(0,0,0,.3);}
+.hpbar>i{display:block;height:100%;background:linear-gradient(90deg,#46b06a,#6fe0a2);}
+.hpbar .txt{position:absolute;inset:0;font-size:0.72rem;font-weight:800;display:flex;align-items:center;justify-content:center;text-shadow:0 1px 2px #000;}
+.heroblock{position:absolute;top:-8px;left:-8px;background:var(--block);color:#10233f;font-weight:800;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:2px solid #10233f;font-size:0.78rem;}
+/* energy + end turn */
+.controls{display:flex;align-items:center;gap:12px;padding:0 14px;}
+.energy-orb{width:54px;height:54px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#fff3c4,#e8b41f 60%,#9c6b00);display:flex;align-items:center;justify-content:center;font-weight:800;color:#3a2b00;font-size:1.05rem;border:2px solid #ffe9a3;box-shadow:0 0 14px rgba(255,200,60,.5);}
+/* hand */
+.hand{display:flex;justify-content:center;align-items:flex-end;gap:-18px;padding:6px 10px 12px;min-height:188px;perspective:900px;}
+.card{width:132px;min-height:178px;border-radius:13px;background:linear-gradient(170deg,#2c2640,#1c1730);border:2px solid var(--line);
+  margin:0 -10px;padding:9px;display:flex;flex-direction:column;cursor:pointer;transition:transform .14s, margin .14s, box-shadow .14s;position:relative;flex-shrink:0;box-shadow:0 6px 14px rgba(0,0,0,.4);}
+.card:hover{transform:translateY(-22px) scale(1.06);margin:0 6px;z-index:5;box-shadow:0 16px 30px rgba(0,0,0,.55);}
+.card.unplayable{opacity:0.55;}
+.card.attack{border-color:#c4584f;} .card.skill{border-color:#6fb3ff;} .card.power{border-color:#b79ae0;}
+.card .cost{position:absolute;top:-9px;left:-9px;width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#fff3c4,#e8b41f 60%,#9c6b00);color:#3a2b00;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #ffe9a3;font-size:0.92rem;}
+.card .cart{font-size:34px;text-align:center;margin:6px 0 4px;}
+.card .cname{font-weight:800;font-size:0.82rem;text-align:center;line-height:1.1;}
+.card .crar{height:3px;border-radius:3px;margin:4px 0;}
+.card .cdesc{font-size:0.72rem;color:var(--muted);text-align:center;line-height:1.25;flex:1;}
+.card .ctype{font-size:0.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:center;}
+.pile{font-size:0.74rem;color:var(--muted);font-weight:700;}
+.floattxt{position:absolute;font-weight:800;font-size:1.2rem;pointer-events:none;animation:floatup 1s ease-out forwards;text-shadow:0 2px 4px #000;z-index:20;}
+@keyframes floatup{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-46px)}}
+/* overlays */
+.overlay{position:fixed;inset:0;background:rgba(10,8,18,.82);display:none;align-items:center;justify-content:center;z-index:50;padding:16px;}
+.overlay.show{display:flex;}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:20px;}
+.panel h2{margin:0 0 6px;} .panel p{color:var(--muted);font-size:0.9rem;margin:4px 0 14px;line-height:1.5;}
+.reward-cards,.pack-cards{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;}
+.q-opt{display:block;width:100%;text-align:left;margin:7px 0;padding:11px 14px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);cursor:pointer;font-size:0.9rem;font-family:inherit;}
+.q-opt:hover{border-color:#7d6fd0;}
+.q-opt.correct{background:#22432f;border-color:#46b06a;} .q-opt.wrong{background:#4a2222;border-color:#e8584f;} .q-opt.dim{opacity:.5;}
+.q-stem img{max-width:100%;border-radius:8px;}
+.map{display:flex;flex-direction:column-reverse;gap:4px;align-items:center;}
+.map-node{display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);font-size:0.85rem;font-weight:700;min-width:200px;}
+.map-node.done{opacity:.4;} .map-node.cur{border-color:var(--gold);background:#3a3354;box-shadow:0 0 0 2px rgba(255,215,106,.3);}
+.center{text-align:center;}
+.toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:#2b2440;border:1px solid var(--line);padding:8px 16px;border-radius:10px;font-weight:700;font-size:0.85rem;z-index:80;opacity:0;transition:opacity .2s;pointer-events:none;}
+.toast.show{opacity:1;}
+.rar-tag{font-size:0.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;}
+.hint{font-size:0.74rem;color:var(--muted);text-align:center;padding:2px 0 6px;}
+@media(max-width:560px){ .card{width:104px;min-height:150px;} .enemy .art,.hero .art{font-size:48px;} }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="hud">
+    <div class="brand"><span class="logo">🗼</span> Science Spire</div>
+    <span class="chip floor" id="cFloor">Floor 1</span>
+    <span class="chip hp" id="cHp">❤️ 60/60</span>
+    <span class="chip gold" id="cGold">🪙 0</span>
+    <span class="chip" id="cDeck">🃏 0</span>
+    <div class="spacer"></div>
+    <button class="btn" id="mapBtn" type="button">🗺️ Map</button>
+    <button class="btn" id="deckBtn" type="button">View deck</button>
+    <button class="btn" id="restartBtn" type="button" title="Abandon this climb">↻</button>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="enemy-row" id="enemyRow"></div>
+    <div class="hero-row" id="heroRow">
+      <div class="controls">
+        <div class="energy-orb" id="energyOrb" title="Energy">3/3</div>
+        <button class="btn primary" id="endTurnBtn" type="button">End turn ⏭</button>
+      </div>
+      <div class="spacer" style="flex:1;"></div>
+      <div class="pile" id="pileInfo">Draw 0 · Discard 0</div>
+    </div>
+    <div class="hand" id="hand"></div>
+    <div class="hint" id="hint">Click a card to play it — attacks need a target.</div>
+  </div>
+</div>
+
+<!-- Intro -->
+<div class="overlay show" id="introOverlay">
+  <div class="panel center">
+    <h2>🗼 Science Spire</h2>
+    <p>Climb the spire one floor at a time. Win turn-based card battles, answer a science question before each fight for a bonus, collect gold, and open <b>booster packs</b> for rare, powerful cards to forge a deadly deck.</p>
+    <p style="font-size:0.82rem;">Play cards using <b>energy</b>. <b>Attacks</b> hurt foes, <b>skills</b> give block & utility, <b>powers</b> are permanent buffs. Block resets each turn. Watch the enemy <b>intent</b> above their head and plan ahead.</p>
+    <button class="btn primary" id="introStartBtn" type="button" style="font-size:1rem;padding:12px 28px;">⚔️ Begin the climb</button>
+  </div>
+</div>
+
+<!-- Question -->
+<div class="overlay" id="qOverlay">
+  <div class="panel">
+    <h2 style="font-size:1.05rem;">🧪 Science question <span style="font-size:0.8rem;color:var(--muted);">— answer for a battle bonus</span></h2>
+    <div class="q-stem" id="qStem" style="margin:8px 0 6px;line-height:1.5;"></div>
+    <div id="qOptions"></div>
+    <div id="qExplain" style="display:none;font-size:0.85rem;color:var(--muted);margin-top:8px;line-height:1.5;"></div>
+    <div class="center" style="margin-top:12px;"><button class="btn primary" id="qContinueBtn" type="button" style="display:none;">Fight! ⚔️</button></div>
+  </div>
+</div>
+
+<!-- Reward -->
+<div class="overlay" id="rewardOverlay">
+  <div class="panel center">
+    <h2>Victory! 🎉</h2>
+    <p id="rewardGold">+0 🪙</p>
+    <p>Add one card to your deck:</p>
+    <div class="reward-cards" id="rewardCards"></div>
+    <button class="btn" id="rewardSkip" type="button" style="margin-top:14px;">Skip</button>
+  </div>
+</div>
+
+<!-- Pack / treasure -->
+<div class="overlay" id="packOverlay">
+  <div class="panel center">
+    <h2 id="packTitle">🎁 Booster Pack</h2>
+    <p id="packSub">Open a pack for a chance at rare, powerful cards.</p>
+    <div class="pack-cards" id="packCards"></div>
+    <div class="center" style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;" id="packButtons"></div>
+  </div>
+</div>
+
+<!-- Rest -->
+<div class="overlay" id="restOverlay">
+  <div class="panel center">
+    <h2>🔥 Campfire</h2>
+    <p>Rest a moment before the climb continues.</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn gold" id="restHeal" type="button">💤 Rest — heal 30% HP</button>
+      <button class="btn" id="restLeave" type="button">Move on →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Map -->
+<div class="overlay" id="mapOverlay">
+  <div class="panel">
+    <h2 class="center">🗺️ The Spire</h2>
+    <div class="map" id="mapList"></div>
+    <div class="center" style="margin-top:14px;"><button class="btn" id="mapClose" type="button">Close</button></div>
+  </div>
+</div>
+
+<!-- Deck view -->
+<div class="overlay" id="deckOverlay">
+  <div class="panel">
+    <h2 class="center" id="deckTitle">Your deck</h2>
+    <div class="pack-cards" id="deckCards"></div>
+    <div class="center" style="margin-top:14px;"><button class="btn" id="deckClose" type="button">Close</button></div>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay" id="overOverlay">
+  <div class="panel center">
+    <h2 id="overTitle">Defeated</h2>
+    <p id="overMsg"></p>
+    <p style="font-size:1.1rem;font-weight:800;color:var(--gold);" id="overScore"></p>
+    <button class="btn primary" id="againBtn" type="button" style="font-size:1rem;padding:12px 28px;">↻ Climb again</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+function rand(a,b){ return a + Math.random()*(b-a); }
+function randint(a,b){ return Math.floor(rand(a,b+1)); }
+function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function embedded(){ return !!(window.parent && window.parent !== window); }
+
+/* ============================ ASSET OVERRIDES ============================
+   Each character object (player + enemy types) can have a pasted PNG per
+   animation state. The parent app pushes { 'objId:anim': url }. We show the
+   override for the current state (falling back to idle), else an emoji. */
+var OVR = {};
+function _ovrSet(map){ OVR = map || {}; render(); }
+function ovrUrl(objId, anim){
+  if (!OVR) return null;
+  return OVR[objId+':'+anim] || OVR[objId+':idle'] || null;
+}
+function artHtml(objId, emoji, anim){
+  var u = ovrUrl(objId, anim || 'idle');
+  if (u) return '<img src="'+u+'" alt="" onerror="this.style.display=\'none\'">';
+  return emoji;
+}
+
+/* ============================ CARD POOL ============================ */
+// effect(s, target): s = combat state, target = enemy (or null). Mutate state.
+var CARDS = {
+  strike:   { name:'Strike',      type:'attack', cost:1, rarity:'common', art:'🗡️', desc:'Deal 6 damage.', dmg:6, eff:function(s,t){ dealDamage(t,6); } },
+  defend:   { name:'Defend',      type:'skill',  cost:1, rarity:'common', art:'🛡️', desc:'Gain 5 Block.', eff:function(s){ gainBlock(5); } },
+  bash:     { name:'Bash',        type:'attack', cost:2, rarity:'common', art:'🔨', desc:'Deal 8 and apply 2 Vulnerable.', eff:function(s,t){ dealDamage(t,8); t.vuln=(t.vuln||0)+2; } },
+  jab:      { name:'Quick Jab',   type:'attack', cost:0, rarity:'common', art:'🤜', desc:'Deal 3 damage.', eff:function(s,t){ dealDamage(t,3); } },
+  guard:    { name:'Iron Guard',  type:'skill',  cost:2, rarity:'common', art:'🪨', desc:'Gain 11 Block.', eff:function(s){ gainBlock(11); } },
+  cleave:   { name:'Cleave',      type:'attack', cost:1, rarity:'uncommon', art:'🪓', desc:'Deal 5 to ALL enemies.', eff:function(s){ s.enemies.forEach(function(e){ if(!e.dead) dealDamage(e,5); }); } },
+  pommel:   { name:'Pommel Strike',type:'attack',cost:1, rarity:'uncommon', art:'⚔️', desc:'Deal 7 and draw 1 card.', eff:function(s,t){ dealDamage(t,7); drawCards(1); } },
+  focus:    { name:'Focus',       type:'skill',  cost:0, rarity:'uncommon', art:'🌀', desc:'Draw 2 cards.', eff:function(s){ drawCards(2); } },
+  adrenal:  { name:'Adrenaline',  type:'skill',  cost:0, rarity:'uncommon', art:'⚡', desc:'Gain 1 Energy & draw 1.', eff:function(s){ s.energy+=1; drawCards(1); } },
+  weaken:   { name:'Weaken Ray',  type:'skill',  cost:1, rarity:'uncommon', art:'🔬', desc:'Apply 2 Weak to ALL enemies.', eff:function(s){ s.enemies.forEach(function(e){ if(!e.dead) e.weak=(e.weak||0)+2; }); } },
+  poison:   { name:'Acid Flask',  type:'skill',  cost:1, rarity:'uncommon', art:'🧪', desc:'Apply 5 Poison.', eff:function(s,t){ t.poison=(t.poison||0)+5; } },
+  // ---- rares / powerful (pack-worthy) ----
+  fireball: { name:'Fireball',    type:'attack', cost:2, rarity:'rare', art:'🔥', desc:'Deal 14 damage. Lingers (Burn 3).', eff:function(s,t){ dealDamage(t,14); t.poison=(t.poison||0)+3; } },
+  shieldwall:{name:'Shield Wall', type:'skill',  cost:2, rarity:'rare', art:'🏰', desc:'Gain 18 Block & draw 1.', eff:function(s){ gainBlock(18); drawCards(1); } },
+  doublestrike:{name:'Twin Fang', type:'attack', cost:1, rarity:'rare', art:'🦷', desc:'Deal 6 twice.', eff:function(s,t){ dealDamage(t,6); if(!t.dead) dealDamage(t,6); } },
+  rage:     { name:'Berserk',     type:'power',  cost:1, rarity:'rare', art:'😤', desc:'Gain 2 Strength (+dmg) permanently.', eff:function(s){ s.player.str=(s.player.str||0)+2; toast('+2 Strength!'); } },
+  meteor:   { name:'Meteor',      type:'attack', cost:3, rarity:'epic', art:'☄️', desc:'Deal 11 to ALL enemies, 4 Vulnerable.', eff:function(s){ s.enemies.forEach(function(e){ if(!e.dead){ dealDamage(e,11); e.vuln=(e.vuln||0)+4; } }); } },
+  lifesteal:{ name:'Vampiric Bite',type:'attack',cost:2, rarity:'epic', art:'🩸', desc:'Deal 12 and heal 6 HP.', eff:function(s,t){ dealDamage(t,12); healPlayer(6); } },
+  fortress: { name:'Bulwark',     type:'power',  cost:2, rarity:'epic', art:'🛡️', desc:'Gain 4 Block at the start of every turn.', eff:function(s){ s.player.regenBlock=(s.player.regenBlock||0)+4; toast('Bulwark!'); } },
+  apex:     { name:'Apex Nova',   type:'attack', cost:3, rarity:'legendary', art:'🌟', desc:'Deal 9 to ALL, gain 1 Energy & Strength.', eff:function(s){ s.enemies.forEach(function(e){ if(!e.dead) dealDamage(e,9); }); s.energy+=1; s.player.str=(s.player.str||0)+1; } },
+  singularity:{name:'Singularity',type:'attack',cost:2, rarity:'legendary', art:'🕳️', desc:'Deal damage = 30% of target max HP.', eff:function(s,t){ dealDamage(t, Math.max(8, Math.round(t.maxHp*0.30))); } }
+};
+var RARITY = { common:'#cfd6e2', uncommon:'#7be0a2', rare:'#6fb3ff', epic:'#b79ae0', legendary:'#ffce5a' };
+var RARITY_RANK = { common:1, uncommon:2, rare:3, epic:4, legendary:5 };
+// cards that can appear as rewards / in packs (not the basic strike/defend)
+var REWARD_POOL = ['bash','jab','guard','cleave','pommel','focus','adrenal','weaken','poison','fireball','shieldwall','doublestrike','rage','meteor','lifesteal','fortress','apex','singularity'];
+
+/* ============================ ENEMIES ============================ */
+// moves: {type:'attack',value} | {type:'block',value} | {type:'buff'} | {type:'debuff'}
+var ENEMIES = {
+  slime:  { name:'Lab Slime',  emoji:'🟢', hp:[20,26], moves:[{type:'attack',value:6},{type:'block',value:5}] },
+  bat:    { name:'Cave Bat',   emoji:'🦇', hp:[14,18], moves:[{type:'attack',value:5},{type:'attack',value:7}] },
+  spider: { name:'Acid Spider',emoji:'🕷️', hp:[18,24], moves:[{type:'attack',value:4},{type:'debuff'}] },
+  bot:    { name:'Sentry Bot', emoji:'🤖', hp:[28,34], moves:[{type:'block',value:8},{type:'attack',value:9}] },
+  ghost:  { name:'Wraith',     emoji:'👻', hp:[22,28], moves:[{type:'attack',value:6},{type:'buff'}] },
+  // elites
+  golem:  { name:'Stone Golem',emoji:'🗿', hp:[55,65], elite:true, moves:[{type:'attack',value:12},{type:'block',value:12}] },
+  beast:  { name:'Chimera',    emoji:'🐉', hp:[60,72], elite:true, moves:[{type:'attack',value:10},{type:'attack',value:14},{type:'buff'}] },
+  // boss
+  titan:  { name:'Spire Titan',emoji:'👹', hp:[130,130], boss:true, moves:[{type:'attack',value:16},{type:'block',value:16},{type:'attack',value:11}] }
+};
+
+/* ============================ STATE ============================ */
+var G = null, qState = { current:null, answered:false, pending:null }, _toastT=null, _busy=false;
+function newRun(){
+  G = {
+    floor: 1,
+    maxFloor: 0,
+    player: { hp:60, maxHp:60, block:0, str:0, regenBlock:0, energy:3, maxEnergy:3 },
+    gold: 0,
+    deck: [],
+    draw:[], hand:[], discard:[],
+    enemies: [],
+    turn:'player',
+    map: buildMap(),
+    node: 0,
+    kills:0,
+    questionBonus:0,
+    state:'map'
+  };
+  // starter deck
+  for (var i=0;i<5;i++) G.deck.push('strike');
+  for (var j=0;j<4;j++) G.deck.push('defend');
+  G.deck.push('bash');
+}
+
+// A linear ascent of typed rooms ending in a boss.
+function buildMap(){
+  var rooms = [];
+  var pattern = ['combat','combat','treasure','combat','rest','elite','combat','treasure','combat','rest','elite','boss'];
+  pattern.forEach(function(t,i){ rooms.push({ type:t, done:false }); });
+  return rooms;
+}
+
+/* ============================ COMBAT ============================ */
+function startNode(){
+  var room = G.map[G.node];
+  if (!room){ victory(); return; }
+  if (room.type === 'rest'){ G.state='rest'; show('restOverlay'); return; }
+  if (room.type === 'treasure'){ G.state='pack'; openTreasurePack(); return; }
+  // combat / elite / boss -> ask a question first, then fight
+  G.pendingRoom = room;
+  askQuestion();
+}
+function beginCombat(){
+  var room = G.pendingRoom; if (!room) return;
+  G.enemies = spawnEnemies(room.type);
+  G.player.block = 0;
+  G.player.energy = G.player.maxEnergy;
+  G.draw = shuffle(G.deck.slice());
+  G.hand = []; G.discard = [];
+  G.turn = 'player'; G.state='combat';
+  rollIntents();
+  startPlayerTurn(true);
+  banner('Floor '+G.floor);
+}
+function spawnEnemies(type){
+  var list = [];
+  function mk(key){
+    var d = ENEMIES[key]; var hp = randint(d.hp[0], d.hp[1]);
+    hp = Math.round(hp * (1 + (G.floor-1)*0.10));   // scale a little per floor
+    return { key:key, name:d.name, emoji:d.emoji, hp:hp, maxHp:hp, block:0, vuln:0, weak:0, poison:0, str:0,
+             moves:d.moves, intent:null, dead:false, anim:'idle' };
+  }
+  if (type==='boss'){ list.push(mk('titan')); }
+  else if (type==='elite'){ list.push(mk(choice(['golem','beast']))); }
+  else {
+    var n = G.floor < 3 ? randint(1,2) : randint(2,3);
+    var pool = ['slime','bat','spider','bot','ghost'];
+    for (var i=0;i<n;i++) list.push(mk(choice(pool)));
+  }
+  return list;
+}
+function rollIntents(){ G.enemies.forEach(function(e){ if(!e.dead) e.intent = choice(e.moves); }); }
+function startPlayerTurn(first){
+  var p = G.player;
+  p.block = 0;
+  if (p.regenBlock) gainBlock(p.regenBlock);
+  p.energy = p.maxEnergy;
+  if (first && G.questionBonus){ p.energy += G.questionBonus; G.questionBonus=0; }
+  // tick poison on enemies at turn start
+  G.enemies.forEach(function(e){ if(!e.dead && e.poison){ dealDamage(e, e.poison, true); } });
+  drawCards(5);
+  G.turn='player';
+  render();
+}
+function drawCards(n){
+  for (var i=0;i<n;i++){
+    if (G.draw.length===0){
+      if (G.discard.length===0) break;
+      G.draw = shuffle(G.discard); G.discard=[];
+    }
+    if (G.hand.length>=10){ break; }
+    G.hand.push(G.draw.pop());
+  }
+}
+function dealDamage(target, amt, ignoreBlockBuffs){
+  if (!target || target.dead) return;
+  var dmg = amt;
+  if (!ignoreBlockBuffs){
+    if (G.player.str) dmg += G.player.str;
+    if (G.player.weak) dmg = Math.floor(dmg*0.75);
+  }
+  if (target.vuln) dmg = Math.floor(dmg*1.5);
+  var absorbed = Math.min(target.block||0, dmg);
+  target.block -= absorbed; dmg -= absorbed;
+  target.hp -= dmg;
+  if (dmg>0){ floatText(enemyEl(target), '-'+dmg, '#ff8a82'); flashHit(enemyEl(target)); setAnim(target,'hurt'); }
+  if (target.hp<=0){ target.hp=0; target.dead=true; setAnim(target,'death'); G.kills++; }
+}
+function gainBlock(n){ G.player.block += n; floatText(heroEl(), '+'+n+'🛡', '#9fd0ff'); }
+function healPlayer(n){ G.player.hp = Math.min(G.player.maxHp, G.player.hp+n); floatText(heroEl(), '+'+n+'❤', '#7fe0a2'); }
+function damagePlayer(amt){
+  var dmg = amt;
+  var absorbed = Math.min(G.player.block, dmg);
+  G.player.block -= absorbed; dmg -= absorbed;
+  G.player.hp -= dmg;
+  if (dmg>0){ floatText(heroEl(), '-'+dmg, '#ff8a82'); flashHit(heroEl()); }
+  if (G.player.hp<=0){ G.player.hp=0; gameOver(); }
+}
+function playCard(handIdx, targetIdx){
+  if (_busy || G.turn!=='player' || G.state!=='combat') return;
+  var id = G.hand[handIdx]; var c = CARDS[id]; if (!c) return;
+  if (G.player.energy < c.cost){ toast('Not enough energy'); return; }
+  var target = (targetIdx!=null) ? G.enemies[targetIdx] : null;
+  if (c.type==='attack' && !target){
+    // pick first alive enemy if single-target attack auto
+    target = firstAlive();
+    if (!target){ return; }
+  }
+  G.player.energy -= c.cost;
+  setAnim('player','attack'); setTimeout(function(){ setAnim('player','idle'); render(); }, 260);
+  try { c.eff(G, target); } catch(e){ console.warn('card eff', e); }
+  // remove from hand -> discard
+  G.hand.splice(handIdx,1);
+  G.discard.push(id);
+  reap();
+  render();
+  if (G.enemies.every(function(e){ return e.dead; })) { winCombat(); }
+}
+function firstAlive(){ for (var i=0;i<G.enemies.length;i++) if(!G.enemies[i].dead) return G.enemies[i]; return null; }
+function reap(){ /* deaths handled by dead flag; visual removed on render */ }
+function endTurn(){
+  if (_busy || G.turn!=='player' || G.state!=='combat') return;
+  // discard hand
+  G.discard = G.discard.concat(G.hand); G.hand=[];
+  G.turn='enemy'; render();
+  _busy = true;
+  enemyActSeq(0);
+}
+function enemyActSeq(i){
+  if (G.state!=='combat'){ _busy=false; return; }
+  var alive = G.enemies.filter(function(e){ return !e.dead; });
+  if (i>=alive.length){
+    // weaken/vuln decay
+    G.enemies.forEach(function(e){ if(e.vuln) e.vuln--; if(e.weak) e.weak--; });
+    if (G.player.weak) G.player.weak--;
+    _busy=false;
+    rollIntents();
+    startPlayerTurn(false);
+    return;
+  }
+  var e = alive[i];
+  var act = e.intent || choice(e.moves);
+  setAnim(e, act.type==='attack'?'attack':'idle');
+  if (act.type==='attack'){
+    var v = act.value + (e.str||0);
+    if (e.weak) v = Math.floor(v*0.75);
+    damagePlayer(v);
+  } else if (act.type==='block'){
+    e.block += act.value;
+  } else if (act.type==='buff'){
+    e.str = (e.str||0)+2; floatText(enemyEl(e),'+2💪','#bff0cf');
+  } else if (act.type==='debuff'){
+    G.player.weak = (G.player.weak||0)+2; floatText(heroEl(),'Weak','#ffe6a3');
+  }
+  render();
+  if (G.state!=='combat'){ _busy=false; return; }
+  setTimeout(function(){ setAnim(e,'idle'); enemyActSeq(i+1); }, 460);
+}
+
+function winCombat(){
+  var room = G.map[G.node]; room.done = true;
+  var isBoss = room.type==='boss';
+  if (isBoss){ victory(); return; }
+  var gold = randint(12,22) + (room.type==='elite'?20:0);
+  G.gold += gold;
+  G.maxFloor = Math.max(G.maxFloor, G.floor);
+  // reward card choice
+  var picks = [];
+  var pool = REWARD_POOL.slice();
+  while (picks.length<3 && pool.length){ picks.push(pool.splice(randint(0,pool.length-1),1)[0]); }
+  $('rewardGold').textContent = '+'+gold+' 🪙';
+  var wrap = $('rewardCards'); wrap.innerHTML='';
+  picks.forEach(function(id){
+    var el = cardEl(id, true);
+    el.onclick = function(){ G.deck.push(id); toast('Added '+CARDS[id].name); afterReward(); };
+    wrap.appendChild(el);
+  });
+  G.state='reward'; show('rewardOverlay');
+}
+function afterReward(){ hide('rewardOverlay'); nextNode(); }
+function nextNode(){
+  G.node++; G.floor++;
+  updateHud();
+  if (G.node >= G.map.length){ victory(); return; }
+  G.state='map';
+  startNode();
+}
+
+/* ============================ QUESTION (MCQ) ============================ */
+function askQuestion(){
+  var q = pickQuestion();
+  if (!q){ G.questionBonus=0; beginCombat(); return; }
+  qState.current=q; qState.answered=false;
+  var stem = $('qStem');
+  if (q.html){ stem.innerHTML = q.html; } else { stem.textContent = q.q; }
+  var opts = $('qOptions'); opts.innerHTML='';
+  $('qExplain').style.display='none';
+  $('qContinueBtn').style.display='none';
+  q.options.forEach(function(opt,i){
+    var b=document.createElement('button'); b.className='q-opt';
+    b.innerHTML = '<b>'+String.fromCharCode(65+i)+'.</b> ' + (usingBank ? opt : escapeText(opt));
+    b.onclick=function(){ answerQuestion(i,b); };
+    opts.appendChild(b);
+  });
+  G.state='question'; show('qOverlay');
+}
+function answerQuestion(idx, btn){
+  if (qState.answered) return; qState.answered=true;
+  var q=qState.current; var correct = (idx===q.answer);
+  var opts = $('qOptions').children;
+  for (var i=0;i<opts.length;i++){
+    opts[i].classList.add(i===q.answer?'correct':(i===idx?'wrong':'dim'));
+    opts[i].onclick=null;
+  }
+  if (correct){ G.questionBonus = 2; G.gold += 10; toast('Correct! +2 energy next fight, +10🪙'); }
+  else { G.questionBonus = 0; toast('Not quite — no bonus this fight'); }
+  if (q.explainHtml || q.explain){
+    var ex=$('qExplain'); ex.style.display=''; ex.innerHTML = (correct?'✅ ':'❌ ') + (q.explainHtml || escapeText(q.explain));
+  }
+  // record to parent (teacher log + leaderboard "questions done")
+  try {
+    if (embedded()) window.parent.postMessage({ type:'SD_RECORD', mode:'spire', questionId:q.id, questionTitle:(q.q||'').slice(0,140), correct:!!correct, topic:q.topic||'', ms: Math.max(0, Math.round(performance.now() - (qState.shownAt||performance.now()))) }, '*');
+  } catch(e){}
+  var btnc=$('qContinueBtn'); btnc.style.display=''; btnc.onclick=function(){ hide('qOverlay'); beginCombat(); };
+  updateHud();
+}
+
+/* ============================ PACKS ============================ */
+function weightedCard(){
+  // rarity weights — rares are rare; powerful cards feel special.
+  var r = Math.random()*100;
+  var tier = r<48?'common':r<76?'uncommon':r<91?'rare':r<98?'epic':'legendary';
+  var pool = REWARD_POOL.filter(function(id){ return CARDS[id].rarity===tier; });
+  if (!pool.length) pool = REWARD_POOL.filter(function(id){ return CARDS[id].rarity==='uncommon'; });
+  return choice(pool);
+}
+function openTreasurePack(){
+  $('packTitle').textContent = '🎁 Treasure Pack (free)';
+  $('packSub').textContent = 'You found a booster pack! Open it and add a card to your deck.';
+  renderPackButtons([{ label:'✨ Open pack', cost:0 }]);
+  $('packCards').innerHTML='';
+  G.state='pack'; show('packOverlay');
+}
+function openShopPack(){ /* shop packs cost gold; reachable from map treasure rooms too */ }
+function renderPackButtons(opts){
+  var box=$('packButtons'); box.innerHTML='';
+  opts.forEach(function(o){
+    var b=document.createElement('button'); b.className='btn gold';
+    b.textContent = o.cost>0 ? (o.label+' — '+o.cost+'🪙') : o.label;
+    b.disabled = o.cost>0 && G.gold<o.cost;
+    b.onclick=function(){ if(o.cost>0) G.gold-=o.cost; doOpenPack(); };
+    box.appendChild(b);
+  });
+  var skip=document.createElement('button'); skip.className='btn'; skip.textContent='Move on →';
+  skip.onclick=function(){ hide('packOverlay'); nextNode(); };
+  box.appendChild(skip);
+}
+function doOpenPack(){
+  // reveal 3 cards; you pick ONE to add.
+  var ids=[]; for(var i=0;i<3;i++) ids.push(weightedCard());
+  // guarantee at least one rare+ feels good occasionally
+  if (!ids.some(function(id){ return RARITY_RANK[CARDS[id].rarity]>=3; }) && Math.random()<0.5){
+    ids[randint(0,2)] = choice(REWARD_POOL.filter(function(id){ return RARITY_RANK[CARDS[id].rarity]>=3; }));
+  }
+  var wrap=$('packCards'); wrap.innerHTML=''; $('packSub').textContent='Pick ONE card to add to your deck:';
+  ids.forEach(function(id){
+    var el=cardEl(id,true); el.style.animation='floatup .01s';
+    el.onclick=function(){ G.deck.push(id); toast('Added '+CARDS[id].name+'!'); hide('packOverlay'); nextNode(); };
+    wrap.appendChild(el);
+  });
+  $('packButtons').innerHTML='';
+}
+
+/* ============================ RENDER ============================ */
+function setAnim(objOrPlayer, anim){
+  if (objOrPlayer==='player'){ G._heroAnim=anim; } else if (objOrPlayer){ objOrPlayer.anim=anim; }
+}
+function enemyEl(e){ var i=G.enemies.indexOf(e); return document.querySelector('.enemy[data-i="'+i+'"]'); }
+function heroEl(){ return document.querySelector('.hero'); }
+function flashHit(el){ if(el){ el.classList.add('hit'); setTimeout(function(){ el.classList.remove('hit'); }, 280); } }
+function floatText(el, txt, color){
+  if(!el) return; var f=document.createElement('div'); f.className='floattxt'; f.textContent=txt; f.style.color=color||'#fff';
+  var r=el.getBoundingClientRect(); f.style.left=(r.left+r.width/2-10)+'px'; f.style.top=(r.top+10)+'px';
+  document.body.appendChild(f); setTimeout(function(){ f.remove(); }, 1000);
+}
+function intentText(e){
+  var a=e.intent; if(!a) return '…';
+  if (a.type==='attack'){ var v=a.value+(e.str||0); if(e.weak) v=Math.floor(v*0.75); return '⚔️ '+v; }
+  if (a.type==='block') return '🛡️ '+a.value;
+  if (a.type==='buff') return '💪 buff';
+  if (a.type==='debuff') return '🌀 weaken';
+  return '?';
+}
+function render(){
+  if (!G) return;
+  updateHud();
+  // enemies
+  var row=$('enemyRow'); row.innerHTML='';
+  G.enemies.forEach(function(e,i){
+    var d=document.createElement('div'); d.className='enemy'+(e.dead?' dead':'')+(G.turn==='player'&&G.state==='combat'?' targetable':''); d.dataset.i=i;
+    var st=''; if(e.vuln) st+='<span class="status vuln">Vuln '+e.vuln+'</span>'; if(e.weak) st+='<span class="status weak">Weak '+e.weak+'</span>'; if(e.poison) st+='<span class="status">☠ '+e.poison+'</span>'; if(e.str) st+='<span class="status str">Str '+e.str+'</span>';
+    d.innerHTML =
+      '<div class="intent">'+(e.dead?'':intentText(e))+'</div>'+
+      '<div class="art">'+artHtml(e.key, e.emoji, e.anim)+(e.block?'<span class="eblock">'+e.block+'</span>':'')+'</div>'+
+      '<div class="statuses">'+st+'</div>'+
+      '<div class="bar"><i style="width:'+(100*e.hp/e.maxHp)+'%"></i><div class="txt">'+e.hp+'/'+e.maxHp+'</div></div>';
+    if (!e.dead && G.turn==='player' && G.state==='combat'){ d.onclick=function(){ onEnemyClick(i); }; }
+    row.appendChild(d);
+  });
+  // hero
+  var p=G.player;
+  var hero=document.querySelector('.hero');
+  var pst=''; if(p.str) pst+='<span class="status str">Str '+p.str+'</span>'; if(p.weak) pst+='<span class="status weak">Weak '+p.weak+'</span>'; if(p.regenBlock) pst+='<span class="status">🛡 regen '+p.regenBlock+'</span>';
+  var heroHtml =
+    '<div class="art">'+artHtml('player','🧙', G._heroAnim||'idle')+(p.block?'<span class="heroblock">🛡'+p.block+'</span>':'')+'</div>'+
+    '<div class="statuses">'+pst+'</div>'+
+    '<div class="hpwrap"><div class="hpbar"><i style="width:'+(100*p.hp/p.maxHp)+'%"></i><div class="txt">'+p.hp+'/'+p.maxHp+'</div></div></div>';
+  if (!hero){ hero=document.createElement('div'); hero.className='hero'; $('heroRow').insertBefore(hero, $('heroRow').firstChild); }
+  hero.innerHTML = heroHtml;
+  // energy + piles + hand
+  $('energyOrb').textContent = p.energy+'/'+p.maxEnergy;
+  $('pileInfo').textContent = 'Draw '+G.draw.length+' · Discard '+G.discard.length;
+  var hand=$('hand'); hand.innerHTML='';
+  G.hand.forEach(function(id,idx){
+    var el=cardEl(id,false);
+    if (G.player.energy < CARDS[id].cost || G.turn!=='player') el.classList.add('unplayable');
+    el.onclick=function(){ onCardClick(idx); };
+    hand.appendChild(el);
+  });
+  $('endTurnBtn').disabled = (G.turn!=='player' || G.state!=='combat');
+}
+var _selCard = null;
+function onCardClick(idx){
+  if (G.turn!=='player'||G.state!=='combat') return;
+  var id=G.hand[idx]; var c=CARDS[id];
+  if (G.player.energy < c.cost){ toast('Not enough energy'); return; }
+  if (c.type==='attack' && !c.eff.toString().indexOf('enemies.forEach')>-1){
+    // single-target attack: need a target. Highlight + wait for enemy click.
+  }
+  // For single-target attacks, require choosing an enemy if more than one alive.
+  var aliveCount = G.enemies.filter(function(e){return !e.dead;}).length;
+  var isAoe = /enemies\.forEach/.test(c.eff.toString());
+  if (c.type==='attack' && !isAoe && aliveCount>1){
+    _selCard = idx; toast('Pick a target');
+    document.querySelectorAll('.enemy.targetable').forEach(function(el){ el.style.outline='2px solid var(--gold)'; });
+    return;
+  }
+  playCard(idx, null);
+}
+function onEnemyClick(i){
+  if (_selCard!=null){
+    var idx=_selCard; _selCard=null;
+    document.querySelectorAll('.enemy').forEach(function(el){ el.style.outline=''; });
+    playCard(idx, i);
+  }
+}
+function cardEl(id, big){
+  var c=CARDS[id]; var el=document.createElement('div');
+  el.className='card '+c.type;
+  el.innerHTML =
+    '<span class="cost">'+c.cost+'</span>'+
+    '<div class="cart">'+c.art+'</div>'+
+    '<div class="cname">'+c.name+'</div>'+
+    '<div class="crar" style="background:'+RARITY[c.rarity]+'"></div>'+
+    '<div class="cdesc">'+c.desc+'</div>'+
+    '<div class="ctype">'+c.type+(c.rarity!=='common'?' · '+c.rarity:'')+'</div>';
+  return el;
+}
+function updateHud(){
+  if(!G) return;
+  $('cFloor').textContent='Floor '+G.floor;
+  $('cHp').textContent='❤️ '+G.player.hp+'/'+G.player.maxHp;
+  $('cGold').textContent='🪙 '+G.gold;
+  $('cDeck').textContent='🃏 '+G.deck.length;
+}
+function banner(t){ toast(t); }
+function toast(msg){ var el=$('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(_toastT); _toastT=setTimeout(function(){ el.classList.remove('show'); }, 1600); }
+function show(id){ $(id).classList.add('show'); }
+function hide(id){ $(id).classList.remove('show'); }
+function escapeText(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ============================ END STATES ============================ */
+function score(){ return G.maxFloor*120 + G.kills*15 + G.gold; }
+function gameOver(){
+  if (G.state==='over') return;
+  G.state='over';
+  $('overTitle').textContent='Defeated on Floor '+G.floor;
+  $('overMsg').textContent='The spire claims another climber. You defeated '+G.kills+' foes.';
+  $('overScore').textContent='Score: '+score();
+  reportScore();
+  show('overOverlay');
+}
+function victory(){
+  if (G.state==='over') return;
+  G.state='over';
+  $('overTitle').textContent='🏆 Spire Conquered!';
+  $('overMsg').textContent='You reached the summit and defeated the Spire Titan! '+G.kills+' foes vanquished.';
+  $('overScore').textContent='Score: '+(score()+500);
+  reportScore(500);
+  show('overOverlay');
+}
+function reportScore(bonus){
+  try { if (embedded()) window.parent.postMessage({ type:'SD_SCORE', mode:'spire', score: score()+(bonus||0), label:'Floor '+G.maxFloor }, '*'); } catch(e){}
+}
+
+/* ============================ DECK / MAP VIEW ============================ */
+function showDeck(){
+  var w=$('deckCards'); w.innerHTML='';
+  $('deckTitle').textContent='Your deck ('+G.deck.length+')';
+  var sorted=G.deck.slice().sort(function(a,b){ return (RARITY_RANK[CARDS[b].rarity]||0)-(RARITY_RANK[CARDS[a].rarity]||0); });
+  sorted.forEach(function(id){ w.appendChild(cardEl(id,false)); });
+  show('deckOverlay');
+}
+function showMap(){
+  var w=$('mapList'); w.innerHTML='';
+  var icon={combat:'⚔️ Battle',elite:'💀 Elite',rest:'🔥 Campfire',treasure:'🎁 Treasure',boss:'👹 Boss'};
+  G.map.forEach(function(r,i){
+    var d=document.createElement('div'); d.className='map-node'+(r.done?' done':'')+(i===G.node?' cur':'');
+    d.textContent=(i+1)+'. '+(icon[r.type]||r.type)+(i===G.node?'  ← you are here':'');
+    w.appendChild(d);
+  });
+  show('mapOverlay');
+}
+
+/* ============================ QUESTIONS (bank + fallback) ============================ */
+var usingBank=false;
+var QBANK = [
+  { q:'Which gas do plants take in for photosynthesis?', options:['Oxygen','Carbon dioxide','Nitrogen','Hydrogen'], answer:1, explain:'Plants absorb carbon dioxide and release oxygen.', topic:'Plants', id:'sp_f1' },
+  { q:'What is the boiling point of pure water at sea level?', options:['50°C','75°C','100°C','120°C'], answer:2, explain:'Pure water boils at 100°C at sea level.', topic:'Matter', id:'sp_f2' },
+  { q:'Which organ pumps blood around the body?', options:['Lungs','Heart','Liver','Brain'], answer:1, explain:'The heart pumps blood through the circulatory system.', topic:'Human body', id:'sp_f3' },
+  { q:'A force that opposes motion between surfaces is called…', options:['Gravity','Friction','Magnetism','Tension'], answer:1, explain:'Friction opposes motion between two surfaces in contact.', topic:'Forces', id:'sp_f4' },
+  { q:'Which of these is a conductor of electricity?', options:['Rubber','Plastic','Copper','Wood'], answer:2, explain:'Metals like copper conduct electricity; the others are insulators.', topic:'Electricity', id:'sp_f5' },
+  { q:'The change from liquid to gas is called…', options:['Freezing','Condensation','Evaporation','Melting'], answer:2, explain:'Evaporation is liquid turning into gas.', topic:'Matter', id:'sp_f6' },
+  { q:'Which part of the plant absorbs water from the soil?', options:['Leaf','Flower','Root','Stem'], answer:2, explain:'Roots absorb water and minerals from the soil.', topic:'Plants', id:'sp_f7' },
+  { q:'What do we call animals that eat only plants?', options:['Carnivores','Herbivores','Omnivores','Decomposers'], answer:1, explain:'Herbivores eat only plants.', topic:'Food chains', id:'sp_f8' }
+];
+function pickQuestion(){ if(!QBANK.length) return null; return QBANK[Math.floor(Math.random()*QBANK.length)]; }
+function applyBank(list){
+  if(!Array.isArray(list)||!list.length) return;
+  var cleaned=list.filter(function(q){ return q && Array.isArray(q.options)&&q.options.length>=2&&typeof q.answer==='number'&&q.answer>=0&&q.answer<q.options.length&&((q.q&&q.q.trim())||(q.html&&q.html.trim())); });
+  if(!cleaned.length) return;
+  QBANK = cleaned; usingBank=true;
+}
+
+/* ============================ PLAY LIMIT ============================ */
+var _gPlaysLeft = null;
+function _canPlayGame(){ return _gPlaysLeft==null || _gPlaysLeft>0; }
+function _noteGamePlayStart(){
+  if (embedded()){ try{ window.parent.postMessage({type:'SD_PLAY_START', mode:'spire'},'*'); }catch(e){} }
+  if (_gPlaysLeft!=null && _gPlaysLeft>0) _gPlaysLeft--;
+}
+function _showPlayLimit(){ toast("That's your 2 Science Spire climbs for today — come back tomorrow!"); }
+
+/* ============================ MESSAGING ============================ */
+var _bankTries=0, _assetTries=0;
+function requestBank(){ if(usingBank) return; if(!embedded()) return; try{ window.parent.postMessage({type:'SD_REQUEST_QUESTIONS'},'*'); }catch(e){} _bankTries++; if(_bankTries<8&&!usingBank) setTimeout(requestBank,1200); }
+function requestAssets(){ if(!embedded()) return; try{ window.parent.postMessage({type:'SPIRE_REQUEST_ASSETS'},'*'); }catch(e){} _assetTries++; if(_assetTries<5) setTimeout(requestAssets,1500); }
+window.addEventListener('message', function(ev){
+  var d=ev&&ev.data; if(!d) return;
+  if (d.type==='SD_QUESTIONS'){
+    if (d.playsLeft && typeof d.playsLeft.spire==='number') _gPlaysLeft=d.playsLeft.spire;
+    applyBank(d.questions);
+  } else if (d.type==='SD_PLAYS_LEFT'){
+    if (d.playsLeft && typeof d.playsLeft.spire==='number') _gPlaysLeft=d.playsLeft.spire;
+  } else if (d.type==='spireAssets'){
+    _assetTries=99; _ovrSet(d.overrides);
+  }
+});
+// stamp question-shown time when the overlay opens (for anti-rush counting)
+var _origAsk = askQuestion;
+askQuestion = function(){ qState.shownAt = performance.now(); return _origAsk.apply(this, arguments); };
+
+/* ============================ STANDALONE NOTICE ============================ */
+function maybeStandaloneNotice(){
+  if (embedded()) return;
+  if (document.getElementById('standaloneNotice')) return;
+  var bar=document.createElement('div'); bar.id='standaloneNotice';
+  bar.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#7c2d12;color:#fff;font:600 13px/1.4 system-ui,sans-serif;padding:9px 14px;display:flex;gap:12px;justify-content:center;align-items:center;flex-wrap:wrap;';
+  bar.innerHTML='<span>⚠️ Playing outside the app — class questions, progress and prizes won\'t be saved here.</span><a href="index.html#spire" style="background:#fff;color:#7c2d12;text-decoration:none;font-weight:700;padding:5px 12px;border-radius:8px;">Open in the app →</a><button style="background:transparent;border:0;color:#fff;font-size:18px;cursor:pointer;">×</button>';
+  bar.querySelector('button').onclick=function(){ bar.remove(); };
+  document.body.appendChild(bar);
+}
+
+/* ============================ WIRE UI ============================ */
+function startRun(){ hide('introOverlay'); hide('overOverlay'); newRun(); updateHud(); startNode(); }
+$('introStartBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } startRun(); _noteGamePlayStart(); };
+$('againBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } startRun(); _noteGamePlayStart(); };
+$('endTurnBtn').onclick=endTurn;
+$('mapBtn').onclick=showMap; $('mapClose').onclick=function(){ hide('mapOverlay'); };
+$('deckBtn').onclick=showDeck; $('deckClose').onclick=function(){ hide('deckOverlay'); };
+$('restartBtn').onclick=function(){ if(G && confirm('Abandon this climb?')){ hide('overOverlay'); show('introOverlay'); G=null; } };
+$('restHeal').onclick=function(){ G.player.hp=Math.min(G.player.maxHp, G.player.hp+Math.round(G.player.maxHp*0.30)); G.map[G.node].done=true; hide('restOverlay'); toast('Rested'); nextNode(); };
+$('restLeave').onclick=function(){ G.map[G.node].done=true; hide('restOverlay'); nextNode(); };
+$('rewardSkip').onclick=function(){ afterReward(); };
+
+maybeStandaloneNotice();
+requestBank();
+requestAssets();
+</script>
+</body>
+</html>

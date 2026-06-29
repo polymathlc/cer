@@ -4618,6 +4618,9 @@ option {
       <div class="nav-item rpg-el" data-page="raiders" onclick="navigateTo('raiders')" style="display:none;" title="Science Raiders — roguelite top-down shooter. Clear rooms, answer science questions to pick power-ups.">
         <span class="ico">👾</span> Science Raiders
       </div>
+      <div class="nav-item rpg-el" data-page="spire" onclick="navigateTo('spire')" style="display:none;" title="Science Spire — Slay-the-Spire-style deck-building dungeon. Answer science questions, build a deck, open card packs.">
+        <span class="ico">🃏</span> Science Spire
+      </div>
       <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any Science Raiders sprite (enemies, heroes, tiles).">
         <span class="ico">🎨</span> Game Objects
       </div>
@@ -5610,6 +5613,7 @@ option {
               <button class="rpg-tab" data-rpgboard="alltime" type="button">⭐ All-Time</button>
               <button class="rpg-tab" data-rpgboard="td" type="button">🧪 Tower Defense</button>
               <button class="rpg-tab" data-rpgboard="raid" type="button">👾 Raiders</button>
+              <button class="rpg-tab" data-rpgboard="spire" type="button">🃏 Spire</button>
             </div>
             <button class="btn btn-ghost btn-sm" id="rpgBoardRefresh" type="button">Refresh</button>
           </div>
@@ -5658,6 +5662,20 @@ option {
         <a class="btn btn-outline" href="science-raiders.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
       </div>
       <iframe id="raidersFrame" class="embed-frame" title="Science Raiders — Roguelite Shooter MCQ"></iframe>
+    </div>
+
+    <div class="page page-embed" id="page-spire">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Science Spire</h2>
+          </div>
+          <div class="subtitle">Slay-the-Spire-style deck builder — answer science questions, build a deck, open packs for rare cards</div>
+        </div>
+        <a class="btn btn-outline" href="science-spire.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+      </div>
+      <iframe id="spireFrame" class="embed-frame" title="Science Spire — Deck-building MCQ Roguelike"></iframe>
     </div>
 
     <!-- ===== PAGE: GAME OBJECTS (Admin Only) — sprite override manager ===== -->
@@ -6680,7 +6698,7 @@ async function enterApp(user) {
   // Deep-link: a game tab's "Open in the app" button links to index.html#raiders
   // / #defenders — jump straight to that game page once we're signed in.
   const hash = (location.hash || '').replace('#', '');
-  if (hash === 'raiders' || hash === 'defenders') {
+  if (hash === 'raiders' || hash === 'defenders' || hash === 'spire') {
     setTimeout(() => { try { navigateTo(hash); } catch (e) {} }, 300);
   }
 
@@ -6689,7 +6707,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.34.0';
+const APP_VERSION = 'v1.35.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -6879,6 +6897,11 @@ function navigateTo(page) {
     const f = document.getElementById('raidersFrame');
     if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-raiders.html'); f.addEventListener('load', pushRaidersAssets); }
     else pushRaidersAssets();
+  }
+  if (page === 'spire') {
+    const f = document.getElementById('spireFrame');
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html'); f.addEventListener('load', pushSpireAssets); }
+    else pushSpireAssets();
   }
   if (page === 'gameassets') loadGameAssets();
   if (page === 'messages') loadMessagesPage();
@@ -18385,7 +18408,7 @@ function rpgRolloverMonth() {
 function rpgEnsureGameScores() {
   if (!rpgState) return null;
   if (!rpgState.gameScores) rpgState.gameScores = {};
-  ["defenders", "raiders"].forEach(k => {
+  ["defenders", "raiders", "spire"].forEach(k => {
     if (!rpgState.gameScores[k]) rpgState.gameScores[k] = { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null };
   });
   rpgRolloverGameScores(rpgMonthKey());
@@ -18394,7 +18417,7 @@ function rpgEnsureGameScores() {
 // Roll each mini-game's month-best into "last month" when the calendar month turns.
 function rpgRolloverGameScores(key) {
   if (!rpgState || !rpgState.gameScores) return;
-  ["defenders", "raiders"].forEach(k => {
+  ["defenders", "raiders", "spire"].forEach(k => {
     const g = rpgState.gameScores[k]; if (!g) return;
     if (g.monthKey && g.monthKey !== key) {
       g.lastBest = g.monthBest || 0; g.lastLabel = g.monthLabel || ""; g.lastKey = g.monthKey;
@@ -19319,6 +19342,7 @@ function rpgPublishLeaderboard() {
       equipment: rpgState.equipment,
       td: rpgGameBoardData("defenders"),
       raid: rpgGameBoardData("raiders"),
+      spire: rpgGameBoardData("spire"),
       updatedAt: new Date().toISOString()
     }).catch(e => console.warn("leaderboard publish", e));
   }, 1200);
@@ -19377,7 +19401,7 @@ async function rpgFetchLeaderboard(force) {
 }
 // The "td" / "raid" tabs rank by this month's best mini-game score; "month" /
 // "lastmonth" rank by UNIQUE QUESTIONS DONE; "alltime" ranks by XP.
-function rpgIsGameTab() { return rpgBoardTab === "td" || rpgBoardTab === "raid"; }
+function rpgIsGameTab() { return rpgBoardTab === "td" || rpgBoardTab === "raid" || rpgBoardTab === "spire"; }
 function rpgBoardMetric(r) {
   if (rpgBoardTab === "alltime") return r.xp || 0;
   if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey() ? (r.monthQ || 0) : 0;
@@ -19439,7 +19463,7 @@ async function rpgRenderLeaderboard(force = false) {
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0, rebirths: rpgState.rebirths || 0,
       house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null,
       equipment: rpgState.equipment,
-      td: rpgGameBoardData("defenders"), raid: rpgGameBoardData("raiders"),
+      td: rpgGameBoardData("defenders"), raid: rpgGameBoardData("raiders"), spire: rpgGameBoardData("spire"),
       updatedAt: new Date().toISOString()
     };
     const i = rows.findIndex(r => r.uid === currentUser.uid);
@@ -19453,6 +19477,7 @@ async function rpgRenderLeaderboard(force = false) {
       : rpgBoardTab === "lastmonth" ? "No questions were recorded last month."
       : rpgBoardTab === "td" ? "No Science Defenders runs this month yet — play to claim the top spot!"
       : rpgBoardTab === "raid" ? "No Science Raiders runs this month yet — dive in to top the board!"
+      : rpgBoardTab === "spire" ? "No Science Spire climbs this month yet — build a deck and claim the top!"
       : "No heroes on the board yet — solve questions to earn XP!";
     body.innerHTML = `<div class="empty-note">${why}</div>`;
     return;
@@ -20974,7 +20999,7 @@ async function _sdRecordFlag(d, source) {
     if (!comment) { ack(false, 'Please describe the issue'); return; }
     if (!currentUser || !d || !d.questionId) { ack(false, 'Sign in to flag a question'); return; }
     if (await _flagsTodayCount() >= FLAG_DAILY_LIMIT) { ack(false, `Daily flag limit reached (${FLAG_DAILY_LIMIT}/day) — try again tomorrow`); return; }
-    const game = d.mode === 'raiders' ? 'Science Raiders' : 'Science Defenders';
+    const game = d.mode === 'raiders' ? 'Science Raiders' : d.mode === 'spire' ? 'Science Spire' : 'Science Defenders';
     await addDoc(collection(db, 'flaggedQuestions'), {
       questionId: d.questionId,
       questionTitle: d.questionTitle || '',
@@ -20993,24 +21018,26 @@ async function _sdRecordFlag(d, source) {
 // don't over-do it). Counts persist on the hero state (Firestore), reset daily.
 const GAME_PLAY_LIMIT = 2;
 function _todayKey() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+const _GAME_MODES = ['defenders', 'raiders', 'spire'];
+function _gameModeKey(mode) { return _GAME_MODES.indexOf(mode) >= 0 ? mode : 'defenders'; }
 function _gamePlaysToday() {
-  if (!rpgState) return { day: _todayKey(), defenders: 0, raiders: 0 };
+  if (!rpgState) return { day: _todayKey(), defenders: 0, raiders: 0, spire: 0 };
   const today = _todayKey();
-  if (!rpgState.gamePlays || rpgState.gamePlays.day !== today) rpgState.gamePlays = { day: today, defenders: 0, raiders: 0 };
+  if (!rpgState.gamePlays || rpgState.gamePlays.day !== today) rpgState.gamePlays = { day: today, defenders: 0, raiders: 0, spire: 0 };
   return rpgState.gamePlays;
 }
 function _gamePlaysLeft(mode) {
   if (!currentUser || currentUser.role !== 'student') return 99; // no limit for admins / preview
-  const gp = _gamePlaysToday(), m = mode === 'raiders' ? 'raiders' : 'defenders';
+  const gp = _gamePlaysToday(), m = _gameModeKey(mode);
   return Math.max(0, GAME_PLAY_LIMIT - (gp[m] || 0));
 }
 function _noteGamePlay(mode) {
   if (!currentUser || currentUser.role !== 'student' || !rpgState) return;
-  const gp = _gamePlaysToday(), m = mode === 'raiders' ? 'raiders' : 'defenders';
+  const gp = _gamePlaysToday(), m = _gameModeKey(mode);
   gp[m] = (gp[m] || 0) + 1;
   try { rpgSave(); } catch (e) {}
 }
-function _playsLeftPayload() { return { defenders: _gamePlaysLeft('defenders'), raiders: _gamePlaysLeft('raiders') }; }
+function _playsLeftPayload() { return { defenders: _gamePlaysLeft('defenders'), raiders: _gamePlaysLeft('raiders'), spire: _gamePlaysLeft('spire') }; }
 
 window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
@@ -21042,6 +21069,11 @@ window.addEventListener('message', function (ev) {
       const overrides = await loadRaidersOverrides();
       try { ev.source && ev.source.postMessage({ type: 'raidersAssets', overrides }, '*'); } catch (e) {}
     })();
+  } else if (d.type === 'SPIRE_REQUEST_ASSETS') {
+    (async () => {
+      const overrides = await loadSpireOverrides();
+      try { ev.source && ev.source.postMessage({ type: 'spireAssets', overrides }, '*'); } catch (e) {}
+    })();
   } else if (d.type === 'SD_PLAY_START') {
     _noteGamePlay(d.mode);
     try { ev.source && ev.source.postMessage({ type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() }, '*'); } catch (e) {}
@@ -21054,7 +21086,7 @@ window.addEventListener('message', function (ev) {
 function _sdRecordScore(d) {
   try {
     if (!rpgState || !currentUser || currentUser.role !== 'student') return;
-    const key = d && d.mode === 'raiders' ? 'raiders' : 'defenders';
+    const key = _gameModeKey(d && d.mode);
     const score = Math.max(0, Math.round(Number(d && d.score) || 0));
     if (!score) return;
     rpgEnsureGameScores();
@@ -21213,6 +21245,40 @@ async function loadGameAssets(){
     html += '</div>';
   });
 
+  // ===== Science Spire — per-object animation slots (idle/attack/hurt/death) =====
+  await loadSpireOverrides(true);
+  const spireCats = {};
+  SPIRE_OBJECTS.forEach(o => { (spireCats[o.cat] = spireCats[o.cat] || []).push(o); });
+  html += '<h2 class="ga-game">🃏 Science Spire <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— paste a PNG for each animation state; missing states fall back to Idle</span></h2>';
+  Object.keys(spireCats).forEach(cat => {
+    html += '<h3 class="ga-cat">' + cat + '</h3>';
+    spireCats[cat].forEach(o => {
+      html += '<div class="ga-objrow"><div class="ga-objname" style="font-weight:600;margin:6px 0;">' + o.emoji + ' ' + escapeHtml(o.label) + '</div><div class="ga-cards">';
+      SPIRE_ANIMS.forEach(an => {
+        const slotId = o.id + ':' + an.id;
+        const safe = slotId.replace(':','-');
+        const ov = _spireOverridesCache[slotId];
+        const thumb = ov ? ('<img src="' + ov + '" alt="' + escapeHtml(o.label) + ' ' + an.label + '">') : ('<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + o.emoji + '</div>');
+        html += '<div class="ga-card" id="sgcard-' + safe + '">'
+          + '<div class="ga-prev">' + thumb + '</div>'
+          + '<div class="ga-name">' + an.label + '</div>'
+          + '<div class="ga-zone" id="sgzone-' + safe + '" tabindex="0"'
+          +   ' onpaste="onSpireObjPaste(\'' + slotId + '\', event)"'
+          +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
+          +   ' ondragleave="this.classList.remove(\'drag\')"'
+          +   ' ondrop="onSpireObjDrop(\'' + slotId + '\', event)"'
+          +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
+          + '<div class="ga-actions">'
+          +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onSpireObjPick(\'' + slotId + '\', event)"></label>'
+          +   (ov ? '<button class="btn btn-ghost ga-mini" onclick="resetSpireObj(\'' + slotId + '\')">Reset</button>' : '')
+          + '</div>'
+          + '<div class="ga-status ' + (ov ? 'custom' : '') + '" id="sgstatus-' + safe + '">' + (ov ? '● Custom' : 'Default') + '</div>'
+          + '</div>';
+      });
+      html += '</div></div>';
+    });
+  });
+
   host.innerHTML = html;
 }
 
@@ -21317,6 +21383,99 @@ async function resetRaidersObj(objId){
     await loadGameAssets();
     showToast('Reset to default', 'success');
   } catch (e) { console.error('raiders reset failed', e); showToast('Reset failed', 'error'); }
+}
+
+// =====================================================================
+// SCIENCE SPIRE — character/enemy art overrides. Unlike Raiders (single
+// sprite per object) each object has MULTIPLE animation states (idle /
+// attack / hurt / death) so admins can paste a PNG per state. Overrides
+// are stored as { 'objId:anim': url } in the admin's `spireSprites`
+// settings doc; the game falls back to 'objId:idle' for any missing state.
+// =====================================================================
+const SPIRE_MAX_SIDE = 256;
+let _spireOverridesCache = null; // {'objId:anim': url}
+const SPIRE_OBJECTS = [
+  { cat:'Hero',    id:'player', label:'Hero',        emoji:'🧙' },
+  { cat:'Enemies', id:'slime',  label:'Lab Slime',   emoji:'🟢' },
+  { cat:'Enemies', id:'bat',    label:'Cave Bat',    emoji:'🦇' },
+  { cat:'Enemies', id:'spider', label:'Acid Spider', emoji:'🕷️' },
+  { cat:'Enemies', id:'bot',    label:'Sentry Bot',  emoji:'🤖' },
+  { cat:'Enemies', id:'ghost',  label:'Wraith',      emoji:'👻' },
+  { cat:'Elites',  id:'golem',  label:'Stone Golem', emoji:'🗿' },
+  { cat:'Elites',  id:'beast',  label:'Chimera',     emoji:'🐉' },
+  { cat:'Boss',    id:'titan',  label:'Spire Titan', emoji:'👹' }
+];
+const SPIRE_ANIMS = [
+  { id:'idle',   label:'Idle' },
+  { id:'attack', label:'Attack' },
+  { id:'hurt',   label:'Hurt' },
+  { id:'death',  label:'Death' }
+];
+function _spireOwnerUid(){ return (typeof adminUid !== 'undefined' && adminUid) || (currentUser && currentUser.uid) || null; }
+function _spireDocRef(uid){ return doc(db, 'users', uid, 'settings', 'spireSprites'); }
+
+async function loadSpireOverrides(force){
+  if (_spireOverridesCache && !force) return _spireOverridesCache;
+  const uid = _spireOwnerUid();
+  if (!uid){ _spireOverridesCache = {}; return _spireOverridesCache; }
+  try {
+    const snap = await getDoc(_spireDocRef(uid));
+    _spireOverridesCache = (snap.exists() && snap.data().overrides) ? snap.data().overrides : {};
+  } catch (e) { console.warn('spire overrides load failed', e); _spireOverridesCache = _spireOverridesCache || {}; }
+  return _spireOverridesCache;
+}
+async function pushSpireAssets(){
+  const overrides = await loadSpireOverrides();
+  const f = document.getElementById('spireFrame');
+  try { f && f.contentWindow && f.contentWindow.postMessage({ type: 'spireAssets', overrides }, '*'); } catch (e) {}
+}
+async function _spireApplyImage(slotId, dataUrl){
+  const status = document.getElementById('sgstatus-' + slotId.replace(':','-'));
+  try {
+    if (status) status.textContent = 'Uploading…';
+    if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
+    const scaled = await _scaleDownDataUrl(dataUrl, SPIRE_MAX_SIDE);
+    const url = await uploadImageDataUrl(scaled);
+    const uid = _spireOwnerUid(); if (!uid) throw new Error('Not signed in');
+    await setDoc(_spireDocRef(uid), { overrides: { [slotId]: url } }, { merge: true });
+    _spireOverridesCache = _spireOverridesCache || {};
+    _spireOverridesCache[slotId] = url;
+    await pushSpireAssets();
+    await loadGameAssets();
+    showToast('Sprite updated', 'success');
+  } catch (e) {
+    console.error('spire sprite update failed', e);
+    showToast('Update failed: ' + (e && e.message ? e.message : e), 'error');
+    if (status) status.textContent = 'Failed';
+  }
+}
+function onSpireObjPaste(slotId, e){
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items){
+    if (it.type && it.type.startsWith('image/')){ e.preventDefault(); _raidersFileToDataUrl(it.getAsFile(), du => _spireApplyImage(slotId, du)); return; }
+  }
+  showToast('No image in clipboard — copy a PNG first', 'error');
+}
+function onSpireObjDrop(slotId, e){
+  e.preventDefault();
+  if (e.currentTarget) e.currentTarget.classList.remove('drag');
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  _raidersFileToDataUrl(file, du => _spireApplyImage(slotId, du));
+}
+function onSpireObjPick(slotId, e){
+  const file = e.target && e.target.files && e.target.files[0];
+  _raidersFileToDataUrl(file, du => _spireApplyImage(slotId, du));
+  if (e.target) e.target.value = '';
+}
+async function resetSpireObj(slotId){
+  try {
+    const uid = _spireOwnerUid(); if (!uid) return;
+    await setDoc(_spireDocRef(uid), { overrides: { [slotId]: deleteField() } }, { merge: true });
+    if (_spireOverridesCache) delete _spireOverridesCache[slotId];
+    await pushSpireAssets();
+    await loadGameAssets();
+    showToast('Reset to default', 'success');
+  } catch (e) { console.error('spire reset failed', e); showToast('Reset failed', 'error'); }
 }
 
 // =====================================================================
@@ -21501,6 +21660,10 @@ window.onRaidersObjPaste = onRaidersObjPaste;
 window.onRaidersObjDrop = onRaidersObjDrop;
 window.onRaidersObjPick = onRaidersObjPick;
 window.resetRaidersObj = resetRaidersObj;
+window.onSpireObjPaste = onSpireObjPaste;
+window.onSpireObjDrop = onSpireObjDrop;
+window.onSpireObjPick = onSpireObjPick;
+window.resetSpireObj = resetSpireObj;
 window.navigateTo = navigateTo;
 window.toggleSidebar = toggleSidebar;
 window.addBlock = addBlock;
