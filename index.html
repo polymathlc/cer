@@ -6689,7 +6689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.33.0';
+const APP_VERSION = 'v1.34.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9028,6 +9028,10 @@ function renderImgEnhanceBar(blockId) {
     </div>
     <div style="font-size:0.72rem;color:var(--text-muted);margin:4px 0 2px;text-align:center;">Compare the two — if the edited one changed too much, tap “↩ Use original”.</div>` : '';
   bar.innerHTML = compare + `
+    <input type="text" id="imgEnhanceRemark_${blockId}" value="${escapeHtml((st && st.remark) || '')}"
+           oninput="_setEnhanceRemark('${blockId}', this.value)"
+           placeholder="Optional: instructions to guide the AI regeneration (e.g. colour the heart red, keep all labels)"
+           style="width:100%;box-sizing:border-box;font-size:0.78rem;padding:6px 9px;margin-top:8px;border:1px solid var(--border);border-radius:6px;">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
       <span style="font-size:0.78rem;color:var(--text-muted);">Image:</span>
       <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.78rem;" data-crop-open="${blockId}">✂️ Crop / reposition</button>
@@ -9170,8 +9174,13 @@ document.addEventListener('click', function (e) {
   _startVoice(mic, target);
 });
 
+function _setEnhanceRemark(blockId, val) { (_imgEnhanceState[blockId] = _imgEnhanceState[blockId] || {}).remark = val; }
 async function enhanceBlockImage(blockId, colour) {
-  console.log('[enhance] clicked', { blockId, colour, imageAiReady: imageAiReady(), models: AI_IMAGE_MODELS });
+  // Read the optional teacher remark BEFORE the bar is replaced by the spinner.
+  const _remarkEl = document.getElementById('imgEnhanceRemark_' + blockId);
+  const remark = String(_remarkEl ? _remarkEl.value : ((_imgEnhanceState[blockId] || {}).remark || '')).trim();
+  (_imgEnhanceState[blockId] = _imgEnhanceState[blockId] || {}).remark = remark; // persist across re-renders
+  console.log('[enhance] clicked', { blockId, colour, remark, imageAiReady: imageAiReady(), models: AI_IMAGE_MODELS });
   // Immediate, unmissable feedback so it's clear the click registered.
   showToast(colour ? '🎨 Colourising image with AI…' : '✨ Enhancing image with AI…', 'info');
   const bar = document.getElementById('imgEnhance_' + blockId);
@@ -9183,9 +9192,10 @@ async function enhanceBlockImage(blockId, colour) {
   }
   try {
     const media = await _blockImageToInline(blockId);
-    const prompt = colour
+    let prompt = colour
       ? 'Add colour to this diagram. Keep it the EXACT same line drawing — identical lines, shapes, labels, text, proportions and positions — and simply fill the existing shapes with flat, natural colours like a clean textbook illustration. Do NOT make it photo-realistic, do NOT add shading, gradients, 3D rendering, textures or a new style, and do NOT redraw, add, remove or move anything. Output only the image, same aspect ratio.'
       : 'Clean up this image into a sharp BLACK-AND-WHITE line diagram: keep every line, shape, label, text, proportion and position EXACTLY the same, just make the lines crisp and the text clearly legible like a freshly printed textbook figure. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT redraw, add, remove or move anything. Output only the image, same aspect ratio.';
+    if (remark) prompt += ' IMPORTANT — also follow these specific instructions from the teacher for this regeneration (apply them even where they relax the rules above, but still keep it the SAME diagram and the same aspect ratio, and output only the image): ' + remark;
     const dataUrl = await generateEnhancedImageDataUrl(prompt, [media]);
     previewImage(blockId, dataUrl); // show immediately
     const url = await uploadImageDataUrl(dataUrl);
@@ -21541,6 +21551,7 @@ window.adjustImgScale = adjustImgScale;
 window.handleImagePaste = handleImagePaste;
 window.handleImageDrop = handleImageDrop;
 window.handleRichImagePaste = handleRichImagePaste;
+window._setEnhanceRemark = _setEnhanceRemark;
 window.handleAiBuildFile = handleAiBuildFile;
 window.handleBulkAiFile = handleBulkAiFile;
 window.aiAnswerAndExplain = aiAnswerAndExplain;
