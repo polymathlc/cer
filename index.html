@@ -6689,7 +6689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.32.0';
+const APP_VERSION = 'v1.33.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -8261,12 +8261,13 @@ function renderBlocks() {
             ${micForBlockHtml(block.id, 'content', 'Dictate the explanation')}
             ${improveBtnHtml(block.id, 'content')}
           </div>
-          <div class="content-editable" contenteditable="true" data-placeholder="Enter explanation text..."
+          <div class="content-editable" contenteditable="true" data-placeholder="Enter explanation text… (you can paste a picture here too)"
                data-block-id="${block.id}" data-field="content"
+               onpaste="handleRichImagePaste('${block.id}', 'content', event)"
                oninput="saveBlockContent('${block.id}', 'content', this.innerHTML)">${block.content || ''}</div>
         `;
         break;
-        
+
       case 'video':
         bodyHTML = `
           <div class="block-body">
@@ -8888,6 +8889,47 @@ function _readAndUploadImage(blockId, file) {
   reader.readAsDataURL(file);
 }
 const _imagePasteHint = '📋 Click here, then paste a screenshot (Ctrl/⌘+V) — or drop an image to upload it';
+
+// Paste an image straight into a rich-text field (e.g. the Explanation answer
+// key): upload it and drop an <img> in at the caret. Non-image pastes fall
+// through to the browser's normal text paste.
+function handleRichImagePaste(blockId, field, e) {
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      e.preventDefault();
+      const editable = (e.target && e.target.closest) ? (e.target.closest('.content-editable') || e.target) : e.target;
+      _insertRichImage(blockId, field, editable, it.getAsFile());
+      return;
+    }
+  }
+}
+function _insertRichImage(blockId, field, editable, file) {
+  if (!file || !editable) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const dataUrl = reader.result;
+    const tmpId = 'rimg_' + Date.now() + '_' + Math.floor(Math.random() * 1e4);
+    editable.focus();
+    const tag = '<img id="' + tmpId + '" src="' + dataUrl + '" style="max-width:100%;height:auto;display:block;margin:6px 0;border-radius:6px;">';
+    try { document.execCommand('insertHTML', false, tag); }
+    catch (e2) { editable.insertAdjacentHTML('beforeend', tag); }
+    if (field) saveBlockContent(blockId, field, editable.innerHTML);   // local preview saved immediately
+    showToast('Uploading image…', 'info');
+    try {
+      const url = await uploadImageDataUrl(dataUrl);                   // host it, then swap the base64 for the URL
+      const el = document.getElementById(tmpId);
+      if (el) { el.src = url; el.removeAttribute('id'); }
+      if (field) saveBlockContent(blockId, field, editable.innerHTML);
+      showToast('Picture added', 'success');
+    } catch (err) {
+      console.error('rich image upload failed', err);
+      const el = document.getElementById(tmpId); if (el) el.removeAttribute('id');
+      showToast('Upload failed: ' + (err && err.message ? err.message : err), 'error');
+    }
+  };
+  reader.readAsDataURL(file);
+}
 
 // =====================================================================
 // IMAGE ENHANCE (AI) — after pasting an image into a question, the teacher
@@ -21498,6 +21540,7 @@ window.previewImage = previewImage;
 window.adjustImgScale = adjustImgScale;
 window.handleImagePaste = handleImagePaste;
 window.handleImageDrop = handleImageDrop;
+window.handleRichImagePaste = handleRichImagePaste;
 window.handleAiBuildFile = handleAiBuildFile;
 window.handleBulkAiFile = handleBulkAiFile;
 window.aiAnswerAndExplain = aiAnswerAndExplain;
