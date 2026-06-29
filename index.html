@@ -4105,6 +4105,9 @@ option {
 .rpg-set-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .rpg-set-chip { font-family: 'Space Mono', monospace; font-size: 0.6rem; font-weight: 700; padding: 4px 9px; border-radius: 999px; border: 1px dashed var(--border); color: var(--text-muted); background: #fff; }
 .rpg-set-chip.on { border-style: solid; border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.rpg-voucher-streak { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: linear-gradient(180deg,#fffaf0,#fff); margin-bottom: 8px; font-size: 0.8rem; }
+.rpg-voucher-bar { margin-top: 6px; height: 7px; border-radius: 4px; background: var(--surface-alt, #eee); overflow: hidden; }
+.rpg-voucher-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg,#f59e0b,#f43f5e); transition: width var(--transition); }
 .rpg-quest { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; margin-bottom: 6px; font-size: 0.82rem; }
 .rpg-quest.done { border-color: var(--primary); background: var(--primary-light); }
 .rpg-quest.claimed { opacity: 0.55; }
@@ -5605,6 +5608,7 @@ option {
         <div class="rpg-prize-banner">
           <span class="rpg-prize-line">🎁 <b>Monthly prize:</b> the top 5 students with the most <b>questions done</b> each month win a <b>$10 Popular voucher</b> each. Questions only count once, and need a genuine answer.</span>
           <span class="rpg-prize-line">🕹️ <b>Arcade prizes:</b> the top 3 each month in <b>Science Defenders</b> and <b>Science Raiders</b> also win a <b>$10 Popular voucher</b> each.</span>
+          <span class="rpg-prize-line">🎟️ <b>Streak prize:</b> practise <b>10+ questions every day for 30 days in a row</b> and win a <b>$10 Popular voucher</b> — track your progress on the Your Hero page.</span>
           <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 all-time XP earners win <b>$200, $100 and $50 Popular vouchers</b>.</span>
         </div>
         <div class="card card-pad">
@@ -6684,9 +6688,13 @@ async function enterApp(user) {
 
   // Deep-link: a game tab's "Open in the app" button links to index.html#raiders
   // / #defenders — jump straight to that game page once we're signed in.
+  // The practice-reminder email links to index.html#practice so a student lands
+  // straight on the practice page in one click.
   const hash = (location.hash || '').replace('#', '');
   if (hash === 'raiders' || hash === 'defenders') {
     setTimeout(() => { try { navigateTo(hash); } catch (e) {} }, 300);
+  } else if (hash === 'practice') {
+    setTimeout(() => { try { navigateTo(rpgPracticePage()); } catch (e) {} }, 300);
   }
 
   showToast('Welcome, ' + displayName + '!', 'success');
@@ -6694,7 +6702,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.35.0';
+const APP_VERSION = 'v1.36.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15863,10 +15871,12 @@ function renderPrizeClaims() {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No prize claims yet. Monthly winners will appear here once they claim.</td></tr>';
     return;
   }
-  const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders' : '🎁 Questions';
+  const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders' : c.category === 'streak' ? '🎟️ 30-day streak' : '🎁 Questions';
   const _prizeResult = c => (c.category === 'defenders' || c.category === 'raiders')
     ? escapeHtml(c.scoreLabel || (c.score != null ? c.score + ' pts' : '—'))
-    : (c.questions != null ? c.questions + ' Q' : '—');
+    : c.category === 'streak'
+      ? escapeHtml(c.scoreLabel || '30 days')
+      : (c.questions != null ? c.questions + ' Q' : '—');
   tbody.innerHTML = _usagePrizeClaims.map(c => {
     const sent = c.status === 'sent';
     return `<tr${sent ? ' style="opacity:0.6;"' : ''}>
@@ -18281,7 +18291,11 @@ function rpgQuestsHtml() {
       ${claimed ? `<span class="rpg-quest-claimed">✓</span>` : done ? `<button class="btn btn-primary btn-sm" type="button" data-rpg-quest="${i}">Claim ${reward}</button>` : `<span class="rpg-quest-reward">${reward}</span>`}
     </div>`;
   }).join("");
-  return `<div class="section-label" style="margin-top:14px;">Daily quests · 🔥 streak ${s.count || 0}${s.freezes ? ` (🧊×${s.freezes})` : ""}</div>${rows}`;
+  const vc = s.vCount || 0;
+  const todayQ = (s.dayKey === advToday()) ? Math.min(10, s.dayMarks || 0) : 0;
+  const voucherLine = `<div class="rpg-voucher-streak" title="Practise 10+ questions every day for 30 days in a row to win a $10 Popular voucher.">🎟️ <b>$10 voucher streak</b> · ${vc}/30 days &nbsp;·&nbsp; today ${todayQ}/10 questions
+    <div class="rpg-voucher-bar"><div class="rpg-voucher-fill" style="width:${Math.round((vc / 30) * 100)}%;"></div></div></div>`;
+  return `<div class="section-label" style="margin-top:14px;">Daily quests · 🔥 streak ${s.count || 0}${s.freezes ? ` (🧊×${s.freezes})` : ""}</div>${voucherLine}${rows}`;
 }
 function rpgCreditStreakDay() {
   const day = advToday();
@@ -18316,6 +18330,22 @@ function rpgNoteStreakActivity(correct) {
   if (correct) {
     s.freezeProg = (s.freezeProg || 0) + 1;
     if (s.freezeProg >= 15 && (s.freezes || 0) < 2) { s.freezeProg = 0; s.freezes = (s.freezes || 0) + 1; toast("🧊 Earned a streak freeze!", "success"); }
+  }
+  // $10 voucher streak: 10+ questions a day for 30 days straight. Tracked apart
+  // from the 3-mark daily streak above so the harder goal has its own counter.
+  if ((s.dayMarks || 0) >= 10 && s.vLastDay !== advToday()) {
+    s.vCount = (s.vLastDay === advYesterday()) ? (s.vCount || 0) + 1 : 1;
+    s.vLastDay = advToday();
+    s.vBest = Math.max(s.vBest || 0, s.vCount);
+    if (s.vCount >= 30) {
+      s.vCycles = (s.vCycles || 0) + 1;
+      s.vCount = 0; // cycle complete — a fresh 30-day run can begin
+      rpgState.streak = s;
+      rpgSave();
+      toast("🎟️ 30-day 10-question streak — you've earned a $10 voucher!", "success");
+      const cyc = s.vCycles;
+      setTimeout(() => { try { rpgOfferStreakVoucher(cyc); } catch (_) {} }, 700);
+    }
   }
   rpgState.streak = s;
   if (s.dayMarks >= 3) rpgCreditStreakDay();
@@ -18353,6 +18383,7 @@ async function rpgInit() {
   rpgSave();
   rpgPublishLeaderboard();
   setTimeout(() => { rpgCheckPrizeClaim(); }, 2500); // auto-prompt month-end winners
+  setTimeout(() => { try { rpgCheckStreakVoucher(); } catch (_) {} }, 3400); // and unclaimed streak vouchers
 }
 function rpgOnSignOut() {
   advToken++; adv = null;
@@ -19524,6 +19555,7 @@ async function rpgRenderLeaderboard(force = false) {
     </div>`;
   }).join("");
   rpgCheckPrizeClaim();
+  setTimeout(() => { try { rpgCheckStreakVoucher(); } catch (_) {} }, 1200);
 }
 
 // ---- Month-end prize claim ---------------------------------------------
@@ -19579,6 +19611,38 @@ async function rpgCheckPrizeClaim() {
     }
   } catch (e) { console.warn("prize claim check", e); }
 }
+// 30-day / 10-questions-a-day streak voucher. Reuses the same claim overlay and
+// submit path as the monthly prizes; each completed 30-day cycle is its own
+// claim doc (uid_streak30_<cycle>) so a student can win it again.
+function rpgOfferStreakVoucher(cycle) {
+  if (!rpgState || !currentUser || currentUser.role !== "student" || RPG_STORAGE_MODE !== "firestore") return;
+  _prizeClaimCtx = { ackKey: "streak30_" + cycle, monthKey: advToday(), rank: 0, value: 30, noun: "30-day practice streak", game: "", detail: "30-day 10-question streak", category: "streak" };
+  const el = id => document.getElementById(id);
+  if (el("prizeClaimMsg")) el("prizeClaimMsg").innerHTML =
+    `Incredible — you practised <b>10+ questions every day for 30 days straight</b>! Enter your details and we'll send your <b>$10 Popular voucher</b>.`;
+  if (el("prizePhone")) el("prizePhone").value = "";
+  if (el("prizeAddress")) el("prizeAddress").value = "";
+  if (el("prizeClaimOverlay")) el("prizeClaimOverlay").classList.add("active");
+  _prizePromptShown = true;
+}
+async function rpgCheckStreakVoucher() {
+  try {
+    if (_prizePromptShown || !rpgState || !currentUser || currentUser.role !== "student" || RPG_STORAGE_MODE !== "firestore") return;
+    const cycles = (rpgState.streak && rpgState.streak.vCycles) || 0;
+    if (cycles < 1) return;
+    rpgState.prizeAck = rpgState.prizeAck || {};
+    for (let c = 1; c <= cycles; c++) {
+      const ackKey = "streak30_" + c;
+      if (rpgState.prizeAck[ackKey]) continue;
+      try {
+        const snap = await getDoc(doc(db, "prizeClaims", currentUser.uid + "_" + ackKey));
+        if (snap.exists()) { rpgState.prizeAck[ackKey] = "claimed"; rpgSave(); continue; }
+      } catch (_) {}
+      rpgOfferStreakVoucher(c);
+      return;
+    }
+  } catch (e) { console.warn("streak voucher check", e); }
+}
 function _showPrizeClaim(cat, rank, entry) {
   _prizeClaimCtx = { ackKey: cat.key, monthKey: rpgPrevMonthKey(), rank, value: entry.v, noun: cat.noun, game: cat.game, detail: entry.detail || "" };
   const ord = rank === 1 ? "1st" : rank === 2 ? "2nd" : rank === 3 ? "3rd" : rank + "th";
@@ -19609,7 +19673,7 @@ async function submitPrizeClaim() {
       name: currentUser.name || "",
       email: currentUser.email || "",
       monthKey: ctx.monthKey,
-      category: ctx.ackKey === ctx.monthKey ? "questions" : (ctx.ackKey.endsWith("_td") ? "defenders" : "raiders"),
+      category: ctx.category || (ctx.ackKey === ctx.monthKey ? "questions" : (ctx.ackKey.endsWith("_td") ? "defenders" : "raiders")),
       rank: ctx.rank,
       questions: ctx.ackKey === ctx.monthKey ? ctx.value : 0,
       score: ctx.value,
@@ -19625,7 +19689,7 @@ async function submitPrizeClaim() {
     _closePrizeClaim();
     _prizePromptShown = false;       // allow another category's prompt this session
     showToast("🎉 Claim submitted — we'll send your $10 voucher soon!", "success");
-    setTimeout(() => { try { rpgCheckPrizeClaim(); } catch (_) {} }, 800);
+    setTimeout(() => { try { rpgCheckPrizeClaim(); } catch (_) {} setTimeout(() => { try { rpgCheckStreakVoucher(); } catch (_) {} }, 600); }, 800);
   } catch (e) { console.warn("prize claim save", e); showToast("Could not submit — check your connection and try again", "error"); }
 }
 // Physical (in-person) students collect the voucher in class — confirm here
@@ -19640,7 +19704,7 @@ async function claimPhysical() {
       name: currentUser.name || "",
       email: currentUser.email || "",
       monthKey: ctx.monthKey,
-      category: ctx.ackKey === ctx.monthKey ? "questions" : (ctx.ackKey.endsWith("_td") ? "defenders" : "raiders"),
+      category: ctx.category || (ctx.ackKey === ctx.monthKey ? "questions" : (ctx.ackKey.endsWith("_td") ? "defenders" : "raiders")),
       rank: ctx.rank,
       questions: ctx.ackKey === ctx.monthKey ? ctx.value : 0,
       score: ctx.value,
@@ -19656,7 +19720,7 @@ async function claimPhysical() {
     _closePrizeClaim();
     _prizePromptShown = false;       // allow another category's prompt this session
     showToast("🏫 Confirmed — collect your $10 voucher in class!", "success");
-    setTimeout(() => { try { rpgCheckPrizeClaim(); } catch (_) {} }, 800);
+    setTimeout(() => { try { rpgCheckPrizeClaim(); } catch (_) {} setTimeout(() => { try { rpgCheckStreakVoucher(); } catch (_) {} }, 600); }, 800);
   } catch (e) { console.warn("physical claim save", e); showToast("Could not submit — check your connection and try again", "error"); }
 }
 
@@ -19674,6 +19738,10 @@ let advToken = 0;     // invalidates timers from finished/abandoned runs
 
 function advToday() {
   const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function advYesterday() {
+  const d = new Date(); d.setDate(d.getDate() - 1);
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 function advRunsUsed() {
