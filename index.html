@@ -6749,7 +6749,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.38.0';
+const APP_VERSION = 'v1.39.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -21270,6 +21270,18 @@ function _noteGamePlay(mode) {
 }
 function _playsLeftPayload() { return { defenders: _gamePlaysLeft('defenders'), raiders: _gamePlaysLeft('raiders'), spire: _gamePlaysLeft('spire') }; }
 
+// Science Spire keeps a persistent deck-builder profile (card collection, chosen
+// deck, banked gold) per student. It lives on the hero state so it syncs to
+// Firestore like everything else; the game owns its shape, we just store it.
+function _loadSpireProfile() {
+  try { return (rpgState && rpgState.spireProfile) ? rpgState.spireProfile : null; } catch (e) { return null; }
+}
+function _saveSpireProfile(p) {
+  if (!p || typeof p !== 'object' || !rpgState) return;
+  rpgState.spireProfile = p;
+  try { rpgSave(); } catch (e) {}
+}
+
 window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
   if (!d) return;
@@ -21305,6 +21317,10 @@ window.addEventListener('message', function (ev) {
       const overrides = await loadSpireOverrides();
       try { ev.source && ev.source.postMessage({ type: 'spireAssets', overrides }, '*'); } catch (e) {}
     })();
+  } else if (d.type === 'SPIRE_REQUEST_PROFILE') {
+    try { ev.source && ev.source.postMessage({ type: 'spireProfile', profile: _loadSpireProfile() }, '*'); } catch (e) {}
+  } else if (d.type === 'SPIRE_SAVE_PROFILE') {
+    _saveSpireProfile(d.profile);
   } else if (d.type === 'SD_PLAY_START') {
     _noteGamePlay(d.mode);
     try { ev.source && ev.source.postMessage({ type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() }, '*'); } catch (e) {}
@@ -21517,6 +21533,37 @@ async function loadGameAssets(){
     });
   });
 
+  // ----- Science Spire deck cards — one art slot per card (override 'card:<id>') -----
+  const spireCardCats = {};
+  SPIRE_CARDS.forEach(c => { (spireCardCats[c.rarity] = spireCardCats[c.rarity] || []).push(c); });
+  html += '<h3 class="ga-cat">Deck cards <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— paste a PNG to use as the card face</span></h3>';
+  ['common','uncommon','rare','epic','legendary'].forEach(rar => {
+    const list = spireCardCats[rar]; if (!list || !list.length) return;
+    html += '<div class="ga-objrow"><div class="ga-objname" style="font-weight:600;margin:6px 0;text-transform:capitalize;">' + rar + '</div><div class="ga-cards">';
+    list.forEach(c => {
+      const slotId = 'card:' + c.id;
+      const safe = slotId.replace(':','-');
+      const ov = _spireOverridesCache[slotId];
+      const thumb = ov ? ('<img src="' + ov + '" alt="' + escapeHtml(c.name) + '">') : ('<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + c.emoji + '</div>');
+      html += '<div class="ga-card" id="sgcard-' + safe + '">'
+        + '<div class="ga-prev">' + thumb + '</div>'
+        + '<div class="ga-name">' + escapeHtml(c.name) + '</div>'
+        + '<div class="ga-zone" id="sgzone-' + safe + '" tabindex="0"'
+        +   ' onpaste="onSpireObjPaste(\'' + slotId + '\', event)"'
+        +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
+        +   ' ondragleave="this.classList.remove(\'drag\')"'
+        +   ' ondrop="onSpireObjDrop(\'' + slotId + '\', event)"'
+        +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
+        + '<div class="ga-actions">'
+        +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onSpireObjPick(\'' + slotId + '\', event)"></label>'
+        +   (ov ? '<button class="btn btn-ghost ga-mini" onclick="resetSpireObj(\'' + slotId + '\')">Reset</button>' : '')
+        + '</div>'
+        + '<div class="ga-status ' + (ov ? 'custom' : '') + '" id="sgstatus-' + safe + '">' + (ov ? '● Custom' : 'Default') + '</div>'
+        + '</div>';
+    });
+    html += '</div></div>';
+  });
+
   host.innerHTML = html;
 }
 
@@ -21648,6 +21695,30 @@ const SPIRE_ANIMS = [
   { id:'attack', label:'Attack' },
   { id:'hurt',   label:'Hurt' },
   { id:'death',  label:'Death' }
+];
+// Every deck card gets a single art slot (override key 'card:<id>'), stored in
+// the same spireSprites doc. Mirrors the CARDS map inside science-spire.html.
+const SPIRE_CARDS = [
+  { id:'strike',      name:'Strike',        emoji:'🗡️', rarity:'common' },
+  { id:'defend',      name:'Defend',        emoji:'🛡️', rarity:'common' },
+  { id:'bash',        name:'Bash',          emoji:'🔨', rarity:'common' },
+  { id:'jab',         name:'Quick Jab',     emoji:'🤜', rarity:'common' },
+  { id:'guard',       name:'Iron Guard',    emoji:'🪨', rarity:'common' },
+  { id:'cleave',      name:'Cleave',        emoji:'🪓', rarity:'uncommon' },
+  { id:'pommel',      name:'Pommel Strike', emoji:'⚔️', rarity:'uncommon' },
+  { id:'focus',       name:'Focus',         emoji:'🌀', rarity:'uncommon' },
+  { id:'adrenal',     name:'Adrenaline',    emoji:'⚡', rarity:'uncommon' },
+  { id:'weaken',      name:'Weaken Ray',    emoji:'🔬', rarity:'uncommon' },
+  { id:'poison',      name:'Acid Flask',    emoji:'🧪', rarity:'uncommon' },
+  { id:'fireball',    name:'Fireball',      emoji:'🔥', rarity:'rare' },
+  { id:'shieldwall',  name:'Shield Wall',   emoji:'🏰', rarity:'rare' },
+  { id:'doublestrike',name:'Twin Fang',     emoji:'🦷', rarity:'rare' },
+  { id:'rage',        name:'Berserk',       emoji:'😤', rarity:'rare' },
+  { id:'meteor',      name:'Meteor',        emoji:'☄️', rarity:'epic' },
+  { id:'lifesteal',   name:'Vampiric Bite', emoji:'🩸', rarity:'epic' },
+  { id:'fortress',    name:'Bulwark',       emoji:'🛡️', rarity:'epic' },
+  { id:'apex',        name:'Apex Nova',     emoji:'🌟', rarity:'legendary' },
+  { id:'singularity', name:'Singularity',   emoji:'🕳️', rarity:'legendary' }
 ];
 function _spireOwnerUid(){ return (typeof adminUid !== 'undefined' && adminUid) || (currentUser && currentUser.uid) || null; }
 function _spireDocRef(uid){ return doc(db, 'users', uid, 'settings', 'spireSprites'); }

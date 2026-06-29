@@ -99,6 +99,24 @@ body{background:radial-gradient(900px 500px at 50% -8%,#241c38,#15121f) fixed, v
 .rar-tag{font-size:0.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;}
 .hint{font-size:0.74rem;color:var(--muted);text-align:center;padding:2px 0 6px;}
 @media(max-width:560px){ .card{width:104px;min-height:150px;} .enemy .art,.hero .art{font-size:48px;} }
+/* hub + deck builder (meta layer outside combat) */
+.panel.wide{max-width:880px;}
+.hub-actions{display:flex;flex-direction:column;gap:10px;margin-top:16px;}
+.hub-actions .btn{font-size:1rem;padding:13px 20px;}
+.hub-stat{display:inline-flex;gap:6px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:5px 14px;font-weight:800;}
+.dbk-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 12px;}
+.dbk-grid{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;max-height:62vh;overflow:auto;padding:6px 2px;}
+.cc{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.cc .badge{position:absolute;top:-8px;right:-8px;background:#4a3f8f;border:1px solid #7d6fd0;color:#fff;border-radius:999px;font-size:0.66rem;font-weight:800;padding:1px 7px;z-index:3;}
+.cc .indeck{position:absolute;top:-8px;left:-8px;background:#2f5a3a;border:1px solid #46b06a;color:#dfffe9;border-radius:999px;font-size:0.66rem;font-weight:800;padding:1px 7px;z-index:3;}
+.cc .ccbtns{display:flex;gap:6px;}
+.cc .ccbtn{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-weight:800;font-size:1.05rem;cursor:pointer;line-height:1;}
+.cc .ccbtn:disabled{opacity:.35;cursor:not-allowed;}
+.cc.locked .card{filter:grayscale(.7);opacity:.5;}
+.card .cart img{height:38px;width:auto;max-width:64px;object-fit:contain;image-rendering:pixelated;display:block;margin:0 auto;}
+.seg{display:flex;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px;}
+.seg button{border:none;background:transparent;color:var(--muted);font-weight:700;font-size:0.82rem;padding:6px 12px;border-radius:7px;cursor:pointer;font-family:inherit;}
+.seg button.on{background:#4a3f8f;color:#fff;}
 </style>
 </head>
 <body>
@@ -134,9 +152,45 @@ body{background:radial-gradient(900px 500px at 50% -8%,#241c38,#15121f) fixed, v
 <div class="overlay show" id="introOverlay">
   <div class="panel center">
     <h2>🗼 Science Spire</h2>
-    <p>Climb the spire one floor at a time. Win turn-based card battles, answer a science question before each fight for a bonus, collect gold, and open <b>booster packs</b> for rare, powerful cards to forge a deadly deck.</p>
+    <p>Build your own deck, then climb the spire one floor at a time. Win turn-based card battles, answer a science question before each fight for a bonus, and collect gold. Spend gold on <b>booster packs</b> to collect rare, powerful cards — then add them to your deck before your next climb.</p>
     <p style="font-size:0.82rem;">Play cards using <b>energy</b>. <b>Attacks</b> hurt foes, <b>skills</b> give block & utility, <b>powers</b> are permanent buffs. Block resets each turn. Watch the enemy <b>intent</b> above their head and plan ahead.</p>
-    <button class="btn primary" id="introStartBtn" type="button" style="font-size:1rem;padding:12px 28px;">⚔️ Begin the climb</button>
+    <button class="btn primary" id="introStartBtn" type="button" style="font-size:1rem;padding:12px 28px;">Enter the spire →</button>
+  </div>
+</div>
+
+<!-- Hub (home base — deck building + packs live here, OUTSIDE the climb) -->
+<div class="overlay" id="hubOverlay">
+  <div class="panel center">
+    <h2>🏕️ Base Camp</h2>
+    <p>Forge your deck and open packs here between climbs. Your collection, deck and gold are saved to your account.</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:6px 0;">
+      <span class="hub-stat gold">🪙 <span id="hubGold">0</span></span>
+      <span class="hub-stat">🃏 Deck <span id="hubDeck">0</span></span>
+      <span class="hub-stat">📚 Collection <span id="hubColl">0</span></span>
+    </div>
+    <div class="hub-actions">
+      <button class="btn primary" id="hubClimb" type="button">⚔️ Start the climb</button>
+      <button class="btn" id="hubDeckBuild" type="button">🃏 Build your deck</button>
+      <button class="btn gold" id="hubPacks" type="button">🎁 Open booster packs</button>
+    </div>
+  </div>
+</div>
+
+<!-- Deck builder -->
+<div class="overlay" id="builderOverlay">
+  <div class="panel wide">
+    <h2 class="center">🃏 Build your deck</h2>
+    <div class="dbk-bar">
+      <span class="hub-stat">In deck: <span id="bkDeckCount">0</span></span>
+      <span style="color:var(--muted);font-size:0.8rem;">Minimum <span id="bkMin">10</span> cards. Click + to add an owned card, − to remove.</span>
+      <div class="spacer" style="flex:1;"></div>
+      <div class="seg" id="bkSeg">
+        <button data-f="all" class="on" type="button">All</button>
+        <button data-f="indeck" type="button">In deck</button>
+      </div>
+    </div>
+    <div class="dbk-grid" id="bkGrid"></div>
+    <div class="center" style="margin-top:14px;"><button class="btn primary" id="bkDone" type="button">Save &amp; back</button></div>
   </div>
 </div>
 
@@ -151,24 +205,17 @@ body{background:radial-gradient(900px 500px at 50% -8%,#241c38,#15121f) fixed, v
   </div>
 </div>
 
-<!-- Reward -->
-<div class="overlay" id="rewardOverlay">
-  <div class="panel center">
-    <h2>Victory! 🎉</h2>
-    <p id="rewardGold">+0 🪙</p>
-    <p>Add one card to your deck:</p>
-    <div class="reward-cards" id="rewardCards"></div>
-    <button class="btn" id="rewardSkip" type="button" style="margin-top:14px;">Skip</button>
-  </div>
-</div>
-
-<!-- Pack / treasure -->
+<!-- Booster packs (bought with gold, in the hub — all revealed cards are kept) -->
 <div class="overlay" id="packOverlay">
   <div class="panel center">
-    <h2 id="packTitle">🎁 Booster Pack</h2>
-    <p id="packSub">Open a pack for a chance at rare, powerful cards.</p>
+    <h2 id="packTitle">🎁 Booster Packs</h2>
+    <p id="packSub">Each pack contains <b>3 cards</b> — and you keep them all. Rarer packs have a better shot at powerful cards.</p>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:6px 0;">
+      <span class="hub-stat gold">🪙 <span id="packGold">0</span></span>
+    </div>
     <div class="pack-cards" id="packCards"></div>
     <div class="center" style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;" id="packButtons"></div>
+    <div class="center" style="margin-top:10px;"><button class="btn" id="packClose" type="button">← Back to camp</button></div>
   </div>
 </div>
 
@@ -208,7 +255,7 @@ body{background:radial-gradient(900px 500px at 50% -8%,#241c38,#15121f) fixed, v
     <h2 id="overTitle">Defeated</h2>
     <p id="overMsg"></p>
     <p style="font-size:1.1rem;font-weight:800;color:var(--gold);" id="overScore"></p>
-    <button class="btn primary" id="againBtn" type="button" style="font-size:1rem;padding:12px 28px;">↻ Climb again</button>
+    <button class="btn primary" id="againBtn" type="button" style="font-size:1rem;padding:12px 28px;">🏕️ Back to camp</button>
   </div>
 </div>
 
@@ -236,6 +283,12 @@ function ovrUrl(objId, anim){
 }
 function artHtml(objId, emoji, anim){
   var u = ovrUrl(objId, anim || 'idle');
+  if (u) return '<img src="'+u+'" alt="" onerror="this.style.display=\'none\'">';
+  return emoji;
+}
+// Card faces use a single override image keyed 'card:<id>' (no animation states).
+function cardArtHtml(id, emoji){
+  var u = OVR && OVR['card:'+id];
   if (u) return '<img src="'+u+'" alt="" onerror="this.style.display=\'none\'">';
   return emoji;
 }
@@ -267,8 +320,47 @@ var CARDS = {
 };
 var RARITY = { common:'#cfd6e2', uncommon:'#7be0a2', rare:'#6fb3ff', epic:'#b79ae0', legendary:'#ffce5a' };
 var RARITY_RANK = { common:1, uncommon:2, rare:3, epic:4, legendary:5 };
-// cards that can appear as rewards / in packs (not the basic strike/defend)
+// cards that can appear in packs (not the basic strike/defend starters)
 var REWARD_POOL = ['bash','jab','guard','cleave','pommel','focus','adrenal','weaken','poison','fireball','shieldwall','doublestrike','rage','meteor','lifesteal','fortress','apex','singularity'];
+
+/* ============================ PERSISTENT PROFILE ============================
+   The collection (cards owned), the chosen deck, and banked gold live OUTSIDE
+   any single climb. In the app they persist to the student's account (via the
+   parent through postMessage); standalone they fall back to localStorage. */
+var DECK_MIN = 10;
+var PACK_COST = 60;
+var profile = null;          // { gold, collection:{id:count}, deck:[id,...] }
+var _profileLoaded = false;
+function starterProfile(){
+  return {
+    gold: 0,
+    collection: { strike:5, defend:4, bash:1, jab:2, guard:1, cleave:1, focus:1 },
+    deck: ['strike','strike','strike','strike','strike','defend','defend','defend','defend','bash']
+  };
+}
+function normalizeProfile(p){
+  p = p && typeof p === 'object' ? p : {};
+  var sp = starterProfile();
+  if (typeof p.gold !== 'number' || p.gold < 0) p.gold = (p.gold>0?p.gold:0) || 0;
+  if (!p.collection || typeof p.collection !== 'object') p.collection = sp.collection;
+  if (!Array.isArray(p.deck) || !p.deck.length) p.deck = sp.deck;
+  // drop unknown cards; clamp deck copies to owned counts
+  Object.keys(p.collection).forEach(function(id){ if(!CARDS[id]) delete p.collection[id]; });
+  p.deck = p.deck.filter(function(id){ return CARDS[id]; });
+  return p;
+}
+function deckCount(id){ return profile.deck.filter(function(x){ return x===id; }).length; }
+function ownedCount(id){ return profile.collection[id] || 0; }
+function grantCard(id){ if(!CARDS[id]) return; profile.collection[id] = (profile.collection[id]||0) + 1; }
+function saveProfile(){
+  if (!profile) return;
+  if (embedded()){ try{ window.parent.postMessage({ type:'SPIRE_SAVE_PROFILE', profile: profile }, '*'); }catch(e){} }
+  else { try{ localStorage.setItem('spireProfile', JSON.stringify(profile)); }catch(e){} }
+}
+function loadLocalProfile(){
+  try{ var s=localStorage.getItem('spireProfile'); if(s) return JSON.parse(s); }catch(e){}
+  return null;
+}
 
 /* ============================ ENEMIES ============================ */
 // moves: {type:'attack',value} | {type:'block',value} | {type:'buff'} | {type:'debuff'}
@@ -292,8 +384,8 @@ function newRun(){
     floor: 1,
     maxFloor: 0,
     player: { hp:60, maxHp:60, block:0, str:0, regenBlock:0, energy:3, maxEnergy:3 },
-    gold: 0,
-    deck: [],
+    gold: 0,                     // gold earned THIS climb; banked to profile at the end
+    deck: (profile && profile.deck.length) ? profile.deck.slice() : ['strike','strike','strike','strike','strike','defend','defend','defend','defend','bash'],
     draw:[], hand:[], discard:[],
     enemies: [],
     turn:'player',
@@ -301,18 +393,16 @@ function newRun(){
     node: 0,
     kills:0,
     questionBonus:0,
+    banked:false,
     state:'map'
   };
-  // starter deck
-  for (var i=0;i<5;i++) G.deck.push('strike');
-  for (var j=0;j<4;j++) G.deck.push('defend');
-  G.deck.push('bash');
 }
 
-// A linear ascent of typed rooms ending in a boss.
+// A linear ascent of typed rooms ending in a boss. No pack/treasure-card rooms —
+// deck-building happens in the hub; "cache" rooms simply grant extra gold.
 function buildMap(){
   var rooms = [];
-  var pattern = ['combat','combat','treasure','combat','rest','elite','combat','treasure','combat','rest','elite','boss'];
+  var pattern = ['combat','combat','cache','combat','rest','elite','combat','cache','combat','rest','elite','boss'];
   pattern.forEach(function(t,i){ rooms.push({ type:t, done:false }); });
   return rooms;
 }
@@ -322,7 +412,10 @@ function startNode(){
   var room = G.map[G.node];
   if (!room){ victory(); return; }
   if (room.type === 'rest'){ G.state='rest'; show('restOverlay'); return; }
-  if (room.type === 'treasure'){ G.state='pack'; openTreasurePack(); return; }
+  if (room.type === 'cache'){
+    var g = randint(20,35); G.gold += g; room.done=true;
+    toast('💰 Gold cache: +'+g+'🪙'); updateHud(); nextNode(); return;
+  }
   // combat / elite / boss -> ask a question first, then fight
   G.pendingRoom = room;
   askQuestion();
@@ -471,20 +564,11 @@ function winCombat(){
   var gold = randint(12,22) + (room.type==='elite'?20:0);
   G.gold += gold;
   G.maxFloor = Math.max(G.maxFloor, G.floor);
-  // reward card choice
-  var picks = [];
-  var pool = REWARD_POOL.slice();
-  while (picks.length<3 && pool.length){ picks.push(pool.splice(randint(0,pool.length-1),1)[0]); }
-  $('rewardGold').textContent = '+'+gold+' 🪙';
-  var wrap = $('rewardCards'); wrap.innerHTML='';
-  picks.forEach(function(id){
-    var el = cardEl(id, true);
-    el.onclick = function(){ G.deck.push(id); toast('Added '+CARDS[id].name); afterReward(); };
-    wrap.appendChild(el);
-  });
-  G.state='reward'; show('rewardOverlay');
+  toast('Victory! +'+gold+'🪙');
+  updateHud();
+  // brief beat so the toast/animation reads, then advance
+  setTimeout(nextNode, 700);
 }
-function afterReward(){ hide('rewardOverlay'); nextNode(); }
 function nextNode(){
   G.node++; G.floor++;
   updateHud();
@@ -532,7 +616,57 @@ function answerQuestion(idx, btn){
   updateHud();
 }
 
-/* ============================ PACKS ============================ */
+/* ============================ HUB (deck building + packs, outside the climb) ============================ */
+function openHub(){
+  hide('introOverlay'); hide('overOverlay'); hide('builderOverlay'); hide('packOverlay');
+  G = null;
+  renderHub();
+  show('hubOverlay');
+}
+function renderHub(){
+  if (!profile) return;
+  $('hubGold').textContent = profile.gold;
+  $('hubDeck').textContent = profile.deck.length;
+  var coll = 0; Object.keys(profile.collection).forEach(function(id){ coll += profile.collection[id]; });
+  $('hubColl').textContent = coll;
+}
+
+/* ---- Deck builder: add/remove owned cards to/from the deck ---- */
+var _bkFilter = 'all';
+function openBuilder(){ hide('hubOverlay'); _bkFilter='all'; syncSeg(); renderBuilder(); show('builderOverlay'); }
+function syncSeg(){ Array.prototype.forEach.call($('bkSeg').children, function(b){ b.classList.toggle('on', b.dataset.f===_bkFilter); }); }
+function renderBuilder(){
+  $('bkMin').textContent = DECK_MIN;
+  $('bkDeckCount').textContent = profile.deck.length;
+  var grid=$('bkGrid'); grid.innerHTML='';
+  var ids = Object.keys(profile.collection).filter(function(id){ return CARDS[id] && ownedCount(id)>0; });
+  if (_bkFilter==='indeck') ids = ids.filter(function(id){ return deckCount(id)>0; });
+  ids.sort(function(a,b){ return (RARITY_RANK[CARDS[b].rarity]||0)-(RARITY_RANK[CARDS[a].rarity]||0) || CARDS[a].name.localeCompare(CARDS[b].name); });
+  if (!ids.length){ grid.innerHTML='<p style="color:var(--muted)">No cards here yet — open some packs!</p>'; return; }
+  ids.forEach(function(id){
+    var owned=ownedCount(id), inDeck=deckCount(id);
+    var cc=document.createElement('div'); cc.className='cc';
+    var card=cardEl(id,false); card.style.cursor='default';
+    cc.appendChild(card);
+    var badge=document.createElement('span'); badge.className='badge'; badge.textContent='x'+owned; cc.appendChild(badge);
+    if (inDeck>0){ var ind=document.createElement('span'); ind.className='indeck'; ind.textContent='deck '+inDeck; cc.appendChild(ind); }
+    var btns=document.createElement('div'); btns.className='ccbtns';
+    var minus=document.createElement('button'); minus.className='ccbtn'; minus.textContent='−'; minus.disabled=inDeck<=0;
+    minus.onclick=function(){ removeFromDeck(id); };
+    var plus=document.createElement('button'); plus.className='ccbtn'; plus.textContent='+'; plus.disabled=inDeck>=owned;
+    plus.onclick=function(){ addToDeck(id); };
+    btns.appendChild(minus); btns.appendChild(plus); cc.appendChild(btns);
+    grid.appendChild(cc);
+  });
+}
+function addToDeck(id){ if(deckCount(id)<ownedCount(id)){ profile.deck.push(id); renderBuilder(); } }
+function removeFromDeck(id){ var i=profile.deck.lastIndexOf(id); if(i>=0){ profile.deck.splice(i,1); renderBuilder(); } }
+function closeBuilder(){
+  if (profile.deck.length < DECK_MIN){ toast('Deck needs at least '+DECK_MIN+' cards'); return; }
+  saveProfile(); hide('builderOverlay'); renderHub(); show('hubOverlay');
+}
+
+/* ---- Booster packs: buy with gold, keep all revealed cards ---- */
 function weightedCard(){
   // rarity weights — rares are rare; powerful cards feel special.
   var r = Math.random()*100;
@@ -541,41 +675,36 @@ function weightedCard(){
   if (!pool.length) pool = REWARD_POOL.filter(function(id){ return CARDS[id].rarity==='uncommon'; });
   return choice(pool);
 }
-function openTreasurePack(){
-  $('packTitle').textContent = '🎁 Treasure Pack (free)';
-  $('packSub').textContent = 'You found a booster pack! Open it and add a card to your deck.';
-  renderPackButtons([{ label:'✨ Open pack', cost:0 }]);
+function openPacks(){ hide('hubOverlay'); renderPackShop(); show('packOverlay'); }
+function renderPackShop(){
+  $('packGold').textContent = profile.gold;
+  $('packSub').innerHTML = 'Each pack contains <b>3 cards</b> — and you keep them all. Rarer packs have a better shot at powerful cards.';
   $('packCards').innerHTML='';
-  G.state='pack'; show('packOverlay');
-}
-function openShopPack(){ /* shop packs cost gold; reachable from map treasure rooms too */ }
-function renderPackButtons(opts){
   var box=$('packButtons'); box.innerHTML='';
-  opts.forEach(function(o){
-    var b=document.createElement('button'); b.className='btn gold';
-    b.textContent = o.cost>0 ? (o.label+' — '+o.cost+'🪙') : o.label;
-    b.disabled = o.cost>0 && G.gold<o.cost;
-    b.onclick=function(){ if(o.cost>0) G.gold-=o.cost; doOpenPack(); };
-    box.appendChild(b);
-  });
-  var skip=document.createElement('button'); skip.className='btn'; skip.textContent='Move on →';
-  skip.onclick=function(){ hide('packOverlay'); nextNode(); };
-  box.appendChild(skip);
+  var b=document.createElement('button'); b.className='btn gold';
+  b.textContent='✨ Buy & open a pack — '+PACK_COST+'🪙';
+  b.disabled = profile.gold < PACK_COST;
+  b.onclick=buyPack;
+  box.appendChild(b);
 }
-function doOpenPack(){
-  // reveal 3 cards; you pick ONE to add.
+function buyPack(){
+  if (profile.gold < PACK_COST){ toast('Not enough gold'); return; }
+  profile.gold -= PACK_COST;
+  // three cards; nudge toward at least one rare+ feeling special
   var ids=[]; for(var i=0;i<3;i++) ids.push(weightedCard());
-  // guarantee at least one rare+ feels good occasionally
   if (!ids.some(function(id){ return RARITY_RANK[CARDS[id].rarity]>=3; }) && Math.random()<0.5){
     ids[randint(0,2)] = choice(REWARD_POOL.filter(function(id){ return RARITY_RANK[CARDS[id].rarity]>=3; }));
   }
-  var wrap=$('packCards'); wrap.innerHTML=''; $('packSub').textContent='Pick ONE card to add to your deck:';
-  ids.forEach(function(id){
-    var el=cardEl(id,true); el.style.animation='floatup .01s';
-    el.onclick=function(){ G.deck.push(id); toast('Added '+CARDS[id].name+'!'); hide('packOverlay'); nextNode(); };
-    wrap.appendChild(el);
-  });
-  $('packButtons').innerHTML='';
+  ids.forEach(grantCard);
+  saveProfile();
+  var best = ids.slice().sort(function(a,b){ return RARITY_RANK[CARDS[b].rarity]-RARITY_RANK[CARDS[a].rarity]; })[0];
+  $('packSub').innerHTML = 'You got <b>3</b> new cards! '+(RARITY_RANK[CARDS[best].rarity]>=3?'✨ Including a '+CARDS[best].rarity+'!':'') + ' They\'re now in your collection.';
+  var wrap=$('packCards'); wrap.innerHTML='';
+  ids.forEach(function(id){ var el=cardEl(id,true); el.style.animation='floatup .01s'; wrap.appendChild(el); });
+  $('packGold').textContent = profile.gold;
+  var box=$('packButtons'); box.innerHTML='';
+  var again=document.createElement('button'); again.className='btn gold'; again.textContent='Open another — '+PACK_COST+'🪙'; again.disabled=profile.gold<PACK_COST; again.onclick=buyPack; box.appendChild(again);
+  var deck=document.createElement('button'); deck.className='btn'; deck.textContent='🃏 Build deck'; deck.onclick=function(){ hide('packOverlay'); openBuilder(); }; box.appendChild(deck);
 }
 
 /* ============================ RENDER ============================ */
@@ -666,7 +795,7 @@ function cardEl(id, big){
   el.className='card '+c.type;
   el.innerHTML =
     '<span class="cost">'+c.cost+'</span>'+
-    '<div class="cart">'+c.art+'</div>'+
+    '<div class="cart">'+cardArtHtml(id, c.art)+'</div>'+
     '<div class="cname">'+c.name+'</div>'+
     '<div class="crar" style="background:'+RARITY[c.rarity]+'"></div>'+
     '<div class="cdesc">'+c.desc+'</div>'+
@@ -688,11 +817,18 @@ function escapeText(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replac
 
 /* ============================ END STATES ============================ */
 function score(){ return G.maxFloor*120 + G.kills*15 + G.gold; }
+// Bank the gold earned this climb into the persistent profile (once).
+function bankRunGold(){
+  if (!G || G.banked) return;
+  G.banked = true;
+  if (profile){ profile.gold += (G.gold||0); saveProfile(); }
+}
 function gameOver(){
   if (G.state==='over') return;
   G.state='over';
+  bankRunGold();
   $('overTitle').textContent='Defeated on Floor '+G.floor;
-  $('overMsg').textContent='The spire claims another climber. You defeated '+G.kills+' foes.';
+  $('overMsg').textContent='The spire claims another climber. You defeated '+G.kills+' foes. You banked '+(G.gold||0)+'🪙 — spend it on packs back at camp.';
   $('overScore').textContent='Score: '+score();
   reportScore();
   show('overOverlay');
@@ -700,8 +836,9 @@ function gameOver(){
 function victory(){
   if (G.state==='over') return;
   G.state='over';
+  bankRunGold();
   $('overTitle').textContent='🏆 Spire Conquered!';
-  $('overMsg').textContent='You reached the summit and defeated the Spire Titan! '+G.kills+' foes vanquished.';
+  $('overMsg').textContent='You reached the summit and defeated the Spire Titan! '+G.kills+' foes vanquished. You banked '+(G.gold||0)+'🪙 for packs.';
   $('overScore').textContent='Score: '+(score()+500);
   reportScore(500);
   show('overOverlay');
@@ -720,7 +857,7 @@ function showDeck(){
 }
 function showMap(){
   var w=$('mapList'); w.innerHTML='';
-  var icon={combat:'⚔️ Battle',elite:'💀 Elite',rest:'🔥 Campfire',treasure:'🎁 Treasure',boss:'👹 Boss'};
+  var icon={combat:'⚔️ Battle',elite:'💀 Elite',rest:'🔥 Campfire',cache:'💰 Gold cache',boss:'👹 Boss'};
   G.map.forEach(function(r,i){
     var d=document.createElement('div'); d.className='map-node'+(r.done?' done':'')+(i===G.node?' cur':'');
     d.textContent=(i+1)+'. '+(icon[r.type]||r.type)+(i===G.node?'  ← you are here':'');
@@ -759,9 +896,15 @@ function _noteGamePlayStart(){
 function _showPlayLimit(){ toast("That's your 2 Science Spire climbs for today — come back tomorrow!"); }
 
 /* ============================ MESSAGING ============================ */
-var _bankTries=0, _assetTries=0;
+var _bankTries=0, _assetTries=0, _profileTries=0;
 function requestBank(){ if(usingBank) return; if(!embedded()) return; try{ window.parent.postMessage({type:'SD_REQUEST_QUESTIONS'},'*'); }catch(e){} _bankTries++; if(_bankTries<8&&!usingBank) setTimeout(requestBank,1200); }
 function requestAssets(){ if(!embedded()) return; try{ window.parent.postMessage({type:'SPIRE_REQUEST_ASSETS'},'*'); }catch(e){} _assetTries++; if(_assetTries<5) setTimeout(requestAssets,1500); }
+function requestProfile(){ if(_profileLoaded) return; if(!embedded()) return; try{ window.parent.postMessage({type:'SPIRE_REQUEST_PROFILE'},'*'); }catch(e){} _profileTries++; if(_profileTries<6&&!_profileLoaded) setTimeout(requestProfile,1200); }
+function applyProfile(p){
+  profile = normalizeProfile(p);
+  _profileLoaded = true;
+  if (document.getElementById('hubOverlay').classList.contains('show')) renderHub();
+}
 window.addEventListener('message', function(ev){
   var d=ev&&ev.data; if(!d) return;
   if (d.type==='SD_QUESTIONS'){
@@ -771,6 +914,8 @@ window.addEventListener('message', function(ev){
     if (d.playsLeft && typeof d.playsLeft.spire==='number') _gPlaysLeft=d.playsLeft.spire;
   } else if (d.type==='spireAssets'){
     _assetTries=99; _ovrSet(d.overrides);
+  } else if (d.type==='spireProfile'){
+    _profileTries=99; applyProfile(d.profile);
   }
 });
 // stamp question-shown time when the overlay opens (for anti-rush counting)
@@ -789,17 +934,37 @@ function maybeStandaloneNotice(){
 }
 
 /* ============================ WIRE UI ============================ */
-function startRun(){ hide('introOverlay'); hide('overOverlay'); newRun(); updateHud(); startNode(); }
-$('introStartBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } startRun(); _noteGamePlayStart(); };
-$('againBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } startRun(); _noteGamePlayStart(); };
+function startRun(){
+  if(!_canPlayGame()){ _showPlayLimit(); return; }
+  if(!profile || profile.deck.length < DECK_MIN){ toast('Build a deck of at least '+DECK_MIN+' cards first'); openBuilder(); return; }
+  hide('hubOverlay'); hide('introOverlay'); hide('overOverlay');
+  newRun(); updateHud(); startNode();
+  _noteGamePlayStart();
+}
+// Intro -> hub (deck building / packs live in the hub, outside any climb)
+$('introStartBtn').onclick=openHub;
+// Hub actions
+$('hubClimb').onclick=startRun;
+$('hubDeckBuild').onclick=openBuilder;
+$('hubPacks').onclick=openPacks;
+// Deck builder
+$('bkDone').onclick=closeBuilder;
+Array.prototype.forEach.call($('bkSeg').children, function(b){ b.onclick=function(){ _bkFilter=b.dataset.f; syncSeg(); renderBuilder(); }; });
+// Packs
+$('packClose').onclick=function(){ hide('packOverlay'); renderHub(); show('hubOverlay'); };
+// After a climb ends -> back to camp (banked gold + saved profile already done)
+$('againBtn').onclick=openHub;
+// Combat controls
 $('endTurnBtn').onclick=endTurn;
 $('mapBtn').onclick=showMap; $('mapClose').onclick=function(){ hide('mapOverlay'); };
 $('deckBtn').onclick=showDeck; $('deckClose').onclick=function(){ hide('deckOverlay'); };
-$('restartBtn').onclick=function(){ if(G && confirm('Abandon this climb?')){ hide('overOverlay'); show('introOverlay'); G=null; } };
+$('restartBtn').onclick=function(){ if(G && confirm('Abandon this climb? Gold earned so far is kept.')){ bankRunGold(); openHub(); } };
 $('restHeal').onclick=function(){ G.player.hp=Math.min(G.player.maxHp, G.player.hp+Math.round(G.player.maxHp*0.30)); G.map[G.node].done=true; hide('restOverlay'); toast('Rested'); nextNode(); };
 $('restLeave').onclick=function(){ G.map[G.node].done=true; hide('restOverlay'); nextNode(); };
-$('rewardSkip').onclick=function(){ afterReward(); };
 
+// Load the persistent profile (account in-app, localStorage standalone)
+if (embedded()) { requestProfile(); }
+else { profile = normalizeProfile(loadLocalProfile()); _profileLoaded = true; }
 maybeStandaloneNotice();
 requestBank();
 requestAssets();
