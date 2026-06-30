@@ -2565,7 +2565,7 @@ function _noteGamePlayStart(){
   if (window.parent && window.parent !== window){ try { window.parent.postMessage({ type:'SD_PLAY_START', mode:'defenders' }, '*'); } catch(e){} }
   if (_gPlaysLeft != null && _gPlaysLeft > 0) _gPlaysLeft--;
 }
-function _showPlayLimit(){ toast("That's your 2 Science Defenders plays for today — come back tomorrow!", 'bad'); }
+function _showPlayLimit(){ toast("Out of game credits — answer 5 questions in any practice mode to earn one, or come back tomorrow!", 'bad'); }
 window.addEventListener('message', function(ev){
   var d = ev && ev.data;
   if(!d || d.type !== 'SD_PLAYS_LEFT') return;

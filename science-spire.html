@@ -756,7 +756,7 @@ function _noteGamePlayStart(){
   if (embedded()){ try{ window.parent.postMessage({type:'SD_PLAY_START', mode:'spire'},'*'); }catch(e){} }
   if (_gPlaysLeft!=null && _gPlaysLeft>0) _gPlaysLeft--;
 }
-function _showPlayLimit(){ toast("That's your 2 Science Spire climbs for today — come back tomorrow!"); }
+function _showPlayLimit(){ toast("Out of game credits — answer 5 questions in any practice mode to earn one, or come back tomorrow!"); }
 
 /* ============================ MESSAGING ============================ */
 var _bankTries=0, _assetTries=0;
