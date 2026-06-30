@@ -6751,7 +6751,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.40.0';
+const APP_VERSION = 'v1.40.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -14512,6 +14512,23 @@ let qpLevel = 'P6';     // selected student level
 let qpAnswered = 0;     // questions answered so far
 let qpSessionResults = []; // per-question results for the end-of-session AI feedback
 
+// Cross-session "recently served" memory so students aren't shown the same
+// questions first every time they start a new Quick Practice session. The queue
+// already covers the whole filtered pool without repeats WITHIN a session, but a
+// fresh session used to reshuffle from scratch — so a student who only answers a
+// few each visit kept seeing the same opening questions. We remember served IDs
+// per student and front-load the ones they haven't seen recently.
+const QP_SEEN_CAP = 600; // rolling window of remembered question IDs
+function qpSeenKey() { return 'sciQuestQpSeen:' + (currentUser ? currentUser.uid : 'anon'); }
+function qpLoadSeen() { try { const a = JSON.parse(localStorage.getItem(qpSeenKey()) || '[]'); return Array.isArray(a) ? a.map(String) : []; } catch (_) { return []; } }
+function qpSaveSeen(arr) { try { localStorage.setItem(qpSeenKey(), JSON.stringify(arr.slice(-QP_SEEN_CAP))); } catch (_) {} }
+function qpMarkServed(qid) {
+  qid = String(qid || ''); if (!qid) return;
+  const a = qpLoadSeen().filter(x => x !== qid); // move to most-recent
+  a.push(qid);
+  qpSaveSeen(a);
+}
+
 // Reset the practice session and show the "ready" state. Reused whenever the
 // level, type or topic filter changes.
 function resetQpSession() {
@@ -14738,17 +14755,37 @@ function buildQpQueue(level) {
     return arr;
   };
 
+  // Remember what this student has already been served. If they've now seen the
+  // whole filtered pool, start a fresh cycle (clear the memory) so the order
+  // varies — but keep the very last question out of the front so it can't repeat
+  // back-to-back across the session boundary.
+  const seen = new Set(qpLoadSeen());
+  const lastServed = qpLoadSeen().slice(-1)[0] || null;
+  const poolIds = withBlanks.map(q => String(q.id));
+  const allSeen = poolIds.length > 0 && poolIds.every(id => seen.has(id));
+  if (allSeen) seen.clear();
+  // Shuffle a bucket, then float questions the student hasn't seen recently to
+  // the front so fresh content comes first every session.
+  const prioritize = arr => {
+    const fresh = [], stale = [];
+    shuffle([...arr]).forEach(q => {
+      const id = String(q.id);
+      ((!seen.has(id) && !(allSeen && id === lastServed)) ? fresh : stale).push(q);
+    });
+    return fresh.concat(stale);
+  };
+
   // Build queue: student's level first, then descending (level-1, level-2, ...)
   const queue = [];
   // First: questions at student's own level
-  if (byLevel[levelNum]) queue.push(...shuffle([...byLevel[levelNum]]));
+  if (byLevel[levelNum]) queue.push(...prioritize(byLevel[levelNum]));
   // Then: each lower level in descending order
   for (let l = levelNum - 1; l >= 3; l--) {
-    if (byLevel[l]) queue.push(...shuffle([...byLevel[l]]));
+    if (byLevel[l]) queue.push(...prioritize(byLevel[l]));
   }
   // Finally: any levels above the student (less likely, but include them)
   for (let l = levelNum + 1; l <= 6; l++) {
-    if (byLevel[l]) queue.push(...shuffle([...byLevel[l]]));
+    if (byLevel[l]) queue.push(...prioritize(byLevel[l]));
   }
   return queue;
 }
@@ -14790,7 +14827,9 @@ function loadNextQpQuestion() {
     updateQpProgress();
     return;
   }
-  renderQpQuestion(qpQueue[qpIndex]);
+  const q = qpQueue[qpIndex];
+  if (q && q.id) qpMarkServed(q.id); // remember it so next session shows fresh ones first
+  renderQpQuestion(q);
   updateQpProgress();
 }
 
