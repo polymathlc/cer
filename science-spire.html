@@ -179,6 +179,19 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
   transform:translate(-50%,-50%);transition:transform .5s ease-out,opacity .5s ease-out;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5));}
 .hero.lunge{animation:heroLunge .32s ease-out;}
 @keyframes heroLunge{0%{transform:translateX(0)}38%{transform:translate(16px,-5px)}100%{transform:translateX(0)}}
+/* ===== hero picker (intro) ===== */
+.hero-pick{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:6px 0 12px;}
+.hero-card{width:148px;border:1px solid var(--line);border-radius:12px;padding:12px 10px 14px;cursor:pointer;
+  background:linear-gradient(180deg,rgba(43,36,64,.6),rgba(33,27,48,.7));text-align:center;transition:transform .12s,box-shadow .12s,border-color .12s;}
+.hero-card:hover{transform:translateY(-3px);}
+.hero-card.sel{border-color:var(--gold);box-shadow:0 0 0 2px rgba(255,215,106,.35),0 6px 16px rgba(0,0,0,.4);}
+.hero-card .hp-art{height:96px;display:flex;align-items:flex-end;justify-content:center;}
+.hero-card .hp-art svg.spr{width:84px;height:84px;}
+.hero-card .hp-role{font-family:'Cinzel',serif;font-weight:700;font-size:0.66rem;letter-spacing:.14em;color:var(--gold);text-transform:uppercase;}
+.hero-card .hp-title{font-weight:800;font-size:1.02rem;margin:1px 0 3px;}
+.hero-card .hp-hp{font-size:0.74rem;color:var(--hp);font-weight:800;}
+.hero-card .hp-sig{font-size:0.72rem;color:var(--muted);line-height:1.3;margin-top:4px;min-height:32px;}
+.hero-card .hp-flavor{font-size:0.7rem;font-style:italic;color:#8f86a8;margin-top:5px;line-height:1.3;}
 @media(max-width:560px){ .card{width:112px;min-height:168px;} .card .cframe{height:60px;} .card .cdesc{font-size:0.64rem;} .enemy .art,.hero .art{font-size:48px;}
   .log-panel{width:150px;font-size:0.64rem;max-height:40%;} }
 </style>
@@ -223,7 +236,9 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
     <p>Climb the spire one floor at a time. Win turn-based card battles, answer a science question before each fight for a bonus, collect gold, and open <b>booster packs</b> for rare, powerful cards to forge a deadly deck.</p>
     <p style="font-size:0.82rem;">Play cards using <b>energy</b>. <b>Attacks</b> hurt foes, <b>skills</b> give block & utility, <b>powers</b> are permanent buffs. Block resets each turn. Watch the enemy <b>intent</b> above their head and plan ahead.</p>
     <p style="font-size:0.82rem;">Buy <b>Spell Packs</b> in the app with points you earn from questions to <b>permanently collect cards</b> and build your own starting deck — your climb begins with whatever deck you forged.</p>
-    <button class="btn primary" id="introStartBtn" type="button" style="font-size:1rem;padding:12px 28px;">⚔️ Begin the climb</button>
+    <h3 style="margin:14px 0 6px;font-size:0.95rem;letter-spacing:.03em;">Choose your hero</h3>
+    <div class="hero-pick" id="heroPick"></div>
+    <button class="btn primary" id="introStartBtn" type="button" style="font-size:1rem;padding:12px 28px;margin-top:6px;">⚔️ Begin the climb</button>
   </div>
 </div>
 
@@ -327,6 +342,10 @@ function ovrUrl(objId, anim){
 function artHtml(objId, emoji, anim){
   var u = ovrUrl(objId, anim || 'idle');
   if (u) return '<img src="'+u+'" alt="" onerror="this.style.display=\'none\'">';
+  // Player hero: animated procedural sprite for the chosen class.
+  if (objId==='player' && G && G.heroKind && HEROES[G.heroKind]){
+    var h = HEROES[G.heroKind]; var hs = spriteSvg(h.kind, h.palette, anim); if (hs) return hs;
+  }
   // Animated procedural sprite for any enemy kind in the bestiary.
   var d = (typeof ENEMIES!=='undefined') ? ENEMIES[objId] : null;
   if (d && d.kind){ var svg = spriteSvg(d.kind, d.palette, anim); if (svg) return svg; }
@@ -448,8 +467,51 @@ var SPRITES = {
     '<ellipse cx="50" cy="66" rx="10" ry="12" fill="'+c+'" opacity=".75"/>'+
     '<circle cx="50" cy="36" r="16" fill="'+a+'"/>'+
     '<path d="M33 30 L33 17 L42 26 L50 13 L58 26 L67 17 L67 30 Z" fill="'+c+'"/>'+
-    '<circle cx="44" cy="38" r="3" fill="'+b+'"/><circle cx="56" cy="38" r="3" fill="'+b+'"/>'; }
+    '<circle cx="44" cy="38" r="3" fill="'+b+'"/><circle cx="56" cy="38" r="3" fill="'+b+'"/>'; },
+  // ---- player heroes ----
+  warrior: function(a,b,c){ return ''+
+    '<rect x="40" y="74" width="8" height="16" fill="'+b+'"/><rect x="52" y="74" width="8" height="16" fill="'+b+'"/>'+
+    '<rect x="36" y="40" width="28" height="38" rx="5" fill="'+a+'"/>'+
+    '<path d="M36 50 L64 50" stroke="'+b+'" stroke-width="2"/>'+
+    '<rect x="42" y="22" width="16" height="18" rx="5" fill="'+a+'"/>'+
+    '<rect x="44" y="29" width="12" height="4" fill="'+b+'"/>'+
+    '<polygon points="50,12 54,24 46,24" fill="'+c+'"/>'+
+    '<rect x="18" y="44" width="16" height="26" rx="6" fill="'+b+'"/><rect x="22" y="50" width="8" height="14" rx="3" fill="'+c+'" opacity=".75"/>'+
+    '<g transform="rotate(18 73 50)"><rect x="70" y="28" width="6" height="42" rx="2" fill="#eef2f6"/></g>'+
+    '<rect x="65" y="56" width="16" height="4" rx="2" fill="'+c+'"/>'; },
+  mage: function(a,b,c){ return ''+
+    '<path d="M30 86 Q34 50 50 44 Q66 50 70 86 Z" fill="'+a+'"/>'+
+    '<path d="M50 50 L50 86" stroke="'+b+'" stroke-width="2" opacity=".4"/>'+
+    '<circle cx="50" cy="37" r="9" fill="'+c+'"/>'+
+    '<path d="M36 31 L50 4 L64 31 Z" fill="'+b+'"/>'+
+    '<ellipse cx="50" cy="31" rx="16" ry="4" fill="'+a+'"/>'+
+    '<polygon points="50,8 53,16 47,16" fill="'+c+'"/>'+
+    '<rect x="72" y="34" width="4" height="50" rx="2" fill="'+b+'"/>'+
+    '<circle cx="74" cy="30" r="7" fill="'+c+'"/><circle cx="74" cy="30" r="3" fill="#fff"/>'; },
+  rogue: function(a,b,c){ return ''+
+    '<rect x="42" y="74" width="7" height="16" fill="'+b+'"/><rect x="53" y="74" width="7" height="16" fill="'+b+'"/>'+
+    '<path d="M34 84 Q34 46 50 40 Q66 46 66 84 L58 78 L50 84 L42 78 Z" fill="'+a+'"/>'+
+    '<path d="M38 40 Q50 24 62 40 Q60 50 50 52 Q40 50 38 40 Z" fill="'+b+'"/>'+
+    '<circle cx="46" cy="42" r="2.2" fill="'+c+'"/><circle cx="54" cy="42" r="2.2" fill="'+c+'"/>'+
+    '<g transform="rotate(28 24 67)"><rect x="22" y="56" width="4" height="20" rx="1" fill="#dfeee0"/></g>'+
+    '<g transform="rotate(-28 76 67)"><rect x="74" y="56" width="4" height="20" rx="1" fill="#dfeee0"/></g>'; }
 };
+// Playable heroes — title/role/hp/signature/flavour + class starter deck.
+var HEROES = {
+  warrior: { kind:'warrior', title:'Bastion', role:'Warrior', hp:80, emoji:'🛡️',
+    signature:'Block & retaliate · Bulwark', flavor:'A wall of iron between you and the dark.',
+    palette:['#b9c0c9','#4a4f57','#d24b3e'],
+    deck:['strike','strike','strike','strike','defend','defend','defend','guard','bash','rage'] },
+  mage: { kind:'mage', title:'Sablewyn', role:'Mage', hp:60, emoji:'🔮',
+    signature:'Spells & scaling · Emberglass', flavor:'She reads the Spire’s fate in scattered embers.',
+    palette:['#7b86e0','#2e2f6a','#b9c6ff'],
+    deck:['strike','strike','strike','strike','defend','defend','fireball','focus','weaken','adrenal'] },
+  rogue: { kind:'rogue', title:'Quill', role:'Rogue', hp:70, emoji:'🗡️',
+    signature:'Poison & blades · Vanish', flavor:'Gone before the blade is missed.',
+    palette:['#6f9a79','#2a3a30','#b6f06a'],
+    deck:['strike','strike','strike','strike','defend','defend','poison','jab','doublestrike','adrenal'] }
+};
+var selectedHero = 'warrior';
 function spriteSvg(kind, pal, anim){
   var fn = SPRITES[kind]; if (!fn) return null;
   pal = pal || ['#9aa0aa','#3a3f48','#d6dae2'];
@@ -460,10 +522,12 @@ function spriteSvg(kind, pal, anim){
 /* ============================ STATE ============================ */
 var G = null, qState = { current:null, answered:false, pending:null }, _toastT=null, _busy=false;
 function newRun(){
+  var hero = HEROES[selectedHero] || HEROES.warrior;
   G = {
     floor: 1,
     maxFloor: 0,
-    player: { hp:60, maxHp:60, block:0, str:0, regenBlock:0, energy:3, maxEnergy:3 },
+    heroKind: hero.kind,
+    player: { hp:hero.hp, maxHp:hero.hp, block:0, str:0, regenBlock:0, energy:3, maxEnergy:3 },
     gold: 0,
     deck: [],
     draw:[], hand:[], discard:[],
@@ -476,13 +540,11 @@ function newRun(){
     state:'map'
   };
   // starter deck — use the player's custom deck (built from packs in the app)
-  // when one was pushed in; otherwise the default Strike/Defend starter.
+  // when one was pushed in; otherwise the chosen hero's class starter deck.
   if (Array.isArray(CUSTOM_DECK) && CUSTOM_DECK.filter(function(x){return CARDS[x];}).length>=10){
     G.deck = CUSTOM_DECK.filter(function(x){ return CARDS[x]; }).slice(0,40);
   } else {
-    for (var i=0;i<5;i++) G.deck.push('strike');
-    for (var j=0;j<4;j++) G.deck.push('defend');
-    G.deck.push('bash');
+    G.deck = hero.deck.filter(function(x){ return CARDS[x]; }).slice();
   }
 }
 
@@ -586,8 +648,8 @@ function damagePlayer(amt){
   var absorbed = Math.min(G.player.block, dmg);
   G.player.block -= absorbed; dmg -= absorbed;
   G.player.hp -= dmg;
-  if (dmg>0){ floatText(heroEl(), '-'+dmg, '#ff8a82'); flashHit(heroEl()); }
-  if (G.player.hp<=0){ G.player.hp=0; gameOver(); }
+  if (dmg>0){ floatText(heroEl(), '-'+dmg, '#ff8a82'); flashHit(heroEl()); setAnim('player','hurt'); setTimeout(function(){ if(G&&G._heroAnim==='hurt'){ setAnim('player','idle'); render(); } }, 320); }
+  if (G.player.hp<=0){ G.player.hp=0; setAnim('player','death'); gameOver(); }
 }
 function playCard(handIdx, targetIdx){
   if (_busy || G.turn!=='player' || G.state!=='combat') return;
@@ -1121,6 +1183,24 @@ function maybeStandaloneNotice(){
 }
 
 /* ============================ WIRE UI ============================ */
+function renderHeroPick(){
+  var wrap=$('heroPick'); if(!wrap) return; wrap.innerHTML='';
+  Object.keys(HEROES).forEach(function(key){
+    var h=HEROES[key];
+    var el=document.createElement('div');
+    el.className='hero-card'+(key===selectedHero?' sel':''); el.dataset.hero=key;
+    el.innerHTML =
+      '<div class="hp-art">'+spriteSvg(h.kind, h.palette, 'idle')+'</div>'+
+      '<div class="hp-role">'+h.role+'</div>'+
+      '<div class="hp-title">'+h.title+'</div>'+
+      '<div class="hp-hp">❤️ '+h.hp+' HP</div>'+
+      '<div class="hp-sig">'+h.signature+'</div>'+
+      '<div class="hp-flavor">“'+h.flavor+'”</div>';
+    el.onclick=function(){ selectedHero=key; renderHeroPick(); };
+    wrap.appendChild(el);
+  });
+}
+renderHeroPick();
 function startRun(){ hide('introOverlay'); hide('overOverlay'); newRun(); updateHud(); startNode(); }
 $('introStartBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } startRun(); _noteGamePlayStart(); };
 $('againBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } startRun(); _noteGamePlayStart(); };
