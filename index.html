@@ -4111,6 +4111,62 @@ option {
 .rpg-voucher-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg,#f59e0b,#f43f5e); transition: width var(--transition); }
 .rpg-quest { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; margin-bottom: 6px; font-size: 0.82rem; }
 .rpg-quest.done { border-color: var(--primary); background: var(--primary-light); }
+/* ===== Community / bulletin board ===== */
+.comm-card { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px; }
+.comm-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.comm-tab { border: 1px solid var(--border); background: var(--surface-alt, #f4f2ee); border-radius: 999px; padding: 6px 14px; font-size: 0.82rem; font-weight: 600; cursor: pointer; color: var(--text-muted); }
+.comm-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.comm-tabpane { display: none; }
+.comm-tabpane.active { display: block; }
+.comm-help { font-size: 0.8rem; color: var(--text-muted); margin: 0 0 10px; line-height: 1.5; }
+.comm-attach { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.comm-img-prev { max-height: 72px; border-radius: 8px; border: 1px solid var(--border); }
+.comm-pin { display: inline-flex; align-items: center; gap: 5px; font-size: 0.82rem; color: var(--text-muted); cursor: pointer; }
+.comm-quest-fields { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.comm-quest-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+.comm-quest-fields .form-input { max-width: 150px; }
+.comm-compose-head, .comm-section-title { font-weight: 700; font-size: 0.98rem; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.comm-count { background: var(--primary); color: #fff; border-radius: 999px; font-size: 0.7rem; padding: 1px 8px; font-weight: 700; }
+.comm-post { display: flex; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.comm-post:last-child { border-bottom: none; }
+.comm-post.pinned { background: linear-gradient(90deg,#fdf6e3,#fff); border-radius: var(--radius-sm); padding: 14px; border: 1px solid #ecd29a; margin-bottom: 8px; }
+.comm-ava { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 20px; background: var(--surface-alt, #eee); }
+.comm-ava.admin { background: linear-gradient(135deg,#316342,#4a7c59); color: #fff; }
+.comm-body { flex: 1; min-width: 0; }
+.comm-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; margin-bottom: 4px; }
+.comm-author { font-weight: 700; }
+.comm-tag { font-size: 0.64rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+.comm-tag.admin { background: #e7f3ec; color: #1c8a4a; }
+.comm-tag.news { background: #e9eefb; color: #3a5bd0; }
+.comm-tag.guidance { background: #fff1e0; color: #b8741a; }
+.comm-tag.photo { background: #fde9f1; color: #c0407e; }
+.comm-tag.update { background: #eef1f5; color: #5d6770; }
+.comm-tag.pending { background: #fdecec; color: #c0392b; }
+.comm-time { color: var(--text-muted); font-size: 0.76rem; }
+.comm-title { font-weight: 700; margin: 2px 0; }
+.comm-text { font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.comm-img { margin-top: 8px; max-width: 100%; max-height: 360px; border-radius: 10px; border: 1px solid var(--border); display: block; cursor: zoom-in; }
+.comm-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.comm-actions .btn { font-size: 0.74rem; padding: 4px 10px; }
+/* live quest banner */
+.comm-quest-banner { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--radius-md); margin-bottom: 12px; color: #fff; background: linear-gradient(135deg,#7b2ff7,#f107a3); box-shadow: 0 6px 18px rgba(124,47,180,0.3); }
+.comm-quest-banner.ended { background: linear-gradient(135deg,#555,#777); }
+.comm-quest-banner .cq-emoji { font-size: 32px; }
+.comm-quest-banner .cq-main { flex: 1; min-width: 0; }
+.comm-quest-banner .cq-title { font-weight: 800; font-size: 1.05rem; }
+.comm-quest-banner .cq-desc { font-size: 0.84rem; opacity: 0.95; margin-top: 2px; }
+.comm-quest-banner .cq-progress { font-size: 0.8rem; margin-top: 6px; font-weight: 600; }
+.comm-quest-banner .cq-timer { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1.3rem; text-align: center; background: rgba(255,255,255,0.18); border-radius: 10px; padding: 8px 12px; min-width: 96px; }
+.comm-quest-banner .cq-timer span { display: block; font-size: 0.6rem; font-weight: 600; opacity: 0.85; letter-spacing: 0.06em; }
+.comm-quest-banner .cq-won { font-weight: 700; }
+/* floating quest chip (all pages) */
+#questChip { display: none; position: fixed; bottom: 18px; right: 18px; z-index: 900; cursor: pointer;
+  background: linear-gradient(135deg,#7b2ff7,#f107a3); color: #fff; border-radius: 999px; padding: 10px 16px;
+  font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.9rem; box-shadow: 0 6px 18px rgba(124,47,180,0.45);
+  animation: questPulse 2s ease-in-out infinite; }
+#questChip.show { display: block; }
+@keyframes questPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+@media (max-width: 560px) { .comm-quest-fields .form-input { max-width: 110px; } #questChip { bottom: 70px; } }
 .rpg-quest.claimed { opacity: 0.55; }
 .rpg-quest-ico { font-size: 1.05rem; }
 .rpg-quest-name { flex: 1; min-width: 0; }
@@ -4506,9 +4562,13 @@ option {
       </div>
     </div>
     <nav class="sidebar-nav">
+      <!-- Community (everyone) -->
+      <div class="nav-item" data-page="community" onclick="navigateTo('community')">
+        <span class="ico">🏛️</span> Community
+      </div>
       <!-- Admin-only nav items -->
       <div class="nav-section-label admin-only">Build</div>
-      <div class="nav-item active admin-only" data-page="create" onclick="navigateTo('create')">
+      <div class="nav-item admin-only" data-page="create" onclick="navigateTo('create')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
         Create Question
       </div>
@@ -5721,6 +5781,76 @@ option {
       <iframe id="spireFrame" class="embed-frame" title="Science Spire — Deck-building MCQ Roguelike"></iframe>
     </div>
 
+    <!-- ===== PAGE: COMMUNITY (everyone) — bulletin board, news, encounter quests ===== -->
+    <div class="page" id="page-community">
+      <div class="page-header">
+        <div>
+          <h2>🏛️ Community</h2>
+          <div class="subtitle">Updates, news, guidance and surprise quests — leave a message and join in.</div>
+        </div>
+      </div>
+
+      <!-- Live encounter-quest banners -->
+      <div id="commQuestArea"></div>
+
+      <!-- Admin tools: post to the board + launch an encounter quest -->
+      <div class="comm-card admin-only" id="commAdminTools">
+        <div class="comm-tabs">
+          <button class="comm-tab active" data-commtab="post" type="button">📣 Post update</button>
+          <button class="comm-tab" data-commtab="quest" type="button">⚡ Encounter quest</button>
+        </div>
+        <div class="comm-tabpane active" id="commTabPost">
+          <select id="commPostType" class="form-input" style="max-width:220px;">
+            <option value="news">📰 News</option>
+            <option value="update">📣 Update</option>
+            <option value="guidance">🧭 Guidance</option>
+            <option value="photo">📸 Photo / gift winner</option>
+          </select>
+          <input id="commPostTitle" class="form-input" type="text" placeholder="Title (optional)" style="margin-top:8px;">
+          <textarea id="commPostText" class="form-input" rows="3" placeholder="Share an update, news, guidance, or a photo caption…" style="margin-top:8px;resize:vertical;"></textarea>
+          <div class="comm-attach">
+            <label class="btn btn-outline btn-sm">📎 Attach image<input id="commPostImg" type="file" accept="image/*" hidden onchange="commPreviewImg(this,'commPostImgPrev')"></label>
+            <img id="commPostImgPrev" class="comm-img-prev" style="display:none;">
+            <label class="comm-pin"><input type="checkbox" id="commPostPin"> 📌 Pin to top</label>
+          </div>
+          <button class="btn btn-primary" type="button" onclick="commAdminPost()" style="margin-top:10px;">Post to board</button>
+        </div>
+        <div class="comm-tabpane" id="commTabQuest">
+          <p class="comm-help">Launch a surprise quest: all students see a live countdown. The first to finish the required questions wins a <b>$10 voucher</b>.</p>
+          <input id="commQuestTitle" class="form-input" type="text" placeholder="Quest title — e.g. ⚡ Flash Quiz Frenzy">
+          <textarea id="commQuestDesc" class="form-input" rows="2" placeholder="Short description shown to students…" style="margin-top:8px;resize:vertical;"></textarea>
+          <div class="comm-quest-fields">
+            <label>Questions to finish<input id="commQuestCount" class="form-input" type="number" min="1" value="10"></label>
+            <label>Lasts (hours)<input id="commQuestHours" class="form-input" type="number" min="0.25" step="0.25" value="3"></label>
+            <label>Topic (optional)<input id="commQuestTopic" class="form-input" type="text" placeholder="any"></label>
+          </div>
+          <button class="btn btn-primary" type="button" onclick="commCreateQuest()" style="margin-top:10px;">⚡ Launch encounter quest</button>
+        </div>
+      </div>
+
+      <!-- Student composer -->
+      <div class="comm-card student-only" id="commStudentBox">
+        <div class="comm-compose-head">💬 Leave a message</div>
+        <textarea id="commMsgText" class="form-input" rows="2" placeholder="Say hi, ask a question, or share something…" style="resize:vertical;"></textarea>
+        <div class="comm-attach">
+          <label class="btn btn-outline btn-sm">📎 Attach image<input id="commMsgImg" type="file" accept="image/*" hidden onchange="commPreviewImg(this,'commMsgImgPrev')"></label>
+          <img id="commMsgImgPrev" class="comm-img-prev" style="display:none;">
+          <span class="comm-help" style="margin:0;">Posts are shown after the teacher approves them.</span>
+        </div>
+        <button class="btn btn-primary btn-sm" type="button" onclick="commStudentPost()" style="margin-top:8px;">Send for approval</button>
+      </div>
+
+      <!-- Admin moderation queue -->
+      <div class="comm-card admin-only" id="commPendingCard" style="display:none;">
+        <div class="comm-section-title">📋 Bulletin board — pending approval <span class="comm-count" id="commPendingCount">0</span></div>
+        <div id="commPending"></div>
+      </div>
+
+      <!-- Public feed -->
+      <div class="comm-section-title" style="margin-top:18px;">📰 Community feed</div>
+      <div id="commFeed"><div class="empty-note">Loading the community board…</div></div>
+    </div>
+
     <!-- ===== PAGE: GAME OBJECTS (Admin Only) — sprite override manager ===== -->
     <div class="page" id="page-gameassets">
       <div class="page-header">
@@ -6000,6 +6130,9 @@ option {
     </div>
   </div>
 </div>
+
+<!-- Floating encounter-quest countdown — visible on every page for students -->
+<div id="questChip" onclick="navigateTo('community')" title="An encounter quest is live — tap to join"></div>
 
 <!-- ==================== MONTH-END PRIZE CLAIM (student) ==================== -->
 <div class="confirm-overlay" id="prizeClaimOverlay">
@@ -6297,6 +6430,7 @@ import {
   orderBy,
   updateDoc,
   increment,
+  onSnapshot,
   Timestamp
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 // App Check (protects the Gemini quota from abuse) + Firebase AI Logic (free-tier Gemini)
@@ -6804,7 +6938,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.45.0';
+const APP_VERSION = 'v1.46.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -6833,6 +6967,10 @@ function configureSidebarForRole(role) {
     const wsPage = document.getElementById('page-worksheet');
     if (wsPage) wsPage.classList.add('active');
   }
+  // Community is the default landing screen for everyone; also start the
+  // realtime quest watch so the countdown chip works on every page.
+  try { commStartGlobalWatch(); } catch (_) {}
+  try { if (document.getElementById('page-community')) navigateTo('community'); } catch (_) {}
 }
 
 async function loadAdminQuestions() {
@@ -6974,6 +7112,7 @@ function navigateTo(page) {
   if (page === 'quickpractice') { populateQpControls(); updateQpProgress(); }
   if (page === 'snapmark') snapInit();
   if (page === 'topicalpractice') tpRenderTopics();
+  if (page === 'community') renderCommunity();
   if (page === 'usage') loadUsageDashboard();
   if (page === 'myreport') loadMyReport();
   if (page === 'scheduled') loadScheduledQuestions();
@@ -16041,12 +16180,14 @@ function _computePrizeWinners() {
 function renderPrizeClaims() {
   const tbody = document.getElementById('usagePrizeBody');
   if (!tbody) return;
-  const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders' : c.category === 'streak' ? '🎟️ 30-day streak' : '🎁 Questions';
+  const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders' : c.category === 'streak' ? '🎟️ 30-day streak' : c.category === 'encounter' ? '⚡ Encounter quest' : '🎁 Questions';
   const _claimResult = c => (c.category === 'defenders' || c.category === 'raiders')
     ? (c.scoreLabel || (c.score != null ? c.score + ' pts' : '—'))
     : c.category === 'streak'
       ? (c.scoreLabel || '30 days')
-      : (c.questions != null ? c.questions + ' Q' : '—');
+      : c.category === 'encounter'
+        ? (c.scoreLabel || (c.score != null ? c.score + ' Q' : '—'))
+        : (c.questions != null ? c.questions + ' Q' : '—');
 
   // Merge: start from every computed winner, fold in their claim (if any),
   // then append any leftover claims (streaks, other months) not already shown.
@@ -18982,7 +19123,7 @@ function rpgOnMarked(q, score, total, opts = {}) {
   const round = rpgState.battle ? rpgBattleRound(credit) : null;
   if (round && round.victory) { gold += round.victory.gold; xp += round.victory.xp; }
   const lvl = rpgApplyRewards(gold, xp);
-  if (!opts.simulated) { rpgNoteUniqueQuestion(qid, opts.answerText); try { _noteQuestionForCredit(qid); } catch (_) {} }
+  if (!opts.simulated) { const _bq = rpgState.monthQ || 0; rpgNoteUniqueQuestion(qid, opts.answerText); if ((rpgState.monthQ || 0) > _bq) { try { commNoteEncounterProgress(q); } catch (_) {} } try { _noteQuestionForCredit(qid); } catch (_) {} }
   rpgHintUsedQ = false;
   rpgSave();
   rpgPublishLeaderboard();
@@ -20060,6 +20201,332 @@ async function claimPhysical() {
     showToast("🏫 Confirmed — collect your $10 voucher in class!", "success");
     setTimeout(() => { try { rpgCheckPrizeClaim(); } catch (_) {} setTimeout(() => { try { rpgCheckStreakVoucher(); } catch (_) {} }, 600); }, 800);
   } catch (e) { console.warn("physical claim save", e); showToast("Could not submit — check your connection and try again", "error"); }
+}
+
+// =====================================================================
+// COMMUNITY BOARD  +  ENCOUNTER QUESTS
+//   community       — bulletin-board feed (admin posts auto-approved,
+//                     student messages start 'pending' until approved)
+//   encounterQuests — timed surprise quests; first student to finish N
+//                     questions before the timer ends wins a $10 voucher
+//                     (delivered through the normal prizeClaims flow)
+// =====================================================================
+let _commPosts = [], _commQuests = [];
+let _commUnsub = null, _questUnsub = null, _questTick = null, _questSeen = {};
+let _commImg = {};                 // dataURL keyed by file-input id
+
+function _commCanFirestore() { return RPG_STORAGE_MODE === 'firestore' && db && currentUser; }
+function _commTypeLabel(t) { return ({ news: 'News', guidance: 'Guidance', photo: 'Photo', update: 'Update' })[t] || 'Update'; }
+function _commTimeAgo(iso) {
+  const t = new Date(iso).getTime(); if (!t) return '';
+  const s = Math.floor((Date.now() - t) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  const d = Math.floor(s / 86400);
+  return d < 7 ? d + 'd ago' : new Date(iso).toLocaleDateString();
+}
+function _fmtCountdown(ms) {
+  if (ms < 0) ms = 0;
+  const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  return (h > 0 ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+}
+
+// ---- image attach: downscale client-side, upload to Storage (inline fallback)
+function commPreviewImg(input, prevId) {
+  const file = input.files && input.files[0];
+  const prev = document.getElementById(prevId);
+  if (!file) { if (prev) { prev.style.display = 'none'; prev.src = ''; } _commImg[input.id] = null; return; }
+  _commDownscale(file, 1280, 0.82).then(dataUrl => {
+    _commImg[input.id] = dataUrl;
+    if (prev) { prev.src = dataUrl; prev.style.display = ''; }
+  }).catch(() => showToast('Could not read that image', 'error'));
+}
+function _commDownscale(file, maxDim, quality) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        w = Math.round(w * scale); h = Math.round(h * scale);
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        res(c.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = rej; img.src = r.result;
+    };
+    r.onerror = rej; r.readAsDataURL(file);
+  });
+}
+async function _commUploadImage(dataUrl, id) {
+  if (!dataUrl) return '';
+  try {
+    const refp = storageRef(storage, 'community/' + id + '.jpg');
+    await uploadString(refp, dataUrl, 'data_url');
+    return await getDownloadURL(refp);
+  } catch (e) {
+    console.warn('community image upload failed, inlining', e);
+    return dataUrl.length < 900000 ? dataUrl : '';   // small images can live in the doc
+  }
+}
+function _commClearImg(inputId, prevId) {
+  _commImg[inputId] = null;
+  const i = document.getElementById(inputId); if (i) i.value = '';
+  const p = document.getElementById(prevId); if (p) { p.style.display = 'none'; p.src = ''; }
+}
+
+// ---- posting -----------------------------------------------------------
+async function commAdminPost() {
+  if (!_isAdmin() || !_commCanFirestore()) return;
+  const type = (document.getElementById('commPostType').value) || 'news';
+  const title = (document.getElementById('commPostTitle').value || '').trim();
+  const text = (document.getElementById('commPostText').value || '').trim();
+  const pin = !!document.getElementById('commPostPin').checked;
+  const imgData = _commImg['commPostImg'];
+  if (!text && !title && !imgData) { showToast('Add some text or an image', 'error'); return; }
+  showToast('Posting…', 'info');
+  try {
+    const id = currentUser.uid + '_' + Date.now();
+    const imageUrl = imgData ? await _commUploadImage(imgData, id) : '';
+    await setDoc(doc(db, 'community', id), {
+      type, title, text, imageUrl,
+      authorUid: currentUser.uid, authorName: currentUser.name || 'Teacher', authorRole: 'admin',
+      status: 'approved', pinned: pin, createdAt: new Date().toISOString()
+    });
+    document.getElementById('commPostText').value = '';
+    document.getElementById('commPostTitle').value = '';
+    document.getElementById('commPostPin').checked = false;
+    _commClearImg('commPostImg', 'commPostImgPrev');
+    showToast('Posted to the board ✓', 'success');
+  } catch (e) { console.warn('admin post', e); showToast('Could not post — check your connection', 'error'); }
+}
+async function commStudentPost() {
+  if (!_commCanFirestore()) { showToast('Sign in to post', 'error'); return; }
+  const text = (document.getElementById('commMsgText').value || '').trim();
+  const imgData = _commImg['commMsgImg'];
+  if (!text && !imgData) { showToast('Write a message or attach an image', 'error'); return; }
+  showToast('Sending…', 'info');
+  try {
+    const id = currentUser.uid + '_' + Date.now();
+    const imageUrl = imgData ? await _commUploadImage(imgData, id) : '';
+    await setDoc(doc(db, 'community', id), {
+      type: 'message', title: '', text, imageUrl,
+      authorUid: currentUser.uid, authorName: currentUser.name || 'Student', authorRole: 'student',
+      status: 'pending', pinned: false, createdAt: new Date().toISOString()
+    });
+    document.getElementById('commMsgText').value = '';
+    _commClearImg('commMsgImg', 'commMsgImgPrev');
+    showToast('Sent for approval — the teacher will review it 👍', 'success');
+  } catch (e) { console.warn('student post', e); showToast('Could not send — check your connection', 'error'); }
+}
+async function commApprove(id) { if (!_isAdmin()) return; try { await updateDoc(doc(db, 'community', id), { status: 'approved', approvedAt: new Date().toISOString() }); showToast('Approved — now public ✓', 'success'); } catch (e) { console.warn(e); showToast('Could not approve', 'error'); } }
+async function commReject(id) { if (!_isAdmin()) return; if (!confirm('Reject and remove this message?')) return; commDelete(id); }
+async function commPin(id, val) { if (!_isAdmin()) return; try { await updateDoc(doc(db, 'community', id), { pinned: (val === true || val === 'true') }); } catch (e) { console.warn(e); } }
+async function commDelete(id) { if (!_isAdmin()) return; try { await deleteDoc(doc(db, 'community', id)); showToast('Removed', 'success'); } catch (e) { console.warn(e); showToast('Could not remove', 'error'); } }
+
+// ---- encounter quests --------------------------------------------------
+async function commCreateQuest() {
+  if (!_isAdmin() || !_commCanFirestore()) return;
+  const title = (document.getElementById('commQuestTitle').value || '').trim() || '⚡ Encounter Quest';
+  const desc = (document.getElementById('commQuestDesc').value || '').trim();
+  const count = Math.max(1, parseInt(document.getElementById('commQuestCount').value, 10) || 10);
+  const hours = Math.max(0.25, parseFloat(document.getElementById('commQuestHours').value) || 3);
+  const topic = (document.getElementById('commQuestTopic').value || '').trim();
+  const now = Date.now(), id = 'q_' + now;
+  try {
+    await setDoc(doc(db, 'encounterQuests', id), {
+      title, desc, count, topic: topic || '', prize: '$10 voucher',
+      startAt: new Date(now).toISOString(), endAt: new Date(now + hours * 3600000).toISOString(), hours,
+      status: 'active', winnerUid: '', winnerName: '', winnerAt: '',
+      createdBy: currentUser.uid, createdAt: new Date().toISOString()
+    });
+    // announce it on the feed too (pinned)
+    await setDoc(doc(db, 'community', 'quest_' + id), {
+      type: 'update', title: '⚡ New Encounter Quest: ' + title,
+      text: (desc ? desc + '\n\n' : '') + 'Finish ' + count + ' questions' + (topic ? ' on ' + topic : '') + ' before the timer runs out — the first to finish wins a $10 voucher!',
+      imageUrl: '', authorUid: currentUser.uid, authorName: currentUser.name || 'Teacher', authorRole: 'admin',
+      status: 'approved', pinned: true, createdAt: new Date().toISOString()
+    });
+    document.getElementById('commQuestTitle').value = '';
+    document.getElementById('commQuestDesc').value = '';
+    showToast('⚡ Quest launched — students see it now!', 'success');
+  } catch (e) { console.warn('create quest', e); showToast('Could not launch the quest', 'error'); }
+}
+async function commEndQuest(id) {
+  if (!_isAdmin()) return;
+  if (!confirm('End this quest now?')) return;
+  try { await updateDoc(doc(db, 'encounterQuests', id), { status: 'ended', endedAt: new Date().toISOString() }); } catch (e) { console.warn(e); }
+}
+function _activeQuests() {
+  const now = Date.now();
+  return _commQuests.filter(q => q.status === 'active' && !q.winnerUid && new Date(q.endAt).getTime() > now);
+}
+function _questProgress(q) { return (rpgState && rpgState.encounter && rpgState.encounter[q._id]) || 0; }
+
+// Count a freshly-answered unique question toward any live quest. Called from
+// rpgOnMarked only when a genuinely new unique question was recorded.
+function commNoteEncounterProgress(q) {
+  if (!rpgState || !currentUser || currentUser.role !== 'student') return;
+  const active = _activeQuests(); if (!active.length) return;
+  rpgState.encounter = rpgState.encounter || {};
+  active.forEach(quest => {
+    if (quest.topic && q && q.topic && String(q.topic).toLowerCase() !== String(quest.topic).toLowerCase()) return;
+    const cur = (rpgState.encounter[quest._id] || 0) + 1;
+    rpgState.encounter[quest._id] = cur;
+    if (cur >= quest.count) commTryWinQuest(quest);
+  });
+  rpgSave();
+  _renderQuestBanners();
+}
+async function commTryWinQuest(quest) {
+  if (!_commCanFirestore()) return;
+  rpgState.encounter = rpgState.encounter || {};
+  if (rpgState.encounter['_tried_' + quest._id]) return;     // attempt the race once
+  rpgState.encounter['_tried_' + quest._id] = 1; rpgSave();
+  try {
+    const snap = await getDoc(doc(db, 'encounterQuests', quest._id));
+    if (!snap.exists()) return;
+    const d = snap.data();
+    if (d.winnerUid) {
+      if (d.winnerUid !== currentUser.uid) showToast('⚡ ' + (d.winnerName || 'Another student') + ' finished first — watch out for the next quest!', 'info');
+      return;
+    }
+    if (d.status !== 'active' || new Date(d.endAt).getTime() < Date.now()) { showToast('That quest already ended.', 'info'); return; }
+    await updateDoc(doc(db, 'encounterQuests', quest._id), {
+      winnerUid: currentUser.uid, winnerName: currentUser.name || 'Student',
+      winnerAt: new Date().toISOString(), status: 'ended'
+    });
+    commOfferQuestPrize(quest);
+  } catch (e) { console.warn('win quest', e); }
+}
+function commOfferQuestPrize(quest) {
+  _prizeClaimCtx = { ackKey: 'enc_' + quest._id, monthKey: rpgMonthKey(), rank: 1, value: quest.count, noun: 'Encounter Quest', game: 'Encounter Quest', detail: (quest.title || 'Encounter Quest'), category: 'encounter' };
+  const el = id => document.getElementById(id);
+  if (el('prizeClaimMsg')) el('prizeClaimMsg').innerHTML =
+    '🏆 You won the <b>' + escapeHtml(quest.title || 'Encounter Quest') + '</b> — first to finish ' + quest.count + ' questions! Enter your details and we\'ll send your <b>$10 Popular voucher</b>.';
+  if (el('prizePhone')) el('prizePhone').value = '';
+  if (el('prizeAddress')) el('prizeAddress').value = '';
+  if (el('prizeClaimOverlay')) el('prizeClaimOverlay').classList.add('active');
+  showToast('🏆 You won the encounter quest!', 'success');
+}
+
+// ---- realtime subscriptions + rendering --------------------------------
+function commStartGlobalWatch() {
+  if (!_commCanFirestore() || _questUnsub) return;
+  try {
+    _questUnsub = onSnapshot(collection(db, 'encounterQuests'), snap => {
+      _commQuests = []; snap.forEach(d => _commQuests.push(Object.assign({ _id: d.id }, d.data())));
+      _activeQuests().forEach(q => {
+        if (!_questSeen[q._id]) {
+          _questSeen[q._id] = 1;
+          if (currentUser && currentUser.role === 'student')
+            showToast('⚡ New Encounter Quest: ' + (q.title || '') + ' — finish ' + q.count + ' questions to win $10!', 'info');
+        }
+      });
+      _renderQuestChip(); _renderQuestBanners();
+    }, e => console.warn('quest sub', e));
+    if (!_questTick) _questTick = setInterval(() => { _renderQuestChip(); _renderQuestBanners(); }, 1000);
+  } catch (e) { console.warn('quest watch', e); }
+}
+function _commSubscribeFeed() {
+  if (!_commCanFirestore() || _commUnsub) return;
+  try {
+    _commUnsub = onSnapshot(collection(db, 'community'), snap => {
+      _commPosts = []; snap.forEach(d => _commPosts.push(Object.assign({ _id: d.id }, d.data())));
+      _renderCommFeed(); _renderCommPending();
+    }, e => { console.warn('community sub', e); const f = document.getElementById('commFeed'); if (f) f.innerHTML = '<div class="empty-note">Couldn\'t load the board — check the Firestore rules for the <b>community</b> collection.</div>'; });
+  } catch (e) { console.warn('community sub', e); }
+}
+function _renderQuestChip() {
+  const chip = document.getElementById('questChip'); if (!chip) return;
+  if (!(currentUser && currentUser.role === 'student')) { chip.classList.remove('show'); return; }
+  const qs = _activeQuests();
+  if (!qs.length) { chip.classList.remove('show'); return; }
+  qs.sort((a, b) => new Date(a.endAt) - new Date(b.endAt));
+  const left = new Date(qs[0].endAt).getTime() - Date.now();
+  chip.innerHTML = '⚡ Quest ' + _fmtCountdown(left);
+  chip.classList.add('show');
+}
+function _renderQuestBanners() {
+  const area = document.getElementById('commQuestArea'); if (!area) return;
+  const list = _commQuests.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 6);
+  if (!list.length) { area.innerHTML = ''; return; }
+  const student = currentUser && currentUser.role === 'student';
+  area.innerHTML = list.map(q => {
+    const left = new Date(q.endAt).getTime() - Date.now();
+    const expired = q.status === 'ended' || left <= 0;
+    const won = !!q.winnerUid;
+    let timer, sub;
+    if (won) { timer = '🏆<span>WINNER</span>'; sub = '<div class="cq-won">🏆 ' + escapeHtml(q.winnerName || 'A student') + ' won the $10 voucher!</div>'; }
+    else if (expired) { timer = '⌛<span>ENDED</span>'; sub = '<div class="cq-progress">Time\'s up — no winner this round.</div>'; }
+    else {
+      timer = _fmtCountdown(left) + '<span>LEFT</span>';
+      const prog = _questProgress(q);
+      sub = student
+        ? '<div class="cq-progress">Your progress: ' + Math.min(prog, q.count) + ' / ' + q.count + ' questions' + (prog >= q.count ? ' ✅' : '') + '</div>'
+        : '<div class="cq-progress">Reward: ' + escapeHtml(q.prize || '$10 voucher') + ' · ' + q.count + ' questions' + (q.topic ? ' · ' + escapeHtml(q.topic) : '') + '</div>';
+    }
+    const endBtn = _isAdmin() && !expired && !won ? ' <button class="btn btn-outline btn-sm" onclick="commEndQuest(\'' + q._id + '\')">End</button>' : '';
+    return '<div class="comm-quest-banner' + (expired || won ? ' ended' : '') + '">' +
+      '<span class="cq-emoji">⚡</span>' +
+      '<div class="cq-main"><div class="cq-title">' + escapeHtml(q.title || 'Encounter Quest') + endBtn + '</div>' +
+      (q.desc ? '<div class="cq-desc">' + escapeHtml(q.desc) + '</div>' : '') + sub + '</div>' +
+      '<div class="cq-timer">' + timer + '</div></div>';
+  }).join('');
+}
+function _commPostHtml(p, moderate) {
+  const admin = _isAdmin();
+  const isStaff = p.authorRole === 'admin';
+  const tag = isStaff
+    ? '<span class="comm-tag ' + (p.type || 'update') + '">' + _commTypeLabel(p.type) + '</span>'
+    : (p.status === 'pending' ? '<span class="comm-tag pending">Pending</span>' : '');
+  const img = p.imageUrl ? '<img class="comm-img" src="' + escapeHtml(p.imageUrl) + '" onclick="window.open(this.src,\'_blank\')" alt="">' : '';
+  let actions = '';
+  if (moderate) actions = '<div class="comm-actions"><button class="btn btn-primary" onclick="commApprove(\'' + p._id + '\')">✓ Approve</button><button class="btn btn-outline" onclick="commReject(\'' + p._id + '\')">✕ Reject</button></div>';
+  else if (admin) actions = '<div class="comm-actions"><button class="btn btn-outline" onclick="commPin(\'' + p._id + '\',\'' + (p.pinned ? 'false' : 'true') + '\')">' + (p.pinned ? '📌 Unpin' : '📌 Pin') + '</button><button class="btn btn-outline" onclick="commDelete(\'' + p._id + '\')">🗑 Delete</button></div>';
+  return '<div class="comm-post' + (p.pinned && !moderate ? ' pinned' : '') + '">' +
+    '<div class="comm-ava' + (isStaff ? ' admin' : '') + '">' + (isStaff ? '🎓' : '🧑‍🎓') + '</div>' +
+    '<div class="comm-body">' +
+    '<div class="comm-meta"><span class="comm-author">' + escapeHtml(p.authorName || 'Anonymous') + '</span>' + tag +
+    '<span class="comm-time">' + _commTimeAgo(p.createdAt) + '</span>' + (p.pinned && !moderate ? ' 📌' : '') + '</div>' +
+    (p.title ? '<div class="comm-title">' + escapeHtml(p.title) + '</div>' : '') +
+    (p.text ? '<div class="comm-text">' + escapeHtml(p.text) + '</div>' : '') +
+    img + actions +
+    '</div></div>';
+}
+function _renderCommFeed() {
+  const feed = document.getElementById('commFeed'); if (!feed) return;
+  const posts = _commPosts.filter(p => p.status === 'approved')
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  if (!posts.length) { feed.innerHTML = '<div class="empty-note">No posts yet. ' + (_isAdmin() ? 'Share the first update above!' : 'Check back soon!') + '</div>'; return; }
+  feed.innerHTML = posts.map(p => _commPostHtml(p, false)).join('');
+}
+function _renderCommPending() {
+  const wrap = document.getElementById('commPending'), card = document.getElementById('commPendingCard');
+  if (!wrap || !card) return;
+  if (!_isAdmin()) { card.style.display = 'none'; return; }
+  const pend = _commPosts.filter(p => p.status === 'pending').sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  const cnt = document.getElementById('commPendingCount'); if (cnt) cnt.textContent = pend.length;
+  card.style.display = pend.length ? '' : 'none';
+  wrap.innerHTML = pend.map(p => _commPostHtml(p, true)).join('');
+}
+function _commWireTabs() {
+  document.querySelectorAll('#commAdminTools .comm-tab').forEach(t => {
+    t.onclick = () => {
+      document.querySelectorAll('#commAdminTools .comm-tab').forEach(x => x.classList.toggle('active', x === t));
+      document.getElementById('commTabPost').classList.toggle('active', t.dataset.commtab === 'post');
+      document.getElementById('commTabQuest').classList.toggle('active', t.dataset.commtab === 'quest');
+    };
+  });
+}
+function renderCommunity() {
+  const pc = document.getElementById('commPendingCard'); if (pc && !_isAdmin()) pc.style.display = 'none';
+  _commWireTabs();
+  _commSubscribeFeed();
+  commStartGlobalWatch();
+  _renderCommFeed(); _renderCommPending(); _renderQuestBanners();
 }
 
 // ---- Adventure mode (idle side-scrolling auto-battler, MOBA-style skills) ----
@@ -22450,6 +22917,15 @@ window.onSpireCardDrop = onSpireCardDrop;
 window.onSpireCardPick = onSpireCardPick;
 window.resetSpireCardArt = resetSpireCardArt;
 window.navigateTo = navigateTo;
+window.commPreviewImg = commPreviewImg;
+window.commAdminPost = commAdminPost;
+window.commCreateQuest = commCreateQuest;
+window.commEndQuest = commEndQuest;
+window.commStudentPost = commStudentPost;
+window.commApprove = commApprove;
+window.commReject = commReject;
+window.commPin = commPin;
+window.commDelete = commDelete;
 window.toggleSidebar = toggleSidebar;
 window.addBlock = addBlock;
 window.addBlockAt = addBlockAt;
