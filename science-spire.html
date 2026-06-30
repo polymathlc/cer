@@ -147,7 +147,40 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
 .toast.show{opacity:1;}
 .rar-tag{font-size:0.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;}
 .hint{font-size:0.74rem;color:var(--muted);text-align:center;padding:2px 0 6px;}
-@media(max-width:560px){ .card{width:112px;min-height:168px;} .card .cframe{height:60px;} .card .cdesc{font-size:0.64rem;} .enemy .art,.hero .art{font-size:48px;} }
+/* ===== battle log ===== */
+.log-panel{position:absolute;top:8px;right:8px;width:212px;max-height:48%;display:flex;flex-direction:column;
+  background:rgba(20,16,30,.84);border:1px solid var(--line);border-radius:10px;font-size:0.72rem;z-index:45;
+  box-shadow:0 6px 18px rgba(0,0,0,.4);overflow:hidden;}
+.log-panel.collapsed{max-height:34px;}
+.log-head{display:flex;align-items:center;gap:6px;padding:6px 10px;font-weight:800;cursor:pointer;
+  border-bottom:1px solid var(--line);user-select:none;}
+.log-head .spc{flex:1;}
+.log-list{overflow-y:auto;padding:6px 8px;display:flex;flex-direction:column;gap:3px;scrollbar-width:thin;}
+.log-panel.collapsed .log-list{display:none;}
+.logline{line-height:1.34;padding:2px 7px;border-radius:5px;border-left:3px solid transparent;background:rgba(255,255,255,.03);}
+.logline b{color:#fff;}
+.logline.log-turn{background:rgba(255,215,106,.14);border-left-color:var(--gold);font-weight:800;text-align:center;color:var(--gold);}
+.logline.log-play{border-left-color:#8a7bd0;color:#d3c8f2;}
+.logline.log-dmg{border-left-color:#e8584f;color:#ffb0a8;}
+.logline.log-enemy{border-left-color:#ff8a4f;color:#ffcaa8;}
+.logline.log-block{border-left-color:#7fb6ff;color:#bcd9ff;}
+.logline.log-heal{border-left-color:#7be0a2;color:#bff0cf;}
+.logline.log-poison{border-left-color:#9bd24a;color:#d6f0a0;}
+.logline.log-buff{border-left-color:#ffd76a;color:#ffe9b0;}
+.logline.log-death{border-left-color:#fff;color:#fff;font-weight:800;}
+.log-sub{color:var(--muted);font-weight:600;}
+/* ===== card-themed attack visuals ===== */
+.proj{position:fixed;font-size:30px;line-height:1;z-index:95;pointer-events:none;opacity:.95;margin:-15px 0 0 -15px;
+  transform:translate(0,0);transition:transform .27s cubic-bezier(.45,.05,.6,1),opacity .27s;
+  filter:drop-shadow(0 2px 5px rgba(0,0,0,.5));will-change:transform;}
+.burst{position:fixed;width:30px;height:30px;border-radius:50%;border:3px solid var(--gold);z-index:94;pointer-events:none;
+  transform:translate(-50%,-50%) scale(.3);opacity:.9;transition:transform .34s ease-out,opacity .34s ease-out;}
+.cast{position:fixed;font-size:30px;line-height:1;z-index:95;pointer-events:none;opacity:1;
+  transform:translate(-50%,-50%);transition:transform .5s ease-out,opacity .5s ease-out;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5));}
+.hero.lunge{animation:heroLunge .32s ease-out;}
+@keyframes heroLunge{0%{transform:translateX(0)}38%{transform:translate(16px,-5px)}100%{transform:translateX(0)}}
+@media(max-width:560px){ .card{width:112px;min-height:168px;} .card .cframe{height:60px;} .card .cdesc{font-size:0.64rem;} .enemy .art,.hero .art{font-size:48px;}
+  .log-panel{width:150px;font-size:0.64rem;max-height:40%;} }
 </style>
 </head>
 <body>
@@ -165,6 +198,10 @@ svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50%
   </div>
 
   <div class="stage" id="stage">
+    <div class="log-panel" id="logPanel">
+      <div class="log-head" id="logHead">📜 Battle Log<span class="spc"></span><span id="logToggle">▾</span></div>
+      <div class="log-list" id="logList"></div>
+    </div>
     <div class="enemy-row" id="enemyRow"></div>
     <div class="hero-row" id="heroRow">
       <div class="controls">
@@ -475,6 +512,8 @@ function beginCombat(){
   G.draw = shuffle(G.deck.slice());
   G.hand = []; G.discard = [];
   G.turn = 'player'; G.state='combat';
+  G.log = [];
+  addLog('⚔️ <b>Floor '+G.floor+'</b> — '+G.enemies.map(function(e){return e.name;}).join(', ')+' appear!', 'log-turn');
   rollIntents();
   startPlayerTurn(true);
   banner('Floor '+G.floor);
@@ -500,11 +539,12 @@ function rollIntents(){ G.enemies.forEach(function(e){ if(!e.dead) e.intent = ch
 function startPlayerTurn(first){
   var p = G.player;
   p.block = 0;
+  addLog('— Your turn —', 'log-turn');
   if (p.regenBlock) gainBlock(p.regenBlock);
   p.energy = p.maxEnergy;
-  if (first && G.questionBonus){ p.energy += G.questionBonus; G.questionBonus=0; }
+  if (first && G.questionBonus){ p.energy += G.questionBonus; addLog('✨ Question bonus: +'+G.questionBonus+' energy', 'log-buff'); G.questionBonus=0; }
   // tick poison on enemies at turn start
-  G.enemies.forEach(function(e){ if(!e.dead && e.poison){ dealDamage(e, e.poison, true); } });
+  G.enemies.forEach(function(e){ if(!e.dead && e.poison){ dealDamage(e, e.poison, true, 'poison'); } });
   drawCards(5);
   G.turn='player';
   render();
@@ -519,7 +559,7 @@ function drawCards(n){
     G.hand.push(G.draw.pop());
   }
 }
-function dealDamage(target, amt, ignoreBlockBuffs){
+function dealDamage(target, amt, ignoreBlockBuffs, srcLabel){
   if (!target || target.dead) return;
   var dmg = amt;
   if (!ignoreBlockBuffs){
@@ -530,11 +570,17 @@ function dealDamage(target, amt, ignoreBlockBuffs){
   var absorbed = Math.min(target.block||0, dmg);
   target.block -= absorbed; dmg -= absorbed;
   target.hp -= dmg;
-  if (dmg>0){ floatText(enemyEl(target), '-'+dmg, '#ff8a82'); flashHit(enemyEl(target)); setAnim(target,'hurt'); }
-  if (target.hp<=0){ target.hp=0; target.dead=true; setAnim(target,'death'); G.kills++; }
+  if (dmg>0){
+    floatText(enemyEl(target), '-'+dmg, '#ff8a82'); flashHit(enemyEl(target)); setAnim(target,'hurt');
+    if (srcLabel==='poison') addLog('☠️ '+target.name+' takes <b>'+dmg+'</b> poison', 'log-poison');
+    else addLog('💥 '+target.name+' takes <b>'+dmg+'</b> damage'+(absorbed?' <span class="log-sub">('+absorbed+' blocked)</span>':''), 'log-dmg');
+  } else if (absorbed>0){
+    addLog('🛡️ '+target.name+' blocks the hit ('+absorbed+')', 'log-block');
+  }
+  if (target.hp<=0){ target.hp=0; target.dead=true; setAnim(target,'death'); G.kills++; addLog('☠️ <b>'+target.name+'</b> is defeated!', 'log-death'); }
 }
-function gainBlock(n){ G.player.block += n; floatText(heroEl(), '+'+n+'🛡', '#9fd0ff'); }
-function healPlayer(n){ G.player.hp = Math.min(G.player.maxHp, G.player.hp+n); floatText(heroEl(), '+'+n+'❤', '#7fe0a2'); }
+function gainBlock(n){ G.player.block += n; floatText(heroEl(), '+'+n+'🛡', '#9fd0ff'); addLog('🛡️ You gain <b>'+n+'</b> block', 'log-block'); }
+function healPlayer(n){ var was=G.player.hp; G.player.hp = Math.min(G.player.maxHp, G.player.hp+n); floatText(heroEl(), '+'+n+'❤', '#7fe0a2'); addLog('❤️ You heal <b>'+(G.player.hp-was)+'</b> HP', 'log-heal'); }
 function damagePlayer(amt){
   var dmg = amt;
   var absorbed = Math.min(G.player.block, dmg);
@@ -554,7 +600,20 @@ function playCard(handIdx, targetIdx){
     if (!target){ return; }
   }
   G.player.energy -= c.cost;
-  setAnim('player','attack'); setTimeout(function(){ setAnim('player','idle'); render(); }, 260);
+  addLog('🃏 You play <b>'+c.name+'</b> <span class="log-sub">— '+c.desc+'</span>', 'log-play');
+  // card-appropriate animation: attacks throw the card's art at the target(s),
+  // skills/powers pop the art over the hero.
+  var hero=heroEl();
+  if (c.type==='attack'){
+    setAnim('player','attack');
+    if (hero){ hero.classList.add('lunge'); setTimeout(function(){ var h=heroEl(); if(h) h.classList.remove('lunge'); }, 320); }
+    var isAoeHit = /enemies\.forEach/.test(c.eff.toString());
+    var tgts = isAoeHit ? G.enemies.filter(function(e){ return !e.dead; }) : (target?[target]:[]);
+    tgts.forEach(function(tg){ projectile(hero, enemyEl(tg), c.art, { color: RARITY[c.rarity] }); });
+  } else {
+    castPop(hero, c.art, RARITY[c.rarity]);
+  }
+  setTimeout(function(){ setAnim('player','idle'); render(); }, 260);
   try { c.eff(G, target); } catch(e){ console.warn('card eff', e); }
   // remove from hand -> discard
   G.hand.splice(handIdx,1);
@@ -570,6 +629,7 @@ function endTurn(){
   // discard hand
   G.discard = G.discard.concat(G.hand); G.hand=[];
   G.turn='enemy'; render();
+  if (G.enemies.some(function(e){ return !e.dead; })) addLog('— Enemy turn —', 'log-turn');
   _busy = true;
   enemyActSeq(0);
 }
@@ -591,13 +651,20 @@ function enemyActSeq(i){
   if (act.type==='attack'){
     var v = act.value + (e.str||0);
     if (e.weak) v = Math.floor(v*0.75);
+    projectile(enemyEl(e), heroEl(), '💢', { color:'#e8584f', spin:-200 });
+    var hpBefore=G.player.hp, blkBefore=G.player.block;
     damagePlayer(v);
+    var dealt=hpBefore-G.player.hp, blocked=Math.min(blkBefore, v);
+    addLog('⚔️ '+e.name+' hits you for <b>'+dealt+'</b>'+(blocked?' <span class="log-sub">('+blocked+' blocked)</span>':''), 'log-enemy');
   } else if (act.type==='block'){
     e.block += act.value;
+    addLog('🛡️ '+e.name+' braces (+'+act.value+' block)', 'log-enemy');
   } else if (act.type==='buff'){
     e.str = (e.str||0)+2; floatText(enemyEl(e),'+2💪','#bff0cf');
+    addLog('💪 '+e.name+' grows stronger (+2 Strength)', 'log-buff');
   } else if (act.type==='debuff'){
     G.player.weak = (G.player.weak||0)+2; floatText(heroEl(),'Weak','#ffe6a3');
+    addLog('🌀 '+e.name+' weakens you (+2 Weak)', 'log-enemy');
   }
   render();
   if (G.state!=='combat'){ _busy=false; return; }
@@ -729,6 +796,51 @@ function floatText(el, txt, color){
   if(!el) return; var f=document.createElement('div'); f.className='floattxt'; f.textContent=txt; f.style.color=color||'#fff';
   var r=el.getBoundingClientRect(); f.style.left=(r.left+r.width/2-10)+'px'; f.style.top=(r.top+10)+'px';
   document.body.appendChild(f); setTimeout(function(){ f.remove(); }, 1000);
+}
+/* ---- battle log ---- */
+function addLog(msg, cls){
+  if(!G) return;
+  if(!G.log) G.log=[];
+  G.log.push({msg:msg, cls:cls||''});
+  if(G.log.length>80) G.log.shift();
+  renderLog(true);
+}
+function renderLog(scroll){
+  var box=$('logList'); if(!box) return;
+  box.innerHTML = (G&&G.log?G.log:[]).map(function(it){
+    return '<div class="logline '+it.cls+'">'+it.msg+'</div>';
+  }).join('');
+  if(scroll) box.scrollTop = box.scrollHeight;
+}
+/* ---- card-themed attack visuals ---- */
+function projectile(fromEl, toEl, emoji, opts){
+  opts=opts||{}; if(!fromEl||!toEl) return;
+  var a=fromEl.getBoundingClientRect(), b=toEl.getBoundingClientRect();
+  var x0=a.left+a.width/2, y0=a.top+a.height/2;
+  var x1=b.left+b.width/2, y1=b.top+b.height*0.45;
+  var el=document.createElement('div'); el.className='proj'; el.textContent=emoji||'✦';
+  el.style.left=x0+'px'; el.style.top=y0+'px';
+  document.body.appendChild(el);
+  requestAnimationFrame(function(){
+    el.style.transform='translate('+(x1-x0)+'px,'+(y1-y0)+'px) rotate('+(opts.spin||300)+'deg) scale(1.25)';
+    el.style.opacity='1';
+  });
+  setTimeout(function(){ el.remove(); burst(x1,y1,opts.color||'#ffd76a'); }, 270);
+}
+function burst(x,y,color){
+  var r=document.createElement('div'); r.className='burst';
+  r.style.left=x+'px'; r.style.top=y+'px'; if(color) r.style.borderColor=color;
+  document.body.appendChild(r);
+  requestAnimationFrame(function(){ r.style.transform='translate(-50%,-50%) scale(2.4)'; r.style.opacity='0'; });
+  setTimeout(function(){ r.remove(); }, 360);
+}
+function castPop(el, emoji, color){
+  if(!el) return; var r=el.getBoundingClientRect();
+  var p=document.createElement('div'); p.className='cast'; p.textContent=emoji||'✨';
+  p.style.left=(r.left+r.width/2)+'px'; p.style.top=(r.top+r.height/2)+'px'; if(color) p.style.color=color;
+  document.body.appendChild(p);
+  requestAnimationFrame(function(){ p.style.transform='translate(-50%,-140%) scale(1.5)'; p.style.opacity='0'; });
+  setTimeout(function(){ p.remove(); }, 520);
 }
 function intentText(e){
   var a=e.intent; if(!a) return '…';
@@ -1013,6 +1125,7 @@ function startRun(){ hide('introOverlay'); hide('overOverlay'); newRun(); update
 $('introStartBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } startRun(); _noteGamePlayStart(); };
 $('againBtn').onclick=function(){ if(!_canPlayGame()){ _showPlayLimit(); return; } startRun(); _noteGamePlayStart(); };
 $('endTurnBtn').onclick=endTurn;
+$('logHead').onclick=function(){ var p=$('logPanel'); var c=p.classList.toggle('collapsed'); $('logToggle').textContent=c?'▸':'▾'; if(!c) renderLog(true); };
 $('mapBtn').onclick=showMap; $('mapClose').onclick=function(){ hide('mapOverlay'); };
 $('deckBtn').onclick=showDeck; $('deckClose').onclick=function(){ hide('deckOverlay'); };
 $('restartBtn').onclick=function(){ if(G && confirm('Abandon this climb?')){ hide('overOverlay'); show('introOverlay'); G=null; } };
