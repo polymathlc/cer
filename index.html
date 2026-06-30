@@ -6804,7 +6804,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.44.0';
+const APP_VERSION = 'v1.45.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -16000,6 +16000,8 @@ async function loadUsageDashboard() {
       claimsSnap.forEach(d => _usagePrizeClaims.push(Object.assign({ _id: d.id }, d.data())));
       _usagePrizeClaims.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
     } catch (e) { console.warn('prize claims load', e); _usagePrizeClaims = []; }
+    // Also pull the leaderboard so EVERY winner shows — not only those who claimed.
+    try { _usageBoardRows = await rpgFetchLeaderboard(true); } catch (e) { console.warn('prize board load', e); _usageBoardRows = null; }
     renderPrizeClaims();
     renderPracticeReminders();
 
@@ -16013,32 +16015,92 @@ async function loadUsageDashboard() {
 
 // Monthly voucher winners' submitted contact details (admin view).
 let _usagePrizeClaims = [];
+let _usageBoardRows = null;
+// Compute last month's prize winners straight from the leaderboard so EVERY
+// winner is listed — those who haven't claimed yet show "Address not yet
+// provided". Claimed winners are merged in (contact, address, sent status).
+function _computePrizeWinners() {
+  const rows = _usageBoardRows;
+  if (!rows || !rows.length) return [];
+  const prev = rpgPrevMonthKey();
+  const out = [];
+  const push = (cat, ackSuffix, topN, valFn, resultFn) => {
+    rows.map(r => ({ r, v: valFn(r) })).filter(x => x.v > 0)
+      .sort((a, b) => b.v - a.v).slice(0, topN)
+      .forEach((x, i) => out.push({
+        _winId: x.r.uid + '_' + prev + ackSuffix,
+        uid: x.r.uid, name: x.r.name || '', monthKey: prev,
+        category: cat, rank: i + 1, result: resultFn(x.r, x.v)
+      }));
+  };
+  push('questions', '',      5, r => rpgLastMonthQ(r),            (r, v) => v + ' Q');
+  push('defenders', '_td',   3, r => rpgLastMonthGame(r, 'td'),  (r) => rpgLastMonthGameLabel(r, 'td')   || '—');
+  push('raiders',   '_raid', 3, r => rpgLastMonthGame(r, 'raid'),(r) => rpgLastMonthGameLabel(r, 'raid') || '—');
+  return out;
+}
 function renderPrizeClaims() {
   const tbody = document.getElementById('usagePrizeBody');
   if (!tbody) return;
-  if (!_usagePrizeClaims.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No prize claims yet. Monthly winners will appear here once they claim.</td></tr>';
+  const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders' : c.category === 'streak' ? '🎟️ 30-day streak' : '🎁 Questions';
+  const _claimResult = c => (c.category === 'defenders' || c.category === 'raiders')
+    ? (c.scoreLabel || (c.score != null ? c.score + ' pts' : '—'))
+    : c.category === 'streak'
+      ? (c.scoreLabel || '30 days')
+      : (c.questions != null ? c.questions + ' Q' : '—');
+
+  // Merge: start from every computed winner, fold in their claim (if any),
+  // then append any leftover claims (streaks, other months) not already shown.
+  const claimsById = {};
+  _usagePrizeClaims.forEach(c => { claimsById[c._id] = c; });
+  const usedClaimIds = {};
+  const winners = _computePrizeWinners();
+  const merged = winners.map(w => {
+    const c = claimsById[w._winId];
+    if (c) {
+      usedClaimIds[c._id] = true;
+      return Object.assign({}, c, { rank: w.rank, _result: _claimResult(c), _claimed: true });
+    }
+    return { _id: w._winId, uid: w.uid, name: w.name, email: '', monthKey: w.monthKey,
+             category: w.category, rank: w.rank, phone: '', address: '', physical: false,
+             status: 'unclaimed', _result: w.result, _claimed: false };
+  });
+  _usagePrizeClaims.forEach(c => {
+    if (usedClaimIds[c._id]) return;
+    merged.push(Object.assign({}, c, { _result: _claimResult(c), _claimed: true }));
+  });
+
+  if (!merged.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No winners yet. Last month’s prize winners will appear here.</td></tr>';
     return;
   }
-  const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders' : c.category === 'streak' ? '🎟️ 30-day streak' : '🎁 Questions';
-  const _prizeResult = c => (c.category === 'defenders' || c.category === 'raiders')
-    ? escapeHtml(c.scoreLabel || (c.score != null ? c.score + ' pts' : '—'))
-    : c.category === 'streak'
-      ? escapeHtml(c.scoreLabel || '30 days')
-      : (c.questions != null ? c.questions + ' Q' : '—');
-  tbody.innerHTML = _usagePrizeClaims.map(c => {
+  const catOrder = { questions: 0, defenders: 1, raiders: 2, streak: 3 };
+  merged.sort((a, b) =>
+    String(b.monthKey || '').localeCompare(String(a.monthKey || '')) ||
+    (catOrder[a.category] ?? 9) - (catOrder[b.category] ?? 9) ||
+    (a.rank || 99) - (b.rank || 99));
+
+  tbody.innerHTML = merged.map(c => {
     const sent = c.status === 'sent';
+    const unclaimed = !c._claimed;
+    const addressCell = c.physical
+      ? '<span style="color:var(--accent-blue);font-weight:600;">🏫 Physical student — collect in class</span>'
+      : c.address
+        ? escapeHtml(c.address)
+        : '<span style="color:var(--text-muted);font-style:italic;">Address not yet provided</span>';
+    const statusCell = sent
+      ? '<span style="color:var(--primary);font-weight:600;font-size:0.8rem;">✓ Sent</span>'
+      : unclaimed
+        ? '<span style="color:var(--text-muted);font-size:0.78rem;">⏳ Not claimed</span>'
+        : `<button class="btn btn-outline" style="font-size:0.74rem;padding:4px 10px;" onclick="markPrizeSent('${escapeHtml(c._id)}')">Mark sent</button>`;
     return `<tr${sent ? ' style="opacity:0.6;"' : ''}>
       <td style="font-weight:600;">${escapeHtml(c.name || '')}<div style="font-weight:400;color:var(--text-muted);font-size:0.78rem;">${escapeHtml(c.email || '')}</div></td>
       <td style="font-size:0.82rem;white-space:nowrap;">${escapeHtml(c.monthKey || '')}</td>
       <td style="font-size:0.8rem;white-space:nowrap;">${_prizeLabel(c)}</td>
       <td style="text-align:center;font-family:'Space Mono',monospace;">#${c.rank || '—'}</td>
-      <td style="text-align:center;font-size:0.8rem;">${_prizeResult(c)}</td>
+      <td style="text-align:center;font-size:0.8rem;">${escapeHtml(c._result || '—')}</td>
       <td style="font-size:0.82rem;white-space:nowrap;">${escapeHtml(c.phone || '')}</td>
-      <td style="font-size:0.82rem;max-width:240px;">${c.physical ? '<span style="color:var(--accent-blue);font-weight:600;">🏫 Physical student — collect in class</span>' : escapeHtml(c.address || '')}</td>
-      <td style="text-align:center;white-space:nowrap;">${sent
-        ? '<span style="color:var(--primary);font-weight:600;font-size:0.8rem;">✓ Sent</span>'
-        : `<button class="btn btn-outline" style="font-size:0.74rem;padding:4px 10px;" onclick="markPrizeSent('${escapeHtml(c._id)}')">Mark sent</button>`}</td>
+      <td style="font-size:0.82rem;max-width:240px;">${addressCell}</td>
+      <td style="text-align:center;white-space:nowrap;">${statusCell}</td>
     </tr>`;
   }).join('');
 }
