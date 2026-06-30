@@ -4637,6 +4637,7 @@ option {
       <div class="rpg-side-top"><span class="rpg-side-level" id="rpgSideLevel">Lv 1</span><span class="rpg-side-gold" id="rpgSideGold">🪙 0</span></div>
       <div class="rpg-bar mini" title="HP"><div class="rpg-bar-fill hp" id="rpgSideHp" style="width:100%;"></div></div>
       <div class="rpg-bar mini" title="XP to next level"><div class="rpg-bar-fill xp" id="rpgSideXp" style="width:0%;"></div></div>
+      <div class="rpg-side-credits" id="rpgSideCredits" style="display:none;" title="Game credits left today — each game play costs 1 credit. Answer 5 questions in any non-game mode to earn another."></div>
     </div>
     <div id="saveStatusIndicator" style="display:none;width:100%;text-align:center;font-size:0.7rem;padding:4px 12px;border-radius:6px;margin:0 8px 6px;font-family:'Space Mono',monospace;letter-spacing:0.03em;"></div>
     <div class="sidebar-footer">
@@ -5593,13 +5594,13 @@ option {
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>🏰 Endless Dungeon</h2>
           </div>
-          <div class="subtitle">Your hero fights automatically — weapon skills and pet abilities fire on cooldown. Beat each floor boss to descend deeper, where monsters grow ever stronger and richer. Each raid advances up to 3 floors, then you make camp — your progress is saved and the next raid carries on from there. 3 raids a day.</div>
+          <div class="subtitle">Your hero fights automatically — weapon skills and pet abilities fire on cooldown. Beat each floor boss to descend deeper, where monsters grow ever stronger and richer. Each raid advances up to 3 floors, then you make camp — your progress is saved and the next raid carries on from there. Each raid spends 1 of your daily game credits (answer 5 questions in any practice mode to earn more).</div>
         </div>
       </div>
       <div class="page-body">
         <div class="card adv-card">
           <div class="adv-top">
-            <span class="chip" id="advRunsChip">— runs left today</span>
+            <span class="chip" id="advRunsChip">— game credits left today</span>
             <span class="chip topic" id="advWaveChip" style="display:none;">Wave 1 / 5</span>
             <span style="flex:1;"></span>
             <button class="btn btn-ghost btn-sm" id="advQuitBtn" type="button" style="display:none;">🏳️ Give up</button>
@@ -6749,7 +6750,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.38.0';
+const APP_VERSION = 'v1.39.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -18329,7 +18330,7 @@ function rpgRebirth() {
   if (lvl < 60) { toast("Starfall unlocks at level 60", "error"); return; }
   let shards = (lvl - 50) + Math.floor((rpgState.stats.bestFloor || 0) / 10);
   if (lvl >= 99) shards = Math.round(shards * 1.5);
-  if (!confirm(`⭐ STARFALL — begin again at level 1 for ${shards} Star Shards?\n\nYOU KEEP: all items, gold, pets, upgrades, collections.\nRESETS: level, skill points (refunded), path seal, daily raids.\nYour gear remembers you — level requirements no longer apply.`)) return;
+  if (!confirm(`⭐ STARFALL — begin again at level 1 for ${shards} Star Shards?\n\nYOU KEEP: all items, gold, pets, upgrades, collections.\nRESETS: level, skill points (refunded), path seal.\nYour gear remembers you — level requirements no longer apply.`)) return;
   rpgState.shards = (rpgState.shards || 0) + shards;
   rpgState.rebirths = (rpgState.rebirths || 0) + 1;
   rpgState.xpBaseline = rpgState.xp;
@@ -18346,7 +18347,7 @@ function rpgRebirth() {
 const RPG_STAR_SHOP = [
   { id: "gold", name: "Stargold", icon: "🪙", desc: "+5% gold per rank", max: 10, cost: r => 5 * (r + 1) },
   { id: "learn", name: "Starlearn", icon: "📚", desc: "+5% XP per rank", max: 10, cost: r => 5 * (r + 1) },
-  { id: "raids", name: "Star Raids", icon: "🏰", desc: "+1 dungeon raid per day", max: 2, cost: () => 40 },
+  { id: "raids", name: "Star Raids", icon: "🏰", desc: "+1 game credit per day", max: 2, cost: () => 40 },
   { id: "nova", name: "Nova the Star-Dragon", icon: "🌟", desc: "Exclusive mythic pet", max: 1, cost: () => 100 }
 ];
 function rpgBuyStar(id) {
@@ -18802,7 +18803,7 @@ function rpgOnMarked(q, score, total, opts = {}) {
   const round = rpgState.battle ? rpgBattleRound(credit) : null;
   if (round && round.victory) { gold += round.victory.gold; xp += round.victory.xp; }
   const lvl = rpgApplyRewards(gold, xp);
-  if (!opts.simulated) rpgNoteUniqueQuestion(qid, opts.answerText);
+  if (!opts.simulated) { rpgNoteUniqueQuestion(qid, opts.answerText); try { _noteQuestionForCredit(qid); } catch (_) {} }
   rpgHintUsedQ = false;
   rpgSave();
   rpgPublishLeaderboard();
@@ -18896,6 +18897,16 @@ function rpgRenderSide() {
   if (hp) hp.style.width = Math.round((rpgState.hp / stats.maxHp) * 100) + "%";
   if (xpEl) xpEl.style.width = Math.round((info.into / info.need) * 100) + "%";
   if (chip) chip.textContent = `Lv ${info.level} · 🪙 ${rpgState.gold}`;
+  const cr = $("rpgSideCredits");
+  if (cr) {
+    if (currentUser && currentUser.role === "student") {
+      const left = _creditsLeft(), need = _creditsToNextReward();
+      cr.style.display = "";
+      cr.textContent = `🎮 ${left} game credit${left === 1 ? "" : "s"} today · ${need} more Q${need === 1 ? "" : "s"} → +1`;
+    } else {
+      cr.style.display = "none";
+    }
+  }
 }
 
 // ---- UI: battle banner on the practice pages ----
@@ -19896,7 +19907,9 @@ function advRunsUsed() {
   const r = rpgState && rpgState.advRuns;
   return r && r.day === advToday() ? (r.used || 0) : 0;
 }
-function advRunsLeft() { return Math.max(0, ADV_MAX_RUNS + ((rpgState && rpgState.star && rpgState.star.raids) || 0) - advRunsUsed()); }
+// Dungeon raids now draw from the same daily game-credit pool as the arcade
+// mini-games — "runs left" is just the shared credit balance.
+function advRunsLeft() { return _creditsLeft(); }
 // The floor the next raid resumes on. Saved across raids/days so the dungeon is
 // a continuous climb — each raid advances it by up to ADV_FLOORS_PER_RAID.
 function advDungeonFloor() { return Math.max(1, Math.floor((rpgState && rpgState.dungeonFloor) || 1)); }
@@ -20038,7 +20051,7 @@ function advOverlay(html) {
 }
 function advUpdateRunsChip() {
   const chip = $("advRunsChip");
-  if (chip) chip.textContent = rpgCanPreview() ? "∞ runs (teacher preview)" : `${advRunsLeft()} / ${ADV_MAX_RUNS} raids left today`;
+  if (chip) chip.textContent = rpgCanPreview() ? "∞ runs (teacher preview)" : `🎮 ${advRunsLeft()} game credit${advRunsLeft() === 1 ? "" : "s"} left today`;
 }
 function advHeroHtml() {
   return `<div class="adv-tag">${escapeHtml((currentUser && currentUser.name) || "You")}</div>` + rpgAvatarSvg() + advBarHtml("advHeroHp");
@@ -20081,16 +20094,13 @@ function rpgRenderAdventure() {
   const best = (rpgState.stats && rpgState.stats.bestFloor) || 0;
   const floor = advDungeonFloor();
   advOverlay(advRunsLeft() > 0 || rpgCanPreview()
-    ? `<div><h4>🏰 The Dungeon awaits — Floor ${floor}</h4><p>Your hero fights on their own — skills and pet abilities cast automatically. Each raid you descend up to <b>${ADV_FLOORS_PER_RAID} floors</b>, then make camp; your progress is saved and the next raid continues from where you stopped.${best > 1 ? ` Your deepest: <b>Floor ${best}</b>.` : ""}</p></div>`
-    : `<div><h4>🛌 No raids left today</h4><p>You've used all ${ADV_MAX_RUNS} dungeon raids for today. Your progress is saved — come back tomorrow to descend from <b>Floor ${floor}</b>.</p></div>`);
+    ? `<div><h4>🏰 The Dungeon awaits — Floor ${floor}</h4><p>Your hero fights on their own — skills and pet abilities cast automatically. Each raid you descend up to <b>${ADV_FLOORS_PER_RAID} floors</b>, then make camp; your progress is saved and the next raid continues from where you stopped. Each raid spends <b>1 game credit</b> (${advRunsLeft()} left today).${best > 1 ? ` Your deepest: <b>Floor ${best}</b>.` : ""}</p></div>`
+    : `<div><h4>🎮 Out of game credits</h4><p>You've used all your game credits for today. Answer <b>5 questions</b> in any practice mode to earn another, or come back tomorrow to descend from <b>Floor ${floor}</b>.</p></div>`);
 }
 function advStart() {
   if (!rpgState || adv) return;
-  if (!rpgCanPreview() && advRunsLeft() <= 0) { toast("No adventure runs left today — come back tomorrow!", "error"); return; }
-  if (!rpgCanPreview()) {
-    rpgState.advRuns = { day: advToday(), used: advRunsUsed() + 1 };
-    rpgSave();
-  }
+  if (!rpgCanPreview() && _creditsLeft() <= 0) { toast("Out of game credits — answer 5 questions to earn one, or come back tomorrow!", "error"); return; }
+  if (!rpgCanPreview()) _spendCredit();
   advToken++;
   const stats = rpgPlayerStats();
   const startFloor = advDungeonFloor(); // resume the climb from where the last raid stopped
@@ -20613,7 +20623,7 @@ function advRaidComplete() {
   const cleared = lastCleared - fromFloor + 1;
   advOverlay(`<div>
     <h4>🏁 Raid complete — ${cleared} floor${cleared === 1 ? "" : "s"} cleared!</h4>
-    <p>You cleared Floor ${fromFloor}${cleared > 1 ? `–${lastCleared}` : ""} and made camp. Your progress is saved — your next raid resumes at <b>Floor ${nextFloor}</b>.${rpgCanPreview() ? "" : (left > 0 ? ` ${left} raid${left === 1 ? "" : "s"} left today.` : " No raids left today — come back tomorrow to descend further.")}</p>
+    <p>You cleared Floor ${fromFloor}${cleared > 1 ? `–${lastCleared}` : ""} and made camp. Your progress is saved — your next raid resumes at <b>Floor ${nextFloor}</b>.${rpgCanPreview() ? "" : (left > 0 ? ` ${left} game credit${left === 1 ? "" : "s"} left today.` : " Out of game credits — answer 5 questions to earn another, or come back tomorrow.")}</p>
     <div class="rpg-reward-stats"><span>🏰 Floor ${nextFloor} next</span><span>🪙 +${gold} gold</span><span>✨ +${xp} XP</span></div>
     ${lvl.levelsGained > 0 ? `<div class="rpg-reward-stats"><span>⬆️ LEVEL UP — now Lv ${lvl.newLevel}!</span></div>` : ""}
   </div>`);
@@ -21245,30 +21255,66 @@ async function _sdRecordFlag(d, source) {
     ack(true);
   } catch (e) { console.warn('SD flag failed', e); ack(false, 'Could not submit — check your connection'); }
 }
-// Students may play each mini-game at most this many times per day (so they
-// don't over-do it). Counts persist on the hero state (Firestore), reset daily.
-const GAME_PLAY_LIMIT = 2;
+// Students get a shared daily pool of GAME CREDITS. Playing ANY game — Science
+// Defenders / Raiders / Spire AND the Dungeon raids — spends one credit, and the
+// pool refills to DAILY_CREDITS at the start of each day. Students top the pool
+// back up by answering questions in the non-game modes: every CREDITS_PER_REWARD
+// unique questions (deduped per day) earns one extra credit. Counts persist on
+// the hero state (Firestore) and reset daily.
+const DAILY_CREDITS = 6;        // free game credits granted each day
+const CREDITS_PER_REWARD = 5;   // non-game questions needed to earn 1 extra credit
+const GAME_PLAY_LIMIT = DAILY_CREDITS; // kept for the games' payload (display only)
 function _todayKey() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 const _GAME_MODES = ['defenders', 'raiders', 'spire'];
 function _gameModeKey(mode) { return _GAME_MODES.indexOf(mode) >= 0 ? mode : 'defenders'; }
-function _gamePlaysToday() {
-  if (!rpgState) return { day: _todayKey(), defenders: 0, raiders: 0, spire: 0 };
+// Bonus daily credits from the Starfall "Star Raids" prestige perk.
+function _creditBonus() { return (rpgState && rpgState.star && rpgState.star.raids) || 0; }
+function _dailyCreditAllowance() { return DAILY_CREDITS + _creditBonus(); }
+function _creditsToday() {
+  if (!rpgState) return { day: _todayKey(), balance: _dailyCreditAllowance(), qProgress: 0, qSeen: {} };
   const today = _todayKey();
-  if (!rpgState.gamePlays || rpgState.gamePlays.day !== today) rpgState.gamePlays = { day: today, defenders: 0, raiders: 0, spire: 0 };
-  return rpgState.gamePlays;
+  let c = rpgState.credits;
+  if (!c || c.day !== today) { c = rpgState.credits = { day: today, balance: _dailyCreditAllowance(), qProgress: 0, qSeen: {} }; }
+  if (typeof c.balance !== 'number') c.balance = _dailyCreditAllowance();
+  if (typeof c.qProgress !== 'number') c.qProgress = 0;
+  if (!c.qSeen || typeof c.qSeen !== 'object') c.qSeen = {};
+  return c;
 }
-function _gamePlaysLeft(mode) {
-  if (!currentUser || currentUser.role !== 'student') return 99; // no limit for admins / preview
-  const gp = _gamePlaysToday(), m = _gameModeKey(mode);
-  return Math.max(0, GAME_PLAY_LIMIT - (gp[m] || 0));
+// Credits remaining today. Admins / teacher-preview are never limited.
+function _creditsLeft() {
+  if (!currentUser || currentUser.role !== 'student') return 99;
+  return Math.max(0, _creditsToday().balance | 0);
 }
-function _noteGamePlay(mode) {
-  if (!currentUser || currentUser.role !== 'student' || !rpgState) return;
-  const gp = _gamePlaysToday(), m = _gameModeKey(mode);
-  gp[m] = (gp[m] || 0) + 1;
+// Questions still needed before the next credit is earned.
+function _creditsToNextReward() {
+  if (!currentUser || currentUser.role !== 'student' || !rpgState) return 0;
+  return Math.max(1, CREDITS_PER_REWARD - (_creditsToday().qProgress | 0));
+}
+// Spend one credit to start a game. Returns true if a credit was available.
+function _spendCredit() {
+  if (!currentUser || currentUser.role !== 'student' || !rpgState) return true; // no limit for admins/preview
+  const c = _creditsToday();
+  if ((c.balance | 0) <= 0) return false;
+  c.balance = (c.balance | 0) - 1;
   try { rpgSave(); } catch (e) {}
+  try { rpgRenderSide(); } catch (e) {}
+  return true;
 }
-function _playsLeftPayload() { return { defenders: _gamePlaysLeft('defenders'), raiders: _gamePlaysLeft('raiders'), spire: _gamePlaysLeft('spire') }; }
+// Count a finished question (a non-game mode) toward the next earned credit.
+function _noteQuestionForCredit(qid) {
+  if (!currentUser || currentUser.role !== 'student' || !rpgState) return;
+  const c = _creditsToday();
+  const key = String(qid || '');
+  if (key) { if (c.qSeen[key]) return; c.qSeen[key] = 1; } // one credit-step per question per day
+  c.qProgress = (c.qProgress | 0) + 1;
+  let earned = 0;
+  while (c.qProgress >= CREDITS_PER_REWARD) { c.qProgress -= CREDITS_PER_REWARD; c.balance = (c.balance | 0) + 1; earned++; }
+  if (earned > 0) { try { toast(`🎮 +${earned} game credit${earned > 1 ? 's' : ''} earned — ${_creditsLeft()} left today`, 'success'); } catch (e) {} }
+  try { rpgSave(); } catch (e) {}
+  try { rpgRenderSide(); } catch (e) {}
+}
+// The mini-games gate on playsLeft[mode]; every mode reads the same shared pool.
+function _playsLeftPayload() { const n = _creditsLeft(); return { defenders: n, raiders: n, spire: n }; }
 
 window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
@@ -21284,7 +21330,7 @@ window.addEventListener('message', function (ev) {
         seenIds,
         studentKey: (currentUser && currentUser.uid) || 'guest',
         studentName: (currentUser && currentUser.name) || '',
-        playLimit: GAME_PLAY_LIMIT,
+        playLimit: _dailyCreditAllowance(),
         playsLeft: _playsLeftPayload()
       };
       try { ev.source && ev.source.postMessage(payload, '*'); } catch (e) {}
@@ -21306,7 +21352,7 @@ window.addEventListener('message', function (ev) {
       try { ev.source && ev.source.postMessage({ type: 'spireAssets', overrides }, '*'); } catch (e) {}
     })();
   } else if (d.type === 'SD_PLAY_START') {
-    _noteGamePlay(d.mode);
+    _spendCredit();
     try { ev.source && ev.source.postMessage({ type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() }, '*'); } catch (e) {}
   }
 });
