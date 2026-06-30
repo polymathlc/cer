@@ -5713,7 +5713,10 @@ option {
           </div>
           <div class="subtitle">Slay-the-Spire-style deck builder — answer science questions, build a deck, open packs for rare cards</div>
         </div>
-        <a class="btn btn-outline" href="science-spire.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="spireBookBtn" type="button" style="font-size:0.82rem;">🃏 Spellbook &amp; Packs</button>
+          <a class="btn btn-outline" href="science-spire.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+        </div>
       </div>
       <iframe id="spireFrame" class="embed-frame" title="Science Spire — Deck-building MCQ Roguelike"></iframe>
     </div>
@@ -6129,6 +6132,56 @@ option {
     <div class="overlay-head"><h3 id="rpgRewardTitle">Victory!</h3><button class="close" data-close="rpgRewardOverlay" type="button">×</button></div>
     <div class="overlay-body" id="rpgRewardBody"></div>
     <div class="overlay-foot"><button class="btn btn-primary" data-close="rpgRewardOverlay" type="button">Continue</button></div>
+  </div>
+</div>
+
+<!-- ==================== SCIENCE SPIRE — SPELLBOOK (packs + deck builder) ==================== -->
+<style>
+#spireBookOverlay .overlay-card, #spireCardPackOverlay .overlay-card{ max-width:880px; background:radial-gradient(120% 80% at 50% -10%,#2a2014,#181209 60%,#0e0a05); color:#e8dcc0; border:1px solid #6a521f; }
+#spireBookOverlay .overlay-head, #spireCardPackOverlay .overlay-head{ border-bottom:1px solid rgba(201,164,74,.3); }
+#spireBookOverlay .overlay-head h3, #spireCardPackOverlay .overlay-head h3{ color:#f4e9c6; font-family:Georgia,serif; letter-spacing:.02em; }
+#spireBookOverlay .overlay-head .close, #spireCardPackOverlay .overlay-head .close{ color:#caa54b; }
+#spireBookOverlay .overlay-foot, #spireCardPackOverlay .overlay-foot{ border-top:1px solid rgba(201,164,74,.3); }
+.spire-points{ font-size:1rem; font-weight:800; color:#ffd76a; margin-bottom:12px; }
+.spire-pack-hero{ display:flex; gap:16px; align-items:flex-start; background:rgba(40,30,16,.45); border:1px solid rgba(201,164,74,.3); border-radius:12px; padding:14px; }
+.spire-pack-box{ font-size:46px; line-height:1; filter:drop-shadow(0 4px 6px rgba(0,0,0,.5)); }
+.spire-pack-hero h4{ margin:0 0 4px; font-family:Georgia,serif; font-size:1.05rem; color:#f4e9c6; }
+.spire-pack-hero p{ margin:0 0 9px; font-size:.84rem; line-height:1.45; color:#b6a880; }
+.spire-pack-hero p b{ color:#ffd76a; }
+.spire-pack-buy{ display:flex; gap:8px; flex-wrap:wrap; }
+.spire-sec-head{ display:flex; align-items:center; gap:8px; margin:18px 0 8px; font-family:Georgia,serif; font-weight:700; letter-spacing:.04em; color:#e8dcc0; font-size:.95rem; }
+.spire-card-grid{ display:flex; flex-wrap:wrap; gap:10px; }
+.spire-deck-strip{ display:flex; flex-wrap:wrap; gap:7px; min-height:54px; padding:10px; border:1px dashed rgba(201,164,74,.4); border-radius:10px; background:rgba(40,30,16,.25); }
+.spire-deck-chip{ display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:8px; background:#1d1708; border:1px solid #6a521f; cursor:pointer; font-size:.74rem; color:#f4e9c6; }
+.spire-deck-chip:hover{ border-color:#caa54b; }
+.spire-deck-chip .x{ color:#e8584f; font-weight:800; }
+.spire-pack-rate{ display:inline-block; font-size:.62rem; font-weight:800; border:1px solid; border-radius:999px; padding:1px 8px; margin:2px 3px 2px 0; }
+.smini{ --tc:#caa54b; width:104px; border-radius:11px; position:relative; padding:0 0 8px; cursor:pointer; flex:0 0 auto; background:linear-gradient(160deg,#3a2f16,#1d1708 55%,#120d05); border:1.5px solid #6a521f; box-shadow:0 0 0 1px rgba(201,164,74,.3) inset,0 4px 10px rgba(0,0,0,.4); transition:transform .12s; }
+.smini:hover{ transform:translateY(-3px); }
+.smini.attack{ --tc:#d06b57; } .smini.skill{ --tc:#5fae93; } .smini.power{ --tc:#a98cdf; } .smini.relic{ --tc:#cba74e; }
+.smini.locked{ opacity:.5; filter:grayscale(.4); cursor:default; }
+.smini.locked:hover{ transform:none; }
+.smini .scost{ position:absolute; top:-8px; left:-8px; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:.8rem; color:#241500; background:radial-gradient(circle at 38% 30%,#fff7d6,#e8b41f 58%,#8a5e10); border:2px solid #1a1206; box-shadow:0 0 0 1.5px #ffe9a3; }
+.smini .sgem{ position:absolute; top:6px; right:6px; width:12px; height:12px; transform:rotate(45deg); border-radius:3px; box-shadow:0 0 0 1.5px #caa54b; }
+.smini .sart{ margin:8px 7px 0; height:50px; border-radius:6px; border:1px solid rgba(201,164,74,.5); background:#0c0a14; box-shadow:inset 0 0 22px -6px var(--tc); display:flex; align-items:center; justify-content:center; font-size:26px; overflow:hidden; }
+.smini .sart img{ width:100%; height:100%; object-fit:cover; }
+.smini .sname{ margin:6px 6px 0; text-align:center; font-weight:800; font-size:.66rem; color:#f4e9c6; font-family:Georgia,serif; line-height:1.06; }
+.smini .smeta{ margin:3px 6px 0; text-align:center; font-size:.52rem; text-transform:uppercase; letter-spacing:.07em; color:var(--tc); font-weight:800; }
+.smini .sbadge{ margin:5px 6px 0; text-align:center; font-size:.56rem; font-weight:800; color:#ffd76a; }
+@media(max-width:560px){ .smini{ width:88px; } .smini .sart{ height:42px; font-size:22px; } }
+</style>
+<div class="overlay" id="spireBookOverlay">
+  <div class="overlay-card spirebook">
+    <div class="overlay-head"><h3>🃏 Spellbook &amp; Packs</h3><button class="close" data-close type="button">×</button></div>
+    <div class="overlay-body" id="spireBookBody"></div>
+    <div class="overlay-foot"><button class="btn btn-ghost" data-close type="button">Done</button></div>
+  </div>
+</div>
+<div class="overlay" id="spireCardPackOverlay">
+  <div class="overlay-card" style="max-width:560px;">
+    <div class="overlay-head"><h3>🎁 Spell Pack</h3><button class="close" data-close type="button">×</button></div>
+    <div class="overlay-body" id="spireCardPackBody"></div>
+    <div class="overlay-foot"><button class="btn btn-primary" data-close type="button">Collect</button></div>
   </div>
 </div>
 
@@ -6751,7 +6804,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.40.1';
+const APP_VERSION = 'v1.41.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -17618,6 +17671,7 @@ function rpgDefaults() {
                   raiders:   { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null } },
     inventory: { wood_sword: 1, cloth_tunic: 1 },
     equipment: { weapon: "wood_sword", shield: null, armor: "cloth_tunic", helmet: null, accessory: null, pet: null },
+    spireCards: {}, spireDeck: [],
     battle: null, upgrades: {}, clazz: null, skills: {}, paths: {}, affixes: {}, petBond: {}, daily: null, streak: null, packCoupon: 0, rebirths: 0, xpBaseline: 0, shards: 0, star: { gold: 0, learn: 0, raids: 0, nova: false }, kills: {}, seenQ: {},
     stats: { wins: 0, defeats: 0, marked: 0, correct: 0, goldEarned: 0 }
   };
@@ -17645,6 +17699,8 @@ function rpgHydrate(saved) {
   const st = Object.assign(rpgDefaults(), saved || {});
   st.inventory = Object.assign({}, (saved && saved.inventory) || rpgDefaults().inventory);
   st.equipment = Object.assign(rpgDefaults().equipment, (saved && saved.equipment) || {});
+  st.spireCards = Object.assign({}, (saved && saved.spireCards) || {});
+  st.spireDeck = Array.isArray(saved && saved.spireDeck) ? saved.spireDeck.slice(0, 60) : [];
   st.stats = Object.assign(rpgDefaults().stats, (saved && saved.stats) || {});
   st.upgrades = Object.assign({}, (saved && saved.upgrades) || {});
   st.skills = Object.assign({}, (saved && saved.skills) || {});
@@ -21419,8 +21475,8 @@ window.addEventListener('message', function (ev) {
     })();
   } else if (d.type === 'SPIRE_REQUEST_ASSETS') {
     (async () => {
-      const overrides = await loadSpireOverrides();
-      try { ev.source && ev.source.postMessage({ type: 'spireAssets', overrides }, '*'); } catch (e) {}
+      const payload = await spireAssetsPayload();
+      try { ev.source && ev.source.postMessage(payload, '*'); } catch (e) {}
     })();
   } else if (d.type === 'SD_PLAY_START') {
     _spendCredit();
@@ -21634,6 +21690,10 @@ async function loadGameAssets(){
     });
   });
 
+  // ===== Science Spire — card art overrides (one picture per card) =====
+  await loadSpireCardArt(true);
+  html += spireCardArtAdminHtml();
+
   host.innerHTML = html;
 }
 
@@ -21779,10 +21839,18 @@ async function loadSpireOverrides(force){
   } catch (e) { console.warn('spire overrides load failed', e); _spireOverridesCache = _spireOverridesCache || {}; }
   return _spireOverridesCache;
 }
-async function pushSpireAssets(){
+// Full asset payload for the Spire game: character overrides + card art overrides
+// + the player's permanently-owned cards and their chosen starting deck.
+async function spireAssetsPayload(){
   const overrides = await loadSpireOverrides();
+  const cardArt = await loadSpireCardArt();
+  return { type: 'spireAssets', overrides, cardArt,
+    cards: (rpgState && rpgState.spireCards) || {}, deck: spireResolvedDeck() };
+}
+async function pushSpireAssets(){
+  const payload = await spireAssetsPayload();
   const f = document.getElementById('spireFrame');
-  try { f && f.contentWindow && f.contentWindow.postMessage({ type: 'spireAssets', overrides }, '*'); } catch (e) {}
+  try { f && f.contentWindow && f.contentWindow.postMessage(payload, '*'); } catch (e) {}
 }
 async function _spireApplyImage(slotId, dataUrl){
   const status = document.getElementById('sgstatus-' + slotId.replace(':','-'));
@@ -21832,6 +21900,301 @@ async function resetSpireObj(slotId){
     showToast('Reset to default', 'success');
   } catch (e) { console.error('spire reset failed', e); showToast('Reset failed', 'error'); }
 }
+
+// =====================================================================
+// SCIENCE SPIRE — SPELLBOOK: card packs, collection & deck builder.
+// Cards bought from Spell Packs (with the same gold/points earned from
+// questions that buy Mythic equipment) are PERMANENT account assets — stored on
+// rpgState.spireCards and synced to Firestore, exactly like the RPG inventory.
+// The chosen starting deck (rpgState.spireDeck) is pushed into the game iframe.
+// Card pictures come from designed vector art in the game; admins may override
+// any card with their own image (settings/spireCardArt → cardId:url), making
+// cards "game objects" too — the same model as the character sprites above.
+// The card ids/cost/type/rarity MUST mirror science-spire.html's CARDS map.
+// =====================================================================
+const SPIRE_CARDS = {
+  strike:      { name:'Strike',       type:'attack', cost:1, rarity:'common',    art:'🗡️', basic:true, desc:'Deal 6 damage.' },
+  defend:      { name:'Defend',       type:'skill',  cost:1, rarity:'common',    art:'🛡️', basic:true, desc:'Gain 5 Block.' },
+  bash:        { name:'Bash',         type:'attack', cost:2, rarity:'common',    art:'🔨', desc:'Deal 8 and apply 2 Vulnerable.' },
+  jab:         { name:'Quick Jab',    type:'attack', cost:0, rarity:'common',    art:'🤜', desc:'Deal 3 damage.' },
+  guard:       { name:'Iron Guard',   type:'skill',  cost:2, rarity:'common',    art:'🪨', desc:'Gain 11 Block.' },
+  cleave:      { name:'Cleave',       type:'attack', cost:1, rarity:'uncommon',  art:'🪓', desc:'Deal 5 to ALL enemies.' },
+  pommel:      { name:'Pommel Strike',type:'attack', cost:1, rarity:'uncommon',  art:'⚔️', desc:'Deal 7 and draw 1 card.' },
+  focus:       { name:'Focus',        type:'skill',  cost:0, rarity:'uncommon',  art:'🌀', desc:'Draw 2 cards.' },
+  adrenal:     { name:'Adrenaline',   type:'skill',  cost:0, rarity:'uncommon',  art:'⚡', desc:'Gain 1 Energy & draw 1.' },
+  weaken:      { name:'Weaken Ray',   type:'skill',  cost:1, rarity:'uncommon',  art:'🔬', desc:'Apply 2 Weak to ALL enemies.' },
+  poison:      { name:'Acid Flask',   type:'skill',  cost:1, rarity:'uncommon',  art:'🧪', desc:'Apply 5 Poison.' },
+  fireball:    { name:'Fireball',     type:'attack', cost:2, rarity:'rare',      art:'🔥', desc:'Deal 14 damage. Lingers (Burn 3).' },
+  shieldwall:  { name:'Shield Wall',  type:'skill',  cost:2, rarity:'rare',      art:'🏰', desc:'Gain 18 Block & draw 1.' },
+  doublestrike:{ name:'Twin Fang',    type:'attack', cost:1, rarity:'rare',      art:'🦷', desc:'Deal 6 twice.' },
+  rage:        { name:'Berserk',      type:'power',  cost:1, rarity:'rare',      art:'😤', desc:'Gain 2 Strength permanently.' },
+  meteor:      { name:'Meteor',       type:'attack', cost:3, rarity:'epic',      art:'☄️', desc:'Deal 11 to ALL enemies, 4 Vulnerable.' },
+  lifesteal:   { name:'Vampiric Bite',type:'attack', cost:2, rarity:'epic',      art:'🩸', desc:'Deal 12 and heal 6 HP.' },
+  fortress:    { name:'Bulwark',      type:'power',  cost:2, rarity:'epic',      art:'🛡️', desc:'Gain 4 Block at the start of every turn.' },
+  apex:        { name:'Apex Nova',    type:'attack', cost:3, rarity:'legendary', art:'🌟', desc:'Deal 9 to ALL, gain 1 Energy & Strength.' },
+  singularity: { name:'Singularity',  type:'attack', cost:2, rarity:'legendary', art:'🕳️', desc:'Deal damage = 30% of target max HP.' }
+};
+const SPIRE_RAR = {
+  common:    { label:'Common',    color:'#c8ced4', rank:1, refund:18 },
+  uncommon:  { label:'Uncommon',  color:'#88c8f4', rank:2, refund:34 },
+  rare:      { label:'Rare',      color:'#ffd76a', rank:3, refund:60 },
+  epic:      { label:'Epic',      color:'#caa6f0', rank:4, refund:100 },
+  legendary: { label:'Legendary', color:'#f6a6e0', rank:5, refund:170 }
+};
+const SPIRE_TYPE_COLOR = { attack:'#d06b57', skill:'#5fae93', power:'#a98cdf', relic:'#cba74e' };
+const SPIRE_PACK_COST = 200;
+const SPIRE_PACK_RATES = [["legendary",4],["epic",9],["rare",20],["uncommon",30],["common",37]];
+const SPIRE_MAX_COPIES = 6;     // pack stacking cap per collectible card
+const SPIRE_DECK_MAX = 30;
+const SPIRE_DECK_MIN = 10;
+const SPIRE_BASIC_MAX = 10;     // copies of a free basic you may field
+
+// ---- card-art overrides (admin pictures), mirrors loadSpireOverrides ----
+let _spireCardArtCache = null;  // { cardId: url }
+function _spireCardArtRef(uid){ return doc(db, 'users', uid, 'settings', 'spireCardArt'); }
+async function loadSpireCardArt(force){
+  if (_spireCardArtCache && !force) return _spireCardArtCache;
+  const uid = _spireOwnerUid();
+  if (!uid){ _spireCardArtCache = {}; return _spireCardArtCache; }
+  try {
+    const snap = await getDoc(_spireCardArtRef(uid));
+    _spireCardArtCache = (snap.exists() && snap.data().overrides) ? snap.data().overrides : {};
+  } catch (e){ console.warn('spire card art load failed', e); _spireCardArtCache = _spireCardArtCache || {}; }
+  return _spireCardArtCache;
+}
+
+// ---- deck helpers ----
+function spireMaxInDeck(id){
+  const c = SPIRE_CARDS[id]; if (!c) return 0;
+  if (c.basic) return SPIRE_BASIC_MAX;
+  return (rpgState && rpgState.spireCards[id]) || 0;
+}
+function spireDeckCount(id){ return (rpgState ? rpgState.spireDeck : []).filter(x => x === id).length; }
+function spireResolvedDeck(){
+  if (!rpgState || !Array.isArray(rpgState.spireDeck)) return [];
+  const used = {};
+  return rpgState.spireDeck.filter(id => {
+    if (!SPIRE_CARDS[id]) return false;
+    used[id] = (used[id] || 0) + 1;
+    return used[id] <= spireMaxInDeck(id);
+  });
+}
+function spireSyncGame(){ rpgSave(); pushSpireAssets(); }
+
+// ---- packs (spend gold, grant permanent cards) ----
+function spireRollRarity(){
+  const roll = Math.random() * 100; let acc = 0;
+  for (const [r, p] of SPIRE_PACK_RATES){ acc += p; if (roll < acc) return r; }
+  return 'common';
+}
+function _spireRollCard(){
+  const rarity = spireRollRarity();
+  const pool = Object.keys(SPIRE_CARDS).filter(id => SPIRE_CARDS[id].rarity === rarity && !SPIRE_CARDS[id].basic);
+  const id = pool[Math.floor(Math.random() * pool.length)];
+  const have = (rpgState.spireCards[id] || 0);
+  let refund = 0;
+  if (have >= SPIRE_MAX_COPIES){ refund = SPIRE_RAR[rarity].refund; rpgState.gold += refund; }
+  else rpgState.spireCards[id] = have + 1;
+  return { id, rarity, refund, capped: have >= SPIRE_MAX_COPIES };
+}
+function spireOpenCardPacks(requested){
+  if (!rpgState) return;
+  let n = 0, g = rpgState.gold;
+  while (n < requested && g >= SPIRE_PACK_COST){ g -= SPIRE_PACK_COST; n++; if (n >= 500) break; }
+  if (n < 1){ showToast(`A Spell Pack costs 🪙 ${SPIRE_PACK_COST} — answer more questions to earn points!`, 'error'); return; }
+  let spent = 0, refund = 0; const results = [];
+  for (let i = 0; i < n; i++){ rpgState.gold -= SPIRE_PACK_COST; spent += SPIRE_PACK_COST; const r = _spireRollCard(); refund += r.refund; results.push(r); }
+  rpgState.stats.packsOpened = (rpgState.stats.packsOpened || 0) + n;
+  spireSyncGame();
+  spireRenderCardPack(results, spent, refund, n);
+  spireRenderBook();
+}
+function spireRenderCardPack(results, spent, refund, n){
+  const order = ['legendary','epic','rare','uncommon','common'];
+  const sorted = results.slice().sort((a,b) => SPIRE_RAR[b.rarity].rank - SPIRE_RAR[a.rarity].rank);
+  const tally = {}; results.forEach(r => tally[r.rarity] = (tally[r.rarity] || 0) + 1);
+  const tallyHtml = order.filter(r => tally[r]).map(r =>
+    `<span class="spire-pack-rate" style="border-color:${SPIRE_RAR[r].color};color:${SPIRE_RAR[r].color};">${SPIRE_RAR[r].label} ×${tally[r]}</span>`).join('');
+  const cards = sorted.map(r => spireMiniCard(r.id, { context:'pack', tag: r.capped ? `dup · +🪙 ${r.refund}` : '✨ new' })).join('');
+  const top = sorted[0];
+  const head = n === 1
+    ? `<div style="text-align:center;font-family:'Cinzel',Georgia,serif;letter-spacing:.06em;color:${SPIRE_RAR[top.rarity].color};font-weight:800;font-size:1.05rem;">${top.rarity==='legendary'?'✦ LEGENDARY ✦':SPIRE_RAR[top.rarity].label}</div>`
+    : `<div style="text-align:center;margin-bottom:8px;">${tallyHtml}</div>`;
+  const body = document.getElementById('spireCardPackBody');
+  if (body) body.innerHTML =
+    `${head}<div class="spire-card-grid" style="justify-content:center;margin:12px 0;">${cards}</div>
+     <div style="text-align:center;color:#b6a880;font-size:.82rem;">Opened <b>${n}</b> pack${n===1?'':'s'} · spent 🪙 ${spent.toLocaleString()}${refund?` · refunded 🪙 ${refund.toLocaleString()}`:''}</div>`;
+  const ov = document.getElementById('spireCardPackOverlay'); if (ov) ov.classList.add('show');
+}
+
+// ---- mini gilded card (collection / deck / pack views) ----
+function spireCardArtThumb(id){
+  const ov = _spireCardArtCache && _spireCardArtCache[id];
+  if (ov) return `<img src="${escapeHtml(ov)}" alt="" onerror="this.style.display='none'">`;
+  return `<span>${SPIRE_CARDS[id].art}</span>`;
+}
+function spireMiniCard(id, opts){
+  opts = opts || {};
+  const c = SPIRE_CARDS[id]; if (!c) return '';
+  const gemColor = SPIRE_RAR[c.rarity].color;
+  const inDeck = spireDeckCount(id), max = spireMaxInDeck(id);
+  let badge = '';
+  if (opts.context === 'collection'){
+    const owned = c.basic ? '∞' : ((rpgState.spireCards[id] || 0));
+    badge = `<div class="sbadge">${inDeck>0?`▶ ${inDeck} · `:''}×${owned}</div>`;
+  } else if (opts.tag){ badge = `<div class="sbadge">${escapeHtml(opts.tag)}</div>`; }
+  const locked = opts.context === 'collection' && !c.basic && !(rpgState.spireCards[id] > 0);
+  const attr = opts.action ? ` data-spire-${opts.action}="${id}"` : '';
+  return `<div class="smini ${c.type}${locked?' locked':''}"${attr} title="${escapeHtml(c.name)} — ${escapeHtml(c.desc)}">
+    <span class="scost">${c.cost}</span><span class="sgem" style="background:${gemColor};"></span>
+    <div class="sart">${locked ? '🔒' : spireCardArtThumb(id)}</div>
+    <div class="sname">${escapeHtml(c.name)}</div>
+    <div class="smeta">${c.type}${c.rarity!=='common'?` · ${c.rarity}`:''}</div>
+    ${badge}
+  </div>`;
+}
+
+// ---- Spellbook overlay (shop + deck builder) ----
+function spireBookOpen(){
+  if (!rpgState){ showToast('Sign in to collect cards', 'error'); return; }
+  loadSpireCardArt().then(() => { spireRenderBook(); const ov = document.getElementById('spireBookOverlay'); if (ov) ov.classList.add('show'); });
+}
+function spireRenderBook(){
+  const body = document.getElementById('spireBookBody'); if (!body) return;
+  const gold = (rpgState && rpgState.gold) || 0;
+  const ratesHtml = SPIRE_PACK_RATES.map(([r,p]) =>
+    `<span class="spire-pack-rate" style="border-color:${SPIRE_RAR[r].color};color:${SPIRE_RAR[r].color};">${SPIRE_RAR[r].label} ${p}%</span>`).join('');
+  const deck = spireResolvedDeck();
+  const deckChips = deck.length
+    ? deck.map(id => `<span class="spire-deck-chip" data-spire-remove="${id}" title="Remove from deck">${SPIRE_CARDS[id].art} ${escapeHtml(SPIRE_CARDS[id].name)} <span class="x">✕</span></span>`).join('')
+    : `<span style="color:#9c8f6c;font-style:italic;align-self:center;">Empty — add at least ${SPIRE_DECK_MIN} cards, or you'll start with the default Strike/Defend deck.</span>`;
+  const allIds = Object.keys(SPIRE_CARDS);
+  const ownedIds = allIds.filter(id => SPIRE_CARDS[id].basic || (rpgState.spireCards[id] > 0));
+  const lockedIds = allIds.filter(id => !SPIRE_CARDS[id].basic && !(rpgState.spireCards[id] > 0));
+  const order = id => SPIRE_RAR[SPIRE_CARDS[id].rarity].rank;
+  ownedIds.sort((a,b) => order(a) - order(b) || a.localeCompare(b));
+  lockedIds.sort((a,b) => order(a) - order(b) || a.localeCompare(b));
+  const collection = ownedIds.map(id => spireMiniCard(id, { context:'collection', action:'add' })).join('');
+  const locked = lockedIds.map(id => spireMiniCard(id, { context:'collection' })).join('');
+  const deckSizeColor = deck.length < SPIRE_DECK_MIN ? '#e8a04a' : '#7be0a2';
+  body.innerHTML = `
+    <div class="spire-points">🪙 <b>${gold.toLocaleString()}</b> points</div>
+    <div class="spire-pack-hero">
+      <span class="spire-pack-box">🎁</span>
+      <div>
+        <h4>Spell Pack</h4>
+        <p>One random card from the spire's armoury — the way to grow your collection. Cards you pull are <b>yours forever</b>. Duplicates past ×${SPIRE_MAX_COPIES} refund points.</p>
+        <div class="spire-pack-buy">
+          <button class="btn btn-primary" type="button" data-spire-pack="1" ${gold < SPIRE_PACK_COST ? 'disabled' : ''}>🎁 Open 1 · 🪙 ${SPIRE_PACK_COST}</button>
+          <button class="btn btn-outline" type="button" data-spire-pack="10" ${gold < 10*SPIRE_PACK_COST ? 'disabled' : ''}>Open ×10 · 🪙 ${(10*SPIRE_PACK_COST).toLocaleString()}</button>
+          <button class="btn btn-outline" type="button" data-spire-pack="all" ${gold < SPIRE_PACK_COST ? 'disabled' : ''}>Spend all 🪙</button>
+        </div>
+        <div style="margin-top:8px;">${ratesHtml}</div>
+      </div>
+    </div>
+    <div class="spire-sec-head">Your starting deck <span style="color:${deckSizeColor};font-weight:800;">${deck.length}/${SPIRE_DECK_MAX}</span>
+      <button class="btn btn-ghost" type="button" data-spire-deck-clear style="margin-left:auto;font-size:.78rem;">Clear</button></div>
+    <div class="spire-deck-strip">${deckChips}</div>
+    <div class="spire-sec-head">Collection — click a card to add it to your deck</div>
+    <div class="spire-card-grid">${collection}</div>
+    ${locked ? `<div class="spire-sec-head" style="opacity:.7;">Not yet collected — open packs to unlock</div><div class="spire-card-grid">${locked}</div>` : ''}
+  `;
+}
+function spireDeckAdd(id){
+  if (!rpgState || !SPIRE_CARDS[id]) return;
+  if (spireDeckCount(id) >= spireMaxInDeck(id)){ showToast(SPIRE_CARDS[id].basic ? `Max ${SPIRE_BASIC_MAX} copies of a basic` : 'You own no more copies — open packs!', 'error'); return; }
+  if (rpgState.spireDeck.length >= SPIRE_DECK_MAX){ showToast(`Deck is full (${SPIRE_DECK_MAX} cards)`, 'error'); return; }
+  rpgState.spireDeck.push(id);
+  spireSyncGame(); spireRenderBook();
+}
+function spireDeckRemove(id){
+  if (!rpgState) return;
+  const i = rpgState.spireDeck.lastIndexOf(id);
+  if (i >= 0){ rpgState.spireDeck.splice(i, 1); spireSyncGame(); spireRenderBook(); }
+}
+function spireDeckClear(){ if (rpgState){ rpgState.spireDeck = []; spireSyncGame(); spireRenderBook(); } }
+
+// ---- ADMIN: card-art override uploader (mirrors the spire sprite uploader) ----
+async function _spireCardArtApply(id, dataUrl){
+  const status = document.getElementById('scardstatus-' + id);
+  try {
+    if (status) status.textContent = 'Uploading…';
+    if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
+    const scaled = await _scaleDownDataUrl(dataUrl, SPIRE_MAX_SIDE);
+    const url = await uploadImageDataUrl(scaled);
+    const uid = _spireOwnerUid(); if (!uid) throw new Error('Not signed in');
+    await setDoc(_spireCardArtRef(uid), { overrides: { [id]: url } }, { merge: true });
+    _spireCardArtCache = _spireCardArtCache || {}; _spireCardArtCache[id] = url;
+    await pushSpireAssets();
+    await loadGameAssets();
+    showToast('Card art updated', 'success');
+  } catch (e){ console.error('spire card art failed', e); showToast('Update failed: ' + (e && e.message ? e.message : e), 'error'); if (status) status.textContent = 'Failed'; }
+}
+function onSpireCardPaste(id, e){
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items){ if (it.type && it.type.startsWith('image/')){ e.preventDefault(); _raidersFileToDataUrl(it.getAsFile(), du => _spireCardArtApply(id, du)); return; } }
+  showToast('No image in clipboard — copy a PNG first', 'error');
+}
+function onSpireCardDrop(id, e){ e.preventDefault(); if (e.currentTarget) e.currentTarget.classList.remove('drag'); const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; _raidersFileToDataUrl(file, du => _spireCardArtApply(id, du)); }
+function onSpireCardPick(id, e){ const file = e.target && e.target.files && e.target.files[0]; _raidersFileToDataUrl(file, du => _spireCardArtApply(id, du)); if (e.target) e.target.value = ''; }
+async function resetSpireCardArt(id){
+  try { const uid = _spireOwnerUid(); if (!uid) return;
+    await setDoc(_spireCardArtRef(uid), { overrides: { [id]: deleteField() } }, { merge: true });
+    if (_spireCardArtCache) delete _spireCardArtCache[id];
+    await pushSpireAssets(); await loadGameAssets(); showToast('Reset to default art', 'success');
+  } catch (e){ console.error('spire card art reset failed', e); showToast('Reset failed', 'error'); }
+}
+// Builds the admin "Spire Cards" art-override grid (ga-* markup), appended by
+// loadGameAssets after the Spire character section. Returns an HTML string.
+function spireCardArtAdminHtml(){
+  let html = '<h2 class="ga-game">🃏 Science Spire — Card Art <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— paste a PNG to replace any card\'s picture; default is the built-in vector art</span></h2><div class="ga-cards">';
+  Object.keys(SPIRE_CARDS).filter(id => !SPIRE_CARDS[id].basic).forEach(id => {
+    const c = SPIRE_CARDS[id]; const url = (_spireCardArtCache || {})[id];
+    const thumb = url ? ('<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(c.name) + '">') : ('<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + c.art + '</div>');
+    html += '<div class="ga-card" id="scardcard-' + id + '">'
+      + '<div class="ga-prev">' + thumb + '</div>'
+      + '<div class="ga-name">' + escapeHtml(c.name) + '</div>'
+      + '<div class="ga-zone" tabindex="0"'
+      +   ' onpaste="onSpireCardPaste(\'' + id + '\', event)"'
+      +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
+      +   ' ondragleave="this.classList.remove(\'drag\')"'
+      +   ' ondrop="onSpireCardDrop(\'' + id + '\', event)"'
+      +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
+      + '<div class="ga-actions">'
+      +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onSpireCardPick(\'' + id + '\', event)"></label>'
+      +   (url ? '<button class="btn btn-ghost ga-mini" onclick="resetSpireCardArt(\'' + id + '\')">Reset</button>' : '')
+      + '</div>'
+      + '<div class="ga-status ' + (url ? 'custom' : '') + '" id="scardstatus-' + id + '">' + (url ? '● Custom' : 'Default') + '</div>'
+      + '</div>';
+  });
+  return html + '</div>';
+}
+
+// ---- wiring ----
+function spireBookWire(){
+  const ov = document.getElementById('spireBookOverlay');
+  if (ov && !ov._wired){
+    ov._wired = true;
+    ov.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => ov.classList.remove('show')));
+    ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
+    ov.addEventListener('click', e => {
+      const pack = e.target.closest('[data-spire-pack]');
+      if (pack){ const v = pack.dataset.spirePack; spireOpenCardPacks(v === 'all' ? Infinity : Number(v)); return; }
+      if (e.target.closest('[data-spire-deck-clear]')){ spireDeckClear(); return; }
+      const add = e.target.closest('[data-spire-add]'); if (add){ spireDeckAdd(add.dataset.spireAdd); return; }
+      const rem = e.target.closest('[data-spire-remove]'); if (rem){ spireDeckRemove(rem.dataset.spireRemove); return; }
+    });
+  }
+  const po = document.getElementById('spireCardPackOverlay');
+  if (po && !po._wired){
+    po._wired = true;
+    po.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => po.classList.remove('show')));
+    po.addEventListener('click', e => { if (e.target === po) po.classList.remove('show'); });
+  }
+  const openBtn = document.getElementById('spireBookBtn');
+  if (openBtn && !openBtn._wired){ openBtn._wired = true; openBtn.addEventListener('click', spireBookOpen); }
+}
+spireBookWire();
 
 // =====================================================================
 // MESSAGING — admin <-> students (top-level `messages` collection, mirrors how
@@ -22020,6 +22383,10 @@ window.onSpireObjPaste = onSpireObjPaste;
 window.onSpireObjDrop = onSpireObjDrop;
 window.onSpireObjPick = onSpireObjPick;
 window.resetSpireObj = resetSpireObj;
+window.onSpireCardPaste = onSpireCardPaste;
+window.onSpireCardDrop = onSpireCardDrop;
+window.onSpireCardPick = onSpireCardPick;
+window.resetSpireCardArt = resetSpireCardArt;
 window.navigateTo = navigateTo;
 window.toggleSidebar = toggleSidebar;
 window.addBlock = addBlock;
