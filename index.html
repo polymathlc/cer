@@ -4103,6 +4103,7 @@ option {
 .rpg-item-diff .up { color: #1c8a4a; margin-right: 5px; }
 .rpg-item-diff .down { color: #c0392b; margin-right: 5px; }
 .rpg-set-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.rpg-quests { grid-column: 1 / -1; }
 .rpg-set-chip { font-family: 'Space Mono', monospace; font-size: 0.6rem; font-weight: 700; padding: 4px 9px; border-radius: 999px; border: 1px dashed var(--border); color: var(--text-muted); background: #fff; }
 .rpg-set-chip.on { border-style: solid; border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
 .rpg-voucher-streak { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: linear-gradient(180deg,#fffaf0,#fff); margin-bottom: 8px; font-size: 0.8rem; }
@@ -6750,7 +6751,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.39.0';
+const APP_VERSION = 'v1.40.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -17486,7 +17487,28 @@ const RPG_ITEMS = [
   { id: "wings_eternity", name: "Wings of Eternity", slot: "accessory", layer: "back", rarity: "mythic", hp: 35, def: 6, crit: 10, atk: 5, price: 2800, levelReq: 1, packOnly: true, box: "20 34 160 100", art: () => svgWings("#ffd9ec", "#e84393") },
   { id: "eternal_phoenix", name: "Eternal Phoenix", slot: "pet", rarity: "mythic", atk: 8, crit: 12, hp: 20, price: 3000, levelReq: 1, packOnly: true, box: "12 86 44 44", art: () => svgPetEmoji("🐦‍🔥") },
   { id: "streak_sprite", name: "Streak Sprite", slot: "pet", rarity: "epic", crit: 6, hp: 8, price: 0, levelReq: 1, box: "12 86 44 44", art: () => svgPetEmoji("🔥") },
-  { id: "nova_dragon", name: "Nova", slot: "pet", rarity: "mythic", atk: 6, crit: 10, hp: 15, price: 0, levelReq: 1, box: "12 86 44 44", art: () => svgPetEmoji("🌟") }
+  { id: "nova_dragon", name: "Nova", slot: "pet", rarity: "mythic", atk: 6, crit: 10, hp: 15, price: 0, levelReq: 1, box: "12 86 44 44", art: () => svgPetEmoji("🌟") },
+  // Mythics — wave II (fancy designs), pack-only
+  { id: "celestial_edge", name: "Celestial Edge", slot: "weapon", rarity: "mythic", atk: 35, crit: 18, price: 3000, levelReq: 1, packOnly: true, art: () => `<circle cx="0" cy="-45" r="17" fill="#bfe0ff" opacity="0.35">${svgPulse(0.2, 0.5)}</circle>` + svgSword("#eaf6ff", "#9bb8e8", "#27406b", "#bfe0ff") + `<g>${svgStar(-12, -58, 3, 1.4, "#fff")}${svgTwinkle(2)}</g><g>${svgStar(12, -40, 2.6, 1.1, "#bfe0ff")}${svgTwinkle(1.6)}</g>` },
+  { id: "galaxy_greatblade", name: "Galaxy Greatblade", slot: "weapon", rarity: "mythic", atk: 38, crit: 16, price: 3000, levelReq: 1, packOnly: true, art: () => svgGreatsword("#2a1f4a", "#b79ae0", "#150e2e", "#d9c4ff", `<g>${svgStar(0, -54, 3, 1.3, "#d9c4ff")}${svgTwinkle(2)}</g><circle cx="-3" cy="-40" r="1.4" fill="#fff"/><circle cx="3" cy="-30" r="1.1" fill="#d9c4ff"/>`) },
+  { id: "phoenix_talon", name: "Phoenix Talon", slot: "weapon", rarity: "mythic", atk: 33, crit: 20, price: 3000, levelReq: 1, packOnly: true, art: () => `<circle cx="6" cy="-40" r="16" fill="#ff8c42" opacity="0.3">${svgPulse(0.2, 0.45)}</circle>` + svgKatana("#ffe6c0", "#ff8c42", "#7e3b1f", "#ffcf6a") },
+  { id: "astral_scythe", name: "Astral Scythe", slot: "weapon", rarity: "mythic", atk: 36, crit: 18, price: 3000, levelReq: 1, packOnly: true, art: () => `<circle cx="-12" cy="-46" r="16" fill="#b79ae0" opacity="0.32">${svgPulse(0.18, 0.42)}</circle>` + svgScythe("#150e2e", "#d9c4ff") + `<g>${svgStar(-20, -44, 2.6, 1.1, "#d9c4ff")}${svgTwinkle(1.9)}</g>` },
+  { id: "heavens_halberd", name: "Heaven's Halberd", slot: "weapon", rarity: "mythic", atk: 35, crit: 16, price: 3000, levelReq: 1, packOnly: true, art: () => `<circle cx="0" cy="-58" r="18" fill="#ffe9a3" opacity="0.32">${svgPulse(0.2, 0.5)}</circle>` + svgHalberd() + `<g>${svgStar(-12, -70, 3, 1.3, "#fff")}${svgTwinkle(2)}</g>` },
+  { id: "starfire_staff", name: "Starfire Staff", slot: "weapon", rarity: "mythic", atk: 30, crit: 26, price: 3000, levelReq: 1, packOnly: true, art: () => svgStaff("#3a2740", "#e84393", "#ff9ad1") + `<g>${svgStar(0, -78, 4, 1.7, "#ffd76a")}${svgTwinkle(1.5)}</g><g>${svgStar(11, -58, 2.6, 1.1, "#ff9ad1")}${svgTwinkle(2.1)}</g>` },
+  { id: "tempest_bow", name: "Tempest Bow", slot: "weapon", rarity: "mythic", atk: 32, crit: 22, price: 3000, levelReq: 1, packOnly: true, art: () => svgBow("#9bb8e8", "#eaf6ff", "#bfe0ff") + `<g>${svgStar(2, -30, 2.6, 1.1, "#fff")}${svgTwinkle(1.8)}</g><circle cx="14" cy="-12" r="1.3" fill="#bfe0ff"/>` },
+  { id: "aurora_aegis", name: "Aurora Aegis", slot: "shield", rarity: "mythic", def: 18, hp: 28, crit: 8, price: 2800, levelReq: 1, packOnly: true, art: () => `<circle r="23" cy="1" fill="#7be0a2" opacity="0.3">${svgPulse(0.16, 0.4)}</circle>` + svgShieldArt("#10324a", "#7be0a2", `<g>${svgStar(0, 1, 8, 3.4, rpgGrad("#bff5d6", "r"))}${svgTwinkle(1.9)}</g>`) },
+  { id: "solar_bulwark", name: "Solar Bulwark", slot: "shield", rarity: "mythic", def: 20, hp: 24, price: 2800, levelReq: 1, packOnly: true, art: () => `<circle r="24" cy="1" fill="#ffe27a" opacity="0.35">${svgPulse(0.2, 0.55)}</circle>` + svgShieldArt("#5c3a08", "#ffd76a", `<circle cx="0" cy="1" r="6.5" fill="${rpgGrad("#ffe27a", "r")}" ${RPG_O_THIN}/><circle cx="-2" cy="-1.5" r="1.7" fill="rgba(255,255,255,0.9)"/>`) },
+  { id: "void_ward", name: "Void Ward", slot: "shield", rarity: "mythic", def: 17, crit: 12, hp: 18, price: 2800, levelReq: 1, packOnly: true, art: () => `<circle r="22" cy="1" fill="#b79ae0" opacity="0.3">${svgPulse(0.15, 0.4)}</circle>` + svgShieldArt("#150e2e", "#b79ae0", `<circle cx="0" cy="1" r="7" fill="${rpgGrad("#241d3e", "r")}" stroke="#b79ae0" stroke-width="2"/><g>${svgStar(0, 1, 4, 1.7, "#d9c4ff")}${svgTwinkle(1.7)}</g>`) },
+  { id: "celestial_plate", name: "Celestial Plate", slot: "armor", rarity: "mythic", def: 16, hp: 42, crit: 8, price: 2800, levelReq: 1, packOnly: true, art: () => svgArmorSpiked("#1f2a4a", "#9bb8e8", "#dff0ff") },
+  { id: "phoenix_mantle", name: "Phoenix Mantle", slot: "armor", rarity: "mythic", def: 10, crit: 16, hp: 32, price: 2800, levelReq: 1, packOnly: true, art: () => svgRobe("#7e1f1f", "#ffd166", `<circle cx="100" cy="150" r="13" fill="#ff8c42" opacity="0.3">${svgPulse(0.2, 0.45)}</circle>${svgStar(112, 172, 3, 1.3, "#ffd166")}<circle cx="88" cy="162" r="2" fill="#ff8c42"/>`) },
+  { id: "astral_scalemail", name: "Astral Scalemail", slot: "armor", rarity: "mythic", def: 15, hp: 38, crit: 10, price: 2800, levelReq: 1, packOnly: true, art: () => svgScaleMail("#241d3e", "#b79ae0", "#d9c4ff") },
+  { id: "astral_hat", name: "Astral Hat", slot: "helmet", rarity: "mythic", def: 6, crit: 20, hp: 18, price: 2800, levelReq: 1, packOnly: true, art: () => svgWizardHat("#2a1f4a", "#e84393", "#ffd76a") + `<g>${svgStar(86, 30, 3, 1.3, "#fff")}${svgTwinkle(2)}</g>` },
+  { id: "cosmos_crown", name: "Crown of the Cosmos", slot: "helmet", rarity: "mythic", def: 8, crit: 16, hp: 24, price: 2800, levelReq: 1, packOnly: true, art: () => `<circle cx="100" cy="46" r="16" fill="#ffe9a3" opacity="0.3">${svgPulse(0.2, 0.45)}</circle>` + svgCrown() + `<g>${svgStar(100, 30, 3.4, 1.5, "#fff")}${svgTwinkle(1.8)}</g>` },
+  { id: "wings_dawn", name: "Wings of Dawn", slot: "accessory", layer: "back", rarity: "mythic", hp: 35, crit: 10, atk: 5, price: 2800, levelReq: 1, packOnly: true, box: "20 34 160 100", art: () => svgWings("#ffe9c0", "#ff8c42") },
+  { id: "cosmos_amulet", name: "Heart of the Cosmos", slot: "accessory", layer: "front", rarity: "mythic", hp: 25, crit: 14, price: 2800, levelReq: 1, packOnly: true, box: "78 104 44 38", art: () => `<circle cx="100" cy="131" r="11" fill="#b79ae0" opacity="0.32">${svgPulse(0.18, 0.45)}</circle>` + svgAmulet("#b79ae0", "#d9c4ff") + `<g>${svgStar(100, 131, 4, 1.7, "#fff")}${svgTwinkle(1.9)}</g>` },
+  { id: "astral_drake", name: "Astral Drake", slot: "pet", rarity: "mythic", atk: 8, crit: 12, hp: 18, price: 3000, levelReq: 1, packOnly: true, box: "12 86 44 44", art: () => svgPetEmoji("🐲") },
+  { id: "prism_peacock", name: "Prism Peacock", slot: "pet", rarity: "mythic", crit: 14, hp: 16, price: 3000, levelReq: 1, packOnly: true, box: "12 86 44 44", art: () => svgPetEmoji("🦚") },
+  { id: "cosmic_wyrm", name: "Cosmic Wyrm", slot: "pet", rarity: "mythic", atk: 9, crit: 10, hp: 16, price: 3000, levelReq: 1, packOnly: true, box: "12 86 44 44", art: () => svgPetEmoji("🐉") }
 ];
 const RPG_ITEMS_BY_ID = Object.fromEntries(RPG_ITEMS.map(i => [i.id, i]));
 
@@ -18442,7 +18464,7 @@ function rpgQuestsHtml() {
   const todayQ = (s.dayKey === advToday()) ? Math.min(10, s.dayMarks || 0) : 0;
   const voucherLine = `<div class="rpg-voucher-streak" title="Practise 10+ questions every day for 30 days in a row to win a $10 Popular voucher.">🎟️ <b>$10 voucher streak</b> · ${vc}/30 days &nbsp;·&nbsp; today ${todayQ}/10 questions
     <div class="rpg-voucher-bar"><div class="rpg-voucher-fill" style="width:${Math.round((vc / 30) * 100)}%;"></div></div></div>`;
-  return `<div class="section-label" style="margin-top:14px;">Daily quests · 🔥 streak ${s.count || 0}${s.freezes ? ` (🧊×${s.freezes})` : ""}</div>${voucherLine}${rows}`;
+  return `<div class="rpg-quests"><div class="section-label" style="margin-top:14px;">Daily quests · 🔥 streak ${s.count || 0}${s.freezes ? ` (🧊×${s.freezes})` : ""}</div>${voucherLine}${rows}</div>`;
 }
 function rpgCreditStreakDay() {
   const day = advToday();
@@ -20000,7 +20022,17 @@ const RPG_SKILLS = {
   elven_rapier:        { name: "Thorn Flurry", icon: "🍃", cd: 8, kind: "multi", mult: 1.1, hits: 2, poison: true },
   sunblade:            { name: "Radiant Slash", icon: "✨", cd: 9, kind: "hit", mult: 1.9, healPct: 0.05 },
   obsidian_axe:        { name: "Umbral Chop", icon: "🌀", cd: 10, kind: "aoe", mult: 1.5, lifesteal: 0.25 },
-  starfall_katana:     { name: "Star Slash", icon: "⭐", cd: 8, kind: "multi", mult: 1.1, hits: 2 }
+  starfall_katana:     { name: "Star Slash", icon: "⭐", cd: 8, kind: "multi", mult: 1.1, hits: 2 },
+  celestial_edge:      { name: "Astral Cleave", icon: "💫", cd: 9, kind: "aoe", mult: 2.0 },
+  galaxy_greatblade:   { name: "Cosmic Crush", icon: "🌌", cd: 11, kind: "aoe", mult: 2.0, stun: true },
+  phoenix_talon:       { name: "Phoenix Rush", icon: "🔥", cd: 9, kind: "multi", mult: 1.3, hits: 2, burn: true },
+  astral_scythe:       { name: "Star Reaper", icon: "💀", cd: 11, kind: "aoe", mult: 1.8, lifesteal: 0.4 },
+  heavens_halberd:     { name: "Divine Sweep", icon: "✨", cd: 10, kind: "aoe", mult: 1.7, stun: true, healPct: 0.08 },
+  starfire_staff:      { name: "Starfire", icon: "⭐", cd: 10, kind: "chain", mult: 1.8, jumps: 3, burn: true },
+  tempest_bow:         { name: "Tempest Volley", icon: "🌩️", cd: 11, kind: "volley", mult: 0.95, hits: 6 },
+  astral_drake:        { name: "Astral Breath", icon: "💠", cd: 10, kind: "aoe", mult: 1.1, chill: true },
+  prism_peacock:       { name: "Prism Burst", icon: "🌈", cd: 9, kind: "chain", mult: 1.2, jumps: 2 },
+  cosmic_wyrm:         { name: "Cosmic Flame", icon: "🐉", cd: 10, kind: "aoe", mult: 1.2, burn: true }
 };
 function advSkillDesc(d) {
   const bits = [];
