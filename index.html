@@ -4163,16 +4163,8 @@ option {
 .comm-mode { display: flex; gap: 8px; margin-top: 10px; }
 .comm-mode-btn { flex: 1; padding: 9px 8px; border-radius: 10px; border: 2px solid var(--border, #d9d9e3); background: var(--surface, #fff); color: var(--text-muted); font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.15s; }
 .comm-mode-btn.active { border-color: #7b2ff7; background: linear-gradient(135deg,#7b2ff7,#f107a3); color: #fff; box-shadow: 0 4px 12px rgba(124,47,180,0.3); }
-.comm-pick-bar { display: flex; align-items: center; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin: 10px 0 6px; }
-.comm-pick-list { max-height: 280px; overflow-y: auto; border: 1px solid var(--border, #e3e3ea); border-radius: 10px; }
-.comm-pick-list:empty { display: none; }
-.comm-pick-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--border, #eee); cursor: pointer; }
-.comm-pick-row:last-child { border-bottom: none; }
-.comm-pick-row:hover { background: rgba(123,47,247,0.05); }
-.comm-pick-row.on { background: rgba(123,47,247,0.1); }
-.comm-pick-row input { margin-top: 3px; flex-shrink: 0; }
-.comm-pick-row .cp-title { font-weight: 600; font-size: 0.88rem; color: var(--text); }
-.comm-pick-row .cp-meta { font-size: 0.74rem; color: var(--text-muted); margin-top: 1px; }
+.comm-pick-bar { display: flex; align-items: center; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin: 12px 0 8px; }
+#commTabQuest .ws-question-grid { max-height: 360px; overflow-y: auto; }
 /* floating quest chip (all pages) */
 #questChip { display: none; position: fixed; bottom: 18px; right: 18px; z-index: 900; cursor: pointer;
   background: linear-gradient(135deg,#7b2ff7,#f107a3); color: #fff; border-radius: 999px; padding: 10px 16px;
@@ -5850,10 +5842,61 @@ option {
           </div>
           <!-- Score mode: pick the exact questions; highest % wins at the deadline -->
           <div id="commQuestScoreFields" style="display:none;">
-            <p class="comm-help" style="margin-top:8px;">Pick the questions students must do. The student with the <b>highest percentage</b> when the timer ends wins.</p>
-            <input id="commQuestSearch" class="form-input" type="text" placeholder="🔍 Search questions by title / topic…" oninput="commRenderQuestPicker(this.value)">
+            <p class="comm-help" style="margin-top:8px;">Pick the questions students must do — search, filter and preview the full bank just like the worksheet builder. The student with the <b>highest percentage</b> when the timer ends wins.</p>
+            <div class="ws-filter-bar">
+              <select id="cqFilterLevel" onchange="commRenderQuestPicker()">
+                <option value="">All Levels</option>
+                <option value="P3">P3</option>
+                <option value="P4">P4</option>
+                <option value="P5">P5</option>
+                <option value="P6">P6</option>
+              </select>
+              <select id="cqFilterTopic" onchange="commRenderQuestPicker()">
+                <option value="">All Topics</option>
+              </select>
+              <select id="cqFilterCategory" onchange="commRenderQuestPicker()">
+                <option value="">All Question Types</option>
+                <optgroup label="── Skills ──">
+                  <option value="CER">CER</option>
+                  <option value="Single Relationship">Single Relationship</option>
+                  <option value="Double Relationship">Double Relationship</option>
+                  <option value="Reliability">Reliability</option>
+                  <option value="Fairness">Fairness</option>
+                  <option value="Accuracy">Accuracy</option>
+                  <option value="Constant Variable">Constant Variable</option>
+                  <option value="Hypothesis">Hypothesis</option>
+                  <option value="Aim">Aim</option>
+                  <option value="Conclusion">Conclusion</option>
+                  <option value="Definition">Definition</option>
+                  <option value="Explanation">Explanation</option>
+                  <option value="Stating">Stating</option>
+                </optgroup>
+                <optgroup label="── Key Concepts ──">
+                  <option value="Key Concepts">Key Concepts</option>
+                </optgroup>
+                <optgroup label="── Question Type ──">
+                  <option value="Multiple Choice Question">Multiple Choice Question</option>
+                </optgroup>
+                <optgroup label="── PSLE ──">
+                  <option value="PSLE - MCQ">PSLE - MCQ</option>
+                  <option value="PSLE - OEQ">PSLE - OEQ</option>
+                </optgroup>
+              </select>
+              <select id="cqFilterSource" onchange="commRenderQuestPicker()">
+                <option value="">All Sources</option>
+              </select>
+              <select id="cqFilterFormat" onchange="commRenderQuestPicker()">
+                <option value="">All Formats</option>
+                <option value="mcq">MCQ only</option>
+                <option value="written">Open-ended only</option>
+              </select>
+              <select id="cqFilterConcept" onchange="commRenderQuestPicker()">
+                <option value="">All Concepts</option>
+              </select>
+              <input type="text" id="cqSearch" placeholder="Search questions..." oninput="commRenderQuestPicker()">
+            </div>
             <div class="comm-pick-bar">Selected: <b id="commQuestPickCount">0</b> question(s) <button type="button" class="btn btn-outline btn-sm" onclick="commClearPick()" style="margin-left:8px;">Clear</button></div>
-            <div class="comm-pick-list" id="commQuestPickList"></div>
+            <div class="ws-question-grid" id="commQuestPickList"></div>
           </div>
           <button class="btn btn-primary" type="button" onclick="commCreateQuest()" style="margin-top:10px;">⚡ Launch encounter quest</button>
         </div>
@@ -6969,7 +7012,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.47.0';
+const APP_VERSION = 'v1.47.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20376,43 +20419,118 @@ function commQuestMode(mode) {
   const score = document.getElementById('commQuestScoreFields');
   if (race) race.style.display = _questMode === 'race' ? '' : 'none';
   if (score) score.style.display = _questMode === 'score' ? '' : 'none';
-  if (_questMode === 'score') commRenderQuestPicker(document.getElementById('commQuestSearch') ? document.getElementById('commQuestSearch').value : '');
+  if (_questMode === 'score') { commPopulateQuestFilters(); commRenderQuestPicker(); }
 }
-function commRenderQuestPicker(filter) {
-  const host = document.getElementById('commQuestPickList'); if (!host) return;
-  const f = String(filter || '').trim().toLowerCase();
-  const bank = Array.isArray(questionBank) ? questionBank : [];
-  const rows = bank.filter(q => {
-    if (!q || !q.id) return false;
-    if (!f) return true;
-    return String(q.title || '').toLowerCase().includes(f)
-      || String(q.topic || '').toLowerCase().includes(f)
-      || String(q.category || '').toLowerCase().includes(f);
-  }).slice(0, 300);
-  if (!rows.length) { host.innerHTML = '<div class="empty-note" style="padding:14px;">No questions match — try another search.</div>'; return; }
-  host.innerHTML = rows.map(q => {
+// Fill the picker's Topic / Source / Concept dropdowns from the live bank,
+// reusing the same helpers the worksheet builder uses.
+function commPopulateQuestFilters() {
+  const topicSel = document.getElementById('cqFilterTopic');
+  if (topicSel) {
+    const prev = topicSel.value;
+    const topics = [...new Set((questionBank || []).map(q => q.topic).filter(Boolean))].sort();
+    topicSel.innerHTML = '<option value="">All Topics</option>';
+    topics.forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; topicSel.appendChild(o); });
+    if (prev && topics.includes(prev)) topicSel.value = prev;
+  }
+  const srcSel = document.getElementById('cqFilterSource');
+  if (srcSel) {
+    const prev = srcSel.value;
+    const sources = [...new Set((questionBank || []).map(questionSource).filter(Boolean))].sort();
+    srcSel.innerHTML = '<option value="">All Sources</option>';
+    sources.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; srcSel.appendChild(o); });
+    if (prev && sources.includes(prev)) srcSel.value = prev;
+  }
+  const conSel = document.getElementById('cqFilterConcept');
+  if (conSel) {
+    const prev = conSel.value;
+    const set = new Set();
+    (questionBank || []).forEach(q => (q.concepts || []).forEach(c => { const s = String(c || '').trim(); if (s) set.add(s); }));
+    const concepts = [...set].sort((a, b) => a.localeCompare(b));
+    conSel.innerHTML = '<option value="">All Concepts</option>';
+    concepts.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; conSel.appendChild(o); });
+    if (prev && concepts.includes(prev)) conSel.value = prev;
+  }
+}
+// Full question-bank picker — same filtering, cards and expandable preview as
+// the worksheet builder, but writing into the encounter-quest selection set.
+function commRenderQuestPicker() {
+  const grid = document.getElementById('commQuestPickList'); if (!grid) return;
+  const levelFilter = document.getElementById('cqFilterLevel')?.value || '';
+  const topicFilter = document.getElementById('cqFilterTopic')?.value || '';
+  const catFilter = document.getElementById('cqFilterCategory')?.value || '';
+  const sourceFilter = document.getElementById('cqFilterSource')?.value || '';
+  const formatFilter = document.getElementById('cqFilterFormat')?.value || '';
+  const conceptFilter = (document.getElementById('cqFilterConcept')?.value || '').toLowerCase();
+  const searchRaw = (document.getElementById('cqSearch')?.value || '').trim().toLowerCase();
+
+  const filtered = (questionBank || []).filter(q => {
+    if (!q || q.id == null) return false;
+    if (topicFilter && q.topic !== topicFilter) return false;
+    if (catFilter && normalizeCategoryValue(q.category) !== catFilter) return false;
+    if (sourceFilter && questionSource(q) !== sourceFilter) return false;
+    if (formatFilter === 'mcq' && !qpHasMcq(q)) return false;
+    if (formatFilter === 'written' && !qpHasWritten(q)) return false;
+    if (conceptFilter && !((q.concepts || []).some(c => String(c || '').toLowerCase() === conceptFilter))) return false;
+    if (levelFilter && getTopicLevel(q.topic || '') !== levelFilter) return false;
+    if (searchRaw) { if (!extractQuestionSearchText(q).includes(searchRaw)) return false; }
+    return true;
+  });
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty-state"><h3>No questions found</h3><p>Try adjusting your filters</p></div>';
+    _updatePickCount();
+    return;
+  }
+  grid.innerHTML = filtered.map(q => {
     const id = String(q.id);
-    const on = _questPick.has(id);
-    const meta = [q.topic, q.category].filter(Boolean).join(' · ');
-    return '<label class="comm-pick-row' + (on ? ' on' : '') + '">' +
-      '<input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="commTogglePick(\'' + id.replace(/'/g, "\\'") + '\', this.checked)">' +
-      '<span><span class="cp-title">' + escapeHtml(q.title || ('Question ' + id)) + '</span>' +
-      (meta ? '<span class="cp-meta">' + escapeHtml(meta) + '</span>' : '') + '</span></label>';
+    const checked = _questPick.has(id);
+    const qLevel = getTopicLevel(q.topic || '');
+    const qCategory = normalizeCategoryValue(q.category);
+    const qSource = questionSource(q);
+    return '<div class="ws-q-card' + (checked ? ' selected' : '') + '" data-qid="' + id + '" onclick="commPickCardClick(\'' + id + '\', event)" style="cursor:pointer;">' +
+      '<div class="ws-q-top">' +
+        '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="commTogglePick(\'' + id + '\', this.checked)">' +
+        '<div class="ws-q-info">' +
+          '<div class="ws-q-title">' + escapeHtml(q.title || ('Question ' + id)) + '</div>' +
+          '<div class="ws-q-meta">' +
+            '<span class="qb-tag category">' + escapeHtml(qCategory) + '</span>' +
+            '<span class="qb-tag topic">' + escapeHtml(q.topic || '') + '</span>' +
+            '<span class="qb-tag">' + escapeHtml(qLevel) + '</span>' +
+            (qSource ? '<span class="qb-tag source" title="' + escapeHtml(qSource) + '">' + escapeHtml(qSource) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<button class="ws-q-expand-btn" onclick="event.stopPropagation();commTogglePickPreview(\'' + id + '\', this)" title="Preview question">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="ws-q-preview" id="cqPreview_' + id + '"></div>' +
+    '</div>';
   }).join('');
   _updatePickCount();
+}
+function commTogglePickPreview(id, btn) {
+  const previewEl = document.getElementById('cqPreview_' + id);
+  if (!previewEl) return;
+  if (previewEl.classList.contains('open')) {
+    previewEl.classList.remove('open'); btn.classList.remove('expanded');
+  } else {
+    if (!previewEl.dataset.rendered) { previewEl.innerHTML = renderQuestionPreviewHtml(id); previewEl.dataset.rendered = '1'; }
+    previewEl.classList.add('open'); btn.classList.add('expanded');
+  }
 }
 function commTogglePick(id, on) {
   id = String(id);
   if (on) _questPick.add(id); else _questPick.delete(id);
+  const card = document.querySelector('#commQuestPickList .ws-q-card[data-qid="' + id + '"]');
+  if (card) { card.classList.toggle('selected', on); const cb = card.querySelector('input[type="checkbox"]'); if (cb) cb.checked = on; }
   _updatePickCount();
-  // reflect the row highlight without a full re-render
-  const host = document.getElementById('commQuestPickList'); if (!host) return;
-  host.querySelectorAll('.comm-pick-row').forEach(row => {
-    const cb = row.querySelector('input');
-    if (cb) row.classList.toggle('on', cb.checked);
-  });
 }
-function commClearPick() { _questPick.clear(); _updatePickCount(); const s = document.getElementById('commQuestSearch'); commRenderQuestPicker(s ? s.value : ''); }
+function commPickCardClick(id, event) {
+  if (event.target.closest('.ws-q-expand-btn') || event.target.closest('.ws-q-preview')) return;
+  if (event.target.tagName === 'INPUT') return;   // checkbox handles itself
+  commTogglePick(id, !_questPick.has(String(id)));
+}
+function commClearPick() { _questPick.clear(); commRenderQuestPicker(); }
 function _updatePickCount() { const el = document.getElementById('commQuestPickCount'); if (el) el.textContent = _questPick.size; }
 
 async function commCreateQuest() {
@@ -23142,6 +23260,8 @@ window.commEndQuest = commEndQuest;
 window.commQuestMode = commQuestMode;
 window.commRenderQuestPicker = commRenderQuestPicker;
 window.commTogglePick = commTogglePick;
+window.commTogglePickPreview = commTogglePickPreview;
+window.commPickCardClick = commPickCardClick;
 window.commClearPick = commClearPick;
 window.commStartQuestRun = commStartQuestRun;
 window.commAwardTopScorer = commAwardTopScorer;
