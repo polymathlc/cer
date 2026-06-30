@@ -43,6 +43,23 @@ body{background:radial-gradient(900px 500px at 50% -8%,#241c38,#15121f) fixed, v
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
 .enemy .art,.hero .art{font-size:62px;line-height:1;filter:drop-shadow(0 6px 8px rgba(0,0,0,.4));user-select:none;}
 .enemy .art img,.hero .art img{height:84px;width:auto;max-width:120px;object-fit:contain;image-rendering:pixelated;display:block;}
+/* animated procedural bestiary sprites */
+.enemy .art svg.spr,.hero .art svg.spr{display:block;overflow:visible;will-change:transform,filter;}
+svg.spr{transform-origin:50% 92%;}
+svg.spr.anim-idle{animation:sprBreathe 2.6s ease-in-out infinite;}
+svg.spr.anim-attack{animation:sprAttack .5s cubic-bezier(.3,1.4,.5,1);}
+svg.spr.anim-hurt{animation:sprHurt .3s ease-out;}
+svg.spr.anim-death{animation:sprDeath .55s ease-in forwards;transform-origin:50% 100%;}
+@keyframes sprBreathe{0%,100%{transform:translateY(0) scale(1,1)}50%{transform:translateY(-2px) scale(1.02,.97)}}
+@keyframes sprAttack{0%{transform:translateX(0) rotate(0)}28%{transform:translateX(9px) rotate(-5deg) scale(1.05)}55%{transform:translateX(-18px) rotate(5deg)}100%{transform:translateX(0) rotate(0)}}
+@keyframes sprHurt{0%,100%{transform:translateX(0);filter:none}25%{transform:translateX(-6px);filter:brightness(2.6) saturate(.3)}70%{transform:translateX(6px);filter:brightness(2.6) saturate(.3)}}
+@keyframes sprDeath{0%{transform:rotate(0) translateY(0);opacity:1}100%{transform:rotate(26deg) translateY(16px);opacity:0}}
+/* tier glow on the silhouette */
+.enemy[data-tier="Uncommon"] .art{filter:drop-shadow(0 6px 8px rgba(0,0,0,.4)) drop-shadow(0 0 7px rgba(123,224,162,.45));}
+.enemy[data-tier="Elite"] .art{filter:drop-shadow(0 6px 8px rgba(0,0,0,.4)) drop-shadow(0 0 9px rgba(183,154,224,.55));}
+.enemy[data-tier="Boss"] .art{filter:drop-shadow(0 7px 10px rgba(0,0,0,.5)) drop-shadow(0 0 14px rgba(255,206,90,.6));}
+.enemy[data-tier="Boss"] svg.spr{width:118px;height:118px;}
+.enemy[data-tier="Elite"] svg.spr{width:98px;height:98px;}
 .enemy .intent{font-size:0.82rem;font-weight:800;background:rgba(0,0,0,.4);border:1px solid var(--line);border-radius:999px;padding:2px 9px;min-height:22px;}
 .bar{width:96px;height:11px;border-radius:6px;background:#3a2230;overflow:hidden;position:relative;border:1px solid rgba(0,0,0,.3);}
 .bar>i{display:block;height:100%;background:linear-gradient(90deg,#e8584f,#ff7a72);}
@@ -273,6 +290,9 @@ function ovrUrl(objId, anim){
 function artHtml(objId, emoji, anim){
   var u = ovrUrl(objId, anim || 'idle');
   if (u) return '<img src="'+u+'" alt="" onerror="this.style.display=\'none\'">';
+  // Animated procedural sprite for any enemy kind in the bestiary.
+  var d = (typeof ENEMIES!=='undefined') ? ENEMIES[objId] : null;
+  if (d && d.kind){ var svg = spriteSvg(d.kind, d.palette, anim); if (svg) return svg; }
   return emoji;
 }
 
@@ -308,18 +328,97 @@ var REWARD_POOL = ['bash','jab','guard','cleave','pommel','focus','adrenal','wea
 
 /* ============================ ENEMIES ============================ */
 // moves: {type:'attack',value} | {type:'block',value} | {type:'buff'} | {type:'debuff'}
+// kind = sprite key (see SPRITES); tier/flavor/palette drive the animated
+// bestiary art. palette = [body, shadow, highlight]. Gameplay hp/moves are
+// intentionally left as tuned ranges (the bestiary single-HP figures are the
+// reference silhouette, not the in-combat roll).
 var ENEMIES = {
-  slime:  { name:'Lab Slime',  emoji:'🟢', hp:[20,26], moves:[{type:'attack',value:6},{type:'block',value:5}] },
-  bat:    { name:'Cave Bat',   emoji:'🦇', hp:[14,18], moves:[{type:'attack',value:5},{type:'attack',value:7}] },
-  spider: { name:'Acid Spider',emoji:'🕷️', hp:[18,24], moves:[{type:'attack',value:4},{type:'debuff'}] },
-  bot:    { name:'Sentry Bot', emoji:'🤖', hp:[28,34], moves:[{type:'block',value:8},{type:'attack',value:9}] },
-  ghost:  { name:'Wraith',     emoji:'👻', hp:[22,28], moves:[{type:'attack',value:6},{type:'buff'}] },
+  slime:  { name:'Lab Slime',  emoji:'🟢', kind:'slime',  tier:'Common',   hp:[20,26], moves:[{type:'attack',value:6},{type:'block',value:5}],
+            flavor:'A burbling escapee from the alchemist’s vats.', palette:['#7bd66a','#2f6f34','#b6ff7a'] },
+  bat:    { name:'Cave Bat',   emoji:'🦇', kind:'bat',    tier:'Common',   hp:[14,18], moves:[{type:'attack',value:5},{type:'attack',value:7}],
+            flavor:'It hears your heartbeat in the dark.', palette:['#9a7be0','#3a2a6a','#c9b6ff'] },
+  spider: { name:'Acid Spider',emoji:'🕷️', kind:'spider', tier:'Common',   hp:[18,24], moves:[{type:'attack',value:4},{type:'debuff'}],
+            flavor:'Its silk dissolves steel.', palette:['#c4d22f','#5a6a12','#e6ff5a'] },
+  ghost:  { name:'Wraith',     emoji:'👻', kind:'wraith', tier:'Uncommon', hp:[22,28], moves:[{type:'attack',value:6},{type:'buff'}],
+            flavor:'Grief that forgot how to die.', palette:['#6fd6c4','#234a46','#b6fff0'] },
+  bot:    { name:'Sentry Bot', emoji:'🤖', kind:'bot',    tier:'Elite',    hp:[28,34], moves:[{type:'block',value:8},{type:'attack',value:9}],
+            flavor:'An ancient ward-construct, still on patrol.', palette:['#5fb0d6','#274a5a','#7ff0ff'] },
   // elites
-  golem:  { name:'Stone Golem',emoji:'🗿', hp:[55,65], elite:true, moves:[{type:'attack',value:12},{type:'block',value:12}] },
-  beast:  { name:'Chimera',    emoji:'🐉', hp:[60,72], elite:true, moves:[{type:'attack',value:10},{type:'attack',value:14},{type:'buff'}] },
+  golem:  { name:'Stone Golem',emoji:'🗿', kind:'golem',  tier:'Elite', elite:true, hp:[55,65], moves:[{type:'attack',value:12},{type:'block',value:12}],
+            flavor:'The mountain learned to walk.', palette:['#b08a5a','#4a3420','#e0b878'] },
+  beast:  { name:'Chimera',    emoji:'🐉', kind:'chimera',tier:'Elite', elite:true, hp:[60,72], moves:[{type:'attack',value:10},{type:'attack',value:14},{type:'buff'}],
+            flavor:'Three throats, one hunger.', palette:['#e0552f','#7a1f10','#ffb24a'] },
   // boss
-  titan:  { name:'Spire Titan',emoji:'👹', hp:[130,130], boss:true, moves:[{type:'attack',value:16},{type:'block',value:16},{type:'attack',value:11}] }
+  titan:  { name:'Spire Titan',emoji:'👹', kind:'titan',  tier:'Boss', boss:true, hp:[130,130], moves:[{type:'attack',value:16},{type:'block',value:16},{type:'attack',value:11}],
+            flavor:'The Spire’s heart, wreathed in old gold.', palette:['#f0c24a','#1c1408','#ffe9a0'] }
 };
+
+/* ===================== ANIMATED BESTIARY SPRITES =====================
+   Procedural SVG silhouettes drawn from each enemy's 3-colour palette
+   (body / shadow / highlight). The <svg> carries an `anim-<state>` class
+   that maps to the idle / attack / hurt / death keyframes in the stylesheet:
+     idle  — gentle breathe loop      attack — windup -> lunge
+     hurt  — shake + flash            death  — topple + fade
+   PNG overrides (OVR) still win when the parent app pushes them. */
+var SPRITES = {
+  slime: function(a,b,c){ return ''+
+    '<path d="M16 80 Q8 50 30 36 Q50 22 70 36 Q92 50 84 80 Z" fill="'+a+'"/>'+
+    '<path d="M16 80 Q14 64 26 60 Q40 70 50 70 Q60 70 74 60 Q86 64 84 80 Z" fill="'+b+'" opacity=".45"/>'+
+    '<ellipse cx="36" cy="40" rx="9" ry="12" fill="'+c+'" opacity=".5"/>'+
+    '<circle cx="41" cy="58" r="6" fill="#0d1f12"/><circle cx="63" cy="58" r="6" fill="#0d1f12"/>'+
+    '<circle cx="43" cy="56" r="2" fill="#fff"/><circle cx="65" cy="56" r="2" fill="#fff"/>'; },
+  bat: function(a,b,c){ return ''+
+    '<path d="M50 50 L6 32 Q20 48 12 62 Q26 52 34 60 Q42 52 50 58 Z" fill="'+a+'"/>'+
+    '<path d="M50 50 L94 32 Q80 48 88 62 Q74 52 66 60 Q58 52 50 58 Z" fill="'+a+'"/>'+
+    '<path d="M41 40 L38 24 L50 38 Z" fill="'+b+'"/><path d="M59 40 L62 24 L50 38 Z" fill="'+b+'"/>'+
+    '<ellipse cx="50" cy="54" rx="13" ry="16" fill="'+b+'"/>'+
+    '<circle cx="45" cy="50" r="3.4" fill="'+c+'"/><circle cx="55" cy="50" r="3.4" fill="'+c+'"/>'; },
+  spider: function(a,b,c){ return ''+
+    '<g stroke="'+b+'" stroke-width="4" stroke-linecap="round" fill="none">'+
+    '<path d="M40 58 L14 40"/><path d="M40 62 L10 60"/><path d="M40 66 L14 78"/><path d="M44 70 L30 88"/>'+
+    '<path d="M60 58 L86 40"/><path d="M60 62 L90 60"/><path d="M60 66 L86 78"/><path d="M56 70 L70 88"/></g>'+
+    '<ellipse cx="50" cy="64" rx="18" ry="16" fill="'+a+'"/>'+
+    '<circle cx="50" cy="46" r="11" fill="'+b+'"/>'+
+    '<circle cx="46" cy="44" r="2.4" fill="'+c+'"/><circle cx="54" cy="44" r="2.4" fill="'+c+'"/>'+
+    '<circle cx="42" cy="48" r="1.5" fill="'+c+'"/><circle cx="58" cy="48" r="1.5" fill="'+c+'"/>'; },
+  wraith: function(a,b,c){ return ''+
+    '<path d="M28 88 Q22 40 50 22 Q78 40 72 88 L64 78 L58 88 L50 78 L42 88 L36 78 Z" fill="'+a+'" opacity=".9"/>'+
+    '<path d="M38 44 Q50 28 62 44 Q60 58 50 60 Q40 58 38 44 Z" fill="'+b+'"/>'+
+    '<ellipse cx="44" cy="46" rx="3" ry="4.5" fill="'+c+'"/><ellipse cx="56" cy="46" rx="3" ry="4.5" fill="'+c+'"/>'; },
+  bot: function(a,b,c){ return ''+
+    '<rect x="34" y="58" width="32" height="24" rx="4" fill="'+b+'"/>'+
+    '<rect x="38" y="82" width="7" height="10" fill="'+b+'"/><rect x="55" y="82" width="7" height="10" fill="'+b+'"/>'+
+    '<rect x="30" y="30" width="40" height="30" rx="6" fill="'+a+'"/>'+
+    '<line x1="50" y1="30" x2="50" y2="15" stroke="'+b+'" stroke-width="3"/><circle cx="50" cy="13" r="4" fill="'+c+'"/>'+
+    '<rect x="36" y="40" width="28" height="9" rx="4.5" fill="#0c1a22"/>'+
+    '<circle cx="50" cy="44.5" r="5" fill="'+c+'"/>'; },
+  chimera: function(a,b,c){ return ''+
+    '<ellipse cx="50" cy="68" rx="24" ry="17" fill="'+b+'"/>'+
+    '<path d="M30 50 Q30 30 50 28 Q70 30 70 50 Q70 64 50 66 Q30 64 30 50 Z" fill="'+a+'"/>'+
+    '<path d="M34 34 L26 16 L41 30 Z" fill="'+b+'"/><path d="M66 34 L74 16 L59 30 Z" fill="'+b+'"/>'+
+    '<path d="M50 28 l-4 -10 l8 0 Z" fill="'+c+'" opacity=".85"/>'+
+    '<path d="M40 47 l9 -3 l0 6 Z" fill="'+c+'"/><path d="M60 47 l-9 -3 l0 6 Z" fill="'+c+'"/>'+
+    '<path d="M43 60 L46 70 L49 60 Z" fill="#fff"/><path d="M51 60 L54 70 L57 60 Z" fill="#fff"/>'; },
+  golem: function(a,b,c){ return ''+
+    '<rect x="14" y="48" width="14" height="26" rx="3" fill="'+b+'"/><rect x="72" y="48" width="14" height="26" rx="3" fill="'+b+'"/>'+
+    '<path d="M30 86 L26 44 L40 34 L62 34 L74 46 L70 86 Z" fill="'+a+'"/>'+
+    '<path d="M50 36 L50 84" stroke="'+b+'" stroke-width="2" opacity=".5"/>'+
+    '<path d="M34 42 L66 42" stroke="'+b+'" stroke-width="3"/>'+
+    '<rect x="38" y="46" width="8" height="6" rx="1" fill="'+c+'"/><rect x="54" y="46" width="8" height="6" rx="1" fill="'+c+'"/>'; },
+  titan: function(a,b,c){ return ''+
+    '<path d="M26 90 L30 50 Q50 40 70 50 L74 90 Z" fill="'+b+'"/>'+
+    '<path d="M26 50 L14 43 L30 48 Z" fill="'+a+'"/><path d="M74 50 L86 43 L70 48 Z" fill="'+a+'"/>'+
+    '<ellipse cx="50" cy="66" rx="10" ry="12" fill="'+c+'" opacity=".75"/>'+
+    '<circle cx="50" cy="36" r="16" fill="'+a+'"/>'+
+    '<path d="M33 30 L33 17 L42 26 L50 13 L58 26 L67 17 L67 30 Z" fill="'+c+'"/>'+
+    '<circle cx="44" cy="38" r="3" fill="'+b+'"/><circle cx="56" cy="38" r="3" fill="'+b+'"/>'; }
+};
+function spriteSvg(kind, pal, anim){
+  var fn = SPRITES[kind]; if (!fn) return null;
+  pal = pal || ['#9aa0aa','#3a3f48','#d6dae2'];
+  return '<svg class="spr anim-'+(anim||'idle')+'" viewBox="0 0 100 100" width="86" height="86" aria-hidden="true">'+
+    fn(pal[0], pal[1], pal[2])+'</svg>';
+}
 
 /* ============================ STATE ============================ */
 var G = null, qState = { current:null, answered:false, pending:null }, _toastT=null, _busy=false;
@@ -645,11 +744,14 @@ function render(){
   // enemies
   var row=$('enemyRow'); row.innerHTML='';
   G.enemies.forEach(function(e,i){
+    var def=ENEMIES[e.key]||{};
     var d=document.createElement('div'); d.className='enemy'+(e.dead?' dead':'')+(G.turn==='player'&&G.state==='combat'?' targetable':''); d.dataset.i=i;
+    if(def.tier) d.dataset.tier=def.tier;
+    var tip=def.name+(def.tier?' · '+def.tier:'')+(def.flavor?'\n'+def.flavor:'');
     var st=''; if(e.vuln) st+='<span class="status vuln">Vuln '+e.vuln+'</span>'; if(e.weak) st+='<span class="status weak">Weak '+e.weak+'</span>'; if(e.poison) st+='<span class="status">☠ '+e.poison+'</span>'; if(e.str) st+='<span class="status str">Str '+e.str+'</span>';
     d.innerHTML =
       '<div class="intent">'+(e.dead?'':intentText(e))+'</div>'+
-      '<div class="art">'+artHtml(e.key, e.emoji, e.anim)+(e.block?'<span class="eblock">'+e.block+'</span>':'')+'</div>'+
+      '<div class="art" title="'+tip.replace(/"/g,'&quot;')+'">'+artHtml(e.key, e.emoji, e.anim)+(e.block?'<span class="eblock">'+e.block+'</span>':'')+'</div>'+
       '<div class="statuses">'+st+'</div>'+
       '<div class="bar"><i style="width:'+(100*e.hp/e.maxHp)+'%"></i><div class="txt">'+e.hp+'/'+e.maxHp+'</div></div>';
     if (!e.dead && G.turn==='player' && G.state==='combat'){ d.onclick=function(){ onEnemyClick(i); }; }
