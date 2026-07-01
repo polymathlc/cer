@@ -4167,6 +4167,8 @@ option {
 .comm-quest-banner .cq-timer { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1.3rem; text-align: center; background: rgba(255,255,255,0.18); border-radius: 10px; padding: 8px 12px; min-width: 96px; }
 .comm-quest-banner .cq-timer span { display: block; font-size: 0.6rem; font-weight: 600; opacity: 0.85; letter-spacing: 0.06em; }
 .comm-quest-banner .cq-won { font-weight: 700; }
+.comm-quest-banner .cq-grade-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.8rem; font-weight: 600; padding: 4px 0; border-top: 1px solid rgba(255,255,255,0.18); }
+.comm-quest-banner .cq-grade-row:first-of-type { border-top: none; }
 /* quest mode toggle + question picker */
 .comm-mode { display: flex; gap: 8px; margin-top: 10px; }
 .comm-mode-btn { flex: 1; padding: 9px 8px; border-radius: 10px; border: 2px solid var(--border, #d9d9e3); background: var(--surface, #fff); color: var(--text-muted); font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.15s; }
@@ -5832,16 +5834,38 @@ option {
         <div class="comm-tabpane" id="commTabQuest">
           <p class="comm-help">Launch a surprise quest: all students see a live countdown and the winner gets a <b>$10 voucher</b>.</p>
           <div class="comm-mode">
-            <button type="button" class="comm-mode-btn active" data-qmode="race" onclick="commQuestMode('race')">🏁 First to finish</button>
-            <button type="button" class="comm-mode-btn" data-qmode="score" onclick="commQuestMode('score')">🏆 Highest score</button>
+            <button type="button" class="comm-mode-btn active" data-qmode="auto" onclick="commQuestMode('auto')">🎯 Auto quest</button>
+            <button type="button" class="comm-mode-btn" data-qmode="race" onclick="commQuestMode('race')">🏁 First to finish</button>
+            <button type="button" class="comm-mode-btn" data-qmode="score" onclick="commQuestMode('score')">🏆 Pick questions</button>
           </div>
           <input id="commQuestTitle" class="form-input" type="text" placeholder="Quest title — e.g. ⚡ Flash Quiz Frenzy" style="margin-top:10px;">
           <textarea id="commQuestDesc" class="form-input" rows="2" placeholder="Short description shown to students…" style="margin-top:8px;resize:vertical;"></textarea>
           <div class="comm-quest-fields">
             <label>Lasts (hours)<input id="commQuestHours" class="form-input" type="number" min="0.25" step="0.25" value="3"></label>
           </div>
+          <!-- Auto mode: system feeds each student their own questions via the "Attempt quest now!" button -->
+          <div id="commQuestAutoFields">
+            <div class="comm-quest-fields">
+              <label>Winner is
+                <select id="commQuestWin" class="form-input">
+                  <option value="highest">🏆 Highest score</option>
+                  <option value="fastest">🏁 Fastest to finish</option>
+                  <option value="graded">✍️ Mr Chung grades</option>
+                </select>
+              </label>
+              <label>Question format
+                <select id="commQuestFormat" class="form-input">
+                  <option value="mcq">MCQ</option>
+                  <option value="written">Open-ended (OEQ)</option>
+                </select>
+              </label>
+              <label>Number of questions<input id="commQuestAutoCount" class="form-input" type="number" min="1" value="5"></label>
+              <label>Topic (optional)<input id="commQuestAutoTopic" class="form-input" type="text" placeholder="any"></label>
+            </div>
+            <p class="comm-help" style="margin-top:8px;">Each student taps <b>Attempt quest now!</b> and the system feeds them the questions — <b>ones they haven't done yet</b>, then any they <b>previously struggled with</b> if more are needed. Winner takes a $10 voucher.</p>
+          </div>
           <!-- Race mode -->
-          <div id="commQuestRaceFields">
+          <div id="commQuestRaceFields" style="display:none;">
             <div class="comm-quest-fields">
               <label>Questions to finish<input id="commQuestCount" class="form-input" type="number" min="1" value="10"></label>
               <label>Topic (optional)<input id="commQuestTopic" class="form-input" type="text" placeholder="any"></label>
@@ -7027,7 +7051,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.48.0';
+const APP_VERSION = 'v1.49.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20304,7 +20328,7 @@ async function claimPhysical() {
 let _commPosts = [], _commQuests = [];
 let _commUnsub = null, _questUnsub = null, _questTick = null, _questSeen = {};
 let _commImg = {};                 // dataURL keyed by file-input id
-let _questMode = 'race';            // admin authoring mode: 'race' | 'score'
+let _questMode = 'auto';            // admin authoring mode: 'auto' | 'race' | 'score'
 let _questPick = new Set();         // selected question ids (score mode)
 let _questRun = null;              // active score-quest run for this student
 let _questOffered = {};            // guards the win overlay per quest id
@@ -20360,6 +20384,12 @@ function _fmtCountdown(ms) {
   if (ms < 0) ms = 0;
   const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
   return (h > 0 ? h + ':' : '') + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+}
+// Human-friendly elapsed time (e.g. "2m 5s") for fastest-to-finish quests.
+function _fmtDuration(ms) {
+  const s = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+  const m = Math.floor(s / 60), ss = s % 60;
+  return m ? (m + 'm ' + ss + 's') : (ss + 's');
 }
 
 // ---- image attach: downscale client-side, upload to Storage (inline fallback)
@@ -20465,11 +20495,13 @@ async function commDelete(id) { if (!_isAdmin()) return; try { await deleteDoc(d
 //   score — admin hand-picks the exact questions; the student with the
 //           highest percentage when the timer ends wins (mode:'score')
 function commQuestMode(mode) {
-  _questMode = (mode === 'score') ? 'score' : 'race';
+  _questMode = (mode === 'score' || mode === 'race') ? mode : 'auto';
   document.querySelectorAll('#commTabQuest .comm-mode-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.qmode === _questMode));
+  const auto = document.getElementById('commQuestAutoFields');
   const race = document.getElementById('commQuestRaceFields');
   const score = document.getElementById('commQuestScoreFields');
+  if (auto) auto.style.display = _questMode === 'auto' ? '' : 'none';
   if (race) race.style.display = _questMode === 'race' ? '' : 'none';
   if (score) score.style.display = _questMode === 'score' ? '' : 'none';
   if (_questMode === 'score') { commPopulateQuestFilters(); commRenderQuestPicker(); }
@@ -20599,7 +20631,19 @@ async function commCreateQuest() {
     createdBy: currentUser.uid, createdAt: new Date().toISOString()
   };
   let payload, feedText;
-  if (_questMode === 'score') {
+  if (_questMode === 'auto') {
+    const winSel = document.getElementById('commQuestWin');
+    const win = ['highest', 'fastest', 'graded'].includes(winSel && winSel.value) ? winSel.value : 'highest';
+    const format = (document.getElementById('commQuestFormat').value === 'written') ? 'written' : 'mcq';
+    const count = Math.max(1, parseInt(document.getElementById('commQuestAutoCount').value, 10) || 5);
+    const topic = (document.getElementById('commQuestAutoTopic').value || '').trim();
+    payload = Object.assign({ mode: 'auto', win, format, count, total: count, topic: topic || '', scores: {} }, base);
+    const fmtLabel = format === 'mcq' ? 'MCQ' : 'open-ended';
+    const winLabel = win === 'fastest' ? 'fastest to finish wins' : win === 'graded' ? 'Mr Chung picks the winner' : 'highest score wins';
+    feedText = (desc ? desc + '\n\n' : '') + 'Tap “Attempt quest now!” — you\'ll get ' + count + ' ' + fmtLabel +
+      ' question' + (count === 1 ? '' : 's') + (topic ? ' on ' + topic : '') + ' chosen just for you (new ones first, then any you found tricky before). ' +
+      winLabel.charAt(0).toUpperCase() + winLabel.slice(1) + ' — reward: $10 voucher!';
+  } else if (_questMode === 'score') {
     const ids = Array.from(_questPick);
     if (!ids.length) { showToast('Pick at least one question for a Highest-score quest', 'error'); return; }
     payload = Object.assign({ mode: 'score', questionIds: ids, total: ids.length, count: ids.length, scores: {} }, base);
@@ -20616,7 +20660,9 @@ async function commCreateQuest() {
     await setDoc(doc(db, 'community', 'quest_' + id), {
       type: 'update', title: '⚡ New Encounter Quest: ' + title,
       text: feedText,
-      imageUrl: '', authorUid: currentUser.uid, authorName: currentUser.name || 'Teacher', authorRole: 'admin',
+      imageUrl: '', authorUid: currentUser.uid,
+      authorName: _isSuperAdmin() ? COMM_ADMIN_NAME : (currentUser.name || 'Teacher'),
+      authorRole: 'admin', authorAvatar: COMM_ADMIN_AVATAR, authorStatus: COMM_ADMIN_STATUS,
       status: 'approved', pinned: true, createdAt: new Date().toISOString()
     });
     document.getElementById('commQuestTitle').value = '';
@@ -20640,7 +20686,10 @@ function _questProgress(q) { return (rpgState && rpgState.encounter && rpgState.
 // rpgOnMarked only when a genuinely new unique question was recorded.
 function commNoteEncounterProgress(q) {
   if (!rpgState || !currentUser || currentUser.role !== 'student') return;
-  const active = _activeQuests(); if (!active.length) return;
+  // Only "first to finish" (race) quests are won by answering questions anywhere.
+  // Score and auto quests are resolved via their own run flow, not this counter.
+  const active = _activeQuests().filter(quest => quest.mode === 'race' || !quest.mode);
+  if (!active.length) return;
   rpgState.encounter = rpgState.encounter || {};
   active.forEach(quest => {
     if (quest.topic && q && q.topic && String(q.topic).toLowerCase() !== String(quest.topic).toLowerCase()) return;
@@ -20675,14 +20724,24 @@ async function commTryWinQuest(quest) {
 function commOfferQuestPrize(quest) {
   _questOffered[quest._id] = 1;
   const isScore = quest.mode === 'score';
-  const myPct = isScore && quest.scores && quest.scores[currentUser.uid] ? Math.round(quest.scores[currentUser.uid].pct || 0) : null;
-  _prizeClaimCtx = { ackKey: 'enc_' + quest._id, monthKey: rpgMonthKey(), rank: 1, value: (isScore ? (myPct != null ? myPct : quest.total || 0) : quest.count), noun: 'Encounter Quest', game: 'Encounter Quest', detail: (quest.title || 'Encounter Quest'), category: 'encounter' };
+  const isAuto = quest.mode === 'auto';
+  const myScore = (isScore || isAuto) && quest.scores ? quest.scores[currentUser.uid] : null;
+  const myPct = myScore ? Math.round(myScore.pct || 0) : null;
+  const myTime = myScore && myScore.elapsedMs != null ? myScore.elapsedMs : (quest.winnerTimeMs != null ? quest.winnerTimeMs : null);
+  _prizeClaimCtx = { ackKey: 'enc_' + quest._id, monthKey: rpgMonthKey(), rank: 1, value: (isScore || isAuto ? (myPct != null ? myPct : quest.total || 0) : quest.count), noun: 'Encounter Quest', game: 'Encounter Quest', detail: (quest.title || 'Encounter Quest'), category: 'encounter' };
   const el = id => document.getElementById(id);
+  let how;
+  if (isAuto) {
+    how = quest.win === 'fastest' ? ('fastest to finish' + (myTime != null ? ' in <b>' + _fmtDuration(myTime) + '</b>' : '') + '!')
+        : quest.win === 'graded' ? 'Mr Chung picked you as the winner!'
+        : 'top scorer' + (myPct != null ? ' with <b>' + myPct + '%</b>' : '') + '!';
+  } else if (isScore) {
+    how = 'top scorer' + (myPct != null ? ' with <b>' + myPct + '%</b>' : '') + '!';
+  } else {
+    how = 'first to finish ' + quest.count + ' questions!';
+  }
   if (el('prizeClaimMsg')) el('prizeClaimMsg').innerHTML =
-    '🏆 You won the <b>' + escapeHtml(quest.title || 'Encounter Quest') + '</b> — ' +
-    (isScore
-      ? 'top scorer' + (myPct != null ? ' with <b>' + myPct + '%</b>' : '') + '!'
-      : 'first to finish ' + quest.count + ' questions!') +
+    '🏆 You won the <b>' + escapeHtml(quest.title || 'Encounter Quest') + '</b> — ' + how +
     ' Enter your details and we\'ll send your <b>$10 Popular voucher</b>.';
   if (el('prizePhone')) el('prizePhone').value = '';
   if (el('prizeAddress')) el('prizeAddress').value = '';
@@ -20710,6 +20769,55 @@ function commStartQuestRun(questId) {
   navigateTo('quickpractice');
   preloadQueueImages(qpQueue).then(() => loadNextQpQuestion()).catch(() => loadNextQpQuestion());
 }
+// ---- auto-fed quest run: the system picks each student's questions ----
+// Priority: questions the student hasn't done yet, then ones they previously
+// struggled with (best score < 50%), then anything else to fill the count.
+async function commStartAutoQuest(questId) {
+  const quest = _commQuests.find(q => q._id === questId);
+  if (!quest || quest.mode !== 'auto') return;
+  if (!(currentUser && currentUser.role === 'student')) return;
+  const left = new Date(quest.endAt).getTime() - Date.now();
+  if (quest.winnerUid || quest.status === 'ended' || left <= 0) { showToast('That quest has ended.', 'info'); return; }
+  const count = Math.max(1, quest.count || quest.total || 5);
+  const format = quest.format === 'written' ? 'written' : 'mcq';
+  const topic = (quest.topic || '').trim().toLowerCase();
+  const pool = (Array.isArray(questionBank) ? questionBank : []).filter(q => {
+    if (!q || q.id == null) return false;
+    if (format === 'mcq' ? !qpHasMcq(q) : !qpHasWritten(q)) return false;
+    if (topic && String(q.topic || '').toLowerCase() !== topic) return false;
+    return true;
+  });
+  if (!pool.length) { showToast('No ' + (format === 'mcq' ? 'MCQ' : 'open-ended') + ' questions available' + (quest.topic ? ' on ' + quest.topic : '') + ' yet.', 'error'); return; }
+  showToast('Picking your questions…', 'info');
+  // Best recorded fraction (0–1) per question from this student's attempt log.
+  const bestByQ = {};
+  try {
+    const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', currentUser.uid)));
+    snap.forEach(dref => {
+      const a = dref.data(); if (!a || a.questionId == null) return;
+      const id = String(a.questionId);
+      const frac = a.totalBlanks ? (Number(a.score) || 0) / a.totalBlanks : 0;
+      bestByQ[id] = Math.max(bestByQ[id] == null ? -1 : bestByQ[id], frac);
+    });
+  } catch (e) { console.warn('auto quest history read', e); }
+  const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
+  const seen = id => bestByQ[id] !== undefined;
+  const unseen = shuffle(pool.filter(q => !seen(String(q.id))));
+  const struggled = pool.filter(q => seen(String(q.id)) && bestByQ[String(q.id)] < 0.5)
+    .sort((a, b) => (bestByQ[String(a.id)] || 0) - (bestByQ[String(b.id)] || 0));
+  const rest = shuffle(pool.filter(q => seen(String(q.id)) && bestByQ[String(q.id)] >= 0.5));
+  const ordered = [];
+  const add = list => list.forEach(q => { if (ordered.length < count && !ordered.some(x => String(x.id) === String(q.id))) ordered.push(q); });
+  add(unseen); add(struggled); add(rest);
+  const queue = ordered.slice(0, count);
+  if (!queue.length) { showToast('Couldn\'t pick questions — try again shortly.', 'error'); return; }
+  _questRun = { questId: quest._id, mode: 'auto', win: quest.win || 'highest', ids: queue.map(q => String(q.id)), total: queue.length, best: {}, answered: new Set(), startedAt: Date.now(), _finished: false };
+  qpQueue = queue; qpIndex = -1; qpAnswered = 0; qpSessionResults = [];
+  const winMsg = quest.win === 'fastest' ? 'fastest to finish wins — go!' : quest.win === 'graded' ? 'do your best, Mr Chung grades!' : 'highest score wins!';
+  showToast('⚡ Quest started — ' + winMsg, 'success');
+  navigateTo('quickpractice');
+  preloadQueueImages(qpQueue).then(() => loadNextQpQuestion()).catch(() => loadNextQpQuestion());
+}
 // Called from rpgOnMarked for every real marked question. If a score-quest run
 // is live and this question belongs to it, record the student's best credit
 // for that question and publish a fresh percentage to Firestore (debounced).
@@ -20719,7 +20827,21 @@ function commQuestRunCapture(q, credit) {
   if (!_questRun.ids.includes(qid)) return;
   const c = Math.max(0, Math.min(1, Number(credit) || 0));
   if (c > (_questRun.best[qid] || 0)) _questRun.best[qid] = c;
+  _questRun.answered = _questRun.answered || new Set();
+  _questRun.answered.add(qid);
   _publishQuestScore(_questRun.questId);
+  // Auto quests fire a finish handler once every fed question has been answered.
+  if (_questRun.mode === 'auto' && !_questRun._finished && _questRun.answered.size >= (_questRun.total || 0)) {
+    _questRun._finished = true;
+    _commAutoFinished(_questRun);
+  }
+}
+function _questRunDone() { return _questRun && _questRun.answered ? _questRun.answered.size : (_questRun ? Object.keys(_questRun.best).length : 0); }
+function _questRunPct() {
+  if (!_questRun) return 0;
+  const total = _questRun.total || 1;
+  const sum = Object.values(_questRun.best).reduce((s, v) => s + v, 0);
+  return Math.round((sum / total) * 100);
 }
 function _publishQuestScore(questId) {
   if (!_questRun || _questRun.questId !== questId || !_commCanFirestore()) return;
@@ -20727,20 +20849,68 @@ function _publishQuestScore(questId) {
   _questScorePub[questId] = setTimeout(async () => {
     _questScorePub[questId] = null;
     if (!_questRun || _questRun.questId !== questId) return;
-    const best = _questRun.best, total = _questRun.total || 1;
-    const done = Object.keys(best).length;
-    const sum = Object.values(best).reduce((s, v) => s + v, 0);
-    const pct = Math.round((sum / total) * 100);
+    const total = _questRun.total || 1;
+    const done = _questRunDone();
+    const pct = _questRunPct();
     // Never let a partial re-attempt lower a better score already recorded.
     const prev = _commQuests.find(q => q._id === questId);
     const prevPct = prev && prev.scores && prev.scores[currentUser.uid] ? (prev.scores[currentUser.uid].pct || 0) : -1;
     if (pct < prevPct) return;
+    const entry = { name: currentUser.name || 'Student', pct, done, total, at: new Date().toISOString() };
+    if (_questRun.mode === 'auto') {
+      entry.win = _questRun.win;
+      if (_questRun.startedAt) entry.elapsedMs = Date.now() - _questRun.startedAt;
+      entry.finished = done >= total;
+    }
     try {
-      await updateDoc(doc(db, 'encounterQuests', questId), {
-        ['scores.' + currentUser.uid]: { name: currentUser.name || 'Student', pct, done, total, at: new Date().toISOString() }
-      });
+      await updateDoc(doc(db, 'encounterQuests', questId), { ['scores.' + currentUser.uid]: entry });
     } catch (e) { console.warn('publish quest score', e); }
   }, 800);
+}
+// Auto quest: the student just answered the last fed question.
+async function _commAutoFinished(run) {
+  const quest = _commQuests.find(q => q._id === run.questId) || { _id: run.questId };
+  const total = run.total || 1;
+  const pct = _questRunPct();
+  const elapsedMs = run.startedAt ? Date.now() - run.startedAt : 0;
+  if (_commCanFirestore()) {
+    const prev = _commQuests.find(q => q._id === run.questId);
+    const prevPct = prev && prev.scores && prev.scores[currentUser.uid] ? (prev.scores[currentUser.uid].pct || 0) : -1;
+    // For "highest", keep a better earlier score; always record for the others.
+    if (!(run.win === 'highest' && pct < prevPct)) {
+      try {
+        await updateDoc(doc(db, 'encounterQuests', run.questId), {
+          ['scores.' + currentUser.uid]: { name: currentUser.name || 'Student', pct, done: total, total, win: run.win, elapsedMs, finished: true, at: new Date().toISOString() }
+        });
+      } catch (e) { console.warn('auto finish publish', e); }
+    }
+  }
+  if (run.win === 'fastest') {
+    _commClaimFastest(quest, elapsedMs, pct);
+  } else if (run.win === 'graded') {
+    showToast('✅ Done in ' + _fmtDuration(elapsedMs) + ' — Mr Chung will grade and pick the winner!', 'success');
+  } else {
+    showToast('✅ Quest complete — you scored ' + pct + '%! Highest score at the deadline wins.', 'success');
+  }
+}
+// Fastest-to-finish: the first student to complete all their questions wins.
+async function _commClaimFastest(quest, elapsedMs, pct) {
+  if (!_commCanFirestore()) return;
+  try {
+    const snap = await getDoc(doc(db, 'encounterQuests', quest._id));
+    if (!snap.exists()) return;
+    const d = snap.data();
+    if (d.winnerUid) {
+      if (d.winnerUid !== currentUser.uid) showToast('⚡ ' + (d.winnerName || 'Another student') + ' finished first — watch for the next quest!', 'info');
+      return;
+    }
+    if (d.status !== 'active' || new Date(d.endAt).getTime() < Date.now()) { showToast('That quest already ended.', 'info'); return; }
+    await updateDoc(doc(db, 'encounterQuests', quest._id), {
+      winnerUid: currentUser.uid, winnerName: currentUser.name || 'Student',
+      winnerAt: new Date().toISOString(), winnerTimeMs: elapsedMs, winnerPct: pct, status: 'ended'
+    });
+    commOfferQuestPrize(Object.assign({ _id: quest._id }, d));
+  } catch (e) { console.warn('claim fastest', e); }
 }
 // Admin resolves a score quest once the timer is up: highest percentage wins
 // (ties broken by more questions done, then earliest submission).
@@ -20754,15 +20924,43 @@ async function commAwardTopScorer(questId) {
     const scores = d.scores || {};
     const entries = Object.keys(scores).map(uid => Object.assign({ uid }, scores[uid]));
     if (!entries.length) { showToast('No students attempted this quest — nothing to award.', 'info'); return; }
-    entries.sort((a, b) => (b.pct || 0) - (a.pct || 0) || (b.done || 0) - (a.done || 0) || String(a.at || '').localeCompare(String(b.at || '')));
-    const top = entries[0];
-    if (!confirm('Award the $10 voucher to ' + (top.name || 'top student') + ' (' + Math.round(top.pct || 0) + '%)?')) return;
+    let top;
+    if (d.win === 'fastest') {
+      // Fastest to finish: only students who completed all questions, shortest time first.
+      const finishers = entries.filter(e => e.finished || (e.total && e.done >= e.total));
+      const pool = finishers.length ? finishers : entries;
+      pool.sort((a, b) => ((a.elapsedMs == null ? Infinity : a.elapsedMs) - (b.elapsedMs == null ? Infinity : b.elapsedMs)) || (b.pct || 0) - (a.pct || 0));
+      top = pool[0];
+    } else {
+      entries.sort((a, b) => (b.pct || 0) - (a.pct || 0) || (b.done || 0) - (a.done || 0) || String(a.at || '').localeCompare(String(b.at || '')));
+      top = entries[0];
+    }
+    const detail = d.win === 'fastest' ? (top.elapsedMs != null ? _fmtDuration(top.elapsedMs) : 'fastest') : (Math.round(top.pct || 0) + '%');
+    if (!confirm('Award the $10 voucher to ' + (top.name || 'top student') + ' (' + detail + ')?')) return;
     await updateDoc(doc(db, 'encounterQuests', questId), {
-      winnerUid: top.uid, winnerName: top.name || 'Student', winnerPct: Math.round(top.pct || 0),
+      winnerUid: top.uid, winnerName: top.name || 'Student', winnerPct: Math.round(top.pct || 0), winnerTimeMs: top.elapsedMs || 0,
       winnerAt: new Date().toISOString(), status: 'ended'
     });
-    showToast('🏆 ' + (top.name || 'Top student') + ' wins with ' + Math.round(top.pct || 0) + '%!', 'success');
+    showToast('🏆 ' + (top.name || 'Top student') + ' wins with ' + detail + '!', 'success');
   } catch (e) { console.warn('award top scorer', e); showToast('Could not award the winner', 'error'); }
+}
+// "Mr Chung grades" mode: the teacher hand-picks the winner from the entrants.
+async function commAwardTo(questId, uid) {
+  if (!_isAdmin() || !_commCanFirestore()) return;
+  try {
+    const snap = await getDoc(doc(db, 'encounterQuests', questId));
+    if (!snap.exists()) return;
+    const d = snap.data();
+    if (d.winnerUid) { showToast('A winner is already set.', 'info'); return; }
+    const s = (d.scores || {})[uid];
+    if (!s) { showToast('That student has no entry.', 'error'); return; }
+    if (!confirm('Award the $10 voucher to ' + (s.name || 'this student') + '?')) return;
+    await updateDoc(doc(db, 'encounterQuests', questId), {
+      winnerUid: uid, winnerName: s.name || 'Student', winnerPct: Math.round(s.pct || 0), winnerTimeMs: s.elapsedMs || 0,
+      winnerAt: new Date().toISOString(), status: 'ended'
+    });
+    showToast('🏆 ' + (s.name || 'Student') + ' wins!', 'success');
+  } catch (e) { console.warn('award to', e); showToast('Could not award the winner', 'error'); }
 }
 
 // ---- realtime subscriptions + rendering --------------------------------
@@ -20774,15 +20972,20 @@ function commStartGlobalWatch() {
       _activeQuests().forEach(q => {
         if (!_questSeen[q._id]) {
           _questSeen[q._id] = 1;
-          if (currentUser && currentUser.role === 'student')
-            showToast('⚡ New Encounter Quest: ' + (q.title || '') + (q.mode === 'score' ? ' — score the highest to win $10!' : ' — finish ' + q.count + ' questions to win $10!'), 'info');
+          if (currentUser && currentUser.role === 'student') {
+            const how = q.mode === 'auto'
+              ? (q.win === 'fastest' ? ' — finish fastest to win $10!' : q.win === 'graded' ? ' — do your best, Mr Chung grades to win $10!' : ' — score the highest to win $10!')
+              : (q.mode === 'score' ? ' — score the highest to win $10!' : ' — finish ' + q.count + ' questions to win $10!');
+            showToast('⚡ New Encounter Quest: ' + (q.title || '') + how, 'info');
+          }
         }
       });
       // A score quest the admin just awarded to me → offer the prize claim.
       if (currentUser && currentUser.role === 'student') {
         const ack = (rpgState && rpgState.prizeAck) || {};
         _commQuests.forEach(q => {
-          if (q.mode === 'score' && q.winnerUid === currentUser.uid && !_questOffered[q._id] && !ack['enc_' + q._id]) {
+          const awardable = q.mode === 'score' || (q.mode === 'auto' && q.win !== 'fastest');
+          if (awardable && q.winnerUid === currentUser.uid && !_questOffered[q._id] && !ack['enc_' + q._id]) {
             commOfferQuestPrize(q);
           }
         });
@@ -20811,6 +21014,57 @@ function _renderQuestChip() {
   chip.innerHTML = '⚡ Quest ' + _fmtCountdown(left);
   chip.classList.add('show');
 }
+// Sub-content for an auto-fed quest banner (student attempt button / admin award UI).
+function _commAutoBannerSub(q, live) {
+  const student = currentUser && currentUser.role === 'student';
+  const win = q.win || 'highest';
+  const fmt = q.format === 'written' ? 'open-ended' : 'MCQ';
+  const nq = q.count || q.total || '';
+  const winLabel = win === 'fastest' ? 'fastest to finish wins' : win === 'graded' ? 'Mr Chung grades' : 'highest score wins';
+  const scores = q.scores || {};
+  const entries = Object.keys(scores).map(uid => Object.assign({ uid }, scores[uid]));
+  const n = entries.length;
+  if (student) {
+    const my = scores[currentUser.uid] || null;
+    if (live) {
+      const label = my ? '🔁 Attempt again' : '⚡ Attempt quest now!';
+      const btn = '<button class="btn btn-primary btn-sm" onclick="commStartAutoQuest(\'' + q._id + '\')" style="margin-top:6px;">' + label + '</button>';
+      let mine = '';
+      if (my) {
+        mine = win === 'fastest'
+          ? (my.finished ? ' Your time: <b>' + _fmtDuration(my.elapsedMs) + '</b>.' : ' Answered ' + (my.done || 0) + '/' + (my.total || nq) + '.')
+          : ' Your score: <b>' + Math.round(my.pct || 0) + '%</b>.';
+      }
+      return '<div class="cq-progress">' + nq + ' ' + fmt + ' questions picked for you · ' + winLabel + '.' + mine + '</div>' + btn;
+    }
+    if (!n) return '<div class="cq-progress">Time\'s up — no entries this round.</div>';
+    return '<div class="cq-progress">Time\'s up — waiting for the result…</div>';
+  }
+  // admin
+  if (!n) return '<div class="cq-progress">' + (live ? 'Live' : 'Time\'s up') + ' — no attempts yet · ' + nq + ' ' + fmt + ' q · ' + winLabel + '.</div>';
+  if (win === 'graded') {
+    return '<div class="cq-progress">' + n + ' student' + (n === 1 ? '' : 's') + ' attempted · pick the winner:</div>' + _commGradedChooser(q);
+  }
+  let lead;
+  if (win === 'fastest') {
+    lead = entries.filter(e => e.finished || (e.total && e.done >= e.total)).sort((a, b) => (a.elapsedMs == null ? Infinity : a.elapsedMs) - (b.elapsedMs == null ? Infinity : b.elapsedMs))[0];
+  } else {
+    lead = entries.slice().sort((a, b) => (b.pct || 0) - (a.pct || 0))[0];
+  }
+  const leadTxt = lead ? (' · leader ' + escapeHtml(lead.name || 'student') + ' ' + (win === 'fastest' ? _fmtDuration(lead.elapsedMs) : Math.round(lead.pct || 0) + '%')) : '';
+  const awardBtn = ' <button class="btn btn-outline btn-sm" onclick="commAwardTopScorer(\'' + q._id + '\')">🏆 Award winner</button>';
+  return '<div class="cq-progress">' + n + ' student' + (n === 1 ? '' : 's') + ' attempted' + leadTxt + awardBtn + '</div>';
+}
+function _commGradedChooser(q) {
+  const scores = q.scores || {};
+  const entries = Object.keys(scores).map(uid => Object.assign({ uid }, scores[uid])).sort((a, b) => (b.pct || 0) - (a.pct || 0));
+  if (!entries.length) return '';
+  return entries.map(e =>
+    '<div class="cq-grade-row"><span>' + escapeHtml(e.name || 'Student') + ' — ' + Math.round(e.pct || 0) + '%' +
+    (e.elapsedMs != null ? ' · ' + _fmtDuration(e.elapsedMs) : '') + (e.finished ? ' ✅' : '') + '</span>' +
+    '<button class="btn btn-outline btn-sm" onclick="commAwardTo(\'' + q._id + '\',\'' + e.uid + '\')">🏆 Award</button></div>'
+  ).join('');
+}
 function _renderQuestBanners() {
   const area = document.getElementById('commQuestArea'); if (!area) return;
   const list = _commQuests.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 6);
@@ -20818,17 +21072,21 @@ function _renderQuestBanners() {
   const student = currentUser && currentUser.role === 'student';
   area.innerHTML = list.map(q => {
     const isScore = q.mode === 'score';
+    const isAuto = q.mode === 'auto';
     const left = new Date(q.endAt).getTime() - Date.now();
     const expired = q.status === 'ended' || left <= 0;
     const won = !!q.winnerUid;
     let timer, sub;
     if (won) {
       timer = '🏆<span>WINNER</span>';
-      sub = '<div class="cq-won">🏆 ' + escapeHtml(q.winnerName || 'A student') + ' won the $10 voucher' +
-        (isScore && q.winnerPct != null ? ' with ' + Math.round(q.winnerPct) + '%' : '') + '!</div>';
+      const how = (isAuto && q.win === 'fastest' && q.winnerTimeMs != null) ? ' in ' + _fmtDuration(q.winnerTimeMs)
+        : ((isScore || isAuto) && q.winnerPct != null && !(isAuto && q.win === 'fastest')) ? ' with ' + Math.round(q.winnerPct) + '%' : '';
+      sub = '<div class="cq-won">🏆 ' + escapeHtml(q.winnerName || 'A student') + ' won the $10 voucher' + how + '!</div>';
     } else if (expired) {
       timer = '⌛<span>ENDED</span>';
-      if (isScore) {
+      if (isAuto) {
+        sub = _commAutoBannerSub(q, false);
+      } else if (isScore) {
         const scores = q.scores || {};
         const n = Object.keys(scores).length;
         const awardBtn = _isAdmin() ? ' <button class="btn btn-outline btn-sm" onclick="commAwardTopScorer(\'' + q._id + '\')">🏆 Award top scorer</button>' : '';
@@ -20838,7 +21096,9 @@ function _renderQuestBanners() {
       }
     } else {
       timer = _fmtCountdown(left) + '<span>LEFT</span>';
-      if (isScore) {
+      if (isAuto) {
+        sub = _commAutoBannerSub(q, true);
+      } else if (isScore) {
         if (student) {
           const my = (q.scores && q.scores[currentUser.uid]) || null;
           const startBtn = '<button class="btn btn-primary btn-sm" onclick="commStartQuestRun(\'' + q._id + '\')" style="margin-top:6px;">▶ ' + (my ? 'Improve your score' : 'Start quest') + '</button>';
@@ -23361,7 +23621,9 @@ window.commTogglePickPreview = commTogglePickPreview;
 window.commPickCardClick = commPickCardClick;
 window.commClearPick = commClearPick;
 window.commStartQuestRun = commStartQuestRun;
+window.commStartAutoQuest = commStartAutoQuest;
 window.commAwardTopScorer = commAwardTopScorer;
+window.commAwardTo = commAwardTo;
 window.commStudentPost = commStudentPost;
 window.commPickAvatar = commPickAvatar;
 window.commApprove = commApprove;
