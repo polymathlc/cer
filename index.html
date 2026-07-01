@@ -5700,16 +5700,16 @@ option {
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>🏆 Leaderboard</h2>
           </div>
-          <div class="subtitle">Do the most questions to top the monthly board and win Popular vouchers.</div>
+          <div class="subtitle">Score = questions done × your % correct. Answer accurately — not just often — to top the board and win Popular vouchers.</div>
         </div>
       </div>
       <div class="page-body">
         <div id="rpgRaidSlot"></div>
         <div class="rpg-prize-banner">
-          <span class="rpg-prize-line">🎁 <b>Monthly prize:</b> the top 5 students with the most <b>questions done</b> each month win a <b>$10 Popular voucher</b> each. Questions only count once, and need a genuine answer.</span>
+          <span class="rpg-prize-line">🎁 <b>Monthly prize:</b> the top 5 students by <b>points (questions done × % correct)</b> each month win a <b>$10 Popular voucher</b> each. Questions only count once, need a genuine answer, and getting them right is what pays off.</span>
           <span class="rpg-prize-line">🕹️ <b>Arcade prizes:</b> the top 3 each month in <b>Science Defenders</b> and <b>Science Raiders</b> also win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🎟️ <b>Streak prize:</b> practise <b>10+ questions every day for 30 days in a row</b> and win a <b>$10 Popular voucher</b> — track your progress on the Your Hero page.</span>
-          <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 all-time XP earners win <b>$200, $100 and $50 Popular vouchers</b>.</span>
+          <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 on the <b>all-time points</b> board win <b>$200, $100 and $50 Popular vouchers</b>.</span>
         </div>
         <div class="card card-pad">
           <div class="rpg-board-head">
@@ -7012,7 +7012,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.47.1';
+const APP_VERSION = 'v1.48.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -16247,7 +16247,7 @@ function _computePrizeWinners() {
         category: cat, rank: i + 1, result: resultFn(x.r, x.v)
       }));
   };
-  push('questions', '',      5, r => rpgLastMonthQ(r),            (r, v) => v + ' Q');
+  push('questions', '',      5, r => rpgLastMonthAcc(r),          (r, v) => v + ' pts');
   push('defenders', '_td',   3, r => rpgLastMonthGame(r, 'td'),  (r) => rpgLastMonthGameLabel(r, 'td')   || '—');
   push('raiders',   '_raid', 3, r => rpgLastMonthGame(r, 'raid'),(r) => rpgLastMonthGameLabel(r, 'raid') || '—');
   return out;
@@ -16262,7 +16262,7 @@ function renderPrizeClaims() {
       ? (c.scoreLabel || '30 days')
       : c.category === 'encounter'
         ? (c.scoreLabel || (c.score != null ? c.score + ' Q' : '—'))
-        : (c.questions != null ? c.questions + ' Q' : '—');
+        : (c.score != null ? c.score + ' pts' : (c.questions != null ? c.questions + ' pts' : '—'));
 
   // Merge: start from every computed winner, fold in their claim (if any),
   // then append any leftover claims (streaks, other months) not already shown.
@@ -17945,6 +17945,12 @@ function rpgDefaults() {
     v: 2, gold: 60, xp: 0, hp: null, hidden: false, battleMin: false, gender: null,
     monthKey: null, monthXp: 0, lastMonthKey: null, lastMonthXp: 0, advRuns: null, dungeonFloor: 1,
     monthQ: 0, lastMonthQ: 0, monthQids: {}, monthPrints: {}, prizeAck: {},
+    // Accuracy-weighted leaderboard (live from July 2026): questions done × %
+    // correct. monthAns/monthCor are this month's attempts/correct; life* are the
+    // running totals since the metric began. Spamming wrong answers lifts
+    // attempts but not correct, so the percentage — and the rank — drops.
+    monthAns: 0, monthCor: 0, lastMonthAns: 0, lastMonthCor: 0,
+    lifeQ: 0, lifeAns: 0, lifeCor: 0,
     gameScores: { defenders: { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null },
                   raiders:   { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null } },
     inventory: { wood_sword: 1, cloth_tunic: 1 },
@@ -18980,10 +18986,14 @@ function rpgRolloverMonth() {
     rpgState.lastMonthKey = rpgState.monthKey;   // keep final standings for prize awarding
     rpgState.lastMonthXp = rpgState.monthXp || 0;
     rpgState.lastMonthQ = rpgState.monthQ || 0;  // last month's unique-question total
+    rpgState.lastMonthAns = rpgState.monthAns || 0;  // + attempts / correct for the
+    rpgState.lastMonthCor = rpgState.monthCor || 0;  // accuracy-weighted final score
   }
   rpgState.monthKey = key;
   rpgState.monthXp = 0;
   rpgState.monthQ = 0;
+  rpgState.monthAns = 0;
+  rpgState.monthCor = 0;
   rpgState.monthQids = {};
   rpgState.monthPrints = {};
   rpgRolloverGameScores(key);
@@ -19051,6 +19061,17 @@ function rpgLastMonthQ(r) {
   if (r.monthKey === prev) return r.monthQ || 0;
   if (r.lastMonthKey === prev) return r.lastMonthQ || 0;
   return 0;
+}
+// Last month's accuracy-weighted score (questions × % correct) for prize ranking.
+// Months before the metric began (no attempts recorded) fall back to plain
+// questions done, so June's winners are still awarded fairly.
+function rpgLastMonthAcc(r) {
+  const prev = rpgPrevMonthKey();
+  let q = 0, ans = 0, cor = 0;
+  if (r.monthKey === prev) { q = r.monthQ || 0; ans = r.monthAns || 0; cor = r.monthCor || 0; }
+  else if (r.lastMonthKey === prev) { q = r.lastMonthQ || 0; ans = r.lastMonthAns || 0; cor = r.lastMonthCor || 0; }
+  else return 0;
+  return ans > 0 ? rpgAccScore(q, ans, cor) : q;
 }
 function rpgApplyRewards(gold, xp) {
   const learn = (rpgState && rpgState.star && rpgState.star.learn) || 0;
@@ -19198,7 +19219,21 @@ function rpgOnMarked(q, score, total, opts = {}) {
   const round = rpgState.battle ? rpgBattleRound(credit) : null;
   if (round && round.victory) { gold += round.victory.gold; xp += round.victory.xp; }
   const lvl = rpgApplyRewards(gold, xp);
-  if (!opts.simulated) { const _bq = rpgState.monthQ || 0; rpgNoteUniqueQuestion(qid, opts.answerText); if ((rpgState.monthQ || 0) > _bq) { try { commNoteEncounterProgress(q); } catch (_) {} } try { _noteQuestionForCredit(qid); } catch (_) {} try { commQuestRunCapture(q, credit); } catch (_) {} }
+  if (!opts.simulated) {
+    const _bq = rpgState.monthQ || 0;
+    rpgNoteUniqueQuestion(qid, opts.answerText);   // rolls the month over first if needed
+    // Accuracy-weighted leaderboard counters. Count EVERY attempt (repeats
+    // included) so spamming the same question wrong drags the percentage down;
+    // unique-question credit (lifeQ / monthQ) is only granted once per question.
+    // *Cor accumulates the marked credit (0..1, partial marks included), so the
+    // percentage reflects how well answers score, not just all-or-nothing.
+    rpgState.monthAns = (rpgState.monthAns || 0) + 1;
+    rpgState.lifeAns = (rpgState.lifeAns || 0) + 1;
+    rpgState.monthCor = (rpgState.monthCor || 0) + credit;
+    rpgState.lifeCor = (rpgState.lifeCor || 0) + credit;
+    if ((rpgState.monthQ || 0) > _bq) { rpgState.lifeQ = (rpgState.lifeQ || 0) + 1; try { commNoteEncounterProgress(q); } catch (_) {} }
+    try { _noteQuestionForCredit(qid); } catch (_) {} try { commQuestRunCapture(q, credit); } catch (_) {}
+  }
   rpgHintUsedQ = false;
   rpgSave();
   rpgPublishLeaderboard();
@@ -19933,6 +19968,9 @@ function rpgPublishLeaderboard() {
       lastMonthKey: rpgState.lastMonthKey || null,
       monthQ: rpgState.monthQ || 0,
       lastMonthQ: rpgState.lastMonthQ || 0,
+      monthAns: rpgState.monthAns || 0, monthCor: rpgState.monthCor || 0,
+      lastMonthAns: rpgState.lastMonthAns || 0, lastMonthCor: rpgState.lastMonthCor || 0,
+      lifeQ: rpgState.lifeQ || 0, lifeAns: rpgState.lifeAns || 0, lifeCor: rpgState.lifeCor || 0,
       wins: (rpgState.stats && rpgState.stats.wins) || 0,
       bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0,
@@ -19999,32 +20037,48 @@ async function rpgFetchLeaderboard(force) {
   rpgBoardRows = rows;
   return rows;
 }
-// The "td" / "raid" tabs rank by this month's best mini-game score; "month" /
-// "lastmonth" rank by UNIQUE QUESTIONS DONE; "alltime" ranks by XP.
+// The "td" / "raid" tabs rank by this month's best mini-game score; "month",
+// "lastmonth" AND "alltime" rank by an ACCURACY-WEIGHTED score — questions done
+// × percentage correct — live from July 2026. Volume alone no longer wins:
+// spamming questions raises the count but tanks the percentage.
 function rpgIsGameTab() { return rpgBoardTab === "td" || rpgBoardTab === "raid" || rpgBoardTab === "spire"; }
+// questions done × fraction correct (attempts as the denominator), rounded.
+function rpgAccScore(qCount, ans, cor) {
+  qCount = Number(qCount) || 0; ans = Number(ans) || 0; cor = Number(cor) || 0;
+  if (qCount <= 0 || ans <= 0) return 0;
+  return Math.round(qCount * Math.max(0, Math.min(1, cor / ans)));
+}
+// The (questions, attempts, correct) triple that feeds the active tab's score.
+function rpgAccParts(r) {
+  if (rpgBoardTab === "alltime") return { q: r.lifeQ || 0, ans: r.lifeAns || 0, cor: r.lifeCor || 0 };
+  if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey()
+    ? { q: r.monthQ || 0, ans: r.monthAns || 0, cor: r.monthCor || 0 } : { q: 0, ans: 0, cor: 0 };
+  const prev = rpgPrevMonthKey();
+  if (r.monthKey === prev) return { q: r.monthQ || 0, ans: r.monthAns || 0, cor: r.monthCor || 0 };
+  if (r.lastMonthKey === prev) return { q: r.lastMonthQ || 0, ans: r.lastMonthAns || 0, cor: r.lastMonthCor || 0 };
+  return { q: 0, ans: 0, cor: 0 };
+}
 function rpgBoardMetric(r) {
-  if (rpgBoardTab === "alltime") return r.xp || 0;
-  if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey() ? (r.monthQ || 0) : 0;
   if (rpgIsGameTab()) {
-    const g = r[rpgBoardTab]; // r.td / r.raid
+    const g = r[rpgBoardTab]; // r.td / r.raid / r.spire
     return g && g.monthKey === rpgMonthKey() ? (g.month || 0) : 0;
   }
-  // lastmonth
-  const prev = rpgPrevMonthKey();
-  if (r.monthKey === prev) return r.monthQ || 0;          // not active yet this month
-  if (r.lastMonthKey === prev) return r.lastMonthQ || 0;  // rolled over
-  return 0;
+  const p = rpgAccParts(r);
+  return rpgAccScore(p.q, p.ans, p.cor);
 }
-function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : rpgIsGameTab() ? "pts" : "questions"; }
-// Pretty value for a row: game tabs show the run's label (e.g. "Floor 7 · 142 kills").
+function rpgBoardUnit() { return "pts"; }
+// Pretty value for a row: game tabs show the run's label (e.g. "Floor 7 · 142 kills");
+// the accuracy tabs show the score with a "N Q · P%" breakdown underneath.
 function rpgBoardValueHtml(r) {
-  const sub = rpgBoardTab === "month" ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : rpgIsGameTab() ? "best this month" : "all-time";
   if (rpgIsGameTab()) {
     const g = r[rpgBoardTab] || {};
     const lbl = (g.monthKey === rpgMonthKey() && g.monthLabel) ? g.monthLabel : (r.shownVal + " pts");
-    return `${escapeHtml(lbl)}<span>${sub}</span>`;
+    return `${escapeHtml(lbl)}<span>best this month</span>`;
   }
-  return `${r.shownVal} ${rpgBoardUnit()}<span>${sub}</span>`;
+  const sub = rpgBoardTab === "month" ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : "all-time";
+  const p = rpgAccParts(r);
+  const pct = p.ans > 0 ? Math.round(p.cor / p.ans * 100) : 0;
+  return `${r.shownVal} pts<span>${p.q} Q · ${pct}% · ${sub}</span>`;
 }
 function rpgPrizeBadge(rank) {
   if (rpgIsGameTab()) return rank <= 3 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
@@ -20059,6 +20113,9 @@ async function rpgRenderLeaderboard(force = false) {
       monthXp: rpgState.monthXp || 0, monthKey: rpgState.monthKey || rpgMonthKey(),
       lastMonthXp: rpgState.lastMonthXp || 0, lastMonthKey: rpgState.lastMonthKey || null,
       monthQ: rpgState.monthQ || 0, lastMonthQ: rpgState.lastMonthQ || 0,
+      monthAns: rpgState.monthAns || 0, monthCor: rpgState.monthCor || 0,
+      lastMonthAns: rpgState.lastMonthAns || 0, lastMonthCor: rpgState.lastMonthCor || 0,
+      lifeQ: rpgState.lifeQ || 0, lifeAns: rpgState.lifeAns || 0, lifeCor: rpgState.lifeCor || 0,
       wins: (rpgState.stats && rpgState.stats.wins) || 0, bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0, rebirths: rpgState.rebirths || 0,
       house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null,
@@ -20073,12 +20130,12 @@ async function rpgRenderLeaderboard(force = false) {
     .filter(r => r.shownVal > 0)
     .sort((a, b) => b.shownVal - a.shownVal || String(a.updatedAt || "").localeCompare(String(b.updatedAt || "")));
   if (!list.length) {
-    const why = rpgBoardTab === "month" ? "No questions done this month yet — be the first on the board!"
-      : rpgBoardTab === "lastmonth" ? "No questions were recorded last month."
+    const why = rpgBoardTab === "month" ? "No points scored this month yet — answer questions accurately to be the first on the board!"
+      : rpgBoardTab === "lastmonth" ? "No points were recorded last month."
       : rpgBoardTab === "td" ? "No Science Defenders runs this month yet — play to claim the top spot!"
       : rpgBoardTab === "raid" ? "No Science Raiders runs this month yet — dive in to top the board!"
       : rpgBoardTab === "spire" ? "No Science Spire climbs this month yet — build a deck and claim the top!"
-      : "No heroes on the board yet — solve questions to earn XP!";
+      : "No points on the board yet — answer questions correctly to climb the all-time board!";
     body.innerHTML = `<div class="empty-note">${why}</div>`;
     return;
   }
@@ -20087,7 +20144,7 @@ async function rpgRenderLeaderboard(force = false) {
   let houseBar = "";
   if (rpgBoardTab === "month") {
     const tot = {};
-    rows.forEach(r => { const h = r.house || rpgHouseOf(r.uid).id; tot[h] = (tot[h] || 0) + (r.monthKey === rpgMonthKey() ? r.monthQ || 0 : 0); });
+    rows.forEach(r => { const h = r.house || rpgHouseOf(r.uid).id; tot[h] = (tot[h] || 0) + (r.monthKey === rpgMonthKey() ? rpgAccScore(r.monthQ, r.monthAns, r.monthCor) : 0); });
     const maxT = Math.max(1, ...RPG_HOUSES.map(h => tot[h.id] || 0));
     houseBar = `<div class="rpg-houses">` + RPG_HOUSES.map(h =>
       `<div class="rpg-house-row"><span>${h.icon} ${h.name}</span><div class="rpg-house-bar"><div style="width:${Math.round((tot[h.id] || 0) / maxT * 100)}%;background:${h.color};"></div></div><b>${tot[h.id] || 0}</b></div>`).join("") + `</div>`;
@@ -20114,7 +20171,7 @@ async function rpgRenderLeaderboard(force = false) {
 
 // ---- Month-end prize claim ---------------------------------------------
 // Three monthly $10 prizes, each prompting last month's winners to claim:
-//   • questions: top 5 by unique questions done
+//   • questions: top 5 by leaderboard points (questions done × % correct)
 //   • td:        top 3 by best Science Defenders score
 //   • raid:      top 3 by best Science Raiders score
 // Each category is acknowledged separately (prizeAck[<key>]) and stored as its
@@ -20143,8 +20200,8 @@ async function rpgCheckPrizeClaim() {
     const rows = await rpgFetchLeaderboard(false);
     if (!rows) return;
     const cats = [
-      { key: prev,          topN: 5, noun: "questions done", game: "the leaderboard",
-        rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthQ(r) })) },
+      { key: prev,          topN: 5, noun: "leaderboard points", game: "the leaderboard",
+        rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthAcc(r) })) },
       { key: prev + "_td",  topN: 3, noun: "in Science Defenders", game: "Science Defenders",
         rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthGame(r, "td"),   detail: rpgLastMonthGameLabel(r, "td") })) },
       { key: prev + "_raid",topN: 3, noun: "in Science Raiders", game: "Science Raiders",
@@ -20202,7 +20259,7 @@ function _showPrizeClaim(cat, rank, entry) {
   const ord = rank === 1 ? "1st" : rank === 2 ? "2nd" : rank === 3 ? "3rd" : rank + "th";
   const el = id => document.getElementById(id);
   const what = cat.key === rpgPrevMonthKey()
-    ? `with <b>${entry.v}</b> question${entry.v === 1 ? "" : "s"} done — the <b>top 5</b>!`
+    ? `with <b>${entry.v}</b> leaderboard point${entry.v === 1 ? "" : "s"} (questions × accuracy) — the <b>top 5</b>!`
     : `in <b>${escapeHtml(cat.game)}</b>${entry.detail ? ` (<b>${escapeHtml(entry.detail)}</b>)` : ""} — the <b>top 3</b>!`;
   if (el("prizeClaimMsg")) el("prizeClaimMsg").innerHTML =
     `You finished <b>${ord}</b> last month ${what} Enter your details and we'll send your <b>$10 Popular voucher</b>.`;
