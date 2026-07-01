@@ -4142,7 +4142,15 @@ option {
 .comm-tag.photo { background: #fde9f1; color: #c0407e; }
 .comm-tag.update { background: #eef1f5; color: #5d6770; }
 .comm-tag.pending { background: #fdecec; color: #c0392b; }
+.comm-status { font-size: 0.64rem; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; background: #eef2f6; color: #4a5560; border: 1px solid rgba(0,0,0,0.05); }
+.comm-status.polymath { background: linear-gradient(135deg,#f6c94a,#e8912a); color: #3d2600; border-color: #e0a326; }
 .comm-time { color: var(--text-muted); font-size: 0.76rem; }
+.comm-avatar-picker { border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 12px; }
+.comm-avatar-head { font-weight: 700; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.comm-avatar-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.comm-ava-btn { width: 38px; height: 38px; border-radius: 50%; border: 2px solid transparent; background: var(--surface-alt, #eee); font-size: 20px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.1s, border-color 0.1s; }
+.comm-ava-btn:hover { transform: scale(1.1); }
+.comm-ava-btn.selected { border-color: var(--primary, #316342); background: var(--primary-light, #e8f0ea); }
 .comm-title { font-weight: 700; margin: 2px 0; }
 .comm-text { font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .comm-img { margin-top: 8px; max-width: 100%; max-height: 360px; border-radius: 10px; border: 1px solid var(--border); display: block; cursor: zoom-in; }
@@ -5904,6 +5912,13 @@ option {
 
       <!-- Student composer -->
       <div class="comm-card student-only" id="commStudentBox">
+        <div class="comm-avatar-picker" id="commAvatarPicker">
+          <div class="comm-avatar-head">Choose your avatar
+            <span class="comm-status" id="commMyStatus">Newcomer</span>
+          </div>
+          <div class="comm-avatar-row" id="commAvatarRow"></div>
+          <div class="comm-help" id="commRankHint" style="margin:6px 0 0;"></div>
+        </div>
         <div class="comm-compose-head">💬 Leave a message</div>
         <textarea id="commMsgText" class="form-input" rows="2" placeholder="Say hi, ask a question, or share something…" style="resize:vertical;"></textarea>
         <div class="comm-attach">
@@ -7012,7 +7027,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.47.1';
+const APP_VERSION = 'v1.48.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20297,6 +20312,41 @@ let _questScorePub = {};           // debounce timers for score publishing
 
 function _commCanFirestore() { return RPG_STORAGE_MODE === 'firestore' && db && currentUser; }
 function _commTypeLabel(t) { return ({ news: 'News', guidance: 'Guidance', photo: 'Photo', update: 'Update' })[t] || 'Update'; }
+
+// ---- identity: avatars + status ----------------------------------------
+// Mr Chung (the teacher) always posts as the owl professor with the top
+// "Polymath" rank. Students pick an animal avatar and climb the ranks by
+// posting more — the rank is computed live from their approved-post count.
+const COMM_ADMIN_AVATAR = '🦉';
+const COMM_ADMIN_NAME    = 'Mr Chung';
+const COMM_ADMIN_STATUS  = 'Polymath';
+const COMM_AVATARS = ['🦊','🐼','🦁','🐯','🐨','🐸','🐧','🦄','🐢','🐬','🦋','🐝','🦖','🐙','🐺','🐰'];
+const COMM_DEFAULT_AVATAR = '🦊';
+// Ranks unlocked by number of approved posts (most-posts-first).
+const COMM_STATUS_TIERS = [
+  { min: 30, label: 'Luminary' },
+  { min: 18, label: 'Sage' },
+  { min: 10, label: 'Scholar' },
+  { min: 5,  label: 'Explorer' },
+  { min: 1,  label: 'Contributor' },
+  { min: 0,  label: 'Newcomer' },
+];
+function _isSuperAdmin() { return !!(currentUser && currentUser.email === SUPER_ADMIN_EMAIL); }
+function _commStudentStatus(count) {
+  for (const t of COMM_STATUS_TIERS) if (count >= t.min) return t.label;
+  return 'Newcomer';
+}
+// Posts needed to reach the next rank (null once at the top).
+function _commNextTier(count) {
+  const higher = COMM_STATUS_TIERS.filter(t => t.min > count).sort((a, b) => a.min - b.min);
+  return higher.length ? { label: higher[0].label, need: higher[0].min - count } : null;
+}
+// How many approved posts a student has on the board right now.
+function _commPostCount(uid) {
+  if (!uid) return 0;
+  return _commPosts.filter(p => p.authorUid === uid && p.status === 'approved' && p.authorRole !== 'admin').length;
+}
+function _commMyAvatar() { return (currentUser && currentUser.avatar) || COMM_DEFAULT_AVATAR; }
 function _commTimeAgo(iso) {
   const t = new Date(iso).getTime(); if (!t) return '';
   const s = Math.floor((Date.now() - t) / 1000);
@@ -20372,7 +20422,9 @@ async function commAdminPost() {
     const imageUrl = imgData ? await _commUploadImage(imgData, id) : '';
     await setDoc(doc(db, 'community', id), {
       type, title, text, imageUrl,
-      authorUid: currentUser.uid, authorName: currentUser.name || 'Teacher', authorRole: 'admin',
+      authorUid: currentUser.uid,
+      authorName: _isSuperAdmin() ? COMM_ADMIN_NAME : (currentUser.name || 'Teacher'),
+      authorRole: 'admin', authorAvatar: COMM_ADMIN_AVATAR, authorStatus: COMM_ADMIN_STATUS,
       status: 'approved', pinned: pin, createdAt: new Date().toISOString()
     });
     document.getElementById('commPostText').value = '';
@@ -20394,6 +20446,7 @@ async function commStudentPost() {
     await setDoc(doc(db, 'community', id), {
       type: 'message', title: '', text, imageUrl,
       authorUid: currentUser.uid, authorName: currentUser.name || 'Student', authorRole: 'student',
+      authorAvatar: _commMyAvatar(),
       status: 'pending', pinned: false, createdAt: new Date().toISOString()
     });
     document.getElementById('commMsgText').value = '';
@@ -20744,7 +20797,7 @@ function _commSubscribeFeed() {
   try {
     _commUnsub = onSnapshot(collection(db, 'community'), snap => {
       _commPosts = []; snap.forEach(d => _commPosts.push(Object.assign({ _id: d.id }, d.data())));
-      _renderCommFeed(); _renderCommPending();
+      _renderCommFeed(); _renderCommPending(); renderCommAvatarPicker();
     }, e => { console.warn('community sub', e); const f = document.getElementById('commFeed'); if (f) f.innerHTML = '<div class="empty-note">Couldn\'t load the board — check the Firestore rules for the <b>community</b> collection.</div>'; });
   } catch (e) { console.warn('community sub', e); }
 }
@@ -20819,13 +20872,16 @@ function _commPostHtml(p, moderate) {
     ? '<span class="comm-tag ' + (p.type || 'update') + '">' + _commTypeLabel(p.type) + '</span>'
     : (p.status === 'pending' ? '<span class="comm-tag pending">Pending</span>' : '');
   const img = p.imageUrl ? '<img class="comm-img" src="' + escapeHtml(p.imageUrl) + '" onclick="window.open(this.src,\'_blank\')" alt="">' : '';
+  const ava = escapeHtml(p.authorAvatar || (isStaff ? COMM_ADMIN_AVATAR : '🧑‍🎓'));
+  const statusLabel = isStaff ? COMM_ADMIN_STATUS : _commStudentStatus(_commPostCount(p.authorUid));
+  const statusPill = '<span class="comm-status' + (isStaff ? ' polymath' : '') + '">' + escapeHtml(statusLabel) + '</span>';
   let actions = '';
   if (moderate) actions = '<div class="comm-actions"><button class="btn btn-primary" onclick="commApprove(\'' + p._id + '\')">✓ Approve</button><button class="btn btn-outline" onclick="commReject(\'' + p._id + '\')">✕ Reject</button></div>';
   else if (admin) actions = '<div class="comm-actions"><button class="btn btn-outline" onclick="commPin(\'' + p._id + '\',\'' + (p.pinned ? 'false' : 'true') + '\')">' + (p.pinned ? '📌 Unpin' : '📌 Pin') + '</button><button class="btn btn-outline" onclick="commDelete(\'' + p._id + '\')">🗑 Delete</button></div>';
   return '<div class="comm-post' + (p.pinned && !moderate ? ' pinned' : '') + '">' +
-    '<div class="comm-ava' + (isStaff ? ' admin' : '') + '">' + (isStaff ? '🎓' : '🧑‍🎓') + '</div>' +
+    '<div class="comm-ava' + (isStaff ? ' admin' : '') + '">' + ava + '</div>' +
     '<div class="comm-body">' +
-    '<div class="comm-meta"><span class="comm-author">' + escapeHtml(p.authorName || 'Anonymous') + '</span>' + tag +
+    '<div class="comm-meta"><span class="comm-author">' + escapeHtml(p.authorName || 'Anonymous') + '</span>' + statusPill + tag +
     '<span class="comm-time">' + _commTimeAgo(p.createdAt) + '</span>' + (p.pinned && !moderate ? ' 📌' : '') + '</div>' +
     (p.title ? '<div class="comm-title">' + escapeHtml(p.title) + '</div>' : '') +
     (p.text ? '<div class="comm-text">' + escapeHtml(p.text) + '</div>' : '') +
@@ -20857,11 +20913,52 @@ function _commWireTabs() {
     };
   });
 }
+// Load the signed-in student's saved animal avatar, then paint the picker.
+async function _commLoadMyProfile() {
+  if (!(currentUser && currentUser.role === 'student')) return;
+  if (!currentUser.avatar && _commCanFirestore()) {
+    try {
+      const snap = await getDoc(doc(db, 'userProfiles', currentUser.uid));
+      const a = snap.exists() && snap.data().avatar;
+      currentUser.avatar = (a && COMM_AVATARS.includes(a)) ? a : COMM_DEFAULT_AVATAR;
+    } catch (e) { console.warn('avatar load', e); currentUser.avatar = COMM_DEFAULT_AVATAR; }
+  }
+  renderCommAvatarPicker();
+}
+function renderCommAvatarPicker() {
+  const row = document.getElementById('commAvatarRow'); if (!row) return;
+  if (!(currentUser && currentUser.role === 'student')) return;
+  const mine = _commMyAvatar();
+  row.innerHTML = COMM_AVATARS.map(a =>
+    '<button type="button" class="comm-ava-btn' + (a === mine ? ' selected' : '') +
+    '" onclick="commPickAvatar(\'' + a + '\')" aria-label="Pick avatar ' + a + '">' + a + '</button>'
+  ).join('');
+  const count = _commPostCount(currentUser.uid);
+  const st = document.getElementById('commMyStatus');
+  if (st) st.textContent = _commStudentStatus(count);
+  const hint = document.getElementById('commRankHint');
+  if (hint) {
+    const next = _commNextTier(count);
+    hint.textContent = next
+      ? ('You have ' + count + ' approved post' + (count === 1 ? '' : 's') + ' — ' + next.need + ' more to reach ' + next.label + '!')
+      : ('You have ' + count + ' approved posts — top rank reached! 🏆');
+  }
+}
+async function commPickAvatar(emoji) {
+  if (!(currentUser && currentUser.role === 'student') || !COMM_AVATARS.includes(emoji)) return;
+  currentUser.avatar = emoji;
+  renderCommAvatarPicker();
+  if (_commCanFirestore()) {
+    try { await setDoc(doc(db, 'userProfiles', currentUser.uid), { avatar: emoji }, { merge: true }); showToast('Avatar updated ✓', 'success'); }
+    catch (e) { console.warn('avatar save', e); showToast('Could not save avatar', 'error'); }
+  }
+}
 function renderCommunity() {
   const pc = document.getElementById('commPendingCard'); if (pc && !_isAdmin()) pc.style.display = 'none';
   _commWireTabs();
   _commSubscribeFeed();
   commStartGlobalWatch();
+  _commLoadMyProfile();
   _renderCommFeed(); _renderCommPending(); _renderQuestBanners();
 }
 
@@ -23266,6 +23363,7 @@ window.commClearPick = commClearPick;
 window.commStartQuestRun = commStartQuestRun;
 window.commAwardTopScorer = commAwardTopScorer;
 window.commStudentPost = commStudentPost;
+window.commPickAvatar = commPickAvatar;
 window.commApprove = commApprove;
 window.commReject = commReject;
 window.commPin = commPin;
