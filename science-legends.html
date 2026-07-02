@@ -350,6 +350,8 @@ body.touch .pbars { bottom: 150px; }
   display: grid; place-items: center; font-size: var(--font-size-xs); font-weight: 800;
 }
 .q-option.locked { cursor: default; }
+.q-options.arming .q-option { pointer-events: none; opacity: 0.5; }
+.q-options.arming { position: relative; }
 .q-option.correct { border-color: var(--good); background: #E8F5E9; }
 .q-option.wrong { border-color: var(--bad); background: #FFEBEE; }
 .q-option.dimmed { opacity: 0.55; }
@@ -2153,6 +2155,11 @@ var mouse = { sx: -200, sy: -200, wx: 0, wy: 0, active: false, over: null, lDown
     if (e.button === 0) mouse.lDown = false;
   });
   canvas.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+  $('stage').addEventListener('contextmenu', function(e){
+    var t = e.target;
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT')) return;
+    e.preventDefault();
+  });
   canvas.addEventListener('pointerleave', function(e){ if (e.pointerType === 'mouse'){ mouse.sx = -200; mouse.sy = -200; } });
 })();
 /* Crosshair-aimed point for targeted skills, clamped to the skill's range. */
@@ -4120,13 +4127,25 @@ function openQuestion(){
   });
   var ex = $('qExplain'); ex.className = 'q-explain'; ex.innerHTML = '';
   $('qContinueBtn').style.display = 'none';
-  $('qReward').textContent = '⏸ The horde waits…';
   resetFlagUI();
+  // Anti-misclick guard: players are usually mid-click-spam (moving/attacking)
+  // when the question pops. Swallow held buttons and disarm the answers for a
+  // beat so a stray click can never pick an option.
+  mouse.lDown = false; mouse.rDown = false;
+  if (G) G.moveTarget = null;
+  qState.lockT = performance.now() + 800;
+  optWrap.classList.add('arming');
+  $('qReward').textContent = '✋ Steady…';
+  setTimeout(function(){
+    optWrap.classList.remove('arming');
+    if (!qState.answered) $('qReward').textContent = '⏸ The horde waits…';
+  }, 800);
   show('questionOverlay');
 }
 
 function answerQuestion(idx){
   if (qState.answered) return;
+  if (performance.now() < (qState.lockT || 0)) return; // anti-misclick lock
   qState.answered = true;
   var q = qState.current;
   var correct = (idx === q.answer);
