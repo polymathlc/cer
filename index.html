@@ -7074,7 +7074,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.57.0';
+const APP_VERSION = 'v1.57.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -22495,6 +22495,26 @@ rpgWireStaticEvents();
 // data table, in order) to self-contained HTML and hand it, with the options
 // and correct answer, to the game over postMessage when it asks.
 // =====================================================================
+// Break inline statement lists onto their own lines. Authors often write
+// "... to Bala? A Bala's breathing rate increases. B The amount of ..." as one
+// paragraph; each labelled statement should sit on its own line with a gap
+// after the label. Only fires when the labels form a proper A, B, C... run,
+// so a sentence that merely starts with the word "A" is never split.
+function _sdBreakStatements(html) {
+  if (!html) return html;
+  const re = /([.?!:)])(\s|&nbsp;)+([A-F])(\s|&nbsp;)+(?=[A-Z0-9"'(])/g;
+  const labels = [];
+  let m;
+  while ((m = re.exec(html))) labels.push(m[3]);
+  if (labels.length < 2 || labels[0] !== 'A') return html;
+  const seq = 'ABCDEF';
+  for (let i = 1; i < labels.length; i++) {
+    if (seq.indexOf(labels[i]) !== seq.indexOf(labels[i - 1]) + 1) return html;
+  }
+  re.lastIndex = 0;
+  return html.replace(re, (all, punct, s1, letter) =>
+    `${punct}<br><b style="display:inline-block;min-width:1.7em;margin-top:7px;">${letter}</b>`);
+}
 function _sdExtractMcq(q) {
   const blocks = (q && q.blocks) || [];
   const mcq = blocks.find(b => b.type === 'mcq' && (b.options || []).length >= 2);
@@ -22510,11 +22530,11 @@ function _sdExtractMcq(q) {
   const plain = [];
   for (const b of blocks) {
     if (b.type === 'text') {
-      if (b.content) { html += `<div style="margin:6px 0;">${b.content}</div>`; const t = stripHtmlToText(b.content).trim(); if (t) plain.push(t); }
+      if (b.content) { html += `<div style="margin:6px 0;">${_sdBreakStatements(b.content)}</div>`; const t = stripHtmlToText(b.content).trim(); if (t) plain.push(t); }
     } else if (b.type === 'part') {
       if (b.content || b.label) {
         const lab = b.label ? `<strong>${escapeHtml(b.label)}</strong> ` : '';
-        html += `<div style="margin:6px 0;">${lab}${b.content || ''}</div>`;
+        html += `<div style="margin:6px 0;">${lab}${_sdBreakStatements(b.content || '')}</div>`;
         const t = ((b.label || '') + ' ' + stripHtmlToText(b.content || '')).trim(); if (t) plain.push(t);
       }
     } else if (b.type === 'image') {

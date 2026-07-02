@@ -774,7 +774,7 @@ function askQuestion(){
   $('qContinueBtn').style.display='none';
   q.options.forEach(function(opt,i){
     var b=document.createElement('button'); b.className='q-opt';
-    b.innerHTML = '<b>'+String.fromCharCode(65+i)+'.</b> ' + (usingBank ? opt : escapeText(opt));
+    b.innerHTML = '<b>'+(i+1)+'.</b> ' + (usingBank ? opt : escapeText(opt));
     b.onclick=function(){ answerQuestion(i,b); };
     opts.appendChild(b);
   });
