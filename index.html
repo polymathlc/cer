@@ -5405,10 +5405,15 @@ option {
           </div>
           <div class="subtitle">Track student logins, registrations, and question activity</div>
         </div>
-        <button class="btn btn-outline" onclick="loadUsageDashboard()" style="font-size:0.82rem;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-          Refresh
-        </button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-outline" onclick="adminResetGameCredits()" style="font-size:0.82rem;" title="Top every student's game-credit pool back up to the full daily allowance, right now.">
+            🎮 Reset game credits
+          </button>
+          <button class="btn btn-outline" onclick="loadUsageDashboard()" style="font-size:0.82rem;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Refresh
+          </button>
+        </div>
       </div>
       <div class="page-body" style="max-width:1100px;">
         <!-- Summary Cards -->
@@ -7069,7 +7074,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.51.0';
+const APP_VERSION = 'v1.52.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7113,6 +7118,7 @@ async function loadAdminQuestions() {
       return;
     }
     adminUid = configSnap.data().uid;
+    try { _startCreditResetListener(); } catch (e) {}
     // Load all questions from admin's subcollection
     const adminQCol = collection(db, 'users', adminUid, 'questions');
     const qSnap = await getDocs(adminQCol);
@@ -22558,12 +22564,31 @@ async function _sdSeenQuestionIds() {
     return Array.from(ids);
   } catch (e) { console.warn('SD seen-ids read failed', e); return []; }
 }
-// Record one Tower-Defense MCQ response into the same teacher-visible log the
+// Record one mini-game MCQ response into the same teacher-visible log the
 // rest of the app uses (shows up in the Usage dashboard).
-// A question answered faster than this (ms on screen) doesn't count toward the
-// monthly "unique questions done" total — rushing through to farm the prize is
-// treated as cheating. The attempt is still logged for the admin's records.
-const MIN_GAME_ANSWER_MS = 4000;
+// ---- Fair anti-rush gate ----
+// The OLD rule discarded any game answer faster than a flat 4s, which punished
+// students who genuinely knew (or remembered) short/easy questions. NEW rule:
+//  • A CORRECT answer only needs to beat a small bot-guard floor (1.2s) —
+//    knowing the answer fast is learning, not cheating.
+//  • A WRONG answer must beat a reading-time threshold scaled to the question's
+//    length (1.5s–8s) — random-guess spam still earns nothing.
+//  • 3+ answers in a row under the bot floor looks like an auto-clicker:
+//    counting then requires full reading time until the student slows down.
+// Attempts are ALWAYS logged for the admin's records either way.
+const ANSWER_BOT_MS = 1200;
+let _fastStreak = 0;
+function _fairMinAnswerMs(questionId, correct) {
+  if (correct && _fastStreak < 3) return ANSWER_BOT_MS;
+  let len = 220; // fallback ≈ old behaviour when the question can't be found
+  try {
+    const q = (questionBank || []).find(x => x && x.id === questionId);
+    const m = q && _sdExtractMcq(q);
+    if (m && m.len) len = m.len;
+  } catch (e) {}
+  return Math.max(1500, Math.min(8000, 900 + len * 14));
+}
+function _noteAnswerSpeed(ms) { _fastStreak = ms < ANSWER_BOT_MS ? _fastStreak + 1 : 0; }
 function _sdRecordAttempt(d) {
   try {
     if (!currentUser || currentUser.role !== 'student' || !d || !d.questionId) return;
@@ -22581,9 +22606,11 @@ function _sdRecordAttempt(d) {
       timestamp: Timestamp.now(),
       mode: (d.mode === 'raiders' ? 'raiders' : d.mode === 'legends' ? 'legends' : 'defenders')
     }).catch(err => console.warn('SD record attempt failed', err));
-    // Count this game MCQ toward the monthly unique-questions total — but only if
-    // the student actually spent time on it (too fast = cheating, see above).
-    if (ms >= MIN_GAME_ANSWER_MS && rpgState) {
+    // Count this game MCQ toward the monthly unique-questions total using the
+    // fair anti-rush gate above (correct answers just need to beat the bot floor).
+    const minMs = _fairMinAnswerMs(d.questionId, !!d.correct);
+    _noteAnswerSpeed(ms);
+    if (ms >= minMs && rpgState) {
       const before = rpgState.monthQ || 0;
       rpgNoteUniqueQuestion(d.questionId, '');   // MCQ → no answer fingerprint; counts by unique question id
       if ((rpgState.monthQ || 0) > before) { rpgSave(); rpgPublishLeaderboard(); }
@@ -22658,7 +22685,57 @@ function _creditsToday() {
   if (typeof c.balance !== 'number') c.balance = _dailyCreditAllowance();
   if (typeof c.qProgress !== 'number') c.qProgress = 0;
   if (!c.qSeen || typeof c.qSeen !== 'object') c.qSeen = {};
+  // Teacher "reset game credits" broadcast: refill today's pool once per marker.
+  const m = _creditResetMarker;
+  if (m && m.key && m.day === today && c.resetAck !== m.key && currentUser && currentUser.role === 'student') {
+    c.resetAck = m.key;
+    c.balance = Math.max(c.balance | 0, _dailyCreditAllowance()); // refill, never reduce
+    try { rpgSave(); } catch (e) {}
+    try { rpgRenderSide(); } catch (e) {}
+    try { _pushPlaysLeft(); } catch (e) {}
+    try { toast(`🎮 Your teacher refilled everyone's game credits — ${c.balance} available!`, 'success'); } catch (e) {}
+  }
   return c;
+}
+// ---- teacher broadcast: reset every student's game credits for today ----
+// The admin writes a marker doc (users/{adminUid}/settings/creditReset); every
+// student client listens and refills its own daily pool the moment it arrives
+// (or on next load). Same read-path students already use for sprite overrides.
+let _creditResetMarker = null, _creditResetUnsub = null;
+function _startCreditResetListener() {
+  if (_creditResetUnsub || !adminUid) return;
+  try {
+    _creditResetUnsub = onSnapshot(doc(db, 'users', adminUid, 'settings', 'creditReset'), snap => {
+      _creditResetMarker = snap.exists() ? snap.data() : null;
+      try { _creditsToday(); } catch (e) {}
+      try { rpgRenderSide(); } catch (e) {}
+    }, err => console.warn('credit reset listen failed', err));
+  } catch (e) { console.warn('credit reset listener', e); }
+}
+// Push the current plays-left pool into any running game iframe so an open
+// game unlocks immediately after a refill.
+function _pushPlaysLeft() {
+  const payload = { type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() };
+  ['defendersFrame', 'raidersFrame', 'spireFrame', 'legendsFrame'].forEach(id => {
+    const f = document.getElementById(id);
+    try { f && f.contentWindow && f.contentWindow.postMessage(payload, '*'); } catch (e) {}
+  });
+}
+async function adminResetGameCredits() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  if (!confirm("Refill game credits for ALL students right now?\n\nEvery student's pool is topped back up to their full daily allowance today. Students with more credits than the allowance keep what they have.")) return;
+  try {
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'creditReset'), {
+      key: Date.now().toString(36),
+      day: _todayKey(),
+      at: new Date().toISOString(),
+      by: currentUser.name || 'Admin'
+    });
+    showToast('🎮 Game credits refilled for all students', 'success');
+  } catch (e) {
+    console.warn('credit reset failed', e);
+    showToast('Could not send the reset — check your connection', 'error');
+  }
 }
 // Credits remaining today. Admins / teacher-preview are never limited.
 function _creditsLeft() {
@@ -22668,7 +22745,7 @@ function _creditsLeft() {
 // Questions still needed before the next credit is earned.
 function _creditsToNextReward() {
   if (!currentUser || currentUser.role !== 'student' || !rpgState) return 0;
-  return Math.max(1, CREDITS_PER_REWARD - (_creditsToday().qProgress | 0));
+  return Math.max(1, Math.ceil(CREDITS_PER_REWARD - (_creditsToday().qProgress || 0)));
 }
 // Spend one credit to start a game. Returns true if a credit was available.
 function _spendCredit() {
@@ -22681,12 +22758,21 @@ function _spendCredit() {
   return true;
 }
 // Count a finished question (a non-game mode) toward the next earned credit.
+// A fresh question is a full step; a question already done today still gives a
+// HALF step once (revision / small banks shouldn't stall the meter entirely),
+// then stops counting for the rest of the day.
 function _noteQuestionForCredit(qid) {
   if (!currentUser || currentUser.role !== 'student' || !rpgState) return;
   const c = _creditsToday();
   const key = String(qid || '');
-  if (key) { if (c.qSeen[key]) return; c.qSeen[key] = 1; } // one credit-step per question per day
-  c.qProgress = (c.qProgress | 0) + 1;
+  let step = 1;
+  if (key) {
+    const n = c.qSeen[key] || 0;
+    if (n >= 2) return;            // already gave its full + repeat credit today
+    if (n === 1) step = 0.5;       // repeat today → half progress, once
+    c.qSeen[key] = n + 1;
+  }
+  c.qProgress = (c.qProgress || 0) + step;
   let earned = 0;
   while (c.qProgress >= CREDITS_PER_REWARD) { c.qProgress -= CREDITS_PER_REWARD; c.balance = (c.balance | 0) + 1; earned++; }
   if (earned > 0) { try { toast(`🎮 +${earned} game credit${earned > 1 ? 's' : ''} earned — ${_creditsLeft()} left today`, 'success'); } catch (e) {} }
@@ -23842,6 +23928,7 @@ window.snapMarkById = snapMarkById;
 window.loadNextQpQuestion = loadNextQpQuestion;
 // Usage Dashboard
 window.loadUsageDashboard = loadUsageDashboard;
+window.adminResetGameCredits = adminResetGameCredits;
 window.showStudentDetail = showStudentDetail;
 window.closeStudentDetail = closeStudentDetail;
 window.markPrizeSent = markPrizeSent;
