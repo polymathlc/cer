@@ -4709,7 +4709,7 @@ option {
       <div class="nav-item rpg-el" data-page="legends" onclick="navigateTo('legends')" style="display:none;" title="Science Legends (BETA) — Diablo-style top-down action RPG. 3 classes, big skill trees, hordes of enemies, and a science question every 20 seconds.">
         <span class="ico">⚔️</span> Science Legends <span style="margin-left:auto;font-size:0.58rem;font-weight:800;letter-spacing:0.06em;background:linear-gradient(135deg,#8E24AA,#7B1FA2);color:#fff;border-radius:999px;padding:2px 7px;">BETA</span>
       </div>
-      <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any Science Raiders sprite (enemies, heroes, tiles).">
+      <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire.">
         <span class="ico">🎨</span> Game Objects
       </div>
       <div class="nav-item" id="rpgHideToggle" style="display:none;"><span class="ico">🙈</span> Hide game</div>
@@ -7074,7 +7074,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.53.0';
+const APP_VERSION = 'v1.54.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7278,7 +7278,8 @@ function navigateTo(page) {
   }
   if (page === 'legends') {
     const f = document.getElementById('legendsFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-legends.html');
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html'); f.addEventListener('load', pushLegendsAssets); }
+    else pushLegendsAssets();
   }
   if (page === 'gameassets') loadGameAssets();
   if (page === 'messages') loadMessagesPage();
@@ -22820,6 +22821,13 @@ window.addEventListener('message', function (ev) {
   } else if (d.type === 'SD_PLAY_START') {
     _spendCredit();
     try { ev.source && ev.source.postMessage({ type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() }, '*'); } catch (e) {}
+  } else if (d.type === 'LEGENDS_REQUEST_ASSETS') {
+    (async () => {
+      const overrides = await loadLegendsSpriteOverrides();
+      try { ev.source && ev.source.postMessage({ type: 'legendsAssets', overrides }, '*'); } catch (e) {}
+    })();
+  } else if (d.type === 'LEGENDS_SPRITES') {
+    _legendsThumbs = d.thumbs || {};
   } else if (d.type === 'LEGENDS_REQUEST_META') {
     try { ev.source && ev.source.postMessage({ type: 'LEGENDS_META', meta: (rpgState && rpgState.legends) || {}, gold: rpgState ? (rpgState.gold | 0) : 0 }, '*'); } catch (e) {}
   } else if (d.type === 'LEGENDS_GOLD_DELTA') {
@@ -22945,6 +22953,110 @@ async function pushRaidersAssets(){
   try { f && f.contentWindow && f.contentWindow.postMessage({ type: 'raidersAssets', overrides }, '*'); } catch (e) {}
 }
 
+// =====================================================================
+// SCIENCE LEGENDS sprites — every object in the top-down action RPG can
+// be replaced with a pasted/uploaded PNG, same flow as the other games.
+// Overrides live at users/{adminUid}/settings/legendsSprites and are
+// pushed to the running game via postMessage. Default thumbnails come
+// from the game itself (a hidden iframe answers LEGENDS_REQUEST_SPRITES
+// with dataURLs of its procedural art) so previews always match.
+// =====================================================================
+const LEGENDS_OBJECTS = [
+  { cat: 'Heroes',         id: 'hero_barb',  label: 'Barbarian',            em: '🪓' },
+  { cat: 'Heroes',         id: 'hero_sorc',  label: 'Sorcerer',             em: '🔮' },
+  { cat: 'Heroes',         id: 'hero_beast', label: 'Beast Master',         em: '🐺' },
+  { cat: 'Heroes',         id: 'hero_pala',  label: 'Paladin',              em: '⚜️' },
+  { cat: 'Heroes',         id: 'hero_ama',   label: 'Amazon',               em: '🏹' },
+  { cat: 'Followers',      id: 'fdef',       label: 'Defender (follower)',  em: '🛡️' },
+  { cat: 'Followers',      id: 'fmag',       label: 'Mage (follower)',      em: '🧙' },
+  { cat: 'Followers',      id: 'fpri',       label: 'Priest (follower)',    em: '⛪' },
+  { cat: 'Summons & pets', id: 'wolf',       label: 'Spirit Wolf',          em: '🐺' },
+  { cat: 'Summons & pets', id: 'bear',       label: 'Great Bear (capstone)',em: '🐻' },
+  { cat: 'Summons & pets', id: 'boar',       label: 'Boar (pet & Stampede)',em: '🐗' },
+  { cat: 'Summons & pets', id: 'hydra',      label: 'Fire Hydra',           em: '🐍' },
+  { cat: 'Summons & pets', id: 'valkyrie',   label: 'Valkyrie',             em: '👼' },
+  { cat: 'Summons & pets', id: 'decoy',      label: 'Decoy',                em: '🎭' },
+  { cat: 'Enemies',        id: 'slime',      label: 'Slime',                em: '🟢' },
+  { cat: 'Enemies',        id: 'imp',        label: 'Imp',                  em: '👺' },
+  { cat: 'Enemies',        id: 'mite',       label: 'Mite (swarmer)',       em: '🕷️' },
+  { cat: 'Enemies',        id: 'brute',      label: 'Brute',                em: '🗿' },
+  { cat: 'Enemies',        id: 'spitter',    label: 'Spitter (ranged)',     em: '🦎' },
+  { cat: 'Enemies',        id: 'charger',    label: 'Charger',              em: '🐗' },
+  { cat: 'Enemies',        id: 'boss',       label: 'Core Tyrant (boss)',   em: '👹' },
+  { cat: 'Terrain',        id: 'ground',     label: 'Ground tile (repeats)',em: '🟩' },
+];
+let _legendsSpritesCache = null; // {id: url}
+function _legendsSpritesDocRef(uid){ return doc(db, 'users', uid, 'settings', 'legendsSprites'); }
+async function loadLegendsSpriteOverrides(force){
+  if (_legendsSpritesCache && !force) return _legendsSpritesCache;
+  const uid = _raidersOwnerUid();
+  if (!uid){ _legendsSpritesCache = {}; return _legendsSpritesCache; }
+  try {
+    const snap = await getDoc(_legendsSpritesDocRef(uid));
+    _legendsSpritesCache = (snap.exists() && snap.data().overrides) ? snap.data().overrides : {};
+  } catch (e) { console.warn('legends overrides load failed', e); _legendsSpritesCache = _legendsSpritesCache || {}; }
+  return _legendsSpritesCache;
+}
+async function pushLegendsAssets(){
+  const overrides = await loadLegendsSpriteOverrides();
+  const f = document.getElementById('legendsFrame');
+  try { f && f.contentWindow && f.contentWindow.postMessage({ type: 'legendsAssets', overrides }, '*'); } catch (e) {}
+}
+// Default-art thumbnails, generated by the game in a tiny hidden iframe.
+let _legendsThumbs = null, _legendsThumbWait = null;
+function loadLegendsThumbs(){
+  if (_legendsThumbs) return Promise.resolve(_legendsThumbs);
+  if (_legendsThumbWait) return _legendsThumbWait;
+  _legendsThumbWait = new Promise(res => {
+    let f = document.getElementById('legendsThumbFrame');
+    if (!f){
+      f = document.createElement('iframe');
+      f.id = 'legendsThumbFrame';
+      f.style.cssText = 'position:absolute;width:2px;height:2px;opacity:0;pointer-events:none;left:-9999px;top:-9999px;';
+      f.src = 'science-legends.html';
+      document.body.appendChild(f);
+    }
+    let tries = 0;
+    const ask = () => {
+      if (_legendsThumbs) return res(_legendsThumbs);
+      try { f.contentWindow && f.contentWindow.postMessage({ type: 'LEGENDS_REQUEST_SPRITES' }, '*'); } catch (e) {}
+      if (++tries < 12) setTimeout(ask, 600); else res(_legendsThumbs || {});
+    };
+    setTimeout(ask, 500);
+  });
+  return _legendsThumbWait;
+}
+async function _legendsArtApply(id, dataUrl){
+  try {
+    if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
+    const scaled = await _scaleDownDataUrl(dataUrl, 256);
+    const url = await uploadImageDataUrl(scaled);
+    const uid = _raidersOwnerUid(); if (!uid) throw new Error('Not signed in');
+    await setDoc(_legendsSpritesDocRef(uid), { overrides: { [id]: url } }, { merge: true });
+    (_legendsSpritesCache = _legendsSpritesCache || {})[id] = url;
+    await loadGameAssets();
+    pushLegendsAssets();
+    showToast('Legends sprite updated', 'success');
+  } catch (e) { console.error('legends art update', e); showToast('Update failed: ' + (e && e.message ? e.message : e), 'error'); }
+}
+function onLegendsObjPaste(id, e){
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items){ if (it.type && it.type.startsWith('image/')){ e.preventDefault(); _raidersFileToDataUrl(it.getAsFile(), du => _legendsArtApply(id, du)); return; } }
+  showToast('No image in clipboard — copy a PNG first', 'error');
+}
+function onLegendsObjDrop(id, e){ e.preventDefault(); if (e.currentTarget) e.currentTarget.classList.remove('drag'); const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; _raidersFileToDataUrl(file, du => _legendsArtApply(id, du)); }
+function onLegendsObjPick(id, e){ const file = e.target && e.target.files && e.target.files[0]; _raidersFileToDataUrl(file, du => _legendsArtApply(id, du)); if (e.target) e.target.value = ''; }
+async function resetLegendsObj(id){
+  try {
+    const uid = _raidersOwnerUid(); if (!uid) return;
+    await setDoc(_legendsSpritesDocRef(uid), { overrides: { [id]: deleteField() } }, { merge: true });
+    if (_legendsSpritesCache) delete _legendsSpritesCache[id];
+    await loadGameAssets();
+    pushLegendsAssets();
+    showToast('Reset to default', 'success');
+  } catch (e) { console.error('legends art reset', e); showToast('Reset failed', 'error'); }
+}
+
 function _loadRaidersSheet(key){
   return new Promise((res, rej) => {
     if (_raidersSheetImg[key]) return res(_raidersSheetImg[key]);
@@ -22990,6 +23102,36 @@ async function loadGameAssets(){
         +   (ov ? '<button class="btn btn-ghost ga-mini" onclick="resetRaidersObj(\'' + o.id + '\')">Reset</button>' : '')
         + '</div>'
         + '<div class="ga-status ' + (ov ? 'custom' : '') + '" id="gastatus-' + o.id + '">' + (ov ? '● Custom' : 'Default') + '</div>'
+        + '</div>';
+    });
+    html += '</div>';
+  });
+
+  // ===== Science Legends — every object in the action RPG (beta) =====
+  await loadLegendsSpriteOverrides(true);
+  const legThumbs = await loadLegendsThumbs();
+  const legCats = {};
+  LEGENDS_OBJECTS.forEach(o => { (legCats[o.cat] = legCats[o.cat] || []).push(o); });
+  html += '<h2 class="ga-game">⚔️ Science Legends <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— paste a PNG to replace any hero, follower, summon, enemy or the ground tile (square images look best)</span></h2>';
+  Object.keys(legCats).forEach(cat => {
+    html += '<h3 class="ga-cat">' + cat + '</h3><div class="ga-cards">';
+    legCats[cat].forEach(o => {
+      const ov = _legendsSpritesCache[o.id];
+      const thumb = ov || legThumbs[o.id] || '';
+      html += '<div class="ga-card" id="lgcard-' + o.id + '">'
+        + '<div class="ga-prev">' + (thumb ? '<img src="' + thumb + '" alt="' + o.label + '">' : '<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + o.em + '</div>') + '</div>'
+        + '<div class="ga-name">' + o.label + '</div>'
+        + '<div class="ga-zone" id="lgzone-' + o.id + '" tabindex="0"'
+        +   ' onpaste="onLegendsObjPaste(\'' + o.id + '\', event)"'
+        +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
+        +   ' ondragleave="this.classList.remove(\'drag\')"'
+        +   ' ondrop="onLegendsObjDrop(\'' + o.id + '\', event)"'
+        +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
+        + '<div class="ga-actions">'
+        +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onLegendsObjPick(\'' + o.id + '\', event)"></label>'
+        +   (ov ? '<button class="btn btn-ghost ga-mini" onclick="resetLegendsObj(\'' + o.id + '\')">Reset</button>' : '')
+        + '</div>'
+        + '<div class="ga-status ' + (ov ? 'custom' : '') + '" id="lgstatus-' + o.id + '">' + (ov ? '● Custom' : 'Default') + '</div>'
         + '</div>';
     });
     html += '</div>';
@@ -23929,6 +24071,10 @@ window.loadNextQpQuestion = loadNextQpQuestion;
 // Usage Dashboard
 window.loadUsageDashboard = loadUsageDashboard;
 window.adminResetGameCredits = adminResetGameCredits;
+window.onLegendsObjPaste = onLegendsObjPaste;
+window.onLegendsObjDrop = onLegendsObjDrop;
+window.onLegendsObjPick = onLegendsObjPick;
+window.resetLegendsObj = resetLegendsObj;
 window.showStudentDetail = showStudentDetail;
 window.closeStudentDetail = closeStudentDetail;
 window.markPrizeSent = markPrizeSent;
