@@ -4706,6 +4706,9 @@ option {
       <div class="nav-item rpg-el" data-page="spire" onclick="navigateTo('spire')" style="display:none;" title="Science Spire — Slay-the-Spire-style deck-building dungeon. Answer science questions, build a deck, open card packs.">
         <span class="ico">🃏</span> Science Spire
       </div>
+      <div class="nav-item rpg-el" data-page="legends" onclick="navigateTo('legends')" style="display:none;" title="Science Legends (BETA) — Diablo-style top-down action RPG. 3 classes, big skill trees, hordes of enemies, and a science question every 20 seconds.">
+        <span class="ico">⚔️</span> Science Legends <span style="margin-left:auto;font-size:0.58rem;font-weight:800;letter-spacing:0.06em;background:linear-gradient(135deg,#8E24AA,#7B1FA2);color:#fff;border-radius:999px;padding:2px 7px;">BETA</span>
+      </div>
       <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any Science Raiders sprite (enemies, heroes, tiles).">
         <span class="ico">🎨</span> Game Objects
       </div>
@@ -5796,6 +5799,20 @@ option {
         </div>
       </div>
       <iframe id="spireFrame" class="embed-frame" title="Science Spire — Deck-building MCQ Roguelike"></iframe>
+    </div>
+
+    <div class="page page-embed" id="page-legends">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Science Legends <span style="font-size:0.6rem;font-weight:800;letter-spacing:0.08em;vertical-align:middle;background:linear-gradient(135deg,#8E24AA,#7B1FA2);color:#fff;border-radius:999px;padding:3px 9px;">🧪 BETA</span></h2>
+          </div>
+          <div class="subtitle">Top-down action RPG — pick a class, grow a Diablo-style skill tree, and answer a science question every 20 seconds. Beta: no game leaderboard yet, but questions still count.</div>
+        </div>
+        <a class="btn btn-outline" href="science-legends.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+      </div>
+      <iframe id="legendsFrame" class="embed-frame" title="Science Legends — Top-Down Action RPG MCQ (BETA)"></iframe>
     </div>
 
     <!-- ===== PAGE: COMMUNITY (everyone) — bulletin board, news, encounter quests ===== -->
@@ -7041,7 +7058,7 @@ async function enterApp(user) {
   // The practice-reminder email links to index.html#practice so a student lands
   // straight on the practice page in one click.
   const hash = (location.hash || '').replace('#', '');
-  if (hash === 'raiders' || hash === 'defenders' || hash === 'spire') {
+  if (hash === 'raiders' || hash === 'defenders' || hash === 'spire' || hash === 'legends') {
     setTimeout(() => { try { navigateTo(hash); } catch (e) {} }, 300);
   } else if (hash === 'practice') {
     setTimeout(() => { try { navigateTo(rpgPracticePage()); } catch (e) {} }, 300);
@@ -7052,7 +7069,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.49.2';
+const APP_VERSION = 'v1.50.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7174,7 +7191,7 @@ function applyMcqCategory(q) {
 function navigateTo(page) {
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
-  if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'defenders' || page === 'raiders') && rpgGameHidden()) page = rpgHomePage();
+  if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'defenders' || page === 'raiders' || page === 'legends') && rpgGameHidden()) page = rpgHomePage();
   if (page !== 'adventure') advAbandon();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -7252,6 +7269,10 @@ function navigateTo(page) {
     const f = document.getElementById('spireFrame');
     if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-spire.html'); f.addEventListener('load', pushSpireAssets); }
     else pushSpireAssets();
+  }
+  if (page === 'legends') {
+    const f = document.getElementById('legendsFrame');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-legends.html');
   }
   if (page === 'gameassets') loadGameAssets();
   if (page === 'messages') loadMessagesPage();
@@ -22458,9 +22479,10 @@ function rpgWireStaticEvents() {
 rpgWireStaticEvents();
 
 // =====================================================================
-// SCIENCE DEFENDERS / RAIDERS BRIDGE
+// SCIENCE DEFENDERS / RAIDERS / LEGENDS BRIDGE
 // The arcade mini-games run in iframes (science-defenders.html tower defense,
-// science-raiders.html roguelite shooter) and share one question protocol.
+// science-raiders.html roguelite shooter, science-legends.html action RPG beta)
+// and share one question protocol.
 // Both must use REAL vetted MCQ questions from the bank — not built-in samples.
 // We render each multiple-choice question's full stem (text + diagram image +
 // data table, in order) to self-contained HTML and hand it, with the options
@@ -22532,7 +22554,7 @@ async function _sdSeenQuestionIds() {
     if (!currentUser || !currentUser.uid) return [];
     const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', currentUser.uid)));
     const ids = new Set();
-    snap.forEach(doc => { const a = doc.data(); if (a && (a.mode === 'defenders' || a.mode === 'raiders') && a.questionId) ids.add(a.questionId); });
+    snap.forEach(doc => { const a = doc.data(); if (a && (a.mode === 'defenders' || a.mode === 'raiders' || a.mode === 'legends') && a.questionId) ids.add(a.questionId); });
     return Array.from(ids);
   } catch (e) { console.warn('SD seen-ids read failed', e); return []; }
 }
@@ -22557,7 +22579,7 @@ function _sdRecordAttempt(d) {
       answerHash: '',
       ms: ms,
       timestamp: Timestamp.now(),
-      mode: (d.mode === 'raiders' ? 'raiders' : 'defenders')
+      mode: (d.mode === 'raiders' ? 'raiders' : d.mode === 'legends' ? 'legends' : 'defenders')
     }).catch(err => console.warn('SD record attempt failed', err));
     // Count this game MCQ toward the monthly unique-questions total — but only if
     // the student actually spent time on it (too fast = cheating, see above).
@@ -22598,7 +22620,7 @@ async function _sdRecordFlag(d, source) {
     if (!comment) { ack(false, 'Please describe the issue'); return; }
     if (!currentUser || !d || !d.questionId) { ack(false, 'Sign in to flag a question'); return; }
     if (await _flagsTodayCount() >= FLAG_DAILY_LIMIT) { ack(false, `Daily flag limit reached (${FLAG_DAILY_LIMIT}/day) — try again tomorrow`); return; }
-    const game = d.mode === 'raiders' ? 'Science Raiders' : d.mode === 'spire' ? 'Science Spire' : 'Science Defenders';
+    const game = d.mode === 'raiders' ? 'Science Raiders' : d.mode === 'spire' ? 'Science Spire' : d.mode === 'legends' ? 'Science Legends' : 'Science Defenders';
     await addDoc(collection(db, 'flaggedQuestions'), {
       questionId: d.questionId,
       questionTitle: d.questionTitle || '',
@@ -22672,7 +22694,7 @@ function _noteQuestionForCredit(qid) {
   try { rpgRenderSide(); } catch (e) {}
 }
 // The mini-games gate on playsLeft[mode]; every mode reads the same shared pool.
-function _playsLeftPayload() { const n = _creditsLeft(); return { defenders: n, raiders: n, spire: n }; }
+function _playsLeftPayload() { const n = _creditsLeft(); return { defenders: n, raiders: n, spire: n, legends: n }; }
 
 window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
