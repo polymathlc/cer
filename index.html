@@ -7069,7 +7069,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.50.0';
+const APP_VERSION = 'v1.51.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -22734,8 +22734,46 @@ window.addEventListener('message', function (ev) {
   } else if (d.type === 'SD_PLAY_START') {
     _spendCredit();
     try { ev.source && ev.source.postMessage({ type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() }, '*'); } catch (e) {}
+  } else if (d.type === 'LEGENDS_REQUEST_META') {
+    try { ev.source && ev.source.postMessage({ type: 'LEGENDS_META', meta: (rpgState && rpgState.legends) || {}, gold: rpgState ? (rpgState.gold | 0) : 0 }, '*'); } catch (e) {}
+  } else if (d.type === 'LEGENDS_GOLD_DELTA') {
+    _legendsGoldDelta(d, ev.source);
+  } else if (d.type === 'LEGENDS_SAVE') {
+    _legendsSaveMeta(d);
   }
 });
+
+// =====================================================================
+// SCIENCE LEGENDS (beta) — permanent gear & loot boxes.
+// The game's Armory lives in the iframe; the wallet is the hero's gold
+// (the points students earn in the app), and the inventory/equipment/
+// loadout persist on rpgState.legends so gear follows the student
+// across devices, like the Spire card collection.
+// =====================================================================
+function _legendsGoldDelta(d, source) {
+  const reason = (d && d.reason) || '';
+  function reply(ok, message) {
+    try { source && source.postMessage({ type: 'LEGENDS_GOLD_RESULT', ok, reason, message: message || '', gold: rpgState ? (rpgState.gold | 0) : 0 }, '*'); } catch (e) {}
+  }
+  if (!rpgState) { reply(false, 'No hero yet — answer a question in the app first'); return; }
+  const delta = Math.round(Number(d && d.delta) || 0);
+  if (!delta || delta < -2000 || delta > 500) { reply(false, 'Invalid amount'); return; }
+  if (delta < 0 && (rpgState.gold | 0) + delta < 0) { reply(false, `Not enough points — that costs 🪙 ${-delta}. Answer questions to earn more!`); return; }
+  rpgState.gold = (rpgState.gold | 0) + delta;
+  rpgSave();
+  reply(true);
+}
+function _legendsSaveMeta(d) {
+  if (!rpgState || !d || !d.meta || typeof d.meta !== 'object') return;
+  const m = d.meta;
+  rpgState.legends = {
+    inv: Array.isArray(m.inv) ? m.inv.slice(0, 100) : [],
+    eq: (m.eq && typeof m.eq === 'object') ? m.eq : {},
+    loadout: (m.loadout && typeof m.loadout === 'object') ? m.loadout : {},
+    follower: typeof m.follower === 'string' ? m.follower : 'fdef'
+  };
+  rpgSave();
+}
 
 // Record a finished mini-game run's score so it can rank on the leaderboard.
 // Best score is kept all-time AND per-month (the month bests drive the monthly
