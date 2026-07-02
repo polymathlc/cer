@@ -3139,9 +3139,13 @@ function update(dt){
 
 
 /* ---------------- RENDER ---------------- */
-var groundPat = null;
+var groundPat = null, _groundTileC = null;
 function buildGround(){
-  var c = document.createElement('canvas');
+  var im = ovr('ground');
+  if (im){ groundPat = ctx.createPattern(im, 'repeat'); return; }
+  var c = _groundTileC;
+  if (c){ groundPat = ctx.createPattern(c, 'repeat'); return; }
+  c = _groundTileC = document.createElement('canvas');
   c.width = 256; c.height = 256;
   var g = c.getContext('2d');
   g.fillStyle = '#3E4A3D'; g.fillRect(0, 0, 256, 256);
@@ -3162,6 +3166,17 @@ function drawSprite(sheet, x, y, size, flip){
   if (flip) ctx.scale(-1, 1);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(sheet, -size / 2, -size / 2, size, size);
+  ctx.restore();
+}
+/* Draw the admin's override PNG when one exists, else the procedural sprite. */
+function drawSpriteOr(id, sheet, x, y, size, flip){
+  var im = ovr(id);
+  if (!im){ drawSprite(sheet, x, y, size, flip); return; }
+  ctx.save();
+  ctx.translate(x, y);
+  if (flip) ctx.scale(-1, 1);
+  ctx.imageSmoothingEnabled = true;   // uploaded art scales smoothly
+  ctx.drawImage(im, -size / 2, -size / 2, size, size);
   ctx.restore();
 }
 var heroSheets = null;
@@ -3205,7 +3220,7 @@ function draw(){
     ctx.beginPath(); ctx.ellipse(e.x, e.y + e.r * 0.9, e.r * 0.9, e.r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
     var frame = (e.animT * 2 | 0) % 2;
-    drawSprite(MOB_SPRITES[e.kind][frame], e.x, e.y, size, false);
+    drawSpriteOr(e.kind, MOB_SPRITES[e.kind][frame], e.x, e.y, size, false);
     if (e.frozen > 0){
       ctx.globalAlpha = 0.45; ctx.fillStyle = '#80DEEA';
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 4, 0, Math.PI * 2); ctx.fill();
@@ -3225,7 +3240,8 @@ function draw(){
     ctx.globalAlpha = 0.25; ctx.fillStyle = '#000';
     ctx.beginPath(); ctx.ellipse(pt.x, pt.y + pt.r * 0.9, pt.r * 0.9, pt.r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
-    drawSprite(petSprite(pt.kind === 'boarpet' ? 'boar' : pt.kind)[(pt.animT * 2 | 0) % 2], pt.x, pt.y, pt.r * 3.4, false);
+    var petId = pt.kind === 'boarpet' ? 'boar' : pt.kind;
+    drawSpriteOr(petId, petSprite(petId)[(pt.animT * 2 | 0) % 2], pt.x, pt.y, pt.r * 3.4, false);
     if (pt.kind === 'wolf' && (G.stats.mods['pw.packlord'] || G.stats.mods['pw.beastgod'])){
       ctx.globalAlpha = 0.3; ctx.strokeStyle = '#FF7043'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r + 4, 0, Math.PI * 2); ctx.stroke();
@@ -3260,7 +3276,7 @@ function draw(){
     ctx.translate(p.x, p.y);
     ctx.rotate(G.time * 14);
     ctx.translate(-p.x, -p.y);
-    drawSprite(heroSheets[dirIdx][hframe], p.x, p.y, 52, false);
+    drawSpriteOr('hero_' + G.cls, heroSheets[dirIdx][hframe], p.x, p.y, 52, ovr('hero_' + G.cls) ? p.fx < 0 : false);
     ctx.restore();
     var flame = G.stats.mods['pw.flamespin'];
     ctx.globalAlpha = 0.35; ctx.strokeStyle = flame ? '#FF5722' : '#FFCC80'; ctx.lineWidth = 4;
@@ -3271,7 +3287,7 @@ function draw(){
     }
     ctx.globalAlpha = 1;
   } else {
-    drawSprite(heroSheets[dirIdx][hframe], p.x, p.y, 52, false);
+    drawSpriteOr('hero_' + G.cls, heroSheets[dirIdx][hframe], p.x, p.y, 52, ovr('hero_' + G.cls) ? p.fx < 0 : false);
   }
   // auras visuals
   G.auras.forEach(function(A){
@@ -3325,7 +3341,7 @@ function draw(){
   });
   G.projs.forEach(function(pr){
     if (pr.kind === 'boar'){
-      drawSprite(MOB_SPRITES.boar[(G.time * 8 | 0) % 2], pr.x, pr.y, 44, pr.vx < 0);
+      drawSpriteOr('boar', MOB_SPRITES.boar[(G.time * 8 | 0) % 2], pr.x, pr.y, 44, pr.vx < 0);
       return;
     }
     ctx.fillStyle = pr.kind === 'fire' ? '#FF7043'
@@ -3768,14 +3784,70 @@ function flagFailed(msg){
 }
 
 /* ============================================================================
+ * ADMIN SPRITE OVERRIDES — the app's "Game Objects" page lets the admin paste
+ * a PNG for any hero / follower / summon / enemy / the ground tile. Overrides
+ * arrive as {id: url} via postMessage and replace the procedural art.
+ * ========================================================================== */
+var _ovrImgs = {};
+function ovr(id){ var im = _ovrImgs[id]; return (im && im.complete && im.naturalWidth) ? im : null; }
+function applyLegendsAssets(overrides){
+  if (!overrides || typeof overrides !== 'object') return;
+  Object.keys(overrides).forEach(function(id){
+    var url = overrides[id];
+    if (!url){ delete _ovrImgs[id]; if (id === 'ground') buildGround(); return; }
+    var im = new Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = function(){
+      _ovrImgs[id] = im;
+      if (id === 'ground') buildGround();
+      if (id.indexOf('hero_') === 0 && $('menuOverlay').classList.contains('show')) renderClassCards();
+    };
+    im.src = url;
+  });
+}
+var _assetReqTries = 0;
+function requestLegendsAssets(){
+  if (!embedded()) return;
+  try { window.parent.postMessage({ type: 'LEGENDS_REQUEST_ASSETS' }, '*'); } catch(e){}
+  _assetReqTries++;
+  if (_assetReqTries < 5) setTimeout(requestLegendsAssets, 1500);
+}
+/* Serve default-sprite thumbnails to the admin page so its cards can show the
+ * exact procedural art each override replaces. */
+function _spriteThumb(cv){
+  var c = document.createElement('canvas'); c.width = 64; c.height = 64;
+  var g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  g.drawImage(cv, 0, 0, 64, 64);
+  return c.toDataURL('image/png');
+}
+function legendsSpriteThumbs(){
+  var out = {};
+  CLASS_ORDER.forEach(function(c){ out['hero_' + c] = _spriteThumb(buildHeroSprites(CLASSES[c].sprite)[0][0]); });
+  Object.keys(MOB_SPRITES).forEach(function(k){ out[k] = _spriteThumb(MOB_SPRITES[k][0]); });
+  if (_groundTileC) out.ground = _spriteThumb(_groundTileC);
+  return out;
+}
+window.addEventListener('message', function(ev){
+  var d = ev && ev.data;
+  if (!d) return;
+  if (d.type === 'legendsAssets'){
+    _assetReqTries = 99;
+    applyLegendsAssets(d.overrides);
+  } else if (d.type === 'LEGENDS_REQUEST_SPRITES'){
+    try { (ev.source || window.parent).postMessage({ type: 'LEGENDS_SPRITES', thumbs: legendsSpriteThumbs() }, '*'); } catch(e){}
+  }
+});
+
+/* ============================================================================
  * MENU / GAME FLOW
  * ========================================================================== */
 function classPreview(cls){
   var c = document.createElement('canvas');
   c.width = 48; c.height = 48;
   var g = c.getContext('2d');
-  g.imageSmoothingEnabled = false;
-  g.drawImage(buildHeroSprites(CLASSES[cls].sprite)[0][0], 0, 0, 48, 48);
+  var im = ovr('hero_' + cls);
+  g.imageSmoothingEnabled = !!im;
+  g.drawImage(im || buildHeroSprites(CLASSES[cls].sprite)[0][0], 0, 0, 48, 48);
   return c;
 }
 function renderClassCards(){
@@ -3921,6 +3993,7 @@ function init(){
   loadAdaptiveState();
   requestBankQuestions();
   requestMeta();
+  requestLegendsAssets();
   updateHud();
   requestAnimationFrame(loop);
 }
