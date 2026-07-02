@@ -549,7 +549,7 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
     </div>
     <div class="skillbar" id="skillBar" style="display:none;"></div>
     <button class="sksel-btn" id="skillSelBtn" type="button" style="display:none;" title="Choose which 4 of your 12 skills sit on the bar (K)">🎯 Select Skill</button>
-    <div class="hint-bar" id="hintBar">Move &amp; face: <b>WASD / Arrows</b> · Skills <b>1–4</b> fire the way you face · Tree: <b>T</b> · Skills: <b>K</b> · Armory: <b>B</b> · Pause: <b>P</b></div>
+    <div class="hint-bar" id="hintBar">Move: <b>WASD</b> or <b>click</b> the ground · <b>Click an enemy</b> / hold <b>right-click</b> to attack · Skills <b>1–4</b> fire at the crosshair · <b>T</b> tree · <b>K</b> skills · <b>B</b> armory</div>
     <div class="joy" id="joy"><div class="base"></div><div class="knob" id="joyKnob"></div></div>
     <div class="toast-wrap" id="toastWrap"></div>
 
@@ -561,7 +561,7 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
         <p class="sub">Hold back the horde! Fight off <b>waves of monsters</b>, level up, and sink points into a <b>Diablo-style skill tree</b>. Every <b>20 seconds</b> a science question appears — answer correctly for a bonus skill point and a burst of power.</p>
         <div class="beta-note">🧪 <span><b>Beta build</b> — no Science Legends leaderboard yet. Questions you answer here <b>still count</b> toward the main leaderboard and your monthly questions total.</span></div>
         <ul class="how">
-          <li data-ico="🕹️">Move with <strong>WASD / arrows</strong> (or the joystick). Basic attacks auto-aim; <strong>skills fire in the direction you are facing</strong> when you press 1–4.</li>
+          <li data-ico="🕹️">Move with <strong>WASD / arrows</strong>, or <strong>click the ground</strong> to walk there. <strong>Click an enemy</strong> to attack it, hold <strong>right-click</strong> to fire at the crosshair, and skills <strong>1–4 fire at the crosshair</strong>.</li>
           <li data-ico="✨">Each class knows <strong>12 skills</strong> — unlock, rank, branch and crown them with 1-of-3 <strong>ULTIMATES</strong> in a huge <strong>skill tree (T)</strong>, then pick your <strong>4</strong> with 🎯 <strong>Select Skill (K)</strong>.</li>
           <li data-ico="🧪">Every <strong>20s</strong>: a science MCQ. Correct = <strong>+1 skill point</strong>, a heal and an Insight damage surge.</li>
           <li data-ico="🎁">Spend app points on <strong>loot boxes</strong> in the <strong>Armory (B)</strong> — permanent helm, armour, gloves, greaves, rings &amp; amulet. Unique and Mythic gear carries <strong>skill-changing powers</strong>.</li>
@@ -1940,6 +1940,7 @@ function newGame(cls){
     qTimer: 0, answered: 0, correct: 0,
     enemies: [], pets: [], projs: [], eprojs: [], fx: [], texts: [], zones: [], orbs: [],
     cds: {}, spin: null, auras: [], orbits: [], abuffs: [], delays: [],
+    moveTarget: null, atkTarget: null, camX: 0, camY: 0,
     insightT: 0, empowerT: 0, slamN: 0, tempestN: 0,
     pwT: { stormcall: 0, cataclysm: 0, starfall: 0, avatar: 0 },
     followerRespawn: 0,
@@ -1983,6 +1984,7 @@ function moveInput(){
   function setKnob(dx, dy){ knob.style.transform = 'translate(' + dx + 'px,' + dy + 'px)'; }
   var stage = $('stage');
   stage.addEventListener('pointerdown', function(e){
+    if (e.pointerType !== 'touch') return;
     if (!document.body.classList.contains('touch')) return;
     if (e.target.closest('.skill-slot') || e.target.closest('.overlay') || e.target.closest('.hud') || e.target.closest('.sksel-btn')) return;
     if (pid !== null) return;
@@ -2012,6 +2014,56 @@ function moveInput(){
   window.addEventListener('pointerup', end);
   window.addEventListener('pointercancel', end);
 })();
+
+/* ---------------- MOUSE: crosshair aim, click-to-move, click-to-attack ----
+ * Left-click ground: walk there. Left-click an enemy (crosshair becomes an
+ * attack symbol): chase & auto-attack it. RIGHT-click (hold): fire your basic
+ * attack at the crosshair. Skills 1-4 fire at / toward the crosshair. */
+var mouse = { sx: -200, sy: -200, wx: 0, wy: 0, active: false, over: null, lDown: false, rDown: false };
+(function(){
+  function pos(e){
+    var r = canvas.getBoundingClientRect();
+    mouse.sx = e.clientX - r.left; mouse.sy = e.clientY - r.top;
+  }
+  canvas.addEventListener('pointermove', function(e){
+    if (e.pointerType !== 'mouse') return;
+    pos(e);
+    if (!mouse.active){ mouse.active = true; canvas.style.cursor = 'none'; }
+    if (mouse.lDown && G && !G.atkTarget) G.moveTarget = { x: (G.camX || 0) + mouse.sx, y: (G.camY || 0) + mouse.sy };
+  });
+  canvas.addEventListener('pointerdown', function(e){
+    if (e.pointerType !== 'mouse') return;
+    pos(e);
+    mouse.active = true; canvas.style.cursor = 'none';
+    if (!G || G.state !== 'play' || overlayOpen()) return;
+    mouse.wx = (G.camX || 0) + mouse.sx; mouse.wy = (G.camY || 0) + mouse.sy;
+    if (e.button === 2){ mouse.rDown = true; return; }
+    if (e.button !== 0) return;
+    mouse.lDown = true;
+    var over = null;
+    for (var i = 0; i < G.enemies.length; i++){
+      var en = G.enemies[i];
+      if (dist2(mouse.wx, mouse.wy, en.x, en.y) < (en.r + 14) * (en.r + 14)){ over = en; break; }
+    }
+    if (over){ G.atkTarget = over; G.moveTarget = null; }
+    else { G.moveTarget = { x: mouse.wx, y: mouse.wy }; G.atkTarget = null; }
+  });
+  window.addEventListener('pointerup', function(e){
+    if (e.button === 2) mouse.rDown = false;
+    if (e.button === 0) mouse.lDown = false;
+  });
+  canvas.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+  canvas.addEventListener('pointerleave', function(e){ if (e.pointerType === 'mouse'){ mouse.sx = -200; mouse.sy = -200; } });
+})();
+/* Crosshair-aimed point for targeted skills, clamped to the skill's range. */
+function skillAimPoint(seek){
+  if (!mouse.active || mouse.sx < 0) return null;
+  var p = G.player;
+  var dx = mouse.wx - p.x, dy = mouse.wy - p.y;
+  var d = Math.hypot(dx, dy);
+  if (d > seek){ dx *= seek / d; dy *= seek / d; }
+  return { x: p.x + dx, y: p.y + dy };
+}
 
 /* ---------------- ENEMIES ---------------- */
 var MOB_TYPES = {
@@ -2457,9 +2509,15 @@ function castSkill(idx){
   G.cds[sid] = skillCd(sid) * cdMult;
   if (cdMult < 1) addText(p.x, p.y - 26, 'ECHO!', '#CE93D8');
   sfx('skill');
-  // Skills fire in the direction the hero is FACING when the key is pressed
-  // (facing = your last move direction, or whoever you're auto-attacking).
-  var fd = faceDir();
+  // Skills fire AT / TOWARD the crosshair (mouse) — or the way the hero is
+  // facing on keyboard/touch.
+  var fd;
+  if (mouse.active && mouse.sx >= 0){
+    var adx = mouse.wx - p.x, ady = mouse.wy - p.y;
+    var al = Math.hypot(adx, ady);
+    fd = al > 4 ? { x: adx / al, y: ady / al } : faceDir();
+    p.fx = fd.x; p.fy = fd.y;
+  } else fd = faceDir();
   var ang = Math.atan2(fd.y, fd.x);
   switch (def.type) {
     case 'arc': {
@@ -2576,8 +2634,9 @@ function castSkill(idx){
     }
     case 'target': {
       var tr = sp.radius * area;
-      var bestE = densestCluster(sp.seek, tr);
-      var tx = bestE ? bestE.x : p.x + fd.x * 220, ty = bestE ? bestE.y : p.y + fd.y * 220;
+      var aimPt = skillAimPoint(sp.seek);
+      var bestE = aimPt ? null : densestCluster(sp.seek, tr);
+      var tx = aimPt ? aimPt.x : (bestE ? bestE.x : p.x + fd.x * 220), ty = aimPt ? aimPt.y : (bestE ? bestE.y : p.y + fd.y * 220);
       var tDmg = sp.dmg * mult * (u === 1 ? 1.6 : 1);
       var strikeOpts = { sid: sid, bleed: hasEnh(sid, 1) && (sid === 'hawk'), stun: hasEnh(sid, 1) && (sid === 'fist'), slow: hasEnh(sid, 1) && (sid === 'rain'), burn: (sid === 'meteor' && hasEnh(sid, 1)) || u === 3 };
       strikeAt(tx, ty, tr, tDmg, sp.delay, strikeOpts);
@@ -2611,7 +2670,7 @@ function castSkill(idx){
       var zr = sp.radius * area * (hasEnh(sid, 1) ? 1.3 : 1);
       var zdps = sp.dps * mult * (hasEnh(sid, 2) && sid !== 'quake' ? 1.4 : 1) * (u === 2 ? 1.5 : 1);
       if (sid === 'consecrate' && G.stats.mods['pw.holyfire']) zdps *= 1.6;
-      var at = sp.at === 'self' ? { x: p.x, y: p.y } : (function(){ var c = densestCluster(520, zr); return c ? { x: c.x, y: c.y } : { x: p.x + fd.x * 200, y: p.y + fd.y * 200 }; })();
+      var at = sp.at === 'self' ? { x: p.x, y: p.y } : (skillAimPoint(520) || (function(){ var c = densestCluster(520, zr); return c ? { x: c.x, y: c.y } : { x: p.x + fd.x * 200, y: p.y + fd.y * 200 }; })());
       G.zones.push({ x: at.x, y: at.y, r: zr, dps: zdps, t: 0, life: sp.dur * (u === 1 ? 1.6 : 1), kind: sid === 'blizzard' || sid === 'vines' ? 'ice' : (sid === 'consecrate' ? 'holy' : 'burn'), slow: sp.slow || ((sid === 'quake' && hasEnh(sid, 2)) || u === 3 ? 1 : 0) });
       break;
     }
@@ -2655,15 +2714,13 @@ function castSkill(idx){
 }
 
 /* ---------------- BASIC ATTACK ---------------- */
-function basicAttack(dt){
+/* Fire one basic attack in direction (dx, dy) — used by auto-attack,
+ * clicked-enemy attacks and the right-mouse "always fire at the crosshair". */
+function fireBasic(dx, dy){
   var p = G.player, c = CLASSES[G.cls];
-  p.atkCd -= dt;
-  if (p.atkCd > 0) return;
-  var aim = aimDir();
-  if (!aim.target || aim.d > c.atk.range) return;
   var mult = G.stats.dmg * buffDmg();
   p.atkCd = c.atk.rate / buffAspd();
-  p.fx = aim.x / (aim.d || 1); p.fy = aim.y / (aim.d || 1);
+  p.fx = dx; p.fy = dy;
   var didHit = false;
   if (c.atk.kind === 'melee'){
     var ang = Math.atan2(p.fy, p.fx);
@@ -2699,6 +2756,27 @@ function basicAttack(dt){
       doChain(p.x, p.y, 30 * G.stats.dmg * buffDmg(), 4, 300, 240, false);
     }
   }
+}
+function basicAttack(dt){
+  var p = G.player, c = CLASSES[G.cls];
+  p.atkCd -= dt;
+  if (p.atkCd > 0) return;
+  // right mouse held: ALWAYS fire at the crosshair, enemies there or not
+  if (mouse.rDown && mouse.active && mouse.sx >= 0){
+    var mdx = mouse.wx - p.x, mdy = mouse.wy - p.y;
+    var ml = Math.hypot(mdx, mdy) || 1;
+    fireBasic(mdx / ml, mdy / ml);
+    return;
+  }
+  // a clicked enemy takes priority once it's in range
+  var tgt = (G.atkTarget && !G.atkTarget.dead && G.atkTarget.hp > 0) ? G.atkTarget : null;
+  if (tgt){
+    var td = Math.hypot(tgt.x - p.x, tgt.y - p.y);
+    if (td <= c.atk.range){ fireBasic((tgt.x - p.x) / (td || 1), (tgt.y - p.y) / (td || 1)); return; }
+  }
+  var aim = aimDir();
+  if (!aim.target || aim.d > c.atk.range) return;
+  fireBasic(aim.x / (aim.d || 1), aim.y / (aim.d || 1));
 }
 
 /* ---------------- PROJECTILES, ZONES, ORBS ---------------- */
@@ -2934,6 +3012,17 @@ function overlayOpen(){
 function update(dt){
   var p = G.player;
   G.time += dt;
+  if (mouse.active){
+    mouse.wx = (G.camX || 0) + mouse.sx;
+    mouse.wy = (G.camY || 0) + mouse.sy;
+    mouse.over = null;
+    if (mouse.sx >= 0){
+      for (var moi = 0; moi < G.enemies.length; moi++){
+        var moe = G.enemies[moi];
+        if (dist2(mouse.wx, mouse.wy, moe.x, moe.y) < (moe.r + 14) * (moe.r + 14)){ mouse.over = moe; break; }
+      }
+    }
+  }
   G.insightT = Math.max(0, G.insightT - dt);
   G.empowerT = Math.max(0, G.empowerT - dt);
   if (p.shieldT > 0){ p.shieldT -= dt; if (p.shieldT <= 0){ p.shield = 0; p.thorns = 0; } }
@@ -2974,8 +3063,25 @@ function update(dt){
       enemiesInRadius(p.x, p.y, 140 * G.stats.area).forEach(function(e){ dealDamage(e, 40 * G.stats.dmg, { color: '#FFF59D' }); });
     }
   }
-  // movement
+  // movement: WASD/arrows take priority; otherwise walk to the clicked point
+  // or chase the clicked enemy until it's in basic-attack range
   var mv = moveInput();
+  if (mv.x || mv.y){ G.moveTarget = null; G.atkTarget = null; }
+  else {
+    if (G.atkTarget && (G.atkTarget.dead || G.atkTarget.hp <= 0)) G.atkTarget = null;
+    var chase = null;
+    if (G.atkTarget){
+      var cad = Math.hypot(G.atkTarget.x - p.x, G.atkTarget.y - p.y);
+      if (cad > CLASSES[G.cls].atk.range * 0.9) chase = G.atkTarget;
+    } else if (G.moveTarget){
+      if (Math.hypot(G.moveTarget.x - p.x, G.moveTarget.y - p.y) < 10) G.moveTarget = null;
+      else chase = G.moveTarget;
+    }
+    if (chase){
+      var cl = Math.hypot(chase.x - p.x, chase.y - p.y) || 1;
+      mv = { x: (chase.x - p.x) / cl, y: (chase.y - p.y) / cl };
+    }
+  }
   p.moving = !!(mv.x || mv.y);
   if (p.dashT > 0){
     p.dashT -= dt;
@@ -3025,6 +3131,10 @@ function update(dt){
     p.animT = (p.animT || 0) + dt * 7;
   }
   p.x = clamp(p.x, 26, WORLD.w - 26); p.y = clamp(p.y, 26, WORLD.h - 26);
+  if (!p.moving && p.dashT <= 0 && mouse.active && mouse.sx >= 0){
+    var ifx = mouse.wx - p.x, ify = mouse.wy - p.y;
+    if (ifx * ifx + ify * ify > 400){ var il = Math.hypot(ifx, ify); p.fx = ifx / il; p.fy = ify / il; }
+  }
   // spin channel (whirlwind-type)
   if (G.spin){
     var sn = G.spin;
@@ -3420,6 +3530,7 @@ function draw(){
   ctx.fillRect(0, 0, VW, VH);
   if (!G || !p) return;
   var camX = clamp(p.x - VW / 2, 0, WORLD.w - VW), camY = clamp(p.y - VH / 2, 0, WORLD.h - VH);
+  G.camX = camX; G.camY = camY;
   if (G.shake > 0){ camX += rand(-1, 1) * G.shake * 14; camY += rand(-1, 1) * G.shake * 14; }
   ctx.save();
   ctx.translate(-camX, -camY);
@@ -3435,6 +3546,17 @@ function draw(){
     ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
   });
+  // click-to-move destination + clicked-enemy marker
+  if (G.moveTarget){
+    var mtp = 0.55 + 0.4 * Math.sin(G.time * 8);
+    ctx.strokeStyle = 'rgba(165,214,167,' + mtp.toFixed(2) + ')'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(G.moveTarget.x, G.moveTarget.y, 12, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(G.moveTarget.x, G.moveTarget.y, 4, 0, Math.PI * 2); ctx.stroke();
+  }
+  if (G.atkTarget && !G.atkTarget.dead && G.atkTarget.hp > 0){
+    ctx.strokeStyle = 'rgba(239,83,80,0.9)'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(G.atkTarget.x, G.atkTarget.y + 2, G.atkTarget.r + 8, 0, Math.PI * 2); ctx.stroke();
+  }
   G.orbs.forEach(function(o){
     ctx.fillStyle = '#EF5350';
     ctx.beginPath(); ctx.arc(o.x, o.y + Math.sin(o.t * 5) * 3, 8, 0, Math.PI * 2); ctx.fill();
@@ -3624,6 +3746,41 @@ function draw(){
     ctx.globalAlpha = 1;
   });
   ctx.restore();
+  // ---- crosshair (screen space): attack symbol over an enemy, cross otherwise
+  if (mouse.active && mouse.sx >= 0 && G.state === 'play'){
+    ctx.save();
+    ctx.translate(mouse.sx, mouse.sy);
+    if (mouse.over){
+      var cpu = 1 + 0.08 * Math.sin(G.time * 10);
+      ctx.scale(cpu, cpu);
+      var passes = [['rgba(20,20,20,0.55)', 4.5], ['#FF5252', 2.2]];
+      for (var cp = 0; cp < 2; cp++){
+        ctx.strokeStyle = passes[cp][0]; ctx.lineWidth = passes[cp][1];
+        ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-15, -15); ctx.lineTo(-5, -5);
+        ctx.moveTo(5, 5); ctx.lineTo(15, 15);
+        ctx.moveTo(-15, 15); ctx.lineTo(-5, 5);
+        ctx.moveTo(5, -5); ctx.lineTo(15, -15);
+        ctx.stroke();
+      }
+    } else {
+      var passes2 = [['rgba(20,20,20,0.55)', 3.6], ['#FFFFFF', 1.7]];
+      for (var cq = 0; cq < 2; cq++){
+        ctx.strokeStyle = passes2[cq][0]; ctx.lineWidth = passes2[cq][1];
+        ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, -16); ctx.lineTo(0, -11);
+        ctx.moveTo(0, 11); ctx.lineTo(0, 16);
+        ctx.moveTo(-16, 0); ctx.lineTo(-11, 0);
+        ctx.moveTo(11, 0); ctx.lineTo(16, 0);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath(); ctx.arc(0, 0, 1.6, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
 }
 
 /* ---------------- HUD ---------------- */
