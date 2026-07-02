@@ -4709,6 +4709,9 @@ option {
       <div class="nav-item rpg-el" data-page="legends" onclick="navigateTo('legends')" style="display:none;" title="Science Legends (BETA) — Diablo-style top-down action RPG. 3 classes, big skill trees, hordes of enemies, and a science question every 20 seconds.">
         <span class="ico">⚔️</span> Science Legends <span style="margin-left:auto;font-size:0.58rem;font-weight:800;letter-spacing:0.06em;background:linear-gradient(135deg,#8E24AA,#7B1FA2);color:#fff;border-radius:999px;padding:2px 7px;">BETA</span>
       </div>
+      <div class="nav-item rpg-el" data-page="slayers" onclick="navigateTo('slayers')" style="display:none;" title="Science Slayers (BETA) — dungeon crawler on the Legends engine. Procedural floors, idle monster packs, magic packs & legendary uniques, boss loot, and questions driven by action points.">
+        <span class="ico">🗡️</span> Science Slayers <span style="margin-left:auto;font-size:0.58rem;font-weight:800;letter-spacing:0.06em;background:linear-gradient(135deg,#8E24AA,#7B1FA2);color:#fff;border-radius:999px;padding:2px 7px;">BETA</span>
+      </div>
       <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire.">
         <span class="ico">🎨</span> Game Objects
       </div>
@@ -5818,6 +5821,20 @@ option {
         <a class="btn btn-outline" href="science-legends.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
       </div>
       <iframe id="legendsFrame" class="embed-frame" title="Science Legends — Top-Down Action RPG MCQ (BETA)"></iframe>
+    </div>
+
+    <div class="page page-embed" id="page-slayers">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Science Slayers <span style="font-size:0.6rem;font-weight:800;letter-spacing:0.08em;vertical-align:middle;background:linear-gradient(135deg,#8E24AA,#7B1FA2);color:#fff;border-radius:999px;padding:3px 9px;">🧪 BETA</span></h2>
+          </div>
+          <div class="subtitle">Dungeon crawler — procedural floors, idle monster packs, boss loot, and questions powered by action points: answer wrong and you fight the next turn on ⅓ actions.</div>
+        </div>
+        <a class="btn btn-outline" href="science-slayers.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+      </div>
+      <iframe id="slayersFrame" class="embed-frame" title="Science Slayers — Dungeon Crawler MCQ (BETA)"></iframe>
     </div>
 
     <!-- ===== PAGE: COMMUNITY (everyone) — bulletin board, news, encounter quests ===== -->
@@ -7063,7 +7080,7 @@ async function enterApp(user) {
   // The practice-reminder email links to index.html#practice so a student lands
   // straight on the practice page in one click.
   const hash = (location.hash || '').replace('#', '');
-  if (hash === 'raiders' || hash === 'defenders' || hash === 'spire' || hash === 'legends') {
+  if (hash === 'raiders' || hash === 'defenders' || hash === 'spire' || hash === 'legends' || hash === 'slayers') {
     setTimeout(() => { try { navigateTo(hash); } catch (e) {} }, 300);
   } else if (hash === 'practice') {
     setTimeout(() => { try { navigateTo(rpgPracticePage()); } catch (e) {} }, 300);
@@ -7074,7 +7091,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.58.1';
+const APP_VERSION = 'v1.59.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7197,7 +7214,7 @@ function applyMcqCategory(q) {
 function navigateTo(page) {
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
-  if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'defenders' || page === 'raiders' || page === 'legends') && rpgGameHidden()) page = rpgHomePage();
+  if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'defenders' || page === 'raiders' || page === 'legends' || page === 'slayers') && rpgGameHidden()) page = rpgHomePage();
   if (page !== 'adventure') advAbandon();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -7279,6 +7296,11 @@ function navigateTo(page) {
   if (page === 'legends') {
     const f = document.getElementById('legendsFrame');
     if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-legends.html'); f.addEventListener('load', pushLegendsAssets); }
+    else pushLegendsAssets();
+  }
+  if (page === 'slayers') {
+    const f = document.getElementById('slayersFrame');
+    if (f && !f.getAttribute('src')) { f.setAttribute('src', 'science-slayers.html'); f.addEventListener('load', pushLegendsAssets); }
     else pushLegendsAssets();
   }
   if (page === 'gameassets') loadGameAssets();
@@ -22581,7 +22603,7 @@ async function _sdSeenQuestionIds() {
     if (!currentUser || !currentUser.uid) return [];
     const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', currentUser.uid)));
     const ids = new Set();
-    snap.forEach(doc => { const a = doc.data(); if (a && (a.mode === 'defenders' || a.mode === 'raiders' || a.mode === 'legends') && a.questionId) ids.add(a.questionId); });
+    snap.forEach(doc => { const a = doc.data(); if (a && (a.mode === 'defenders' || a.mode === 'raiders' || a.mode === 'legends' || a.mode === 'slayers') && a.questionId) ids.add(a.questionId); });
     return Array.from(ids);
   } catch (e) { console.warn('SD seen-ids read failed', e); return []; }
 }
@@ -22625,7 +22647,7 @@ function _sdRecordAttempt(d) {
       answerHash: '',
       ms: ms,
       timestamp: Timestamp.now(),
-      mode: (d.mode === 'raiders' ? 'raiders' : d.mode === 'legends' ? 'legends' : 'defenders')
+      mode: (d.mode === 'raiders' ? 'raiders' : d.mode === 'legends' ? 'legends' : d.mode === 'slayers' ? 'slayers' : 'defenders')
     }).catch(err => console.warn('SD record attempt failed', err));
     // Count this game MCQ toward the monthly unique-questions total using the
     // fair anti-rush gate above (correct answers just need to beat the bot floor).
@@ -22668,7 +22690,7 @@ async function _sdRecordFlag(d, source) {
     if (!comment) { ack(false, 'Please describe the issue'); return; }
     if (!currentUser || !d || !d.questionId) { ack(false, 'Sign in to flag a question'); return; }
     if (await _flagsTodayCount() >= FLAG_DAILY_LIMIT) { ack(false, `Daily flag limit reached (${FLAG_DAILY_LIMIT}/day) — try again tomorrow`); return; }
-    const game = d.mode === 'raiders' ? 'Science Raiders' : d.mode === 'spire' ? 'Science Spire' : d.mode === 'legends' ? 'Science Legends' : 'Science Defenders';
+    const game = d.mode === 'raiders' ? 'Science Raiders' : d.mode === 'spire' ? 'Science Spire' : d.mode === 'legends' ? 'Science Legends' : d.mode === 'slayers' ? 'Science Slayers' : 'Science Defenders';
     await addDoc(collection(db, 'flaggedQuestions'), {
       questionId: d.questionId,
       questionTitle: d.questionTitle || '',
@@ -22737,7 +22759,7 @@ function _startCreditResetListener() {
 // game unlocks immediately after a refill.
 function _pushPlaysLeft() {
   const payload = { type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() };
-  ['defendersFrame', 'raidersFrame', 'spireFrame', 'legendsFrame'].forEach(id => {
+  ['defendersFrame', 'raidersFrame', 'spireFrame', 'legendsFrame', 'slayersFrame'].forEach(id => {
     const f = document.getElementById(id);
     try { f && f.contentWindow && f.contentWindow.postMessage(payload, '*'); } catch (e) {}
   });
@@ -22801,7 +22823,7 @@ function _noteQuestionForCredit(qid) {
   try { rpgRenderSide(); } catch (e) {}
 }
 // The mini-games gate on playsLeft[mode]; every mode reads the same shared pool.
-function _playsLeftPayload() { const n = _creditsLeft(); return { defenders: n, raiders: n, spire: n, legends: n }; }
+function _playsLeftPayload() { const n = _creditsLeft(); return { defenders: n, raiders: n, spire: n, legends: n, slayers: n }; }
 
 window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
@@ -23019,8 +23041,10 @@ async function loadLegendsSpriteOverrides(force){
 }
 async function pushLegendsAssets(){
   const overrides = await loadLegendsSpriteOverrides();
-  const f = document.getElementById('legendsFrame');
-  try { f && f.contentWindow && f.contentWindow.postMessage({ type: 'legendsAssets', overrides }, '*'); } catch (e) {}
+  ['legendsFrame', 'slayersFrame'].forEach(id => {
+    const f = document.getElementById(id);
+    try { f && f.contentWindow && f.contentWindow.postMessage({ type: 'legendsAssets', overrides }, '*'); } catch (e) {}
+  });
 }
 // Default-art thumbnails, generated by the game in a tiny hidden iframe.
 let _legendsThumbs = null, _legendsThumbWait = null;
