@@ -565,7 +565,7 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
         <ul class="how">
           <li data-ico="🕹️">Move with <strong>WASD / arrows</strong>, or <strong>click the ground</strong> to walk there. <strong>Click an enemy</strong> to attack it, hold <strong>right-click</strong> to fire at the crosshair, and skills <strong>1–4 fire at the crosshair</strong>.</li>
           <li data-ico="✨">Each class knows <strong>12 skills</strong> — unlock, rank, branch and crown them with 1-of-3 <strong>ULTIMATES</strong> in a huge <strong>skill tree (T)</strong>, then pick your <strong>4</strong> with 🎯 <strong>Select Skill (K)</strong>.</li>
-          <li data-ico="⚡">Attacks and skills spend <strong>action points</strong>. When they run out, a science MCQ appears — <strong>correct = full refill</strong> +1 skill point; <strong>wrong = only ⅓ of your actions</strong> next turn.</li>
+          <li data-ico="⚡">Everything spends <strong>action points</strong>: basic attacks <strong>1 ⚡</strong>, skills <strong>4 ⚡</strong>, and even the auto-attacks from unique/mythic gear <strong>2–3 ⚡</strong>. At zero, a science MCQ appears — <strong>correct = full refill</strong> +1 skill point; <strong>wrong = only ⅓ of your actions</strong> next turn.</li>
           <li data-ico="👑">Each floor hides a <strong>boss</strong> — kill it for a <strong>guaranteed item drop</strong> (0.5% Mythic!) and the stairs to the next depth.</li>
           <li data-ico="🎁">Spend app points on <strong>loot boxes</strong> in the <strong>Armory (B)</strong> — permanent helm, armour, gloves, greaves, rings &amp; amulet. Unique and Mythic gear carries <strong>skill-changing powers</strong>.</li>
         </ul>
@@ -2731,8 +2731,11 @@ function buffStat(k){
   return v;
 }
 function buffDmg(){ return (1 + buffStat('dmg')) * (G.insightT > 0 ? 1.3 : 1); }
-/* Every attack/skill spends ACTION POINTS; at zero the science question pops.
- * Correct answer = full refill (+1 skill point); wrong = only 1/3 of the pool. */
+/* ACTION POINTS: basic attacks cost 1, skills cost 4, and the automatic
+ * attacks fired by unique/mythic item powers (Stormcall, Cataclysm, Falling
+ * Stars, Eye of the Tempest) cost 2-3 — free damage still spends actions.
+ * At zero the science question pops: correct = full refill (+1 skill point);
+ * wrong = only 1/3 of the pool. */
 function noteAction(cost){
   if (!G || G.state !== 'play') return;
   G.ap -= cost;
@@ -2793,7 +2796,7 @@ function castSkill(idx){
   var area = G.stats.area * (1 + skillSm(sid).area);
   var cdMult = (G.stats.mods['cap.echo'] && Math.random() < 0.2) ? 0.5 : 1;
   G.cds[sid] = skillCd(sid) * cdMult;
-  noteAction(2);
+  noteAction(4);
   if (cdMult < 1) addText(p.x, p.y - 26, 'ECHO!', '#CE93D8');
   sfx('skill');
   // Skills fire AT / TOWARD the crosshair (mouse) — or the way the hero is
@@ -3043,6 +3046,7 @@ function fireBasic(dx, dy){
     if (G.tempestN >= 5){
       G.tempestN = 0;
       doChain(p.x, p.y, 30 * G.stats.dmg * buffDmg(), 4, 300, 240, false);
+      noteAction(2);
     }
   }
 }
@@ -3349,14 +3353,14 @@ function update(dt){
   // item-power timers
   if (G.stats.mods['pw.stormcall']){
     G.pwT.stormcall += dt;
-    if (G.pwT.stormcall >= 6){ G.pwT.stormcall = 0; doChain(p.x, p.y, 32 * G.stats.dmg, 4, 300, 240, false); }
+    if (G.pwT.stormcall >= 6){ G.pwT.stormcall = 0; doChain(p.x, p.y, 32 * G.stats.dmg, 4, 300, 240, false); noteAction(2); }
   }
   if (G.stats.mods['pw.cataclysm']){
     G.pwT.cataclysm += dt;
     if (G.pwT.cataclysm >= 12){
       G.pwT.cataclysm = 0;
       var cc = densestCluster(560, 130);
-      if (cc){ strikeAt(cc.x, cc.y, 130 * G.stats.area, 95 * G.stats.dmg, 0.7, { burn: true }); addText(p.x, p.y - 30, 'CATACLYSM', '#FF7043'); }
+      if (cc){ strikeAt(cc.x, cc.y, 130 * G.stats.area, 95 * G.stats.dmg, 0.7, { burn: true }); addText(p.x, p.y - 30, 'CATACLYSM', '#FF7043'); noteAction(3); }
     }
   }
   if (G.stats.mods['pw.starfall']){
@@ -3365,6 +3369,7 @@ function update(dt){
       G.pwT.starfall = 0;
       var se = pick(G.enemies);
       strikeAt(se.x, se.y, 70, 80 * G.stats.dmg, 0.4, { star: true });
+      noteAction(2);
     }
   }
   if (G.stats.mods['cap.avatar']){
