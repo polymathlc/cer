@@ -817,7 +817,106 @@ function heroPainter(cfg, dir){
     }
   };
 }
+/* ---- PALADIN — bespoke 24x24 pixel art modelled on the classic crusader:
+ * golden crested helm under a pale hood, dark plate with a radiant gold sun
+ * emblem, ornate golden tower shield and a knight's sword. 4 facings x 2
+ * walk frames (left is a mirror of right). ---- */
+var PALA_C = {
+  crest: '#E8C95A', crestD: '#A8842C',
+  hood: '#D8D3C8', hoodD: '#B4AEA1',
+  helm: '#5C6B78', helmD: '#46525C',
+  gold: '#D4AF37', goldL: '#F3D46A', goldD: '#8A6D1F',
+  chest: '#4A545E', chestD: '#3A424B',
+  cloth: '#5D3A33', clothD: '#452B26',
+  leather: '#4E342E', skin: '#C69A6D', blade: '#DDE3E8', eye: '#14181C'
+};
+function _palaLegs(px, f, C){
+  if (f === 0){
+    px(8, 18, 2, 4, C.helm); px(14, 18, 2, 4, C.helm);
+    px(8, 22, 2, 2, C.helmD); px(14, 22, 2, 2, C.helmD);
+  } else {
+    px(7, 18, 2, 4, C.helm); px(15, 18, 2, 4, C.helm);
+    px(7, 22, 2, 2, C.helmD); px(15, 22, 2, 2, C.helmD);
+  }
+}
+function _palaTabard(px, C){
+  px(8, 17, 8, 1, C.leather); px(11, 17, 2, 1, C.gold);
+  px(10, 18, 4, 4, C.cloth); px(10, 21, 4, 1, C.clothD);
+  px(10, 18, 1, 4, C.goldD); px(13, 18, 1, 4, C.goldD);
+}
+function _palaShield(px, x, C){
+  px(x + 2, 6, 1, 2, C.crestD);                 // top spike
+  px(x, 8, 6, 12, C.gold);                      // frame
+  px(x, 8, 6, 1, C.goldL); px(x, 19, 6, 1, C.goldD);
+  px(x, 8, 1, 12, C.goldL); px(x + 5, 8, 1, 12, C.goldD);
+  px(x + 1, 10, 4, 8, C.clothD);                // inner panel
+  px(x + 2, 11, 2, 6, C.gold);                  // sword motif
+  px(x + 1, 13, 4, 1, C.gold);
+}
+function paladinPainter(dir){
+  return function(g, f){
+    var px = P(g), C = PALA_C, bob = f ? 1 : 0;
+    if (dir === 0){ // facing DOWN (front)
+      px(11, 0 + bob, 2, 2, C.crest); px(11, 2 + bob, 2, 2, C.crestD);
+      px(7, 4 + bob, 10, 2, C.hood); px(7, 6 + bob, 2, 4, C.hood); px(15, 6 + bob, 2, 4, C.hoodD);
+      px(9, 5 + bob, 6, 5, C.helm); px(9, 5 + bob, 6, 1, C.helmD);
+      px(11, 5 + bob, 2, 5, C.gold);
+      px(9, 7 + bob, 2, 1, C.eye); px(13, 7 + bob, 2, 1, C.eye);
+      px(6, 10 + bob, 3, 2, C.gold); px(15, 10 + bob, 3, 2, C.gold);
+      px(6, 10 + bob, 3, 1, C.goldL); px(15, 10 + bob, 3, 1, C.goldL);
+      px(8, 10 + bob, 8, 7, C.chest);
+      px(8, 10 + bob, 1, 7, C.chestD); px(15, 10 + bob, 1, 7, C.chestD);
+      px(11, 12 + bob, 2, 2, C.goldL);                                  // sun core
+      px(10, 11 + bob, 1, 1, C.gold); px(13, 11 + bob, 1, 1, C.gold);   // rays
+      px(10, 14 + bob, 1, 1, C.gold); px(13, 14 + bob, 1, 1, C.gold);
+      px(11, 10 + bob, 2, 1, C.gold); px(11, 15 + bob, 2, 1, C.gold);
+      _palaTabard(px, C); _palaLegs(px, f, C);
+      px(4, 6, 1, 9, C.blade); px(3, 12, 3, 1, C.gold); px(4, 13, 1, 2, C.leather); // sword
+      px(6, 12 + bob, 2, 2, C.chest); px(6, 14 + bob, 1, 1, C.skin);
+      _palaShield(px, 17, C);                                            // tower shield
+    } else if (dir === 1){ // facing UP (back)
+      px(11, 0 + bob, 2, 2, C.crest); px(11, 2 + bob, 2, 2, C.crestD);
+      px(7, 4 + bob, 10, 6, C.hood); px(8, 5 + bob, 8, 4, C.hoodD);
+      px(6, 10 + bob, 3, 2, C.gold); px(15, 10 + bob, 3, 2, C.gold);
+      px(8, 10 + bob, 8, 7, C.chest);
+      px(11, 11 + bob, 2, 5, C.goldD);                                   // back spine trim
+      _palaTabard(px, C); _palaLegs(px, f, C);
+      px(19, 6, 1, 9, C.blade); px(18, 12, 3, 1, C.gold);                // sword on the right
+      _palaShield(px, 1, C);                                             // shield on his left
+    } else { // facing RIGHT (dir 3); LEFT is a mirror
+      px(10, 0 + bob, 2, 2, C.crest); px(10, 2 + bob, 2, 2, C.crestD);
+      px(7, 4 + bob, 9, 2, C.hood); px(7, 6 + bob, 2, 4, C.hood);
+      px(9, 5 + bob, 7, 5, C.helm); px(9, 5 + bob, 7, 1, C.helmD);
+      px(14, 5 + bob, 2, 5, C.gold);                                     // face guard
+      px(13, 7 + bob, 1, 1, C.eye);
+      px(3, 8, 4, 11, C.goldD); px(4, 10, 2, 7, C.clothD);               // shield edge behind
+      px(9, 10 + bob, 4, 2, C.gold); px(9, 10 + bob, 4, 1, C.goldL);     // near pauldron
+      px(8, 10 + bob, 8, 7, C.chest); px(8, 10 + bob, 1, 7, C.chestD);
+      px(12, 12 + bob, 2, 2, C.goldL);
+      _palaTabard(px, C); _palaLegs(px, f, C);
+      px(19, 5, 1, 9, C.blade); px(18, 11, 3, 1, C.gold); px(19, 12, 1, 2, C.leather);
+      px(16, 12 + bob, 2, 2, C.chest); px(17, 14 + bob, 1, 1, C.skin);
+    }
+  };
+}
+function flipFrames(frames){
+  return frames.map(function(cv){
+    var c = document.createElement('canvas');
+    c.width = cv.width; c.height = cv.height;
+    var g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.translate(cv.width, 0); g.scale(-1, 1);
+    g.drawImage(cv, 0, 0);
+    return c;
+  });
+}
 function buildHeroSprites(cfg){
+  if (cfg.custom === 'paladin'){
+    var down = makeSheet(paladinPainter(0), 2, 24);
+    var up = makeSheet(paladinPainter(1), 2, 24);
+    var right = makeSheet(paladinPainter(3), 2, 24);
+    return [down, up, flipFrames(right), right];
+  }
   var dirs = [];
   for (var d = 0; d < 4; d++) dirs.push(makeSheet(heroPainter(cfg, d), 2));
   return dirs;
@@ -936,7 +1035,7 @@ var CLASSES = {
     desc: 'A holy knight. Auras, hammers and healing light — hard to kill, harder to stop.',
     hp: 150, speed: 166,
     atk: { kind: 'melee', dmg: 13, rate: 0.6, range: 80, arc: 1.8 },
-    sprite: { skin: '#F1C27D', hair: '#B0BEC5', body: '#90A4AE', trim: '#FDD835', leg: '#546E7A', weapon: 'sword' },
+    sprite: { custom: 'paladin' },
     skills: ['smite', 'hammers', 'zeal', 'consecrate', 'bash', 'holybolt', 'retribution', 'lay', 'fist', 'judgement', 'aegis', 'banner']
   },
   ama: {
