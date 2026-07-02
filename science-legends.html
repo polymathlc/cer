@@ -282,12 +282,12 @@ body.touch .pbars { bottom: 150px; }
 .tree-head h2 { margin: 0; }
 .tree-pts { background: var(--accent-base); color: #fff; border-radius: 999px; padding: 4px 13px; font-weight: 800; font-size: var(--font-size-sm); }
 .tree-board-wrap {
-  position: relative; height: 54vh; min-height: 320px; overflow: auto;
+  position: relative; height: 62vh; min-height: 340px; overflow: auto;
   border: 1px solid var(--border-subtle); border-radius: 14px; background:
     radial-gradient(circle at 30% 10%, #FFF6F2, transparent 60%), var(--bg-secondary);
   overscroll-behavior: contain;
 }
-.tree-board { position: relative; width: 880px; }
+.tree-board { position: relative; width: 1000px; }
 .tree-board svg { position: absolute; inset: 0; pointer-events: none; }
 .tier-label {
   position: absolute; left: 12px; transform: translateY(-50%);
@@ -489,6 +489,35 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
 .sel-skill .ssk-desc { color: var(--text-secondary); font-size: var(--font-size-xs); line-height: 1.45; margin-top: 3px; }
 .tnode.enh { width: 46px; height: 46px; margin: -23px 0 0 -23px; font-size: 15px; border-radius: 12px; }
 
+
+/* ---- v3: tree popover, tooltips, node kinds ---- */
+.tnode.k-branch, .tnode.k-enh { width: 46px; height: 46px; margin: -23px 0 0 -23px; font-size: 15px; border-radius: 12px; }
+.tnode.k-ult { border-radius: 50% 50% 14px 14px; background: linear-gradient(180deg, #F3E5F5, #fff); font-size: 19px; }
+.tnode.k-ult.part, .tnode.k-ult.done { background: linear-gradient(180deg, #E1BEE7, #F3E5F5); border-color: #8E24AA; }
+.tnode.k-unlock { border-radius: 14px; }
+.tree-pop {
+  position: absolute; width: 290px; z-index: 6;
+  background: var(--bg-primary); border: 1.5px solid var(--border-medium);
+  border-radius: 14px; box-shadow: var(--shadow-lg); padding: 14px 14px 12px;
+  animation: popIn 0.14s ease;
+}
+@keyframes popIn { from { opacity: 0; transform: translateY(4px) scale(0.97); } }
+.tree-pop .tp-x { position: absolute; top: 6px; right: 8px; border: none; background: none; font-size: 13px; cursor: pointer; color: var(--text-tertiary); padding: 4px; }
+.tree-pop .tp-head { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 4px; padding-right: 16px; }
+.tree-pop .tp-ico { width: 38px; height: 38px; border-radius: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); display: grid; place-items: center; font-size: 19px; flex: 0 0 auto; }
+.tree-pop .tp-name { font-weight: 800; font-size: var(--font-size-sm); line-height: 1.3; }
+.tree-pop .tp-kind { font-size: 0.6rem; font-weight: 800; letter-spacing: 0.04em; color: var(--accent-dark); background: var(--accent-bg); border-radius: 999px; padding: 2px 8px; text-transform: uppercase; }
+.tree-pop .tp-desc { color: var(--text-secondary); font-size: var(--font-size-xs); line-height: 1.5; margin: 6px 0 8px; }
+.tree-pop .tp-req { color: var(--bad); font-size: 0.68rem; font-weight: 700; line-height: 1.45; margin-bottom: 8px; }
+.tree-pop .tp-row { display: flex; gap: 10px; align-items: center; }
+.tree-pop .tp-add { flex: 1; justify-content: center; padding: 8px 10px; }
+.tree-tip {
+  position: absolute; z-index: 7; pointer-events: none; width: 260px;
+  background: rgba(26,26,28,0.95); color: #ECECEC; border-radius: 10px;
+  padding: 9px 12px; font-size: var(--font-size-xs); line-height: 1.5; box-shadow: var(--shadow-md);
+}
+.tree-tip b { color: #FFD54F; }
+
 </style>
 </head>
 <body>
@@ -520,7 +549,7 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
     </div>
     <div class="skillbar" id="skillBar" style="display:none;"></div>
     <button class="sksel-btn" id="skillSelBtn" type="button" style="display:none;" title="Choose which 4 of your 12 skills sit on the bar (K)">🎯 Select Skill</button>
-    <div class="hint-bar" id="hintBar">Move: <b>WASD / Arrows</b> · Skills: <b>1–4</b> · Tree: <b>T</b> · Pick skills: <b>K</b> · Armory: <b>B</b> · Pause: <b>P</b></div>
+    <div class="hint-bar" id="hintBar">Move &amp; face: <b>WASD / Arrows</b> · Skills <b>1–4</b> fire the way you face · Tree: <b>T</b> · Skills: <b>K</b> · Armory: <b>B</b> · Pause: <b>P</b></div>
     <div class="joy" id="joy"><div class="base"></div><div class="knob" id="joyKnob"></div></div>
     <div class="toast-wrap" id="toastWrap"></div>
 
@@ -532,8 +561,8 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
         <p class="sub">Hold back the horde! Fight off <b>waves of monsters</b>, level up, and sink points into a <b>Diablo-style skill tree</b>. Every <b>20 seconds</b> a science question appears — answer correctly for a bonus skill point and a burst of power.</p>
         <div class="beta-note">🧪 <span><b>Beta build</b> — no Science Legends leaderboard yet. Questions you answer here <b>still count</b> toward the main leaderboard and your monthly questions total.</span></div>
         <ul class="how">
-          <li data-ico="🕹️">Move with <strong>WASD / arrow keys</strong> (or the joystick on touch). Your hero attacks the nearest enemy automatically.</li>
-          <li data-ico="✨">Each class knows <strong>12 skills</strong> — unlock them in the huge <strong>skill tree (T)</strong>, then pick your <strong>4</strong> with 🎯 <strong>Select Skill (K)</strong>.</li>
+          <li data-ico="🕹️">Move with <strong>WASD / arrows</strong> (or the joystick). Basic attacks auto-aim; <strong>skills fire in the direction you are facing</strong> when you press 1–4.</li>
+          <li data-ico="✨">Each class knows <strong>12 skills</strong> — unlock, rank, branch and crown them with 1-of-3 <strong>ULTIMATES</strong> in a huge <strong>skill tree (T)</strong>, then pick your <strong>4</strong> with 🎯 <strong>Select Skill (K)</strong>.</li>
           <li data-ico="🧪">Every <strong>20s</strong>: a science MCQ. Correct = <strong>+1 skill point</strong>, a heal and an Insight damage surge.</li>
           <li data-ico="🎁">Spend app points on <strong>loot boxes</strong> in the <strong>Armory (B)</strong> — permanent helm, armour, gloves, greaves, rings &amp; amulet. Unique and Mythic gear carries <strong>skill-changing powers</strong>.</li>
         </ul>
@@ -561,15 +590,6 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
         </div>
         <div class="tree-board-wrap" id="treeBoardWrap">
           <div class="tree-board" id="treeBoard"></div>
-        </div>
-        <div class="tree-info" id="treeInfo">
-          <div class="tico" id="tiIco">🌳</div>
-          <div class="tbody">
-            <div class="tname" id="tiName">Select a node</div>
-            <div class="tdesc" id="tiDesc">Tap any node to see what it does. Unlock nodes tier by tier — spend points to open deeper tiers, just like the big ARPGs.</div>
-            <div class="treq" id="tiReq"></div>
-          </div>
-          <button class="btn btn-primary" id="tiLearnBtn" type="button" style="display:none;">Learn (1 pt)</button>
         </div>
         <div class="tree-stats" id="treeStats"></div>
       </div></div>
@@ -1432,35 +1452,105 @@ var PASSIVE_POOL = [
   { n: 'Second Skin', ic: '🦏', fx: { armor: 0.05 },   d: '+5% damage reduction per point.' },
   { n: 'Frenzied',    ic: '😾', fx: { aspd: 0.05 },    d: '+5% attack speed per point.' }
 ];
+/* Per-skill BRANCH nodes: 6 extra specialisation branches on every skill. */
+var BRANCH_DEFS = [
+  { k: 'b1', n: 'Honed',       ic: '📈', max: 3, d: '+10% [S] damage per point.',                 sm: { dmg: 0.10 } },
+  { k: 'b2', n: 'Swift',       ic: '⏱️', max: 3, d: '−5% [S] cooldown per point.',                sm: { cd: 0.05 } },
+  { k: 'b3', n: 'Expansive',   ic: '📐', max: 2, d: '+10% [S] area / reach per point.',           sm: { area: 0.10 } },
+  { k: 'b4', n: 'Devastating', ic: '💥', max: 2, d: '+15% [S] damage per point.',                 sm: { dmg: 0.15 } },
+  { k: 'b5', n: 'Fluid',       ic: '🌊', max: 2, d: '−7% [S] cooldown per point.',                sm: { cd: 0.07 } },
+  { k: 'b6', n: 'Masterwork',  ic: '⚙️', max: 2, d: '+8% [S] damage and −3% cooldown per point.', sm: { dmg: 0.08, cd: 0.03 } }
+];
+/* Per-archetype ULTIMATE transformations — pick ONE of three per skill
+ * (requires the skill at rank 3+). */
+var ULT_DEFS = {
+  arc:    [ { n: 'Echoing [S]',    d: '[S] strikes a second time for 50% damage.' },
+            { n: 'Colossal [S]',   d: '[S] deals +60% damage with +40% reach.' },
+            { n: 'Shockwave [S]',  d: '[S] launches a piercing shockwave in front of you.' } ],
+  spin:   [ { n: 'Perpetual [S]',  d: '[S] spins 60% longer.' },
+            { n: 'Maelstrom [S]',  d: '[S] is 40% larger, hits harder and drags enemies in.' },
+            { n: 'Razorstorm [S]', d: '[S] flings heavy blades outward while spinning.' } ],
+  dash:   [ { n: 'Phantom [S]',    d: '[S] recharges 40% faster.' },
+            { n: 'Wrecking [S]',   d: '[S] deals DOUBLE damage.' },
+            { n: 'Aftershock [S]', d: '[S] ends in an explosion.' } ],
+  buff:   [ { n: 'Enduring [S]',   d: '[S] lasts 80% longer.' },
+            { n: 'Overwhelming [S]', d: '[S] effects are 50% stronger.' },
+            { n: 'Shared [S]',     d: '[S] also heals you 10% and empowers your companions.' } ],
+  proj:   [ { n: '[S]: Barrage',   d: '[S] fires a second volley at 60% damage.' },
+            { n: '[S]: Heavy Payload', d: '[S] deals +60% damage, pierces more and blasts wider.' },
+            { n: '[S]: Seeker',    d: '[S] projectiles home in on enemies.' } ],
+  chain:  [ { n: '[S]: Storm Series', d: '[S] leaps to 4 extra targets.' },
+            { n: '[S]: Superbolt', d: '[S] deals +60% damage.' },
+            { n: '[S]: Static Grip', d: 'Enemies struck by [S] are stunned briefly.' } ],
+  nova:   [ { n: '[S]: Cataclysmic Ring', d: '[S] radius +50%.' },
+            { n: '[S]: Double Pulse', d: '[S] pulses a second time at 60% damage.' },
+            { n: '[S]: Crippling',  d: '[S] freeze/stun/slow lasts TWICE as long.' } ],
+  target: [ { n: '[S]: Annihilation', d: '[S] deals +60% damage.' },
+            { n: '[S]: Twin Fall',  d: '[S] always strikes twice.' },
+            { n: '[S]: Crater',     d: '[S] leaves burning ground behind.' } ],
+  summon: [ { n: 'Elder [S]',      d: 'The summon has +80% health and damage.' },
+            { n: 'Twin [S]',       d: '+1 maximum summon.' },
+            { n: 'Bonded [S]',     d: 'The summon heals you 1 HP with every hit.' } ],
+  zone:   [ { n: '[S]: Enduring Field', d: '[S] lasts 60% longer.' },
+            { n: '[S]: Cataclysm Field', d: '[S] damage ticks are 50% stronger.' },
+            { n: '[S]: Grasping',   d: 'Enemies inside [S] are heavily slowed.' } ],
+  aura:   [ { n: 'Eternal [S]',    d: '[S] lasts 60% longer.' },
+            { n: 'Tempest [S]',    d: '[S] damage ticks are 50% stronger.' },
+            { n: 'Terror [S]',     d: 'Enemies inside [S] are slowed.' } ],
+  shield: [ { n: '[S]: Bastion',   d: '[S] absorbs 80% more.' },
+            { n: '[S]: Reflector', d: 'Attackers take heavy damage while [S] holds.' },
+            { n: '[S]: Repulsor',  d: 'Casting [S] blasts nearby enemies away.' } ],
+  heal:   [ { n: '[S]: Miracle',   d: '[S] heals 60% more.' },
+            { n: '[S]: Renewal',   d: '[S] leaves strong regeneration for 5s.' },
+            { n: "[S]: Martyr's Gift", d: '[S] fully heals your pets and enrages them for 6s.' } ],
+  orbit:  [ { n: '[S]: Choir',     d: '2 extra hammers join the orbit.' },
+            { n: '[S]: Consecrated Steel', d: '[S] deals +60% damage.' },
+            { n: '[S]: Gyre',      d: 'The orbit sweeps in and out, covering far more ground.' } ]
+};
 function genTree(cls){
   var sk = CLASSES[cls].skills;
   var nodes = [];
+  var ROWS_PER_TIER = 5;
   for (var s = 0; s < 12; s++){
     var sid = sk[s], def = SKILLS[sid];
     var tier = (s / 2) | 0;
-    var baseCol = (s % 2 === 0) ? 0.8 : 3.6;
-    var r0 = tier * 3;
+    var bc = (s % 2 === 0) ? 0.9 : 3.7;
+    var r0 = tier * ROWS_PER_TIER;
     if (s > 0){
-      nodes.push({ id: 'u_' + sid, name: 'Learn: ' + def.name, icon: def.icon, tier: tier, col: baseCol + 0.4, row: r0, kind: 'unlock', max: 1,
-        req: ['r_' + sk[s >= 2 ? s - 2 : 0]], desc: 'Unlock the ' + def.name + ' skill — assign it with the 🎯 Select Skill button.', fx: { unlock: sid } });
+      nodes.push({ id: 'u_' + sid, name: 'Learn: ' + def.name, icon: def.icon, tier: tier, col: bc + 0.4, row: r0, kind: 'unlock', max: 1,
+        req: ['r_' + sk[s >= 2 ? s - 2 : 0]], desc: 'Unlock the ' + def.name + ' skill — assign it with the 🎯 Select Skill button (K).', fx: { unlock: sid } });
     }
-    nodes.push({ id: 'r_' + sid, name: def.name, icon: def.icon, tier: tier, col: baseCol + 0.4, row: r0 + 1, kind: 'rank', max: 5,
-      req: s > 0 ? ['u_' + sid] : [], desc: def.desc + ' Each rank: +20% power, −4% cooldown.', fx: { skill: sid } });
-    nodes.push({ id: 'e1_' + sid, name: def.e1.n, icon: '◆', tier: tier, col: baseCol - 0.4, row: r0 + 2, kind: 'enh', max: 1,
+    nodes.push({ id: 'r_' + sid, name: def.name, icon: def.icon, tier: tier, col: bc + 0.4, row: r0 + 1, kind: 'rank', max: 5,
+      req: s > 0 ? ['u_' + sid] : [], desc: def.desc + ' Each rank: +20% power, −4% cooldown. Rank 3 opens this skill’s ULTIMATES.', fx: { skill: sid } });
+    nodes.push({ id: 'e1_' + sid, name: def.e1.n, icon: '◆', tier: tier, col: bc - 0.6, row: r0 + 1, kind: 'enh', max: 1,
       req: ['r_' + sid], desc: def.e1.d, mod: sid + '.e1' });
-    nodes.push({ id: 'e2_' + sid, name: def.e2.n, icon: '◇', tier: tier, col: baseCol + 1.2, row: r0 + 2, kind: 'enh', max: 1,
+    nodes.push({ id: 'e2_' + sid, name: def.e2.n, icon: '◇', tier: tier, col: bc + 1.4, row: r0 + 1, kind: 'enh', max: 1,
       req: ['r_' + sid], desc: def.e2.d, mod: sid + '.e2' });
+    for (var bi = 0; bi < 6; bi++){
+      var B = BRANCH_DEFS[bi];
+      nodes.push({ id: B.k + '_' + sid, name: B.n + ' ' + def.name, icon: B.ic, tier: tier,
+        col: bc - 0.8 + (bi % 3) * 1.2, row: r0 + 2 + ((bi / 3) | 0), kind: 'branch', max: B.max,
+        req: [(bi < 3 ? 'r_' : BRANCH_DEFS[bi - 3].k + '_') + sid],
+        desc: B.d.replace(/\[S\]/g, def.name), sm: { sid: sid, dmg: B.sm.dmg || 0, cd: B.sm.cd || 0, area: B.sm.area || 0 } });
+    }
+    var ults = ULT_DEFS[def.type] || ULT_DEFS.buff;
+    for (var ui = 0; ui < 3; ui++){
+      nodes.push({ id: 'ult' + (ui + 1) + '_' + sid, name: ults[ui].n.replace(/\[S\]/g, def.name), icon: '☀', tier: tier,
+        col: bc - 0.6 + ui * 1.0, row: r0 + 4, kind: 'ult', max: 1,
+        req: ['b4_' + sid, 'b5_' + sid, 'b6_' + sid],
+        desc: 'ULTIMATE (pick ONE of three · needs ' + def.name + ' rank 3): ' + ults[ui].d.replace(/\[S\]/g, def.name),
+        ultInfo: { sid: sid, n: ui + 1 } });
+    }
   }
   for (var t = 0; t < 6; t++){
     for (var pI = 0; pI < 3; pI++){
       var P2 = PASSIVE_POOL[t * 3 + pI];
-      var pid = 'p_' + t + '_' + pI;
-      nodes.push({ id: pid, name: P2.n, icon: P2.ic, tier: t, col: pI === 1 ? 7.3 : 6.4, row: t * 3 + pI, kind: 'passive', max: 3,
+      nodes.push({ id: 'p_' + t + '_' + pI, name: P2.n, icon: P2.ic, tier: t, col: pI === 1 ? 7.4 : 6.5, row: t * ROWS_PER_TIER + pI * 1.6 + 0.4, kind: 'passive', max: 3,
         req: pI > 0 ? ['p_' + t + '_' + (pI - 1)] : (t > 0 ? ['p_' + (t - 1) + '_2'] : []), desc: P2.d, fx: P2.fx });
     }
   }
   CAPSTONES[cls].forEach(function(c, i){
-    nodes.push({ id: c.id, name: c.name, icon: c.icon, tier: 6, col: 1.4 + i * 2.2, row: 18.4, kind: 'cap', max: 1,
+    nodes.push({ id: c.id, name: c.name, icon: c.icon, tier: 6, col: 1.6 + i * 2.2, row: 6 * ROWS_PER_TIER + 0.5, kind: 'cap', max: 1,
       req: ['r_' + sk[10], 'r_' + sk[11]], desc: 'CAPSTONE: ' + c.desc, fx: c.fx || null, mod: c.mod || null });
   });
   return nodes;
@@ -1479,6 +1569,11 @@ function reqMet(node){
   return false;
 }
 function canLearn(node){
+  if (node.kind === 'ult'){
+    if (nodeRank('r_' + node.ultInfo.sid) < 3) return false;   // master the skill first (rank 3+)
+    var taken = TREES[G.cls].some(function(n){ return n.kind === 'ult' && n.ultInfo.sid === node.ultInfo.sid && n.id !== node.id && nodeRank(n.id) > 0; });
+    if (taken) return false;                                    // one ultimate per skill
+  }
   return G.points > 0 && nodeRank(node.id) < node.max && tierOpen(node.tier) && reqMet(node);
 }
 
@@ -1489,7 +1584,7 @@ function computeStats(){
     dmg: 1, aspd: 1, speed: 1, crit: 0.05, critDmg: 1.5, cdr: 0, area: 1,
     armor: 0, regen: 0, lifeKill: 0, hpAdd: 0, petDmg: 1, petAspd: 1, petMax: 0,
     shieldMult: 1, poisonMult: 1, dashCd: 1, basicPierce: 0,
-    rank: {}, mods: {}, unlocked: {}
+    rank: {}, mods: {}, unlocked: {}, sm: {}, ult: {}
   };
   S.unlocked[cls.skills[0]] = true;
   S.rank[cls.skills[0]] = 1;
@@ -1502,6 +1597,13 @@ function computeStats(){
       if (nd.fx.unlock){ S.unlocked[nd.fx.unlock] = true; S.rank[nd.fx.unlock] = Math.max(1, S.rank[nd.fx.unlock] || 1); }
       applyFx(S, nd.fx, r);
     }
+    if (nd.sm && r){
+      var t2 = S.sm[nd.sm.sid] = S.sm[nd.sm.sid] || { dmg: 0, cd: 0, area: 0 };
+      t2.dmg += (nd.sm.dmg || 0) * r;
+      t2.cd += (nd.sm.cd || 0) * r;
+      t2.area += (nd.sm.area || 0) * r;
+    }
+    if (nd.ultInfo && r) S.ult[nd.ultInfo.sid] = nd.ultInfo.n;
     if (nd.mod) S.mods[nd.mod] = true;
   }
   // permanent equipment: affixes + powers
@@ -1558,26 +1660,78 @@ function applyFx(S, fx, r){
 }
 function skillRank(id){ return (G.stats.rank && G.stats.rank[id]) || 1; }
 function skillUnlocked(id){ return !!(G.stats.unlocked && G.stats.unlocked[id]); }
-function skillDmgMult(id){ return G.stats.dmg * (1 + 0.2 * (skillRank(id) - 1)); }
+function skillSm(id){ return (G.stats.sm && G.stats.sm[id]) || { dmg: 0, cd: 0, area: 0 }; }
+function ultN(id){ return (G.stats.ult && G.stats.ult[id]) || 0; }
+function skillDmgMult(id){ return G.stats.dmg * (1 + 0.2 * (skillRank(id) - 1)) * (1 + skillSm(id).dmg); }
 function hasEnh(sid, n){ return !!G.stats.mods[sid + '.e' + n]; }
 function skillCd(id){
   var base = SKILLS[id].cd * (1 - 0.04 * (skillRank(id) - 1));
+  base *= (1 - Math.min(0.5, skillSm(id).cd));
   if (SKILLS[id].type === 'dash') base *= G.stats.dashCd;
   return base * (1 - G.stats.cdr);
 }
 
-/* ---- Tree UI ---- */
+/* ---- Tree UI: hover = tooltip, click = floating popover with "+ Add point" ---- */
 var treeSel = null;
 var TREE_W = 1000;
 function treeNodeState(nd){
   var r = nodeRank(nd.id);
   if (r >= nd.max) return 'done';
   if (r > 0) return 'part';
-  if (tierOpen(nd.tier) && reqMet(nd)) return (G.points > 0 ? 'avail' : '');
+  if (tierOpen(nd.tier) && reqMet(nd)) return (canLearn(nd) ? 'avail' : '');
   return 'locked';
 }
 function nodeXY(nd){ return { x: 90 + nd.col * 112, y: 70 + nd.row * 112 }; }
+function nodeKindLabel(nd){
+  return nd.kind === 'cap' ? 'Capstone' : nd.kind === 'ult' ? 'Ultimate' : nd.kind === 'enh' ? 'Enhancement'
+    : nd.kind === 'branch' ? 'Branch' : nd.kind === 'unlock' ? 'New skill' : nd.kind === 'rank' ? 'Skill rank' : 'Passive';
+}
+function nodeReqMsgs(nd){
+  var r = nodeRank(nd.id);
+  var msgs = [];
+  if (r >= nd.max) return ['Fully learned ✓'];
+  if (!tierOpen(nd.tier)) msgs.push('Needs ' + TIER_REQ[nd.tier] + ' pts spent in the tree (you have ' + pointsSpent() + ')');
+  if (!reqMet(nd)){
+    var names = nd.req.map(function(rid){ var pn = nodeById(G.cls, rid); return pn ? pn.name : rid; });
+    msgs.push('Requires: ' + names.join(' or '));
+  }
+  if (nd.kind === 'ult'){
+    if (nodeRank('r_' + nd.ultInfo.sid) < 3) msgs.push('Needs ' + SKILLS[nd.ultInfo.sid].name + ' at rank 3+');
+    var other = TREES[G.cls].find(function(n){ return n.kind === 'ult' && n.ultInfo.sid === nd.ultInfo.sid && n.id !== nd.id && nodeRank(n.id) > 0; });
+    if (other) msgs.push('Ultimate already chosen: ' + other.name);
+  }
+  if (!msgs.length && G.points <= 0) msgs.push('No skill points — level up or answer questions');
+  return msgs;
+}
+function buildPopHtml(nd){
+  var p = nodeXY(nd);
+  var W = 290;
+  var px = p.x + 46;
+  if (px + W > TREE_W - 8) px = p.x - W - 46;
+  px = clamp(px, 8, TREE_W - W - 8);
+  var py = Math.max(8, p.y - 44);
+  var r = nodeRank(nd.id);
+  var msgs = nodeReqMsgs(nd);
+  var ok = canLearn(nd);
+  var full = r >= nd.max;
+  return '<div class="tree-pop" id="treePop" style="left:' + px + 'px;top:' + py + 'px;">' +
+    '<button type="button" class="tp-x" id="tpClose">✕</button>' +
+    '<div class="tp-head"><span class="tp-ico">' + nd.icon + '</span><div>' +
+    '<div class="tp-name">' + nd.name + '</div>' +
+    '<div style="display:flex;gap:6px;align-items:center;margin-top:3px;"><span class="tp-kind">' + nodeKindLabel(nd) + '</span>' +
+    (nd.max > 1 ? '<span style="font-size:0.66rem;font-weight:800;color:var(--text-tertiary);">Rank ' + r + '/' + nd.max + '</span>' : (r ? '<span style="font-size:0.66rem;font-weight:800;color:var(--good);">Learned ✓</span>' : '')) +
+    '</div></div></div>' +
+    '<div class="tp-desc">' + nd.desc + '</div>' +
+    (full ? '' : '<div class="tp-req" style="' + (msgs.length ? '' : 'display:none;') + '">' + msgs.join(' · ') + '</div>') +
+    '<div class="tp-row">' +
+    (full ? '<span style="color:var(--good);font-weight:800;font-size:var(--font-size-sm);">✓ Maxed out</span>'
+          : '<button type="button" class="btn btn-primary tp-add" id="tpAdd"' + (ok ? '' : ' disabled') + '>＋ Add point' + (nd.max > 1 ? ' (' + r + '→' + (r + 1) + ')' : '') + '</button>') +
+    '<span style="font-size:var(--font-size-xs);color:var(--text-tertiary);white-space:nowrap;">' + G.points + ' pt' + (G.points === 1 ? '' : 's') + ' left</span>' +
+    '</div></div>';
+}
 function renderTree(){
+  var wrap = $('treeBoardWrap');
+  var sx = wrap.scrollLeft, sy = wrap.scrollTop;
   var board = $('treeBoard');
   var tree = TREES[G.cls];
   var maxRow = 0;
@@ -1588,10 +1742,10 @@ function renderTree(){
   tree.forEach(function(nd){
     var a = nodeXY(nd);
     nd.req.forEach(function(rid){
-      var p = nodeById(G.cls, rid); if (!p) return;
-      var b = nodeXY(p);
+      var pn = nodeById(G.cls, rid); if (!pn) return;
+      var b = nodeXY(pn);
       var on = nodeRank(nd.id) > 0 && nodeRank(rid) > 0;
-      svg += '<line x1="' + b.x + '" y1="' + b.y + '" x2="' + a.x + '" y2="' + a.y + '" stroke="' + (on ? '#43A047' : '#D4D4CF') + '" stroke-width="' + (on ? 4 : 2.5) + '" stroke-linecap="round"' + (on ? '' : ' stroke-dasharray="6 5"') + '/>';
+      svg += '<line x1="' + b.x + '" y1="' + b.y + '" x2="' + a.x + '" y2="' + a.y + '" stroke="' + (on ? '#43A047' : '#D4D4CF') + '" stroke-width="' + (on ? 4 : 2) + '" stroke-linecap="round"' + (on ? '' : ' stroke-dasharray="5 5"') + '/>';
     });
   });
   svg += '</svg>';
@@ -1604,49 +1758,45 @@ function renderTree(){
   }
   tree.forEach(function(nd){
     var p = nodeXY(nd), st = treeNodeState(nd), r = nodeRank(nd.id);
-    html += '<button type="button" class="tnode ' + st + (nd.kind === 'cap' ? ' capstone' : '') + (nd.kind === 'enh' ? ' enh' : '') + (treeSel === nd.id ? ' selq' : '') + '" style="left:' + p.x + 'px;top:' + p.y + 'px;" data-node="' + nd.id + '" title="' + nd.name.replace(/"/g, '&quot;') + '">' +
-      nd.icon + '<span class="rank">' + (nd.max > 1 ? (r + '/' + nd.max) : (r ? '✓' : nd.kind === 'cap' ? 'CAP' : '·')) + '</span></button>';
+    html += '<button type="button" class="tnode ' + st + ' k-' + nd.kind + (nd.kind === 'cap' ? ' capstone' : '') + (treeSel === nd.id ? ' selq' : '') + '" style="left:' + p.x + 'px;top:' + p.y + 'px;" data-node="' + nd.id + '">' +
+      nd.icon + '<span class="rank">' + (nd.max > 1 ? (r + '/' + nd.max) : (r ? '✓' : nd.kind === 'cap' ? 'CAP' : nd.kind === 'ult' ? 'ULT' : '·')) + '</span></button>';
   });
+  if (treeSel){
+    var selNd = nodeById(G.cls, treeSel);
+    if (selNd) html += buildPopHtml(selNd);
+  }
+  html += '<div class="tree-tip" id="treeTip" style="display:none;"></div>';
   board.innerHTML = html;
+  var tip = $('treeTip');
   Array.prototype.forEach.call(board.querySelectorAll('.tnode'), function(btn){
-    btn.addEventListener('click', function(){ selectNode(btn.getAttribute('data-node')); });
+    var nd = nodeById(G.cls, btn.getAttribute('data-node'));
+    btn.addEventListener('click', function(){ treeSel = nd.id; renderTree(); });
+    btn.addEventListener('mouseenter', function(){
+      if (treeSel === nd.id) return;                    // popover already shows it
+      var p = nodeXY(nd), r = nodeRank(nd.id);
+      var msgs = nodeReqMsgs(nd);
+      tip.innerHTML = '<b>' + nd.icon + ' ' + nd.name + '</b> · ' + nodeKindLabel(nd) +
+        (nd.max > 1 ? ' · Rank ' + r + '/' + nd.max : '') +
+        '<br>' + nd.desc +
+        (r >= nd.max ? '' : (msgs.length ? '<br><span style="color:#FF8A80;">' + msgs.join(' · ') + '</span>' : '<br><span style="color:#A5D6A7;">Click to add points</span>'));
+      var tx = p.x + 40;
+      if (tx + 260 > TREE_W - 6) tx = p.x - 260 - 40;
+      tip.style.left = clamp(tx, 6, TREE_W - 260) + 'px';
+      tip.style.top = Math.max(6, p.y - 30) + 'px';
+      tip.style.display = 'block';
+    });
+    btn.addEventListener('mouseleave', function(){ tip.style.display = 'none'; });
   });
+  var tpAdd = $('tpAdd');
+  if (tpAdd) tpAdd.addEventListener('click', function(e){ e.stopPropagation(); learnSelected(); });
+  var tpClose = $('tpClose');
+  if (tpClose) tpClose.addEventListener('click', function(e){ e.stopPropagation(); treeSel = null; renderTree(); });
+  wrap.scrollLeft = sx; wrap.scrollTop = sy;
   $('treeTitle').textContent = '🌳 ' + CLASSES[G.cls].name + ' Skill Tree';
   $('treePtsBig').textContent = G.points + ' point' + (G.points === 1 ? '' : 's');
-  renderTreeInfo();
   renderTreeStats();
 }
 function selectNode(id){ treeSel = id; renderTree(); }
-function renderTreeInfo(){
-  var nd = treeSel ? nodeById(G.cls, treeSel) : null;
-  var btn = $('tiLearnBtn');
-  if (!nd){
-    $('tiIco').textContent = '🌳';
-    $('tiName').textContent = 'Select a node';
-    $('tiDesc').textContent = 'Tap any node to see what it does. 12 skills per class — unlock them here, then pick your 4 with the 🎯 Select Skill button.';
-    $('tiReq').textContent = '';
-    btn.style.display = 'none';
-    return;
-  }
-  var r = nodeRank(nd.id);
-  $('tiIco').textContent = nd.icon;
-  $('tiName').innerHTML = nd.name + ' <span class="q-badge">' + (nd.kind === 'cap' ? 'Capstone' : nd.kind === 'enh' ? 'Enhancement' : nd.kind === 'unlock' ? 'New skill' : nd.kind === 'rank' ? 'Skill rank' : 'Passive') + '</span>' + (nd.max > 1 ? ' <span style="color:var(--text-tertiary);font-size:var(--font-size-xs);">Rank ' + r + '/' + nd.max + '</span>' : '');
-  $('tiDesc').textContent = nd.desc;
-  var msgs = [];
-  if (!tierOpen(nd.tier)) msgs.push('Needs ' + TIER_REQ[nd.tier] + ' points spent in the tree (you have ' + pointsSpent() + ').');
-  if (!reqMet(nd)){
-    var names = nd.req.map(function(rid){ var pn = nodeById(G.cls, rid); return pn ? pn.name : rid; });
-    msgs.push('Requires: ' + names.join(' or '));
-  }
-  if (r >= nd.max) msgs = ['Fully learned ✓'];
-  else if (!msgs.length && G.points <= 0) msgs.push('No skill points — level up or answer questions to earn more.');
-  $('tiReq').textContent = msgs.join(' · ');
-  $('tiReq').style.color = (r >= nd.max) ? 'var(--good)' : 'var(--bad)';
-  var ok = canLearn(nd);
-  btn.style.display = (r >= nd.max) ? 'none' : 'inline-flex';
-  btn.disabled = !ok;
-  btn.textContent = r > 0 ? 'Rank up (1 pt)' : 'Learn (1 pt)';
-}
 function renderTreeStats(){
   var S = G.stats; if (!S) return;
   var bits = [
@@ -1789,7 +1939,7 @@ function newGame(cls){
     waveT: 0, spawnT: 1.2,
     qTimer: 0, answered: 0, correct: 0,
     enemies: [], pets: [], projs: [], eprojs: [], fx: [], texts: [], zones: [], orbs: [],
-    cds: {}, spin: null, auras: [], orbits: [], abuffs: [],
+    cds: {}, spin: null, auras: [], orbits: [], abuffs: [], delays: [],
     insightT: 0, empowerT: 0, slamN: 0, tempestN: 0,
     pwT: { stormcall: 0, cataclysm: 0, starfall: 0, avatar: 0 },
     followerRespawn: 0,
@@ -2061,6 +2211,7 @@ var PET_BASE = {
   valkyrie: { hp: 200, dmg: 30, rate: 0.75, speed: 200, r: 15 },
   decoy:    { hp: 150, dmg: 0,  rate: 9,   speed: 0,   r: 14, taunt: true, life: 10 }
 };
+var PET_SKILL = { wolf: 'wolf', hydra: 'hydra', boarpet: 'boarpet', valkyrie: 'valk', decoy: 'decoy' };
 function spawnPet(kind, opts){
   opts = opts || {};
   var base = PET_BASE[kind] || PET_BASE.wolf;
@@ -2141,7 +2292,7 @@ function updatePets(dt){
       } else if (pet.cd <= 0 && dd0 <= pet.ranged.range){
         pet.cd = pet.rate / (G.stats.petAspd * frenzyAspd);
         var dmgR = pet.dmg * petDmgMult(pet);
-        G.projs.push({ kind: 'petbolt', x: pet.x, y: pet.y, vx: (best.x - pet.x) / dd0 * pet.ranged.speed, vy: (best.y - pet.y) / dd0 * pet.ranged.speed, r: 5, dmg: dmgR, life: pet.ranged.range / pet.ranged.speed + 0.15, pierce: 0, pet: true });
+        G.projs.push({ kind: 'petbolt', x: pet.x, y: pet.y, vx: (best.x - pet.x) / dd0 * pet.ranged.speed, vy: (best.y - pet.y) / dd0 * pet.ranged.speed, r: 5, dmg: dmgR, life: pet.ranged.range / pet.ranged.speed + 0.15, pierce: 0, pet: true, healOwner: !!(PET_SKILL[pet.kind] && ultN(PET_SKILL[pet.kind]) === 3) });
       }
     } else {
       var dd = Math.sqrt(bd) || 1;
@@ -2155,6 +2306,8 @@ function updatePets(dt){
         var dmg = pet.dmg * petDmgMult(pet);
         var cr = ((pet.kind === 'wolf' && hasEnh('wolf', 1)) || pet.kind === 'valkyrie') ? rollCrit() : { mult: 1, crit: false };
         dealDamage(best, dmg * cr.mult, { crit: cr.crit, pet: true, color: '#B0BEC5' });
+        var psk = PET_SKILL[pet.kind];
+        if (psk && ultN(psk) === 3) healPlayer(1);
         if (buffStat('petDmg') > 0 && hasEnh('frenzy', 1)) healPlayer(1);
         slashFx(best.x, best.y, Math.atan2(best.y - pet.y, best.x - pet.x), 30, '#B0BEC5');
       }
@@ -2250,7 +2403,7 @@ function buffDmg(){ return (1 + buffStat('dmg')) * (G.insightT > 0 ? 1.3 : 1); }
 function buffAspd(){ return G.stats.aspd * (1 + buffStat('aspd')); }
 
 /* ---------------- SKILL CASTING (archetype dispatcher) ---------------- */
-function doChain(fromX, fromY, dmg, bounces, range, jump, fork){
+function doChain(fromX, fromY, dmg, bounces, range, jump, fork, stunS){
   var cur = { x: fromX, y: fromY }, hit = {}, pts = [{ x: fromX, y: fromY }];
   var rng = range;
   for (var h = 0; h < bounces + 1; h++){
@@ -2266,6 +2419,7 @@ function doChain(fromX, fromY, dmg, bounces, range, jump, fork){
     pts.push({ x: best.x, y: best.y });
     var cr = rollCrit();
     dealDamage(best, dmg * cr.mult, { crit: cr.crit, color: '#FFF176' });
+    if (stunS) best.stun = Math.max(best.stun, stunS);
     if (cr.crit && fork){
       var forks = 0;
       for (var k = 0; k < G.enemies.length && forks < 2; k++){
@@ -2296,41 +2450,52 @@ function castSkill(idx){
   if ((G.cds[sid] || 0) > 0) return;
   var def = SKILLS[sid], sp = def.p;
   var p = G.player;
+  var u = ultN(sid);
   var mult = skillDmgMult(sid) * buffDmg();
-  var area = G.stats.area;
+  var area = G.stats.area * (1 + skillSm(sid).area);
   var cdMult = (G.stats.mods['cap.echo'] && Math.random() < 0.2) ? 0.5 : 1;
   G.cds[sid] = skillCd(sid) * cdMult;
   if (cdMult < 1) addText(p.x, p.y - 26, 'ECHO!', '#CE93D8');
   sfx('skill');
-  var aim = aimDir();
-  if (aim.d > 0){ p.fx = aim.x / (aim.d || 1); p.fy = aim.y / (aim.d || 1); }
+  // Skills fire in the direction the hero is FACING when the key is pressed
+  // (facing = your last move direction, or whoever you're auto-attacking).
   var fd = faceDir();
   var ang = Math.atan2(fd.y, fd.x);
   switch (def.type) {
     case 'arc': {
-      var range = sp.range * area * (hasEnh(sid, 2) ? 1.3 : 1);
+      var range = sp.range * area * (hasEnh(sid, 2) ? 1.3 : 1) * (u === 2 ? 1.4 : 1);
       var arcW = sp.arc * (hasEnh(sid, 2) ? 1.3 : 1);
-      slashFx(p.x + fd.x * 40, p.y + fd.y * 40, ang, range, sid === 'smite' ? '#FFF59D' : '#FFB74D');
-      enemiesInArc(p.x, p.y, ang, range, arcW).forEach(function(e){
-        var cr = rollCrit();
-        dealDamage(e, sp.dmg * mult * cr.mult, { crit: cr.crit, knock: { x: p.x, y: p.y, f: 160 } });
-        if (hasEnh(sid, 1)) applyBleed(e, sp.dmg * mult * (sid === 'execute' ? 0.8 : 0.4), 3);
-        if (sp.stun) e.stun = Math.max(e.stun, sp.stun);
-      });
+      var aDmg = sp.dmg * mult * (u === 2 ? 1.6 : 1);
+      var swing = function(k){
+        slashFx(p.x + fd.x * 40, p.y + fd.y * 40, ang, range, sid === 'smite' ? '#FFF59D' : '#FFB74D');
+        enemiesInArc(p.x, p.y, ang, range, arcW).forEach(function(e){
+          var cr = rollCrit();
+          dealDamage(e, aDmg * k * cr.mult, { crit: cr.crit, knock: { x: p.x, y: p.y, f: 160 } });
+          if (hasEnh(sid, 1)) applyBleed(e, aDmg * k * (sid === 'execute' ? 0.8 : 0.4), 3);
+          if (sp.stun) e.stun = Math.max(e.stun, sp.stun);
+        });
+      };
+      swing(1);
+      if (u === 1) G.delays.push({ t: 0.16, run: function(){ swing(0.5); } });
+      if (u === 3) G.projs.push({ kind: 'skillproj', sid: sid, x: p.x, y: p.y, vx: fd.x * 420, vy: fd.y * 420, r: 12, dmg: aDmg * 0.6, life: 0.8, pierce: 999, hitSet: {} });
       break;
     }
     case 'spin':
-      G.spin = { sid: sid, t: sp.dur, tick: 0, bladeT: 0, dps: sp.dps, radius: sp.radius };
+      G.spin = { sid: sid, t: sp.dur * (u === 1 ? 1.6 : 1), tick: 0, bladeT: 0,
+        dps: sp.dps * (u === 2 ? 1.2 : 1), radius: sp.radius * (u === 2 ? 1.4 : 1) * (1 + skillSm(sid).area),
+        pull: hasEnh(sid, 1) || u === 2, blades: hasEnh(sid, 2) || u === 3, bladeMult: u === 3 ? 2 : 1 };
       break;
     case 'dash': {
+      if (u === 1) G.cds[sid] *= 0.6;
       p.dashT = 0.28; p.dashX = fd.x; p.dashY = fd.y; p.dashSid = sid;
+      p.dashDmgMult = (u === 2 ? 2 : 1);
       G.hitEnemies = {};
       var dashShield = (sid === 'charge' && hasEnh(sid, 1)) || ((sid === 'teleport' || sid === 'stag' || sid === 'roll') && hasEnh(sid, 2)) || (sid === 'bash' && hasEnh(sid, 1));
       if (dashShield){ p.shield = 30 * G.stats.shieldMult; p.shieldT = 3; }
       break;
     }
     case 'buff': {
-      var dur = sp.dur * (hasEnh(sid, 2) ? 1.4 : 1);
+      var dur = sp.dur * (hasEnh(sid, 2) ? 1.4 : 1) * (u === 1 ? 1.8 : 1);
       if (sid === 'frenzy' && hasEnh(sid, 1)) dur += 3;
       var st = { dmg: sp.dmg || 0, aspd: sp.aspd || 0, speed: sp.speed || 0, crit: sp.crit || 0, critDmg: sp.critDmg || 0, petDmg: sp.petDmg || 0, petAspd: sp.petDmg ? 0.5 : 0 };
       if (hasEnh(sid, 1)){
@@ -2339,11 +2504,11 @@ function castSkill(idx){
         if (sid === 'combust') st.dmg += 0.25;
         if (sid === 'banner') st.aspd += 0.25;
         if (sid === 'strafe') st.speed += 0.25;
-        if (sid === 'frenzy') st.petDmg = (st.petDmg || 0); // moon handled in pets (heal on hit)
       }
       if (hasEnh(sid, 2) && sid === 'frenzy') st.petDmg += 0.3;
+      if (u === 3){ healPlayer(p.maxHp * 0.1); st.petDmg = (st.petDmg || 0) + 0.25; }
       var rk = skillRank(sid);
-      Object.keys(st).forEach(function(k){ if (st[k]) st[k] *= (1 + 0.08 * (rk - 1)); });
+      Object.keys(st).forEach(function(k){ if (st[k]) st[k] *= (1 + 0.08 * (rk - 1)) * (u === 2 ? 1.5 : 1); });
       G.abuffs.push({ sid: sid, t: dur, s: st });
       if (sp.stunR){
         var stun = sp.stun * ((sid === 'roar' && hasEnh(sid, 1)) ? 2 : 1);
@@ -2356,45 +2521,55 @@ function castSkill(idx){
     case 'proj': {
       var count = sp.count + ((hasEnh(sid, 1) && !sp.radius && sid !== 'stampede') || (sid === 'stampede' && hasEnh(sid, 2)) ? 2 : 0);
       if (sid === 'fireball' && G.stats.mods['pw.tripleball']) count = Math.max(count, 3);
-      var pierce = sp.pierce || 0;
+      var pierce = (sp.pierce || 0) + (u === 2 ? 2 : 0);
       if (hasEnh(sid, 2) && (sid === 'axes' || sid === 'icebolt' || sid === 'javelin' || sid === 'multishot' || sid === 'holybolt')) pierce += 2;
       var spread = sp.spread || (count > 1 ? 0.5 : 0);
       if (sid === 'stampede' && hasEnh(sid, 1)) spread = 0.75;
-      for (var b = 0; b < count; b++){
-        var off = count > 1 ? (b - (count - 1) / 2) * (spread / Math.max(1, count - 1)) * 2 : 0;
-        var ba = ang + off;
-        G.projs.push({
-          kind: sp.boar ? 'boar' : (sp.radius ? 'fire' : 'skillproj'), sid: sid,
-          x: p.x, y: p.y, vx: Math.cos(ba) * sp.speed, vy: Math.sin(ba) * sp.speed,
-          r: sp.radius ? 10 : (sp.boar ? 15 : 6), dmg: sp.dmg * mult, life: sp.boar ? 1.6 : 1.4,
-          pierce: sp.boar ? 999 : pierce, hitSet: (pierce > 0 || sp.boar) ? {} : null,
-          radius: sp.radius ? sp.radius * area * ((sid === 'plague' && hasEnh(sid, 2)) || (sid === 'orb' && hasEnh(sid, 2)) ? 1.3 : 1) : 0,
-          slow: sp.slow || 0, poison: sp.poison || 0,
-          stunHit: (sid === 'stampede' && hasEnh(sid, 1)) ? 0.6 : 0
-        });
-      }
+      var pDmg = sp.dmg * mult * (u === 2 ? 1.6 : 1);
+      var pRad = sp.radius ? sp.radius * area * (((sid === 'plague' && hasEnh(sid, 2)) || (sid === 'orb' && hasEnh(sid, 2))) ? 1.3 : 1) * (u === 2 ? 1.4 : 1) : 0;
+      var volley = function(k){
+        for (var b = 0; b < count; b++){
+          var off = count > 1 ? (b - (count - 1) / 2) * (spread / Math.max(1, count - 1)) * 2 : 0;
+          var ba = ang + off;
+          G.projs.push({
+            kind: sp.boar ? 'boar' : (sp.radius ? 'fire' : 'skillproj'), sid: sid,
+            x: p.x, y: p.y, vx: Math.cos(ba) * sp.speed, vy: Math.sin(ba) * sp.speed,
+            r: sp.radius ? 10 : (sp.boar ? 15 : 6), dmg: pDmg * k, life: sp.boar ? 1.6 : 1.4,
+            pierce: sp.boar ? 999 : pierce, hitSet: (pierce > 0 || sp.boar) ? {} : null,
+            radius: pRad, slow: sp.slow || 0, poison: sp.poison || 0, homing: u === 3,
+            stunHit: (sid === 'stampede' && hasEnh(sid, 1)) ? 0.6 : 0
+          });
+        }
+      };
+      volley(1);
+      if (u === 1) G.delays.push({ t: 0.18, run: function(){ volley(0.6); } });
       break;
     }
     case 'chain': {
-      var extra = hasEnh(sid, 1) ? 2 : 0;
-      var ok = doChain(p.x, p.y, sp.dmg * mult, sp.bounces + extra, sp.range * area, sp.jump * area, hasEnh(sid, 2));
+      var extra = (hasEnh(sid, 1) ? 2 : 0) + (u === 1 ? 4 : 0);
+      var ok = doChain(p.x, p.y, sp.dmg * mult * (u === 2 ? 1.6 : 1), sp.bounces + extra, sp.range * area, sp.jump * area, hasEnh(sid, 2), u === 3 ? 0.8 : 0);
       if (!ok) G.cds[sid] = 0.4;
       break;
     }
     case 'nova': {
-      var nr = sp.radius * area * (hasEnh(sid, (sid === 'nova' || sid === 'net') ? 2 : 1) ? 1.3 : 1);
+      var nr = sp.radius * area * (hasEnh(sid, (sid === 'nova' || sid === 'net') ? 2 : 1) ? 1.3 : 1) * (u === 1 ? 1.5 : 1);
       if ((sid === 'slam' || sid === 'judgement') && G.stats.mods['pw.titan']){ nr *= 1.5; G.shake = 0.5; }
       if (sid === 'nova' && G.stats.mods['pw.frostking']) nr *= 1.4;
-      ringFx(p.x, p.y, nr, sid === 'nova' ? '#80DEEA' : sid === 'net' ? '#B0BEC5' : '#FF8A65');
-      var freeze = sp.freeze ? ((sid === 'nova' && hasEnh(sid, 1)) ? 3.2 : sp.freeze) : 0;
-      var stun2 = sp.stun ? sp.stun * (hasEnh(sid, 2) ? 2 : 1) : ((sid === 'net' && hasEnh(sid, 1)) ? 0.8 : 0);
-      enemiesInRadius(p.x, p.y, nr).forEach(function(e){
-        var cr = rollCrit();
-        dealDamage(e, sp.dmg * mult * cr.mult, { crit: cr.crit, color: '#80DEEA' });
-        if (freeze) e.frozen = Math.max(e.frozen, freeze);
-        if (stun2) e.stun = Math.max(e.stun, stun2);
-        if (sp.slow) e.slowT = Math.max(e.slowT || 0, sp.slow);
-      });
+      var ctlMult = (u === 3 ? 2 : 1);
+      var freeze = sp.freeze ? ((sid === 'nova' && hasEnh(sid, 1)) ? 3.2 : sp.freeze) * ctlMult : 0;
+      var stun2 = (sp.stun ? sp.stun * (hasEnh(sid, 2) ? 2 : 1) : ((sid === 'net' && hasEnh(sid, 1)) ? 0.8 : 0)) * ctlMult;
+      var pulse = function(k){
+        ringFx(p.x, p.y, nr, sid === 'nova' ? '#80DEEA' : sid === 'net' ? '#B0BEC5' : '#FF8A65');
+        enemiesInRadius(p.x, p.y, nr).forEach(function(e){
+          var cr = rollCrit();
+          dealDamage(e, sp.dmg * mult * k * cr.mult, { crit: cr.crit, color: '#80DEEA' });
+          if (freeze) e.frozen = Math.max(e.frozen, freeze);
+          if (stun2) e.stun = Math.max(e.stun, stun2);
+          if (sp.slow) e.slowT = Math.max(e.slowT || 0, sp.slow * ctlMult);
+        });
+      };
+      pulse(1);
+      if (u === 2) G.delays.push({ t: 0.35, run: function(){ pulse(0.6); } });
       if (sid === 'nova' && G.stats.mods['pw.frostking']) G.zones.push({ x: p.x, y: p.y, r: nr * 0.8, dps: 18 * G.stats.dmg, t: 0, life: 4, kind: 'ice', slow: 1 });
       if (sid === 'slam' || sid === 'judgement') G.shake = Math.max(G.shake, 0.35);
       break;
@@ -2403,67 +2578,76 @@ function castSkill(idx){
       var tr = sp.radius * area;
       var bestE = densestCluster(sp.seek, tr);
       var tx = bestE ? bestE.x : p.x + fd.x * 220, ty = bestE ? bestE.y : p.y + fd.y * 220;
-      var strikeOpts = { sid: sid, bleed: hasEnh(sid, 1) && (sid === 'hawk'), stun: hasEnh(sid, 1) && (sid === 'fist'), slow: hasEnh(sid, 1) && (sid === 'rain'), burn: (sid === 'meteor' && hasEnh(sid, 1)) };
-      strikeAt(tx, ty, tr, sp.dmg * mult, sp.delay, strikeOpts);
-      var doubled = hasEnh(sid, 2) || (sid === 'meteor' && G.stats.mods['pw.meteorx2']);
-      if (doubled) strikeAt(tx + rand(-60, 60), ty + rand(-60, 60), tr, sp.dmg * mult * 0.8, sp.delay + 0.35, strikeOpts);
+      var tDmg = sp.dmg * mult * (u === 1 ? 1.6 : 1);
+      var strikeOpts = { sid: sid, bleed: hasEnh(sid, 1) && (sid === 'hawk'), stun: hasEnh(sid, 1) && (sid === 'fist'), slow: hasEnh(sid, 1) && (sid === 'rain'), burn: (sid === 'meteor' && hasEnh(sid, 1)) || u === 3 };
+      strikeAt(tx, ty, tr, tDmg, sp.delay, strikeOpts);
+      var doubled = hasEnh(sid, 2) || u === 2 || (sid === 'meteor' && G.stats.mods['pw.meteorx2']);
+      if (doubled) strikeAt(tx + rand(-60, 60), ty + rand(-60, 60), tr, tDmg * 0.8, sp.delay + 0.35, strikeOpts);
       break;
     }
     case 'summon': {
       var kind = sp.kind;
+      var uMult = (u === 1 ? 1.8 : 1);
       if (kind === 'wolf'){
         var wolves = G.pets.filter(function(pp){ return pp.kind === 'wolf'; });
-        var wolfRank = 1 + 0.2 * (skillRank('wolf') - 1);
-        if (wolves.length >= petCap()){
+        var wolfRank = (1 + 0.2 * (skillRank('wolf') - 1)) * (1 + skillSm('wolf').dmg) * uMult;
+        var cap = petCap() + (u === 2 ? 1 : 0);
+        if (wolves.length >= cap){
           wolves.sort(function(a, b){ return a.hp - b.hp; });
           wolves[0].hp = wolves[0].maxHp;
           toast('🐺 Pack is full — weakest wolf healed', 'energy');
-        } else spawnPet('wolf', { dmgMult: wolfRank });
+        } else spawnPet('wolf', { dmgMult: wolfRank, hpMult: uMult });
       } else {
-        var maxN = (sp.max || 1) + ((kind === 'hydra' && hasEnh(sid, 1)) ? 1 : 0);
+        var maxN = (sp.max || 1) + ((kind === 'hydra' && hasEnh(sid, 1)) ? 1 : 0) + (u === 2 ? 1 : 0);
         var have = G.pets.filter(function(pp){ return pp.kind === kind; });
-        var rkM = 1 + 0.2 * (skillRank(sid) - 1);
-        var hpM = ((kind === 'boarpet' && hasEnh(sid, 2)) || (kind === 'valkyrie' && hasEnh(sid, 2)) || (kind === 'decoy' && hasEnh(sid, 2))) ? 2 : 1;
-        if (have.length >= maxN){ have[0].hp = 0; } // replace the oldest
+        var rkM = (1 + 0.2 * (skillRank(sid) - 1)) * (1 + skillSm(sid).dmg) * uMult;
+        var hpM = (((kind === 'boarpet' && hasEnh(sid, 2)) || (kind === 'valkyrie' && hasEnh(sid, 2)) || (kind === 'decoy' && hasEnh(sid, 2))) ? 2 : 1) * uMult;
+        if (have.length >= maxN){ have[0].hp = 0; }
         spawnPet(kind, { dmgMult: rkM, hpMult: hpM });
       }
       break;
     }
     case 'zone': {
       var zr = sp.radius * area * (hasEnh(sid, 1) ? 1.3 : 1);
-      var zdps = sp.dps * mult * (hasEnh(sid, 2) && sid !== 'quake' ? 1.4 : 1);
+      var zdps = sp.dps * mult * (hasEnh(sid, 2) && sid !== 'quake' ? 1.4 : 1) * (u === 2 ? 1.5 : 1);
       if (sid === 'consecrate' && G.stats.mods['pw.holyfire']) zdps *= 1.6;
       var at = sp.at === 'self' ? { x: p.x, y: p.y } : (function(){ var c = densestCluster(520, zr); return c ? { x: c.x, y: c.y } : { x: p.x + fd.x * 200, y: p.y + fd.y * 200 }; })();
-      G.zones.push({ x: at.x, y: at.y, r: zr, dps: zdps, t: 0, life: sp.dur, kind: sid === 'blizzard' || sid === 'vines' ? 'ice' : (sid === 'consecrate' ? 'holy' : 'burn'), slow: sp.slow || ((sid === 'quake' && hasEnh(sid, 2)) ? 1 : 0) });
+      G.zones.push({ x: at.x, y: at.y, r: zr, dps: zdps, t: 0, life: sp.dur * (u === 1 ? 1.6 : 1), kind: sid === 'blizzard' || sid === 'vines' ? 'ice' : (sid === 'consecrate' ? 'holy' : 'burn'), slow: sp.slow || ((sid === 'quake' && hasEnh(sid, 2)) || u === 3 ? 1 : 0) });
       break;
     }
     case 'aura': {
       var ar = sp.radius * area * ((hasEnh(sid, 1) && (sid === 'storm' || sid === 'retribution' || sid === 'bladestorm')) || (hasEnh(sid, 2) && (sid === 'ravens' || sid === 'locusts')) ? 1.3 : 1);
-      var aslow = (hasEnh(sid, 1) && (sid === 'ravens' || sid === 'locusts')) || (hasEnh(sid, 2) && (sid === 'storm' || sid === 'retribution' || sid === 'bladestorm')) ? true : false;
-      G.auras.push({ sid: sid, t: sp.dur, tick: 0, radius: ar, dps: sp.dps * mult, visual: sp.visual, slow: aslow });
+      var aslow = (hasEnh(sid, 1) && (sid === 'ravens' || sid === 'locusts')) || (hasEnh(sid, 2) && (sid === 'storm' || sid === 'retribution' || sid === 'bladestorm')) || u === 3;
+      G.auras.push({ sid: sid, t: sp.dur * (u === 1 ? 1.6 : 1), tick: 0, radius: ar, dps: sp.dps * mult * (u === 2 ? 1.5 : 1), visual: sp.visual, slow: aslow });
       break;
     }
     case 'shield': {
-      var absorb = sp.absorb * (hasEnh(sid, 2) ? 1.5 : 1) * G.stats.shieldMult * (1 + 0.15 * (skillRank(sid) - 1));
+      var absorb = sp.absorb * (hasEnh(sid, 2) ? 1.5 : 1) * (u === 1 ? 1.8 : 1) * G.stats.shieldMult * (1 + 0.15 * (skillRank(sid) - 1));
       p.shield = Math.max(p.shield, absorb);
       p.shieldT = sp.dur;
-      p.thorns = hasEnh(sid, 1) ? 12 * G.stats.dmg : 0;
+      p.thorns = ((hasEnh(sid, 1) ? 12 : 0) + (u === 2 ? 25 : 0)) * G.stats.dmg;
+      if (u === 3){
+        ringFx(p.x, p.y, 170, '#4FC3F7');
+        enemiesInRadius(p.x, p.y, 170).forEach(function(e){ dealDamage(e, 30 * G.stats.dmg, { color: '#4FC3F7', knock: { x: p.x, y: p.y, f: 240 } }); });
+      }
       ringFx(p.x, p.y, 60, '#4FC3F7');
       break;
     }
     case 'heal': {
-      var pct = sp.pct * (hasEnh(sid, 2) ? 1.4 : 1) * (1 + 0.1 * (skillRank(sid) - 1));
+      var pct = sp.pct * (hasEnh(sid, 2) ? 1.4 : 1) * (u === 1 ? 1.6 : 1) * (1 + 0.1 * (skillRank(sid) - 1));
       healPlayer(p.maxHp * pct);
       addText(p.x, p.y - 24, '+' + Math.round(p.maxHp * pct), '#81C784', true);
-      if (sp.petPct) G.pets.forEach(function(pp){ pp.hp = clamp(pp.hp + pp.maxHp * sp.petPct, 0, pp.maxHp); });
+      if (sp.petPct) G.pets.forEach(function(pp){ pp.hp = clamp(pp.hp + pp.maxHp * (u === 3 ? 1 : sp.petPct), 0, pp.maxHp); });
       if (hasEnh(sid, 1)){ p.shield = Math.max(p.shield, 30 * G.stats.shieldMult); p.shieldT = 4; }
+      if (u === 2) G.abuffs.push({ sid: sid, t: 5, s: { regenB: 4 } });
+      if (u === 3) G.abuffs.push({ sid: sid, t: 6, s: { petDmg: 0.2 } });
       G.fx.push({ kind: 'ring', x: p.x, y: p.y, r: 70, t: 0, life: 0.4, color: '#A5D6A7' });
       break;
     }
     case 'orbit': {
-      var ocount = sp.count + (hasEnh(sid, 1) ? 2 : 0);
+      var ocount = sp.count + (hasEnh(sid, 1) ? 2 : 0) + (u === 1 ? 2 : 0);
       var oradius = sp.radius * area * (hasEnh(sid, 2) ? 1.3 : 1);
-      G.orbits.push({ sid: sid, t: sp.dur, dmg: sp.dmg * mult, count: ocount, radius: oradius, ang: 0, hitCd: {} });
+      G.orbits.push({ sid: sid, t: sp.dur, dmg: sp.dmg * mult * (u === 2 ? 1.6 : 1), count: ocount, radius: oradius, ang: 0, hitCd: {}, pulse: u === 3 });
       break;
     }
   }
@@ -2536,6 +2720,24 @@ function explode(x, y, radius, dmg, opts){
 function updateProjectiles(dt){
   for (var i = G.projs.length - 1; i >= 0; i--){
     var pr = G.projs[i];
+    if (pr.homing){
+      var tb = null, tbd = 260 * 260;
+      for (var q2 = 0; q2 < G.enemies.length; q2++){
+        if (pr.hitSet && pr.hitSet[q2]) continue;
+        var te = G.enemies[q2];
+        var td = dist2(pr.x, pr.y, te.x, te.y);
+        if (td < tbd){ tbd = td; tb = te; }
+      }
+      if (tb){
+        var spd0 = Math.hypot(pr.vx, pr.vy) || 1;
+        var ddx = tb.x - pr.x, ddy = tb.y - pr.y;
+        var dm0 = Math.hypot(ddx, ddy) || 1;
+        pr.vx += (ddx / dm0 * spd0 - pr.vx) * 6 * dt;
+        pr.vy += (ddy / dm0 * spd0 - pr.vy) * 6 * dt;
+        var vn0 = Math.hypot(pr.vx, pr.vy) || 1;
+        pr.vx = pr.vx / vn0 * spd0; pr.vy = pr.vy / vn0 * spd0;
+      }
+    }
     pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.life -= dt;
     var dead = pr.life <= 0 || pr.x < 10 || pr.y < 10 || pr.x > WORLD.w - 10 || pr.y > WORLD.h - 10;
     for (var j = 0; j < G.enemies.length && !dead; j++){
@@ -2556,6 +2758,7 @@ function updateProjectiles(dt){
         break;
       }
       var cr = pr.pet ? { mult: 1, crit: false } : rollCrit();
+      if (pr.healOwner) healPlayer(1);
       dealDamage(e, pr.dmg * cr.mult, { crit: cr.crit || pr.emp, basic: pr.basic, pet: pr.pet, color: pr.kind === 'boar' ? '#BCAAA4' : '#B39DDB', knock: pr.kind === 'boar' ? { x: pr.x - pr.vx, y: pr.y - pr.vy, f: 190 } : null });
       if (pr.stunHit) e.stun = Math.max(e.stun, pr.stunHit);
       if (pr.slow) e.slowT = Math.max(e.slowT || 0, pr.slow);
@@ -2736,7 +2939,12 @@ function update(dt){
   if (p.shieldT > 0){ p.shieldT -= dt; if (p.shieldT <= 0){ p.shield = 0; p.thorns = 0; } }
   for (var k in G.cds) if (G.cds[k] > 0) G.cds[k] -= dt;
   for (var b = G.abuffs.length - 1; b >= 0; b--){ G.abuffs[b].t -= dt; if (G.abuffs[b].t <= 0) G.abuffs.splice(b, 1); }
-  if (G.stats.regen > 0) healPlayer(G.stats.regen * dt);
+  for (var dl = G.delays.length - 1; dl >= 0; dl--){
+    G.delays[dl].t -= dt;
+    if (G.delays[dl].t <= 0){ var dfn = G.delays[dl].run; G.delays.splice(dl, 1); try { dfn(); } catch (e) {} }
+  }
+  var rgn = G.stats.regen + buffStat('regenB');
+  if (rgn > 0) healPlayer(rgn * dt);
   // item-power timers
   if (G.stats.mods['pw.stormcall']){
     G.pwT.stormcall += dt;
@@ -2784,7 +2992,7 @@ function update(dt){
         if (dist2(p.x, p.y, ce.x, ce.y) < (p.r + ce.r + 14) * (p.r + ce.r + 14)){
           G.hitEnemies[ci] = true;
           var cr = rollCrit();
-          dealDamage(ce, dashDef.p.dmg * chMult * cr.mult, { crit: cr.crit, knock: { x: p.x, y: p.y, f: 260 } });
+          dealDamage(ce, dashDef.p.dmg * chMult * (p.dashDmgMult || 1) * cr.mult, { crit: cr.crit, knock: { x: p.x, y: p.y, f: 260 } });
           if (dashDef.p.stun) ce.stun = Math.max(ce.stun, dashDef.p.stun);
           if (G.stats.mods['pw.thunderhooves']){
             boltFx([{ x: ce.x, y: ce.y - 60 }, { x: ce.x, y: ce.y }], '#FFF176');
@@ -2807,6 +3015,9 @@ function update(dt){
         e.frozen = Math.max(e.frozen, 1);
       });
     }
+    if (p.dashT <= 0 && p.dashSid && ultN(p.dashSid) === 3){
+      explode(p.x, p.y, 140 * G.stats.area, 0.8 * (SKILLS[p.dashSid].p.dmg || 40) * skillDmgMult(p.dashSid) * buffDmg(), {});
+    }
   } else if (p.moving){
     var spd = CLASSES[G.cls].speed * G.stats.speed * (1 + buffStat('speed')) * (G.spin ? 0.82 : 1);
     p.x += mv.x * spd * dt; p.y += mv.y * spd * dt;
@@ -2821,27 +3032,28 @@ function update(dt){
     sn.tick -= dt;
     if (sn.tick <= 0){
       sn.tick = 0.16;
-      var wr = sn.radius * G.stats.area;
+      var wr = sn.radius;
       var wm = skillDmgMult(sn.sid) * buffDmg();
       var flame = G.stats.mods['pw.flamespin'];
       enemiesInRadius(p.x, p.y, wr).forEach(function(e){
         var cr = rollCrit();
         dealDamage(e, sn.dps * 0.16 * wm * cr.mult, { crit: cr.crit, color: flame ? '#FF7043' : '#FFCC80' });
         if (flame) applyBleed(e, sn.dps * 0.1 * wm, 2);
-        if (hasEnh(sn.sid, 1)){
+        if (sn.pull){
           var m = Math.hypot(e.x - p.x, e.y - p.y) || 1;
           e.x -= (e.x - p.x) / m * 90 * dt * 6; e.y -= (e.y - p.y) / m * 90 * dt * 6;
         }
       });
       if (flame) burst(p.x + rand(-wr, wr) * 0.7, p.y + rand(-wr, wr) * 0.7, 2, '#FF7043');
     }
-    if (hasEnh(sn.sid, 2)){
+    if (sn.blades){
       sn.bladeT -= dt;
       if (sn.bladeT <= 0){
         sn.bladeT = 0.4;
-        for (var bi = 0; bi < 4; bi++){
+        var bladeN = 4 + (sn.bladeMult > 1 ? 2 : 0);
+        for (var bi = 0; bi < bladeN; bi++){
           var baa = rand(0, Math.PI * 2);
-          G.projs.push({ kind: 'skillproj', sid: sn.sid, x: p.x, y: p.y, vx: Math.cos(baa) * 340, vy: Math.sin(baa) * 340, r: 7, dmg: 16 * skillDmgMult(sn.sid) * buffDmg(), life: 0.7, pierce: 2, hitSet: {} });
+          G.projs.push({ kind: 'skillproj', sid: sn.sid, x: p.x, y: p.y, vx: Math.cos(baa) * 340, vy: Math.sin(baa) * 340, r: 7, dmg: 16 * (sn.bladeMult || 1) * skillDmgMult(sn.sid) * buffDmg(), life: 0.7, pierce: 2, hitSet: {} });
         }
       }
     }
@@ -2863,9 +3075,10 @@ function update(dt){
   for (var ob = G.orbits.length - 1; ob >= 0; ob--){
     var O = G.orbits[ob];
     O.t -= dt; O.ang += dt * 3.2;
+    var oR = O.pulse ? O.radius * (1 + 0.35 * Math.sin(G.time * 2.2)) : O.radius;
     for (var h = 0; h < O.count; h++){
       var ha = O.ang + h * (Math.PI * 2 / O.count);
-      var hx = p.x + Math.cos(ha) * O.radius, hy = p.y + Math.sin(ha) * O.radius;
+      var hx = p.x + Math.cos(ha) * oR, hy = p.y + Math.sin(ha) * oR;
       for (var ei = 0; ei < G.enemies.length; ei++){
         var he = G.enemies[ei];
         var cdKey = ei;
@@ -3098,9 +3311,10 @@ function draw(){
   });
   // orbit hammers
   G.orbits.forEach(function(O){
+    var oR = O.pulse ? O.radius * (1 + 0.35 * Math.sin(G.time * 2.2)) : O.radius;
     for (var h = 0; h < O.count; h++){
       var ha = O.ang + h * (Math.PI * 2 / O.count);
-      var hx = p.x + Math.cos(ha) * O.radius, hy = p.y + Math.sin(ha) * O.radius;
+      var hx = p.x + Math.cos(ha) * oR, hy = p.y + Math.sin(ha) * oR;
       ctx.save();
       ctx.translate(hx, hy);
       ctx.rotate(ha);
@@ -3691,7 +3905,6 @@ function init(){
   $('treeBtn').addEventListener('click', toggleTree);
   $('treeCloseBtn').addEventListener('click', function(){ hide('treeOverlay'); });
   $('treeResetBtn').addEventListener('click', resetTree);
-  $('tiLearnBtn').addEventListener('click', learnSelected);
   $('armoryBtn').addEventListener('click', toggleArmory);
   $('menuArmoryBtn').addEventListener('click', toggleArmory);
   $('armoryCloseBtn').addEventListener('click', toggleArmory);
