@@ -535,6 +535,7 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
     <span class="spacer"></span>
     <button class="tree-btn" id="armoryBtn" type="button" title="Armory — permanent equipment &amp; loot boxes (B)">🎁 Armory</button>
     <button class="tree-btn" id="treeBtn" type="button" title="Skill tree (T)">🌳 Skill Tree <span class="pts" id="treePts">0</span></button>
+    <button class="icon-btn" id="saveBtn" type="button" title="Save your run (also auto-saves every 20s)">💾</button>
     <button class="icon-btn" id="muteBtn" type="button" title="Sound on/off">🔊</button>
     <button class="icon-btn" id="pauseBtn" type="button" title="Pause (P / Esc)">⏸</button>
   </div>
@@ -573,6 +574,10 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
         <div class="classes" id="classCards"></div>
         <div style="font-weight:800;font-size:var(--font-size-sm);margin-bottom:8px;">Choose your follower <span style="font-weight:600;color:var(--text-tertiary);">(fights beside you every run)</span></div>
         <div class="followers" id="followerPills"></div>
+        <div class="row" id="contRow" style="display:none;">
+          <button class="btn btn-primary" id="contBtn" type="button" style="flex:1;justify-content:center;font-size:0.95rem;padding:12px;">▶ Continue</button>
+          <button class="btn btn-outline" id="clearSaveBtn" type="button" title="Delete the saved run">🗑 Clear save</button>
+        </div>
         <div class="row">
           <button class="btn btn-outline" id="menuArmoryBtn" type="button" style="font-size:0.95rem;padding:12px 18px;">🎁 Armory &amp; Loot Boxes</button>
           <button class="btn btn-primary" id="startBtn" type="button" style="flex:1;justify-content:center;font-size:1rem;padding:12px;">🗡️ Descend into the dungeon</button>
@@ -2212,6 +2217,76 @@ function newGame(cls){
   spawnFollower();
 }
 
+/* ============================================================================
+ * SAVE / RESUME — the run snapshots to localStorage: manual 💾 button, an
+ * auto-save every 20s, and on tab close. Death ends the run and clears it.
+ * ========================================================================== */
+var SAVE_EVERY = 20;
+function saveKey(){ return 'slayers_save_' + studentKey; }
+function saveRun(auto){
+  if (!G || G.state !== 'play' || !map) return;
+  var p = G.player;
+  var snap = {
+    v: 1, at: Date.now(), cls: G.cls,
+    wave: G.wave, level: G.level, xp: G.xp, xpNext: G.xpNext, points: G.points,
+    alloc: G.alloc, slots: G.slots, ap: G.ap, apMax: G.apMax,
+    kills: G.kills, gold: G.gold, time: G.time,
+    answered: G.answered, correct: G.correct,
+    cheatUsed: G.cheatUsed, phoenixUsed: G.phoenixUsed, packSeq: G.packSeq,
+    player: { x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp, levelHp: p.levelHp },
+    stairs: G.stairs, map: Array.from(map), rooms: rooms,
+    enemies: G.enemies, pets: G.pets, cds: G.cds, abuffs: G.abuffs
+  };
+  try { localStorage.setItem(saveKey(), JSON.stringify(snap)); } catch(e){ if (!auto) toast('Could not save — storage full?', 'bad'); return; }
+  if (!auto) toast('💾 Run saved', 'good');
+}
+function loadSave(){ return _lsGet(saveKey(), null); }
+function clearSave(silent){
+  try { localStorage.removeItem(saveKey()); } catch(e){}
+  renderContinue();
+  if (!silent) toast('🗑 Saved run deleted', 'energy');
+}
+function renderContinue(){
+  var row = $('contRow'); if (!row) return;
+  var s = loadSave();
+  var ok = s && s.v === 1 && CLASSES[s.cls];
+  row.style.display = ok ? '' : 'none';
+  if (ok) $('contBtn').textContent = '▶ Continue — Depth ' + s.wave + ' · Lv ' + s.level + ' ' + CLASSES[s.cls].name;
+}
+function resumeRun(){
+  var s = loadSave();
+  if (!s || s.v !== 1 || !CLASSES[s.cls]){ renderContinue(); return; }
+  chosenClass = s.cls;
+  hide('menuOverlay'); hide('overOverlay');
+  newGame(s.cls);                       // resuming does NOT spend a game credit
+  heroSheets = buildHeroSprites(CLASSES[s.cls].sprite);
+  map = Uint8Array.from(s.map || []);
+  rooms = s.rooms || [];
+  G.wave = s.wave; G.level = s.level; G.xp = s.xp; G.xpNext = s.xpNext; G.points = s.points;
+  G.alloc = s.alloc || {}; G.slots = (s.slots && s.slots.length === 4) ? s.slots : G.slots;
+  G.ap = s.ap; G.apMax = s.apMax || 30;
+  G.kills = s.kills; G.gold = s.gold; G.time = s.time || 0;
+  G.answered = s.answered || 0; G.correct = s.correct || 0;
+  G.cheatUsed = !!s.cheatUsed; G.phoenixUsed = !!s.phoenixUsed; G.packSeq = s.packSeq || 999;
+  G.stairs = s.stairs || null;
+  G.enemies = s.enemies || []; G.pets = s.pets || [];
+  G.cds = s.cds || {}; G.abuffs = s.abuffs || [];
+  G.player.levelHp = (s.player && s.player.levelHp) || 0;
+  computeStats();
+  var p = G.player;
+  if (s.player){ p.x = s.player.x; p.y = s.player.y; p.hp = Math.min(s.player.hp, p.maxHp); }
+  G.moveTarget = null; G.atkTarget = null;
+  $('pBars').style.display = '';
+  $('skillBar').style.display = '';
+  $('skillSelBtn').style.display = '';
+  $('qTimer').style.display = '';
+  qState.active = false;
+  renderSkillBar();
+  updateHud(); updateBars();
+  toast('▶ Run restored — Depth ' + G.wave + ', welcome back!', 'good');
+}
+window.addEventListener('beforeunload', function(){ try { saveRun(true); } catch(e){} });
+
 /* ---------------- INPUT ---------------- */
 var keys = {};
 var joyVec = { x: 0, y: 0, on: false };
@@ -3342,6 +3417,8 @@ function update(dt){
   G.empowerT = Math.max(0, G.empowerT - dt);
   if (p.shieldT > 0){ p.shieldT -= dt; if (p.shieldT <= 0){ p.shield = 0; p.thorns = 0; } }
   if (G.swing){ G.swing.t -= dt; if (G.swing.t <= 0) G.swing = null; }
+  G.saveT = (G.saveT || 0) + dt;
+  if (G.saveT >= SAVE_EVERY){ G.saveT = 0; saveRun(true); }
   for (var k in G.cds) if (G.cds[k] > 0) G.cds[k] -= dt;
   for (var b = G.abuffs.length - 1; b >= 0; b--){ G.abuffs[b].t -= dt; if (G.abuffs[b].t <= 0) G.abuffs.splice(b, 1); }
   for (var dl = G.delays.length - 1; dl >= 0; dl--){
@@ -4509,7 +4586,7 @@ window.addEventListener('message', function(ev){
     if (d.playsLeft && typeof d.playsLeft.slayers === 'number') _gPlaysLeft = d.playsLeft.slayers;
     updateHud();
   } else if (d.type === 'SD_QUESTIONS'){
-    if (d.studentKey && d.studentKey !== studentKey){ studentKey = String(d.studentKey); loadAdaptiveState(); metaLoadLocal(); }
+    if (d.studentKey && d.studentKey !== studentKey){ studentKey = String(d.studentKey); loadAdaptiveState(); metaLoadLocal(); try { renderContinue(); } catch(e){} }
     if (d.playsLeft && typeof d.playsLeft.slayers === 'number') _gPlaysLeft = d.playsLeft.slayers;
     applyBankQuestions(d.questions);
     if (Array.isArray(d.seenIds)){
@@ -4693,6 +4770,7 @@ function renderMenuFollowers(){
 function startRun(){
   if (!_canPlayGame()){ _showPlayLimit(); return; }
   _noteGamePlayStart();
+  clearSave(true);                       // a new run replaces the old save
   hide('menuOverlay'); hide('overOverlay');
   newGame(chosenClass);
   heroSheets = buildHeroSprites(CLASSES[chosenClass].sprite);
@@ -4710,6 +4788,7 @@ function saveBest(v){ try { localStorage.setItem('slayers_best', JSON.stringify(
 function gameOver(){
   if (G.state === 'over') return;
   G.state = 'over';
+  clearSave(true);                       // the run is finished — no resurrecting
   sfx('death');
   $('overSub').textContent = 'The dungeon claimed you on Depth ' + G.wave + ' as a Level ' + G.level + ' ' + CLASSES[G.cls].name + '.';
   $('overWave').textContent = G.wave;
@@ -4778,7 +4857,13 @@ function init(){
   renderClassCards();
   wireFlag();
   $('startBtn').addEventListener('click', startRun);
-  $('againBtn').addEventListener('click', function(){ hide('overOverlay'); show('menuOverlay'); renderClassCards(); });
+  $('againBtn').addEventListener('click', function(){ hide('overOverlay'); show('menuOverlay'); renderClassCards(); renderContinue(); });
+  $('saveBtn').addEventListener('click', function(){ saveRun(false); });
+  $('contBtn').addEventListener('click', resumeRun);
+  $('clearSaveBtn').addEventListener('click', function(){
+    if (confirm('Delete your saved run (Depth ' + ((loadSave() || {}).wave || '?') + ')? Your permanent Armory gear is NOT affected.')) clearSave(false);
+  });
+  renderContinue();
   $('resumeBtn').addEventListener('click', function(){ hide('pauseOverlay'); });
   $('quitBtn').addEventListener('click', function(){ hide('pauseOverlay'); gameOver(); });
   $('pauseBtn').addEventListener('click', togglePause);
