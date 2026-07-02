@@ -639,7 +639,7 @@ body.touch .sksel-btn { transform: none; left: auto; right: 16px; bottom: 90px; 
           <span style="font-size:26px;">📦</span>
           <div style="flex:1;min-width:170px;">
             <div style="font-weight:800;">Loot Box — <span style="color:var(--accent-dark);">150 🪙</span></div>
-            <div style="font-size:var(--font-size-xs);color:var(--text-secondary);line-height:1.45;">Drop rates: Common 40% · Magic 28% · Rare 17% · <b style="color:#C9A227;">Unique 8%</b> · <b style="color:#FF7043;">Legendary 5%</b> · <b style="color:#D500F9;">Mythic 2%</b></div>
+            <div style="font-size:var(--font-size-xs);color:var(--text-secondary);line-height:1.45;">Drop rates: Common 41% · Magic 28% · Rare 19% · <b style="color:#FF7043;">Legendary 6%</b> · <b style="color:#C9A227;">Unique 4%</b> · <b style="color:#D500F9;">Mythic 2%</b></div>
           </div>
           <span class="armory-wallet" id="armoryWallet">…</span>
           <button class="btn btn-primary" id="buyBoxBtn" type="button">📦 Open loot box</button>
@@ -1180,14 +1180,14 @@ var EQUIP_SLOTS = [
 ];
 function slotBase(slotId){ return slotId === 'ring1' || slotId === 'ring2' ? 'ring' : slotId; }
 var RARITIES = {
-  common:    { name: 'Common',    color: '#9E9E9E', rank: 1, affixes: 1, mult: 1.0,  salvage: 10,  rate: 40 },
+  common:    { name: 'Common',    color: '#9E9E9E', rank: 1, affixes: 1, mult: 1.0,  salvage: 10,  rate: 41 },
   magic:     { name: 'Magic',     color: '#42A5F5', rank: 2, affixes: 2, mult: 1.1,  salvage: 25,  rate: 28 },
-  rare:      { name: 'Rare',      color: '#FFB300', rank: 3, affixes: 3, mult: 1.25, salvage: 50,  rate: 17 },
-  unique:    { name: 'Unique',    color: '#C9A227', rank: 4, affixes: 3, mult: 1.5,  salvage: 120, rate: 8 },
-  legendary: { name: 'Legendary', color: '#FF7043', rank: 5, affixes: 4, mult: 1.7,  salvage: 150, rate: 5 },
+  rare:      { name: 'Rare',      color: '#FFB300', rank: 3, affixes: 3, mult: 1.25, salvage: 50,  rate: 19 },
+  legendary: { name: 'Legendary', color: '#FF7043', rank: 4, affixes: 4, mult: 1.7,  salvage: 150, rate: 6 },
+  unique:    { name: 'Unique',    color: '#C9A227', rank: 5, affixes: 4, mult: 1.9,  salvage: 200, rate: 4 },
   mythic:    { name: 'Mythic',    color: '#D500F9', rank: 6, affixes: 4, mult: 2.1,  salvage: 300, rate: 2 }
 };
-var RARITY_ORDER = ['common', 'magic', 'rare', 'unique', 'legendary', 'mythic'];
+var RARITY_ORDER = ['common', 'magic', 'rare', 'legendary', 'unique', 'mythic'];
 var BOX_COST = 150;
 
 /* Affix pool — [key, label fn, min, max] per roll (scaled by rarity mult). */
