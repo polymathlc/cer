@@ -4801,6 +4801,9 @@ option {
                 <option value="PSLE - MCQ">PSLE - MCQ</option>
                 <option value="PSLE - OEQ">PSLE - OEQ</option>
               </optgroup>
+              <optgroup label="── Manage ──">
+                <option value="__custom__">⚙ Add / remove categories…</option>
+              </optgroup>
             </select>
           </div>
           <div class="form-group">
@@ -6285,6 +6288,25 @@ option {
   </div>
 </div>
 
+<!-- ==================== MANAGE CATEGORIES ==================== -->
+<div class="confirm-overlay" id="manageCategoriesOverlay">
+  <div class="confirm-dialog" style="max-width:520px;text-align:left;max-height:85vh;overflow-y:auto;">
+    <h3 style="margin-bottom:4px;">Manage categories</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Add your own categories — e.g. &ldquo;PSLE 2025 - MCQ&rdquo; — for filing questions. They are saved permanently and appear in every category dropdown. Questions already saved keep their category.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+      <div style="flex:1;min-width:200px;">
+        <label class="form-label">New category</label>
+        <input id="newCategoryName" class="form-input" type="text" placeholder="e.g. PSLE 2025 - MCQ" onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomCategory();}">
+      </div>
+      <button class="btn btn-primary" onclick="addCustomCategory()">+ Add</button>
+    </div>
+    <div id="manageCategoriesList"></div>
+    <div class="btn-group" style="justify-content:flex-end;margin-top:14px;">
+      <button class="btn btn-outline" onclick="closeManageCategories()">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- Floating encounter-quest countdown — visible on every page for students -->
 <div id="questChip" onclick="navigateTo('community')" title="An encounter quest is live — tap to join"></div>
 
@@ -7041,6 +7063,7 @@ async function enterApp(user) {
     );
     configureSidebarForRole('admin');
     publishTopicsForStudents(); // keep the students' shared topic→level map current
+    await loadCustomCategories(); // before questions load — the MCQ rule respects custom categories
     await loadFromStorage();
     await loadStudentsFromStorage();
     loadMarkingSettings();
@@ -7096,7 +7119,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.61.0';
+const APP_VERSION = 'v1.62.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7151,6 +7174,9 @@ async function loadAdminQuestions() {
         removedTopics = Array.isArray(t && t.removed) ? t.removed : [];
       }
     } catch (e) { console.warn('shared topics load', e); }
+    // Admin's custom categories, before questions normalize (the MCQ rule
+    // respects custom categories) — also fills the student-side filters.
+    await loadCustomCategories();
     // Load all questions from admin's subcollection
     const adminQCol = collection(db, 'users', adminUid, 'questions');
     const qSnap = await getDocs(adminQCol);
@@ -7219,7 +7245,8 @@ function normalizeCategoryValue(category) {
 const MCQ_CATEGORY = 'Multiple Choice Question';
 const PSLE_CATEGORIES = new Set(['PSLE - MCQ', 'PSLE - OEQ']);
 function applyMcqCategory(q) {
-  if (q && qpHasMcq(q) && !(q.category && PSLE_CATEGORIES.has(q.category))) q.category = MCQ_CATEGORY;
+  // Deliberate PSLE or admin-defined custom categories are kept as chosen.
+  if (q && qpHasMcq(q) && !(q.category && (PSLE_CATEGORIES.has(q.category) || isCustomCategory(q.category)))) q.category = MCQ_CATEGORY;
   return q;
 }
 
@@ -7344,6 +7371,17 @@ document.getElementById('topicSelect').addEventListener('change', function() {
     openManageTopics();
   } else {
     _lastTopicValue = this.value;
+  }
+});
+
+let _lastCategoryValue = 'CER';
+document.getElementById('categorySelect').addEventListener('change', function() {
+  if (this.value === '__custom__') {
+    // Restore the previous real selection, then open the category manager.
+    this.value = (_lastCategoryValue && Array.from(this.options).some(o => o.value === _lastCategoryValue && o.value !== '__custom__')) ? _lastCategoryValue : 'CER';
+    openManageCategories();
+  } else {
+    _lastCategoryValue = this.value;
   }
 });
 
@@ -11414,7 +11452,19 @@ function editQuestion(id) {
   
   currentEditingQuestion = q.id;
   document.getElementById('questionTitle').value = q.title;
-  document.getElementById('categorySelect').value = normalizeCategoryValue(q.category);
+  // Set the category, tolerating one that's no longer in the list (e.g. a
+  // removed custom category) by inserting a one-off option — mirrors topics.
+  const catSel = document.getElementById('categorySelect');
+  const qCat = normalizeCategoryValue(q.category);
+  if (qCat && !Array.from(catSel.options).some(o => o.value === qCat)) {
+    const catOpt = document.createElement('option');
+    catOpt.value = qCat;
+    catOpt.textContent = qCat;
+    const catManage = catSel.querySelector('optgroup[label="── Manage ──"]');
+    if (catManage) catSel.insertBefore(catOpt, catManage); else catSel.appendChild(catOpt);
+  }
+  catSel.value = qCat;
+  _lastCategoryValue = qCat;
   const mgEl = document.getElementById('questionMarkingGuide');
   if (mgEl) mgEl.value = q.markingGuide || '';
   
@@ -12974,6 +13024,125 @@ function removeTopic(topic) {
     rebuildTopicSelect();
     renderManageTopicsList();
     showToast(`Removed “${topic}”`, 'info');
+  });
+}
+
+// ── Custom question categories — e.g. "PSLE 2025 - MCQ" ─────────────────────
+// Admin-defined categories offered alongside the built-in ones when authoring
+// and in every category filter. Stored permanently: Firestore (survives new
+// devices) with a localStorage copy for instant startup.
+const DEFAULT_CATEGORY_GROUPS = [
+  { label: 'Skills', items: ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating'] },
+  { label: 'Key Concepts', items: ['Key Concepts'] },
+  { label: 'Question Type', items: ['Multiple Choice Question'] },
+  { label: 'PSLE', items: ['PSLE - MCQ', 'PSLE - OEQ'] }
+];
+let customCategories = [];
+function _categoriesStoreKey() { return 'cerCategories:' + (currentUser ? currentUser.uid : 'anon'); }
+function allCategories() {
+  const defaults = DEFAULT_CATEGORY_GROUPS.reduce((a, g) => a.concat(g.items), []);
+  return defaults.concat(customCategories.filter(c => !defaults.includes(c)));
+}
+function isCustomCategory(c) { return customCategories.includes(c); }
+async function loadCustomCategories() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(_categoriesStoreKey()) || '[]');
+    customCategories = Array.isArray(raw) ? raw.filter(c => typeof c === 'string' && c.trim()) : [];
+  } catch (_) { customCategories = []; }
+  // Firestore copy is authoritative. Students read the ADMIN's list so custom
+  // categories show up in their worksheet filters too.
+  try {
+    const uid = (currentUser && currentUser.role === 'student') ? adminUid : (currentUser && currentUser.uid);
+    if (uid && db) {
+      const s = await getDoc(doc(db, 'users', uid, 'settings', 'categories'));
+      if (s.exists() && Array.isArray(s.data().custom)) {
+        customCategories = s.data().custom.filter(c => typeof c === 'string' && c.trim());
+      }
+    }
+  } catch (e) { console.warn('categories load', e); }
+  rebuildCategorySelects();
+}
+function saveCustomCategories() {
+  try { localStorage.setItem(_categoriesStoreKey(), JSON.stringify(customCategories)); } catch (_) {}
+  if (currentUser && currentUser.role === 'admin' && db) {
+    setDoc(doc(db, 'users', currentUser.uid, 'settings', 'categories'), { custom: customCategories })
+      .catch(e => console.warn('categories save', e));
+  }
+}
+// Rebuild every select that offers categories: the authoring dropdown (which
+// also carries the Manage entry) and the bank / worksheet / quest-picker
+// filters (which keep their "All …" placeholder). Selection is preserved.
+function rebuildCategorySelects() {
+  let groupsHtml = '';
+  DEFAULT_CATEGORY_GROUPS.forEach(g => {
+    groupsHtml += `<optgroup label="── ${g.label} ──">`;
+    g.items.forEach(c => { groupsHtml += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`; });
+    groupsHtml += '</optgroup>';
+  });
+  if (customCategories.length) {
+    groupsHtml += '<optgroup label="── Custom ──">';
+    customCategories.forEach(c => { groupsHtml += `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`; });
+    groupsHtml += '</optgroup>';
+  }
+  const authoring = document.getElementById('categorySelect');
+  if (authoring) {
+    const cur = (authoring.value && authoring.value !== '__custom__') ? authoring.value : 'CER';
+    authoring.innerHTML = groupsHtml + '<optgroup label="── Manage ──"><option value="__custom__">⚙ Add / remove categories…</option></optgroup>';
+    authoring.value = allCategories().includes(cur) ? cur : 'CER';
+  }
+  ['bankFilterCategory', 'wsFilterCategory', 'cqFilterCategory'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    const placeholder = (sel.options[0] && sel.options[0].value === '') ? sel.options[0].textContent : 'All Categories';
+    sel.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>` + groupsHtml;
+    sel.value = (cur && allCategories().includes(cur)) ? cur : '';
+  });
+}
+function openManageCategories() {
+  renderManageCategoriesList();
+  const nm = document.getElementById('newCategoryName'); if (nm) nm.value = '';
+  const ov = document.getElementById('manageCategoriesOverlay'); if (ov) ov.classList.add('active');
+}
+function closeManageCategories() {
+  const ov = document.getElementById('manageCategoriesOverlay'); if (ov) ov.classList.remove('active');
+}
+function renderManageCategoriesList() {
+  const wrap = document.getElementById('manageCategoriesList');
+  if (!wrap) return;
+  wrap.innerHTML = customCategories.map(c => {
+    const safe = escapeHtml(c).replace(/'/g, "\\'");
+    return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:5px;">
+      <span style="flex:1;font-size:0.88rem;">${escapeHtml(c)} <span style="font-size:0.7rem;color:var(--primary);">(custom)</span></span>
+      <button class="btn btn-outline" style="padding:2px 9px;font-size:0.78rem;color:var(--accent-red);border-color:#f0b9b9;" onclick="removeCustomCategory('${safe}')">✕ Remove</button>
+    </div>`;
+  }).join('') || `<div style="font-size:0.8rem;color:var(--text-muted);padding:4px 0;">No custom categories yet — add one above, e.g. &ldquo;PSLE 2025 - MCQ&rdquo;.</div>`;
+}
+function addCustomCategory() {
+  const nameEl = document.getElementById('newCategoryName');
+  const name = (nameEl ? nameEl.value : '').trim();
+  if (!name) { showToast('Type a category name first', 'error'); return; }
+  if (name === '__custom__') return;
+  if (allCategories().includes(name)) { showToast('That category already exists', 'info'); return; }
+  customCategories.push(name);
+  customCategories.sort((a, b) => a.localeCompare(b));
+  saveCustomCategories();
+  rebuildCategorySelects();
+  renderManageCategoriesList();
+  // Select it right away — the admin is usually mid-authoring when adding one.
+  const sel = document.getElementById('categorySelect');
+  if (sel) { sel.value = name; _lastCategoryValue = name; }
+  if (nameEl) nameEl.value = '';
+  showToast(`Added “${name}” ✓ — selected for this question`, 'success');
+}
+function removeCustomCategory(name) {
+  if (!isCustomCategory(name)) return;
+  showConfirm('Remove category', `Remove “${name}” from the category list? Questions already saved with it keep it — this only removes it from the dropdowns.`, () => {
+    customCategories = customCategories.filter(c => c !== name);
+    saveCustomCategories();
+    rebuildCategorySelects();
+    renderManageCategoriesList();
+    showToast(`Removed “${name}”`, 'info');
   });
 }
 
@@ -24160,6 +24329,10 @@ window.openManageTopics = openManageTopics;
 window.closeManageTopics = closeManageTopics;
 window.addCustomTopic = addCustomTopic;
 window.removeTopic = removeTopic;
+window.openManageCategories = openManageCategories;
+window.closeManageCategories = closeManageCategories;
+window.addCustomCategory = addCustomCategory;
+window.removeCustomCategory = removeCustomCategory;
 window.handleImgError = handleImgError;
 window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
