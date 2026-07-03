@@ -7091,7 +7091,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.60.0';
+const APP_VERSION = 'v1.60.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -22875,7 +22875,7 @@ window.addEventListener('message', function (ev) {
   } else if (d.type === 'LEGENDS_GOLD_DELTA') {
     _legendsGoldDelta(d, ev.source);
   } else if (d.type === 'LEGENDS_SAVE') {
-    _legendsSaveMeta(d);
+    _legendsSaveMeta(d, ev.source);
   }
 });
 
@@ -22899,16 +22899,33 @@ function _legendsGoldDelta(d, source) {
   rpgSave();
   reply(true);
 }
-function _legendsSaveMeta(d) {
+function _legendsSaveMeta(d, source) {
   if (!rpgState || !d || !d.meta || typeof d.meta !== 'object') return;
   const m = d.meta;
+  const cur = (rpgState.legends && typeof rpgState.legends === 'object') ? rpgState.legends : {};
+  const curInv = Array.isArray(cur.inv) ? cur.inv.length : 0;
+  const newInv = Array.isArray(m.inv) ? m.inv.length : 0;
+  const curTs = cur.ts || 0, newTs = m.ts || 0;
+  // Refuse stale writes and suspicious wipes: a game frame that hasn't synced
+  // down yet (or a second open game with an old copy) must never erase the
+  // armory. Resync the sender with the good copy instead of saving.
+  if ((curTs && newTs && newTs < curTs) || (curInv >= 2 && newInv === 0)) {
+    try { source && source.postMessage({ type: 'LEGENDS_META', meta: cur, gold: rpgState.gold | 0 }, '*'); } catch (e) {}
+    return;
+  }
   rpgState.legends = {
     inv: Array.isArray(m.inv) ? m.inv.slice(0, 100) : [],
     eq: (m.eq && typeof m.eq === 'object') ? m.eq : {},
     loadout: (m.loadout && typeof m.loadout === 'object') ? m.loadout : {},
-    follower: typeof m.follower === 'string' ? m.follower : 'fdef'
+    follower: typeof m.follower === 'string' ? m.follower : 'fdef',
+    ts: newTs || Date.now()
   };
   rpgSave();
+  // keep BOTH game frames on the fresh copy so a stale frame can't clobber it
+  ['legendsFrame', 'slayersFrame'].forEach(id => {
+    const f = document.getElementById(id);
+    try { f && f.contentWindow && f.contentWindow !== source && f.contentWindow.postMessage({ type: 'LEGENDS_META', meta: rpgState.legends, gold: rpgState.gold | 0 }, '*'); } catch (e) {}
+  });
 }
 
 // Record a finished mini-game run's score so it can rank on the leaderboard.
