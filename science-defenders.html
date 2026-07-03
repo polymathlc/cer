@@ -2249,6 +2249,11 @@ function pickQuestion(){
   pool.forEach(function(q){
     var eloDist = Math.abs(questionElo(q) - target);
     q._pickScore = eloDist - (hot ? ((q.len || 0) / maxLen) * 300 : 0); // longer → preferred when hot
+    if(allDone){ // everything attempted: strongly prefer low-accuracy questions
+      var rec = student.seen[q.id];
+      var acc = (rec && rec.n) ? (rec.correct || 0) / rec.n : 0;
+      q._pickScore += acc * 600;
+    }
   });
   pool.sort(function(a,b){ return a._pickScore - b._pickScore; });
   // Pick among the best few so questions never come in a fixed sequence.
@@ -2899,6 +2904,16 @@ window.addEventListener('message', function(ev){
   // Merge in questions already answered on other devices so we don't repeat them.
   if(Array.isArray(d.seenIds)){
     d.seenIds.forEach(function(id){ if(id && !student.seen[id]) student.seen[id] = { n:1, correct:0, fromHistory:true }; });
+    saveStudent();
+  }
+  // Real cross-mode attempt stats (n/correct from practice, quests AND games) —
+  // once everything is seen these steer the pick toward the weakest questions.
+  if(d.seenStats && typeof d.seenStats === 'object'){
+    Object.keys(d.seenStats).forEach(function(id){
+      var s = d.seenStats[id]; if(!s || !id) return;
+      var rec = student.seen[id];
+      if(!rec || rec.fromHistory) student.seen[id] = { n: s.n || 1, correct: s.correct || 0, fromHistory: true };
+    });
     saveStudent();
   }
 });

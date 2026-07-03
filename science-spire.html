@@ -793,6 +793,7 @@ function answerQuestion(idx, btn){
   if (q.explainHtml || q.explain){
     var ex=$('qExplain'); ex.style.display=''; ex.innerHTML = (correct?'✅ ':'❌ ') + (q.explainHtml || escapeText(q.explain));
   }
+  noteQuestionAnswered(q, correct); // keep the unseen-first pick honest mid-run
   // record to parent (teacher log + leaderboard "questions done")
   try {
     if (embedded()) window.parent.postMessage({ type:'SD_RECORD', mode:'spire', questionId:q.id, questionTitle:(q.q||'').slice(0,140), correct:!!correct, topic:q.topic||'', ms: Math.max(0, Math.round(performance.now() - (qState.shownAt||performance.now()))) }, '*');
@@ -1131,7 +1132,24 @@ var QBANK = [
   { q:'Which part of the plant absorbs water from the soil?', options:['Leaf','Flower','Root','Stem'], answer:2, explain:'Roots absorb water and minerals from the soil.', topic:'Plants', id:'sp_f7' },
   { q:'What do we call animals that eat only plants?', options:['Carnivores','Herbivores','Omnivores','Decomposers'], answer:1, explain:'Herbivores eat only plants.', topic:'Food chains', id:'sp_f8' }
 ];
-function pickQuestion(){ if(!QBANK.length) return null; return QBANK[Math.floor(Math.random()*QBANK.length)]; }
+// Cross-mode attempt stats from the parent app ({id:{n,correct}}) — questions
+// the student has never attempted anywhere come first; once everything has
+// been tried, the lowest-accuracy ones come back first.
+var SEEN_STATS = {};
+function _qAcc(q){ var s = q && q.id != null ? SEEN_STATS[q.id] : null; return (s && s.n) ? (s.correct || 0) / s.n : 0; }
+function pickQuestion(){
+  if(!QBANK.length) return null;
+  var unseen = QBANK.filter(function(q){ return !(q && q.id != null && SEEN_STATS[q.id]); });
+  if(unseen.length) return unseen[Math.floor(Math.random()*unseen.length)];
+  var pool = QBANK.slice().sort(function(a,b){ return _qAcc(a) - _qAcc(b); });
+  var k = Math.min(3, pool.length); // small random window so it isn't a fixed sequence
+  return pool[Math.floor(Math.random()*k)];
+}
+function noteQuestionAnswered(q, correct){
+  if(!q || q.id == null) return;
+  var s = SEEN_STATS[q.id] || (SEEN_STATS[q.id] = { n:0, correct:0 });
+  s.n++; if(correct) s.correct++;
+}
 function applyBank(list){
   if(!Array.isArray(list)||!list.length) return;
   var cleaned=list.filter(function(q){ return q && Array.isArray(q.options)&&q.options.length>=2&&typeof q.answer==='number'&&q.answer>=0&&q.answer<q.options.length&&((q.q&&q.q.trim())||(q.html&&q.html.trim())); });
@@ -1157,6 +1175,9 @@ window.addEventListener('message', function(ev){
   if (d.type==='SD_QUESTIONS'){
     if (d.playsLeft && typeof d.playsLeft.spire==='number') _gPlaysLeft=d.playsLeft.spire;
     applyBank(d.questions);
+    if (d.seenStats && typeof d.seenStats==='object'){
+      Object.keys(d.seenStats).forEach(function(id){ var s=d.seenStats[id]; if(s && !SEEN_STATS[id]) SEEN_STATS[id]={ n:s.n||1, correct:s.correct||0 }; });
+    }
   } else if (d.type==='SD_PLAYS_LEFT'){
     if (d.playsLeft && typeof d.playsLeft.spire==='number') _gPlaysLeft=d.playsLeft.spire;
   } else if (d.type==='spireAssets'){

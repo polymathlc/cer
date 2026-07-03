@@ -5460,6 +5460,7 @@ option {
                 <tr>
                   <th>Student Name</th>
                   <th>Email</th>
+                  <th>Level</th>
                   <th>Last Login</th>
                   <th>Total Logins</th>
                   <th>Questions Done</th>
@@ -7039,6 +7040,7 @@ async function enterApp(user) {
       console.warn('Could not save admin config:', err)
     );
     configureSidebarForRole('admin');
+    publishTopicsForStudents(); // keep the students' shared topic→level map current
     await loadFromStorage();
     await loadStudentsFromStorage();
     loadMarkingSettings();
@@ -7058,6 +7060,9 @@ async function enterApp(user) {
     // Student: load admin's question bank
     configureSidebarForRole('student');
     await loadAdminQuestions();
+    // Assigned level cap + attempt history (drives level-capped, unattempted-first serving)
+    await loadStudentLevel();
+    loadAttemptStats().catch(e => console.warn('attempt stats prefetch', e));
     // Preload all images so they display instantly in practice
     await preloadAllQuestionImages();
     await loadSavedWorksheets();
@@ -7091,7 +7096,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.60.1';
+const APP_VERSION = 'v1.61.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7136,6 +7141,16 @@ async function loadAdminQuestions() {
     }
     adminUid = configSnap.data().uid;
     try { _startCreditResetListener(); } catch (e) {}
+    // Use the ADMIN's topic→level map (custom topics + removals) so custom
+    // topics get their real level on student devices instead of the P6 default.
+    try {
+      const topicsSnap = await getDoc(doc(db, 'users', adminUid, 'settings', 'topics'));
+      if (topicsSnap.exists()) {
+        const t = topicsSnap.data();
+        customTopics = (t && typeof t.custom === 'object' && t.custom) ? t.custom : {};
+        removedTopics = Array.isArray(t && t.removed) ? t.removed : [];
+      }
+    } catch (e) { console.warn('shared topics load', e); }
     // Load all questions from admin's subcollection
     const adminQCol = collection(db, 'users', adminUid, 'questions');
     const qSnap = await getDocs(adminQCol);
@@ -12869,6 +12884,16 @@ function loadCustomTopics() {
 }
 function saveCustomTopics() {
   try { localStorage.setItem(_topicsStoreKey(), JSON.stringify({ custom: customTopics, removed: removedTopics })); } catch (_) {}
+  publishTopicsForStudents();
+}
+// Admin only: mirror the topic→level map to Firestore so students resolve
+// custom topics to their REAL level (otherwise unknown topics default to P6
+// and would be hidden from every student below P6 by the level cap).
+function publishTopicsForStudents() {
+  if (!currentUser || currentUser.role !== 'admin' || !db) return;
+  setDoc(doc(db, 'users', currentUser.uid, 'settings', 'topics'),
+    { custom: customTopics, removed: removedTopics }, { merge: false })
+    .catch(e => console.warn('topics publish', e));
 }
 function currentTopicsByLevel() {
   const byLevel = { P3: [], P4: [], P5: [], P6: [] };
@@ -13694,6 +13719,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       timestamp: Timestamp.now(),
       mode
     }).catch(err => console.warn('Could not record attempt:', err));
+    noteAttemptLocally(q.id, score, total);
   }
   recordCerPerformance(q, score, total, mode, answerText);
   _openFinalized[containerSel] = true; // attempt recorded — per-part marking must not record it again
@@ -13791,6 +13817,7 @@ function _checkAllPartsMarked(containerSel) {
       timestamp: Timestamp.now(),
       mode: cfg.mode || 'practice-open'
     }).catch(err => console.warn('Could not record attempt:', err));
+    noteAttemptLocally(q.id, score, totalParts);
   }
   recordCerPerformance(q, score, totalParts, cfg.mode || 'practice-open', answerText);
   if (typeof cfg.onAllMarked === 'function') cfg.onAllMarked({ score, total: totalParts, mistakes });
@@ -14885,6 +14912,110 @@ function qpMarkServed(qid) {
   qpSaveSeen(a);
 }
 
+// ── Student level cap ─────────────────────────────────────────────────────────
+// Each student account can be assigned a P3–P6 level by the admin (Usage page).
+// Students are NEVER served questions whose topic sits above their level, in
+// any mode: quick practice, topical practice, quests and the mini-games.
+// Unassigned students default to P6 (no restriction) so nothing breaks until
+// the admin sets levels.
+function studentCapLevel() {
+  if (currentUser && currentUser.role === 'student' && /^P[3-6]$/.test(currentUser.level || '')) return currentUser.level;
+  return 'P6';
+}
+function studentCapNum() { return getLevelNumber(studentCapLevel()); }
+function qWithinStudentLevel(q) {
+  return getLevelNumber(getTopicLevel((q && q.topic) || '')) <= studentCapNum();
+}
+// Clamp a P-level string to the student's cap (admins pass through unchanged).
+function clampToStudentLevel(level) {
+  const n = Math.min(getLevelNumber(level), studentCapNum());
+  return 'P' + Math.max(3, n);
+}
+// Trim the student-facing level dropdowns so a student can't select a level
+// above their assigned one, and preselect their own level.
+function applyStudentLevelCaps() {
+  if (!currentUser || currentUser.role !== 'student') return;
+  const capNum = studentCapNum();
+  ['qpLevelSelect', 'tpLevelSelect'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    Array.from(sel.options).forEach(o => {
+      if (/^P[3-6]$/.test(o.value) && getLevelNumber(o.value) > capNum) o.remove();
+    });
+    sel.value = studentCapLevel();
+  });
+}
+// Load the signed-in student's assigned level. Primary source: their own
+// userProfiles doc (set by the admin). Fallback: the admin's shared
+// settings/studentLevels map — covers rule setups where students can't read
+// userProfiles. Both failing leaves the P6 default (no restriction).
+async function loadStudentLevel() {
+  if (!currentUser || currentUser.role !== 'student') return;
+  let lvl = '';
+  try {
+    const s = await getDoc(doc(db, 'userProfiles', currentUser.uid));
+    if (s.exists() && /^P[3-6]$/.test(s.data().level || '')) lvl = s.data().level;
+  } catch (e) { console.warn('own profile level read', e); }
+  if (!lvl && adminUid) {
+    try {
+      const s = await getDoc(doc(db, 'users', adminUid, 'settings', 'studentLevels'));
+      const map = s.exists() ? (s.data().levels || {}) : {};
+      if (/^P[3-6]$/.test(map[currentUser.uid] || '')) lvl = map[currentUser.uid];
+    } catch (e) { console.warn('shared level map read', e); }
+  }
+  currentUser.level = lvl || '';
+  applyStudentLevelCaps();
+}
+
+// ── Cross-mode attempt stats ──────────────────────────────────────────────────
+// One shared per-question record of everything this student has ever attempted
+// — practice, topical, quests AND the mini-games — read once from the
+// questionAttempts log and kept fresh in-session. Feeds the serving order
+// everywhere: questions never attempted first, then lowest best-percentage.
+let _qAttemptStats = null;   // { '<questionId>': { n, correct, best } }
+let _qAttemptStatsAt = 0;
+async function loadAttemptStats(force) {
+  if (!currentUser || !currentUser.uid || !db) { _qAttemptStats = _qAttemptStats || {}; return _qAttemptStats; }
+  if (_qAttemptStats && !force && (Date.now() - _qAttemptStatsAt) < 5 * 60 * 1000) return _qAttemptStats;
+  try {
+    const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', currentUser.uid)));
+    const stats = {};
+    snap.forEach(d => {
+      const a = d.data();
+      if (!a || a.questionId == null) return;
+      const id = String(a.questionId);
+      const frac = a.totalBlanks ? Math.max(0, Math.min(1, (Number(a.score) || 0) / a.totalBlanks)) : 0;
+      const r = stats[id] || (stats[id] = { n: 0, correct: 0, best: 0 });
+      r.n++; if (frac >= 1) r.correct++; if (frac > r.best) r.best = frac;
+    });
+    _qAttemptStats = stats;
+    _qAttemptStatsAt = Date.now();
+  } catch (e) { console.warn('attempt stats load', e); _qAttemptStats = _qAttemptStats || {}; }
+  return _qAttemptStats;
+}
+// Keep the in-memory stats current as the student answers, so a rebuilt queue
+// mid-session already treats just-answered questions as attempted.
+function noteAttemptLocally(qid, score, total) {
+  if (!_qAttemptStats) return;
+  const id = String(qid || ''); if (!id) return;
+  const frac = total ? Math.max(0, Math.min(1, (Number(score) || 0) / total)) : 0;
+  const r = _qAttemptStats[id] || (_qAttemptStats[id] = { n: 0, correct: 0, best: 0 });
+  r.n++; if (frac >= 1) r.correct++; if (frac > r.best) r.best = frac;
+}
+// Order a pool: unattempted first (shuffled), then attempted ascending by best
+// score so the weakest questions come back soonest. Ties shuffle.
+function orderByAttemptPriority(pool) {
+  const stats = _qAttemptStats || {};
+  const jitter = new Map();
+  pool.forEach(q => jitter.set(q, Math.random()));
+  const rec = q => stats[String(q.id)];
+  const unseenArr = pool.filter(q => !rec(q));
+  const seenArr = pool.filter(q => !!rec(q));
+  unseenArr.sort((a, b) => jitter.get(a) - jitter.get(b));
+  seenArr.sort((a, b) => (rec(a).best - rec(b).best) || (jitter.get(a) - jitter.get(b)));
+  return unseenArr.concat(seenArr);
+}
+
 // Reset the practice session and show the "ready" state. Reused whenever the
 // level, type or topic filter changes.
 function resetQpSession() {
@@ -14964,14 +15095,14 @@ async function qpAiRecommend() {
         `Accuracy by skill category (weakest first): ${catAcc.length ? catAcc.map(c => c.name + ' ' + c.acc + '%').join(', ') : 'none yet'}.\n` +
         `Accuracy by question type: ${typeAcc.length ? typeAcc.map(t => (t.name === 'open' ? 'open-ended' : 'MCQ') + ' ' + t.acc + '%').join(', ') : 'none yet'}.\n\n` +
         `Pick the ONE topic the student should practise next — prefer a weak topic (low accuracy) or an important untried one, keeping their weak skill categories in mind. ` +
-        `Choose a difficulty level P3–P6: easier when struggling, harder when doing well. ` +
+        `Choose a difficulty level P3–${studentCapLevel()} (never above ${studentCapLevel()}, the student's own level): easier when struggling, harder when doing well. ` +
         `Also choose a question "type": "mcq", "written" (open-ended) or "all" — target the student's weaker type when there is a clear gap, otherwise "all". ` +
         `Return ONLY JSON: {"topic":"<exact topic from the list>","level":"P3|P4|P5|P6","type":"mcq|written|all","reason":"one short sentence to the student starting with 'Let's'"}`;
       try {
         const raw = await askGemini(prompt, { maxOutputTokens: 220, temperature: 0.3, json: true });
         const parsed = _parseAIJson(raw);
         if (parsed && parsed.topic && counts[parsed.topic]) {
-          const lvl = /^P[3-6]$/.test(parsed.level) ? parsed.level : getTopicLevel(parsed.topic);
+          const lvl = clampToStudentLevel(/^P[3-6]$/.test(parsed.level) ? parsed.level : getTopicLevel(parsed.topic));
           const ty = /^(mcq|written|all)$/.test(parsed.type) ? parsed.type : 'all';
           pick = { topic: parsed.topic, level: lvl, type: ty, reason: parsed.reason || '' };
         }
@@ -14986,7 +15117,7 @@ async function qpAiRecommend() {
         n: accByTopic[t] ? accByTopic[t].n : 0
       })).sort((a, b) => a.acc - b.acc);
       const top = scored[0];
-      const lvl = getTopicLevel(top.topic);
+      const lvl = clampToStudentLevel(getTopicLevel(top.topic));
       // Ease off by one level if they have been scoring low on it.
       const easedNum = top.acc >= 0 && top.acc < 50 ? Math.max(3, getLevelNumber(lvl) - 1) : getLevelNumber(lvl);
       pick = {
@@ -15061,6 +15192,7 @@ function qpAvailableTopics(typeFilter) {
   const counts = {};
   questionBank.forEach(q => {
     if (!qpMatchesType(q, typeFilter)) return;
+    if (!qWithinStudentLevel(q)) return; // topics above the student's level never show
     const t = q.topic || 'General';
     counts[t] = (counts[t] || 0) + 1;
   });
@@ -15084,66 +15216,28 @@ function populateQpControls() {
 }
 
 function buildQpQueue(level) {
-  const levelNum = getLevelNumber(level);
+  // Hard cap: never serve a question above the selected level, and never above
+  // the student's assigned level regardless of what the dropdown says.
+  const levelNum = Math.min(getLevelNumber(level), studentCapNum());
   const { type, topic } = qpFilters();
-  // Collect practiceable questions matching the chosen type and topic
-  const withBlanks = questionBank.filter(q => {
+  const pool = questionBank.filter(q => {
     if (!qpMatchesType(q, type)) return false;
     if (topic && (q.topic || 'General') !== topic) return false;
-    return true;
+    return getLevelNumber(getTopicLevel(q.topic || '')) <= levelNum;
   });
 
-  // Group by level
-  const byLevel = {};
-  withBlanks.forEach(q => {
-    const qLevel = getTopicLevel(q.topic || '');
-    const qNum = getLevelNumber(qLevel);
-    if (!byLevel[qNum]) byLevel[qNum] = [];
-    byLevel[qNum].push(q);
-  });
-
-  // Shuffle each level group
-  const shuffle = arr => {
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  };
-
-  // Remember what this student has already been served. If they've now seen the
-  // whole filtered pool, start a fresh cycle (clear the memory) so the order
-  // varies — but keep the very last question out of the front so it can't repeat
-  // back-to-back across the session boundary.
-  const seen = new Set(qpLoadSeen());
-  const lastServed = qpLoadSeen().slice(-1)[0] || null;
-  const poolIds = withBlanks.map(q => String(q.id));
-  const allSeen = poolIds.length > 0 && poolIds.every(id => seen.has(id));
-  if (allSeen) seen.clear();
-  // Shuffle a bucket, then float questions the student hasn't seen recently to
-  // the front so fresh content comes first every session.
-  const prioritize = arr => {
-    const fresh = [], stale = [];
-    shuffle([...arr]).forEach(q => {
-      const id = String(q.id);
-      ((!seen.has(id) && !(allSeen && id === lastServed)) ? fresh : stale).push(q);
-    });
-    return fresh.concat(stale);
-  };
-
-  // Build queue: student's level first, then descending (level-1, level-2, ...)
-  const queue = [];
-  // First: questions at student's own level
-  if (byLevel[levelNum]) queue.push(...prioritize(byLevel[levelNum]));
-  // Then: each lower level in descending order
-  for (let l = levelNum - 1; l >= 3; l--) {
-    if (byLevel[l]) queue.push(...prioritize(byLevel[l]));
-  }
-  // Finally: any levels above the student (less likely, but include them)
-  for (let l = levelNum + 1; l <= 6; l++) {
-    if (byLevel[l]) queue.push(...prioritize(byLevel[l]));
-  }
-  return queue;
+  // Serving order: questions this student has NEVER attempted (in any mode, on
+  // any device) come first, then previously attempted ones with the lowest
+  // best score. Within the unattempted group, ones not served recently in
+  // quick practice float to the front so back-to-back sessions stay fresh.
+  const stats = _qAttemptStats || {};
+  const ordered = orderByAttemptPriority(pool);
+  const served = new Set(qpLoadSeen());
+  const unattempted = ordered.filter(q => !stats[String(q.id)]);
+  const attempted = ordered.filter(q => !!stats[String(q.id)]);
+  return unattempted.filter(q => !served.has(String(q.id)))
+    .concat(unattempted.filter(q => served.has(String(q.id))))
+    .concat(attempted);
 }
 
 // Student shortcut: jump straight into MCQ-only Quick Practice.
@@ -15157,6 +15251,7 @@ function startMcqPractice() {
 async function startQuickPractice() {
   _questRun = null;   // a normal practice run is not part of any encounter quest
   qpLevel = document.getElementById('qpLevelSelect').value;
+  await loadAttemptStats(); // unattempted-first ordering needs the attempt log
   qpQueue = buildQpQueue(qpLevel);
   qpIndex = -1;
   qpAnswered = 0;
@@ -15950,16 +16045,13 @@ async function tpStartPractice() {
 
   tpActiveTopics = Array.from(tpSelectedTopics);
 
-  // Gather questions per topic, each shuffled independently
+  // Gather questions per topic, each ordered unattempted-first then weakest-first
+  // (orderByAttemptPriority shuffles within those groups).
+  await loadAttemptStats();
   const questionsByTopic = {};
   tpActiveTopics.forEach(topic => {
-    const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && q.topic === topic);
-    // Shuffle
-    for (let i = markable.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [markable[i], markable[j]] = [markable[j], markable[i]];
-    }
-    questionsByTopic[topic] = markable;
+    const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && q.topic === topic && qWithinStudentLevel(q));
+    questionsByTopic[topic] = orderByAttemptPriority(markable);
   });
 
   // Interleave: round-robin across topics, skip exhausted topics
@@ -16186,6 +16278,7 @@ async function loadUsageDashboard() {
         uid: p.uid,
         email: p.email || '',
         name: p.displayName || p.email || 'Unknown',
+        level: /^P[3-6]$/.test(p.level || '') ? p.level : '',
         lastLogin: p.lastLogin ? (p.lastLogin.toDate ? p.lastLogin.toDate() : new Date(p.lastLogin)) : null,
         loginCount: 0,
         questionsAttempted: 0,
@@ -16263,14 +16356,19 @@ async function loadUsageDashboard() {
     // Render student table
     const tbody = document.getElementById('usageStudentBody');
     if (studentList.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No student data yet. Students will appear here after they log in.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No student data yet. Students will appear here after they log in.</td></tr>';
     } else {
       tbody.innerHTML = studentList.map(s => {
         const lastLoginStr = s.lastLogin ? formatDateTimeSGT(s.lastLogin) : 'Never';
         const avgScore = s.totalBlanks > 0 ? Math.round((s.totalScore / s.totalBlanks) * 100) + '%' : '--';
+        const levelOpts = ['', 'P3', 'P4', 'P5', 'P6'].map(lv =>
+          `<option value="${lv}"${(s.level || '') === lv ? ' selected' : ''}>${lv || '—'}</option>`).join('');
         return `<tr class="clickable" onclick="showStudentDetail('${escapeHtml(s.uid)}')" title="Click to see every question this student attempted, with times">
           <td style="font-weight:600;">${escapeHtml(s.name)}</td>
           <td style="color:var(--text-muted);font-size:0.82rem;">${escapeHtml(s.email)}</td>
+          <td style="text-align:center;" onclick="event.stopPropagation()">
+            <select onchange="setStudentLevel('${escapeHtml(s.uid)}', this.value)" title="Assigned level — the student is never served questions above this" style="padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:0.8rem;">${levelOpts}</select>
+          </td>
           <td style="font-size:0.82rem;">${lastLoginStr}</td>
           <td style="text-align:center;"><span style="background:var(--accent-blue-light);color:var(--accent-blue);padding:2px 10px;border-radius:10px;font-family:'Space Mono',monospace;font-size:0.75rem;font-weight:600;">${s.loginCount}</span></td>
           <td style="text-align:center;"><span style="background:var(--accent-orange-light);color:var(--accent-orange);padding:2px 10px;border-radius:10px;font-family:'Space Mono',monospace;font-size:0.75rem;font-weight:600;">${s.questionsAttempted}</span></td>
@@ -16314,6 +16412,25 @@ async function loadUsageDashboard() {
   } catch (err) {
     console.error('loadUsageDashboard failed:', err);
     showToast('Could not load usage data — check your connection', 'error');
+  }
+}
+
+// Admin: assign a student's level (P3–P6, or '' to clear). Written to the
+// student's profile AND mirrored into the admin's shared studentLevels map so
+// the student can read it regardless of how userProfiles is locked down.
+async function setStudentLevel(uid, level) {
+  if (!currentUser || currentUser.role !== 'admin' || !uid) return;
+  const lvl = /^P[3-6]$/.test(level || '') ? level : '';
+  try {
+    await setDoc(doc(db, 'userProfiles', uid), { level: lvl }, { merge: true });
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'studentLevels'),
+      { levels: { [uid]: lvl } }, { merge: true });
+    if (_usageStudentStats[uid]) _usageStudentStats[uid].level = lvl;
+    const who = (_usageStudentStats[uid] && _usageStudentStats[uid].name) || 'Student';
+    showToast(lvl ? `${who} set to ${lvl} — they'll only get ${lvl}-and-below questions` : `${who}'s level cleared (no restriction)`, 'success');
+  } catch (e) {
+    console.error('setStudentLevel failed', e);
+    showToast('Could not save the level — check your connection', 'error');
   }
 }
 
@@ -20836,21 +20953,14 @@ async function commStartAutoQuest(questId) {
     if (!q || q.id == null) return false;
     if (format === 'mcq' ? !qpHasMcq(q) : !qpHasWritten(q)) return false;
     if (topic && String(q.topic || '').toLowerCase() !== topic) return false;
-    return true;
+    return qWithinStudentLevel(q); // never quest a student above their level
   });
   if (!pool.length) { showToast('No ' + (format === 'mcq' ? 'MCQ' : 'open-ended') + ' questions available' + (quest.topic ? ' on ' + quest.topic : '') + ' yet.', 'error'); return; }
   showToast('Picking your questions…', 'info');
   // Best recorded fraction (0–1) per question from this student's attempt log.
+  const _stats = await loadAttemptStats();
   const bestByQ = {};
-  try {
-    const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', currentUser.uid)));
-    snap.forEach(dref => {
-      const a = dref.data(); if (!a || a.questionId == null) return;
-      const id = String(a.questionId);
-      const frac = a.totalBlanks ? (Number(a.score) || 0) / a.totalBlanks : 0;
-      bestByQ[id] = Math.max(bestByQ[id] == null ? -1 : bestByQ[id], frac);
-    });
-  } catch (e) { console.warn('auto quest history read', e); }
+  Object.keys(_stats).forEach(id => { bestByQ[id] = _stats[id].best; });
   const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
   const seen = id => bestByQ[id] !== undefined;
   const unseen = shuffle(pool.filter(q => !seen(String(q.id))));
@@ -22592,20 +22702,23 @@ function _sdSeedElo(q) {
 function buildDefenderQuestions() {
   return (questionBank || [])
     .filter(q => q && q.status !== 'pending' && q.status !== 'flagged')
+    .filter(qWithinStudentLevel) // games never serve questions above the student's level
     .map(_sdExtractMcq)
     .filter(Boolean);
 }
-// Question ids the current student has already answered in the Tower-Defense
-// game (read from the shared questionAttempts log) so the game never repeats
-// a question across devices. Best-effort: returns [] if the read is denied.
-async function _sdSeenQuestionIds() {
+// Per-question attempt stats for the mini-games, from the SHARED attempt log —
+// every mode counts (practice, quests and games), so a question answered
+// anywhere is no longer "unseen" in the games, and the games can fall back to
+// the student's weakest questions once everything has been attempted.
+// Best-effort: returns {} if the read is denied.
+async function _sdSeenStats() {
   try {
-    if (!currentUser || !currentUser.uid) return [];
-    const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', currentUser.uid)));
-    const ids = new Set();
-    snap.forEach(doc => { const a = doc.data(); if (a && (a.mode === 'defenders' || a.mode === 'raiders' || a.mode === 'legends' || a.mode === 'slayers') && a.questionId) ids.add(a.questionId); });
-    return Array.from(ids);
-  } catch (e) { console.warn('SD seen-ids read failed', e); return []; }
+    if (!currentUser || !currentUser.uid) return {};
+    const stats = await loadAttemptStats();
+    const out = {};
+    Object.keys(stats || {}).forEach(id => { out[id] = { n: stats[id].n, correct: stats[id].correct }; });
+    return out;
+  } catch (e) { console.warn('SD seen-stats read failed', e); return {}; }
 }
 // Record one mini-game MCQ response into the same teacher-visible log the
 // rest of the app uses (shows up in the Usage dashboard).
@@ -22649,6 +22762,7 @@ function _sdRecordAttempt(d) {
       timestamp: Timestamp.now(),
       mode: (d.mode === 'raiders' ? 'raiders' : d.mode === 'legends' ? 'legends' : d.mode === 'slayers' ? 'slayers' : 'defenders')
     }).catch(err => console.warn('SD record attempt failed', err));
+    noteAttemptLocally(d.questionId, d.correct ? 1 : 0, 1);
     // Count this game MCQ toward the monthly unique-questions total using the
     // fair anti-rush gate above (correct answers just need to beat the bot floor).
     const minMs = _fairMinAnswerMs(d.questionId, !!d.correct);
@@ -22832,11 +22946,12 @@ window.addEventListener('message', function (ev) {
     (async () => {
       let questions = [];
       try { questions = buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
-      const seenIds = await _sdSeenQuestionIds();
+      const seenStats = await _sdSeenStats();
       const payload = {
         type: 'SD_QUESTIONS',
         questions,
-        seenIds,
+        seenIds: Object.keys(seenStats),
+        seenStats,
         studentKey: (currentUser && currentUser.uid) || 'guest',
         studentName: (currentUser && currentUser.name) || '',
         playLimit: _dailyCreditAllowance(),
@@ -24137,6 +24252,7 @@ window.onLegendsObjDrop = onLegendsObjDrop;
 window.onLegendsObjPick = onLegendsObjPick;
 window.resetLegendsObj = resetLegendsObj;
 window.showStudentDetail = showStudentDetail;
+window.setStudentLevel = setStudentLevel;
 window.closeStudentDetail = closeStudentDetail;
 window.markPrizeSent = markPrizeSent;
 window.copyReminderEmails = copyReminderEmails;
