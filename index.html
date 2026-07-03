@@ -4685,6 +4685,10 @@ option {
         Messages
         <span class="badge" id="msgUnreadStudent" style="display:none;">0</span>
       </div>
+      <div class="nav-item student-only" data-page="familysettings" onclick="navigateTo('familysettings')" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </div>
       <!-- Science Quest game nav (shown once the hero loads, hidden via "Hide game") -->
       <div class="nav-section-label rpg-el" style="display:none;">Game</div>
       <div class="nav-item rpg-el" data-page="character" onclick="navigateTo('character')" style="display:none;">
@@ -5398,6 +5402,22 @@ option {
       </div>
       <div class="page-body" style="max-width:900px;">
         <div id="myReportContainer"></div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: FAMILY SETTINGS (Student Only) ===== -->
+    <div class="page" id="page-familysettings">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Settings</h2>
+          </div>
+          <div class="subtitle">Your students, their levels and your home address</div>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:640px;">
+        <div id="famSettingsContainer"></div>
       </div>
     </div>
 
@@ -6307,6 +6327,13 @@ option {
   </div>
 </div>
 
+<!-- ==================== STUDENT LOGIN — WHO'S PRACTISING ==================== -->
+<div class="confirm-overlay" id="famLoginOverlay">
+  <div class="confirm-dialog" style="max-width:460px;text-align:left;max-height:88vh;overflow-y:auto;">
+    <div id="famLoginBody"></div>
+  </div>
+</div>
+
 <!-- Floating encounter-quest countdown — visible on every page for students -->
 <div id="questChip" onclick="navigateTo('community')" title="An encounter quest is live — tap to join"></div>
 
@@ -7086,6 +7113,11 @@ async function enterApp(user) {
     // Assigned level cap + attempt history (drives level-capped, unattempted-first serving)
     await loadStudentLevel();
     loadAttemptStats().catch(e => console.warn('attempt stats prefetch', e));
+    // Family profile: apply the saved active student, then always ask who's
+    // practising (first login asks for name + level instead).
+    await famLoadProfile();
+    famApplyActiveStudent();
+    famShowLoginPopup();
     // Preload all images so they display instantly in practice
     await preloadAllQuestionImages();
     await loadSavedWorksheets();
@@ -7119,7 +7151,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.63.0';
+const APP_VERSION = 'v1.64.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7324,6 +7356,7 @@ function navigateTo(page) {
   if (page === 'community') renderCommunity();
   if (page === 'usage') loadUsageDashboard();
   if (page === 'myreport') loadMyReport();
+  if (page === 'familysettings') famRenderSettings();
   if (page === 'scheduled') loadScheduledQuestions();
   if (page === 'flagged') loadFlaggedQuestions();
   if (page === 'character') rpgRenderCharacterPage();
@@ -15113,18 +15146,24 @@ function clampToStudentLevel(level) {
   const n = Math.min(getLevelNumber(level), studentCapNum());
   return 'P' + Math.max(3, n);
 }
-// Trim the student-facing level dropdowns so a student can't select a level
-// above their assigned one, and preselect their own level.
+// Rebuild the student-facing level dropdowns up to the student's cap so they
+// can't select a level above their own, and preselect their level. Rebuilt
+// (not just trimmed) because the cap can RISE when a family account switches
+// to an older sibling.
 function applyStudentLevelCaps() {
   if (!currentUser || currentUser.role !== 'student') return;
   const capNum = studentCapNum();
   ['qpLevelSelect', 'tpLevelSelect'].forEach(id => {
     const sel = document.getElementById(id);
     if (!sel) return;
-    Array.from(sel.options).forEach(o => {
-      if (/^P[3-6]$/.test(o.value) && getLevelNumber(o.value) > capNum) o.remove();
-    });
-    sel.value = studentCapLevel();
+    const cur = sel.value;
+    sel.innerHTML = '';
+    for (let n = 3; n <= capNum; n++) {
+      const o = document.createElement('option');
+      o.value = 'P' + n; o.textContent = 'P' + n;
+      sel.appendChild(o);
+    }
+    sel.value = (/^P[3-6]$/.test(cur) && getLevelNumber(cur) <= capNum) ? cur : studentCapLevel();
   });
 }
 // Load the signed-in student's assigned level. Primary source: their own
@@ -15145,8 +15184,247 @@ async function loadStudentLevel() {
       if (/^P[3-6]$/.test(map[currentUser.uid] || '')) lvl = map[currentUser.uid];
     } catch (e) { console.warn('shared level map read', e); }
   }
+  currentUser.adminLevel = lvl || ''; // the teacher's assigned cap for this account
   currentUser.level = lvl || '';
   applyStudentLevelCaps();
+}
+
+// ── Family profile: the students on this login, their levels, home address ──
+// Every student login gets a popup: the first time it asks for each child's
+// name and level (parents tap "+ Add student" for more); afterwards it asks
+// who's practising today. Details are editable under ⚙ Settings, but at most
+// FAM_EDIT_LIMIT times per student — the teacher can always change them.
+const FAM_EDIT_LIMIT = 2;
+let familyProfile = { students: [], address: '', activeStudent: 0 };
+let _famAddFrom = 'login'; // where the "+ Add student" flow was opened from
+
+function famStudents() { return Array.isArray(familyProfile.students) ? familyProfile.students : []; }
+function famActive() { return famStudents()[familyProfile.activeStudent] || famStudents()[0] || null; }
+
+async function famLoadProfile() {
+  familyProfile = { students: [], address: '', activeStudent: 0 };
+  try {
+    const s = await getDoc(doc(db, 'userProfiles', currentUser.uid));
+    if (s.exists()) {
+      const d = s.data();
+      familyProfile.students = Array.isArray(d.students)
+        ? d.students.filter(x => x && typeof x.name === 'string' && x.name.trim()).map(x => ({
+            name: x.name.trim(),
+            level: /^P[3-6]$/.test(x.level || '') ? x.level : 'P6',
+            edits: Math.max(0, Number(x.edits) || 0)
+          }))
+        : [];
+      familyProfile.address = typeof d.address === 'string' ? d.address : '';
+      familyProfile.activeStudent = Math.min(Math.max(0, Number(d.activeStudent) || 0), Math.max(0, familyProfile.students.length - 1));
+    }
+  } catch (e) { console.warn('family profile load', e); }
+}
+function famSaveProfile() {
+  if (!currentUser || !db) return Promise.resolve();
+  return setDoc(doc(db, 'userProfiles', currentUser.uid), {
+    students: famStudents().map(s => ({ name: s.name, level: s.level, edits: s.edits || 0 })),
+    address: familyProfile.address || '',
+    activeStudent: familyProfile.activeStudent || 0
+  }, { merge: true }).catch(e => console.warn('family profile save', e));
+}
+// The serving cap honours BOTH sides: the teacher's assigned level (Usage
+// dashboard) and the active student's own declared level — the LOWER of the
+// two wins, so neither a typo nor an eager student can raise it.
+function famApplyActiveStudent() {
+  const s = famActive();
+  const kid = (s && /^P[3-6]$/.test(s.level || '')) ? s.level : '';
+  const admin = /^P[3-6]$/.test(currentUser.adminLevel || '') ? currentUser.adminLevel : '';
+  currentUser.level = (kid && admin)
+    ? (getLevelNumber(kid) < getLevelNumber(admin) ? kid : admin)
+    : (kid || admin || '');
+  if (s && s.name) {
+    // Attempts, the leaderboard and the sidebar show the child who's
+    // practising, not the parent's Google account name.
+    currentUser.name = s.name;
+    const nameEl = document.querySelector('.sidebar-footer div div:first-child');
+    if (nameEl) nameEl.textContent = s.name;
+    const av = document.querySelector('.avatar');
+    if (av) av.textContent = s.name[0].toUpperCase();
+  }
+  applyStudentLevelCaps();
+}
+
+function famHintHtml() {
+  return `<p style="font-size:0.8rem;color:var(--text-muted);line-height:1.5;margin-top:16px;">💡 You can update student names, levels and your address anytime under <strong>⚙ Settings</strong> in the menu. Each student's details can only be edited ${FAM_EDIT_LIMIT} times, so type carefully — your teacher can always fix them for you.</p>`;
+}
+function famShowLoginPopup() {
+  if (!currentUser || currentUser.role !== 'student') return;
+  renderFamLoginBody();
+  const ov = document.getElementById('famLoginOverlay');
+  if (ov) ov.classList.add('active');
+}
+function renderFamLoginBody() {
+  const body = document.getElementById('famLoginBody');
+  if (!body) return;
+  const studs = famStudents();
+  if (!studs.length) {
+    body.innerHTML = `
+      <h3 style="margin-bottom:6px;">👋 Welcome! Who's practising?</h3>
+      <p style="font-size:0.88rem;color:var(--text-muted);line-height:1.5;margin-bottom:16px;">Enter the student's name and school level. More than one child using this account? Click <strong>+ Add student</strong>.</p>
+      <div id="famSetupRows"></div>
+      <button class="btn btn-outline" style="margin-top:4px;" onclick="famAddSetupRow()">+ Add student</button>
+      <div class="btn-group" style="justify-content:flex-end;margin-top:18px;">
+        <button class="btn btn-primary" onclick="famSaveSetup()">Save &amp; start</button>
+      </div>
+      ${famHintHtml()}`;
+    famAddSetupRow();
+  } else {
+    body.innerHTML = `
+      <h3 style="margin-bottom:6px;">👋 Who's practising today?</h3>
+      <p style="font-size:0.88rem;color:var(--text-muted);margin-bottom:16px;">Tap your name to start.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${studs.map((s, i) => `
+          <button class="btn btn-outline" style="display:flex;width:100%;justify-content:space-between;align-items:center;padding:12px 16px;font-size:0.95rem;" onclick="famPickStudent(${i})">
+            <span>${escapeHtml(s.name)}</span><span style="color:var(--text-muted);font-size:0.8rem;">${escapeHtml(s.level)}</span>
+          </button>`).join('')}
+      </div>
+      <button class="btn btn-outline" style="margin-top:14px;" onclick="famStartAdd('login')">+ Add student</button>
+      ${famHintHtml()}`;
+  }
+}
+function famAddSetupRow(name, level) {
+  const wrap = document.getElementById('famSetupRows');
+  if (!wrap) return;
+  const row = document.createElement('div');
+  row.className = 'fam-setup-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px;';
+  row.innerHTML = `
+    <input type="text" class="form-input fam-name" placeholder="Student name" value="${escapeHtml(name || '')}" style="flex:1;">
+    <select class="form-select fam-level" style="max-width:90px;">
+      ${['P3', 'P4', 'P5', 'P6'].map(lv => `<option value="${lv}"${lv === (level || 'P4') ? ' selected' : ''}>${lv}</option>`).join('')}
+    </select>
+    <button class="block-action-btn delete" title="Remove" onclick="this.parentElement.remove()">✕</button>`;
+  wrap.appendChild(row);
+}
+function _famCollectRows() {
+  return Array.from(document.querySelectorAll('#famSetupRows .fam-setup-row')).map(r => ({
+    name: (r.querySelector('.fam-name').value || '').trim(),
+    level: r.querySelector('.fam-level').value,
+    edits: 0
+  })).filter(s => s.name);
+}
+async function famSaveSetup() {
+  const studs = _famCollectRows();
+  if (!studs.length) { showToast("Enter the student's name first", 'error'); return; }
+  familyProfile.students = studs;
+  familyProfile.activeStudent = 0;
+  await famSaveProfile();
+  if (studs.length > 1) renderFamLoginBody(); // several children — ask who's practising now
+  else famPickStudent(0);
+}
+function famStartAdd(from) {
+  _famAddFrom = from || 'login';
+  const body = document.getElementById('famLoginBody');
+  if (!body) return;
+  body.innerHTML = `
+    <h3 style="margin-bottom:12px;">Add a student</h3>
+    <div id="famSetupRows"></div>
+    <div class="btn-group" style="justify-content:flex-end;margin-top:18px;">
+      <button class="btn btn-outline" onclick="famCancelAdd()">Back</button>
+      <button class="btn btn-primary" onclick="famSaveAdd()">Add &amp; save</button>
+    </div>
+    ${famHintHtml()}`;
+  famAddSetupRow();
+  const ov = document.getElementById('famLoginOverlay');
+  if (ov) ov.classList.add('active');
+}
+function famCancelAdd() {
+  if (_famAddFrom === 'settings') {
+    const ov = document.getElementById('famLoginOverlay');
+    if (ov) ov.classList.remove('active');
+  } else {
+    renderFamLoginBody();
+  }
+}
+async function famSaveAdd() {
+  const studs = _famCollectRows();
+  if (!studs.length) { showToast("Enter the student's name first", 'error'); return; }
+  familyProfile.students = famStudents().concat(studs);
+  await famSaveProfile();
+  showToast('Student added ✓', 'success');
+  if (_famAddFrom === 'settings') {
+    const ov = document.getElementById('famLoginOverlay');
+    if (ov) ov.classList.remove('active');
+    famRenderSettings();
+  } else {
+    renderFamLoginBody();
+  }
+}
+function famPickStudent(i) {
+  familyProfile.activeStudent = Math.max(0, Math.min(i, famStudents().length - 1));
+  famSaveProfile();
+  famApplyActiveStudent();
+  const ov = document.getElementById('famLoginOverlay');
+  if (ov) ov.classList.remove('active');
+  const s = famActive();
+  if (s) showToast(`Hi ${s.name}! Questions up to ${currentUser.level || 'P6'} today`, 'success');
+}
+
+// ⚙ Settings page (student side): address, student names/levels (2 edits per
+// student), add students, and switch who's practising.
+function famRenderSettings() {
+  const wrap = document.getElementById('famSettingsContainer');
+  if (!wrap) return;
+  const studs = famStudents();
+  const rows = studs.map((s, i) => {
+    const left = Math.max(0, FAM_EDIT_LIMIT - (s.edits || 0));
+    const locked = left <= 0;
+    return `
+    <div style="border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:var(--text-muted);margin-bottom:10px;cursor:pointer;">
+        <input type="radio" name="famActivePick" ${i === familyProfile.activeStudent ? 'checked' : ''} onchange="famPickStudent(${i});famRenderSettings();"> Practising now
+      </label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="famSetName${i}" class="form-input" value="${escapeHtml(s.name)}" style="flex:1;min-width:150px;" ${locked ? 'disabled' : ''}>
+        <select id="famSetLevel${i}" class="form-select" style="max-width:90px;" ${locked ? 'disabled' : ''}>
+          ${['P3', 'P4', 'P5', 'P6'].map(lv => `<option value="${lv}"${lv === s.level ? ' selected' : ''}>${lv}</option>`).join('')}
+        </select>
+        <button class="btn btn-primary" onclick="famSaveStudentEdit(${i})" ${locked ? 'disabled' : ''}>Save</button>
+      </div>
+      <div style="font-size:0.76rem;color:${locked ? 'var(--accent-red, #c62828)' : 'var(--text-muted)'};margin-top:8px;">
+        ${locked ? 'No edits left — ask your teacher to change these details.' : `${left} of ${FAM_EDIT_LIMIT} edits left for this student.`}
+      </div>
+    </div>`;
+  }).join('') || '<p style="color:var(--text-muted);">No students yet — add one below.</p>';
+  wrap.innerHTML = `
+    <h3 style="margin-bottom:12px;">Students</h3>
+    ${rows}
+    <button class="btn btn-outline" onclick="famStartAdd('settings')">+ Add student</button>
+    <h3 style="margin:28px 0 12px;">Home address</h3>
+    <textarea id="famAddressInput" class="form-input" rows="2" placeholder="Your address (used for prize deliveries)" style="resize:vertical;">${escapeHtml(familyProfile.address || '')}</textarea>
+    <div class="btn-group" style="margin-top:10px;">
+      <button class="btn btn-primary" onclick="famSaveAddress()">Save address</button>
+    </div>
+    <p style="font-size:0.78rem;color:var(--text-muted);line-height:1.5;margin-top:20px;">Each student's name and level can be edited ${FAM_EDIT_LIMIT} times in total. Your teacher can always update them for you.</p>`;
+}
+async function famSaveStudentEdit(i) {
+  const s = famStudents()[i];
+  if (!s) return;
+  const nameEl = document.getElementById('famSetName' + i);
+  const lvlEl = document.getElementById('famSetLevel' + i);
+  const name = (nameEl ? nameEl.value : '').trim();
+  const level = lvlEl ? lvlEl.value : s.level;
+  if (!name) { showToast('Name cannot be empty', 'error'); return; }
+  if (name === s.name && level === s.level) { showToast('Nothing changed', 'info'); return; }
+  if ((s.edits || 0) >= FAM_EDIT_LIMIT) { showToast('No edits left for this student — ask your teacher.', 'error'); return; }
+  s.name = name;
+  s.level = /^P[3-6]$/.test(level) ? level : s.level;
+  s.edits = (s.edits || 0) + 1;
+  await famSaveProfile();
+  if (i === familyProfile.activeStudent) famApplyActiveStudent();
+  famRenderSettings();
+  showToast(`Saved ✓ — ${Math.max(0, FAM_EDIT_LIMIT - s.edits)} edit${FAM_EDIT_LIMIT - s.edits === 1 ? '' : 's'} left for this student`, 'success');
+}
+async function famSaveAddress() {
+  const el = document.getElementById('famAddressInput');
+  familyProfile.address = el ? el.value.trim() : '';
+  await famSaveProfile();
+  showToast('Address saved ✓', 'success');
 }
 
 // ── Cross-mode attempt stats ──────────────────────────────────────────────────
@@ -16461,6 +16739,8 @@ async function loadUsageDashboard() {
         email: p.email || '',
         name: p.displayName || p.email || 'Unknown',
         level: /^P[3-6]$/.test(p.level || '') ? p.level : '',
+        famStudents: Array.isArray(p.students) ? p.students.filter(x => x && x.name).map(x => `${x.name} (${x.level || '?'})`).join(', ') : '',
+        famAddress: typeof p.address === 'string' ? p.address : '',
         lastLogin: p.lastLogin ? (p.lastLogin.toDate ? p.lastLogin.toDate() : new Date(p.lastLogin)) : null,
         loginCount: 0,
         questionsAttempted: 0,
@@ -16546,7 +16826,7 @@ async function loadUsageDashboard() {
         const levelOpts = ['', 'P3', 'P4', 'P5', 'P6'].map(lv =>
           `<option value="${lv}"${(s.level || '') === lv ? ' selected' : ''}>${lv || '—'}</option>`).join('');
         return `<tr class="clickable" onclick="showStudentDetail('${escapeHtml(s.uid)}')" title="Click to see every question this student attempted, with times">
-          <td style="font-weight:600;">${escapeHtml(s.name)}</td>
+          <td style="font-weight:600;">${escapeHtml(s.name)}${s.famStudents ? `<div style="font-weight:400;font-size:0.74rem;color:var(--text-muted);margin-top:2px;">👧 ${escapeHtml(s.famStudents)}</div>` : ''}${s.famAddress ? `<div style="font-weight:400;font-size:0.72rem;color:var(--text-muted);margin-top:1px;">📍 ${escapeHtml(s.famAddress)}</div>` : ''}</td>
           <td style="color:var(--text-muted);font-size:0.82rem;">${escapeHtml(s.email)}</td>
           <td style="text-align:center;" onclick="event.stopPropagation()">
             <select onchange="setStudentLevel('${escapeHtml(s.uid)}', this.value)" title="Assigned level — the student is never served questions above this" style="padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:0.8rem;">${levelOpts}</select>
@@ -24346,6 +24626,16 @@ window.openManageCategories = openManageCategories;
 window.closeManageCategories = closeManageCategories;
 window.addCustomCategory = addCustomCategory;
 window.removeCustomCategory = removeCustomCategory;
+window.famPickStudent = famPickStudent;
+window.famAddSetupRow = famAddSetupRow;
+window.famSaveSetup = famSaveSetup;
+window.famStartAdd = famStartAdd;
+window.famCancelAdd = famCancelAdd;
+window.famSaveAdd = famSaveAdd;
+window.famSaveStudentEdit = famSaveStudentEdit;
+window.famSaveAddress = famSaveAddress;
+window.famRenderSettings = famRenderSettings;
+window.renderFamLoginBody = renderFamLoginBody;
 window.handleImgError = handleImgError;
 window.renderPrintSelect = renderPrintSelect;
 window.togglePrintQuestion = togglePrintQuestion;
