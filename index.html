@@ -7119,7 +7119,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.62.0';
+const APP_VERSION = 'v1.63.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7225,6 +7225,19 @@ let _rapidJustAdded = new Set();
 let selectedBlanks = {}; // { blockId: { wordIndex: true } }
 let currentEditingQuestion = null;
 let _skipCreateReset = false;
+
+// MCQ options are numbered 1,2,3,4 everywhere (matching the mini-games). The
+// AI (or a student's handwritten paper) may still answer with a legacy letter
+// — normalise "B" → "2", "(3)" → "3", etc.
+function _normMcqChoice(raw) {
+  const s = String(raw || '').trim().toUpperCase();
+  if (!s) return '';
+  const digits = s.match(/\d+/);
+  if (digits) return digits[0];
+  const ch = s.charAt(0);
+  if (ch >= 'A' && ch <= 'H') return String(ch.charCodeAt(0) - 64); // A→1 … H→8
+  return ch;
+}
 
 function normalizeCategoryValue(category) {
   const legacyCER = new Set([
@@ -8959,7 +8972,7 @@ function renderImportedBlockEditorBody(block) {
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;" data-mic-wrap>
           <input type="radio" class="mcq-correct-radio" name="mcqedit_${id}" ${block.correctId === o.id ? 'checked' : ''}
                  title="Mark as correct answer" onchange="mcqSetCorrect('${id}','${o.id}')">
-          <span style="font-weight:600;width:18px;">${String.fromCharCode(65 + i)}.</span>
+          <span style="font-weight:600;width:18px;">${i + 1}.</span>
           <input class="form-input" type="text" style="flex:1;" placeholder="Option text"
                  value="${escapeHtml(o.text || '')}" oninput="mcqSetOptionText('${id}','${o.id}',this.value)">
           ${micButtonHtml('', 'Speak this option')}
@@ -9068,7 +9081,7 @@ function renderImportedBlockStudent(block, q) {
       (block.options || []).forEach((o, i) => {
         h += `<label style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
           <input type="radio" name="${name}" value="${o.id}" onchange="markMcqChoice(this)">
-          <span><b>${String.fromCharCode(65 + i)}.</b> ${o.text || ''}</span></label>`;
+          <span><b>${i + 1}.</b> ${o.text || ''}</span></label>`;
       });
       h += `</div>`;
       return h;
@@ -13318,7 +13331,7 @@ function loadRandomPracticeQuestion() {
 
 let currentPracticeQ = null;
 let _openItemsStore = {};        // containerSel -> [{ label, model }] for open-ended marking
-let _openMcqStore = {};          // containerSel -> [{ blockId, options:[{letter,text,id,correct}] }]
+let _openMcqStore = {};          // containerSel -> [{ blockId, options:[{letter,text,id,correct}] }] — "letter" is the option NUMBER ("1".."8")
 let _openQStore = {};            // containerSel -> the question being answered (context for per-part AI calls)
 let _openSurfaceCfg = {};        // containerSel -> { scoreElId, scorePrefix, mode, onAllMarked }
 let _openPartResults = {};       // containerSel -> { 'open:<oidx>'|'mcq:<blockId>': { verdict, pts, expected, student } }
@@ -13491,7 +13504,7 @@ function buildOpenBody(q, containerSel, markCfg) {
         html += `<div class="mcq-feedback" data-mcq-fb="${block.id}" style="margin:2px 0 12px;"></div>`;
         mcqItems.push({
           blockId: block.id,
-          options: (block.options || []).map((o, idx) => ({ letter: String.fromCharCode(65 + idx), text: stripHtml(o.text || ''), id: o.id, correct: block.correctId === o.id }))
+          options: (block.options || []).map((o, idx) => ({ letter: String(idx + 1), text: stripHtml(o.text || ''), id: o.id, correct: block.correctId === o.id }))
         });
         break;
       case 'text':
@@ -13789,10 +13802,10 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
         `${_markingPreamble(q && q.markingGuide)}\n` +
         `Question context: "${ctx}".\n` +
         (photo
-          ? `The student wrote their answers on paper and attached ONE photo of the whole page. Read the photo carefully and find the student's answer for EACH item below, matching by its label and order. For a multiple-choice item, work out which option letter the student chose (a circled option, a written letter, or a tick) from the photo when they have not selected one on screen. Ignore handwriting quality.\n`
+          ? `The student wrote their answers on paper and attached ONE photo of the whole page. Read the photo carefully and find the student's answer for EACH item below, matching by its label and order. For a multiple-choice item, work out which option number the student chose (a circled option, a written number or letter, or a tick) from the photo when they have not selected one on screen. Ignore handwriting quality.\n`
           : ``) +
         `For each OPEN item, compare the student's answer to the expected model answer by meaning (ignore wording, grammar and spelling — focus on the science); verdict "correct", "partial" or "incorrect". ` +
-        `For each MULTIPLE-CHOICE item, decide which option the student chose and mark "correct" only if it matches the correct option letter, otherwise "incorrect"; also include "chosen":"<the letter the student picked, or empty>". ` +
+        `For each MULTIPLE-CHOICE item, decide which option the student chose and mark "correct" only if it matches the correct option number, otherwise "incorrect"; also include "chosen":"<the option number the student picked, or empty>". ` +
         `Give ONE short feedback sentence (max 22 words) addressed to the student for each item. ` +
         `Provide the full correct MODEL ANSWER for the whole question as "modelAnswer" — the ideal answer a student should give (use the expected answers if provided, otherwise generate the correct answer yourself; for multiple choice state the correct option and what it says). ` +
         `Also write a clear overall EXPLANATION (2-4 sentences) addressed to "you" that is SPECIFIC to the answer the student actually gave: explain WHY their answer was marked correct, partial or incorrect — quote or refer to what they wrote, say what they got right, what was missing or wrong, and what a full-mark answer needs. Do NOT just restate the model answer or describe the question in the abstract. ` +
@@ -13843,7 +13856,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
     } else {
       const m = e.mcq;
       const correctOpt = m.options.find(o => o.correct);
-      const chosenLetter = (v && v.chosen) ? String(v.chosen).trim().toUpperCase().charAt(0) : e.studentLetter;
+      const chosenLetter = (v && v.chosen) ? _normMcqChoice(v.chosen) : e.studentLetter;
       e.chosenLetter = chosenLetter;
       if (verdict !== 'correct') mistakes.push({ expected: correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', student: chosenLetter });
       const wrap = document.querySelector(containerSel + ' .mcq-block[data-block="' + m.blockId + '"]');
@@ -14097,14 +14110,14 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
       `${_markingPreamble(q && q.markingGuide)}\n` +
       `Question context: "${ctx}".\n` +
       (photo
-        ? `The student wrote their answers on paper and attached ONE photo of the whole page. Find the student's answer for THIS part in the photo, matching by its label and order${kind === 'mcq' ? ' (a circled option, a written letter, or a tick)' : ''}. Ignore handwriting quality.\n`
+        ? `The student wrote their answers on paper and attached ONE photo of the whole page. Find the student's answer for THIS part in the photo, matching by its label and order${kind === 'mcq' ? ' (a circled option, a written number or letter, or a tick)' : ''}. Ignore handwriting quality.\n`
         : ``) +
       (kind === 'open'
         ? `Compare the student's answer to the expected model answer by meaning (ignore wording, grammar and spelling — focus on the science); verdict "correct", "partial" or "incorrect". `
-        : `Decide which option the student chose and mark "correct" only if it matches the correct option letter, otherwise "incorrect"; also include "chosen":"<the letter the student picked, or empty>". `) +
+        : `Decide which option the student chose and mark "correct" only if it matches the correct option number, otherwise "incorrect"; also include "chosen":"<the option number the student picked, or empty>". `) +
       `Give ONE short feedback sentence (max 22 words) addressed to the student. ` +
-      `Provide the full correct answer for THIS part as "modelAnswer"${kind === 'mcq' ? ' (state the correct option letter and what it says)' : ' (use the expected answer if provided, otherwise generate the correct answer yourself)'}. ` +
-      `Return ONLY JSON: {"verdict":"correct","feedback":"...","modelAnswer":"..."${kind === 'mcq' ? ',"chosen":"B"' : ''}}.\n${item}`;
+      `Provide the full correct answer for THIS part as "modelAnswer"${kind === 'mcq' ? ' (state the correct option number and what it says)' : ' (use the expected answer if provided, otherwise generate the correct answer yourself)'}. ` +
+      `Return ONLY JSON: {"verdict":"correct","feedback":"...","modelAnswer":"..."${kind === 'mcq' ? ',"chosen":"2"' : ''}}.\n${item}`;
     let raw;
     if (photo && photo.data) {
       raw = await askGeminiVision(prompt, [{ mimeType: photo.mimeType, data: photo.data }], { maxOutputTokens: 500, json: true });
@@ -14138,7 +14151,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     }
     _setPartResult(containerSel, 'open:' + pid, verdict, pts, model, student);
   } else {
-    const chosenLetter = parsed.chosen ? String(parsed.chosen).trim().toUpperCase().charAt(0) : studentLetter;
+    const chosenLetter = parsed.chosen ? _normMcqChoice(parsed.chosen) : studentLetter;
     const wrap = document.querySelector(containerSel + ' .mcq-block[data-block="' + pid + '"]');
     if (wrap) {
       wrap.querySelectorAll('label').forEach((lab, idx) => {
@@ -14176,7 +14189,7 @@ async function hintQuestionPart(containerSel, kind, pid, btn) {
     const mcq = (_openMcqStore[containerSel] || []).find(m => m.blockId === pid);
     if (!mcq) return;
     const correct = mcq.options.find(o => o.correct);
-    partDesc = `The part is a multiple-choice question with options: ${mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ')}. The correct option (do NOT reveal it or its letter): ${correct ? correct.letter : '?'}.`;
+    partDesc = `The part is a multiple-choice question with options: ${mcq.options.map(o => `${o.letter}) ${o.text}`).join(' | ')}. The correct option (do NOT reveal it or its number): ${correct ? correct.letter : '?'}.`;
   }
 
   const orig = btn ? btn.innerHTML : '';
@@ -14186,7 +14199,7 @@ async function hintQuestionPart(containerSel, kind, pid, btn) {
       `You are a science teacher. A student is stuck on ONE part of a question and asked for a hint.\n` +
       `Question context: "${ctx}".\n${partDesc}\n` +
       `Give ONE short hint (1-2 sentences, max 35 words) addressed to "you" that nudges the student toward the answer — point at the science concept to think about or where in the question to look. ` +
-      `Do NOT state the answer, the model answer's wording, or the correct option letter. Return ONLY the hint text — no preamble.`;
+      `Do NOT state the answer, the model answer's wording, or the correct option number. Return ONLY the hint text — no preamble.`;
     const raw = await askGemini(prompt, { maxOutputTokens: 200, temperature: 0.5 });
     const hint = (raw || '').trim();
     if (box) {
