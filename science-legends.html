@@ -1314,7 +1314,11 @@ var metaReady = false;
 var INV_CAP = 80;
 function metaLoadLocal(){
   var m = _lsGet('legends_meta_' + studentKey, null);
-  if (m && typeof m === 'object'){ META = Object.assign(META, m); }
+  // Once the cloud copy has synced down, only a strictly NEWER local copy may
+  // replace it — a stale device must never erase gear bought elsewhere.
+  if (m && typeof m === 'object' && (!metaReady || (m.ts || 0) > (META.ts || 0))){
+    META = Object.assign(META, m);
+  }
   if (!META.eq) META.eq = {};
   if (!META.loadout) META.loadout = {};
   if (!Array.isArray(META.inv)) META.inv = [];
@@ -1323,22 +1327,35 @@ function metaLoadLocal(){
 }
 var _metaSaveT = null;
 function metaSave(){
+  META.ts = Date.now();
   if (_metaSaveT) clearTimeout(_metaSaveT);
   _metaSaveT = setTimeout(function(){
     _metaSaveT = null;
     _lsSet('legends_meta_' + studentKey, META);
-    if (embedded()){
-      try { window.parent.postMessage({ type: 'LEGENDS_SAVE', meta: { inv: META.inv, eq: META.eq, loadout: META.loadout, follower: META.follower } }, '*'); } catch(e){}
+    // Never write to the cloud before the cloud copy has synced down — an
+    // unsynced frame pushing its empty boot state was wiping armories.
+    if (embedded() && metaReady){
+      try { window.parent.postMessage({ type: 'LEGENDS_SAVE', meta: { inv: META.inv, eq: META.eq, loadout: META.loadout, follower: META.follower, ts: META.ts } }, '*'); } catch(e){}
     }
   }, 600);
 }
 function metaApplyRemote(m){
-  if (!m || typeof m !== 'object') return;
-  if (Array.isArray(m.inv)) META.inv = m.inv;
+  m = (m && typeof m === 'object') ? m : {};
+  var remoteInv = Array.isArray(m.inv) ? m.inv : [];
+  var remoteNewer = (m.ts || 0) >= (META.ts || 0);
+  var wipeSuspect = remoteInv.length === 0 && META.inv.length > 0;
+  metaReady = true;
+  if (!remoteNewer || wipeSuspect){
+    // This device knows MORE than the cloud (e.g. the cloud copy was wiped by
+    // an unsynced frame) — keep ours and repair the cloud copy from it.
+    metaSave();
+    return;
+  }
+  META.inv = remoteInv;
   if (m.eq && typeof m.eq === 'object') META.eq = m.eq;
   if (m.loadout && typeof m.loadout === 'object') META.loadout = m.loadout;
   if (FOLLOWERS[m.follower]) META.follower = m.follower;
-  metaReady = true;
+  META.ts = m.ts || META.ts || 0;
 }
 function itemById(id){ for (var i = 0; i < META.inv.length; i++) if (META.inv[i].id === id) return META.inv[i]; return null; }
 function equippedItems(){
