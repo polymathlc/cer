@@ -6365,6 +6365,58 @@ option {
   </div>
 </div>
 
+<!-- ==================== PAST PAPER — EDIT A QUESTION ==================== -->
+<div class="confirm-overlay" id="ppQEditOverlay">
+  <div class="confirm-dialog" style="max-width:600px;text-align:left;max-height:90vh;overflow-y:auto;">
+    <h3 id="ppQEditTitle" style="margin-bottom:12px;">Edit question</h3>
+    <div class="pp-form-grid">
+      <div><label class="form-label">Year</label><input id="ppQeYear" class="form-input" type="text" placeholder="2024"></div>
+      <div><label class="form-label">Question no.</label><input id="ppQeN" class="form-input" type="number" min="1"></div>
+      <div><label class="form-label">Booklet</label><select id="ppQeBk" class="form-select"><option>A</option><option>B</option></select></div>
+      <div><label class="form-label">Marks</label><input id="ppQeMarks" class="form-input" type="number" min="1"></div>
+      <div class="full"><label class="form-label">Topic</label><select id="ppQeTopic" class="form-select"></select></div>
+      <div class="full"><label class="form-label">Skill tested</label><select id="ppQeType" class="form-select"></select></div>
+    </div>
+    <label class="form-label">Title</label>
+    <input id="ppQeTitle" class="form-input" type="text" placeholder="Short description of the question" style="margin-bottom:10px;">
+    <label class="form-label">What it tests / analysis</label>
+    <textarea id="ppQeDetail" class="form-input" rows="3" placeholder="How the question works and what to watch for" style="margin-bottom:10px;resize:vertical;"></textarea>
+    <label class="form-label">Suggested answer (optional)</label>
+    <textarea id="ppQeAns" class="form-input" rows="2" placeholder="Model answer / key" style="resize:vertical;"></textarea>
+    <div class="btn-group" style="justify-content:space-between;margin-top:16px;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-outline" id="ppQeDeleteBtn" onclick="ppDeleteQuestionFromEditor()" style="display:none;color:var(--accent-red,#d94f4f);">Delete</button>
+      <div style="display:flex;gap:8px;margin-left:auto;">
+        <button class="btn btn-outline" onclick="ppCloseQEdit()">Cancel</button>
+        <button class="btn btn-primary" onclick="ppSaveQuestionEditor()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PAST PAPER — EDIT A RECURRING CONCEPT ==================== -->
+<div class="confirm-overlay" id="ppCEditOverlay">
+  <div class="confirm-dialog" style="max-width:640px;text-align:left;max-height:90vh;display:flex;flex-direction:column;">
+    <h3 id="ppCEditTitle" style="margin-bottom:12px;">Edit concept</h3>
+    <label class="form-label">Concept name</label>
+    <input id="ppCeName" class="form-input" type="text" placeholder="e.g. Electromagnets — bells & games" style="margin-bottom:10px;">
+    <label class="form-label">Topic label</label>
+    <input id="ppCeTopic" class="form-input" type="text" placeholder="e.g. Electrical Systems" style="margin-bottom:10px;">
+    <label class="form-label">Note / what to expect</label>
+    <textarea id="ppCeNote" class="form-input" rows="3" placeholder="Why this pattern matters and what to master" style="margin-bottom:12px;resize:vertical;"></textarea>
+    <label class="form-label">Questions in this concept</label>
+    <div id="ppCeSelected" style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px;"></div>
+    <input id="ppCeSearch" class="form-input" type="text" placeholder="Filter questions to add…" oninput="ppRenderConceptPicker()" style="margin-bottom:8px;">
+    <div id="ppCePicker" style="flex:1;overflow-y:auto;min-height:120px;max-height:280px;border:1px solid var(--border);border-radius:10px;padding:10px;"></div>
+    <div class="btn-group" style="justify-content:space-between;margin-top:16px;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-outline" id="ppCeDeleteBtn" onclick="ppDeleteConceptFromEditor()" style="display:none;color:var(--accent-red,#d94f4f);">Delete</button>
+      <div style="display:flex;gap:8px;margin-left:auto;">
+        <button class="btn btn-outline" onclick="ppCloseCEdit()">Cancel</button>
+        <button class="btn btn-primary" onclick="ppSaveConceptEditor()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== STUDENT LOGIN — WHO'S PRACTISING ==================== -->
 <div class="confirm-overlay" id="famLoginOverlay">
   <div class="confirm-dialog" style="max-width:460px;text-align:left;max-height:88vh;overflow-y:auto;">
@@ -7189,7 +7241,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.67.0';
+const APP_VERSION = 'v1.68.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -24585,172 +24637,154 @@ window.onSpireCardDrop = onSpireCardDrop;
 window.onSpireCardPick = onSpireCardPick;
 window.resetSpireCardArt = resetSpireCardArt;
 // =====================================================================
-// PAST PAPER ANALYSIS  (2021–2023 PSLE Science, mapped to bank questions)
-// Admin authors question assignments; students practise assigned questions.
-// Mapping persists at users/{adminUid}/settings/paperMap  { map: {key:qid} }
+// PAST PAPER ANALYSIS  (2021–2023 PSLE Science, fully editable by admins)
+// Admins can add/remove questions per year and edit every field, plus
+// author recurring concepts, and attach a bank question to each so
+// students can practise it.
+//   users/{adminUid}/settings/paperData  { questions:[], recurring:[] }
+//   users/{adminUid}/settings/paperMap   { map: { questionId: bankQid } }
+// Built-in seed below is the default until an admin saves changes.
 // =====================================================================
-const PP_QUESTIONS = [
-  /* ================= 2023 ================= */
-  { year:'2023', n:1,  bk:'A', marks:2, topic:'Humans and the Environment', type:'recall', title:'One effect of deforestation', ans:'Increase in carbon dioxide', detail:'Fewer trees → less photosynthesis removing CO₂, so atmospheric carbon dioxide rises. A direct human-impact recall item.' },
-  { year:'2023', n:2,  bk:'A', marks:2, topic:'Life Cycles', type:'recall', title:'Which group has a three-stage life cycle', ans:'Chicken, frog and grasshopper', detail:'Three-stage (no pupa): grasshopper, chicken and frog. Butterfly and beetle are four-stage. Tests stage counts across groups.' },
-  { year:'2023', n:3,  bk:'A', marks:2, topic:'Plant Reproduction', type:'application', title:'What structures R and S help seeds do', ans:'Disperse', detail:'A parachute/feathery structure and a winged/hooked one are seed-dispersal adaptations. Apply dispersal knowledge to unfamiliar structures.' },
-  { year:'2023', n:4,  bk:'A', marks:2, topic:'Human Body Systems', type:'data', title:'Graph of undigested food leaving each digestive organ', ans:'The graph increasing along mouth→large intestine', detail:'Order organs A–E along the gut, then match the bar graph. Combines system knowledge with graph reading.' },
-  { year:'2023', n:5,  bk:'A', marks:2, topic:'Living and non-living things', type:'application', title:'Two-way table — which group animal X belongs to', ans:'Group B (lays eggs, can swim)', detail:'Animal X is a bird (beak, feathers, webbed feet): lays eggs and can swim → group B. Classification with a table.' },
-  { year:'2023', n:6,  bk:'A', marks:2, topic:'Living and non-living things', type:'data', title:'Temperature suitable for both bacteria P and Q', ans:'30 °C', detail:'Read the temperature where both population curves are high. Bacteria as living things + graph interpretation.' },
-  { year:'2023', n:7,  bk:'A', marks:2, topic:'Human and Plant Transport', type:'application', title:'How food from exposed leaves is transported', ans:'Upwards and downwards by the food-carrying tubes', detail:'Food from photosynthesis travels in the food tubes both up and down. Distinguishes water tubes from food tubes.' },
-  { year:'2023', n:8,  bk:'A', marks:2, topic:'Plant Reproduction', type:'application', title:'Female flower parts P, Q, R — which statements correct', ans:'A and C only', detail:'P (stigma) is where pollen lands; R (ovary) is where a seed develops; fertilisation is in the ovary, not Q (style).' },
-  { year:'2023', n:9,  bk:'A', marks:2, topic:'Living and non-living things', type:'experimental', title:'Fair test — what goes into container Q', ans:'Ants + food, but no substance S', detail:'The control is identical except the one variable being tested (substance S). Fair-test design around living things responding.' },
-  { year:'2023', n:10, bk:'A', marks:2, topic:'Plant Systems', type:'data', title:'Light amount vs rate of photosynthesis — who is correct', ans:'Both Sherwin and Michael', detail:'Rate rises 0–1500 units then plateaus (light no longer limiting). Both statements read correctly off the graph.' },
-  { year:'2023', n:11, bk:'A', marks:2, topic:'Living Together', type:'recall', title:'Term for all the grasshoppers in a garden', ans:'Population', detail:'All members of one species in an area = a population. Core ecology vocabulary.' },
-  { year:'2023', n:12, bk:'A', marks:2, topic:'Human and Plant Transport', type:'application', title:'Leaf mass order after sealing surfaces with oil', ans:'A, C, B, D', detail:'Leaves lose water through stomata (more underneath). Most water lost = lightest. No oil loses most; oil both sides loses least.' },
-  { year:'2023', n:13, bk:'A', marks:2, topic:'Plant Reproduction', type:'experimental', title:'Light and germination/growth conclusion', ans:'B and C only', detail:'Both germinated → seeds don’t need light to germinate; the dark seedlings grew taller → faster in the dark.' },
-  { year:'2023', n:14, bk:'A', marks:2, topic:'Living and non-living things', type:'data', title:'Fruit-fly numbers over 25 days — conclusion & cause of death', ans:'Living things reproduce; death from lack of air', detail:'Rising numbers show reproduction; the later die-off points to too little air as the jar overcrowds.' },
-  { year:'2023', n:15, bk:'A', marks:2, topic:'Materials', type:'application', title:'Property of a crab shell that supports and protects', ans:'Strength', detail:'Supporting the body and protecting organs needs a strong material. Match property to function.' },
-  { year:'2023', n:16, bk:'A', marks:2, topic:'Water and its 3 States', type:'application', title:'Which process on the water cycle is condensation', ans:'B only', detail:'B is water vapour turning into cloud (condensation); A evaporation, C precipitation.' },
-  { year:'2023', n:17, bk:'A', marks:2, topic:'Forces', type:'application', title:'Which forces act on magnet B when it stops on a slope', ans:'Friction, gravitational and magnetic', detail:'Held stationary on a slope near another magnet: gravity, friction and magnetic force all act. Identify simultaneous forces.' },
-  { year:'2023', n:18, bk:'A', marks:2, topic:'Materials', type:'experimental', title:'Most suitable material for netting (property table)', ans:'Material A (strong, flexible, lets light through)', detail:'Only one row ticks all three required properties. Read a tick/cross property table.' },
-  { year:'2023', n:19, bk:'A', marks:2, topic:'Heat', type:'application', title:'Fitting a metal rim onto a too-big wheel', ans:'Heat the rim and place it over the wheel', detail:'Heating expands the rim so it slips over the wheel, then contracts to grip. Expansion of matter on heating.' },
-  { year:'2023', n:20, bk:'A', marks:2, topic:'Heat', type:'application', title:'Why part X of a paper lantern started to burn', ans:'Metal is a good conductor of heat', detail:'The metal wire conducts heat from the flame to the paper at X. Conduction through a good conductor.' },
-  { year:'2023', n:21, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'What would have prevented the bulb from blowing', ans:'Using fewer batteries', detail:'Too much current (too many batteries in series) blew the bulb; fewer batteries lowers the current.' },
-  { year:'2023', n:22, bk:'A', marks:2, topic:'Forces', type:'application', title:'Which statement on forces is NOT correct', ans:'“The pushing force is used up”', detail:'A force is not a substance that gets used up; the ball falls because gravity acts. Spot the misconception.' },
-  { year:'2023', n:23, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'Components at A and B that keep bulb L equally bright', ans:'The arrangement leaving L’s current unchanged', detail:'Choose components/positions that don’t change the current through L. Series vs parallel reasoning about brightness.' },
-  { year:'2023', n:24, bk:'A', marks:2, topic:'Magnets', type:'experimental', title:'Conclusion about objects P, Q and X from mass readings', ans:'X is a magnet; P and Q read off the changing balance', detail:'A mass balance shows attraction/repulsion as objects approach X. Deduce magnet vs magnetic vs non-magnetic.' },
-  { year:'2023', n:25, bk:'A', marks:2, topic:'Matter and its 3 States', type:'recall', title:'Which of these is NOT matter', ans:'A beam of light', detail:'Matter has mass and volume; light (and heat) do not. A cloud, a stream of water and melting ice cream are all matter.' },
-  { year:'2023', n:26, bk:'A', marks:2, topic:'Forces', type:'data', title:'Elastic spring force vs compression for springs X and Y', ans:'Compression rising with force, X steeper than Y', detail:'Identical blocks compress the softer spring more; read which graph matches. Elastic/spring force with a graph.' },
-  { year:'2023', n:27, bk:'A', marks:2, topic:'Forces', type:'experimental', title:'Which two experiments support “surface area doesn’t affect force”', ans:'A and B (same mass, different surface area, ~same force)', detail:'To test surface area, keep mass constant and vary only surface area. Selecting a fair-test pair from a table.' },
-  { year:'2023', n:28, bk:'A', marks:2, topic:'Light', type:'application', title:'What Eva was doing (shadow length constant over time)', ans:'Standing still near the lamp post', detail:'An unchanging shadow length means her distance from the light did not change. Read a length-vs-time graph in context.' },
-  { year:'2023', n:29, bk:'B', marks:4, topic:'Life Cycles', type:'open', title:'Mosquito life cycle, insect characteristic, global warming', ans:'egg → larva → pupa → adult; 3 body parts / 6 legs; warmer → shorter cycle → more mosquitoes', detail:'(a) draw the 4-stage cycle in words+arrows [1]; (b) an insect feature [1]; (c) explain from the graph that global warming shortens the cycle and increases numbers [2].' },
-  { year:'2023', n:30, bk:'B', marks:4, topic:'Human and Plant Transport', type:'open', title:'Blood redistribution when resting vs jogging', ans:'More blood to leg muscles for energy/oxygen; less to gut → slower absorption', detail:'(a) leg muscles need more oxygen/food to release energy [2]; (b) less blood to the digestive system slows absorption [2].' },
-  { year:'2023', n:31, bk:'B', marks:4, topic:'Humans and the Environment', type:'open', title:'Secchi-disc water-pollution investigation', ans:'Changed variable = the lake; reliable = repeated & consistent; least polluted = S (deepest visibility)', detail:'(a) changed variable [1]; (b) reliability from repeated, consistent readings [1]; (c) identify + justify the least-polluted lake [2]. Process skills.' },
-  { year:'2023', n:32, bk:'B', marks:4, topic:'Food Chains and Webs', type:'open', title:'Build a food web; advantages of a nest', ans:'F→B,C→E→G web; nest gives shelter from predators and access to prey', detail:'(a) draw the web from the feeding statements [2]; (b) use it to give two survival advantages of the water nest [2].' },
-  { year:'2023', n:33, bk:'B', marks:3, topic:'Living and non-living things', type:'open', title:'Single-celled organism P (cell parts, response to light)', ans:'Chloroplast makes food; responds/moves to light; gathered at the lit holes to photosynthesise', detail:'(a) name the food-making part (chloroplast) [1]; (b) the living characteristic shown [1]; (c) why it gathered under the holes [1].' },
-  { year:'2023', n:34, bk:'B', marks:3, topic:'Plant Reproduction', type:'open', title:'Insect laying eggs in a flower ovary + pollination', ans:'Fruit develops from the ovary; plant is pollinated, insect’s young get food/shelter', detail:'(a) fruit develops from the ovary [1]; (b) explain the mutual benefit — pollination for the plant, food/shelter for the insect [2].' },
-  { year:'2023', n:35, bk:'B', marks:3, topic:'Water and its 3 States', type:'open', title:'Hand sanitiser drying and feeling cold', ans:'Evaporates quickly; evaporation takes heat from the hand; blowing speeds it, so it feels colder', detail:'(a) it evaporates quickly [1]; (b) evaporation absorbs heat from the hand and blowing raises the rate [2]. Evaporation as cooling.' },
-  { year:'2023', n:36, bk:'B', marks:4, topic:'Energy Conversion', type:'open', title:'Rubber-band toy boat — energy conversion', ans:'More turns → greater distance; elastic potential → kinetic (+ sound + heat); tries differ from experimental error', detail:'(a) input→output relationship [1]; (b) fill the energy-conversion boxes [2]; (c) why repeat tries differ [1].' },
-  { year:'2023', n:37, bk:'B', marks:4, topic:'Matter and its 3 States', type:'open', title:'Cooking-oil temperature graph; solid forming in the pipe', ans:'Room temp ≈ 30 °C; vegetables added at the dip; oil cooled below 40 °C melting point and solidified', detail:'(a) read room temperature [1]; (b) read the time of the dip [1]; (c) explain the oil cooled below its melting point and solidified, blocking the pipe [2].' },
-  { year:'2023', n:38, bk:'B', marks:5, topic:'Electrical Systems', type:'open', title:'Electromagnet making an iron bar oscillate', ans:'Electromagnet attracts the bar → breaks the circuit → it drops → remakes → repeats; bulb states from the contacts', detail:'(a) explain the make-and-break oscillation [2]; (b) which bulb(s) light at A [1]; (c) how bulb Q’s brightness changes at B, with reason [2]. Highest-mark item.' },
-  { year:'2023', n:39, bk:'B', marks:3, topic:'Electrical Systems', type:'open', title:'Correct and complete a toy circuit', ans:'Fix the error; wire the two bulbs in parallel so one still lights if the other blows, switch in the main line', detail:'Draw the corrected circuit: bulbs in parallel, switch controlling both. Circuit design under two constraints [3].' },
-  { year:'2023', n:40, bk:'B', marks:3, topic:'Heat', type:'open', title:'Boiling; glass top heating unevenly and cracking', ans:'Boiling = rapid liquid→gas at the boiling point; part A hotter (nearer the pot, conduction); glass cracks from uneven expansion', detail:'(a) define boiling [1]; (b)(i) why part A is hotter [1]; (b)(ii) why the glass cracks [1].' },
-
-  /* ================= 2022 ================= */
-  { year:'2022', n:1,  bk:'A', marks:2, topic:'Living and non-living things', type:'recall', title:'Reptiles have ___ on their body', ans:'Scales', detail:'Reptiles are covered in scales — a defining feature of the group. Direct classification recall.' },
-  { year:'2022', n:2,  bk:'A', marks:2, topic:'Food Chains and Webs', type:'recall', title:'Terms describing caterpillars in the food chain', ans:'Consumer and prey', detail:'Caterpillars eat leaves (consumer) and are eaten by birds (prey). Producer/consumer/prey vocabulary.' },
-  { year:'2022', n:3,  bk:'A', marks:2, topic:'Living and non-living things', type:'application', title:'C makes pollen and its own food, D does neither', ans:'C = flowering plant, D = fungi', detail:'Pollen + makes own food → flowering plant. A non-food-making, non-pollen organism → fungi. Classify from clues.' },
-  { year:'2022', n:4,  bk:'A', marks:2, topic:'Life Cycles', type:'application', title:'What is NOT correct for both butterfly and grasshopper', ans:'“Both have young that look like the adults”', detail:'Grasshopper young resemble adults; butterfly young (caterpillar) do not. The other statements hold for both.' },
-  { year:'2022', n:5,  bk:'A', marks:2, topic:'Living and non-living things', type:'recall', title:'Basic unit of life for a frog and a rose plant', ans:'Cell / cell', detail:'The cell is the basic unit of life for every organism. A newer-syllabus recall item.' },
-  { year:'2022', n:6,  bk:'A', marks:2, topic:'Human and Plant Transport', type:'application', title:'What organ could X be (oxygen-rich in, oxygen-poor out)', ans:'B and C only (stomach and leg muscle)', detail:'X receives oxygen-rich blood and returns oxygen-poor — a respiring body part, not the lung (which does the reverse).' },
-  { year:'2022', n:7,  bk:'A', marks:2, topic:'Living and non-living things', type:'data', title:'Cell-parts table — which statement is correct', ans:'P and R are from a plant', detail:'A cell wall marks a plant cell; R has a chloroplast and cell wall, P has a cell wall (no chloroplast), Q has neither → animal.' },
-  { year:'2022', n:8,  bk:'A', marks:2, topic:'Plant Systems', type:'application', title:'How dead leaves benefit the tree', ans:'C and D only', detail:'Rotting leaves enrich the soil with mineral salts and reduce water evaporating from the soil — both help the tree.' },
-  { year:'2022', n:9,  bk:'A', marks:2, topic:'Plant Reproduction', type:'recall', title:'Statement about germination that is NOT correct', ans:'“The mass of seed leaves increases”', detail:'Seed leaves store food used up during germination, so their mass decreases. The other statements are true.' },
-  { year:'2022', n:10, bk:'A', marks:2, topic:'Plant Reproduction', type:'application', title:'Flower J → fruit L — which statements are correct', ans:'A, B and C', detail:'K develops from the ovary; pollination then fertilisation occurred at M; one seed shows one ovule. Flower-to-fruit reasoning.' },
-  { year:'2022', n:11, bk:'A', marks:2, topic:'Living Together', type:'data', title:'Leaf characteristics at two mountain heights', ans:'At 3000 m the plants have thicker leaves to adapt to the cold', detail:'Compare surface area/thickness data across heights and pick the valid adaptation conclusion. Structural adaptation to environment.' },
-  { year:'2022', n:12, bk:'A', marks:2, topic:'Plant Reproduction', type:'data', title:'Shoot and root lengths of a seedling over time', ans:'The graph with the root growing ahead of the shoot', detail:'During germination the root emerges and grows first, then the shoot. Match the graph to that order.' },
-  { year:'2022', n:13, bk:'A', marks:2, topic:'Plant Systems', type:'experimental', title:'Variegated-leaf photosynthesis test (CO₂ removed from K)', ans:'K shows no food; L shows food only in the green part', detail:'No carbon dioxide (leaf K) → no photosynthesis anywhere; leaf L makes food only where it is green. Tests the needs for photosynthesis.' },
-  { year:'2022', n:14, bk:'A', marks:2, topic:'Human and Plant Respiration', type:'data', title:'Breathing rates of Ken and Jude during exercise', ans:'Ken’s breathing rate increased more than Jude’s', detail:'Ken rises 12→31 (+19), Jude 17→32 (+15). Compare the change, not the raw values. Table reading.' },
-  { year:'2022', n:15, bk:'A', marks:2, topic:'Matter and its 3 States', type:'experimental', title:'Volume of an object by water displacement', ans:'2 cm³', detail:'The object raises the water level; the volume is the rise in the reading. Measuring the volume of an irregular object.' },
-  { year:'2022', n:16, bk:'A', marks:2, topic:'Forces', type:'recall', title:'Which is NOT an effect of a force', ans:'Light passing through a glass pane', detail:'Forces start/stop motion, change direction or shape. Light passing through glass is not a force effect.' },
-  { year:'2022', n:17, bk:'A', marks:2, topic:'Matter and its 3 States', type:'application', title:'Why a flatbread rose when fried then flattened', ans:'Air expands when heated', detail:'Trapped air expands on heating (rises), then contracts as it cools (flattens). Behaviour of a gas with temperature.' },
-  { year:'2022', n:18, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'Which bulb was blown (one other stayed unlit)', ans:'The bulb in series with the one that went out', detail:'Trace the circuit: a blown bulb only kills bulbs in its series path, not parallel ones. Series vs parallel reasoning.' },
-  { year:'2022', n:19, bk:'A', marks:2, topic:'Forces', type:'experimental', title:'Distance moved by the toy car on the ruler', ans:'7 cm', detail:'Read start and stop positions on the ruler and subtract. Measuring distance moved — a process skill in a forces context.' },
-  { year:'2022', n:20, bk:'A', marks:2, topic:'Magnets', type:'application', title:'Direction of magnetic force on P and friction on Q', ans:'Both act away from each other / opposing Q’s motion', detail:'Like poles face, so the magnets repel: P is pushed one way; released Q slides away and friction opposes its motion.' },
-  { year:'2022', n:21, bk:'A', marks:2, topic:'Materials', type:'application', title:'Most suitable material for a face shield', ans:'Material D (flexible, waterproof, lets light through)', detail:'A face shield must be flexible, waterproof and transparent — only one row ticks all three. Property-table selection.' },
-  { year:'2022', n:22, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'In which circuits does bulb L have the same brightness', ans:'The circuits where L carries the same current', detail:'Compare the current through L across the four set-ups (single vs series vs parallel). Brightness follows current.' },
-  { year:'2022', n:23, bk:'A', marks:2, topic:'Magnets', type:'experimental', title:'Which of three metal bars are magnets', ans:'Deduced from the attract/repel pattern', detail:'Repulsion is the sure test for two magnets; attraction alone is ambiguous. Work through the hung-bar results.' },
-  { year:'2022', n:24, bk:'A', marks:2, topic:'Matter and its 3 States', type:'recall', title:'Which arrow (gas–liquid–solid) is condensation', ans:'The gas → liquid arrow', detail:'Condensation is gas turning to liquid. Name the change-of-state process on the diagram.' },
-  { year:'2022', n:25, bk:'A', marks:2, topic:'Heat', type:'application', title:'Why the tiles felt cold but the wooden floor did not', ans:'The tile is a better conductor of heat than wood', detail:'Tiles conduct heat away from the feet faster, so they feel colder. Conductors vs insulators of heat.' },
-  { year:'2022', n:26, bk:'A', marks:2, topic:'Water and its 3 States', type:'data', title:'Heating curve — what the flat line JK represents', ans:'Boiling', detail:'The temperature stays constant while heat is still added → boiling at the boiling point. Read a heating curve.' },
-  { year:'2022', n:27, bk:'A', marks:2, topic:'Forces', type:'data', title:'Elastic spring force vs extension for springs X, Y, Z', ans:'Extension rising with force, one line per spring by stiffness', detail:'Identical blocks stretch each spring differently; the softer spring extends most. Match the force–extension graph.' },
-  { year:'2022', n:28, bk:'A', marks:2, topic:'Light', type:'application', title:'How to get the largest shadow and the effect on the sensor', ans:'Move the light source nearer the block → larger shadow → sensor reading decreases', detail:'A shadow enlarges as the light source moves closer to the object; more light is blocked, so the sensor reads less.' },
-  { year:'2022', n:29, bk:'B', marks:3, topic:'Humans and the Environment', type:'open', title:'What deforestation is; its effect on gases', ans:'Clearing/cutting down of forests; more carbon dioxide and less oxygen as fewer trees photosynthesise', detail:'(a) define deforestation [1]; (b) state and explain the effect on the surrounding gases [2].' },
-  { year:'2022', n:30, bk:'B', marks:4, topic:'Human Body Systems', type:'open', title:'Organs J and K from their processes; blood at the small intestine', ans:'Digestion = breaking food into smaller/soluble bits; J = large intestine, K = mouth; Q richer in digested food, P richer in oxygen', detail:'(a) define digestion [1]; (b) identify J and K from the process table [1]; (c) name substances higher at Q than P and vice-versa [2].' },
-  { year:'2022', n:31, bk:'B', marks:4, topic:'Living and non-living things', type:'open', title:'Liquid T vs soap for killing bacteria (bar graph)', ans:'Liquid T is more effective (fewer bacteria at both 3 min and 1 h); same thumb = same starting bacteria/conditions (fair test)', detail:'(a)(i) conclude which is more effective [1]; (ii) explain using the graph [2]; (b) why the same thumb makes it a fair test [1].' },
-  { year:'2022', n:32, bk:'B', marks:4, topic:'Living and non-living things', type:'open', title:'Outdoor toilet, waste gases and a mosquito trap', ans:'Waste is moist for larvae; bacteria/micro-organisms give off gas by respiration; gases attract mosquitoes; trapped mosquitoes die from no air/heat', detail:'(a) why mosquitoes lay eggs on waste [1]; (b) the group producing the gases + the process [1]; (c) why the gases attract mosquitoes [1]; (d) why the trapped mosquitoes die quickly [1].' },
-  { year:'2022', n:33, bk:'B', marks:3, topic:'Human and Plant Transport', type:'open', title:'Stem stained by red water; temperature vs rate of water movement', ans:'Water-carrying tubes transport water up the stem; change the temperature; measure how far the red stain rises in a set time', detail:'(a) name the stained part and its function [1]; (b)(i) the variable to change [1]; (ii) what to measure [1].' },
-  { year:'2022', n:34, bk:'B', marks:4, topic:'Plant Systems', type:'open', title:'Temperature vs photosynthesis; size of leaf openings', ans:'Bigger openings let in more carbon dioxide, so more photosynthesis / faster food-making; keep light and water constant', detail:'(a) explain how larger openings at higher temperature help the plant, using the graph [2]; (b) two factors to keep constant [2].' },
-  { year:'2022', n:35, bk:'B', marks:4, topic:'Forces', type:'open', title:'Strings R vs S — length against mass graph', ans:'Read mass at S = 63 cm; increase in R over 0–800 g; not fair (different starting lengths); S broke beyond 800 g', detail:'(a) read a value off S [1]; (b) read the increase for R [1]; (c) why it is not a fair comparison [1]; (d) why S has no results beyond 800 g [1]. Elastic force + data + fair test.' },
-  { year:'2022', n:36, bk:'B', marks:5, topic:'Electrical Systems', type:'open', title:'Electric bell — make-and-break electromagnet', ans:'Electromagnet pulls the iron bar to strike the bell, breaking the circuit → bar springs back → circuit remakes → repeats; stronger spring changes the sound; a wooden nail breaks the circuit so no sound', detail:'(a) explain the continuous ting sound [2]; (b) effect of a stronger spring on the sound + why [2]; (c) effect of a wooden nail + why [1]. Highest-mark item.' },
-  { year:'2022', n:37, bk:'B', marks:5, topic:'Energy Conversion', type:'open', title:'Flying-bird toy — energy conversion and path', ans:'Elastic potential → kinetic + sound; flew lower as the stored energy ran out / converted away; two bands → flies further', detail:'(a) fill the energy forms A→B [1]; (b) why it flew lower C→D [2]; (c) draw the new path with two rubber bands [2].' },
-  { year:'2022', n:38, bk:'B', marks:2, topic:'Matter and its 3 States', type:'open', title:'Two properties of air that inflated the tyre', ans:'Air has mass and occupies space; it can be compressed / exerts pressure in all directions', detail:'State two properties of air that let the pumped air fill and firm up the tyre [2]. Properties of a gas.' },
-  { year:'2022', n:39, bk:'B', marks:4, topic:'Electrical Systems', type:'open', title:'Two-bulb toy — series fault, then draw parallel', ans:'They were in series (one blows, both go out); redraw with L and R in parallel and the switch controlling both', detail:'(a) state how the two bulbs were connected [1]; (b) complete the circuit so one stays lit if the other blows, only on when the switch is closed [3]. Near-identical to 2023 Q39.' },
-  { year:'2022', n:40, bk:'B', marks:2, topic:'Heat', type:'open', title:'Turkey in a 160 °C oven — thermometer reading', ans:'Read the dial; the turkey is still gaining heat and has not yet reached the oven’s temperature', detail:'(a) state the thermometer reading [1]; (b) why the turkey is not yet 160 °C after two hours [1]. Heat gain toward the surroundings’ temperature.' },
-
-  /* ================= 2021 ================= */
-  { year:'2021', n:1,  bk:'A', marks:2, topic:'Living and non-living things', type:'recall', title:'Characteristics of all living things', ans:'Grow, reproduce and respond to changes', detail:'Not all living things make their own food or move from place to place — the shared traits are growth, reproduction and responding to changes.' },
-  { year:'2021', n:2,  bk:'A', marks:2, topic:'Living and non-living things', type:'recall', title:'Flowering vs non-flowering plants', ans:'Flowering plants produce fruits; non-flowering ones do not', detail:'Both make their own food; the distinguishing feature is that flowering plants form fruits (from the ovary). Classification recall.' },
-  { year:'2021', n:3,  bk:'A', marks:2, topic:'Matter and its 3 States', type:'recall', title:'Which gases are found in air', ans:'A, B, C and D (oxygen, nitrogen, carbon dioxide, water vapour)', detail:'Air is a mixture of all four gases. Basic knowledge of the composition of air.' },
-  { year:'2021', n:4,  bk:'A', marks:2, topic:'Human and Plant Transport', type:'application', title:'Which arrows show the direction water moves in a plant', ans:'Q, S and T only', detail:'Water is absorbed by the roots and moves up the stem to the leaves and fruits — trace the upward arrows only.' },
-  { year:'2021', n:5,  bk:'A', marks:2, topic:'Plant Reproduction', type:'application', title:'Which flower produced the papaya fruit (one ovary, many seeds)', ans:'Q (one ovary, many ovules)', detail:'A papaya has many seeds in one fruit → one ovary with many ovules. Link fruit structure back to the flower.' },
-  { year:'2021', n:6,  bk:'A', marks:2, topic:'Living and non-living things', type:'application', title:'Classification chart (feathers / can fly) — what is possible', ans:'C is a mosquito (no feathers, can fly)', detail:'C = no feathers + can fly = an insect such as a mosquito. Work an unfamiliar organism through a classification key.' },
-  { year:'2021', n:7,  bk:'A', marks:2, topic:'Human Reproduction', type:'application', title:'Fertilisation diagram — which statement is NOT correct', ans:'“The fertilised egg develops in the ovary”', detail:'Fertilisation happens in the oviduct and the fertilised egg develops in the uterus (womb), not the ovary. Human reproduction facts.' },
-  { year:'2021', n:8,  bk:'A', marks:2, topic:'Human and Plant Transport', type:'recall', title:'Substances in the water-carrying vs food-carrying tubes', ans:'Water tubes: water and mineral salts; food tubes: sugar', detail:'Water-carrying tubes move water and dissolved mineral salts up; food-carrying tubes move sugar made in the leaves. Distinguish the two transport systems.' },
-  { year:'2021', n:9,  bk:'A', marks:2, topic:'Plant Reproduction', type:'experimental', title:'Two germination set-ups differing only in temperature', ans:'Seeds will only germinate when the temperature is suitable', detail:'Both are dark and damp; the only variable changed is temperature, so that is the hypothesis being tested. Identify the tested variable.' },
-  { year:'2021', n:10, bk:'A', marks:2, topic:'Life Cycles', type:'data', title:'Bar graph of life-cycle stage lengths for P and Q', ans:'P took a shorter time to become an adult than Q', detail:'Sum each organism’s egg + larva + pupa days; P’s total is far smaller than Q’s. Read and compare from a grouped bar graph.' },
-  { year:'2021', n:11, bk:'A', marks:2, topic:'Human Body Systems', type:'application', title:'Why the whole potato in beaker B digested more slowly', ans:'It has a smaller exposed surface area', detail:'The cut cubes (A) expose more surface to the digestive juice, so they digest faster. Surface area and rate of digestion.' },
-  { year:'2021', n:12, bk:'A', marks:2, topic:'Plant Systems', type:'data', title:'Oxygen in a bag around a sunlit leaf over two hours', ans:'A steadily increasing line', detail:'A leaf in sunlight photosynthesises, releasing oxygen, so the amount rises over time. Match the process to the graph.' },
-  { year:'2021', n:13, bk:'A', marks:2, topic:'Living and non-living things', type:'recall', title:'Characteristic used to classify insect/fish/mammal/amphibian', ans:'Type of body covering', detail:'These groups are distinguished by their body covering (scales, feathers/hair, moist skin, etc.). Classification basis.' },
-  { year:'2021', n:14, bk:'A', marks:2, topic:'Plant Reproduction', type:'experimental', title:'Seed dropped near a fan — distance vs variable X', ans:'Mass of seed', detail:'Distance fell as X increased; a heavier seed is carried a shorter distance by the wind. Infer the variable from a falling graph. Seed dispersal.' },
-  { year:'2021', n:15, bk:'A', marks:2, topic:'Matter and its 3 States', type:'application', title:'Ball stayed the same size after more air was pumped in', ans:'Air can be compressed', detail:'More air fitting into the same volume shows that air (a gas) can be compressed. Property of a gas.' },
-  { year:'2021', n:16, bk:'A', marks:2, topic:'Matter and its 3 States', type:'experimental', title:'Correct way to read a measuring cylinder', ans:'Cylinder on the table, eye level with the water surface', detail:'Read at eye level with the meniscus and the cylinder on a flat surface to avoid a parallax error. Measurement technique.' },
-  { year:'2021', n:17, bk:'A', marks:2, topic:'Matter and its 3 States', type:'data', title:'States of P, Q, R at different temperatures — what can be concluded', ans:'R has the highest freezing point', detail:'R is solid even at 50 °C, so it freezes/melts at the highest temperature of the three. Reason about melting/freezing points from a state table.' },
-  { year:'2021', n:18, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'In which circuit is bulb L brightest', ans:'The circuit where L carries the most current (its own branch)', detail:'A bulb is brightest when the most current flows through it — compare series and parallel arrangements. Brightness follows current.' },
-  { year:'2021', n:19, bk:'A', marks:2, topic:'Energy Conversion', type:'application', title:'Energy change in a balloon-powered toy car', ans:'Stored (potential) energy → kinetic + heat + sound', detail:'The stretched balloon stores potential energy that converts to movement (kinetic), plus heat and sound. Energy-conversion chain.' },
-  { year:'2021', n:20, bk:'A', marks:2, topic:'Forces', type:'application', title:'Which forces acted on the still wooden block on a slope', ans:'Friction and gravitational force (no magnetic force)', detail:'Wood is non-magnetic, so no magnetic force; friction holds it and gravity pulls it down the slope. Identify the forces present.' },
-  { year:'2021', n:21, bk:'A', marks:2, topic:'Materials', type:'application', title:'Properties of a folded material that floated then sank', ans:'Flexible but not (fully) waterproof', detail:'It could be folded (flexible) but eventually let water in and sank (not waterproof). Read properties from behaviour.' },
-  { year:'2021', n:22, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'In which circuits will at least one bulb NOT light up', ans:'The circuits containing a short circuit / break', detail:'Trace each circuit for a short circuit (bulb bypassed) or gap. Fault-finding across four set-ups.' },
-  { year:'2021', n:23, bk:'A', marks:2, topic:'Forces', type:'application', title:'Opening car doors on a slope — who uses a smaller force', ans:'The downhill person, whose door is not lifted against gravity', detail:'Opening a door uphill means working against gravitational force (larger force); the downhill door needs less. Gravity and force.' },
-  { year:'2021', n:24, bk:'A', marks:2, topic:'Heat', type:'application', title:'Why cup B (with a handle) can be held but cup A cannot', ans:'The handle keeps the hand away from the heat (conduction)', detail:'Material P conducts heat; holding the body of cup A burns, while cup B’s handle keeps the hand at a distance from the hot water. Heat conduction.' },
-  { year:'2021', n:25, bk:'A', marks:2, topic:'Light', type:'application', title:'Why Susan can see the glass of the cupboard', ans:'Some light is reflected from the glass', detail:'We see an object when light bounces off it into our eyes; some light reflects off the glass surface. How we see objects.' },
-  { year:'2021', n:26, bk:'A', marks:2, topic:'Heat', type:'application', title:'Why the bun’s liquid filling burst through the wall', ans:'The filling expanded more than the bun', detail:'On heating, the liquid filling expands (and turns to gas) more than the solid bun, bursting through. Expansion on heating.' },
-  { year:'2021', n:27, bk:'A', marks:2, topic:'Light', type:'data', title:'Light through three fabrics over 10 s — which graph', ans:'Constant lines, C highest, then B, then A', detail:'Each fabric passes a steady amount of light, so flat lines ranked C > B > A. Match a table to the correct graph.' },
-  { year:'2021', n:28, bk:'A', marks:2, topic:'Magnets', type:'application', title:'Toy-train magnets — identify object P and poles J, K, L', ans:'P is a magnet; poles deduced from the attract/repel behaviour', detail:'Turning carriage A reversed the interactions (one end attracts, one repels), showing P is a magnet and fixing the poles. Magnet reasoning.' },
-  { year:'2021', n:29, bk:'B', marks:3, topic:'Living and non-living things', type:'open', title:'Plant cell — name parts and state functions', ans:'R = cell wall, S = nucleus; P (cell membrane) controls what enters/leaves, Q (chloroplast) makes food', detail:'(a) name parts R and S [1]; (b) state the functions of P and Q [2]. Plant-cell structure and function.' },
-  { year:'2021', n:30, bk:'B', marks:4, topic:'Human and Plant Respiration', type:'open', title:'Human respiratory system and how it works with circulation', ans:'Takes in oxygen and removes carbon dioxide; nose, windpipe, lungs; lungs oxygenate the blood the heart pumps round the body', detail:'(a) function + gases involved [1]; (b) name three parts [1]; (c) how the respiratory and circulatory systems work together [2].' },
-  { year:'2021', n:31, bk:'B', marks:3, topic:'Human Body Systems', type:'open', title:'Amount of sugar along the small intestine', ans:'Sugar rises Q→R as rice is digested into sugar; falls R→S as sugar is absorbed into the blood; undigested food enters the large intestine (absorbs water)', detail:'(a) why sugar increased Q→R [1]; (b) why it decreased R→S [1]; (c) name the next organ and its main function [1]. Digestion and absorption.' },
-  { year:'2021', n:32, bk:'B', marks:4, topic:'Life Cycles', type:'open', title:'Temperature and mosquito-egg hatching; dropping balls into a well', ans:'Most eggs hatch around 28 °C, fewer when too cold or too hot; the balls float; they cover the water so mosquitoes cannot breed on it', detail:'(a) conclude the effect of temperature on hatching [2]; (b) a physical property of the balls (they float) [1]; (c) how the method reduces mosquito breeding [1].' },
-  { year:'2021', n:33, bk:'B', marks:4, topic:'Life Cycles', type:'open', title:'Bee larva vs pupa; making honey from nectar; fierce offspring', ans:'Larva feeds and moves, pupa is resting; fanning evaporates water so the nectar becomes concentrated honey; the offspring inherit fierceness from bee T', detail:'(a) one way a larva differs from a pupa [1]; (b) how the bee’s fanning turns nectar to honey (evaporation) [2]; (c) why the offspring behave differently — inherited trait [1].' },
-  { year:'2021', n:34, bk:'B', marks:4, topic:'Plant Systems', type:'open', title:'Leaf disc rising in liquid Y under a lamp', ans:'Photosynthesis makes oxygen bubbles that lift the disc; repeat and average / control variables; liquid Y provides more carbon dioxide than water', detail:'(a) name the process and how it made the disc rise [1]; (b) two ways to get more reliable results [2]; (c) the substance liquid Y provided more of than water (carbon dioxide) [1].' },
-  { year:'2021', n:35, bk:'B', marks:2, topic:'Water and its 3 States', type:'open', title:'Why spectacles fogged above a face mask', ans:'Warm water vapour from the breath escapes upward, meets the cool lens and condenses into water droplets', detail:'Explain the fogging [2]. Condensation of exhaled water vapour on a cool surface.' },
-  { year:'2021', n:36, bk:'B', marks:4, topic:'Heat', type:'open', title:'Temperature inside a sun-parked car; expanding film bubble', ans:'Temperature = degree of hotness; surroundings ≈ 30 °C; reaches 40 °C at about 10 min; the trapped air in the bubble expands on heating', detail:'(a) state what temperature is [1]; (b) the temperature of the surroundings [1]; (c) time to reach 40 °C [1]; (d) why the bubble grew larger over days [1].' },
-  { year:'2021', n:37, bk:'B', marks:4, topic:'Energy Conversion', type:'open', title:'Sound of water droplets hitting a plate over time', ans:'Count the peaks in 30 s; the sound isn’t zero because of small background/ripple sounds; increase the drop height or the amount/size of water to raise the peak sound', detail:'(a) number of droplets in the first 30 s [1]; (b) why the sound isn’t zero between 10–15 s [1]; (c) two changes to increase the maximum sound [2]. Sound as a form of energy.' },
-  { year:'2021', n:38, bk:'B', marks:5, topic:'Electrical Systems', type:'open', title:'Electromagnet swings a bar; the “Bobbing Carrots” game', ans:'Disagree — an electromagnet also attracts magnetic materials, so the bar need not be a magnet; opening the switch turns the electromagnet off so the spring pushes the carrot up; use more coils/batteries to pull faster', detail:'(a) evaluate the “bar is a magnet” claim [1]; (b) why the carrot rises when the switch opens [2]; (c) two ways to make it drop faster while still rising when off [2]. Electromagnetism.' },
-  { year:'2021', n:39, bk:'B', marks:3, topic:'Matter and its 3 States', type:'open', title:'Finding the volume inside a coin bank', ans:'Fill it with water and pour that into a measuring cylinder to read the volume; the coins can’t fill it fully because of gaps/air spaces between them', detail:'(a) describe one way to find the internal volume [2]; (b) why 200 one-cm³ coins won’t all fit in a 200 cm³ space [1]. Measuring volume; gaps between solids.' },
-  { year:'2021', n:40, bk:'B', marks:4, topic:'Forces', type:'open', title:'Spring-launched rocket — compression, forces, energy, accuracy', ans:'More compression → greater distance; at G gravity and friction act; at H kinetic + (gravitational) potential energy; a sand pit stops the rocket bouncing/rolling for a truer landing point', detail:'(a) the compression–distance relationship [1]; (b) forces on the rocket going up the ramp off the spring [1]; (c) main energy form(s) at the top H [1]; (d) why a sand pit gives more accurate results [1]. Elastic force + energy + fair test.' },
+const PP_SEED_Q = [
+  {"id":"s_2023_1","year":"2023","n":1,"bk":"A","marks":2,"topic":"Humans and the Environment","type":"recall","title":"One effect of deforestation","ans":"Increase in carbon dioxide","detail":"Fewer trees → less photosynthesis removing CO₂, so atmospheric carbon dioxide rises. A direct human-impact recall item."},
+  {"id":"s_2023_2","year":"2023","n":2,"bk":"A","marks":2,"topic":"Life Cycles","type":"recall","title":"Which group has a three-stage life cycle","ans":"Chicken, frog and grasshopper","detail":"Three-stage (no pupa): grasshopper, chicken and frog. Butterfly and beetle are four-stage. Tests stage counts across groups."},
+  {"id":"s_2023_3","year":"2023","n":3,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"application","title":"What structures R and S help seeds do","ans":"Disperse","detail":"A parachute/feathery structure and a winged/hooked one are seed-dispersal adaptations. Apply dispersal knowledge to unfamiliar structures."},
+  {"id":"s_2023_4","year":"2023","n":4,"bk":"A","marks":2,"topic":"Human Body Systems","type":"data","title":"Graph of undigested food leaving each digestive organ","ans":"The graph increasing along mouth→large intestine","detail":"Order organs A–E along the gut, then match the bar graph. Combines system knowledge with graph reading."},
+  {"id":"s_2023_5","year":"2023","n":5,"bk":"A","marks":2,"topic":"Living and non-living things","type":"application","title":"Two-way table — which group animal X belongs to","ans":"Group B (lays eggs, can swim)","detail":"Animal X is a bird (beak, feathers, webbed feet): lays eggs and can swim → group B. Classification with a table."},
+  {"id":"s_2023_6","year":"2023","n":6,"bk":"A","marks":2,"topic":"Living and non-living things","type":"data","title":"Temperature suitable for both bacteria P and Q","ans":"30 °C","detail":"Read the temperature where both population curves are high. Bacteria as living things + graph interpretation."},
+  {"id":"s_2023_7","year":"2023","n":7,"bk":"A","marks":2,"topic":"Human and Plant Transport","type":"application","title":"How food from exposed leaves is transported","ans":"Upwards and downwards by the food-carrying tubes","detail":"Food from photosynthesis travels in the food tubes both up and down. Distinguishes water tubes from food tubes."},
+  {"id":"s_2023_8","year":"2023","n":8,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"application","title":"Female flower parts P, Q, R — which statements correct","ans":"A and C only","detail":"P (stigma) is where pollen lands; R (ovary) is where a seed develops; fertilisation is in the ovary, not Q (style)."},
+  {"id":"s_2023_9","year":"2023","n":9,"bk":"A","marks":2,"topic":"Living and non-living things","type":"experimental","title":"Fair test — what goes into container Q","ans":"Ants + food, but no substance S","detail":"The control is identical except the one variable being tested (substance S). Fair-test design around living things responding."},
+  {"id":"s_2023_10","year":"2023","n":10,"bk":"A","marks":2,"topic":"Plant Systems","type":"data","title":"Light amount vs rate of photosynthesis — who is correct","ans":"Both Sherwin and Michael","detail":"Rate rises 0–1500 units then plateaus (light no longer limiting). Both statements read correctly off the graph."},
+  {"id":"s_2023_11","year":"2023","n":11,"bk":"A","marks":2,"topic":"Living Together","type":"recall","title":"Term for all the grasshoppers in a garden","ans":"Population","detail":"All members of one species in an area = a population. Core ecology vocabulary."},
+  {"id":"s_2023_12","year":"2023","n":12,"bk":"A","marks":2,"topic":"Human and Plant Transport","type":"application","title":"Leaf mass order after sealing surfaces with oil","ans":"A, C, B, D","detail":"Leaves lose water through stomata (more underneath). Most water lost = lightest. No oil loses most; oil both sides loses least."},
+  {"id":"s_2023_13","year":"2023","n":13,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"experimental","title":"Light and germination/growth conclusion","ans":"B and C only","detail":"Both germinated → seeds don’t need light to germinate; the dark seedlings grew taller → faster in the dark."},
+  {"id":"s_2023_14","year":"2023","n":14,"bk":"A","marks":2,"topic":"Living and non-living things","type":"data","title":"Fruit-fly numbers over 25 days — conclusion & cause of death","ans":"Living things reproduce; death from lack of air","detail":"Rising numbers show reproduction; the later die-off points to too little air as the jar overcrowds."},
+  {"id":"s_2023_15","year":"2023","n":15,"bk":"A","marks":2,"topic":"Materials","type":"application","title":"Property of a crab shell that supports and protects","ans":"Strength","detail":"Supporting the body and protecting organs needs a strong material. Match property to function."},
+  {"id":"s_2023_16","year":"2023","n":16,"bk":"A","marks":2,"topic":"Water and its 3 States","type":"application","title":"Which process on the water cycle is condensation","ans":"B only","detail":"B is water vapour turning into cloud (condensation); A evaporation, C precipitation."},
+  {"id":"s_2023_17","year":"2023","n":17,"bk":"A","marks":2,"topic":"Forces","type":"application","title":"Which forces act on magnet B when it stops on a slope","ans":"Friction, gravitational and magnetic","detail":"Held stationary on a slope near another magnet: gravity, friction and magnetic force all act. Identify simultaneous forces."},
+  {"id":"s_2023_18","year":"2023","n":18,"bk":"A","marks":2,"topic":"Materials","type":"experimental","title":"Most suitable material for netting (property table)","ans":"Material A (strong, flexible, lets light through)","detail":"Only one row ticks all three required properties. Read a tick/cross property table."},
+  {"id":"s_2023_19","year":"2023","n":19,"bk":"A","marks":2,"topic":"Heat","type":"application","title":"Fitting a metal rim onto a too-big wheel","ans":"Heat the rim and place it over the wheel","detail":"Heating expands the rim so it slips over the wheel, then contracts to grip. Expansion of matter on heating."},
+  {"id":"s_2023_20","year":"2023","n":20,"bk":"A","marks":2,"topic":"Heat","type":"application","title":"Why part X of a paper lantern started to burn","ans":"Metal is a good conductor of heat","detail":"The metal wire conducts heat from the flame to the paper at X. Conduction through a good conductor."},
+  {"id":"s_2023_21","year":"2023","n":21,"bk":"A","marks":2,"topic":"Electrical Systems","type":"application","title":"What would have prevented the bulb from blowing","ans":"Using fewer batteries","detail":"Too much current (too many batteries in series) blew the bulb; fewer batteries lowers the current."},
+  {"id":"s_2023_22","year":"2023","n":22,"bk":"A","marks":2,"topic":"Forces","type":"application","title":"Which statement on forces is NOT correct","ans":"“The pushing force is used up”","detail":"A force is not a substance that gets used up; the ball falls because gravity acts. Spot the misconception."},
+  {"id":"s_2023_23","year":"2023","n":23,"bk":"A","marks":2,"topic":"Electrical Systems","type":"application","title":"Components at A and B that keep bulb L equally bright","ans":"The arrangement leaving L’s current unchanged","detail":"Choose components/positions that don’t change the current through L. Series vs parallel reasoning about brightness."},
+  {"id":"s_2023_24","year":"2023","n":24,"bk":"A","marks":2,"topic":"Magnets","type":"experimental","title":"Conclusion about objects P, Q and X from mass readings","ans":"X is a magnet; P and Q read off the changing balance","detail":"A mass balance shows attraction/repulsion as objects approach X. Deduce magnet vs magnetic vs non-magnetic."},
+  {"id":"s_2023_25","year":"2023","n":25,"bk":"A","marks":2,"topic":"Matter and its 3 States","type":"recall","title":"Which of these is NOT matter","ans":"A beam of light","detail":"Matter has mass and volume; light (and heat) do not. A cloud, a stream of water and melting ice cream are all matter."},
+  {"id":"s_2023_26","year":"2023","n":26,"bk":"A","marks":2,"topic":"Forces","type":"data","title":"Elastic spring force vs compression for springs X and Y","ans":"Compression rising with force, X steeper than Y","detail":"Identical blocks compress the softer spring more; read which graph matches. Elastic/spring force with a graph."},
+  {"id":"s_2023_27","year":"2023","n":27,"bk":"A","marks":2,"topic":"Forces","type":"experimental","title":"Which two experiments support “surface area doesn’t affect force”","ans":"A and B (same mass, different surface area, ~same force)","detail":"To test surface area, keep mass constant and vary only surface area. Selecting a fair-test pair from a table."},
+  {"id":"s_2023_28","year":"2023","n":28,"bk":"A","marks":2,"topic":"Light","type":"application","title":"What Eva was doing (shadow length constant over time)","ans":"Standing still near the lamp post","detail":"An unchanging shadow length means her distance from the light did not change. Read a length-vs-time graph in context."},
+  {"id":"s_2023_29","year":"2023","n":29,"bk":"B","marks":4,"topic":"Life Cycles","type":"open","title":"Mosquito life cycle, insect characteristic, global warming","ans":"egg → larva → pupa → adult; 3 body parts / 6 legs; warmer → shorter cycle → more mosquitoes","detail":"(a) draw the 4-stage cycle in words+arrows [1]; (b) an insect feature [1]; (c) explain from the graph that global warming shortens the cycle and increases numbers [2]."},
+  {"id":"s_2023_30","year":"2023","n":30,"bk":"B","marks":4,"topic":"Human and Plant Transport","type":"open","title":"Blood redistribution when resting vs jogging","ans":"More blood to leg muscles for energy/oxygen; less to gut → slower absorption","detail":"(a) leg muscles need more oxygen/food to release energy [2]; (b) less blood to the digestive system slows absorption [2]."},
+  {"id":"s_2023_31","year":"2023","n":31,"bk":"B","marks":4,"topic":"Humans and the Environment","type":"open","title":"Secchi-disc water-pollution investigation","ans":"Changed variable = the lake; reliable = repeated & consistent; least polluted = S (deepest visibility)","detail":"(a) changed variable [1]; (b) reliability from repeated, consistent readings [1]; (c) identify + justify the least-polluted lake [2]. Process skills."},
+  {"id":"s_2023_32","year":"2023","n":32,"bk":"B","marks":4,"topic":"Food Chains and Webs","type":"open","title":"Build a food web; advantages of a nest","ans":"F→B,C→E→G web; nest gives shelter from predators and access to prey","detail":"(a) draw the web from the feeding statements [2]; (b) use it to give two survival advantages of the water nest [2]."},
+  {"id":"s_2023_33","year":"2023","n":33,"bk":"B","marks":3,"topic":"Living and non-living things","type":"open","title":"Single-celled organism P (cell parts, response to light)","ans":"Chloroplast makes food; responds/moves to light; gathered at the lit holes to photosynthesise","detail":"(a) name the food-making part (chloroplast) [1]; (b) the living characteristic shown [1]; (c) why it gathered under the holes [1]."},
+  {"id":"s_2023_34","year":"2023","n":34,"bk":"B","marks":3,"topic":"Plant Reproduction","type":"open","title":"Insect laying eggs in a flower ovary + pollination","ans":"Fruit develops from the ovary; plant is pollinated, insect’s young get food/shelter","detail":"(a) fruit develops from the ovary [1]; (b) explain the mutual benefit — pollination for the plant, food/shelter for the insect [2]."},
+  {"id":"s_2023_35","year":"2023","n":35,"bk":"B","marks":3,"topic":"Water and its 3 States","type":"open","title":"Hand sanitiser drying and feeling cold","ans":"Evaporates quickly; evaporation takes heat from the hand; blowing speeds it, so it feels colder","detail":"(a) it evaporates quickly [1]; (b) evaporation absorbs heat from the hand and blowing raises the rate [2]. Evaporation as cooling."},
+  {"id":"s_2023_36","year":"2023","n":36,"bk":"B","marks":4,"topic":"Energy Conversion","type":"open","title":"Rubber-band toy boat — energy conversion","ans":"More turns → greater distance; elastic potential → kinetic (+ sound + heat); tries differ from experimental error","detail":"(a) input→output relationship [1]; (b) fill the energy-conversion boxes [2]; (c) why repeat tries differ [1]."},
+  {"id":"s_2023_37","year":"2023","n":37,"bk":"B","marks":4,"topic":"Matter and its 3 States","type":"open","title":"Cooking-oil temperature graph; solid forming in the pipe","ans":"Room temp ≈ 30 °C; vegetables added at the dip; oil cooled below 40 °C melting point and solidified","detail":"(a) read room temperature [1]; (b) read the time of the dip [1]; (c) explain the oil cooled below its melting point and solidified, blocking the pipe [2]."},
+  {"id":"s_2023_38","year":"2023","n":38,"bk":"B","marks":5,"topic":"Electrical Systems","type":"open","title":"Electromagnet making an iron bar oscillate","ans":"Electromagnet attracts the bar → breaks the circuit → it drops → remakes → repeats; bulb states from the contacts","detail":"(a) explain the make-and-break oscillation [2]; (b) which bulb(s) light at A [1]; (c) how bulb Q’s brightness changes at B, with reason [2]. Highest-mark item."},
+  {"id":"s_2023_39","year":"2023","n":39,"bk":"B","marks":3,"topic":"Electrical Systems","type":"open","title":"Correct and complete a toy circuit","ans":"Fix the error; wire the two bulbs in parallel so one still lights if the other blows, switch in the main line","detail":"Draw the corrected circuit: bulbs in parallel, switch controlling both. Circuit design under two constraints [3]."},
+  {"id":"s_2023_40","year":"2023","n":40,"bk":"B","marks":3,"topic":"Heat","type":"open","title":"Boiling; glass top heating unevenly and cracking","ans":"Boiling = rapid liquid→gas at the boiling point; part A hotter (nearer the pot, conduction); glass cracks from uneven expansion","detail":"(a) define boiling [1]; (b)(i) why part A is hotter [1]; (b)(ii) why the glass cracks [1]."},
+  {"id":"s_2022_1","year":"2022","n":1,"bk":"A","marks":2,"topic":"Living and non-living things","type":"recall","title":"Reptiles have ___ on their body","ans":"Scales","detail":"Reptiles are covered in scales — a defining feature of the group. Direct classification recall."},
+  {"id":"s_2022_2","year":"2022","n":2,"bk":"A","marks":2,"topic":"Food Chains and Webs","type":"recall","title":"Terms describing caterpillars in the food chain","ans":"Consumer and prey","detail":"Caterpillars eat leaves (consumer) and are eaten by birds (prey). Producer/consumer/prey vocabulary."},
+  {"id":"s_2022_3","year":"2022","n":3,"bk":"A","marks":2,"topic":"Living and non-living things","type":"application","title":"C makes pollen and its own food, D does neither","ans":"C = flowering plant, D = fungi","detail":"Pollen + makes own food → flowering plant. A non-food-making, non-pollen organism → fungi. Classify from clues."},
+  {"id":"s_2022_4","year":"2022","n":4,"bk":"A","marks":2,"topic":"Life Cycles","type":"application","title":"What is NOT correct for both butterfly and grasshopper","ans":"“Both have young that look like the adults”","detail":"Grasshopper young resemble adults; butterfly young (caterpillar) do not. The other statements hold for both."},
+  {"id":"s_2022_5","year":"2022","n":5,"bk":"A","marks":2,"topic":"Living and non-living things","type":"recall","title":"Basic unit of life for a frog and a rose plant","ans":"Cell / cell","detail":"The cell is the basic unit of life for every organism. A newer-syllabus recall item."},
+  {"id":"s_2022_6","year":"2022","n":6,"bk":"A","marks":2,"topic":"Human and Plant Transport","type":"application","title":"What organ could X be (oxygen-rich in, oxygen-poor out)","ans":"B and C only (stomach and leg muscle)","detail":"X receives oxygen-rich blood and returns oxygen-poor — a respiring body part, not the lung (which does the reverse)."},
+  {"id":"s_2022_7","year":"2022","n":7,"bk":"A","marks":2,"topic":"Living and non-living things","type":"data","title":"Cell-parts table — which statement is correct","ans":"P and R are from a plant","detail":"A cell wall marks a plant cell; R has a chloroplast and cell wall, P has a cell wall (no chloroplast), Q has neither → animal."},
+  {"id":"s_2022_8","year":"2022","n":8,"bk":"A","marks":2,"topic":"Plant Systems","type":"application","title":"How dead leaves benefit the tree","ans":"C and D only","detail":"Rotting leaves enrich the soil with mineral salts and reduce water evaporating from the soil — both help the tree."},
+  {"id":"s_2022_9","year":"2022","n":9,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"recall","title":"Statement about germination that is NOT correct","ans":"“The mass of seed leaves increases”","detail":"Seed leaves store food used up during germination, so their mass decreases. The other statements are true."},
+  {"id":"s_2022_10","year":"2022","n":10,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"application","title":"Flower J → fruit L — which statements are correct","ans":"A, B and C","detail":"K develops from the ovary; pollination then fertilisation occurred at M; one seed shows one ovule. Flower-to-fruit reasoning."},
+  {"id":"s_2022_11","year":"2022","n":11,"bk":"A","marks":2,"topic":"Living Together","type":"data","title":"Leaf characteristics at two mountain heights","ans":"At 3000 m the plants have thicker leaves to adapt to the cold","detail":"Compare surface area/thickness data across heights and pick the valid adaptation conclusion. Structural adaptation to environment."},
+  {"id":"s_2022_12","year":"2022","n":12,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"data","title":"Shoot and root lengths of a seedling over time","ans":"The graph with the root growing ahead of the shoot","detail":"During germination the root emerges and grows first, then the shoot. Match the graph to that order."},
+  {"id":"s_2022_13","year":"2022","n":13,"bk":"A","marks":2,"topic":"Plant Systems","type":"experimental","title":"Variegated-leaf photosynthesis test (CO₂ removed from K)","ans":"K shows no food; L shows food only in the green part","detail":"No carbon dioxide (leaf K) → no photosynthesis anywhere; leaf L makes food only where it is green. Tests the needs for photosynthesis."},
+  {"id":"s_2022_14","year":"2022","n":14,"bk":"A","marks":2,"topic":"Human and Plant Respiration","type":"data","title":"Breathing rates of Ken and Jude during exercise","ans":"Ken’s breathing rate increased more than Jude’s","detail":"Ken rises 12→31 (+19), Jude 17→32 (+15). Compare the change, not the raw values. Table reading."},
+  {"id":"s_2022_15","year":"2022","n":15,"bk":"A","marks":2,"topic":"Matter and its 3 States","type":"experimental","title":"Volume of an object by water displacement","ans":"2 cm³","detail":"The object raises the water level; the volume is the rise in the reading. Measuring the volume of an irregular object."},
+  {"id":"s_2022_16","year":"2022","n":16,"bk":"A","marks":2,"topic":"Forces","type":"recall","title":"Which is NOT an effect of a force","ans":"Light passing through a glass pane","detail":"Forces start/stop motion, change direction or shape. Light passing through glass is not a force effect."},
+  {"id":"s_2022_17","year":"2022","n":17,"bk":"A","marks":2,"topic":"Matter and its 3 States","type":"application","title":"Why a flatbread rose when fried then flattened","ans":"Air expands when heated","detail":"Trapped air expands on heating (rises), then contracts as it cools (flattens). Behaviour of a gas with temperature."},
+  {"id":"s_2022_18","year":"2022","n":18,"bk":"A","marks":2,"topic":"Electrical Systems","type":"application","title":"Which bulb was blown (one other stayed unlit)","ans":"The bulb in series with the one that went out","detail":"Trace the circuit: a blown bulb only kills bulbs in its series path, not parallel ones. Series vs parallel reasoning."},
+  {"id":"s_2022_19","year":"2022","n":19,"bk":"A","marks":2,"topic":"Forces","type":"experimental","title":"Distance moved by the toy car on the ruler","ans":"7 cm","detail":"Read start and stop positions on the ruler and subtract. Measuring distance moved — a process skill in a forces context."},
+  {"id":"s_2022_20","year":"2022","n":20,"bk":"A","marks":2,"topic":"Magnets","type":"application","title":"Direction of magnetic force on P and friction on Q","ans":"Both act away from each other / opposing Q’s motion","detail":"Like poles face, so the magnets repel: P is pushed one way; released Q slides away and friction opposes its motion."},
+  {"id":"s_2022_21","year":"2022","n":21,"bk":"A","marks":2,"topic":"Materials","type":"application","title":"Most suitable material for a face shield","ans":"Material D (flexible, waterproof, lets light through)","detail":"A face shield must be flexible, waterproof and transparent — only one row ticks all three. Property-table selection."},
+  {"id":"s_2022_22","year":"2022","n":22,"bk":"A","marks":2,"topic":"Electrical Systems","type":"application","title":"In which circuits does bulb L have the same brightness","ans":"The circuits where L carries the same current","detail":"Compare the current through L across the four set-ups (single vs series vs parallel). Brightness follows current."},
+  {"id":"s_2022_23","year":"2022","n":23,"bk":"A","marks":2,"topic":"Magnets","type":"experimental","title":"Which of three metal bars are magnets","ans":"Deduced from the attract/repel pattern","detail":"Repulsion is the sure test for two magnets; attraction alone is ambiguous. Work through the hung-bar results."},
+  {"id":"s_2022_24","year":"2022","n":24,"bk":"A","marks":2,"topic":"Matter and its 3 States","type":"recall","title":"Which arrow (gas–liquid–solid) is condensation","ans":"The gas → liquid arrow","detail":"Condensation is gas turning to liquid. Name the change-of-state process on the diagram."},
+  {"id":"s_2022_25","year":"2022","n":25,"bk":"A","marks":2,"topic":"Heat","type":"application","title":"Why the tiles felt cold but the wooden floor did not","ans":"The tile is a better conductor of heat than wood","detail":"Tiles conduct heat away from the feet faster, so they feel colder. Conductors vs insulators of heat."},
+  {"id":"s_2022_26","year":"2022","n":26,"bk":"A","marks":2,"topic":"Water and its 3 States","type":"data","title":"Heating curve — what the flat line JK represents","ans":"Boiling","detail":"The temperature stays constant while heat is still added → boiling at the boiling point. Read a heating curve."},
+  {"id":"s_2022_27","year":"2022","n":27,"bk":"A","marks":2,"topic":"Forces","type":"data","title":"Elastic spring force vs extension for springs X, Y, Z","ans":"Extension rising with force, one line per spring by stiffness","detail":"Identical blocks stretch each spring differently; the softer spring extends most. Match the force–extension graph."},
+  {"id":"s_2022_28","year":"2022","n":28,"bk":"A","marks":2,"topic":"Light","type":"application","title":"How to get the largest shadow and the effect on the sensor","ans":"Move the light source nearer the block → larger shadow → sensor reading decreases","detail":"A shadow enlarges as the light source moves closer to the object; more light is blocked, so the sensor reads less."},
+  {"id":"s_2022_29","year":"2022","n":29,"bk":"B","marks":3,"topic":"Humans and the Environment","type":"open","title":"What deforestation is; its effect on gases","ans":"Clearing/cutting down of forests; more carbon dioxide and less oxygen as fewer trees photosynthesise","detail":"(a) define deforestation [1]; (b) state and explain the effect on the surrounding gases [2]."},
+  {"id":"s_2022_30","year":"2022","n":30,"bk":"B","marks":4,"topic":"Human Body Systems","type":"open","title":"Organs J and K from their processes; blood at the small intestine","ans":"Digestion = breaking food into smaller/soluble bits; J = large intestine, K = mouth; Q richer in digested food, P richer in oxygen","detail":"(a) define digestion [1]; (b) identify J and K from the process table [1]; (c) name substances higher at Q than P and vice-versa [2]."},
+  {"id":"s_2022_31","year":"2022","n":31,"bk":"B","marks":4,"topic":"Living and non-living things","type":"open","title":"Liquid T vs soap for killing bacteria (bar graph)","ans":"Liquid T is more effective (fewer bacteria at both 3 min and 1 h); same thumb = same starting bacteria/conditions (fair test)","detail":"(a)(i) conclude which is more effective [1]; (ii) explain using the graph [2]; (b) why the same thumb makes it a fair test [1]."},
+  {"id":"s_2022_32","year":"2022","n":32,"bk":"B","marks":4,"topic":"Living and non-living things","type":"open","title":"Outdoor toilet, waste gases and a mosquito trap","ans":"Waste is moist for larvae; bacteria/micro-organisms give off gas by respiration; gases attract mosquitoes; trapped mosquitoes die from no air/heat","detail":"(a) why mosquitoes lay eggs on waste [1]; (b) the group producing the gases + the process [1]; (c) why the gases attract mosquitoes [1]; (d) why the trapped mosquitoes die quickly [1]."},
+  {"id":"s_2022_33","year":"2022","n":33,"bk":"B","marks":3,"topic":"Human and Plant Transport","type":"open","title":"Stem stained by red water; temperature vs rate of water movement","ans":"Water-carrying tubes transport water up the stem; change the temperature; measure how far the red stain rises in a set time","detail":"(a) name the stained part and its function [1]; (b)(i) the variable to change [1]; (ii) what to measure [1]."},
+  {"id":"s_2022_34","year":"2022","n":34,"bk":"B","marks":4,"topic":"Plant Systems","type":"open","title":"Temperature vs photosynthesis; size of leaf openings","ans":"Bigger openings let in more carbon dioxide, so more photosynthesis / faster food-making; keep light and water constant","detail":"(a) explain how larger openings at higher temperature help the plant, using the graph [2]; (b) two factors to keep constant [2]."},
+  {"id":"s_2022_35","year":"2022","n":35,"bk":"B","marks":4,"topic":"Forces","type":"open","title":"Strings R vs S — length against mass graph","ans":"Read mass at S = 63 cm; increase in R over 0–800 g; not fair (different starting lengths); S broke beyond 800 g","detail":"(a) read a value off S [1]; (b) read the increase for R [1]; (c) why it is not a fair comparison [1]; (d) why S has no results beyond 800 g [1]. Elastic force + data + fair test."},
+  {"id":"s_2022_36","year":"2022","n":36,"bk":"B","marks":5,"topic":"Electrical Systems","type":"open","title":"Electric bell — make-and-break electromagnet","ans":"Electromagnet pulls the iron bar to strike the bell, breaking the circuit → bar springs back → circuit remakes → repeats; stronger spring changes the sound; a wooden nail breaks the circuit so no sound","detail":"(a) explain the continuous ting sound [2]; (b) effect of a stronger spring on the sound + why [2]; (c) effect of a wooden nail + why [1]. Highest-mark item."},
+  {"id":"s_2022_37","year":"2022","n":37,"bk":"B","marks":5,"topic":"Energy Conversion","type":"open","title":"Flying-bird toy — energy conversion and path","ans":"Elastic potential → kinetic + sound; flew lower as the stored energy ran out / converted away; two bands → flies further","detail":"(a) fill the energy forms A→B [1]; (b) why it flew lower C→D [2]; (c) draw the new path with two rubber bands [2]."},
+  {"id":"s_2022_38","year":"2022","n":38,"bk":"B","marks":2,"topic":"Matter and its 3 States","type":"open","title":"Two properties of air that inflated the tyre","ans":"Air has mass and occupies space; it can be compressed / exerts pressure in all directions","detail":"State two properties of air that let the pumped air fill and firm up the tyre [2]. Properties of a gas."},
+  {"id":"s_2022_39","year":"2022","n":39,"bk":"B","marks":4,"topic":"Electrical Systems","type":"open","title":"Two-bulb toy — series fault, then draw parallel","ans":"They were in series (one blows, both go out); redraw with L and R in parallel and the switch controlling both","detail":"(a) state how the two bulbs were connected [1]; (b) complete the circuit so one stays lit if the other blows, only on when the switch is closed [3]. Near-identical to 2023 Q39."},
+  {"id":"s_2022_40","year":"2022","n":40,"bk":"B","marks":2,"topic":"Heat","type":"open","title":"Turkey in a 160 °C oven — thermometer reading","ans":"Read the dial; the turkey is still gaining heat and has not yet reached the oven’s temperature","detail":"(a) state the thermometer reading [1]; (b) why the turkey is not yet 160 °C after two hours [1]. Heat gain toward the surroundings’ temperature."},
+  {"id":"s_2021_1","year":"2021","n":1,"bk":"A","marks":2,"topic":"Living and non-living things","type":"recall","title":"Characteristics of all living things","ans":"Grow, reproduce and respond to changes","detail":"Not all living things make their own food or move from place to place — the shared traits are growth, reproduction and responding to changes."},
+  {"id":"s_2021_2","year":"2021","n":2,"bk":"A","marks":2,"topic":"Living and non-living things","type":"recall","title":"Flowering vs non-flowering plants","ans":"Flowering plants produce fruits; non-flowering ones do not","detail":"Both make their own food; the distinguishing feature is that flowering plants form fruits (from the ovary). Classification recall."},
+  {"id":"s_2021_3","year":"2021","n":3,"bk":"A","marks":2,"topic":"Matter and its 3 States","type":"recall","title":"Which gases are found in air","ans":"A, B, C and D (oxygen, nitrogen, carbon dioxide, water vapour)","detail":"Air is a mixture of all four gases. Basic knowledge of the composition of air."},
+  {"id":"s_2021_4","year":"2021","n":4,"bk":"A","marks":2,"topic":"Human and Plant Transport","type":"application","title":"Which arrows show the direction water moves in a plant","ans":"Q, S and T only","detail":"Water is absorbed by the roots and moves up the stem to the leaves and fruits — trace the upward arrows only."},
+  {"id":"s_2021_5","year":"2021","n":5,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"application","title":"Which flower produced the papaya fruit (one ovary, many seeds)","ans":"Q (one ovary, many ovules)","detail":"A papaya has many seeds in one fruit → one ovary with many ovules. Link fruit structure back to the flower."},
+  {"id":"s_2021_6","year":"2021","n":6,"bk":"A","marks":2,"topic":"Living and non-living things","type":"application","title":"Classification chart (feathers / can fly) — what is possible","ans":"C is a mosquito (no feathers, can fly)","detail":"C = no feathers + can fly = an insect such as a mosquito. Work an unfamiliar organism through a classification key."},
+  {"id":"s_2021_7","year":"2021","n":7,"bk":"A","marks":2,"topic":"Human Reproduction","type":"application","title":"Fertilisation diagram — which statement is NOT correct","ans":"“The fertilised egg develops in the ovary”","detail":"Fertilisation happens in the oviduct and the fertilised egg develops in the uterus (womb), not the ovary. Human reproduction facts."},
+  {"id":"s_2021_8","year":"2021","n":8,"bk":"A","marks":2,"topic":"Human and Plant Transport","type":"recall","title":"Substances in the water-carrying vs food-carrying tubes","ans":"Water tubes: water and mineral salts; food tubes: sugar","detail":"Water-carrying tubes move water and dissolved mineral salts up; food-carrying tubes move sugar made in the leaves. Distinguish the two transport systems."},
+  {"id":"s_2021_9","year":"2021","n":9,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"experimental","title":"Two germination set-ups differing only in temperature","ans":"Seeds will only germinate when the temperature is suitable","detail":"Both are dark and damp; the only variable changed is temperature, so that is the hypothesis being tested. Identify the tested variable."},
+  {"id":"s_2021_10","year":"2021","n":10,"bk":"A","marks":2,"topic":"Life Cycles","type":"data","title":"Bar graph of life-cycle stage lengths for P and Q","ans":"P took a shorter time to become an adult than Q","detail":"Sum each organism’s egg + larva + pupa days; P’s total is far smaller than Q’s. Read and compare from a grouped bar graph."},
+  {"id":"s_2021_11","year":"2021","n":11,"bk":"A","marks":2,"topic":"Human Body Systems","type":"application","title":"Why the whole potato in beaker B digested more slowly","ans":"It has a smaller exposed surface area","detail":"The cut cubes (A) expose more surface to the digestive juice, so they digest faster. Surface area and rate of digestion."},
+  {"id":"s_2021_12","year":"2021","n":12,"bk":"A","marks":2,"topic":"Plant Systems","type":"data","title":"Oxygen in a bag around a sunlit leaf over two hours","ans":"A steadily increasing line","detail":"A leaf in sunlight photosynthesises, releasing oxygen, so the amount rises over time. Match the process to the graph."},
+  {"id":"s_2021_13","year":"2021","n":13,"bk":"A","marks":2,"topic":"Living and non-living things","type":"recall","title":"Characteristic used to classify insect/fish/mammal/amphibian","ans":"Type of body covering","detail":"These groups are distinguished by their body covering (scales, feathers/hair, moist skin, etc.). Classification basis."},
+  {"id":"s_2021_14","year":"2021","n":14,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"experimental","title":"Seed dropped near a fan — distance vs variable X","ans":"Mass of seed","detail":"Distance fell as X increased; a heavier seed is carried a shorter distance by the wind. Infer the variable from a falling graph. Seed dispersal."},
+  {"id":"s_2021_15","year":"2021","n":15,"bk":"A","marks":2,"topic":"Matter and its 3 States","type":"application","title":"Ball stayed the same size after more air was pumped in","ans":"Air can be compressed","detail":"More air fitting into the same volume shows that air (a gas) can be compressed. Property of a gas."},
+  {"id":"s_2021_16","year":"2021","n":16,"bk":"A","marks":2,"topic":"Matter and its 3 States","type":"experimental","title":"Correct way to read a measuring cylinder","ans":"Cylinder on the table, eye level with the water surface","detail":"Read at eye level with the meniscus and the cylinder on a flat surface to avoid a parallax error. Measurement technique."},
+  {"id":"s_2021_17","year":"2021","n":17,"bk":"A","marks":2,"topic":"Matter and its 3 States","type":"data","title":"States of P, Q, R at different temperatures — what can be concluded","ans":"R has the highest freezing point","detail":"R is solid even at 50 °C, so it freezes/melts at the highest temperature of the three. Reason about melting/freezing points from a state table."},
+  {"id":"s_2021_18","year":"2021","n":18,"bk":"A","marks":2,"topic":"Electrical Systems","type":"application","title":"In which circuit is bulb L brightest","ans":"The circuit where L carries the most current (its own branch)","detail":"A bulb is brightest when the most current flows through it — compare series and parallel arrangements. Brightness follows current."},
+  {"id":"s_2021_19","year":"2021","n":19,"bk":"A","marks":2,"topic":"Energy Conversion","type":"application","title":"Energy change in a balloon-powered toy car","ans":"Stored (potential) energy → kinetic + heat + sound","detail":"The stretched balloon stores potential energy that converts to movement (kinetic), plus heat and sound. Energy-conversion chain."},
+  {"id":"s_2021_20","year":"2021","n":20,"bk":"A","marks":2,"topic":"Forces","type":"application","title":"Which forces acted on the still wooden block on a slope","ans":"Friction and gravitational force (no magnetic force)","detail":"Wood is non-magnetic, so no magnetic force; friction holds it and gravity pulls it down the slope. Identify the forces present."},
+  {"id":"s_2021_21","year":"2021","n":21,"bk":"A","marks":2,"topic":"Materials","type":"application","title":"Properties of a folded material that floated then sank","ans":"Flexible but not (fully) waterproof","detail":"It could be folded (flexible) but eventually let water in and sank (not waterproof). Read properties from behaviour."},
+  {"id":"s_2021_22","year":"2021","n":22,"bk":"A","marks":2,"topic":"Electrical Systems","type":"application","title":"In which circuits will at least one bulb NOT light up","ans":"The circuits containing a short circuit / break","detail":"Trace each circuit for a short circuit (bulb bypassed) or gap. Fault-finding across four set-ups."},
+  {"id":"s_2021_23","year":"2021","n":23,"bk":"A","marks":2,"topic":"Forces","type":"application","title":"Opening car doors on a slope — who uses a smaller force","ans":"The downhill person, whose door is not lifted against gravity","detail":"Opening a door uphill means working against gravitational force (larger force); the downhill door needs less. Gravity and force."},
+  {"id":"s_2021_24","year":"2021","n":24,"bk":"A","marks":2,"topic":"Heat","type":"application","title":"Why cup B (with a handle) can be held but cup A cannot","ans":"The handle keeps the hand away from the heat (conduction)","detail":"Material P conducts heat; holding the body of cup A burns, while cup B’s handle keeps the hand at a distance from the hot water. Heat conduction."},
+  {"id":"s_2021_25","year":"2021","n":25,"bk":"A","marks":2,"topic":"Light","type":"application","title":"Why Susan can see the glass of the cupboard","ans":"Some light is reflected from the glass","detail":"We see an object when light bounces off it into our eyes; some light reflects off the glass surface. How we see objects."},
+  {"id":"s_2021_26","year":"2021","n":26,"bk":"A","marks":2,"topic":"Heat","type":"application","title":"Why the bun’s liquid filling burst through the wall","ans":"The filling expanded more than the bun","detail":"On heating, the liquid filling expands (and turns to gas) more than the solid bun, bursting through. Expansion on heating."},
+  {"id":"s_2021_27","year":"2021","n":27,"bk":"A","marks":2,"topic":"Light","type":"data","title":"Light through three fabrics over 10 s — which graph","ans":"Constant lines, C highest, then B, then A","detail":"Each fabric passes a steady amount of light, so flat lines ranked C > B > A. Match a table to the correct graph."},
+  {"id":"s_2021_28","year":"2021","n":28,"bk":"A","marks":2,"topic":"Magnets","type":"application","title":"Toy-train magnets — identify object P and poles J, K, L","ans":"P is a magnet; poles deduced from the attract/repel behaviour","detail":"Turning carriage A reversed the interactions (one end attracts, one repels), showing P is a magnet and fixing the poles. Magnet reasoning."},
+  {"id":"s_2021_29","year":"2021","n":29,"bk":"B","marks":3,"topic":"Living and non-living things","type":"open","title":"Plant cell — name parts and state functions","ans":"R = cell wall, S = nucleus; P (cell membrane) controls what enters/leaves, Q (chloroplast) makes food","detail":"(a) name parts R and S [1]; (b) state the functions of P and Q [2]. Plant-cell structure and function."},
+  {"id":"s_2021_30","year":"2021","n":30,"bk":"B","marks":4,"topic":"Human and Plant Respiration","type":"open","title":"Human respiratory system and how it works with circulation","ans":"Takes in oxygen and removes carbon dioxide; nose, windpipe, lungs; lungs oxygenate the blood the heart pumps round the body","detail":"(a) function + gases involved [1]; (b) name three parts [1]; (c) how the respiratory and circulatory systems work together [2]."},
+  {"id":"s_2021_31","year":"2021","n":31,"bk":"B","marks":3,"topic":"Human Body Systems","type":"open","title":"Amount of sugar along the small intestine","ans":"Sugar rises Q→R as rice is digested into sugar; falls R→S as sugar is absorbed into the blood; undigested food enters the large intestine (absorbs water)","detail":"(a) why sugar increased Q→R [1]; (b) why it decreased R→S [1]; (c) name the next organ and its main function [1]. Digestion and absorption."},
+  {"id":"s_2021_32","year":"2021","n":32,"bk":"B","marks":4,"topic":"Life Cycles","type":"open","title":"Temperature and mosquito-egg hatching; dropping balls into a well","ans":"Most eggs hatch around 28 °C, fewer when too cold or too hot; the balls float; they cover the water so mosquitoes cannot breed on it","detail":"(a) conclude the effect of temperature on hatching [2]; (b) a physical property of the balls (they float) [1]; (c) how the method reduces mosquito breeding [1]."},
+  {"id":"s_2021_33","year":"2021","n":33,"bk":"B","marks":4,"topic":"Life Cycles","type":"open","title":"Bee larva vs pupa; making honey from nectar; fierce offspring","ans":"Larva feeds and moves, pupa is resting; fanning evaporates water so the nectar becomes concentrated honey; the offspring inherit fierceness from bee T","detail":"(a) one way a larva differs from a pupa [1]; (b) how the bee’s fanning turns nectar to honey (evaporation) [2]; (c) why the offspring behave differently — inherited trait [1]."},
+  {"id":"s_2021_34","year":"2021","n":34,"bk":"B","marks":4,"topic":"Plant Systems","type":"open","title":"Leaf disc rising in liquid Y under a lamp","ans":"Photosynthesis makes oxygen bubbles that lift the disc; repeat and average / control variables; liquid Y provides more carbon dioxide than water","detail":"(a) name the process and how it made the disc rise [1]; (b) two ways to get more reliable results [2]; (c) the substance liquid Y provided more of than water (carbon dioxide) [1]."},
+  {"id":"s_2021_35","year":"2021","n":35,"bk":"B","marks":2,"topic":"Water and its 3 States","type":"open","title":"Why spectacles fogged above a face mask","ans":"Warm water vapour from the breath escapes upward, meets the cool lens and condenses into water droplets","detail":"Explain the fogging [2]. Condensation of exhaled water vapour on a cool surface."},
+  {"id":"s_2021_36","year":"2021","n":36,"bk":"B","marks":4,"topic":"Heat","type":"open","title":"Temperature inside a sun-parked car; expanding film bubble","ans":"Temperature = degree of hotness; surroundings ≈ 30 °C; reaches 40 °C at about 10 min; the trapped air in the bubble expands on heating","detail":"(a) state what temperature is [1]; (b) the temperature of the surroundings [1]; (c) time to reach 40 °C [1]; (d) why the bubble grew larger over days [1]."},
+  {"id":"s_2021_37","year":"2021","n":37,"bk":"B","marks":4,"topic":"Energy Conversion","type":"open","title":"Sound of water droplets hitting a plate over time","ans":"Count the peaks in 30 s; the sound isn’t zero because of small background/ripple sounds; increase the drop height or the amount/size of water to raise the peak sound","detail":"(a) number of droplets in the first 30 s [1]; (b) why the sound isn’t zero between 10–15 s [1]; (c) two changes to increase the maximum sound [2]. Sound as a form of energy."},
+  {"id":"s_2021_38","year":"2021","n":38,"bk":"B","marks":5,"topic":"Electrical Systems","type":"open","title":"Electromagnet swings a bar; the “Bobbing Carrots” game","ans":"Disagree — an electromagnet also attracts magnetic materials, so the bar need not be a magnet; opening the switch turns the electromagnet off so the spring pushes the carrot up; use more coils/batteries to pull faster","detail":"(a) evaluate the “bar is a magnet” claim [1]; (b) why the carrot rises when the switch opens [2]; (c) two ways to make it drop faster while still rising when off [2]. Electromagnetism."},
+  {"id":"s_2021_39","year":"2021","n":39,"bk":"B","marks":3,"topic":"Matter and its 3 States","type":"open","title":"Finding the volume inside a coin bank","ans":"Fill it with water and pour that into a measuring cylinder to read the volume; the coins can’t fill it fully because of gaps/air spaces between them","detail":"(a) describe one way to find the internal volume [2]; (b) why 200 one-cm³ coins won’t all fit in a 200 cm³ space [1]. Measuring volume; gaps between solids."},
+  {"id":"s_2021_40","year":"2021","n":40,"bk":"B","marks":4,"topic":"Forces","type":"open","title":"Spring-launched rocket — compression, forces, energy, accuracy","ans":"More compression → greater distance; at G gravity and friction act; at H kinetic + (gravitational) potential energy; a sand pit stops the rocket bouncing/rolling for a truer landing point","detail":"(a) the compression–distance relationship [1]; (b) forces on the rocket going up the ramp off the spring [1]; (c) main energy form(s) at the top H [1]; (d) why a sand pit gives more accurate results [1]. Elastic force + energy + fair test."}
 ];
-const PP_RECURRING = [
-  { concept:'Electromagnets — bells, oscillating bars & games', topic:'Electrical Systems', hits:['2021 Q38','2022 Q36','2023 Q38'], marks:15,
-    note:'A make-and-break (or switched) electromagnet moves an iron bar/hammer/carrot. Explain the on-off cycle, then how a change (spring strength, a non-metal part, more coils) affects it. A high-mark open-ended question in every single year — 5 marks each time.' },
-  { concept:'Circuits: series vs parallel, brightness & keeping a bulb lit', topic:'Electrical Systems', hits:['2021 Q18','2021 Q22','2022 Q18','2022 Q22','2022 Q39','2023 Q21','2023 Q23','2023 Q39'], marks:19,
-    note:'Series vs parallel is the backbone electrical idea — brightest bulb, which bulb blew, fault-finding, and the "if one bulb blows the other stays lit + switch controls both" circuit to draw (2022 Q39 ≈ 2023 Q39).' },
-  { concept:'Energy conversion from a stored-energy toy', topic:'Energy Conversion', hits:['2021 Q19','2021 Q40','2022 Q37','2023 Q36'], marks:15,
-    note:'A stretched balloon, wound rubber band or compressed spring drives a toy. Fill the chain (elastic) potential → kinetic + sound + heat; explain why the motion dies away; predict the effect of more turns / another band.' },
-  { concept:'Elastic / spring force vs stretch or compression', topic:'Forces', hits:['2022 Q27','2022 Q35','2023 Q26'], marks:8,
-    note:'Compare springs/strings via a force–extension (or compression) graph. Steeper = more stretch per unit force; read values; spot why a comparison is not fair (different starting lengths).' },
-  { concept:'Life cycles, mosquitoes & insects', topic:'Life Cycles', hits:['2021 Q10','2021 Q32','2021 Q33','2022 Q4','2022 Q32','2023 Q2','2023 Q29'], marks:22,
-    note:'Stage counts (3 vs 4 stage), larva-vs-pupa differences, insect features, and mosquitoes tied to temperature/environment. Draw a life cycle in words and arrows; controlling mosquito breeding recurs.' },
-  { concept:'Photosynthesis, leaves & gas exchange', topic:'Plant Systems', hits:['2021 Q12','2021 Q34','2022 Q13','2022 Q34','2023 Q10'], marks:14,
-    note:'A leaf makes food and releases oxygen in light — read a rate graph, the oxygen-rising graph, leaf-disc bubbles, and variegated-leaf food tests. The plant needs light and carbon dioxide.' },
-  { concept:'Cells as the basic unit of life', topic:'Living and non-living things', hits:['2021 Q29','2022 Q5','2022 Q7','2023 Q33'], marks:10,
-    note:'A newer-syllabus emphasis: cell as the basic unit of life, plant vs animal cell parts (cell wall, chloroplast, nucleus) and their functions, and the part that makes food.' },
-  { concept:'Changes of state — evaporation, boiling & condensation', topic:'Water and its 3 States', hits:['2021 Q33','2021 Q35','2022 Q24','2022 Q26','2023 Q16','2023 Q35','2023 Q37'], marks:19,
-    note:'Name processes on a state-change diagram; evaporation concentrating a liquid or cooling a surface; condensation fogging a cold lens; a liquid solidifying below its melting point.' },
-  { concept:'Heat: conductors & expansion', topic:'Heat', hits:['2021 Q24','2021 Q26','2021 Q36','2022 Q25','2023 Q19','2023 Q20','2023 Q40'], marks:17,
-    note:'Good vs poor conductors (metal, tiles vs wood, a handle); expansion on heating (a bun filling, trapped air, fitting a rim, cracking glass); an object gaining heat until it reaches the surroundings’ temperature.' },
-  { concept:'Water transport & transpiration in plants', topic:'Human and Plant Transport', hits:['2021 Q4','2021 Q8','2022 Q33','2023 Q7','2023 Q12'], marks:11,
-    note:'Water-carrying (water + mineral salts, upward) vs food-carrying (sugar) tubes; the red-dye-in-stem experiment; leaves losing water through stomata.' },
-  { concept:'Circulatory, respiratory & digestive systems', topic:'Human Body Systems', hits:['2021 Q11','2021 Q30','2021 Q31','2022 Q6','2022 Q30','2023 Q4','2023 Q30'], marks:21,
-    note:'Oxygen-rich vs oxygen-poor blood; how the respiratory and circulatory systems work together; digestion and absorption along the gut (sugar rising then absorbed); surface area and digestion rate.' },
-  { concept:'Magnets: identify magnet vs magnetic material', topic:'Magnets', hits:['2021 Q28','2021 Q38','2022 Q20','2022 Q23','2023 Q17','2023 Q24'], marks:15,
-    note:'Deduce which object is a magnet from attraction/repulsion (repulsion is the sure test) or balance readings; an electromagnet attracts magnetic materials too, so attraction alone doesn’t prove a magnet.' },
-  { concept:'Measuring volume — displacement & reading a cylinder', topic:'Matter and its 3 States', hits:['2021 Q16','2021 Q39','2022 Q15'], marks:7,
-    note:'Read a measuring cylinder at eye level; find an irregular/internal volume by water displacement; gaps between solids mean packed objects don’t fill a space exactly.' },
-  { concept:'Properties of air (a gas)', topic:'Matter and its 3 States', hits:['2021 Q3','2021 Q15','2022 Q17','2022 Q38'], marks:8,
-    note:'Air is a mixture of gases with mass, occupies space, can be compressed, has no fixed shape and expands when heated — applied to balls, tyres and rising bread.' },
-  { concept:'Fair testing, variables & reliability', topic:'Cuts across topics', hits:['2021 Q9','2021 Q34','2022 Q31','2022 Q34','2023 Q27','2023 Q31'], marks:0,
-    note:'Name the changed / measured / constant variables; say what makes a test fair; get reliable results by repeating and averaging. A process skill that rides on top of many topics — not a topic of its own.' },
-  { concept:'Human impact: deforestation & pollution', topic:'Humans and the Environment', hits:['2022 Q29','2023 Q1','2023 Q31'], marks:9,
-    note:'Deforestation → more carbon dioxide, less oxygen (define-then-explain); or a pollution investigation carrying the variables-and-reliability process skills. (Absent from the 2021 paper.)' },
+const PP_SEED_R = [
+  {"id":"r1","concept":"Electromagnets — bells, oscillating bars & games","topic":"Electrical Systems","note":"A make-and-break (or switched) electromagnet moves an iron bar/hammer/carrot. Explain the on-off cycle, then how a change (spring strength, a non-metal part, more coils) affects it. A high-mark open-ended question in every single year — 5 marks each time.","hits":["s_2021_38","s_2022_36","s_2023_38"]},
+  {"id":"r2","concept":"Circuits: series vs parallel, brightness & keeping a bulb lit","topic":"Electrical Systems","note":"Series vs parallel is the backbone electrical idea — brightest bulb, which bulb blew, fault-finding, and the \"if one bulb blows the other stays lit + switch controls both\" circuit to draw (2022 Q39 ≈ 2023 Q39).","hits":["s_2021_18","s_2021_22","s_2022_18","s_2022_22","s_2022_39","s_2023_21","s_2023_23","s_2023_39"]},
+  {"id":"r3","concept":"Energy conversion from a stored-energy toy","topic":"Energy Conversion","note":"A stretched balloon, wound rubber band or compressed spring drives a toy. Fill the chain (elastic) potential → kinetic + sound + heat; explain why the motion dies away; predict the effect of more turns / another band.","hits":["s_2021_19","s_2021_40","s_2022_37","s_2023_36"]},
+  {"id":"r4","concept":"Elastic / spring force vs stretch or compression","topic":"Forces","note":"Compare springs/strings via a force–extension (or compression) graph. Steeper = more stretch per unit force; read values; spot why a comparison is not fair (different starting lengths).","hits":["s_2022_27","s_2022_35","s_2023_26"]},
+  {"id":"r5","concept":"Life cycles, mosquitoes & insects","topic":"Life Cycles","note":"Stage counts (3 vs 4 stage), larva-vs-pupa differences, insect features, and mosquitoes tied to temperature/environment. Draw a life cycle in words and arrows; controlling mosquito breeding recurs.","hits":["s_2021_10","s_2021_32","s_2021_33","s_2022_4","s_2022_32","s_2023_2","s_2023_29"]},
+  {"id":"r6","concept":"Photosynthesis, leaves & gas exchange","topic":"Plant Systems","note":"A leaf makes food and releases oxygen in light — read a rate graph, the oxygen-rising graph, leaf-disc bubbles, and variegated-leaf food tests. The plant needs light and carbon dioxide.","hits":["s_2021_12","s_2021_34","s_2022_13","s_2022_34","s_2023_10"]},
+  {"id":"r7","concept":"Cells as the basic unit of life","topic":"Living and non-living things","note":"A newer-syllabus emphasis: cell as the basic unit of life, plant vs animal cell parts (cell wall, chloroplast, nucleus) and their functions, and the part that makes food.","hits":["s_2021_29","s_2022_5","s_2022_7","s_2023_33"]},
+  {"id":"r8","concept":"Changes of state — evaporation, boiling & condensation","topic":"Water and its 3 States","note":"Name processes on a state-change diagram; evaporation concentrating a liquid or cooling a surface; condensation fogging a cold lens; a liquid solidifying below its melting point.","hits":["s_2021_33","s_2021_35","s_2022_24","s_2022_26","s_2023_16","s_2023_35","s_2023_37"]},
+  {"id":"r9","concept":"Heat: conductors & expansion","topic":"Heat","note":"Good vs poor conductors (metal, tiles vs wood, a handle); expansion on heating (a bun filling, trapped air, fitting a rim, cracking glass); an object gaining heat until it reaches the surroundings’ temperature.","hits":["s_2021_24","s_2021_26","s_2021_36","s_2022_25","s_2023_19","s_2023_20","s_2023_40"]},
+  {"id":"r10","concept":"Water transport & transpiration in plants","topic":"Human and Plant Transport","note":"Water-carrying (water + mineral salts, upward) vs food-carrying (sugar) tubes; the red-dye-in-stem experiment; leaves losing water through stomata.","hits":["s_2021_4","s_2021_8","s_2022_33","s_2023_7","s_2023_12"]},
+  {"id":"r11","concept":"Circulatory, respiratory & digestive systems","topic":"Human Body Systems","note":"Oxygen-rich vs oxygen-poor blood; how the respiratory and circulatory systems work together; digestion and absorption along the gut (sugar rising then absorbed); surface area and digestion rate.","hits":["s_2021_11","s_2021_30","s_2021_31","s_2022_6","s_2022_30","s_2023_4","s_2023_30"]},
+  {"id":"r12","concept":"Magnets: identify magnet vs magnetic material","topic":"Magnets","note":"Deduce which object is a magnet from attraction/repulsion (repulsion is the sure test) or balance readings; an electromagnet attracts magnetic materials too, so attraction alone doesn’t prove a magnet.","hits":["s_2021_28","s_2021_38","s_2022_20","s_2022_23","s_2023_17","s_2023_24"]},
+  {"id":"r13","concept":"Measuring volume — displacement & reading a cylinder","topic":"Matter and its 3 States","note":"Read a measuring cylinder at eye level; find an irregular/internal volume by water displacement; gaps between solids mean packed objects don’t fill a space exactly.","hits":["s_2021_16","s_2021_39","s_2022_15"]},
+  {"id":"r14","concept":"Properties of air (a gas)","topic":"Matter and its 3 States","note":"Air is a mixture of gases with mass, occupies space, can be compressed, has no fixed shape and expands when heated — applied to balls, tyres and rising bread.","hits":["s_2021_3","s_2021_15","s_2022_17","s_2022_38"]},
+  {"id":"r15","concept":"Fair testing, variables & reliability","topic":"Cuts across topics","note":"Name the changed / measured / constant variables; say what makes a test fair; get reliable results by repeating and averaging. A process skill that rides on top of many topics — not a topic of its own.","hits":["s_2021_9","s_2021_34","s_2022_31","s_2022_34","s_2023_27","s_2023_31"]},
+  {"id":"r16","concept":"Human impact: deforestation & pollution","topic":"Humans and the Environment","note":"Deforestation → more carbon dioxide, less oxygen (define-then-explain); or a pollution investigation carrying the variables-and-reliability process skills. (Absent from the 2021 paper.)","hits":["s_2022_29","s_2023_1","s_2023_31"]}
 ];
-const PP_YEARS = ['2021', '2022', '2023'];
 const PP_SKILL = { recall:'Knowledge / recall', application:'Application', data:'Data interpretation', experimental:'Experimental skills', open:'Open-ended explanation' };
 const PP_THEME = {
   'Living and non-living things':'diversity','Materials':'diversity',
@@ -24762,21 +24796,58 @@ const PP_THEME = {
 const PP_THEME_C = { diversity:'#3b82c4', cycles:'#3a9d78', systems:'#c98a2b', interactions:'#7a5cc0', energy:'#d0743a' };
 const PP_THEME_NAME = { diversity:'Diversity', cycles:'Cycles', systems:'Systems', interactions:'Interactions', energy:'Energy' };
 
-let paperMap = {};
+let ppData = null;            // { questions:[], recurring:[] } — loaded or seeded
+let paperMap = {};            // { questionId: bankQuestionId }
+let _ppDataLoaded = false;
 let _ppMapLoaded = false;
+let ppEditMode = false;
 let _ppAssignKey = null;
+let _ppQEditId = null;        // id of question being edited (null = new)
+let _ppCEditId = null;        // id of concept being edited (null = new)
+let _ppCeHits = null;         // Set of question ids while editing a concept
 let _ppHoverEl = null;
 
-function ppKey(q){ return q.year + '-' + q.n; }
-function ppHitKey(hit){ return String(hit).replace(' Q', '-'); }   // "2021 Q38" -> "2021-38"
-function ppSkillName(t){ return PP_SKILL[t] || t; }
+function ppClone(o){ return JSON.parse(JSON.stringify(o)); }
+function ppDefaults(){ return { questions: PP_SEED_Q.map(ppClone), recurring: PP_SEED_R.map(ppClone) }; }
+function ppQuestions(){ return (ppData && Array.isArray(ppData.questions)) ? ppData.questions : []; }
+function ppRecurring(){ return (ppData && Array.isArray(ppData.recurring)) ? ppData.recurring : []; }
+function ppYears(){ return [...new Set(ppQuestions().map(q => String(q.year)))].sort(); }
+function ppNextN(year){ const ns = ppQuestions().filter(q => String(q.year) === String(year)).map(q => Number(q.n) || 0); return ns.length ? Math.max.apply(null, ns) + 1 : 1; }
+function ppNewId(){ return 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+function ppKey(q){ return q.id; }
+function ppSkillName(t){ return PP_SKILL[t] || t || '—'; }
 function ppTheme(topic){ return PP_THEME[topic] || 'diversity'; }
 function ppThemeColor(topic){ return PP_THEME_C[ppTheme(topic)]; }
 function ppLevel(topic){ try { return getTopicLevel(topic); } catch(_) { return ''; } }
-function ppFindQ(key){ return PP_QUESTIONS.find(q => ppKey(q) === key); }
+function ppFindQ(id){ return ppQuestions().find(q => q.id === id); }
 function ppIsAdmin(){ return !!(currentUser && currentUser.role === 'admin'); }
 function ppOwnerUid(){ return ppIsAdmin() ? (currentUser && currentUser.uid) : adminUid; }
-function ppBankQ(key){ const id = paperMap[key]; return id ? questionBank.find(q => q.id === id) : null; }
+function ppBankQ(id){ const b = paperMap[id]; return b ? questionBank.find(q => q.id === b) : null; }
+
+async function loadPaperData(force){
+  if (_ppDataLoaded && !force) return;
+  ppData = ppDefaults();
+  try {
+    const uid = ppOwnerUid();
+    if (uid && db) {
+      const snap = await getDoc(doc(db, 'users', uid, 'settings', 'paperData'));
+      if (snap.exists() && snap.data()) {
+        const d = snap.data();
+        if (Array.isArray(d.questions) && d.questions.length) ppData.questions = d.questions;
+        if (Array.isArray(d.recurring)) ppData.recurring = d.recurring;
+      }
+    }
+  } catch (e) { console.warn('paperData load', e); }
+  _ppDataLoaded = true;
+}
+async function savePaperData(){
+  if (!ppIsAdmin() || !db) return;
+  try {
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'paperData'),
+      { questions: ppData.questions, recurring: ppData.recurring, updatedAt: new Date().toISOString() }, { merge:false });
+  } catch (e) { console.warn('paperData save', e); showToast('Could not save — check your connection', 'error'); }
+}
 
 async function loadPaperMap(force){
   if (_ppMapLoaded && !force) return;
@@ -24787,6 +24858,12 @@ async function loadPaperMap(force){
       paperMap = (snap.exists() && snap.data() && snap.data().map && typeof snap.data().map === 'object') ? snap.data().map : {};
     }
   } catch (e) { console.warn('paperMap load', e); if (!paperMap) paperMap = {}; }
+  // migrate legacy keys "2021-38" -> stable id "s_2021_38"
+  let migrated = false;
+  Object.keys(paperMap).forEach(k => {
+    if (/^\d{4}-\d+$/.test(k)) { const nk = 's_' + k.replace('-', '_'); if (!paperMap[nk]) paperMap[nk] = paperMap[k]; delete paperMap[k]; migrated = true; }
+  });
+  if (migrated && ppIsAdmin()) savePaperMap();
   _ppMapLoaded = true;
 }
 async function savePaperMap(){
@@ -24799,96 +24876,108 @@ async function renderPapersPage(){
   const body = document.getElementById('papersBody');
   if (!body) return;
   body.innerHTML = '<div style="padding:48px;text-align:center;color:var(--text-muted);">Loading past-paper analysis…</div>';
-  await loadPaperMap(true);
+  await Promise.all([ loadPaperData(true), loadPaperMap(true) ]);
   ppRenderBody();
 }
 
-function ppMarksByTopic(){
-  const m = {};
-  PP_QUESTIONS.forEach(q => { m[q.topic] = (m[q.topic] || 0) + q.marks; });
-  return m;
-}
-function ppAssignedCount(){ return PP_QUESTIONS.filter(q => ppBankQ(ppKey(q))).length; }
+function ppMarksByTopic(){ const m = {}; ppQuestions().forEach(q => { m[q.topic] = (m[q.topic] || 0) + (Number(q.marks) || 0); }); return m; }
+function ppAssignedCount(){ return ppQuestions().filter(q => ppBankQ(q.id)).length; }
+function ppRecurringMarks(c){ return (c.hits || []).reduce((s, id) => { const q = ppFindQ(id); return s + (q ? (Number(q.marks) || 0) : 0); }, 0); }
 
 function ppRenderBody(){
   const body = document.getElementById('papersBody');
   if (!body) return;
   const admin = ppIsAdmin();
+  const edit = admin && ppEditMode;
+  const qs = ppQuestions();
+  const total = qs.length;
   const assigned = ppAssignedCount();
-  const total = PP_QUESTIONS.length;
-  const openMarks = PP_QUESTIONS.filter(q => q.type === 'open').reduce((s,q)=>s+q.marks,0);
-  const totalMarks = PP_QUESTIONS.reduce((s,q)=>s+q.marks,0);
+  const totalMarks = qs.reduce((s,q)=>s+(Number(q.marks)||0),0);
+  const openMarks = qs.filter(q => q.type === 'open').reduce((s,q)=>s+(Number(q.marks)||0),0);
+  const years = ppYears();
 
-  // --- recurring concepts (sorted by number of hits) ---
-  const rec = PP_RECURRING.slice().sort((a,b)=> (b.hits.length - a.hits.length) || (b.marks - a.marks));
+  // --- recurring concepts ---
+  const rec = ppRecurring().slice().sort((a,b)=> ((b.hits||[]).length - (a.hits||[]).length) || (ppRecurringMarks(b) - ppRecurringMarks(a)));
   const recCards = rec.map(c => {
-    const yrs = new Set(c.hits.map(h => String(h).slice(0,4))).size;
-    const span = yrs >= PP_YEARS.length ? 'in every year' : (yrs > 1 ? 'in ' + yrs + ' of ' + PP_YEARS.length + ' years' : '');
-    const chips = c.hits.map(h => ppChipByKey(ppHitKey(h))).join('');
+    const hits = (c.hits || []).filter(id => ppFindQ(id));
+    const yrs = new Set(hits.map(id => ppFindQ(id).year)).size;
+    const span = yrs >= years.length && years.length > 1 ? 'in every year' : (yrs > 1 ? 'in ' + yrs + ' of ' + years.length + ' years' : '');
+    const mk = ppRecurringMarks(c);
+    const chips = hits.map(id => ppChipByKey(id)).join('') || '<span style="color:var(--text-muted);font-size:0.8rem;">No questions linked yet</span>';
+    const tools = edit ? `<span class="pp-tools"><button class="pp-mini" title="Edit concept" onclick="ppEditConcept('${c.id}')">&#9998; Edit</button><button class="pp-mini del" title="Delete concept" onclick="ppDeleteConcept('${c.id}')">&times; Delete</button></span>` : '';
     return `<div class="pp-rec">
-      <div class="pp-rec-head"><span class="pp-rec-count">${c.hits.length}&times;</span><span class="pp-rec-title">${escapeHtml(c.concept)}</span></div>
-      <div class="pp-rec-topic">${escapeHtml(c.topic)}${span ? ' &middot; ' + span : ''}${c.marks ? ' &middot; ~' + c.marks + ' marks across the papers' : ''}</div>
+      <div class="pp-rec-head"><span class="pp-rec-count">${hits.length}&times;</span><span class="pp-rec-title">${escapeHtml(c.concept || 'Untitled concept')}</span>${tools}</div>
+      <div class="pp-rec-topic">${escapeHtml(c.topic || '')}${span ? ' &middot; ' + span : ''}${mk ? ' &middot; ~' + mk + ' marks across the papers' : ''}</div>
       <div class="pp-chip-row">${chips}</div>
-      <div class="pp-rec-note">${escapeHtml(c.note)}</div>
+      <div class="pp-rec-note">${escapeHtml(c.note || '')}</div>
     </div>`;
-  }).join('');
+  }).join('') || '<div style="color:var(--text-muted);padding:8px;">No recurring concepts yet.</div>';
+  const addConcept = edit ? `<button class="pp-add" onclick="ppAddConcept()">+ Add concept</button>` : '';
 
-  // --- question map, grouped by year ---
-  const yearGroups = PP_YEARS.map(y => {
-    const qs = PP_QUESTIONS.filter(q => q.year === y).sort((a,b)=> a.n - b.n);
-    const yAssigned = qs.filter(q => ppBankQ(ppKey(q))).length;
-    const chips = qs.map(q => ppChip(q)).join('');
+  // --- question map ---
+  const yearGroups = years.map(y => {
+    const yq = qs.filter(q => String(q.year) === y).sort((a,b)=> (Number(a.n)||0) - (Number(b.n)||0));
+    const yAssigned = yq.filter(q => ppBankQ(q.id)).length;
+    const chips = yq.map(q => edit ? ppChipEdit(q) : ppChip(q)).join('') || '<span style="color:var(--text-muted);font-size:0.8rem;">No questions</span>';
+    const addBtn = edit ? `<button class="pp-add sm" onclick="ppAddQuestion('${y}')">+ Add question</button>` : '';
     return `<div class="pp-year">
-      <div class="pp-year-head"><strong>${y}</strong> <span class="pp-year-sub">Paper 0009/2 &middot; ${qs.length} questions &middot; ${yAssigned}/${qs.length} assigned</span></div>
+      <div class="pp-year-head"><strong>${escapeHtml(y)}</strong> <span class="pp-year-sub">${yq.length} questions &middot; ${yAssigned}/${yq.length} attached</span> ${addBtn}</div>
       <div class="pp-chip-row">${chips}</div>
     </div>`;
   }).join('');
+  const addYear = edit ? `<button class="pp-add" onclick="ppAddQuestion('')">+ Add a paper / question in a new year</button>` : '';
 
   // --- topic breakdown ---
   const byTopic = ppMarksByTopic();
   const topicRows = Object.keys(byTopic).sort((a,b)=> byTopic[b] - byTopic[a]);
-  const maxT = Math.max.apply(null, topicRows.map(t => byTopic[t]));
+  const maxT = topicRows.length ? Math.max.apply(null, topicRows.map(t => byTopic[t])) : 1;
   const bars = topicRows.map(t => {
-    const asg = PP_QUESTIONS.filter(q => q.topic === t && ppBankQ(ppKey(q))).length;
-    const cnt = PP_QUESTIONS.filter(q => q.topic === t).length;
+    const asg = qs.filter(q => q.topic === t && ppBankQ(q.id)).length;
+    const cnt = qs.filter(q => q.topic === t).length;
     return `<div class="pp-bar-row">
       <div class="pp-bar-name"><span class="pp-dot" style="background:${ppThemeColor(t)}"></span>${escapeHtml(t)} <span class="pp-lv">${ppLevel(t)}</span></div>
       <div class="pp-bar-track"><div class="pp-bar-fill" style="width:${(byTopic[t]/maxT*100).toFixed(1)}%;background:${ppThemeColor(t)}"></div></div>
       <div class="pp-bar-val">${byTopic[t]}m &middot; ${asg}/${cnt}</div>
     </div>`;
-  }).join('');
+  }).join('') || '<div style="color:var(--text-muted);">No questions yet.</div>';
   const legend = Object.keys(PP_THEME_NAME).map(k => `<span class="pp-lg"><span class="pp-dot" style="background:${PP_THEME_C[k]}"></span>${PP_THEME_NAME[k]}</span>`).join('');
 
-  const roleLine = admin
-    ? 'Click any question to attach a question from your bank; students can then practise it. Hover a question to preview what is attached.'
-    : 'Tap any highlighted question to practise it. Hover to preview. Greyed-out questions have not been added yet.';
+  const toggle = admin ? `<button class="pp-editbtn ${edit ? 'on' : ''}" onclick="ppToggleEdit()">${edit ? '✓ Done editing' : '✎ Edit content'}</button>` : '';
+  const roleLine = !admin
+    ? 'Tap any highlighted question to practise it. Hover to preview. Greyed-out questions have not been added yet.'
+    : (edit
+      ? 'Editing: use + Add question / + Add concept, click a question or concept to change its details, or × to remove it. Turn editing off to attach bank questions.'
+      : 'Click any question to attach a question from your bank; students can then practise it. Hover a question to preview. Use “Edit content” to add, remove or reword questions and concepts.');
 
   body.innerHTML = ppStyles() + `
   <div class="pp-wrap">
-    <div class="pp-tiles">
-      <div class="pp-tile"><div class="pp-tile-l">Papers</div><div class="pp-tile-v">${PP_YEARS.length}</div><div class="pp-tile-h">${PP_YEARS[0]}–${PP_YEARS[PP_YEARS.length-1]} &middot; ${total} questions</div></div>
-      <div class="pp-tile"><div class="pp-tile-l">Assigned</div><div class="pp-tile-v">${assigned}<span style="font-size:1rem;color:var(--text-muted);font-weight:500;">/${total}</span></div><div class="pp-tile-h">questions ready to practise</div></div>
-      <div class="pp-tile"><div class="pp-tile-l">Open-ended</div><div class="pp-tile-v">${Math.round(openMarks/totalMarks*100)}%</div><div class="pp-tile-h">of marks per paper</div></div>
-      <div class="pp-tile"><div class="pp-tile-l">Recurring concepts</div><div class="pp-tile-v">${PP_RECURRING.length}</div><div class="pp-tile-h">patterns across the papers</div></div>
+    <div class="pp-topbar">
+      <div class="pp-tiles">
+        <div class="pp-tile"><div class="pp-tile-l">Papers</div><div class="pp-tile-v">${years.length}</div><div class="pp-tile-h">${years.length ? years[0] + '–' + years[years.length-1] : '—'} &middot; ${total} questions</div></div>
+        <div class="pp-tile"><div class="pp-tile-l">Attached</div><div class="pp-tile-v">${assigned}<span style="font-size:1rem;color:var(--text-muted);font-weight:500;">/${total}</span></div><div class="pp-tile-h">questions ready to practise</div></div>
+        <div class="pp-tile"><div class="pp-tile-l">Open-ended</div><div class="pp-tile-v">${totalMarks ? Math.round(openMarks/totalMarks*100) : 0}%</div><div class="pp-tile-h">of the marks</div></div>
+        <div class="pp-tile"><div class="pp-tile-l">Recurring concepts</div><div class="pp-tile-v">${ppRecurring().length}</div><div class="pp-tile-h">patterns across the papers</div></div>
+      </div>
+      ${toggle}
     </div>
 
     <div class="pp-note">${roleLine}</div>
 
     <div class="pp-card">
-      <h3 class="pp-h">The concepts that keep coming back</h3>
-      <p class="pp-sub">Patterns that recur across the ${PP_YEARS.length} papers — the highest-yield things to master, ordered by how many questions touched each.</p>
+      <h3 class="pp-h">The concepts that keep coming back ${addConcept}</h3>
+      <p class="pp-sub">Patterns that recur across the papers — the highest-yield things to master, ordered by how many questions touched each.</p>
       ${recCards}
     </div>
 
     <div class="pp-card">
-      <h3 class="pp-h">Question map — every question, every year</h3>
-      <p class="pp-sub">All ${total} questions from the ${PP_YEARS.length} papers, classified into your portal's topics. ${admin ? 'Green = a bank question is attached.' : 'Highlighted = available to practise.'}</p>
+      <h3 class="pp-h">Question map — every question, every year ${addYear}</h3>
+      <p class="pp-sub">All ${total} questions, classified into your portal's topics. ${admin && !edit ? 'Green = a bank question is attached. ' : ''}${edit ? 'Click a question to edit its fields; × removes it.' : (admin ? '' : 'Highlighted = available to practise.')}</p>
       ${yearGroups}
     </div>
 
     <div class="pp-card">
       <h3 class="pp-h">Marks by topic</h3>
-      <p class="pp-sub">Where the marks fall across all three papers. The count shows how many of that topic's questions you've assigned.</p>
+      <p class="pp-sub">Where the marks fall across the papers. The count shows how many of that topic's questions have a bank question attached.</p>
       <div class="pp-legend">${legend}</div>
       ${bars}
     </div>
@@ -24896,67 +24985,59 @@ function ppRenderBody(){
 }
 
 function ppChip(q){
-  const key = ppKey(q);
-  const bq = ppBankQ(key);
+  const bq = ppBankQ(q.id);
   const admin = ppIsAdmin();
   let cls = 'pp-chip';
   if (bq) cls += ' assigned';
   else if (admin) cls += ' open';
   else cls += ' muted';
-  const click = admin ? `ppOpenAssign('${key}')` : (bq ? `ppPractise('${key}')` : '');
+  const click = admin ? `ppOpenAssign('${q.id}')` : (bq ? `ppPractise('${q.id}')` : '');
   const mark = bq ? ' &#10003;' : '';
-  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${key}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">Q${q.n}<span class="pp-chip-yr">${q.year}</span>${mark}</span>`;
+  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${mark}</span>`;
 }
-// A chip that shows the year inline (used in recurring lists that mix years).
-function ppChipByKey(key){
-  const q = ppFindQ(key);
+function ppChipEdit(q){
+  const bq = ppBankQ(q.id);
+  return `<span class="pp-chip-edit">
+    <span class="pp-chip open ${bq ? 'assigned' : ''}" title="Edit this question" onclick="ppEditQuestion('${q.id}')" onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${bq ? ' &#10003;' : ''}</span>
+    <button class="pp-mini del" title="Remove question" onclick="ppDeleteQuestion('${q.id}')">&times;</button>
+  </span>`;
+}
+function ppChipByKey(id){
+  const q = ppFindQ(id);
   if (!q) return '';
-  const bq = ppBankQ(key);
+  const bq = ppBankQ(id);
   const admin = ppIsAdmin();
   let cls = 'pp-chip wide';
   if (bq) cls += ' assigned';
-  else if (admin) cls += ' open';
+  else if (admin && !ppEditMode) cls += ' open';
   else cls += ' muted';
-  const click = admin ? `ppOpenAssign('${key}')` : (bq ? `ppPractise('${key}')` : '');
+  const click = (admin && !ppEditMode) ? `ppOpenAssign('${id}')` : (!admin && bq ? `ppPractise('${id}')` : '');
   const mark = bq ? ' &#10003;' : '';
-  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${key}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">${q.year} Q${q.n}${mark}</span>`;
+  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">${escapeHtml(String(q.year))} Q${escapeHtml(String(q.n))}${mark}</span>`;
 }
 
 // -------- hover preview --------
-function ppHoverEl(){
-  if (!_ppHoverEl) {
-    _ppHoverEl = document.createElement('div');
-    _ppHoverEl.id = 'ppHover';
-    document.body.appendChild(_ppHoverEl);
-  }
-  return _ppHoverEl;
-}
-function ppHoverHtml(key){
-  const q = ppFindQ(key);
+function ppHoverEl(){ if (!_ppHoverEl) { _ppHoverEl = document.createElement('div'); _ppHoverEl.id = 'ppHover'; document.body.appendChild(_ppHoverEl); } return _ppHoverEl; }
+function ppHoverHtml(id){
+  const q = ppFindQ(id);
   if (!q) return '';
-  const bq = ppBankQ(key);
-  const head = `<div class="pp-hv-head"><strong>${q.year} &middot; Q${q.n}</strong> &middot; ${q.marks}m &middot; Booklet ${q.bk}</div>
-    <div class="pp-hv-topic"><span class="pp-dot" style="background:${ppThemeColor(q.topic)}"></span>${escapeHtml(q.topic)} &middot; ${ppLevel(q.topic)} &middot; ${escapeHtml(ppSkillName(q.type))}</div>`;
+  const bq = ppBankQ(id);
+  const head = `<div class="pp-hv-head"><strong>${escapeHtml(String(q.year))} &middot; Q${escapeHtml(String(q.n))}</strong> &middot; ${escapeHtml(String(q.marks))}m &middot; Booklet ${escapeHtml(String(q.bk||''))}</div>
+    <div class="pp-hv-topic"><span class="pp-dot" style="background:${ppThemeColor(q.topic)}"></span>${escapeHtml(q.topic || '')} &middot; ${ppLevel(q.topic)} &middot; ${escapeHtml(ppSkillName(q.type))}</div>`;
   if (bq) {
     return head + `<div class="pp-hv-assigned">&#10003; Attached: ${escapeHtml(bq.title || 'Untitled')}</div>
       <div class="pp-hv-preview">${renderQuestionPreviewHtml(bq.id)}</div>
-      <div class="pp-hv-note">${ppIsAdmin() ? 'Click to change or remove.' : 'Click to practise.'}</div>`;
+      <div class="pp-hv-note">${ppIsAdmin() ? (ppEditMode ? 'Click to edit this question.' : 'Click to change or remove the attachment.') : 'Click to practise.'}</div>`;
   }
-  const id = paperMap[key];
-  const missing = id ? '<div class="pp-hv-note" style="color:var(--accent-red,#c0392b);">The attached question is no longer in the bank.</div>' : '';
-  return head + `<div class="pp-hv-title">${escapeHtml(q.title)}</div>
+  const b = paperMap[id];
+  const missing = b ? '<div class="pp-hv-note" style="color:var(--accent-red,#c0392b);">The attached question is no longer in the bank.</div>' : '';
+  return head + `<div class="pp-hv-title">${escapeHtml(q.title || '')}</div>
     <div class="pp-hv-detail">${escapeHtml(q.detail || '')}</div>${missing}
-    <div class="pp-hv-note">${ppIsAdmin() ? 'Click to attach a bank question.' : 'Not yet available to practise.'}</div>`;
+    <div class="pp-hv-note">${ppIsAdmin() ? (ppEditMode ? 'Click to edit this question.' : 'Click to attach a bank question.') : 'Not yet available to practise.'}</div>`;
 }
-function ppHoverShow(ev, key){
-  const el = ppHoverEl();
-  el.innerHTML = ppHoverHtml(key);
-  el.style.display = 'block';
-  ppHoverMove(ev);
-}
+function ppHoverShow(ev, id){ const el = ppHoverEl(); el.innerHTML = ppHoverHtml(id); el.style.display = 'block'; ppHoverMove(ev); }
 function ppHoverMove(ev){
-  const el = _ppHoverEl;
-  if (!el || el.style.display !== 'block') return;
+  const el = _ppHoverEl; if (!el || el.style.display !== 'block') return;
   const pad = 14, w = el.offsetWidth || 360, h = el.offsetHeight || 240;
   let x = ev.clientX + pad, y = ev.clientY + pad;
   if (x + w > window.innerWidth - 8) x = ev.clientX - w - pad;
@@ -24966,17 +25047,20 @@ function ppHoverMove(ev){
 }
 function ppHoverHide(){ if (_ppHoverEl) _ppHoverEl.style.display = 'none'; }
 
-// -------- assign modal (admin) --------
-function ppOpenAssign(key){
-  if (!ppIsAdmin()) return;
+// -------- edit mode --------
+function ppToggleEdit(){ if (!ppIsAdmin()) return; ppEditMode = !ppEditMode; ppHoverHide(); ppRenderBody(); }
+
+// -------- attach modal --------
+function ppOpenAssign(id){
+  if (!ppIsAdmin() || ppEditMode) return;
   ppHoverHide();
-  _ppAssignKey = key;
-  const q = ppFindQ(key);
+  _ppAssignKey = id;
+  const q = ppFindQ(id);
   const t = document.getElementById('ppAssignTitle');
   const info = document.getElementById('ppAssignInfo');
   if (t) t.textContent = `${q.year} Q${q.n} — ${q.topic}`;
-  if (info) info.innerHTML = `<div style="font-size:0.82rem;color:var(--text-muted);">${q.marks} mark(s) &middot; Booklet ${q.bk} &middot; ${escapeHtml(ppSkillName(q.type))} &middot; ${ppLevel(q.topic)}</div>
-    <div style="margin-top:4px;font-weight:600;">${escapeHtml(q.title)}</div>
+  if (info) info.innerHTML = `<div style="font-size:0.82rem;color:var(--text-muted);">${q.marks} mark(s) &middot; Booklet ${escapeHtml(String(q.bk||''))} &middot; ${escapeHtml(ppSkillName(q.type))} &middot; ${ppLevel(q.topic)}</div>
+    <div style="margin-top:4px;font-weight:600;">${escapeHtml(q.title || '')}</div>
     <div style="margin-top:4px;font-size:0.85rem;color:var(--text-muted);">${escapeHtml(q.detail || '')}</div>`;
   const s = document.getElementById('ppAssignSearch'); if (s) s.value = '';
   ppRenderAssignList();
@@ -24984,19 +25068,18 @@ function ppOpenAssign(key){
 }
 function ppCloseAssign(){ const ov = document.getElementById('ppAssignOverlay'); if (ov) ov.classList.remove('active'); }
 function ppRenderAssignList(){
-  const key = _ppAssignKey; if (!key) return;
-  const q = ppFindQ(key);
+  const id = _ppAssignKey; if (!id) return;
+  const q = ppFindQ(id); if (!q) return;
   const term = (document.getElementById('ppAssignSearch')?.value || '').toLowerCase().trim();
-  const cur = paperMap[key];
+  const cur = paperMap[id];
   let list = questionBank.slice();
   if (term) list = list.filter(x => ((x.title || '') + ' ' + (x.topic || '') + ' ' + (x.category || '') + ' ' + getQuestionPreview(x)).toLowerCase().includes(term));
-  // same-topic first, then alphabetical
   list.sort((a,b)=> ((a.topic === q.topic ? 0 : 1) - (b.topic === q.topic ? 0 : 1)) || String(a.title||'').localeCompare(String(b.title||'')));
   const shown = list.slice(0, 80);
   const rows = shown.map(x => {
     const sel = x.id === cur;
     const same = x.topic === q.topic;
-    return `<div class="pp-arow ${sel ? 'sel' : ''}" onclick="ppAssign('${key}','${x.id}')">
+    return `<div class="pp-arow ${sel ? 'sel' : ''}" onclick="ppAssign('${id}','${x.id}')">
       <div style="flex:1;min-width:0;">
         <div class="pp-arow-title">${escapeHtml(x.title || 'Untitled')}${sel ? ' <span style="color:var(--primary);font-weight:700;">&#10003; attached</span>' : ''}</div>
         <div class="pp-arow-sub">${same ? '<span class="pp-match">same topic</span> ' : ''}${escapeHtml(x.topic || '')}${x.category ? ' &middot; ' + escapeHtml(x.category) : ''}</div>
@@ -25009,57 +25092,174 @@ function ppRenderAssignList(){
   const pr = document.getElementById('ppAssignPractiseBtn'); if (pr) pr.style.display = cur ? '' : 'none';
   const cnt = document.getElementById('ppAssignCount'); if (cnt) cnt.textContent = list.length + ' question' + (list.length === 1 ? '' : 's') + (list.length > shown.length ? ' (showing first ' + shown.length + ')' : '');
 }
-async function ppAssign(key, qid){
-  paperMap[key] = qid;
-  await savePaperMap();
-  ppRenderAssignList();
-  ppRenderBody();
-  showToast('Question attached — students can now practise it', 'success');
-}
-async function ppUnassign(){
-  const key = _ppAssignKey; if (!key) return;
-  delete paperMap[key];
-  await savePaperMap();
-  ppRenderAssignList();
-  ppRenderBody();
-  showToast('Attachment removed', 'info');
-}
-function ppPractise(key){
-  const bq = ppBankQ(key);
-  if (!bq) { showToast('This question is not available to practise', 'error'); return; }
-  ppHoverHide();
-  ppCloseAssign();
-  launchWorksheetPractice([bq]);
-}
+async function ppAssign(id, qid){ paperMap[id] = qid; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Question attached — students can now practise it', 'success'); }
+async function ppUnassign(){ const id = _ppAssignKey; if (!id) return; delete paperMap[id]; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Attachment removed', 'info'); }
+function ppPractise(id){ const bq = ppBankQ(id); if (!bq) { showToast('This question is not available to practise', 'error'); return; } ppHoverHide(); ppCloseAssign(); launchWorksheetPractice([bq]); }
 function ppAssignPractise(){ if (_ppAssignKey) ppPractise(_ppAssignKey); }
+
+// -------- question editor --------
+function ppAddQuestion(year){
+  const y = year || (ppYears().slice(-1)[0] || String(new Date().getFullYear()));
+  ppOpenQEdit({ id: null, year: y, n: ppNextN(y), bk: 'A', marks: 2, topic: (currentTopics()[0] || 'Electrical Systems'), type: 'recall', title: '', detail: '', ans: '' });
+}
+function ppEditQuestion(id){ const q = ppFindQ(id); if (q) ppOpenQEdit(q); }
+function ppOpenQEdit(q){
+  _ppQEditId = q.id;   // null when new
+  ppHoverHide();
+  const set = (elId, v) => { const el = document.getElementById(elId); if (el) el.value = v; };
+  document.getElementById('ppQEditTitle').textContent = q.id ? 'Edit question' : 'Add question';
+  set('ppQeYear', q.year); set('ppQeN', q.n); set('ppQeBk', q.bk || 'A'); set('ppQeMarks', q.marks);
+  // topic dropdown from the portal's live topic list (+ current value if custom)
+  const ts = document.getElementById('ppQeTopic');
+  if (ts) {
+    const topics = currentTopics().slice();
+    if (q.topic && topics.indexOf(q.topic) < 0) topics.unshift(q.topic);
+    ts.innerHTML = topics.map(t => `<option ${t === q.topic ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('');
+  }
+  const sk = document.getElementById('ppQeType');
+  if (sk) sk.innerHTML = Object.keys(PP_SKILL).map(k => `<option value="${k}" ${k === q.type ? 'selected' : ''}>${escapeHtml(PP_SKILL[k])}</option>`).join('');
+  set('ppQeTitle', q.title || ''); set('ppQeDetail', q.detail || ''); set('ppQeAns', q.ans || '');
+  const del = document.getElementById('ppQeDeleteBtn'); if (del) del.style.display = q.id ? '' : 'none';
+  const ov = document.getElementById('ppQEditOverlay'); if (ov) ov.classList.add('active');
+}
+function ppCloseQEdit(){ const ov = document.getElementById('ppQEditOverlay'); if (ov) ov.classList.remove('active'); _ppQEditId = null; }
+async function ppSaveQuestionEditor(){
+  const val = (elId) => (document.getElementById(elId)?.value || '').trim();
+  const year = val('ppQeYear');
+  const n = val('ppQeN');
+  if (!year || !n) { showToast('Year and question number are required', 'error'); return; }
+  const rec = {
+    year: year,
+    n: (Number(n) || n),
+    bk: document.getElementById('ppQeBk')?.value || 'A',
+    marks: Math.max(1, Number(val('ppQeMarks')) || 1),
+    topic: document.getElementById('ppQeTopic')?.value || '',
+    type: document.getElementById('ppQeType')?.value || 'recall',
+    title: val('ppQeTitle'),
+    detail: val('ppQeDetail'),
+    ans: val('ppQeAns')
+  };
+  if (_ppQEditId) {
+    const q = ppFindQ(_ppQEditId); if (q) Object.assign(q, rec);
+  } else {
+    rec.id = ppNewId(); ppData.questions.push(rec);
+  }
+  await savePaperData();
+  ppCloseQEdit();
+  ppRenderBody();
+  showToast('Saved', 'success');
+}
+async function ppDeleteQuestion(id){
+  const q = ppFindQ(id); if (!q) return;
+  if (!confirm(`Remove ${q.year} Q${q.n}? This also removes it from any concept and clears its attachment.`)) return;
+  ppData.questions = ppData.questions.filter(x => x.id !== id);
+  ppData.recurring.forEach(c => { if (Array.isArray(c.hits)) c.hits = c.hits.filter(h => h !== id); });
+  if (paperMap[id]) { delete paperMap[id]; savePaperMap(); }
+  await savePaperData();
+  ppRenderBody();
+  showToast('Question removed', 'info');
+}
+function ppDeleteQuestionFromEditor(){ const id = _ppQEditId; if (!id) return; ppCloseQEdit(); ppDeleteQuestion(id); }
+
+// -------- concept editor --------
+function ppAddConcept(){ ppOpenCEdit({ id: null, concept: '', topic: '', note: '', hits: [] }); }
+function ppEditConcept(id){ const c = ppRecurring().find(x => x.id === id); if (c) ppOpenCEdit(c); }
+function ppOpenCEdit(c){
+  _ppCEditId = c.id;
+  _ppCeHits = new Set((c.hits || []).filter(h => ppFindQ(h)));
+  document.getElementById('ppCEditTitle').textContent = c.id ? 'Edit concept' : 'Add concept';
+  const set = (elId, v) => { const el = document.getElementById(elId); if (el) el.value = v; };
+  set('ppCeName', c.concept || ''); set('ppCeTopic', c.topic || ''); set('ppCeNote', c.note || '');
+  const s = document.getElementById('ppCeSearch'); if (s) s.value = '';
+  ppRenderConceptPicker();
+  const del = document.getElementById('ppCeDeleteBtn'); if (del) del.style.display = c.id ? '' : 'none';
+  const ov = document.getElementById('ppCEditOverlay'); if (ov) ov.classList.add('active');
+}
+function ppCloseCEdit(){ const ov = document.getElementById('ppCEditOverlay'); if (ov) ov.classList.remove('active'); _ppCEditId = null; _ppCeHits = null; }
+function ppRenderConceptPicker(){
+  if (!_ppCeHits) return;
+  const term = (document.getElementById('ppCeSearch')?.value || '').toLowerCase().trim();
+  const selWrap = document.getElementById('ppCeSelected');
+  if (selWrap) {
+    const chips = [..._ppCeHits].map(id => { const q = ppFindQ(id); return q ? `<span class="pp-chip assigned" onclick="ppCeToggleHit('${id}')">${escapeHtml(String(q.year))} Q${escapeHtml(String(q.n))} &times;</span>` : ''; }).join('');
+    selWrap.innerHTML = chips || '<span style="color:var(--text-muted);font-size:0.8rem;">No questions selected yet — pick some below.</span>';
+  }
+  let list = ppQuestions().slice();
+  if (term) list = list.filter(q => (String(q.year) + ' q' + q.n + ' ' + (q.topic||'') + ' ' + (q.title||'')).toLowerCase().includes(term));
+  const rows = ppYears().map(y => {
+    const yq = list.filter(q => String(q.year) === y).sort((a,b)=> (Number(a.n)||0)-(Number(b.n)||0));
+    if (!yq.length) return '';
+    return `<div style="margin-bottom:8px;"><div style="font-size:0.72rem;color:var(--text-muted);font-weight:700;margin:2px 0 5px;">${escapeHtml(y)}</div><div class="pp-chip-row">` +
+      yq.map(q => { const on = _ppCeHits.has(q.id); return `<span class="pp-chip ${on ? 'assigned' : 'open'}" onclick="ppCeToggleHit('${q.id}')">Q${escapeHtml(String(q.n))}${on ? ' &#10003;' : ''}</span>`; }).join('') + `</div></div>`;
+  }).join('');
+  const picker = document.getElementById('ppCePicker');
+  if (picker) picker.innerHTML = rows || '<div style="color:var(--text-muted);padding:10px;">No matching questions.</div>';
+}
+function ppCeToggleHit(id){ if (!_ppCeHits) return; if (_ppCeHits.has(id)) _ppCeHits.delete(id); else _ppCeHits.add(id); ppRenderConceptPicker(); }
+async function ppSaveConceptEditor(){
+  const val = (elId) => (document.getElementById(elId)?.value || '').trim();
+  const name = val('ppCeName');
+  if (!name) { showToast('Give the concept a name', 'error'); return; }
+  // hits ordered by year then question number
+  const hits = [...(_ppCeHits || new Set())].map(id => ppFindQ(id)).filter(Boolean)
+    .sort((a,b)=> String(a.year).localeCompare(String(b.year)) || (Number(a.n)||0)-(Number(b.n)||0)).map(q => q.id);
+  const rec = { concept: name, topic: val('ppCeTopic'), note: val('ppCeNote'), hits: hits };
+  if (_ppCEditId) { const c = ppRecurring().find(x => x.id === _ppCEditId); if (c) Object.assign(c, rec); }
+  else { rec.id = ppNewId(); ppData.recurring.push(rec); }
+  await savePaperData();
+  ppCloseCEdit();
+  ppRenderBody();
+  showToast('Saved', 'success');
+}
+async function ppDeleteConcept(id){
+  const c = ppRecurring().find(x => x.id === id); if (!c) return;
+  if (!confirm(`Delete the concept "${c.concept}"? (The questions themselves are not deleted.)`)) return;
+  ppData.recurring = ppData.recurring.filter(x => x.id !== id);
+  await savePaperData();
+  ppRenderBody();
+  showToast('Concept deleted', 'info');
+}
+function ppDeleteConceptFromEditor(){ const id = _ppCEditId; if (!id) return; ppCloseCEdit(); ppDeleteConcept(id); }
 
 function ppStyles(){
   return `<style>
   #page-papers .page-body { padding-bottom:60px; }
   .pp-wrap { max-width:960px; margin:0 auto; }
-  .pp-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:18px; }
+  .pp-topbar { display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap; margin-bottom:18px; }
+  .pp-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; flex:1; min-width:280px; }
   .pp-tile { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 18px; }
   .pp-tile-l { font-size:0.8rem; color:var(--text-muted); margin-bottom:4px; }
   .pp-tile-v { font-size:1.9rem; font-weight:700; line-height:1.1; color:var(--primary); }
   .pp-tile-h { font-size:0.75rem; color:var(--text-muted); margin-top:4px; }
+  .pp-editbtn { border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:10px; padding:10px 16px; font:inherit; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .pp-editbtn.on { background:var(--primary); border-color:var(--primary); color:#fff; }
   .pp-note { font-size:0.9rem; color:var(--text-muted); background:var(--surface-alt,#faf8f5); border:1px solid var(--border); border-radius:12px; padding:12px 16px; margin-bottom:18px; }
   .pp-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:22px 24px; margin-bottom:20px; }
-  .pp-h { margin:0 0 4px; font-size:1.05rem; }
+  .pp-h { margin:0 0 4px; font-size:1.05rem; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .pp-sub { margin:0 0 16px; font-size:0.88rem; color:var(--text-muted); }
-  .pp-chip-row { display:flex; flex-wrap:wrap; gap:7px; }
+  .pp-add { border:1px dashed var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); color:var(--primary-dark,#2f5d3f); border-radius:9px; padding:6px 12px; font:inherit; font-size:0.82rem; font-weight:600; cursor:pointer; }
+  .pp-add.sm { padding:4px 10px; font-size:0.76rem; margin-left:6px; }
+  .pp-add:hover { filter:brightness(0.97); }
+  .pp-chip-row { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
   .pp-chip { display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:600; padding:5px 10px; border-radius:9px; border:1px solid var(--border); background:var(--surface-alt,#faf8f5); color:var(--text,#333); cursor:default; user-select:none; }
   .pp-chip .pp-chip-yr { font-size:0.64rem; color:var(--text-muted); font-weight:600; }
   .pp-chip.assigned { background:var(--primary-light,#e8f0ea); border-color:var(--primary,#4a7c59); color:var(--primary-dark,#2f5d3f); cursor:pointer; }
   .pp-chip.open { border-style:dashed; cursor:pointer; }
   .pp-chip.open:hover, .pp-chip.assigned:hover { filter:brightness(0.97); box-shadow:0 1px 4px rgba(0,0,0,0.08); }
   .pp-chip.muted { opacity:0.55; }
-  .pp-chip.wide { }
+  .pp-chip-edit { display:inline-flex; align-items:stretch; border-radius:9px; }
+  .pp-chip-edit .pp-chip { border-top-right-radius:0; border-bottom-right-radius:0; }
+  .pp-mini { border:1px solid var(--border); background:var(--surface); color:var(--text-muted); font:inherit; font-size:0.78rem; cursor:pointer; padding:0 8px; border-radius:0 9px 9px 0; border-left:none; }
+  .pp-mini:hover { color:var(--text); }
+  .pp-mini.del:hover { color:#fff; background:var(--accent-red,#d94f4f); border-color:var(--accent-red,#d94f4f); }
+  .pp-tools { margin-left:auto; display:flex; gap:6px; }
+  .pp-tools .pp-mini { border-radius:8px; border-left:1px solid var(--border); padding:3px 9px; }
   .pp-year { padding:12px 0; }
   .pp-year + .pp-year { border-top:1px solid var(--border); }
-  .pp-year-head { margin-bottom:9px; font-size:0.95rem; }
+  .pp-year-head { margin-bottom:9px; font-size:0.95rem; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .pp-year-sub { font-size:0.78rem; color:var(--text-muted); font-weight:500; }
   .pp-rec { border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
-  .pp-rec-head { display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; }
+  .pp-rec-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
   .pp-rec-count { font-size:0.72rem; font-weight:700; color:#fff; background:var(--primary,#4a7c59); border-radius:999px; padding:2px 9px; }
   .pp-rec-title { font-size:0.98rem; font-weight:700; }
   .pp-rec-topic { font-size:0.76rem; color:var(--text-muted); margin:4px 0 8px; }
@@ -25088,11 +25288,14 @@ function ppStyles(){
   .pp-arow-sub { font-size:0.76rem; color:var(--text-muted); margin:2px 0; }
   .pp-arow-prev { font-size:0.78rem; color:var(--text-muted); overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
   .pp-match { color:var(--primary,#4a7c59); font-weight:700; }
-  @media (max-width:560px){ .pp-card { padding:18px; } .pp-bar-name { width:130px; font-size:0.74rem; } .pp-bar-val { width:56px; } }
+  .pp-form-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px 12px; margin-bottom:6px; }
+  .pp-form-grid .full { grid-column:1 / -1; }
+  @media (max-width:560px){ .pp-card { padding:18px; } .pp-bar-name { width:130px; font-size:0.74rem; } .pp-bar-val { width:56px; } .pp-form-grid { grid-template-columns:1fr 1fr; } }
   </style>`;
 }
 
 window.renderPapersPage = renderPapersPage;
+window.ppToggleEdit = ppToggleEdit;
 window.ppOpenAssign = ppOpenAssign;
 window.ppCloseAssign = ppCloseAssign;
 window.ppRenderAssignList = ppRenderAssignList;
@@ -25103,6 +25306,20 @@ window.ppAssignPractise = ppAssignPractise;
 window.ppHoverShow = ppHoverShow;
 window.ppHoverMove = ppHoverMove;
 window.ppHoverHide = ppHoverHide;
+window.ppAddQuestion = ppAddQuestion;
+window.ppEditQuestion = ppEditQuestion;
+window.ppCloseQEdit = ppCloseQEdit;
+window.ppSaveQuestionEditor = ppSaveQuestionEditor;
+window.ppDeleteQuestion = ppDeleteQuestion;
+window.ppDeleteQuestionFromEditor = ppDeleteQuestionFromEditor;
+window.ppAddConcept = ppAddConcept;
+window.ppEditConcept = ppEditConcept;
+window.ppCloseCEdit = ppCloseCEdit;
+window.ppSaveConceptEditor = ppSaveConceptEditor;
+window.ppDeleteConcept = ppDeleteConcept;
+window.ppDeleteConceptFromEditor = ppDeleteConceptFromEditor;
+window.ppRenderConceptPicker = ppRenderConceptPicker;
+window.ppCeToggleHit = ppCeToggleHit;
 // ============ end PAST PAPER ANALYSIS ============
 
 window.navigateTo = navigateTo;
