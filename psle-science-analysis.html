@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PSLE Science Paper Analyser</title>
+<style>
+  :root {
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+    --hairline:#e1e0d9; --border:rgba(11,11,11,0.10);
+    --accent:#2a78d6; --accent-deep:#1c5cab; --accent-track:#cde2fb; --accent-wash:rgba(42,120,214,0.08);
+    --good:#0ca30c; --good-text:#006300; --warning:#eda100; --critical:#d03b3b;
+    --t-diversity:#2a78d6; --t-cycles:#1baf7a; --t-systems:#eda100; --t-interactions:#4a3aa7; --t-energy:#eb6834;
+    --shadow:0 1px 3px rgba(11,11,11,0.06), 0 4px 14px rgba(11,11,11,0.05);
+  }
+  :root[data-theme="dark"] {
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+    --hairline:#2c2c2a; --border:rgba(255,255,255,0.10);
+    --accent:#3987e5; --accent-deep:#86b6ef; --accent-track:#0d366b; --accent-wash:rgba(57,135,229,0.14);
+    --good:#0ca30c; --good-text:#0ca30c; --warning:#c98500; --critical:#e66767;
+    --t-diversity:#3987e5; --t-cycles:#199e70; --t-systems:#c98500; --t-interactions:#9085e9; --t-energy:#d95926;
+    --shadow:none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+      --hairline:#2c2c2a; --border:rgba(255,255,255,0.10);
+      --accent:#3987e5; --accent-deep:#86b6ef; --accent-track:#0d366b; --accent-wash:rgba(57,135,229,0.14);
+      --good:#0ca30c; --good-text:#0ca30c; --warning:#c98500; --critical:#e66767;
+      --t-diversity:#3987e5; --t-cycles:#199e70; --t-systems:#c98500; --t-interactions:#9085e9; --t-energy:#d95926;
+      --shadow:none;
+    }
+  }
+
+  * { box-sizing:border-box; }
+  html,body { margin:0; padding:0; }
+  body { background:var(--page); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .shell { max-width:960px; margin:0 auto; padding:28px 20px 80px; }
+
+  header.app { display:flex; align-items:center; gap:16px; padding:8px 4px 20px; }
+  .app-mark { width:44px; height:44px; border-radius:12px; flex:none; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .app-titles { flex:1; min-width:0; }
+  .app-titles h1 { margin:0; font-size:20px; line-height:1.3; letter-spacing:-0.01em; }
+  .app-titles p { margin:2px 0 0; font-size:13px; color:var(--ink-2); }
+  .icon-btn { border:1px solid var(--border); background:var(--surface); color:var(--ink-2); border-radius:10px; padding:8px 12px; font-size:14px; cursor:pointer; }
+  .icon-btn:hover { color:var(--ink); }
+
+  nav.tabs { display:flex; gap:6px; flex-wrap:wrap; padding:6px; margin-bottom:20px; background:var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); position:sticky; top:10px; z-index:5; }
+  nav.tabs button { flex:1; min-width:96px; border:none; background:transparent; color:var(--ink-2); font:inherit; font-size:13.5px; font-weight:500; padding:10px 10px; border-radius:10px; cursor:pointer; transition:background .15s,color .15s; }
+  nav.tabs button:hover { color:var(--ink); background:var(--accent-wash); }
+  nav.tabs button.active { background:var(--accent); color:#fff; }
+
+  .segwrap { display:flex; align-items:center; gap:12px; margin-bottom:22px; flex-wrap:wrap; }
+  .segwrap .lbl { font-size:13px; color:var(--ink-3); }
+  .seg { display:inline-flex; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:4px; gap:4px; }
+  .seg button { border:none; background:transparent; color:var(--ink-2); font:inherit; font-size:13.5px; font-weight:500; padding:6px 16px; border-radius:7px; cursor:pointer; }
+  .seg button.on { background:var(--accent); color:#fff; }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow); padding:28px; margin-bottom:24px; }
+  .card > h2 { margin:0 0 6px; font-size:17px; letter-spacing:-0.01em; }
+  .card > .sub { margin:0 0 20px; font-size:14px; color:var(--ink-2); }
+  .card h3 { font-size:15px; margin:0 0 4px; }
+
+  .tile-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:16px; margin-bottom:24px; }
+  .tile { background:var(--surface); border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow); padding:20px 22px; }
+  .tile .label { font-size:13px; color:var(--ink-2); margin-bottom:6px; }
+  .tile .value { font-size:34px; font-weight:600; line-height:1.15; letter-spacing:-0.02em; }
+  .tile .hint { font-size:12px; color:var(--ink-3); margin-top:6px; }
+  .tile.hero .value { font-size:44px; color:var(--accent-deep); }
+
+  .bar-row { display:flex; align-items:center; gap:14px; padding:7px 0; }
+  .bar-name { width:210px; flex:none; font-size:13.5px; display:flex; align-items:center; gap:8px; }
+  .bar-name .dot { width:10px; height:10px; border-radius:3px; flex:none; }
+  .bar-name .lv { font-size:11px; color:var(--ink-3); font-weight:600; }
+  .bar-track { flex:1; height:22px; border-radius:5px; background:var(--accent-wash); overflow:hidden; display:flex; }
+  .bar-fill { height:100%; }
+  .bar-fill:first-child { border-radius:5px 0 0 5px; }
+  .bar-fill.gap { box-shadow:2px 0 0 var(--surface); }
+  .bar-val { width:70px; flex:none; text-align:right; font-size:13px; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+  @media (max-width:560px){ .bar-name{ width:130px; font-size:12px; } .bar-val{ width:54px; } }
+
+  .legend { display:flex; flex-wrap:wrap; gap:14px; margin:2px 0 18px; font-size:12.5px; color:var(--ink-2); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .legend .dot { width:11px; height:11px; border-radius:3px; }
+
+  .split { display:flex; height:26px; border-radius:8px; overflow:hidden; border:1px solid var(--border); }
+  .split div { display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:600; }
+
+  .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; }
+  .filters select, .filters button.chipf { border:1px solid var(--border); background:var(--page); color:var(--ink-2); font:inherit; font-size:13.5px; padding:8px 14px; border-radius:999px; cursor:pointer; }
+  .filters button.chipf.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+  .q { border:1px solid var(--border); border-radius:14px; padding:16px 18px; margin-bottom:12px; }
+  .q .q-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:4px; }
+  .q .q-num { font-weight:700; font-size:15px; }
+  .q .q-marks { font-size:12px; color:var(--ink-3); }
+  .q .q-title { font-size:14.5px; margin:2px 0 10px; }
+  .q .q-tags { display:flex; gap:8px; flex-wrap:wrap; }
+  .tag { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:3px 10px; border-radius:999px; background:var(--accent-wash); color:var(--accent-deep); }
+  .tag .dot { width:9px; height:9px; border-radius:2px; }
+  .tag.lv,.tag.type,.tag.bk { background:transparent; border:1px solid var(--border); color:var(--ink-2); }
+  .tag.bk { color:var(--ink-3); }
+  .tag.yr { background:transparent; border:1px solid var(--border); color:var(--ink-2); font-weight:700; }
+  .q details { margin-top:10px; }
+  .q details summary { cursor:pointer; font-size:13px; color:var(--accent-deep); font-weight:600; list-style:none; }
+  .q details summary::-webkit-details-marker { display:none; }
+  .q details summary::before { content:"▸ "; }
+  .q details[open] summary::before { content:"▾ "; }
+  .q .q-detail { font-size:13.5px; color:var(--ink-2); padding:8px 0 2px; }
+  .q .q-detail p { margin:6px 0; }
+  .q .q-detail .ans { color:var(--good-text); font-weight:600; }
+
+  .topic-pick { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+  .topic-pick button { border:1px solid var(--border); background:var(--page); color:var(--ink-2); font:inherit; font-size:13px; padding:8px 13px; border-radius:10px; cursor:pointer; display:flex; align-items:center; gap:7px; }
+  .topic-pick button.on { border-color:var(--accent); background:var(--accent-wash); color:var(--ink); }
+  .topic-pick button .dot { width:9px; height:9px; border-radius:2px; }
+  .topic-pick button .n { font-size:11px; color:var(--ink-3); }
+
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; font-size:14px; margin:12px 0 16px; }
+  .kv dt { color:var(--ink-3); }
+  .kv dd { margin:0; }
+
+  .expect { border-left:3px solid var(--accent); padding:2px 0 2px 16px; margin:12px 0; }
+  .expect h4 { margin:0 0 4px; font-size:14px; }
+  .expect ul { margin:6px 0 0; padding-left:20px; font-size:13.5px; color:var(--ink-2); }
+  .expect ul li { margin-bottom:5px; }
+
+  .pill-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .qpill { border:1px solid var(--border); border-radius:8px; padding:5px 10px; font-size:12.5px; color:var(--ink-2); background:var(--page); }
+
+  .rec { border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin-bottom:14px; }
+  .rec.hot { border-color:var(--accent); }
+  .rec .r-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
+  .rec .r-title { font-size:15px; font-weight:600; }
+  .rec .r-count { font-size:12px; font-weight:700; color:#fff; background:var(--accent); border-radius:999px; padding:2px 9px; }
+  .rec .r-topic { font-size:12px; color:var(--ink-3); }
+  .rec .r-years { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 8px; }
+  .rec .r-years .yb { font-size:11.5px; border:1px solid var(--border); border-radius:7px; padding:3px 8px; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+  .rec p { font-size:13.5px; color:var(--ink-2); margin:6px 0 0; }
+
+  .qtype-card { border:1px solid var(--border); border-radius:14px; padding:20px 22px; margin-bottom:16px; }
+  .qtype-card h3 { display:flex; align-items:center; gap:10px; margin:0 0 4px; }
+  .qtype-card .meta { font-size:12.5px; color:var(--ink-3); margin-bottom:10px; }
+  .qtype-card p { font-size:14px; color:var(--ink-2); margin:8px 0; }
+  .qtype-card ul { font-size:13.5px; color:var(--ink-2); padding-left:20px; margin:8px 0; }
+  .qtype-card ul li { margin-bottom:5px; }
+  .qtype-card .eg { font-size:13px; background:var(--accent-wash); border-radius:10px; padding:12px 14px; margin-top:10px; }
+
+  footer.app { text-align:center; color:var(--ink-3); font-size:12px; padding-top:12px; }
+  .note { font-size:12.5px; color:var(--ink-3); }
+
+  @media (max-width:560px){ .card{ padding:20px; } }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="app">
+    <div class="app-mark">🔬</div>
+    <div class="app-titles">
+      <h1>PSLE Science Paper Analyser</h1>
+      <p>The 2022 &amp; 2023 papers (0009/2), every question classified into the CER portal's topics — with a cross-paper analysis of the concepts that keep coming back.</p>
+    </div>
+    <button class="icon-btn" data-action="toggle-theme" title="Toggle light / dark">◐</button>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-action="tab" data-tab="overview" class="active">Overview</button>
+    <button data-action="tab" data-tab="overall">Overall Analysis</button>
+    <button data-action="tab" data-tab="questions">Question Map</button>
+    <button data-action="tab" data-tab="topics">Topic Deep Dive</button>
+    <button data-action="tab" data-tab="types">Question Types</button>
+  </nav>
+
+  <main>
+    <section id="view-overview"></section>
+    <section id="view-overall" hidden></section>
+    <section id="view-questions" hidden></section>
+    <section id="view-topics" hidden></section>
+    <section id="view-types" hidden></section>
+  </main>
+
+  <footer class="app">
+    PSLE Science (0009/2) Analyser · <span id="appVersionBadge"></span> · 2022 &amp; 2023 · topics mirror the CER portal taxonomy
+  </footer>
+</div>
+
+<script type="module">
+'use strict';
+
+const APP_VERSION = 'v2.0.0';
+const YEARS = ['2022', '2023'];
+
+const THEMES = {
+  diversity:    { name:'Diversity',    varc:'--t-diversity' },
+  cycles:       { name:'Cycles',       varc:'--t-cycles' },
+  systems:      { name:'Systems',      varc:'--t-systems' },
+  interactions: { name:'Interactions', varc:'--t-interactions' },
+  energy:       { name:'Energy',       varc:'--t-energy' },
+};
+
+const TOPICS = {
+  'Living and non-living things': { level:'P3', theme:'diversity', expect:[
+    'Classify organisms by observable features (scales/feathers, produces pollen, makes own food) using two-way tables.',
+    'Cells as the basic unit of life — identify plant vs animal cells from a parts table (cell wall, chloroplast, nucleus).',
+    'Characteristics of living things — respond, reproduce, grow — and micro-organisms (bacteria) inferred from an experiment.' ]},
+  'Materials': { level:'P3', theme:'diversity', expect:[
+    'Match a property (strength, flexibility, waterproof, transparency, floats) to the job an object must do.',
+    'Property tables with tick/cross keys — pick the material whose row meets every requirement (netting, face shield).' ]},
+  'Life Cycles': { level:'P3', theme:'cycles', expect:[
+    'Compare 3-stage and 4-stage life cycles; what is / isn’t true of butterfly vs grasshopper.',
+    'Draw a life cycle in words and arrows; state insect features (3 body parts, 6 legs).',
+    'Link temperature / environment to how fast a life cycle completes (mosquitoes recur).' ]},
+  'Magnets': { level:'P3', theme:'interactions', expect:[
+    'Deduce which bar is a magnet vs magnetic vs non-magnetic from attraction/repulsion or balance readings.',
+    'Direction of magnetic force (repel/attract) and it appearing alongside friction and gravity.' ]},
+  'Plant Systems': { level:'P4', theme:'systems', expect:[
+    'Photosynthesis — read a rate graph (vs light or temperature); variegated-leaf food tests; stomata and gas exchange.',
+    'Plant needs (mineral salts, water) and how leaves/roots/stems help the plant make and use food.' ]},
+  'Human Body Systems': { level:'P4', theme:'systems', expect:[
+    'Digestive system — order the organs; identify organs from the processes they carry out (digestion, absorption).',
+    'Reason about a body system in an applied context (a bar graph of undigested food; nutrients after the gut).' ]},
+  'Matter and its 3 States': { level:'P4', theme:'cycles', expect:[
+    'Decide what is / is not matter; properties of air (has mass, occupies space, can be compressed, expands when heated).',
+    'Name processes on a solid–liquid–gas change-of-state diagram; measure volume by water displacement.' ]},
+  'Light': { level:'P4', theme:'energy', expect:[
+    'Shadows — how size changes with the light source’s distance; effect on a light-sensor reading.' ]},
+  'Heat': { level:'P4', theme:'energy', expect:[
+    'Good vs poor conductors of heat (metal, tiles vs wood); why one surface feels colder.',
+    'Expansion on heating (fitting a rim, cracking glass); an object gaining heat until it reaches the surroundings’ temperature.' ]},
+  'Water and its 3 States': { level:'P5', theme:'cycles', expect:[
+    'Water cycle — evaporation, condensation, precipitation on a diagram.',
+    'Read heating/cooling curves for boiling; evaporation as a cooling process (hand sanitiser).' ]},
+  'Plant Reproduction': { level:'P5', theme:'cycles', expect:[
+    'Flower parts (stigma, style, ovary) and where pollination, fertilisation and seed/fruit development happen.',
+    'Seed dispersal — match a structure to its method; germination — what seeds do/don’t need, root emerging first.' ]},
+  'Human Reproduction': { level:'P5', theme:'cycles', expect:[
+    'Not directly tested in 2022–2023 here — a standard topic: reproductive system parts and their functions.' ]},
+  'Human and Plant Respiration': { level:'P5', theme:'systems', expect:[
+    'Breathing rate during exercise — read a table and compare how much each person’s rate increased.',
+    'Breathing vs respiration; gas exchange (expect it to reappear in other years).' ]},
+  'Human and Plant Transport': { level:'P5', theme:'systems', expect:[
+    'Water-carrying vs food-carrying tubes and the direction each transports; the red-dye-in-stem experiment.',
+    'Transpiration — leaves lose water through stomata; circulatory system moving oxygen-rich/poor blood to organs.' ]},
+  'Electrical Systems': { level:'P5', theme:'systems', expect:[
+    'Series vs parallel — brightness, which bulb blew, what keeps L equally bright.',
+    'Electromagnets — a make-and-break iron bar/bell that oscillates; effect of spring strength or a non-metal part.',
+    'Draw/correct a circuit so bulbs stay lit if one blows (parallel) and only when the switch is closed — a near-annual question.' ]},
+  'Forces': { level:'P6', theme:'interactions', expect:[
+    'Identify what is / isn’t an effect of a force; which forces (friction, gravity, magnetic, elastic) act.',
+    'Elastic/spring force vs stretch or compression graphs; comparing springs/strings and why a comparison isn’t fair.' ]},
+  'Energy in Food': { level:'P6', theme:'energy', expect:[
+    'Not a standalone item in 2022–2023 here — expect food as an energy store and photosynthesis links.' ]},
+  'Energy Conversion': { level:'P6', theme:'energy', expect:[
+    'Fill an energy-conversion chain from a wound rubber band (elastic potential → kinetic + sound + heat).',
+    'Explain why motion dies away; predict the effect of more turns or another rubber band.' ]},
+  'Living Together': { level:'P6', theme:'interactions', expect:[
+    'Ecology vocabulary — population, community, habitat — applied to a scene.',
+    'Adaptations of organisms to their environment (leaf structure at altitude, reducing water loss).' ]},
+  'Food Chains and Webs': { level:'P6', theme:'interactions', expect:[
+    'Producer / consumer / prey / predator roles; build a food web from feeding statements and reason about survival.' ]},
+  'Humans and the Environment': { level:'P6', theme:'interactions', expect:[
+    'Deforestation → more carbon dioxide, less oxygen (define then explain); pollution investigations with variables and reliability.' ]},
+};
+
+const SKILLS = {
+  recall:       { name:'Knowledge / recall' },
+  application:  { name:'Application' },
+  data:         { name:'Data interpretation' },
+  experimental: { name:'Experimental skills' },
+  open:         { name:'Open-ended explanation' },
+};
+
+const QUESTIONS = [
+  /* ================= 2023 ================= */
+  { year:'2023', n:1,  bk:'A', marks:2, topic:'Humans and the Environment', type:'recall', title:'One effect of deforestation', ans:'Increase in carbon dioxide', detail:'Fewer trees → less photosynthesis removing CO₂, so atmospheric carbon dioxide rises. A direct human-impact recall item.' },
+  { year:'2023', n:2,  bk:'A', marks:2, topic:'Life Cycles', type:'recall', title:'Which group has a three-stage life cycle', ans:'Chicken, frog and grasshopper', detail:'Three-stage (no pupa): grasshopper, chicken and frog. Butterfly and beetle are four-stage. Tests stage counts across groups.' },
+  { year:'2023', n:3,  bk:'A', marks:2, topic:'Plant Reproduction', type:'application', title:'What structures R and S help seeds do', ans:'Disperse', detail:'A parachute/feathery structure and a winged/hooked one are seed-dispersal adaptations. Apply dispersal knowledge to unfamiliar structures.' },
+  { year:'2023', n:4,  bk:'A', marks:2, topic:'Human Body Systems', type:'data', title:'Graph of undigested food leaving each digestive organ', ans:'The graph increasing along mouth→large intestine', detail:'Order organs A–E along the gut, then match the bar graph. Combines system knowledge with graph reading.' },
+  { year:'2023', n:5,  bk:'A', marks:2, topic:'Living and non-living things', type:'application', title:'Two-way table — which group animal X belongs to', ans:'Group B (lays eggs, can swim)', detail:'Animal X is a bird (beak, feathers, webbed feet): lays eggs and can swim → group B. Classification with a table.' },
+  { year:'2023', n:6,  bk:'A', marks:2, topic:'Living and non-living things', type:'data', title:'Temperature suitable for both bacteria P and Q', ans:'30 °C', detail:'Read the temperature where both population curves are high. Bacteria as living things + graph interpretation.' },
+  { year:'2023', n:7,  bk:'A', marks:2, topic:'Human and Plant Transport', type:'application', title:'How food from exposed leaves is transported', ans:'Upwards and downwards by the food-carrying tubes', detail:'Food from photosynthesis travels in the food tubes both up and down. Distinguishes water tubes from food tubes.' },
+  { year:'2023', n:8,  bk:'A', marks:2, topic:'Plant Reproduction', type:'application', title:'Female flower parts P, Q, R — which statements correct', ans:'A and C only', detail:'P (stigma) is where pollen lands; R (ovary) is where a seed develops; fertilisation is in the ovary, not Q (style).' },
+  { year:'2023', n:9,  bk:'A', marks:2, topic:'Living and non-living things', type:'experimental', title:'Fair test — what goes into container Q', ans:'Ants + food, but no substance S', detail:'The control is identical except the one variable being tested (substance S). Fair-test design around living things responding.' },
+  { year:'2023', n:10, bk:'A', marks:2, topic:'Plant Systems', type:'data', title:'Light amount vs rate of photosynthesis — who is correct', ans:'Both Sherwin and Michael', detail:'Rate rises 0–1500 units then plateaus (light no longer limiting). Both statements read correctly off the graph.' },
+  { year:'2023', n:11, bk:'A', marks:2, topic:'Living Together', type:'recall', title:'Term for all the grasshoppers in a garden', ans:'Population', detail:'All members of one species in an area = a population. Core ecology vocabulary.' },
+  { year:'2023', n:12, bk:'A', marks:2, topic:'Human and Plant Transport', type:'application', title:'Leaf mass order after sealing surfaces with oil', ans:'A, C, B, D', detail:'Leaves lose water through stomata (more underneath). Most water lost = lightest. No oil loses most; oil both sides loses least.' },
+  { year:'2023', n:13, bk:'A', marks:2, topic:'Plant Reproduction', type:'experimental', title:'Light and germination/growth conclusion', ans:'B and C only', detail:'Both germinated → seeds don’t need light to germinate; the dark seedlings grew taller → faster in the dark.' },
+  { year:'2023', n:14, bk:'A', marks:2, topic:'Living and non-living things', type:'data', title:'Fruit-fly numbers over 25 days — conclusion & cause of death', ans:'Living things reproduce; death from lack of air', detail:'Rising numbers show reproduction; the later die-off points to too little air as the jar overcrowds.' },
+  { year:'2023', n:15, bk:'A', marks:2, topic:'Materials', type:'application', title:'Property of a crab shell that supports and protects', ans:'Strength', detail:'Supporting the body and protecting organs needs a strong material. Match property to function.' },
+  { year:'2023', n:16, bk:'A', marks:2, topic:'Water and its 3 States', type:'application', title:'Which process on the water cycle is condensation', ans:'B only', detail:'B is water vapour turning into cloud (condensation); A evaporation, C precipitation.' },
+  { year:'2023', n:17, bk:'A', marks:2, topic:'Forces', type:'application', title:'Which forces act on magnet B when it stops on a slope', ans:'Friction, gravitational and magnetic', detail:'Held stationary on a slope near another magnet: gravity, friction and magnetic force all act. Identify simultaneous forces.' },
+  { year:'2023', n:18, bk:'A', marks:2, topic:'Materials', type:'experimental', title:'Most suitable material for netting (property table)', ans:'Material A (strong, flexible, lets light through)', detail:'Only one row ticks all three required properties. Read a tick/cross property table.' },
+  { year:'2023', n:19, bk:'A', marks:2, topic:'Heat', type:'application', title:'Fitting a metal rim onto a too-big wheel', ans:'Heat the rim and place it over the wheel', detail:'Heating expands the rim so it slips over the wheel, then contracts to grip. Expansion of matter on heating.' },
+  { year:'2023', n:20, bk:'A', marks:2, topic:'Heat', type:'application', title:'Why part X of a paper lantern started to burn', ans:'Metal is a good conductor of heat', detail:'The metal wire conducts heat from the flame to the paper at X. Conduction through a good conductor.' },
+  { year:'2023', n:21, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'What would have prevented the bulb from blowing', ans:'Using fewer batteries', detail:'Too much current (too many batteries in series) blew the bulb; fewer batteries lowers the current.' },
+  { year:'2023', n:22, bk:'A', marks:2, topic:'Forces', type:'application', title:'Which statement on forces is NOT correct', ans:'“The pushing force is used up”', detail:'A force is not a substance that gets used up; the ball falls because gravity acts. Spot the misconception.' },
+  { year:'2023', n:23, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'Components at A and B that keep bulb L equally bright', ans:'The arrangement leaving L’s current unchanged', detail:'Choose components/positions that don’t change the current through L. Series vs parallel reasoning about brightness.' },
+  { year:'2023', n:24, bk:'A', marks:2, topic:'Magnets', type:'experimental', title:'Conclusion about objects P, Q and X from mass readings', ans:'X is a magnet; P and Q read off the changing balance', detail:'A mass balance shows attraction/repulsion as objects approach X. Deduce magnet vs magnetic vs non-magnetic.' },
+  { year:'2023', n:25, bk:'A', marks:2, topic:'Matter and its 3 States', type:'recall', title:'Which of these is NOT matter', ans:'A beam of light', detail:'Matter has mass and volume; light (and heat) do not. A cloud, a stream of water and melting ice cream are all matter.' },
+  { year:'2023', n:26, bk:'A', marks:2, topic:'Forces', type:'data', title:'Elastic spring force vs compression for springs X and Y', ans:'Compression rising with force, X steeper than Y', detail:'Identical blocks compress the softer spring more; read which graph matches. Elastic/spring force with a graph.' },
+  { year:'2023', n:27, bk:'A', marks:2, topic:'Forces', type:'experimental', title:'Which two experiments support “surface area doesn’t affect force”', ans:'A and B (same mass, different surface area, ~same force)', detail:'To test surface area, keep mass constant and vary only surface area. Selecting a fair-test pair from a table.' },
+  { year:'2023', n:28, bk:'A', marks:2, topic:'Light', type:'application', title:'What Eva was doing (shadow length constant over time)', ans:'Standing still near the lamp post', detail:'An unchanging shadow length means her distance from the light did not change. Read a length-vs-time graph in context.' },
+  { year:'2023', n:29, bk:'B', marks:4, topic:'Life Cycles', type:'open', title:'Mosquito life cycle, insect characteristic, global warming', ans:'egg → larva → pupa → adult; 3 body parts / 6 legs; warmer → shorter cycle → more mosquitoes', detail:'(a) draw the 4-stage cycle in words+arrows [1]; (b) an insect feature [1]; (c) explain from the graph that global warming shortens the cycle and increases numbers [2].' },
+  { year:'2023', n:30, bk:'B', marks:4, topic:'Human and Plant Transport', type:'open', title:'Blood redistribution when resting vs jogging', ans:'More blood to leg muscles for energy/oxygen; less to gut → slower absorption', detail:'(a) leg muscles need more oxygen/food to release energy [2]; (b) less blood to the digestive system slows absorption [2].' },
+  { year:'2023', n:31, bk:'B', marks:4, topic:'Humans and the Environment', type:'open', title:'Secchi-disc water-pollution investigation', ans:'Changed variable = the lake; reliable = repeated & consistent; least polluted = S (deepest visibility)', detail:'(a) changed variable [1]; (b) reliability from repeated, consistent readings [1]; (c) identify + justify the least-polluted lake [2]. Process skills.' },
+  { year:'2023', n:32, bk:'B', marks:4, topic:'Food Chains and Webs', type:'open', title:'Build a food web; advantages of a nest', ans:'F→B,C→E→G web; nest gives shelter from predators and access to prey', detail:'(a) draw the web from the feeding statements [2]; (b) use it to give two survival advantages of the water nest [2].' },
+  { year:'2023', n:33, bk:'B', marks:3, topic:'Living and non-living things', type:'open', title:'Single-celled organism P (cell parts, response to light)', ans:'Chloroplast makes food; responds/moves to light; gathered at the lit holes to photosynthesise', detail:'(a) name the food-making part (chloroplast) [1]; (b) the living characteristic shown [1]; (c) why it gathered under the holes [1].' },
+  { year:'2023', n:34, bk:'B', marks:3, topic:'Plant Reproduction', type:'open', title:'Insect laying eggs in a flower ovary + pollination', ans:'Fruit develops from the ovary; plant is pollinated, insect’s young get food/shelter', detail:'(a) fruit develops from the ovary [1]; (b) explain the mutual benefit — pollination for the plant, food/shelter for the insect [2].' },
+  { year:'2023', n:35, bk:'B', marks:3, topic:'Water and its 3 States', type:'open', title:'Hand sanitiser drying and feeling cold', ans:'Evaporates quickly; evaporation takes heat from the hand; blowing speeds it, so it feels colder', detail:'(a) it evaporates quickly [1]; (b) evaporation absorbs heat from the hand and blowing raises the rate [2]. Evaporation as cooling.' },
+  { year:'2023', n:36, bk:'B', marks:4, topic:'Energy Conversion', type:'open', title:'Rubber-band toy boat — energy conversion', ans:'More turns → greater distance; elastic potential → kinetic (+ sound + heat); tries differ from experimental error', detail:'(a) input→output relationship [1]; (b) fill the energy-conversion boxes [2]; (c) why repeat tries differ [1].' },
+  { year:'2023', n:37, bk:'B', marks:4, topic:'Matter and its 3 States', type:'open', title:'Cooking-oil temperature graph; solid forming in the pipe', ans:'Room temp ≈ 30 °C; vegetables added at the dip; oil cooled below 40 °C melting point and solidified', detail:'(a) read room temperature [1]; (b) read the time of the dip [1]; (c) explain the oil cooled below its melting point and solidified, blocking the pipe [2].' },
+  { year:'2023', n:38, bk:'B', marks:5, topic:'Electrical Systems', type:'open', title:'Electromagnet making an iron bar oscillate', ans:'Electromagnet attracts the bar → breaks the circuit → it drops → remakes → repeats; bulb states from the contacts', detail:'(a) explain the make-and-break oscillation [2]; (b) which bulb(s) light at A [1]; (c) how bulb Q’s brightness changes at B, with reason [2]. Highest-mark item.' },
+  { year:'2023', n:39, bk:'B', marks:3, topic:'Electrical Systems', type:'open', title:'Correct and complete a toy circuit', ans:'Fix the error; wire the two bulbs in parallel so one still lights if the other blows, switch in the main line', detail:'Draw the corrected circuit: bulbs in parallel, switch controlling both. Circuit design under two constraints [3].' },
+  { year:'2023', n:40, bk:'B', marks:3, topic:'Heat', type:'open', title:'Boiling; glass top heating unevenly and cracking', ans:'Boiling = rapid liquid→gas at the boiling point; part A hotter (nearer the pot, conduction); glass cracks from uneven expansion', detail:'(a) define boiling [1]; (b)(i) why part A is hotter [1]; (b)(ii) why the glass cracks [1].' },
+
+  /* ================= 2022 ================= */
+  { year:'2022', n:1,  bk:'A', marks:2, topic:'Living and non-living things', type:'recall', title:'Reptiles have ___ on their body', ans:'Scales', detail:'Reptiles are covered in scales — a defining feature of the group. Direct classification recall.' },
+  { year:'2022', n:2,  bk:'A', marks:2, topic:'Food Chains and Webs', type:'recall', title:'Terms describing caterpillars in the food chain', ans:'Consumer and prey', detail:'Caterpillars eat leaves (consumer) and are eaten by birds (prey). Producer/consumer/prey vocabulary.' },
+  { year:'2022', n:3,  bk:'A', marks:2, topic:'Living and non-living things', type:'application', title:'C makes pollen and its own food, D does neither', ans:'C = flowering plant, D = fungi', detail:'Pollen + makes own food → flowering plant. A non-food-making, non-pollen organism → fungi. Classify from clues.' },
+  { year:'2022', n:4,  bk:'A', marks:2, topic:'Life Cycles', type:'application', title:'What is NOT correct for both butterfly and grasshopper', ans:'“Both have young that look like the adults”', detail:'Grasshopper young resemble adults; butterfly young (caterpillar) do not. The other statements hold for both.' },
+  { year:'2022', n:5,  bk:'A', marks:2, topic:'Living and non-living things', type:'recall', title:'Basic unit of life for a frog and a rose plant', ans:'Cell / cell', detail:'The cell is the basic unit of life for every organism. A newer-syllabus recall item.' },
+  { year:'2022', n:6,  bk:'A', marks:2, topic:'Human and Plant Transport', type:'application', title:'What organ could X be (oxygen-rich in, oxygen-poor out)', ans:'B and C only (stomach and leg muscle)', detail:'X receives oxygen-rich blood and returns oxygen-poor — a respiring body part, not the lung (which does the reverse).' },
+  { year:'2022', n:7,  bk:'A', marks:2, topic:'Living and non-living things', type:'data', title:'Cell-parts table — which statement is correct', ans:'P and R are from a plant', detail:'A cell wall marks a plant cell; R has a chloroplast and cell wall, P has a cell wall (no chloroplast), Q has neither → animal.' },
+  { year:'2022', n:8,  bk:'A', marks:2, topic:'Plant Systems', type:'application', title:'How dead leaves benefit the tree', ans:'C and D only', detail:'Rotting leaves enrich the soil with mineral salts and reduce water evaporating from the soil — both help the tree.' },
+  { year:'2022', n:9,  bk:'A', marks:2, topic:'Plant Reproduction', type:'recall', title:'Statement about germination that is NOT correct', ans:'“The mass of seed leaves increases”', detail:'Seed leaves store food used up during germination, so their mass decreases. The other statements are true.' },
+  { year:'2022', n:10, bk:'A', marks:2, topic:'Plant Reproduction', type:'application', title:'Flower J → fruit L — which statements are correct', ans:'A, B and C', detail:'K develops from the ovary; pollination then fertilisation occurred at M; one seed shows one ovule. Flower-to-fruit reasoning.' },
+  { year:'2022', n:11, bk:'A', marks:2, topic:'Living Together', type:'data', title:'Leaf characteristics at two mountain heights', ans:'At 3000 m the plants have thicker leaves to adapt to the cold', detail:'Compare surface area/thickness data across heights and pick the valid adaptation conclusion. Structural adaptation to environment.' },
+  { year:'2022', n:12, bk:'A', marks:2, topic:'Plant Reproduction', type:'data', title:'Shoot and root lengths of a seedling over time', ans:'The graph with the root growing ahead of the shoot', detail:'During germination the root emerges and grows first, then the shoot. Match the graph to that order.' },
+  { year:'2022', n:13, bk:'A', marks:2, topic:'Plant Systems', type:'experimental', title:'Variegated-leaf photosynthesis test (CO₂ removed from K)', ans:'K shows no food; L shows food only in the green part', detail:'No carbon dioxide (leaf K) → no photosynthesis anywhere; leaf L makes food only where it is green. Tests the needs for photosynthesis.' },
+  { year:'2022', n:14, bk:'A', marks:2, topic:'Human and Plant Respiration', type:'data', title:'Breathing rates of Ken and Jude during exercise', ans:'Ken’s breathing rate increased more than Jude’s', detail:'Ken rises 12→31 (+19), Jude 17→32 (+15). Compare the change, not the raw values. Table reading.' },
+  { year:'2022', n:15, bk:'A', marks:2, topic:'Matter and its 3 States', type:'experimental', title:'Volume of an object by water displacement', ans:'2 cm³', detail:'The object raises the water level; the volume is the rise in the reading. Measuring the volume of an irregular object.' },
+  { year:'2022', n:16, bk:'A', marks:2, topic:'Forces', type:'recall', title:'Which is NOT an effect of a force', ans:'Light passing through a glass pane', detail:'Forces start/stop motion, change direction or shape. Light passing through glass is not a force effect.' },
+  { year:'2022', n:17, bk:'A', marks:2, topic:'Matter and its 3 States', type:'application', title:'Why a flatbread rose when fried then flattened', ans:'Air expands when heated', detail:'Trapped air expands on heating (rises), then contracts as it cools (flattens). Behaviour of a gas with temperature.' },
+  { year:'2022', n:18, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'Which bulb was blown (one other stayed unlit)', ans:'The bulb in series with the one that went out', detail:'Trace the circuit: a blown bulb only kills bulbs in its series path, not parallel ones. Series vs parallel reasoning.' },
+  { year:'2022', n:19, bk:'A', marks:2, topic:'Forces', type:'experimental', title:'Distance moved by the toy car on the ruler', ans:'7 cm', detail:'Read start and stop positions on the ruler and subtract. Measuring distance moved — a process skill in a forces context.' },
+  { year:'2022', n:20, bk:'A', marks:2, topic:'Magnets', type:'application', title:'Direction of magnetic force on P and friction on Q', ans:'Both act away from each other / opposing Q’s motion', detail:'Like poles face, so the magnets repel: P is pushed one way; released Q slides away and friction opposes its motion.' },
+  { year:'2022', n:21, bk:'A', marks:2, topic:'Materials', type:'application', title:'Most suitable material for a face shield', ans:'Material D (flexible, waterproof, lets light through)', detail:'A face shield must be flexible, waterproof and transparent — only one row ticks all three. Property-table selection.' },
+  { year:'2022', n:22, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'In which circuits does bulb L have the same brightness', ans:'The circuits where L carries the same current', detail:'Compare the current through L across the four set-ups (single vs series vs parallel). Brightness follows current.' },
+  { year:'2022', n:23, bk:'A', marks:2, topic:'Magnets', type:'experimental', title:'Which of three metal bars are magnets', ans:'Deduced from the attract/repel pattern', detail:'Repulsion is the sure test for two magnets; attraction alone is ambiguous. Work through the hung-bar results.' },
+  { year:'2022', n:24, bk:'A', marks:2, topic:'Matter and its 3 States', type:'recall', title:'Which arrow (gas–liquid–solid) is condensation', ans:'The gas → liquid arrow', detail:'Condensation is gas turning to liquid. Name the change-of-state process on the diagram.' },
+  { year:'2022', n:25, bk:'A', marks:2, topic:'Heat', type:'application', title:'Why the tiles felt cold but the wooden floor did not', ans:'The tile is a better conductor of heat than wood', detail:'Tiles conduct heat away from the feet faster, so they feel colder. Conductors vs insulators of heat.' },
+  { year:'2022', n:26, bk:'A', marks:2, topic:'Water and its 3 States', type:'data', title:'Heating curve — what the flat line JK represents', ans:'Boiling', detail:'The temperature stays constant while heat is still added → boiling at the boiling point. Read a heating curve.' },
+  { year:'2022', n:27, bk:'A', marks:2, topic:'Forces', type:'data', title:'Elastic spring force vs extension for springs X, Y, Z', ans:'Extension rising with force, one line per spring by stiffness', detail:'Identical blocks stretch each spring differently; the softer spring extends most. Match the force–extension graph.' },
+  { year:'2022', n:28, bk:'A', marks:2, topic:'Light', type:'application', title:'How to get the largest shadow and the effect on the sensor', ans:'Move the light source nearer the block → larger shadow → sensor reading decreases', detail:'A shadow enlarges as the light source moves closer to the object; more light is blocked, so the sensor reads less.' },
+  { year:'2022', n:29, bk:'B', marks:3, topic:'Humans and the Environment', type:'open', title:'What deforestation is; its effect on gases', ans:'Clearing/cutting down of forests; more carbon dioxide and less oxygen as fewer trees photosynthesise', detail:'(a) define deforestation [1]; (b) state and explain the effect on the surrounding gases [2].' },
+  { year:'2022', n:30, bk:'B', marks:4, topic:'Human Body Systems', type:'open', title:'Organs J and K from their processes; blood at the small intestine', ans:'Digestion = breaking food into smaller/soluble bits; J = large intestine, K = mouth; Q richer in digested food, P richer in oxygen', detail:'(a) define digestion [1]; (b) identify J and K from the process table [1]; (c) name substances higher at Q than P and vice-versa [2].' },
+  { year:'2022', n:31, bk:'B', marks:4, topic:'Living and non-living things', type:'open', title:'Liquid T vs soap for killing bacteria (bar graph)', ans:'Liquid T is more effective (fewer bacteria at both 3 min and 1 h); same thumb = same starting bacteria/conditions (fair test)', detail:'(a)(i) conclude which is more effective [1]; (ii) explain using the graph [2]; (b) why the same thumb makes it a fair test [1].' },
+  { year:'2022', n:32, bk:'B', marks:4, topic:'Living and non-living things', type:'open', title:'Outdoor toilet, waste gases and a mosquito trap', ans:'Waste is moist for larvae; bacteria/micro-organisms give off gas by respiration; gases attract mosquitoes; trapped mosquitoes die from no air/heat', detail:'(a) why mosquitoes lay eggs on waste [1]; (b) the group producing the gases + the process [1]; (c) why the gases attract mosquitoes [1]; (d) why the trapped mosquitoes die quickly [1].' },
+  { year:'2022', n:33, bk:'B', marks:3, topic:'Human and Plant Transport', type:'open', title:'Stem stained by red water; temperature vs rate of water movement', ans:'Water-carrying tubes transport water up the stem; change the temperature; measure how far the red stain rises in a set time', detail:'(a) name the stained part and its function [1]; (b)(i) the variable to change [1]; (ii) what to measure [1].' },
+  { year:'2022', n:34, bk:'B', marks:4, topic:'Plant Systems', type:'open', title:'Temperature vs photosynthesis; size of leaf openings', ans:'Bigger openings let in more carbon dioxide, so more photosynthesis / faster food-making; keep light and water constant', detail:'(a) explain how larger openings at higher temperature help the plant, using the graph [2]; (b) two factors to keep constant [2].' },
+  { year:'2022', n:35, bk:'B', marks:4, topic:'Forces', type:'open', title:'Strings R vs S — length against mass graph', ans:'Read mass at S = 63 cm; increase in R over 0–800 g; not fair (different starting lengths); S broke beyond 800 g', detail:'(a) read a value off S [1]; (b) read the increase for R [1]; (c) why it is not a fair comparison [1]; (d) why S has no results beyond 800 g [1]. Elastic force + data + fair test.' },
+  { year:'2022', n:36, bk:'B', marks:5, topic:'Electrical Systems', type:'open', title:'Electric bell — make-and-break electromagnet', ans:'Electromagnet pulls the iron bar to strike the bell, breaking the circuit → bar springs back → circuit remakes → repeats; stronger spring changes the sound; a wooden nail breaks the circuit so no sound', detail:'(a) explain the continuous ting sound [2]; (b) effect of a stronger spring on the sound + why [2]; (c) effect of a wooden nail + why [1]. Highest-mark item.' },
+  { year:'2022', n:37, bk:'B', marks:5, topic:'Energy Conversion', type:'open', title:'Flying-bird toy — energy conversion and path', ans:'Elastic potential → kinetic + sound; flew lower as the stored energy ran out / converted away; two bands → flies further', detail:'(a) fill the energy forms A→B [1]; (b) why it flew lower C→D [2]; (c) draw the new path with two rubber bands [2].' },
+  { year:'2022', n:38, bk:'B', marks:2, topic:'Matter and its 3 States', type:'open', title:'Two properties of air that inflated the tyre', ans:'Air has mass and occupies space; it can be compressed / exerts pressure in all directions', detail:'State two properties of air that let the pumped air fill and firm up the tyre [2]. Properties of a gas.' },
+  { year:'2022', n:39, bk:'B', marks:4, topic:'Electrical Systems', type:'open', title:'Two-bulb toy — series fault, then draw parallel', ans:'They were in series (one blows, both go out); redraw with L and R in parallel and the switch controlling both', detail:'(a) state how the two bulbs were connected [1]; (b) complete the circuit so one stays lit if the other blows, only on when the switch is closed [3]. Near-identical to 2023 Q39.' },
+  { year:'2022', n:40, bk:'B', marks:2, topic:'Heat', type:'open', title:'Turkey in a 160 °C oven — thermometer reading', ans:'Read the dial; the turkey is still gaining heat and has not yet reached the oven’s temperature', detail:'(a) state the thermometer reading [1]; (b) why the turkey is not yet 160 °C after two hours [1]. Heat gain toward the surroundings’ temperature.' },
+];
+
+const RECURRING = [
+  { concept:'Electromagnets & the electric bell', topic:'Electrical Systems', hits:['2022 Q36','2023 Q38'], marks:10,
+    note:'A make-and-break electromagnet moves an iron bar/hammer repeatedly. Explain the on-off cycle, then how a change (spring strength, a non-metal part) affects the result. Always a high-mark open-ended question — 5 marks in each paper.' },
+  { concept:'Circuits: keep one bulb lit if another blows (parallel)', topic:'Electrical Systems', hits:['2022 Q18','2022 Q22','2022 Q39','2023 Q21','2023 Q23','2023 Q39'], marks:15,
+    note:'Series vs parallel is the backbone electrical idea. The "if one bulb blows the other stays lit + switch controls both" circuit-drawing question appeared almost identically in both years (2022 Q39 ≈ 2023 Q39).' },
+  { concept:'Energy conversion from a twisted rubber band', topic:'Energy Conversion', hits:['2022 Q37','2023 Q36'], marks:9,
+    note:'A wound rubber band drives a toy (flying bird, boat). Fill the chain elastic potential → kinetic + sound (+ heat); explain why the motion dies away; predict the effect of more turns or another band.' },
+  { concept:'Elastic / spring force vs stretch or compression', topic:'Forces', hits:['2022 Q27','2022 Q35','2023 Q26'], marks:6,
+    note:'Compare springs/strings via a force–extension (or compression) graph. Steeper = more stretch per unit force; read values; spot why a comparison is not fair (different starting lengths).' },
+  { concept:'Human impact: deforestation & pollution', topic:'Humans and the Environment', hits:['2022 Q29','2023 Q1','2023 Q31'], marks:9,
+    note:'Deforestation → more carbon dioxide, less oxygen (define-then-explain). Or a pollution investigation carrying the variables-and-reliability process skills.' },
+  { concept:'Life cycles & mosquitoes', topic:'Life Cycles', hits:['2022 Q4','2022 Q32','2023 Q2','2023 Q29'], marks:12,
+    note:'Stage counts (3 vs 4 stage), insect features (3 body parts, 6 legs), and mosquitoes tied to their environment/temperature. Expect to draw a life cycle in words and arrows.' },
+  { concept:'Photosynthesis, leaves & stomata', topic:'Plant Systems', hits:['2022 Q13','2022 Q34','2023 Q10'], marks:8,
+    note:'Read a rate-of-photosynthesis graph (vs light or temperature); link leaf-opening size to gas exchange; variegated-leaf food tests showing the needs for photosynthesis.' },
+  { concept:'Cells as the basic unit of life', topic:'Living and non-living things', hits:['2022 Q5','2022 Q7','2023 Q33'], marks:7,
+    note:'A newer-syllabus emphasis: the cell as the basic unit of life, plant vs animal cells from a parts table, and the cell part that makes food (chloroplast).' },
+  { concept:'Changes of state; evaporation & boiling', topic:'Water and its 3 States', hits:['2022 Q24','2022 Q26','2023 Q16','2023 Q35','2023 Q37'], marks:11,
+    note:'Name processes on a state-change diagram; read heating/cooling curves; evaporation as a cooling process; a liquid solidifying once it cools below its melting point.' },
+  { concept:'Heat: conductors & expansion', topic:'Heat', hits:['2022 Q25','2023 Q19','2023 Q20','2023 Q40'], marks:9,
+    note:'Good vs poor conductors (metal, tiles vs wood); expansion on heating (fitting a rim, cracking glass); an object gaining heat until it reaches the surroundings’ temperature.' },
+  { concept:'Water transport & transpiration in plants', topic:'Human and Plant Transport', hits:['2022 Q33','2023 Q7','2023 Q12'], marks:7,
+    note:'Water-carrying vs food-carrying tubes; the red-dye-in-stem experiment and its variables; leaves losing water through stomata.' },
+  { concept:'Fair testing, variables & reliability', topic:'Cuts across topics', hits:['2022 Q31','2022 Q34','2023 Q9','2023 Q27','2023 Q31'], marks:0,
+    note:'Name the changed / measured / constant variables; say what makes a test fair; justify reliability from repeated, consistent readings. A process skill that rides on top of many topics — not a topic of its own.' },
+  { concept:'Magnets: identify magnet vs magnetic material', topic:'Magnets', hits:['2022 Q20','2022 Q23','2023 Q17','2023 Q24'], marks:8,
+    note:'Deduce which bar is a magnet from attraction/repulsion or balance readings; direction of magnetic force; it appearing alongside friction and gravity.' },
+  { concept:'Circulatory & digestive systems', topic:'Human Body Systems', hits:['2022 Q6','2022 Q30','2023 Q4','2023 Q30'], marks:12,
+    note:'Oxygen-rich vs oxygen-poor blood to organs; blood redistribution during exercise; digestion and absorption along the gut; nutrients higher after the small intestine.' },
+];
+
+function themeOf(topic){ return TOPICS[topic] ? TOPICS[topic].theme : 'diversity'; }
+function levelOf(topic){ return TOPICS[topic] ? TOPICS[topic].level : ''; }
+function qset(scope){ return scope==='all' ? QUESTIONS : QUESTIONS.filter(q=>q.year===scope); }
+function totalMarks(scope){ return qset(scope).reduce((s,q)=>s+q.marks,0); }
+
+function marksByTopic(scope){
+  const m = {}; Object.keys(TOPICS).forEach(t=>m[t]={marks:0,count:0,y:{}});
+  YEARS.forEach(y=>Object.keys(TOPICS).forEach(t=>m[t].y[y]=0));
+  qset(scope).forEach(q=>{ m[q.topic].marks+=q.marks; m[q.topic].count++; m[q.topic].y[q.year]+=q.marks; });
+  return m;
+}
+function marksByLevel(scope){ const m={P3:0,P4:0,P5:0,P6:0}; qset(scope).forEach(q=>m[levelOf(q.topic)]+=q.marks); return m; }
+function marksByTheme(scope){ const m={}; Object.keys(THEMES).forEach(t=>m[t]=0); qset(scope).forEach(q=>m[themeOf(q.topic)]+=q.marks); return m; }
+function marksByType(scope){ const m={}; Object.keys(SKILLS).forEach(t=>m[t]={marks:0,count:0}); qset(scope).forEach(q=>{m[q.type].marks+=q.marks;m[q.type].count++;}); return m; }
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let activeTab = 'overview';
+let scope = 'all';
+let qFilter = { topic:'', bk:'', type:'', year:'' };
+let activeTopic = 'Electrical Systems';
+
+function themeDot(theme){ return `<span class="dot" style="background:var(${THEMES[theme].varc})"></span>`; }
+
+function paperSeg(){
+  const opt = (v,label) => `<button class="${scope===v?'on':''}" data-action="scope" data-val="${v}">${label}</button>`;
+  return `<div class="segwrap"><span class="lbl">Paper</span><div class="seg">${opt('all','Both')}${opt('2023','2023')}${opt('2022','2022')}</div></div>`;
+}
+
+function topicBarsHtml(byTopic, stacked){
+  const rows = Object.keys(TOPICS).map(t=>({t,...byTopic[t]})).filter(r=>r.marks>0).sort((a,b)=>b.marks-a.marks);
+  const maxTopic = Math.max(...rows.map(r=>r.marks));
+  return { max:maxTopic, rows, html: rows.map(r=>{
+    const th=themeOf(r.t);
+    let fills;
+    if (stacked) {
+      fills = YEARS.map((y,i)=>{
+        const w=r.y[y]/maxTopic*100; if(w<=0) return '';
+        const op = y==='2023' ? '1' : '0.55';
+        return `<div class="bar-fill ${i>0?'gap':''}" style="width:${w.toFixed(1)}%; background:var(${THEMES[th].varc}); opacity:${op}"></div>`;
+      }).join('');
+    } else {
+      fills = `<div class="bar-fill" style="width:${(r.marks/maxTopic*100).toFixed(1)}%; background:var(${THEMES[th].varc})"></div>`;
+    }
+    return `<div class="bar-row">
+      <div class="bar-name">${themeDot(th)}<span>${esc(r.t)}</span> <span class="lv">${levelOf(r.t)}</span></div>
+      <div class="bar-track">${fills}</div>
+      <div class="bar-val">${r.marks}m · ${r.count}Q</div>
+    </div>`;
+  }).join('') };
+}
+
+function renderOverview(){
+  const el = $('#view-overview');
+  const byTopic = marksByTopic(scope);
+  const byLevel = marksByLevel(scope);
+  const byTheme = marksByTheme(scope);
+  const byType = marksByType(scope);
+  const total = totalMarks(scope);
+  const qn = qset(scope).length;
+  const notTested = Object.keys(TOPICS).filter(t=>byTopic[t].marks===0);
+  const bars = topicBarsHtml(byTopic, scope==='all');
+
+  const themeLegend = Object.entries(THEMES).map(([k,v])=>`<span>${themeDot(k)} ${esc(v.name)} · ${byTheme[k]}m</span>`).join('');
+  const yearNote = scope==='all' ? '<p class="note" style="margin:-6px 0 14px">Darker segment = 2023, lighter = 2022.</p>' : '';
+
+  const aMarks = qset(scope).filter(q=>q.bk==='A').reduce((s,q)=>s+q.marks,0);
+  const bMarks = total - aMarks;
+
+  const levelBar = ['P3','P4','P5','P6'].map((lv,i)=>{
+    const pct=(byLevel[lv]/total*100).toFixed(1);
+    const shades=['--t-diversity','--t-cycles','--t-systems','--t-interactions'];
+    return `<div style="width:${pct}%; background:var(${shades[i]})">${lv} · ${byLevel[lv]}m</div>`;
+  }).join('');
+
+  const typeBars = Object.keys(SKILLS).map((k,i)=>{
+    const shades=['--t-diversity','--t-cycles','--t-systems','--t-interactions','--t-energy'];
+    return `<div class="bar-row">
+      <div class="bar-name"><span class="dot" style="background:var(${shades[i]})"></span>${esc(SKILLS[k].name)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(byType[k].marks/total*100).toFixed(1)}%; background:var(${shades[i]})"></div></div>
+      <div class="bar-val">${byType[k].marks}m · ${byType[k].count}Q</div>
+    </div>`;
+  }).join('');
+
+  const scopeLabel = scope==='all' ? 'both papers' : `the ${scope} paper`;
+
+  el.innerHTML = `
+    ${paperSeg()}
+    <div class="tile-row">
+      <div class="tile hero"><div class="label">Questions</div><div class="value">${qn}</div><div class="hint">${scope==='all'?'40 per paper × 2':'Booklet A Q1–28 · Booklet B Q29–40'}</div></div>
+      <div class="tile"><div class="label">Total marks</div><div class="value">${total}</div><div class="hint">${scope==='all'?'100 per paper':'56 MCQ + 44 open-ended'}</div></div>
+      <div class="tile"><div class="label">Topics covered</div><div class="value">${Object.keys(TOPICS).length-notTested.length}</div><div class="hint">of ${Object.keys(TOPICS).length} CER-portal topics</div></div>
+      <div class="tile"><div class="label">Duration</div><div class="value">1h45</div><div class="hint">Booklets A and B combined</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Paper anatomy</h2>
+      <p class="sub">Across ${scopeLabel}: one code (0009/2), two booklets sat back-to-back in 1 h 45 min.</p>
+      <div class="split" style="margin-bottom:8px">
+        <div style="width:${(aMarks/total*100)}%; background:var(--accent)">Booklet A · MCQ · ${aMarks} marks</div>
+        <div style="width:${(bMarks/total*100)}%; background:var(--accent-deep)">Booklet B · open-ended · ${bMarks} marks</div>
+      </div>
+      <p class="note">Booklet A is 28 four-option MCQs (2 marks each, OAS). Booklet B is 12 structured questions (Q29–40) written in the booklet, 1–5 marks each.</p>
+    </div>
+
+    <div class="card">
+      <h2>Marks by CER-portal topic</h2>
+      <p class="sub">Every question mapped to the portal's topic list, coloured by the five PSLE Science themes.</p>
+      <div class="legend">${themeLegend}</div>
+      ${yearNote}
+      ${bars.html}
+      <p class="note" style="margin-top:14px">Not assessed in ${scopeLabel}: ${notTested.map(esc).join(' · ')||'none'}.</p>
+    </div>
+
+    <div class="card">
+      <h2>Coverage by level</h2>
+      <p class="sub">The paper draws across all four years of the syllabus.</p>
+      <div class="split">${levelBar}</div>
+    </div>
+
+    <div class="card">
+      <h2>What skill each question tests</h2>
+      <p class="sub">How the marks split by the demand made — content is only half the story.</p>
+      ${typeBars}
+      <p class="note" style="margin-top:12px">The Booklet-B marks all need written explanations; the biggest mark-loser is answering these without the marking keywords.</p>
+    </div>`;
+}
+
+function renderOverall(){
+  const el = $('#view-overall');
+  const byTopicAll = marksByTopic('all');
+  const total = totalMarks('all');
+  const bars = topicBarsHtml(byTopicAll, true);
+  const rows = bars.rows;
+
+  const rec = RECURRING.slice().sort((a,b)=> (b.hits.length-a.hits.length) || (b.marks-a.marks));
+  const recCards = rec.map(c=>{
+    const hot = c.hits.length>=4;
+    const yearsSpanned = new Set(c.hits.map(h=>h.slice(0,4))).size;
+    return `<div class="rec ${hot?'hot':''}">
+      <div class="r-head"><span class="r-count">${c.hits.length}×</span><span class="r-title">${esc(c.concept)}</span></div>
+      <div class="r-topic">${esc(c.topic)}${yearsSpanned>1?' · appeared in both years':''}${c.marks?` · ~${c.marks} marks across the two papers`:''}</div>
+      <div class="r-years">${c.hits.map(h=>`<span class="yb">${esc(h)}</span>`).join('')}</div>
+      <p>${esc(c.note)}</p>
+    </div>`;
+  }).join('');
+
+  const byType = marksByType('all');
+  const typeShare = Object.keys(SKILLS).map(k=>`${SKILLS[k].name} ${Math.round(byType[k].marks/total*100)}%`).join(' · ');
+  const top6 = rows.slice(0,6).map(r=>`${r.t} (${r.marks}m)`).join(', ');
+
+  el.innerHTML = `
+    <div class="tile-row">
+      <div class="tile hero"><div class="label">Papers analysed</div><div class="value">2</div><div class="hint">2022 &amp; 2023 · 80 questions · 200 marks</div></div>
+      <div class="tile"><div class="label">Recurring concepts</div><div class="value">${RECURRING.length}</div><div class="hint">patterns seen in both years</div></div>
+      <div class="tile"><div class="label">Open-ended share</div><div class="value">${Math.round(byType.open.marks/total*100)}%</div><div class="hint">of marks need written answers</div></div>
+      <div class="tile"><div class="label">Heaviest topic</div><div class="value">${rows[0].marks}m</div><div class="hint">${esc(rows[0].t)}</div></div>
+    </div>
+
+    <div class="card">
+      <h2>The concepts that keep coming back</h2>
+      <p class="sub">These patterns showed up in <strong>both</strong> the 2022 and 2023 papers — the highest-yield things to master. Ordered by how many questions across the two papers touched each one.</p>
+      ${recCards}
+    </div>
+
+    <div class="card">
+      <h2>Most important topics by marks (both papers)</h2>
+      <p class="sub">Combined marks across 2022 + 2023. Darker segment = 2023, lighter = 2022. The top of this list is where revision time pays back most.</p>
+      ${bars.html}
+      <p class="note" style="margin-top:14px"><strong>Top six by weight:</strong> ${esc(top6)}.</p>
+    </div>
+
+    <div class="card">
+      <h2>What to expect — the through-lines</h2>
+      <div class="expect">
+        <h4>Content that anchors every paper</h4>
+        <ul>
+          <li><strong>Electrical Systems is the single biggest topic</strong> (25 marks over the two papers) — series/parallel brightness, the "keep one bulb lit" circuit to draw, and a 5-mark electromagnet/bell question every year.</li>
+          <li><strong>Living things &amp; cells</strong> and <strong>Plant Reproduction/Systems</strong> together dominate the biology marks — classification tables, cells as the basic unit of life, germination, pollination and photosynthesis graphs.</li>
+          <li><strong>Forces, changes of state and heat</strong> carry the physical-science marks — spring/elastic graphs, evaporation/boiling, conductors and expansion.</li>
+        </ul>
+      </div>
+      <div class="expect">
+        <h4>Skills that decide the grade</h4>
+        <ul>
+          <li><strong>Open-ended explanation is ${Math.round(byType.open.marks/total*100)}% of every paper.</strong> Answer in Claim–Evidence–Reasoning shape with the exact marking keywords — vague answers score zero.</li>
+          <li><strong>Data interpretation and experimental skills</strong> (fair test, variables, reliability) recur across both booklets and cut across every topic.</li>
+          <li>Skill split across both papers: ${esc(typeShare)}.</li>
+        </ul>
+      </div>
+      <p class="note">Reading the two papers together: the same dozen ideas are re-dressed each year. Drill the recurring concepts above and practise writing them in keyword-precise language, and you have covered the bulk of what the paper rewards.</p>
+    </div>`;
+}
+
+function renderQuestions(){
+  const el = $('#view-questions');
+  const topicOpts = ['<option value="">All topics</option>']
+    .concat(Object.keys(TOPICS).filter(t=>QUESTIONS.some(q=>q.topic===t))
+      .map(t=>`<option value="${esc(t)}" ${qFilter.topic===t?'selected':''}>${esc(t)} (${levelOf(t)})</option>`)).join('');
+  const typeChips = Object.keys(SKILLS).map(k=>`<button class="chipf ${qFilter.type===k?'on':''}" data-action="qfilter" data-kind="type" data-val="${k}">${esc(SKILLS[k].name)}</button>`).join('');
+  const bkChips = ['A','B'].map(b=>`<button class="chipf ${qFilter.bk===b?'on':''}" data-action="qfilter" data-kind="bk" data-val="${b}">Booklet ${b}</button>`).join('');
+  const yrChips = YEARS.map(y=>`<button class="chipf ${qFilter.year===y?'on':''}" data-action="qfilter" data-kind="year" data-val="${y}">${y}</button>`).join('');
+
+  const filtered = QUESTIONS.filter(q=>
+    (!qFilter.topic||q.topic===qFilter.topic) &&
+    (!qFilter.bk||q.bk===qFilter.bk) &&
+    (!qFilter.type||q.type===qFilter.type) &&
+    (!qFilter.year||q.year===qFilter.year))
+    .sort((a,b)=> a.year===b.year ? a.n-b.n : a.year.localeCompare(b.year));
+
+  const cards = filtered.map(q=>{
+    const th=themeOf(q.topic);
+    return `<div class="q">
+      <div class="q-head"><span class="q-num">${q.year} · Q${q.n}</span><span class="q-marks">${q.marks} mark${q.marks===1?'':'s'} · Booklet ${q.bk}</span></div>
+      <div class="q-title">${esc(q.title)}</div>
+      <div class="q-tags">
+        <span class="tag yr">${q.year}</span>
+        <span class="tag">${themeDot(th)}${esc(q.topic)}</span>
+        <span class="tag lv">${levelOf(q.topic)}</span>
+        <span class="tag type">${esc(SKILLS[q.type].name)}</span>
+      </div>
+      <details><summary>Analysis${q.ans?' &amp; suggested answer':''}</summary>
+        <div class="q-detail"><p>${esc(q.detail)}</p>${q.ans?`<p><span class="ans">Suggested answer:</span> ${esc(q.ans)}</p>`:''}</div>
+      </details>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>Question map — all 80 classified</h2>
+      <p class="sub">Every question from both papers, tagged with year, CER-portal topic, level and skill. Filter to drill in; expand a card for the analysis and a suggested answer.</p>
+      <div class="filters"><select data-action="qfilter-topic">${topicOpts}</select>${yrChips}${bkChips}</div>
+      <div class="filters">${typeChips}<button class="chipf" data-action="qfilter-clear">Clear filters</button></div>
+      <p class="note" style="margin-bottom:16px">Showing ${filtered.length} of ${QUESTIONS.length} questions.</p>
+      ${cards || '<p class="note">No questions match these filters.</p>'}
+    </div>`;
+}
+
+function renderTopics(){
+  const el = $('#view-topics');
+  const byTopic = marksByTopic('all');
+  const tested = Object.keys(TOPICS).filter(t=>byTopic[t].marks>0).sort((a,b)=>byTopic[b].marks-byTopic[a].marks);
+
+  const picker = tested.map(t=>{
+    const th=themeOf(t);
+    return `<button class="${activeTopic===t?'on':''}" data-action="topicpick" data-topic="${esc(t)}">
+      <span class="dot" style="background:var(${THEMES[th].varc})"></span>${esc(t)} <span class="n">${byTopic[t].marks}m</span></button>`;
+  }).join('');
+
+  const info = TOPICS[activeTopic];
+  const qs = QUESTIONS.filter(q=>q.topic===activeTopic).sort((a,b)=> a.year===b.year?a.n-b.n:a.year.localeCompare(b.year));
+  const marks = byTopic[activeTopic].marks;
+  const typeSet=[...new Set(qs.map(q=>SKILLS[q.type].name))];
+  const qPills = qs.map(q=>`<span class="qpill">${q.year} Q${q.n} · ${q.marks}m · ${esc(SKILLS[q.type].name)}</span>`).join('');
+  const expectList = info.expect.map(e=>`<li>${esc(e)}</li>`).join('');
+  const yr = YEARS.map(y=>`${y}: ${byTopic[activeTopic].y[y]}m`).join(' · ');
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>Topic deep dive</h2>
+      <p class="sub">Pick a topic to see how it showed up across both papers and what to expect. Ordered by combined marks.</p>
+      <div class="topic-pick">${picker}</div>
+      <h3 style="display:flex; align-items:center; gap:9px; font-size:16px; margin-top:8px">${themeDot(themeOf(activeTopic))} ${esc(activeTopic)}</h3>
+      <dl class="kv">
+        <dt>Level</dt><dd>${levelOf(activeTopic)}</dd>
+        <dt>Theme</dt><dd>${esc(THEMES[themeOf(activeTopic)].name)}</dd>
+        <dt>Across both</dt><dd>${qs.length} question${qs.length===1?'':'s'} · ${marks} marks (${yr})</dd>
+        <dt>Skills tested</dt><dd>${typeSet.map(esc).join(', ')}</dd>
+      </dl>
+      <div class="expect"><h4>What to expect from this topic</h4><ul>${expectList}</ul></div>
+      <h3 style="margin-top:18px">This topic's questions</h3>
+      <div class="pill-list">${qPills}</div>
+      <p class="note" style="margin-top:10px">Switch to the Question Map and filter by this topic to read each one's analysis.</p>
+    </div>`;
+}
+
+function renderTypes(){
+  const el = $('#view-types');
+  const byType = marksByType('all');
+  const cards = [
+    { k:'recall', icon:'📌', what:'Direct knowledge — a fact, definition or term recalled with no working.',
+      how:['Read every option before committing; the obvious answer is sometimes a distractor.','Know the vocabulary cold — population, cell, matter, condensation, consumer, deforestation.'],
+      eg:'2022 Q1 (reptiles have scales), 2022 Q5 (basic unit of life = cell), 2023 Q11 (all grasshoppers = a population).' },
+    { k:'application', icon:'🧩', what:'A known concept dropped into an unfamiliar object, animal or set-up. The costume is new; the concept is always from the syllabus.',
+      how:['Ask "which topic is this really about?" and strip away the unfamiliar context.','Reason to your own answer first, then match it to an option.','The largest MCQ category — practising unfamiliar contexts is the training.'],
+      eg:'2022 Q17 (flatbread rising = air expands when heated), 2023 Q19 (heating a metal rim to fit it).' },
+    { k:'data', icon:'📊', what:'Read exact values, trends or comparisons off a graph, table or pictorial series.',
+      how:['Read the axes and units first, before the shape.','Quote start and end values; compare the change, not just the raw numbers.','Run a finger across rows and down columns to avoid transfer errors.'],
+      eg:'2022 Q14 (whose breathing rate increased more), 2022 Q35 & 2023 Q26 (force–extension/compression graphs).' },
+    { k:'experimental', icon:'⚗️', what:'Process skills — fair testing, identifying variables, judging reliability, choosing a valid control.',
+      how:['Name the three variables: changed, measured, kept constant.','A fair test changes only one thing; the control is identical except that one variable.','Reliability comes from repeated, consistent readings.'],
+      eg:'2022 Q31 (same thumb = fair test) & Q34 (constants), 2023 Q27 (isolate surface area) & Q31 (variables + reliability).' },
+    { k:'open', icon:'✍️', what:'Written answers in Booklet B, marked against specific keywords. Sensible-but-vague answers score zero.',
+      how:['Answer in Claim–Evidence–Reasoning shape: answer directly, quote the data/set-up, then the concept with its keywords.','Use precise, comparative language — "gains/loses heat", "more/less than" — never "hot" or "big".','If the question says "using the results/graph", your answer must quote the data.','Match the command word: state = one line; explain = cause linked to concept.'],
+      eg:'The 5-mark electromagnet questions (2022 Q36 bell, 2023 Q38 oscillating bar) and the parallel-circuit drawing (2022 Q39 ≈ 2023 Q39).' },
+  ];
+  const html = cards.map(c=>`
+    <div class="qtype-card">
+      <h3>${c.icon} ${esc(SKILLS[c.k].name)}</h3>
+      <div class="meta">${byType[c.k].count} questions · ${byType[c.k].marks} marks across both papers (${Math.round(byType[c.k].marks/totalMarks('all')*100)}%)</div>
+      <p>${esc(c.what)}</p>
+      <strong style="font-size:13.5px">How to handle it</strong>
+      <ul>${c.how.map(h=>`<li>${esc(h)}</li>`).join('')}</ul>
+      <div class="eg"><strong>From these papers:</strong> ${esc(c.eg)}</div>
+    </div>`).join('');
+  el.innerHTML = `
+    <div class="card">
+      <h2>Question types — what to expect</h2>
+      <p class="sub">Both papers mix five kinds of demand. Booklet A leans on the first four; Booklet B is all written explanation. Knowing the type tells you how to attack the question.</p>
+      ${html}
+    </div>`;
+}
+
+const RENDERERS = { overview:renderOverview, overall:renderOverall, questions:renderQuestions, topics:renderTopics, types:renderTypes };
+
+function render(){
+  Object.keys(RENDERERS).forEach(tab=>{ document.getElementById('view-'+tab).hidden = tab!==activeTab; });
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.tab===activeTab));
+  RENDERERS[activeTab]();
+}
+
+document.addEventListener('click', ev=>{
+  const t = ev.target.closest('[data-action]'); if(!t) return;
+  const a = t.dataset.action;
+  if (a==='tab'){ activeTab=t.dataset.tab; render(); window.scrollTo({top:0}); }
+  else if (a==='toggle-theme'){ const dark=getComputedStyle(document.body).backgroundColor!=='rgb(249, 249, 247)'; document.documentElement.setAttribute('data-theme', dark?'light':'dark'); try{localStorage.setItem('psleAnalyser.theme', dark?'light':'dark');}catch(_){ } render(); }
+  else if (a==='scope'){ scope=t.dataset.val; renderOverview(); }
+  else if (a==='qfilter'){ const k=t.dataset.kind,v=t.dataset.val; qFilter[k]=qFilter[k]===v?'':v; renderQuestions(); }
+  else if (a==='qfilter-clear'){ qFilter={topic:'',bk:'',type:'',year:''}; renderQuestions(); }
+  else if (a==='topicpick'){ activeTopic=t.dataset.topic; renderTopics(); window.scrollTo({top:0}); }
+});
+document.addEventListener('change', ev=>{
+  const t = ev.target.closest('[data-action]'); if(!t) return;
+  if (t.dataset.action==='qfilter-topic'){ qFilter.topic=t.value; renderQuestions(); }
+});
+
+try { const th=localStorage.getItem('psleAnalyser.theme'); if(th==='light'||th==='dark') document.documentElement.setAttribute('data-theme', th); } catch(_){}
+document.getElementById('appVersionBadge').textContent = APP_VERSION;
+render();
+</script>
+</body>
+</html>
