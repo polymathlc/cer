@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Road to PSLE Science — Study Roadmap</title>
+<style>
+  :root {
+    --page:            #f9f9f7;
+    --surface:         #fcfcfb;
+    --ink:             #0b0b0b;
+    --ink-2:           #52514e;
+    --ink-3:           #898781;
+    --hairline:        #e1e0d9;
+    --border:          rgba(11,11,11,0.10);
+    --accent:          #2a78d6;
+    --accent-deep:     #1c5cab;
+    --accent-track:    #cde2fb;
+    --accent-wash:     rgba(42,120,214,0.08);
+    --good:            #0ca30c;
+    --good-text:       #006300;
+    --warning:         #fab219;
+    --serious:         #ec835a;
+    --critical:        #d03b3b;
+    --shadow:          0 1px 3px rgba(11,11,11,0.06), 0 4px 14px rgba(11,11,11,0.05);
+  }
+  :root[data-theme="dark"] {
+    --page:            #0d0d0d;
+    --surface:         #1a1a19;
+    --ink:             #ffffff;
+    --ink-2:           #c3c2b7;
+    --ink-3:           #898781;
+    --hairline:        #2c2c2a;
+    --border:          rgba(255,255,255,0.10);
+    --accent:          #3987e5;
+    --accent-deep:     #86b6ef;
+    --accent-track:    #0d366b;
+    --accent-wash:     rgba(57,135,229,0.14);
+    --good:            #0ca30c;
+    --good-text:       #0ca30c;
+    --shadow:          none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page:            #0d0d0d;
+      --surface:         #1a1a19;
+      --ink:             #ffffff;
+      --ink-2:           #c3c2b7;
+      --ink-3:           #898781;
+      --hairline:        #2c2c2a;
+      --border:          rgba(255,255,255,0.10);
+      --accent:          #3987e5;
+      --accent-deep:     #86b6ef;
+      --accent-track:    #0d366b;
+      --accent-wash:     rgba(57,135,229,0.14);
+      --good:            #0ca30c;
+      --good-text:       #0ca30c;
+      --shadow:          none;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell { max-width: 920px; margin: 0 auto; padding: 28px 20px 80px; }
+
+  /* ---------- header ---------- */
+  header.app {
+    display: flex; align-items: center; gap: 16px;
+    padding: 8px 4px 20px;
+  }
+  .app-mark {
+    width: 44px; height: 44px; border-radius: 12px; flex: none;
+    background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  .app-titles { flex: 1; min-width: 0; }
+  .app-titles h1 { margin: 0; font-size: 20px; line-height: 1.3; letter-spacing: -0.01em; }
+  .app-titles p { margin: 2px 0 0; font-size: 13px; color: var(--ink-2); }
+  .header-actions { display: flex; align-items: center; gap: 10px; }
+  .icon-btn {
+    border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+    border-radius: 10px; padding: 8px 12px; font-size: 14px; cursor: pointer;
+  }
+  .icon-btn:hover { color: var(--ink); }
+
+  /* ---------- tabs ---------- */
+  nav.tabs {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    padding: 6px; margin-bottom: 24px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; box-shadow: var(--shadow);
+    position: sticky; top: 10px; z-index: 5;
+  }
+  nav.tabs button {
+    flex: 1; min-width: 100px;
+    border: none; background: transparent; color: var(--ink-2);
+    font: inherit; font-size: 14px; font-weight: 500;
+    padding: 10px 12px; border-radius: 10px; cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  nav.tabs button:hover { color: var(--ink); background: var(--accent-wash); }
+  nav.tabs button.active { background: var(--accent); color: #fff; }
+
+  /* ---------- cards ---------- */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; box-shadow: var(--shadow);
+    padding: 28px; margin-bottom: 24px;
+  }
+  .card > h2 { margin: 0 0 6px; font-size: 17px; letter-spacing: -0.01em; }
+  .card > .sub { margin: 0 0 20px; font-size: 14px; color: var(--ink-2); }
+  .card h3 { font-size: 15px; margin: 0 0 4px; }
+
+  /* ---------- stat tiles ---------- */
+  .tile-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; box-shadow: var(--shadow);
+    padding: 20px 22px;
+  }
+  .tile .label { font-size: 13px; color: var(--ink-2); margin-bottom: 6px; }
+  .tile .value { font-size: 34px; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; }
+  .tile .hint { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+  .tile.hero .value { font-size: 48px; color: var(--accent-deep); }
+
+  /* ---------- meters ---------- */
+  .meter-row { display: flex; align-items: center; gap: 14px; padding: 10px 0; }
+  .meter-row + .meter-row { border-top: 1px solid var(--hairline); }
+  .meter-name { width: 160px; flex: none; font-size: 14px; }
+  .meter-track {
+    flex: 1; height: 10px; border-radius: 5px; background: var(--accent-track); overflow: hidden;
+  }
+  .meter-fill { height: 100%; border-radius: 5px; background: var(--accent); transition: width .4s ease; }
+  .meter-val { width: 44px; flex: none; text-align: right; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+  /* ---------- status chip ---------- */
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; font-weight: 600;
+    padding: 4px 12px; border-radius: 999px;
+  }
+  .chip.good     { color: var(--good-text); background: rgba(12,163,12,0.10); }
+  .chip.behind   { color: var(--critical);  background: rgba(208,59,59,0.10); }
+  .chip.neutral  { color: var(--ink-2);     background: var(--accent-wash); }
+
+  /* ---------- task list ---------- */
+  ul.tasks { list-style: none; margin: 0; padding: 0; }
+  ul.tasks li {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 4px;
+  }
+  ul.tasks li + li { border-top: 1px solid var(--hairline); }
+  ul.tasks input[type="checkbox"] {
+    width: 20px; height: 20px; margin-top: 3px; flex: none;
+    accent-color: var(--accent); cursor: pointer;
+  }
+  ul.tasks .t-body { flex: 1; min-width: 0; }
+  ul.tasks .t-subject { font-size: 12px; font-weight: 600; color: var(--accent-deep); letter-spacing: 0.03em; text-transform: uppercase; }
+  ul.tasks .t-text { font-size: 14.5px; }
+  ul.tasks li.done .t-text { color: var(--ink-3); text-decoration: line-through; }
+
+  /* ---------- diagnostic ---------- */
+  .diag-group { margin-bottom: 26px; }
+  .diag-group h3 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  .diag-item {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 10px; cursor: pointer; transition: background .15s;
+  }
+  .diag-item:hover { background: var(--accent-wash); }
+  .diag-item.on { background: var(--accent-wash); border-color: var(--accent); }
+  .diag-item input { width: 18px; height: 18px; margin-top: 3px; flex: none; accent-color: var(--accent); pointer-events: none; }
+  .diag-item .d-title { font-size: 14.5px; font-weight: 600; }
+  .diag-item .d-signs { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+
+  /* ---------- fix cards ---------- */
+  .fix-card {
+    border: 1px solid var(--border); border-radius: 14px;
+    padding: 20px 22px; margin-bottom: 16px;
+  }
+  .fix-card.focus { border-color: var(--accent); background: var(--accent-wash); }
+  .fix-card .f-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .fix-card .f-head h3 { margin: 0; }
+  .fix-card .why { font-size: 13.5px; color: var(--ink-2); margin: 4px 0 12px; }
+  .fix-card .why strong { color: var(--ink); }
+  .fix-card ul { margin: 0; padding-left: 20px; font-size: 14px; }
+  .fix-card ul li { margin-bottom: 6px; }
+  .fix-card ul li:last-child { margin-bottom: 0; }
+
+  /* ---------- roadmap ---------- */
+  .phase-band {
+    display: flex; align-items: center; gap: 10px;
+    margin: 26px 4px 12px; font-size: 13px; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent-deep);
+  }
+  .phase-band::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+  details.week {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; box-shadow: var(--shadow);
+    margin-bottom: 14px; overflow: hidden;
+  }
+  details.week summary {
+    list-style: none; cursor: pointer;
+    display: flex; align-items: center; gap: 14px;
+    padding: 18px 22px;
+  }
+  details.week summary::-webkit-details-marker { display: none; }
+  details.week summary .w-title { flex: 1; min-width: 0; }
+  details.week summary .w-title .w-name { font-weight: 600; font-size: 15px; }
+  details.week summary .w-title .w-dates { font-size: 12.5px; color: var(--ink-3); margin-top: 1px; }
+  details.week summary .w-meter { width: 120px; flex: none; }
+  details.week summary .w-pct { width: 40px; flex: none; text-align: right; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  details.week summary .w-caret { flex: none; color: var(--ink-3); transition: transform .15s; }
+  details.week[open] summary .w-caret { transform: rotate(90deg); }
+  details.week .w-body { border-top: 1px solid var(--hairline); padding: 8px 22px 18px; }
+  .day-block { padding: 14px 0 6px; }
+  .day-block + .day-block { border-top: 1px solid var(--hairline); }
+  .day-block .d-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }
+  .day-block .d-name { font-weight: 600; font-size: 14px; }
+  .day-block .d-date { font-size: 12px; color: var(--ink-3); }
+  .day-block .d-today { font-size: 11px; font-weight: 700; color: var(--accent-deep); letter-spacing: 0.05em; }
+
+  /* ---------- forms / settings ---------- */
+  .field { margin-bottom: 20px; }
+  .field label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
+  .field .note { font-size: 12.5px; color: var(--ink-3); margin-top: 5px; }
+  .field input[type="date"], .field input[type="text"] {
+    width: 100%; max-width: 320px;
+    padding: 10px 12px; font: inherit; font-size: 14px;
+    color: var(--ink); background: var(--page);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+
+  .btn {
+    display: inline-block; border: none; cursor: pointer; font: inherit;
+    font-size: 14.5px; font-weight: 600;
+    background: var(--accent); color: #fff;
+    padding: 12px 24px; border-radius: 12px;
+  }
+  .btn:hover { background: var(--accent-deep); }
+  .btn.ghost { background: transparent; color: var(--critical); border: 1px solid var(--border); font-weight: 500; }
+
+  .empty-note {
+    text-align: center; color: var(--ink-2); font-size: 14px;
+    padding: 30px 20px;
+  }
+
+  footer.app {
+    text-align: center; color: var(--ink-3); font-size: 12px;
+    padding-top: 12px;
+  }
+
+  @media (max-width: 560px) {
+    .card { padding: 20px; }
+    details.week summary .w-meter { display: none; }
+    .meter-name { width: 118px; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="app">
+    <div class="app-mark">🔬</div>
+    <div class="app-titles">
+      <h1>Road to PSLE Science</h1>
+      <p>Find your weak spots, fix them, and follow a day-by-day science plan to exam day.</p>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" data-action="toggle-theme" title="Toggle light / dark">◐</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-action="tab" data-tab="dashboard" class="active">Dashboard</button>
+    <button data-action="tab" data-tab="diagnostic">Diagnostic</button>
+    <button data-action="tab" data-tab="fixes">Fix-It Guide</button>
+    <button data-action="tab" data-tab="roadmap">Roadmap</button>
+    <button data-action="tab" data-tab="settings">Settings</button>
+  </nav>
+
+  <main>
+    <section id="view-dashboard"></section>
+    <section id="view-diagnostic" hidden></section>
+    <section id="view-fixes" hidden></section>
+    <section id="view-roadmap" hidden></section>
+    <section id="view-settings" hidden></section>
+  </main>
+
+  <footer class="app">
+    Road to PSLE Science · <span id="appVersionBadge"></span> · progress is saved on this device
+  </footer>
+</div>
+
+<script type="module">
+'use strict';
+
+const APP_VERSION = 'v2.0.0';
+
+/* ============================================================
+   Content: why students don't score in PSLE Science,
+   and the fixes that rectify each weakness.
+   ============================================================ */
+
+const HABITS_KEY = 'habits';
+
+const WEAKNESSES = [
+  {
+    id: 'sc-keywords', subject: 'science',
+    title: 'Open-ended answers miss the marking keywords',
+    signs: 'Understands the concept but scores 0–1 out of 2; answers are "right" but not in the marker’s language.',
+    why: 'This is the number-one mark-loser in PSLE Science. Open-ended questions are marked against specific keywords ("gains heat", "denser", "evaporates", "complete circuit"). An answer without the keyword and the link to the question setup earns nothing, however sensible it sounds.',
+    fixes: [
+      'Answer in C.E.R. shape: Claim (answer the question directly), Evidence (quote the data or setup), Reasoning (the concept with its keywords).',
+      'Build a keyword bank per topic — the exact verbs and nouns mark schemes use — and self-mark against it: no keyword, no mark.',
+      'Compare your answer to the model answer line by line; copy the missing keyword into your bank.',
+      'Practise 5 open-ended questions per session rather than reading notes — output beats input for this weakness.',
+    ],
+    drill: '10-min drill: 2 open-ended questions in C.E.R. shape; self-mark against your keyword bank — no keyword, no mark.',
+  },
+  {
+    id: 'sc-apply', subject: 'science',
+    title: 'Knows the facts, freezes on new experiment setups',
+    signs: 'Can recite notes but panics when a question shows an unfamiliar apparatus, animal or context.',
+    why: 'PSLE Science tests process skills — applying known concepts to setups you have never seen. Memorising without practising application means the knowledge never becomes usable. Every "weird" question is a normal syllabus concept wearing a costume.',
+    fixes: [
+      'For every experiment question, name the three variables first: changed (independent), measured (dependent), kept constant.',
+      'Ask "which topic is this really about?" — strip away the unfamiliar apparatus and the underlying concept is always from the syllabus.',
+      'Practise unfamiliar-context questions deliberately (new setups, strange organisms, odd materials) — the discomfort is the training.',
+      'Explain one experiment a day aloud to someone: aim, variables, expected result, why.',
+    ],
+    drill: '10-min drill: 1 unfamiliar experiment question — name the changed, measured and constant variables before answering.',
+  },
+  {
+    id: 'sc-data', subject: 'science',
+    title: 'Misreads graphs, tables and diagrams',
+    signs: 'Quotes the wrong values, describes trends loosely, ignores axis labels and units.',
+    why: 'Data questions hand you the answer — students lose marks by describing from impression instead of reading the numbers. "The temperature increased" scores less than "the temperature increased from 30 °C to 70 °C between 0 and 5 minutes".',
+    fixes: [
+      'Read axes first: what is measured, in what units, over what range — before looking at the shape.',
+      'Describe trends with numbers: state start value, end value and where the change happens.',
+      'For tables, run one finger across the row and one down the column — transfer errors are the top mark-loser here.',
+      'When a graph flattens, say what the flat region means in the experiment (e.g., "all the ice has melted").',
+    ],
+    drill: '10-min drill: 2 graph/table questions — quote exact values with units in every answer.',
+  },
+  {
+    id: 'sc-mcq', subject: 'science',
+    title: 'MCQ: falls for tempting wrong options',
+    signs: 'Torn between two options that both "look right"; picks the partly-true one; changes correct answers to wrong ones.',
+    why: 'Booklet A is 56 of the 100 marks, and its distractors are engineered from common misconceptions. Reading the options before forming your own answer lets the distractor frame your thinking — you recognise it instead of reasoning to it.',
+    fixes: [
+      'Cover the options, answer the question in your head first, then find your answer among the options.',
+      'Eliminate with reasons: say why each rejected option is wrong, not just why your pick feels right.',
+      'Beware absolute words in options — "always", "only", "all" — they are usually the trap.',
+      'Only change an answer if you can state the concrete reason the first one is wrong; gut-feel changes are usually downgrades.',
+    ],
+    drill: '10-min drill: 10 MCQs — cover the options, commit to your own answer first, then eliminate the rest with reasons.',
+  },
+  {
+    id: 'sc-question', subject: 'science',
+    title: 'Answers the wrong question',
+    signs: 'Explains the right concept but not what was asked; ignores command words (state vs explain vs compare); misses "based on the results above".',
+    why: 'Command words define the marks: "state" wants one line, "explain" wants cause linked to concept, "compare" needs both sides, "based on the graph" means quote the data. Under time pressure students answer the question they expected instead of the one printed.',
+    fixes: [
+      'Circle the command word and underline what the question is actually about before writing anything.',
+      'Match the answer shape to the command word: explain → because + concept; compare → both items named with "more/less than".',
+      'If the question says "based on the results/graph/table", your answer must quote that data — no data, no mark.',
+      'After writing, re-read the question once: does your answer actually answer it?',
+    ],
+    drill: '10-min drill: 3 open-ended questions — circle the command word first, then check each answer matches it.',
+  },
+  {
+    id: 'sc-topics', subject: 'science',
+    title: 'Topical gaps from P3–P5',
+    signs: 'Whole topics feel foggy (light, heat, magnets, life cycles); MCQ scores swing wildly by topic.',
+    why: 'PSLE Science examines four years of content, and P3–P4 topics (magnets, light, heat, life cycles) reappear in P6 papers. Gaps from earlier years silently cap the MCQ score no matter how hard you work on P6 material.',
+    fixes: [
+      'Diagnose first: do one topical MCQ set per topic and rank your scores — revise from the weakest up.',
+      'Concept-map each weak topic from memory, then patch the map against your notes; the gaps you couldn’t recall are the revision list.',
+      'The roadmap cycles through every syllabus topic — don’t skip the "easy" old ones; that’s where the gaps hide.',
+      'Re-test the same topic a week later — a topic is only "fixed" when the retest holds.',
+    ],
+    drill: '10-min drill: 10 MCQs from your current weakest topic.',
+  },
+  {
+    id: 'sc-vague', subject: 'science',
+    title: 'Vague language ("it is hot" vs "temperature increases")',
+    signs: 'Answers use everyday words; comparisons miss "more/less than"; "heat" and "temperature" used interchangeably.',
+    why: 'Science answers must be precise and comparative. "The cup is hot" earns nothing when the mark needs "the water in cup A loses heat to the surroundings faster than the water in cup B". Precision is a habit, trainable in weeks.',
+    fixes: [
+      'Ban vague words in answers: hot/cold → gains/loses heat; big/small → increases/decreases; a lot → state the value.',
+      'Every comparison names both sides: "X is greater than Y", never "X is big".',
+      'Rewrite 3 of your own vague answers per week using precise language — editing yourself teaches faster than new questions.',
+      'Use the topic’s noun, not a pronoun: "the water gains heat", not "it gets hotter".',
+    ],
+    drill: '10-min drill: rewrite 2 of your past answers replacing every vague word with a precise, comparative one.',
+  },
+
+  /* ---------- Study habits ---------- */
+  {
+    id: 'gen-plan', subject: HABITS_KEY,
+    title: 'No revision plan — everything is last-minute',
+    signs: 'Revision happens only before tests; some topics get all the time, others none; four years of syllabus feels too big.',
+    why: 'Cramming fights how memory works. Spaced, rotating revision (a little of each topic, repeatedly) beats massed revision because each retrieval strengthens the memory. A plan also kills decision fatigue — you never waste energy deciding what to study.',
+    fixes: [
+      'Follow this app’s roadmap: it rotates through every syllabus topic and weights your weak skills automatically.',
+      'Fixed study slots at the same time daily — habits remove the willpower tax.',
+      'Plan in sessions (40 min + 10 min break), not hours; 1–2 quality science sessions a day is plenty alongside school.',
+      'Sunday is for reviewing the week’s errors and previewing next week — not for new content.',
+    ],
+    drill: 'Habit check: did you follow today’s plan? Tick tasks off and preview tomorrow’s (2 min).',
+  },
+  {
+    id: 'gen-errlog', subject: HABITS_KEY,
+    title: 'Never reviews mistakes',
+    signs: 'Does many papers but the same errors repeat; finished papers go into a pile and are never reopened.',
+    why: 'Doing papers without reviewing errors is practising your mistakes. The score on a practice paper matters far less than what you do with the wrong answers — that is where all the improvement lives.',
+    fixes: [
+      'Keep a science error log: the question (or a photo), your wrong answer, the correct one, and the missing keyword or concept.',
+      'Re-do logged questions cold after a week; a question leaves the log only after 2 clean solves.',
+      'Spend Sunday’s session on the error log, not on new papers.',
+      'Look for patterns monthly: which topic, which question type (MCQ trap? missing keyword? data misread?) — then aim the next week at it.',
+    ],
+    drill: 'Habit drill: add today’s mistakes to the error log; re-do 2 old logged questions.',
+  },
+  {
+    id: 'gen-focus', subject: HABITS_KEY,
+    title: 'Easily distracted — sessions leak away',
+    signs: 'A "2-hour" session yields 30 minutes of work; phone checks every few minutes; homework stretches into the night.',
+    why: 'Attention is the multiplier on every study hour. A focused 40 minutes outperforms a distracted 2 hours, and distraction is mostly environmental — fix the environment and focus follows.',
+    fixes: [
+      'Phone in another room (not face-down on the desk) during every session — out of sight is the only setting that works.',
+      'Work in 40-minute focused blocks with a 10-minute real break (move, drink water — no screens).',
+      'One task per block, written down before starting; the roadmap gives you exactly this.',
+      'Same desk, cleared before starting; the brain learns "this place means work".',
+    ],
+    drill: 'Habit drill: run today’s sessions with the phone in another room; note how many blocks stayed clean.',
+  },
+  {
+    id: 'gen-anxiety', subject: HABITS_KEY,
+    title: 'Exam stress, poor sleep, burnout',
+    signs: 'Blanks out in exams despite knowing the work; studies late into the night; dreads papers.',
+    why: 'Anxiety shrinks working memory — the exact resource applied questions need. Sleep is when the day’s revision consolidates; trading sleep for revision gives back less than it takes. Confidence is built by rehearsing exam conditions until they feel normal.',
+    fixes: [
+      'Protect 9 hours of sleep, especially exam week — it is revision, not rest from revision.',
+      'Do timed papers under real conditions regularly so the exam format holds no surprises.',
+      'Learn one reset: 4-second breathe in, 4 hold, 4 out — use it when you blank; then move to the next question and return later.',
+      'Keep one no-study block every day (sport, play, family) and one lighter day a week — pacing prevents the final-month crash.',
+    ],
+    drill: 'Habit drill: lights out on time tonight; one 4-4-4 breathing round before each study block.',
+  },
+];
+
+/* ============================================================
+   Skill areas (dashboard meters) mapped to weaknesses
+   ============================================================ */
+
+const SKILLS = [
+  { id: 'technique', name: 'Answer technique',  weaknesses: ['sc-keywords', 'sc-vague'] },
+  { id: 'apply',     name: 'Applying concepts', weaknesses: ['sc-apply', 'sc-question'] },
+  { id: 'data',      name: 'Data & diagrams',   weaknesses: ['sc-data'] },
+  { id: 'mcq',       name: 'MCQ accuracy',      weaknesses: ['sc-mcq'] },
+  { id: 'content',   name: 'Topic coverage',    weaknesses: ['sc-topics'] },
+];
+
+/* ============================================================
+   PSLE Science syllabus topics (cycled through the plan)
+   ============================================================ */
+
+const TOPICS = [
+  { theme: 'Diversity',    name: 'Classification of living things (plants, animals, fungi, bacteria)' },
+  { theme: 'Diversity',    name: 'Materials & their properties' },
+  { theme: 'Cycles',       name: 'Life cycles of plants & animals' },
+  { theme: 'Cycles',       name: 'Matter: solids, liquids & gases' },
+  { theme: 'Cycles',       name: 'Water & the water cycle' },
+  { theme: 'Cycles',       name: 'Reproduction in plants & humans' },
+  { theme: 'Systems',      name: 'Plant parts & the transport system' },
+  { theme: 'Systems',      name: 'Digestive system' },
+  { theme: 'Systems',      name: 'Respiratory & circulatory systems' },
+  { theme: 'Systems',      name: 'Cells' },
+  { theme: 'Systems',      name: 'Electrical systems & circuits' },
+  { theme: 'Interactions', name: 'Magnets & their characteristics' },
+  { theme: 'Interactions', name: 'Forces: friction, gravity & springs' },
+  { theme: 'Interactions', name: 'Food chains, food webs & the environment' },
+  { theme: 'Interactions', name: 'Adaptations: structural & behavioural' },
+  { theme: 'Energy',       name: 'Light & shadows' },
+  { theme: 'Energy',       name: 'Heat & temperature' },
+  { theme: 'Energy',       name: 'Energy forms & conversions; photosynthesis' },
+];
+
+/* ============================================================
+   Task templates
+   ============================================================ */
+
+// Topic sessions — each is a function of the topic name, cycled per phase.
+const TOPIC_TASKS = {
+  foundation: [
+    t => `Concept-map “${t}” from memory, then patch the gaps against your notes — the parts you couldn’t recall are the revision list.`,
+    t => `Keyword bank: list the marking keywords for “${t}” (the exact verbs and nouns mark schemes use).`,
+    t => `20 MCQs on “${t}”; log every wrong answer and which option tempted you.`,
+    t => `Read your notes on “${t}” once, close them, and write everything you remember; compare and mark the gaps.`,
+  ],
+  topical: [
+    t => `30 MCQs on “${t}”, timed; log every wrong option and why it tempted you.`,
+    t => `5 open-ended questions on “${t}” in C.E.R. shape — Claim, Evidence from the setup, Reasoning with keywords.`,
+    t => `Experiment practice on “${t}”: for 3 setups, state the aim, the changed/measured/constant variables and one fair-test improvement.`,
+    t => `Teach “${t}” aloud to someone in 5 minutes — the ideas you stumble on go to the top of tomorrow’s list.`,
+    t => `Re-do every “${t}” question in your error log; a question leaves the log only after 2 clean solves.`,
+  ],
+};
+
+// Skills sessions — cycled per phase (technique work independent of topic).
+const SKILL_TASKS = {
+  foundation: [
+    'Variables practice: for 3 experiments, name the changed, measured and constant variables.',
+    'Data basics: 3 graph questions — read the axes and units aloud before answering; quote exact values.',
+    'Set up your error log and keyword bank (one page per topic) if you haven’t — they power the rest of this plan.',
+    'C.E.R. warm-up: rewrite 2 model answers in your own words, keeping every keyword.',
+  ],
+  topical: [
+    'Data practice: 4 graph/table questions — describe each trend with exact values before explaining it.',
+    'Open-ended drill: 4 questions in C.E.R. shape; self-mark with keywords — no keyword, no mark.',
+    'MCQ technique: 10 questions — cover the options, commit to your own answer, then eliminate with reasons.',
+    'Rewrite 3 vague answers from your error log using precise, comparative language.',
+    'Command-word drill: 5 questions — circle state/explain/compare first; match each answer’s shape to its word.',
+  ],
+  papers: [
+    'Open-ended drill: 5 questions across topics in C.E.R. shape, timed at 3 minutes each.',
+    'Data sprint: 5 graph/table questions — exact values, units, and what the flat/steep regions mean.',
+    'Error-log session: re-do the open-ended questions you lost marks on this week, in full C.E.R. shape.',
+    'MCQ sprint: 15 mixed questions, timed — eliminate every option with a reason.',
+  ],
+  intensive: [
+    'Error-log sweep: re-answer starred open-ended questions from memory, then check the keywords.',
+    'Rapid-fire keyword quiz: 20 one-line “explain why” questions across topics.',
+    'Mixed MCQ set: 30 questions across all themes, timed.',
+    'Rewrite round: fix every vague answer still sitting in the error log.',
+  ],
+  final: [
+    'Light: read your keyword bank and concept maps — stop after 30 minutes.',
+    'Skim the error log once; sleep early.',
+    'Light: 10 easy MCQs for confidence, then close the books.',
+  ],
+};
+
+// Saturday sessions per phase.
+const SATURDAY_TASKS = {
+  foundation: [
+    'Extended session (60 min): one full topical worksheet on this week’s focus topic — mark it immediately.',
+  ],
+  topical: [
+    'Timed Booklet A (28 MCQs, 1 hour) under exam conditions; log every wrong option.',
+    'Timed Booklet B (open-ended, 45 min) under exam conditions; self-mark with keywords — no keyword, no mark.',
+  ],
+  papers: [
+    'Full timed paper (Booklets A + B, 1 h 45 min) under real exam conditions — no pauses, no notes.',
+    'Timed Booklet B (45 min), then spend 30 minutes marking against the answer key’s keywords.',
+    'Timed Booklet A (1 hour), then re-attempt every question you guessed before checking answers.',
+  ],
+  intensive: [
+    'Full timed paper under exam conditions; afterwards sort every lost mark: keyword? data? MCQ trap? topic gap?',
+  ],
+  final: [
+    'Light: one relaxed Booklet A at your own pace — confidence, not assessment.',
+  ],
+};
+
+const PHASES = [
+  { id: 'foundation', name: 'Phase 1 · Foundations & Diagnosis',
+    blurb: 'Rebuild the base: concept maps, keyword banks, the error log. Early topics get patched first. Slow is smooth.' },
+  { id: 'topical',    name: 'Phase 2 · Topical Mastery',
+    blurb: 'Work through the syllabus topic by topic — MCQs, open-ended in C.E.R. shape and experiment questions on each.' },
+  { id: 'papers',     name: 'Phase 3 · Timed Practice',
+    blurb: 'Full booklets under exam conditions. The score matters less than what goes into the error log.' },
+  { id: 'intensive',  name: 'Phase 4 · Intensive Revision',
+    blurb: 'Error-log driven: re-do what you got wrong until it stays right. No new material in the last stretch.' },
+  { id: 'final',      name: 'Final Lap · Taper & Rest',
+    blurb: 'Light revision only, early nights, exam logistics. You bank marks this week by resting, not cramming.' },
+];
+const PHASE_BY_ID = Object.fromEntries(PHASES.map(p => [p.id, p]));
+
+/* ============================================================
+   State & persistence
+   ============================================================ */
+
+const store = {
+  get(key, fallback) {
+    try {
+      const raw = localStorage.getItem('psle.' + key);
+      return raw === null ? fallback : JSON.parse(raw);
+    } catch (e) { return fallback; }
+  },
+  set(key, value) {
+    try { localStorage.setItem('psle.' + key, JSON.stringify(value)); } catch (e) { /* private mode */ }
+  },
+};
+
+const DEFAULT_SETTINGS = {
+  name: '',
+  examDate: '2026-10-01',   // typical PSLE written window: late Sep – early Oct. Confirm on MOE's timetable.
+};
+
+let settings   = Object.assign({}, DEFAULT_SETTINGS, store.get('settings', {}));
+let diagnostic = store.get('diag', []);          // array of weakness ids
+let done       = store.get('done', {});          // { taskKey: true }
+let planStart  = store.get('planStart', null);   // ymd string — anchored on first use so the plan doesn't shift daily
+let activeTab  = 'dashboard';
+
+/* ============================================================
+   Date helpers (local time, no toISOString to avoid TZ drift)
+   ============================================================ */
+
+function ymd(d) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() + '-' + m + '-' + day;
+}
+function parseYmd(s) {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function today0() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+function addDays(d, n) { const c = new Date(d); c.setDate(c.getDate() + n); return c; }
+function fmtDate(d) {
+  return d.toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
+}
+function fmtDateFull(d) {
+  return d.toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
+const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function daysToExam() {
+  const exam = parseYmd(settings.examDate);
+  return Math.round((exam - today0()) / 86400000);
+}
+
+/* ============================================================
+   Plan generation — deterministic from (planStart, examDate,
+   diagnostic), so checkbox keys stay stable per date.
+   ============================================================ */
+
+function buildPlan() {
+  const exam = parseYmd(settings.examDate);
+  // Anchor the plan's first day so weeks and tasks stay put as days pass.
+  if (!planStart || parseYmd(planStart) > exam || parseYmd(planStart) > today0()) {
+    planStart = ymd(today0());
+    store.set('planStart', planStart);
+  }
+  const start = parseYmd(planStart);
+  const totalDays = Math.round((exam - start) / 86400000);
+  if (totalDays < 0) return null;
+
+  const totalWeeks = Math.max(1, Math.ceil((totalDays + 1) / 7));
+
+  // Assign a phase to each week. Last week is always the final lap.
+  const phaseOfWeek = [];
+  const working = totalWeeks - 1; // weeks before the final lap
+  if (working <= 0) {
+    phaseOfWeek.push('final');
+  } else {
+    let alloc;
+    if (working >= 10)     alloc = { foundation: 0.18, topical: 0.34, papers: 0.28, intensive: 0.20 };
+    else if (working >= 6) alloc = { foundation: 0.12, topical: 0.32, papers: 0.30, intensive: 0.26 };
+    else if (working >= 3) alloc = { foundation: 0,    topical: 0.34, papers: 0.33, intensive: 0.33 };
+    else                   alloc = { foundation: 0,    topical: 0,    papers: 0.5,  intensive: 0.5  };
+    const order = ['foundation', 'topical', 'papers', 'intensive'];
+    const counts = {};
+    let used = 0;
+    order.forEach(p => { counts[p] = Math.floor(alloc[p] * working); used += counts[p]; });
+    // hand leftovers to topical then intensive
+    let leftover = working - used;
+    const topUp = ['topical', 'intensive', 'papers', 'foundation'];
+    let i = 0;
+    while (leftover > 0) { counts[topUp[i % topUp.length]]++; leftover--; i++; }
+    order.forEach(p => { for (let k = 0; k < counts[p]; k++) phaseOfWeek.push(p); });
+    phaseOfWeek.push('final');
+  }
+
+  // Spread the syllabus topics across the foundation + topical weeks,
+  // so every topic gets a slot in the plan.
+  const topicWeekIdxs = [];
+  phaseOfWeek.forEach((p, i) => { if (p === 'foundation' || p === 'topical') topicWeekIdxs.push(i); });
+  const topicsOfWeek = {};   // weekIndex -> array of topic names
+  if (topicWeekIdxs.length > 0) {
+    const per = Math.floor(TOPICS.length / topicWeekIdxs.length);
+    let extra = TOPICS.length % topicWeekIdxs.length;
+    let cursor = 0;
+    topicWeekIdxs.forEach(wi => {
+      const take = Math.max(1, per + (extra > 0 ? 1 : 0));
+      if (extra > 0) extra--;
+      topicsOfWeek[wi] = TOPICS.slice(cursor, cursor + take).map(t => t.name);
+      cursor = Math.min(cursor + take, TOPICS.length);
+      if (topicsOfWeek[wi].length === 0) {
+        // more weeks than topics — recycle from the start
+        topicsOfWeek[wi] = [TOPICS[wi % TOPICS.length].name];
+      }
+    });
+  }
+
+  // Drill rotation: the 10-minute drills from every ticked weakness.
+  const drills = WEAKNESSES.filter(w => diagnostic.includes(w.id)).map(w => w.drill);
+
+  const counters = { topic: {}, skill: {}, sat: {}, drill: 0 };
+  function cycle(group, phase, pool) {
+    const c = counters[group];
+    c[phase] = c[phase] || 0;
+    const item = pool[c[phase] % pool.length];
+    c[phase]++;
+    return item;
+  }
+
+  const weeks = [];
+  for (let w = 0; w < totalWeeks; w++) {
+    const phase = phaseOfWeek[Math.min(w, phaseOfWeek.length - 1)];
+    const weekTopics = topicsOfWeek[w] || [];
+    const week = { index: w, phase, topics: weekTopics, days: [] };
+    let topicPtr = 0;
+    for (let dd = 0; dd < 7; dd++) {
+      const dayNum = w * 7 + dd;
+      if (dayNum > totalDays) break;
+      const date = addDays(start, dayNum);
+      const key = ymd(date);
+      const tasks = [];
+      const isExamDay = dayNum === totalDays;
+      const dow = date.getDay();
+
+      if (isExamDay) {
+        tasks.push({ subject: 'PSLE', text: 'PSLE Science paper. Eat breakfast, bring your entry proof and stationery, arrive early — you’ve done the work. Go get it! 🔬' });
+      } else if (phase === 'final') {
+        tasks.push({ subject: 'Light', text: cycle('skill', 'final', SKILL_TASKS.final) });
+        tasks.push({ subject: 'Rest', text: 'Early night (9 hours of sleep), light exercise, pack and check exam materials.' });
+      } else if (dow === 0) {
+        // Sunday: error-log review + rest
+        tasks.push({ subject: 'Review', text: 'Error-log Sunday: go through this week’s mistakes; re-do 5 of them cold and update your keyword bank.' });
+        tasks.push({ subject: 'Rest', text: 'Free afternoon — sport, family, play. Preview next week’s plan tonight (2 min).' });
+      } else if (dow === 6) {
+        // Saturday: timed practice
+        tasks.push({ subject: 'Paper', text: cycle('sat', phase, SATURDAY_TASKS[phase]) });
+        tasks.push({ subject: 'Review', text: 'Mark today’s work immediately and move every lost mark into the error log — note whether it was a keyword, data, MCQ-trap or topic-gap loss.' });
+      } else {
+        // Weekday: topic session + skills session + weakness drill
+        if (weekTopics.length > 0) {
+          const topic = weekTopics[topicPtr % weekTopics.length];
+          topicPtr++;
+          const tmpl = cycle('topic', phase, TOPIC_TASKS[phase] || TOPIC_TASKS.topical);
+          tasks.push({ subject: 'Topic', text: tmpl(topic) });
+        } else {
+          tasks.push({ subject: 'Practice', text: cycle('skill', phase + '-alt', SKILL_TASKS[phase] || SKILL_TASKS.topical) });
+        }
+        tasks.push({ subject: 'Skills', text: cycle('skill', phase, SKILL_TASKS[phase] || SKILL_TASKS.topical) });
+        if (drills.length > 0) {
+          tasks.push({ subject: 'Drill', text: drills[counters.drill % drills.length] });
+          counters.drill++;
+        }
+      }
+      week.days.push({ date, key, tasks });
+    }
+    if (week.days.length > 0) weeks.push(week);
+  }
+  return { weeks, totalDays };
+}
+
+function taskKey(dayKey, idx) { return dayKey + '#' + idx; }
+
+/* ============================================================
+   Derived stats
+   ============================================================ */
+
+function planStats(plan) {
+  const t = today0();
+  let dueTotal = 0, dueDone = 0, todayTasks = null;
+  const todayKey = ymd(t);
+
+  if (plan) {
+    plan.weeks.forEach(week => week.days.forEach(day => {
+      const isPastOrToday = day.date <= t;
+      if (day.key === todayKey) todayTasks = day;
+      day.tasks.forEach((task, i) => {
+        if (isPastOrToday) {
+          dueTotal++;
+          if (done[taskKey(day.key, i)]) dueDone++;
+        }
+      });
+    }));
+  }
+
+  // streak: consecutive days ending today/yesterday with >=1 task done
+  let streak = 0;
+  for (let i = 0; i < 365; i++) {
+    const dKey = ymd(addDays(t, -i));
+    const any = Object.keys(done).some(k => k.startsWith(dKey + '#') && done[k]);
+    if (any) streak++;
+    else if (i === 0) continue; // today may not be done yet — don't break the streak
+    else break;
+  }
+
+  return { dueTotal, dueDone, todayTasks, streak };
+}
+
+function masteryFor(skill, stats) {
+  // Base confidence drops with each ticked weakness in this skill area;
+  // climbs with overall completed work.
+  const ticks = skill.weaknesses.filter(id => diagnostic.includes(id)).length;
+  const base = Math.max(30, 78 - ticks * 16);
+  const overall = stats.dueTotal > 0 ? stats.dueDone / stats.dueTotal : 0;
+  return Math.min(100, base + Math.round(overall * (100 - base)));
+}
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+
+const $ = sel => document.querySelector(sel);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function chipFor(pct) {
+  if (pct >= 75) return '<span class="chip good">✓ On track</span>';
+  if (pct >= 45) return '<span class="chip neutral">◔ Keeping pace</span>';
+  return '<span class="chip behind">⚠ Behind — catch up today</span>';
+}
+
+function renderDashboard() {
+  const el = $('#view-dashboard');
+  const days = daysToExam();
+  const plan = days >= 0 ? buildPlan() : null;
+  const stats = planStats(plan);
+  const donePct = stats.dueTotal > 0 ? Math.round((stats.dueDone / stats.dueTotal) * 100) : 0;
+  const isDayOne = planStart === ymd(today0());
+  const statusChip = (isDayOne && stats.dueDone === 0)
+    ? '<span class="chip neutral">● Day 1 — let’s go</span>'
+    : chipFor(donePct);
+  const exam = parseYmd(settings.examDate);
+  const hello = settings.name ? `, ${esc(settings.name)}` : '';
+
+  if (days < 0) {
+    el.innerHTML = `
+      <div class="card">
+        <h2>Exam date has passed</h2>
+        <p class="sub">Your saved PSLE date (${fmtDateFull(exam)}) is in the past. Set the next exam date in Settings to build a fresh roadmap.</p>
+        <button class="btn" data-action="tab" data-tab="settings">Open Settings</button>
+      </div>`;
+    return;
+  }
+
+  const tiles = `
+    <div class="tile-row">
+      <div class="tile hero">
+        <div class="label">Days to PSLE</div>
+        <div class="value">${days}</div>
+        <div class="hint">Written papers: ${fmtDateFull(exam)}</div>
+      </div>
+      <div class="tile">
+        <div class="label">Plan completed</div>
+        <div class="value">${donePct}%</div>
+        <div class="hint">${stats.dueDone} of ${stats.dueTotal} tasks due so far</div>
+      </div>
+      <div class="tile">
+        <div class="label">Study streak</div>
+        <div class="value">${stats.streak}</div>
+        <div class="hint">day${stats.streak === 1 ? '' : 's'} with at least one task done</div>
+      </div>
+      <div class="tile">
+        <div class="label">Focus areas</div>
+        <div class="value">${diagnostic.length}</div>
+        <div class="hint">${diagnostic.length === 0 ? 'Run the diagnostic to find them' : 'weak spots being rectified'}</div>
+      </div>
+    </div>`;
+
+  let todayHtml;
+  if (!stats.todayTasks || stats.todayTasks.tasks.length === 0) {
+    todayHtml = '<p class="empty-note">No tasks scheduled today.</p>';
+  } else {
+    todayHtml = '<ul class="tasks">' + stats.todayTasks.tasks.map((t, i) => {
+      const k = taskKey(stats.todayTasks.key, i);
+      const isDone = !!done[k];
+      return `<li class="${isDone ? 'done' : ''}">
+        <input type="checkbox" data-action="task" data-key="${esc(k)}" ${isDone ? 'checked' : ''}>
+        <div class="t-body"><div class="t-subject">${esc(t.subject)}</div><div class="t-text">${esc(t.text)}</div></div>
+      </li>`;
+    }).join('') + '</ul>';
+  }
+
+  const meters = SKILLS.map(skill => {
+    const pct = masteryFor(skill, stats);
+    return `<div class="meter-row">
+      <div class="meter-name">${esc(skill.name)}</div>
+      <div class="meter-track"><div class="meter-fill" style="width:${pct}%"></div></div>
+      <div class="meter-val">${pct}%</div>
+    </div>`;
+  }).join('');
+
+  const diagNudge = diagnostic.length === 0 ? `
+    <div class="card">
+      <h2>Start here: the 3-minute diagnostic</h2>
+      <p class="sub">The single biggest reason students underperform in PSLE Science is losing marks to technique — keywords, data reading, MCQ traps — not to a lack of knowledge. Tick what sounds like you, and the roadmap will weight your weak areas automatically.</p>
+      <button class="btn" data-action="tab" data-tab="diagnostic">Run the diagnostic</button>
+    </div>` : '';
+
+  el.innerHTML = `
+    ${tiles}
+    ${diagNudge}
+    <div class="card">
+      <h2>Today${hello} — ${DOW[today0().getDay()]}, ${fmtDate(today0())} ${statusChip}</h2>
+      <p class="sub">Work in 40-minute focused blocks with 10-minute breaks. Phone in another room.</p>
+      ${todayHtml}
+    </div>
+    <div class="card">
+      <h2>Skill confidence</h2>
+      <p class="sub">Starts from your diagnostic and climbs as you complete the plan.</p>
+      ${meters}
+    </div>`;
+}
+
+function renderDiagnostic() {
+  const el = $('#view-diagnostic');
+  const groups = [
+    { key: 'science', name: 'Science — where the marks go' },
+    { key: HABITS_KEY, name: 'Study habits' },
+  ];
+
+  const body = groups.map(g => {
+    const items = WEAKNESSES.filter(w => w.subject === g.key).map(w => {
+      const on = diagnostic.includes(w.id);
+      return `<div class="diag-item ${on ? 'on' : ''}" data-action="diag" data-id="${esc(w.id)}">
+        <input type="checkbox" ${on ? 'checked' : ''} tabindex="-1">
+        <div>
+          <div class="d-title">${esc(w.title)}</div>
+          <div class="d-signs">${esc(w.signs)}</div>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="diag-group"><h3>${esc(g.name)}</h3>${items}</div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>Why do students underperform in PSLE Science?</h2>
+      <p class="sub">These are the most common mark-losers. Tick everything that sounds like you (be honest — nobody else sees this). Your roadmap gives daily 10-minute drills to whatever you tick, and the Fix-It Guide explains how to rectify each one.</p>
+      ${body}
+      <button class="btn" data-action="tab" data-tab="fixes">See my fixes →</button>
+    </div>`;
+}
+
+function renderFixes() {
+  const el = $('#view-fixes');
+  const focus = WEAKNESSES.filter(w => diagnostic.includes(w.id));
+  const others = WEAKNESSES.filter(w => !diagnostic.includes(w.id));
+  const label = w => w.subject === HABITS_KEY ? 'Habits' : 'Science';
+
+  const cardFor = (w, isFocus) => `
+    <div class="fix-card ${isFocus ? 'focus' : ''}">
+      <div class="f-head">
+        <span class="chip ${isFocus ? 'behind' : 'neutral'}">${isFocus ? '★ Your focus' : esc(label(w))}</span>
+        <h3>${esc(w.title)}</h3>
+      </div>
+      <p class="why"><strong>Why it happens:</strong> ${esc(w.why)}</p>
+      <ul>${w.fixes.map(f => `<li>${esc(f)}</li>`).join('')}</ul>
+    </div>`;
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>Fix-It Guide</h2>
+      <p class="sub">Every common PSLE Science weakness, why it happens, and exactly how to rectify it. ${focus.length > 0 ? 'Your diagnostic picks are highlighted first — their 10-minute drills are already woven into your daily plan.' : 'Run the diagnostic to highlight your personal focus areas.'}</p>
+      ${focus.map(w => cardFor(w, true)).join('')}
+      ${focus.length > 0 && others.length > 0 ? '<div class="phase-band">Everything else</div>' : ''}
+      ${others.map(w => cardFor(w, false)).join('')}
+    </div>`;
+}
+
+function renderRoadmap() {
+  const el = $('#view-roadmap');
+  const days = daysToExam();
+  if (days < 0) {
+    el.innerHTML = `<div class="card"><h2>Roadmap</h2><p class="sub">Your saved PSLE date is in the past — update it in Settings to build a fresh plan.</p><button class="btn" data-action="tab" data-tab="settings">Open Settings</button></div>`;
+    return;
+  }
+  const plan = buildPlan();
+  const t = today0();
+  const todayKey = ymd(t);
+
+  let html = `
+    <div class="card">
+      <h2>Your week-by-week roadmap</h2>
+      <p class="sub">${plan.weeks.length} week${plan.weeks.length === 1 ? '' : 's'} to the Science paper on ${fmtDateFull(parseYmd(settings.examDate))}. Every syllabus topic gets a slot. Weekdays carry a topic session and a skills session (about 40 minutes each) plus a 10-minute drill aimed at your weak spots; Saturdays are timed practice; Sundays are for the error log and rest. Tick tasks as you finish them — the plan re-weights automatically if you update the diagnostic.</p>
+    </div>`;
+
+  let lastPhase = null;
+  plan.weeks.forEach(week => {
+    if (week.phase !== lastPhase) {
+      const p = PHASE_BY_ID[week.phase];
+      html += `<div class="phase-band">${esc(p.name)}</div>
+               <p class="sub" style="margin:0 6px 14px; font-size:13.5px; color:var(--ink-2);">${esc(p.blurb)}</p>`;
+      lastPhase = week.phase;
+    }
+    let wDue = 0, wDone = 0;
+    week.days.forEach(day => day.tasks.forEach((task, i) => {
+      wDue++; if (done[taskKey(day.key, i)]) wDone++;
+    }));
+    const wPct = wDue > 0 ? Math.round((wDone / wDue) * 100) : 0;
+    const first = week.days[0].date, last = week.days[week.days.length - 1].date;
+    const isCurrent = t >= first && t <= last;
+    const focusLine = week.topics.length > 0
+      ? ` · Focus: ${week.topics.map(esc).join(' · ')}`
+      : '';
+
+    const daysHtml = week.days.map(day => {
+      const isToday = day.key === todayKey;
+      const tasksHtml = day.tasks.map((task, i) => {
+        const k = taskKey(day.key, i);
+        const isDone = !!done[k];
+        return `<li class="${isDone ? 'done' : ''}">
+          <input type="checkbox" data-action="task" data-key="${esc(k)}" ${isDone ? 'checked' : ''}>
+          <div class="t-body"><div class="t-subject">${esc(task.subject)}</div><div class="t-text">${esc(task.text)}</div></div>
+        </li>`;
+      }).join('');
+      return `<div class="day-block">
+        <div class="d-head">
+          <span class="d-name">${DOW[day.date.getDay()]}</span>
+          <span class="d-date">${fmtDate(day.date)}</span>
+          ${isToday ? '<span class="d-today">● TODAY</span>' : ''}
+        </div>
+        <ul class="tasks">${tasksHtml}</ul>
+      </div>`;
+    }).join('');
+
+    html += `<details class="week" ${isCurrent ? 'open' : ''}>
+      <summary>
+        <div class="w-title">
+          <div class="w-name">Week ${week.index + 1}${isCurrent ? ' — this week' : ''}</div>
+          <div class="w-dates">${fmtDate(first)} – ${fmtDate(last)}${focusLine}</div>
+        </div>
+        <div class="w-meter"><div class="meter-track"><div class="meter-fill" style="width:${wPct}%"></div></div></div>
+        <div class="w-pct">${wPct}%</div>
+        <span class="w-caret">›</span>
+      </summary>
+      <div class="w-body">${daysHtml}</div>
+    </details>`;
+  });
+
+  el.innerHTML = html;
+}
+
+function renderSettings() {
+  const el = $('#view-settings');
+  el.innerHTML = `
+    <div class="card">
+      <h2>Settings</h2>
+      <p class="sub">Everything is stored on this device only.</p>
+      <div class="field">
+        <label for="set-name">Student name (optional)</label>
+        <input type="text" id="set-name" value="${esc(settings.name)}" placeholder="e.g., Kai" data-action="name">
+      </div>
+      <div class="field">
+        <label for="set-exam">PSLE Science paper date</label>
+        <input type="date" id="set-exam" value="${esc(settings.examDate)}" data-action="exam-date">
+        <div class="note">The written papers usually run late September to early October — always confirm the exact date on MOE’s official examination timetable.</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Danger zone</h2>
+      <p class="sub">Reset clears the diagnostic, all ticked tasks and settings on this device.</p>
+      <button class="btn ghost" data-action="reset">Reset everything</button>
+    </div>`;
+}
+
+const RENDERERS = {
+  dashboard: renderDashboard,
+  diagnostic: renderDiagnostic,
+  fixes: renderFixes,
+  roadmap: renderRoadmap,
+  settings: renderSettings,
+};
+
+function render() {
+  Object.keys(RENDERERS).forEach(tab => {
+    const view = document.getElementById('view-' + tab);
+    view.hidden = tab !== activeTab;
+  });
+  document.querySelectorAll('nav.tabs button').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === activeTab));
+  RENDERERS[activeTab]();
+}
+
+/* ============================================================
+   Events (single delegated handler)
+   ============================================================ */
+
+document.addEventListener('click', ev => {
+  const target = ev.target.closest('[data-action]');
+  if (!target) return;
+  const action = target.dataset.action;
+
+  if (action === 'tab') {
+    activeTab = target.dataset.tab;
+    render();
+    window.scrollTo({ top: 0 });
+  } else if (action === 'toggle-theme') {
+    const root = document.documentElement;
+    const dark = getComputedStyle(document.body).backgroundColor !== 'rgb(249, 249, 247)';
+    const next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    store.set('theme', next);
+  } else if (action === 'diag') {
+    const id = target.dataset.id;
+    if (diagnostic.includes(id)) diagnostic = diagnostic.filter(x => x !== id);
+    else diagnostic.push(id);
+    store.set('diag', diagnostic);
+    renderDiagnostic();
+  } else if (action === 'reset') {
+    if (confirm('Reset the diagnostic, all progress and settings on this device?')) {
+      ['settings', 'diag', 'done', 'planStart'].forEach(k => localStorage.removeItem('psle.' + k));
+      settings = Object.assign({}, DEFAULT_SETTINGS);
+      diagnostic = [];
+      done = {};
+      planStart = null;
+      activeTab = 'dashboard';
+      render();
+    }
+  }
+});
+
+document.addEventListener('change', ev => {
+  const target = ev.target.closest('[data-action]');
+  if (!target) return;
+  const action = target.dataset.action;
+
+  if (action === 'task') {
+    const k = target.dataset.key;
+    if (target.checked) done[k] = true;
+    else delete done[k];
+    store.set('done', done);
+    RENDERERS[activeTab]();
+  } else if (action === 'exam-date') {
+    if (target.value) {
+      const oldExamPassed = parseYmd(settings.examDate) < today0();
+      settings.examDate = target.value;
+      store.set('settings', settings);
+      if (oldExamPassed) {
+        // New exam cycle: restart the plan from today instead of the stale anchor.
+        planStart = ymd(today0());
+        store.set('planStart', planStart);
+      }
+    }
+  } else if (action === 'name') {
+    settings.name = target.value.trim();
+    store.set('settings', settings);
+  }
+});
+
+/* ============================================================
+   Boot
+   ============================================================ */
+
+const savedTheme = store.get('theme', null);
+if (savedTheme === 'light' || savedTheme === 'dark') {
+  document.documentElement.setAttribute('data-theme', savedTheme);
+}
+document.getElementById('appVersionBadge').textContent = APP_VERSION;
+render();
+</script>
+</body>
+</html>
