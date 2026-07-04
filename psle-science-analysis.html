@@ -159,7 +159,7 @@
     <div class="app-mark">🔬</div>
     <div class="app-titles">
       <h1>PSLE Science Paper Analyser</h1>
-      <p>The 2022 &amp; 2023 papers (0009/2), every question classified into the CER portal's topics — with a cross-paper analysis of the concepts that keep coming back.</p>
+      <p>The 2021–2023 papers (0009/2), every question classified into the CER portal's topics — with a cross-paper analysis of the concepts that keep coming back.</p>
     </div>
     <button class="icon-btn" data-action="toggle-theme" title="Toggle light / dark">◐</button>
   </header>
@@ -181,15 +181,16 @@
   </main>
 
   <footer class="app">
-    PSLE Science (0009/2) Analyser · <span id="appVersionBadge"></span> · 2022 &amp; 2023 · topics mirror the CER portal taxonomy
+    PSLE Science (0009/2) Analyser · <span id="appVersionBadge"></span> · 2021–2023 · topics mirror the CER portal taxonomy
   </footer>
 </div>
 
 <script type="module">
 'use strict';
 
-const APP_VERSION = 'v2.0.0';
-const YEARS = ['2022', '2023'];
+const APP_VERSION = 'v3.0.0';
+const YEARS = ['2021', '2022', '2023'];
+function yearOpacity(i){ return YEARS.length <= 1 ? 1 : (0.45 + 0.55 * (i / (YEARS.length - 1))); }
 
 const THEMES = {
   diversity:    { name:'Diversity',    varc:'--t-diversity' },
@@ -355,37 +356,83 @@ const QUESTIONS = [
   { year:'2022', n:38, bk:'B', marks:2, topic:'Matter and its 3 States', type:'open', title:'Two properties of air that inflated the tyre', ans:'Air has mass and occupies space; it can be compressed / exerts pressure in all directions', detail:'State two properties of air that let the pumped air fill and firm up the tyre [2]. Properties of a gas.' },
   { year:'2022', n:39, bk:'B', marks:4, topic:'Electrical Systems', type:'open', title:'Two-bulb toy — series fault, then draw parallel', ans:'They were in series (one blows, both go out); redraw with L and R in parallel and the switch controlling both', detail:'(a) state how the two bulbs were connected [1]; (b) complete the circuit so one stays lit if the other blows, only on when the switch is closed [3]. Near-identical to 2023 Q39.' },
   { year:'2022', n:40, bk:'B', marks:2, topic:'Heat', type:'open', title:'Turkey in a 160 °C oven — thermometer reading', ans:'Read the dial; the turkey is still gaining heat and has not yet reached the oven’s temperature', detail:'(a) state the thermometer reading [1]; (b) why the turkey is not yet 160 °C after two hours [1]. Heat gain toward the surroundings’ temperature.' },
+
+  /* ================= 2021 ================= */
+  { year:'2021', n:1,  bk:'A', marks:2, topic:'Living and non-living things', type:'recall', title:'Characteristics of all living things', ans:'Grow, reproduce and respond to changes', detail:'Not all living things make their own food or move from place to place — the shared traits are growth, reproduction and responding to changes.' },
+  { year:'2021', n:2,  bk:'A', marks:2, topic:'Living and non-living things', type:'recall', title:'Flowering vs non-flowering plants', ans:'Flowering plants produce fruits; non-flowering ones do not', detail:'Both make their own food; the distinguishing feature is that flowering plants form fruits (from the ovary). Classification recall.' },
+  { year:'2021', n:3,  bk:'A', marks:2, topic:'Matter and its 3 States', type:'recall', title:'Which gases are found in air', ans:'A, B, C and D (oxygen, nitrogen, carbon dioxide, water vapour)', detail:'Air is a mixture of all four gases. Basic knowledge of the composition of air.' },
+  { year:'2021', n:4,  bk:'A', marks:2, topic:'Human and Plant Transport', type:'application', title:'Which arrows show the direction water moves in a plant', ans:'Q, S and T only', detail:'Water is absorbed by the roots and moves up the stem to the leaves and fruits — trace the upward arrows only.' },
+  { year:'2021', n:5,  bk:'A', marks:2, topic:'Plant Reproduction', type:'application', title:'Which flower produced the papaya fruit (one ovary, many seeds)', ans:'Q (one ovary, many ovules)', detail:'A papaya has many seeds in one fruit → one ovary with many ovules. Link fruit structure back to the flower.' },
+  { year:'2021', n:6,  bk:'A', marks:2, topic:'Living and non-living things', type:'application', title:'Classification chart (feathers / can fly) — what is possible', ans:'C is a mosquito (no feathers, can fly)', detail:'C = no feathers + can fly = an insect such as a mosquito. Work an unfamiliar organism through a classification key.' },
+  { year:'2021', n:7,  bk:'A', marks:2, topic:'Human Reproduction', type:'application', title:'Fertilisation diagram — which statement is NOT correct', ans:'“The fertilised egg develops in the ovary”', detail:'Fertilisation happens in the oviduct and the fertilised egg develops in the uterus (womb), not the ovary. Human reproduction facts.' },
+  { year:'2021', n:8,  bk:'A', marks:2, topic:'Human and Plant Transport', type:'recall', title:'Substances in the water-carrying vs food-carrying tubes', ans:'Water tubes: water and mineral salts; food tubes: sugar', detail:'Water-carrying tubes move water and dissolved mineral salts up; food-carrying tubes move sugar made in the leaves. Distinguish the two transport systems.' },
+  { year:'2021', n:9,  bk:'A', marks:2, topic:'Plant Reproduction', type:'experimental', title:'Two germination set-ups differing only in temperature', ans:'Seeds will only germinate when the temperature is suitable', detail:'Both are dark and damp; the only variable changed is temperature, so that is the hypothesis being tested. Identify the tested variable.' },
+  { year:'2021', n:10, bk:'A', marks:2, topic:'Life Cycles', type:'data', title:'Bar graph of life-cycle stage lengths for P and Q', ans:'P took a shorter time to become an adult than Q', detail:'Sum each organism’s egg + larva + pupa days; P’s total is far smaller than Q’s. Read and compare from a grouped bar graph.' },
+  { year:'2021', n:11, bk:'A', marks:2, topic:'Human Body Systems', type:'application', title:'Why the whole potato in beaker B digested more slowly', ans:'It has a smaller exposed surface area', detail:'The cut cubes (A) expose more surface to the digestive juice, so they digest faster. Surface area and rate of digestion.' },
+  { year:'2021', n:12, bk:'A', marks:2, topic:'Plant Systems', type:'data', title:'Oxygen in a bag around a sunlit leaf over two hours', ans:'A steadily increasing line', detail:'A leaf in sunlight photosynthesises, releasing oxygen, so the amount rises over time. Match the process to the graph.' },
+  { year:'2021', n:13, bk:'A', marks:2, topic:'Living and non-living things', type:'recall', title:'Characteristic used to classify insect/fish/mammal/amphibian', ans:'Type of body covering', detail:'These groups are distinguished by their body covering (scales, feathers/hair, moist skin, etc.). Classification basis.' },
+  { year:'2021', n:14, bk:'A', marks:2, topic:'Plant Reproduction', type:'experimental', title:'Seed dropped near a fan — distance vs variable X', ans:'Mass of seed', detail:'Distance fell as X increased; a heavier seed is carried a shorter distance by the wind. Infer the variable from a falling graph. Seed dispersal.' },
+  { year:'2021', n:15, bk:'A', marks:2, topic:'Matter and its 3 States', type:'application', title:'Ball stayed the same size after more air was pumped in', ans:'Air can be compressed', detail:'More air fitting into the same volume shows that air (a gas) can be compressed. Property of a gas.' },
+  { year:'2021', n:16, bk:'A', marks:2, topic:'Matter and its 3 States', type:'experimental', title:'Correct way to read a measuring cylinder', ans:'Cylinder on the table, eye level with the water surface', detail:'Read at eye level with the meniscus and the cylinder on a flat surface to avoid a parallax error. Measurement technique.' },
+  { year:'2021', n:17, bk:'A', marks:2, topic:'Matter and its 3 States', type:'data', title:'States of P, Q, R at different temperatures — what can be concluded', ans:'R has the highest freezing point', detail:'R is solid even at 50 °C, so it freezes/melts at the highest temperature of the three. Reason about melting/freezing points from a state table.' },
+  { year:'2021', n:18, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'In which circuit is bulb L brightest', ans:'The circuit where L carries the most current (its own branch)', detail:'A bulb is brightest when the most current flows through it — compare series and parallel arrangements. Brightness follows current.' },
+  { year:'2021', n:19, bk:'A', marks:2, topic:'Energy Conversion', type:'application', title:'Energy change in a balloon-powered toy car', ans:'Stored (potential) energy → kinetic + heat + sound', detail:'The stretched balloon stores potential energy that converts to movement (kinetic), plus heat and sound. Energy-conversion chain.' },
+  { year:'2021', n:20, bk:'A', marks:2, topic:'Forces', type:'application', title:'Which forces acted on the still wooden block on a slope', ans:'Friction and gravitational force (no magnetic force)', detail:'Wood is non-magnetic, so no magnetic force; friction holds it and gravity pulls it down the slope. Identify the forces present.' },
+  { year:'2021', n:21, bk:'A', marks:2, topic:'Materials', type:'application', title:'Properties of a folded material that floated then sank', ans:'Flexible but not (fully) waterproof', detail:'It could be folded (flexible) but eventually let water in and sank (not waterproof). Read properties from behaviour.' },
+  { year:'2021', n:22, bk:'A', marks:2, topic:'Electrical Systems', type:'application', title:'In which circuits will at least one bulb NOT light up', ans:'The circuits containing a short circuit / break', detail:'Trace each circuit for a short circuit (bulb bypassed) or gap. Fault-finding across four set-ups.' },
+  { year:'2021', n:23, bk:'A', marks:2, topic:'Forces', type:'application', title:'Opening car doors on a slope — who uses a smaller force', ans:'The downhill person, whose door is not lifted against gravity', detail:'Opening a door uphill means working against gravitational force (larger force); the downhill door needs less. Gravity and force.' },
+  { year:'2021', n:24, bk:'A', marks:2, topic:'Heat', type:'application', title:'Why cup B (with a handle) can be held but cup A cannot', ans:'The handle keeps the hand away from the heat (conduction)', detail:'Material P conducts heat; holding the body of cup A burns, while cup B’s handle keeps the hand at a distance from the hot water. Heat conduction.' },
+  { year:'2021', n:25, bk:'A', marks:2, topic:'Light', type:'application', title:'Why Susan can see the glass of the cupboard', ans:'Some light is reflected from the glass', detail:'We see an object when light bounces off it into our eyes; some light reflects off the glass surface. How we see objects.' },
+  { year:'2021', n:26, bk:'A', marks:2, topic:'Heat', type:'application', title:'Why the bun’s liquid filling burst through the wall', ans:'The filling expanded more than the bun', detail:'On heating, the liquid filling expands (and turns to gas) more than the solid bun, bursting through. Expansion on heating.' },
+  { year:'2021', n:27, bk:'A', marks:2, topic:'Light', type:'data', title:'Light through three fabrics over 10 s — which graph', ans:'Constant lines, C highest, then B, then A', detail:'Each fabric passes a steady amount of light, so flat lines ranked C > B > A. Match a table to the correct graph.' },
+  { year:'2021', n:28, bk:'A', marks:2, topic:'Magnets', type:'application', title:'Toy-train magnets — identify object P and poles J, K, L', ans:'P is a magnet; poles deduced from the attract/repel behaviour', detail:'Turning carriage A reversed the interactions (one end attracts, one repels), showing P is a magnet and fixing the poles. Magnet reasoning.' },
+  { year:'2021', n:29, bk:'B', marks:3, topic:'Living and non-living things', type:'open', title:'Plant cell — name parts and state functions', ans:'R = cell wall, S = nucleus; P (cell membrane) controls what enters/leaves, Q (chloroplast) makes food', detail:'(a) name parts R and S [1]; (b) state the functions of P and Q [2]. Plant-cell structure and function.' },
+  { year:'2021', n:30, bk:'B', marks:4, topic:'Human and Plant Respiration', type:'open', title:'Human respiratory system and how it works with circulation', ans:'Takes in oxygen and removes carbon dioxide; nose, windpipe, lungs; lungs oxygenate the blood the heart pumps round the body', detail:'(a) function + gases involved [1]; (b) name three parts [1]; (c) how the respiratory and circulatory systems work together [2].' },
+  { year:'2021', n:31, bk:'B', marks:3, topic:'Human Body Systems', type:'open', title:'Amount of sugar along the small intestine', ans:'Sugar rises Q→R as rice is digested into sugar; falls R→S as sugar is absorbed into the blood; undigested food enters the large intestine (absorbs water)', detail:'(a) why sugar increased Q→R [1]; (b) why it decreased R→S [1]; (c) name the next organ and its main function [1]. Digestion and absorption.' },
+  { year:'2021', n:32, bk:'B', marks:4, topic:'Life Cycles', type:'open', title:'Temperature and mosquito-egg hatching; dropping balls into a well', ans:'Most eggs hatch around 28 °C, fewer when too cold or too hot; the balls float; they cover the water so mosquitoes cannot breed on it', detail:'(a) conclude the effect of temperature on hatching [2]; (b) a physical property of the balls (they float) [1]; (c) how the method reduces mosquito breeding [1].' },
+  { year:'2021', n:33, bk:'B', marks:4, topic:'Life Cycles', type:'open', title:'Bee larva vs pupa; making honey from nectar; fierce offspring', ans:'Larva feeds and moves, pupa is resting; fanning evaporates water so the nectar becomes concentrated honey; the offspring inherit fierceness from bee T', detail:'(a) one way a larva differs from a pupa [1]; (b) how the bee’s fanning turns nectar to honey (evaporation) [2]; (c) why the offspring behave differently — inherited trait [1].' },
+  { year:'2021', n:34, bk:'B', marks:4, topic:'Plant Systems', type:'open', title:'Leaf disc rising in liquid Y under a lamp', ans:'Photosynthesis makes oxygen bubbles that lift the disc; repeat and average / control variables; liquid Y provides more carbon dioxide than water', detail:'(a) name the process and how it made the disc rise [1]; (b) two ways to get more reliable results [2]; (c) the substance liquid Y provided more of than water (carbon dioxide) [1].' },
+  { year:'2021', n:35, bk:'B', marks:2, topic:'Water and its 3 States', type:'open', title:'Why spectacles fogged above a face mask', ans:'Warm water vapour from the breath escapes upward, meets the cool lens and condenses into water droplets', detail:'Explain the fogging [2]. Condensation of exhaled water vapour on a cool surface.' },
+  { year:'2021', n:36, bk:'B', marks:4, topic:'Heat', type:'open', title:'Temperature inside a sun-parked car; expanding film bubble', ans:'Temperature = degree of hotness; surroundings ≈ 30 °C; reaches 40 °C at about 10 min; the trapped air in the bubble expands on heating', detail:'(a) state what temperature is [1]; (b) the temperature of the surroundings [1]; (c) time to reach 40 °C [1]; (d) why the bubble grew larger over days [1].' },
+  { year:'2021', n:37, bk:'B', marks:4, topic:'Energy Conversion', type:'open', title:'Sound of water droplets hitting a plate over time', ans:'Count the peaks in 30 s; the sound isn’t zero because of small background/ripple sounds; increase the drop height or the amount/size of water to raise the peak sound', detail:'(a) number of droplets in the first 30 s [1]; (b) why the sound isn’t zero between 10–15 s [1]; (c) two changes to increase the maximum sound [2]. Sound as a form of energy.' },
+  { year:'2021', n:38, bk:'B', marks:5, topic:'Electrical Systems', type:'open', title:'Electromagnet swings a bar; the “Bobbing Carrots” game', ans:'Disagree — an electromagnet also attracts magnetic materials, so the bar need not be a magnet; opening the switch turns the electromagnet off so the spring pushes the carrot up; use more coils/batteries to pull faster', detail:'(a) evaluate the “bar is a magnet” claim [1]; (b) why the carrot rises when the switch opens [2]; (c) two ways to make it drop faster while still rising when off [2]. Electromagnetism.' },
+  { year:'2021', n:39, bk:'B', marks:3, topic:'Matter and its 3 States', type:'open', title:'Finding the volume inside a coin bank', ans:'Fill it with water and pour that into a measuring cylinder to read the volume; the coins can’t fill it fully because of gaps/air spaces between them', detail:'(a) describe one way to find the internal volume [2]; (b) why 200 one-cm³ coins won’t all fit in a 200 cm³ space [1]. Measuring volume; gaps between solids.' },
+  { year:'2021', n:40, bk:'B', marks:4, topic:'Forces', type:'open', title:'Spring-launched rocket — compression, forces, energy, accuracy', ans:'More compression → greater distance; at G gravity and friction act; at H kinetic + (gravitational) potential energy; a sand pit stops the rocket bouncing/rolling for a truer landing point', detail:'(a) the compression–distance relationship [1]; (b) forces on the rocket going up the ramp off the spring [1]; (c) main energy form(s) at the top H [1]; (d) why a sand pit gives more accurate results [1]. Elastic force + energy + fair test.' },
 ];
 
 const RECURRING = [
-  { concept:'Electromagnets & the electric bell', topic:'Electrical Systems', hits:['2022 Q36','2023 Q38'], marks:10,
-    note:'A make-and-break electromagnet moves an iron bar/hammer repeatedly. Explain the on-off cycle, then how a change (spring strength, a non-metal part) affects the result. Always a high-mark open-ended question — 5 marks in each paper.' },
-  { concept:'Circuits: keep one bulb lit if another blows (parallel)', topic:'Electrical Systems', hits:['2022 Q18','2022 Q22','2022 Q39','2023 Q21','2023 Q23','2023 Q39'], marks:15,
-    note:'Series vs parallel is the backbone electrical idea. The "if one bulb blows the other stays lit + switch controls both" circuit-drawing question appeared almost identically in both years (2022 Q39 ≈ 2023 Q39).' },
-  { concept:'Energy conversion from a twisted rubber band', topic:'Energy Conversion', hits:['2022 Q37','2023 Q36'], marks:9,
-    note:'A wound rubber band drives a toy (flying bird, boat). Fill the chain elastic potential → kinetic + sound (+ heat); explain why the motion dies away; predict the effect of more turns or another band.' },
-  { concept:'Elastic / spring force vs stretch or compression', topic:'Forces', hits:['2022 Q27','2022 Q35','2023 Q26'], marks:6,
+  { concept:'Electromagnets — bells, oscillating bars & games', topic:'Electrical Systems', hits:['2021 Q38','2022 Q36','2023 Q38'], marks:15,
+    note:'A make-and-break (or switched) electromagnet moves an iron bar/hammer/carrot. Explain the on-off cycle, then how a change (spring strength, a non-metal part, more coils) affects it. A high-mark open-ended question in every single year — 5 marks each time.' },
+  { concept:'Circuits: series vs parallel, brightness & keeping a bulb lit', topic:'Electrical Systems', hits:['2021 Q18','2021 Q22','2022 Q18','2022 Q22','2022 Q39','2023 Q21','2023 Q23','2023 Q39'], marks:19,
+    note:'Series vs parallel is the backbone electrical idea — brightest bulb, which bulb blew, fault-finding, and the "if one bulb blows the other stays lit + switch controls both" circuit to draw (2022 Q39 ≈ 2023 Q39).' },
+  { concept:'Energy conversion from a stored-energy toy', topic:'Energy Conversion', hits:['2021 Q19','2021 Q40','2022 Q37','2023 Q36'], marks:15,
+    note:'A stretched balloon, wound rubber band or compressed spring drives a toy. Fill the chain (elastic) potential → kinetic + sound + heat; explain why the motion dies away; predict the effect of more turns / another band.' },
+  { concept:'Elastic / spring force vs stretch or compression', topic:'Forces', hits:['2022 Q27','2022 Q35','2023 Q26'], marks:8,
     note:'Compare springs/strings via a force–extension (or compression) graph. Steeper = more stretch per unit force; read values; spot why a comparison is not fair (different starting lengths).' },
+  { concept:'Life cycles, mosquitoes & insects', topic:'Life Cycles', hits:['2021 Q10','2021 Q32','2021 Q33','2022 Q4','2022 Q32','2023 Q2','2023 Q29'], marks:22,
+    note:'Stage counts (3 vs 4 stage), larva-vs-pupa differences, insect features, and mosquitoes tied to temperature/environment. Draw a life cycle in words and arrows; controlling mosquito breeding recurs.' },
+  { concept:'Photosynthesis, leaves & gas exchange', topic:'Plant Systems', hits:['2021 Q12','2021 Q34','2022 Q13','2022 Q34','2023 Q10'], marks:14,
+    note:'A leaf makes food and releases oxygen in light — read a rate graph, the oxygen-rising graph, leaf-disc bubbles, and variegated-leaf food tests. The plant needs light and carbon dioxide.' },
+  { concept:'Cells as the basic unit of life', topic:'Living and non-living things', hits:['2021 Q29','2022 Q5','2022 Q7','2023 Q33'], marks:10,
+    note:'A newer-syllabus emphasis: cell as the basic unit of life, plant vs animal cell parts (cell wall, chloroplast, nucleus) and their functions, and the part that makes food.' },
+  { concept:'Changes of state — evaporation, boiling & condensation', topic:'Water and its 3 States', hits:['2021 Q33','2021 Q35','2022 Q24','2022 Q26','2023 Q16','2023 Q35','2023 Q37'], marks:19,
+    note:'Name processes on a state-change diagram; evaporation concentrating a liquid or cooling a surface; condensation fogging a cold lens; a liquid solidifying below its melting point.' },
+  { concept:'Heat: conductors & expansion', topic:'Heat', hits:['2021 Q24','2021 Q26','2021 Q36','2022 Q25','2023 Q19','2023 Q20','2023 Q40'], marks:17,
+    note:'Good vs poor conductors (metal, tiles vs wood, a handle); expansion on heating (a bun filling, trapped air, fitting a rim, cracking glass); an object gaining heat until it reaches the surroundings’ temperature.' },
+  { concept:'Water transport & transpiration in plants', topic:'Human and Plant Transport', hits:['2021 Q4','2021 Q8','2022 Q33','2023 Q7','2023 Q12'], marks:11,
+    note:'Water-carrying (water + mineral salts, upward) vs food-carrying (sugar) tubes; the red-dye-in-stem experiment; leaves losing water through stomata.' },
+  { concept:'Circulatory, respiratory & digestive systems', topic:'Human Body Systems', hits:['2021 Q11','2021 Q30','2021 Q31','2022 Q6','2022 Q30','2023 Q4','2023 Q30'], marks:21,
+    note:'Oxygen-rich vs oxygen-poor blood; how the respiratory and circulatory systems work together; digestion and absorption along the gut (sugar rising then absorbed); surface area and digestion rate.' },
+  { concept:'Magnets: identify magnet vs magnetic material', topic:'Magnets', hits:['2021 Q28','2021 Q38','2022 Q20','2022 Q23','2023 Q17','2023 Q24'], marks:15,
+    note:'Deduce which object is a magnet from attraction/repulsion (repulsion is the sure test) or balance readings; an electromagnet attracts magnetic materials too, so attraction alone doesn’t prove a magnet.' },
+  { concept:'Measuring volume — displacement & reading a cylinder', topic:'Matter and its 3 States', hits:['2021 Q16','2021 Q39','2022 Q15'], marks:7,
+    note:'Read a measuring cylinder at eye level; find an irregular/internal volume by water displacement; gaps between solids mean packed objects don’t fill a space exactly.' },
+  { concept:'Properties of air (a gas)', topic:'Matter and its 3 States', hits:['2021 Q3','2021 Q15','2022 Q17','2022 Q38'], marks:8,
+    note:'Air is a mixture of gases with mass, occupies space, can be compressed, has no fixed shape and expands when heated — applied to balls, tyres and rising bread.' },
+  { concept:'Fair testing, variables & reliability', topic:'Cuts across topics', hits:['2021 Q9','2021 Q34','2022 Q31','2022 Q34','2023 Q27','2023 Q31'], marks:0,
+    note:'Name the changed / measured / constant variables; say what makes a test fair; get reliable results by repeating and averaging. A process skill that rides on top of many topics — not a topic of its own.' },
   { concept:'Human impact: deforestation & pollution', topic:'Humans and the Environment', hits:['2022 Q29','2023 Q1','2023 Q31'], marks:9,
-    note:'Deforestation → more carbon dioxide, less oxygen (define-then-explain). Or a pollution investigation carrying the variables-and-reliability process skills.' },
-  { concept:'Life cycles & mosquitoes', topic:'Life Cycles', hits:['2022 Q4','2022 Q32','2023 Q2','2023 Q29'], marks:12,
-    note:'Stage counts (3 vs 4 stage), insect features (3 body parts, 6 legs), and mosquitoes tied to their environment/temperature. Expect to draw a life cycle in words and arrows.' },
-  { concept:'Photosynthesis, leaves & stomata', topic:'Plant Systems', hits:['2022 Q13','2022 Q34','2023 Q10'], marks:8,
-    note:'Read a rate-of-photosynthesis graph (vs light or temperature); link leaf-opening size to gas exchange; variegated-leaf food tests showing the needs for photosynthesis.' },
-  { concept:'Cells as the basic unit of life', topic:'Living and non-living things', hits:['2022 Q5','2022 Q7','2023 Q33'], marks:7,
-    note:'A newer-syllabus emphasis: the cell as the basic unit of life, plant vs animal cells from a parts table, and the cell part that makes food (chloroplast).' },
-  { concept:'Changes of state; evaporation & boiling', topic:'Water and its 3 States', hits:['2022 Q24','2022 Q26','2023 Q16','2023 Q35','2023 Q37'], marks:11,
-    note:'Name processes on a state-change diagram; read heating/cooling curves; evaporation as a cooling process; a liquid solidifying once it cools below its melting point.' },
-  { concept:'Heat: conductors & expansion', topic:'Heat', hits:['2022 Q25','2023 Q19','2023 Q20','2023 Q40'], marks:9,
-    note:'Good vs poor conductors (metal, tiles vs wood); expansion on heating (fitting a rim, cracking glass); an object gaining heat until it reaches the surroundings’ temperature.' },
-  { concept:'Water transport & transpiration in plants', topic:'Human and Plant Transport', hits:['2022 Q33','2023 Q7','2023 Q12'], marks:7,
-    note:'Water-carrying vs food-carrying tubes; the red-dye-in-stem experiment and its variables; leaves losing water through stomata.' },
-  { concept:'Fair testing, variables & reliability', topic:'Cuts across topics', hits:['2022 Q31','2022 Q34','2023 Q9','2023 Q27','2023 Q31'], marks:0,
-    note:'Name the changed / measured / constant variables; say what makes a test fair; justify reliability from repeated, consistent readings. A process skill that rides on top of many topics — not a topic of its own.' },
-  { concept:'Magnets: identify magnet vs magnetic material', topic:'Magnets', hits:['2022 Q20','2022 Q23','2023 Q17','2023 Q24'], marks:8,
-    note:'Deduce which bar is a magnet from attraction/repulsion or balance readings; direction of magnetic force; it appearing alongside friction and gravity.' },
-  { concept:'Circulatory & digestive systems', topic:'Human Body Systems', hits:['2022 Q6','2022 Q30','2023 Q4','2023 Q30'], marks:12,
-    note:'Oxygen-rich vs oxygen-poor blood to organs; blood redistribution during exercise; digestion and absorption along the gut; nutrients higher after the small intestine.' },
+    note:'Deforestation → more carbon dioxide, less oxygen (define-then-explain); or a pollution investigation carrying the variables-and-reliability process skills. (Absent from the 2021 paper.)' },
 ];
 
 function themeOf(topic){ return TOPICS[topic] ? TOPICS[topic].theme : 'diversity'; }
@@ -415,7 +462,11 @@ function themeDot(theme){ return `<span class="dot" style="background:var(${THEM
 
 function paperSeg(){
   const opt = (v,label) => `<button class="${scope===v?'on':''}" data-action="scope" data-val="${v}">${label}</button>`;
-  return `<div class="segwrap"><span class="lbl">Paper</span><div class="seg">${opt('all','Both')}${opt('2023','2023')}${opt('2022','2022')}</div></div>`;
+  return `<div class="segwrap"><span class="lbl">Paper</span><div class="seg">${opt('all','All')}${YEARS.slice().reverse().map(y=>opt(y,y)).join('')}</div></div>`;
+}
+
+function yearLegend(){
+  return '<div class="legend">' + YEARS.map((y,i)=>`<span><span class="dot" style="background:var(--accent); opacity:${yearOpacity(i)}"></span>${y}</span>`).join('') + '</div>';
 }
 
 function topicBarsHtml(byTopic, stacked){
@@ -427,8 +478,7 @@ function topicBarsHtml(byTopic, stacked){
     if (stacked) {
       fills = YEARS.map((y,i)=>{
         const w=r.y[y]/maxTopic*100; if(w<=0) return '';
-        const op = y==='2023' ? '1' : '0.55';
-        return `<div class="bar-fill ${i>0?'gap':''}" style="width:${w.toFixed(1)}%; background:var(${THEMES[th].varc}); opacity:${op}"></div>`;
+        return `<div class="bar-fill ${i>0?'gap':''}" style="width:${w.toFixed(1)}%; background:var(${THEMES[th].varc}); opacity:${yearOpacity(i)}"></div>`;
       }).join('');
     } else {
       fills = `<div class="bar-fill" style="width:${(r.marks/maxTopic*100).toFixed(1)}%; background:var(${THEMES[th].varc})"></div>`;
@@ -453,7 +503,7 @@ function renderOverview(){
   const bars = topicBarsHtml(byTopic, scope==='all');
 
   const themeLegend = Object.entries(THEMES).map(([k,v])=>`<span>${themeDot(k)} ${esc(v.name)} · ${byTheme[k]}m</span>`).join('');
-  const yearNote = scope==='all' ? '<p class="note" style="margin:-6px 0 14px">Darker segment = 2023, lighter = 2022.</p>' : '';
+  const yearNote = scope==='all' ? ('<p class="note" style="margin:-6px 0 8px">Bars stack oldest→newest; more opaque = more recent.</p>'+yearLegend()) : '';
 
   const aMarks = qset(scope).filter(q=>q.bk==='A').reduce((s,q)=>s+q.marks,0);
   const bMarks = total - aMarks;
@@ -478,7 +528,7 @@ function renderOverview(){
   el.innerHTML = `
     ${paperSeg()}
     <div class="tile-row">
-      <div class="tile hero"><div class="label">Questions</div><div class="value">${qn}</div><div class="hint">${scope==='all'?'40 per paper × 2':'Booklet A Q1–28 · Booklet B Q29–40'}</div></div>
+      <div class="tile hero"><div class="label">Questions</div><div class="value">${qn}</div><div class="hint">${scope==='all'?'40 per paper × '+YEARS.length:'Booklet A Q1–28 · Booklet B Q29–40'}</div></div>
       <div class="tile"><div class="label">Total marks</div><div class="value">${total}</div><div class="hint">${scope==='all'?'100 per paper':'56 MCQ + 44 open-ended'}</div></div>
       <div class="tile"><div class="label">Topics covered</div><div class="value">${Object.keys(TOPICS).length-notTested.length}</div><div class="hint">of ${Object.keys(TOPICS).length} CER-portal topics</div></div>
       <div class="tile"><div class="label">Duration</div><div class="value">1h45</div><div class="hint">Booklets A and B combined</div></div>
@@ -528,9 +578,10 @@ function renderOverall(){
   const recCards = rec.map(c=>{
     const hot = c.hits.length>=4;
     const yearsSpanned = new Set(c.hits.map(h=>h.slice(0,4))).size;
+    const spanTxt = yearsSpanned>=YEARS.length ? ' · in every year' : (yearsSpanned>1 ? ` · in ${yearsSpanned} of the ${YEARS.length} years` : '');
     return `<div class="rec ${hot?'hot':''}">
       <div class="r-head"><span class="r-count">${c.hits.length}×</span><span class="r-title">${esc(c.concept)}</span></div>
-      <div class="r-topic">${esc(c.topic)}${yearsSpanned>1?' · appeared in both years':''}${c.marks?` · ~${c.marks} marks across the two papers`:''}</div>
+      <div class="r-topic">${esc(c.topic)}${spanTxt}${c.marks?` · ~${c.marks} marks across the papers`:''}</div>
       <div class="r-years">${c.hits.map(h=>`<span class="yb">${esc(h)}</span>`).join('')}</div>
       <p>${esc(c.note)}</p>
     </div>`;
@@ -542,21 +593,22 @@ function renderOverall(){
 
   el.innerHTML = `
     <div class="tile-row">
-      <div class="tile hero"><div class="label">Papers analysed</div><div class="value">2</div><div class="hint">2022 &amp; 2023 · 80 questions · 200 marks</div></div>
-      <div class="tile"><div class="label">Recurring concepts</div><div class="value">${RECURRING.length}</div><div class="hint">patterns seen in both years</div></div>
+      <div class="tile hero"><div class="label">Papers analysed</div><div class="value">${YEARS.length}</div><div class="hint">${YEARS[0]}–${YEARS[YEARS.length-1]} · ${QUESTIONS.length} questions · ${total} marks</div></div>
+      <div class="tile"><div class="label">Recurring concepts</div><div class="value">${RECURRING.length}</div><div class="hint">patterns seen across the papers</div></div>
       <div class="tile"><div class="label">Open-ended share</div><div class="value">${Math.round(byType.open.marks/total*100)}%</div><div class="hint">of marks need written answers</div></div>
       <div class="tile"><div class="label">Heaviest topic</div><div class="value">${rows[0].marks}m</div><div class="hint">${esc(rows[0].t)}</div></div>
     </div>
 
     <div class="card">
       <h2>The concepts that keep coming back</h2>
-      <p class="sub">These patterns showed up in <strong>both</strong> the 2022 and 2023 papers — the highest-yield things to master. Ordered by how many questions across the two papers touched each one.</p>
+      <p class="sub">These patterns recur across the ${YEARS.length} papers (${YEARS[0]}–${YEARS[YEARS.length-1]}) — the highest-yield things to master. Ordered by how many questions across all the papers touched each one.</p>
       ${recCards}
     </div>
 
     <div class="card">
-      <h2>Most important topics by marks (both papers)</h2>
-      <p class="sub">Combined marks across 2022 + 2023. Darker segment = 2023, lighter = 2022. The top of this list is where revision time pays back most.</p>
+      <h2>Most important topics by marks (all papers)</h2>
+      <p class="sub">Combined marks across ${YEARS.join(' + ')}. Bars stack oldest→newest; more opaque = more recent. The top of this list is where revision time pays back most.</p>
+      ${yearLegend()}
       ${bars.html}
       <p class="note" style="margin-top:14px"><strong>Top six by weight:</strong> ${esc(top6)}.</p>
     </div>
@@ -566,9 +618,9 @@ function renderOverall(){
       <div class="expect">
         <h4>Content that anchors every paper</h4>
         <ul>
-          <li><strong>Electrical Systems is the single biggest topic</strong> (25 marks over the two papers) — series/parallel brightness, the "keep one bulb lit" circuit to draw, and a 5-mark electromagnet/bell question every year.</li>
-          <li><strong>Living things &amp; cells</strong> and <strong>Plant Reproduction/Systems</strong> together dominate the biology marks — classification tables, cells as the basic unit of life, germination, pollination and photosynthesis graphs.</li>
-          <li><strong>Forces, changes of state and heat</strong> carry the physical-science marks — spring/elastic graphs, evaporation/boiling, conductors and expansion.</li>
+          <li><strong>Electrical Systems</strong> (${byTopicAll['Electrical Systems'].marks}m over three papers) is the heaviest single physical-science topic — series/parallel brightness, fault-finding, the "keep one bulb lit" circuit to draw, and a 5-mark electromagnet question <em>every single year</em>.</li>
+          <li><strong>Living things &amp; cells</strong> (${byTopicAll['Living and non-living things'].marks}m) top the biology marks through many small classification and cell items, alongside <strong>Life Cycles</strong>, <strong>Plant Reproduction</strong> and <strong>photosynthesis</strong>.</li>
+          <li><strong>Matter/changes of state, Forces and Heat</strong> carry the rest of physical science — properties of air, measuring volume, spring/elastic and energy-conversion toys, conductors and expansion.</li>
         </ul>
       </div>
       <div class="expect">
@@ -576,10 +628,10 @@ function renderOverall(){
         <ul>
           <li><strong>Open-ended explanation is ${Math.round(byType.open.marks/total*100)}% of every paper.</strong> Answer in Claim–Evidence–Reasoning shape with the exact marking keywords — vague answers score zero.</li>
           <li><strong>Data interpretation and experimental skills</strong> (fair test, variables, reliability) recur across both booklets and cut across every topic.</li>
-          <li>Skill split across both papers: ${esc(typeShare)}.</li>
+          <li>Skill split across all ${YEARS.length} papers: ${esc(typeShare)}.</li>
         </ul>
       </div>
-      <p class="note">Reading the two papers together: the same dozen ideas are re-dressed each year. Drill the recurring concepts above and practise writing them in keyword-precise language, and you have covered the bulk of what the paper rewards.</p>
+      <p class="note">Reading the three papers together: the same dozen-and-a-half ideas are re-dressed each year — an electromagnet, a stored-energy toy, a parallel circuit, changes of state, life cycles, cells, the body systems. Drill the recurring concepts above and practise writing them in keyword-precise language, and you have covered the bulk of what the paper rewards.</p>
     </div>`;
 }
 
@@ -618,8 +670,8 @@ function renderQuestions(){
 
   el.innerHTML = `
     <div class="card">
-      <h2>Question map — all 80 classified</h2>
-      <p class="sub">Every question from both papers, tagged with year, CER-portal topic, level and skill. Filter to drill in; expand a card for the analysis and a suggested answer.</p>
+      <h2>Question map — all ${QUESTIONS.length} classified</h2>
+      <p class="sub">Every question from all ${YEARS.length} papers, tagged with year, CER-portal topic, level and skill. Filter to drill in; expand a card for the analysis and a suggested answer.</p>
       <div class="filters"><select data-action="qfilter-topic">${topicOpts}</select>${yrChips}${bkChips}</div>
       <div class="filters">${typeChips}<button class="chipf" data-action="qfilter-clear">Clear filters</button></div>
       <p class="note" style="margin-bottom:16px">Showing ${filtered.length} of ${QUESTIONS.length} questions.</p>
@@ -671,7 +723,7 @@ function renderTypes(){
   const cards = [
     { k:'recall', icon:'📌', what:'Direct knowledge — a fact, definition or term recalled with no working.',
       how:['Read every option before committing; the obvious answer is sometimes a distractor.','Know the vocabulary cold — population, cell, matter, condensation, consumer, deforestation.'],
-      eg:'2022 Q1 (reptiles have scales), 2022 Q5 (basic unit of life = cell), 2023 Q11 (all grasshoppers = a population).' },
+      eg:'2021 Q1 (characteristics of living things), 2022 Q5 (basic unit of life = cell), 2023 Q11 (all grasshoppers = a population).' },
     { k:'application', icon:'🧩', what:'A known concept dropped into an unfamiliar object, animal or set-up. The costume is new; the concept is always from the syllabus.',
       how:['Ask "which topic is this really about?" and strip away the unfamiliar context.','Reason to your own answer first, then match it to an option.','The largest MCQ category — practising unfamiliar contexts is the training.'],
       eg:'2022 Q17 (flatbread rising = air expands when heated), 2023 Q19 (heating a metal rim to fit it).' },
@@ -683,7 +735,7 @@ function renderTypes(){
       eg:'2022 Q31 (same thumb = fair test) & Q34 (constants), 2023 Q27 (isolate surface area) & Q31 (variables + reliability).' },
     { k:'open', icon:'✍️', what:'Written answers in Booklet B, marked against specific keywords. Sensible-but-vague answers score zero.',
       how:['Answer in Claim–Evidence–Reasoning shape: answer directly, quote the data/set-up, then the concept with its keywords.','Use precise, comparative language — "gains/loses heat", "more/less than" — never "hot" or "big".','If the question says "using the results/graph", your answer must quote the data.','Match the command word: state = one line; explain = cause linked to concept.'],
-      eg:'The 5-mark electromagnet questions (2022 Q36 bell, 2023 Q38 oscillating bar) and the parallel-circuit drawing (2022 Q39 ≈ 2023 Q39).' },
+      eg:'The 5-mark electromagnet questions (2021 Q38 bobbing carrot, 2022 Q36 bell, 2023 Q38 oscillating bar) and the parallel-circuit drawing (2022 Q39 ≈ 2023 Q39).' },
   ];
   const html = cards.map(c=>`
     <div class="qtype-card">
