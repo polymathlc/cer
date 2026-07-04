@@ -2225,46 +2225,36 @@ function startPreRoundQuiz(){
   openQuestion();
 }
 
-/* Adaptive pick: prefer questions the student hasn't answered yet, and among
-   those choose the one whose Elo difficulty is just above the student's current
-   ability (with a little randomness), so success steadily raises the challenge. */
+/* Pick: questions the student has NEVER attempted (in any mode) come first,
+   then the one whose last attempt was LONGEST ago — difficulty does not ramp.
+   No repeats until the whole pool has been served once (one full round);
+   then the next round starts. */
 function pickQuestion(){
   ensureIds();
   if(QUESTION_BANK.length === 0) return null;
   var filtered = QUESTION_BANK.filter(function(q){ return G.topic === 'mixed' || q.topic === G.topic; });
   if(filtered.length === 0) filtered = QUESTION_BANK.slice();
-  var unseen = filtered.filter(function(q){ return !isSeen(q); });
-  var allDone = unseen.length === 0;
-  var pool = allDone ? filtered.slice() : unseen;
-  // Don't re-ask the last few questions when there's a choice.
-  var fresh = pool.filter(function(q){ return sessionAsked.indexOf(q.id) === -1; });
-  if(fresh.length) pool = fresh;
-  // On a correct streak (3+ in a row) aim well above the student's ability and
-  // prefer LONGER, meatier questions; otherwise stay just above their level.
-  var streak = student.streak || 0;
-  var hot = streak >= 3;
-  var target = student.ability + 40 + (hot ? 160 + Math.min(300, (streak - 3) * 60) : 0);
-  var maxLen = 1;
-  pool.forEach(function(q){ if((q.len || 0) > maxLen) maxLen = q.len || 0; });
-  pool.forEach(function(q){
-    var eloDist = Math.abs(questionElo(q) - target);
-    q._pickScore = eloDist - (hot ? ((q.len || 0) / maxLen) * 300 : 0); // longer → preferred when hot
-    if(allDone){ // everything attempted: strongly prefer low-accuracy questions
-      var rec = student.seen[q.id];
-      var acc = (rec && rec.n) ? (rec.correct || 0) / rec.n : 0;
-      q._pickScore += acc * 600;
-    }
-  });
-  pool.sort(function(a,b){ return a._pickScore - b._pickScore; });
-  // Pick among the best few so questions never come in a fixed sequence.
-  var k = Math.min(hot ? 4 : 3, pool.length);
-  var choice = pool[Math.floor(Math.random() * k)];
-  if(allDone && usingBankQuestions && !pickQuestion._warned){
-    pickQuestion._warned = true;
-    toast("You've answered every question — revisiting earlier ones", 'energy');
+  if(!student.cycle) student.cycle = {};
+  // Every question served once this round? Start the next round.
+  if(filtered.every(function(q){ return student.cycle[q.id]; })){
+    filtered.forEach(function(q){ delete student.cycle[q.id]; });
+    if(usingBankQuestions) toast("Full round done — starting a new round!", 'energy');
   }
-  sessionAsked.push(choice.id);
-  if(sessionAsked.length > 6) sessionAsked.shift();
+  var pool = filtered.filter(function(q){ return !student.cycle[q.id]; });
+  var unseen = pool.filter(function(q){ return !isSeen(q); });
+  var choice;
+  if(unseen.length){
+    choice = unseen[Math.floor(Math.random() * unseen.length)];
+  } else {
+    pool.sort(function(a, b){
+      var ta = (student.seen[a.id] && student.seen[a.id].lastTs) || 0;
+      var tb = (student.seen[b.id] && student.seen[b.id].lastTs) || 0;
+      return ta - tb; // last done longest ago first
+    });
+    choice = pool[0];
+  }
+  student.cycle[choice.id] = 1;
+  saveStudent();
   return choice;
 }
 
@@ -2906,13 +2896,15 @@ window.addEventListener('message', function(ev){
     d.seenIds.forEach(function(id){ if(id && !student.seen[id]) student.seen[id] = { n:1, correct:0, fromHistory:true }; });
     saveStudent();
   }
-  // Real cross-mode attempt stats (n/correct from practice, quests AND games) —
-  // once everything is seen these steer the pick toward the weakest questions.
+  // Real cross-mode attempt stats (n/correct/last from practice, quests AND
+  // games) — once everything is seen, the pick serves the question last
+  // attempted longest ago.
   if(d.seenStats && typeof d.seenStats === 'object'){
     Object.keys(d.seenStats).forEach(function(id){
       var s = d.seenStats[id]; if(!s || !id) return;
       var rec = student.seen[id];
-      if(!rec || rec.fromHistory) student.seen[id] = { n: s.n || 1, correct: s.correct || 0, fromHistory: true };
+      if(!rec || rec.fromHistory) student.seen[id] = { n: s.n || 1, correct: s.correct || 0, lastTs: s.last || 0, fromHistory: true };
+      else if(!rec.lastTs && s.last) rec.lastTs = s.last;
     });
     saveStudent();
   }

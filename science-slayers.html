@@ -4392,32 +4392,33 @@ function loadAdaptiveState(){
 function saveStudent(){ _lsSet('legends_student_' + studentKey, student); }
 function saveQElo(){ _lsSet('legends_qElo', qElo); }
 
+/* Pick: questions the student has NEVER attempted (in any mode) come first,
+   then the one whose last attempt was LONGEST ago — difficulty does not ramp.
+   No repeats until the whole pool has been served once (one full round);
+   then the next round starts. */
 function pickQuestion(){
   if (QUESTION_BANK.length === 0) return null;
-  var unseen = QUESTION_BANK.filter(function(q){ return !isSeen(q); });
-  var allDone = unseen.length === 0;
-  var pool = allDone ? QUESTION_BANK.slice() : unseen;
-  var fresh = pool.filter(function(q){ return sessionAsked.indexOf(q.id) === -1; });
-  if (fresh.length) pool = fresh;
-  var streak = student.streak || 0;
-  var hot = streak >= 3;
-  var target = student.ability + 40 + (G ? (G.wave - 1) * 50 : 0) + (hot ? 160 + Math.min(300, (streak - 3) * 60) : 0);
-  var maxLen = 1;
-  pool.forEach(function(q){ if ((q.len || 0) > maxLen) maxLen = q.len || 0; });
-  pool.forEach(function(q){
-    var eloDist = Math.abs(questionElo(q) - target);
-    q._pickScore = eloDist - (hot ? ((q.len || 0) / maxLen) * 300 : 0);
-    if (allDone){ // everything attempted: strongly prefer low-accuracy questions
-      var rec = student.seen[q.id];
-      var acc = (rec && rec.n) ? (rec.correct || 0) / rec.n : 0;
-      q._pickScore += acc * 600;
-    }
-  });
-  pool.sort(function(a, b){ return a._pickScore - b._pickScore; });
-  var k = Math.min(hot ? 4 : 3, pool.length);
-  var ch = pool[Math.floor(Math.random() * k)];
-  if (allDone && usingBankQuestions && !pickQuestion._warned){ pickQuestion._warned = true; toast("You've answered them all — revisiting earlier questions", 'energy'); }
-  sessionAsked.push(ch.id); if (sessionAsked.length > 6) sessionAsked.shift();
+  if (!student.cycle) student.cycle = {};
+  // Every question served once this round? Start the next round.
+  if (QUESTION_BANK.every(function(q){ return student.cycle[q.id]; })){
+    student.cycle = {};
+    if (usingBankQuestions) toast("Full round done — starting a new round!", 'energy');
+  }
+  var pool = QUESTION_BANK.filter(function(q){ return !student.cycle[q.id]; });
+  var unseen = pool.filter(function(q){ return !isSeen(q); });
+  var ch;
+  if (unseen.length){
+    ch = unseen[Math.floor(Math.random() * unseen.length)];
+  } else {
+    pool.sort(function(a, b){
+      var ta = (student.seen[a.id] && student.seen[a.id].lastTs) || 0;
+      var tb = (student.seen[b.id] && student.seen[b.id].lastTs) || 0;
+      return ta - tb; // last done longest ago first
+    });
+    ch = pool[0];
+  }
+  student.cycle[ch.id] = 1;
+  saveStudent();
   return ch;
 }
 
@@ -4615,13 +4616,15 @@ window.addEventListener('message', function(ev){
       d.seenIds.forEach(function(id){ if (id && !student.seen[id]) student.seen[id] = { n: 1, correct: 0, fromHistory: true }; });
       saveStudent();
     }
-    // Real cross-mode attempt stats (n/correct from practice, quests AND games) —
-    // once everything is seen these steer the pick toward the weakest questions.
+    // Real cross-mode attempt stats (n/correct/last from practice, quests AND
+    // games) — once everything is seen, the pick serves the question last
+    // attempted longest ago.
     if (d.seenStats && typeof d.seenStats === 'object'){
       Object.keys(d.seenStats).forEach(function(id){
         var s = d.seenStats[id]; if (!s || !id) return;
         var rec = student.seen[id];
-        if (!rec || rec.fromHistory) student.seen[id] = { n: s.n || 1, correct: s.correct || 0, fromHistory: true };
+        if (!rec || rec.fromHistory) student.seen[id] = { n: s.n || 1, correct: s.correct || 0, lastTs: s.last || 0, fromHistory: true };
+        else if (!rec.lastTs && s.last) rec.lastTs = s.last;
       });
       saveStudent();
     }
@@ -4707,7 +4710,17 @@ function flagFailed(msg){
  * arrive as {id: url} via postMessage and replace the procedural art.
  * ========================================================================== */
 var _ovrImgs = {};
-function ovr(id){ var im = _ovrImgs[id]; return (im && im.complete && im.naturalWidth) ? im : null; }
+/* Built-in pixel-art Barbarian (pixelised portrait of the class art) — used
+   wherever the hero renders. An admin override for hero_barb saved on the
+   Game Objects page still takes priority. */
+var BARB_BUILTIN_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAFACAYAAADNkKWqAAAII0lEQVR42u3dMW4TURCAYR+Aio40ENEgkIKEUlAg0VCZlo7IouIMyAWVqxS4c5MmvoFzA1ofwaeBKwzK4Dc7+/3StLvel31fqqddLCRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ6V08ffKnw/hLSgKgJAFQkgAoSQCUJABKEgAlARCAkgAIQEkABKCk/mC9efGsxQBVAiAAASgBEIAAlAAIQABKAAQgACUAAhCAEgABCEAJgAAEoARAAAJQAiAAJdWDLRuO5fvXoely32xQvbkSAAEoCYAAlARAAEoCIAAlARCAkgAIQEkABKAkAAJQAiAAASgBsP/RtS5H67y5EgABKAmAAJQEQABKAiAAJQEQgJIACEBJAASgJAACUAIgAAEoAfDxAJ72m1kNACUAAhCAEgABCEAJgAAEoARAAAJQAiAAASgBEIAAlAAIQABKAAQgACUAAhCAUn8Ao/fNBmvUfQEoARCAAJQACEAASgAEIAAlAAIQgBIAAQhACYAABKAEQAACUAIgAAEoARCAkqYLYPYc1qvQVD8yB0AJgAAEoARAAAJQAiAAASgBEIAAlAAIQEkABKAkAAJQEgABKAmAAJR0PgCzocy+b/XfB0AJgAAEoARAAAJQAiAAASgBEIAAlAAIQEkABKAkAAJQEgABKAmAAJRUD0ADQAmABoASAA0AJQACEIASAAEIQAmAAASgBEAAAlACIAAlARCAkgAIQEmgBJskAAJQEgABKAmAAJQEQABKAiAAJQEQgJIACEBJAASgJAACUPrfcBwftqkz6jnmBmX2umT/PX69fTlkgC8AAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABKAACEIAAFAABCEAACoAABCAABUAAAhCA6g3bdn0Tmuj1sjfmab9JnepQVl+XKES/l+9Ckw3gcXcVGlACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAAKgAAEIAAFQAACEIACIAABCEABEIAABKCmCduojZR931HPUR38UQCOGgACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAASgagGY/eIf1qvQjNqY99evQpN93+X1ZWiqw5a9fuF/1EGI0if5yCaZAAhAAAJQAAQgAAEoAAIQgAAUAAEIQAAKgAAEIAAFQAACEIACIAABCEABEIAABKAACEAAAhBsj9sg2S90dQC7gBX9fdXXOR3KIFjZR0ABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABKAACEIAAFAABCEAACoAABCAABUAAAhCAqnXErctHjLocSasO5agjh6M+PkUmAAIQgAAUAAEIQAAKgAAEIAAFQAACEIACIAABCEABEIAABKAACEAAAlAABCAAASgAAhCAANR5AMw+upb9wnSBLXvDjfp91Y/gZb9/0ev9+PIhNEAFIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAUAAEIQAAKgAAEIAAFQAACEIAABCAAAQhAAJ7no0hRKEe9gNU33O12F5qv376HJnq9uX20CYAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIwGkCGAWr+lG4LgBmwxa9XvX1i75/2UcdAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAArAXgz+cXoYkehcv+qE8XAEd9FKnLulQ/Yrm7uw9NFMDo9UAJQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAoDwPWNXBj85xdxWa7PuOmlHPWx22UQCCEoAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAhCAAAQgANUb8o+fPocm+tGh6PWy71v992XfF4AAFAABCEAACoAABCAABUAAAhCAAiAAAQhAAAIQgAAEIAABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAJwuiDM7TlGbWAfRRIAAQhAAAqAAAQgAAVAAAIQgAIgAAEIQAEQgAAEoAAIQAACUAAEIAABKAACEIAAFAABCEAAagoAOgrX+yjcqPcvCiDYBEAAAhCAAiAAAQhAARCAAASgAAhAAAJQAAQgACUAAhCAAiAAAQhAARCAAASgAAhAAAJQWgw8Mje3+3aBbdT7Z6cKgAAEoARAAAJQAiAAASgBEIAAlAAIQABKAAQgACUAAhCAEgABCEAJgAAEoPQvL+BhvQrNab8JTfWP+kSfI7ouNroEQAACUAIgAAEoARCAAJQACEAASgAEoCQAAlASAAEoCYAAlARAAEoCAvAlARCAkgAIQEkABKAkAAJQEgABKAmAAJQEQABKAAQgACUAAhCA0nxgOz5sQ7Nd34Qmer3qAM5tXSQAAhCAEgABCEAJgAAEoARAAAJQAiAAASgBEIAAlAAIQABKAAQgACUAAhCAUicAs6cLgF3WRQIgAAEoARCAAJQACEAASgAEIAAlAAIQgBIAAQhACYAABKAEQAACUAIgAAEodYIye6wL2CQb3boAULLRrQsAJRvdukiy0a2LJBvdukiy0a2LJBvdukiy0a2LJBvdumgC/QXPi1JgQ2LUOwAAAABJRU5ErkJggg==';
+var _barbBuiltin = new Image();
+_barbBuiltin.src = BARB_BUILTIN_SRC;
+function ovr(id){
+  var im = _ovrImgs[id];
+  if ((!im || !im.complete || !im.naturalWidth) && id === 'hero_barb') im = _barbBuiltin;
+  return (im && im.complete && im.naturalWidth) ? im : null;
+}
 function applyLegendsAssets(overrides){
   if (!overrides || typeof overrides !== 'object') return;
   Object.keys(overrides).forEach(function(id){
@@ -4741,6 +4754,7 @@ function _spriteThumb(cv){
 function legendsSpriteThumbs(){
   var out = {};
   CLASS_ORDER.forEach(function(c){ out['hero_' + c] = _spriteThumb(buildHeroSprites(CLASSES[c].sprite)[0][0]); });
+  out.hero_barb = BARB_BUILTIN_SRC; // the built-in pixel barbarian is the real default
   Object.keys(MOB_SPRITES).forEach(function(k){ out[k] = _spriteThumb(MOB_SPRITES[k][0]); });
   if (_groundTileC) out.ground = _spriteThumb(_groundTileC);
   return out;

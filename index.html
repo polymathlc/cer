@@ -7151,7 +7151,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.64.0';
+const APP_VERSION = 'v1.66.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15445,8 +15445,9 @@ async function loadAttemptStats(force) {
       if (!a || a.questionId == null) return;
       const id = String(a.questionId);
       const frac = a.totalBlanks ? Math.max(0, Math.min(1, (Number(a.score) || 0) / a.totalBlanks)) : 0;
-      const r = stats[id] || (stats[id] = { n: 0, correct: 0, best: 0 });
-      r.n++; if (frac >= 1) r.correct++; if (frac > r.best) r.best = frac;
+      const ts = (a.timestamp && typeof a.timestamp.toMillis === 'function') ? a.timestamp.toMillis() : 0;
+      const r = stats[id] || (stats[id] = { n: 0, correct: 0, best: 0, last: 0 });
+      r.n++; if (frac >= 1) r.correct++; if (frac > r.best) r.best = frac; if (ts > r.last) r.last = ts;
     });
     _qAttemptStats = stats;
     _qAttemptStatsAt = Date.now();
@@ -15459,8 +15460,8 @@ function noteAttemptLocally(qid, score, total) {
   if (!_qAttemptStats) return;
   const id = String(qid || ''); if (!id) return;
   const frac = total ? Math.max(0, Math.min(1, (Number(score) || 0) / total)) : 0;
-  const r = _qAttemptStats[id] || (_qAttemptStats[id] = { n: 0, correct: 0, best: 0 });
-  r.n++; if (frac >= 1) r.correct++; if (frac > r.best) r.best = frac;
+  const r = _qAttemptStats[id] || (_qAttemptStats[id] = { n: 0, correct: 0, best: 0, last: 0 });
+  r.n++; if (frac >= 1) r.correct++; if (frac > r.best) r.best = frac; r.last = Date.now();
 }
 // Order a pool: unattempted first (shuffled), then attempted ascending by best
 // score so the weakest questions come back soonest. Ties shuffle.
@@ -23170,15 +23171,15 @@ function buildDefenderQuestions() {
 }
 // Per-question attempt stats for the mini-games, from the SHARED attempt log —
 // every mode counts (practice, quests and games), so a question answered
-// anywhere is no longer "unseen" in the games, and the games can fall back to
-// the student's weakest questions once everything has been attempted.
+// anywhere is no longer "unseen" in the games, and each game serves the
+// question last attempted LONGEST ago once everything has been tried.
 // Best-effort: returns {} if the read is denied.
 async function _sdSeenStats() {
   try {
     if (!currentUser || !currentUser.uid) return {};
     const stats = await loadAttemptStats();
     const out = {};
-    Object.keys(stats || {}).forEach(id => { out[id] = { n: stats[id].n, correct: stats[id].correct }; });
+    Object.keys(stats || {}).forEach(id => { out[id] = { n: stats[id].n, correct: stats[id].correct, last: stats[id].last || 0 }; });
     return out;
   } catch (e) { console.warn('SD seen-stats read failed', e); return {}; }
 }
