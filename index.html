@@ -7250,7 +7250,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.69.0';
+const APP_VERSION = 'v1.70.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -14948,7 +14948,10 @@ function printStudentWorksheet() {
 // Build the worksheet print HTML (question chunks + answer key). Shared by the
 // printer and the live preview so the two render identically. Each chunk carries
 // data-qid so the packer can honour manual page breaks keyed by question.
-function buildWorksheetHtml(selected, worksheetTitle) {
+function buildWorksheetHtml(selected, worksheetTitle, opts) {
+  // answerKeyExtras: also put MCQ correct answers, explanation blocks and
+  // answer-key blocks into the printed answer key (used by past-paper prints).
+  const akExtras = !!(opts && opts.answerKeyExtras);
   let allHtml = '';
   const answerKeyData = [];
 
@@ -15006,9 +15009,22 @@ function buildWorksheetHtml(selected, worksheetTitle) {
             break;
           }
           case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
-          case 'explanation': break;
-          case 'video': { if (block.url) qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`; break; }
-          default: qHtml += renderImportedBlockStudent(block); break;
+          case 'explanation': {
+            if (akExtras && stripHtml(block.content)) qSections.push({ label: 'Explanation', content: sanitizeAnswerKeyHtml(block.content) });
+            break;
+          }
+          default: {
+            qHtml += renderImportedBlockStudent(block);
+            if (akExtras && block.type === 'mcq') {
+              const mo = block.options || [];
+              const ci = mo.findIndex(o => o.id === block.correctId);
+              if (ci >= 0) qSections.push({ label: 'Answer', content: `<b>${ci + 1}.</b> ` + sanitizeAnswerKeyHtml(mo[ci].text || '') });
+            }
+            if (akExtras && block.type === 'answerKey' && (stripHtml(block.text) || block.url)) {
+              qSections.push({ label: 'Answer key', content: sanitizeAnswerKeyHtml(block.text || '') + (block.url ? `<div><img src="${escapeHtml(transformImageUrl(block.url))}" style="max-width:100%;max-height:180pt;"></div>` : '') });
+            }
+            break;
+          }
         }
       });
       qHtml += `</div>`;
@@ -24914,13 +24930,17 @@ function ppRenderBody(){
 
   // --- recurring concepts ---
   const rec = ppRecurring().slice().sort((a,b)=> ((b.hits||[]).length - (a.hits||[]).length) || (ppRecurringMarks(b) - ppRecurringMarks(a)));
+  [..._ppPrintSel].forEach(id => { if (!rec.some(c => c.id === id)) _ppPrintSel.delete(id); }); // drop deleted concepts
   const recCards = rec.map(c => {
     const hits = (c.hits || []).filter(id => ppFindQ(id));
     const yrs = new Set(hits.map(id => ppFindQ(id).year)).size;
     const span = yrs >= years.length && years.length > 1 ? 'in every year' : (yrs > 1 ? 'in ' + yrs + ' of ' + years.length + ' years' : '');
     const mk = ppRecurringMarks(c);
     const chips = hits.map(id => ppChipByKey(id)).join('') || '<span style="color:var(--text-muted);font-size:0.8rem;">No questions linked yet</span>';
-    const tools = edit ? `<span class="pp-tools"><button class="pp-mini" title="Edit concept" onclick="ppEditConcept('${c.id}')">&#9998; Edit</button><button class="pp-mini del" title="Delete concept" onclick="ppDeleteConcept('${c.id}')">&times; Delete</button></span>` : '';
+    const attached = hits.filter(id => ppBankQ(id)).length;
+    const tools = edit
+      ? `<span class="pp-tools"><button class="pp-mini" title="Edit concept" onclick="ppEditConcept('${c.id}')">&#9998; Edit</button><button class="pp-mini del" title="Delete concept" onclick="ppDeleteConcept('${c.id}')">&times; Delete</button></span>`
+      : (admin ? `<span class="pp-tools"><button class="pp-mini" title="Print this concept's ${attached} attached question${attached === 1 ? '' : 's'} as a worksheet — answer key on the last pages" onclick="ppPrintConcept('${c.id}')">🖨 Print</button><label class="pp-print-check" title="Tick to include this concept in “Print selected” at the top"><input type="checkbox" ${_ppPrintSel.has(c.id) ? 'checked' : ''} onchange="ppTogglePrintSel('${c.id}', this.checked)"></label></span>` : '');
     return `<div class="pp-rec">
       <div class="pp-rec-head"><span class="pp-rec-count">${hits.length}&times;</span><span class="pp-rec-title">${escapeHtml(c.concept || 'Untitled concept')}</span>${tools}</div>
       <div class="pp-rec-topic">${escapeHtml(c.topic || '')}${span ? ' &middot; ' + span : ''}${mk ? ' &middot; ~' + mk + ' marks across the papers' : ''}</div>
@@ -24929,6 +24949,7 @@ function ppRenderBody(){
     </div>`;
   }).join('') || '<div style="color:var(--text-muted);padding:8px;">No recurring concepts yet.</div>';
   const addConcept = edit ? `<button class="pp-add" onclick="ppAddConcept()">+ Add concept</button>` : '';
+  const printSelBtn = (admin && !edit) ? `<button class="pp-add" id="ppPrintSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Print every attached question from the concepts you ticked below as ONE worksheet — questions first, the full answer key on the last pages. Tick concepts with the checkbox at their top-right corner." onclick="ppPrintSelected()">🖨 Print selected${_ppPrintSel.size ? ' (' + _ppPrintSel.size + ')' : ''}</button>` : '';
 
   // --- question map ---
   const yearGroups = years.map(y => {
@@ -24936,8 +24957,9 @@ function ppRenderBody(){
     const yAssigned = yq.filter(q => ppBankQ(q.id)).length;
     const chips = yq.map(q => edit ? ppChipEdit(q) : ppChip(q)).join('') || '<span style="color:var(--text-muted);font-size:0.8rem;">No questions</span>';
     const addBtn = edit ? `<button class="pp-add sm" onclick="ppAddQuestion('${y}')">+ Add question</button>` : '';
+    const printYearBtn = (admin && !edit) ? `<span class="pp-tools"><button class="pp-mini" title="Print the whole ${escapeHtml(y)} paper — all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} in question order, answer key on the last pages" onclick="ppPrintYear('${escapeHtml(y)}')">🖨 Print year</button></span>` : '';
     return `<div class="pp-year">
-      <div class="pp-year-head"><strong>${escapeHtml(y)}</strong> <span class="pp-year-sub">${yq.length} questions &middot; ${yAssigned}/${yq.length} attached</span> ${addBtn}</div>
+      <div class="pp-year-head"><strong>${escapeHtml(y)}</strong> <span class="pp-year-sub">${yq.length} questions &middot; ${yAssigned}/${yq.length} attached</span> ${addBtn}${printYearBtn}</div>
       <div class="pp-chip-row">${chips}</div>
     </div>`;
   }).join('');
@@ -24963,7 +24985,7 @@ function ppRenderBody(){
     ? 'Tap any highlighted question to practise it. Hover to preview. Greyed-out questions have not been added yet.'
     : (edit
       ? 'Editing: use + Add question / + Add concept, click a question or concept to change its details, or × to remove it. Turn editing off to attach bank questions.'
-      : 'Click any question to attach one from your bank — or create a brand-new question for it on the spot; students can then practise it. Hover a question to preview. Use “Edit content” to add, remove or reword questions and concepts.');
+      : 'Click any question to attach one from your bank — or create a brand-new question for it on the spot; students can then practise it. Hover a question to preview. Use the 🖨 buttons to print a concept or a whole year (answer key on the last pages), and the checkboxes to print several concepts together. “Edit content” adds, removes or rewords questions and concepts.');
 
   body.innerHTML = ppStyles() + `
   <div class="pp-wrap">
@@ -24980,7 +25002,7 @@ function ppRenderBody(){
     <div class="pp-note">${roleLine}</div>
 
     <div class="pp-card">
-      <h3 class="pp-h">The concepts that keep coming back ${addConcept}</h3>
+      <h3 class="pp-h">The concepts that keep coming back ${addConcept}${printSelBtn}</h3>
       <p class="pp-sub">Patterns that recur across the papers — the highest-yield things to master, ordered by how many questions touched each.</p>
       ${recCards}
     </div>
@@ -25177,6 +25199,65 @@ async function ppConsumePendingAttach(bankQ, toVetting){
   }
 }
 
+// -------- printing: concepts & whole years --------
+// Prints the ATTACHED bank questions (questions first, answer key on the
+// last pages) via the shared worksheet print pipeline. Past-paper questions
+// with nothing attached are skipped and reported.
+let _ppPrintSel = new Set();   // concept ids ticked for "Print selected"
+
+function ppCollectPrintable(hitIds){
+  const seen = new Map(); const missing = [];
+  (hitIds || []).forEach(id => {
+    const q = ppFindQ(id); if (!q) return;
+    const label = q.year + ' Q' + q.n;
+    const bq = ppBankQ(id);
+    if (!bq) { missing.push(label); return; }
+    if (seen.has(bq.id)) seen.get(bq.id).refs.push(label);   // same bank question attached to several papers — print once
+    else seen.set(bq.id, { bq, refs: [label] });
+  });
+  return { items: [...seen.values()], missing };
+}
+function ppDoPrint(items, missing, title){
+  if (!items.length) { showToast('Nothing to print — none of these questions have a bank question attached yet', 'error'); return; }
+  const selected = items.map(it => Object.assign({}, it.bq, { title: it.refs.join(' / ') + ' — ' + (it.bq.title || 'Untitled') }));
+  const output = document.getElementById('printOutput');
+  output.innerHTML = buildWorksheetHtml(selected, title, { answerKeyExtras: true });
+  autoscaleAndPrint(output);
+  if (missing.length) {
+    const list = missing.length > 6 ? missing.slice(0, 6).join(', ') + ' +' + (missing.length - 6) + ' more' : missing.join(', ');
+    showToast('Skipped ' + missing.length + ' with no attached question: ' + list, 'info');
+  }
+}
+function ppPrintConcept(id){
+  const c = ppRecurring().find(x => x.id === id); if (!c) return;
+  const { items, missing } = ppCollectPrintable(c.hits);
+  ppDoPrint(items, missing, c.concept || 'Recurring concept');
+}
+function ppPrintYear(y){
+  const hitIds = ppQuestions().filter(q => String(q.year) === String(y))
+    .sort((a,b) => (Number(a.n)||0) - (Number(b.n)||0)).map(q => q.id);
+  const { items, missing } = ppCollectPrintable(hitIds);
+  ppDoPrint(items, missing, 'PSLE Science ' + y);
+}
+function ppPrintSelected(){
+  const chosen = ppRecurring().filter(c => _ppPrintSel.has(c.id));
+  if (!chosen.length) { showToast('Tick the checkbox on the concepts you want, then print', 'info'); return; }
+  const allHits = [];
+  chosen.forEach(c => (c.hits || []).forEach(h => allHits.push(h)));
+  const { items, missing } = ppCollectPrintable(allHits);
+  const title = chosen.length === 1 ? (chosen[0].concept || 'Recurring concept') : 'Recurring Concepts — ' + chosen.length + ' concepts';
+  ppDoPrint(items, missing, title);
+}
+function ppTogglePrintSel(id, checked){
+  if (checked) _ppPrintSel.add(id); else _ppPrintSel.delete(id);
+  const btn = document.getElementById('ppPrintSelBtn');
+  if (btn) {
+    const n = _ppPrintSel.size;
+    btn.textContent = '🖨 Print selected' + (n ? ' (' + n + ')' : '');
+    btn.disabled = !n;
+  }
+}
+
 // -------- question editor --------
 function ppAddQuestion(year){
   const y = year || (ppYears().slice(-1)[0] || String(new Date().getFullYear()));
@@ -25332,8 +25413,13 @@ function ppStyles(){
   .pp-mini { border:1px solid var(--border); background:var(--surface); color:var(--text-muted); font:inherit; font-size:0.78rem; cursor:pointer; padding:0 8px; border-radius:0 9px 9px 0; border-left:none; }
   .pp-mini:hover { color:var(--text); }
   .pp-mini.del:hover { color:#fff; background:var(--accent-red,#d94f4f); border-color:var(--accent-red,#d94f4f); }
-  .pp-tools { margin-left:auto; display:flex; gap:6px; }
+  .pp-tools { margin-left:auto; display:flex; gap:6px; align-items:center; }
   .pp-tools .pp-mini { border-radius:8px; border-left:1px solid var(--border); padding:3px 9px; }
+  .pp-print-check { display:inline-flex; align-items:center; justify-content:center; padding:3px 6px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer; }
+  .pp-print-check:hover { border-color:var(--primary,#4a7c59); }
+  .pp-print-check input { width:15px; height:15px; margin:0; accent-color:var(--primary,#4a7c59); cursor:pointer; }
+  .pp-add:disabled { opacity:0.5; cursor:not-allowed; }
+  .pp-year-head .pp-tools { margin-left:auto; }
   .pp-year { padding:12px 0; }
   .pp-year + .pp-year { border-top:1px solid var(--border); }
   .pp-year-head { margin-bottom:9px; font-size:0.95rem; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -25386,6 +25472,10 @@ window.ppAssignPractise = ppAssignPractise;
 window.ppCreateForAssign = ppCreateForAssign;
 window.ppCancelPendingAttach = ppCancelPendingAttach;
 window.ppHasPendingAttach = ppHasPendingAttach;
+window.ppPrintConcept = ppPrintConcept;
+window.ppPrintYear = ppPrintYear;
+window.ppPrintSelected = ppPrintSelected;
+window.ppTogglePrintSel = ppTogglePrintSel;
 window.ppHoverShow = ppHoverShow;
 window.ppHoverMove = ppHoverMove;
 window.ppHoverHide = ppHoverHide;
