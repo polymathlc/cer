@@ -4779,6 +4779,14 @@ option {
         </div>
       </div>
       <div class="page-body">
+        <!-- Past-paper attach banner: shown when this new question will be attached to a past-paper analysis question on save -->
+        <div id="ppAttachBanner" style="display:none;align-items:flex-start;gap:14px;flex-wrap:wrap;background:var(--primary-light,#eef4f0);border:1px solid var(--primary,#4a7c59);border-radius:12px;padding:14px 18px;margin-bottom:18px;">
+          <div style="flex:1;min-width:220px;">
+            <div style="font-weight:700;color:var(--primary-dark,#2f5d3f);margin-bottom:5px;">📎 Will attach to the past-paper analysis</div>
+            <div id="ppAttachBannerText" style="font-size:0.85rem;color:var(--text-muted);line-height:1.55;"></div>
+          </div>
+          <button class="btn btn-outline" onclick="ppCancelPendingAttach()" style="white-space:nowrap;">✕ Don't attach</button>
+        </div>
         <!-- Meta Fields -->
         <div class="form-row-3">
           <div class="form-group">
@@ -6357,6 +6365,7 @@ option {
     <div id="ppAssignList" style="flex:1;overflow-y:auto;min-height:120px;"></div>
     <div class="btn-group" style="justify-content:space-between;margin-top:14px;gap:8px;flex-wrap:wrap;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="ppCreateForAssign()" title="Open the question editor prefilled from this past-paper question — the new question is attached here automatically when you save it.">＋ Create a new question</button>
         <button class="btn btn-outline" id="ppUnassignBtn" onclick="ppUnassign()" style="display:none;color:var(--accent-red,#c0392b);">Remove attachment</button>
         <button class="btn btn-primary" id="ppAssignPractiseBtn" onclick="ppAssignPractise()" style="display:none;">▶ Practise this</button>
       </div>
@@ -7241,7 +7250,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.68.0';
+const APP_VERSION = 'v1.69.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7416,7 +7425,11 @@ function navigateTo(page) {
       document.getElementById('topicSelect').value = 'Heat';
       renderBlocks();
       setEditMode(false);
+      if (window.ppCancelPendingAttach) window.ppCancelPendingAttach();
     }
+  } else {
+    // Leaving the create page drops any pending past-paper attachment
+    if (window.ppCancelPendingAttach) window.ppCancelPendingAttach();
   }
   _skipCreateReset = false;
   if (page === 'bank') renderQuestionBank();
@@ -11307,7 +11320,8 @@ function addToBank() {
   renderBlocks();
   renderQuestionBank();
   showToast('Question added to bank ✓', 'success');
-  navigateTo('bank');
+  if (window.ppHasPendingAttach && window.ppHasPendingAttach()) ppConsumePendingAttach(q, false);
+  else navigateTo('bank');
   saveQuestion(q); // async, non-blocking
 }
 
@@ -11423,7 +11437,8 @@ function addToVetting() {
   renderBlocks();
   renderVettingList();
   showToast('Question added to vetting list ✓', 'success');
-  navigateTo('vetting');
+  if (window.ppHasPendingAttach && window.ppHasPendingAttach()) ppConsumePendingAttach(q, true);
+  else navigateTo('vetting');
   saveVettingQuestion(q); // async, non-blocking
 }
 
@@ -11624,6 +11639,7 @@ function editQuestion(id) {
   selectedBlanks = JSON.parse(JSON.stringify(q.blanks || {}));
   
   renderBlocks();
+  if (window.ppCancelPendingAttach) window.ppCancelPendingAttach();
   _skipCreateReset = true;
   navigateTo('create');
   showToast('Editing: ' + q.title, 'info');
@@ -24947,7 +24963,7 @@ function ppRenderBody(){
     ? 'Tap any highlighted question to practise it. Hover to preview. Greyed-out questions have not been added yet.'
     : (edit
       ? 'Editing: use + Add question / + Add concept, click a question or concept to change its details, or × to remove it. Turn editing off to attach bank questions.'
-      : 'Click any question to attach a question from your bank; students can then practise it. Hover a question to preview. Use “Edit content” to add, remove or reword questions and concepts.');
+      : 'Click any question to attach one from your bank — or create a brand-new question for it on the spot; students can then practise it. Hover a question to preview. Use “Edit content” to add, remove or reword questions and concepts.');
 
   body.innerHTML = ppStyles() + `
   <div class="pp-wrap">
@@ -25030,10 +25046,10 @@ function ppHoverHtml(id){
       <div class="pp-hv-note">${ppIsAdmin() ? (ppEditMode ? 'Click to edit this question.' : 'Click to change or remove the attachment.') : 'Click to practise.'}</div>`;
   }
   const b = paperMap[id];
-  const missing = b ? '<div class="pp-hv-note" style="color:var(--accent-red,#c0392b);">The attached question is no longer in the bank.</div>' : '';
+  const missing = b ? '<div class="pp-hv-note" style="color:var(--accent-red,#c0392b);">The attached question is not in the bank — it may be awaiting vetting approval, or it was deleted.</div>' : '';
   return head + `<div class="pp-hv-title">${escapeHtml(q.title || '')}</div>
     <div class="pp-hv-detail">${escapeHtml(q.detail || '')}</div>${missing}
-    <div class="pp-hv-note">${ppIsAdmin() ? (ppEditMode ? 'Click to edit this question.' : 'Click to attach a bank question.') : 'Not yet available to practise.'}</div>`;
+    <div class="pp-hv-note">${ppIsAdmin() ? (ppEditMode ? 'Click to edit this question.' : 'Click to attach a bank question — or create one on the spot.') : 'Not yet available to practise.'}</div>`;
 }
 function ppHoverShow(ev, id){ const el = ppHoverEl(); el.innerHTML = ppHoverHtml(id); el.style.display = 'block'; ppHoverMove(ev); }
 function ppHoverMove(ev){
@@ -25096,6 +25112,70 @@ async function ppAssign(id, qid){ paperMap[id] = qid; await savePaperMap(); ppRe
 async function ppUnassign(){ const id = _ppAssignKey; if (!id) return; delete paperMap[id]; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Attachment removed', 'info'); }
 function ppPractise(id){ const bq = ppBankQ(id); if (!bq) { showToast('This question is not available to practise', 'error'); return; } ppHoverHide(); ppCloseAssign(); launchWorksheetPractice([bq]); }
 function ppAssignPractise(){ if (_ppAssignKey) ppPractise(_ppAssignKey); }
+
+// -------- create a NEW bank question for a past-paper question --------
+// Opens the Create Question editor prefilled from the past-paper item; when
+// the admin saves (Add to Bank / vetting), the new question is attached
+// automatically and they land back on the analysis to pick the next one.
+let _ppPendingAttach = null;   // past-paper question id awaiting a new bank question
+
+function ppHasPendingAttach(){ return !!_ppPendingAttach; }
+function ppCancelPendingAttach(){
+  _ppPendingAttach = null;
+  const b = document.getElementById('ppAttachBanner');
+  if (b) b.style.display = 'none';
+}
+function ppCreateForAssign(){
+  const id = _ppAssignKey; if (!id) return;
+  const q = ppFindQ(id); if (!q) return;
+  ppCloseAssign(); ppHoverHide();
+
+  // Fresh editor, prefilled from the past-paper question
+  blocks = []; selectedBlanks = {}; currentEditingQuestion = null;
+  const titleEl = document.getElementById('questionTitle');
+  if (titleEl) titleEl.value = q.title || (q.year + ' Q' + q.n);
+  const cat = (q.bk === 'B' || q.type === 'open') ? 'PSLE - OEQ' : 'PSLE - MCQ';
+  const catSel = document.getElementById('categorySelect');
+  if (catSel) { catSel.value = cat; _lastCategoryValue = cat; }
+  const ts = document.getElementById('topicSelect');
+  if (ts && q.topic) {
+    if (!Array.from(ts.options).some(o => o.value === q.topic)) {
+      const opt = document.createElement('option');
+      opt.value = q.topic; opt.textContent = q.topic;
+      const mg = ts.querySelector('optgroup[label="── Manage ──"]');
+      if (mg) ts.insertBefore(opt, mg); else ts.appendChild(opt);
+    }
+    ts.value = q.topic; _lastTopicValue = q.topic;
+  }
+  const mgEl = document.getElementById('questionMarkingGuide');
+  if (mgEl) mgEl.value = q.ans ? 'Expected answer: ' + q.ans : '';
+  renderBlocks();
+
+  _ppPendingAttach = id;
+  const b = document.getElementById('ppAttachBanner');
+  const bt = document.getElementById('ppAttachBannerText');
+  if (bt) bt.innerHTML = `<strong>${escapeHtml(String(q.year))} Q${escapeHtml(String(q.n))}</strong> &middot; ${escapeHtml(q.topic || '')} &middot; ${escapeHtml(String(q.marks))} mark(s)<br>“${escapeHtml(q.title || '')}” — build the question (typing blocks or Build from screenshot both work), then <strong>Add to Bank</strong>. It will be attached to this analysis question automatically.`;
+  if (b) b.style.display = 'flex';
+
+  _skipCreateReset = true;
+  navigateTo('create');
+  showToast('Build the question, then Add to Bank — it will attach to ' + q.year + ' Q' + q.n, 'info');
+}
+async function ppConsumePendingAttach(bankQ, toVetting){
+  const id = _ppPendingAttach; if (!id || !bankQ) return;
+  const q = ppFindQ(id);
+  const label = q ? q.year + ' Q' + q.n : 'the past-paper question';
+  paperMap[id] = bankQ.id;
+  ppCancelPendingAttach();
+  await savePaperMap();
+  if (toVetting) {
+    navigateTo('vetting');
+    showToast('Attached to ' + label + ' — it becomes practisable once approved into the bank', 'success');
+  } else {
+    navigateTo('papers');
+    showToast('Attached to ' + label + ' ✓ — click the next question to keep going', 'success');
+  }
+}
 
 // -------- question editor --------
 function ppAddQuestion(year){
@@ -25303,6 +25383,9 @@ window.ppAssign = ppAssign;
 window.ppUnassign = ppUnassign;
 window.ppPractise = ppPractise;
 window.ppAssignPractise = ppAssignPractise;
+window.ppCreateForAssign = ppCreateForAssign;
+window.ppCancelPendingAttach = ppCancelPendingAttach;
+window.ppHasPendingAttach = ppHasPendingAttach;
 window.ppHoverShow = ppHoverShow;
 window.ppHoverMove = ppHoverMove;
 window.ppHoverHide = ppHoverHide;
