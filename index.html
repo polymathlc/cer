@@ -6385,6 +6385,7 @@ option {
       <div><label class="form-label">Marks</label><input id="ppQeMarks" class="form-input" type="number" min="1"></div>
       <div class="full"><label class="form-label">Topic</label><select id="ppQeTopic" class="form-select"></select></div>
       <div class="full"><label class="form-label">Skill tested</label><select id="ppQeType" class="form-select"></select></div>
+      <div class="full"><label class="form-label">Difficulty (colours this question's chip)</label><select id="ppQeDiff" class="form-select"><option value="">◻ Not set</option><option value="easy">🟢 Easy</option><option value="moderate">🟡 Moderate</option><option value="hard">🔴 Difficult</option></select></div>
     </div>
     <label class="form-label">Title</label>
     <input id="ppQeTitle" class="form-input" type="text" placeholder="Short description of the question" style="margin-bottom:10px;">
@@ -7250,7 +7251,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.73.0';
+const APP_VERSION = 'v1.74.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -24977,6 +24978,42 @@ function ppIsAdmin(){ return !!(currentUser && currentUser.role === 'admin'); }
 function ppOwnerUid(){ return ppIsAdmin() ? (currentUser && currentUser.uid) : adminUid; }
 function ppBankQ(id){ const b = paperMap[id]; return b ? questionBank.find(q => q.id === b) : null; }
 
+// ---- Question success rate (correct attempts / total attempts, whole %) ----
+// Backed by the shared per-question attempt stats (_qAttemptStats), which are
+// written for EVERY marked question on EVERY platform — Quick/Topical/worksheet
+// practice, past-paper practice and all game modes (defenders/raiders/legends/
+// slayers) — so this one accessor reflects a student's live accuracy anywhere.
+// Returns a whole-number percentage, or null if the question was never attempted.
+function questionPercent(qid){
+  const r = (typeof _qAttemptStats !== 'undefined' && _qAttemptStats) ? _qAttemptStats[String(qid == null ? '' : qid)] : null;
+  if (!r || !r.n) return null;
+  return Math.round((r.correct / r.n) * 100);
+}
+// Full picture for a question id: { attempts, correct, percent }. percent is null
+// when there are no attempts yet.
+function questionStats(qid){
+  const r = (typeof _qAttemptStats !== 'undefined' && _qAttemptStats) ? _qAttemptStats[String(qid == null ? '' : qid)] : null;
+  const n = r ? r.n : 0, correct = r ? r.correct : 0;
+  return { attempts: n, correct: correct, percent: n ? Math.round((correct / n) * 100) : null };
+}
+
+// ---- Past-paper difficulty (admin-set, colour-codes the question chips) ----
+// Difficulty lives on each past-paper question as q.diff ∈ 'easy'|'moderate'|'hard'
+// and only ever applies inside the Past Papers analysis interface.
+function ppDiff(q){ const d = q && q.diff; return (d === 'easy' || d === 'moderate' || d === 'hard') ? d : ''; }
+function ppDiffClass(q){ const d = ppDiff(q); return d ? ' pp-diff-' + d : ''; }
+// Set (or clear) the difficulty of ONE past-paper question and persist it.
+// level: 'easy' | 'moderate' | 'hard'  (anything else clears it).
+async function ppSetDifficulty(id, level){
+  if (!ppIsAdmin()) { showToast('Only admins can set difficulty', 'error'); return; }
+  const q = ppFindQ(id); if (!q) return;
+  const lv = (level === 'easy' || level === 'moderate' || level === 'hard') ? level : '';
+  if (lv) q.diff = lv; else delete q.diff;
+  await savePaperData();
+  ppHoverHide();
+  ppRenderBody();
+}
+
 async function loadPaperData(force){
   if (_ppDataLoaded && !force) return;
   ppData = ppDefaults();
@@ -25028,7 +25065,9 @@ async function renderPapersPage(){
   const body = document.getElementById('papersBody');
   if (!body) return;
   body.innerHTML = '<div style="padding:48px;text-align:center;color:var(--text-muted);">Loading past-paper analysis…</div>';
-  await Promise.all([ loadPaperData(true), loadPaperMap(true) ]);
+  // loadAttemptStats gives each chip the student's live success rate; never let
+  // it block the analysis if it errors.
+  await Promise.all([ loadPaperData(true), loadPaperMap(true), (typeof loadAttemptStats === 'function' ? loadAttemptStats().catch(()=>{}) : Promise.resolve()) ]);
   ppRenderBody();
 }
 
@@ -25128,8 +25167,10 @@ function ppRenderBody(){
     </div>
 
     <div class="pp-card">
-      <h3 class="pp-h">Question map — every question, every year ${addYear}</h3>
-      <p class="pp-sub">All ${total} questions, classified into your portal's topics. ${admin && !edit ? 'Green = a bank question is attached. ' : ''}${edit ? 'Click a question to edit its fields; × removes it.' : (admin ? '' : 'Highlighted = available to practise.')}</p>
+      <h3 class="pp-h">Question map — every question, every year ${addYear}
+        <span class="pp-diff-legend"><span><span class="pp-lg-box" style="background:#2ea069;"></span>Easy</span><span><span class="pp-lg-box" style="background:#d69e2e;"></span>Moderate</span><span><span class="pp-lg-box" style="background:#cf4f4f;"></span>Difficult</span></span>
+      </h3>
+      <p class="pp-sub">All ${total} questions, classified into your portal's topics. Chips are colour-coded by difficulty (green / yellow / red). ${edit ? 'Click a question to edit it, use the drop-down to set its difficulty, or × to remove it.' : (admin ? 'A &#10003; marks questions with a bank question attached. ' : 'Highlighted questions are available to practise, with your success rate shown.')}</p>
       ${yearGroups}
     </div>
 
@@ -25142,6 +25183,14 @@ function ppRenderBody(){
   </div>`;
 }
 
+// A small accuracy badge for students: their live success rate on the attached
+// bank question (correct attempts / total attempts). Hidden for admins and when
+// the question has never been attempted.
+function ppAccBadge(bq){
+  if (ppIsAdmin() || !bq) return '';
+  const pct = questionPercent(bq.id);
+  return (pct == null) ? '' : `<span class="pp-chip-acc" title="Your success rate on this question">${pct}%</span>`;
+}
 function ppChip(q){
   const bq = ppBankQ(q.id);
   const admin = ppIsAdmin();
@@ -25149,14 +25198,25 @@ function ppChip(q){
   if (bq) cls += ' assigned';
   else if (admin) cls += ' open';
   else cls += ' muted';
+  cls += ppDiffClass(q);
   const click = admin ? `ppOpenAssign('${q.id}')` : (bq ? `ppPractise('${q.id}')` : '');
   const mark = bq ? ' &#10003;' : '';
-  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${mark}</span>`;
+  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${mark}${ppAccBadge(bq)}</span>`;
+}
+function ppDiffSelect(q){
+  const d = ppDiff(q);
+  return `<select class="pp-diff-sel" title="Set difficulty (colours this chip — past-paper only)" onchange="ppSetDifficulty('${q.id}', this.value)" onclick="event.stopPropagation()">
+    <option value="" ${!d ? 'selected' : ''}>◻ diff</option>
+    <option value="easy" ${d === 'easy' ? 'selected' : ''}>🟢 Easy</option>
+    <option value="moderate" ${d === 'moderate' ? 'selected' : ''}>🟡 Moderate</option>
+    <option value="hard" ${d === 'hard' ? 'selected' : ''}>🔴 Difficult</option>
+  </select>`;
 }
 function ppChipEdit(q){
   const bq = ppBankQ(q.id);
   return `<span class="pp-chip-edit">
-    <span class="pp-chip open ${bq ? 'assigned' : ''}" title="Edit this question" onclick="ppEditQuestion('${q.id}')" onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${bq ? ' &#10003;' : ''}</span>
+    <span class="pp-chip open ${bq ? 'assigned' : ''}${ppDiffClass(q)}" title="Edit this question" onclick="ppEditQuestion('${q.id}')" onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${bq ? ' &#10003;' : ''}</span>
+    ${ppDiffSelect(q)}
     <button class="pp-mini del" title="Remove question" onclick="ppDeleteQuestion('${q.id}')">&times;</button>
   </span>`;
 }
@@ -25169,9 +25229,10 @@ function ppChipByKey(id){
   if (bq) cls += ' assigned';
   else if (admin && !ppEditMode) cls += ' open';
   else cls += ' muted';
+  cls += ppDiffClass(q);
   const click = (admin && !ppEditMode) ? `ppOpenAssign('${id}')` : (!admin && bq ? `ppPractise('${id}')` : '');
   const mark = bq ? ' &#10003;' : '';
-  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">${escapeHtml(String(q.year))} Q${escapeHtml(String(q.n))}${mark}</span>`;
+  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">${escapeHtml(String(q.year))} Q${escapeHtml(String(q.n))}${mark}${ppAccBadge(bq)}</span>`;
 }
 
 // -------- hover preview --------
@@ -25180,11 +25241,17 @@ function ppHoverHtml(id){
   const q = ppFindQ(id);
   if (!q) return '';
   const bq = ppBankQ(id);
+  const diff = ppDiff(q);
+  const diffLabel = { easy: '🟢 Easy', moderate: '🟡 Moderate', hard: '🔴 Difficult' }[diff] || '';
+  const diffLine = diffLabel ? `<div class="pp-hv-topic" style="font-weight:600;">Difficulty: ${diffLabel}</div>` : '';
   const head = `<div class="pp-hv-head"><strong>${escapeHtml(String(q.year))} &middot; Q${escapeHtml(String(q.n))}</strong> &middot; ${escapeHtml(String(q.marks))}m &middot; Booklet ${escapeHtml(String(q.bk||''))}</div>
-    <div class="pp-hv-topic"><span class="pp-dot" style="background:${ppThemeColor(q.topic)}"></span>${escapeHtml(q.topic || '')} &middot; ${ppLevel(q.topic)} &middot; ${escapeHtml(ppSkillName(q.type))}</div>`;
+    <div class="pp-hv-topic"><span class="pp-dot" style="background:${ppThemeColor(q.topic)}"></span>${escapeHtml(q.topic || '')} &middot; ${ppLevel(q.topic)} &middot; ${escapeHtml(ppSkillName(q.type))}</div>${diffLine}`;
   if (bq) {
+    // Student's live success rate on the attached question (all platforms).
+    const st = questionStats(bq.id);
+    const accLine = (st.percent != null) ? `<div class="pp-hv-note" style="color:var(--primary,#4a7c59);font-style:normal;">Your success rate: <strong>${st.percent}%</strong> (${st.correct}/${st.attempts} correct)</div>` : '';
     return head + `<div class="pp-hv-assigned">&#10003; Attached: ${escapeHtml(bq.title || 'Untitled')}</div>
-      <div class="pp-hv-preview">${renderQuestionPreviewHtml(bq.id)}</div>
+      <div class="pp-hv-preview">${renderQuestionPreviewHtml(bq.id)}</div>${accLine}
       <div class="pp-hv-note">${ppIsAdmin() ? (ppEditMode ? 'Click to edit this question.' : 'Click to change or remove the attachment.') : 'Click to practise.'}</div>`;
   }
   const b = paperMap[id];
@@ -25400,6 +25467,7 @@ function ppOpenQEdit(q){
   const sk = document.getElementById('ppQeType');
   if (sk) sk.innerHTML = Object.keys(PP_SKILL).map(k => `<option value="${k}" ${k === q.type ? 'selected' : ''}>${escapeHtml(PP_SKILL[k])}</option>`).join('');
   set('ppQeTitle', q.title || ''); set('ppQeDetail', q.detail || ''); set('ppQeAns', q.ans || '');
+  set('ppQeDiff', ppDiff(q));
   const del = document.getElementById('ppQeDeleteBtn'); if (del) del.style.display = q.id ? '' : 'none';
   const ov = document.getElementById('ppQEditOverlay'); if (ov) ov.classList.add('active');
 }
@@ -25420,8 +25488,10 @@ async function ppSaveQuestionEditor(){
     detail: val('ppQeDetail'),
     ans: val('ppQeAns')
   };
+  const diff = document.getElementById('ppQeDiff')?.value || '';
+  if (diff === 'easy' || diff === 'moderate' || diff === 'hard') rec.diff = diff;
   if (_ppQEditId) {
-    const q = ppFindQ(_ppQEditId); if (q) Object.assign(q, rec);
+    const q = ppFindQ(_ppQEditId); if (q) { if (!rec.diff) delete q.diff; Object.assign(q, rec); }
   } else {
     rec.id = ppNewId(); ppData.questions.push(rec);
   }
@@ -25528,6 +25598,17 @@ function ppStyles(){
   .pp-chip.open { border-style:dashed; cursor:pointer; }
   .pp-chip.open:hover, .pp-chip.assigned:hover { filter:brightness(0.97); box-shadow:0 1px 4px rgba(0,0,0,0.08); }
   .pp-chip.muted { opacity:0.55; }
+  /* Difficulty colour-coding (admin-set, past-paper only). Placed after the
+     assigned/open/muted rules so it wins for the same specificity. */
+  .pp-chip.pp-diff-easy { background:#e4f4ec; border-color:#2ea069; color:#1f6b4e; }
+  .pp-chip.pp-diff-moderate { background:#fbf1da; border-color:#cf9526; color:#8a6212; }
+  .pp-chip.pp-diff-hard { background:#fbe4e4; border-color:#cf4f4f; color:#9e2b2b; }
+  .pp-chip.pp-diff-easy, .pp-chip.pp-diff-moderate, .pp-chip.pp-diff-hard { border-style:solid; }
+  .pp-chip.pp-diff-easy .pp-chip-yr, .pp-chip.pp-diff-moderate .pp-chip-yr, .pp-chip.pp-diff-hard .pp-chip-yr { color:inherit; opacity:0.7; }
+  .pp-diff-legend { display:inline-flex; gap:12px; flex-wrap:wrap; margin-left:auto; font-size:0.76rem; color:var(--text-muted); align-items:center; }
+  .pp-diff-legend .pp-lg-box { display:inline-block; width:12px; height:12px; border-radius:4px; margin-right:5px; vertical-align:-1px; border:1px solid rgba(0,0,0,0.12); }
+  .pp-diff-sel { font:inherit; font-size:0.72rem; border:1px solid var(--border); border-left:none; border-radius:0; background:var(--surface); color:var(--text); padding:0 4px; cursor:pointer; }
+  .pp-chip-acc { font-size:0.6rem; font-weight:700; padding:1px 5px; border-radius:6px; background:rgba(0,0,0,0.06); color:var(--text-muted); }
   .pp-chip-edit { display:inline-flex; align-items:stretch; border-radius:9px; }
   .pp-chip-edit .pp-chip { border-top-right-radius:0; border-bottom-right-radius:0; }
   .pp-mini { border:1px solid var(--border); background:var(--surface); color:var(--text-muted); font:inherit; font-size:0.78rem; cursor:pointer; padding:0 8px; border-radius:0 9px 9px 0; border-left:none; }
@@ -25596,6 +25677,9 @@ window.ppPrintConcept = ppPrintConcept;
 window.ppPrintYear = ppPrintYear;
 window.ppPrintSelected = ppPrintSelected;
 window.ppTogglePrintSel = ppTogglePrintSel;
+window.ppSetDifficulty = ppSetDifficulty;
+window.questionPercent = questionPercent;
+window.questionStats = questionStats;
 window.ppHoverShow = ppHoverShow;
 window.ppHoverMove = ppHoverMove;
 window.ppHoverHide = ppHoverHide;
