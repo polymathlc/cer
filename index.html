@@ -7269,7 +7269,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.77.0';
+const APP_VERSION = 'v1.78.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -25332,7 +25332,7 @@ function ppChip(q){
   cls += ppDiffClass(q);
   const click = admin ? `ppOpenAssign('${q.id}')` : (bq ? `ppPractise('${q.id}')` : '');
   const mark = bq ? ' &#10003;' : '';
-  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${mark}${ppAccBadge(bq)}</span>`;
+  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverLeave()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${mark}${ppAccBadge(bq)}</span>`;
 }
 function ppDiffSelect(q){
   const d = ppDiff(q);
@@ -25346,7 +25346,7 @@ function ppDiffSelect(q){
 function ppChipEdit(q){
   const bq = ppBankQ(q.id);
   return `<span class="pp-chip-edit">
-    <span class="pp-chip open ${bq ? 'assigned' : ''}${ppDiffClass(q)}" title="Edit this question" onclick="ppEditQuestion('${q.id}')" onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${bq ? ' &#10003;' : ''}</span>
+    <span class="pp-chip open ${bq ? 'assigned' : ''}${ppDiffClass(q)}" title="Edit this question" onclick="ppEditQuestion('${q.id}')" onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverLeave()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${bq ? ' &#10003;' : ''}</span>
     ${ppDiffSelect(q)}
     <button class="pp-mini del" title="Remove question" onclick="ppDeleteQuestion('${q.id}')">&times;</button>
   </span>`;
@@ -25363,11 +25363,38 @@ function ppChipByKey(id){
   cls += ppDiffClass(q);
   const click = (admin && !ppEditMode) ? `ppOpenAssign('${id}')` : (!admin && bq ? `ppPractise('${id}')` : '');
   const mark = bq ? ' &#10003;' : '';
-  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">${escapeHtml(String(q.year))} Q${escapeHtml(String(q.n))}${mark}${ppAccBadge(bq)}</span>`;
+  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverLeave()">${escapeHtml(String(q.year))} Q${escapeHtml(String(q.n))}${mark}${ppAccBadge(bq)}</span>`;
 }
 
 // -------- hover preview --------
-function ppHoverEl(){ if (!_ppHoverEl) { _ppHoverEl = document.createElement('div'); _ppHoverEl.id = 'ppHover'; document.body.appendChild(_ppHoverEl); } return _ppHoverEl; }
+// The panel is interactive: moving the mouse from a chip ONTO the preview
+// keeps it open (chip leave hides after a short grace period the panel's
+// mouseenter cancels), and holding the cursor on it for 5 s expands it to
+// the whole question.
+let _ppHoverHideT = null;    // pending delayed-hide timer (chip mouseleave grace)
+let _ppHoverExpandT = null;  // pending 5 s expand timer
+function ppHoverEl(){
+  if (!_ppHoverEl) {
+    _ppHoverEl = document.createElement('div');
+    _ppHoverEl.id = 'ppHover';
+    _ppHoverEl.addEventListener('mouseenter', () => {
+      clearTimeout(_ppHoverHideT);
+      clearTimeout(_ppHoverExpandT);
+      _ppHoverExpandT = setTimeout(() => {
+        const el = _ppHoverEl;
+        if (!el || el.style.display !== 'block') return;
+        el.classList.add('expanded');
+        // keep the grown panel on screen
+        const r = el.getBoundingClientRect();
+        if (r.bottom > window.innerHeight - 8) el.style.top = Math.max(8, window.innerHeight - el.offsetHeight - 8) + 'px';
+        if (r.right > window.innerWidth - 8) el.style.left = Math.max(8, window.innerWidth - el.offsetWidth - 8) + 'px';
+      }, 5000);
+    });
+    _ppHoverEl.addEventListener('mouseleave', () => { clearTimeout(_ppHoverExpandT); ppHoverHide(); });
+    document.body.appendChild(_ppHoverEl);
+  }
+  return _ppHoverEl;
+}
 function ppHoverHtml(id){
   const q = ppFindQ(id);
   if (!q) return '';
@@ -25391,7 +25418,18 @@ function ppHoverHtml(id){
     <div class="pp-hv-detail">${escapeHtml(q.detail || '')}</div>${missing}
     <div class="pp-hv-note">${ppIsAdmin() ? (ppEditMode ? 'Click to edit this question.' : 'Click to attach a bank question — or create one on the spot.') : 'Not yet available to practise.'}</div>`;
 }
-function ppHoverShow(ev, id){ const el = ppHoverEl(); el.innerHTML = ppHoverHtml(id); el.style.display = 'block'; ppHoverMove(ev); }
+function ppHoverShow(ev, id){
+  const el = ppHoverEl();
+  clearTimeout(_ppHoverHideT);
+  clearTimeout(_ppHoverExpandT);
+  el.classList.remove('expanded');
+  el.innerHTML = ppHoverHtml(id) + `<div class="pp-hv-note" style="opacity:0.75;">Move onto this preview to keep it open — after 5 s it expands to the whole question.</div>`;
+  el.style.display = 'block';
+  ppHoverMove(ev);
+}
+// Chips call this on mouseleave: hide after a short grace period so the
+// pointer can travel onto the preview panel (whose mouseenter cancels it).
+function ppHoverLeave(){ clearTimeout(_ppHoverHideT); _ppHoverHideT = setTimeout(ppHoverHide, 180); }
 function ppHoverMove(ev){
   const el = _ppHoverEl; if (!el || el.style.display !== 'block') return;
   const pad = 14, w = el.offsetWidth || 360, h = el.offsetHeight || 240;
@@ -25401,7 +25439,11 @@ function ppHoverMove(ev){
   el.style.left = Math.max(8, x) + 'px';
   el.style.top = Math.max(8, y) + 'px';
 }
-function ppHoverHide(){ if (_ppHoverEl) _ppHoverEl.style.display = 'none'; }
+function ppHoverHide(){
+  clearTimeout(_ppHoverHideT);
+  clearTimeout(_ppHoverExpandT);
+  if (_ppHoverEl) { _ppHoverEl.classList.remove('expanded'); _ppHoverEl.style.display = 'none'; }
+}
 
 // -------- edit mode --------
 function ppToggleEdit(){ if (!ppIsAdmin()) return; ppEditMode = !ppEditMode; ppHoverHide(); ppRenderBody(); }
@@ -25868,7 +25910,9 @@ function ppStyles(){
   .pp-topic-year + .pp-topic-year { border-top:1px solid var(--border); }
   .pp-topic-yhead { font-size:0.74rem; font-weight:700; color:var(--text-muted); margin-bottom:7px; }
   .pp-bar-val { width:74px; flex:none; text-align:right; font-size:0.76rem; color:var(--text-muted); }
-  #ppHover { position:fixed; z-index:4000; display:none; pointer-events:none; max-width:360px; max-height:340px; overflow:hidden; background:var(--surface,#fff); border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.16); padding:12px 14px; font-size:0.82rem; }
+  #ppHover { position:fixed; z-index:4000; display:none; max-width:360px; max-height:340px; overflow:hidden; background:var(--surface,#fff); border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.16); padding:12px 14px; font-size:0.82rem; }
+  #ppHover.expanded { max-width:560px; max-height:min(85vh, 760px); overflow-y:auto; box-shadow:0 12px 44px rgba(0,0,0,0.24); }
+  #ppHover.expanded .pp-hv-preview { max-height:none; -webkit-mask-image:none; mask-image:none; }
   #ppHover .pp-hv-head { font-size:0.82rem; }
   #ppHover .pp-hv-topic { font-size:0.74rem; color:var(--text-muted); margin:3px 0 6px; display:flex; align-items:center; gap:5px; }
   #ppHover .pp-hv-title { font-weight:600; margin-bottom:3px; }
@@ -25917,6 +25961,7 @@ window.questionStats = questionStats;
 window.ppHoverShow = ppHoverShow;
 window.ppHoverMove = ppHoverMove;
 window.ppHoverHide = ppHoverHide;
+window.ppHoverLeave = ppHoverLeave;
 window.ppAddQuestion = ppAddQuestion;
 window.ppEditQuestion = ppEditQuestion;
 window.ppCloseQEdit = ppCloseQEdit;
