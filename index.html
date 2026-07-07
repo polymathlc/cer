@@ -4797,6 +4797,8 @@ option {
           </div>
           <button class="btn btn-outline" onclick="ppCancelPendingAttach()" style="white-space:nowrap;">✕ Don't attach</button>
         </div>
+        <!-- Possible-duplicate warning: shown when a built question looks like one already in the bank -->
+        <div id="dupWarnBanner" style="display:none;align-items:center;gap:14px;flex-wrap:wrap;background:#fffbeb;border:1px solid #fcd34d;border-radius:12px;padding:12px 16px;margin-bottom:18px;"></div>
         <!-- Meta Fields -->
         <div class="form-row-3">
           <div class="form-group">
@@ -7570,7 +7572,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.85.2';
+const APP_VERSION = 'v1.86.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7753,6 +7755,7 @@ function navigateTo(page) {
       selectedBlanks = {};
       currentEditingQuestion = null;
       _editReturnPage = null;           // a brand-new question won't return to Past Papers
+      _hideDupBanner();
       document.getElementById('questionTitle').value = '';
       document.getElementById('categorySelect').value = 'CER';
       document.getElementById('topicSelect').value = 'Heat';
@@ -10772,6 +10775,7 @@ async function handleBulkAiFile(file) {
       try {
         const q = buildQuestionFromAi(qd);
         if (!q.blocks.length) return;
+        _tagDuplicate(q);   // flag likely duplicates of existing bank questions
         vettingList.push(q);
         saveVettingQuestion(q); // async, non-blocking
         added++;
@@ -10955,6 +10959,67 @@ function _aiBuildQuestionPrompt(isPdf) {
 // The prompt used to clean a whole screenshot into a crisp black-and-white figure.
 const _BW_ENHANCE_PROMPT = 'Clean up this ENTIRE image into a sharp BLACK-AND-WHITE line diagram: crisp black line-work and text on a white background, like a freshly printed textbook figure rather than a photocopy or scan. Keep every diagram, detail, label, shape, proportion and all text EXACTLY the same and in the same positions. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT redraw, add, remove or move anything. Output only the image, same aspect ratio.';
 
+// =====================================================================
+// DUPLICATE SUSPICION — when a question is built from a screenshot / Rapid
+// add, flag it if it looks like one already in the bank, and let the admin
+// hover a "See original" control to preview the match. Reuses the Question
+// Doctor's text normalisation (_docQParts / _docNorm) and a token-overlap
+// (Jaccard) similarity so lightly-reworded copies are still caught.
+// =====================================================================
+function _dupTokenSet(q) {
+  const p = _docQParts(q);
+  let s = _docNorm(p.title) + ' ' + _docNorm(p.text);
+  if (p.mcq) s += ' ' + (p.mcq.options || []).map(o => _docNorm(o.text)).join(' ');
+  return new Set(s.split(/\s+/).filter(w => w.length > 2));
+}
+// Best matching EXISTING bank question, or null. Threshold tuned so near-
+// identical questions trip it but genuinely different ones don't.
+function findDuplicateCandidate(q, excludeId) {
+  if (!q || !Array.isArray(questionBank)) return null;
+  const skip = excludeId || (q && q.id) || null;
+  const target = _dupTokenSet(q);
+  if (target.size < 3) return null;
+  let best = null, bestScore = 0;
+  for (const bq of questionBank) {
+    if (!bq || bq.id === skip) continue;
+    const bset = _dupTokenSet(bq);
+    if (bset.size < 3) continue;
+    let inter = 0; target.forEach(x => { if (bset.has(x)) inter++; });
+    const score = inter / (target.size + bset.size - inter);
+    if (score > bestScore) { bestScore = score; best = bq; }
+  }
+  return (best && bestScore >= 0.7) ? { id: best.id, title: best.title || 'Untitled', pct: Math.round(bestScore * 100) } : null;
+}
+// Stamp q._dupOf if it looks like an existing bank question (used for Rapid
+// add / bulk import cards).
+function _tagDuplicate(q) {
+  try { const d = findDuplicateCandidate(q); if (d) q._dupOf = d; else delete q._dupOf; } catch (e) { console.warn('dup check', e); }
+  return q;
+}
+// A hover-to-preview "See original question" control (reuses the bank hover).
+function _dupSeeOriginalBtn(dup, style) {
+  return `<button type="button" class="btn btn-outline" style="${style || ''}" onclick="editQuestion('${dup.id}')"
+      onmouseenter="ppHoverShowBank(event,'${dup.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()"
+      title="Hover to preview the existing question · click to open it">👁 See original question</button>`;
+}
+// Editor banner: check the question currently in the editor for a bank duplicate.
+function checkEditorDuplicate() {
+  const banner = document.getElementById('dupWarnBanner');
+  if (!banner) return;
+  const q = { id: currentEditingQuestion || null, title: (document.getElementById('questionTitle')?.value || ''), blocks: blocks };
+  const dup = findDuplicateCandidate(q);
+  if (!dup) { banner.style.display = 'none'; banner.innerHTML = ''; return; }
+  banner.style.display = 'flex';
+  banner.innerHTML =
+    `<span style="font-size:1.3rem;line-height:1;">🟡</span>
+     <div style="flex:1;min-width:220px;">
+       <div style="font-weight:700;color:#92400e;margin-bottom:2px;">Possible duplicate (${dup.pct}% match)</div>
+       <div style="font-size:0.84rem;color:#92400e;line-height:1.5;">This looks a lot like <strong>“${escapeHtml(dup.title)}”</strong> already in your bank. Review before saving.</div>
+     </div>
+     ${_dupSeeOriginalBtn(dup, 'white-space:nowrap;border-color:#fcd34d;color:#92400e;')}`;
+}
+function _hideDupBanner() { const b = document.getElementById('dupWarnBanner'); if (b) { b.style.display = 'none'; b.innerHTML = ''; } }
+
 async function handleAiBuildFile(file) {
   if (!file) return;
   if (!window.__aiReady || !window.__aiReady()) {
@@ -10977,6 +11042,7 @@ async function handleAiBuildFile(file) {
     const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 4096, json: true });
     const parsed = _parseAIJson(raw);
     _populateEditorFromAi(parsed);
+    checkEditorDuplicate();   // warn if this looks like a question already in the bank
     const hasImageBlock = blocks.some(b => b.type === 'image');
     if (isImg && hasImageBlock) {
       showToast('Question built ✓ — enhancing the image next…', 'success');
@@ -11143,6 +11209,7 @@ async function processRapidJob(jobId, file) {
     }
 
     // 3) Promote to a real Vetting question (newest first) and persist.
+    _tagDuplicate(q);   // flag if it looks like a question already in the bank
     _removeRapidJob(jobId);
     vettingList.unshift(q);
     _rapidJustAdded.add(q.id);
@@ -11847,6 +11914,7 @@ function clearForm() {
     if (annEl) annEl.checked = false;
     const nisEl = document.getElementById('questionNotInSyllabus');
     if (nisEl) nisEl.checked = false;
+    _hideDupBanner();
     renderBlocks();
     setEditMode(false);
     showToast('Form cleared', 'info');
@@ -12002,6 +12070,7 @@ function editQuestion(id) {
   if (!q) return;
   _editReturnPage = null;   // default: return to the Bank (callers may override after)
   _ppReturnFocus = null;
+  _hideDupBanner();
   currentEditingQuestion = q.id;
   document.getElementById('questionTitle').value = q.title;
   // Set the category, tolerating one that's no longer in the list (e.g. a
@@ -12252,14 +12321,18 @@ function renderVettingList() {
     const statusClass = q.status || 'pending';
     const isNew = _rapidJustAdded.has(q.id); // freshly added via Rapid add this session
     const preview = getQuestionPreview(q);
+    // Only surface the duplicate warning if the suspected original still exists.
+    const dup = (q._dupOf && q._dupOf.id && questionBank.some(b => b.id === q._dupOf.id)) ? q._dupOf : null;
+    const dupBorder = dup ? ' style="border-color:#f59e0b;box-shadow:0 0 0 1px #f59e0b;"' : (isNew ? ' style="border-color:var(--accent-orange);box-shadow:0 0 0 1px var(--accent-orange);"' : '');
     return `
-      <div class="qb-card"${isNew ? ' style="border-color:var(--accent-orange);box-shadow:0 0 0 1px var(--accent-orange);"' : ''}>
+      <div class="qb-card"${dupBorder}>
         <div class="qb-card-header">
           <div>
             <div class="qb-card-title">${escapeHtml(q.title)}</div>
             <div class="qb-card-meta">
               <span class="qb-tag category">${escapeHtml(q.category)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+              ${dup ? `<span class="qb-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="Looks ${dup.pct}% similar to “${escapeHtml(dup.title)}” already in the bank">🟡 Possible duplicate</span>` : ''}
               ${isNew ? '<span class="qb-tag" style="background:var(--accent-orange-light);color:var(--accent-orange);" title="Just added by Rapid add — review and approve">⚡ Just added</span>' : ''}
               ${q.topicConfidence === 'low' ? '<span class="qb-tag" style="background:#fee2e2;color:#dc2626;" title="AI was unsure of this topic — please check it">⚠ check topic</span>' : q.topicConfidence === 'medium' ? '<span class="qb-tag" style="background:#fef3c7;color:#b45309;" title="AI was fairly sure of this topic — worth a glance">~ topic?</span>' : ''}
               <span class="vetting-badge ${statusClass}">${statusClass.charAt(0).toUpperCase() + statusClass.slice(1)}</span>
@@ -12278,6 +12351,7 @@ function renderVettingList() {
           </div>
         </div>
         <div class="qb-card-preview">${escapeHtml(preview)}</div>
+        ${dup ? `<div class="vetting-flag-note" style="background:#fffbeb;border-color:#fcd34d;color:#92400e;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">🟡 <b>Possible duplicate</b> of “${escapeHtml(dup.title)}” (${dup.pct}% match). ${_dupSeeOriginalBtn(dup, 'font-size:0.76rem;padding:4px 10px;border-color:#fcd34d;color:#92400e;')}</div>` : ''}
         ${q.status === 'flagged' && q._flag ? `<div class="vetting-flag-note">🚩 <b>Flagged by ${escapeHtml(q._flag.by || 'a student')}</b>${q._flag.when ? ' · ' + escapeHtml(q._flag.when) : ''}${q._flag.comment ? `<div class="vfn-comment">“${escapeHtml(q._flag.comment)}”</div>` : ''}</div>` : ''}
         ${isNew ? `<div style="margin-top:10px;"><button class="btn btn-outline" style="font-size:0.78rem;padding:5px 12px;" onclick="editQuestion('${q.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;vertical-align:-2px;margin-right:4px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Open in editor</button></div>` : ''}
       </div>`;
@@ -12291,6 +12365,7 @@ function approveVetting(id) {
   const q = vettingList[idx];
   q.status = 'approved';
   if (q._flag) { delete q._flag; _resolveFlagsForQuestion(id); } // re-approved a flagged question
+  delete q._dupOf;   // the admin has vetted it — drop the duplicate-suspicion marker
   questionBank.push(q);
   vettingList.splice(idx, 1);
   renderVettingList();
