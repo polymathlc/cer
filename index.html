@@ -7570,7 +7570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.85.1';
+const APP_VERSION = 'v1.85.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -26379,6 +26379,11 @@ function ppTheme(topic){ return PP_THEME[topic] || 'diversity'; }
 function ppThemeColor(topic){ return PP_THEME_C[ppTheme(topic)]; }
 function ppLevel(topic){ try { return getTopicLevel(topic); } catch(_) { return ''; } }
 function ppFindQ(id){ return ppQuestions().find(q => q.id === id); }
+// The topic used across the analysis (chart, bars, topic worksheets): the
+// ATTACHED bank question's topic — the live value the admin edits — when a
+// question is attached, otherwise the past-paper record's own topic. This way
+// changing a question's topic in the editor immediately re-buckets everything.
+function ppTopicOf(q){ if (!q) return ''; const bq = ppBankQ(q.id); return (bq && bq.topic) ? bq.topic : (q.topic || ''); }
 function ppIsAdmin(){ return !!(currentUser && currentUser.role === 'admin'); }
 function ppOwnerUid(){ return ppIsAdmin() ? (currentUser && currentUser.uid) : adminUid; }
 function ppBankQ(id){ const b = paperMap[id]; return b ? questionBank.find(q => q.id === b) : null; }
@@ -26493,7 +26498,7 @@ function _ppFocusScroll(){
   });
 }
 
-function ppMarksByTopic(){ const m = {}; ppQuestions().forEach(q => { m[q.topic] = (m[q.topic] || 0) + (Number(q.marks) || 0); }); return m; }
+function ppMarksByTopic(){ const m = {}; ppQuestions().forEach(q => { const t = ppTopicOf(q); m[t] = (m[t] || 0) + (Number(q.marks) || 0); }); return m; }
 function ppAssignedCount(){ return ppQuestions().filter(q => ppBankQ(q.id)).length; }
 function ppRecurringMarks(c){ return (c.hits || []).reduce((s, id) => { const q = ppFindQ(id); return s + (q ? (Number(q.marks) || 0) : 0); }, 0); }
 
@@ -26555,7 +26560,7 @@ function ppRenderBody(){
   _ppTopicOrder = topicRows;
   const maxT = topicRows.length ? Math.max.apply(null, topicRows.map(t => byTopic[t])) : 1;
   const bars = topicRows.map((t, ti) => {
-    const tq = qs.filter(q => q.topic === t);
+    const tq = qs.filter(q => ppTopicOf(q) === t);
     const asg = tq.filter(q => ppBankQ(q.id)).length;
     const cnt = tq.length;
     const tYears = years.filter(y => tq.some(q => String(q.year) === y));
@@ -26689,8 +26694,9 @@ function ppHoverHtml(id){
   const diff = ppDiff(q);
   const diffLabel = { easy: '🟢 Easy', moderate: '🟡 Moderate', hard: '🔴 Difficult' }[diff] || '';
   const diffLine = diffLabel ? `<div class="pp-hv-topic" style="font-weight:600;">Difficulty: ${diffLabel}</div>` : '';
+  const _topic = ppTopicOf(q);
   const head = `<div class="pp-hv-head"><strong>${escapeHtml(String(q.year))} &middot; Q${escapeHtml(String(q.n))}</strong> &middot; ${escapeHtml(String(q.marks))}m &middot; Booklet ${escapeHtml(String(q.bk||''))}</div>
-    <div class="pp-hv-topic"><span class="pp-dot" style="background:${ppThemeColor(q.topic)}"></span>${escapeHtml(q.topic || '')} &middot; ${ppLevel(q.topic)} &middot; ${escapeHtml(ppSkillName(q.type))}</div>${diffLine}`;
+    <div class="pp-hv-topic"><span class="pp-dot" style="background:${ppThemeColor(_topic)}"></span>${escapeHtml(_topic || '')} &middot; ${ppLevel(_topic)} &middot; ${escapeHtml(ppSkillName(q.type))}</div>${diffLine}`;
   if (bq) {
     // Student's live success rate on the attached question (all platforms).
     const st = questionStats(bq.id);
@@ -26992,7 +26998,7 @@ function ppTopicOpen(idx, year){
 function ppTopicQs(){
   if (!_ppTopicSel) return [];
   return ppQuestions()
-    .filter(q => q.topic === _ppTopicSel.topic && (!_ppTopicSel.year || String(q.year) === _ppTopicSel.year))
+    .filter(q => ppTopicOf(q) === _ppTopicSel.topic && (!_ppTopicSel.year || String(q.year) === _ppTopicSel.year))
     .sort((a,b)=> String(a.year).localeCompare(String(b.year)) || (Number(a.n)||0) - (Number(b.n)||0));
 }
 function ppTopicRender(){
