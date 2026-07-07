@@ -6796,6 +6796,12 @@ option {
 .fb-sentence{ font-size:0.98rem; }
 .fb-input{ display:inline-block; padding:3px 8px; margin:0 3px; border:1px solid var(--border); border-bottom:2px solid var(--accent-blue,#3b82f6); border-radius:6px; font-family:inherit; font-size:0.95rem; background:#fff; color:var(--on-surface,#1c1c19); min-width:70px; vertical-align:baseline; }
 .fb-input:focus{ outline:none; border-color:var(--accent-blue,#3b82f6); box-shadow:0 0 0 2px rgba(59,130,246,0.15); }
+/* ── Practice question parts — clean grouped cards instead of tag chips ── */
+.qp-part{ border:1px solid var(--border); border-radius:14px; padding:18px 20px 14px; margin:0 0 16px; background:var(--surface,#fff); }
+.qp-part.solo{ border:none; border-radius:0; padding:0; margin:0; }
+.qp-qtext{ line-height:1.85; font-size:0.97rem; margin:0 0 12px; color:var(--on-surface,#1c1c19); }
+.qp-qtext + .qp-qtext{ margin-top:-2px; }
+.qp-part .open-answer-section{ margin-bottom:10px; }
 </style>
 <div class="overlay" id="spireBookOverlay">
   <div class="overlay-card spirebook">
@@ -7572,7 +7578,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.87.0';
+const APP_VERSION = 'v1.87.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -14219,49 +14225,58 @@ function buildOpenBody(q, containerSel, markCfg) {
   const fbBlocks = [];
   const isAnnot = !!(q && q.annotation);
   let annotCount = 0;
-  let html = '';
+  // Blocks are grouped into visual PARTS: a run of question content (text,
+  // pictures, tables) followed by its answer area(s). A new part starts at the
+  // first text block AFTER an answer area, so a multi-part question reads as
+  // clean separated cards instead of a wall of "QUESTION / YOUR ANSWER" chips.
+  const sections = [];
+  let cur = null;
+  const sec = () => { if (!cur) { cur = { html: '', hasAnswer: false }; sections.push(cur); } return cur; };
+  const add = h => { sec().html += h; };
+  const addAnswer = h => { const s = sec(); s.html += h; s.hasAnswer = true; };
   q.blocks.forEach(block => {
     switch (block.type) {
       case 'mcq':
-        html += `<div style="margin-top:12px;margin-bottom:4px;"><span class="sv-block-tag answer">Multiple choice</span></div>`;
-        html += renderImportedBlockStudent(block, q);
-        html += _partActionsHtml(containerSel, 'mcq', block.id);
-        html += `<div class="mcq-feedback" data-mcq-fb="${block.id}" style="margin:2px 0 12px;"></div>`;
+        addAnswer(
+          renderImportedBlockStudent(block, q) +
+          _partActionsHtml(containerSel, 'mcq', block.id) +
+          `<div class="mcq-feedback" data-mcq-fb="${block.id}" style="margin:2px 0 4px;"></div>`
+        );
         mcqItems.push({
           blockId: block.id,
           options: (block.options || []).map((o, idx) => ({ letter: String(idx + 1), text: stripHtml(o.text || ''), id: o.id, correct: block.correctId === o.id }))
         });
         break;
       case 'text':
-        html += `<div style="margin-bottom:4px;"><span class="sv-block-tag question">Question</span></div>`;
-        html += `<div style="line-height:1.9;margin-bottom:8px;">${block.content || ''}</div>`;
+        if (cur && cur.hasAnswer) cur = null;   // this text begins the next part
+        add(`<div class="qp-qtext">${block.content || ''}</div>`);
         break;
       case 'image':
         if (block.url) {
-          if (isAnnot) { html += annotationPadHtml(block, q, containerSel); annotCount++; }
-          else html += `<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="eager" decoding="async" fetchpriority="high" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`;
+          if (isAnnot) { add(annotationPadHtml(block, q, containerSel)); annotCount++; }
+          else add(`<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="eager" decoding="async" fetchpriority="high" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`);
         }
         break;
       case 'answer':
-        html += `<div style="margin-top:12px;margin-bottom:6px;"><span class="sv-block-tag answer">Your Answer</span></div>`;
-        html += _openSection(items, 'Claim', stripHtml(block.claim || ''), 'var(--accent-blue-light)', 'var(--accent-blue)', containerSel, { block, field: 'claim' });
-        html += _openSection(items, 'Evidence', stripHtml(block.evidence || ''), 'var(--accent-orange-light)', 'var(--accent-orange)', containerSel, { block, field: 'evidence' });
-        html += _openSection(items, 'Reasoning', stripHtml(block.reasoning || ''), 'var(--primary-light)', 'var(--primary)', containerSel, { block, field: 'reasoning' });
+        addAnswer(
+          _openSection(items, 'Claim', stripHtml(block.claim || ''), 'var(--accent-blue-light)', 'var(--accent-blue)', containerSel, { block, field: 'claim' }) +
+          _openSection(items, 'Evidence', stripHtml(block.evidence || ''), 'var(--accent-orange-light)', 'var(--accent-orange)', containerSel, { block, field: 'evidence' }) +
+          _openSection(items, 'Reasoning', stripHtml(block.reasoning || ''), 'var(--primary-light)', 'var(--primary)', containerSel, { block, field: 'reasoning' })
+        );
         break;
       case 'plainanswer':
-        html += `<div style="margin-top:12px;margin-bottom:6px;"><span class="sv-block-tag answer">Your Answer</span></div>`;
-        html += _openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' });
+        addAnswer(_openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }));
         break;
       case 'openLines':
       case 'workingSpace':
         // Open-ended mode: just a writing box (no lines). Reads any stored model
         // answer so an admin-set answer persists across renders.
-        html += _openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' });
+        addAnswer(_openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }));
         break;
       case 'fillblank': {
         const parts = _fbParse(block.text || '');
         const hasBlank = parts.some(p => p.type === 'blank');
-        if (!hasBlank) { html += `<div class="fb-sentence" style="line-height:2;margin:8px 0;">${parts.map(p => escapeHtml(p.text)).join('')}</div>`; break; }
+        if (!hasBlank) { add(`<div class="fb-sentence" style="line-height:2;margin:8px 0;">${parts.map(p => escapeHtml(p.text)).join('')}</div>`); break; }
         const oidxs = [], answers = [];
         let sentence = '';
         parts.forEach(p => {
@@ -14273,12 +14288,13 @@ function buildOpenBody(q, containerSel, markCfg) {
           sentence += `<input class="fb-input" data-oidx="${oidx}" type="text" autocomplete="off" spellcheck="false" aria-label="blank" style="width:${w}ch;">`;
         });
         fbBlocks.push({ blockId: block.id, oidxs, answers });
-        html += `<div style="margin-top:12px;margin-bottom:4px;"><span class="sv-block-tag answer">Fill in the blanks</span></div>`;
-        html += `<div class="fb-sentence" style="line-height:2.4;margin-bottom:8px;">${sentence}</div>`;
-        html += `<div class="fb-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
+        addAnswer(
+          `<div class="fb-sentence" style="line-height:2.4;margin-bottom:10px;">${sentence}</div>` +
+          `<div class="fb-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
             <button type="button" class="btn btn-blue" data-fb-check="${containerSel}" data-fb-block="${block.id}" style="padding:6px 14px;font-size:0.82rem;">🤖 Check answers</button>
           </div>
-          <div class="fb-feedback" data-fb-fb="${block.id}" style="margin:2px 0 12px;"></div>`;
+          <div class="fb-feedback" data-fb-fb="${block.id}" style="margin:2px 0 4px;"></div>`
+        );
         break;
       }
       case 'explanation':
@@ -14286,17 +14302,21 @@ function buildOpenBody(q, containerSel, markCfg) {
       case 'video':
         if (block.url) {
           const embedUrl = getYouTubeEmbedUrl(block.url);
-          if (embedUrl) html += `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`;
+          if (embedUrl) add(`<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen></iframe></div>`);
         }
         break;
       case 'table':
-        html += renderTableReadonly(block, '');
+        add(renderTableReadonly(block, ''));
         break;
       default:
-        html += renderImportedBlockStudent(block, q);
+        add(renderImportedBlockStudent(block, q));
         break;
     }
   });
+  // Single-part questions render plain (no extra frame); multi-part questions
+  // get one softly-bordered card per part so the structure is obvious.
+  const solo = sections.length <= 1;
+  let html = sections.map(s => `<div class="qp-part${solo ? ' solo' : ''}">${s.html}</div>`).join('');
   const fbItemCount = fbBlocks.reduce((s, b) => s + b.oidxs.length, 0);
   if (isAnnot && annotCount) {
     // Annotation (tick & label) questions get their own Check / AI Check bar
