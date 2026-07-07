@@ -4495,8 +4495,8 @@ option {
     <div class="auth-divider"><span>or</span></div>
 
     <div class="form-group">
-      <label class="form-label">Email</label>
-      <input id="loginEmail" class="form-input" type="email" placeholder="you@example.com">
+      <label class="form-label">Username or email</label>
+      <input id="loginEmail" class="form-input" type="text" autocapitalize="none" autocorrect="off" placeholder="Your username or email">
     </div>
     <div class="form-group">
       <label class="form-label">Password</label>
@@ -6178,15 +6178,15 @@ option {
   <div class="confirm-dialog" style="max-width:460px;text-align:left;max-height:88vh;overflow-y:auto;">
     <div id="csFormWrap">
       <h3 style="margin-bottom:6px;">Create Student Account</h3>
-      <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.5;margin-bottom:18px;">Set up an account for a student practising at your centre. You choose the email and password — the student signs in with them on the login page. You stay signed in as admin.</p>
+      <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.5;margin-bottom:18px;">Set up an account for a student practising at your centre. No email needed — just pick a username and password, and the student signs in with them on the login page. You stay signed in as admin.</p>
 
       <div class="form-group">
         <label class="form-label">Student name</label>
         <input id="csName" class="form-input" type="text" placeholder="e.g. Tan Wei Ming" autocomplete="off">
       </div>
       <div class="form-group">
-        <label class="form-label">Email</label>
-        <input id="csEmail" class="form-input" type="email" placeholder="student@example.com" autocomplete="off">
+        <label class="form-label">Username <span style="font-weight:400;color:var(--text-muted);">(letters and numbers, no spaces)</span></label>
+        <input id="csEmail" class="form-input" type="text" autocapitalize="none" autocorrect="off" placeholder="e.g. weiming" autocomplete="off">
       </div>
       <div class="form-group">
         <label class="form-label">Password <span style="font-weight:400;color:var(--text-muted);">(at least 6 characters)</span></label>
@@ -6210,7 +6210,7 @@ option {
       <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.5;margin-bottom:18px;">Hand these login details to the student. Copy them now — the password can't be viewed again later.</p>
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:18px;line-height:2;font-size:0.92rem;">
         <div><span style="color:var(--text-muted);">Name:</span> <b id="csDoneName"></b></div>
-        <div><span style="color:var(--text-muted);">Email:</span> <b id="csDoneEmail"></b></div>
+        <div><span style="color:var(--text-muted);">Username:</span> <b id="csDoneEmail"></b></div>
         <div><span style="color:var(--text-muted);">Password:</span> <b id="csDonePass"></b></div>
       </div>
       <div class="btn-group" style="justify-content:flex-end;">
@@ -7082,13 +7082,14 @@ function showPage(pageId) {
 // FIREBASE AUTH - Email/Password Login
 // =====================================================================
 async function handleEmailLogin() {
-  const email = document.getElementById('loginEmail').value.trim();
+  // Accepts a real email OR a centre username (mapped to its synthetic email).
+  const email = _loginIdToEmail(document.getElementById('loginEmail').value);
   const pass = document.getElementById('loginPass').value;
   const errorEl = document.getElementById('loginError');
   const loadingEl = document.getElementById('loginLoading');
 
   if (!email || !pass) {
-    errorEl.textContent = 'Please enter both email and password';
+    errorEl.textContent = 'Please enter both your username (or email) and password';
     errorEl.style.display = 'block';
     return;
   }
@@ -7213,7 +7214,17 @@ function getAuthErrorMessage(code) {
 // createUserWithEmailAndPassword signs in the new user on whichever Auth
 // instance it runs against, so we run it on a SECONDARY Firebase app —
 // the admin's session on the primary app is never touched.
+// Students don't need a real email: the admin picks a USERNAME and the
+// app stores it as username@STUDENT_USERNAME_DOMAIN behind the scenes
+// (Firebase Auth requires an email-shaped string). The login page maps
+// a plain username back to that address the same way.
 // =====================================================================
+const STUDENT_USERNAME_DOMAIN = 'students.sciencequest.app';
+// A plain username (no @) becomes its synthetic email; real emails pass through.
+function _loginIdToEmail(id) {
+  const s = (id || '').trim();
+  return s && !s.includes('@') ? s.toLowerCase() + '@' + STUDENT_USERNAME_DOMAIN : s;
+}
 let _studentCreator = null; // { auth, db } on the secondary app
 function _getStudentCreator() {
   if (!_studentCreator) {
@@ -7256,14 +7267,19 @@ function generateStudentPassword() {
 
 async function handleCreateStudent() {
   const name = document.getElementById('csName').value.trim();
-  const email = document.getElementById('csEmail').value.trim();
+  const username = document.getElementById('csEmail').value.trim().toLowerCase();
   const pass = document.getElementById('csPass').value;
   const errorEl = document.getElementById('csError');
   const showErr = msg => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
   errorEl.style.display = 'none';
 
-  if (!name || !email || !pass) return showErr('Please fill in name, email and password');
+  if (!name || !username || !pass) return showErr('Please fill in name, username and password');
+  // A real email is also accepted, but the normal case is a plain username.
+  if (!username.includes('@') && !/^[a-z0-9][a-z0-9._-]{2,}$/.test(username)) {
+    return showErr('Username must be at least 3 characters — letters, numbers, dots, dashes (no spaces)');
+  }
   if (pass.length < 6) return showErr('Password must be at least 6 characters');
+  const email = _loginIdToEmail(username);
   if (ADMIN_EMAILS.includes(email)) return showErr('That email belongs to an admin account');
 
   const loadingEl = document.getElementById('csLoading');
@@ -7280,6 +7296,7 @@ async function handleCreateStudent() {
       await setDoc(doc(sc.db, 'userProfiles', cred.user.uid), {
         uid: cred.user.uid,
         email: email,
+        username: username.includes('@') ? null : username,
         displayName: name,
         role: 'student',
         createdBy: currentUser ? currentUser.uid : null,
@@ -7289,13 +7306,15 @@ async function handleCreateStudent() {
     await signOut(sc.auth); // ends the secondary session only
 
     document.getElementById('csDoneName').textContent = name;
-    document.getElementById('csDoneEmail').textContent = email;
+    document.getElementById('csDoneEmail').textContent = username;
     document.getElementById('csDonePass').textContent = pass;
     document.getElementById('csFormWrap').style.display = 'none';
     document.getElementById('csSuccessWrap').style.display = '';
     try { loadUsageDashboard(); } catch (e) {}
   } catch (error) {
-    showErr(getAuthErrorMessage(error.code));
+    showErr(error && error.code === 'auth/email-already-in-use'
+      ? 'That username is already taken — try another'
+      : getAuthErrorMessage(error.code));
   } finally {
     loadingEl.classList.remove('active');
     document.getElementById('csCreateBtn').disabled = false;
@@ -7304,7 +7323,7 @@ async function handleCreateStudent() {
 
 function copyStudentCredentials() {
   const txt = 'Science Quest login\nName: ' + document.getElementById('csDoneName').textContent +
-    '\nEmail: ' + document.getElementById('csDoneEmail').textContent +
+    '\nUsername: ' + document.getElementById('csDoneEmail').textContent +
     '\nPassword: ' + document.getElementById('csDonePass').textContent;
   navigator.clipboard.writeText(txt)
     .then(() => showToast('Login details copied', 'success'))
@@ -7429,7 +7448,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.78.0';
+const APP_VERSION = 'v1.79.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
