@@ -4878,6 +4878,14 @@ option {
           <div style="font-size:0.8rem;color:var(--text-muted);margin:4px 0 0 27px;line-height:1.5;">Turn this on for ticking &amp; labelling questions. Add an <strong>Image</strong> block with the diagram, and describe the correct ticks / labels in the <strong>Marking guide</strong> above so the AI knows what to look for.</div>
         </div>
 
+        <div class="form-group">
+          <label class="form-label" style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600;">
+            <input type="checkbox" id="questionNotInSyllabus" style="width:18px;height:18px;flex:0 0 auto;cursor:pointer;">
+            <span>🚫 Not in syllabus <span style="font-weight:400;color:var(--text-muted);">— hide from every practice mode, but keep it in Past Papers</span></span>
+          </label>
+          <div style="font-size:0.8rem;color:var(--text-muted);margin:4px 0 0 27px;line-height:1.5;">For questions on topics no longer in the syllabus (e.g. cell systems). It won't be served in Quick / Topical / Practice mode, but it still shows on the <strong>Past Papers</strong> page (marked <em>Not in syllabus</em>) so students aren't confused about a missing question.</div>
+        </div>
+
         <!-- Blocks List -->
         <div class="blocks-container">
           <div class="blocks-list" id="blocksList">
@@ -7475,7 +7483,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.81.2';
+const APP_VERSION = 'v1.82.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7650,6 +7658,8 @@ function navigateTo(page) {
       document.getElementById('topicSelect').value = 'Heat';
       const annEl = document.getElementById('questionAnnotation');
       if (annEl) annEl.checked = false;
+      const nisEl = document.getElementById('questionNotInSyllabus');
+      if (nisEl) nisEl.checked = false;
       renderBlocks();
       setEditMode(false);
       if (window.ppCancelPendingAttach) window.ppCancelPendingAttach();
@@ -11505,6 +11515,7 @@ function collectQuestionData() {
     topic: document.getElementById('topicSelect').value,
     markingGuide: (document.getElementById('questionMarkingGuide')?.value || '').trim(),
     annotation: !!(document.getElementById('questionAnnotation') && document.getElementById('questionAnnotation').checked),
+    notInSyllabus: !!(document.getElementById('questionNotInSyllabus') && document.getElementById('questionNotInSyllabus').checked),
     blocks: blocksClone,
     blanks: JSON.parse(JSON.stringify(selectedBlanks)),
     createdAt: new Date().toISOString(),
@@ -11682,6 +11693,8 @@ function clearForm() {
     if (mgEl) mgEl.value = '';
     const annEl = document.getElementById('questionAnnotation');
     if (annEl) annEl.checked = false;
+    const nisEl = document.getElementById('questionNotInSyllabus');
+    if (nisEl) nisEl.checked = false;
     renderBlocks();
     setEditMode(false);
     showToast('Form cleared', 'info');
@@ -11796,6 +11809,7 @@ function renderQuestionBank() {
               <span class="qb-tag category">${escapeHtml(qCategory)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
+              ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="Hidden from practice; still shown in Past Papers">🚫 Not in syllabus</span>` : ''}
               ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
             </div>
           </div>
@@ -11851,6 +11865,8 @@ function editQuestion(id) {
   if (mgEl) mgEl.value = q.markingGuide || '';
   const annEl = document.getElementById('questionAnnotation');
   if (annEl) annEl.checked = !!q.annotation;
+  const nisEl = document.getElementById('questionNotInSyllabus');
+  if (nisEl) nisEl.checked = !!q.notInSyllabus;
 
   // Try to set topic, handle custom topics
   const topicSelect = document.getElementById('topicSelect');
@@ -13752,9 +13768,14 @@ function renderPracticeReady() {
     </div>`;
 }
 
+// Out-of-syllabus questions are kept in the bank and shown on the Past Papers
+// page, but never served in any general practice mode.
+function qInSyllabus(q) { return !(q && q.notInSyllabus); }
+
 function getQuestionsForLevel(level) {
   const maxLevel = getLevelNumber(level);
   return questionBank.filter(q => {
+    if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
     // Only include questions with something the AI can mark
     if (!questionHasMarkableAnswer(q)) return false;
     const qLevel = getLevelNumber(getTopicLevel(q.topic));
@@ -16546,6 +16567,7 @@ function qpFilters() {
 function qpAvailableTopics(typeFilter) {
   const counts = {};
   questionBank.forEach(q => {
+    if (!qInSyllabus(q)) return;          // not in syllabus → never offered in practice
     if (!qpMatchesType(q, typeFilter)) return;
     if (!qWithinStudentLevel(q)) return; // topics above the student's level never show
     const t = q.topic || 'General';
@@ -16576,6 +16598,7 @@ function buildQpQueue(level) {
   const levelNum = Math.min(getLevelNumber(level), studentCapNum());
   const { type, topic } = qpFilters();
   const pool = questionBank.filter(q => {
+    if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
     if (!qpMatchesType(q, type)) return false;
     if (topic && (q.topic || 'General') !== topic) return false;
     return getLevelNumber(getTopicLevel(q.topic || '')) <= levelNum;
@@ -17287,10 +17310,10 @@ function tpRenderTopics() {
   const studentLevel = document.getElementById('tpLevelSelect').value;
   const studentLevelNum = getLevelNumber(studentLevel);
 
-  // Count questions per topic (only those the AI can mark)
+  // Count questions per topic (only those the AI can mark, and in-syllabus)
   const topicCounts = {};
   questionBank.forEach(q => {
-    if (questionHasMarkableAnswer(q)) {
+    if (questionHasMarkableAnswer(q) && qInSyllabus(q)) {
       const t = q.topic || '';
       topicCounts[t] = (topicCounts[t] || 0) + 1;
     }
@@ -17405,7 +17428,7 @@ async function tpStartPractice() {
   await loadAttemptStats();
   const questionsByTopic = {};
   tpActiveTopics.forEach(topic => {
-    const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && q.topic === topic && qWithinStudentLevel(q));
+    const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && qInSyllabus(q) && q.topic === topic && qWithinStudentLevel(q));
     questionsByTopic[topic] = orderByAttemptPriority(markable);
   });
 
@@ -22300,6 +22323,7 @@ async function commStartAutoQuest(questId) {
   const topic = (quest.topic || '').trim().toLowerCase();
   const pool = (Array.isArray(questionBank) ? questionBank : []).filter(q => {
     if (!q || q.id == null) return false;
+    if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
     if (format === 'mcq' ? !qpHasMcq(q) : !qpHasWritten(q)) return false;
     if (topic && String(q.topic || '').toLowerCase() !== topic) return false;
     return qWithinStudentLevel(q); // never quest a student above their level
@@ -26016,6 +26040,12 @@ function ppChipByKey(id){
 
 // -------- hover preview --------
 function ppHoverEl(){ if (!_ppHoverEl) { _ppHoverEl = document.createElement('div'); _ppHoverEl.id = 'ppHover'; document.body.appendChild(_ppHoverEl); } return _ppHoverEl; }
+// "Not in syllabus" ribbon for the past-paper previews — explains why an
+// attached question shows here but never appears in practice.
+function _ppNisBadge(bq){
+  if (!bq || !bq.notInSyllabus) return '';
+  return `<div style="margin:6px 0;padding:5px 9px;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;font-size:0.74rem;font-weight:600;">🚫 Not in syllabus — kept here for reference; it is not served in any practice mode.</div>`;
+}
 function ppHoverHtml(id){
   const q = ppFindQ(id);
   if (!q) return '';
@@ -26029,7 +26059,7 @@ function ppHoverHtml(id){
     // Student's live success rate on the attached question (all platforms).
     const st = questionStats(bq.id);
     const accLine = (st.percent != null) ? `<div class="pp-hv-note" style="color:var(--primary,#4a7c59);font-style:normal;">Your success rate: <strong>${st.percent}%</strong> (${st.correct}/${st.attempts} correct)</div>` : '';
-    return head + `<div class="pp-hv-assigned">&#10003; Attached: ${escapeHtml(bq.title || 'Untitled')}</div>
+    return head + `<div class="pp-hv-assigned">&#10003; Attached: ${escapeHtml(bq.title || 'Untitled')}</div>${_ppNisBadge(bq)}
       <div class="pp-hv-preview">${renderQuestionPreviewHtml(bq.id)}</div>${accLine}
       <div class="pp-hv-note">${ppIsAdmin() ? (ppEditMode ? 'Click to edit this question.' : 'Click to change or remove the attachment.') : 'Click to practise.'}</div>`;
   }
@@ -26062,7 +26092,7 @@ function ppBankHoverHtml(qid){
   const st = questionStats(bq.id);
   const accLine = (st && st.percent != null) ? `<div class="pp-hv-note" style="color:var(--primary,#4a7c59);font-style:normal;">Your success rate: <strong>${st.percent}%</strong> (${st.correct}/${st.attempts} correct)</div>` : '';
   return `<div class="pp-hv-head"><strong>${escapeHtml(bq.title || 'Untitled')}</strong></div>
-    <div class="pp-hv-topic"><span class="pp-dot" style="background:${ppThemeColor(bq.topic)}"></span>${escapeHtml(bq.topic || '')}${cat}</div>
+    <div class="pp-hv-topic"><span class="pp-dot" style="background:${ppThemeColor(bq.topic)}"></span>${escapeHtml(bq.topic || '')}${cat}</div>${_ppNisBadge(bq)}
     <div class="pp-hv-preview">${renderQuestionPreviewHtml(bq.id)}</div>${accLine}
     <div class="pp-hv-note">Click to attach this question.</div>`;
 }
@@ -26209,6 +26239,8 @@ function ppCreateForAssign(){
   if (mgEl) mgEl.value = q.ans ? 'Expected answer: ' + q.ans : '';
   const annEl = document.getElementById('questionAnnotation');
   if (annEl) annEl.checked = false;
+  const nisEl = document.getElementById('questionNotInSyllabus');
+  if (nisEl) nisEl.checked = false;
   renderBlocks();
 
   _ppPendingAttach = id;
