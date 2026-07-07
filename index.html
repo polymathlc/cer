@@ -7268,7 +7268,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.75.0';
+const APP_VERSION = 'v1.76.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -12479,7 +12479,8 @@ function doPrintWorksheetOpen() {
   const answerKeyData = []; // { title, sections: [{ label?, content }] }
 
   selected.forEach((q, qIndex) => {
-    let qHtml = `<div class="print-question-chunk">`;
+    const isMcq = q.blocks.some(b => b.type === 'mcq') && !q.blocks.some(b => b.type === 'answer' || b.type === 'plainanswer');
+    let qHtml = `<div class="print-question-chunk"${isMcq ? ' data-mcq="1"' : ''}>`;
 
     if (qIndex === 0) {
       qHtml += `<div class="print-worksheet-header">
@@ -12632,9 +12633,12 @@ function _createPrintPageFooter() {
 // fits so questions aren't left alone with big gaps). A new page starts before
 // chunk i when forcedFlags[i] is set (manual break) OR it would overflow maxH —
 // UNLESS mergeFlags[i] is set, which keeps i on the previous page (the teacher's
-// "move to previous page" override). Shared by the printer and the live preview
-// so both paginate identically.
-function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH) {
+// "move to previous page" override), OR the page holds a single compact MCQ and
+// chunk i is one too (pairFlags — each fits within half the printable page), in
+// which case the two always share the page and the zoom step absorbs the few
+// per cent they may nudge over the budget. Shared by the printer and the live
+// preview so both paginate identically.
+function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH, pairFlags) {
   const pageGroups = [];
   if (!heights.length) return pageGroups;
   let currentGroup = [];
@@ -12643,7 +12647,8 @@ function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH) {
     const addedHeight = (currentGroup.length > 0 ? separatorH : 0) + heights[i];
     const forced = !!(forcedFlags && forcedFlags[i]);
     const merge = !!(mergeFlags && mergeFlags[i]);
-    const breakHere = currentGroup.length > 0 && (forced || (!merge && currentHeight + addedHeight > maxH));
+    const pairUp = !!(pairFlags && pairFlags[i] && currentGroup.length === 1 && pairFlags[currentGroup[0]]);
+    const breakHere = currentGroup.length > 0 && (forced || (!merge && !pairUp && currentHeight + addedHeight > maxH));
     if (breakHere) {
       pageGroups.push(currentGroup);
       currentGroup = [i];
@@ -12657,18 +12662,79 @@ function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH) {
   return pageGroups;
 }
 
+// ---- Accurate A4 print measurement ----
+// The printable content height inside the @page margins (297 − 18 − 20 mm),
+// in CSS pixels — the unit every chunk height below is measured in.
+const A4_CONTENT_PX = Math.round((297 - 18 - 20) * 96 / 25.4); // ≈ 979
+
+// Height of the per-page footer, measured inside a print-CSS context (the
+// image box is fixed by CSS at 22pt, so this is stable even before it loads).
+function _printFooterHeightIn(doc, container) {
+  const holder = doc.createElement('div');
+  holder.innerHTML = _createPrintPageFooter().outerHTML;
+  container.appendChild(holder);
+  const h = holder.getBoundingClientRect().height;
+  holder.remove();
+  return h;
+}
+
+// Renders the print HTML in a hidden same-origin iframe with the app's
+// @media print rules unwrapped (the same technique as the worksheet live
+// preview), so every question chunk is measured at the size it will REALLY
+// print at — screen styles don't apply to the .print-* classes, so measuring
+// in the main document under-counts writing lines, headers and margins.
+// Calls cb({heights, akHeights, footerH, budget, half}) or cb(null) if the
+// iframe cannot be used (caller falls back to screen estimates).
+function _printMeasureChunks(html, cb) {
+  let fr = null;
+  const finish = (res) => {
+    try { if (fr) fr.remove(); } catch (_) {}
+    cb(res);
+  };
+  try {
+    fr = document.createElement('iframe');
+    fr.setAttribute('aria-hidden', 'true');
+    fr.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;height:640px;visibility:hidden;';
+    document.body.appendChild(fr);
+    const doc = fr.contentDocument || (fr.contentWindow && fr.contentWindow.document);
+    if (!doc) { finish(null); return; }
+    const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"],link[rel="preconnect"]')).map(l => l.outerHTML).join('');
+    doc.open();
+    doc.write('<!DOCTYPE html><html><head><meta charset="utf-8">' + fontLinks +
+      '<style>' + _wsAppCssForPreview() + ' html,body{margin:0;} #pmMeasure{position:absolute;left:0;top:0;width:178mm;}</style></head>' +
+      '<body><div id="printOutput"><div id="pmMeasure">' + html + '</div></div></body></html>');
+    doc.close();
+    _wsPreviewWhenReady(doc, () => {
+      try {
+        const m = doc.getElementById('pmMeasure');
+        const heights = Array.from(m.querySelectorAll('.print-question-chunk')).map(c => c.scrollHeight);
+        const akHeights = Array.from(m.querySelectorAll('.print-answer-key-page')).map(p => p.scrollHeight);
+        const footerH = _printFooterHeightIn(doc, m);
+        finish({
+          heights,
+          akHeights,
+          footerH,
+          budget: A4_CONTENT_PX - footerH - 10,   // per-page room for chunks (footer + breathing space reserved)
+          half: Math.round(A4_CONTENT_PX / 2)     // "fits within half the page" threshold for MCQ pairing
+        });
+      } catch (e) { console.warn('print measure', e); finish(null); }
+    });
+  } catch (e) { console.warn('print measure', e); finish(null); }
+}
+
 function doScaleAndPrint(output, opts) {
-  // Make output visible off-screen so we can measure heights accurately
+  // Make output visible off-screen so the DOM is laid out (needed by the
+  // no-chunk fallback and the screen-estimate fallback).
   output.style.cssText = 'display:block;position:absolute;left:-9999px;top:0;width:178mm;';
 
   requestAnimationFrame(() => {
-    const maxH = 740; // reduced from 770 to accommodate page footer
     const separatorH = 30; // approx height of .print-question-separator
     const chunks = Array.from(output.querySelectorAll('.print-question-chunk'));
     const answerKeys = Array.from(output.querySelectorAll('.print-answer-key-page'));
 
     if (chunks.length === 0) {
       // Fallback: no question chunks, just scale existing pages
+      const maxH = 740;
       const pages = output.querySelectorAll('.print-question-page');
       pages.forEach(page => {
         page.appendChild(_createPrintPageFooter());
@@ -12684,68 +12750,87 @@ function doScaleAndPrint(output, opts) {
       return;
     }
 
-    // Measure each chunk's natural height
-    const heights = chunks.map(c => c.scrollHeight);
+    // Measure every chunk at true print size, then plan the pages.
+    _printMeasureChunks(output.innerHTML, (mz) => {
+      const heights = mz ? mz.heights : chunks.map(c => c.scrollHeight);
+      const budget = mz ? mz.budget : 740;
+      const halfPage = mz ? mz.half : 0;  // 0 → no MCQ pairing without real measurements
+      const footerH = mz ? mz.footerH : 0;
 
-    // Group into pages, honouring any manual page breaks (forced before the
-    // questions whose ids are in opts.forcedBreakIds).
-    const forced = (opts && opts.forcedBreakIds) || null;
-    const merge = (opts && opts.mergeUpIds) || null;
-    const forcedFlags = chunks.map(c => !!(forced && forced.has(c.dataset.qid)));
-    const mergeFlags = chunks.map(c => !!(merge && merge.has(c.dataset.qid)));
-    const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH);
+      // Group into pages, honouring any manual page breaks (forced before the
+      // questions whose ids are in opts.forcedBreakIds).
+      const forced = (opts && opts.forcedBreakIds) || null;
+      const merge = (opts && opts.mergeUpIds) || null;
+      const forcedFlags = chunks.map(c => !!(forced && forced.has(c.dataset.qid)));
+      const mergeFlags = chunks.map(c => !!(merge && merge.has(c.dataset.qid)));
+      // Compact MCQs (each within half the printable page) always pair 2-up.
+      const pairFlags = chunks.map((c, i) => halfPage > 0 && c.dataset.mcq === '1' && heights[i] <= halfPage);
+      const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, separatorH, pairFlags);
 
-    // Detach all chunks and answer keys from current DOM positions
-    chunks.forEach(c => c.remove());
-    answerKeys.forEach(ak => ak.remove());
-    output.innerHTML = '';
+      // Detach all chunks and answer keys from current DOM positions
+      chunks.forEach(c => c.remove());
+      answerKeys.forEach(ak => ak.remove());
+      output.innerHTML = '';
 
-    // Build pages from groups
-    pageGroups.forEach(group => {
-      const page = document.createElement('div');
-      page.className = 'print-question-page';
-
-      group.forEach((chunkIdx, posInGroup) => {
-        if (posInGroup > 0) {
-          const sep = document.createElement('div');
-          sep.className = 'print-question-separator';
-          page.appendChild(sep);
-        }
-        page.appendChild(chunks[chunkIdx]);
+      // Build pages from groups, tracking each page's measured print height
+      const pageHs = [];
+      pageGroups.forEach(group => {
+        const page = document.createElement('div');
+        page.className = 'print-question-page';
+        let h = footerH;
+        group.forEach((chunkIdx, posInGroup) => {
+          if (posInGroup > 0) {
+            const sep = document.createElement('div');
+            sep.className = 'print-question-separator';
+            page.appendChild(sep);
+            h += separatorH;
+          }
+          page.appendChild(chunks[chunkIdx]);
+          h += heights[chunkIdx];
+        });
+        pageHs.push(h);
+        output.appendChild(page);
       });
 
-      output.appendChild(page);
-    });
-
-    // Add footer to each question page
-    Array.from(output.querySelectorAll('.print-question-page')).forEach(page => {
-      page.appendChild(_createPrintPageFooter());
-    });
-
-    // Re-add answer key pages (also get footer)
-    answerKeys.forEach(ak => {
-      ak.appendChild(_createPrintPageFooter());
-      output.appendChild(ak);
-    });
-
-    // Second rAF: measure grouped pages and scale with zoom (not transform)
-    // zoom affects layout size directly, so content is never clipped
-    requestAnimationFrame(() => {
-      const pages = output.querySelectorAll('.print-question-page');
-      pages.forEach(page => {
-        page.style.zoom = '';
-        const h = page.scrollHeight;
-        if (h > maxH) {
-          page.style.zoom = Math.max(0.7, maxH / h);
-        }
+      // Add footer to each question page
+      Array.from(output.querySelectorAll('.print-question-page')).forEach(page => {
+        page.appendChild(_createPrintPageFooter());
       });
 
-      // Hide output and trigger print
-      output.style.cssText = 'display:none;';
-      window.print();
+      // Re-add answer key pages (also get footer)
+      answerKeys.forEach(ak => {
+        ak.appendChild(_createPrintPageFooter());
+        output.appendChild(ak);
+      });
 
-      // Clean up after print dialog closes
-      pages.forEach(page => { page.style.zoom = ''; });
+      // Second rAF: scale any page whose MEASURED print height overflows the
+      // physical A4 content area, with zoom (not transform) — zoom affects
+      // layout size directly, so content is never clipped.
+      requestAnimationFrame(() => {
+        const pages = output.querySelectorAll('.print-question-page');
+        Array.from(pages).forEach((page, i) => {
+          page.style.zoom = '';
+          let h;
+          if (mz) {
+            if (i < pageHs.length) h = pageHs[i];
+            else {
+              const akH = mz.akHeights[i - pageHs.length];
+              h = (akH == null) ? page.scrollHeight : akH + footerH;
+            }
+            if (h > A4_CONTENT_PX) page.style.zoom = Math.max(0.7, (A4_CONTENT_PX - 4) / h);
+          } else {
+            h = page.scrollHeight;
+            if (h > 740) page.style.zoom = Math.max(0.7, 740 / h);
+          }
+        });
+
+        // Hide output and trigger print
+        output.style.cssText = 'display:none;';
+        window.print();
+
+        // Clean up after print dialog closes
+        pages.forEach(page => { page.style.zoom = ''; });
+      });
     });
   });
 }
@@ -14974,7 +15059,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   const answerKeyData = [];
 
   selected.forEach((q, qIndex) => {
-    let qHtml = `<div class="print-question-chunk" data-qid="${escapeHtml(String(q.id || ''))}">`;
+    // MCQ-style questions (no writing boxes) are flagged so the packer can
+    // pair two compact ones onto a single page.
+    const isMcq = q.blocks.some(b => b.type === 'mcq') && !q.blocks.some(b => b.type === 'answer' || b.type === 'plainanswer');
+    let qHtml = `<div class="print-question-chunk" data-qid="${escapeHtml(String(q.id || ''))}"${isMcq ? ' data-mcq="1"' : ''}>`;
 
     if (qIndex === 0) {
       qHtml += `<div class="print-worksheet-header">
@@ -15189,15 +15277,22 @@ function _wsPreviewPack(doc) {
   const measure = doc.getElementById('wsMeasure');
   const pagesEl = doc.getElementById('wsPages');
   if (!measure || !pagesEl) return;
-  const maxH = 740, separatorH = 30;
+  const separatorH = 30;
   const chunks = Array.from(measure.querySelectorAll('.print-question-chunk'));
   const answerKeys = Array.from(measure.querySelectorAll('.print-answer-key-page'));
   pagesEl.innerHTML = '';
   if (!chunks.length) { measure.style.display = 'none'; return; }
   const heights = chunks.map(c => c.scrollHeight);
+  // Same budget + MCQ-pairing rules as the real printer (doScaleAndPrint),
+  // measured in the same print-CSS context, so preview and print paginate
+  // identically.
+  const footerH = _printFooterHeightIn(doc, measure);
+  const budget = A4_CONTENT_PX - footerH - 10;
+  const halfPage = Math.round(A4_CONTENT_PX / 2);
   const forcedFlags = chunks.map(c => wsManualBreaks.has(c.dataset.qid));
   const mergeFlags = chunks.map(c => wsMergeUp.has(c.dataset.qid));
-  const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH);
+  const pairFlags = chunks.map((c, i) => c.dataset.mcq === '1' && heights[i] <= halfPage);
+  const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, separatorH, pairFlags);
   measure.style.display = 'none';
   const totalPages = pageGroups.length + answerKeys.length;
   let pageNo = 0;
@@ -15211,7 +15306,8 @@ function _wsPreviewPack(doc) {
     sheet.appendChild(pno);
     pagesEl.appendChild(sheet);
     content.style.zoom = '';
-    if (content.scrollHeight > maxH) content.style.zoom = Math.max(0.7, maxH / content.scrollHeight); // match print scaling
+    const hWithFooter = content.scrollHeight + footerH; // real pages carry the footer
+    if (hWithFooter > A4_CONTENT_PX) content.style.zoom = Math.max(0.7, (A4_CONTENT_PX - 4) / hWithFooter); // match print scaling
   };
   pageGroups.forEach(group => addSheet(content => {
     group.forEach((idx, pos) => {
