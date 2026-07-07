@@ -7475,7 +7475,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.81.1';
+const APP_VERSION = 'v1.81.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -26042,9 +26042,9 @@ function ppHoverHtml(id){
 let _ppHoverTimer = null;         // fires the "expand to full preview" after a dwell
 let _ppHoverLast = null;          // last pointer position, so we can re-anchor on expand
 const PP_HOVER_EXPAND_MS = 4000;  // dwell time before the preview blooms open
-function ppHoverShow(ev, id){
+function _ppHoverOpen(html, ev){
   const el = ppHoverEl();
-  el.innerHTML = ppHoverHtml(id);
+  el.innerHTML = html;
   el.classList.remove('pp-hv-expanded');   // start collapsed every time
   el.style.display = 'block';
   ppHoverMove(ev);
@@ -26052,6 +26052,21 @@ function ppHoverShow(ev, id){
   clearTimeout(_ppHoverTimer);
   _ppHoverTimer = setTimeout(ppHoverExpand, PP_HOVER_EXPAND_MS);
 }
+function ppHoverShow(ev, id){ _ppHoverOpen(ppHoverHtml(id), ev); }
+// Same hover preview for a BANK question — used in the "attach a question"
+// picker so the teacher can read the full question before selecting it.
+function ppBankHoverHtml(qid){
+  const bq = questionBank.find(q => q.id === qid);
+  if (!bq) return '';
+  const cat = bq.category ? ' &middot; ' + escapeHtml(normalizeCategoryValue(bq.category)) : '';
+  const st = questionStats(bq.id);
+  const accLine = (st && st.percent != null) ? `<div class="pp-hv-note" style="color:var(--primary,#4a7c59);font-style:normal;">Your success rate: <strong>${st.percent}%</strong> (${st.correct}/${st.attempts} correct)</div>` : '';
+  return `<div class="pp-hv-head"><strong>${escapeHtml(bq.title || 'Untitled')}</strong></div>
+    <div class="pp-hv-topic"><span class="pp-dot" style="background:${ppThemeColor(bq.topic)}"></span>${escapeHtml(bq.topic || '')}${cat}</div>
+    <div class="pp-hv-preview">${renderQuestionPreviewHtml(bq.id)}</div>${accLine}
+    <div class="pp-hv-note">Click to attach this question.</div>`;
+}
+function ppHoverShowBank(ev, qid){ _ppHoverOpen(ppBankHoverHtml(qid), ev); }
 function ppHoverMove(ev){
   const el = _ppHoverEl; if (!el || el.style.display !== 'block') return;
   _ppHoverLast = { x: ev.clientX, y: ev.clientY };
@@ -26138,7 +26153,7 @@ function ppRenderAssignList(){
   const rows = shown.map(x => {
     const sel = x.id === cur;
     const same = x.topic === q.topic;
-    return `<div class="pp-arow ${sel ? 'sel' : ''}" onclick="ppAssign('${id}','${x.id}')">
+    return `<div class="pp-arow ${sel ? 'sel' : ''}" onclick="ppAssign('${id}','${x.id}')" onmouseenter="ppHoverShowBank(event,'${x.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">
       <div style="flex:1;min-width:0;">
         <div class="pp-arow-title">${escapeHtml(x.title || 'Untitled')}${sel ? ' <span style="color:var(--primary);font-weight:700;">&#10003; attached</span>' : ''}</div>
         <div class="pp-arow-sub">${same ? '<span class="pp-match">same topic</span> ' : ''}${escapeHtml(x.topic || '')}${x.category ? ' &middot; ' + escapeHtml(x.category) : ''}</div>
@@ -26151,8 +26166,8 @@ function ppRenderAssignList(){
   const pr = document.getElementById('ppAssignPractiseBtn'); if (pr) pr.style.display = cur ? '' : 'none';
   const cnt = document.getElementById('ppAssignCount'); if (cnt) cnt.textContent = list.length + ' question' + (list.length === 1 ? '' : 's') + (list.length > shown.length ? ' (showing first ' + shown.length + ')' : '');
 }
-async function ppAssign(id, qid){ paperMap[id] = qid; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Question attached — students can now practise it', 'success'); }
-async function ppUnassign(){ const id = _ppAssignKey; if (!id) return; delete paperMap[id]; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Attachment removed', 'info'); }
+async function ppAssign(id, qid){ ppHoverHide(); paperMap[id] = qid; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Question attached — students can now practise it', 'success'); }
+async function ppUnassign(){ const id = _ppAssignKey; if (!id) return; ppHoverHide(); delete paperMap[id]; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Attachment removed', 'info'); }
 function ppPractise(id){ const bq = ppBankQ(id); if (!bq) { showToast('This question is not available to practise', 'error'); return; } ppHoverHide(); ppCloseAssign(); ppTopicClose(); launchWorksheetPractice([bq]); }
 function ppAssignPractise(){ if (_ppAssignKey) ppPractise(_ppAssignKey); }
 
@@ -26602,6 +26617,7 @@ window.ppSetDifficulty = ppSetDifficulty;
 window.questionPercent = questionPercent;
 window.questionStats = questionStats;
 window.ppHoverShow = ppHoverShow;
+window.ppHoverShowBank = ppHoverShowBank;
 window.ppHoverMove = ppHoverMove;
 window.ppHoverHide = ppHoverHide;
 window.ppAddQuestion = ppAddQuestion;
