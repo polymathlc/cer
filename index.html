@@ -7475,7 +7475,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.81.0';
+const APP_VERSION = 'v1.81.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -26039,9 +26039,24 @@ function ppHoverHtml(id){
     <div class="pp-hv-detail">${escapeHtml(q.detail || '')}</div>${missing}
     <div class="pp-hv-note">${ppIsAdmin() ? (ppEditMode ? 'Click to edit this question.' : 'Click to attach a bank question — or create one on the spot.') : 'Not yet available to practise.'}</div>`;
 }
-function ppHoverShow(ev, id){ const el = ppHoverEl(); el.innerHTML = ppHoverHtml(id); el.style.display = 'block'; ppHoverMove(ev); }
+let _ppHoverTimer = null;         // fires the "expand to full preview" after a dwell
+let _ppHoverLast = null;          // last pointer position, so we can re-anchor on expand
+const PP_HOVER_EXPAND_MS = 4000;  // dwell time before the preview blooms open
+function ppHoverShow(ev, id){
+  const el = ppHoverEl();
+  el.innerHTML = ppHoverHtml(id);
+  el.classList.remove('pp-hv-expanded');   // start collapsed every time
+  el.style.display = 'block';
+  ppHoverMove(ev);
+  // Dwell for a few seconds on the same question → smoothly expand to full view.
+  clearTimeout(_ppHoverTimer);
+  _ppHoverTimer = setTimeout(ppHoverExpand, PP_HOVER_EXPAND_MS);
+}
 function ppHoverMove(ev){
   const el = _ppHoverEl; if (!el || el.style.display !== 'block') return;
+  _ppHoverLast = { x: ev.clientX, y: ev.clientY };
+  // Once expanded the card settles in place — don't chase the cursor any more.
+  if (el.classList.contains('pp-hv-expanded')) return;
   const pad = 14, w = el.offsetWidth || 360, h = el.offsetHeight || 240;
   let x = ev.clientX + pad, y = ev.clientY + pad;
   if (x + w > window.innerWidth - 8) x = ev.clientX - w - pad;
@@ -26049,7 +26064,26 @@ function ppHoverMove(ev){
   el.style.left = Math.max(8, x) + 'px';
   el.style.top = Math.max(8, y) + 'px';
 }
-function ppHoverHide(){ if (_ppHoverEl) _ppHoverEl.style.display = 'none'; }
+// Bloom the partial preview into a full one and re-anchor it so the taller card
+// stays fully on-screen (both moves are CSS-transitioned for a premium feel).
+function ppHoverExpand(){
+  const el = _ppHoverEl; if (!el || el.style.display !== 'block') return;
+  el.classList.add('pp-hv-expanded');
+  requestAnimationFrame(() => {
+    const p = _ppHoverLast || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    const pad = 14, w = el.offsetWidth || 400;
+    const targetH = Math.min(el.scrollHeight + 4, Math.round(window.innerHeight * 0.86));
+    let x = p.x + pad, y = p.y + pad;
+    if (x + w > window.innerWidth - 8) x = p.x - w - pad;
+    if (y + targetH > window.innerHeight - 8) y = Math.max(8, window.innerHeight - targetH - 8);
+    el.style.left = Math.max(8, x) + 'px';
+    el.style.top = Math.max(8, y) + 'px';
+  });
+}
+function ppHoverHide(){
+  clearTimeout(_ppHoverTimer);
+  if (_ppHoverEl) { _ppHoverEl.style.display = 'none'; _ppHoverEl.classList.remove('pp-hv-expanded'); }
+}
 
 // -------- edit mode --------
 function ppToggleEdit(){ if (!ppIsAdmin()) return; ppEditMode = !ppEditMode; ppHoverHide(); ppRenderBody(); }
@@ -26518,13 +26552,16 @@ function ppStyles(){
   .pp-topic-year + .pp-topic-year { border-top:1px solid var(--border); }
   .pp-topic-yhead { font-size:0.74rem; font-weight:700; color:var(--text-muted); margin-bottom:7px; }
   .pp-bar-val { width:74px; flex:none; text-align:right; font-size:0.76rem; color:var(--text-muted); }
-  #ppHover { position:fixed; z-index:4000; display:none; pointer-events:none; max-width:360px; max-height:340px; overflow:hidden; background:var(--surface,#fff); border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.16); padding:12px 14px; font-size:0.82rem; }
+  #ppHover { position:fixed; z-index:4000; display:none; pointer-events:none; max-width:360px; max-height:340px; overflow:hidden; background:var(--surface,#fff); border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.16); padding:12px 14px; font-size:0.82rem; transform:translateY(0); will-change:max-height,transform; transition:max-height .55s cubic-bezier(.16,1,.3,1), box-shadow .5s ease, transform .5s cubic-bezier(.16,1,.3,1), border-color .5s ease; }
+  /* After ~4s of hovering, the partial preview blooms into a full one. */
+  #ppHover.pp-hv-expanded { max-width:420px; max-height:86vh; box-shadow:0 22px 60px rgba(0,0,0,0.26); transform:translateY(-3px); border-color:var(--primary,#4a7c59); transition:max-height .55s cubic-bezier(.16,1,.3,1), max-width .55s cubic-bezier(.16,1,.3,1), box-shadow .5s ease, transform .5s cubic-bezier(.16,1,.3,1), border-color .5s ease, top .5s cubic-bezier(.16,1,.3,1), left .5s cubic-bezier(.16,1,.3,1); }
+  #ppHover.pp-hv-expanded .pp-hv-preview { max-height:82vh; -webkit-mask-image:none; mask-image:none; }
   #ppHover .pp-hv-head { font-size:0.82rem; }
   #ppHover .pp-hv-topic { font-size:0.74rem; color:var(--text-muted); margin:3px 0 6px; display:flex; align-items:center; gap:5px; }
   #ppHover .pp-hv-title { font-weight:600; margin-bottom:3px; }
   #ppHover .pp-hv-detail { color:var(--text-muted); font-size:0.79rem; }
   #ppHover .pp-hv-assigned { font-weight:600; color:var(--primary,#4a7c59); margin-bottom:6px; }
-  #ppHover .pp-hv-preview { max-height:200px; overflow:hidden; -webkit-mask-image:linear-gradient(#000 78%, transparent); mask-image:linear-gradient(#000 78%, transparent); font-size:0.8rem; }
+  #ppHover .pp-hv-preview { max-height:200px; overflow:hidden; -webkit-mask-image:linear-gradient(#000 78%, transparent); mask-image:linear-gradient(#000 78%, transparent); font-size:0.8rem; transition:max-height .55s cubic-bezier(.16,1,.3,1); }
   #ppHover .pp-hv-note { font-size:0.73rem; color:var(--text-muted); margin-top:7px; font-style:italic; }
   .pp-arow { display:flex; gap:10px; align-items:flex-start; padding:11px 12px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; cursor:pointer; }
   .pp-arow:hover { border-color:var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); }
