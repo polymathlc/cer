@@ -7572,7 +7572,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.86.0';
+const APP_VERSION = 'v1.87.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -13970,6 +13970,8 @@ function populatePracticeStudentSelect() {
 function onPracticeStudentChange() {
   const sel = document.getElementById('practiceStudentSelect');
   activeStudentIndex = sel.value !== '' ? parseInt(sel.value) : -1;
+  practiceSessionResults = [];   // a new student starts a fresh session
+  _practiceServed = {};
   if (activeStudentIndex >= 0) {
     renderPracticeReady();
   } else {
@@ -14014,7 +14016,10 @@ function getQuestionsForLevel(level) {
   });
 }
 
-function loadRandomPracticeQuestion() {
+let practiceSessionResults = []; // per-question results for the end-of-session report
+let _practiceServed = {};        // qid -> times served THIS session (rotation for count ties)
+
+async function loadRandomPracticeQuestion() {
   rpgQuestionChanged();
   const student = students[activeStudentIndex];
   if (!student) return;
@@ -14034,7 +14039,15 @@ function loadRandomPracticeQuestion() {
     return;
   }
 
-  const q = available[Math.floor(Math.random() * available.length)];
+  // Serve the LEAST-DONE question first: never-attempted (0×) is top priority,
+  // then ascending attempt count (orderByAttemptPriority). A session-served
+  // counter breaks ties so one sitting still rotates through everything before
+  // any repeats.
+  try { await loadAttemptStats(); } catch (_) {}
+  const ordered = orderByAttemptPriority(available);
+  ordered.sort((a, b) => (_practiceServed[a.id] || 0) - (_practiceServed[b.id] || 0)); // stable: keeps count-priority within equal serves
+  const q = ordered[0];
+  _practiceServed[q.id] = (_practiceServed[q.id] || 0) + 1;
   renderPracticeQuestion(q, student);
 }
 
@@ -14925,8 +14938,31 @@ document.addEventListener('change', function (e) {
 
 function renderOpenPracticeBody(q) {
   return buildOpenBody(q, '#practiceContainer', {
-    scoreElId: 'practiceScoreDisplay', scorePrefix: 'AI Score', mode: 'practice-open'
+    scoreElId: 'practiceScoreDisplay', scorePrefix: 'AI Score', mode: 'practice-open',
+    // Every fully-marked question is banked into the session so "Finish &
+    // report" can summarise the whole sitting.
+    onAllMarked: res => {
+      practiceSessionResults.push({ title: q.title || '', topic: q.topic || '', correct: res.score, total: res.total, mistakes: res.mistakes || [] });
+      const btn = document.getElementById('practiceFinishBtn');
+      if (btn) btn.innerHTML = `🏁 Finish &amp; report (${practiceSessionResults.length})`;
+    }
   });
+}
+
+// End the Practice Mode sitting: show the shared end-of-practice report (score
+// ring, per-question breakdown, AI strengths / areas to improve).
+function finishPracticeSession() {
+  if (!practiceSessionResults.length) { showToast('Mark at least one question first — then finish to see the report', 'info'); return; }
+  renderPracticeReport('#practiceContainer', practiceSessionResults.slice(), `
+    <button class="btn btn-primary" onclick="startNewPracticeSession()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+      Practice Again
+    </button>`);
+  practiceSessionResults = [];
+}
+function startNewPracticeSession() {
+  practiceSessionResults = [];
+  loadRandomPracticeQuestion();
 }
 
 function renderPracticeQuestion(q, student) {
@@ -14958,6 +14994,7 @@ function renderPracticeQuestion(q, student) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             Reset
           </button>
+          <button class="btn btn-outline" id="practiceFinishBtn" onclick="finishPracticeSession()" title="End this sitting and see a summary of the learning — score, question breakdown and AI strengths / areas to improve">🏁 Finish &amp; report${practiceSessionResults.length ? ' (' + practiceSessionResults.length + ')' : ''}</button>
           <button class="btn btn-primary" onclick="loadRandomPracticeQuestion()">
             Next Question &rarr;
           </button>
@@ -16761,18 +16798,19 @@ function noteAttemptLocally(qid, score, total) {
   const r = _qAttemptStats[id] || (_qAttemptStats[id] = { n: 0, correct: 0, best: 0, last: 0 });
   r.n++; if (frac >= 1) r.correct++; if (frac > r.best) r.best = frac; r.last = Date.now();
 }
-// Order a pool: unattempted first (shuffled), then attempted ascending by best
-// score so the weakest questions come back soonest. Ties shuffle.
+// Order a pool by how many times the student has DONE each question (the
+// per-question attempt counter): never-attempted first (0× = top priority),
+// then ascending attempt count so the least-practised questions always surface
+// first. Within the same count, the weakest best score comes back soonest.
+// Ties shuffle so back-to-back sessions stay fresh.
 function orderByAttemptPriority(pool) {
   const stats = _qAttemptStats || {};
   const jitter = new Map();
   pool.forEach(q => jitter.set(q, Math.random()));
-  const rec = q => stats[String(q.id)];
-  const unseenArr = pool.filter(q => !rec(q));
-  const seenArr = pool.filter(q => !!rec(q));
-  unseenArr.sort((a, b) => jitter.get(a) - jitter.get(b));
-  seenArr.sort((a, b) => (rec(a).best - rec(b).best) || (jitter.get(a) - jitter.get(b)));
-  return unseenArr.concat(seenArr);
+  const rec = q => stats[String(q.id)] || null;
+  const count = q => { const r = rec(q); return r ? (r.n || 0) : 0; };
+  const best = q => { const r = rec(q); return r ? (r.best || 0) : 0; };
+  return pool.slice().sort((a, b) => (count(a) - count(b)) || (best(a) - best(b)) || (jitter.get(a) - jitter.get(b)));
 }
 
 // Reset the practice session and show the "ready" state. Reused whenever the
@@ -27548,6 +27586,8 @@ window.saveStudentSetup = saveStudentSetup;
 window.skipStudentSetup = skipStudentSetup;
 window.onPracticeStudentChange = onPracticeStudentChange;
 window.loadRandomPracticeQuestion = loadRandomPracticeQuestion;
+window.finishPracticeSession = finishPracticeSession;
+window.startNewPracticeSession = startNewPracticeSession;
 window.resetOpenAnswers = resetOpenAnswers;
 window.resetQpOpenAnswers = resetQpOpenAnswers;
 window.setLandingDemoMode = setLandingDemoMode;
