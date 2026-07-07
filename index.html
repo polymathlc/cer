@@ -5802,6 +5802,7 @@ option {
               <button class="rpg-tab active" data-rpgboard="month" type="button">📅 This Month</button>
               <button class="rpg-tab" data-rpgboard="lastmonth" type="button">🗓️ Last Month</button>
               <button class="rpg-tab" data-rpgboard="alltime" type="button">⭐ All-Time</button>
+              <button class="rpg-tab" data-rpgboard="papers" type="button">📄 Past Papers</button>
               <button class="rpg-tab" data-rpgboard="td" type="button">🧪 Tower Defense</button>
               <button class="rpg-tab" data-rpgboard="raid" type="button">👾 Raiders</button>
               <button class="rpg-tab" data-rpgboard="spire" type="button">🃏 Spire</button>
@@ -7474,7 +7475,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.80.0';
+const APP_VERSION = 'v1.81.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -18524,7 +18525,9 @@ async function loadFlaggedQuestions() {
       const tb = b.timestamp ? (b.timestamp.toDate ? b.timestamp.toDate() : new Date(b.timestamp)) : new Date(0);
       return tb - ta;
     });
-    _autoVetFlagged();   // pull any newly-flagged bank questions out for review
+    // Flagged questions are NOT auto-moved out of the bank any more — they stay
+    // live and simply appear here on the Flagged page, where the admin decides
+    // what to do (Edit / Move to Vetting / Resolve / Dismiss).
     updateFlaggedCount();
     renderFlaggedQuestions();
   } catch (err) {
@@ -18539,40 +18542,10 @@ function updateFlaggedCount() {
   if (el) el.textContent = openCount;
 }
 
-// When a student flags a question (from practice or either mini-game) it lands
-// in the global `flaggedQuestions` collection. The owning admin can't be reached
-// at flag time (Firestore rules), so we reconcile here, on the admin's own
-// client: any open-flag question still live in this admin's bank is pulled OUT
-// of the bank and dropped into the Vetting list with a 'flagged' status so it
-// stops appearing in practice / the games until it's reviewed and re-approved.
-function _autoVetFlagged() {
-  if (!currentUser || currentUser.role !== 'admin') return;
-  let moved = 0;
-  flaggedQuestions.filter(f => f && f.status === 'open' && f.questionId).forEach(f => {
-    // Already pulled out (in vetting) — make sure it carries the latest flag note.
-    const vq = vettingList.find(v => v.id === f.questionId);
-    if (vq) {
-      if (vq.status === 'flagged' && !vq._flag) vq._flag = _flagInfo(f);
-      return;
-    }
-    const idx = questionBank.findIndex(q => q.id === f.questionId);
-    if (idx === -1) return;                              // not in our active bank
-    if (_ownerUidByQuestionId[f.questionId]) return;     // belongs to another admin — they'll reconcile
-    const q = questionBank[idx];
-    q.status = 'flagged';
-    q._flag = _flagInfo(f);
-    vettingList.unshift(q);
-    questionBank.splice(idx, 1);
-    saveVettingQuestion(q);     // write to the vetting subcollection
-    deleteQuestionDoc(q.id);    // remove from the live questions subcollection
-    moved++;
-  });
-  if (moved) {
-    updateCounts();
-    if (document.querySelector('#page-vetting.active')) renderVettingList();
-    showToast(`${moved} flagged question${moved === 1 ? '' : 's'} moved to Vetting for review`, 'info');
-  }
-}
+// Flag note builder — kept for the manual "Move to Vetting" flow and for any
+// legacy questions already carrying a 'flagged' status in the vetting list.
+// (Student flags no longer auto-move questions out of the bank; the admin
+// decides what to do from the Flagged Questions page.)
 function _flagInfo(f) {
   let when = '';
   try { const d = f.timestamp ? (f.timestamp.toDate ? f.timestamp.toDate() : new Date(f.timestamp)) : null; if (d) when = d.toLocaleDateString(); } catch (e) {}
@@ -18663,16 +18636,20 @@ function flagEditQuestion(flagDocId, questionId) {
 }
 
 async function flagMoveToVetting(flagDocId, questionId) {
-  // Move the question from bank to vetting
+  // Move the question from bank to vetting — an explicit admin choice, carrying
+  // the student's flag note so it shows on the vetting card.
   const qIdx = questionBank.findIndex(qb => qb.id === questionId);
   if (qIdx !== -1) {
     const q = questionBank[qIdx];
-    q.status = 'pending';
+    const f = flaggedQuestions.find(x => x._docId === flagDocId);
+    q.status = 'flagged';
+    if (f) q._flag = _flagInfo(f);
     questionBank.splice(qIdx, 1);
-    vettingList.push(q);
+    vettingList.unshift(q);
     deleteQuestionDoc(questionId);
     saveVettingQuestion(q);
     updateCounts();
+    if (document.querySelector('#page-vetting.active')) renderVettingList();
     showToast('Question moved to vetting list', 'success');
   } else {
     showToast('Question is already in vetting or not found', 'info');
@@ -20543,13 +20520,22 @@ function rpgRolloverMonth() {
     rpgState.lastMonthKey = rpgState.monthKey;   // keep final standings for prize awarding
     rpgState.lastMonthXp = rpgState.monthXp || 0;
     rpgState.lastMonthQ = rpgState.monthQ || 0;  // last month's unique-question total
+    rpgState.lastPapersQ = rpgState.papersQ || 0; // last month's past-paper total
   }
   rpgState.monthKey = key;
   rpgState.monthXp = 0;
   rpgState.monthQ = 0;
+  rpgState.papersQ = 0;      // this month's PSLE past-year-paper questions done
   rpgState.monthQids = {};
   rpgState.monthPrints = {};
   rpgRolloverGameScores(key);
+}
+
+// A past-year exam-paper question is one filed under a PSLE category. Used for
+// the Past Papers leaderboard segment (counted once per month, like monthQ).
+function isPastPaperQuestion(q) {
+  const c = (typeof normalizeCategoryValue === 'function' ? normalizeCategoryValue(q && q.category) : (q && q.category)) || '';
+  return /^PSLE\b/i.test(String(c).trim());
 }
 
 // Make sure the mini-game score store exists and its month bucket is current.
@@ -20761,7 +20747,7 @@ function rpgOnMarked(q, score, total, opts = {}) {
   const round = rpgState.battle ? rpgBattleRound(credit) : null;
   if (round && round.victory) { gold += round.victory.gold; xp += round.victory.xp; }
   const lvl = rpgApplyRewards(gold, xp);
-  if (!opts.simulated) { const _bq = rpgState.monthQ || 0; rpgNoteUniqueQuestion(qid, opts.answerText); if ((rpgState.monthQ || 0) > _bq) { try { commNoteEncounterProgress(q); } catch (_) {} } try { _noteQuestionForCredit(qid); } catch (_) {} try { commQuestRunCapture(q, credit); } catch (_) {} }
+  if (!opts.simulated) { const _bq = rpgState.monthQ || 0; rpgNoteUniqueQuestion(qid, opts.answerText); if ((rpgState.monthQ || 0) > _bq) { try { commNoteEncounterProgress(q); } catch (_) {} if (isPastPaperQuestion(q)) rpgState.papersQ = (rpgState.papersQ || 0) + 1; } try { _noteQuestionForCredit(qid); } catch (_) {} try { commQuestRunCapture(q, credit); } catch (_) {} }
   rpgHintUsedQ = false;
   rpgSave();
   rpgPublishLeaderboard();
@@ -21496,6 +21482,8 @@ function rpgPublishLeaderboard() {
       lastMonthKey: rpgState.lastMonthKey || null,
       monthQ: rpgState.monthQ || 0,
       lastMonthQ: rpgState.lastMonthQ || 0,
+      papersQ: rpgState.papersQ || 0,
+      lastPapersQ: rpgState.lastPapersQ || 0,
       wins: (rpgState.stats && rpgState.stats.wins) || 0,
       bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0,
@@ -21568,6 +21556,7 @@ function rpgIsGameTab() { return rpgBoardTab === "td" || rpgBoardTab === "raid" 
 function rpgBoardMetric(r) {
   if (rpgBoardTab === "alltime") return r.xp || 0;
   if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey() ? (r.monthQ || 0) : 0;
+  if (rpgBoardTab === "papers") return r.monthKey === rpgMonthKey() ? (r.papersQ || 0) : 0;
   if (rpgIsGameTab()) {
     const g = r[rpgBoardTab]; // r.td / r.raid
     return g && g.monthKey === rpgMonthKey() ? (g.month || 0) : 0;
@@ -21581,7 +21570,7 @@ function rpgBoardMetric(r) {
 function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : rpgIsGameTab() ? "pts" : "questions"; }
 // Pretty value for a row: game tabs show the run's label (e.g. "Floor 7 · 142 kills").
 function rpgBoardValueHtml(r) {
-  const sub = rpgBoardTab === "month" ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : rpgIsGameTab() ? "best this month" : "all-time";
+  const sub = (rpgBoardTab === "month" || rpgBoardTab === "papers") ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : rpgIsGameTab() ? "best this month" : "all-time";
   if (rpgIsGameTab()) {
     const g = r[rpgBoardTab] || {};
     const lbl = (g.monthKey === rpgMonthKey() && g.monthLabel) ? g.monthLabel : (r.shownVal + " pts");
@@ -21590,6 +21579,7 @@ function rpgBoardValueHtml(r) {
   return `${r.shownVal} ${rpgBoardUnit()}<span>${sub}</span>`;
 }
 function rpgPrizeBadge(rank) {
+  if (rpgBoardTab === "papers") return "";   // ranking board only — no prize attached
   if (rpgIsGameTab()) return rank <= 3 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rpgBoardTab !== "alltime") return rank <= 5 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rank === 1) return `<span class="rpg-board-prize">🏆 $200 voucher</span>`;
@@ -21598,6 +21588,7 @@ function rpgPrizeBadge(rank) {
   return "";
 }
 function rpgRowClass(rank) {
+  if (rpgBoardTab === "papers") return "";
   if (rpgIsGameTab()) return rank <= 3 ? `prize-${rank}` : "";
   if (rpgBoardTab !== "alltime") return rank <= 5 ? "prize-month" : "";
   return rank <= 3 ? `prize-${rank}` : "";
@@ -21622,6 +21613,7 @@ async function rpgRenderLeaderboard(force = false) {
       monthXp: rpgState.monthXp || 0, monthKey: rpgState.monthKey || rpgMonthKey(),
       lastMonthXp: rpgState.lastMonthXp || 0, lastMonthKey: rpgState.lastMonthKey || null,
       monthQ: rpgState.monthQ || 0, lastMonthQ: rpgState.lastMonthQ || 0,
+      papersQ: rpgState.papersQ || 0, lastPapersQ: rpgState.lastPapersQ || 0,
       wins: (rpgState.stats && rpgState.stats.wins) || 0, bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0, rebirths: rpgState.rebirths || 0,
       house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null,
@@ -21637,6 +21629,7 @@ async function rpgRenderLeaderboard(force = false) {
     .sort((a, b) => b.shownVal - a.shownVal || String(a.updatedAt || "").localeCompare(String(b.updatedAt || "")));
   if (!list.length) {
     const why = rpgBoardTab === "month" ? "No questions done this month yet — be the first on the board!"
+      : rpgBoardTab === "papers" ? "No past-year exam-paper questions done this month yet — practise a PSLE paper question to top this board!"
       : rpgBoardTab === "lastmonth" ? "No questions were recorded last month."
       : rpgBoardTab === "td" ? "No Science Defenders runs this month yet — play to claim the top spot!"
       : rpgBoardTab === "raid" ? "No Science Raiders runs this month yet — dive in to top the board!"
