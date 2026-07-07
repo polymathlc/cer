@@ -5460,6 +5460,9 @@ option {
           <div class="subtitle">Track student logins, registrations, and question activity</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="openCreateStudent()" style="font-size:0.82rem;" title="Create a student account yourself — you set the email and password, then hand them to the student.">
+            ➕ Create student account
+          </button>
           <button class="btn btn-outline" onclick="adminResetGameCredits()" style="font-size:0.82rem;" title="Top every student's game-credit pool back up to the full daily allowance, right now.">
             🎮 Reset game credits
           </button>
@@ -6166,6 +6169,55 @@ option {
     <div class="btn-group" style="justify-content:flex-end;">
       <button class="btn btn-outline" onclick="closeGenSettings()">Cancel</button>
       <button class="btn btn-primary" onclick="saveGenSettings()">Save Generation Guide</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== CREATE STUDENT ACCOUNT DIALOG (Admin) ==================== -->
+<div class="confirm-overlay" id="createStudentOverlay">
+  <div class="confirm-dialog" style="max-width:460px;text-align:left;max-height:88vh;overflow-y:auto;">
+    <div id="csFormWrap">
+      <h3 style="margin-bottom:6px;">Create Student Account</h3>
+      <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.5;margin-bottom:18px;">Set up an account for a student practising at your centre. You choose the email and password — the student signs in with them on the login page. You stay signed in as admin.</p>
+
+      <div class="form-group">
+        <label class="form-label">Student name</label>
+        <input id="csName" class="form-input" type="text" placeholder="e.g. Tan Wei Ming" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input id="csEmail" class="form-input" type="email" placeholder="student@example.com" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password <span style="font-weight:400;color:var(--text-muted);">(at least 6 characters)</span></label>
+        <div style="display:flex;gap:8px;">
+          <input id="csPass" class="form-input" type="text" placeholder="Set a password" autocomplete="off" style="flex:1;">
+          <button type="button" class="btn btn-outline" onclick="generateStudentPassword()" title="Generate an easy-to-read password" style="white-space:nowrap;">🎲 Generate</button>
+        </div>
+      </div>
+
+      <div id="csError" class="auth-error" style="margin-top:4px;">Something went wrong</div>
+      <div id="csLoading" class="auth-loading"><div class="spinner"></div> Creating account...</div>
+
+      <div class="btn-group" style="justify-content:flex-end;margin-top:18px;">
+        <button class="btn btn-outline" onclick="closeCreateStudent()">Cancel</button>
+        <button class="btn btn-primary" id="csCreateBtn" onclick="handleCreateStudent()">Create Account</button>
+      </div>
+    </div>
+
+    <div id="csSuccessWrap" style="display:none;">
+      <h3 style="margin-bottom:6px;">✅ Account created</h3>
+      <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.5;margin-bottom:18px;">Hand these login details to the student. Copy them now — the password can't be viewed again later.</p>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:18px;line-height:2;font-size:0.92rem;">
+        <div><span style="color:var(--text-muted);">Name:</span> <b id="csDoneName"></b></div>
+        <div><span style="color:var(--text-muted);">Email:</span> <b id="csDoneEmail"></b></div>
+        <div><span style="color:var(--text-muted);">Password:</span> <b id="csDonePass"></b></div>
+      </div>
+      <div class="btn-group" style="justify-content:flex-end;">
+        <button class="btn btn-outline" onclick="copyStudentCredentials()">📋 Copy details</button>
+        <button class="btn btn-outline" onclick="openCreateStudent()">➕ Create another</button>
+        <button class="btn btn-primary" onclick="closeCreateStudent()">Done</button>
+      </div>
     </div>
   </div>
 </div>
@@ -7007,6 +7059,11 @@ window.handleEmailRegister = handleEmailRegister;
 window.handleGoogleSignIn = handleGoogleSignIn;
 window.handleLogout = handleLogout;
 window.showPage = showPage;
+window.openCreateStudent = openCreateStudent;
+window.closeCreateStudent = closeCreateStudent;
+window.generateStudentPassword = generateStudentPassword;
+window.handleCreateStudent = handleCreateStudent;
+window.copyStudentCredentials = copyStudentCredentials;
 
 // =====================================================================
 // PAGE NAVIGATION (Landing / Login / Register / App)
@@ -7152,6 +7209,109 @@ function getAuthErrorMessage(code) {
 }
 
 // =====================================================================
+// ADMIN — CREATE STUDENT ACCOUNT
+// createUserWithEmailAndPassword signs in the new user on whichever Auth
+// instance it runs against, so we run it on a SECONDARY Firebase app —
+// the admin's session on the primary app is never touched.
+// =====================================================================
+let _studentCreator = null; // { auth, db } on the secondary app
+function _getStudentCreator() {
+  if (!_studentCreator) {
+    const app2 = initializeApp(firebaseConfig, 'studentCreator');
+    if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
+      try {
+        initializeAppCheck(app2, {
+          provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+          isTokenAutoRefreshEnabled: true
+        });
+      } catch (e) { console.warn('Secondary App Check init failed:', e); }
+    }
+    _studentCreator = { auth: getAuth(app2), db: getFirestore(app2) };
+  }
+  return _studentCreator;
+}
+
+function openCreateStudent() {
+  document.getElementById('csName').value = '';
+  document.getElementById('csEmail').value = '';
+  document.getElementById('csPass').value = '';
+  document.getElementById('csError').style.display = 'none';
+  document.getElementById('csLoading').classList.remove('active');
+  document.getElementById('csCreateBtn').disabled = false;
+  document.getElementById('csFormWrap').style.display = '';
+  document.getElementById('csSuccessWrap').style.display = 'none';
+  document.getElementById('createStudentOverlay').classList.add('active');
+}
+
+function closeCreateStudent() {
+  document.getElementById('createStudentOverlay').classList.remove('active');
+}
+
+// Friendly password the admin can read out at the centre: science word + 4 digits.
+function generateStudentPassword() {
+  const words = ['comet', 'rocket', 'magnet', 'photon', 'fossil', 'nebula', 'crystal', 'volcano', 'gravity', 'neuron', 'plasma', 'quartz', 'meteor', 'oxygen', 'proton'];
+  const w = words[Math.floor(Math.random() * words.length)];
+  document.getElementById('csPass').value = w + Math.floor(1000 + Math.random() * 9000);
+}
+
+async function handleCreateStudent() {
+  const name = document.getElementById('csName').value.trim();
+  const email = document.getElementById('csEmail').value.trim();
+  const pass = document.getElementById('csPass').value;
+  const errorEl = document.getElementById('csError');
+  const showErr = msg => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
+  errorEl.style.display = 'none';
+
+  if (!name || !email || !pass) return showErr('Please fill in name, email and password');
+  if (pass.length < 6) return showErr('Password must be at least 6 characters');
+  if (ADMIN_EMAILS.includes(email)) return showErr('That email belongs to an admin account');
+
+  const loadingEl = document.getElementById('csLoading');
+  loadingEl.classList.add('active');
+  document.getElementById('csCreateBtn').disabled = true;
+  try {
+    const sc = _getStudentCreator();
+    const cred = await createUserWithEmailAndPassword(sc.auth, email, pass);
+    try { await updateProfile(cred.user, { displayName: name }); } catch (e) { console.warn('Could not set student name:', e); }
+    // Profile doc so the student appears on the dashboard before their first
+    // login. Written on the secondary app (as the student), matching the
+    // permissions recordLogin relies on.
+    try {
+      await setDoc(doc(sc.db, 'userProfiles', cred.user.uid), {
+        uid: cred.user.uid,
+        email: email,
+        displayName: name,
+        role: 'student',
+        createdBy: currentUser ? currentUser.uid : null,
+        createdAt: Timestamp.now()
+      }, { merge: true });
+    } catch (e) { console.warn('Could not write student profile:', e); }
+    await signOut(sc.auth); // ends the secondary session only
+
+    document.getElementById('csDoneName').textContent = name;
+    document.getElementById('csDoneEmail').textContent = email;
+    document.getElementById('csDonePass').textContent = pass;
+    document.getElementById('csFormWrap').style.display = 'none';
+    document.getElementById('csSuccessWrap').style.display = '';
+    try { loadUsageDashboard(); } catch (e) {}
+  } catch (error) {
+    showErr(getAuthErrorMessage(error.code));
+  } finally {
+    loadingEl.classList.remove('active');
+    document.getElementById('csCreateBtn').disabled = false;
+  }
+}
+
+function copyStudentCredentials() {
+  const txt = 'Science Quest login\nName: ' + document.getElementById('csDoneName').textContent +
+    '\nEmail: ' + document.getElementById('csDoneEmail').textContent +
+    '\nPassword: ' + document.getElementById('csDonePass').textContent;
+  navigator.clipboard.writeText(txt)
+    .then(() => showToast('Login details copied', 'success'))
+    .catch(() => showToast('Could not copy — please note the details down', 'error'));
+}
+
+// =====================================================================
 // AUTH STATE LISTENER
 // =====================================================================
 const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'abigail.yew@stanfordmanpower.com'];
@@ -7269,7 +7429,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.77.0';
+const APP_VERSION = 'v1.78.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
