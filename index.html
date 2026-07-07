@@ -6374,6 +6374,23 @@ option {
   </div>
 </div>
 
+<!-- ==================== PAST PAPER — TOPIC DRILL-DOWN (marks-by-topic graph) ==================== -->
+<div class="confirm-overlay" id="ppTopicOverlay">
+  <div class="confirm-dialog" style="max-width:680px;text-align:left;max-height:88vh;display:flex;flex-direction:column;">
+    <h3 id="ppTopicTitle" style="margin-bottom:6px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;"></h3>
+    <p id="ppTopicSub" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;"></p>
+    <div id="ppTopicBody" style="flex:1;overflow-y:auto;min-height:100px;"></div>
+    <div class="btn-group" style="justify-content:space-between;margin-top:16px;gap:8px;flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="ppTopicPractiseBtn" title="Practise every available question in this list, one after another" onclick="ppTopicPractise()">▶ Practise all</button>
+        <button class="btn btn-outline" id="ppTopicPrintBtn" title="Print every available question in this list as ONE worksheet — answer key on the last pages" onclick="ppTopicPrint()">🖨 Print worksheet</button>
+        <button class="btn btn-outline" id="ppTopicAllBtn" onclick="ppTopicShowAll()" style="display:none;">Show all years</button>
+      </div>
+      <button class="btn btn-outline" onclick="ppTopicClose()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== PAST PAPER — EDIT A QUESTION ==================== -->
 <div class="confirm-overlay" id="ppQEditOverlay">
   <div class="confirm-dialog" style="max-width:600px;text-align:left;max-height:90vh;overflow-y:auto;">
@@ -7251,7 +7268,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.74.0';
+const APP_VERSION = 'v1.75.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -25125,15 +25142,30 @@ function ppRenderBody(){
   const addYear = edit ? `<button class="pp-add" onclick="ppAddQuestion('')">+ Add a paper / question in a new year</button>` : '';
 
   // --- topic breakdown ---
+  // Each bar is stacked by year (oldest = lightest tint, newest = full colour).
+  // Clicking a year block opens that year's questions; clicking the topic name
+  // opens the whole topic as a printable / practisable worksheet.
   const byTopic = ppMarksByTopic();
   const topicRows = Object.keys(byTopic).sort((a,b)=> byTopic[b] - byTopic[a]);
+  _ppTopicOrder = topicRows;
   const maxT = topicRows.length ? Math.max.apply(null, topicRows.map(t => byTopic[t])) : 1;
-  const bars = topicRows.map(t => {
-    const asg = qs.filter(q => q.topic === t && ppBankQ(q.id)).length;
-    const cnt = qs.filter(q => q.topic === t).length;
+  const bars = topicRows.map((t, ti) => {
+    const tq = qs.filter(q => q.topic === t);
+    const asg = tq.filter(q => ppBankQ(q.id)).length;
+    const cnt = tq.length;
+    const tYears = years.filter(y => tq.some(q => String(q.year) === y));
+    const segs = tYears.map((y, yi) => {
+      const yq = tq.filter(q => String(q.year) === y);
+      const mk = yq.reduce((s,q)=>s+(Number(q.marks)||0),0);
+      if (!mk) return '';
+      const w = mk / maxT * 100;
+      const tint = tYears.length > 1 ? (0.42 * (tYears.length - 1 - yi) / (tYears.length - 1)) : 0;
+      const label = w >= 8 ? `<span class="pp-seg-lb">${escapeHtml(y)}</span>` : '';
+      return `<div class="pp-bar-seg" style="width:${w.toFixed(2)}%;background:linear-gradient(rgba(255,255,255,${tint.toFixed(2)}),rgba(255,255,255,${tint.toFixed(2)})),${ppThemeColor(t)};" title="${escapeHtml(y)}: ${mk} mark${mk === 1 ? '' : 's'} &middot; ${yq.length} question${yq.length === 1 ? '' : 's'} — click to see them" onclick="ppTopicOpen(${ti},'${escapeHtml(y)}')">${label}</div>`;
+    }).join('');
     return `<div class="pp-bar-row">
-      <div class="pp-bar-name"><span class="pp-dot" style="background:${ppThemeColor(t)}"></span>${escapeHtml(t)} <span class="pp-lv">${ppLevel(t)}</span></div>
-      <div class="pp-bar-track"><div class="pp-bar-fill" style="width:${(byTopic[t]/maxT*100).toFixed(1)}%;background:${ppThemeColor(t)}"></div></div>
+      <div class="pp-bar-name"><span class="pp-dot" style="background:${ppThemeColor(t)}"></span><span class="pp-topic-link" title="Open all ${cnt} question${cnt === 1 ? '' : 's'} in this topic — print them as a worksheet or practise them" onclick="ppTopicOpen(${ti})">${escapeHtml(t)}</span> <span class="pp-lv">${ppLevel(t)}</span></div>
+      <div class="pp-bar-track">${segs}</div>
       <div class="pp-bar-val">${byTopic[t]}m &middot; ${asg}/${cnt}</div>
     </div>`;
   }).join('') || '<div style="color:var(--text-muted);">No questions yet.</div>';
@@ -25176,11 +25208,13 @@ function ppRenderBody(){
 
     <div class="pp-card">
       <h3 class="pp-h">Marks by topic</h3>
-      <p class="pp-sub">Where the marks fall across the papers. The count shows how many of that topic's questions have a bank question attached.</p>
+      <p class="pp-sub">Where the marks fall across the papers — each bar is split into the years (lighter = older). Click a year block to see that year's questions, or click a topic name to open every question in the topic as a worksheet you can print and practise. The count shows how many of that topic's questions have a bank question attached.</p>
       <div class="pp-legend">${legend}</div>
       ${bars}
     </div>
   </div>`;
+  // keep the topic drill-down modal in sync (e.g. after attaching a question from inside it)
+  if (_ppTopicSel) ppTopicRender();
 }
 
 // A small accuracy badge for students: their live success rate on the attached
@@ -25319,7 +25353,7 @@ function ppRenderAssignList(){
 }
 async function ppAssign(id, qid){ paperMap[id] = qid; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Question attached — students can now practise it', 'success'); }
 async function ppUnassign(){ const id = _ppAssignKey; if (!id) return; delete paperMap[id]; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Attachment removed', 'info'); }
-function ppPractise(id){ const bq = ppBankQ(id); if (!bq) { showToast('This question is not available to practise', 'error'); return; } ppHoverHide(); ppCloseAssign(); launchWorksheetPractice([bq]); }
+function ppPractise(id){ const bq = ppBankQ(id); if (!bq) { showToast('This question is not available to practise', 'error'); return; } ppHoverHide(); ppCloseAssign(); ppTopicClose(); launchWorksheetPractice([bq]); }
 function ppAssignPractise(){ if (_ppAssignKey) ppPractise(_ppAssignKey); }
 
 // -------- create a NEW bank question for a past-paper question --------
@@ -25443,6 +25477,67 @@ function ppTogglePrintSel(id, checked){
     btn.textContent = '🖨 Print selected' + (n ? ' (' + n + ')' : '');
     btn.disabled = !n;
   }
+}
+
+// -------- topic drill-down (marks-by-topic graph) --------
+// Clicking a year block on a bar opens that year's questions for the topic;
+// clicking the topic name opens all years. From the modal anyone can print
+// the attached questions as a worksheet or practise them all.
+let _ppTopicOrder = [];   // topic names in the order the bars render (index-addressed to avoid quoting topic names in onclick)
+let _ppTopicSel = null;   // { topic, year } while the modal is open ('' year = all years)
+
+function ppTopicOpen(idx, year){
+  const topic = _ppTopicOrder[idx];
+  if (!topic) return;
+  ppHoverHide();
+  _ppTopicSel = { topic: topic, year: year || '' };
+  ppTopicRender();
+  const ov = document.getElementById('ppTopicOverlay'); if (ov) ov.classList.add('active');
+}
+function ppTopicQs(){
+  if (!_ppTopicSel) return [];
+  return ppQuestions()
+    .filter(q => q.topic === _ppTopicSel.topic && (!_ppTopicSel.year || String(q.year) === _ppTopicSel.year))
+    .sort((a,b)=> String(a.year).localeCompare(String(b.year)) || (Number(a.n)||0) - (Number(b.n)||0));
+}
+function ppTopicRender(){
+  if (!_ppTopicSel) return;
+  const t = _ppTopicSel.topic, yr = _ppTopicSel.year;
+  const list = ppTopicQs();
+  const marks = list.reduce((s,q)=>s+(Number(q.marks)||0),0);
+  const attached = list.filter(q => ppBankQ(q.id)).length;
+  const title = document.getElementById('ppTopicTitle');
+  if (title) title.innerHTML = `<span class="pp-dot" style="background:${ppThemeColor(t)};width:11px;height:11px;"></span>${escapeHtml(t)} <span class="pp-lv" style="font-size:0.72rem;color:var(--text-muted);font-weight:600;">${ppLevel(t)}</span>${yr ? `<span class="pp-topic-yrtag">${escapeHtml(yr)} only</span>` : ''}`;
+  const sub = document.getElementById('ppTopicSub');
+  if (sub) sub.textContent = `${list.length} question${list.length === 1 ? '' : 's'} · ${marks} mark${marks === 1 ? '' : 's'}${yr ? ` in the ${yr} paper` : ' across the papers'} · ${attached} available to print / practise. ${ppIsAdmin() ? 'Click a question to attach or change its bank question.' : 'Click a highlighted question to practise just that one.'}`;
+  const body = document.getElementById('ppTopicBody');
+  if (body) {
+    const yrs = [...new Set(list.map(q => String(q.year)))];
+    body.innerHTML = yrs.map(y => {
+      const yq = list.filter(q => String(q.year) === y);
+      return `<div class="pp-topic-year"><div class="pp-topic-yhead">${escapeHtml(y)}</div><div class="pp-chip-row">${yq.map(q => ppChip(q)).join('')}</div></div>`;
+    }).join('') || '<div style="color:var(--text-muted);padding:12px 0;">No questions here yet.</div>';
+  }
+  const all = document.getElementById('ppTopicAllBtn'); if (all) all.style.display = yr ? '' : 'none';
+  const pr = document.getElementById('ppTopicPrintBtn');
+  if (pr) { pr.disabled = !attached; pr.innerHTML = '🖨 Print worksheet' + (attached ? ` (${attached})` : ''); }
+  const pl = document.getElementById('ppTopicPractiseBtn');
+  if (pl) { pl.disabled = !attached; pl.innerHTML = '▶ Practise all' + (attached ? ` (${attached})` : ''); }
+}
+function ppTopicShowAll(){ if (_ppTopicSel) { _ppTopicSel.year = ''; ppTopicRender(); } }
+function ppTopicClose(){ const ov = document.getElementById('ppTopicOverlay'); if (ov) ov.classList.remove('active'); _ppTopicSel = null; ppHoverHide(); }
+function ppTopicPrint(){
+  if (!_ppTopicSel) return;
+  const { items, missing } = ppCollectPrintable(ppTopicQs().map(q => q.id));
+  ppDoPrint(items, missing, _ppTopicSel.topic + (_ppTopicSel.year ? ' — PSLE ' + _ppTopicSel.year : ' — Past-Paper Questions'));
+}
+function ppTopicPractise(){
+  if (!_ppTopicSel) return;
+  const seen = new Set(); const bqs = [];
+  ppTopicQs().forEach(q => { const bq = ppBankQ(q.id); if (bq && !seen.has(bq.id)) { seen.add(bq.id); bqs.push(bq); } });
+  if (!bqs.length) { showToast('None of these questions are available to practise yet', 'error'); return; }
+  ppTopicClose();
+  launchWorksheetPractice(bqs);
 }
 
 // -------- question editor --------
@@ -25637,8 +25732,17 @@ function ppStyles(){
   .pp-bar-row { display:flex; align-items:center; gap:12px; padding:5px 0; }
   .pp-bar-name { width:210px; flex:none; font-size:0.82rem; display:flex; align-items:center; gap:7px; }
   .pp-bar-name .pp-lv { font-size:0.66rem; color:var(--text-muted); font-weight:600; }
-  .pp-bar-track { flex:1; height:16px; border-radius:5px; background:var(--surface-alt,#f0ede8); overflow:hidden; }
-  .pp-bar-fill { height:100%; border-radius:5px; }
+  .pp-bar-track { flex:1; height:18px; border-radius:5px; background:var(--surface-alt,#f0ede8); overflow:hidden; display:flex; }
+  .pp-bar-seg { height:100%; min-width:4px; cursor:pointer; display:flex; align-items:center; justify-content:center; overflow:hidden; border-right:2px solid var(--surface,#fff); transition:filter 0.15s; }
+  .pp-bar-seg:last-child { border-right:none; }
+  .pp-bar-seg:hover { filter:brightness(1.1) saturate(1.15); }
+  .pp-seg-lb { font-size:0.6rem; font-weight:700; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.4); white-space:nowrap; pointer-events:none; }
+  .pp-topic-link { cursor:pointer; }
+  .pp-topic-link:hover { color:var(--primary,#4a7c59); text-decoration:underline; text-underline-offset:3px; }
+  .pp-topic-yrtag { font-size:0.68rem; font-weight:700; color:var(--primary-dark,#2f5d3f); background:var(--primary-light,#eef4f0); border:1px solid var(--primary,#4a7c59); border-radius:999px; padding:2px 10px; }
+  .pp-topic-year { padding:11px 0; }
+  .pp-topic-year + .pp-topic-year { border-top:1px solid var(--border); }
+  .pp-topic-yhead { font-size:0.74rem; font-weight:700; color:var(--text-muted); margin-bottom:7px; }
   .pp-bar-val { width:74px; flex:none; text-align:right; font-size:0.76rem; color:var(--text-muted); }
   #ppHover { position:fixed; z-index:4000; display:none; pointer-events:none; max-width:360px; max-height:340px; overflow:hidden; background:var(--surface,#fff); border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.16); padding:12px 14px; font-size:0.82rem; }
   #ppHover .pp-hv-head { font-size:0.82rem; }
@@ -25675,6 +25779,11 @@ window.ppCancelPendingAttach = ppCancelPendingAttach;
 window.ppHasPendingAttach = ppHasPendingAttach;
 window.ppPrintConcept = ppPrintConcept;
 window.ppPrintYear = ppPrintYear;
+window.ppTopicOpen = ppTopicOpen;
+window.ppTopicClose = ppTopicClose;
+window.ppTopicShowAll = ppTopicShowAll;
+window.ppTopicPrint = ppTopicPrint;
+window.ppTopicPractise = ppTopicPractise;
 window.ppPrintSelected = ppPrintSelected;
 window.ppTogglePrintSel = ppTogglePrintSel;
 window.ppSetDifficulty = ppSetDifficulty;
