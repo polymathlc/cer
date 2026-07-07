@@ -6506,6 +6506,7 @@ option {
     <div class="btn-group" style="justify-content:space-between;margin-top:14px;gap:8px;flex-wrap:wrap;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="ppCreateForAssign()" title="Open the question editor prefilled from this past-paper question — the new question is attached here automatically when you save it.">＋ Create a new question</button>
+        <button class="btn btn-outline" id="ppEditQBtn" onclick="ppEditAttachedQuestion()" style="display:none;" title="Edit the attached question in the full editor, then come straight back here">✏️ Edit this question</button>
         <button class="btn btn-outline" id="ppUnassignBtn" onclick="ppUnassign()" style="display:none;color:var(--accent-red,#c0392b);">Remove attachment</button>
         <button class="btn btn-primary" id="ppAssignPractiseBtn" onclick="ppAssignPractise()" style="display:none;">▶ Practise this</button>
       </div>
@@ -6552,7 +6553,8 @@ option {
     <textarea id="ppQeAns" class="form-input" rows="2" placeholder="Model answer / key" style="resize:vertical;"></textarea>
     <div class="btn-group" style="justify-content:space-between;margin-top:16px;gap:8px;flex-wrap:wrap;">
       <button class="btn btn-outline" id="ppQeDeleteBtn" onclick="ppDeleteQuestionFromEditor()" style="display:none;color:var(--accent-red,#d94f4f);">Delete</button>
-      <div style="display:flex;gap:8px;margin-left:auto;">
+      <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap;">
+        <button class="btn btn-outline" id="ppQeEditBankBtn" onclick="ppEditAttachedFromQEdit()" style="display:none;" title="Edit the attached quiz question (its text, answer, blocks) in the full editor">✏️ Edit attached question</button>
         <button class="btn btn-outline" onclick="ppCloseQEdit()">Cancel</button>
         <button class="btn btn-primary" onclick="ppSaveQuestionEditor()">Save</button>
       </div>
@@ -7567,7 +7569,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.84.0';
+const APP_VERSION = 'v1.85.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7673,6 +7675,12 @@ let _rapidJustAdded = new Set();
 let selectedBlanks = {}; // { blockId: { wordIndex: true } }
 let currentEditingQuestion = null;
 let _skipCreateReset = false;
+// When an edit is launched from the Past Papers page, we return there (not the
+// Question Bank) after saving/cancelling — so the admin never has to hunt for
+// the question in the database.
+let _editReturnPage = null;
+function editQuestionFromPapers(bankId) { editQuestion(bankId); _editReturnPage = 'papers'; }
+function _afterEditNavigate() { const dest = _editReturnPage || 'bank'; _editReturnPage = null; navigateTo(dest); }
 
 // MCQ options are numbered 1,2,3,4 everywhere (matching the mini-games). The
 // AI (or a student's handwritten paper) may still answer with a legacy letter
@@ -7737,6 +7745,7 @@ function navigateTo(page) {
       blocks = [];
       selectedBlanks = {};
       currentEditingQuestion = null;
+      _editReturnPage = null;           // a brand-new question won't return to Past Papers
       document.getElementById('questionTitle').value = '';
       document.getElementById('categorySelect').value = 'CER';
       document.getElementById('topicSelect').value = 'Heat';
@@ -11741,7 +11750,7 @@ function saveEditedQuestion() {
   updateCounts();
   renderQuestionBank();
   showToast('Question saved ✓', 'success');
-  navigateTo('bank');
+  _afterEditNavigate();
   if (savedToVetting) saveVettingQuestion(q);
   else saveQuestion(q);
 }
@@ -11777,19 +11786,20 @@ function saveEditToBank() {
   renderQuestionBank();
   renderVettingList();
   showToast('Saved to question bank ✓', 'success');
-  navigateTo('bank');
+  _afterEditNavigate();
   saveQuestion(q);                       // upsert into the questions subcollection
   if (wasVetting) deleteVettingDoc(id);  // remove from the vetting subcollection
 }
 
 function cancelEdit() {
-  showConfirm('Cancel Edit', 'Discard changes and go back to the question bank?', () => {
+  const backToPapers = _editReturnPage === 'papers';
+  showConfirm('Cancel Edit', `Discard changes and go back to ${backToPapers ? 'Past Papers' : 'the question bank'}?`, () => {
     currentEditingQuestion = null;
     setEditMode(false);
     blocks = [];
     selectedBlanks = {};
     renderBlocks();
-    navigateTo('bank');
+    _afterEditNavigate();
   });
 }
 
@@ -11981,7 +11991,7 @@ function getQuestionPreview(q) {
 function editQuestion(id) {
   const q = questionBank.find(qb => qb.id === id) || vettingList.find(v => v.id === id);
   if (!q) return;
-  
+  _editReturnPage = null;   // default: return to the Bank (callers may override after)
   currentEditingQuestion = q.id;
   document.getElementById('questionTitle').value = q.title;
   // Set the category, tolerating one that's no longer in the list (e.g. a
@@ -18757,6 +18767,7 @@ function moveEditToVetting() {
   updateCounts();
   renderQuestionBank();
   showToast('Question moved to vetting list', 'success');
+  _editReturnPage = null;   // moved out of the bank — don't bounce back to Past Papers
   navigateTo('vetting');
 }
 
@@ -26792,11 +26803,21 @@ function ppRenderAssignList(){
   document.getElementById('ppAssignList').innerHTML = rows;
   const un = document.getElementById('ppUnassignBtn'); if (un) un.style.display = cur ? '' : 'none';
   const pr = document.getElementById('ppAssignPractiseBtn'); if (pr) pr.style.display = cur ? '' : 'none';
+  // Show "Edit this question" only when the attached question is in this bank.
+  const ed = document.getElementById('ppEditQBtn'); if (ed) ed.style.display = (cur && questionBank.some(qb => qb.id === cur)) ? '' : 'none';
   const cnt = document.getElementById('ppAssignCount'); if (cnt) cnt.textContent = list.length + ' question' + (list.length === 1 ? '' : 's') + (list.length > shown.length ? ' (showing first ' + shown.length + ')' : '');
 }
 async function ppAssign(id, qid){ ppHoverHide(); paperMap[id] = qid; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Question attached — students can now practise it', 'success'); }
 async function ppUnassign(){ const id = _ppAssignKey; if (!id) return; ppHoverHide(); delete paperMap[id]; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Attachment removed', 'info'); }
 function ppPractise(id){ const bq = ppBankQ(id); if (!bq) { showToast('This question is not available to practise', 'error'); return; } ppHoverHide(); ppCloseAssign(); ppTopicClose(); launchWorksheetPractice([bq]); }
+// Edit the attached bank question in the full editor, returning to Past Papers on save.
+function ppEditAttachedQuestion(){
+  const id = _ppAssignKey; if (!id) return;
+  const bq = ppBankQ(id);
+  if (!bq) { showToast('The attached question is not in your bank', 'error'); return; }
+  ppHoverHide(); ppCloseAssign();
+  editQuestionFromPapers(bq.id);
+}
 function ppAssignPractise(){ if (_ppAssignKey) ppPractise(_ppAssignKey); }
 
 // -------- create a NEW bank question for a past-paper question --------
@@ -27011,7 +27032,18 @@ function ppOpenQEdit(q){
   set('ppQeTitle', q.title || ''); set('ppQeDetail', q.detail || ''); set('ppQeAns', q.ans || '');
   set('ppQeDiff', ppDiff(q));
   const del = document.getElementById('ppQeDeleteBtn'); if (del) del.style.display = q.id ? '' : 'none';
+  const eb = document.getElementById('ppQeEditBankBtn');
+  if (eb) { const bq = q.id ? ppBankQ(q.id) : null; eb.style.display = bq ? '' : 'none'; }
   const ov = document.getElementById('ppQEditOverlay'); if (ov) ov.classList.add('active');
+}
+// From the past-paper metadata editor, jump into the full editor for the
+// attached bank question (returns to Past Papers on save).
+function ppEditAttachedFromQEdit(){
+  const id = _ppQEditId; if (!id) return;
+  const bq = ppBankQ(id);
+  if (!bq) { showToast('No bank question is attached to this one', 'info'); return; }
+  ppCloseQEdit();
+  editQuestionFromPapers(bq.id);
 }
 function ppCloseQEdit(){ const ov = document.getElementById('ppQEditOverlay'); if (ov) ov.classList.remove('active'); _ppQEditId = null; }
 async function ppSaveQuestionEditor(){
@@ -27231,6 +27263,8 @@ window.ppUnassign = ppUnassign;
 window.ppAssignSetDiff = ppAssignSetDiff;
 window.ppPractise = ppPractise;
 window.ppAssignPractise = ppAssignPractise;
+window.ppEditAttachedQuestion = ppEditAttachedQuestion;
+window.ppEditAttachedFromQEdit = ppEditAttachedFromQEdit;
 window.ppCreateForAssign = ppCreateForAssign;
 window.ppCancelPendingAttach = ppCancelPendingAttach;
 window.ppHasPendingAttach = ppHasPendingAttach;
