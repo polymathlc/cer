@@ -4613,6 +4613,11 @@ option {
         Flagged Questions
         <span class="badge" id="flaggedCount">0</span>
       </div>
+      <div class="nav-item admin-only" data-page="doctor" onclick="navigateTo('doctor')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2a2 2 0 0 0-2 2v1.09A6 6 0 0 0 6 10v4l-1.5 3h15L18 14v-4a6 6 0 0 0-3-4.91V4a2 2 0 0 0-2-2z"/><path d="M9 20a3 3 0 0 0 6 0"/></svg>
+        Question Doctor
+        <span class="badge" id="doctorBadge" style="display:none;">0</span>
+      </div>
       <div class="nav-item admin-only" data-page="messages" onclick="navigateTo('messages')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         Messages
@@ -5667,6 +5672,63 @@ option {
             <p>Questions flagged by students will appear here for review.</p>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: QUESTION DOCTOR (admin) ===== -->
+    <div class="page" id="page-doctor">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>🩺 Question Doctor</h2>
+          </div>
+          <div class="subtitle">Scan your question bank for possible problems — duplicates, answer issues, MCQ mistakes and more</div>
+        </div>
+        <span id="doctorCount" style="font-size:0.85rem;color:var(--text-muted);font-weight:600;"></span>
+      </div>
+      <div class="page-body" style="max-width:920px;">
+        <style>
+          .doc-search-card{ border:1px solid var(--border); border-radius:14px; padding:18px 18px 16px; background:var(--surface,#fff); margin-bottom:18px; }
+          .doc-search-card > label{ display:block; font-weight:700; font-size:0.9rem; margin-bottom:8px; }
+          .doc-search-card > label span{ font-weight:400; color:var(--text-muted); font-size:0.82rem; }
+          #doctorQuery{ width:100%; padding:11px 12px; border:1px solid var(--border); border-radius:10px; font-family:inherit; font-size:0.9rem; line-height:1.55; resize:vertical; background:#fff; color:var(--on-surface,#1c1c19); box-sizing:border-box; }
+          .doc-presets{ display:flex; flex-wrap:wrap; gap:7px; margin:10px 0 14px; }
+          .doc-preset{ font-size:0.78rem; padding:5px 12px; border:1px solid var(--border); border-radius:999px; background:var(--surface-alt,#faf8f5); cursor:pointer; color:var(--text-muted); font-weight:600; }
+          .doc-preset:hover{ border-color:var(--primary); color:var(--primary); }
+          .doc-actions-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+          #doctorStatus{ font-size:0.83rem; color:var(--text-muted); }
+          .doc-card{ border:1px solid var(--border); border-radius:12px; background:#fff; margin-bottom:12px; overflow:hidden; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
+          .doc-card-head{ display:flex; align-items:center; gap:12px; padding:13px 15px; cursor:pointer; }
+          .doc-card-head:hover{ background:var(--surface-alt,#faf8f5); }
+          .doc-badge{ flex:0 0 auto; font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:999px; white-space:nowrap; }
+          .doc-card-title{ font-weight:600; font-size:0.9rem; line-height:1.35; }
+          .doc-card-sub{ color:var(--text-muted); font-size:0.8rem; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+          .doc-chev{ flex:0 0 auto; color:var(--text-muted); font-size:0.7rem; }
+          .doc-detail{ padding:2px 15px 15px; border-top:1px solid var(--border); }
+          .doc-detail-note{ font-size:0.85rem; color:#92400e; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:9px 12px; margin:12px 0; line-height:1.5; }
+          .doc-q{ border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:10px; background:var(--surface-alt,#fafafa); }
+          .doc-q-head{ margin-bottom:6px; }
+          .doc-q-prev{ font-size:0.84rem; max-height:240px; overflow:auto; border:1px solid var(--border); border-radius:8px; padding:10px; background:#fff; }
+          .doc-q-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+        </style>
+        <div class="doc-search-card">
+          <label>What should I look for? <span>(edit these words to focus your search — or tap a preset)</span></label>
+          <textarea id="doctorQuery" rows="3" placeholder="Describe the kinds of problems to hunt for…"></textarea>
+          <div class="doc-presets">
+            <button type="button" class="doc-preset" onclick="doctorSetPreset('everything')">🔎 Everything</button>
+            <button type="button" class="doc-preset" onclick="doctorSetPreset('duplicates')">🧬 Duplicates</button>
+            <button type="button" class="doc-preset" onclick="doctorSetPreset('answers')">✅ Answer issues</button>
+            <button type="button" class="doc-preset" onclick="doctorSetPreset('mcq')">🔘 MCQ problems</button>
+            <button type="button" class="doc-preset" onclick="doctorSetPreset('wording')">✍️ Unclear wording</button>
+          </div>
+          <div class="doc-actions-row">
+            <button id="doctorScanBtn" class="btn btn-primary" onclick="doctorScan()" style="font-size:0.88rem;">🔍 Scan questions</button>
+            <button id="doctorStopBtn" class="btn btn-outline" onclick="doctorStop()" style="display:none;font-size:0.88rem;">⏹ Stop</button>
+            <span id="doctorStatus"></span>
+          </div>
+        </div>
+        <div id="doctorResults"></div>
       </div>
     </div>
 
@@ -7483,7 +7545,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.82.0';
+const APP_VERSION = 'v1.83.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7700,6 +7762,7 @@ function navigateTo(page) {
   if (page === 'familysettings') famRenderSettings();
   if (page === 'scheduled') loadScheduledQuestions();
   if (page === 'flagged') loadFlaggedQuestions();
+  if (page === 'doctor') renderDoctorPage();
   if (page === 'character') rpgRenderCharacterPage();
   if (page === 'leaderboard') rpgRenderLeaderboard();
   if (page === 'adventure') rpgRenderAdventure();
@@ -18729,6 +18792,265 @@ async function deleteFlaggedQuestion(docId) {
 
 
 // =====================================================================
+// QUESTION DOCTOR (admin) — scan the bank for likely problems (duplicates,
+// answer/MCQ mistakes, unclear wording…), render them as clickable cards, and
+// fix them (open in the editor / delete) right from the page. Local structural
+// checks run instantly; an editable prompt drives an AI pass for deeper issues.
+// =====================================================================
+const DOCTOR_PRESETS = {
+  everything: "Find any problems with these questions: duplicate or near-duplicate questions; a model answer or marked MCQ option that is wrong or doesn't match the question; MCQs with no correct option, repeated options or no real answer; unclear, ambiguous or grammatically broken wording; scientific mistakes; a question that refers to a picture or diagram but has none; blank or incomplete answers.",
+  duplicates: "Find duplicate or near-duplicate questions — ones that ask essentially the same thing, test the same fact, or are lightly reworded copies of each other.",
+  answers: "Check each question's answer: flag any where the model answer, the marked MCQ option, or the explanation is wrong, doesn't match the question, or is incomplete for the marks awarded.",
+  mcq: "Check multiple-choice questions: flag ones with no correct option marked, repeated or identical options, fewer than two real options, or where the marked option looks wrong.",
+  wording: "Find questions with unclear, ambiguous, confusing or grammatically broken wording, or spelling / scientific-term errors that would confuse a student."
+};
+const DOCTOR_DEFAULT = DOCTOR_PRESETS.everything;
+let _doctorIssues = [];
+let _doctorScan = { running: false, done: 0, total: 0, stop: false };
+const _doctorDismissed = new Set();
+const _doctorExpanded = new Set();
+
+function renderDoctorPage() {
+  const box = document.getElementById('doctorQuery');
+  if (box && !box.value.trim()) box.value = DOCTOR_DEFAULT;
+  _doctorRenderResults();
+}
+function doctorSetPreset(key) {
+  const box = document.getElementById('doctorQuery');
+  if (box && DOCTOR_PRESETS[key]) { box.value = DOCTOR_PRESETS[key]; box.focus(); }
+}
+
+// ---- helpers: pull a question apart, normalise text, build a signature ----
+function _docQParts(q) {
+  const p = { title: (q.title || '').trim(), text: '', mcq: null, answers: [], images: 0, emptyImages: 0 };
+  (q.blocks || []).forEach(b => {
+    if (b.type === 'text') p.text += ' ' + stripHtml(b.content || '');
+    else if (b.type === 'image') { p.images++; if (!b.url) p.emptyImages++; }
+    else if (b.type === 'mcq') p.mcq = b;
+    else if (b.type === 'answer') p.answers.push({ kind: 'cer', claim: stripHtml(b.claim || ''), evidence: stripHtml(b.evidence || ''), reasoning: stripHtml(b.reasoning || '') });
+    else if (b.type === 'plainanswer') p.answers.push({ kind: 'plain', text: stripHtml(b.content || '') });
+  });
+  p.text = p.text.replace(/\s+/g, ' ').trim();
+  return p;
+}
+function _docNorm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+function _docSignature(q) {
+  const p = _docQParts(q);
+  let sig = _docNorm(p.title) + ' | ' + _docNorm(p.text);
+  if (p.mcq) sig += ' | ' + (p.mcq.options || []).map(o => _docNorm(o.text)).filter(Boolean).sort().join(' ');
+  return sig;
+}
+function _docQById(id) { return questionBank.find(q => q.id === id); }
+function _sevRank(s) { return s === 'high' ? 0 : s === 'med' ? 1 : 2; }
+function _iss(tag, q, type, severity, title, detail) {
+  return { key: tag + ':' + q.id, type, severity, ids: [q.id], title, summary: '“' + (q.title || 'Untitled') + '”', detail };
+}
+
+// ---- instant, deterministic structural checks ----
+function _doctorLocalIssues() {
+  const issues = [];
+  const bank = questionBank;
+  // 1) duplicates by content signature
+  const bySig = {};
+  bank.forEach(q => { const s = _docSignature(q); if (s.replace(/[|\s]/g, '').length < 5) return; (bySig[s] = bySig[s] || []).push(q); });
+  Object.values(bySig).forEach(group => {
+    if (group.length > 1) {
+      issues.push({
+        key: 'dup:' + group.map(q => q.id).sort().join(','), type: 'Duplicate', severity: 'high', ids: group.map(q => q.id),
+        title: group.length + ' identical / near-identical questions', summary: '“' + (group[0].title || 'Untitled') + '” appears ' + group.length + ' times',
+        detail: 'These questions are essentially the same. Keep the best one and delete the extras.'
+      });
+    }
+  });
+  // 2) per-question structural checks
+  bank.forEach(q => {
+    const p = _docQParts(q);
+    if (p.mcq) {
+      const opts = (p.mcq.options || []).filter(o => stripHtml(o.text || '').trim());
+      const correct = (p.mcq.options || []).find(o => o.id === p.mcq.correctId);
+      if (!correct) issues.push(_iss('mcqnc', q, 'MCQ', 'high', 'No correct option marked', 'This multiple-choice question has no correct option selected, so it can never be marked right.'));
+      else if (opts.length < 2) issues.push(_iss('mcqfew', q, 'MCQ', 'med', 'Too few options', 'This multiple-choice question has fewer than two real options.'));
+      else {
+        const norm = opts.map(o => _docNorm(o.text));
+        if (new Set(norm).size < norm.length) issues.push(_iss('mcqdupo', q, 'MCQ', 'med', 'Repeated options', 'Two or more of the options are identical.'));
+      }
+    }
+    if (p.emptyImages > 0) issues.push(_iss('img', q, 'Image', 'med', 'Missing diagram', 'An image block has no picture — students will see a broken or blank diagram.'));
+    p.answers.forEach(a => {
+      if (a.kind === 'cer' && !(a.claim || a.evidence || a.reasoning)) issues.push(_iss('cerempty', q, 'Answer', 'med', 'Blank model answer', 'The CER answer (claim / evidence / reasoning) is empty, so there is nothing for the AI to mark against.'));
+      if (a.kind === 'plain' && !a.text) issues.push(_iss('plainempty', q, 'Answer', 'med', 'Blank model answer', 'The answer field is empty, so there is nothing for the AI to mark against.'));
+    });
+    if (!questionHasMarkableAnswer(q) && !q.annotation) issues.push(_iss('noans', q, 'Answer', 'low', 'No answer to mark', 'This question has no answer section (CER, answer, open-ended or MCQ) and is not an annotation question, so practice cannot score it.'));
+    if (!(q.topic || '').trim()) issues.push(_iss('notopic', q, 'Meta', 'low', 'No topic set', 'This question has no topic, so it will not appear under any topic in practice.'));
+    if (!normalizeCategoryValue(q.category || '').trim()) issues.push(_iss('nocat', q, 'Meta', 'low', 'No category set', 'This question has no category.'));
+  });
+  return issues;
+}
+
+// ---- AI pass: batch compact question reps and ask the model for problems ----
+function _docAiRepr(q, num) {
+  const p = _docQParts(q);
+  let s = '#' + num + ' [' + (q.topic || 'no topic') + ' / ' + (normalizeCategoryValue(q.category) || 'no category') + '] Title: ' + (q.title || '(untitled)');
+  if (p.text) s += ' | Q: ' + p.text.slice(0, 400);
+  if (p.mcq) {
+    const opts = (p.mcq.options || []).map((o, i) => (i + 1) + ') ' + stripHtml(o.text || '')).join('  ');
+    const c = (p.mcq.options || []).findIndex(o => o.id === p.mcq.correctId);
+    s += ' | Options: ' + opts + ' | Marked correct: ' + (c >= 0 ? (c + 1) : 'NONE');
+  }
+  p.answers.forEach(a => { s += a.kind === 'cer' ? ' | Model: ' + [a.claim, a.evidence, a.reasoning].filter(Boolean).join('; ').slice(0, 300) : ' | Answer: ' + (a.text || '').slice(0, 300); });
+  if (p.emptyImages) s += ' | (has an EMPTY image block)'; else if (p.images) s += ' | (has a diagram image)';
+  return s;
+}
+async function _docAiBatch(items, startNum, instruction) {
+  const lines = items.map((q, i) => _docAiRepr(q, startNum + i)).join('\n');
+  const prompt =
+    `You are a meticulous science-quiz editor reviewing a teacher's question bank for problems. ` +
+    `The teacher is specifically looking for: ${instruction}\n` +
+    `Only report REAL, clear problems — never invent issues; if a question is fine, say nothing about it. ` +
+    `Here are the questions (each line starts with #<number>):\n${lines}\n` +
+    `Return ONLY a JSON array. Each element describes ONE problem: {"refs":[<the #numbers involved>],"type":"Duplicate|Answer|MCQ|Wording|Science|Other","severity":"high|medium|low","summary":"<=14 words naming the problem","detail":"one or two sentences: the problem and how to fix it"}. ` +
+    `Put a duplicate/near-duplicate set into ONE element with all its numbers in refs. If nothing is wrong, return [].`;
+  const raw = await askGemini(prompt, { maxOutputTokens: 1500, temperature: 0.2, json: true });
+  const arr = _parseAIJson(raw);
+  return Array.isArray(arr) ? arr : ((arr && arr.issues) || []);
+}
+function _docAiToIssue(f, snapshot) {
+  if (!f || !Array.isArray(f.refs)) return null;
+  const ids = f.refs.map(n => snapshot[Number(n)] && snapshot[Number(n)].id).filter(Boolean);
+  if (!ids.length) return null;
+  const sev = /high/i.test(f.severity) ? 'high' : /low/i.test(f.severity) ? 'low' : 'med';
+  const type = String(f.type || 'Issue').replace(/[^a-z]/gi, '') || 'Issue';
+  return {
+    key: 'ai:' + type + ':' + ids.slice().sort().join(','), type, severity: sev, ids, ai: true,
+    title: String(f.summary || 'Possible issue').slice(0, 140),
+    summary: ids.map(id => '“' + ((_docQById(id) || {}).title || '?') + '”').join(', '),
+    detail: String(f.detail || '')
+  };
+}
+function _doctorAddIssue(issue) {
+  if (_doctorIssues.some(x => x.key === issue.key)) return;
+  if (/duplicate/i.test(issue.type)) {
+    const idset = issue.ids.slice().sort().join(',');
+    if (_doctorIssues.some(x => /duplicate/i.test(x.type) && x.ids.slice().sort().join(',') === idset)) return; // already found structurally
+  }
+  _doctorIssues.push(issue);
+}
+
+async function doctorScan() {
+  if (_doctorScan.running) return;
+  if (!currentUser || currentUser.role !== 'admin') { showToast('Admins only', 'error'); return; }
+  if (!Array.isArray(questionBank) || !questionBank.length) { showToast('No questions in the bank to scan yet', 'info'); return; }
+  const instruction = (document.getElementById('doctorQuery')?.value || '').trim() || DOCTOR_DEFAULT;
+  const useAi = !!(window.__aiReady && window.__aiReady());
+  _doctorDismissed.clear();
+  _doctorExpanded.clear();
+  _doctorIssues = _doctorLocalIssues();
+  _doctorScan = { running: true, done: 0, total: 0, stop: false };
+  _doctorSetStatus(useAi ? 'Running structural checks…' : 'AI is off — showing structural checks only.');
+  _doctorRenderResults();
+  if (useAi) {
+    const snapshot = questionBank.slice();
+    const BATCH = 12;
+    const batches = [];
+    for (let i = 0; i < snapshot.length; i += BATCH) batches.push({ start: i, items: snapshot.slice(i, i + BATCH) });
+    _doctorScan.total = batches.length;
+    _doctorSetStatus(`Scanning with AI… 0 / ${batches.length}`);
+    let bi = 0;
+    const worker = async () => {
+      while (bi < batches.length && !_doctorScan.stop) {
+        const my = batches[bi++];
+        try {
+          const found = await _docAiBatch(my.items, my.start, instruction);
+          found.forEach(f => { const issue = _docAiToIssue(f, snapshot); if (issue) _doctorAddIssue(issue); });
+        } catch (e) { console.warn('doctor batch failed', e); }
+        _doctorScan.done++;
+        _doctorSetStatus(`Scanning with AI… ${_doctorScan.done} / ${batches.length}`);
+        _doctorRenderResults();
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, batches.length) }, worker));
+  }
+  _doctorScan.running = false;
+  _doctorSetStatus('');
+  _doctorRenderResults();
+  const n = _doctorVisibleIssues().length;
+  showToast(`Scan complete — ${n} possible issue${n === 1 ? '' : 's'} found`, n ? 'info' : 'success');
+}
+function doctorStop() { if (_doctorScan.running) { _doctorScan.stop = true; _doctorSetStatus('Stopping…'); } }
+function _doctorSetStatus(txt) {
+  const el = document.getElementById('doctorStatus'); if (el) el.textContent = txt || '';
+  const scanBtn = document.getElementById('doctorScanBtn'); const stopBtn = document.getElementById('doctorStopBtn');
+  if (scanBtn) scanBtn.style.display = _doctorScan.running ? 'none' : '';
+  if (stopBtn) stopBtn.style.display = _doctorScan.running ? '' : 'none';
+}
+
+function _doctorVisibleIssues() {
+  return _doctorIssues.filter(i => !_doctorDismissed.has(i.key) && i.ids.some(id => _docQById(id)));
+}
+function _doctorRenderResults() {
+  const host = document.getElementById('doctorResults'); if (!host) return;
+  const list = _doctorVisibleIssues().slice().sort((a, b) => _sevRank(a.severity) - _sevRank(b.severity));
+  const countEl = document.getElementById('doctorCount');
+  if (countEl) countEl.textContent = list.length ? (list.length + ' possible issue' + (list.length === 1 ? '' : 's')) : (_doctorScan.running ? 'Scanning…' : '');
+  const badge = document.getElementById('doctorBadge');
+  if (badge) { if (list.length) { badge.style.display = ''; badge.textContent = list.length; } else badge.style.display = 'none'; }
+  if (!list.length) {
+    host.innerHTML = _doctorScan.running ? '' :
+      `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:44px;height:44px;opacity:0.4;margin-bottom:10px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><h3>No issues to show</h3><p>Edit the search box above and hit <strong>Scan questions</strong> to check your bank.</p></div>`;
+    return;
+  }
+  host.innerHTML = list.map(_doctorCardHtml).join('');
+}
+function _doctorCardHtml(iss) {
+  const expanded = _doctorExpanded.has(iss.key);
+  const color = iss.severity === 'high' ? '#dc2626' : iss.severity === 'med' ? '#d97706' : '#6b7280';
+  const bg = iss.severity === 'high' ? '#fef2f2' : iss.severity === 'med' ? '#fffbeb' : '#f3f4f6';
+  return `<div class="doc-card" style="border-left:4px solid ${color};">
+      <div class="doc-card-head" onclick="doctorToggle('${_docKeyAttr(iss.key)}')">
+        <span class="doc-badge" style="background:${bg};color:${color};">${escapeHtml(iss.type)}${iss.ai ? ' · AI' : ''}</span>
+        <div style="flex:1;min-width:0;">
+          <div class="doc-card-title">${escapeHtml(iss.title)}</div>
+          <div class="doc-card-sub">${escapeHtml(iss.summary)}</div>
+        </div>
+        <span class="doc-chev">${expanded ? '▲' : '▼'}</span>
+      </div>
+      ${expanded ? _doctorDetailHtml(iss) : ''}
+    </div>`;
+}
+function _doctorDetailHtml(iss) {
+  const qs = iss.ids.map(id => _docQById(id)).filter(Boolean);
+  const body = qs.map(q => `<div class="doc-q">
+      <div class="doc-q-head"><strong>${escapeHtml(q.title || 'Untitled')}</strong> <span style="color:var(--text-muted);font-size:0.76rem;">${escapeHtml(q.topic || '')}${q.category ? ' · ' + escapeHtml(normalizeCategoryValue(q.category)) : ''}</span></div>
+      <div class="doc-q-prev">${renderQuestionPreviewHtml(q.id)}</div>
+      <div class="doc-q-actions">
+        <button class="btn btn-outline" style="font-size:0.78rem;padding:5px 11px;" onclick="doctorOpen('${escapeHtml(q.id)}')">✏️ Open in editor</button>
+        <button class="btn btn-outline" style="font-size:0.78rem;padding:5px 11px;color:var(--accent-red);border-color:#f0b9b9;" onclick="doctorDelete('${escapeHtml(q.id)}')">🗑 Delete this question</button>
+      </div>
+    </div>`).join('');
+  return `<div class="doc-detail">
+      ${iss.detail ? `<div class="doc-detail-note">${escapeHtml(iss.detail)}</div>` : ''}
+      ${body}
+      <div style="text-align:right;margin-top:6px;"><button class="btn btn-outline" style="font-size:0.76rem;padding:4px 10px;" onclick="doctorDismiss('${_docKeyAttr(iss.key)}')">✓ Dismiss (not an issue)</button></div>
+    </div>`;
+}
+function _docKeyAttr(k) { return String(k).replace(/'/g, "\\'"); }
+function doctorToggle(key) { if (_doctorExpanded.has(key)) _doctorExpanded.delete(key); else _doctorExpanded.add(key); _doctorRenderResults(); }
+function doctorDismiss(key) { _doctorDismissed.add(key); _doctorRenderResults(); }
+function doctorOpen(id) { if (_docQById(id)) editQuestion(id); else showToast('That question no longer exists', 'info'); }
+function doctorDelete(id) {
+  const q = _docQById(id); if (!q) { _doctorRenderResults(); return; }
+  showConfirm('Delete Question', `Permanently delete “${q.title || 'Untitled'}”? This cannot be undone.`, () => {
+    questionBank = questionBank.filter(x => x.id !== id);
+    deleteQuestionDoc(id);
+    updateCounts();
+    showToast('Question deleted', 'info');
+    if (document.querySelector('#page-bank.active')) renderQuestionBank();
+    _doctorRenderResults();
+  });
+}
+
+
+// =====================================================================
 // RPG — Science Quest layer (ported from the Math Practice app)
 // Storage: "firestore" saves hero progress to users/{uid}/settings/scienceRpg
 // (with one-time migration from any local preview's localStorage).
@@ -26910,6 +27232,14 @@ window.flagMoveToVetting = flagMoveToVetting;
 window.resolveFlaggedQuestion = resolveFlaggedQuestion;
 window.dismissFlaggedQuestion = dismissFlaggedQuestion;
 window.deleteFlaggedQuestion = deleteFlaggedQuestion;
+// Question Doctor (inline handlers)
+window.doctorScan = doctorScan;
+window.doctorStop = doctorStop;
+window.doctorSetPreset = doctorSetPreset;
+window.doctorToggle = doctorToggle;
+window.doctorDismiss = doctorDismiss;
+window.doctorOpen = doctorOpen;
+window.doctorDelete = doctorDelete;
 // Worksheet-creator block types + AI image enhance (inline handlers)
 window.saveBlockField = saveBlockField;
 window.saveBlockNum = saveBlockNum;
