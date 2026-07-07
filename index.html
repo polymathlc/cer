@@ -4919,6 +4919,10 @@ option {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               &#x270D;&#xFE0F; Add Open-Ended
             </button>
+            <button class="add-block-btn plainanswer-add" onclick="addBlock('fillblank')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              &#x1F532; Add Fill-in-the-Blanks
+            </button>
             <button class="add-block-btn explanation-add" onclick="addBlock('explanation')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
               &#x1F4A1; Add Explanation
@@ -6776,6 +6780,17 @@ option {
 .dgn-text .dgn-del{ position:absolute; right:-11px; top:-11px; width:20px; height:20px; border-radius:50%; background:var(--accent-red,#dc2626); color:#fff; font-size:0.82rem; display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; user-select:none; }
 .dgn-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0 4px; }
 .dgn-hint{ font-size:0.82rem; color:var(--text-muted); margin:2px 0 8px; line-height:1.5; }
+/* ── Fill in the blanks ─────────────────────────────────────────────── */
+.fb-chip-wrap{ display:flex; flex-wrap:wrap; gap:5px 6px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface-alt,#faf8f5); line-height:1.9; }
+.fb-chip{ display:inline-block; padding:2px 8px; border-radius:6px; border:1px solid transparent; cursor:pointer; font-size:0.88rem; user-select:none; transition:background .12s,border-color .12s; }
+.fb-chip:hover{ background:#fff; border-color:var(--border); }
+.fb-chip.on{ background:var(--accent-blue,#3b82f6); color:#fff; border-color:var(--accent-blue,#3b82f6); font-weight:600; }
+.fb-chip.on:hover{ background:#2563eb; }
+.fb-preview{ padding:10px 12px; border:1px dashed var(--border); border-radius:10px; background:#fff; font-size:0.92rem; line-height:2; }
+.fb-blank-slot{ display:inline-block; min-width:44px; border-bottom:1.5px solid #9aa0a6; margin:0 2px; text-align:center; white-space:nowrap; }
+.fb-sentence{ font-size:0.98rem; }
+.fb-input{ display:inline-block; padding:3px 8px; margin:0 3px; border:1px solid var(--border); border-bottom:2px solid var(--accent-blue,#3b82f6); border-radius:6px; font-family:inherit; font-size:0.95rem; background:#fff; color:var(--on-surface,#1c1c19); min-width:70px; vertical-align:baseline; }
+.fb-input:focus{ outline:none; border-color:var(--accent-blue,#3b82f6); box-shadow:0 0 0 2px rgba(59,130,246,0.15); }
 </style>
 <div class="overlay" id="spireBookOverlay">
   <div class="overlay-card spirebook">
@@ -7552,7 +7567,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.83.2';
+const APP_VERSION = 'v1.84.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7910,6 +7925,10 @@ function createBlock(type) {
       break;
     case 'openLines':
       block.lines = 4;
+      break;
+    case 'fillblank':
+      // Paragraph text; blanked answers are wrapped in [[double brackets]].
+      block.text = '';
       break;
     case 'workingSpace':
       block.lines = 6;
@@ -9042,6 +9061,7 @@ function renderBlocks() {
       case 'mcq':         badgeClass = 'answer-badge'; badgeIcon = '🔘'; badgeLabel = 'Multiple Choice'; break;
       case 'answerLine':  badgeClass = 'plainanswer-badge'; badgeIcon = '✏️'; badgeLabel = 'Answer Line'; break;
       case 'openLines':   badgeClass = 'plainanswer-badge'; badgeIcon = '✍️'; badgeLabel = 'Open-Ended Answer'; break;
+      case 'fillblank':   badgeClass = 'plainanswer-badge'; badgeIcon = '🔲'; badgeLabel = 'Fill in the Blanks'; break;
       case 'workingSpace':badgeClass = 'plainanswer-badge'; badgeIcon = '🧮'; badgeLabel = 'Working Space'; break;
       case 'commonMistake':badgeClass = 'explanation-badge'; badgeIcon = '⚠️'; badgeLabel = 'Common Mistake'; break;
       case 'studentAnswer':badgeClass = 'explanation-badge'; badgeIcon = '🧑‍🎓'; badgeLabel = 'Student Answer'; break;
@@ -9283,6 +9303,7 @@ function makeBlockInsertBar(index) {
       <button type="button" class="block-insert-btn" onclick="addBlockAt('mcq', ${index})">🔘 Multiple Choice</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('answerLine', ${index})">✏️ Answer Line</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('openLines', ${index})">✍️ Open-Ended Answer</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('fillblank', ${index})">🔲 Fill-in-the-Blanks</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('workingSpace', ${index})">🧮 Working Space</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('commonMistake', ${index})">⚠️ Common Mistake</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('studentAnswer', ${index})">🧑‍🎓 Student Answer</button>
@@ -9460,6 +9481,17 @@ function renderImportedBlockEditorBody(block) {
           </div>
         </div>`;
     }
+    case 'fillblank':
+      return `
+        <div class="block-body">
+          <textarea id="fbText_${id}" class="form-input" rows="3" placeholder="Type the sentence or paragraph, e.g.  Metal is a good [[conductor]] of heat."
+                    style="width:100%;box-sizing:border-box;font-family:inherit;font-size:0.92rem;line-height:1.6;resize:vertical;"
+                    oninput="saveBlockField('${id}','text',this.value); fbSyncChips('${id}')">${escapeHtml(block.text || '')}</textarea>
+          <div style="font-size:0.78rem;color:var(--text-muted);margin:8px 0 6px;line-height:1.5;">👆 Click a word below to turn it into a blank (click again to undo). You can also wrap words yourself in <code>[[ ]]</code>. In practice students fill the blanks in and the <strong>AI accepts sensible variations</strong> (synonyms, spelling, plurals).</div>
+          <div id="fbChips_${id}" class="fb-chip-wrap">${_fbChipsHtml(id, block.text || '')}</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);margin:12px 0 4px;">Student preview:</div>
+          <div id="fbPrev_${id}" class="fb-preview">${_fbPreviewHtml(block.text || '')}</div>
+        </div>`;
     case 'workingSpace':
       return `
         <div class="block-body">
@@ -9537,6 +9569,8 @@ function renderImportedBlockStudent(block, q) {
         Array.from({ length: Number(block.lines) || 4 }).map(() => `<div style="border-bottom:1px solid #d4d4d4;height:26px;"></div>`).join('') + `</div>`;
     case 'workingSpace':
       return `<div class="ws-working" style="margin:10px 0;border:1px dashed #c4c4c4;border-radius:8px;height:${(Number(block.lines) || 6) * 26}px;"></div>`;
+    case 'fillblank':
+      return _fbHasBlanks(block) ? `<div style="margin:10px 0;">${_fbReadonlyHtml(block)}</div>` : `<div class="fb-sentence" style="line-height:2;margin:10px 0;">${escapeHtml(block.text || '')}</div>`;
     case 'commonMistake': {
       const c = COMMON_MISTAKE_COLORS[block.color] || COMMON_MISTAKE_COLORS.teal;
       return `<div style="margin:10px 0;border-left:4px solid ${c};background:${c}14;padding:8px 12px;border-radius:6px;">
@@ -11937,6 +11971,9 @@ function getQuestionPreview(q) {
     if (block.type === 'mcq' && (block.options || []).some(o => o.text)) {
       return clean('Multiple choice: ' + (block.options || []).map(o => o.text).join(' / ')).substring(0, 150);
     }
+    if (block.type === 'fillblank' && (block.text || '').trim()) {
+      return clean('Fill in the blanks: ' + _fbParse(block.text).map(p => p.type === 'blank' ? '____' : p.text).join('')).substring(0, 150);
+    }
   }
   return 'No text content';
 }
@@ -14071,6 +14108,7 @@ document.addEventListener('click', function (e) {
 function buildOpenBody(q, containerSel, markCfg) {
   const items = [];
   const mcqItems = [];
+  const fbBlocks = [];
   const isAnnot = !!(q && q.annotation);
   let annotCount = 0;
   let html = '';
@@ -14112,6 +14150,29 @@ function buildOpenBody(q, containerSel, markCfg) {
         // answer so an admin-set answer persists across renders.
         html += _openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' });
         break;
+      case 'fillblank': {
+        const parts = _fbParse(block.text || '');
+        const hasBlank = parts.some(p => p.type === 'blank');
+        if (!hasBlank) { html += `<div class="fb-sentence" style="line-height:2;margin:8px 0;">${parts.map(p => escapeHtml(p.text)).join('')}</div>`; break; }
+        const oidxs = [], answers = [];
+        let sentence = '';
+        parts.forEach(p => {
+          if (p.type === 'text') { sentence += escapeHtml(p.text); return; }
+          const oidx = items.length;
+          items.push({ label: 'Blank ' + (oidxs.length + 1), model: p.answer, block, field: 'text' });
+          oidxs.push(oidx); answers.push(p.answer);
+          const w = Math.max(6, Math.min(22, (p.answer || '').length + 3));
+          sentence += `<input class="fb-input" data-oidx="${oidx}" type="text" autocomplete="off" spellcheck="false" aria-label="blank" style="width:${w}ch;">`;
+        });
+        fbBlocks.push({ blockId: block.id, oidxs, answers });
+        html += `<div style="margin-top:12px;margin-bottom:4px;"><span class="sv-block-tag answer">Fill in the blanks</span></div>`;
+        html += `<div class="fb-sentence" style="line-height:2.4;margin-bottom:8px;">${sentence}</div>`;
+        html += `<div class="fb-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
+            <button type="button" class="btn btn-blue" data-fb-check="${containerSel}" data-fb-block="${block.id}" style="padding:6px 14px;font-size:0.82rem;">🤖 Check answers</button>
+          </div>
+          <div class="fb-feedback" data-fb-fb="${block.id}" style="margin:2px 0 12px;"></div>`;
+        break;
+      }
       case 'explanation':
         break; // hidden
       case 'video':
@@ -14128,17 +14189,22 @@ function buildOpenBody(q, containerSel, markCfg) {
         break;
     }
   });
+  const fbItemCount = fbBlocks.reduce((s, b) => s + b.oidxs.length, 0);
   if (isAnnot && annotCount) {
     // Annotation (tick & label) questions get their own Check / AI Check bar
     // instead of the open-answer photo bar or the "nothing to mark" note.
     html += annotationActionsHtml(containerSel);
   } else if (items.length === 0 && mcqItems.length === 0) {
     html += `<div style="padding:12px;color:var(--text-muted);font-size:0.9rem;">This question has no answer section for the AI to mark.</div>`;
+  } else if (items.length - fbItemCount === 0 && mcqItems.length === 0) {
+    // Fill-in-the-blank only — each block carries its own Check button, so the
+    // "photo of your written work" bar would just be noise here.
   } else {
     html += openPhotoBarHtml(containerSel);
   }
   _openItemsStore[containerSel] = items;
   _openMcqStore[containerSel] = mcqItems;
+  _fbStore[containerSel] = fbBlocks;
   _openQStore[containerSel] = q;
   _openSurfaceCfg[containerSel] = markCfg || {};
   _openPartResults[containerSel] = {};
@@ -14576,6 +14642,124 @@ document.addEventListener('click', function (e) {
 });
 
 // =====================================================================
+// FILL IN THE BLANKS — a paragraph with selected words blanked out as
+// [[answer]]. Students type the missing words inline; a Check button grades
+// them (exact match instantly, then the AI accepts sensible variations).
+// =====================================================================
+const _fbStore = {}; // containerSel -> [{ blockId, oidxs:[], answers:[] }]
+
+// Split text into tokens, keeping [[...]] groups (even multi-word) intact.
+function _fbSplitTokens(text) { const toks = []; const re = /\[\[[\s\S]+?\]\]|\S+/g; let m; while ((m = re.exec(String(text || '')))) toks.push(m[0]); return toks; }
+// Parse into ordered segments of plain text and blanks (with the answer).
+function _fbParse(text) {
+  const parts = []; const re = /\[\[([\s\S]+?)\]\]/g; let last = 0, m; text = String(text || '');
+  while ((m = re.exec(text))) { if (m.index > last) parts.push({ type: 'text', text: text.slice(last, m.index) }); parts.push({ type: 'blank', answer: (m[1] || '').trim() }); last = m.index + m[0].length; }
+  if (last < text.length) parts.push({ type: 'text', text: text.slice(last) });
+  return parts;
+}
+function _fbHasBlanks(block) { return !!(block && block.type === 'fillblank' && /\[\[[\s\S]+?\]\]/.test(block.text || '')); }
+
+// ---- editor: clickable word chips + live student preview ----
+function _fbChipsHtml(id, text) {
+  const toks = _fbSplitTokens(text);
+  if (!toks.length) return '<span style="font-size:0.8rem;color:var(--text-muted);">Type a sentence above, then click words here to blank them.</span>';
+  return toks.map((t, i) => {
+    const bm = t.match(/^\W*\[\[([\s\S]+?)\]\]\W*$/);
+    const label = bm ? bm[1] : t;
+    return `<span class="fb-chip${bm ? ' on' : ''}" onclick="fbToggleToken('${id}',${i})" title="${bm ? 'Click to un-blank' : 'Click to make this a blank'}">${escapeHtml(label)}</span>`;
+  }).join(' ');
+}
+function _fbPreviewHtml(text) {
+  const parts = _fbParse(text);
+  if (!parts.length) return '<span style="color:var(--text-muted);font-size:0.82rem;">—</span>';
+  return parts.map(p => p.type === 'blank'
+    ? `<span class="fb-blank-slot" title="${escapeHtml(p.answer)}">${'&nbsp;'.repeat(Math.max(6, (p.answer || '').length + 2))}</span>`
+    : escapeHtml(p.text)).join('');
+}
+function fbSyncChips(id) {
+  const b = blocks.find(x => x.id === id); if (!b) return;
+  const c = document.getElementById('fbChips_' + id); if (c) c.innerHTML = _fbChipsHtml(id, b.text || '');
+  const p = document.getElementById('fbPrev_' + id); if (p) p.innerHTML = _fbPreviewHtml(b.text || '');
+}
+function fbToggleToken(id, idx) {
+  const b = blocks.find(x => x.id === id); if (!b) return;
+  const toks = _fbSplitTokens(b.text || '');
+  let t = toks[idx]; if (t == null) return;
+  const bm = t.match(/^(\W*)\[\[([\s\S]+?)\]\](\W*)$/);
+  if (bm) t = bm[1] + bm[2] + bm[3];                                  // un-blank
+  else { const wm = t.match(/^(\W*)([\s\S]*?)(\W*)$/); t = wm[1] + '[[' + wm[2] + ']]' + wm[3]; } // blank the core word
+  toks[idx] = t;
+  b.text = toks.join(' ');
+  const ta = document.getElementById('fbText_' + id); if (ta) ta.value = b.text;
+  fbSyncChips(id);
+}
+
+// ---- read-only render (previews, student view, print) ----
+function _fbReadonlyHtml(block) {
+  const parts = _fbParse(block.text || '');
+  if (!parts.length) return '';
+  const body = parts.map(p => p.type === 'blank'
+    ? `<span class="fb-blank-slot" style="color:var(--primary);border-bottom:1.5px solid var(--primary);">${escapeHtml(p.answer)}</span>`
+    : escapeHtml(p.text)).join('');
+  return `<div class="fb-sentence" style="line-height:2;">${body}</div>`;
+}
+
+// ---- marking: exact match first, then the AI accepts variations ----
+async function fbCheck(containerSel, blockId, btn) {
+  const c = document.querySelector(containerSel); if (!c) return;
+  const store = (_fbStore[containerSel] || []).find(x => x.blockId === blockId); if (!store) return;
+  const q = _openQStore[containerSel];
+  const fb = c.querySelector('[data-fb-fb="' + blockId + '"]');
+  const rows = store.oidxs.map((oidx, i) => {
+    const el = c.querySelector('.fb-input[data-oidx="' + oidx + '"]');
+    return { oidx, i, el, model: store.answers[i] || '', student: el ? el.value.trim() : '' };
+  });
+  if (rows.every(r => !r.student)) { showToast('Fill in the blanks first', 'info'); return; }
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+  const pending = [];
+  rows.forEach(r => { if (r.student && norm(r.student) === norm(r.model)) r.verdict = 'correct'; else if (r.student) pending.push(r); else r.verdict = 'incorrect'; });
+  // Variations → AI (only the ones that don't match exactly and aren't blank).
+  if (pending.length && window.__aiReady && window.__aiReady()) {
+    const orig = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Checking…'; }
+    if (fb) fb.innerHTML = '<span style="color:var(--text-muted);font-size:0.85rem;">🤖 Checking your answers…</span>';
+    try {
+      const ctx = q ? _questionContext(q) : '';
+      const list = pending.map((r, k) => `${k}. expected="${r.model}" student="${r.student}"`).join('\n');
+      const prompt =
+        `You are marking fill-in-the-blank answers for a primary-school science quiz. ${_markingPreamble(q && q.markingGuide)}\n` +
+        `Question context: "${ctx}".\n` +
+        `For EACH blank, decide whether the student's word means the same as the expected answer. ACCEPT synonyms, plurals, minor spelling slips and scientifically equivalent terms; only mark "incorrect" when the meaning is wrong. ` +
+        `Return ONLY a JSON array like [{"i":0,"verdict":"correct"}]:\n${list}`;
+      const raw = await askGemini(prompt, { maxOutputTokens: 300 + pending.length * 40, temperature: 0.1, json: true });
+      const parsed = _parseAIJson(raw);
+      const arr = Array.isArray(parsed) ? parsed : ((parsed && parsed.items) || []);
+      arr.forEach(v => { if (v && typeof v.i === 'number' && pending[v.i]) pending[v.i].verdict = String(v.verdict || '').toLowerCase() === 'correct' ? 'correct' : 'incorrect'; });
+    } catch (e) { console.warn('fill-blank AI mark', e); }
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+  let correct = 0;
+  rows.forEach(r => {
+    if (!r.verdict) r.verdict = 'incorrect';
+    const ok = r.verdict === 'correct'; if (ok) correct++;
+    if (r.el) { r.el.style.borderColor = ok ? 'var(--primary)' : 'var(--accent-red)'; r.el.style.background = ok ? '#f0fdf4' : '#fef2f2'; }
+    _setPartResult(containerSel, 'open:' + r.oidx, r.verdict, ok ? 1 : 0, r.model, r.student);
+  });
+  if (fb) {
+    const wrong = rows.filter(r => r.verdict !== 'correct');
+    fb.innerHTML = `<span style="font-weight:700;color:${correct === rows.length ? 'var(--primary)' : 'var(--accent-orange)'};">${correct} / ${rows.length} correct</span>` +
+      (wrong.length ? `<span style="color:var(--text-muted);font-size:0.85rem;"> — correct answer${wrong.length === 1 ? '' : 's'}: ${wrong.map(r => escapeHtml(r.model)).join(', ')}</span>` : ' 🎉');
+  }
+  _checkAllPartsMarked(containerSel);
+}
+
+// Delegated Check handler for fill-in-the-blank blocks.
+document.addEventListener('click', function (e) {
+  const chk = e.target.closest && e.target.closest('[data-fb-check]');
+  if (chk) { e.preventDefault(); fbCheck(chk.getAttribute('data-fb-check'), chk.getAttribute('data-fb-block'), chk); }
+});
+
+// =====================================================================
 // PHOTO ANSWER — one photo of the whole page of written answers, sent to the
 // AI so it can read the handwriting and mark each open-ended section.
 // =====================================================================
@@ -14695,7 +14879,8 @@ function resetOpenAnswersIn(containerSel, scoreElId) {
     a.disabled = false;
     a.style.borderColor = 'var(--border)';
   });
-  document.querySelectorAll(containerSel + ' .open-feedback, ' + containerSel + ' .mcq-feedback').forEach(fb => { fb.innerHTML = ''; });
+  document.querySelectorAll(containerSel + ' .fb-input').forEach(a => { a.value = ''; a.disabled = false; a.style.borderColor = 'var(--border)'; a.style.background = '#fff'; });
+  document.querySelectorAll(containerSel + ' .open-feedback, ' + containerSel + ' .mcq-feedback, ' + containerSel + ' .fb-feedback').forEach(fb => { fb.innerHTML = ''; });
   document.querySelectorAll(containerSel + ' .part-hint-box').forEach(h => { h.style.display = 'none'; h.innerHTML = ''; });
   document.querySelectorAll(containerSel + ' .part-ai-btn').forEach(b => { b.disabled = false; });
   document.querySelectorAll(containerSel + ' .mcq-block label').forEach(l => { l.style.background = ''; l.style.borderColor = 'var(--border)'; });
@@ -15591,6 +15776,8 @@ function questionHasMarkableAnswer(q) {
   // Annotation (tick & label) questions are markable via AI Check as long as
   // they carry a diagram to annotate.
   if (q && q.annotation && ((q.blocks) || []).some(b => b && b.type === 'image' && b.url)) return true;
+  // A fill-in-the-blank block counts only once it actually has blanks marked.
+  if (((q && q.blocks) || []).some(b => _fbHasBlanks(b))) return true;
   return ((q && q.blocks) || []).some(b => b && ['answer', 'plainanswer', 'openLines', 'workingSpace', 'mcq'].includes(b.type));
 }
 
@@ -18868,6 +19055,7 @@ function _docQParts(q) {
     else if (b.type === 'mcq') p.mcq = b;
     else if (b.type === 'answer') { p.answers.push({ kind: 'cer', claim: stripHtml(b.claim || ''), evidence: stripHtml(b.evidence || ''), reasoning: stripHtml(b.reasoning || '') }); scanInline(b.claim); scanInline(b.evidence); scanInline(b.reasoning); }
     else if (b.type === 'plainanswer') { p.answers.push({ kind: 'plain', text: stripHtml(b.content || '') }); scanInline(b.content); }
+    else if (b.type === 'fillblank') { const fp = _fbParse(b.text || ''); p.text += ' ' + fp.map(x => x.type === 'blank' ? x.answer : x.text).join(''); const ans = fp.filter(x => x.type === 'blank').map(x => x.answer).join('; '); if (ans) p.answers.push({ kind: 'plain', text: ans }); }
     else if (b.type === 'explanation') scanInline(b.content);
   });
   p.text = p.text.replace(/\s+/g, ' ').trim();
@@ -27331,6 +27519,8 @@ window.doctorDelete = doctorDelete;
 // Worksheet-creator block types + AI image enhance (inline handlers)
 window.saveBlockField = saveBlockField;
 window.saveBlockNum = saveBlockNum;
+window.fbSyncChips = fbSyncChips;
+window.fbToggleToken = fbToggleToken;
 window.mcqSetCorrect = mcqSetCorrect;
 window.mcqSetOptionText = mcqSetOptionText;
 window.mcqAddOption = mcqAddOption;
