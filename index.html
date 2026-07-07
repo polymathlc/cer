@@ -7545,7 +7545,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.83.0';
+const APP_VERSION = 'v1.83.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -18846,45 +18846,48 @@ function _iss(tag, q, type, severity, title, detail) {
   return { key: tag + ':' + q.id, type, severity, ids: [q.id], title, summary: '“' + (q.title || 'Untitled') + '”', detail };
 }
 
-// ---- instant, deterministic structural checks ----
-function _doctorLocalIssues() {
-  const issues = [];
-  const bank = questionBank;
-  // 1) duplicates by content signature
+// ---- instant, deterministic structural checks — emitted progressively so a
+// big bank never freezes the page (we yield to the browser between chunks) ----
+async function _doctorRunLocalChecks() {
+  const bank = questionBank.slice();
+  // 1) duplicates by content signature (one fast pass, then emit each group)
   const bySig = {};
   bank.forEach(q => { const s = _docSignature(q); if (s.replace(/[|\s]/g, '').length < 5) return; (bySig[s] = bySig[s] || []).push(q); });
   Object.values(bySig).forEach(group => {
     if (group.length > 1) {
-      issues.push({
+      _doctorEmitIssue({
         key: 'dup:' + group.map(q => q.id).sort().join(','), type: 'Duplicate', severity: 'high', ids: group.map(q => q.id),
         title: group.length + ' identical / near-identical questions', summary: '“' + (group[0].title || 'Untitled') + '” appears ' + group.length + ' times',
         detail: 'These questions are essentially the same. Keep the best one and delete the extras.'
       });
     }
   });
-  // 2) per-question structural checks
-  bank.forEach(q => {
+  // 2) per-question structural checks, chunked with a yield so cards stream in
+  const CHUNK = 60;
+  for (let i = 0; i < bank.length; i++) {
+    if (_doctorScan.stop) return;
+    const q = bank[i];
     const p = _docQParts(q);
     if (p.mcq) {
       const opts = (p.mcq.options || []).filter(o => stripHtml(o.text || '').trim());
       const correct = (p.mcq.options || []).find(o => o.id === p.mcq.correctId);
-      if (!correct) issues.push(_iss('mcqnc', q, 'MCQ', 'high', 'No correct option marked', 'This multiple-choice question has no correct option selected, so it can never be marked right.'));
-      else if (opts.length < 2) issues.push(_iss('mcqfew', q, 'MCQ', 'med', 'Too few options', 'This multiple-choice question has fewer than two real options.'));
+      if (!correct) _doctorEmitIssue(_iss('mcqnc', q, 'MCQ', 'high', 'No correct option marked', 'This multiple-choice question has no correct option selected, so it can never be marked right.'));
+      else if (opts.length < 2) _doctorEmitIssue(_iss('mcqfew', q, 'MCQ', 'med', 'Too few options', 'This multiple-choice question has fewer than two real options.'));
       else {
         const norm = opts.map(o => _docNorm(o.text));
-        if (new Set(norm).size < norm.length) issues.push(_iss('mcqdupo', q, 'MCQ', 'med', 'Repeated options', 'Two or more of the options are identical.'));
+        if (new Set(norm).size < norm.length) _doctorEmitIssue(_iss('mcqdupo', q, 'MCQ', 'med', 'Repeated options', 'Two or more of the options are identical.'));
       }
     }
-    if (p.emptyImages > 0) issues.push(_iss('img', q, 'Image', 'med', 'Missing diagram', 'An image block has no picture — students will see a broken or blank diagram.'));
+    if (p.emptyImages > 0) _doctorEmitIssue(_iss('img', q, 'Image', 'med', 'Missing diagram', 'An image block has no picture — students will see a broken or blank diagram.'));
     p.answers.forEach(a => {
-      if (a.kind === 'cer' && !(a.claim || a.evidence || a.reasoning)) issues.push(_iss('cerempty', q, 'Answer', 'med', 'Blank model answer', 'The CER answer (claim / evidence / reasoning) is empty, so there is nothing for the AI to mark against.'));
-      if (a.kind === 'plain' && !a.text) issues.push(_iss('plainempty', q, 'Answer', 'med', 'Blank model answer', 'The answer field is empty, so there is nothing for the AI to mark against.'));
+      if (a.kind === 'cer' && !(a.claim || a.evidence || a.reasoning)) _doctorEmitIssue(_iss('cerempty', q, 'Answer', 'med', 'Blank model answer', 'The CER answer (claim / evidence / reasoning) is empty, so there is nothing for the AI to mark against.'));
+      if (a.kind === 'plain' && !a.text) _doctorEmitIssue(_iss('plainempty', q, 'Answer', 'med', 'Blank model answer', 'The answer field is empty, so there is nothing for the AI to mark against.'));
     });
-    if (!questionHasMarkableAnswer(q) && !q.annotation) issues.push(_iss('noans', q, 'Answer', 'low', 'No answer to mark', 'This question has no answer section (CER, answer, open-ended or MCQ) and is not an annotation question, so practice cannot score it.'));
-    if (!(q.topic || '').trim()) issues.push(_iss('notopic', q, 'Meta', 'low', 'No topic set', 'This question has no topic, so it will not appear under any topic in practice.'));
-    if (!normalizeCategoryValue(q.category || '').trim()) issues.push(_iss('nocat', q, 'Meta', 'low', 'No category set', 'This question has no category.'));
-  });
-  return issues;
+    if (!questionHasMarkableAnswer(q) && !q.annotation) _doctorEmitIssue(_iss('noans', q, 'Answer', 'low', 'No answer to mark', 'This question has no answer section (CER, answer, open-ended or MCQ) and is not an annotation question, so practice cannot score it.'));
+    if (!(q.topic || '').trim()) _doctorEmitIssue(_iss('notopic', q, 'Meta', 'low', 'No topic set', 'This question has no topic, so it will not appear under any topic in practice.'));
+    if (!normalizeCategoryValue(q.category || '').trim()) _doctorEmitIssue(_iss('nocat', q, 'Meta', 'low', 'No category set', 'This question has no category.'));
+    if (i % CHUNK === CHUNK - 1) await new Promise(r => setTimeout(r, 0)); // let the browser paint the new cards
+  }
 }
 
 // ---- AI pass: batch compact question reps and ask the model for problems ----
@@ -18927,13 +18930,46 @@ function _docAiToIssue(f, snapshot) {
     detail: String(f.detail || '')
   };
 }
-function _doctorAddIssue(issue) {
-  if (_doctorIssues.some(x => x.key === issue.key)) return;
+// Clear the board for a fresh scan.
+function _doctorClearResults() {
+  _doctorIssues = [];
+  const host = document.getElementById('doctorResults');
+  if (host) host.innerHTML = '';
+  _doctorUpdateCount();
+}
+// Add ONE issue and paint its card immediately (progressive fill — the page
+// never waits for the whole scan to finish before showing what it found).
+function _doctorEmitIssue(issue) {
+  if (!issue || _doctorIssues.some(x => x.key === issue.key)) return;
   if (/duplicate/i.test(issue.type)) {
     const idset = issue.ids.slice().sort().join(',');
     if (_doctorIssues.some(x => /duplicate/i.test(x.type) && x.ids.slice().sort().join(',') === idset)) return; // already found structurally
   }
+  if (!issue.ids.some(id => _docQById(id))) return; // references a deleted question
   _doctorIssues.push(issue);
+  if (!_doctorDismissed.has(issue.key)) _doctorInsertCard(issue);
+  _doctorUpdateCount();
+}
+// Insert a single card in severity order, without re-rendering the whole list.
+function _doctorInsertCard(iss) {
+  const host = document.getElementById('doctorResults'); if (!host) return;
+  const empty = host.querySelector('.empty-state'); if (empty) empty.remove();
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _doctorCardHtml(iss);
+  const el = tmp.firstElementChild; if (!el) return;
+  const rank = _sevRank(iss.severity);
+  let placed = false;
+  for (const child of host.children) {
+    if (Number(child.dataset.sev || 9) > rank) { host.insertBefore(el, child); placed = true; break; }
+  }
+  if (!placed) host.appendChild(el);
+}
+function _doctorUpdateCount() {
+  const list = _doctorVisibleIssues();
+  const countEl = document.getElementById('doctorCount');
+  if (countEl) countEl.textContent = list.length ? (list.length + ' possible issue' + (list.length === 1 ? '' : 's') + (_doctorScan.running ? ' so far…' : '')) : (_doctorScan.running ? 'Scanning…' : '');
+  const badge = document.getElementById('doctorBadge');
+  if (badge) { if (list.length) { badge.style.display = ''; badge.textContent = list.length; } else badge.style.display = 'none'; }
 }
 
 async function doctorScan() {
@@ -18944,11 +18980,14 @@ async function doctorScan() {
   const useAi = !!(window.__aiReady && window.__aiReady());
   _doctorDismissed.clear();
   _doctorExpanded.clear();
-  _doctorIssues = _doctorLocalIssues();
   _doctorScan = { running: true, done: 0, total: 0, stop: false };
-  _doctorSetStatus(useAi ? 'Running structural checks…' : 'AI is off — showing structural checks only.');
-  _doctorRenderResults();
-  if (useAi) {
+  _doctorClearResults();                    // start from an empty board
+  _doctorSetStatus('Checking structure…');
+  // Structural checks stream in first (cards appear as they're found)…
+  await _doctorRunLocalChecks();
+  // …then the AI pass fills in deeper issues batch by batch, each painting
+  // its cards the moment it returns — nothing waits for the whole scan.
+  if (useAi && !_doctorScan.stop) {
     const snapshot = questionBank.slice();
     const BATCH = 12;
     const batches = [];
@@ -18961,18 +19000,20 @@ async function doctorScan() {
         const my = batches[bi++];
         try {
           const found = await _docAiBatch(my.items, my.start, instruction);
-          found.forEach(f => { const issue = _docAiToIssue(f, snapshot); if (issue) _doctorAddIssue(issue); });
+          found.forEach(f => _doctorEmitIssue(_docAiToIssue(f, snapshot)));
         } catch (e) { console.warn('doctor batch failed', e); }
         _doctorScan.done++;
         _doctorSetStatus(`Scanning with AI… ${_doctorScan.done} / ${batches.length}`);
-        _doctorRenderResults();
       }
     };
     await Promise.all(Array.from({ length: Math.min(4, batches.length) }, worker));
+  } else if (!useAi) {
+    _doctorSetStatus('');
+    showToast('AI is off — showing structural checks only', 'info');
   }
   _doctorScan.running = false;
   _doctorSetStatus('');
-  _doctorRenderResults();
+  _doctorRenderResults();                    // one final tidy (sorted, consistent)
   const n = _doctorVisibleIssues().length;
   showToast(`Scan complete — ${n} possible issue${n === 1 ? '' : 's'} found`, n ? 'info' : 'success');
 }
@@ -18990,10 +19031,7 @@ function _doctorVisibleIssues() {
 function _doctorRenderResults() {
   const host = document.getElementById('doctorResults'); if (!host) return;
   const list = _doctorVisibleIssues().slice().sort((a, b) => _sevRank(a.severity) - _sevRank(b.severity));
-  const countEl = document.getElementById('doctorCount');
-  if (countEl) countEl.textContent = list.length ? (list.length + ' possible issue' + (list.length === 1 ? '' : 's')) : (_doctorScan.running ? 'Scanning…' : '');
-  const badge = document.getElementById('doctorBadge');
-  if (badge) { if (list.length) { badge.style.display = ''; badge.textContent = list.length; } else badge.style.display = 'none'; }
+  _doctorUpdateCount();
   if (!list.length) {
     host.innerHTML = _doctorScan.running ? '' :
       `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:44px;height:44px;opacity:0.4;margin-bottom:10px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><h3>No issues to show</h3><p>Edit the search box above and hit <strong>Scan questions</strong> to check your bank.</p></div>`;
@@ -19005,7 +19043,7 @@ function _doctorCardHtml(iss) {
   const expanded = _doctorExpanded.has(iss.key);
   const color = iss.severity === 'high' ? '#dc2626' : iss.severity === 'med' ? '#d97706' : '#6b7280';
   const bg = iss.severity === 'high' ? '#fef2f2' : iss.severity === 'med' ? '#fffbeb' : '#f3f4f6';
-  return `<div class="doc-card" style="border-left:4px solid ${color};">
+  return `<div class="doc-card" data-sev="${_sevRank(iss.severity)}" style="border-left:4px solid ${color};">
       <div class="doc-card-head" onclick="doctorToggle('${_docKeyAttr(iss.key)}')">
         <span class="doc-badge" style="background:${bg};color:${color};">${escapeHtml(iss.type)}${iss.ai ? ' · AI' : ''}</span>
         <div style="flex:1;min-width:0;">
