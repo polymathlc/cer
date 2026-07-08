@@ -7578,7 +7578,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.87.1';
+const APP_VERSION = 'v1.88.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -21340,8 +21340,9 @@ function rpgRolloverGameScores(key) {
 // at most once per month (no repeats); and to stop a student pasting the SAME
 // open answer into many questions, an open answer must be non-empty and not a
 // duplicate of one already counted this month. Updates state only — the caller
-// (rpgOnMarked) saves & republishes.
-function rpgNoteUniqueQuestion(qid, answerText) {
+// (rpgOnMarked) saves & republishes. `weight` lets past-paper game mode count a
+// question as 2 (the advertised ×2 leaderboard bonus).
+function rpgNoteUniqueQuestion(qid, answerText, weight) {
   qid = String(qid || "");
   if (!rpgState || !qid) return;
   rpgRolloverMonth();
@@ -21354,7 +21355,7 @@ function rpgNoteUniqueQuestion(qid, answerText) {
     rpgState.monthPrints[print] = 1;
   }
   rpgState.monthQids[qid] = 1;
-  rpgState.monthQ = (rpgState.monthQ || 0) + 1;
+  rpgState.monthQ = (rpgState.monthQ || 0) + Math.max(1, Math.round(Number(weight) || 1));
 }
 
 // A small, stable fingerprint of an open answer (letters/digits only). Empty for
@@ -22404,7 +22405,7 @@ async function rpgRenderLeaderboard(force = false) {
     .sort((a, b) => b.shownVal - a.shownVal || String(a.updatedAt || "").localeCompare(String(b.updatedAt || "")));
   if (!list.length) {
     const why = rpgBoardTab === "month" ? "No questions done this month yet — be the first on the board!"
-      : rpgBoardTab === "papers" ? "No past-year exam-paper questions done this month yet — practise a PSLE paper question to top this board!"
+      : rpgBoardTab === "papers" ? "No past-year exam-paper questions done this month yet — practise a PSLE paper question to top this board! Tip: paper questions answered in a game's past-paper mode count ×2."
       : rpgBoardTab === "lastmonth" ? "No questions were recorded last month."
       : rpgBoardTab === "td" ? "No Science Defenders runs this month yet — play to claim the top spot!"
       : rpgBoardTab === "raid" ? "No Science Raiders runs this month yet — dive in to top the board!"
@@ -24772,20 +24773,15 @@ function _sdBreakStatements(html) {
   return html.replace(re, (all, punct, s1, letter) =>
     `${punct}<br><b style="display:inline-block;min-width:1.7em;margin-top:7px;">${letter}</b>`);
 }
-function _sdExtractMcq(q) {
-  const blocks = (q && q.blocks) || [];
-  const mcq = blocks.find(b => b.type === 'mcq' && (b.options || []).length >= 2);
-  if (!mcq) return null;
-  // Need a defined correct option.
-  const answer = (mcq.options || []).findIndex(o => o.id === mcq.correctId);
-  if (answer < 0) return null;
-  // Build the FULL question stem as self-contained HTML — text, the diagram
-  // image(s) and any data table, in their original order. Styles are inlined
-  // and image URLs fully resolved so it renders correctly inside the iframe
-  // (which doesn't share the app's CSS variables or helper functions).
+// Build a question's FULL stem as self-contained HTML — text, the diagram
+// image(s) and any data table, in their original order. Styles are inlined
+// and image URLs fully resolved so it renders correctly inside the game
+// iframes (which don't share the app's CSS variables or helper functions).
+// Shared by the MCQ extractor and the past-paper OEQ (self-check) extractor.
+function _sdStemHtml(blocks) {
   let html = '';
   const plain = [];
-  for (const b of blocks) {
+  for (const b of (blocks || [])) {
     if (b.type === 'text') {
       if (b.content) { html += `<div style="margin:6px 0;">${_sdBreakStatements(b.content)}</div>`; const t = stripHtmlToText(b.content).trim(); if (t) plain.push(t); }
     } else if (b.type === 'part') {
@@ -24800,6 +24796,18 @@ function _sdExtractMcq(q) {
       try { html += `<div style="margin:10px 0;overflow-x:auto;">${renderTableReadonly(b, '')}</div>`; plain.push('[table]'); } catch (e) {}
     }
   }
+  return { html, plain };
+}
+function _sdExtractMcq(q) {
+  const blocks = (q && q.blocks) || [];
+  const mcq = blocks.find(b => b.type === 'mcq' && (b.options || []).length >= 2);
+  if (!mcq) return null;
+  // Need a defined correct option.
+  const answer = (mcq.options || []).findIndex(o => o.id === mcq.correctId);
+  if (answer < 0) return null;
+  const stem = _sdStemHtml(blocks);
+  const html = stem.html;
+  const plain = stem.plain;
   if (!html.trim()) return null; // nothing to show
   if (!q.id) return null;        // need a stable id to record responses / no-repeat
   // Options keep their authored formatting; require each to have real text.
@@ -24893,9 +24901,18 @@ function _sdRecordAttempt(d) {
     const minMs = _fairMinAnswerMs(d.questionId, !!d.correct);
     _noteAnswerSpeed(ms);
     if (ms >= minMs && rpgState) {
+      // Past-paper game mode: questions answered inside a game launched from the
+      // Past Papers page count ×2 on the leaderboards (the advertised bonus).
+      const pp = !!(_ppGameSel && _ppGameSel.qids && _ppGameSel.qids.has(String(d.questionId)));
+      const w = pp ? 2 : 1;
       const before = rpgState.monthQ || 0;
-      rpgNoteUniqueQuestion(d.questionId, '');   // MCQ → no answer fingerprint; counts by unique question id
-      if ((rpgState.monthQ || 0) > before) { rpgSave(); rpgPublishLeaderboard(); }
+      rpgNoteUniqueQuestion(d.questionId, '', w);   // MCQ → no answer fingerprint; counts by unique question id
+      if ((rpgState.monthQ || 0) > before) {
+        const bq = (questionBank || []).find(x => x && x.id === d.questionId);
+        if (pp || (bq && isPastPaperQuestion(bq))) rpgState.papersQ = (rpgState.papersQ || 0) + w;
+        rpgSave();
+        rpgPublishLeaderboard();
+      }
     }
   } catch (e) {}
 }
@@ -25070,7 +25087,10 @@ window.addEventListener('message', function (ev) {
   if (d.type === 'SD_REQUEST_QUESTIONS') {
     (async () => {
       let questions = [];
-      try { questions = buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
+      // Past-paper mode: the game launched from the Past Papers page gets ONLY
+      // the selected portion's attached questions (MCQ + OEQ self-check).
+      const ppMode = _ppGameFrameMatches(ev.source);
+      try { questions = ppMode ? ppGamePool(_ppGameSel.year) : buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
       const seenStats = await _sdSeenStats();
       const payload = {
         type: 'SD_QUESTIONS',
@@ -26676,9 +26696,11 @@ function ppRenderBody(){
     const yAssigned = yq.filter(q => ppBankQ(q.id)).length;
     const chips = yq.map(q => edit ? ppChipEdit(q) : ppChip(q)).join('') || '<span style="color:var(--text-muted);font-size:0.8rem;">No questions</span>';
     const addBtn = edit ? `<button class="pp-add sm" onclick="ppAddQuestion('${y}')">+ Add question</button>` : '';
-    const printYearBtn = (admin && !edit) ? `<span class="pp-tools"><button class="pp-mini" title="Print the whole ${escapeHtml(y)} paper — all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} in question order, answer key on the last pages" onclick="ppPrintYear('${escapeHtml(y)}')">🖨 Print year</button></span>` : '';
+    const practiceBtn = (!edit && yAssigned) ? `<button class="pp-mini" title="Practise all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} from the ${escapeHtml(y)} paper on the system" onclick="ppPracticeYear('${escapeHtml(y)}')">▶ Practice now</button>` : '';
+    const printBtn = (admin && !edit) ? `<button class="pp-mini" title="Print the whole ${escapeHtml(y)} paper — all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} in question order, answer key on the last pages" onclick="ppPrintYear('${escapeHtml(y)}')">🖨 Print year</button>` : '';
+    const yearTools = (practiceBtn || printBtn) ? `<span class="pp-tools">${practiceBtn}${printBtn}</span>` : '';
     return `<div class="pp-year">
-      <div class="pp-year-head"><strong>${escapeHtml(y)}</strong> <span class="pp-year-sub">${yq.length} questions &middot; ${yAssigned}/${yq.length} attached</span> ${addBtn}${printYearBtn}</div>
+      <div class="pp-year-head"><strong>${escapeHtml(y)}</strong> <span class="pp-year-sub">${yq.length} questions &middot; ${yAssigned}/${yq.length} attached</span> ${addBtn}${yearTools}</div>
       <div class="pp-chip-row">${chips}</div>
     </div>`;
   }).join('');
@@ -26714,9 +26736,27 @@ function ppRenderBody(){
   }).join('') || '<div style="color:var(--text-muted);">No questions yet.</div>';
   const legend = Object.keys(PP_THEME_NAME).map(k => `<span class="pp-lg"><span class="pp-dot" style="background:${PP_THEME_C[k]}"></span>${PP_THEME_NAME[k]}</span>`).join('');
 
+  // --- practise the papers (all years + each year, on the system or in a game) ---
+  const pRows = [{ y: '', avail: ppAttachedBankQs('').length }]
+    .concat(years.slice().reverse().map(y => ({ y, avail: ppAttachedBankQs(y).length })));
+  const practiceRows = pRows.map(r => `
+    <div class="pp-pr-row">
+      <div class="pp-pr-info"><div class="pp-pr-title">${r.y ? '📄 PSLE ' + escapeHtml(r.y) : '📚 All years'}</div><div class="pp-pr-sub">${r.avail} question${r.avail === 1 ? '' : 's'} ready to practise</div></div>
+      <div class="pp-pr-btns">
+        <button class="pp-add" ${r.avail ? '' : 'disabled'} title="Practise ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'every attached past-paper question'} on the system — MCQ and open-ended, marked as usual" onclick="ppPracticeYear('${escapeHtml(r.y)}')">▶ ${r.y ? 'Practice now' : 'Practice all'}</button>
+        <button class="pp-add pp-gamebtn" ${r.avail ? '' : 'disabled'} title="Load ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'all past-paper questions'} into a mini-game — every question answered there counts ×2 on the leaderboards" onclick="ppGameMenuOpen(event,'${escapeHtml(r.y)}')">🎮 Practice in a game <span style="font-size:0.72em;">▾</span></button>
+      </div>
+    </div>`).join('');
+  const practiceCard = `
+    <div class="pp-card">
+      <h3 class="pp-h">Practise the papers</h3>
+      <p class="pp-sub">Do the attached questions right here on the system — the whole set or one year's paper — or load them into a mini-game (MCQ and open-ended). <b>Game bonus: every past-paper question answered inside a game counts ×2 on the Questions and Past Papers leaderboards.</b></p>
+      ${practiceRows}
+    </div>`;
+
   const toggle = admin ? `<button class="pp-editbtn ${edit ? 'on' : ''}" onclick="ppToggleEdit()">${edit ? '✓ Done editing' : '✎ Edit content'}</button>` : '';
   const roleLine = !admin
-    ? 'Tap any highlighted question to practise it. Hover to preview. Greyed-out questions have not been added yet.'
+    ? 'Tap any highlighted question to practise it. Hover to preview. Greyed-out questions have not been added yet. Use “Practise the papers” below to do a whole year in one go — or play it inside a game, where every question counts ×2 on the leaderboards!'
     : (edit
       ? 'Editing: use + Add question / + Add concept, click a question or concept to change its details, or × to remove it. Turn editing off to attach bank questions.'
       : 'Click any question to attach one from your bank — or create a brand-new question for it on the spot — and to set its difficulty (🟢/🟡/🔴, colours the chip on this page only); students can then practise it. Hover a question to preview. Use the 🖨 buttons to print a concept or a whole year (answer key on the last pages), and the checkboxes to print several concepts together. “Edit content” adds, removes or rewords questions and concepts.');
@@ -26734,7 +26774,7 @@ function ppRenderBody(){
     </div>
 
     <div class="pp-note">${roleLine}</div>
-
+    ${practiceCard}
     <div class="pp-card">
       <h3 class="pp-h">The concepts that keep coming back ${addConcept}${printSelBtn}</h3>
       <p class="pp-sub">Patterns that recur across the papers — the highest-yield things to master, ordered by how many questions touched each.</p>
@@ -27174,6 +27214,193 @@ function ppTopicPractise(){
   launchWorksheetPractice(bqs);
 }
 
+// -------- practise the papers (on the system + in the mini-games) --------
+// "Practice all" / per-year "Practice now" run the attached bank questions
+// through Quick Practice. "Practice in a game" arms past-paper mode: the chosen
+// mini-game reloads and serves ONLY the selected portion's attached questions —
+// MCQs as normal, OEQs as self-check questions (pick the correct model answer
+// from decoys). Every question answered in that mode counts ×2 on the Questions
+// and Past Papers leaderboards.
+const PP_GAMES = [
+  { mode: 'defenders', icon: '🏰', name: 'Science Defenders', sub: 'Tower defense' },
+  { mode: 'raiders',   icon: '🚀', name: 'Science Raiders',   sub: 'Roguelite shooter' },
+  { mode: 'spire',     icon: '🃏', name: 'Science Spire',     sub: 'Deck builder' },
+  { mode: 'legends',   icon: '⚔️', name: 'Science Legends',   sub: 'Action RPG · beta' },
+  { mode: 'slayers',   icon: '🗡️', name: 'Science Slayers',   sub: 'Dungeon crawler · beta' }
+];
+const PP_GAME_FRAMES = { defenders: 'defendersFrame', raiders: 'raidersFrame', spire: 'spireFrame', legends: 'legendsFrame', slayers: 'slayersFrame' };
+
+// Unique attached bank questions for a year ('' = every year), in paper order.
+function ppAttachedBankQs(year){
+  const seen = new Set(); const bqs = [];
+  ppQuestions()
+    .filter(q => !year || String(q.year) === String(year))
+    .sort((a,b)=> String(a.year).localeCompare(String(b.year)) || (Number(a.n)||0) - (Number(b.n)||0))
+    .forEach(q => { const bq = ppBankQ(q.id); if (bq && !seen.has(bq.id)) { seen.add(bq.id); bqs.push(bq); } });
+  return bqs;
+}
+function ppYearLabel(year){ return year ? 'PSLE ' + year : 'All past papers'; }
+
+// ▶ Practice on the system: run the portion's attached questions (MCQ + OEQ,
+// AI-marked as usual) through Quick Practice.
+function ppPracticeYear(year){
+  const bqs = ppAttachedBankQs(year);
+  if (!bqs.length) { showToast('No questions are attached ' + (year ? 'for ' + year : '') + ' yet', 'error'); return; }
+  ppHoverHide();
+  launchWorksheetPractice(bqs);
+}
+
+// Model answer of an open-ended bank question as one HTML snippet (CER answer
+// boxes, plain answer boxes and answer-key blocks, in order). '' if none.
+function _ppModelAnswerHtml(q){
+  const parts = [];
+  ((q && q.blocks) || []).forEach(b => {
+    if (b.type === 'answer') {
+      const seg = [b.claim, b.evidence, b.reasoning].filter(s => stripHtmlToText(s || '').trim());
+      if (seg.length) parts.push(seg.join(' '));
+    } else if (b.type === 'plainanswer') {
+      if (stripHtmlToText(b.content || '').trim()) parts.push(b.content);
+    } else if (b.type === 'answerKey') {
+      if (stripHtmlToText(b.text || '').trim()) parts.push(b.text);
+    }
+  });
+  return parts.length ? parts.join('<br>') : '';
+}
+// Turn an open-ended question into a game-playable self-check MCQ: full stem +
+// "pick the correct model answer" with decoy answers drawn from OTHER open
+// questions (the past-paper pool first, then the whole bank). Returns null when
+// the question has no model answer or no decoys are available.
+function _ppExtractOeq(q, pool){
+  if (!q || !q.id) return null;
+  const blocks = q.blocks || [];
+  if (blocks.some(b => b.type === 'mcq' && (b.options || []).length >= 2)) return null; // MCQ path owns it
+  const correct = _ppModelAnswerHtml(q);
+  if (!stripHtmlToText(correct).trim()) return null;
+  const stem = _sdStemHtml(blocks);
+  if (!stem.html.trim()) return null;
+  const norm = s => stripHtmlToText(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const used = new Set([norm(correct)]);
+  const decoys = [];
+  const harvest = list => {
+    for (const o of list) {
+      if (decoys.length >= 3) break;
+      if (!o || o.id === q.id) continue;
+      if ((o.blocks || []).some(b => b.type === 'mcq' && (b.options || []).length >= 2)) continue;
+      const a = _ppModelAnswerHtml(o); const k = norm(a);
+      if (k && !used.has(k)) { used.add(k); decoys.push(a); }
+    }
+  };
+  const shuffle = arr => { const s = arr.slice(); for (let i = s.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [s[i], s[j]] = [s[j], s[i]]; } return s; };
+  harvest(shuffle(pool || []));
+  if (decoys.length < 3) harvest(shuffle((questionBank || []).filter(x => x && x.status !== 'pending' && x.status !== 'flagged')));
+  if (!decoys.length) return null; // a self-check needs at least one decoy
+  const options = shuffle([correct].concat(decoys));
+  const answer = options.indexOf(correct);
+  const html = stem.html + `<div style="margin:12px 0 2px;padding:9px 12px;background:rgba(128,128,128,0.14);border:1px dashed rgba(128,128,128,0.6);border-radius:9px;font-size:0.85em;line-height:1.45;">✍️ <b>Open-ended:</b> think of your own answer first, then pick the correct <b>model answer</b> below.</div>`;
+  const exB = blocks.find(b => b.type === 'explanation');
+  const explainHtml = exB && exB.content ? String(exB.content) : '';
+  const explain = exB ? stripHtmlToText(exB.content || '').trim() : '';
+  const qtext = stem.plain.join(' ').replace(/\s+/g, ' ').trim() || (q.title || 'See the question');
+  const mediaCount = blocks.filter(b => b.type === 'image' || b.type === 'table').length;
+  const optChars = options.reduce((n, o) => n + stripHtmlToText(o).length, 0);
+  const len = qtext.length + optChars + mediaCount * 220 + options.length * 8;
+  return { id: q.id, q: qtext, html, options, answer, explain, explainHtml, topic: (q.topic || 'Science'), seedElo: _sdSeedElo(q), len };
+}
+// Game-playable payload for a portion of the past papers (year '' = all).
+function ppGamePool(year){
+  const bqs = ppAttachedBankQs(year).filter(q => q && q.status !== 'pending' && q.status !== 'flagged');
+  const out = [];
+  bqs.forEach(q => { const m = _sdExtractMcq(q) || _ppExtractOeq(q, bqs); if (m) out.push(m); });
+  return out;
+}
+
+// Armed while a game launched from the Past Papers page is running:
+// { year, mode, label, count, qids:Set }. Session-only by design.
+let _ppGameSel = null;
+function _ppGameFrameMatches(source){
+  if (!_ppGameSel || !source) return false;
+  const f = document.getElementById(PP_GAME_FRAMES[_ppGameSel.mode] || '');
+  return !!(f && f.contentWindow && f.contentWindow === source);
+}
+function ppGameLaunch(year, mode){
+  ppGameMenuClose();
+  ppHoverHide();
+  const frameId = PP_GAME_FRAMES[mode];
+  if (!frameId) return;
+  const pool = ppGamePool(year);
+  if (!pool.length) { showToast('No playable questions are attached ' + (year ? 'for ' + year : '') + ' yet', 'error'); return; }
+  _ppGameSel = { year: String(year || ''), mode, label: ppYearLabel(year), count: pool.length, qids: new Set(pool.map(m => String(m.id))) };
+  const f = document.getElementById(frameId);
+  if (f) f.setAttribute('src', 'science-' + mode + '.html'); // (re)load so the game asks for questions afresh
+  _ppGameBannerSync();
+  navigateTo(mode);
+  showToast(`🎯 Past-paper mode: ${pool.length} question${pool.length === 1 ? '' : 's'} from ${_ppGameSel.label} — every one you answer counts ×2 on the leaderboards!`, 'success');
+}
+function ppGameExit(){
+  if (!_ppGameSel) return;
+  const frameId = PP_GAME_FRAMES[_ppGameSel.mode];
+  _ppGameSel = null;
+  _ppGameBannerSync();
+  const f = frameId && document.getElementById(frameId);
+  if (f && f.getAttribute('src')) f.setAttribute('src', f.getAttribute('src')); // reload back onto the full bank
+  showToast('Past-paper mode off — the game is back on the full question bank', 'info');
+}
+// Show/remove the past-paper-mode banner on the armed game's page. Inline
+// styles so it works even before the Past Papers page has been rendered.
+function _ppGameBannerSync(){
+  Object.keys(PP_GAME_FRAMES).forEach(mode => {
+    const page = document.getElementById('page-' + mode);
+    if (!page) return;
+    let b = page.querySelector('.pp-game-banner');
+    if (_ppGameSel && _ppGameSel.mode === mode) {
+      if (!b) {
+        b = document.createElement('div');
+        b.className = 'pp-game-banner';
+        b.style.cssText = 'display:flex;align-items:center;gap:14px;flex-wrap:wrap;max-width:880px;margin:10px auto;padding:12px 18px;border:1px solid var(--primary,#4a7c59);background:var(--primary-light,#eef4f0);color:var(--primary-dark,#2f5d3f);border-radius:12px;font-size:0.86rem;line-height:1.5;';
+        const hdr = page.querySelector('.page-header');
+        if (hdr) hdr.insertAdjacentElement('afterend', b); else page.prepend(b);
+      }
+      b.innerHTML = `<div style="flex:1;min-width:220px;">🎯 <b>Past-paper mode — ${escapeHtml(_ppGameSel.label)}.</b> This game serves only the ${_ppGameSel.count} attached past-paper question${_ppGameSel.count === 1 ? '' : 's'} (MCQ + open-ended self-check). Every question you answer here counts <b>×2</b> on the Questions and Past Papers leaderboards!</div><button class="btn btn-outline btn-sm" type="button" style="flex:none;" onclick="ppGameExit()">✖ Exit past-paper mode</button>`;
+    } else if (b) b.remove();
+  });
+}
+
+// -------- "Practice in a game" drop-down menu --------
+let _ppGameMenuEl = null;
+function ppGameMenuClose(){
+  if (_ppGameMenuEl) { _ppGameMenuEl.remove(); _ppGameMenuEl = null; }
+  document.removeEventListener('click', _ppGameMenuDocClick, true);
+}
+function _ppGameMenuDocClick(e){ if (_ppGameMenuEl && !_ppGameMenuEl.contains(e.target)) ppGameMenuClose(); }
+function ppGameMenuOpen(ev, year){
+  ev.stopPropagation();
+  if (_ppGameMenuEl) { ppGameMenuClose(); return; }
+  const n = ppGamePool(year).length;
+  if (!n) { showToast('No playable questions are attached ' + (year ? 'for ' + year : '') + ' yet', 'error'); return; }
+  const el = document.createElement('div');
+  el.id = 'ppGameMenu';
+  el.style.cssText = 'position:fixed;z-index:5000;min-width:270px;max-width:330px;background:var(--surface,#fff);border:1px solid var(--border);border-radius:14px;box-shadow:0 14px 44px rgba(0,0,0,0.2);padding:10px;';
+  el.innerHTML = `
+    <div style="padding:6px 10px 10px;">
+      <div style="font-weight:700;font-size:0.9rem;">Choose a game — ${escapeHtml(ppYearLabel(year))}</div>
+      <div style="font-size:0.76rem;color:var(--text-muted);margin-top:5px;line-height:1.5;">Only these ${n} past-paper question${n === 1 ? '' : 's'} will appear (MCQ + open-ended). Every question answered in the game counts <b style="color:var(--primary-dark,#2f5d3f);">×2 on the leaderboards</b>.</div>
+    </div>` + PP_GAMES.map(g => `
+    <button type="button" style="display:flex;align-items:center;gap:11px;width:100%;padding:9px 10px;border:none;background:none;border-radius:10px;cursor:pointer;font:inherit;text-align:left;" onmouseover="this.style.background='var(--primary-light,#eef4f0)'" onmouseout="this.style.background='none'" onclick="ppGameLaunch('${escapeHtml(String(year || ''))}','${g.mode}')">
+      <span style="font-size:1.25rem;flex:none;">${g.icon}</span>
+      <span><span style="display:block;font-weight:600;font-size:0.87rem;">${g.name}</span><span style="display:block;font-size:0.73rem;color:var(--text-muted);margin-top:1px;">${g.sub}</span></span>
+    </button>`).join('');
+  document.body.appendChild(el);
+  _ppGameMenuEl = el;
+  const r = ev.currentTarget ? ev.currentTarget.getBoundingClientRect() : { left: ev.clientX, bottom: ev.clientY, top: ev.clientY };
+  const w = el.offsetWidth, h = el.offsetHeight;
+  let x = Math.min(r.left, window.innerWidth - w - 12);
+  let y = r.bottom + 6;
+  if (y + h > window.innerHeight - 8) y = Math.max(8, r.top - h - 6);
+  el.style.left = Math.max(8, x) + 'px';
+  el.style.top = y + 'px';
+  setTimeout(() => document.addEventListener('click', _ppGameMenuDocClick, true), 0);
+}
+
 // -------- question editor --------
 function ppAddQuestion(year){
   const y = year || (ppYears().slice(-1)[0] || String(new Date().getFullYear()));
@@ -27366,6 +27593,14 @@ function ppStyles(){
   .pp-print-check:hover { border-color:var(--primary,#4a7c59); }
   .pp-print-check input { width:15px; height:15px; margin:0; accent-color:var(--primary,#4a7c59); cursor:pointer; }
   .pp-add:disabled { opacity:0.5; cursor:not-allowed; }
+  .pp-pr-row { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:13px 2px; }
+  .pp-pr-row + .pp-pr-row { border-top:1px solid var(--border); }
+  .pp-pr-info { flex:1; min-width:150px; }
+  .pp-pr-title { font-size:0.95rem; font-weight:700; }
+  .pp-pr-sub { font-size:0.76rem; color:var(--text-muted); margin-top:3px; }
+  .pp-pr-btns { display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
+  .pp-pr-btns .pp-add { padding:8px 14px; }
+  .pp-gamebtn { border-style:solid; background:#fdf3e3; border-color:#d1892b; color:#8a5a12; }
   .pp-year-head .pp-tools { margin-left:auto; }
   .pp-year { padding:12px 0; }
   .pp-year + .pp-year { border-top:1px solid var(--border); }
@@ -27441,6 +27676,10 @@ window.ppTopicClose = ppTopicClose;
 window.ppTopicShowAll = ppTopicShowAll;
 window.ppTopicPrint = ppTopicPrint;
 window.ppTopicPractise = ppTopicPractise;
+window.ppPracticeYear = ppPracticeYear;
+window.ppGameMenuOpen = ppGameMenuOpen;
+window.ppGameLaunch = ppGameLaunch;
+window.ppGameExit = ppGameExit;
 window.ppPrintSelected = ppPrintSelected;
 window.ppTogglePrintSel = ppTogglePrintSel;
 window.ppSetDifficulty = ppSetDifficulty;
