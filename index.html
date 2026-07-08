@@ -4653,6 +4653,10 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
         AI Question Guide
       </div>
+      <div class="nav-item admin-only" data-page="notes" onclick="navigateTo('notes')" title="Teaching Notes — upload your PDF notes; the AI extracts the topics, keywords and marking standards and follows them whenever it builds questions or marks answers.">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        Teaching Notes
+      </div>
       <div class="nav-item" data-page="papers" onclick="navigateTo('papers')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7"/><path d="M9 11h5"/></svg>
         Past Papers
@@ -5093,6 +5097,23 @@ option {
       <div class="page-body">
         <div id="papersBody"></div>
       </div>
+    </div>
+
+    <!-- ===== PAGE: TEACHING NOTES (admin) — upload PDFs, AI learns keywords & standards ===== -->
+    <div class="page" id="page-notes">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Teaching Notes</h2>
+          </div>
+          <div class="subtitle">Upload your PDF notes — the AI extracts the topics, keywords and marking standards, then follows them whenever it builds questions or marks answers</div>
+        </div>
+      </div>
+      <div class="page-body">
+        <div id="notesBody"></div>
+      </div>
+      <input type="file" id="notesFileInput" accept="application/pdf,image/*" style="display:none" onchange="const f=this.files[0]; this.value=''; if(f) notesHandleFile(f);">
     </div>
 
     <!-- ===== PAGE: STUDENT VIEW ===== -->
@@ -6263,6 +6284,42 @@ option {
   </div>
 </div>
 
+<!-- ==================== TEACHING NOTE EDITOR DIALOG (Admin) ==================== -->
+<div class="confirm-overlay" id="noteEditOverlay">
+  <div class="confirm-dialog" style="max-width:620px;text-align:left;max-height:88vh;overflow-y:auto;">
+    <h3 style="margin-bottom:4px;">Edit Teaching Note</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Fine-tune what the AI extracted — especially the keywords, which the AI looks for when marking and uses when building questions.</p>
+    <div class="form-group">
+      <label class="form-label">Title</label>
+      <input id="nteTitle" class="form-input" type="text" placeholder="e.g. Heat & Temperature revision notes">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Topics <span style="font-weight:400;color:var(--text-muted);">(comma-separated, matching your portal's topic names)</span></label>
+      <input id="nteTopics" class="form-input" type="text" placeholder="e.g. Heat, Matter and its 3 States">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Keywords <span style="font-weight:400;color:var(--text-muted);">(comma-separated — the exact exam-answer vocabulary)</span></label>
+      <textarea id="nteKeywords" class="form-input" rows="4" placeholder="e.g. good conductor of heat, gains heat, expands, contracts" style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Marking standards <span style="font-weight:400;color:var(--text-muted);">(how answers must be phrased for full marks)</span></label>
+      <textarea id="nteStandards" class="form-input" rows="4" style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Key facts <span style="font-weight:400;color:var(--text-muted);">(one per line)</span></label>
+      <textarea id="nteFacts" class="form-input" rows="5" style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Your comment <span style="font-weight:400;color:var(--text-muted);">(extra guidance for the AI, optional)</span></label>
+      <textarea id="nteComment" class="form-input" rows="3" style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
+    </div>
+    <div class="btn-group" style="justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="notesEditClose()">Cancel</button>
+      <button class="btn btn-primary" onclick="notesEditSave()">Save Note</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== CREATE STUDENT ACCOUNT DIALOG (Admin) ==================== -->
 <div class="confirm-overlay" id="createStudentOverlay">
   <div class="confirm-dialog" style="max-width:460px;text-align:left;max-height:88vh;overflow-y:auto;">
@@ -7124,7 +7181,9 @@ async function saveMarkingSettings() {
 }
 
 // Builds the instruction block injected before every grading prompt.
-function _markingPreamble(questionGuide) {
+// `topic` (the question's topic) pulls in the teacher's uploaded Teaching
+// Notes for that topic — preferred keywords and marking standards.
+function _markingPreamble(questionGuide, topic) {
   const sMap = {
     1: 'Mark VERY leniently: accept any answer showing partial understanding or that is close in meaning.',
     2: 'Mark leniently: accept answers that capture the main idea even if imprecise or with minor errors.',
@@ -7139,6 +7198,10 @@ function _markingPreamble(questionGuide) {
   if (aiMarkingSettings.perQuestion && questionGuide) {
     parts.push(`Marking guide specific to THIS question: ${questionGuide}`);
   }
+  try {
+    const notes = _notesMarkingBlock(topic);
+    if (notes) parts.push(notes);
+  } catch (e) {}
   return parts.join(' ');
 }
 
@@ -7175,9 +7238,295 @@ async function saveGenSettings() {
 }
 // Injected into the "Build from screenshot/PDF" prompt.
 function _genPreamble() {
-  return aiGenSettings.instructions
-    ? `IMPORTANT teacher instructions for creating this question — follow them closely: ${aiGenSettings.instructions}\n`
+  const parts = [];
+  if (aiGenSettings.instructions) parts.push(`IMPORTANT teacher instructions for creating this question — follow them closely: ${aiGenSettings.instructions}\n`);
+  const notes = _notesGenBlock();
+  if (notes) parts.push(notes);
+  return parts.join('');
+}
+
+// =====================================================================
+// TEACHING NOTES — the teacher's own "notebook" grounding all AI features.
+// Admin uploads PDF notes; Gemini analyses each into topics, KEYWORDS,
+// marking standards and key facts, stored per note at
+//   users/{adminUid}/teachingNotes/{id}
+// Students' clients read the notes too (marking runs on their device), but
+// only the admin can see the page and add/edit/delete notes.
+// The digests below are injected into every AI-marking prompt (topic-matched
+// notes) and every AI question-generation prompt (keywords across all notes).
+// =====================================================================
+let teachingNotes = [];
+let _notesLoaded = false;
+
+async function loadTeachingNotes(force) {
+  if (_notesLoaded && !force) return teachingNotes;
+  if (!currentUser) return teachingNotes;
+  const owner = currentUser.role === 'admin' ? currentUser.uid : adminUid;
+  if (!owner) return teachingNotes;
+  try {
+    const snap = await getDocs(collection(db, 'users', owner, 'teachingNotes'));
+    const list = [];
+    snap.forEach(d => { const n = d.data(); if (n) { n.id = d.id; list.push(n); } });
+    list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    teachingNotes = list;
+    _notesLoaded = true;
+  } catch (e) { console.warn('teaching notes load', e); }
+  return teachingNotes;
+}
+
+// Compact digest for MARKING prompts: keywords + marking standards from the
+// notes covering this question's topic (general/untagged notes as fallback).
+// Kept tight so every marking call stays cheap.
+function _notesMarkingBlock(topic) {
+  if (!teachingNotes.length) return '';
+  const t = String(topic || '').toLowerCase().trim();
+  let rel = t ? teachingNotes.filter(n => (n.topics || []).some(x => String(x).toLowerCase().trim() === t)) : [];
+  if (!rel.length) rel = teachingNotes.filter(n => !(n.topics || []).length);
+  if (!rel.length) return '';
+  const kw = [...new Set(rel.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 40);
+  const std = rel.map(n => String(n.markingStandards || '').trim()).filter(Boolean).join(' ').slice(0, 900);
+  const com = rel.map(n => String(n.comment || '').trim()).filter(Boolean).join(' ').slice(0, 300);
+  const bits = [];
+  if (kw.length) bits.push(`Preferred science keywords from the teacher's own notes — expect and accept these exact terms in a full-mark answer: ${kw.join(', ')}.`);
+  if (std) bits.push(`The teacher's marking standards from those notes: ${std}`);
+  if (com) bits.push(`The teacher's comment on those notes: ${com}`);
+  return bits.length
+    ? `TEACHER'S REFERENCE NOTES (from the teacher's uploaded notes database): ${bits.join(' ')} AUTHORITY ORDER: the question's own expected/model answer (when provided) is ALWAYS the highest authority — never mark against it; use these notes for the preferred keywords, phrasing and standards, and base the model answer on them whenever you have to craft one yourself.`
     : '';
+}
+// Compact digest for QUESTION-GENERATION prompts: the teacher's preferred
+// keyword vocabulary + key facts across all uploaded notes. Every answer or
+// explanation the AI writes must be based on this database first — but an
+// answer already shown in the source document always wins.
+function _notesGenBlock() {
+  if (!teachingNotes.length) return '';
+  const kw = [...new Set(teachingNotes.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 60);
+  const facts = teachingNotes.map(n => String(n.keyFacts || '').trim()).filter(Boolean).join('\n').slice(0, 1200);
+  const bits = [];
+  if (kw.length) bits.push(`TEACHER'S NOTES DATABASE — preferred science vocabulary: ${kw.join(', ')}.`);
+  if (facts) bits.push(`Key facts from the teacher's notes:\n${facts}`);
+  if (!bits.length) return '';
+  return bits.join('\n') +
+    `\nWhen you WRITE any answer or explanation content, base the science and the wording on this database first (use its exact terms where relevant); fall back to standard PSLE syllabus knowledge only where the database does not cover it. ` +
+    `EXCEPTION — highest authority: if the source document already shows or implies an answer, keep that provided answer exactly; the database only guides its phrasing.\n`;
+}
+
+// Richer digest for CRAFTING a model answer (the "🤖 AI answer" button on
+// answer blocks): topic-matched notes first, general notes next, the whole
+// database as a last resort — keywords, standards AND key facts.
+function _notesAnswerBlock(topic) {
+  if (!teachingNotes.length) return '';
+  const t = String(topic || '').toLowerCase().trim();
+  let rel = t ? teachingNotes.filter(n => (n.topics || []).some(x => String(x).toLowerCase().trim() === t)) : [];
+  if (!rel.length) rel = teachingNotes.filter(n => !(n.topics || []).length);
+  if (!rel.length) rel = teachingNotes;
+  const kw = [...new Set(rel.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 40);
+  const std = rel.map(n => String(n.markingStandards || '').trim()).filter(Boolean).join(' ').slice(0, 800);
+  const facts = rel.map(n => String(n.keyFacts || '').trim()).filter(Boolean).join('\n').slice(0, 1800);
+  const bits = [];
+  if (kw.length) bits.push(`Preferred keywords: ${kw.join(', ')}.`);
+  if (std) bits.push(`Answer standards: ${std}`);
+  if (facts) bits.push(`Key facts:\n${facts}`);
+  return bits.length ? `TEACHER'S NOTES DATABASE (the primary source for the science and wording — use only what is relevant to this question):\n${bits.join('\n')}` : '';
+}
+
+// ---- Teaching Notes page (admin only) ----
+async function renderNotesPage() {
+  const body = document.getElementById('notesBody');
+  if (!body) return;
+  if (!currentUser || currentUser.role !== 'admin') {
+    body.innerHTML = '<div class="empty-note">Teaching Notes are only available to the admin.</div>';
+    return;
+  }
+  body.innerHTML = '<div style="padding:48px;text-align:center;color:var(--text-muted);">Loading your teaching notes…</div>';
+  await loadTeachingNotes(true);
+  notesRenderBody();
+}
+
+function notesRenderBody() {
+  const body = document.getElementById('notesBody');
+  if (!body || !currentUser || currentUser.role !== 'admin') return;
+  const cards = teachingNotes.map(n => {
+    const topics = (n.topics || []).map(t => `<span class="tn-chip tn-topic">${escapeHtml(t)}</span>`).join('') || '<span class="tn-none">No topic tagged — used as general notes</span>';
+    const kws = (n.keywords || []).map(k => `<span class="tn-chip tn-kw">${escapeHtml(k)}</span>`).join('') || '<span class="tn-none">No keywords extracted yet — add some via Edit</span>';
+    const facts = String(n.keyFacts || '').trim();
+    const std = String(n.markingStandards || '').trim();
+    const com = String(n.comment || '').trim();
+    const when = n.createdAt ? new Date(n.createdAt).toLocaleDateString() : '';
+    return `<div class="tn-card">
+      <div class="tn-head">
+        <div>
+          <div class="tn-title">${escapeHtml(n.title || n.fileName || 'Untitled notes')}</div>
+          <div class="tn-meta">${escapeHtml(n.fileName || '')}${when ? ' · uploaded ' + escapeHtml(when) : ''}</div>
+        </div>
+        <div class="tn-actions">
+          <button class="btn btn-outline btn-sm" onclick="notesEditOpen('${n.id}')">✎ Edit</button>
+          <button class="btn btn-outline btn-sm" onclick="notesDelete('${n.id}')">× Delete</button>
+        </div>
+      </div>
+      <div class="tn-row"><div class="tn-label">Topics</div><div class="tn-chips">${topics}</div></div>
+      <div class="tn-row"><div class="tn-label">Keywords</div><div class="tn-chips">${kws}</div></div>
+      ${std ? `<div class="tn-row"><div class="tn-label">Marking standards</div><div class="tn-text">${escapeHtml(std)}</div></div>` : ''}
+      ${com ? `<div class="tn-row"><div class="tn-label">Your comment</div><div class="tn-text tn-comment">${escapeHtml(com)}</div></div>` : ''}
+      ${facts ? `<details class="tn-facts"><summary>Key facts (${facts.split('\n').filter(s => s.trim()).length})</summary><div class="tn-text">${escapeHtml(facts).replace(/\n/g, '<br>')}</div></details>` : ''}
+    </div>`;
+  }).join('') || '<div class="tn-empty">No notes yet — upload your first PDF above. Everything the AI extracts stays editable.</div>';
+
+  body.innerHTML = `<style>
+    .tn-wrap { max-width:880px; margin:0 auto; }
+    .tn-upload { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:22px 24px; margin-bottom:20px; }
+    .tn-upload h3 { margin:0 0 4px; font-size:1.05rem; }
+    .tn-upload .tn-sub { margin:0 0 16px; font-size:0.88rem; color:var(--text-muted); line-height:1.55; }
+    .tn-upload textarea { width:100%; }
+    .tn-upbtns { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px; }
+    #notesStatus { font-size:0.86rem; color:var(--primary-dark,#2f5d3f); margin-top:12px; line-height:1.5; }
+    .tn-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px 24px; margin-bottom:16px; }
+    .tn-head { display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap; margin-bottom:12px; }
+    .tn-head > div:first-child { flex:1; min-width:200px; }
+    .tn-title { font-size:1rem; font-weight:700; }
+    .tn-meta { font-size:0.76rem; color:var(--text-muted); margin-top:3px; }
+    .tn-actions { display:flex; gap:8px; }
+    .tn-row { display:flex; gap:12px; align-items:flex-start; padding:7px 0; }
+    .tn-label { flex:none; width:132px; font-size:0.76rem; font-weight:700; color:var(--text-muted); padding-top:3px; }
+    .tn-chips { display:flex; flex-wrap:wrap; gap:6px; flex:1; }
+    .tn-chip { font-size:0.76rem; font-weight:600; padding:3px 10px; border-radius:999px; border:1px solid var(--border); background:var(--surface-alt,#faf8f5); }
+    .tn-chip.tn-topic { background:var(--primary-light,#eef4f0); border-color:var(--primary,#4a7c59); color:var(--primary-dark,#2f5d3f); }
+    .tn-chip.tn-kw { background:#fdf3e3; border-color:#d1892b; color:#8a5a12; }
+    .tn-text { flex:1; font-size:0.85rem; line-height:1.55; color:var(--text); }
+    .tn-comment { font-style:italic; color:var(--text-muted); }
+    .tn-none { font-size:0.8rem; color:var(--text-muted); }
+    .tn-facts { margin-top:10px; }
+    .tn-facts summary { font-size:0.8rem; font-weight:600; color:var(--text-muted); cursor:pointer; }
+    .tn-facts .tn-text { margin-top:8px; }
+    .tn-empty { color:var(--text-muted); text-align:center; padding:36px 16px; border:1px dashed var(--border); border-radius:16px; }
+    @media (max-width:560px){ .tn-row { flex-direction:column; gap:4px; } .tn-label { width:auto; } }
+  </style>
+  <div class="tn-wrap">
+    <div class="tn-upload">
+      <h3>📚 Upload notes</h3>
+      <p class="tn-sub">Upload a PDF (or a photo) of your teaching notes. The AI reads it and extracts the <b>topics</b>, the <b>keywords</b> students must use, the <b>marking standards</b> and the key facts — then follows them whenever it builds questions or marks answers. Only you can see this page.</p>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Comment for this upload <span style="font-weight:400;color:var(--text-muted);">(optional — e.g. “focus on the keywords in the summary table”)</span></label>
+        <textarea id="notesComment" class="form-input" rows="2" placeholder="Any guidance about this document for the AI…" style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
+      </div>
+      <div class="tn-upbtns">
+        <button class="btn btn-primary" id="notesUploadBtn" onclick="document.getElementById('notesFileInput').click()">📄 Choose PDF &amp; analyse</button>
+        <span style="font-size:0.78rem;color:var(--text-muted);">PDF or image, up to ~18&nbsp;MB</span>
+      </div>
+      <div id="notesStatus"></div>
+    </div>
+    <div class="tn-list-head" style="display:flex;align-items:baseline;gap:10px;margin:0 2px 12px;">
+      <h3 style="margin:0;font-size:1.02rem;">Your notes (${teachingNotes.length})</h3>
+      <span style="font-size:0.8rem;color:var(--text-muted);">marking uses the notes matching each question's topic; question-building uses the keywords from all notes</span>
+    </div>
+    ${cards}
+  </div>`;
+}
+
+function _notesSetStatus(msg) {
+  const el = document.getElementById('notesStatus');
+  if (el) el.innerHTML = msg ? escapeHtml(msg) : '';
+  const btn = document.getElementById('notesUploadBtn');
+  if (btn) btn.disabled = !!msg;
+}
+
+async function notesHandleFile(file) {
+  if (!file || !currentUser || currentUser.role !== 'admin') return;
+  if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't set up yet — add your reCAPTCHA site key in the code", 'info'); return; }
+  const isPdf = file.type === 'application/pdf';
+  const isImg = file.type && file.type.startsWith('image/');
+  if (!isPdf && !isImg) { showToast('Please choose a PDF (or an image of your notes)', 'error'); return; }
+  if (file.size > 18 * 1024 * 1024) { showToast('File is too large (max ~18 MB)', 'error'); return; }
+  const comment = (document.getElementById('notesComment') ? document.getElementById('notesComment').value : '').trim();
+  _notesSetStatus(`⏳ Reading “${file.name}” and extracting topics, keywords and marking standards…`);
+  try {
+    const b64 = await _fileToBase64(file);
+    const topics = currentTopics();
+    const prompt =
+      `You are analysing a science teacher's reference notes (the attached ${isPdf ? 'PDF' : 'image'}) for a Singapore primary-school (PSLE) science question bank.\n` +
+      (comment ? `The teacher says about this document: "${comment}".\n` : '') +
+      `Extract the teaching content and return ONLY JSON:\n` +
+      `{"title":"short descriptive title for these notes",` +
+      `"topics":["every syllabus topic this document covers, chosen from EXACTLY: ${topics.join('; ')}"],` +
+      `"keywords":["the EXACT science keywords and key phrases students are expected to use in exam answers, most important first — copy the document's own wording"],` +
+      `"markingStandards":"how answers should be phrased and marked according to this document: required sentence patterns, terms that MUST appear for full marks, acceptable alternatives, common mistakes to penalise (plain text, at most 1200 characters)",` +
+      `"keyFacts":"the key facts and concepts taught, one short line each, separated by \\n (plain text, at most 1500 characters)"}\n` +
+      `Rules:\n- 10 to 40 keywords, each 1-4 words, no duplicates, most important first.\n- "topics" only from the given list; include every topic the document genuinely covers.\n- Plain text only, no markdown.`;
+    const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 3072, json: true });
+    const p = _parseAIJson(raw) || {};
+    const topicLc = new Map(topics.map(t => [t.toLowerCase().trim(), t]));
+    const note = {
+      title: String(p.title || file.name || 'Untitled notes').slice(0, 140),
+      fileName: file.name || '',
+      comment,
+      topics: (Array.isArray(p.topics) ? p.topics : []).map(t => topicLc.get(String(t).toLowerCase().trim())).filter(Boolean),
+      keywords: (Array.isArray(p.keywords) ? p.keywords : []).map(s => String(s).trim()).filter(Boolean).slice(0, 60),
+      markingStandards: String(p.markingStandards || '').slice(0, 1600),
+      keyFacts: String(p.keyFacts || '').slice(0, 2000),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    const id = 'note_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    await setDoc(doc(db, 'users', currentUser.uid, 'teachingNotes', id), note);
+    note.id = id;
+    teachingNotes.unshift(note);
+    _notesSetStatus('');
+    notesRenderBody();
+    showToast(`✅ “${note.title}” analysed — ${note.keywords.length} keywords extracted. The AI will use them from now on.`, 'success');
+  } catch (e) {
+    console.error('notes analysis failed', e);
+    _notesSetStatus('');
+    showToast('Analysis failed: ' + (e && e.message ? e.message : e), 'error');
+  }
+}
+
+let _noteEditId = null;
+function notesEditOpen(id) {
+  const n = teachingNotes.find(x => x.id === id);
+  if (!n) return;
+  _noteEditId = id;
+  document.getElementById('nteTitle').value = n.title || '';
+  document.getElementById('nteTopics').value = (n.topics || []).join(', ');
+  document.getElementById('nteKeywords').value = (n.keywords || []).join(', ');
+  document.getElementById('nteStandards').value = n.markingStandards || '';
+  document.getElementById('nteFacts').value = n.keyFacts || '';
+  document.getElementById('nteComment').value = n.comment || '';
+  document.getElementById('noteEditOverlay').classList.add('active');
+}
+function notesEditClose() {
+  document.getElementById('noteEditOverlay').classList.remove('active');
+  _noteEditId = null;
+}
+async function notesEditSave() {
+  const n = teachingNotes.find(x => x.id === _noteEditId);
+  if (!n) { notesEditClose(); return; }
+  const topics = currentTopics();
+  const topicLc = new Map(topics.map(t => [t.toLowerCase().trim(), t]));
+  n.title = (document.getElementById('nteTitle').value || '').trim().slice(0, 140) || n.fileName || 'Untitled notes';
+  n.topics = (document.getElementById('nteTopics').value || '').split(',').map(s => topicLc.get(s.toLowerCase().trim())).filter(Boolean);
+  n.keywords = (document.getElementById('nteKeywords').value || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean).slice(0, 60);
+  n.markingStandards = (document.getElementById('nteStandards').value || '').trim().slice(0, 1600);
+  n.keyFacts = (document.getElementById('nteFacts').value || '').trim().slice(0, 2000);
+  n.comment = (document.getElementById('nteComment').value || '').trim();
+  n.updatedAt = new Date().toISOString();
+  try {
+    const { id, ...data } = n;
+    await setDoc(doc(db, 'users', currentUser.uid, 'teachingNotes', id), data, { merge: false });
+    notesEditClose();
+    notesRenderBody();
+    showToast('Note updated', 'success');
+  } catch (e) { showToast('Could not save: ' + (e && e.message ? e.message : e), 'error'); }
+}
+async function notesDelete(id) {
+  const n = teachingNotes.find(x => x.id === id);
+  if (!n) return;
+  if (!confirm(`Delete “${n.title || n.fileName || 'this note'}”?\n\nThe AI will stop using its keywords and marking standards.`)) return;
+  try {
+    await deleteDoc(doc(db, 'users', currentUser.uid, 'teachingNotes', id));
+    teachingNotes = teachingNotes.filter(x => x.id !== id);
+    notesRenderBody();
+    showToast('Note deleted', 'info');
+  } catch (e) { showToast('Could not delete: ' + (e && e.message ? e.message : e), 'error'); }
 }
 
 // Expose auth functions globally so onclick handlers work
@@ -7519,6 +7868,7 @@ async function enterApp(user) {
     await loadStudentsFromStorage();
     loadMarkingSettings();
     loadGenSettings();
+    loadTeachingNotes(); // grounds AI generation & marking on the uploaded notes
     loadSampleData();
     renderBlocks();
     populatePracticeStudentSelect();
@@ -7578,7 +7928,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.88.1';
+const APP_VERSION = 'v1.90.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7647,6 +7997,7 @@ async function loadAdminQuestions() {
     updateCounts();
     populateWsTopicFilter();
     loadMarkingSettings(); // pick up the teacher's rubric for student practice
+    loadTeachingNotes();   // teacher's notes ground the AI marking on this device too
   } catch (err) {
     console.error('loadAdminQuestions failed:', err);
     showToast('Could not load questions - check your connection', 'error');
@@ -7780,6 +8131,7 @@ function navigateTo(page) {
   _skipCreateReset = false;
   if (page === 'bank') renderQuestionBank();
   if (page === 'papers') renderPapersPage();
+  if (page === 'notes') renderNotesPage();
   if (page === 'vetting') renderVettingList();
   if (page === 'student') {
     populateStudentSelect();
@@ -9173,6 +9525,8 @@ function renderBlocks() {
               <span class="toolbar-divider"></span>
               <button class="toolbar-btn" title="Bulleted List" onmousedown="event.preventDefault();execCmd('insertUnorderedList')">•</button>
               <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
+              <span class="toolbar-divider"></span>
+              ${aiAnswerBtnHtml(block.id)}
             </div>
             <div class="cer-section" data-mic-wrap>
               <div class="cer-label claim-label">Claim ${micButtonHtml('', 'Speak the claim')} ${improveBtnHtml(block.id, 'claim')}</div>
@@ -9210,6 +9564,7 @@ function renderBlocks() {
               <span class="toolbar-divider"></span>
               ${micButtonHtml('', 'Dictate the answer')}
               ${improveBtnHtml(block.id, 'content')}
+              ${aiAnswerBtnHtml(block.id)}
             </div>
             <div class="content-editable" contenteditable="true" data-placeholder="Enter the answer..."
                  data-block-id="${block.id}" data-field="content"
@@ -9396,6 +9751,83 @@ function mcqNumberOptions(blockId) {
 function improveBtnHtml(blockId, field) {
   return `<button type="button" class="improve-btn" data-improve-block="${blockId}" data-improve-field="${field}" title="Improve grammar, phrasing and sentence structure with AI — keeps your meaning">✨ Improve</button>`;
 }
+
+// "🤖 AI answer" button shown on every ANSWER block (CER and plain answer).
+// Reads the whole question above it — text, parts, tables and diagrams — and
+// crafts the model answer, grounded FIRST on the Teaching Notes database.
+function aiAnswerBtnHtml(blockId) {
+  return `<button type="button" class="improve-btn" data-aianswer="${blockId}" title="Craft this answer with AI — it reads the question (including diagrams) and bases the science on your Teaching Notes database">🤖 AI answer</button>`;
+}
+async function aiGenerateBlockAnswer(blockId, btn) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || (block.type !== 'answer' && block.type !== 'plainanswer')) return;
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+  const hasContent = block.type === 'answer'
+    ? [block.claim, block.evidence, block.reasoning].some(v => stripHtml(v || '').trim())
+    : !!stripHtml(block.content || '').trim();
+  if (hasContent && !confirm('Replace the current answer with an AI-crafted one?')) return;
+
+  // The question in block order, with THIS answer box marked so the AI knows
+  // which part it belongs to. Diagrams go along as images (best effort).
+  const ctxBits = [];
+  const media = [];
+  let ansN = 0;
+  for (const b of blocks) {
+    if (b.type === 'text' && stripHtml(b.content || '').trim()) ctxBits.push(stripHtml(b.content));
+    else if (b.type === 'part' && ((b.label || '') + stripHtml(b.content || '')).trim()) ctxBits.push(((b.label || '') + ' ' + stripHtml(b.content || '')).trim());
+    else if (b.type === 'image' && b.url) { ctxBits.push('[diagram — attached as an image]'); if (media.length < 3) { try { media.push(await _blockImageToInline(b.id)); } catch (e) { console.warn('AI answer: diagram skipped', e); } } }
+    else if (b.type === 'table') { try { ctxBits.push('[table] ' + (b.data || []).map(row => (row || []).map(c => stripHtml(String(c || ''))).join(' | ')).join(' ; ')); } catch (e) {} }
+    else if (b.type === 'mcq') ctxBits.push('[multiple-choice options] ' + (b.options || []).map((o, i) => (i + 1) + ') ' + stripHtml(o.text || '')).join(' '));
+    else if (b.type === 'answer' || b.type === 'plainanswer') { ansN++; ctxBits.push(b.id === blockId ? `>>> ANSWER BOX ${ansN} — WRITE THIS ONE <<<` : `[answer box ${ansN} — belongs to another part, do not answer it]`); }
+  }
+  const topic = (document.getElementById('topicSelect') && document.getElementById('topicSelect').value) || '';
+  const title = (document.getElementById('questionTitle') && document.getElementById('questionTitle').value) || '';
+  const notesDb = _notesAnswerBlock(topic);
+  const prompt =
+    `You are a Singapore primary-school (PSLE) science teacher writing the MODEL ANSWER for one answer box of the question below.\n` +
+    (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
+    (title || topic ? `Question: "${title}"${topic ? ' — topic: ' + topic : ''}.\n` : '') +
+    `THE QUESTION, in order${media.length ? ' (diagrams attached as images)' : ''}:\n${ctxBits.join('\n').slice(0, 3500)}\n` +
+    `Write the model answer for the box marked >>> WRITE THIS ONE <<< only — the part of the question immediately before it.\n` +
+    (block.type === 'answer'
+      ? `It is a Claim-Evidence-Reasoning answer. Return ONLY JSON: {"claim":"...","evidence":"...","reasoning":"..."}\n`
+      : `Return ONLY JSON: {"answer":"..."}\n`) +
+    `Rules: concise exam-style phrasing a P6 pupil could write; wrap the 3-8 most important science keywords in [[double brackets]] (e.g. [[evaporation]]); plain text only, no markdown.`;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '🤖 Crafting…'; }
+  try {
+    const raw = media.length
+      ? await askGeminiVision(prompt, media, { maxOutputTokens: 900, json: true })
+      : await askGemini(prompt, { maxOutputTokens: 900, temperature: 0.25, json: true });
+    let p = _parseAIJson(raw);
+    if (Array.isArray(p)) p = p[0];
+    if (!p || typeof p !== 'object') throw new Error('the AI returned an unexpected format — please try again');
+    const toHtml = t => escapeHtml(String(t || '').trim()).replace(/\n+/g, '<br>');
+    if (block.type === 'answer') {
+      if (!String(p.claim || p.evidence || p.reasoning || '').trim()) throw new Error('the AI returned an empty answer — please try again');
+      block.claim = toHtml(p.claim);
+      block.evidence = toHtml(p.evidence);
+      block.reasoning = toHtml(p.reasoning);
+    } else {
+      const ans = String(p.answer || p.text || '').trim();
+      if (!ans) throw new Error('the AI returned an empty answer — please try again');
+      block.content = toHtml(ans);
+    }
+    renderBlocks();
+    showToast(notesDb ? '🤖 Answer crafted from your Teaching Notes database — review it before saving' : '🤖 Answer crafted — no Teaching Notes matched, so standard PSLE knowledge was used. Review it before saving', 'success');
+  } catch (e) {
+    console.error('AI answer failed', e);
+    showToast('Could not craft the answer: ' + (e && e.message ? e.message : e), 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+// Delegated so the button works after every re-render.
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest && e.target.closest('[data-aianswer]');
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
+  aiGenerateBlockAnswer(btn.getAttribute('data-aianswer'), btn);
+});
 (function injectEditorToolStyles() {
   const css = `
   .mcq-correct-radio { appearance:none; -webkit-appearance:none; width:20px; height:20px; flex-shrink:0; margin:0; border:2px solid #9aa0a6; border-radius:50%; background:#fff; cursor:pointer; transition:border-color .15s, background .15s; }
@@ -14699,7 +15131,7 @@ async function annotAiCheck(containerSel, btn) {
       `You are a science teacher marking a "ticking and labelling" annotation question. ` +
       `The student was shown a diagram and annotated it DIRECTLY — drawing ticks, crosses, circles or lines with a pen and/or typing text labels onto it. ` +
       `Each attached image is the diagram WITH the student's annotations drawn on top. Look carefully at where the ticks/circles/lines point and read any typed labels, then decide whether each is in the right place / correct. ` +
-      `${_markingPreamble(guide)}\n` +
+      `${_markingPreamble(guide, q && q.topic)}\n` +
       `Question context: "${ctx}". ` +
       (model ? `Expected correct answer: "${model.replace(/\s+/g, ' ').slice(0, 700)}". ` : '') +
       `Work out how many marks the student earned out of the total available for this question. ` +
@@ -14855,7 +15287,7 @@ async function fbCheck(containerSel, blockId, btn) {
       const ctx = q ? _questionContext(q) : '';
       const list = pending.map((r, k) => `${k}. expected="${r.model}" student="${r.student}"`).join('\n');
       const prompt =
-        `You are marking fill-in-the-blank answers for a primary-school science quiz. ${_markingPreamble(q && q.markingGuide)}\n` +
+        `You are marking fill-in-the-blank answers for a primary-school science quiz. ${_markingPreamble(q && q.markingGuide, q && q.topic)}\n` +
         `Question context: "${ctx}".\n` +
         `For EACH blank, decide whether the student's word means the same as the expected answer. ACCEPT synonyms, plurals, minor spelling slips and scientifically equivalent terms; only mark "incorrect" when the meaning is wrong. ` +
         `Return ONLY a JSON array like [{"i":0,"verdict":"correct"}]:\n${list}`;
@@ -15153,7 +15585,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       }).join('\n');
       const prompt =
         `You are a science teacher marking a student's answers. ` +
-        `${_markingPreamble(q && q.markingGuide)}\n` +
+        `${_markingPreamble(q && q.markingGuide, q && q.topic)}\n` +
         `Question context: "${ctx}".\n` +
         (photo
           ? `The student wrote their answers on paper and attached ONE photo of the whole page. Read the photo carefully and find the student's answer for EACH item below, matching by its label and order. For a multiple-choice item, work out which option number the student chose (a circled option, a written number or letter, or a tick) from the photo when they have not selected one on screen. Ignore handwriting quality.\n`
@@ -15461,7 +15893,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     }
     const prompt =
       `You are a science teacher marking ONE part of a student's answer to a question. ` +
-      `${_markingPreamble(q && q.markingGuide)}\n` +
+      `${_markingPreamble(q && q.markingGuide, q && q.topic)}\n` +
       `Question context: "${ctx}".\n` +
       (photo
         ? `The student wrote their answers on paper and attached ONE photo of the whole page. Find the student's answer for THIS part in the photo, matching by its label and order${kind === 'mcq' ? ' (a circled option, a written number or letter, or a tick)' : ''}. Ignore handwriting quality.\n`
@@ -27676,6 +28108,11 @@ window.ppTopicOpen = ppTopicOpen;
 window.ppTopicClose = ppTopicClose;
 window.ppTopicShowAll = ppTopicShowAll;
 window.ppTopicPrint = ppTopicPrint;
+window.notesHandleFile = notesHandleFile;
+window.notesEditOpen = notesEditOpen;
+window.notesEditClose = notesEditClose;
+window.notesEditSave = notesEditSave;
+window.notesDelete = notesDelete;
 window.ppTopicPractise = ppTopicPractise;
 window.ppPracticeYear = ppPracticeYear;
 window.ppGameMenuOpen = ppGameMenuOpen;
