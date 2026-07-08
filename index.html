@@ -7928,7 +7928,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.90.0';
+const APP_VERSION = 'v1.91.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11195,6 +11195,7 @@ async function handleBulkAiFile(file) {
       `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
       `Rules:\n` +
       `- ONE entry per question, in document order. Put an "image" placeholder exactly where each diagram/figure belongs, interleaved with the text.\n` +
+      `- Do NOT transcribe data tables into text — every data table gets its own "image" placeholder instead (the teacher attaches it as a picture).\n` +
       `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
       `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, set "correctIndex" to the 0-based correct option; no "answer"/"plainanswer".\n` +
       `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
@@ -11378,13 +11379,21 @@ function _aiBuildQuestionPrompt(isPdf) {
     `{"title":"short title","topic":"<closest topic>","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
     `Each item in "blocks" is ONE of these objects:\n` +
     `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
-    `  {"type":"image"}   (a placeholder marking where a diagram/picture/graph/figure/experimental setup appears — the teacher pastes the real image there)\n` +
+    `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — box_2d is the rectangle you draw around it on the page)\n` +
     `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0}\n` +
     `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
-    `- List blocks in the SAME order they appear in the source. Put an "image" placeholder block exactly where each diagram/picture/graph/figure belongs, interleaved with the text blocks.\n` +
+    `- List blocks in the SAME order they appear in the source. Put an "image" block exactly where each diagram/picture/graph/figure/table belongs, interleaved with the text blocks.\n` +
+    `- RECTANGLE SELECTION (box_2d) — follow these steps for EVERY "image" block:\n` +
+    `  1. Find that one figure on the page and note its four edges: top, left, bottom, right.\n` +
+    `  2. Give box_2d = [ymin, xmin, ymax, xmax] as integers from 0 to 1000 measured on the WHOLE attached page: 0,0 is the page's top-left corner and 1000,1000 its bottom-right corner; ymin = the figure's top edge, ymax = its bottom edge, xmin = its left edge, xmax = its right edge.\n` +
+    `  3. Draw the rectangle TIGHTLY around ONLY that one figure: include the figure and the labels, arrows and captions that are part of it, but EXCLUDE the question text, the question number, the answer options, answer lines and every other figure.\n` +
+    `  4. Leave a small sliver of white space on every side rather than cutting into the figure.\n` +
+    `  5. If two sub-figures belong to one reference (e.g. "Diagram 1 and Diagram 2" shown side by side), one rectangle around both is fine; otherwise use one "image" block per figure.\n` +
+    `  6. Only if you genuinely cannot locate the figure, omit box_2d.\n` +
+    `- DATA TABLES: do NOT transcribe a data table into a text block. Treat EVERY data table as its own "image" block, with box_2d drawn around the whole table including its header row and borders — it will be captured as a picture.\n` +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
     `- If questionType is "open": include ONE answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer. In these answer fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
@@ -11483,8 +11492,8 @@ async function handleAiBuildFile(file) {
     checkEditorDuplicate();   // warn if this looks like a question already in the bank
     const hasImageBlock = blocks.some(b => b.type === 'image');
     if (isImg && hasImageBlock) {
-      showToast('Question built ✓ — enhancing the image next…', 'success');
-      _autoFillDiagramFromUpload(file.type, b64); // async: enhances the whole image to B&W; crop it from there
+      showToast('Question built ✓ — cropping the AI-selected pictures next…', 'success');
+      _autoFillDiagramsFromBoxes(parsed, file.type, b64); // async: crops each AI-drawn rectangle; whole screenshot is the backup
     } else {
       showToast('Question built — review it' + (hasImageBlock ? ', paste the diagram,' : '') + ' then Save', 'success');
     }
@@ -11504,6 +11513,106 @@ function _loadImageEl(src) {
     img.onerror = () => reject(new Error('could not load the image'));
     img.src = src;
   });
+}
+
+// ---- AI-drawn rectangle → cropped figure ----------------------------------
+// The build prompt asks the AI to DRAW A RECTANGLE (box_2d, [ymin,xmin,ymax,
+// xmax] in 0–1000 page units) around each figure/table. This crops that
+// rectangle out of the uploaded screenshot with a small breathing margin and
+// an up-scale so the figure stays sharp. Returns a data URL, or null when the
+// box is unusable (missing, malformed, tiny, or basically the whole page) —
+// the caller then falls back to the whole screenshot.
+async function _cropBoxFromScreenshot(fullDataUrl, box) {
+  if (!Array.isArray(box) || box.length !== 4) return null;
+  const [ymin, xmin, ymax, xmax] = box.map(Number);
+  if (![ymin, xmin, ymax, xmax].every(v => isFinite(v) && v >= 0 && v <= 1000)) return null;
+  if (ymax - ymin < 25 || xmax - xmin < 25) return null;                    // far too small to be a real figure
+  if ((ymax - ymin) / 1000 > 0.92 && (xmax - xmin) / 1000 > 0.92) return null; // ≈ the whole page → selection failed
+  const img = await _loadImageEl(fullDataUrl);
+  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+  if (!W || !H) return null;
+  const mx = W * 0.015, my = H * 0.015; // sliver of white space around the figure
+  const sx = Math.max(0, xmin / 1000 * W - mx);
+  const sy = Math.max(0, ymin / 1000 * H - my);
+  const sw = Math.min(W - sx, (xmax - xmin) / 1000 * W + mx * 2);
+  const sh = Math.min(H - sy, (ymax - ymin) / 1000 * H + my * 2);
+  if (sw < 24 || sh < 24) return null;
+  const scale = Math.max(1, Math.min(2, 1600 / Math.max(sw, sh))); // upscale small crops (≤2×, ≤~1600px)
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(sw * scale);
+  canvas.height = Math.round(sh * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/png');
+}
+
+// Fill a question's image blocks from the AI-drawn rectangles (screenshots
+// only). Each usable rectangle is cropped out and re-rendered as a clean
+// black-and-white figure (first 3 crops; the rest stay as sharp raw crops).
+// The WHOLE screenshot is uploaded once as every block's "Original", so the
+// ↩ Use original button is the manual backup when a rectangle was wrong.
+// Blocks whose own rectangle failed while others succeeded get the whole
+// screenshot to crop by hand. Returns how many blocks got a real crop;
+// 0 = selection failed everywhere → caller falls back to the old flow.
+async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus) {
+  const fullDataUrl = 'data:' + mimeType + ';base64,' + b64;
+  const crops = [];
+  for (let i = 0; i < imgBlocks.length; i++) {
+    let c = null;
+    try { c = await _cropBoxFromScreenshot(fullDataUrl, boxes[i]); } catch (e) { console.warn('AI rectangle crop failed', e); }
+    crops.push(c);
+  }
+  if (!crops.some(Boolean)) return 0;
+  const fullUrl = await uploadImageDataUrl(fullDataUrl); // shared "Use original" backup
+  let filled = 0, enhanced = 0;
+  for (let i = 0; i < imgBlocks.length; i++) {
+    const blk = imgBlocks[i];
+    if (!crops[i]) { // this rectangle failed — backup: the whole screenshot, crop by hand
+      blk.url = fullUrl;
+      _imgEnhanceState[blk.id] = { originalDataUrl: fullDataUrl, originalUrl: fullUrl, currentDataUrl: fullDataUrl };
+      continue;
+    }
+    let dataUrl = crops[i];
+    if (imageAiReady() && enhanced < 3) {
+      enhanced++;
+      if (onStatus) onStatus(`Enhancing picture ${filled + 1} (black & white)…`);
+      try { dataUrl = await generateEnhancedImageDataUrl(_BW_ENHANCE_PROMPT, [{ mimeType: 'image/png', data: crops[i].split(',')[1] || '' }]); }
+      catch (e) { console.warn('crop enhance failed — keeping the sharp crop', e); dataUrl = crops[i]; }
+    }
+    try {
+      blk.url = await uploadImageDataUrl(dataUrl);
+      _imgEnhanceState[blk.id] = { originalDataUrl: fullDataUrl, originalUrl: fullUrl, currentDataUrl: dataUrl };
+      filled++;
+    } catch (e) { console.warn('crop upload failed', e); }
+  }
+  return filled;
+}
+
+// Editor flow: crop the AI-selected rectangles into the freshly built
+// question's image blocks; on total failure fall back to the original
+// whole-screenshot flow. Runs async after the editor is populated.
+async function _autoFillDiagramsFromBoxes(parsed, mimeType, b64) {
+  const boxes = ((parsed && parsed.blocks) || [])
+    .filter(b => String((b && b.type) || '').toLowerCase() === 'image')
+    .map(b => (b && (b.box_2d || b.box)) || null);
+  const imgBlocks = blocks.filter(b => b.type === 'image');
+  if (!imgBlocks.length) return;
+  const editorRef = blocks; // detect the teacher moving on to another question
+  let filled = 0;
+  try {
+    filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, m => showToast('🖼️ ' + m, 'info'));
+  } catch (e) { console.warn('AI rectangle flow failed', e); }
+  if (blocks !== editorRef) return;
+  if (!filled) { _autoFillDiagramFromUpload(mimeType, b64); return; } // BACKUP: whole screenshot
+  renderBlocks();
+  imgBlocks.forEach(b => renderImgEnhanceBar(b.id));
+  showToast(filled === imgBlocks.length
+    ? `✂️ Cropped ${filled} picture${filled === 1 ? '' : 's'} from your screenshot ✓ — check them; “↩ Use original” brings back the whole screenshot`
+    : `✂️ Cropped ${filled} of ${imgBlocks.length} pictures — the rest got the whole screenshot to crop by hand`, 'success');
 }
 
 // After the AI lays out the question, enhance the WHOLE uploaded screenshot to
@@ -11618,30 +11727,45 @@ async function processRapidJob(jobId, file) {
     // 1) Read the question into blocks (same prompt as Build from screenshot).
     const b64 = await _fileToBase64(file);
     const raw = await askGeminiVision(_aiBuildQuestionPrompt(isPdf), [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 4096, json: true });
-    const q = buildQuestionFromAi(_parseAIJson(raw));
+    const parsed = _parseAIJson(raw);
+    const q = buildQuestionFromAi(parsed);
 
-    // 2) Enhance the WHOLE picture to black & white and attach it to the first
-    //    image block. Falls back to the original screenshot if enhancing fails.
+    // 2) Crop each AI-drawn rectangle (box_2d) out of the screenshot into its
+    //    image block. If the selection failed everywhere, fall back to the old
+    //    flow: enhance the WHOLE picture and attach it to the first image block.
     if (isImg) {
-      const imgBlock = q.blocks.find(b => b.type === 'image');
-      if (imgBlock) {
-        _setRapidJobState(jobId, { title: q.title || 'Question', sub: 'Enhancing the image (black & white)…' });
+      const imgBlocks = q.blocks.filter(b => b.type === 'image');
+      if (imgBlocks.length) {
+        _setRapidJobState(jobId, { title: q.title || 'Question', sub: 'Cropping the AI-selected pictures…' });
         renderVettingList();
-        const original = 'data:' + file.type + ';base64,' + b64;
+        const boxes = ((parsed && parsed.blocks) || [])
+          .filter(b => String((b && b.type) || '').toLowerCase() === 'image')
+          .map(b => (b && (b.box_2d || b.box)) || null);
+        let filled = 0;
         try {
-          const dataUrl = imageAiReady()
-            ? await generateEnhancedImageDataUrl(_BW_ENHANCE_PROMPT, [{ mimeType: file.type, data: b64 }])
-            : original;
-          imgBlock.url = await uploadImageDataUrl(dataUrl);
-          // Seed in-session image state so Crop / Touch up / Enhance work when this
-          // question is opened in the editor (mirrors Build-from-screenshot).
-          _imgEnhanceState[imgBlock.id] = { originalDataUrl: dataUrl, originalUrl: imgBlock.url, currentDataUrl: dataUrl };
-        } catch (imgErr) {
-          console.warn('rapid B&W enhance failed; attaching original screenshot', imgErr);
+          filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, file.type, b64, m => { _setRapidJobState(jobId, { sub: m }); renderVettingList(); });
+        } catch (e) { console.warn('rapid AI rectangle flow failed', e); }
+        if (!filled) {
+          // BACKUP — whole screenshot, enhanced to black & white.
+          const imgBlock = imgBlocks[0];
+          _setRapidJobState(jobId, { sub: 'Enhancing the whole image (black & white)…' });
+          renderVettingList();
+          const original = 'data:' + file.type + ';base64,' + b64;
           try {
-            imgBlock.url = await uploadImageDataUrl(original);
-            _imgEnhanceState[imgBlock.id] = { originalDataUrl: original, originalUrl: imgBlock.url, currentDataUrl: original };
-          } catch (e2) { /* leave url empty; paste manually later */ }
+            const dataUrl = imageAiReady()
+              ? await generateEnhancedImageDataUrl(_BW_ENHANCE_PROMPT, [{ mimeType: file.type, data: b64 }])
+              : original;
+            imgBlock.url = await uploadImageDataUrl(dataUrl);
+            // Seed in-session image state so Crop / Touch up / Enhance work when this
+            // question is opened in the editor (mirrors Build-from-screenshot).
+            _imgEnhanceState[imgBlock.id] = { originalDataUrl: dataUrl, originalUrl: imgBlock.url, currentDataUrl: dataUrl };
+          } catch (imgErr) {
+            console.warn('rapid B&W enhance failed; attaching original screenshot', imgErr);
+            try {
+              imgBlock.url = await uploadImageDataUrl(original);
+              _imgEnhanceState[imgBlock.id] = { originalDataUrl: original, originalUrl: imgBlock.url, currentDataUrl: original };
+            } catch (e2) { /* leave url empty; paste manually later */ }
+          }
         }
       }
     }
