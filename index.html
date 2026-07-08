@@ -7928,7 +7928,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.91.0';
+const APP_VERSION = 'v1.91.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11389,10 +11389,11 @@ function _aiBuildQuestionPrompt(isPdf) {
     `- RECTANGLE SELECTION (box_2d) — follow these steps for EVERY "image" block:\n` +
     `  1. Find that one figure on the page and note its four edges: top, left, bottom, right.\n` +
     `  2. Give box_2d = [ymin, xmin, ymax, xmax] as integers from 0 to 1000 measured on the WHOLE attached page: 0,0 is the page's top-left corner and 1000,1000 its bottom-right corner; ymin = the figure's top edge, ymax = its bottom edge, xmin = its left edge, xmax = its right edge.\n` +
-    `  3. Draw the rectangle TIGHTLY around ONLY that one figure: include the figure and the labels, arrows and captions that are part of it, but EXCLUDE the question text, the question number, the answer options, answer lines and every other figure.\n` +
-    `  4. Leave a small sliver of white space on every side rather than cutting into the figure.\n` +
-    `  5. If two sub-figures belong to one reference (e.g. "Diagram 1 and Diagram 2" shown side by side), one rectangle around both is fine; otherwise use one "image" block per figure.\n` +
-    `  6. Only if you genuinely cannot locate the figure, omit box_2d.\n` +
+    `  3. Draw the rectangle around ONLY that one figure: include the figure and the labels, arrows and captions that are part of it, but EXCLUDE the question text, the question number, the answer options, answer lines and every other figure.\n` +
+    `  4. LABELS STICK OUT: label text and their pointer lines usually extend far to the LEFT and RIGHT of the drawing itself. xmin and xmax MUST reach past the LAST letter of the longest label on each side — never through the middle of a word. Re-check every label before answering: if any word would be cut, widen the rectangle.\n` +
+    `  5. Leave a clear band of white space on every side rather than cutting into the figure. When unsure, make the rectangle LARGER, never smaller — a little extra background is fine, a cut-off word is not.\n` +
+    `  6. If two sub-figures belong to one reference (e.g. "Diagram 1 and Diagram 2" shown side by side), one rectangle around both is fine; otherwise use one "image" block per figure.\n` +
+    `  7. Only if you genuinely cannot locate the figure, omit box_2d.\n` +
     `- DATA TABLES: do NOT transcribe a data table into a text block. Treat EVERY data table as its own "image" block, with box_2d drawn around the whole table including its header row and borders — it will be captured as a picture.\n` +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
@@ -11522,6 +11523,37 @@ function _loadImageEl(src) {
 // an up-scale so the figure stays sharp. Returns a data URL, or null when the
 // box is unusable (missing, malformed, tiny, or basically the whole page) —
 // the caller then falls back to the whole screenshot.
+// Safety net for slightly-tight AI rectangles: grow each edge of the crop
+// until it sits in clean whitespace, so a label word the rectangle clipped is
+// pulled back in. Generous sideways (labels stick out left/right of a
+// drawing), conservative vertically (question text usually sits above/below).
+// Only ever grows — never shrinks the AI's selection.
+function _expandRectToWhitespace(ctx, W, H, r) {
+  const inkFrac = (x, y, w, h) => {
+    x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y));
+    w = Math.round(Math.min(w, W - x)); h = Math.round(Math.min(h, H - y));
+    if (w < 1 || h < 1) return 0;
+    const d = ctx.getImageData(x, y, w, h).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < 190 && d[i + 3] > 60) n++;
+    }
+    return n / (d.length / 4);
+  };
+  const TH = 0.004; // >0.4% inked pixels in an edge strip = something is being cut through
+  const stepX = Math.max(4, W * 0.012), stepY = Math.max(4, H * 0.012);
+  const maxX = W * 0.18, maxY = H * 0.08; // per-side growth caps
+  let { x, y, w, h } = r, gL = 0, gR = 0, gT = 0, gB = 0;
+  for (let i = 0; i < 40; i++) {
+    let moved = false;
+    if (x > 0 && gL < maxX && inkFrac(x, y, 3, h) > TH) { const d = Math.min(stepX, x, maxX - gL); x -= d; w += d; gL += d; moved = true; }
+    if (x + w < W && gR < maxX && inkFrac(x + w - 3, y, 3, h) > TH) { const d = Math.min(stepX, W - (x + w), maxX - gR); w += d; gR += d; moved = true; }
+    if (y > 0 && gT < maxY && inkFrac(x, y, w, 3) > TH) { const d = Math.min(stepY, y, maxY - gT); y -= d; h += d; gT += d; moved = true; }
+    if (y + h < H && gB < maxY && inkFrac(x, y + h - 3, w, 3) > TH) { const d = Math.min(stepY, H - (y + h), maxY - gB); h += d; gB += d; moved = true; }
+    if (!moved) break;
+  }
+  return { x, y, w, h };
+}
 async function _cropBoxFromScreenshot(fullDataUrl, box) {
   if (!Array.isArray(box) || box.length !== 4) return null;
   const [ymin, xmin, ymax, xmax] = box.map(Number);
@@ -11531,22 +11563,32 @@ async function _cropBoxFromScreenshot(fullDataUrl, box) {
   const img = await _loadImageEl(fullDataUrl);
   const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
   if (!W || !H) return null;
-  const mx = W * 0.015, my = H * 0.015; // sliver of white space around the figure
-  const sx = Math.max(0, xmin / 1000 * W - mx);
-  const sy = Math.max(0, ymin / 1000 * H - my);
-  const sw = Math.min(W - sx, (xmax - xmin) / 1000 * W + mx * 2);
-  const sh = Math.min(H - sy, (ymax - ymin) / 1000 * H + my * 2);
-  if (sw < 24 || sh < 24) return null;
-  const scale = Math.max(1, Math.min(2, 1600 / Math.max(sw, sh))); // upscale small crops (≤2×, ≤~1600px)
+  const mx = W * 0.025, my = H * 0.02; // white-space margin around the figure
+  let r = {
+    x: Math.max(0, xmin / 1000 * W - mx),
+    y: Math.max(0, ymin / 1000 * H - my)
+  };
+  r.w = Math.min(W - r.x, (xmax - xmin) / 1000 * W + mx * 2);
+  r.h = Math.min(H - r.y, (ymax - ymin) / 1000 * H + my * 2);
+  if (r.w < 24 || r.h < 24) return null;
+  // Grow the rectangle out of any content it cuts through (clipped labels).
+  try {
+    const probe = document.createElement('canvas');
+    probe.width = W; probe.height = H;
+    const pctx = probe.getContext('2d', { willReadFrequently: true });
+    pctx.drawImage(img, 0, 0);
+    r = _expandRectToWhitespace(pctx, W, H, r);
+  } catch (e) { console.warn('edge expansion skipped', e); }
+  const scale = Math.max(1, Math.min(2, 1600 / Math.max(r.w, r.h))); // upscale small crops (≤2×, ≤~1600px)
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(sw * scale);
-  canvas.height = Math.round(sh * scale);
+  canvas.width = Math.round(r.w * scale);
+  canvas.height = Math.round(r.h * scale);
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL('image/png');
 }
 
