@@ -7578,7 +7578,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.88.0';
+const APP_VERSION = 'v1.88.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -26679,7 +26679,7 @@ function ppRenderBody(){
     const attached = hits.filter(id => ppBankQ(id)).length;
     const tools = edit
       ? `<span class="pp-tools"><button class="pp-mini" title="Edit concept" onclick="ppEditConcept('${c.id}')">&#9998; Edit</button><button class="pp-mini del" title="Delete concept" onclick="ppDeleteConcept('${c.id}')">&times; Delete</button></span>`
-      : (admin ? `<span class="pp-tools"><button class="pp-mini" title="Print this concept's ${attached} attached question${attached === 1 ? '' : 's'} as a worksheet — answer key on the last pages" onclick="ppPrintConcept('${c.id}')">🖨 Print</button><label class="pp-print-check" title="Tick to include this concept in “Print selected” at the top"><input type="checkbox" ${_ppPrintSel.has(c.id) ? 'checked' : ''} onchange="ppTogglePrintSel('${c.id}', this.checked)"></label></span>` : '');
+      : `<span class="pp-tools"><button class="pp-mini" title="Print this concept's ${attached} attached question${attached === 1 ? '' : 's'} as a worksheet — answer key on the last pages" onclick="ppPrintConcept('${c.id}')">🖨 Print</button><label class="pp-print-check" title="Tick to include this concept in “Print selected” at the top"><input type="checkbox" ${_ppPrintSel.has(c.id) ? 'checked' : ''} onchange="ppTogglePrintSel('${c.id}', this.checked)"></label></span>`;
     return `<div class="pp-rec">
       <div class="pp-rec-head"><span class="pp-rec-count">${hits.length}&times;</span><span class="pp-rec-title">${escapeHtml(c.concept || 'Untitled concept')}</span>${tools}</div>
       <div class="pp-rec-topic">${escapeHtml(c.topic || '')}${span ? ' &middot; ' + span : ''}${mk ? ' &middot; ~' + mk + ' marks across the papers' : ''}</div>
@@ -26688,7 +26688,7 @@ function ppRenderBody(){
     </div>`;
   }).join('') || '<div style="color:var(--text-muted);padding:8px;">No recurring concepts yet.</div>';
   const addConcept = edit ? `<button class="pp-add" onclick="ppAddConcept()">+ Add concept</button>` : '';
-  const printSelBtn = (admin && !edit) ? `<button class="pp-add" id="ppPrintSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Print every attached question from the concepts you ticked below as ONE worksheet — questions first, the full answer key on the last pages. Tick concepts with the checkbox at their top-right corner." onclick="ppPrintSelected()">🖨 Print selected${_ppPrintSel.size ? ' (' + _ppPrintSel.size + ')' : ''}</button>` : '';
+  const printSelBtn = !edit ? `<button class="pp-add" id="ppPrintSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Print every attached question from the concepts you ticked below as ONE worksheet — questions first, the full answer key on the last pages. Tick concepts with the checkbox at their top-right corner." onclick="ppPrintSelected()">🖨 Print selected${_ppPrintSel.size ? ' (' + _ppPrintSel.size + ')' : ''}</button>` : '';
 
   // --- question map ---
   const yearGroups = years.map(y => {
@@ -26697,7 +26697,7 @@ function ppRenderBody(){
     const chips = yq.map(q => edit ? ppChipEdit(q) : ppChip(q)).join('') || '<span style="color:var(--text-muted);font-size:0.8rem;">No questions</span>';
     const addBtn = edit ? `<button class="pp-add sm" onclick="ppAddQuestion('${y}')">+ Add question</button>` : '';
     const practiceBtn = (!edit && yAssigned) ? `<button class="pp-mini" title="Practise all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} from the ${escapeHtml(y)} paper on the system" onclick="ppPracticeYear('${escapeHtml(y)}')">▶ Practice now</button>` : '';
-    const printBtn = (admin && !edit) ? `<button class="pp-mini" title="Print the whole ${escapeHtml(y)} paper — all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} in question order, answer key on the last pages" onclick="ppPrintYear('${escapeHtml(y)}')">🖨 Print year</button>` : '';
+    const printBtn = (!edit && (admin || yAssigned)) ? `<button class="pp-mini" title="Print the whole ${escapeHtml(y)} paper — all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} in question order, answer key on the last pages" onclick="ppPrintYear('${escapeHtml(y)}')">🖨 Print year</button>` : '';
     const yearTools = (practiceBtn || printBtn) ? `<span class="pp-tools">${practiceBtn}${printBtn}</span>` : '';
     return `<div class="pp-year">
       <div class="pp-year-head"><strong>${escapeHtml(y)}</strong> <span class="pp-year-sub">${yq.length} questions &middot; ${yAssigned}/${yq.length} attached</span> ${addBtn}${yearTools}</div>
@@ -26745,6 +26745,7 @@ function ppRenderBody(){
       <div class="pp-pr-btns">
         <button class="pp-add" ${r.avail ? '' : 'disabled'} title="Practise ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'every attached past-paper question'} on the system — MCQ and open-ended, marked as usual" onclick="ppPracticeYear('${escapeHtml(r.y)}')">▶ ${r.y ? 'Practice now' : 'Practice all'}</button>
         <button class="pp-add pp-gamebtn" ${r.avail ? '' : 'disabled'} title="Load ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'all past-paper questions'} into a mini-game — every question answered there counts ×2 on the leaderboards" onclick="ppGameMenuOpen(event,'${escapeHtml(r.y)}')">🎮 Practice in a game <span style="font-size:0.72em;">▾</span></button>
+        ${r.y ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Print the whole ${escapeHtml(r.y)} paper as a worksheet — answer key on the last pages" onclick="ppPrintYear('${escapeHtml(r.y)}')">🖨 Print paper</button>` : ''}
       </div>
     </div>`).join('');
   const practiceCard = `
@@ -26756,7 +26757,7 @@ function ppRenderBody(){
 
   const toggle = admin ? `<button class="pp-editbtn ${edit ? 'on' : ''}" onclick="ppToggleEdit()">${edit ? '✓ Done editing' : '✎ Edit content'}</button>` : '';
   const roleLine = !admin
-    ? 'Tap any highlighted question to practise it. Hover to preview. Greyed-out questions have not been added yet. Use “Practise the papers” below to do a whole year in one go — or play it inside a game, where every question counts ×2 on the leaderboards!'
+    ? 'Tap any highlighted question to practise it. Hover to preview. Greyed-out questions have not been added yet. Use “Practise the papers” below to do a whole year in one go — or play it inside a game, where every question counts ×2 on the leaderboards! The 🖨 buttons print a year or a concept as a worksheet, with the answer key on the last pages.'
     : (edit
       ? 'Editing: use + Add question / + Add concept, click a question or concept to change its details, or × to remove it. Turn editing off to attach bank questions.'
       : 'Click any question to attach one from your bank — or create a brand-new question for it on the spot — and to set its difficulty (🟢/🟡/🔴, colours the chip on this page only); students can then practise it. Hover a question to preview. Use the 🖨 buttons to print a concept or a whole year (answer key on the last pages), and the checkboxes to print several concepts together. “Edit content” adds, removes or rewords questions and concepts.');
