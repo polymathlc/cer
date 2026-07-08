@@ -7290,15 +7290,44 @@ function _notesMarkingBlock(topic) {
   if (kw.length) bits.push(`Preferred science keywords from the teacher's own notes — expect and accept these exact terms in a full-mark answer: ${kw.join(', ')}.`);
   if (std) bits.push(`The teacher's marking standards from those notes: ${std}`);
   if (com) bits.push(`The teacher's comment on those notes: ${com}`);
-  return bits.length ? `TEACHER'S REFERENCE NOTES (uploaded by the teacher — treat them as the marking authority): ${bits.join(' ')}` : '';
+  return bits.length
+    ? `TEACHER'S REFERENCE NOTES (from the teacher's uploaded notes database): ${bits.join(' ')} AUTHORITY ORDER: the question's own expected/model answer (when provided) is ALWAYS the highest authority — never mark against it; use these notes for the preferred keywords, phrasing and standards, and base the model answer on them whenever you have to craft one yourself.`
+    : '';
 }
 // Compact digest for QUESTION-GENERATION prompts: the teacher's preferred
-// keyword vocabulary across all uploaded notes.
+// keyword vocabulary + key facts across all uploaded notes. Every answer or
+// explanation the AI writes must be based on this database first — but an
+// answer already shown in the source document always wins.
 function _notesGenBlock() {
   if (!teachingNotes.length) return '';
   const kw = [...new Set(teachingNotes.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 60);
-  if (!kw.length) return '';
-  return `The teacher's uploaded notes use this preferred science vocabulary — use these exact terms in answers, [[keyword]] blanks and explanations wherever they fit: ${kw.join(', ')}.\n`;
+  const facts = teachingNotes.map(n => String(n.keyFacts || '').trim()).filter(Boolean).join('\n').slice(0, 1200);
+  const bits = [];
+  if (kw.length) bits.push(`TEACHER'S NOTES DATABASE — preferred science vocabulary: ${kw.join(', ')}.`);
+  if (facts) bits.push(`Key facts from the teacher's notes:\n${facts}`);
+  if (!bits.length) return '';
+  return bits.join('\n') +
+    `\nWhen you WRITE any answer or explanation content, base the science and the wording on this database first (use its exact terms where relevant); fall back to standard PSLE syllabus knowledge only where the database does not cover it. ` +
+    `EXCEPTION — highest authority: if the source document already shows or implies an answer, keep that provided answer exactly; the database only guides its phrasing.\n`;
+}
+
+// Richer digest for CRAFTING a model answer (the "🤖 AI answer" button on
+// answer blocks): topic-matched notes first, general notes next, the whole
+// database as a last resort — keywords, standards AND key facts.
+function _notesAnswerBlock(topic) {
+  if (!teachingNotes.length) return '';
+  const t = String(topic || '').toLowerCase().trim();
+  let rel = t ? teachingNotes.filter(n => (n.topics || []).some(x => String(x).toLowerCase().trim() === t)) : [];
+  if (!rel.length) rel = teachingNotes.filter(n => !(n.topics || []).length);
+  if (!rel.length) rel = teachingNotes;
+  const kw = [...new Set(rel.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 40);
+  const std = rel.map(n => String(n.markingStandards || '').trim()).filter(Boolean).join(' ').slice(0, 800);
+  const facts = rel.map(n => String(n.keyFacts || '').trim()).filter(Boolean).join('\n').slice(0, 1800);
+  const bits = [];
+  if (kw.length) bits.push(`Preferred keywords: ${kw.join(', ')}.`);
+  if (std) bits.push(`Answer standards: ${std}`);
+  if (facts) bits.push(`Key facts:\n${facts}`);
+  return bits.length ? `TEACHER'S NOTES DATABASE (the primary source for the science and wording — use only what is relevant to this question):\n${bits.join('\n')}` : '';
 }
 
 // ---- Teaching Notes page (admin only) ----
@@ -7899,7 +7928,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.89.0';
+const APP_VERSION = 'v1.90.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9496,6 +9525,8 @@ function renderBlocks() {
               <span class="toolbar-divider"></span>
               <button class="toolbar-btn" title="Bulleted List" onmousedown="event.preventDefault();execCmd('insertUnorderedList')">•</button>
               <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
+              <span class="toolbar-divider"></span>
+              ${aiAnswerBtnHtml(block.id)}
             </div>
             <div class="cer-section" data-mic-wrap>
               <div class="cer-label claim-label">Claim ${micButtonHtml('', 'Speak the claim')} ${improveBtnHtml(block.id, 'claim')}</div>
@@ -9533,6 +9564,7 @@ function renderBlocks() {
               <span class="toolbar-divider"></span>
               ${micButtonHtml('', 'Dictate the answer')}
               ${improveBtnHtml(block.id, 'content')}
+              ${aiAnswerBtnHtml(block.id)}
             </div>
             <div class="content-editable" contenteditable="true" data-placeholder="Enter the answer..."
                  data-block-id="${block.id}" data-field="content"
@@ -9719,6 +9751,83 @@ function mcqNumberOptions(blockId) {
 function improveBtnHtml(blockId, field) {
   return `<button type="button" class="improve-btn" data-improve-block="${blockId}" data-improve-field="${field}" title="Improve grammar, phrasing and sentence structure with AI — keeps your meaning">✨ Improve</button>`;
 }
+
+// "🤖 AI answer" button shown on every ANSWER block (CER and plain answer).
+// Reads the whole question above it — text, parts, tables and diagrams — and
+// crafts the model answer, grounded FIRST on the Teaching Notes database.
+function aiAnswerBtnHtml(blockId) {
+  return `<button type="button" class="improve-btn" data-aianswer="${blockId}" title="Craft this answer with AI — it reads the question (including diagrams) and bases the science on your Teaching Notes database">🤖 AI answer</button>`;
+}
+async function aiGenerateBlockAnswer(blockId, btn) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || (block.type !== 'answer' && block.type !== 'plainanswer')) return;
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+  const hasContent = block.type === 'answer'
+    ? [block.claim, block.evidence, block.reasoning].some(v => stripHtml(v || '').trim())
+    : !!stripHtml(block.content || '').trim();
+  if (hasContent && !confirm('Replace the current answer with an AI-crafted one?')) return;
+
+  // The question in block order, with THIS answer box marked so the AI knows
+  // which part it belongs to. Diagrams go along as images (best effort).
+  const ctxBits = [];
+  const media = [];
+  let ansN = 0;
+  for (const b of blocks) {
+    if (b.type === 'text' && stripHtml(b.content || '').trim()) ctxBits.push(stripHtml(b.content));
+    else if (b.type === 'part' && ((b.label || '') + stripHtml(b.content || '')).trim()) ctxBits.push(((b.label || '') + ' ' + stripHtml(b.content || '')).trim());
+    else if (b.type === 'image' && b.url) { ctxBits.push('[diagram — attached as an image]'); if (media.length < 3) { try { media.push(await _blockImageToInline(b.id)); } catch (e) { console.warn('AI answer: diagram skipped', e); } } }
+    else if (b.type === 'table') { try { ctxBits.push('[table] ' + (b.data || []).map(row => (row || []).map(c => stripHtml(String(c || ''))).join(' | ')).join(' ; ')); } catch (e) {} }
+    else if (b.type === 'mcq') ctxBits.push('[multiple-choice options] ' + (b.options || []).map((o, i) => (i + 1) + ') ' + stripHtml(o.text || '')).join(' '));
+    else if (b.type === 'answer' || b.type === 'plainanswer') { ansN++; ctxBits.push(b.id === blockId ? `>>> ANSWER BOX ${ansN} — WRITE THIS ONE <<<` : `[answer box ${ansN} — belongs to another part, do not answer it]`); }
+  }
+  const topic = (document.getElementById('topicSelect') && document.getElementById('topicSelect').value) || '';
+  const title = (document.getElementById('questionTitle') && document.getElementById('questionTitle').value) || '';
+  const notesDb = _notesAnswerBlock(topic);
+  const prompt =
+    `You are a Singapore primary-school (PSLE) science teacher writing the MODEL ANSWER for one answer box of the question below.\n` +
+    (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
+    (title || topic ? `Question: "${title}"${topic ? ' — topic: ' + topic : ''}.\n` : '') +
+    `THE QUESTION, in order${media.length ? ' (diagrams attached as images)' : ''}:\n${ctxBits.join('\n').slice(0, 3500)}\n` +
+    `Write the model answer for the box marked >>> WRITE THIS ONE <<< only — the part of the question immediately before it.\n` +
+    (block.type === 'answer'
+      ? `It is a Claim-Evidence-Reasoning answer. Return ONLY JSON: {"claim":"...","evidence":"...","reasoning":"..."}\n`
+      : `Return ONLY JSON: {"answer":"..."}\n`) +
+    `Rules: concise exam-style phrasing a P6 pupil could write; wrap the 3-8 most important science keywords in [[double brackets]] (e.g. [[evaporation]]); plain text only, no markdown.`;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '🤖 Crafting…'; }
+  try {
+    const raw = media.length
+      ? await askGeminiVision(prompt, media, { maxOutputTokens: 900, json: true })
+      : await askGemini(prompt, { maxOutputTokens: 900, temperature: 0.25, json: true });
+    let p = _parseAIJson(raw);
+    if (Array.isArray(p)) p = p[0];
+    if (!p || typeof p !== 'object') throw new Error('the AI returned an unexpected format — please try again');
+    const toHtml = t => escapeHtml(String(t || '').trim()).replace(/\n+/g, '<br>');
+    if (block.type === 'answer') {
+      if (!String(p.claim || p.evidence || p.reasoning || '').trim()) throw new Error('the AI returned an empty answer — please try again');
+      block.claim = toHtml(p.claim);
+      block.evidence = toHtml(p.evidence);
+      block.reasoning = toHtml(p.reasoning);
+    } else {
+      const ans = String(p.answer || p.text || '').trim();
+      if (!ans) throw new Error('the AI returned an empty answer — please try again');
+      block.content = toHtml(ans);
+    }
+    renderBlocks();
+    showToast(notesDb ? '🤖 Answer crafted from your Teaching Notes database — review it before saving' : '🤖 Answer crafted — no Teaching Notes matched, so standard PSLE knowledge was used. Review it before saving', 'success');
+  } catch (e) {
+    console.error('AI answer failed', e);
+    showToast('Could not craft the answer: ' + (e && e.message ? e.message : e), 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+// Delegated so the button works after every re-render.
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest && e.target.closest('[data-aianswer]');
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
+  aiGenerateBlockAnswer(btn.getAttribute('data-aianswer'), btn);
+});
 (function injectEditorToolStyles() {
   const css = `
   .mcq-correct-radio { appearance:none; -webkit-appearance:none; width:20px; height:20px; flex-shrink:0; margin:0; border:2px solid #9aa0a6; border-radius:50%; background:#fff; cursor:pointer; transition:border-color .15s, background .15s; }
