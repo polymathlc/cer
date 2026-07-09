@@ -6839,6 +6839,11 @@ option {
 .dgn-textlayer{ position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; }
 .dgn-text{ position:absolute; min-width:30px; min-height:22px; max-width:60%; padding:2px 6px; font-size:0.9rem; line-height:1.3; font-family:'DM Sans',sans-serif; background:rgba(255,255,255,0.85); border:1px dashed var(--accent-blue,#3b82f6); border-radius:6px; pointer-events:auto; cursor:text; outline:none; white-space:pre-wrap; }
 .dgn-text .dgn-edit{ display:inline-block; min-width:26px; min-height:1.1em; outline:none; white-space:pre-wrap; }
+.dgn-badge{ font-size:0.72rem; font-weight:700; background:var(--accent-blue,#3b82f6); color:#fff; border-radius:999px; padding:3px 11px; margin-right:4px; align-self:center; }
+.dgn-link{ color:var(--accent-blue,#2563eb); text-decoration:underline dotted; text-underline-offset:3px; cursor:pointer; font-weight:600; }
+.dgn-link:hover{ background:rgba(59,130,246,0.1); border-radius:4px; }
+@keyframes dgnflash { 0%,100%{ box-shadow:none; } 20%{ box-shadow:0 0 0 5px rgba(59,130,246,0.5); } 65%{ box-shadow:0 0 0 5px rgba(59,130,246,0.22); } }
+.dgn-flash{ animation:dgnflash 2.2s ease; border-radius:10px; }
 .dgn-text .dgn-drag{ position:absolute; left:-11px; top:-11px; width:20px; height:20px; border-radius:50%; background:var(--accent-blue,#3b82f6); color:#fff; font-size:0.72rem; display:flex; align-items:center; justify-content:center; cursor:move; pointer-events:auto; user-select:none; }
 .dgn-text .dgn-del{ position:absolute; right:-11px; top:-11px; width:20px; height:20px; border-radius:50%; background:var(--accent-red,#dc2626); color:#fff; font-size:0.82rem; display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; user-select:none; }
 .dgn-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0 4px; }
@@ -7964,7 +7969,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.94.0';
+const APP_VERSION = 'v1.95.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9550,6 +9555,11 @@ function renderBlocks() {
               <input type="checkbox" ${block.annotate === false ? '' : 'checked'} onchange="saveBlockContent('${block.id}', 'annotate', this.checked)" style="width:15px;height:15px;flex:0 0 auto;cursor:pointer;">
               ✍️ Students annotate this image <span style="font-weight:400;">(only used when “Annotation question” is ticked — untick for reference pictures that shouldn't get pen &amp; label tools)</span>
             </label>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+              <span style="font-size:0.8rem;color:var(--text-muted);white-space:nowrap;">Diagram label</span>
+              <input class="form-input" type="text" style="max-width:200px;padding:6px 10px;font-size:0.82rem;" placeholder="e.g. Diagram 2" value="${escapeHtml(block.dgnLabel || '')}" oninput="saveBlockContent('${block.id}', 'dgnLabel', this.value)">
+              <span style="font-size:0.74rem;color:var(--text-muted);">shown on the image in practice; “Diagram 2” in the question text becomes a link that jumps to it</span>
+            </div>
           </div>
         `;
         break;
@@ -15097,9 +15107,9 @@ function buildOpenBody(q, containerSel, markCfg) {
   let html = sections.map(s => `<div class="qp-part${solo ? ' solo' : ''}">${s.html}</div>`).join('');
   const fbItemCount = fbBlocks.reduce((s, b) => s + b.oidxs.length, 0);
   if (isAnnot && annotCount) {
-    // Annotation (tick & label) questions get their own Check / AI Check bar
-    // instead of the open-answer photo bar or the "nothing to mark" note.
-    html += annotationActionsHtml(containerSel);
+    // Each annotation pad carries its own Check / AI Check bar; just add the
+    // how-to hint once at the end instead of the photo bar / "nothing" note.
+    html += `<div class="dgn-hint">✍️ Annotate each diagram — use <strong>✏️ Pen</strong> to draw ticks, crosses, lines or circles and <strong>🔤 Label</strong> to type labels — then use the check buttons under that diagram.</div>`;
   } else if (items.length === 0 && mcqItems.length === 0) {
     html += `<div style="padding:12px;color:var(--text-muted);font-size:0.9rem;">This question has no answer section for the AI to mark.</div>`;
   } else if (items.length - fbItemCount === 0 && mcqItems.length === 0) {
@@ -15114,6 +15124,7 @@ function buildOpenBody(q, containerSel, markCfg) {
   _openQStore[containerSel] = q;
   _openSurfaceCfg[containerSel] = markCfg || {};
   _openPartResults[containerSel] = {};
+  _annotPadScores[containerSel] = {};
   _openFinalized[containerSel] = false;
   _openPhoto[containerSel] = null; // fresh render — drop any previous photo
   if (isAnnot && annotCount) _scheduleAnnotInit(containerSel);
@@ -15137,9 +15148,11 @@ function _annotPadId(containerSel, blockId) {
 function annotationPadHtml(block, q, containerSel) {
   const pid = _annotPadId(containerSel, block.id);
   const src = escapeHtml(transformImageUrl(block.url));
+  const label = String(block.dgnLabel || '').trim();
   const swatch = (color, name) => `<button type="button" class="dgn-swatch${color === '#e11d48' ? ' active' : ''}" data-dgn-color="${pid}" data-color="${color}" style="background:${color};" title="${name}"></button>`;
   return `<div class="dgn-wrap">
       <div class="dgn-toolbar" data-dgn-tb="${pid}">
+        ${label ? `<span class="dgn-badge">📍 ${escapeHtml(label)}</span>` : ''}
         <button type="button" class="dgn-tool active" data-dgn-tool="${pid}" data-tool="pen" title="Draw / tick with a pen">✏️ Pen</button>
         <button type="button" class="dgn-tool" data-dgn-tool="${pid}" data-tool="text" title="Add a text label — then click on the diagram">🔤 Label</button>
         <button type="button" class="dgn-tool" data-dgn-tool="${pid}" data-tool="erase" title="Erase pen strokes">🩹 Erase</button>
@@ -15149,21 +15162,17 @@ function annotationPadHtml(block, q, containerSel) {
         <button type="button" class="dgn-tool" data-dgn-undo="${pid}" title="Undo the last mark">↶ Undo</button>
         <button type="button" class="dgn-tool" data-dgn-clear="${pid}" title="Clear all annotations">🗑 Clear</button>
       </div>
-      <div class="dgn-pad" data-annot="${pid}" id="${pid}">
+      <div class="dgn-pad" data-annot="${pid}" id="${pid}"${label ? ` data-dgn-name="${escapeHtml(label)}"` : ''}>
         <img id="${pid}_img" src="${src}" onerror="handleImgError(this)" alt="diagram to annotate">
         <canvas id="${pid}_cv"></canvas>
         <div class="dgn-textlayer" id="${pid}_tl"></div>
       </div>
+      <div class="dgn-actions" style="margin-top:10px;">
+        <button type="button" class="btn btn-outline" data-dgn-check="${containerSel}" style="padding:7px 14px;font-size:0.83rem;" title="Reveal the model answer">✅ Check answer</button>
+        <button type="button" class="btn btn-blue" data-dgn-aicheck="${containerSel}" data-dgn-pid="${pid}" style="padding:7px 14px;font-size:0.83rem;" title="Have the AI mark your annotations on this diagram">🤖 AI Check${label ? ' — ' + escapeHtml(label) : ''}</button>
+      </div>
+      <div class="dgn-feedback" data-dgn-fb-pad="${pid}" style="margin-top:6px;"></div>
     </div>`;
-}
-
-function annotationActionsHtml(containerSel) {
-  return `<div class="dgn-hint">✍️ Annotate the diagram above — use <strong>✏️ Pen</strong> to draw ticks, crosses, lines or circles and <strong>🔤 Label</strong> to type labels — then check your work.</div>
-    <div class="dgn-actions">
-      <button type="button" class="btn btn-outline" data-dgn-check="${containerSel}" style="padding:8px 15px;font-size:0.85rem;" title="Reveal the model answer">✅ Check answer</button>
-      <button type="button" class="btn btn-blue" data-dgn-aicheck="${containerSel}" style="padding:8px 15px;font-size:0.85rem;" title="Have the AI mark your annotations">🤖 AI Check</button>
-    </div>
-    <div class="dgn-feedback" data-dgn-fb="${containerSel}" style="margin-top:6px;"></div>`;
 }
 
 // buildOpenBody returns a string that the caller injects with innerHTML, so we
@@ -15177,6 +15186,7 @@ function initAnnotationPadsIn(containerSel) {
   const c = document.querySelector(containerSel);
   if (!c) return;
   c.querySelectorAll('.dgn-pad[data-annot]').forEach(el => _initAnnotPad(el.getAttribute('data-annot')));
+  _annotLinkifyDiagramRefs(c, containerSel);
 }
 
 function _initAnnotPad(pid) {
@@ -15403,7 +15413,15 @@ async function _annotExportBase64(pid) {
         im.onerror = () => rej(new Error('cors img load'));
         im.src = st.blockUrl + (st.blockUrl.includes('?') ? '&' : '?') + 'corscb=' + Date.now();
       });
-    } catch (_2) { source = st.img; }
+    } catch (_2) {
+      // Last resort for hosts that send no CORS headers at all (e.g. Google
+      // Drive image links): fetch through the wsrv.nl image proxy, which
+      // serves any public image WITH CORS headers.
+      try {
+        const durl = await _urlToDataUrl('https://wsrv.nl/?url=' + encodeURIComponent(st.blockUrl));
+        source = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('proxy img load')); im.src = durl; });
+      } catch (_3) { source = st.img; }
+    }
   }
   const nw = source.naturalWidth || source.width || st.cssW || 800;
   const nh = source.naturalHeight || source.height || st.cssH || 600;
@@ -15452,14 +15470,61 @@ async function _annotExportBase64(pid) {
   catch (e) { console.warn('annot export tainted', e); return null; }
 }
 
-function _annotHasMarks(containerSel) {
-  const c = document.querySelector(containerSel);
-  if (!c) return false;
-  return Array.from(c.querySelectorAll('.dgn-pad[data-annot]')).some(el => {
-    const st = _annotPads[el.getAttribute('data-annot')];
-    return st && ((st.strokes && st.strokes.length) ||
-      Array.from(st.tl.querySelectorAll('.dgn-text')).some(b => _annotTextValue(b)));
+// Make "Diagram 2" (etc.) mentions in the question text clickable — they
+// scroll to (and flash) the matching annotation pad, so students can see
+// which diagram each part refers to. Matching: the pad whose admin-set
+// "Diagram label" equals the clicked text; else the only pad; else the Nth.
+function _annotLinkifyDiagramRefs(c, containerSel) {
+  if (c._dgnLinked) return;
+  c._dgnLinked = true;
+  const re = /\bDiagrams?\s*\d+[a-z]?\b/gi;
+  c.querySelectorAll('.qp-qtext').forEach(el => {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) {
+      const n = walker.currentNode;
+      re.lastIndex = 0;
+      if (re.test(n.nodeValue)) nodes.push(n);
+    }
+    nodes.forEach(n => {
+      const s = n.nodeValue;
+      const frag = document.createDocumentFragment();
+      let last = 0, m;
+      re.lastIndex = 0;
+      while ((m = re.exec(s))) {
+        frag.appendChild(document.createTextNode(s.slice(last, m.index)));
+        const a = document.createElement('span');
+        a.className = 'dgn-link';
+        a.setAttribute('data-dgn-jump', containerSel);
+        a.title = 'Show this diagram';
+        a.textContent = m[0];
+        frag.appendChild(a);
+        last = m.index + m[0].length;
+      }
+      frag.appendChild(document.createTextNode(s.slice(last)));
+      n.parentNode.replaceChild(frag, n);
+    });
   });
+}
+function _annotJumpToDiagram(containerSel, name) {
+  const c = document.querySelector(containerSel);
+  if (!c) return;
+  const pads = Array.from(c.querySelectorAll('.dgn-pad[data-annot]'));
+  if (!pads.length) return;
+  const norm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  let target = pads.find(p => norm(p.getAttribute('data-dgn-name')) === norm(name));
+  if (!target && pads.length === 1) target = pads[0];
+  if (!target) {
+    const num = parseInt((String(name).match(/\d+/) || [])[0], 10);
+    if (num && num <= pads.length) target = pads[num - 1];
+  }
+  if (!target) target = pads[0];
+  const wrap = target.closest('.dgn-wrap') || target;
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  wrap.classList.remove('dgn-flash');
+  void wrap.offsetWidth;
+  wrap.classList.add('dgn-flash');
+  setTimeout(() => wrap.classList.remove('dgn-flash'), 2400);
 }
 
 // "Check answer" — reveal the authored model answer / marking guide (self-mark).
@@ -15471,13 +15536,16 @@ function annotShowAnswer(containerSel) {
   const hasExp = ((q.blocks) || []).some(b => b.type === 'explanation' && stripHtml(b.content || '').trim());
   showExplanation(containerSel, q, '', cfg.scoreElId, model);
   if (!model && !hasExp) {
-    const fb = document.querySelector(containerSel + ' [data-dgn-fb="' + containerSel + '"]');
+    const fb = document.querySelector(containerSel + ' .dgn-feedback');
     if (fb) fb.innerHTML = '<span style="color:var(--text-muted);font-size:0.85rem;">No model answer was set for this question — use 🤖 AI Check for feedback.</span>';
   }
 }
 
-// "AI Check" — flatten every annotated diagram and have Gemini mark it.
-async function annotAiCheck(containerSel, btn) {
+// "AI Check" — flatten ONE annotated diagram and have Gemini mark it. Every
+// pad has its own button + feedback; the question finalises (attempt record,
+// score, Next button) once every pad in it has been checked at least once.
+const _annotPadScores = {}; // containerSel -> { pid: { score, total } }
+async function annotAiCheck(containerSel, pid, btn) {
   const q = _openQStore[containerSel];
   const cfg = _openSurfaceCfg[containerSel] || {};
   const c = document.querySelector(containerSel);
@@ -15486,29 +15554,37 @@ async function annotAiCheck(containerSel, btn) {
     showToast("AI checking isn't set up yet — add your reCAPTCHA site key in the code", 'info');
     return;
   }
-  const pids = Array.from(c.querySelectorAll('.dgn-pad[data-annot]')).map(el => el.getAttribute('data-annot'));
-  if (!pids.length) { showToast('Nothing to check on this question', 'info'); return; }
-  if (!_annotHasMarks(containerSel)) { showToast('Annotate the diagram first, then AI Check', 'info'); return; }
-  const fb = c.querySelector('[data-dgn-fb="' + containerSel + '"]');
+  const allPids = Array.from(c.querySelectorAll('.dgn-pad[data-annot]')).map(el => el.getAttribute('data-annot'));
+  if (!allPids.length) { showToast('Nothing to check on this question', 'info'); return; }
+  if (!pid || !allPids.includes(pid)) pid = allPids[0];
+  const st = _annotPads[pid];
+  const hasMarks = st && ((st.strokes && st.strokes.length) ||
+    Array.from(st.tl.querySelectorAll('.dgn-text')).some(b => _annotTextValue(b)));
+  if (!hasMarks) { showToast('Annotate this diagram first, then AI Check', 'info'); return; }
+  const padEl = document.getElementById(pid);
+  const padName = (padEl && padEl.getAttribute('data-dgn-name')) || '';
+  const fb = c.querySelector('[data-dgn-fb-pad="' + pid + '"]') || c.querySelector('.dgn-feedback');
   const scoreEl = cfg.scoreElId ? document.getElementById(cfg.scoreElId) : null;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = 'Checking…'; }
   if (fb) fb.innerHTML = '<span style="color:var(--text-muted);font-size:0.85rem;">🤖 Reading your annotations…</span>';
   try {
-    const media = [];
-    for (const pid of pids) { const d = await _annotExportBase64(pid); if (d) media.push({ mimeType: 'image/jpeg', data: d }); }
-    if (!media.length) throw new Error('could not read the annotated diagram (the image may block copying)');
+    const d = await _annotExportBase64(pid);
+    if (!d) throw new Error('could not read the annotated diagram (the image may block copying)');
+    const media = [{ mimeType: 'image/jpeg', data: d }];
     const ctx = _questionContext(q);
     const guide = (q.markingGuide || '').trim();
     const model = _deriveModelAnswer(q);
+    const multi = allPids.length > 1;
     const prompt =
       `You are a science teacher marking a "ticking and labelling" annotation question. ` +
       `The student was shown a diagram and annotated it DIRECTLY — drawing ticks, crosses, circles or lines with a pen and/or typing text labels onto it. ` +
-      `Each attached image is the diagram WITH the student's annotations drawn on top. Look carefully at where the ticks/circles/lines point and read any typed labels, then decide whether each is in the right place / correct. ` +
+      `The attached image is the diagram WITH the student's annotations drawn on top. Look carefully at where the ticks/circles/lines point and read any typed labels, then decide whether each is in the right place / correct. ` +
+      (multi ? `This question has ${allPids.length} diagrams and you are marking ONLY the attached one${padName ? ` (called "${padName}")` : ''} — award marks only for what THIS diagram asks for. ` : '') +
       `${_markingPreamble(guide, q && q.topic)}\n` +
       `Question context: "${ctx}". ` +
       (model ? `Expected correct answer: "${model.replace(/\s+/g, ' ').slice(0, 700)}". ` : '') +
-      `Work out how many marks the student earned out of the total available for this question. ` +
+      `Work out how many marks the student earned out of the total available for this diagram. ` +
       `Return ONLY JSON: {"score":<number>,"total":<number>,"verdict":"correct|partial|incorrect","feedback":"<1-2 sentences to the student: what they got right and what was wrong or missing>","modelAnswer":"<what a fully correct annotated diagram should show>","explanation":"<2-4 sentences addressed to \\"you\\" that refer to what the student actually annotated and explain the marks>"}. ` +
       `If there are no visible annotations, return score 0 and say they haven't annotated yet.`;
     const raw = await askGeminiVision(prompt, media, { maxOutputTokens: 900, json: true });
@@ -15523,12 +15599,17 @@ async function annotAiCheck(containerSel, btn) {
     const color = verdict === 'correct' ? 'var(--primary)' : verdict === 'partial' ? 'var(--accent-orange)' : 'var(--accent-red)';
     const icon = verdict === 'correct' ? '✓' : verdict === 'partial' ? '≈' : '✗';
     if (fb) fb.innerHTML = `<div style="padding:6px 0;"><span style="color:${color};font-weight:700;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span><span style="color:var(--text-muted);"> — ${escapeHtml(parsed.feedback || '')}</span></div>`;
+    // Aggregate this pad's result with the question's other pads.
+    const store = _annotPadScores[containerSel] = _annotPadScores[containerSel] || {};
+    store[pid] = { score, total };
+    const agg = allPids.reduce((a, p) => store[p] ? { s: a.s + store[p].score, t: a.t + store[p].total, n: a.n + 1 } : a, { s: 0, t: 0, n: 0 });
     if (scoreEl) {
-      const pct = Math.round((score / total) * 100);
-      scoreEl.textContent = `${cfg.scorePrefix || 'AI Score'}: ${score}/${total} (${pct}%)`;
-      scoreEl.style.color = score === total ? 'var(--primary)' : 'var(--accent-orange)';
+      const pct = Math.round((agg.s / (agg.t || 1)) * 100);
+      scoreEl.textContent = `${cfg.scorePrefix || 'AI Score'}: ${agg.s}/${agg.t} (${pct}%)` + (agg.n < allPids.length ? ` — ${agg.n}/${allPids.length} diagrams checked` : '');
+      scoreEl.style.color = agg.s === agg.t ? 'var(--primary)' : 'var(--accent-orange)';
     }
-    if (!_openFinalized[containerSel]) {
+    const allChecked = agg.n >= allPids.length;
+    if (allChecked && !_openFinalized[containerSel]) {
       _openFinalized[containerSel] = true;
       if (currentUser && currentUser.role === 'student') {
         addDoc(collection(db, 'questionAttempts'), {
@@ -15537,19 +15618,21 @@ async function annotAiCheck(containerSel, btn) {
           displayName: currentUser.name,
           questionId: q.id || '',
           questionTitle: q.title || '',
-          score: score,
-          totalBlanks: total,
+          score: agg.s,
+          totalBlanks: agg.t,
           answerHash: rpgAnswerFingerprint('annot:' + (q.id || '')),
           timestamp: Timestamp.now(),
           mode: cfg.mode || 'practice-open'
         }).catch(err => console.warn('Could not record attempt:', err));
-        noteAttemptLocally(q.id, score, total);
+        noteAttemptLocally(q.id, agg.s, agg.t);
       }
-      recordCerPerformance(q, score, total, cfg.mode || 'practice-open', 'annotation');
+      recordCerPerformance(q, agg.s, agg.t, cfg.mode || 'practice-open', 'annotation');
       // Reveal the surface's "Next" button (Quick / Topical gate it behind this).
-      if (typeof cfg.onAllMarked === 'function') cfg.onAllMarked({ score, total, mistakes: [] });
+      if (typeof cfg.onAllMarked === 'function') cfg.onAllMarked({ score: agg.s, total: agg.t, mistakes: [] });
     }
-    showExplanation(containerSel, q, String(parsed.explanation || ''), cfg.scoreElId, String(parsed.modelAnswer || '') || model || guide);
+    if (allChecked) {
+      showExplanation(containerSel, q, String(parsed.explanation || ''), cfg.scoreElId, String(parsed.modelAnswer || '') || model || guide);
+    }
   } catch (err) {
     console.error('annotation AI check error:', err);
     if (fb) fb.innerHTML = '<span style="color:var(--accent-red);font-size:0.85rem;">AI check failed: ' + escapeHtml(err && err.message ? err.message : String(err)) + '</span>';
@@ -15572,7 +15655,9 @@ document.addEventListener('click', function (e) {
   const chk = e.target.closest && e.target.closest('[data-dgn-check]');
   if (chk) { e.preventDefault(); annotShowAnswer(chk.getAttribute('data-dgn-check')); return; }
   const aichk = e.target.closest && e.target.closest('[data-dgn-aicheck]');
-  if (aichk) { e.preventDefault(); annotAiCheck(aichk.getAttribute('data-dgn-aicheck'), aichk); return; }
+  if (aichk) { e.preventDefault(); annotAiCheck(aichk.getAttribute('data-dgn-aicheck'), aichk.getAttribute('data-dgn-pid'), aichk); return; }
+  const jump = e.target.closest && e.target.closest('[data-dgn-jump]');
+  if (jump) { e.preventDefault(); _annotJumpToDiagram(jump.getAttribute('data-dgn-jump'), jump.textContent); return; }
 });
 
 // =====================================================================
@@ -15849,6 +15934,7 @@ function resetOpenAnswersIn(containerSel, scoreElId) {
   if (c) c.querySelectorAll('.dgn-pad[data-annot]').forEach(el => _annotClear(el.getAttribute('data-annot')));
   if (c) c.querySelectorAll('.dgn-feedback').forEach(el => { el.innerHTML = ''; });
   _openPartResults[containerSel] = {};
+  _annotPadScores[containerSel] = {};
   _openFinalized[containerSel] = false;
   const scoreEl = scoreElId ? document.getElementById(scoreElId) : null;
   if (scoreEl) scoreEl.textContent = '';
