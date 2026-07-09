@@ -113,7 +113,11 @@
     box-shadow:var(--shadow);padding:48px 40px;max-width:420px;width:100%;
     text-align:center;
   }
-  .auth-card .logo{font-size:2.6rem;margin-bottom:14px}
+  .auth-card .logo{margin-bottom:18px}
+  .auth-card .logo img{width:110px;max-width:60%;height:auto}
+  .brand-logo{height:40px;width:auto;flex:none}
+  header.app .brand{display:flex;align-items:center;gap:12px}
+  footer img.foot-logo{height:26px;width:auto;vertical-align:middle;margin-right:8px}
   .auth-card h1{font-size:1.4rem;font-weight:700;margin-bottom:10px;letter-spacing:-.01em}
   .auth-card h1 span{color:var(--accent)}
   .auth-card p{color:var(--muted);font-size:.9rem;margin-bottom:28px}
@@ -276,7 +280,7 @@
 <!-- ==================== SIGN IN ==================== -->
 <div id="authScreen" style="display:none">
   <div class="auth-card">
-    <div class="logo">🎬</div>
+    <div class="logo"><img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre" onerror="this.outerHTML='🎬'"></div>
     <h1>Lesson <span>Replay</span></h1>
     <p>Watch lesson recordings and jump straight to each question.<br>Sign in with your Google account to continue.</p>
     <button class="gbtn" id="googleSignInBtn">
@@ -291,7 +295,10 @@
 <div class="wrap" id="appScreen" style="display:none">
 
   <header class="app">
-    <h1>🎬 Lesson <span>Replay</span></h1>
+    <div class="brand">
+      <img class="brand-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre" onerror="this.style.display='none'">
+      <h1>Lesson <span>Replay</span></h1>
+    </div>
     <div class="header-actions">
       <span class="mode-pill">
         Edit mode
@@ -401,7 +408,8 @@
   </section>
 
   <footer>
-    Lesson Replay <span class="ver" id="appVersionBadge"></span>
+    <img class="foot-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="" onerror="this.style.display='none'">
+    Polymath Learning Centre · Lesson Replay <span class="ver" id="appVersionBadge"></span>
   </footer>
 </div>
 
@@ -460,7 +468,7 @@ import {
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
 
-const APP_VERSION = 'v1.2.0';
+const APP_VERSION = 'v1.2.1';
 document.getElementById('appVersionBadge').textContent = APP_VERSION;
 
 // Same Firebase project as the main Science Quest app — one login for everything.
