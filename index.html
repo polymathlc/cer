@@ -7937,7 +7937,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.92.2';
+const APP_VERSION = 'v1.93.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11683,6 +11683,55 @@ async function _cropBoxFromScreenshot(fullDataUrl, box) {
   return canvas.toDataURL('image/png');
 }
 
+// SECOND-CHANCE CLEANUP (AI verify pass). Pixel heuristics can't reliably
+// tell question sentences from figure content, so after the geometric crop we
+// show the crop ITSELF back to Gemini and ask for the tight rectangle around
+// just the figure/table. On this small, already-roughly-right image that is a
+// far easier task than on the full page, so leftover sentences above/below
+// the figure get cut dependably. Any failure returns the crop unchanged.
+async function _aiRefineCrop(dataUrl) {
+  if (!geminiModel) return dataUrl;
+  try {
+    const b64 = dataUrl.split(',')[1] || '';
+    const prompt =
+      'The attached image is an auto-cropped figure for a primary-school science exam question. It should contain ONE figure (diagram / graph / experimental set-up / data table) and NOTHING else.\n' +
+      'Sometimes the crop wrongly includes full sentences of question text above or below the figure.\n' +
+      'Reply ONLY with JSON:\n' +
+      '- If the image is already clean (no sentences of question text): {"clean":true}\n' +
+      '- Otherwise: {"clean":false,"box_2d":[ymin,xmin,ymax,xmax]} — integers 0-1000 measured on THIS image, the rectangle around the figure/table only.\n' +
+      'Rules for box_2d:\n' +
+      '- INCLUDE everything that belongs to the figure: labels, pointer lines, axis titles, axis numbers, units, and short captions like "Diagram 1".\n' +
+      '- EXCLUDE full sentences / paragraphs of question or explanation text.\n' +
+      '- Never cut through a word that belongs to the figure — when unsure, keep it.';
+    const raw = await askGeminiVision(prompt, [{ mimeType: 'image/png', data: b64 }], { maxOutputTokens: 128, json: true });
+    const p = _parseAIJson(raw) || {};
+    if (p.clean === true || !Array.isArray(p.box_2d) || p.box_2d.length !== 4) return dataUrl;
+    const [ymin, xmin, ymax, xmax] = p.box_2d.map(Number);
+    if (![ymin, xmin, ymax, xmax].every(v => isFinite(v) && v >= 0 && v <= 1000)) return dataUrl;
+    if (ymax - ymin < 150 || xmax - xmin < 150) return dataUrl;   // suspiciously small → don't trust it
+    if (ymax - ymin > 960 && xmax - xmin > 960) return dataUrl;   // ≈ whole image → nothing to cut
+    const img = await _loadImageEl(dataUrl);
+    const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+    if (!W || !H) return dataUrl;
+    const mx = W * 0.012, my = H * 0.012; // tiny margin — the white frame is re-added below
+    const x = Math.max(0, xmin / 1000 * W - mx), y = Math.max(0, ymin / 1000 * H - my);
+    const w = Math.min(W - x, (xmax - xmin) / 1000 * W + mx * 2);
+    const h = Math.min(H - y, (ymax - ymin) / 1000 * H + my * 2);
+    if (w < 24 || h < 24 || (w * h) / (W * H) < 0.2) return dataUrl; // would discard >80% of the crop → refuse
+    const pad = Math.round(Math.max(16, Math.max(w, h) * 0.035));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(w) + pad * 2;
+    canvas.height = Math.round(h) + pad * 2;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, x, y, w, h, pad, pad, Math.round(w), Math.round(h));
+    return canvas.toDataURL('image/png');
+  } catch (e) { console.warn('AI crop refine skipped', e); return dataUrl; }
+}
+
 // Fill a question's image blocks from the AI-drawn rectangles (screenshots
 // only). Each usable rectangle is cropped out and re-rendered as a clean
 // black-and-white figure (first 3 crops; the rest stay as sharp raw crops).
@@ -11697,6 +11746,10 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus)
   for (let i = 0; i < imgBlocks.length; i++) {
     let c = null;
     try { c = await _cropBoxFromScreenshot(fullDataUrl, boxes[i]); } catch (e) { console.warn('AI rectangle crop failed', e); }
+    if (c) {
+      if (onStatus) onStatus(`Checking picture ${i + 1} for stray question text…`);
+      c = await _aiRefineCrop(c);
+    }
     crops.push(c);
   }
   if (!crops.some(Boolean)) return 0;
