@@ -7937,7 +7937,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.92.1';
+const APP_VERSION = 'v1.92.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11563,6 +11563,79 @@ function _expandRectToWhitespace(ctx, W, H, r) {
   }
   return { x, y, w, h };
 }
+// Cut question-sentence lines off the TOP and BOTTOM of the crop. The AI's
+// rectangle (or the safety margin) often catches the sentence above/below a
+// figure; no margin tuning fixes that, so detect and trim it instead.
+// A trimmable "text line" band must look like body text:
+//   - short (one line: ≤ ~2.8% of page height) but not hairline-thin
+//     (≥ ~0.5% — so a table/figure border line is never trimmed),
+//   - its ink spanning most of the crop's width (≥ 55% — captions like
+//     "Diagram 1" and axis titles are narrow, so they survive),
+//   - not solid like a border (max row fill < 60%),
+//   - separated from the remaining content by clear whitespace.
+// Trims at most 3 bands and ~20% of the crop per side, keeps ≥ 50% of it.
+function _trimEdgeTextLines(ctx, W, H, r) {
+  const x = Math.round(r.x), w = Math.round(r.w);
+  const y0 = Math.round(r.y), h = Math.round(Math.min(r.h, H - y0));
+  if (w < 40 || h < 60) return r;
+  const data = ctx.getImageData(x, y0, w, h).data;
+  const rows = new Array(h);
+  for (let ry = 0; ry < h; ry++) {
+    let n = 0, minX = -1, maxX = -1;
+    const base = ry * w * 4;
+    for (let rx = 0; rx < w; rx++) {
+      const i = base + rx * 4;
+      if (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114 < 190 && data[i + 3] > 60) {
+        n++; if (minX < 0) minX = rx; maxX = rx;
+      }
+    }
+    rows[ry] = { n, minX, maxX };
+  }
+  const inked = ry => rows[ry].n > Math.max(2, w * 0.004);
+  const joinGap = Math.max(2, Math.round(H * 0.003));  // gaps inside one band (i-dots, accents)
+  const gapMin = Math.max(5, Math.round(H * 0.007));   // whitespace that separates text from the figure
+  const minBandH = Math.max(4, Math.round(H * 0.005)); // thinner = a border/rule line, keep it
+  const maxBandH = Math.round(H * 0.028);              // taller = part of the figure, keep it
+  const maxTrim = h * 0.20, minKeep = h * 0.50;
+
+  // Scan from `from` in direction `dir` (+1 top / −1 bottom): the first ink
+  // band plus the whitespace gap that follows it.
+  const band = (from, dir, limit) => {
+    let s = from;
+    while (s !== limit && !inked(s)) s += dir;
+    if (s === limit) return null;
+    let e = s, gap = 0, minX = w, maxX = 0, maxFrac = 0;
+    for (let ry = s; ry !== limit; ry += dir) {
+      if (inked(ry)) {
+        e = ry; gap = 0;
+        if (rows[ry].minX < minX) minX = rows[ry].minX;
+        if (rows[ry].maxX > maxX) maxX = rows[ry].maxX;
+        if (rows[ry].n / w > maxFrac) maxFrac = rows[ry].n / w;
+      } else if (++gap > joinGap) break;
+    }
+    let after = 0;
+    for (let ry = e + dir; ry !== limit && !inked(ry); ry += dir) after++;
+    return { end: e, size: Math.abs(e - s) + 1, inkW: maxX - minX + 1, maxFrac, after };
+  };
+
+  let top = 0, bot = h - 1;
+  for (let k = 0; k < 3; k++) {
+    const b = band(top, 1, bot + 1);
+    if (!b || b.size < minBandH || b.size > maxBandH || b.inkW < w * 0.55 || b.maxFrac > 0.6 || b.after < gapMin) break;
+    const cut = b.end + 1 + Math.min(b.after, gapMin);
+    if (cut > maxTrim || bot - cut + 1 < minKeep) break;
+    top = cut;
+  }
+  for (let k = 0; k < 3; k++) {
+    const b = band(bot, -1, top - 1);
+    if (!b || b.size < minBandH || b.size > maxBandH || b.inkW < w * 0.55 || b.maxFrac > 0.6 || b.after < gapMin) break;
+    const cut = b.end - 1 - Math.min(b.after, gapMin);
+    if ((h - 1 - cut) > maxTrim || cut - top + 1 < minKeep) break;
+    bot = cut;
+  }
+  if (top === 0 && bot === h - 1) return r;
+  return { x: r.x, y: y0 + top, w: r.w, h: bot - top + 1 };
+}
 async function _cropBoxFromScreenshot(fullDataUrl, box) {
   if (!Array.isArray(box) || box.length !== 4) return null;
   const [ymin, xmin, ymax, xmax] = box.map(Number);
@@ -11590,6 +11663,8 @@ async function _cropBoxFromScreenshot(fullDataUrl, box) {
     const pctx = probe.getContext('2d', { willReadFrequently: true });
     pctx.drawImage(img, 0, 0);
     r = _expandRectToWhitespace(pctx, W, H, r);
+    // Then cut away any full-width sentence lines the rectangle still holds.
+    r = _trimEdgeTextLines(pctx, W, H, r);
   } catch (e) { console.warn('edge expansion skipped', e); }
   const scale = Math.max(1, Math.min(2, 1600 / Math.max(r.w, r.h))); // upscale small crops (≤2×, ≤~1600px)
   // Guaranteed breathing space: a white frame around the crop, so content
