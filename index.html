@@ -7937,7 +7937,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.92.0';
+const APP_VERSION = 'v1.92.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11572,7 +11572,10 @@ async function _cropBoxFromScreenshot(fullDataUrl, box) {
   const img = await _loadImageEl(fullDataUrl);
   const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
   if (!W || !H) return null;
-  const mx = W * 0.035, my = H * 0.028; // white-space margin around the figure
+  // Keep this margin tight: if it reaches into neighbouring question text,
+  // the whitespace expansion below cascades and drags whole lines into the
+  // crop. Breathing space comes from the white frame added at render time.
+  const mx = W * 0.028, my = H * 0.022;
   let r = {
     x: Math.max(0, xmin / 1000 * W - mx),
     y: Math.max(0, ymin / 1000 * H - my)
