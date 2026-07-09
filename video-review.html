@@ -348,8 +348,13 @@
         <label class="fld" for="videoUrl">Video link (Dropbox or Google Drive)</label>
         <input type="url" id="videoUrl" placeholder="https://www.dropbox.com/scl/fi/…  or  https://drive.google.com/file/d/…">
       </div>
+      <div>
+        <label class="fld" for="startOffset" title="The Zoom “time elapsed” shown at the very first second of this recording">Time elapsed at video start</label>
+        <input type="text" id="startOffset" placeholder="e.g. 1:15:00" style="width:150px">
+      </div>
       <button class="primary" id="loadVideoBtn">Load video</button>
     </div>
+    <p class="hint editor-only" style="display:block;margin-top:14px;margin-bottom:0">⏱️ <strong>Time elapsed at video start:</strong> pause the video at its first second and copy the Zoom “time elapsed” counter shown there (0:00 if the recording starts from the beginning of the lesson). Timestamps are written as Zoom elapsed times, so the app jumps to <em>timestamp − start time</em> inside the video.</p>
     <div class="player-shell" id="playerShell">
       <div class="player-empty">No video loaded yet.</div>
     </div>
@@ -455,7 +460,7 @@ import {
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
 
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.2.0';
 document.getElementById('appVersionBadge').textContent = APP_VERSION;
 
 // Same Firebase project as the main Science Quest app — one login for everything.
@@ -502,6 +507,13 @@ let currentLessonId = null;
 
 const isAdmin = () => currentUser && currentUser.role === 'admin';
 function lesson(){ return lessons.find(l => l.id === currentLessonId) || null; }
+// Zoom "time elapsed" shown at the video's first second. Timestamps are noted
+// as Zoom elapsed times, so position-in-video = timestamp − this offset.
+function startOffsetSec(){
+  const l = lesson();
+  return (l && Number(l.startOffset)) || 0;
+}
+function videoPos(seconds){ return Math.max(0, seconds - startOffsetSec()); }
 function uid(){ return 'id-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
 
 /* ---------------- default seed lesson ---------------- */
@@ -513,6 +525,7 @@ function seedLesson(){
     subject: 'Science',
     level: 'P5',
     videoUrl: '',
+    startOffset: 0,
     timestamps: [
       { label:'Q18',  seconds: 4690 },
       { label:'Q18d', seconds: 4705 },
@@ -813,6 +826,7 @@ function renderChips(){
     const t = document.createElement('span');
     t.className = 't';
     t.textContent = fmtTime(ts.seconds);
+    chip.title = 'Jumps to ' + fmtTime(videoPos(ts.seconds)) + ' in the video';
     chip.append(q, t);
 
     const del = document.createElement('span');
@@ -833,9 +847,10 @@ function renderChips(){
 }
 
 function jumpTo(seconds){
+  const pos = videoPos(seconds);
   if(videoEl){
     const go = () => {
-      videoEl.currentTime = seconds;
+      videoEl.currentTime = pos;
       videoEl.play().catch(() => {});
     };
     if(videoEl.readyState >= 1){ go(); }
@@ -844,13 +859,14 @@ function jumpTo(seconds){
       videoEl.load();
     }
   }else{
-    setNotice('warn', `⏱️ Scrub the player above to <strong>${fmtTime(seconds)}</strong> — this video’s player doesn’t allow automatic jumping.`);
+    setNotice('warn', `⏱️ Scrub the player above to <strong>${fmtTime(pos)}</strong> — this video’s player doesn’t allow automatic jumping.`);
   }
 }
 
 function highlightActiveChip(){
   if(!videoEl) return;
-  const now = videoEl.currentTime;
+  // Compare in Zoom elapsed-time terms: video position + start offset.
+  const now = videoEl.currentTime + startOffsetSec();
   const chips = [...chipsEl.querySelectorAll('.chip')];
   let active = null;
   chips.forEach(c => {
@@ -1150,7 +1166,7 @@ document.getElementById('newLessonBtn').addEventListener('click', async () => {
   const l = {
     id: uid(), name: name.trim() || 'New lesson',
     subject: 'Science', level: 'P5',
-    videoUrl:'', timestamps:[], worksheet:[], answers:[]
+    videoUrl:'', startOffset: 0, timestamps:[], worksheet:[], answers:[]
   };
   lessons.push(l);
   currentLessonId = l.id;
@@ -1178,10 +1194,35 @@ document.getElementById('deleteLessonBtn').addEventListener('click', async () =>
 
 /* ---------------- video + timestamp inputs ---------------- */
 
+function readStartOffsetInput(){
+  const inp = document.getElementById('startOffset');
+  const raw = inp.value.trim();
+  if(!raw) return 0;
+  const sec = parseTime(raw);
+  if(sec === null){
+    alert('Please enter the start time as h:mm:ss or mm:ss (e.g. 1:15:00), or leave it blank for 0:00.');
+    inp.focus();
+    return null;
+  }
+  return sec;
+}
+
 document.getElementById('loadVideoBtn').addEventListener('click', () => {
   const l = lesson(); if(!l) return;
+  const offset = readStartOffsetInput();
+  if(offset === null) return;
   l.videoUrl = document.getElementById('videoUrl').value.trim();
-  save(); renderVideo();
+  l.startOffset = offset;
+  save(); renderVideo(); renderChips();
+});
+
+// Changing the start time alone (without re-loading the video) also saves.
+document.getElementById('startOffset').addEventListener('change', () => {
+  const l = lesson(); if(!l) return;
+  const offset = readStartOffsetInput();
+  if(offset === null) return;
+  l.startOffset = offset;
+  save(); renderChips();
 });
 
 document.getElementById('addTsBtn').addEventListener('click', () => {
@@ -1234,6 +1275,7 @@ document.getElementById('importFile').addEventListener('change', e => {
       l.name = l.name || 'Imported lesson';
       l.subject = l.subject || 'Science';
       l.level = l.level || 'P5';
+      l.startOffset = Number(l.startOffset) || 0;
       l.worksheet = Array.isArray(l.worksheet) ? l.worksheet : [];
       l.answers = Array.isArray(l.answers) ? l.answers : [];
       l.videoUrl = l.videoUrl || '';
@@ -1254,6 +1296,7 @@ document.getElementById('importFile').addEventListener('change', e => {
 function renderAll(){
   renderLessonSelect();
   document.getElementById('videoUrl').value = (lesson() && lesson().videoUrl) || '';
+  document.getElementById('startOffset').value = startOffsetSec() ? fmtTime(startOffsetSec()) : '';
   renderVideo();
   renderChips();
   renderBlocks();
