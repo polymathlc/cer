@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson Replay — Video Review</title>
+<style>
+  :root{
+    --bg:#f4f6fb;
+    --card:#ffffff;
+    --ink:#1e2a3a;
+    --muted:#64748b;
+    --line:#e2e8f0;
+    --accent:#4f46e5;
+    --accent-soft:#eef2ff;
+    --accent-ink:#3730a3;
+    --green:#059669;
+    --green-soft:#ecfdf5;
+    --red:#dc2626;
+    --red-soft:#fef2f2;
+    --amber-soft:#fffbeb;
+    --amber-ink:#92400e;
+    --radius:16px;
+    --chip-radius:14px;
+    --shadow:0 1px 3px rgba(15,23,42,.06), 0 8px 24px rgba(15,23,42,.05);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    line-height:1.6;
+    padding:32px 20px 80px;
+  }
+  .wrap{max-width:960px;margin:0 auto}
+
+  /* ---------- header ---------- */
+  header.app{
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+    flex-wrap:wrap;margin-bottom:28px;
+  }
+  header.app h1{font-size:1.45rem;font-weight:700;letter-spacing:-.01em}
+  header.app h1 span{color:var(--accent)}
+  .header-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+  /* ---------- cards ---------- */
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:28px;
+    margin-bottom:24px;
+  }
+  .card h2{
+    font-size:1.05rem;font-weight:700;margin-bottom:6px;letter-spacing:-.01em;
+  }
+  .card .hint{color:var(--muted);font-size:.86rem;margin-bottom:18px}
+
+  /* ---------- buttons & inputs ---------- */
+  button{
+    font-family:inherit;font-size:.88rem;font-weight:600;
+    border:1px solid var(--line);border-radius:12px;
+    background:#fff;color:var(--ink);
+    padding:9px 16px;cursor:pointer;
+    transition:background .15s,border-color .15s,transform .05s;
+  }
+  button:hover{background:#f8fafc;border-color:#cbd5e1}
+  button:active{transform:scale(.98)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#4338ca}
+  button.danger{color:var(--red)}
+  button.danger:hover{background:var(--red-soft);border-color:#fecaca}
+  button.ghost{border-color:transparent;background:transparent;color:var(--muted);padding:6px 10px}
+  button.ghost:hover{background:#f1f5f9;color:var(--ink)}
+  input[type=text],input[type=url],input[type=number],textarea,select{
+    font-family:inherit;font-size:.92rem;color:var(--ink);
+    border:1px solid var(--line);border-radius:12px;
+    padding:10px 14px;background:#fff;width:100%;
+  }
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  textarea{resize:vertical;min-height:96px;line-height:1.6}
+  label.fld{display:block;font-size:.8rem;font-weight:600;color:var(--muted);margin-bottom:6px}
+
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .row .grow{flex:1 1 220px}
+
+  /* ---------- lesson bar ---------- */
+  .lesson-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .lesson-bar select{width:auto;min-width:220px;flex:1 1 220px}
+
+  /* ---------- video ---------- */
+  .player-shell{
+    background:#0f172a;border-radius:var(--radius);overflow:hidden;
+    aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;
+  }
+  .player-shell video,.player-shell iframe{width:100%;height:100%;border:0;display:block;background:#000}
+  .player-empty{color:#94a3b8;font-size:.92rem;text-align:center;padding:32px}
+  .notice{
+    border-radius:12px;padding:12px 16px;font-size:.85rem;margin-top:14px;display:none;
+  }
+  .notice.warn{display:block;background:var(--amber-soft);color:var(--amber-ink);border:1px solid #fde68a}
+  .notice.err{display:block;background:var(--red-soft);color:var(--red);border:1px solid #fecaca}
+
+  /* ---------- timestamp chips ---------- */
+  .chips{display:flex;flex-wrap:wrap;gap:12px;margin-top:4px}
+  .chip{
+    display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;
+    border:1.5px solid var(--line);border-radius:var(--chip-radius);
+    background:#fff;padding:10px 18px;cursor:pointer;
+    transition:border-color .15s,background .15s,transform .05s;
+    min-width:96px;
+  }
+  .chip:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .chip:active{transform:scale(.97)}
+  .chip .q{font-weight:700;font-size:.95rem;letter-spacing:-.01em}
+  .chip .t{font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+  .chip.active{border-color:var(--accent);background:var(--accent-soft)}
+  .chip.active .q{color:var(--accent-ink)}
+  .chip .del{
+    display:none;margin-top:6px;font-size:.72rem;color:var(--red);
+    font-weight:600;
+  }
+  body.editing .chip .del{display:inline}
+  .chips-empty{color:var(--muted);font-size:.88rem}
+
+  /* ---------- tabs ---------- */
+  .tabs{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+  .tab{
+    border-radius:999px;padding:8px 20px;font-size:.88rem;font-weight:600;
+    border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer;
+  }
+  .tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+  /* ---------- material blocks ---------- */
+  .blocks{display:flex;flex-direction:column;gap:16px}
+  .block{
+    border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px 22px;background:#fcfdff;
+  }
+  .block .block-head{
+    display:none;align-items:center;justify-content:space-between;gap:10px;
+    margin-bottom:12px;
+  }
+  body.editing .block .block-head{display:flex}
+  .block .block-type{
+    font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);background:#f1f5f9;border-radius:999px;padding:3px 12px;
+  }
+  .block .block-tools{display:flex;gap:4px}
+  .block h3{font-size:1rem;font-weight:700;margin-bottom:4px}
+  .block p.body{white-space:pre-wrap;font-size:.94rem}
+  .block img{max-width:100%;border-radius:12px;display:block}
+  .block a.linkout{color:var(--accent);font-weight:600;word-break:break-all}
+  .block iframe.embed{width:100%;height:520px;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .blocks-empty{color:var(--muted);font-size:.88rem;text-align:center;padding:24px 12px}
+
+  .add-block-bar{display:none;gap:10px;flex-wrap:wrap;margin-top:20px}
+  body.editing .add-block-bar{display:flex}
+  .editor-only{display:none !important}
+  body.editing .editor-only{display:block !important}
+  .editor-only.flex, body.editing .editor-only.flex{display:none !important}
+  body.editing .editor-only.flex{display:flex !important}
+
+  /* ---------- modal ---------- */
+  .modal-bg{
+    position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;
+    align-items:flex-start;justify-content:center;padding:60px 20px;z-index:50;
+  }
+  .modal-bg.open{display:flex}
+  .modal{
+    background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);
+    width:100%;max-width:520px;padding:28px;
+  }
+  .modal h3{font-size:1.05rem;font-weight:700;margin-bottom:18px}
+  .modal .fields{display:flex;flex-direction:column;gap:16px;margin-bottom:22px}
+  .modal .actions{display:flex;justify-content:flex-end;gap:10px}
+
+  /* ---------- footer ---------- */
+  footer{
+    text-align:center;color:var(--muted);font-size:.78rem;margin-top:40px;
+  }
+  footer .ver{
+    display:inline-block;background:#e2e8f0;border-radius:999px;
+    padding:2px 12px;font-weight:600;margin-left:6px;
+  }
+
+  .mode-pill{
+    display:inline-flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;
+    color:var(--muted);
+  }
+  .switch{position:relative;width:44px;height:24px;flex:none}
+  .switch input{opacity:0;width:0;height:0}
+  .switch .track{
+    position:absolute;inset:0;background:#cbd5e1;border-radius:999px;cursor:pointer;
+    transition:background .15s;
+  }
+  .switch .track::after{
+    content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;
+    background:#fff;border-radius:50%;transition:left .15s;
+    box-shadow:0 1px 2px rgba(0,0,0,.2);
+  }
+  .switch input:checked + .track{background:var(--accent)}
+  .switch input:checked + .track::after{left:23px}
+</style>
+</head>
+<body class="editing">
+<div class="wrap">
+
+  <header class="app">
+    <h1>🎬 Lesson <span>Replay</span></h1>
+    <div class="header-actions">
+      <span class="mode-pill">
+        Edit mode
+        <label class="switch">
+          <input type="checkbox" id="editToggle" checked>
+          <span class="track"></span>
+        </label>
+      </span>
+      <button id="exportBtn" class="ghost" title="Download this lesson as a JSON file">Export</button>
+      <button id="importBtn" class="ghost" title="Load a lesson from a JSON file">Import</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none">
+    </div>
+  </header>
+
+  <!-- Lesson picker -->
+  <section class="card editor-only">
+    <h2>Lesson</h2>
+    <p class="hint">Each lesson has its own video, timestamps, worksheet and answer key. Everything is saved automatically in this browser.</p>
+    <div class="lesson-bar">
+      <select id="lessonSelect"></select>
+      <button id="newLessonBtn">＋ New lesson</button>
+      <button id="renameLessonBtn">Rename</button>
+      <button id="deleteLessonBtn" class="danger">Delete</button>
+    </div>
+  </section>
+
+  <!-- Video -->
+  <section class="card">
+    <h2 id="lessonTitle">Video</h2>
+    <p class="hint editor-only" style="display:block">Paste a <strong>Dropbox</strong> or <strong>Google Drive</strong> share link. Dropbox links give the best experience — timestamp jumping works natively. Google Drive links open in Drive's own player, which doesn't allow click-to-jump; the chips will still show the time to scrub to.</p>
+    <div class="row editor-only flex" style="margin-bottom:20px">
+      <div class="grow">
+        <label class="fld" for="videoUrl">Video link (Dropbox or Google Drive)</label>
+        <input type="url" id="videoUrl" placeholder="https://www.dropbox.com/scl/fi/…  or  https://drive.google.com/file/d/…">
+      </div>
+      <button class="primary" id="loadVideoBtn">Load video</button>
+    </div>
+    <div class="player-shell" id="playerShell">
+      <div class="player-empty">No video loaded yet.<br>Paste a Dropbox or Google Drive link above to get started.</div>
+    </div>
+    <div class="notice" id="videoNotice"></div>
+  </section>
+
+  <!-- Timestamps -->
+  <section class="card">
+    <h2>Jump to a question</h2>
+    <p class="hint">Tap a question to jump straight to that part of the recording. Times follow the “time elapsed” counter shown in the Zoom recording.</p>
+    <div class="chips" id="chips"></div>
+    <div class="row editor-only flex" style="margin-top:22px">
+      <div>
+        <label class="fld" for="tsLabel">Question label</label>
+        <input type="text" id="tsLabel" placeholder="e.g. Q20a" style="width:140px">
+      </div>
+      <div>
+        <label class="fld" for="tsTime">Time (h:mm:ss or mm:ss)</label>
+        <input type="text" id="tsTime" placeholder="1:27:55" style="width:140px">
+      </div>
+      <button class="primary" id="addTsBtn">＋ Add timestamp</button>
+    </div>
+  </section>
+
+  <!-- Materials -->
+  <section class="card">
+    <h2>Materials</h2>
+    <p class="hint">Worksheet questions and the answer key. In edit mode you can add text boxes, headings, images, links and embedded files.</p>
+    <div class="tabs">
+      <button class="tab active" data-tab="worksheet">📄 Worksheet</button>
+      <button class="tab" data-tab="answers">✅ Answer key</button>
+    </div>
+    <div class="blocks" id="blocks"></div>
+    <div class="add-block-bar">
+      <button data-add="heading">＋ Heading</button>
+      <button data-add="text">＋ Text box</button>
+      <button data-add="image">＋ Image</button>
+      <button data-add="link">＋ Link</button>
+      <button data-add="embed">＋ File embed (PDF)</button>
+    </div>
+  </section>
+
+  <footer>
+    Lesson Replay <span class="ver" id="appVersionBadge"></span>
+  </footer>
+</div>
+
+<!-- Block editor modal -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h3 id="modalTitle">Edit block</h3>
+    <div class="fields" id="modalFields"></div>
+    <div class="actions">
+      <button id="modalCancel">Cancel</button>
+      <button class="primary" id="modalSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const APP_VERSION = 'v1.0.0';
+document.getElementById('appVersionBadge').textContent = APP_VERSION;
+
+const STORE_KEY = 'lessonReplayData';
+
+/* ---------------- data ---------------- */
+
+function defaultData(){
+  return {
+    currentLessonId: 'lesson-1',
+    lessons: [{
+      id: 'lesson-1',
+      name: 'P5 Science — July Worksheet (Q18–20)',
+      videoUrl: '',
+      timestamps: [
+        { label:'Q18',  seconds: 4690 },  // 1:18:10
+        { label:'Q18d', seconds: 4705 },  // 1:18:25
+        { label:'Q19a', seconds: 4885 },  // 1:21:25
+        { label:'Q19b', seconds: 4930 },  // 1:22:10
+        { label:'Q19c', seconds: 4980 },  // 1:23:00
+        { label:'Q19d', seconds: 5059 },  // 1:24:19
+        { label:'Q20a', seconds: 5275 },  // 1:27:55
+        { label:'Q20b', seconds: 5353 },  // 1:29:13
+        { label:'Q20c', seconds: 5470 }   // 1:31:10
+      ],
+      worksheet: [],
+      answers: []
+    }]
+  };
+}
+
+let data = load();
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(parsed && Array.isArray(parsed.lessons) && parsed.lessons.length) return parsed;
+    }
+  }catch(e){ /* corrupted store — start fresh */ }
+  return defaultData();
+}
+function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
+function lesson(){
+  return data.lessons.find(l => l.id === data.currentLessonId) || data.lessons[0];
+}
+function uid(){ return 'id-' + Math.random().toString(36).slice(2,10); }
+
+/* ---------------- time helpers ---------------- */
+
+function parseTime(str){
+  if(!str) return null;
+  const parts = str.trim().split(':').map(s => s.trim());
+  if(parts.some(p => p === '' || isNaN(p))) return null;
+  const nums = parts.map(Number);
+  if(nums.length === 3) return nums[0]*3600 + nums[1]*60 + nums[2];
+  if(nums.length === 2) return nums[0]*60 + nums[1];
+  if(nums.length === 1) return nums[0];
+  return null;
+}
+function fmtTime(sec){
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60;
+  const mm = String(m).padStart(2,'0'), ss = String(s).padStart(2,'0');
+  return h ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+}
+
+/* ---------------- video link conversion ---------------- */
+
+function classifyLink(url){
+  let u;
+  try{ u = new URL(url.trim()); }catch(e){ return { kind:'invalid' }; }
+  const host = u.hostname.toLowerCase();
+
+  if(host.endsWith('dropbox.com') || host.endsWith('dropboxusercontent.com')){
+    // Force the raw file so the HTML5 <video> element can stream + seek it.
+    u.hostname = 'dl.dropboxusercontent.com';
+    u.searchParams.delete('dl');
+    u.searchParams.set('raw', '1');
+    return { kind:'direct', src: u.toString() };
+  }
+
+  if(host === 'drive.google.com' || host === 'docs.google.com'){
+    let id = null;
+    const m = u.pathname.match(/\/file\/d\/([^/]+)/);
+    if(m) id = m[1];
+    if(!id) id = u.searchParams.get('id');
+    if(!id) return { kind:'invalid' };
+    return {
+      kind:'drive',
+      // Attempted direct stream (works for smaller files)…
+      src: `https://drive.google.com/uc?export=download&id=${id}`,
+      // …with the official preview iframe as fallback.
+      iframe: `https://drive.google.com/file/d/${id}/preview`
+    };
+  }
+
+  // Any other URL: assume it's already a direct video file link.
+  return { kind:'direct', src: u.toString() };
+}
+
+/* ---------------- video rendering ---------------- */
+
+const playerShell = document.getElementById('playerShell');
+const videoNotice = document.getElementById('videoNotice');
+let videoEl = null;   // the <video> element when in direct mode, else null
+
+function setNotice(kind, msg){
+  videoNotice.className = 'notice' + (kind ? ' ' + kind : '');
+  videoNotice.innerHTML = msg || '';
+}
+
+function renderVideo(){
+  const l = lesson();
+  playerShell.innerHTML = '';
+  videoEl = null;
+  setNotice('', '');
+
+  if(!l.videoUrl){
+    playerShell.innerHTML = '<div class="player-empty">No video loaded yet.<br>Paste a Dropbox or Google Drive link above to get started.</div>';
+    return;
+  }
+
+  const link = classifyLink(l.videoUrl);
+  if(link.kind === 'invalid'){
+    playerShell.innerHTML = '<div class="player-empty">That link doesn’t look like a valid Dropbox or Google Drive link.</div>';
+    setNotice('err', 'Could not understand the video link. Please paste the full share link copied from Dropbox or Google Drive.');
+    return;
+  }
+
+  const v = document.createElement('video');
+  v.controls = true;
+  v.preload = 'metadata';
+  v.playsInline = true;
+  v.src = link.src;
+  playerShell.appendChild(v);
+  videoEl = v;
+
+  v.addEventListener('timeupdate', highlightActiveChip);
+
+  if(link.kind === 'drive'){
+    // If the direct stream fails (large files / permission), fall back to Drive's preview iframe.
+    v.addEventListener('error', () => {
+      playerShell.innerHTML = '';
+      videoEl = null;
+      const f = document.createElement('iframe');
+      f.src = link.iframe;
+      f.allow = 'autoplay; fullscreen';
+      f.allowFullscreen = true;
+      playerShell.appendChild(f);
+      setNotice('warn', '⚠️ This Google Drive video is playing inside Drive’s own player, so the question buttons can’t jump automatically — tap a question to see its time, then drag the player to that time. For one-tap jumping, upload the recording to <strong>Dropbox</strong> and use that link instead.');
+      renderChips();
+    }, { once:true });
+  }
+}
+
+/* ---------------- timestamp chips ---------------- */
+
+const chipsEl = document.getElementById('chips');
+
+function renderChips(){
+  const l = lesson();
+  chipsEl.innerHTML = '';
+  if(!l.timestamps.length){
+    chipsEl.innerHTML = '<div class="chips-empty">No timestamps yet — add one below.</div>';
+    return;
+  }
+  const sorted = [...l.timestamps].sort((a,b) => a.seconds - b.seconds);
+  sorted.forEach(ts => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.dataset.seconds = ts.seconds;
+
+    const q = document.createElement('span');
+    q.className = 'q';
+    q.textContent = ts.label;
+    const t = document.createElement('span');
+    t.className = 't';
+    t.textContent = fmtTime(ts.seconds);
+    chip.append(q, t);
+
+    const del = document.createElement('span');
+    del.className = 'del';
+    del.textContent = 'remove';
+    del.addEventListener('click', ev => {
+      ev.stopPropagation();
+      l.timestamps = l.timestamps.filter(x => x !== ts);
+      save(); renderChips();
+    });
+    chip.appendChild(del);
+
+    chip.addEventListener('click', () => jumpTo(ts.seconds));
+    chipsEl.appendChild(chip);
+  });
+  highlightActiveChip();
+}
+
+function jumpTo(seconds){
+  if(videoEl){
+    const go = () => {
+      videoEl.currentTime = seconds;
+      videoEl.play().catch(() => {});
+    };
+    if(videoEl.readyState >= 1){ go(); }
+    else {
+      videoEl.addEventListener('loadedmetadata', go, { once:true });
+      videoEl.load();
+    }
+  }else{
+    setNotice('warn', `⏱️ Scrub the player above to <strong>${fmtTime(seconds)}</strong> — this video’s player doesn’t allow automatic jumping.`);
+  }
+}
+
+function highlightActiveChip(){
+  if(!videoEl) return;
+  const now = videoEl.currentTime;
+  const chips = [...chipsEl.querySelectorAll('.chip')];
+  let active = null;
+  chips.forEach(c => {
+    if(Number(c.dataset.seconds) <= now) active = c;
+    c.classList.remove('active');
+  });
+  if(active) active.classList.add('active');
+}
+
+/* ---------------- materials (worksheet / answer key) ---------------- */
+
+let currentTab = 'worksheet';
+const blocksEl = document.getElementById('blocks');
+
+const BLOCK_DEFS = {
+  heading: { name:'Heading',  fields:[{key:'text', label:'Heading text', type:'text'}] },
+  text:    { name:'Text box', fields:[{key:'title', label:'Title (optional)', type:'text'},
+                                      {key:'body',  label:'Text', type:'textarea'}] },
+  image:   { name:'Image',    fields:[{key:'url',   label:'Image link (Dropbox links work)', type:'url'},
+                                      {key:'caption', label:'Caption (optional)', type:'text'}] },
+  link:    { name:'Link',     fields:[{key:'url',   label:'Link URL', type:'url'},
+                                      {key:'text',  label:'Link text', type:'text'}] },
+  embed:   { name:'File embed', fields:[{key:'url', label:'Dropbox / Google Drive link to a PDF or file', type:'url'}] }
+};
+
+function tabList(){ return currentTab === 'worksheet' ? lesson().worksheet : lesson().answers; }
+function setTabList(arr){
+  if(currentTab === 'worksheet') lesson().worksheet = arr;
+  else lesson().answers = arr;
+}
+
+function embedSrc(url){
+  const link = classifyLink(url);
+  if(link.kind === 'drive') return link.iframe;
+  if(link.kind === 'direct') return link.src;
+  return null;
+}
+
+function renderBlocks(){
+  const list = tabList();
+  blocksEl.innerHTML = '';
+  if(!list.length){
+    blocksEl.innerHTML = `<div class="blocks-empty">Nothing here yet.${document.body.classList.contains('editing') ? ' Use the buttons below to add content.' : ''}</div>`;
+    return;
+  }
+  list.forEach((b, i) => {
+    const el = document.createElement('div');
+    el.className = 'block';
+
+    const head = document.createElement('div');
+    head.className = 'block-head';
+    head.innerHTML = `<span class="block-type">${BLOCK_DEFS[b.type].name}</span>`;
+    const tools = document.createElement('div');
+    tools.className = 'block-tools';
+    const mk = (txt, title, fn) => {
+      const btn = document.createElement('button');
+      btn.className = 'ghost'; btn.textContent = txt; btn.title = title;
+      btn.addEventListener('click', fn);
+      return btn;
+    };
+    tools.append(
+      mk('↑','Move up',   () => { if(i>0){ const a=tabList(); [a[i-1],a[i]]=[a[i],a[i-1]]; save(); renderBlocks(); } }),
+      mk('↓','Move down', () => { const a=tabList(); if(i<a.length-1){ [a[i+1],a[i]]=[a[i],a[i+1]]; save(); renderBlocks(); } }),
+      mk('✏️','Edit',     () => openBlockModal(b.type, b)),
+      mk('🗑️','Delete',   () => { setTabList(tabList().filter(x => x !== b)); save(); renderBlocks(); })
+    );
+    head.appendChild(tools);
+    el.appendChild(head);
+
+    const bodyWrap = document.createElement('div');
+    if(b.type === 'heading'){
+      const h = document.createElement('h3');
+      h.style.fontSize = '1.15rem';
+      h.textContent = b.text || '';
+      bodyWrap.appendChild(h);
+    }else if(b.type === 'text'){
+      if(b.title){ const h = document.createElement('h3'); h.textContent = b.title; bodyWrap.appendChild(h); }
+      const p = document.createElement('p'); p.className = 'body'; p.textContent = b.body || '';
+      bodyWrap.appendChild(p);
+    }else if(b.type === 'image'){
+      const src = embedSrc(b.url);
+      if(src){ const img = document.createElement('img'); img.src = src; img.alt = b.caption || 'image'; bodyWrap.appendChild(img); }
+      if(b.caption){ const p = document.createElement('p'); p.className='body'; p.style.color='var(--muted)'; p.style.fontSize='.84rem'; p.style.marginTop='8px'; p.textContent = b.caption; bodyWrap.appendChild(p); }
+    }else if(b.type === 'link'){
+      const a = document.createElement('a');
+      a.className = 'linkout'; a.href = b.url || '#'; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = b.text || b.url || '';
+      bodyWrap.appendChild(a);
+    }else if(b.type === 'embed'){
+      const src = embedSrc(b.url);
+      if(src){ const f = document.createElement('iframe'); f.className = 'embed'; f.src = src; bodyWrap.appendChild(f); }
+      else { const p = document.createElement('p'); p.className='body'; p.textContent = 'Invalid file link.'; bodyWrap.appendChild(p); }
+    }
+    el.appendChild(bodyWrap);
+    blocksEl.appendChild(el);
+  });
+}
+
+/* ---------------- block modal ---------------- */
+
+const modalBg = document.getElementById('modalBg');
+const modalFields = document.getElementById('modalFields');
+const modalTitle = document.getElementById('modalTitle');
+let modalCtx = null; // { type, block|null }
+
+function openBlockModal(type, block){
+  modalCtx = { type, block: block || null };
+  const def = BLOCK_DEFS[type];
+  modalTitle.textContent = (block ? 'Edit ' : 'Add ') + def.name.toLowerCase();
+  modalFields.innerHTML = '';
+  def.fields.forEach(f => {
+    const wrap = document.createElement('div');
+    const lab = document.createElement('label');
+    lab.className = 'fld'; lab.textContent = f.label;
+    wrap.appendChild(lab);
+    let inp;
+    if(f.type === 'textarea'){ inp = document.createElement('textarea'); }
+    else { inp = document.createElement('input'); inp.type = f.type; }
+    inp.dataset.key = f.key;
+    inp.value = block ? (block[f.key] || '') : '';
+    wrap.appendChild(inp);
+    modalFields.appendChild(wrap);
+  });
+  modalBg.classList.add('open');
+  const first = modalFields.querySelector('input,textarea');
+  if(first) first.focus();
+}
+function closeModal(){ modalBg.classList.remove('open'); modalCtx = null; }
+
+document.getElementById('modalCancel').addEventListener('click', closeModal);
+modalBg.addEventListener('click', e => { if(e.target === modalBg) closeModal(); });
+document.getElementById('modalSave').addEventListener('click', () => {
+  if(!modalCtx) return;
+  const values = {};
+  modalFields.querySelectorAll('input,textarea').forEach(inp => values[inp.dataset.key] = inp.value.trim());
+  if(modalCtx.block){
+    Object.assign(modalCtx.block, values);
+  }else{
+    tabList().push(Object.assign({ id: uid(), type: modalCtx.type }, values));
+  }
+  save(); renderBlocks(); closeModal();
+});
+
+document.querySelector('.add-block-bar').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-add]');
+  if(btn) openBlockModal(btn.dataset.add, null);
+});
+
+/* ---------------- tabs ---------------- */
+
+document.querySelector('.tabs').addEventListener('click', e => {
+  const btn = e.target.closest('.tab');
+  if(!btn) return;
+  currentTab = btn.dataset.tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === btn));
+  renderBlocks();
+});
+
+/* ---------------- lessons ---------------- */
+
+const lessonSelect = document.getElementById('lessonSelect');
+
+function renderLessonSelect(){
+  lessonSelect.innerHTML = '';
+  data.lessons.forEach(l => {
+    const opt = document.createElement('option');
+    opt.value = l.id; opt.textContent = l.name;
+    if(l.id === data.currentLessonId) opt.selected = true;
+    lessonSelect.appendChild(opt);
+  });
+  document.getElementById('lessonTitle').textContent = '🎥 ' + lesson().name;
+}
+
+lessonSelect.addEventListener('change', () => {
+  data.currentLessonId = lessonSelect.value;
+  save(); renderAll();
+});
+
+document.getElementById('newLessonBtn').addEventListener('click', () => {
+  const name = prompt('Name for the new lesson:', 'New lesson');
+  if(name === null) return;
+  const l = { id: uid(), name: name.trim() || 'New lesson', videoUrl:'', timestamps:[], worksheet:[], answers:[] };
+  data.lessons.push(l);
+  data.currentLessonId = l.id;
+  save(); renderAll();
+});
+
+document.getElementById('renameLessonBtn').addEventListener('click', () => {
+  const l = lesson();
+  const name = prompt('Rename lesson:', l.name);
+  if(name === null) return;
+  l.name = name.trim() || l.name;
+  save(); renderLessonSelect();
+});
+
+document.getElementById('deleteLessonBtn').addEventListener('click', () => {
+  if(data.lessons.length === 1){ alert('You need at least one lesson.'); return; }
+  if(!confirm(`Delete "${lesson().name}" and all its timestamps and materials?`)) return;
+  data.lessons = data.lessons.filter(l => l.id !== data.currentLessonId);
+  data.currentLessonId = data.lessons[0].id;
+  save(); renderAll();
+});
+
+/* ---------------- video + timestamp inputs ---------------- */
+
+document.getElementById('loadVideoBtn').addEventListener('click', () => {
+  const url = document.getElementById('videoUrl').value.trim();
+  lesson().videoUrl = url;
+  save(); renderVideo();
+});
+
+document.getElementById('addTsBtn').addEventListener('click', () => {
+  const labelInp = document.getElementById('tsLabel');
+  const timeInp = document.getElementById('tsTime');
+  const seconds = parseTime(timeInp.value);
+  if(!labelInp.value.trim()){ labelInp.focus(); return; }
+  if(seconds === null){ alert('Please enter the time as h:mm:ss or mm:ss (e.g. 1:27:55).'); timeInp.focus(); return; }
+  lesson().timestamps.push({ label: labelInp.value.trim(), seconds });
+  labelInp.value = ''; timeInp.value = '';
+  save(); renderChips();
+  labelInp.focus();
+});
+document.getElementById('tsTime').addEventListener('keydown', e => {
+  if(e.key === 'Enter') document.getElementById('addTsBtn').click();
+});
+
+/* ---------------- edit mode ---------------- */
+
+document.getElementById('editToggle').addEventListener('change', e => {
+  document.body.classList.toggle('editing', e.target.checked);
+  renderBlocks();
+});
+
+/* ---------------- export / import ---------------- */
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const l = lesson();
+  const blob = new Blob([JSON.stringify(l, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = l.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+document.getElementById('importFile').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const l = JSON.parse(reader.result);
+      if(!l || !Array.isArray(l.timestamps)) throw new Error('bad file');
+      l.id = uid();
+      l.name = l.name || 'Imported lesson';
+      l.worksheet = Array.isArray(l.worksheet) ? l.worksheet : [];
+      l.answers = Array.isArray(l.answers) ? l.answers : [];
+      l.videoUrl = l.videoUrl || '';
+      data.lessons.push(l);
+      data.currentLessonId = l.id;
+      save(); renderAll();
+    }catch(err){
+      alert('That file doesn’t look like an exported lesson.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+/* ---------------- boot ---------------- */
+
+function renderAll(){
+  renderLessonSelect();
+  document.getElementById('videoUrl').value = lesson().videoUrl || '';
+  renderVideo();
+  renderChips();
+  renderBlocks();
+}
+renderAll();
+</script>
+</body>
+</html>
