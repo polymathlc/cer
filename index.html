@@ -7087,17 +7087,40 @@ function _parseAIJson(raw) {
     catch (_) { throw firstErr; }
   }
 }
-// Best-effort repair for slightly-malformed or TRUNCATED model JSON: escapes raw
-// newlines/tabs inside strings, closes an unterminated string, balances any open
-// brackets, and drops trailing commas — so a cut-off response still parses.
+// Best-effort repair for slightly-malformed or TRUNCATED model JSON: escapes
+// unescaped inner quotes and raw newlines/tabs inside strings, closes an
+// unterminated string, drops a dangling half-written key, balances any open
+// brackets, and drops trailing commas — so a broken response still parses.
 function _repairAIJson(s) {
+  s = String(s || '');
   let out = '', inString = false, escaped = false;
   const closers = [];
-  for (const ch of String(s || '')) {
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
     if (inString) {
       if (escaped) { out += ch; escaped = false; continue; }
       if (ch === '\\') { out += ch; escaped = true; continue; }
-      if (ch === '"') { out += ch; inString = false; continue; }
+      if (ch === '"') {
+        // Only a real close-quote if what follows continues the JSON
+        // structure; otherwise it's an unescaped quote INSIDE the string
+        // (e.g. feedback text quoting the word "friction") — escape it.
+        let j = i + 1;
+        while (j < s.length && ' \t\r\n'.includes(s[j])) j++;
+        const nxt = j < s.length ? s[j] : '';
+        let close = false;
+        if (!nxt || ':}]'.includes(nxt)) close = true;
+        else if (nxt === ',') {
+          // A real close is followed by the NEXT element after the comma —
+          // a quoted key/value, number, object/array or literal. Prose
+          // (like: "no", so the toy…) is not, so the quote is internal.
+          let k = j + 1;
+          while (k < s.length && ' \t\r\n'.includes(s[k])) k++;
+          close = k >= s.length || '"{[}]-0123456789'.includes(s[k]) ||
+                  /^(true|false|null)\b/.test(s.slice(k, k + 6));
+        }
+        if (close) { out += ch; inString = false; } else out += '\\"';
+        continue;
+      }
       if (ch === '\n') { out += '\\n'; continue; }
       if (ch === '\r') { continue; }
       if (ch === '\t') { out += '\\t'; continue; }
@@ -7110,6 +7133,9 @@ function _repairAIJson(s) {
     out += ch;
   }
   if (inString) out += '"';
+  // A response cut off in the middle of a KEY (e.g. …,"feedb or …,"feedback":)
+  // leaves a dangling key that no amount of bracket-closing fixes — drop it.
+  out = out.replace(/([{,]\s*)"(?:[^"\\]|\\.)*"\s*:?\s*$/, '$1').replace(/,\s*$/, '');
   while (closers.length) out += closers.pop();
   return out.replace(/,\s*([}\]])/g, '$1');
 }
@@ -7937,7 +7963,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.93.0';
+const APP_VERSION = 'v1.93.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
