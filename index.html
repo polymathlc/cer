@@ -6838,6 +6838,7 @@ option {
 .dgn-pad canvas{ position:absolute; left:0; top:0; width:100%; height:100%; }
 .dgn-textlayer{ position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; }
 .dgn-text{ position:absolute; min-width:30px; min-height:22px; max-width:60%; padding:2px 6px; font-size:0.9rem; line-height:1.3; font-family:'DM Sans',sans-serif; background:rgba(255,255,255,0.85); border:1px dashed var(--accent-blue,#3b82f6); border-radius:6px; pointer-events:auto; cursor:text; outline:none; white-space:pre-wrap; }
+.dgn-text .dgn-edit{ display:inline-block; min-width:26px; min-height:1.1em; outline:none; white-space:pre-wrap; }
 .dgn-text .dgn-drag{ position:absolute; left:-11px; top:-11px; width:20px; height:20px; border-radius:50%; background:var(--accent-blue,#3b82f6); color:#fff; font-size:0.72rem; display:flex; align-items:center; justify-content:center; cursor:move; pointer-events:auto; user-select:none; }
 .dgn-text .dgn-del{ position:absolute; right:-11px; top:-11px; width:20px; height:20px; border-radius:50%; background:var(--accent-red,#dc2626); color:#fff; font-size:0.82rem; display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; user-select:none; }
 .dgn-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0 4px; }
@@ -7963,7 +7964,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.93.1';
+const APP_VERSION = 'v1.94.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9545,10 +9546,14 @@ function renderBlocks() {
               <button type="button" class="btn btn-outline" style="padding:2px 12px;font-weight:700;" onclick="adjustImgScale('${block.id}',1)" title="Larger (max 100%)">+</button>
             </div>
             <div class="img-enhance-bar" id="imgEnhance_${block.id}"></div>
+            <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:0.8rem;color:var(--text-muted);cursor:pointer;">
+              <input type="checkbox" ${block.annotate === false ? '' : 'checked'} onchange="saveBlockContent('${block.id}', 'annotate', this.checked)" style="width:15px;height:15px;flex:0 0 auto;cursor:pointer;">
+              ✍️ Students annotate this image <span style="font-weight:400;">(only used when “Annotation question” is ticked — untick for reference pictures that shouldn't get pen &amp; label tools)</span>
+            </label>
           </div>
         `;
         break;
-        
+
       case 'answer':
         bodyHTML = `
           <div class="block-body">
@@ -10437,7 +10442,10 @@ async function generateEnhancedImageDataUrl(prompt, media) {
 }
 
 async function _urlToDataUrl(url) {
-  const resp = await fetch(url, { mode: 'cors' });
+  // cache:'no-store' matters: if the page already showed this URL in a plain
+  // <img>, the cached response has no CORS headers and a cache hit here would
+  // fail the fetch (and taint any canvas the fallback image is drawn onto).
+  const resp = await fetch(url, { mode: 'cors', cache: 'no-store' });
   if (!resp.ok) throw new Error('could not load the image');
   const blob = await resp.blob();
   return await new Promise((res, rej) => {
@@ -15021,7 +15029,9 @@ function buildOpenBody(q, containerSel, markCfg) {
         break;
       case 'image':
         if (block.url) {
-          if (isAnnot) { add(annotationPadHtml(block, q, containerSel)); annotCount++; }
+          // Only images the admin marked as annotatable get the pen & label
+          // pad — reference pictures render plain even on annotation questions.
+          if (isAnnot && block.annotate !== false) { add(annotationPadHtml(block, q, containerSel)); annotCount++; }
           else add(`<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="eager" decoding="async" fetchpriority="high" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`);
         }
         break;
@@ -15278,23 +15288,38 @@ function _annotAddText(pid, e) {
   const r = st.tl.getBoundingClientRect();
   const x = ((e.clientX - r.left) / (r.width || 1)) * 100;
   const y = ((e.clientY - r.top) / (r.height || 1)) * 100;
+  // The box itself is NOT contenteditable — an editable box whose only
+  // children are the non-editable ✥/× handles gets no caret in Chrome/Safari,
+  // so typing goes nowhere. The text lives in an inner editable span instead.
   const box = document.createElement('div');
   box.className = 'dgn-text';
-  box.setAttribute('contenteditable', 'true');
   box.setAttribute('data-dgn-textbox', '1');
   box.style.left = Math.max(0, Math.min(92, x)) + '%';
   box.style.top = Math.max(0, Math.min(94, y)) + '%';
   box.style.color = st.color;
   const drag = document.createElement('div');
-  drag.className = 'dgn-drag'; drag.textContent = '✥'; drag.setAttribute('contenteditable', 'false');
+  drag.className = 'dgn-drag'; drag.textContent = '✥';
   const del = document.createElement('div');
-  del.className = 'dgn-del'; del.textContent = '×'; del.setAttribute('contenteditable', 'false');
+  del.className = 'dgn-del'; del.textContent = '×';
   del.addEventListener('pointerdown', ev => { ev.stopPropagation(); ev.preventDefault(); box.remove(); });
   _annotBindDrag(pid, box, drag);
+  const edit = document.createElement('span');
+  edit.className = 'dgn-edit';
+  edit.setAttribute('contenteditable', 'true');
+  // An abandoned empty label is just clutter — remove it when focus leaves.
+  edit.addEventListener('blur', () => setTimeout(() => {
+    if (box.isConnected && !_annotTextValue(box)) box.remove();
+  }, 150));
   box.appendChild(drag);
   box.appendChild(del);
+  box.appendChild(edit);
+  // Clicking anywhere on the box puts the caret in the text.
+  box.addEventListener('pointerdown', ev => {
+    if (ev.target === drag || ev.target === del) return;
+    setTimeout(() => { try { edit.focus(); } catch (_) {} }, 0);
+  });
   st.tl.appendChild(box);
-  setTimeout(() => { try { box.focus(); } catch (_) {} }, 0);
+  setTimeout(() => { try { edit.focus(); } catch (_) {} }, 0);
 }
 function _annotBindDrag(pid, box, handle) {
   handle.addEventListener('pointerdown', e => {
@@ -15367,7 +15392,19 @@ async function _annotExportBase64(pid) {
   try {
     const durl = await _urlToDataUrl(st.blockUrl);
     source = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('img load')); im.src = durl; });
-  } catch (_) { source = st.img; }
+  } catch (_) {
+    // Second chance: reload the image itself with CORS enabled (cache-busted
+    // so the browser can't reuse the plain <img>'s non-CORS cache entry).
+    try {
+      source = await new Promise((res, rej) => {
+        const im = new Image();
+        im.crossOrigin = 'anonymous';
+        im.onload = () => res(im);
+        im.onerror = () => rej(new Error('cors img load'));
+        im.src = st.blockUrl + (st.blockUrl.includes('?') ? '&' : '?') + 'corscb=' + Date.now();
+      });
+    } catch (_2) { source = st.img; }
+  }
   const nw = source.naturalWidth || source.width || st.cssW || 800;
   const nh = source.naturalHeight || source.height || st.cssH || 600;
   const maxDim = 1400;
@@ -15420,7 +15457,8 @@ function _annotHasMarks(containerSel) {
   if (!c) return false;
   return Array.from(c.querySelectorAll('.dgn-pad[data-annot]')).some(el => {
     const st = _annotPads[el.getAttribute('data-annot')];
-    return st && ((st.strokes && st.strokes.length) || st.tl.querySelector('.dgn-text'));
+    return st && ((st.strokes && st.strokes.length) ||
+      Array.from(st.tl.querySelectorAll('.dgn-text')).some(b => _annotTextValue(b)));
   });
 }
 
