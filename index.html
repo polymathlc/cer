@@ -7928,7 +7928,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.91.1';
+const APP_VERSION = 'v1.91.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11563,7 +11563,7 @@ async function _cropBoxFromScreenshot(fullDataUrl, box) {
   const img = await _loadImageEl(fullDataUrl);
   const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
   if (!W || !H) return null;
-  const mx = W * 0.025, my = H * 0.02; // white-space margin around the figure
+  const mx = W * 0.035, my = H * 0.028; // white-space margin around the figure
   let r = {
     x: Math.max(0, xmin / 1000 * W - mx),
     y: Math.max(0, ymin / 1000 * H - my)
@@ -11580,15 +11580,19 @@ async function _cropBoxFromScreenshot(fullDataUrl, box) {
     r = _expandRectToWhitespace(pctx, W, H, r);
   } catch (e) { console.warn('edge expansion skipped', e); }
   const scale = Math.max(1, Math.min(2, 1600 / Math.max(r.w, r.h))); // upscale small crops (≤2×, ≤~1600px)
+  // Guaranteed breathing space: a white frame around the crop, so content
+  // never sits flush against the edge even when the whitespace expansion
+  // stopped right at the last inked pixel (or the figure touches the page edge).
+  const pad = Math.round(Math.max(16, Math.max(r.w, r.h) * scale * 0.035));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(r.w * scale);
-  canvas.height = Math.round(r.h * scale);
+  canvas.width = Math.round(r.w * scale) + pad * 2;
+  canvas.height = Math.round(r.h * scale) + pad * 2;
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, r.x, r.y, r.w, r.h, pad, pad, Math.round(r.w * scale), Math.round(r.h * scale));
   return canvas.toDataURL('image/png');
 }
 
