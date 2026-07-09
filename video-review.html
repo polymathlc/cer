@@ -43,6 +43,23 @@
   header.app h1{font-size:1.45rem;font-weight:700;letter-spacing:-.01em}
   header.app h1 span{color:var(--accent)}
   .header-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .user-pill{
+    display:inline-flex;align-items:center;gap:10px;background:#fff;
+    border:1px solid var(--line);border-radius:999px;padding:6px 14px 6px 6px;
+    font-size:.82rem;font-weight:600;color:var(--muted);
+  }
+  .user-pill .avatar{
+    width:28px;height:28px;border-radius:50%;background:var(--accent);
+    color:#fff;display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:.85rem;flex:none;
+  }
+  .user-pill .who b{color:var(--ink)}
+  .role-tag{
+    font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+    border-radius:999px;padding:1px 10px;
+  }
+  .role-tag.admin{background:var(--accent-soft);color:var(--accent-ink)}
+  .role-tag.student{background:var(--green-soft);color:var(--green)}
 
   /* ---------- cards ---------- */
   .card{
@@ -68,6 +85,7 @@
   }
   button:hover{background:#f8fafc;border-color:#cbd5e1}
   button:active{transform:scale(.98)}
+  button:disabled{opacity:.55;cursor:default}
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   button.primary:hover{background:#4338ca}
   button.danger{color:var(--red)}
@@ -86,9 +104,38 @@
   .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
   .row .grow{flex:1 1 220px}
 
+  /* ---------- auth screen ---------- */
+  #authScreen{
+    min-height:70vh;display:flex;align-items:center;justify-content:center;
+  }
+  .auth-card{
+    background:var(--card);border:1px solid var(--line);border-radius:20px;
+    box-shadow:var(--shadow);padding:48px 40px;max-width:420px;width:100%;
+    text-align:center;
+  }
+  .auth-card .logo{font-size:2.6rem;margin-bottom:14px}
+  .auth-card h1{font-size:1.4rem;font-weight:700;margin-bottom:10px;letter-spacing:-.01em}
+  .auth-card h1 span{color:var(--accent)}
+  .auth-card p{color:var(--muted);font-size:.9rem;margin-bottom:28px}
+  .gbtn{
+    display:inline-flex;align-items:center;gap:12px;
+    border:1px solid var(--line);border-radius:999px;background:#fff;
+    padding:12px 28px;font-size:.95rem;font-weight:600;cursor:pointer;
+    transition:box-shadow .15s,border-color .15s;
+  }
+  .gbtn:hover{border-color:#cbd5e1;box-shadow:0 2px 10px rgba(15,23,42,.08)}
+  .gbtn svg{width:20px;height:20px;flex:none}
+  .auth-err{color:var(--red);font-size:.84rem;margin-top:18px;display:none}
+
   /* ---------- lesson bar ---------- */
   .lesson-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .lesson-bar select{width:auto;min-width:220px;flex:1 1 220px}
+  .meta-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .meta-tag{
+    font-size:.74rem;font-weight:700;border-radius:999px;padding:3px 14px;
+    background:var(--accent-soft);color:var(--accent-ink);
+  }
+  .meta-tag.subject{background:var(--green-soft);color:var(--green)}
 
   /* ---------- video ---------- */
   .player-shell{
@@ -102,6 +149,7 @@
   }
   .notice.warn{display:block;background:var(--amber-soft);color:var(--amber-ink);border:1px solid #fde68a}
   .notice.err{display:block;background:var(--red-soft);color:var(--red);border:1px solid #fecaca}
+  .notice.ok{display:block;background:var(--green-soft);color:var(--green);border:1px solid #a7f3d0}
 
   /* ---------- timestamp chips ---------- */
   .chips{display:flex;flex-wrap:wrap;gap:12px;margin-top:4px}
@@ -158,10 +206,18 @@
 
   .add-block-bar{display:none;gap:10px;flex-wrap:wrap;margin-top:20px}
   body.editing .add-block-bar{display:flex}
+
+  /* editor-only: visible only in edit mode (admin) */
   .editor-only{display:none !important}
   body.editing .editor-only{display:block !important}
-  .editor-only.flex, body.editing .editor-only.flex{display:none !important}
+  .editor-only.flex{display:none !important}
   body.editing .editor-only.flex{display:flex !important}
+  /* admin-only: visible whenever the signed-in user is the admin */
+  .admin-only{display:none !important}
+  body.admin .admin-only{display:block !important}
+  .admin-only.flex{display:none !important}
+  body.admin .admin-only.flex{display:flex !important}
+  body.admin .admin-only.inline{display:inline-flex !important}
 
   /* ---------- modal ---------- */
   .modal-bg{
@@ -173,7 +229,8 @@
     background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);
     width:100%;max-width:520px;padding:28px;
   }
-  .modal h3{font-size:1.05rem;font-weight:700;margin-bottom:18px}
+  .modal h3{font-size:1.05rem;font-weight:700;margin-bottom:8px}
+  .modal p.sub{color:var(--muted);font-size:.86rem;margin-bottom:18px}
   .modal .fields{display:flex;flex-direction:column;gap:16px;margin-bottom:22px}
   .modal .actions{display:flex;justify-content:flex-end;gap:10px}
 
@@ -187,9 +244,10 @@
   }
 
   .mode-pill{
-    display:inline-flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;
+    display:none;align-items:center;gap:8px;font-size:.82rem;font-weight:600;
     color:var(--muted);
   }
+  body.admin .mode-pill{display:inline-flex}
   .switch{position:relative;width:44px;height:24px;flex:none}
   .switch input{opacity:0;width:0;height:0}
   .switch .track{
@@ -203,10 +261,34 @@
   }
   .switch input:checked + .track{background:var(--accent)}
   .switch input:checked + .track::after{left:23px}
+
+  .loading-screen{
+    min-height:60vh;display:flex;align-items:center;justify-content:center;
+    color:var(--muted);font-size:.95rem;
+  }
 </style>
 </head>
-<body class="editing">
-<div class="wrap">
+<body>
+
+<!-- ==================== LOADING ==================== -->
+<div class="loading-screen" id="loadingScreen">Loading…</div>
+
+<!-- ==================== SIGN IN ==================== -->
+<div id="authScreen" style="display:none">
+  <div class="auth-card">
+    <div class="logo">🎬</div>
+    <h1>Lesson <span>Replay</span></h1>
+    <p>Watch lesson recordings and jump straight to each question.<br>Sign in with your Google account to continue.</p>
+    <button class="gbtn" id="googleSignInBtn">
+      <svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.5 6.1 29.5 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.2 5.2C36.9 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+      Sign in with Google
+    </button>
+    <div class="auth-err" id="authErr"></div>
+  </div>
+</div>
+
+<!-- ==================== APP ==================== -->
+<div class="wrap" id="appScreen" style="display:none">
 
   <header class="app">
     <h1>🎬 Lesson <span>Replay</span></h1>
@@ -218,22 +300,43 @@
           <span class="track"></span>
         </label>
       </span>
-      <button id="exportBtn" class="ghost" title="Download this lesson as a JSON file">Export</button>
-      <button id="importBtn" class="ghost" title="Load a lesson from a JSON file">Import</button>
+      <span class="user-pill">
+        <span class="avatar" id="userAvatar">?</span>
+        <span class="who"><b id="userName">—</b> <span class="role-tag student" id="roleTag">student</span></span>
+      </span>
+      <button id="exportBtn" class="ghost admin-only inline" title="Download this lesson as a JSON file">Export</button>
+      <button id="importBtn" class="ghost admin-only inline" title="Load a lesson from a JSON file">Import</button>
       <input type="file" id="importFile" accept="application/json" style="display:none">
+      <button id="signOutBtn" class="ghost">Sign out</button>
     </div>
   </header>
 
   <!-- Lesson picker -->
-  <section class="card editor-only">
+  <section class="card">
     <h2>Lesson</h2>
-    <p class="hint">Each lesson has its own video, timestamps, worksheet and answer key. Everything is saved automatically in this browser.</p>
+    <p class="hint" id="lessonPickerHint">Pick a lesson to watch.</p>
     <div class="lesson-bar">
       <select id="lessonSelect"></select>
-      <button id="newLessonBtn">＋ New lesson</button>
-      <button id="renameLessonBtn">Rename</button>
-      <button id="deleteLessonBtn" class="danger">Delete</button>
+      <button id="newLessonBtn" class="admin-only inline">＋ New lesson</button>
+      <button id="renameLessonBtn" class="admin-only inline">Rename</button>
+      <button id="deleteLessonBtn" class="danger admin-only inline">Delete</button>
     </div>
+    <div class="row editor-only flex" style="margin-top:20px">
+      <div>
+        <label class="fld" for="lessonSubject">Subject</label>
+        <select id="lessonSubject" style="width:160px">
+          <option value="Math">Math</option>
+          <option value="Science">Science</option>
+        </select>
+      </div>
+      <div>
+        <label class="fld" for="lessonLevel">Level</label>
+        <select id="lessonLevel" style="width:120px">
+          <option>P3</option><option>P4</option><option>P5</option><option>P6</option>
+        </select>
+      </div>
+    </div>
+    <div class="meta-tags" id="lessonMeta"></div>
   </section>
 
   <!-- Video -->
@@ -245,10 +348,15 @@
         <label class="fld" for="videoUrl">Video link (Dropbox or Google Drive)</label>
         <input type="url" id="videoUrl" placeholder="https://www.dropbox.com/scl/fi/…  or  https://drive.google.com/file/d/…">
       </div>
+      <div>
+        <label class="fld" for="startOffset" title="The Zoom “time elapsed” shown at the very first second of this recording">Time elapsed at video start</label>
+        <input type="text" id="startOffset" placeholder="e.g. 1:15:00" style="width:150px">
+      </div>
       <button class="primary" id="loadVideoBtn">Load video</button>
     </div>
+    <p class="hint editor-only" style="display:block;margin-top:14px;margin-bottom:0">⏱️ <strong>Time elapsed at video start:</strong> pause the video at its first second and copy the Zoom “time elapsed” counter shown there (0:00 if the recording starts from the beginning of the lesson). Timestamps are written as Zoom elapsed times, so the app jumps to <em>timestamp − start time</em> inside the video.</p>
     <div class="player-shell" id="playerShell">
-      <div class="player-empty">No video loaded yet.<br>Paste a Dropbox or Google Drive link above to get started.</div>
+      <div class="player-empty">No video loaded yet.</div>
     </div>
     <div class="notice" id="videoNotice"></div>
   </section>
@@ -268,13 +376,16 @@
         <input type="text" id="tsTime" placeholder="1:27:55" style="width:140px">
       </div>
       <button class="primary" id="addTsBtn">＋ Add timestamp</button>
+      <button id="aiTsBtn" title="Upload a photo or screenshot of your timestamp notes and AI fills in the chips">📸 AI: read timestamps from screenshot</button>
+      <input type="file" id="aiTsFile" accept="image/*" style="display:none">
     </div>
+    <div class="notice" id="tsNotice"></div>
   </section>
 
   <!-- Materials -->
   <section class="card">
     <h2>Materials</h2>
-    <p class="hint">Worksheet questions and the answer key. In edit mode you can add text boxes, headings, images, links and embedded files.</p>
+    <p class="hint">Worksheet questions and the answer key.</p>
     <div class="tabs">
       <button class="tab active" data-tab="worksheet">📄 Worksheet</button>
       <button class="tab" data-tab="answers">✅ Answer key</button>
@@ -294,7 +405,38 @@
   </footer>
 </div>
 
-<!-- Block editor modal -->
+<!-- ==================== STUDENT FIRST-TIME SETUP ==================== -->
+<div class="modal-bg" id="setupBg">
+  <div class="modal">
+    <h3>👋 Welcome! Tell us who you are</h3>
+    <p class="sub">This is your first time signing in. Enter your name, level and subject so we can show you the right lessons.</p>
+    <div class="fields">
+      <div>
+        <label class="fld" for="setupName">Student name</label>
+        <input type="text" id="setupName" placeholder="e.g. Jun Wei">
+      </div>
+      <div>
+        <label class="fld" for="setupLevel">Level</label>
+        <select id="setupLevel">
+          <option>P3</option><option>P4</option><option selected>P5</option><option>P6</option>
+        </select>
+      </div>
+      <div>
+        <label class="fld" for="setupSubject">Subject</label>
+        <select id="setupSubject">
+          <option value="Math">Math</option>
+          <option value="Science">Science</option>
+          <option value="Math and Science">Math and Science</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="setupSaveBtn">Start watching</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== BLOCK EDITOR MODAL ==================== -->
 <div class="modal-bg" id="modalBg">
   <div class="modal">
     <h3 id="modalTitle">Edit block</h3>
@@ -306,61 +448,259 @@
   </div>
 </div>
 
-<script>
-'use strict';
-const APP_VERSION = 'v1.0.0';
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+import {
+  getAuth, signInWithPopup, GoogleAuthProvider, browserPopupRedirectResolver,
+  onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+import {
+  getFirestore, doc, collection, getDoc, getDocs, setDoc, deleteDoc, Timestamp
+} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
+import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
+
+const APP_VERSION = 'v1.2.0';
 document.getElementById('appVersionBadge').textContent = APP_VERSION;
 
-const STORE_KEY = 'lessonReplayData';
+// Same Firebase project as the main Science Quest app — one login for everything.
+const firebaseConfig = {
+  apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
+  authDomain: "mathgen--app.firebaseapp.com",
+  projectId: "mathgen--app",
+  storageBucket: "mathgen--app.firebasestorage.app",
+  messagingSenderId: "165654161198",
+  appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf",
+  measurementId: "G-0MWZFG211D"
+};
+const ADMIN_EMAILS = ['chungzhikai@gmail.com'];
+const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
+const AI_MODEL = "gemini-3.5-flash";
+const LESSONS_COL = 'videoLessons';   // shared lesson library (admin writes, students read)
+const PROFILES_COL = 'videoProfiles'; // per-student name / level / subject
 
-/* ---------------- data ---------------- */
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
 
-function defaultData(){
+if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+  } catch (e) { console.warn("App Check init failed:", e); }
+}
+
+let geminiModel = null;
+try {
+  geminiModel = getGenerativeModel(getAI(app, { backend: new GoogleAIBackend() }), { model: AI_MODEL });
+} catch (e) { console.warn("Firebase AI init failed (AI timestamps disabled):", e); }
+
+/* ---------------- state ---------------- */
+
+let currentUser = null;   // { uid, email, name, role: 'admin'|'student' }
+let profile = null;       // student profile { studentName, level, subject }
+let lessons = [];         // all lessons visible to this user
+let currentLessonId = null;
+
+const isAdmin = () => currentUser && currentUser.role === 'admin';
+function lesson(){ return lessons.find(l => l.id === currentLessonId) || null; }
+// Zoom "time elapsed" shown at the video's first second. Timestamps are noted
+// as Zoom elapsed times, so position-in-video = timestamp − this offset.
+function startOffsetSec(){
+  const l = lesson();
+  return (l && Number(l.startOffset)) || 0;
+}
+function videoPos(seconds){ return Math.max(0, seconds - startOffsetSec()); }
+function uid(){ return 'id-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+
+/* ---------------- default seed lesson ---------------- */
+
+function seedLesson(){
   return {
-    currentLessonId: 'lesson-1',
-    lessons: [{
-      id: 'lesson-1',
-      name: 'P5 Science — July Worksheet (Q18–20)',
-      videoUrl: '',
-      timestamps: [
-        { label:'Q18',  seconds: 4690 },  // 1:18:10
-        { label:'Q18d', seconds: 4705 },  // 1:18:25
-        { label:'Q19a', seconds: 4885 },  // 1:21:25
-        { label:'Q19b', seconds: 4930 },  // 1:22:10
-        { label:'Q19c', seconds: 4980 },  // 1:23:00
-        { label:'Q19d', seconds: 5059 },  // 1:24:19
-        { label:'Q20a', seconds: 5275 },  // 1:27:55
-        { label:'Q20b', seconds: 5353 },  // 1:29:13
-        { label:'Q20c', seconds: 5470 }   // 1:31:10
-      ],
-      worksheet: [],
-      answers: []
-    }]
+    id: uid(),
+    name: 'P5 Science — July Worksheet (Q18–20)',
+    subject: 'Science',
+    level: 'P5',
+    videoUrl: '',
+    startOffset: 0,
+    timestamps: [
+      { label:'Q18',  seconds: 4690 },
+      { label:'Q18d', seconds: 4705 },
+      { label:'Q19a', seconds: 4885 },
+      { label:'Q19b', seconds: 4930 },
+      { label:'Q19c', seconds: 4980 },
+      { label:'Q19d', seconds: 5059 },
+      { label:'Q20a', seconds: 5275 },
+      { label:'Q20b', seconds: 5353 },
+      { label:'Q20c', seconds: 5470 }
+    ],
+    worksheet: [],
+    answers: []
   };
 }
 
-let data = load();
-function load(){
-  try{
-    const raw = localStorage.getItem(STORE_KEY);
-    if(raw){
-      const parsed = JSON.parse(raw);
-      if(parsed && Array.isArray(parsed.lessons) && parsed.lessons.length) return parsed;
+/* ---------------- Firestore I/O ---------------- */
+
+async function loadLessons(){
+  const snap = await getDocs(collection(db, LESSONS_COL));
+  lessons = [];
+  snap.forEach(d => {
+    const l = d.data();
+    l.id = d.id;
+    l.timestamps = Array.isArray(l.timestamps) ? l.timestamps : [];
+    l.worksheet = Array.isArray(l.worksheet) ? l.worksheet : [];
+    l.answers = Array.isArray(l.answers) ? l.answers : [];
+    lessons.push(l);
+  });
+  lessons.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+  if (!isAdmin()) {
+    // Students only see lessons for their level + subject(s).
+    const subj = (profile && profile.subject) || '';
+    const allowed = subj === 'Math and Science' ? ['Math', 'Science'] : [subj];
+    const level = profile && profile.level;
+    lessons = lessons.filter(l => allowed.includes(l.subject) && l.level === level);
+  } else if (!lessons.length) {
+    // First admin visit: seed the sample lesson so the page isn't empty.
+    const l = seedLesson();
+    lessons = [l];
+    await saveLesson(l);
+  }
+  currentLessonId = lessons.length ? lessons[0].id : null;
+}
+
+let _saveTimer = null;
+function saveLesson(l){
+  l = l || lesson();
+  if (!l || !isAdmin()) return Promise.resolve();
+  const payload = Object.assign({}, l, { updatedAt: Timestamp.now() });
+  delete payload.id;
+  return setDoc(doc(db, LESSONS_COL, l.id), payload).catch(err => {
+    console.warn('save failed', err);
+    setNotice('err', 'Could not save to the cloud — check your connection and Firestore rules.');
+  });
+}
+// Debounced save of the current lesson — call after every mutation.
+function save(){
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => saveLesson(), 400);
+}
+
+/* ---------------- auth flow ---------------- */
+
+const loadingScreen = document.getElementById('loadingScreen');
+const authScreen = document.getElementById('authScreen');
+const appScreen = document.getElementById('appScreen');
+
+function show(which){
+  loadingScreen.style.display = which === 'loading' ? 'flex' : 'none';
+  authScreen.style.display = which === 'auth' ? 'flex' : 'none';
+  appScreen.style.display = which === 'app' ? 'block' : 'none';
+}
+
+document.getElementById('googleSignInBtn').addEventListener('click', async () => {
+  const errEl = document.getElementById('authErr');
+  errEl.style.display = 'none';
+  try {
+    await signInWithPopup(auth, googleProvider, browserPopupRedirectResolver);
+  } catch (e) {
+    errEl.textContent = 'Sign-in failed: ' + (e.message || e);
+    errEl.style.display = 'block';
+  }
+});
+
+document.getElementById('signOutBtn').addEventListener('click', () => signOut(auth));
+
+onAuthStateChanged(auth, async user => {
+  if (!user) {
+    currentUser = null; profile = null;
+    show('auth');
+    return;
+  }
+  show('loading');
+  const role = ADMIN_EMAILS.includes(user.email) ? 'admin' : 'student';
+  currentUser = {
+    uid: user.uid,
+    email: user.email,
+    name: user.displayName || user.email.split('@')[0],
+    role
+  };
+  try {
+    if (role === 'student') {
+      const snap = await getDoc(doc(db, PROFILES_COL, user.uid));
+      if (snap.exists() && snap.data().studentName) {
+        profile = snap.data();
+        setDoc(doc(db, PROFILES_COL, user.uid), { lastLogin: Timestamp.now() }, { merge: true }).catch(() => {});
+        await enterApp();
+      } else {
+        // First login — collect name, level and subject before entering.
+        show('loading');
+        document.getElementById('setupBg').classList.add('open');
+      }
+    } else {
+      await enterApp();
     }
-  }catch(e){ /* corrupted store — start fresh */ }
-  return defaultData();
+  } catch (e) {
+    console.error(e);
+    const errEl = document.getElementById('authErr');
+    errEl.textContent = 'Could not load your data: ' + (e.message || e);
+    errEl.style.display = 'block';
+    show('auth');
+  }
+});
+
+document.getElementById('setupSaveBtn').addEventListener('click', async () => {
+  const name = document.getElementById('setupName').value.trim();
+  if (!name) { document.getElementById('setupName').focus(); return; }
+  const btn = document.getElementById('setupSaveBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  profile = {
+    uid: currentUser.uid,
+    email: currentUser.email,
+    studentName: name,
+    level: document.getElementById('setupLevel').value,
+    subject: document.getElementById('setupSubject').value,
+    createdAt: Timestamp.now(),
+    lastLogin: Timestamp.now()
+  };
+  try {
+    await setDoc(doc(db, PROFILES_COL, currentUser.uid), profile);
+  } catch (e) {
+    console.warn('profile save failed', e);
+  }
+  btn.disabled = false; btn.textContent = 'Start watching';
+  document.getElementById('setupBg').classList.remove('open');
+  await enterApp();
+});
+
+async function enterApp(){
+  document.body.classList.toggle('admin', isAdmin());
+  document.body.classList.toggle('editing', isAdmin() && document.getElementById('editToggle').checked);
+
+  const displayName = isAdmin() ? currentUser.name : (profile ? profile.studentName : currentUser.name);
+  document.getElementById('userAvatar').textContent = (displayName[0] || '?').toUpperCase();
+  document.getElementById('userName').textContent = displayName;
+  const tag = document.getElementById('roleTag');
+  tag.textContent = isAdmin() ? 'admin' : (profile ? `${profile.level} · ${profile.subject}` : 'student');
+  tag.className = 'role-tag ' + (isAdmin() ? 'admin' : 'student');
+
+  document.getElementById('lessonPickerHint').textContent = isAdmin()
+    ? 'Each lesson has its own video, timestamps, subject, level, worksheet and answer key. Lessons are saved to the cloud and shared with students automatically.'
+    : 'Pick a lesson to watch. You only see lessons for your level and subject.';
+
+  await loadLessons();
+  renderAll();
+  show('app');
 }
-function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
-function lesson(){
-  return data.lessons.find(l => l.id === data.currentLessonId) || data.lessons[0];
-}
-function uid(){ return 'id-' + Math.random().toString(36).slice(2,10); }
 
 /* ---------------- time helpers ---------------- */
 
 function parseTime(str){
   if(!str) return null;
-  const parts = str.trim().split(':').map(s => s.trim());
+  const parts = String(str).trim().split(':').map(s => s.trim());
   if(parts.some(p => p === '' || isNaN(p))) return null;
   const nums = parts.map(Number);
   if(nums.length === 3) return nums[0]*3600 + nums[1]*60 + nums[2];
@@ -379,11 +719,10 @@ function fmtTime(sec){
 
 function classifyLink(url){
   let u;
-  try{ u = new URL(url.trim()); }catch(e){ return { kind:'invalid' }; }
+  try{ u = new URL(String(url).trim()); }catch(e){ return { kind:'invalid' }; }
   const host = u.hostname.toLowerCase();
 
   if(host.endsWith('dropbox.com') || host.endsWith('dropboxusercontent.com')){
-    // Force the raw file so the HTML5 <video> element can stream + seek it.
     u.hostname = 'dl.dropboxusercontent.com';
     u.searchParams.delete('dl');
     u.searchParams.set('raw', '1');
@@ -398,14 +737,11 @@ function classifyLink(url){
     if(!id) return { kind:'invalid' };
     return {
       kind:'drive',
-      // Attempted direct stream (works for smaller files)…
       src: `https://drive.google.com/uc?export=download&id=${id}`,
-      // …with the official preview iframe as fallback.
       iframe: `https://drive.google.com/file/d/${id}/preview`
     };
   }
 
-  // Any other URL: assume it's already a direct video file link.
   return { kind:'direct', src: u.toString() };
 }
 
@@ -413,11 +749,12 @@ function classifyLink(url){
 
 const playerShell = document.getElementById('playerShell');
 const videoNotice = document.getElementById('videoNotice');
-let videoEl = null;   // the <video> element when in direct mode, else null
+let videoEl = null;
 
-function setNotice(kind, msg){
-  videoNotice.className = 'notice' + (kind ? ' ' + kind : '');
-  videoNotice.innerHTML = msg || '';
+function setNotice(kind, msg, el){
+  el = el || videoNotice;
+  el.className = 'notice' + (kind ? ' ' + kind : '');
+  el.innerHTML = msg || '';
 }
 
 function renderVideo(){
@@ -426,8 +763,10 @@ function renderVideo(){
   videoEl = null;
   setNotice('', '');
 
-  if(!l.videoUrl){
-    playerShell.innerHTML = '<div class="player-empty">No video loaded yet.<br>Paste a Dropbox or Google Drive link above to get started.</div>';
+  if(!l || !l.videoUrl){
+    playerShell.innerHTML = '<div class="player-empty">' + (isAdmin()
+      ? 'No video loaded yet.<br>Paste a Dropbox or Google Drive link above to get started.'
+      : 'No video has been added to this lesson yet.') + '</div>';
     return;
   }
 
@@ -449,7 +788,6 @@ function renderVideo(){
   v.addEventListener('timeupdate', highlightActiveChip);
 
   if(link.kind === 'drive'){
-    // If the direct stream fails (large files / permission), fall back to Drive's preview iframe.
     v.addEventListener('error', () => {
       playerShell.innerHTML = '';
       videoEl = null;
@@ -471,8 +809,8 @@ const chipsEl = document.getElementById('chips');
 function renderChips(){
   const l = lesson();
   chipsEl.innerHTML = '';
-  if(!l.timestamps.length){
-    chipsEl.innerHTML = '<div class="chips-empty">No timestamps yet — add one below.</div>';
+  if(!l || !l.timestamps.length){
+    chipsEl.innerHTML = '<div class="chips-empty">No timestamps yet' + (isAdmin() ? ' — add one below or upload a screenshot of your notes.' : '.') + '</div>';
     return;
   }
   const sorted = [...l.timestamps].sort((a,b) => a.seconds - b.seconds);
@@ -488,6 +826,7 @@ function renderChips(){
     const t = document.createElement('span');
     t.className = 't';
     t.textContent = fmtTime(ts.seconds);
+    chip.title = 'Jumps to ' + fmtTime(videoPos(ts.seconds)) + ' in the video';
     chip.append(q, t);
 
     const del = document.createElement('span');
@@ -495,6 +834,7 @@ function renderChips(){
     del.textContent = 'remove';
     del.addEventListener('click', ev => {
       ev.stopPropagation();
+      if(!isAdmin()) return;
       l.timestamps = l.timestamps.filter(x => x !== ts);
       save(); renderChips();
     });
@@ -507,9 +847,10 @@ function renderChips(){
 }
 
 function jumpTo(seconds){
+  const pos = videoPos(seconds);
   if(videoEl){
     const go = () => {
-      videoEl.currentTime = seconds;
+      videoEl.currentTime = pos;
       videoEl.play().catch(() => {});
     };
     if(videoEl.readyState >= 1){ go(); }
@@ -518,13 +859,14 @@ function jumpTo(seconds){
       videoEl.load();
     }
   }else{
-    setNotice('warn', `⏱️ Scrub the player above to <strong>${fmtTime(seconds)}</strong> — this video’s player doesn’t allow automatic jumping.`);
+    setNotice('warn', `⏱️ Scrub the player above to <strong>${fmtTime(pos)}</strong> — this video’s player doesn’t allow automatic jumping.`);
   }
 }
 
 function highlightActiveChip(){
   if(!videoEl) return;
-  const now = videoEl.currentTime;
+  // Compare in Zoom elapsed-time terms: video position + start offset.
+  const now = videoEl.currentTime + startOffsetSec();
   const chips = [...chipsEl.querySelectorAll('.chip')];
   let active = null;
   chips.forEach(c => {
@@ -533,6 +875,86 @@ function highlightActiveChip(){
   });
   if(active) active.classList.add('active');
 }
+
+/* ---------------- AI: read timestamps from a screenshot ---------------- */
+
+const tsNotice = document.getElementById('tsNotice');
+
+function fileToB64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = String(reader.result);
+      const comma = res.indexOf(',');
+      resolve(comma >= 0 ? res.slice(comma + 1) : res);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('aiTsBtn').addEventListener('click', () => {
+  if(!geminiModel){ setNotice('err', 'AI is not available right now.', tsNotice); return; }
+  document.getElementById('aiTsFile').click();
+});
+
+document.getElementById('aiTsFile').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if(!file || !lesson()) return;
+  const btn = document.getElementById('aiTsBtn');
+  btn.disabled = true;
+  const oldTxt = btn.textContent;
+  btn.textContent = '🤖 Reading your notes…';
+  setNotice('', '', tsNotice);
+  try{
+    const b64 = await fileToB64(file);
+    const prompt =
+      'This image is a photo or screenshot of notes (often handwritten) mapping video times to worksheet question numbers. ' +
+      'Each entry pairs a time like "1:27:55" (h:mm:ss or mm:ss, matching a video\'s elapsed-time counter) with a question label like "20a", "Q19b" or "18 d)". ' +
+      'Extract every pair you can read. Normalise labels to the form "Q18d" (capital Q, number, lowercase part letter, no spaces or brackets). ' +
+      'If an entry has a time but no readable label, use the nearest question number context or "Q?" as the label. ' +
+      'Respond with ONLY a JSON array like: [{"label":"Q18d","time":"1:18:25"}] — no other text.';
+    const res = await geminiModel.generateContent({
+      contents: [{ role: 'user', parts: [
+        { text: prompt },
+        { inlineData: { mimeType: file.type || 'image/jpeg', data: b64 } }
+      ]}],
+      generationConfig: {
+        maxOutputTokens: 2048,
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+        thinkingConfig: { thinkingBudget: 0 }
+      }
+    });
+    let raw = (res.response.text() || '').trim();
+    raw = raw.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+    const start = raw.search(/\[/);
+    if(start > 0) raw = raw.slice(start);
+    const items = JSON.parse(raw);
+    if(!Array.isArray(items) || !items.length) throw new Error('no timestamps found in the image');
+
+    const l = lesson();
+    let added = 0, skipped = 0;
+    items.forEach(it => {
+      const seconds = parseTime(it.time);
+      const label = String(it.label || '').trim();
+      if(seconds === null || !label){ skipped++; return; }
+      const dup = l.timestamps.some(t => t.seconds === seconds && t.label === label);
+      if(dup){ skipped++; return; }
+      l.timestamps.push({ label, seconds });
+      added++;
+    });
+    save(); renderChips();
+    setNotice('ok', `✅ Added ${added} timestamp${added === 1 ? '' : 's'} from your screenshot` +
+      (skipped ? ` (${skipped} skipped as duplicates or unreadable)` : '') + '. Tap “remove” on any chip that looks wrong.', tsNotice);
+  }catch(err){
+    console.warn(err);
+    setNotice('err', '❌ Could not read timestamps from that image — ' + (err.message || err) + '. Try a clearer photo, or add them manually below.', tsNotice);
+  }
+  btn.disabled = false;
+  btn.textContent = oldTxt;
+});
 
 /* ---------------- materials (worksheet / answer key) ---------------- */
 
@@ -550,10 +972,16 @@ const BLOCK_DEFS = {
   embed:   { name:'File embed', fields:[{key:'url', label:'Dropbox / Google Drive link to a PDF or file', type:'url'}] }
 };
 
-function tabList(){ return currentTab === 'worksheet' ? lesson().worksheet : lesson().answers; }
+function tabList(){
+  const l = lesson();
+  if(!l) return [];
+  return currentTab === 'worksheet' ? l.worksheet : l.answers;
+}
 function setTabList(arr){
-  if(currentTab === 'worksheet') lesson().worksheet = arr;
-  else lesson().answers = arr;
+  const l = lesson();
+  if(!l) return;
+  if(currentTab === 'worksheet') l.worksheet = arr;
+  else l.answers = arr;
 }
 
 function embedSrc(url){
@@ -628,9 +1056,10 @@ function renderBlocks(){
 const modalBg = document.getElementById('modalBg');
 const modalFields = document.getElementById('modalFields');
 const modalTitle = document.getElementById('modalTitle');
-let modalCtx = null; // { type, block|null }
+let modalCtx = null;
 
 function openBlockModal(type, block){
+  if(!isAdmin()) return;
   modalCtx = { type, block: block || null };
   const def = BLOCK_DEFS[type];
   modalTitle.textContent = (block ? 'Edit ' : 'Add ') + def.name.toLowerCase();
@@ -689,60 +1118,121 @@ const lessonSelect = document.getElementById('lessonSelect');
 
 function renderLessonSelect(){
   lessonSelect.innerHTML = '';
-  data.lessons.forEach(l => {
+  if(!lessons.length){
     const opt = document.createElement('option');
-    opt.value = l.id; opt.textContent = l.name;
-    if(l.id === data.currentLessonId) opt.selected = true;
+    opt.textContent = isAdmin() ? 'No lessons yet — click “New lesson”' : 'No lessons available for your level and subject yet';
+    lessonSelect.appendChild(opt);
+    document.getElementById('lessonTitle').textContent = '🎥 Video';
+    document.getElementById('lessonMeta').innerHTML = '';
+    return;
+  }
+  lessons.forEach(l => {
+    const opt = document.createElement('option');
+    opt.value = l.id;
+    opt.textContent = `${l.level || '—'} · ${l.subject || '—'} — ${l.name}`;
+    if(l.id === currentLessonId) opt.selected = true;
     lessonSelect.appendChild(opt);
   });
-  document.getElementById('lessonTitle').textContent = '🎥 ' + lesson().name;
+  const l = lesson();
+  document.getElementById('lessonTitle').textContent = '🎥 ' + (l ? l.name : 'Video');
+  document.getElementById('lessonMeta').innerHTML = l
+    ? `<span class="meta-tag">${l.level || '—'}</span><span class="meta-tag subject">${l.subject || '—'}</span>`
+    : '';
+  if(l && isAdmin()){
+    document.getElementById('lessonSubject').value = l.subject || 'Science';
+    document.getElementById('lessonLevel').value = l.level || 'P5';
+  }
 }
 
 lessonSelect.addEventListener('change', () => {
-  data.currentLessonId = lessonSelect.value;
-  save(); renderAll();
+  currentLessonId = lessonSelect.value;
+  renderAll();
 });
 
-document.getElementById('newLessonBtn').addEventListener('click', () => {
+document.getElementById('lessonSubject').addEventListener('change', e => {
+  const l = lesson(); if(!l) return;
+  l.subject = e.target.value;
+  save(); renderLessonSelect();
+});
+document.getElementById('lessonLevel').addEventListener('change', e => {
+  const l = lesson(); if(!l) return;
+  l.level = e.target.value;
+  save(); renderLessonSelect();
+});
+
+document.getElementById('newLessonBtn').addEventListener('click', async () => {
   const name = prompt('Name for the new lesson:', 'New lesson');
   if(name === null) return;
-  const l = { id: uid(), name: name.trim() || 'New lesson', videoUrl:'', timestamps:[], worksheet:[], answers:[] };
-  data.lessons.push(l);
-  data.currentLessonId = l.id;
-  save(); renderAll();
+  const l = {
+    id: uid(), name: name.trim() || 'New lesson',
+    subject: 'Science', level: 'P5',
+    videoUrl:'', startOffset: 0, timestamps:[], worksheet:[], answers:[]
+  };
+  lessons.push(l);
+  currentLessonId = l.id;
+  await saveLesson(l);
+  renderAll();
 });
 
 document.getElementById('renameLessonBtn').addEventListener('click', () => {
-  const l = lesson();
+  const l = lesson(); if(!l) return;
   const name = prompt('Rename lesson:', l.name);
   if(name === null) return;
   l.name = name.trim() || l.name;
   save(); renderLessonSelect();
 });
 
-document.getElementById('deleteLessonBtn').addEventListener('click', () => {
-  if(data.lessons.length === 1){ alert('You need at least one lesson.'); return; }
-  if(!confirm(`Delete "${lesson().name}" and all its timestamps and materials?`)) return;
-  data.lessons = data.lessons.filter(l => l.id !== data.currentLessonId);
-  data.currentLessonId = data.lessons[0].id;
-  save(); renderAll();
+document.getElementById('deleteLessonBtn').addEventListener('click', async () => {
+  const l = lesson(); if(!l) return;
+  if(!confirm(`Delete "${l.name}" and all its timestamps and materials?`)) return;
+  lessons = lessons.filter(x => x.id !== l.id);
+  try{ await deleteDoc(doc(db, LESSONS_COL, l.id)); }
+  catch(e){ console.warn('delete failed', e); }
+  currentLessonId = lessons.length ? lessons[0].id : null;
+  renderAll();
 });
 
 /* ---------------- video + timestamp inputs ---------------- */
 
+function readStartOffsetInput(){
+  const inp = document.getElementById('startOffset');
+  const raw = inp.value.trim();
+  if(!raw) return 0;
+  const sec = parseTime(raw);
+  if(sec === null){
+    alert('Please enter the start time as h:mm:ss or mm:ss (e.g. 1:15:00), or leave it blank for 0:00.');
+    inp.focus();
+    return null;
+  }
+  return sec;
+}
+
 document.getElementById('loadVideoBtn').addEventListener('click', () => {
-  const url = document.getElementById('videoUrl').value.trim();
-  lesson().videoUrl = url;
-  save(); renderVideo();
+  const l = lesson(); if(!l) return;
+  const offset = readStartOffsetInput();
+  if(offset === null) return;
+  l.videoUrl = document.getElementById('videoUrl').value.trim();
+  l.startOffset = offset;
+  save(); renderVideo(); renderChips();
+});
+
+// Changing the start time alone (without re-loading the video) also saves.
+document.getElementById('startOffset').addEventListener('change', () => {
+  const l = lesson(); if(!l) return;
+  const offset = readStartOffsetInput();
+  if(offset === null) return;
+  l.startOffset = offset;
+  save(); renderChips();
 });
 
 document.getElementById('addTsBtn').addEventListener('click', () => {
+  const l = lesson(); if(!l) return;
   const labelInp = document.getElementById('tsLabel');
   const timeInp = document.getElementById('tsTime');
   const seconds = parseTime(timeInp.value);
   if(!labelInp.value.trim()){ labelInp.focus(); return; }
   if(seconds === null){ alert('Please enter the time as h:mm:ss or mm:ss (e.g. 1:27:55).'); timeInp.focus(); return; }
-  lesson().timestamps.push({ label: labelInp.value.trim(), seconds });
+  l.timestamps.push({ label: labelInp.value.trim(), seconds });
   labelInp.value = ''; timeInp.value = '';
   save(); renderChips();
   labelInp.focus();
@@ -754,14 +1244,14 @@ document.getElementById('tsTime').addEventListener('keydown', e => {
 /* ---------------- edit mode ---------------- */
 
 document.getElementById('editToggle').addEventListener('change', e => {
-  document.body.classList.toggle('editing', e.target.checked);
+  document.body.classList.toggle('editing', isAdmin() && e.target.checked);
   renderBlocks();
 });
 
-/* ---------------- export / import ---------------- */
+/* ---------------- export / import (admin) ---------------- */
 
 document.getElementById('exportBtn').addEventListener('click', () => {
-  const l = lesson();
+  const l = lesson(); if(!l) return;
   const blob = new Blob([JSON.stringify(l, null, 2)], { type:'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -777,18 +1267,22 @@ document.getElementById('importFile').addEventListener('change', e => {
   const file = e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try{
       const l = JSON.parse(reader.result);
       if(!l || !Array.isArray(l.timestamps)) throw new Error('bad file');
       l.id = uid();
       l.name = l.name || 'Imported lesson';
+      l.subject = l.subject || 'Science';
+      l.level = l.level || 'P5';
+      l.startOffset = Number(l.startOffset) || 0;
       l.worksheet = Array.isArray(l.worksheet) ? l.worksheet : [];
       l.answers = Array.isArray(l.answers) ? l.answers : [];
       l.videoUrl = l.videoUrl || '';
-      data.lessons.push(l);
-      data.currentLessonId = l.id;
-      save(); renderAll();
+      lessons.push(l);
+      currentLessonId = l.id;
+      await saveLesson(l);
+      renderAll();
     }catch(err){
       alert('That file doesn’t look like an exported lesson.');
     }
@@ -801,12 +1295,13 @@ document.getElementById('importFile').addEventListener('change', e => {
 
 function renderAll(){
   renderLessonSelect();
-  document.getElementById('videoUrl').value = lesson().videoUrl || '';
+  document.getElementById('videoUrl').value = (lesson() && lesson().videoUrl) || '';
+  document.getElementById('startOffset').value = startOffsetSec() ? fmtTime(startOffsetSec()) : '';
   renderVideo();
   renderChips();
   renderBlocks();
 }
-renderAll();
+show('loading');
 </script>
 </body>
 </html>
