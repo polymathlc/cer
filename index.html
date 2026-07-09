@@ -7928,7 +7928,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.91.1';
+const APP_VERSION = 'v1.92.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9598,6 +9598,32 @@ function renderBlocks() {
                data-block-id="${block.id}" data-field="content"
                onpaste="handleRichImagePaste('${block.id}', 'content', event)"
                oninput="saveBlockContent('${block.id}', 'content', this.innerHTML)">${block.content || ''}</div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);">
+            <div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);margin-bottom:8px;">🖼️ Picture for this explanation <span style="font-weight:400;">(optional — students see it with the explanation after answering)</span></div>
+            <div class="image-paste-zone" id="imgPaste_${block.id}" tabindex="0"
+                 onclick="this.focus()"
+                 onpaste="handleImagePaste('${block.id}', event)"
+                 ondragover="event.preventDefault(); this.classList.add('dragover')"
+                 ondragleave="this.classList.remove('dragover')"
+                 ondrop="handleImageDrop('${block.id}', event)">
+              📋 Click here, then paste a picture (Ctrl/⌘+V) — or drop an image to upload it
+            </div>
+            <div class="image-url-input">
+              <input class="form-input" id="imgUrlInput_${block.id}" type="text" placeholder="…or paste an image URL (Dropbox, Drive, https://…)"
+                     value="${escapeHtml(block.url || '')}"
+                     oninput="saveBlockContent('${block.id}', 'url', this.value); previewImage('${block.id}', this.value)">
+            </div>
+            <div class="image-preview" id="imgPreview_${block.id}">
+              ${block.url ? `<img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="lazy" decoding="async" style="${imgSizeStyle(block)}">` : ''}
+            </div>
+            <div class="img-size-bar" id="imgSizeBar_${block.id}" style="display:${block.url ? 'flex' : 'none'};align-items:center;gap:8px;margin-top:8px;">
+              <span style="font-size:0.8rem;color:var(--text-muted);">Size</span>
+              <button type="button" class="btn btn-outline" style="padding:2px 12px;font-weight:700;" onclick="adjustImgScale('${block.id}',-1)" title="Smaller (min 30%)">−</button>
+              <span id="imgSizeLabel_${block.id}" style="font-family:'Space Mono',monospace;font-size:0.8rem;min-width:46px;text-align:center;">${Math.round(imgScale(block) * 100)}%</span>
+              <button type="button" class="btn btn-outline" style="padding:2px 12px;font-weight:700;" onclick="adjustImgScale('${block.id}',1)" title="Larger (max 100%)">+</button>
+              <button type="button" class="btn btn-outline" style="padding:2px 12px;" title="Remove this picture" onclick="saveBlockContent('${block.id}','url',''); const i=document.getElementById('imgUrlInput_${block.id}'); if(i) i.value=''; previewImage('${block.id}','');">✕ Remove</button>
+            </div>
+          </div>
         `;
         break;
 
@@ -13463,7 +13489,7 @@ function showPrintPreview(qid, btnEl) {
         html += `<div class="preview-block">${renderTableReadonly(block, 'print-table')}</div>`;
         break;
       case 'explanation':
-        html += `<div class="preview-block" style="color:var(--text-muted);font-style:italic;">${block.content || ''}</div>`;
+        html += `<div class="preview-block" style="color:var(--text-muted);font-style:italic;">${block.content || ''}${block.url ? `<div style="margin-top:8px;text-align:center;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="this.parentNode.style.display='none'" loading="lazy" decoding="async" style="${imgSizeStyle(block)};border-radius:8px;"></div>` : ''}</div>`;
         break;
       case 'video':
         if (block.url) html += `<div class="preview-block" style="font-style:italic;color:var(--text-muted);">Video: ${escapeHtml(block.url)}</div>`;
@@ -16832,7 +16858,9 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
           }
           case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
           case 'explanation': {
-            if (akExtras && stripHtml(block.content)) qSections.push({ label: 'Explanation', content: sanitizeAnswerKeyHtml(block.content) });
+            if (akExtras && (stripHtml(block.content) || block.url)) {
+              qSections.push({ label: 'Explanation', content: sanitizeAnswerKeyHtml(block.content) + (block.url ? `<div><img src="${escapeHtml(transformImageUrl(block.url))}" style="max-width:100%;max-height:180pt;"></div>` : '') });
+            }
             break;
           }
           default: {
@@ -18295,15 +18323,19 @@ function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
   const c = document.querySelector(containerSel);
   if (!c) return;
   c.querySelectorAll('.post-explanation').forEach(el => el.remove());
-  const exps = ((q && q.blocks) || []).filter(b => b.type === 'explanation' && stripHtml(b.content || '').trim());
-  const blockHtml = exps.map(b => `<div style="line-height:1.7;margin-bottom:4px;">${b.content}</div>`).join('');
+  const exps = ((q && q.blocks) || []).filter(b => b.type === 'explanation' && (stripHtml(b.content || '').trim() || String(b.url || '').trim()));
+  const expImg = b => String(b.url || '').trim()
+    ? `<div style="margin:10px 0 2px;text-align:center;"><img src="${escapeHtml(transformImageUrl(b.url))}" onerror="this.parentNode.style.display='none'" loading="lazy" decoding="async" style="${imgSizeStyle(b)};border-radius:8px;"></div>`
+    : '';
+  const blockHtml = exps.map(b => `<div style="line-height:1.7;margin-bottom:4px;">${b.content || ''}${expImg(b)}</div>`).join('');
+  const expImgsOnly = exps.map(expImg).join(''); // authored pictures still show alongside an AI explanation
   const aiText2 = (aiText && String(aiText).trim()) ? String(aiText).trim() : '';
   let cards = '';
   // A.I. Explanation card on top — the feedback specific to the student's answer.
   if (aiText2) {
     cards +=
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
-        <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">🤖 A.I. Explanation</div><div style="line-height:1.7;">${escapeHtml(aiText2)}</div></div>`;
+        <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">🤖 A.I. Explanation</div><div style="line-height:1.7;">${escapeHtml(aiText2)}</div>${expImgsOnly}</div>`;
   } else if (blockHtml) {
     // The question's authored explanation is generic (written at authoring time),
     // so it's only shown as a fallback when there's no answer-specific A.I.
@@ -25412,7 +25444,8 @@ function _sdExtractMcq(q) {
   const optionsHtml = mcq.options.map(o => String(o.text || '').trim());
   if (optionsHtml.length < 2 || mcq.options.some(o => !stripHtmlToText(o.text || '').trim())) return null;
   const exB = blocks.find(b => b.type === 'explanation');
-  const explainHtml = exB && exB.content ? String(exB.content) : '';
+  let explainHtml = exB && exB.content ? String(exB.content) : '';
+  if (exB && String(exB.url || '').trim()) explainHtml += `<div style="margin:8px 0;text-align:center;"><img src="${escapeHtml(transformImageUrl(exB.url))}" loading="lazy" decoding="async" style="${imgSizeStyle(exB)};border-radius:8px;"></div>`;
   const explain = exB ? stripHtmlToText(exB.content || '').trim() : '';
   const qtext = plain.join(' ').replace(/\s+/g, ' ').trim() || (q.title || 'See the diagram');
   // Complexity/length proxy so the games can serve longer, meatier questions on
@@ -27897,7 +27930,8 @@ function _ppExtractOeq(q, pool){
   const answer = options.indexOf(correct);
   const html = stem.html + `<div style="margin:12px 0 2px;padding:9px 12px;background:rgba(128,128,128,0.14);border:1px dashed rgba(128,128,128,0.6);border-radius:9px;font-size:0.85em;line-height:1.45;">✍️ <b>Open-ended:</b> think of your own answer first, then pick the correct <b>model answer</b> below.</div>`;
   const exB = blocks.find(b => b.type === 'explanation');
-  const explainHtml = exB && exB.content ? String(exB.content) : '';
+  let explainHtml = exB && exB.content ? String(exB.content) : '';
+  if (exB && String(exB.url || '').trim()) explainHtml += `<div style="margin:8px 0;text-align:center;"><img src="${escapeHtml(transformImageUrl(exB.url))}" loading="lazy" decoding="async" style="${imgSizeStyle(exB)};border-radius:8px;"></div>`;
   const explain = exB ? stripHtmlToText(exB.content || '').trim() : '';
   const qtext = stem.plain.join(' ').replace(/\s+/g, ' ').trim() || (q.title || 'See the question');
   const mediaCount = blocks.filter(b => b.type === 'image' || b.type === 'table').length;
