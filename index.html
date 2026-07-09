@@ -5113,7 +5113,7 @@ option {
       <div class="page-body">
         <div id="notesBody"></div>
       </div>
-      <input type="file" id="notesFileInput" accept="application/pdf,image/*" style="display:none" onchange="const f=this.files[0]; this.value=''; if(f) notesHandleFile(f);">
+      <input type="file" id="notesFileInput" accept="application/pdf,image/*" multiple style="display:none" onchange="const fs=[...this.files]; this.value=''; if(fs.length) notesHandleFiles(fs);">
     </div>
 
     <!-- ===== PAGE: STUDENT VIEW ===== -->
@@ -7404,14 +7404,14 @@ function notesRenderBody() {
   <div class="tn-wrap">
     <div class="tn-upload">
       <h3>📚 Upload notes</h3>
-      <p class="tn-sub">Upload a PDF (or a photo) of your teaching notes. The AI reads it and extracts the <b>topics</b>, the <b>keywords</b> students must use, the <b>marking standards</b> and the key facts — then follows them whenever it builds questions or marks answers. Only you can see this page.</p>
+      <p class="tn-sub">Upload one or more PDFs and/or photos of your teaching notes — select several files at once and they are read <b>together as one set of notes</b>. The AI extracts the <b>topics</b>, the <b>keywords</b> students must use, the <b>marking standards</b> and the key facts — then follows them whenever it builds questions or marks answers. Only you can see this page.</p>
       <div class="form-group" style="margin-bottom:0;">
         <label class="form-label">Comment for this upload <span style="font-weight:400;color:var(--text-muted);">(optional — e.g. “focus on the keywords in the summary table”)</span></label>
         <textarea id="notesComment" class="form-input" rows="2" placeholder="Any guidance about this document for the AI…" style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
       </div>
       <div class="tn-upbtns">
-        <button class="btn btn-primary" id="notesUploadBtn" onclick="document.getElementById('notesFileInput').click()">📄 Choose PDF &amp; analyse</button>
-        <span style="font-size:0.78rem;color:var(--text-muted);">PDF or image, up to ~18&nbsp;MB</span>
+        <button class="btn btn-primary" id="notesUploadBtn" onclick="document.getElementById('notesFileInput').click()">📄 Choose file(s) &amp; analyse</button>
+        <span style="font-size:0.78rem;color:var(--text-muted);">PDFs and/or images, up to ~18&nbsp;MB per upload — multiple files are analysed together</span>
       </div>
       <div id="notesStatus"></div>
     </div>
@@ -7430,20 +7430,29 @@ function _notesSetStatus(msg) {
   if (btn) btn.disabled = !!msg;
 }
 
-async function notesHandleFile(file) {
-  if (!file || !currentUser || currentUser.role !== 'admin') return;
+async function notesHandleFiles(files) {
+  files = Array.isArray(files) ? files : [files];
+  if (!files.length || !currentUser || currentUser.role !== 'admin') return;
   if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't set up yet — add your reCAPTCHA site key in the code", 'info'); return; }
-  const isPdf = file.type === 'application/pdf';
-  const isImg = file.type && file.type.startsWith('image/');
-  if (!isPdf && !isImg) { showToast('Please choose a PDF (or an image of your notes)', 'error'); return; }
-  if (file.size > 18 * 1024 * 1024) { showToast('File is too large (max ~18 MB)', 'error'); return; }
+  for (const f of files) {
+    const ok = f.type === 'application/pdf' || (f.type && f.type.startsWith('image/'));
+    if (!ok) { showToast(`“${f.name}” isn't a PDF or image — please choose PDFs and/or images only`, 'error'); return; }
+  }
+  const totalSize = files.reduce((s, f) => s + f.size, 0);
+  if (totalSize > 18 * 1024 * 1024) { showToast('Files are too large together (max ~18 MB in one upload) — split them into two uploads', 'error'); return; }
   const comment = (document.getElementById('notesComment') ? document.getElementById('notesComment').value : '').trim();
-  _notesSetStatus(`⏳ Reading “${file.name}” and extracting topics, keywords and marking standards…`);
+  _notesSetStatus(files.length === 1
+    ? `⏳ Reading “${files[0].name}” and extracting topics, keywords and marking standards…`
+    : `⏳ Reading ${files.length} files together and extracting topics, keywords and marking standards…`);
   try {
-    const b64 = await _fileToBase64(file);
+    const media = [];
+    for (const f of files) media.push({ mimeType: f.type, data: await _fileToBase64(f) });
     const topics = currentTopics();
+    const docDesc = files.length === 1
+      ? `the attached ${files[0].type === 'application/pdf' ? 'PDF' : 'image'}`
+      : `the ${files.length} attached files, which together form ONE set of notes — read them in the order attached and analyse them as a single document`;
     const prompt =
-      `You are analysing a science teacher's reference notes (the attached ${isPdf ? 'PDF' : 'image'}) for a Singapore primary-school (PSLE) science question bank.\n` +
+      `You are analysing a science teacher's reference notes (${docDesc}) for a Singapore primary-school (PSLE) science question bank.\n` +
       (comment ? `The teacher says about this document: "${comment}".\n` : '') +
       `Extract the teaching content and return ONLY JSON:\n` +
       `{"title":"short descriptive title for these notes",` +
@@ -7452,12 +7461,12 @@ async function notesHandleFile(file) {
       `"markingStandards":"how answers should be phrased and marked according to this document: required sentence patterns, terms that MUST appear for full marks, acceptable alternatives, common mistakes to penalise (plain text, at most 1200 characters)",` +
       `"keyFacts":"the key facts and concepts taught, one short line each, separated by \\n (plain text, at most 1500 characters)"}\n` +
       `Rules:\n- 10 to 40 keywords, each 1-4 words, no duplicates, most important first.\n- "topics" only from the given list; include every topic the document genuinely covers.\n- Plain text only, no markdown.`;
-    const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 3072, json: true });
+    const raw = await askGeminiVision(prompt, media, { maxOutputTokens: 3072, json: true });
     const p = _parseAIJson(raw) || {};
     const topicLc = new Map(topics.map(t => [t.toLowerCase().trim(), t]));
     const note = {
-      title: String(p.title || file.name || 'Untitled notes').slice(0, 140),
-      fileName: file.name || '',
+      title: String(p.title || files[0].name || 'Untitled notes').slice(0, 140),
+      fileName: files.map(f => f.name || '').filter(Boolean).join(', '),
       comment,
       topics: (Array.isArray(p.topics) ? p.topics : []).map(t => topicLc.get(String(t).toLowerCase().trim())).filter(Boolean),
       keywords: (Array.isArray(p.keywords) ? p.keywords : []).map(s => String(s).trim()).filter(Boolean).slice(0, 60),
@@ -7928,7 +7937,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.91.2';
+const APP_VERSION = 'v1.92.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28278,7 +28287,7 @@ window.ppTopicOpen = ppTopicOpen;
 window.ppTopicClose = ppTopicClose;
 window.ppTopicShowAll = ppTopicShowAll;
 window.ppTopicPrint = ppTopicPrint;
-window.notesHandleFile = notesHandleFile;
+window.notesHandleFiles = notesHandleFiles;
 window.notesEditOpen = notesEditOpen;
 window.notesEditClose = notesEditClose;
 window.notesEditSave = notesEditSave;
