@@ -6928,9 +6928,9 @@ option {
     <div class="overlay-head"><h3>✏️ Touch up &amp; label</h3><button class="close" onclick="closeAnnotTool()" type="button">×</button></div>
     <div class="overlay-body" style="text-align:center;">
       <div class="annot-tools">
-        <button type="button" class="annot-tool" data-atool="erase" title="Paint white over words to erase them">🩹 Erase</button>
-        <button type="button" class="annot-tool" data-atool="paint" title="Paint over with the chosen colour">🖌️ Paint</button>
-        <button type="button" class="annot-tool" data-atool="line" title="Drag to draw a straight label line">📏 Line</button>
+        <button type="button" class="annot-tool" data-atool="erase" title="Paint white over words to erase them — hold Shift to erase in a straight line">🩹 Erase</button>
+        <button type="button" class="annot-tool" data-atool="paint" title="Paint over with the chosen colour — hold Shift to paint in a straight line">🖌️ Paint</button>
+        <button type="button" class="annot-tool" data-atool="line" title="Drag to draw a straight label line — hold Shift to snap to 45° angles">📏 Line</button>
         <button type="button" class="annot-tool" data-atool="text" title="Click to drop a text label">🔤 Text</button>
         <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Colour <input type="color" id="annotColor" value="#e23c3c" style="width:34px;height:28px;padding:0;border:1px solid var(--border);border-radius:6px;"></label>
         <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Size <input type="range" id="annotSize" min="2" max="40" value="8"></label>
@@ -7969,7 +7969,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.95.0';
+const APP_VERSION = 'v1.96.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -10901,6 +10901,13 @@ function _annotPt(e) {
   const scale = c.width / r.width;
   return { x: (e.clientX - r.left) * scale, y: (e.clientY - r.top) * (c.height / r.height), dispX: e.clientX - r.left, dispY: e.clientY - r.top, scale };
 }
+// Snap the end point to the nearest 45° from the start (PowerPoint-style).
+function _annotSnap45(s, p) {
+  const dx = p.x - s.x, dy = p.y - s.y;
+  const ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+  const len = Math.hypot(dx, dy);
+  return { x: s.x + Math.cos(ang) * len, y: s.y + Math.sin(ang) * len };
+}
 function _annotDown(e) {
   if (!_annot) return;
   e.preventDefault();
@@ -10916,6 +10923,8 @@ function _annotDown(e) {
   }
   // erase / paint brush
   _annot.drawing = true;
+  _annot.last = p;
+  _annot.shiftSeg = null; // Shift-straight segment state (start pt + snapshot)
   const lw = Math.max(1, Math.round(_annot.size * p.scale));
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.strokeStyle = _annot.tool === 'erase' ? '#ffffff' : _annot.color;
@@ -10929,16 +10938,42 @@ function _annotMove(e) {
   e.preventDefault();
   const p = _annotPt(e), ctx = _annot.ctx;
   if (_annot.tool === 'line') {
+    const end = e.shiftKey ? _annotSnap45(_annot.start, p) : p;
     ctx.putImageData(_annot.snap, 0, 0);
     ctx.strokeStyle = _annot.color; ctx.lineCap = 'round';
     ctx.lineWidth = Math.max(1, Math.round(_annot.size * p.scale));
-    ctx.beginPath(); ctx.moveTo(_annot.start.x, _annot.start.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(_annot.start.x, _annot.start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
     return;
+  }
+  // Hold Shift while erasing/painting: the segment from where Shift was
+  // pressed follows the cursor as ONE straight line (snapped to 45° steps),
+  // live-previewed by restoring the snapshot — just like PowerPoint.
+  if (e.shiftKey) {
+    if (!_annot.shiftSeg) {
+      _annot.shiftSeg = {
+        start: _annot.last,
+        snap: ctx.getImageData(0, 0, _annot.canvas.width, _annot.canvas.height)
+      };
+    }
+    const s = _annot.shiftSeg.start;
+    const q = _annotSnap45(s, p);
+    ctx.putImageData(_annot.shiftSeg.snap, 0, 0);
+    ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(q.x, q.y);
+    _annot.last = q;
+    return;
+  }
+  if (_annot.shiftSeg) {
+    // Shift released mid-stroke — the straight segment stays; carry on
+    // freehand from its end.
+    _annot.shiftSeg = null;
+    ctx.beginPath(); ctx.moveTo(_annot.last.x, _annot.last.y);
   }
   ctx.lineTo(p.x, p.y); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(p.x, p.y);
+  _annot.last = p;
 }
-function _annotUp() { if (_annot) { _annot.drawing = false; _annot.start = null; _annot.snap = null; } }
+function _annotUp() { if (_annot) { _annot.drawing = false; _annot.start = null; _annot.snap = null; _annot.shiftSeg = null; _annot.last = null; } }
 function _annotPlaceText(p) {
   const stage = document.getElementById('annotStage');
   if (!stage) return;
