@@ -4583,6 +4583,10 @@ option {
       </div>
     </div>
     <nav class="sidebar-nav">
+      <!-- Home (students) — the simple landing screen -->
+      <div class="nav-item student-only" data-page="home" onclick="navigateTo('home')" style="display:none;">
+        <span class="ico">🏠</span> Home
+      </div>
       <!-- Community (everyone) -->
       <div class="nav-item" data-page="community" onclick="navigateTo('community')">
         <span class="ico">🏛️</span> Community
@@ -4717,21 +4721,9 @@ option {
       <div class="nav-item rpg-el" data-page="adventure" onclick="navigateTo('adventure')" style="display:none;">
         <span class="ico">🏰</span> Dungeon
       </div>
-      <!-- Arcade mini-games — share the question bank, hidden together via "Hide game" -->
-      <div class="nav-item rpg-el" data-page="defenders" onclick="navigateTo('defenders')" style="display:none;" title="Science Defenders — Tower Defense MCQ game. Answer science questions to earn gold and build towers.">
-        <span class="ico">🧪</span> Science Defenders
-      </div>
-      <div class="nav-item rpg-el" data-page="raiders" onclick="navigateTo('raiders')" style="display:none;" title="Science Raiders — roguelite top-down shooter. Clear rooms, answer science questions to pick power-ups.">
-        <span class="ico">👾</span> Science Raiders
-      </div>
-      <div class="nav-item rpg-el" data-page="spire" onclick="navigateTo('spire')" style="display:none;" title="Science Spire — Slay-the-Spire-style deck-building dungeon. Answer science questions, build a deck, open card packs.">
-        <span class="ico">🃏</span> Science Spire
-      </div>
-      <div class="nav-item rpg-el" data-page="legends" onclick="navigateTo('legends')" style="display:none;" title="Science Legends (BETA) — Diablo-style top-down action RPG. 3 classes, big skill trees, hordes of enemies, and a science question every 20 seconds.">
-        <span class="ico">⚔️</span> Science Legends <span style="margin-left:auto;font-size:0.58rem;font-weight:800;letter-spacing:0.06em;background:linear-gradient(135deg,#8E24AA,#7B1FA2);color:#fff;border-radius:999px;padding:2px 7px;">BETA</span>
-      </div>
-      <div class="nav-item rpg-el" data-page="slayers" onclick="navigateTo('slayers')" style="display:none;" title="Science Slayers (BETA) — dungeon crawler on the Legends engine. Procedural floors, idle monster packs, magic packs & legendary uniques, boss loot, and questions driven by action points.">
-        <span class="ico">🗡️</span> Science Slayers <span style="margin-left:auto;font-size:0.58rem;font-weight:800;letter-spacing:0.06em;background:linear-gradient(135deg,#8E24AA,#7B1FA2);color:#fff;border-radius:999px;padding:2px 7px;">BETA</span>
+      <!-- Arcade — all five mini-games live inside one page now -->
+      <div class="nav-item rpg-el" data-page="arcade" onclick="navigateTo('arcade')" style="display:none;" title="Arcade — Science Defenders, Raiders, Spire, Legends and Slayers, all in one place. Each play costs 1 game credit.">
+        <span class="ico">🕹️</span> Arcade
       </div>
       <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire.">
         <span class="ico">🎨</span> Game Objects
@@ -6003,6 +5995,38 @@ option {
       <iframe id="slayersFrame" class="embed-frame" title="Science Slayers — Dungeon Crawler MCQ (BETA)"></iframe>
     </div>
 
+    <!-- ===== PAGE: HOME (Student) — the simple landing screen ===== -->
+    <div class="page" id="page-home">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2 id="homeGreeting">🏠 Home</h2>
+          </div>
+          <div class="subtitle">Your practice at a glance — pick up right where you left off.</div>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:880px;">
+        <div id="homeContainer"></div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: ARCADE — all five mini-games in one place ===== -->
+    <div class="page" id="page-arcade">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>🕹️ Arcade</h2>
+          </div>
+          <div class="subtitle">Five science mini-games, one place. Every play costs 1 game credit — answer practice questions to earn more.</div>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:880px;">
+        <div id="arcadeContainer"></div>
+      </div>
+    </div>
+
     <!-- ===== PAGE: COMMUNITY (everyone) — bulletin board, news, encounter quests ===== -->
     <div class="page" id="page-community">
       <div class="page-header">
@@ -6865,6 +6889,24 @@ option {
 .qp-qtext{ line-height:1.85; font-size:0.97rem; margin:0 0 12px; color:var(--on-surface,#1c1c19); }
 .qp-qtext + .qp-qtext{ margin-top:-2px; }
 .qp-part .open-answer-section{ margin-bottom:10px; }
+/* ── Student Home & Arcade ───────────────────────────────────────────── */
+.home-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }
+.home-card{ background:var(--surface,#fff); border:1px solid var(--border); border-radius:16px; padding:24px 26px; display:flex; flex-direction:column; gap:12px; }
+.home-card.wide{ grid-column:1 / -1; }
+.home-card h3{ margin:0; font-size:1rem; display:flex; align-items:center; gap:8px; }
+.home-big{ font-size:2.1rem; font-weight:800; line-height:1.15; }
+.home-sub{ color:var(--text-muted); font-size:0.87rem; line-height:1.65; }
+.home-card .btn{ margin-top:auto; align-self:flex-start; }
+.home-bar{ height:9px; background:var(--border); border-radius:99px; overflow:hidden; }
+.home-bar-fill{ height:100%; background:var(--primary); border-radius:99px; transition:width 0.3s ease; }
+.home-recent-row{ display:flex; align-items:baseline; gap:12px; padding:9px 0; border-bottom:1px solid var(--border); font-size:0.88rem; }
+.home-recent-row:last-child{ border-bottom:none; }
+.arcade-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:18px; }
+.arcade-card{ background:var(--surface,#fff); border:1px solid var(--border); border-radius:16px; padding:26px 24px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.arcade-card .arcade-ico{ font-size:2.7rem; line-height:1; margin-bottom:2px; }
+.arcade-card h3{ margin:0; font-size:1.02rem; }
+.arcade-card p{ margin:0; color:var(--text-muted); font-size:0.84rem; line-height:1.65; }
+.arcade-card .btn{ margin-top:10px; }
 </style>
 <div class="overlay" id="spireBookOverlay">
   <div class="overlay-card spirebook">
@@ -7943,9 +7985,15 @@ async function enterApp(user) {
     renderWsQuestions();
     renderSavedWorksheets();
     await loadCerPerf();
+    // The Home screen rendered before the bank/report finished loading —
+    // refresh it now the real numbers are in (if the student is still there).
+    if (document.querySelector('#page-home.active')) renderHomePage();
   }
 
-  rpgInit().catch(e => console.warn('rpg init', e));
+  rpgInit().then(() => {
+    // Hero state carries the streak/day counters the Home screen shows.
+    if (document.querySelector('#page-home.active')) renderHomePage();
+  }).catch(e => console.warn('rpg init', e));
 
   // Load message inbox so the unread badge shows on the Messages nav item.
   loadMessages().then(updateMsgBadge).catch(e => console.warn('messages init', e));
@@ -7969,7 +8017,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.97.0';
+const APP_VERSION = 'v1.98.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -7990,18 +8038,18 @@ function configureSidebarForRole(role) {
   } else {
     adminItems.forEach(el => el.style.display = 'none');
     studentItems.forEach(el => el.style.display = '');
-    // Set worksheet page as default active for students
+    // Set the Home page as default active for students
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    const wsNav = document.querySelector('.nav-item[data-page="worksheet"]');
-    if (wsNav) wsNav.classList.add('active');
+    const homeNav = document.querySelector('.nav-item[data-page="home"]');
+    if (homeNav) homeNav.classList.add('active');
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    const wsPage = document.getElementById('page-worksheet');
-    if (wsPage) wsPage.classList.add('active');
+    const homePage = document.getElementById('page-home');
+    if (homePage) homePage.classList.add('active');
   }
-  // Community is the default landing screen for everyone; also start the
-  // realtime quest watch so the countdown chip works on every page.
+  // Students land on their simple Home screen; admins keep Community. Also
+  // start the realtime quest watch so the countdown chip works on every page.
   try { commStartGlobalWatch(); } catch (_) {}
-  try { if (document.getElementById('page-community')) navigateTo('community'); } catch (_) {}
+  try { navigateTo(role === 'admin' ? 'community' : 'home'); } catch (_) {}
 }
 
 async function loadAdminQuestions() {
@@ -8132,12 +8180,15 @@ function applyMcqCategory(q) {
 function navigateTo(page) {
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
-  if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'defenders' || page === 'raiders' || page === 'legends' || page === 'slayers') && rpgGameHidden()) page = rpgHomePage();
+  if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'arcade' || page === 'defenders' || page === 'raiders' || page === 'spire' || page === 'legends' || page === 'slayers') && rpgGameHidden()) page = rpgHomePage();
   if (page !== 'adventure') advAbandon();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
-  document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
+  // The five games live inside the Arcade — highlight its nav item for them.
+  const navItem = document.querySelector(`.nav-item[data-page="${page}"]`) ||
+    (['defenders', 'raiders', 'spire', 'legends', 'slayers'].includes(page) ? document.querySelector('.nav-item[data-page="arcade"]') : null);
+  if (navItem) navItem.classList.add('active');
   // Close sidebar on mobile after navigation
   const sidebar = document.getElementById('sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
@@ -8237,6 +8288,8 @@ function navigateTo(page) {
   }
   if (page === 'gameassets') loadGameAssets();
   if (page === 'messages') loadMessagesPage();
+  if (page === 'home') renderHomePage();
+  if (page === 'arcade') renderArcadePage();
   // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
 }
@@ -18591,6 +18644,164 @@ function _topicAccuracy(p) {
     .map(([t, d]) => ({ topic: t, acc: d.possible ? Math.round(100 * d.score / d.possible) : 0, n: d.attempts || 0 }))
     .filter(x => x.n > 0);
 }
+// =====================================================================
+// STUDENT HOME — one simple screen: continue today's practice, questions
+// due for review, weakest topic, recent progress, and one Games button.
+// =====================================================================
+let _homeWeakestTopic = '';
+
+// Questions this student has attempted but never fully cracked (best < 100%),
+// weakest and least-recently-tried first. In-syllabus, within level, markable.
+function _homeReviewPool() {
+  const stats = _qAttemptStats || {};
+  const pool = (questionBank || []).filter(q => {
+    if (!q || q.id == null) return false;
+    if (!questionHasMarkableAnswer(q) || !qInSyllabus(q) || !qWithinStudentLevel(q)) return false;
+    const r = stats[String(q.id)];
+    return !!(r && r.n > 0 && (r.best || 0) < 1);
+  });
+  const best = q => (stats[String(q.id)] && stats[String(q.id)].best) || 0;
+  const last = q => (stats[String(q.id)] && stats[String(q.id)].last) || 0;
+  return pool.sort((a, b) => (best(a) - best(b)) || (last(a) - last(b)));
+}
+
+async function renderHomePage() {
+  const c = document.getElementById('homeContainer');
+  if (!c) return;
+  const first = ((currentUser && currentUser.name) || '').trim().split(/\s+/)[0] || '';
+  const g = document.getElementById('homeGreeting');
+  if (g) g.textContent = first ? `👋 Hi, ${first}!` : '🏠 Home';
+  c.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">Loading your day…</div>';
+  try { await loadAttemptStats(); } catch (_) {}
+  try { if (!cerPerf) await loadCerPerf(); } catch (_) {}
+  const p = cerPerf || _emptyPerf();
+
+  // Today's practice (the 10-a-day goal that also feeds the voucher streak).
+  const s = (rpgState && rpgState.streak) || {};
+  const todayQ = (s.dayKey === advToday()) ? (s.dayMarks || 0) : 0;
+  const goal = 10;
+  const streakDays = s.count || 0;
+
+  // Due for review + weakest topic (needs 2+ attempts to be meaningful).
+  const review = _homeReviewPool();
+  const topics = _topicAccuracy(p).sort((a, b) => (a.acc - b.acc) || (b.n - a.n));
+  const weakest = topics.find(t => t.n >= 2) || topics[0] || null;
+  _homeWeakestTopic = weakest ? weakest.topic : '';
+
+  // Recent progress: last five marked questions, newest first.
+  const recent = (p.recent || []).slice(-5).reverse();
+  const recentRows = recent.map(r => {
+    const col = r.pct >= 80 ? 'var(--primary)' : r.pct >= 50 ? 'var(--accent-orange)' : 'var(--accent-red)';
+    return `<div class="home-recent-row">
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.title || r.topic || 'Question')}</span>
+      <span style="color:var(--text-muted);font-size:0.76rem;flex:0 0 auto;">${escapeHtml(r.topic || '')}</span>
+      <b style="color:${col};flex:0 0 auto;">${Number(r.pct) || 0}%</b>
+    </div>`;
+  }).join('');
+
+  const pctToday = Math.min(100, Math.round((todayQ / goal) * 100));
+  c.innerHTML = `
+    <div class="home-grid">
+      <div class="home-card wide">
+        <h3>📘 Today's practice</h3>
+        <div class="home-big">${Math.min(todayQ, goal)}<span style="font-size:1.05rem;color:var(--text-muted);font-weight:600;"> / ${goal} questions</span></div>
+        <div class="home-bar"><div class="home-bar-fill" style="width:${pctToday}%;"></div></div>
+        <div class="home-sub">${todayQ >= goal ? '🎉 Daily goal done — anything more is bonus!' : streakDays ? `🔥 ${streakDays}-day streak — answer ${goal - todayQ} more to keep today counting.` : 'Answer questions every day to build a practice streak.'}</div>
+        <button class="btn btn-primary btn-lg" onclick="homeContinuePractice()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          ${todayQ > 0 ? "Continue today's practice" : "Start today's practice"}
+        </button>
+      </div>
+      <div class="home-card">
+        <h3>🔁 Due for review</h3>
+        <div class="home-big">${review.length}<span style="font-size:1.05rem;color:var(--text-muted);font-weight:600;"> question${review.length === 1 ? '' : 's'}</span></div>
+        <div class="home-sub">${review.length ? "Ones you haven't fully cracked yet — beat your best score." : "Nothing waiting — everything you've tried is mastered!"}</div>
+        ${review.length ? `<button class="btn btn-blue" onclick="homeStartReview()">Review ${Math.min(review.length, 10)} now</button>` : ''}
+      </div>
+      <div class="home-card">
+        <h3>🎯 Weakest topic</h3>
+        ${weakest ? `
+        <div class="home-big" style="font-size:1.35rem;">${escapeHtml(weakest.topic)}</div>
+        <div class="home-sub">${weakest.acc}% correct over ${weakest.n} attempt${weakest.n === 1 ? '' : 's'} — a little focus goes a long way.</div>
+        <button class="btn btn-blue" onclick="homePractiseWeakest()">Practise this topic</button>` : `
+        <div class="home-sub">Answer a few questions and your weakest topic will show up here with a one-tap practice button.</div>`}
+      </div>
+      <div class="home-card wide">
+        <h3>📈 Recent progress</h3>
+        ${recent.length ? `
+        <div class="home-sub">Performance score <b style="color:${_scoreColor(p.score100 || 0)};">${p.score100 || 0}/100</b> · ${p.attempts || 0} question${(p.attempts || 0) === 1 ? '' : 's'} marked so far.</div>
+        <div>${recentRows}</div>
+        <button class="btn btn-outline" onclick="navigateTo('myreport')">View full report</button>` : `
+        <div class="home-sub">Your last few marked questions will appear here once you start practising.</div>`}
+      </div>
+      <div class="home-card wide" style="align-items:center;text-align:center;">
+        <div style="font-size:2.4rem;line-height:1;">🕹️</div>
+        <h3 style="justify-content:center;">Games</h3>
+        <div class="home-sub" style="max-width:420px;">All five science games live in the Arcade. Every play costs 1 game credit — practice earns you more.</div>
+        <button class="btn btn-primary btn-lg" onclick="navigateTo('arcade')" style="align-self:center;">Open the Arcade</button>
+      </div>
+    </div>`;
+}
+
+// Home actions — each hands over to an existing practice surface.
+function homeContinuePractice() {
+  navigateTo('quickpractice');
+  startQuickPractice();
+}
+function homeStartReview() {
+  const pool = _homeReviewPool();
+  if (!pool.length) { showToast('Nothing to review — great work!', 'success'); return; }
+  _questRun = null;
+  qpQueue = pool.slice(0, 10);
+  qpIndex = -1;
+  qpAnswered = 0;
+  qpSessionResults = [];
+  navigateTo('quickpractice');
+  showToast('🔁 Review session — beat your old scores!', 'info');
+  preloadQueueImages(qpQueue).then(() => loadNextQpQuestion()).catch(() => loadNextQpQuestion());
+}
+function homePractiseWeakest() {
+  navigateTo('topicalpractice');
+  if (_homeWeakestTopic) tpStartTopic(_homeWeakestTopic);
+}
+
+// =====================================================================
+// ARCADE — the five mini-games grouped on one page (one sidebar entry).
+// =====================================================================
+const ARCADE_GAMES = [
+  { page: 'defenders', ico: '🧪', name: 'Science Defenders', desc: 'Tower defense — answer MCQs to earn gold and build towers.' },
+  { page: 'raiders', ico: '👾', name: 'Science Raiders', desc: 'Roguelite top-down shooter — clear rooms, answer questions to pick power-ups.' },
+  { page: 'spire', ico: '🃏', name: 'Science Spire', desc: 'Deck-building dungeon — answer questions, build a deck, open card packs.' },
+  { page: 'legends', ico: '⚔️', name: 'Science Legends', beta: true, desc: 'Top-down action RPG — three classes, big skill trees, a question every 20 seconds.' },
+  { page: 'slayers', ico: '🗡️', name: 'Science Slayers', beta: true, desc: 'Dungeon crawler — procedural floors, boss loot, questions power your actions.' }
+];
+function renderArcadePage() {
+  const c = document.getElementById('arcadeContainer');
+  if (!c) return;
+  const credits = _creditsToday();
+  const beta = `<span style="font-size:0.58rem;font-weight:800;letter-spacing:0.06em;vertical-align:middle;background:linear-gradient(135deg,#8E24AA,#7B1FA2);color:#fff;border-radius:999px;padding:2px 8px;margin-left:6px;">BETA</span>`;
+  c.innerHTML = `
+    <div class="card card-pad" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:20px;">
+      <div style="font-size:1.9rem;line-height:1;">🎟️</div>
+      <div style="flex:1;min-width:220px;">
+        <div style="font-weight:700;font-size:1.02rem;">Game credits today: ${Math.max(0, credits.balance | 0)}</div>
+        <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.65;margin-top:4px;">Each play costs 1 credit. Answer ${CREDITS_PER_REWARD} practice questions to earn another — practice powers your play!</div>
+      </div>
+    </div>
+    <div class="arcade-grid">
+      ${ARCADE_GAMES.map(g => `
+      <div class="arcade-card">
+        <div class="arcade-ico">${g.ico}</div>
+        <h3>${escapeHtml(g.name)}${g.beta ? beta : ''}</h3>
+        <p>${escapeHtml(g.desc)}</p>
+        <button class="btn btn-primary" onclick="navigateTo('${g.page}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Play
+        </button>
+      </div>`).join('')}
+    </div>`;
+}
+
 async function loadMyReport() {
   const c = document.getElementById('myReportContainer');
   if (!c) return;
@@ -20497,7 +20708,7 @@ function doctorDelete(id) {
 const $ = (id) => document.getElementById(id);
 function toast(msg, type = "") { showToast(msg, type || "info"); }
 function rpgCanPreview() { return !!currentUser && currentUser.role === "admin"; }
-function rpgHomePage() { return rpgCanPreview() ? "create" : "quickpractice"; }
+function rpgHomePage() { return rpgCanPreview() ? "create" : "home"; }
 function rpgPracticePage() { return rpgCanPreview() ? "practice" : "quickpractice"; }
 // Question difficulty rating from the question's level (P3-P6, derived from
 // its topic when the question has no level field) — used to scale rewards.
@@ -28977,6 +29188,10 @@ window.doctorDelete = doctorDelete;
 window.saveBlockField = saveBlockField;
 window.saveBlockNum = saveBlockNum;
 window.toggleWorkingAnnotate = toggleWorkingAnnotate;
+// Student Home screen actions
+window.homeContinuePractice = homeContinuePractice;
+window.homeStartReview = homeStartReview;
+window.homePractiseWeakest = homePractiseWeakest;
 window.fbSyncChips = fbSyncChips;
 window.fbToggleToken = fbToggleToken;
 window.mcqSetCorrect = mcqSetCorrect;
