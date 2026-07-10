@@ -7969,7 +7969,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.96.0';
+const APP_VERSION = 'v1.97.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -8350,6 +8350,8 @@ function createBlock(type) {
       break;
     case 'workingSpace':
       block.lines = 6;
+      block.annotate = false;   // true → blank annotation pad in practice (AI-marked)
+      block.answerKey = '';     // what a correct annotation should show (hidden from students)
       break;
     case 'commonMistake':
       block.title = 'Common Mistake';
@@ -9480,7 +9482,7 @@ function renderBlocks() {
       case 'answerLine':  badgeClass = 'plainanswer-badge'; badgeIcon = '✏️'; badgeLabel = 'Answer Line'; break;
       case 'openLines':   badgeClass = 'plainanswer-badge'; badgeIcon = '✍️'; badgeLabel = 'Open-Ended Answer'; break;
       case 'fillblank':   badgeClass = 'plainanswer-badge'; badgeIcon = '🔲'; badgeLabel = 'Fill in the Blanks'; break;
-      case 'workingSpace':badgeClass = 'plainanswer-badge'; badgeIcon = '🧮'; badgeLabel = 'Working Space'; break;
+      case 'workingSpace':badgeClass = 'plainanswer-badge'; badgeIcon = block.annotate ? '✍️' : '🧮'; badgeLabel = block.annotate ? 'Annotation Working Area' : 'Working Space'; break;
       case 'commonMistake':badgeClass = 'explanation-badge'; badgeIcon = '⚠️'; badgeLabel = 'Common Mistake'; break;
       case 'studentAnswer':badgeClass = 'explanation-badge'; badgeIcon = '🧑‍🎓'; badgeLabel = 'Student Answer'; break;
       case 'answerKey':   badgeClass = 'explanation-badge'; badgeIcon = '🔑'; badgeLabel = 'Answer Key'; break;
@@ -9763,6 +9765,14 @@ function saveBlockNum(id, field, value, min, max) {
   if (max != null) n = Math.min(max, n);
   block[field] = n;
 }
+// Working-space "annotation area" toggle — re-render so the answer-key field
+// and the block badge follow the checkbox.
+function toggleWorkingAnnotate(id, on) {
+  const block = blocks.find(b => b.id === id);
+  if (!block) return;
+  block.annotate = !!on;
+  renderBlocks();
+}
 
 // ── MCQ option handlers ──────────────────────────────────────────────
 function mcqSetCorrect(blockId, optId) {
@@ -10005,6 +10015,18 @@ function renderImportedBlockEditorBody(block) {
           <label style="font-size:0.85rem;">Working-space height (lines)
             <input class="form-input" type="number" min="1" max="40" style="width:80px;margin-left:8px;"
                    value="${Number(block.lines) || 6}" oninput="saveBlockNum('${id}','lines',this.value,1,40)"></label>
+          <label style="display:flex;align-items:flex-start;gap:9px;margin-top:12px;font-size:0.85rem;line-height:1.55;cursor:pointer;">
+            <input type="checkbox" ${block.annotate ? 'checked' : ''} onchange="toggleWorkingAnnotate('${id}', this.checked)" style="width:15px;height:15px;flex:0 0 auto;margin-top:2px;cursor:pointer;">
+            <span>✍️ <strong>Use as annotation area</strong> — in practice this becomes a blank pad where students draw &amp; label (working, arrows, sketches…) for the question above, and the <strong>AI marks what they drew</strong>. On printed worksheets it stays a blank box.</span>
+          </label>
+          ${block.annotate ? `
+          <div style="margin-top:12px;">
+            <label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:6px;">🔑 Answer key for this working area <span style="font-weight:400;color:var(--text-muted);">(hidden from students)</span></label>
+            <textarea class="form-input" rows="3" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:0.9rem;line-height:1.55;resize:vertical;"
+                      placeholder="Describe what a correct annotation / working should show, e.g. an arrow from the battery's positive terminal through the bulb, labelled 'current'."
+                      oninput="saveBlockField('${id}','answerKey',this.value)">${escapeHtml(block.answerKey || '')}</textarea>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;line-height:1.5;">The AI marks the student's drawing &amp; labels against this key. If left empty it falls back to the question's marking guide / model answer.</div>
+          </div>` : ''}
         </div>`;
     case 'commonMistake': {
       const colorOpts = Object.keys(COMMON_MISTAKE_COLORS).map(c =>
@@ -10137,7 +10159,7 @@ function worksheetElementToBlock(el) {
     case 'answer':       return { id, type: 'plainanswer', content: el.answer || '' };
     case 'answerKey':    return { id, type: 'answerKey', text: el.text || '', url: el.dataUrl || '' };
     case 'openLines':    return { id, type: 'openLines', lines: Number(el.lines) || 4 };
-    case 'workingSpace': return { id, type: 'workingSpace', lines: Number(el.lines) || 6 };
+    case 'workingSpace': return { id, type: 'workingSpace', lines: Number(el.lines) || 6, annotate: !!el.annotate, answerKey: el.answerKey || '' };
     case 'video':        return { id, type: 'video', url: el.url || '', caption: el.caption || '' };
     case 'image':        return { id, type: 'image', url: el.dataUrl || '', caption: el.caption || '', scale: Number(el.scale) || 0.6 };
     case 'commonMistake':return { id, type: 'commonMistake', title: el.title || 'Common Mistake', text: el.text || '', color: el.color || 'teal' };
@@ -11393,7 +11415,12 @@ async function aiAnswerAndExplain() {
         applied = true;
       } else if (['plainanswer', 'openLines', 'workingSpace'].includes(b.type)) {
         const a = (r.answer && String(r.answer).trim()) || [r.claim, r.evidence, r.reasoning].filter(Boolean).join(' ');
-        if (a) { b.content = a; applied = true; }
+        if (a) {
+          // Annotation working areas keep their answer key, not a typed model answer.
+          if (b.type === 'workingSpace' && b.annotate) { if (!String(b.answerKey || '').trim()) b.answerKey = a; }
+          else b.content = a;
+          applied = true;
+        }
       } else if (b.type === 'mcq' && Number.isInteger(r.mcqCorrectIndex) && b.options[r.mcqCorrectIndex]) {
         b.correctId = b.options[r.mcqCorrectIndex].id;
         applied = true;
@@ -15092,6 +15119,13 @@ function buildOpenBody(q, containerSel, markCfg) {
         break;
       case 'openLines':
       case 'workingSpace':
+        // Annotation working area: a blank pen-and-label pad for annotating the
+        // question above, AI-marked against the block's answer key.
+        if (block.type === 'workingSpace' && block.annotate) {
+          addAnswer(annotationPadHtml(block, q, containerSel));
+          annotCount++;
+          break;
+        }
         // Open-ended mode: just a writing box (no lines). Reads any stored model
         // answer so an admin-set answer persists across renders.
         addAnswer(_openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }));
@@ -15141,10 +15175,10 @@ function buildOpenBody(q, containerSel, markCfg) {
   const solo = sections.length <= 1;
   let html = sections.map(s => `<div class="qp-part${solo ? ' solo' : ''}">${s.html}</div>`).join('');
   const fbItemCount = fbBlocks.reduce((s, b) => s + b.oidxs.length, 0);
-  if (isAnnot && annotCount) {
+  if (annotCount) {
     // Each annotation pad carries its own Check / AI Check bar; just add the
     // how-to hint once at the end instead of the photo bar / "nothing" note.
-    html += `<div class="dgn-hint">✍️ Annotate each diagram — use <strong>✏️ Pen</strong> to draw ticks, crosses, lines or circles and <strong>🔤 Label</strong> to type labels — then use the check buttons under that diagram.</div>`;
+    html += `<div class="dgn-hint">✍️ Annotate each diagram / working area — use <strong>✏️ Pen</strong> to draw ticks, crosses, lines or circles and <strong>🔤 Label</strong> to type labels — then use the check buttons under it.</div>`;
   } else if (items.length === 0 && mcqItems.length === 0) {
     html += `<div style="padding:12px;color:var(--text-muted);font-size:0.9rem;">This question has no answer section for the AI to mark.</div>`;
   } else if (items.length - fbItemCount === 0 && mcqItems.length === 0) {
@@ -15162,7 +15196,7 @@ function buildOpenBody(q, containerSel, markCfg) {
   _annotPadScores[containerSel] = {};
   _openFinalized[containerSel] = false;
   _openPhoto[containerSel] = null; // fresh render — drop any previous photo
-  if (isAnnot && annotCount) _scheduleAnnotInit(containerSel);
+  if (annotCount) _scheduleAnnotInit(containerSel);
   return html;
 }
 
@@ -15179,11 +15213,21 @@ function _annotPadId(containerSel, blockId) {
   return 'ap_' + _openPhotoKey(containerSel) + '_' + String(blockId).replace(/[^a-z0-9]/gi, '');
 }
 
-// The image + drawing/text overlay + its toolbar.
+// Blank white "canvas" for annotation working areas — served as an inline SVG
+// image so the whole pad machinery (sizing, strokes, flatten-to-JPEG export
+// for the AI) works unchanged, exactly as if it were a diagram picture.
+function _workingPadSvgUrl(lines) {
+  const h = Math.max(3, Math.min(40, Number(lines) || 6)) * 40; // on a 1000-wide canvas
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="${h}"><rect width="1000" height="${h}" fill="#ffffff"/></svg>`);
+}
+
+// The image (or blank working area) + drawing/text overlay + its toolbar.
 function annotationPadHtml(block, q, containerSel) {
   const pid = _annotPadId(containerSel, block.id);
-  const src = escapeHtml(transformImageUrl(block.url));
-  const label = String(block.dgnLabel || '').trim();
+  const isWorking = block.type === 'workingSpace';
+  const src = isWorking ? _workingPadSvgUrl(block.lines) : escapeHtml(transformImageUrl(block.url));
+  const label = String(block.dgnLabel || '').trim() || (isWorking ? 'Working area' : '');
   const swatch = (color, name) => `<button type="button" class="dgn-swatch${color === '#e11d48' ? ' active' : ''}" data-dgn-color="${pid}" data-color="${color}" style="background:${color};" title="${name}"></button>`;
   return `<div class="dgn-wrap">
       <div class="dgn-toolbar" data-dgn-tb="${pid}">
@@ -15197,8 +15241,8 @@ function annotationPadHtml(block, q, containerSel) {
         <button type="button" class="dgn-tool" data-dgn-undo="${pid}" title="Undo the last mark">↶ Undo</button>
         <button type="button" class="dgn-tool" data-dgn-clear="${pid}" title="Clear all annotations">🗑 Clear</button>
       </div>
-      <div class="dgn-pad" data-annot="${pid}" id="${pid}"${label ? ` data-dgn-name="${escapeHtml(label)}"` : ''}>
-        <img id="${pid}_img" src="${src}" onerror="handleImgError(this)" alt="diagram to annotate">
+      <div class="dgn-pad" data-annot="${pid}" data-dgn-block="${escapeHtml(String(block.id))}" id="${pid}"${label ? ` data-dgn-name="${escapeHtml(label)}"` : ''}>
+        <img id="${pid}_img" src="${src}" onerror="handleImgError(this)" alt="${isWorking ? 'working area to annotate' : 'diagram to annotate'}">
         <canvas id="${pid}_cv"></canvas>
         <div class="dgn-textlayer" id="${pid}_tl"></div>
       </div>
@@ -15595,9 +15639,14 @@ async function annotAiCheck(containerSel, pid, btn) {
   const st = _annotPads[pid];
   const hasMarks = st && ((st.strokes && st.strokes.length) ||
     Array.from(st.tl.querySelectorAll('.dgn-text')).some(b => _annotTextValue(b)));
-  if (!hasMarks) { showToast('Annotate this diagram first, then AI Check', 'info'); return; }
+  if (!hasMarks) { showToast('Annotate this first, then AI Check', 'info'); return; }
   const padEl = document.getElementById(pid);
   const padName = (padEl && padEl.getAttribute('data-dgn-name')) || '';
+  // Working-area pads carry their own answer key on the block; mark against it.
+  const padBlockId = padEl && padEl.getAttribute('data-dgn-block');
+  const padBlock = padBlockId ? ((q.blocks || []).find(b => b && String(b.id) === padBlockId)) : null;
+  const isWorkingPad = !!(padBlock && padBlock.type === 'workingSpace');
+  const wsKey = isWorkingPad ? stripHtml(padBlock.answerKey || '').replace(/\s+/g, ' ').trim() : '';
   const fb = c.querySelector('[data-dgn-fb-pad="' + pid + '"]') || c.querySelector('.dgn-feedback');
   const scoreEl = cfg.scoreElId ? document.getElementById(cfg.scoreElId) : null;
   const orig = btn ? btn.innerHTML : '';
@@ -15611,16 +15660,24 @@ async function annotAiCheck(containerSel, pid, btn) {
     const guide = (q.markingGuide || '').trim();
     const model = _deriveModelAnswer(q);
     const multi = allPids.length > 1;
+    const intro = isWorkingPad
+      ? `You are a science teacher marking the WORKING AREA a student filled in for the question above it. ` +
+        `The student was given a BLANK working/annotation space under the question and drew or wrote on it directly — pen strokes (ticks, crosses, arrows, sketches, diagrams, written working) and/or typed text labels. ` +
+        `The attached image is that working area with everything the student drew and typed. Read it carefully and decide whether the working/annotations are correct and complete. `
+      : `You are a science teacher marking a "ticking and labelling" annotation question. ` +
+        `The student was shown a diagram and annotated it DIRECTLY — drawing ticks, crosses, circles or lines with a pen and/or typing text labels onto it. ` +
+        `The attached image is the diagram WITH the student's annotations drawn on top. Look carefully at where the ticks/circles/lines point and read any typed labels, then decide whether each is in the right place / correct. `;
+    const expected = isWorkingPad && wsKey
+      ? `ANSWER KEY for this working area — mark the student's work against it: "${wsKey.slice(0, 700)}". `
+      : (model ? `Expected correct answer: "${model.replace(/\s+/g, ' ').slice(0, 700)}". ` : '');
     const prompt =
-      `You are a science teacher marking a "ticking and labelling" annotation question. ` +
-      `The student was shown a diagram and annotated it DIRECTLY — drawing ticks, crosses, circles or lines with a pen and/or typing text labels onto it. ` +
-      `The attached image is the diagram WITH the student's annotations drawn on top. Look carefully at where the ticks/circles/lines point and read any typed labels, then decide whether each is in the right place / correct. ` +
-      (multi ? `This question has ${allPids.length} diagrams and you are marking ONLY the attached one${padName ? ` (called "${padName}")` : ''} — award marks only for what THIS diagram asks for. ` : '') +
+      intro +
+      (multi ? `This question has ${allPids.length} annotated areas and you are marking ONLY the attached one${padName ? ` (called "${padName}")` : ''} — award marks only for what THIS one asks for. ` : '') +
       `${_markingPreamble(guide, q && q.topic)}\n` +
       `Question context: "${ctx}". ` +
-      (model ? `Expected correct answer: "${model.replace(/\s+/g, ' ').slice(0, 700)}". ` : '') +
-      `Work out how many marks the student earned out of the total available for this diagram. ` +
-      `Return ONLY JSON: {"score":<number>,"total":<number>,"verdict":"correct|partial|incorrect","feedback":"<1-2 sentences to the student: what they got right and what was wrong or missing>","modelAnswer":"<what a fully correct annotated diagram should show>","explanation":"<2-4 sentences addressed to \\"you\\" that refer to what the student actually annotated and explain the marks>"}. ` +
+      expected +
+      `Work out how many marks the student earned out of the total available for this ${isWorkingPad ? 'working area' : 'diagram'}. ` +
+      `Return ONLY JSON: {"score":<number>,"total":<number>,"verdict":"correct|partial|incorrect","feedback":"<1-2 sentences to the student: what they got right and what was wrong or missing>","modelAnswer":"<what a fully correct ${isWorkingPad ? 'working area' : 'annotated diagram'} should show>","explanation":"<2-4 sentences addressed to \\"you\\" that refer to what the student actually annotated and explain the marks>"}. ` +
       `If there are no visible annotations, return score 0 and say they haven't annotated yet.`;
     const raw = await askGeminiVision(prompt, media, { maxOutputTokens: 900, json: true });
     const parsed = _parseAIJson(raw) || {};
@@ -15634,18 +15691,29 @@ async function annotAiCheck(containerSel, pid, btn) {
     const color = verdict === 'correct' ? 'var(--primary)' : verdict === 'partial' ? 'var(--accent-orange)' : 'var(--accent-red)';
     const icon = verdict === 'correct' ? '✓' : verdict === 'partial' ? '≈' : '✗';
     if (fb) fb.innerHTML = `<div style="padding:6px 0;"><span style="color:${color};font-weight:700;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span><span style="color:var(--text-muted);"> — ${escapeHtml(parsed.feedback || '')}</span></div>`;
-    // Aggregate this pad's result with the question's other pads.
+    // Aggregate this pad's result with the question's other pads AND any typed
+    // parts, so mixed questions (answer boxes + pads) score and finalise once.
     const store = _annotPadScores[containerSel] = _annotPadScores[containerSel] || {};
     store[pid] = { score, total };
     const agg = allPids.reduce((a, p) => store[p] ? { s: a.s + store[p].score, t: a.t + store[p].total, n: a.n + 1 } : a, { s: 0, t: 0, n: 0 });
+    const typedTotal = (_openItemsStore[containerSel] || []).length + (_openMcqStore[containerSel] || []).length;
+    const typedResults = _openPartResults[containerSel] || {};
+    const typedMarked = Math.min(Object.keys(typedResults).length, typedTotal);
+    let typedScore = 0;
+    Object.values(typedResults).forEach(r => { typedScore += (r && r.pts) || 0; });
+    const allChecked = agg.n >= allPids.length && typedMarked >= typedTotal;
     if (scoreEl) {
-      const pct = Math.round((agg.s / (agg.t || 1)) * 100);
-      scoreEl.textContent = `${cfg.scorePrefix || 'AI Score'}: ${agg.s}/${agg.t} (${pct}%)` + (agg.n < allPids.length ? ` — ${agg.n}/${allPids.length} diagrams checked` : '');
-      scoreEl.style.color = agg.s === agg.t ? 'var(--primary)' : 'var(--accent-orange)';
+      const cs = agg.s + typedScore, ct = agg.t + typedTotal;
+      const pct = Math.round((cs / (ct || 1)) * 100);
+      const left = [];
+      if (agg.n < allPids.length) left.push(`${agg.n}/${allPids.length} pads checked`);
+      if (typedMarked < typedTotal) left.push(`${typedMarked}/${typedTotal} parts marked`);
+      scoreEl.textContent = `${cfg.scorePrefix || 'AI Score'}: ${cs}/${ct} (${pct}%)` + (left.length ? ` — ${left.join(', ')}` : '');
+      scoreEl.style.color = cs === ct ? 'var(--primary)' : 'var(--accent-orange)';
     }
-    const allChecked = agg.n >= allPids.length;
     if (allChecked && !_openFinalized[containerSel]) {
       _openFinalized[containerSel] = true;
+      const finalScore = agg.s + typedScore, finalTotal = agg.t + typedTotal;
       if (currentUser && currentUser.role === 'student') {
         addDoc(collection(db, 'questionAttempts'), {
           uid: currentUser.uid,
@@ -15653,17 +15721,17 @@ async function annotAiCheck(containerSel, pid, btn) {
           displayName: currentUser.name,
           questionId: q.id || '',
           questionTitle: q.title || '',
-          score: agg.s,
-          totalBlanks: agg.t,
+          score: finalScore,
+          totalBlanks: finalTotal,
           answerHash: rpgAnswerFingerprint('annot:' + (q.id || '')),
           timestamp: Timestamp.now(),
           mode: cfg.mode || 'practice-open'
         }).catch(err => console.warn('Could not record attempt:', err));
-        noteAttemptLocally(q.id, agg.s, agg.t);
+        noteAttemptLocally(q.id, finalScore, finalTotal);
       }
-      recordCerPerformance(q, agg.s, agg.t, cfg.mode || 'practice-open', 'annotation');
+      recordCerPerformance(q, finalScore, finalTotal, cfg.mode || 'practice-open', 'annotation');
       // Reveal the surface's "Next" button (Quick / Topical gate it behind this).
-      if (typeof cfg.onAllMarked === 'function') cfg.onAllMarked({ score: agg.s, total: agg.t, mistakes: [] });
+      if (typeof cfg.onAllMarked === 'function') cfg.onAllMarked({ score: finalScore, total: finalTotal, mistakes: [] });
     }
     if (allChecked) {
       showExplanation(containerSel, q, String(parsed.explanation || ''), cfg.scoreElId, String(parsed.modelAnswer || '') || model || guide);
@@ -16251,17 +16319,25 @@ function _checkAllPartsMarked(containerSel) {
     score += r.pts || 0;
     if (r.verdict !== 'correct') mistakes.push({ expected: r.expected, student: r.student });
   });
-  if (marked < totalParts) {
+  // Annotation pads (diagram or working-area) count as parts of this question:
+  // the score combines them and the question only finalises once every pad has
+  // been AI-checked too (annotAiCheck does the same from the other side).
+  const cEl = document.querySelector(containerSel);
+  const padPids = cEl ? Array.from(cEl.querySelectorAll('.dgn-pad[data-annot]')).map(el => el.getAttribute('data-annot')) : [];
+  const padStore = _annotPadScores[containerSel] || {};
+  const padAgg = padPids.reduce((a, p) => padStore[p] ? { s: a.s + padStore[p].score, t: a.t + padStore[p].total, n: a.n + 1 } : a, { s: 0, t: 0, n: 0 });
+  if (marked < totalParts || padAgg.n < padPids.length) {
     if (scoreEl) {
-      scoreEl.textContent = `${marked} / ${totalParts} parts marked`;
+      scoreEl.textContent = `${marked + padAgg.n} / ${totalParts + padPids.length} parts marked`;
       scoreEl.style.color = 'var(--text-muted)';
     }
     return;
   }
+  const finalScore = score + padAgg.s, finalTotal = totalParts + padAgg.t;
   if (scoreEl) {
-    const pct = Math.round((score / totalParts) * 100);
-    scoreEl.textContent = `${cfg.scorePrefix || 'AI Score'}: ${score}/${totalParts} (${pct}%)`;
-    scoreEl.style.color = score === totalParts ? 'var(--primary)' : 'var(--accent-orange)';
+    const pct = Math.round((finalScore / (finalTotal || 1)) * 100);
+    scoreEl.textContent = `${cfg.scorePrefix || 'AI Score'}: ${finalScore}/${finalTotal} (${pct}%)`;
+    scoreEl.style.color = finalScore === finalTotal ? 'var(--primary)' : 'var(--accent-orange)';
   }
   if (_openFinalized[containerSel]) return;
   _openFinalized[containerSel] = true;
@@ -16274,16 +16350,16 @@ function _checkAllPartsMarked(containerSel) {
       displayName: currentUser.name,
       questionId: q.id || '',
       questionTitle: q.title || '',
-      score: score,
-      totalBlanks: totalParts,
+      score: finalScore,
+      totalBlanks: finalTotal,
       answerHash: rpgAnswerFingerprint(answerText),
       timestamp: Timestamp.now(),
       mode: cfg.mode || 'practice-open'
     }).catch(err => console.warn('Could not record attempt:', err));
-    noteAttemptLocally(q.id, score, totalParts);
+    noteAttemptLocally(q.id, finalScore, finalTotal);
   }
-  recordCerPerformance(q, score, totalParts, cfg.mode || 'practice-open', answerText);
-  if (typeof cfg.onAllMarked === 'function') cfg.onAllMarked({ score, total: totalParts, mistakes });
+  recordCerPerformance(q, finalScore, finalTotal, cfg.mode || 'practice-open', answerText);
+  if (typeof cfg.onAllMarked === 'function') cfg.onAllMarked({ score: finalScore, total: finalTotal, mistakes });
   // Show the "why": an A.I. explanation of the answers. The photo/bulk path makes
   // its own; the click-to-mark path (including MCQ) didn't — so generate one here.
   _genAndShowExplanation(containerSel, q, results, cfg.scoreElId);
@@ -16833,6 +16909,10 @@ function renderQuestionPreviewHtml(qId) {
         break;
       case 'openLines':
       case 'workingSpace':
+        if (block.type === 'workingSpace' && block.annotate) {
+          html += `<div style="margin:8px 0;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--surface-alt,#faf8f5);font-size:0.82rem;color:var(--text-muted);">✍️ Annotation working area — students draw &amp; label here; the AI marks it${stripHtml(block.answerKey || '').trim() ? ' against the attached answer key' : ''}</div>`;
+          break;
+        }
         html += `<div style="margin:8px 0;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--surface-alt,#faf8f5);font-size:0.82rem;color:var(--text-muted);">✍️ Open-ended answer space (${Number(block.lines) || (block.type === 'openLines' ? 4 : 6)} lines)</div>`;
         break;
       case 'explanation':
@@ -18613,6 +18693,8 @@ function _deriveModelAnswer(q) {
       if (r) parts.push('Reasoning: ' + r);
     } else if (b.type === 'plainanswer') {
       const t = stripHtml(b.content || ''); if (t) parts.push(t);
+    } else if (b.type === 'workingSpace' && b.annotate) {
+      const t = stripHtml(b.answerKey || '').trim(); if (t) parts.push('Working area: ' + t);
     } else if (b.type === 'mcq') {
       const opt = (b.options || []).find(o => o.id === b.correctId);
       if (opt && stripHtml(opt.text || '')) parts.push('Correct option: ' + stripHtml(opt.text));
@@ -28894,6 +28976,7 @@ window.doctorDelete = doctorDelete;
 // Worksheet-creator block types + AI image enhance (inline handlers)
 window.saveBlockField = saveBlockField;
 window.saveBlockNum = saveBlockNum;
+window.toggleWorkingAnnotate = toggleWorkingAnnotate;
 window.fbSyncChips = fbSyncChips;
 window.fbToggleToken = fbToggleToken;
 window.mcqSetCorrect = mcqSetCorrect;
