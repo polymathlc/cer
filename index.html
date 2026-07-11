@@ -8017,7 +8017,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.99.0';
+const APP_VERSION = 'v1.99.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -27851,7 +27851,33 @@ async function loadPaperData(force){
       }
     }
   } catch (e) { console.warn('paperData load', e); }
+  ppMergeSeedContent();   // bring in past-year papers shipped in code that a saved copy predates
   _ppDataLoaded = true;
+}
+// A saved paperData copy (once an admin edits difficulty/attachments) replaces the
+// built-in seed, so a whole new past-year paper added to PP_SEED_Q would never show.
+// Merge in every seed question for any YEAR the saved data doesn't have yet — this
+// won't resurrect individually-deleted questions inside an existing year — and add
+// those new questions' recurring-concept links without touching existing years' notes.
+function ppMergeSeedContent(){
+  try {
+    const q = Array.isArray(ppData.questions) ? ppData.questions : (ppData.questions = []);
+    const savedYears = new Set(q.map(x => String(x.year)));
+    const addQ = PP_SEED_Q.filter(s => !savedYears.has(String(s.year)));
+    if (!addQ.length) return;
+    ppData.questions = q.concat(addQ.map(ppClone));
+    const newIds = new Set(addQ.map(s => s.id));
+    const rec = Array.isArray(ppData.recurring) ? ppData.recurring : (ppData.recurring = []);
+    const byId = {}; rec.forEach(r => { if (r && r.id) byId[r.id] = r; });
+    PP_SEED_R.forEach(sr => {
+      const cur = byId[sr.id];
+      if (!cur) { rec.push(ppClone(sr)); return; }
+      if (!Array.isArray(sr.hits)) return;
+      if (!Array.isArray(cur.hits)) cur.hits = [];
+      const have = new Set(cur.hits);
+      sr.hits.forEach(h => { if (newIds.has(h) && !have.has(h)) { cur.hits.push(h); have.add(h); } });
+    });
+  } catch (e) { console.warn('pp seed merge', e); }
 }
 async function savePaperData(){
   if (!ppIsAdmin() || !db) return;
