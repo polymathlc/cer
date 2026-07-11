@@ -6406,7 +6406,18 @@ option {
          ondrop="aiBuildDrop(event)">
       📋 Click here, then paste your screenshot (Ctrl/⌘+V)<br>— or drop an image / PDF here
     </div>
-    <input type="file" id="aiBuildFile" accept="image/*,application/pdf" style="display:none" onchange="const f=this.files[0]; this.value=''; if(f){ closeAiBuild(); handleAiBuildFile(f); }">
+    <label style="display:flex;align-items:flex-start;gap:9px;margin-top:12px;font-size:0.84rem;cursor:pointer;line-height:1.5;">
+      <input type="checkbox" id="aiBuildMulti" onchange="aiBuildMultiToggle(this.checked)" style="width:16px;height:16px;flex:0 0 auto;margin-top:2px;cursor:pointer;">
+      <span>🧩 <b>This question spans several screenshots</b> — collect them first (paste one after another, in reading order), then build once. <span style="color:var(--text-muted);">Leave unticked for normal one-screenshot questions.</span></span>
+    </label>
+    <div id="aiBuildQueue" style="display:none;margin-top:10px;padding:12px 14px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#faf8f5);">
+      <div id="aiBuildQueueThumbs" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;"></div>
+      <div class="btn-group" style="justify-content:flex-end;">
+        <button class="btn btn-outline" onclick="aiBuildQueueClear()">Clear</button>
+        <button class="btn btn-primary" id="aiBuildQueueGo" onclick="aiBuildFromQueue()" disabled>🚀 Build from 0 screenshots</button>
+      </div>
+    </div>
+    <input type="file" id="aiBuildFile" accept="image/*,application/pdf" multiple style="display:none" onchange="const fs=[...this.files]; this.value=''; if(fs.length) aiBuildFilesChosen(fs);">
     <input type="file" id="aiBuildBulkFile" accept="image/*,application/pdf" style="display:none" onchange="const f=this.files[0]; this.value=''; if(f){ closeAiBuild(); handleBulkAiFile(f); }">
     <div style="margin-top:14px;padding:12px 14px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#faf8f5);">
       <div style="font-size:0.86rem;font-weight:700;margin-bottom:4px;">📚 Bulk import a whole paper</div>
@@ -8020,7 +8031,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.100.0';
+const APP_VERSION = 'v1.101.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11690,49 +11701,122 @@ function closeAiBuild() {
 }
 function aiBuildPaste(e) {
   const items = (e.clipboardData && e.clipboardData.items) || [];
+  const files = [];
   for (const it of items) {
-    if (it.type && it.type.startsWith('image/')) {
-      e.preventDefault();
-      const file = it.getAsFile();
-      closeAiBuild();
-      handleAiBuildFile(file);
-      return;
-    }
+    if (it.type && it.type.startsWith('image/')) { const f = it.getAsFile(); if (f) files.push(f); }
   }
+  if (!files.length) return;
+  e.preventDefault();
+  aiBuildFilesChosen(files);
 }
 function aiBuildDrop(e) {
   e.preventDefault();
   const zone = document.getElementById('aiBuildZone');
   if (zone) zone.classList.remove('dragover');
-  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (file && file.type && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
-    closeAiBuild();
-    handleAiBuildFile(file);
-  } else {
-    showToast('Please drop an image or a PDF', 'error');
+  const files = [...((e.dataTransfer && e.dataTransfer.files) || [])]
+    .filter(f => f.type && (f.type.startsWith('image/') || f.type === 'application/pdf'));
+  if (files.length) aiBuildFilesChosen(files);
+  else showToast('Please drop an image or a PDF', 'error');
+}
+
+// ---- MULTI-SCREENSHOT QUESTION (one question spread over several pages) ----
+// Default OFF: a pasted screenshot builds immediately, as always. With the
+// "spans several screenshots" box ticked, pastes/drops collect in a queue
+// (with numbered thumbnails) and ONE question is built from all of them
+// together when the teacher hits Build.
+let _aiBuildQueue = []; // [{ file, thumb }]
+const AI_BUILD_MAX_SHOTS = 6;
+function _aiBuildMultiOn() { const c = document.getElementById('aiBuildMulti'); return !!(c && c.checked); }
+function aiBuildMultiToggle(on) {
+  const box = document.getElementById('aiBuildQueue');
+  if (box) box.style.display = on ? '' : 'none';
+  if (!on) _aiBuildQueue = [];
+  _renderAiBuildQueue();
+  const zone = document.getElementById('aiBuildZone');
+  if (zone) zone.focus();
+}
+function _renderAiBuildQueue() {
+  const wrap = document.getElementById('aiBuildQueueThumbs');
+  const go = document.getElementById('aiBuildQueueGo');
+  if (wrap) {
+    wrap.innerHTML = _aiBuildQueue.length
+      ? _aiBuildQueue.map((it, i) =>
+          `<div style="position:relative;">
+             <img src="${it.thumb}" alt="screenshot ${i + 1}" style="width:72px;height:96px;object-fit:cover;object-position:top;border:1px solid var(--border);border-radius:8px;background:#fff;">
+             <div style="position:absolute;left:5px;bottom:5px;background:rgba(0,0,0,.55);color:#fff;font-size:0.68rem;font-weight:700;padding:1px 7px;border-radius:6px;">${i + 1}</div>
+             <button type="button" onclick="aiBuildQueueRemove(${i})" title="Remove this screenshot" style="position:absolute;top:-7px;right:-7px;width:20px;height:20px;border-radius:50%;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:0.7rem;line-height:1;padding:0;">✕</button>
+           </div>`).join('')
+      : `<div style="font-size:0.8rem;color:var(--text-muted);line-height:1.5;">No screenshots collected yet — paste or drop them into the box above, in reading order (page 1 first).</div>`;
   }
+  if (go) {
+    go.disabled = !_aiBuildQueue.length;
+    go.textContent = `🚀 Build from ${_aiBuildQueue.length} screenshot${_aiBuildQueue.length === 1 ? '' : 's'}`;
+  }
+}
+async function _aiBuildQueueAdd(files) {
+  for (const f of files) {
+    if (_aiBuildQueue.length >= AI_BUILD_MAX_SHOTS) { showToast(`Max ${AI_BUILD_MAX_SHOTS} screenshots for one question`, 'error'); break; }
+    try {
+      const thumb = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = () => rej(new Error('could not read the screenshot'));
+        r.readAsDataURL(f);
+      });
+      _aiBuildQueue.push({ file: f, thumb });
+    } catch (e) { console.warn('queue thumbnail failed', e); }
+  }
+  _renderAiBuildQueue();
+}
+function aiBuildQueueRemove(i) { _aiBuildQueue.splice(i, 1); _renderAiBuildQueue(); }
+function aiBuildQueueClear() { _aiBuildQueue = []; _renderAiBuildQueue(); }
+function aiBuildFromQueue() {
+  if (!_aiBuildQueue.length) return;
+  const files = _aiBuildQueue.map(it => it.file);
+  aiBuildQueueClear();
+  closeAiBuild();
+  handleAiBuildFiles(files);
+}
+// Route a paste / drop / file-pick from the Build dialog. Multi mode collects
+// images into the queue (dialog stays open); otherwise build immediately.
+// PDFs always build immediately — they already carry all their pages. Picking
+// several images at once in the file dialog builds them as ONE question too.
+function aiBuildFilesChosen(files) {
+  files = (files || []).filter(f => f && f.type && (f.type.startsWith('image/') || f.type === 'application/pdf'));
+  if (!files.length) { showToast('Please choose an image or a PDF', 'error'); return; }
+  const pdf = files.find(f => f.type === 'application/pdf');
+  if (pdf) { closeAiBuild(); handleAiBuildFile(pdf); return; }
+  if (_aiBuildMultiOn()) { _aiBuildQueueAdd(files); return; }
+  closeAiBuild();
+  handleAiBuildFiles(files);
 }
 
 // The exact prompt used to turn one screenshot/PDF into a question. Shared by
 // "Build from screenshot" (handleAiBuildFile) and "Rapid add" (processRapidJob)
 // so both produce identical-quality questions.
-function _aiBuildQuestionPrompt(isPdf) {
+function _aiBuildQuestionPrompt(isPdf, imageCount) {
+  const multi = !isPdf && (Number(imageCount) || 1) > 1;
+  const n = Number(imageCount) || 1;
   const topics = currentTopics();
   const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
-  return `You are helping a Singapore primary-school science teacher turn an exam question (in the attached ${isPdf ? 'PDF' : 'image'}) into a practice question.\n` +
+  return `You are helping a Singapore primary-school science teacher turn an exam question (${multi ? `spread across the ${n} attached images` : `in the attached ${isPdf ? 'PDF' : 'image'}`}) into a practice question.\n` +
     _genPreamble() +
+    (multi ? `IMPORTANT: the ${n} attached images are CONSECUTIVE screenshots of ONE AND THE SAME question, already in reading order (image 1 first). Read them as one continuous question — do NOT treat them as separate questions and do NOT drop content from any of the images.\n` : '') +
     `FIRST decide the question type: "mcq" if the question gives a set of answer options to choose from (e.g. (1)(2)(3)(4) or A/B/C/D), otherwise "open".\n` +
     `Then return ONLY JSON with this exact shape:\n` +
     `{"title":"short title","topic":"<closest topic>","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
     `Each item in "blocks" is ONE of these objects:\n` +
+    (multi
+      ? `  {"type":"image","page":<which attached image, 1-based>,"box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — "page" says which attached image it is on, and box_2d is the rectangle you draw around it on THAT image)\n`
+      : `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — box_2d is the rectangle you draw around it on the page)\n`) +
     `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
-    `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — box_2d is the rectangle you draw around it on the page)\n` +
     `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0}\n` +
     `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
     `- List blocks in the SAME order they appear in the source. Put an "image" block exactly where each diagram/picture/graph/figure/table belongs, interleaved with the text blocks.\n` +
+    (multi ? `- "page" on every "image" block: the 1-based index of the attached image the figure is on (1 = the first attached image). box_2d is measured on THAT image: 0,0 is its top-left corner, 1000,1000 its bottom-right corner.\n` : '') +
     _rectangleRules() +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
@@ -11821,33 +11905,43 @@ function checkEditorDuplicate() {
 }
 function _hideDupBanner() { const b = document.getElementById('dupWarnBanner'); if (b) { b.style.display = 'none'; b.innerHTML = ''; } }
 
-async function handleAiBuildFile(file) {
-  if (!file) return;
+async function handleAiBuildFile(file) { return handleAiBuildFiles(file ? [file] : []); }
+
+// Build ONE question from one file (image or PDF), or from SEVERAL screenshots
+// that together make up one multi-page question (in reading order).
+async function handleAiBuildFiles(files) {
+  files = (files || []).filter(Boolean);
+  if (!files.length) return;
   if (!window.__aiReady || !window.__aiReady()) {
     showToast("AI isn't set up yet — add your reCAPTCHA site key in the code", 'info');
     return;
   }
-  const isPdf = file.type === 'application/pdf';
-  const isImg = file.type && file.type.startsWith('image/');
-  if (!isPdf && !isImg) { showToast('Please choose an image or a PDF', 'error'); return; }
-  if (file.size > 18 * 1024 * 1024) { showToast('File is too large (max ~18 MB)', 'error'); return; }
-  if (blocks.length > 0 && !confirm('Replace the current question with the one AI builds from this file?')) return;
+  const isPdf = files.length === 1 && files[0].type === 'application/pdf';
+  const allImgs = files.every(f => f.type && f.type.startsWith('image/'));
+  if (!isPdf && !allImgs) { showToast('Please choose images or a single PDF', 'error'); return; }
+  if (files.length > AI_BUILD_MAX_SHOTS) {
+    showToast(`Max ${AI_BUILD_MAX_SHOTS} screenshots for one question — using the first ${AI_BUILD_MAX_SHOTS}`, 'info');
+    files = files.slice(0, AI_BUILD_MAX_SHOTS);
+  }
+  if (files.reduce((s, f) => s + f.size, 0) > 18 * 1024 * 1024) { showToast('Files are too large (max ~18 MB together)', 'error'); return; }
+  if (blocks.length > 0 && !confirm(`Replace the current question with the one AI builds from ${files.length > 1 ? 'these ' + files.length + ' screenshots' : 'this file'}?`)) return;
 
   const btn = document.getElementById('aiBuildBtn');
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Reading…'; }
-  showToast('Reading your file with AI…', 'info');
+  showToast(files.length > 1 ? `Reading your ${files.length} screenshots as ONE question…` : 'Reading your file with AI…', 'info');
   try {
-    const b64 = await _fileToBase64(file);
-    const prompt = _aiBuildQuestionPrompt(isPdf);
-    const raw = await askGeminiVision(prompt, [{ mimeType: file.type, data: b64 }], { maxOutputTokens: 4096, json: true });
+    const pages = [];
+    for (const f of files) pages.push({ mimeType: f.type, data: await _fileToBase64(f) });
+    const prompt = _aiBuildQuestionPrompt(isPdf, pages.length);
+    const raw = await askGeminiVision(prompt, pages.map(p => ({ mimeType: p.mimeType, data: p.data })), { maxOutputTokens: 4096, json: true });
     const parsed = _parseAIJson(raw);
     _populateEditorFromAi(parsed);
     checkEditorDuplicate();   // warn if this looks like a question already in the bank
     const hasImageBlock = blocks.some(b => b.type === 'image');
-    if (isImg && hasImageBlock) {
+    if (!isPdf && hasImageBlock) {
       showToast('Question built ✓ — cropping the AI-selected pictures next…', 'success');
-      _autoFillDiagramsFromBoxes(parsed, file.type, b64); // async: crops each AI-drawn rectangle; whole screenshot is the backup
+      _autoFillDiagramsFromBoxes(parsed, pages); // async: crops each AI-drawn rectangle from its own screenshot; the whole screenshot is the backup
     } else {
       showToast('Question built — review it' + (hasImageBlock ? ', paste the diagram,' : '') + ' then Save', 'success');
     }
@@ -12128,24 +12222,57 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
 // Editor flow: crop the AI-selected rectangles into the freshly built
 // question's image blocks; on total failure fall back to the original
 // whole-screenshot flow. Runs async after the editor is populated.
-async function _autoFillDiagramsFromBoxes(parsed, mimeType, b64) {
-  const boxes = ((parsed && parsed.blocks) || [])
-    .filter(b => String((b && b.type) || '').toLowerCase() === 'image')
-    .map(b => (b && (b.box_2d || b.box)) || null);
+// `pages` is [{mimeType,data}] — one entry for a normal screenshot, several
+// for a multi-screenshot question (each image block's "page" says which
+// screenshot its rectangle was drawn on).
+async function _autoFillDiagramsFromBoxes(parsed, pages) {
+  const rawImgs = ((parsed && parsed.blocks) || [])
+    .filter(b => String((b && b.type) || '').toLowerCase() === 'image');
   const imgBlocks = blocks.filter(b => b.type === 'image');
-  if (!imgBlocks.length) return;
+  if (!imgBlocks.length || !pages.length) return;
   const editorRef = blocks; // detect the teacher moving on to another question
-  let filled = 0;
-  try {
-    filled = await _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, m => showToast('🖼️ ' + m, 'info'));
-  } catch (e) { console.warn('AI rectangle flow failed', e); }
+  // Group the image blocks by the screenshot their rectangle was drawn on
+  // (rawImgs and imgBlocks are index-aligned — buildBlocksFromAi keeps order).
+  const groups = new Map();
+  imgBlocks.forEach((blk, i) => {
+    const rb = rawImgs[i] || {};
+    let pg = Number(rb.page);
+    pg = (Number.isInteger(pg) && pg >= 1 && pg <= pages.length) ? pg - 1 : 0;
+    if (!groups.has(pg)) groups.set(pg, { blks: [], boxes: [] });
+    const g = groups.get(pg);
+    g.blks.push(blk);
+    g.boxes.push((rb.box_2d || rb.box) || null);
+  });
+  let filled = 0, enhanceLeft = 3;
+  for (const [pg, g] of groups) {
+    try {
+      const n = await _fillBlocksFromAiBoxes(g.blks, g.boxes, pages[pg].mimeType, pages[pg].data, m => showToast('🖼️ ' + m, 'info'), { maxEnhance: enhanceLeft });
+      filled += n;
+      enhanceLeft = Math.max(0, enhanceLeft - n);
+      if (!n && pages.length > 1) {
+        // Nothing usable on this screenshot — attach it whole to its blocks
+        // so the teacher can crop by hand (mirrors the single-page backup).
+        const fullDataUrl = 'data:' + pages[pg].mimeType + ';base64,' + pages[pg].data;
+        try {
+          const fullUrl = await uploadImageDataUrl(fullDataUrl);
+          g.blks.forEach(b => {
+            if (b.url) return;
+            b.url = fullUrl;
+            _imgEnhanceState[b.id] = { originalDataUrl: fullDataUrl, originalUrl: fullUrl, currentDataUrl: fullDataUrl };
+          });
+        } catch (e) { console.warn('multi-page whole-screenshot backup failed', e); }
+      }
+    } catch (e) { console.warn('AI rectangle flow failed', e); }
+  }
   if (blocks !== editorRef) return;
-  if (!filled) { _autoFillDiagramFromUpload(mimeType, b64); return; } // BACKUP: whole screenshot
+  if (!filled && pages.length === 1) { _autoFillDiagramFromUpload(pages[0].mimeType, pages[0].data); return; } // BACKUP: whole screenshot
   renderBlocks();
   imgBlocks.forEach(b => renderImgEnhanceBar(b.id));
   showToast(filled === imgBlocks.length
-    ? `✂️ Cropped ${filled} picture${filled === 1 ? '' : 's'} from your screenshot ✓ — check them; “↩ Use original” brings back the whole screenshot`
-    : `✂️ Cropped ${filled} of ${imgBlocks.length} pictures — the rest got the whole screenshot to crop by hand`, 'success');
+    ? `✂️ Cropped ${filled} picture${filled === 1 ? '' : 's'} from your screenshot${pages.length > 1 ? 's' : ''} ✓ — check them; “↩ Use original” brings back the whole screenshot`
+    : filled
+      ? `✂️ Cropped ${filled} of ${imgBlocks.length} pictures — the rest got the whole screenshot to crop by hand`
+      : `Attached the whole screenshots — crop each picture by hand with ✂️`, 'success');
 }
 
 // After the AI lays out the question, enhance the WHOLE uploaded screenshot to
@@ -29238,6 +29365,12 @@ window.handleImageDrop = handleImageDrop;
 window.handleRichImagePaste = handleRichImagePaste;
 window._setEnhanceRemark = _setEnhanceRemark;
 window.handleAiBuildFile = handleAiBuildFile;
+window.handleAiBuildFiles = handleAiBuildFiles;
+window.aiBuildFilesChosen = aiBuildFilesChosen;
+window.aiBuildMultiToggle = aiBuildMultiToggle;
+window.aiBuildQueueRemove = aiBuildQueueRemove;
+window.aiBuildQueueClear = aiBuildQueueClear;
+window.aiBuildFromQueue = aiBuildFromQueue;
 window.handleBulkAiFile = handleBulkAiFile;
 window.cancelBulkImport = cancelBulkImport;
 window.aiAnswerAndExplain = aiAnswerAndExplain;
