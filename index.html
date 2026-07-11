@@ -8017,7 +8017,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.99.1';
+const APP_VERSION = 'v1.99.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -10541,6 +10541,32 @@ async function _urlToDataUrl(url) {
   });
 }
 
+// _urlToDataUrl with fallbacks. A plain fetch() can die with a bare
+// "Failed to fetch" (CORS preflight/cache quirks, blockers) even though the
+// very same URL displays fine in an <img>. Ladder: direct fetch → reload via
+// a CORS-enabled <img> re-encoded through a canvas → the wsrv.nl image proxy,
+// which serves any public image WITH CORS headers.
+async function _urlToDataUrlRobust(url) {
+  try { return await _urlToDataUrl(url); }
+  catch (e) { if (/^(data|blob):/i.test(url || '')) throw e; console.warn('image fetch failed, trying fallbacks', e); }
+  try {
+    const im = await new Promise((res, rej) => {
+      const i = new Image();
+      i.crossOrigin = 'anonymous';
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error('cors img load'));
+      i.src = url + (url.includes('?') ? '&' : '?') + 'corscb=' + Date.now();
+    });
+    const cv = document.createElement('canvas');
+    cv.width = im.naturalWidth || im.width || 1;
+    cv.height = im.naturalHeight || im.height || 1;
+    cv.getContext('2d').drawImage(im, 0, 0);
+    return cv.toDataURL('image/png');
+  } catch (e2) { console.warn('CORS <img> fallback failed, trying proxy', e2); }
+  try { return await _urlToDataUrl('https://wsrv.nl/?url=' + encodeURIComponent(url)); }
+  catch (e3) { throw new Error('could not load the image (the host blocked the request) — try re-uploading it'); }
+}
+
 // Get the source image (as base64 inlineData) to enhance for a block.
 async function _blockImageToInline(blockId) {
   const st = _imgEnhanceState[blockId];
@@ -10548,7 +10574,7 @@ async function _blockImageToInline(blockId) {
   if (!dataUrl) {
     const block = blocks.find(b => b.id === blockId);
     if (!block || !block.url) throw new Error('no image to enhance');
-    dataUrl = await _urlToDataUrl(transformImageUrl(block.url));
+    dataUrl = await _urlToDataUrlRobust(transformImageUrl(block.url));
   }
   const parsed = _parseImageDataUrl(dataUrl);
   if (!parsed) throw new Error('could not read the image');
@@ -10806,7 +10832,7 @@ function openCropTool(blockId) {
   // Crop the image currently shown in the block (the enhanced one), not a stale source.
   const srcP = st.currentDataUrl ? Promise.resolve(st.currentDataUrl)
     : st.originalDataUrl ? Promise.resolve(st.originalDataUrl)
-    : (block && block.url) ? _urlToDataUrl(transformImageUrl(block.url))
+    : (block && block.url) ? _urlToDataUrlRobust(transformImageUrl(block.url))
     : Promise.reject(new Error('no image to crop'));
   srcP.then(srcUrl => {
     const overlay = document.getElementById('cropOverlay');
@@ -10934,7 +10960,7 @@ function openAnnotTool(blockId) {
   // only fall back to fetching the hosted URL if we have nothing cached.
   const srcP = st.currentDataUrl ? Promise.resolve(st.currentDataUrl)
     : st.originalDataUrl ? Promise.resolve(st.originalDataUrl)
-    : _urlToDataUrl(transformImageUrl(block.url));
+    : _urlToDataUrlRobust(transformImageUrl(block.url));
   srcP.then(_loadImageEl).then(img => {
     const canvas = document.getElementById('annotCanvas');
     const cap = 1600; // keep the working canvas (and undo snapshots) sane
@@ -13137,7 +13163,7 @@ async function confirmRegenerate() {
     const srcImg = (orig.blocks || []).find(b => b.type === 'image' && b.url);
     if (srcImg) {
       try {
-        const dataUrl = await _urlToDataUrl(transformImageUrl(srcImg.url));
+        const dataUrl = await _urlToDataUrlRobust(transformImageUrl(srcImg.url));
         const parsed = _parseImageDataUrl(dataUrl);
         if (parsed) media = [{ mimeType: parsed.mime, data: dataUrl.split(',')[1] || '' }];
       } catch (e) { console.warn('regen image for AI', e); }
@@ -15532,29 +15558,9 @@ async function _annotExportBase64(pid) {
   // the on-screen <img> (fine for data: URLs and same-origin images).
   let source = st.img;
   try {
-    const durl = await _urlToDataUrl(st.blockUrl);
+    const durl = await _urlToDataUrlRobust(st.blockUrl);
     source = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('img load')); im.src = durl; });
-  } catch (_) {
-    // Second chance: reload the image itself with CORS enabled (cache-busted
-    // so the browser can't reuse the plain <img>'s non-CORS cache entry).
-    try {
-      source = await new Promise((res, rej) => {
-        const im = new Image();
-        im.crossOrigin = 'anonymous';
-        im.onload = () => res(im);
-        im.onerror = () => rej(new Error('cors img load'));
-        im.src = st.blockUrl + (st.blockUrl.includes('?') ? '&' : '?') + 'corscb=' + Date.now();
-      });
-    } catch (_2) {
-      // Last resort for hosts that send no CORS headers at all (e.g. Google
-      // Drive image links): fetch through the wsrv.nl image proxy, which
-      // serves any public image WITH CORS headers.
-      try {
-        const durl = await _urlToDataUrl('https://wsrv.nl/?url=' + encodeURIComponent(st.blockUrl));
-        source = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('proxy img load')); im.src = durl; });
-      } catch (_3) { source = st.img; }
-    }
-  }
+  } catch (_) { source = st.img; }
   const nw = source.naturalWidth || source.width || st.cssW || 800;
   const nh = source.naturalHeight || source.height || st.cssH || 600;
   const maxDim = 1400;
