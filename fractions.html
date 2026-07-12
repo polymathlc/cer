@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fraction Quest — Learn Fractions (P3)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #f2f7f4;
+    --card: #ffffff;
+    --ink: #243932;
+    --muted: #63796f;
+    --line: #dde9e2;
+    --green: #2fa56a;
+    --green-soft: #e2f4ea;
+    --green-deep: #1d7f4f;
+    --amber: #f2a63c;
+    --amber-soft: #fdf1dd;
+    --red: #d95d5d;
+    --red-soft: #fbe9e9;
+    --blue: #3f7fd1;
+    --blue-soft: #e7f0fb;
+    --purple: #8a63c9;
+    --purple-soft: #f0eafa;
+    --shade: #58c185;
+    --shade-2: #f2b04c;
+    --radius: 18px;
+    --shadow: 0 6px 18px rgba(36,57,50,0.08);
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  h1,h2,h3,h4{ font-family:'Baloo 2','Nunito',sans-serif; line-height:1.25; margin:0; }
+
+  /* ---------- header ---------- */
+  header{
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+    padding: 18px 20px;
+  }
+  .header-inner{
+    max-width: 860px; margin: 0 auto;
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand .logo{ font-size:2rem; }
+  .brand h1{ font-size:1.5rem; color:var(--green-deep); }
+  .brand .sub{ font-size:0.85rem; color:var(--muted); margin-top:2px; }
+  .star-pill{
+    background: var(--amber-soft); border:1.5px solid #f3ddb5; color:#9a6a17;
+    font-weight:800; padding: 8px 18px; border-radius:999px; font-size:1rem;
+    display:flex; align-items:center; gap:8px;
+  }
+
+  /* ---------- tabs ---------- */
+  nav.tabs{
+    max-width:860px; margin: 20px auto 0; padding: 0 20px;
+    display:flex; gap:10px; flex-wrap:wrap;
+  }
+  .tab-btn{
+    border:1.5px solid var(--line); background:var(--card); color:var(--muted);
+    font-family:'Baloo 2',sans-serif; font-weight:700; font-size:1rem;
+    padding: 10px 22px; border-radius: 999px; cursor:pointer; transition: all .15s;
+  }
+  .tab-btn:hover{ border-color:var(--green); color:var(--green-deep); }
+  .tab-btn.active{ background:var(--green); border-color:var(--green); color:#fff; }
+
+  main{ max-width:860px; margin: 0 auto; padding: 24px 20px 90px; }
+
+  /* ---------- cards ---------- */
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow: var(--shadow); padding: 28px; margin: 0 auto 22px; max-width: 720px;
+  }
+  .card h2{ font-size:1.35rem; color:var(--green-deep); margin-bottom: 6px; }
+  .card h3{ font-size:1.1rem; margin-bottom:4px; }
+  .card .lede{ color:var(--muted); font-size:0.95rem; margin: 0 0 18px; }
+
+  .idea{
+    background:var(--blue-soft); border:1.5px solid #cfe1f6; border-radius:14px;
+    padding: 16px 20px; margin: 18px 0; font-size:0.97rem;
+  }
+  .idea b{ color:var(--blue); }
+  .warn{
+    background:var(--red-soft); border:1.5px solid #f0cccc; border-radius:14px;
+    padding: 16px 20px; margin: 18px 0; font-size:0.97rem;
+  }
+  .warn b{ color:var(--red); }
+
+  /* ---------- fraction display ---------- */
+  .frac{
+    display:inline-flex; flex-direction:column; align-items:center; vertical-align:middle;
+    margin: 0 6px; line-height:1.15; font-weight:800; font-size:1.25rem;
+  }
+  .frac .fd{ border-top: 2.5px solid var(--ink); padding-top:2px; }
+  .frac .fn, .frac .fd{ padding-left:8px; padding-right:8px; min-width: 30px; text-align:center; }
+  .eq-row{
+    display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap;
+    font-size:1.3rem; font-weight:800; margin: 18px 0; text-align:center;
+  }
+  .eq-row .op{ font-size:1.4rem; color:var(--muted); }
+
+  .blank{
+    width: 58px; height: 44px; text-align:center; font-family:'Nunito',sans-serif;
+    font-size:1.2rem; font-weight:800; color:var(--ink);
+    border: 2px dashed #b8cdc1; border-radius: 10px; background:#fbfdfc; outline:none;
+    -moz-appearance: textfield;
+  }
+  .blank::-webkit-outer-spin-button,.blank::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  .blank:focus{ border-color: var(--green); border-style: solid; background:#fff; }
+  .blank.ok{ border-color:var(--green); border-style:solid; background:var(--green-soft); }
+  .blank.bad{ border-color:var(--red); border-style:solid; background:var(--red-soft); }
+
+  /* ---------- bars ---------- */
+  .bar-wrap{ display:flex; flex-direction:column; align-items:center; gap:14px; margin: 18px 0; }
+  .bar-label{ font-size:0.9rem; color:var(--muted); font-weight:700; }
+  svg.fbar{ max-width:100%; height:auto; display:block; }
+
+  /* ---------- buttons ---------- */
+  .btn{
+    font-family:'Baloo 2',sans-serif; font-weight:700; font-size:1rem;
+    border:none; border-radius:12px; padding: 12px 26px; cursor:pointer; transition: all .15s;
+  }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+  .btn-green{ background:var(--green); color:#fff; }
+  .btn-green:hover:not(:disabled){ background:var(--green-deep); }
+  .btn-soft{ background:var(--green-soft); color:var(--green-deep); border:1.5px solid #bfe3cf; }
+  .btn-soft:hover:not(:disabled){ background:#d3eede; }
+  .btn-blue{ background:var(--blue); color:#fff; }
+  .btn-blue:hover:not(:disabled){ background:#3268ae; }
+  .btn-ghost{ background:transparent; color:var(--muted); border:1.5px solid var(--line); }
+  .btn-ghost:hover{ color:var(--ink); border-color:#c3d4ca; }
+  .btn-row{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top: 20px; }
+
+  .chip-row{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin: 14px 0; }
+  .chip{
+    font-family:'Baloo 2',sans-serif; font-weight:700; font-size:0.95rem;
+    padding: 8px 18px; border-radius:999px; border:1.5px solid var(--line);
+    background:var(--card); color:var(--muted); cursor:pointer; transition: all .15s;
+  }
+  .chip:hover:not(:disabled){ border-color:var(--green); color:var(--green-deep); }
+  .chip.active{ background:var(--green); border-color:var(--green); color:#fff; }
+  .chip:disabled{ opacity:.35; cursor:not-allowed; }
+
+  /* ---------- feedback ---------- */
+  .feedback{ border-radius:14px; padding: 16px 20px; margin-top: 18px; font-size:0.97rem; display:none; }
+  .feedback.show{ display:block; }
+  .feedback.good{ background:var(--green-soft); border:1.5px solid #bfe3cf; }
+  .feedback.bad{ background:var(--red-soft); border:1.5px solid #f0cccc; }
+  .feedback.info{ background:var(--blue-soft); border:1.5px solid #cfe1f6; }
+  .feedback .fb-title{ font-weight:800; margin-bottom:4px; }
+
+  /* ---------- pickers / grids ---------- */
+  .grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(210px,1fr)); gap:16px; }
+  .pick-card{
+    background:var(--card); border:1.5px solid var(--line); border-radius:16px;
+    padding: 22px 20px; cursor:pointer; transition: all .15s; box-shadow:var(--shadow);
+  }
+  .pick-card:hover{ border-color:var(--green); transform: translateY(-2px); }
+  .pick-card .pc-emoji{ font-size:1.8rem; }
+  .pick-card h3{ margin: 10px 0 4px; font-size:1.05rem; }
+  .pick-card p{ margin:0 0 10px; color:var(--muted); font-size:0.88rem; line-height:1.5; }
+  .pick-card .pc-meta{ font-size:0.85rem; color:#9a6a17; font-weight:800; }
+  .pick-card.done{ border-color:#bfe3cf; background:var(--green-soft); }
+
+  .lesson-steps{ display:flex; gap:8px; justify-content:center; margin-bottom: 20px; flex-wrap:wrap; }
+  .lstep{
+    width:34px; height:34px; border-radius:50%; border:2px solid var(--line);
+    display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.9rem;
+    color:var(--muted); background:var(--card); cursor:pointer;
+  }
+  .lstep.active{ border-color:var(--green); background:var(--green); color:#fff; }
+  .lstep.done{ border-color:var(--green); color:var(--green-deep); background:var(--green-soft); }
+
+  .ai-box{ background:var(--purple-soft); border:1.5px solid #ddd0f2; border-radius:14px; padding:16px 20px; margin-top:18px; font-size:0.96rem; }
+  .ai-box .ai-title{ font-weight:800; color:var(--purple); margin-bottom:4px; }
+  .ai-stars{ font-size:1.5rem; letter-spacing:4px; margin: 6px 0; }
+
+  textarea.explain-input{
+    width:100%; min-height:130px; border:2px dashed #b8cdc1; border-radius:12px;
+    padding: 14px 16px; font-family:'Nunito',sans-serif; font-size:1rem; line-height:1.6;
+    resize:vertical; outline:none; background:#fbfdfc;
+  }
+  textarea.explain-input:focus{ border-color:var(--green); border-style:solid; background:#fff; }
+
+  .spinner{
+    display:inline-block; width:18px; height:18px; border:3px solid rgba(255,255,255,.4);
+    border-top-color:#fff; border-radius:50%; animation: spin .8s linear infinite; vertical-align:-3px; margin-right:8px;
+  }
+  .spinner.dark{ border-color:#d8cff0; border-top-color:var(--purple); }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  #toast{
+    position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:#fff; padding: 12px 24px; border-radius:12px;
+    font-weight:700; opacity:0; pointer-events:none; transition: all .25s; z-index:60; max-width:90vw; text-align:center;
+  }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  #versionBadge{
+    position:fixed; right:14px; bottom:12px; font-size:0.72rem; color:#9ab3a6;
+    background:rgba(255,255,255,.8); border:1px solid var(--line); border-radius:999px;
+    padding: 3px 10px; z-index:50;
+  }
+
+  @media (max-width:560px){
+    .card{ padding: 22px 18px; }
+    .eq-row{ font-size:1.15rem; }
+    .blank{ width:50px; height:40px; font-size:1.05rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="logo">🍰</div>
+      <div>
+        <h1>Fraction Quest</h1>
+        <div class="sub">Really understand fractions — Primary 3</div>
+      </div>
+    </div>
+    <div class="star-pill">⭐ <span id="starCount">0</span> stars</div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="learn" onclick="goTab('learn')">📖 Learn</button>
+  <button class="tab-btn" data-tab="practice" onclick="goTab('practice')">✏️ Practice</button>
+  <button class="tab-btn" data-tab="explain" onclick="goTab('explain')">🤖 Teach the AI</button>
+</nav>
+
+<main id="view"></main>
+
+<div id="toast"></div>
+<div id="versionBadge"></div>
+
+<script type="module">
+// =====================================================================
+// Firebase AI Logic (same shared "mathgen--app" project as math.html).
+// Only the AI is used here — progress lives in localStorage.
+// Loaded dynamically so the app still boots (lessons + practice work
+// offline) even if the Firebase CDN can't be reached; only the AI
+// features need it.
+// =====================================================================
+const APP_VERSION = 'v1.0.0';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
+  authDomain: "mathgen--app.firebaseapp.com",
+  projectId: "mathgen--app",
+  storageBucket: "mathgen--app.firebasestorage.app",
+  messagingSenderId: "165654161198",
+  appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf",
+  measurementId: "G-0MWZFG211D"
+};
+const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
+const AI_MODEL = "gemini-3.5-flash";
+
+let geminiModel = null;
+const aiReady = () => !!geminiModel;
+(async () => {
+  const CDN = "https://www.gstatic.com/firebasejs/11.10.0/";
+  try {
+    const [{ initializeApp }, appCheckMod, { getAI, getGenerativeModel, GoogleAIBackend }] = await Promise.all([
+      import(CDN + "firebase-app.js"),
+      import(CDN + "firebase-app-check.js"),
+      import(CDN + "firebase-ai.js"),
+    ]);
+    const app = initializeApp(firebaseConfig);
+    try { appCheckMod.initializeAppCheck(app, { provider: new appCheckMod.ReCaptchaV3Provider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true }); }
+    catch (e) { console.warn("App Check init failed:", e); }
+    geminiModel = getGenerativeModel(getAI(app, { backend: new GoogleAIBackend() }), { model: AI_MODEL });
+  } catch (e) {
+    console.warn("Firebase AI unavailable (offline?) — lessons and practice still work:", e);
+  }
+})();
+
+async function askGemini(prompt, { maxOutputTokens = 700, temperature = 0.4 } = {}) {
+  if (!geminiModel) throw new Error("AI is not available right now");
+  const res = await geminiModel.generateContent({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens, temperature, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } }
+  });
+  return (res.response.text() || "").trim();
+}
+function parseAIJson(raw) {
+  let s = (raw || "").trim();
+  if (!s) throw new Error("empty AI response");
+  s = s.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  const start = s.search(/[\[{]/);
+  if (start > 0) s = s.slice(start);
+  return JSON.parse(s);
+}
+
+// =====================================================================
+// Helpers + persistent progress
+// =====================================================================
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pick = (arr) => arr[ri(0, arr.length - 1)];
+const gcd = (a, b) => b ? gcd(b, a % b) : a;
+
+const STORE_KEY = 'fractionQuest.v1';
+let progress = { stars: 0, skillStars: {}, lessonsDone: {}, explainBest: {} };
+try { const raw = localStorage.getItem(STORE_KEY); if (raw) progress = Object.assign(progress, JSON.parse(raw)); } catch(e){}
+function saveProgress(){ try { localStorage.setItem(STORE_KEY, JSON.stringify(progress)); } catch(e){} }
+function addStars(n, skill){
+  if (n <= 0) return;
+  progress.stars += n;
+  if (skill) progress.skillStars[skill] = (progress.skillStars[skill] || 0) + n;
+  saveProgress(); renderStarCount();
+}
+function renderStarCount(){ $('starCount').textContent = progress.stars; }
+
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// =====================================================================
+// Fraction bar SVG
+//   num/den shaded; split k draws dashed sub-lines cutting every piece
+//   into k; glue g draws bold lines only every g pieces (grouping).
+// =====================================================================
+function fbar(num, den, opts = {}) {
+  const { split = 1, glue = 1, w = 360, h = 58, color = 'var(--shade)', label = null } = opts;
+  const r = 10, sw = 2;
+  let cells = '';
+  const pieceW = w / den;
+  for (let i = 0; i < num; i++) {
+    cells += `<rect x="${(i * pieceW).toFixed(2)}" y="0" width="${pieceW.toFixed(2)}" height="${h}" fill="${color}"/>`;
+  }
+  // piece boundaries
+  let lines = '';
+  for (let i = 1; i < den; i++) {
+    const x = (i * pieceW).toFixed(2);
+    const strong = (glue > 1) ? (i % glue === 0) : true;
+    lines += `<line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="#243932" stroke-width="${strong ? sw : 1}" ${strong ? '' : 'stroke-dasharray="3 4" opacity="0.35"'}/>`;
+  }
+  // sub-splits (dashed, inside every piece)
+  if (split > 1) {
+    const subW = pieceW / split;
+    for (let i = 0; i < den; i++) {
+      for (let j = 1; j < split; j++) {
+        const x = (i * pieceW + j * subW).toFixed(2);
+        lines += `<line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="#243932" stroke-width="1.4" stroke-dasharray="4 4" opacity="0.55"/>`;
+      }
+    }
+  }
+  const lbl = label ? `<div class="bar-label">${label}</div>` : '';
+  return `<div class="bar-wrap"><svg class="fbar" viewBox="-2 -2 ${w + 4} ${h + 4}" width="${w}" role="img" aria-label="${num} out of ${den} pieces shaded">
+    <clipPath id="c${fbar._id = (fbar._id || 0) + 1}"><rect x="0" y="0" width="${w}" height="${h}" rx="${r}"/></clipPath>
+    <rect x="0" y="0" width="${w}" height="${h}" rx="${r}" fill="#eef5f0"/>
+    <g clip-path="url(#c${fbar._id})">${cells}${lines}</g>
+    <rect x="0" y="0" width="${w}" height="${h}" rx="${r}" fill="none" stroke="#243932" stroke-width="${sw + 0.5}"/>
+  </svg>${lbl}</div>`;
+}
+function frac(n, d){ return `<span class="frac"><span class="fn">${n}</span><span class="fd">${d}</span></span>`; }
+function blank(id, w){ return `<input class="blank" id="${id}" inputmode="numeric" autocomplete="off" ${w ? `style="width:${w}px"` : ''}>`; }
+function fracBlank(idN, idD){ return `<span class="frac"><span class="fn">${blank(idN)}</span><span class="fd" style="padding-top:6px;">${blank(idD)}</span></span>`; }
+function getNum(id){
+  const v = ($(id)?.value ?? '').trim();
+  if (!/^\d+$/.test(v)) return null;
+  return parseInt(v, 10);
+}
+function markBlank(id, ok){ const el = $(id); if (el) { el.classList.remove('ok','bad'); el.classList.add(ok ? 'ok' : 'bad'); } }
+function clearBlankMarks(root){ (root || document).querySelectorAll('.blank').forEach(el => el.classList.remove('ok','bad')); }
+
+// =====================================================================
+// Tabs
+// =====================================================================
+let currentTab = 'learn';
+function goTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  if (tab === 'learn') renderLearnHome();
+  else if (tab === 'practice') renderPracticeHome();
+  else renderExplainHome();
+  window.scrollTo({ top: 0 });
+}
+
+// =====================================================================
+// LEARN — five interactive lessons
+// =====================================================================
+const LESSONS = [
+  { id: 'what',    emoji: '🍫', title: 'What is a fraction?',        blurb: 'Equal pieces of one whole — what the top and bottom numbers really mean.' },
+  { id: 'split',   emoji: '✂️', title: 'The Magic Split',             blurb: 'Why multiplying the top AND bottom by the same number keeps a fraction equal.' },
+  { id: 'glue',    emoji: '🧩', title: 'Gluing pieces (simplify)',    blurb: 'Why dividing the top AND bottom by the same number works — and what "simplest form" means.' },
+  { id: 'samesize',emoji: '➕', title: 'Adding same-size pieces',     blurb: 'Add and subtract fractions with the same denominator — and why the bottom never changes.' },
+  { id: 'match',   emoji: '🔧', title: 'Different pieces? Match them!', blurb: 'Add and subtract fractions like ½ + ¼ by making the pieces the same size first.' },
+];
+
+function renderLearnHome(){
+  $('view').innerHTML = `
+    <div class="card" style="text-align:center;">
+      <h2>📖 Learn — one idea at a time</h2>
+      <p class="lede">Do the lessons in order. Play with the pictures — that's where the real understanding comes from!</p>
+    </div>
+    <div class="grid">
+      ${LESSONS.map((L, i) => `
+        <div class="pick-card ${progress.lessonsDone[L.id] ? 'done' : ''}" onclick="openLesson(${i})">
+          <div class="pc-emoji">${L.emoji}</div>
+          <h3>${i + 1}. ${L.title}</h3>
+          <p>${L.blurb}</p>
+          <div class="pc-meta">${progress.lessonsDone[L.id] ? '✅ Completed' : '▶ Start'}</div>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ---- generic lesson shell: steps within a lesson ----
+let lessonState = null;
+function openLesson(idx){
+  lessonState = { idx, step: 0 };
+  renderLesson();
+}
+function lessonShell(L, steps, bodyHtml){
+  const dots = steps.map((_, i) =>
+    `<div class="lstep ${i === lessonState.step ? 'active' : (i < lessonState.step ? 'done' : '')}" onclick="gotoLessonStep(${i})">${i < lessonState.step ? '✓' : i + 1}</div>`).join('');
+  return `
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+        <h2 style="margin:0;">${L.emoji} ${L.title}</h2>
+        <button class="btn btn-ghost" onclick="goTab('learn')">← All lessons</button>
+      </div>
+      <div class="lesson-steps">${dots}</div>
+      ${bodyHtml}
+    </div>`;
+}
+function gotoLessonStep(i){ lessonState.step = i; renderLesson(); }
+function nextLessonStep(){
+  const L = LESSONS[lessonState.idx];
+  const total = LESSON_RENDERERS[L.id].steps;
+  if (lessonState.step + 1 >= total) {
+    if (!progress.lessonsDone[L.id]) { progress.lessonsDone[L.id] = true; saveProgress(); addStars(2, 'lessons'); toast('🎉 Lesson complete! +2 stars'); }
+    else toast('🎉 Lesson complete!');
+    goTab('learn');
+  } else { lessonState.step++; renderLesson(); }
+}
+function renderLesson(){
+  const L = LESSONS[lessonState.idx];
+  LESSON_RENDERERS[L.id].render(L);
+  window.scrollTo({ top: 0 });
+}
+const nextBtn = (label = 'Next →') => `<div class="btn-row"><button class="btn btn-green" onclick="nextLessonStep()">${label}</button></div>`;
+
+// ---- quick-check widget used inside lessons ----
+// cfg: { html, answers: {blankId: value}, onCorrect, feedbackGood, feedbackBad }
+let quickCheck = null;
+function quickCheckHtml(cfg){
+  quickCheck = cfg;
+  return `
+    ${cfg.html}
+    <div class="btn-row"><button class="btn btn-blue" onclick="doQuickCheck()">Check my answer</button></div>
+    <div class="feedback" id="qcFeedback"></div>
+    <div class="btn-row" id="qcNextRow" style="display:none;"><button class="btn btn-green" onclick="nextLessonStep()">Next →</button></div>`;
+}
+function doQuickCheck(){
+  const fb = $('qcFeedback');
+  let allOk = true, anyEmpty = false;
+  for (const [id, want] of Object.entries(quickCheck.answers)) {
+    const got = getNum(id);
+    if (got === null) { anyEmpty = true; markBlank(id, false); allOk = false; continue; }
+    const ok = got === want;
+    markBlank(id, ok);
+    if (!ok) allOk = false;
+  }
+  fb.classList.add('show');
+  if (allOk) {
+    fb.className = 'feedback show good';
+    fb.innerHTML = `<div class="fb-title">✅ ${quickCheck.feedbackGood || 'Exactly right!'}</div>`;
+    $('qcNextRow').style.display = 'flex';
+  } else {
+    fb.className = 'feedback show bad';
+    fb.innerHTML = `<div class="fb-title">Not yet — look at the picture again.</div>${anyEmpty ? 'Fill in every box with a number.' : (quickCheck.feedbackBad || 'Count the pieces carefully, then try again.')}`;
+  }
+}
+
+// ---------------------------------------------------------------
+// Lesson 1 — What is a fraction?
+// ---------------------------------------------------------------
+const l1 = { den: 4, num: 3 };
+function renderL1(L){
+  const steps = [0,1,2];
+  let body = '';
+  if (lessonState.step === 0) {
+    body = `
+      <h3>A fraction is about EQUAL pieces</h3>
+      <p>Imagine a chocolate bar. We cut the <b>whole</b> bar into <b>equal</b> pieces and take some of them.</p>
+      <div id="l1bar">${fbar(l1.num, l1.den, { label: `${l1.num} out of ${l1.den} equal pieces → we write ${l1.num}/${l1.den}` })}</div>
+      <div class="eq-row" id="l1eq">${frac(l1.num, l1.den)}</div>
+      <p style="text-align:center; color:var(--muted); font-size:0.92rem;">Play with the buttons — watch what each number does!</p>
+      <div class="chip-row"><span style="align-self:center; font-weight:700; color:var(--muted);">Cut into:</span>
+        ${[2,3,4,5,6,8].map(d => `<button class="chip ${d === l1.den ? 'active' : ''}" onclick="l1SetDen(${d})">${d} pieces</button>`).join('')}
+      </div>
+      <div class="chip-row"><span style="align-self:center; font-weight:700; color:var(--muted);">Take:</span>
+        ${[1,2,3,4,5].map(n => `<button class="chip ${n === l1.num ? 'active' : ''}" ${n >= l1.den ? 'disabled' : ''} onclick="l1SetNum(${n})">${n}</button>`).join('')}
+      </div>
+      <div class="idea"><b>Key idea:</b> the <b>bottom number (denominator)</b> tells how many <b>equal pieces</b> the whole is cut into. The <b>top number (numerator)</b> tells how many pieces we take. Bigger bottom number = <b>smaller</b> pieces!</div>
+      ${nextBtn()}`;
+  } else if (lessonState.step === 1) {
+    body = `
+      <h3>Careful — the pieces must be EQUAL</h3>
+      <p>If the pieces are different sizes, the bottom number tells us nothing! One "half" could be tiny and the other huge — that's not fair sharing, and it's not a fraction.</p>
+      <div class="bar-wrap">
+        <svg class="fbar" viewBox="-2 -2 364 62" width="360" role="img" aria-label="unequal pieces">
+          <rect x="0" y="0" width="360" height="58" rx="10" fill="#eef5f0"/>
+          <rect x="0" y="0" width="70" height="58" fill="var(--shade-2)"/>
+          <line x1="70" y1="0" x2="70" y2="58" stroke="#243932" stroke-width="2"/>
+          <line x1="150" y1="0" x2="150" y2="58" stroke="#243932" stroke-width="2"/>
+          <line x1="190" y1="0" x2="190" y2="58" stroke="#243932" stroke-width="2"/>
+          <rect x="0" y="0" width="360" height="58" rx="10" fill="none" stroke="#243932" stroke-width="2.5"/>
+        </svg>
+        <div class="bar-label">4 pieces… but NOT equal — so the orange piece is NOT ¼ of the bar ❌</div>
+      </div>
+      ${fbar(1, 4, { label: '4 EQUAL pieces — now the shaded piece really is ¼ ✅' })}
+      <div class="warn"><b>Watch out:</b> a fraction only makes sense when every piece is the <b>same size</b>. Always ask: "are the pieces equal?"</div>
+      ${nextBtn()}`;
+  } else {
+    body = quickCheckHtml({
+      html: `
+        <h3>Quick check</h3>
+        <p>Write the fraction shown by this picture:</p>
+        ${fbar(5, 8)}
+        <div class="eq-row">shaded part = ${fracBlank('qc1n','qc1d')}</div>`,
+      answers: { qc1n: 5, qc1d: 8 },
+      feedbackGood: '5 shaded pieces out of 8 equal pieces — that is 5/8!',
+      feedbackBad: 'Top = how many pieces are shaded. Bottom = how many equal pieces altogether.'
+    });
+  }
+  $('view').innerHTML = lessonShell(L, steps, body);
+}
+function l1SetDen(d){ l1.den = d; if (l1.num >= d) l1.num = d - 1; renderLesson(); }
+function l1SetNum(n){ l1.num = n; renderLesson(); }
+
+// ---------------------------------------------------------------
+// Lesson 2 — The Magic Split (equivalent fractions, why × works)
+// ---------------------------------------------------------------
+const l2 = { n: 1, d: 2, k: 1 };
+function renderL2(L){
+  const steps = [0,1,2,3];
+  let body = '';
+  if (lessonState.step === 0) {
+    const { n, d, k } = l2;
+    body = `
+      <h3>Split every piece — the amount doesn't change!</h3>
+      <p>Here is ${frac(n, d)} of a bar. Now cut <b>every</b> piece into smaller equal pieces. Does the shaded amount grow or shrink?</p>
+      ${fbar(n, d, { split: k, label: k === 1 ? `${n}/${d}` : `Every piece cut into ${k} → now ${n * k} small pieces are shaded out of ${d * k}` })}
+      <div class="chip-row"><span style="align-self:center; font-weight:700; color:var(--muted);">Cut every piece into:</span>
+        ${[1,2,3,4].map(kk => `<button class="chip ${kk === l2.k ? 'active' : ''}" onclick="l2SetK(${kk})">${kk === 1 ? 'no cut' : '×' + kk}</button>`).join('')}
+      </div>
+      <div class="eq-row">${frac(n, d)}${k > 1 ? `<span class="op">=</span>${frac(`${n}×${k}`, `${d}×${k}`)}<span class="op">=</span>${frac(n * k, d * k)}` : ''}</div>
+      <div class="idea"><b>See it?</b> The shaded part <b>never moved</b>. We only drew extra lines. Cutting every piece into ${k > 1 ? k : 'k'} pieces makes the top <b>×${k > 1 ? k : 'k'}</b> AND the bottom <b>×${k > 1 ? k : 'k'}</b> — but the amount of chocolate is exactly the same. That's why ${frac(n, d)} ${k > 1 ? `= ${frac(n * k, d * k)}` : 'has many other names'}. We call them <b>equivalent fractions</b>.</div>
+      <div class="chip-row"><span style="align-self:center; font-weight:700; color:var(--muted);">Try another fraction:</span>
+        ${[[1,2],[2,3],[3,4]].map(([nn,dd]) => `<button class="chip ${nn === l2.n && dd === l2.d ? 'active' : ''}" onclick="l2SetFrac(${nn},${dd})">${nn}/${dd}</button>`).join('')}
+      </div>
+      ${nextBtn()}`;
+  } else if (lessonState.step === 1) {
+    body = `
+      <h3>Why must we multiply BOTH numbers?</h3>
+      <p>The top and bottom are a team. When you cut every piece into 3, you get 3 times as many <b>shaded</b> pieces (top ×3) and 3 times as many <b>total</b> pieces (bottom ×3). One can't change without the other!</p>
+      ${fbar(1, 2, { label: '1/2' })}
+      ${fbar(3, 6, { glue: 3, label: '1/2 = 3/6 — same amount, smaller pieces, new name' })}
+      <div class="idea"><b>Multiplying top and bottom by the same number</b> is really just <b>cutting the same picture into smaller pieces</b>. Nothing is added, nothing is taken away.</div>
+      ${nextBtn()}`;
+  } else if (lessonState.step === 2) {
+    body = `
+      <h3>⚠️ What about ADDING the same number?</h3>
+      <p>Sam says: "If multiplying both numbers is OK, adding 1 to both should be OK too! So ${frac(1,2)} = ${frac(2,3)}." Let's check with a picture:</p>
+      ${fbar(1, 2, { label: '1/2' })}
+      ${fbar(2, 3, { color: 'var(--shade-2)', label: '2/3 — more is shaded!' })}
+      <div class="warn"><b>Sam is wrong!</b> ${frac(2,3)} is clearly MORE than ${frac(1,2)}. Adding the same number to top and bottom is <b>not</b> a fair move — it changes the amount. Only <b>multiplying (or dividing)</b> both by the same number keeps the fraction equal, because that's just re-cutting the same picture.</div>
+      ${nextBtn()}`;
+  } else {
+    body = quickCheckHtml({
+      html: `
+        <h3>Quick check</h3>
+        <p>Every piece of this ${frac(2,3)} bar is cut into 2. Fill in the blanks:</p>
+        ${fbar(2, 3, { split: 2 })}
+        <div class="eq-row">${frac(2,3)}<span class="op">=</span>${frac(`2 × 2`, `3 × 2`)}<span class="op">=</span>${fracBlank('qc2n','qc2d')}</div>`,
+      answers: { qc2n: 4, qc2d: 6 },
+      feedbackGood: '2/3 = 4/6 — same amount, just cut smaller!',
+      feedbackBad: 'Count the SMALL pieces: how many are shaded? How many altogether?'
+    });
+  }
+  $('view').innerHTML = lessonShell(L, steps, body);
+}
+function l2SetK(k){ l2.k = k; renderLesson(); }
+function l2SetFrac(n, d){ l2.n = n; l2.d = d; l2.k = 1; renderLesson(); }
+
+// ---------------------------------------------------------------
+// Lesson 3 — Gluing pieces (simplifying, why ÷ works)
+// ---------------------------------------------------------------
+const l3 = { n: 8, d: 12, g: 1 };
+function renderL3(L){
+  const steps = [0,1,2];
+  let body = '';
+  if (lessonState.step === 0) {
+    const { n, d, g } = l3;
+    const canGlue = (x) => n % x === 0 && d % x === 0;
+    body = `
+      <h3>Gluing is the Magic Split in reverse</h3>
+      <p>Here is ${frac(n, d)}. Those are a lot of small pieces! Can we <b>glue</b> them back into bigger equal pieces?</p>
+      ${fbar(n, d, { glue: g, label: g === 1 ? `${n}/${d}` : `Glued in groups of ${g} → ${n / g} big pieces shaded out of ${d / g}` })}
+      <div class="chip-row"><span style="align-self:center; font-weight:700; color:var(--muted);">Glue groups of:</span>
+        ${[1,2,3,4].map(gg => `<button class="chip ${gg === l3.g ? 'active' : ''}" ${gg !== 1 && !canGlue(gg) ? 'disabled' : ''} onclick="l3SetG(${gg})">${gg === 1 ? 'no glue' : '÷' + gg}</button>`).join('')}
+      </div>
+      <div class="eq-row">${frac(n, d)}${g > 1 ? `<span class="op">=</span>${frac(`${n}÷${g}`, `${d}÷${g}`)}<span class="op">=</span>${frac(n / g, d / g)}` : ''}</div>
+      <div class="idea"><b>Why dividing works:</b> gluing every ${g > 1 ? g : 'few'} small pieces into 1 big piece divides the top AND the bottom by the same number — and again, <b>the shaded amount never changes</b>. ${l3.g === 3 || (l3.n === 8 && l3.d === 12) ? 'Notice ÷3 is greyed out for 8/12: you can only glue if the group size divides BOTH numbers exactly — otherwise a shaded piece and an unshaded piece would end up glued together!' : ''}</div>
+      ${nextBtn()}`;
+  } else if (lessonState.step === 1) {
+    body = `
+      <h3>Simplest form = no more gluing possible</h3>
+      <p>Keep gluing until no number (except 1) divides both the top and the bottom. That's the fraction's <b>simplest form</b> — the same amount with the fewest, biggest pieces.</p>
+      <div class="eq-row">${frac(8,12)}<span class="op">=</span>${frac(4,6)}<span class="op">=</span>${frac(2,3)}</div>
+      ${fbar(8, 12, { label: '8/12' })}
+      ${fbar(2, 3, { label: '2/3 — simplest form: same amount, biggest pieces' })}
+      <div class="idea"><b>Tip:</b> you can glue step by step (÷2, then ÷2 again) or in one big jump (÷4). You always land on the same simplest form.</div>
+      ${nextBtn()}`;
+  } else {
+    body = quickCheckHtml({
+      html: `
+        <h3>Quick check</h3>
+        <p>Write ${frac(6, 8)} in its simplest form. (Hint: what number divides BOTH 6 and 8?)</p>
+        ${fbar(6, 8, { glue: 2 })}
+        <div class="eq-row">${frac(6,8)}<span class="op">=</span>${fracBlank('qc3n','qc3d')}</div>`,
+      answers: { qc3n: 3, qc3d: 4 },
+      feedbackGood: '6/8 = 3/4. Glue pieces in pairs: 6÷2 = 3 and 8÷2 = 4!',
+      feedbackBad: 'Glue the small pieces two by two. How many big shaded pieces? How many big pieces altogether?'
+    });
+  }
+  $('view').innerHTML = lessonShell(L, steps, body);
+}
+function l3SetG(g){ l3.g = g; renderLesson(); }
+
+// ---------------------------------------------------------------
+// Lesson 4 — Adding same-size pieces
+// ---------------------------------------------------------------
+function renderL4(L){
+  const steps = [0,1,2];
+  let body = '';
+  if (lessonState.step === 0) {
+    body = `
+      <h3>Same-size pieces? Just count them!</h3>
+      <p>2 apples + 1 apple = 3 apples. In the same way: 2 <b>fifths</b> + 1 <b>fifth</b> = 3 <b>fifths</b>. The pieces are the same size, so we simply count pieces.</p>
+      ${fbar(2, 5, { label: '2/5' })}
+      ${fbar(1, 5, { color: 'var(--shade-2)', label: '+ 1/5' })}
+      <div class="bar-wrap">
+        <svg class="fbar" viewBox="-2 -2 364 62" width="360" role="img" aria-label="3 out of 5 shaded">
+          <clipPath id="l4c"><rect x="0" y="0" width="360" height="58" rx="10"/></clipPath>
+          <rect x="0" y="0" width="360" height="58" rx="10" fill="#eef5f0"/>
+          <g clip-path="url(#l4c)">
+            <rect x="0" y="0" width="144" height="58" fill="var(--shade)"/>
+            <rect x="144" y="0" width="72" height="58" fill="var(--shade-2)"/>
+            ${[1,2,3,4].map(i => `<line x1="${i*72}" y1="0" x2="${i*72}" y2="58" stroke="#243932" stroke-width="2"/>`).join('')}
+          </g>
+          <rect x="0" y="0" width="360" height="58" rx="10" fill="none" stroke="#243932" stroke-width="2.5"/>
+        </svg>
+        <div class="bar-label">= 3/5 — count the pieces: 2 + 1 = 3 pieces, each still a fifth</div>
+      </div>
+      <div class="eq-row">${frac(2,5)}<span class="op">+</span>${frac(1,5)}<span class="op">=</span>${frac(3,5)}</div>
+      <div class="idea"><b>Key idea:</b> the bottom number is the <b>size of the pieces</b> (fifths). Adding pieces doesn't change their size — so the bottom stays <b>5</b>. Only the count (top) changes.</div>
+      ${nextBtn()}`;
+  } else if (lessonState.step === 1) {
+    body = `
+      <h3>⚠️ Why NOT add the bottoms?</h3>
+      <p>Sam says ${frac(2,5)} + ${frac(1,5)} = ${frac(3,10)}. Let's test that with a picture:</p>
+      ${fbar(2, 5, { label: 'Just the first fraction: 2/5' })}
+      ${fbar(3, 10, { color: 'var(--shade-2)', label: "Sam's answer: 3/10" })}
+      <div class="warn"><b>Impossible!</b> Sam's "answer" ${frac(3,10)} is <b>smaller</b> than the ${frac(2,5)} we started with — but we <b>added</b> more! Adding the bottoms invents smaller pieces out of nowhere. The piece size (bottom) must stay the same; we only count more pieces on top. Subtraction works the same way: ${frac(4,5)} − ${frac(1,5)} = ${frac(3,5)}.</div>
+      ${nextBtn()}`;
+  } else {
+    body = quickCheckHtml({
+      html: `
+        <h3>Quick check</h3>
+        <div class="eq-row">${frac(3,8)}<span class="op">+</span>${frac(2,8)}<span class="op">=</span>${fracBlank('qc4n','qc4d')}</div>
+        ${fbar(3, 8, { label: '3/8 …now add 2 more eighths in your head' })}`,
+      answers: { qc4n: 5, qc4d: 8 },
+      feedbackGood: '3 eighths + 2 eighths = 5 eighths. The pieces stayed the same size!',
+      feedbackBad: 'The pieces are all eighths — the bottom stays 8. Only count the top: 3 + 2.'
+    });
+  }
+  $('view').innerHTML = lessonShell(L, steps, body);
+}
+
+// ---------------------------------------------------------------
+// Lesson 5 — Different-size pieces? Match them first!
+// ---------------------------------------------------------------
+const l5 = { split: false };
+function renderL5(L){
+  const steps = [0,1,2];
+  let body = '';
+  if (lessonState.step === 0) {
+    body = `
+      <h3>You can't count different-size pieces</h3>
+      <p>Try to add ${frac(1,2)} + ${frac(1,4)}. Is it "2 pieces"? 2 pieces of <b>what size</b>? A half and a quarter are different — counting them together makes no sense yet.</p>
+      ${fbar(1, 2, { label: '1/2 — one BIG piece' })}
+      ${fbar(1, 4, { color: 'var(--shade-2)', label: '1/4 — one small piece. Different sizes!' })}
+      <div class="idea"><b>The fix:</b> use the <b>Magic Split</b> from Lesson 2 to re-cut one fraction until the pieces match. Then we can count!</div>
+      ${nextBtn()}`;
+  } else if (lessonState.step === 1) {
+    body = `
+      <h3>Split the half into quarters</h3>
+      <p>${l5.split ? 'Now every piece is a quarter — same size, so we can count them!' : 'Press the button to cut the half into quarters:'}</p>
+      ${fbar(1, 2, { split: l5.split ? 2 : 1, label: l5.split ? '1/2 = 2/4 (Magic Split: ×2 top and bottom)' : '1/2' })}
+      ${fbar(1, 4, { color: 'var(--shade-2)', label: '1/4' })}
+      ${l5.split ? `
+        <div class="eq-row">${frac(1,2)}<span class="op">+</span>${frac(1,4)}<span class="op">=</span>${frac(2,4)}<span class="op">+</span>${frac(1,4)}<span class="op">=</span>${frac(3,4)}</div>
+        <div class="idea"><b>That's the whole secret</b> of adding fractions with different bottoms: it's not a rule to memorise — you're just re-cutting pieces until they're the same size, then counting. Subtraction is the same: ${frac(1,2)} − ${frac(1,4)} = ${frac(2,4)} − ${frac(1,4)} = ${frac(1,4)}.</div>
+        ${nextBtn()}`
+      : `<div class="btn-row"><button class="btn btn-green" onclick="l5Split()">✂️ Split the half into quarters</button></div>`}`;
+  } else {
+    body = quickCheckHtml({
+      html: `
+        <h3>Quick check</h3>
+        <p>Work out ${frac(1,3)} + ${frac(2,6)} step by step:</p>
+        ${fbar(1, 3, { split: 2, label: '1/3 with every piece cut into 2 → sixths' })}
+        <div class="eq-row">${frac(1,3)}<span class="op">=</span><span class="frac"><span class="fn">${blank('qc5a')}</span><span class="fd">6</span></span></div>
+        <div class="eq-row"><span class="frac"><span class="fn">?</span><span class="fd">6</span></span><span class="op">+</span>${frac(2,6)}<span class="op">=</span>${fracBlank('qc5n','qc5d')}</div>`,
+      answers: { qc5a: 2, qc5n: 4, qc5d: 6 },
+      feedbackGood: '1/3 = 2/6, then 2 sixths + 2 sixths = 4 sixths. You added fractions with different bottoms — like a pro!',
+      feedbackBad: 'First: cutting each third into 2 gives how many sixths? Then count sixths — the bottom stays 6.'
+    });
+  }
+  $('view').innerHTML = lessonShell(L, steps, body);
+}
+function l5Split(){ l5.split = true; renderLesson(); }
+
+const LESSON_RENDERERS = {
+  what:     { steps: 3, render: renderL1 },
+  split:    { steps: 4, render: renderL2 },
+  glue:     { steps: 3, render: renderL3 },
+  samesize: { steps: 3, render: renderL4 },
+  match:    { steps: 3, render: renderL5 },
+};
+
+// =====================================================================
+// PRACTICE — generated fill-in-the-blank questions with smart feedback
+// =====================================================================
+const SKILLS = [
+  { id: 'name',     emoji: '🍫', title: 'Name the fraction', blurb: 'Look at the picture, write the fraction.' },
+  { id: 'equiv',    emoji: '✂️', title: 'Equal fractions',    blurb: 'Find the missing number using the Magic Split.' },
+  { id: 'simplify', emoji: '🧩', title: 'Simplify',           blurb: 'Glue pieces to find the simplest form.' },
+  { id: 'like',     emoji: '➕', title: 'Add & subtract (same pieces)', blurb: 'Same denominators — count the pieces.' },
+  { id: 'related',  emoji: '🔧', title: 'Add & subtract (match first)', blurb: 'Different denominators — match the pieces, then count.' },
+  { id: 'mixed',    emoji: '🎲', title: 'Mixed challenge',    blurb: 'A little bit of everything!' },
+];
+
+let practice = null; // { skill, q, firstTry, answered }
+
+function renderPracticeHome(){
+  $('view').innerHTML = `
+    <div class="card" style="text-align:center;">
+      <h2>✏️ Practice</h2>
+      <p class="lede">Fill in the blanks. Get it right on the first try to earn a star! If you're stuck, the AI Coach can explain.</p>
+    </div>
+    <div class="grid">
+      ${SKILLS.map(s => `
+        <div class="pick-card" onclick="startPractice('${s.id}')">
+          <div class="pc-emoji">${s.emoji}</div>
+          <h3>${s.title}</h3>
+          <p>${s.blurb}</p>
+          <div class="pc-meta">⭐ ${progress.skillStars[s.id] || 0}</div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function startPractice(skillId){
+  practice = { skill: skillId, q: null, firstTry: true, answered: false };
+  nextPracticeQ();
+}
+function nextPracticeQ(){
+  const s = practice.skill;
+  const gen = s === 'mixed' ? pick([genName, genEquiv, genSimplify, genLike, genRelated]) : GENERATORS[s];
+  practice.q = gen();
+  practice.firstTry = true;
+  practice.answered = false;
+  renderPracticeQ();
+}
+function renderPracticeQ(){
+  const q = practice.q;
+  const skill = SKILLS.find(s => s.id === practice.skill);
+  $('view').innerHTML = `
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+        <h2 style="margin:0;">${skill.emoji} ${skill.title}</h2>
+        <button class="btn btn-ghost" onclick="goTab('practice')">← Skills</button>
+      </div>
+      ${q.html}
+      <div class="btn-row">
+        <button class="btn btn-blue" id="pCheckBtn" onclick="checkPractice()">Check my answer</button>
+        <button class="btn btn-soft" id="pNextBtn" onclick="nextPracticeQ()" style="display:none;">Next question →</button>
+      </div>
+      <div class="feedback" id="pFeedback"></div>
+      <div class="btn-row" id="pCoachRow" style="display:none;">
+        <button class="btn btn-soft" id="pCoachBtn" onclick="askCoach()">🤖 AI Coach, help me understand!</button>
+      </div>
+      <div class="ai-box" id="pCoachBox" style="display:none;"></div>
+    </div>`;
+  const first = document.querySelector('#view .blank');
+  if (first) first.focus();
+}
+
+function checkPractice(){
+  const q = practice.q;
+  const fb = $('pFeedback');
+  let allOk = true, anyEmpty = false;
+  const got = {};
+  for (const [id, want] of Object.entries(q.answers)) {
+    const v = getNum(id);
+    got[id] = v;
+    if (v === null) { anyEmpty = true; markBlank(id, false); allOk = false; continue; }
+    const ok = v === want;
+    markBlank(id, ok);
+    if (!ok) allOk = false;
+  }
+  // some questions accept an equivalent-fraction answer (e.g. already simplified)
+  let altNote = '';
+  if (!allOk && !anyEmpty && q.acceptEquivalent) {
+    const alt = q.acceptEquivalent(got);
+    if (alt) { allOk = true; altNote = alt; clearBlankMarks(); Object.keys(q.answers).forEach(id => markBlank(id, true)); }
+  }
+  fb.classList.add('show');
+  if (allOk) {
+    fb.className = 'feedback show good';
+    fb.innerHTML = `<div class="fb-title">✅ ${altNote || q.praise || 'Correct — great thinking!'}</div>`;
+    $('pCheckBtn').style.display = 'none';
+    $('pNextBtn').style.display = 'inline-block';
+    $('pCoachRow').style.display = 'none';
+    if (practice.firstTry && !practice.answered) { addStars(1, practice.skill); toast('⭐ +1 star!'); }
+    practice.answered = true;
+  } else {
+    fb.className = 'feedback show bad';
+    let msg = anyEmpty ? 'Fill in every box with a number, then check again.' : (q.diagnose ? q.diagnose(got) : null) || 'Not quite — look at the picture and try again.';
+    fb.innerHTML = `<div class="fb-title">Not yet!</div>${msg}`;
+    practice.firstTry = false;
+    $('pCoachRow').style.display = 'flex';
+  }
+}
+
+// ---- generators ----
+function genName(){
+  const d = pick([3,4,5,6,8,10,12]);
+  const n = ri(1, d - 1);
+  return {
+    text: `Write the fraction shown in the picture.`,
+    html: `<p>Write the fraction shown in the picture:</p>${fbar(n, d)}
+      <div class="eq-row">shaded part = ${fracBlank('bn','bd')}</div>`,
+    answers: { bn: n, bd: d },
+    praise: `${n} shaded out of ${d} equal pieces = ${n}/${d}.`,
+    expected: `${n}/${d}`,
+    diagnose(got){
+      if (got.bn === d && got.bd === n) return 'You swapped them! The <b>top</b> counts the shaded pieces, the <b>bottom</b> counts ALL the equal pieces.';
+      if (got.bd === d && got.bn === d - n) return 'You counted the <b>unshaded</b> pieces. Count the shaded (green) ones for the top.';
+      return 'Top = shaded pieces. Bottom = all the equal pieces.';
+    }
+  };
+}
+function genEquiv(){
+  const d = pick([2,3,4,5,6]);
+  const n = ri(1, d - 1);
+  const kMax = Math.floor(12 / d);
+  const k = ri(2, Math.max(2, kMax));
+  const missingTop = Math.random() < 0.6;
+  const text = missingTop
+    ? `${n}/${d} = ?/${d * k}`
+    : `${n}/${d} = ${n * k}/?`;
+  return {
+    text: `Find the missing number: ${text}`,
+    html: `<p>Find the missing number. (Think: each piece is cut into <b>${k}</b>.)</p>
+      ${fbar(n, d, { split: k, label: `${n}/${d}, with every piece cut into ${k}` })}
+      <div class="eq-row">${frac(n, d)}<span class="op">=</span>${missingTop
+        ? `<span class="frac"><span class="fn">${blank('bx')}</span><span class="fd">${d * k}</span></span>`
+        : `<span class="frac"><span class="fn">${n * k}</span><span class="fd" style="padding-top:6px;">${blank('bx')}</span></span>`}</div>`,
+    answers: { bx: missingTop ? n * k : d * k },
+    praise: `${n}/${d} = ${n * k}/${d * k} — top and bottom both ×${k}.`,
+    expected: `${n}/${d} = ${n * k}/${d * k}`,
+    diagnose(got){
+      const diff = d * k - d;
+      if (missingTop && got.bx === n + diff) return `You <b>added</b> ${diff} to the top because the bottom grew by ${diff}. But equal fractions come from <b>multiplying</b>, not adding! The bottom went ${d} → ${d * k}, that's <b>×${k}</b>. Do the same to the top.`;
+      if (missingTop && got.bx === n + k) return `Careful — the bottom was <b>multiplied</b> by ${k}, not increased by ${k}. Do the same to the top: ${n} × ${k}.`;
+      return `The bottom ${missingTop ? `went from ${d} to ${d * k} — that's ×${k}` : `must grow the same way as the top (×${k})`}. Whatever you do to one number, do to the other!`;
+    }
+  };
+}
+function genSimplify(){
+  const [p, qd] = pick([[1,2],[1,3],[2,3],[1,4],[3,4],[2,5],[1,5],[5,6],[1,6]]);
+  const kMax = Math.floor(12 / qd);
+  const k = ri(2, Math.max(2, kMax));
+  const n = p * k, d = qd * k;
+  return {
+    text: `Write ${n}/${d} in its simplest form.`,
+    html: `<p>Write this fraction in its <b>simplest form</b>. (Hint: what number divides BOTH ${n} and ${d}?)</p>
+      ${fbar(n, d, { glue: k, label: `${n}/${d} — the bold lines show the glue groups` })}
+      <div class="eq-row">${frac(n, d)}<span class="op">=</span>${fracBlank('bn','bd')}</div>`,
+    answers: { bn: p, bd: qd },
+    praise: `${n}/${d} = ${p}/${qd} — divide top and bottom by ${k}.`,
+    expected: `${n}/${d} = ${p}/${qd}`,
+    diagnose(got){
+      if (got.bn != null && got.bd != null && got.bd !== 0 && got.bn * d === n * got.bd) {
+        const g = gcd(got.bn, got.bd);
+        if (g > 1) return `${got.bn}/${got.bd} IS equal to ${n}/${d} — nice! But you can still glue more: ${got.bn} and ${got.bd} can both be divided by ${g}. Keep going to the simplest form.`;
+      }
+      return `Find a number that divides BOTH the top and the bottom exactly, and divide them together. The picture's bold lines show the groups.`;
+    }
+  };
+}
+function genLike(){
+  const d = pick([4,5,6,8,10,12]);
+  const isAdd = Math.random() < 0.6;
+  let a, b;
+  if (isAdd) { a = ri(1, d - 2); b = ri(1, d - a - 1); }
+  else { a = ri(2, d - 1); b = ri(1, a - 1); }
+  const res = isAdd ? a + b : a - b;
+  return {
+    text: `${a}/${d} ${isAdd ? '+' : '−'} ${b}/${d} = ?`,
+    html: `<p>Work it out. Remember: the pieces are all the <b>same size</b>.</p>
+      ${fbar(a, d, { label: `${a}/${d}` })}
+      <div class="eq-row">${frac(a, d)}<span class="op">${isAdd ? '+' : '−'}</span>${frac(b, d)}<span class="op">=</span>${fracBlank('bn','bd')}</div>`,
+    answers: { bn: res, bd: d },
+    praise: `${a} ${isAdd ? '+' : '−'} ${b} = ${res} pieces, each still a ${d === 2 ? 'half' : '1/' + d} — so ${res}/${d}.`,
+    expected: `${res}/${d}`,
+    acceptEquivalent(got){
+      if (got.bn != null && got.bd != null && got.bd !== 0 && got.bn * d === res * got.bd && gcd(got.bn, got.bd) === 1 && got.bd < d)
+        return `${got.bn}/${got.bd} is exactly right — you even gave the simplest form. Superstar! (${res}/${d} was also accepted.)`;
+      return null;
+    },
+    diagnose(got){
+      if (got.bd === d + d) return `You ${isAdd ? 'added' : 'changed'} the bottoms! But ${a + b <= d && isAdd ? `${a + b}/${d + d} is only HALF of the real total — half the chocolate would vanish into thin air! ` : ''}The bottom number is the <b>size</b> of the pieces — ${isAdd ? 'adding' : 'subtracting'} pieces doesn't change their size. Keep the bottom as ${d} and only ${isAdd ? 'add' : 'subtract'} the tops.`;
+      if (got.bn === (isAdd ? a - b : a + b)) return `Check the sign — this question is ${isAdd ? 'an addition (+)' : 'a subtraction (−)'}.`;
+      return `The pieces stay the same size (bottom = ${d}). Just ${isAdd ? 'count all the pieces: ' + a + ' + ' + b : 'take away: ' + a + ' − ' + b}.`;
+    }
+  };
+}
+function genRelated(){
+  const [ds, db] = pick([[2,4],[2,6],[2,8],[2,10],[2,12],[3,6],[3,9],[3,12],[4,8],[4,12],[5,10],[6,12]]);
+  const k = db / ds;
+  const isAdd = Math.random() < 0.6;
+  let a, c; // a/ds  and  c/db
+  if (isAdd) {
+    a = ri(1, ds - 1);
+    const room = db - a * k;
+    if (room < 1) return genRelated();
+    c = ri(1, Math.min(db - 1, room));
+  } else {
+    a = ri(1, ds - 1);
+    c = ri(1, a * k - 1);
+  }
+  const conv = a * k;
+  const res = isAdd ? conv + c : conv - c;
+  return {
+    text: `${a}/${ds} ${isAdd ? '+' : '−'} ${c}/${db} = ?`,
+    html: `<p>The pieces are different sizes — <b>match them first</b>, then count!</p>
+      ${fbar(a, ds, { split: k, label: `${a}/${ds} with every piece cut into ${k} → ${db === 2 ? 'halves' : db + 'ths'}` })}
+      <div class="eq-row">Step 1: ${frac(a, ds)}<span class="op">=</span><span class="frac"><span class="fn">${blank('bc')}</span><span class="fd">${db}</span></span></div>
+      <div class="eq-row">Step 2: <span class="frac"><span class="fn">?</span><span class="fd">${db}</span></span><span class="op">${isAdd ? '+' : '−'}</span>${frac(c, db)}<span class="op">=</span>${fracBlank('bn','bd')}</div>`,
+    answers: { bc: conv, bn: res, bd: db },
+    praise: `${a}/${ds} = ${conv}/${db}, then ${conv} ${isAdd ? '+' : '−'} ${c} = ${res} pieces of size 1/${db}.`,
+    expected: `${a}/${ds} = ${conv}/${db}; answer ${res}/${db}`,
+    diagnose(got){
+      if (got.bc !== conv) return `Start with Step 1. Each piece of ${frac(a, ds)} is cut into ${k}, so multiply top and bottom by ${k}: ${a} × ${k} = ?`;
+      if (got.bd === ds + db) return `You added the bottoms! Once the pieces match (all ${db}ths), the size doesn't change any more — the bottom stays <b>${db}</b>. Only count the tops.`;
+      return `Step 1 is right! Now all pieces are ${db}ths — the same size. Count: ${conv} ${isAdd ? '+' : '−'} ${c} pieces.`;
+    }
+  };
+}
+const GENERATORS = { name: genName, equiv: genEquiv, simplify: genSimplify, like: genLike, related: genRelated };
+
+// ---- AI Coach for a wrong practice answer ----
+async function askCoach(){
+  const q = practice.q;
+  const box = $('pCoachBox');
+  const btn = $('pCoachBtn');
+  if (!aiReady()) { box.style.display = 'block'; box.innerHTML = `<div class="ai-title">🤖 AI Coach</div>Sorry, the AI is not available right now. Look at the picture and the hint above — you can do it!`; return; }
+  const entries = Object.keys(q.answers).map(id => `${id}: ${($(id)?.value ?? '').trim() || '(empty)'}`).join(', ');
+  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Coach is thinking…`;
+  try {
+    const prompt = `You are a warm, patient maths coach for a Primary 3 child (about 9 years old) in Singapore, helping with fractions.
+
+The child is solving: ${q.text}
+The correct working: ${q.expected}
+The child's (wrong) answers to the blanks: ${entries}
+
+Explain WHY their answer doesn't work using the idea of equal-sized pieces of a bar (not just the rule). Be encouraging, never scolding. Use very simple words and short sentences. Do NOT give the final answer — end with one small guiding question that leads them to the next step.
+
+Return STRICT JSON only: {"help": "your explanation, 2-4 short sentences"}`;
+    const raw = await askGemini(prompt, { maxOutputTokens: 400, temperature: 0.5 });
+    const out = parseAIJson(raw);
+    box.style.display = 'block';
+    box.innerHTML = `<div class="ai-title">🤖 AI Coach says:</div>${esc(out.help || 'Look at the picture — are the pieces the same size?')}`;
+  } catch (e) {
+    console.warn('coach error', e);
+    box.style.display = 'block';
+    box.innerHTML = `<div class="ai-title">🤖 AI Coach</div>Oops, I couldn't reach the AI. Try again in a moment!`;
+  } finally {
+    btn.disabled = false; btn.innerHTML = `🤖 AI Coach, help me understand!`;
+  }
+}
+
+// =====================================================================
+// TEACH THE AI — free-text explanations marked by AI
+// =====================================================================
+const EXPLAIN_QS = [
+  {
+    id: 'exp-equal-pieces',
+    emoji: '🍕',
+    q: 'Two pizzas are the same size. Ali cut his pizza into 4 equal slices and ate 2. Ben cut his into 8 equal slices and ate 4. Ali says he ate more because his slices were bigger. Is Ali right? Explain.',
+    rubric: 'Ali is wrong — they ate the same amount. 2/4 and 4/8 are equivalent fractions (both are one half). Ben had twice as many slices but each slice was half the size. Look for the idea that more, smaller pieces can make the same total amount.',
+    visual: () => fbar(2, 4, { label: 'Ali: 2 out of 4 slices' }) + fbar(4, 8, { color: 'var(--shade-2)', label: 'Ben: 4 out of 8 slices' })
+  },
+  {
+    id: 'exp-why-multiply',
+    emoji: '✂️',
+    q: 'Why is it OK to multiply the top AND bottom of a fraction by the same number? Why does the fraction stay equal? Explain using pieces of a bar.',
+    rubric: 'Multiplying top and bottom by k is the same as cutting every piece into k smaller pieces. You get k times as many shaded pieces and k times as many total pieces, but the shaded AMOUNT does not change — nothing is added or removed. Look for the cutting/splitting idea and "the amount stays the same".',
+    visual: () => fbar(1, 2, { label: '1/2' }) + fbar(2, 4, { label: '2/4 — same amount?' })
+  },
+  {
+    id: 'exp-add-one',
+    emoji: '⚠️',
+    q: 'Maya says: "1/2 = 2/3, because I added 1 to the top and 1 to the bottom, and doing the same thing to both is fair." Is Maya right? Explain.',
+    rubric: 'Maya is wrong. Adding the same number to top and bottom changes the fraction (2/3 is more than 1/2 — compare the pictures). Only multiplying or dividing both by the same number keeps a fraction equal, because that just re-cuts the same pieces without changing the amount. Look for: adding is not fair here / 2/3 is bigger than 1/2 / only multiply or divide works.',
+    visual: () => fbar(1, 2, { label: '1/2' }) + fbar(2, 3, { color: 'var(--shade-2)', label: '2/3' })
+  },
+  {
+    id: 'exp-why-divide',
+    emoji: '🧩',
+    q: 'To simplify 6/8, we divide the top and bottom by 2 to get 3/4. Why does dividing both numbers by the same number keep the fraction equal?',
+    rubric: 'Dividing top and bottom by 2 is like gluing the small pieces together in pairs to make bigger pieces. There are half as many shaded pieces and half as many total pieces, but the shaded amount is unchanged. Look for the gluing/grouping idea and "same amount, bigger pieces".',
+    visual: () => fbar(6, 8, { glue: 2, label: '6/8 glued in pairs' })
+  },
+  {
+    id: 'exp-add-denoms',
+    emoji: '🚫',
+    q: 'Ken worked out 2/5 + 1/5 = 3/10. His friend says the answer must be wrong WITHOUT even checking the working. How can the friend tell? Explain what Ken did wrong.',
+    rubric: 'Ken added the denominators. 3/10 is smaller than the 2/5 he started with — impossible when you ADD more. The denominator is the size of the pieces; adding pieces does not change their size, so the bottom stays 5 and only the tops add: 3/5. Look for: answer smaller than start is impossible, and/or bottom number = piece size so it stays the same.',
+    visual: () => fbar(2, 5, { label: '2/5' }) + fbar(3, 10, { color: 'var(--shade-2)', label: "Ken's answer: 3/10" })
+  },
+  {
+    id: 'exp-half-quarter',
+    emoji: '🔧',
+    q: 'Explain, step by step, how to work out 1/2 + 1/4 — and WHY you need the first step at all.',
+    rubric: 'You cannot count pieces of different sizes, so first make the pieces match: split the half into quarters, 1/2 = 2/4 (multiply top and bottom by 2). Then count same-size pieces: 2/4 + 1/4 = 3/4. Look for: pieces must be the same size to add, converting 1/2 to 2/4, then adding the numerators.',
+    visual: () => fbar(1, 2, { split: 2, label: '1/2, each piece cut into 2' }) + fbar(1, 4, { color: 'var(--shade-2)', label: '1/4' })
+  },
+  {
+    id: 'exp-bigger-denominator',
+    emoji: '🤔',
+    q: 'Mia says 1/8 is bigger than 1/4 because 8 is bigger than 4. Is she right? Explain what the bottom number really tells us.',
+    rubric: 'Mia is wrong. The bottom number tells how many equal pieces the whole is cut into — more pieces means each piece is SMALLER. So 1/8 is smaller than 1/4. Look for the idea that a bigger denominator means smaller pieces.',
+    visual: () => fbar(1, 4, { label: '1/4' }) + fbar(1, 8, { color: 'var(--shade-2)', label: '1/8' })
+  },
+  {
+    id: 'exp-simplest',
+    emoji: '🏁',
+    q: 'What does "simplest form" mean? How do you KNOW when a fraction like 2/3 cannot be simplified any more?',
+    rubric: 'Simplest form means no number (except 1) divides both the top and bottom exactly — the pieces cannot be glued into bigger equal groups. 2/3 is simplest because nothing divides both 2 and 3. Look for: no common factor / cannot divide both / cannot glue any more.',
+    visual: () => fbar(2, 3, { label: '2/3' })
+  },
+];
+
+function renderExplainHome(){
+  $('view').innerHTML = `
+    <div class="card" style="text-align:center;">
+      <h2>🤖 Teach the AI</h2>
+      <p class="lede">The best way to REALLY learn is to explain! Write your answer in your own words — the AI teacher reads it and gives you stars for <b>understanding</b>, not spelling. Up to ⭐⭐⭐ per question.</p>
+    </div>
+    <div class="grid">
+      ${EXPLAIN_QS.map((e, i) => {
+        const best = progress.explainBest[e.id] || 0;
+        return `
+        <div class="pick-card ${best >= 3 ? 'done' : ''}" onclick="openExplain(${i})">
+          <div class="pc-emoji">${e.emoji}</div>
+          <h3>${e.q.length > 76 ? esc(e.q.slice(0, 73)) + '…' : esc(e.q)}</h3>
+          <div class="pc-meta">${best > 0 ? '⭐'.repeat(best) + '☆'.repeat(3 - best) : '☆☆☆ not tried yet'}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+let explainIdx = 0;
+function openExplain(i){
+  explainIdx = i;
+  const e = EXPLAIN_QS[i];
+  $('view').innerHTML = `
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+        <h2 style="margin:0;">${e.emoji} Teach the AI</h2>
+        <button class="btn btn-ghost" onclick="goTab('explain')">← All questions</button>
+      </div>
+      <p style="font-size:1.05rem; font-weight:700;">${esc(e.q)}</p>
+      ${e.visual ? e.visual() : ''}
+      <textarea class="explain-input" id="explainText" placeholder="Type your explanation here, like you're teaching a friend…"></textarea>
+      <div class="btn-row">
+        <button class="btn btn-green" id="explainSend" onclick="sendExplain()">Send to the AI teacher 🚀</button>
+      </div>
+      <div class="ai-box" id="explainResult" style="display:none;"></div>
+      <div class="btn-row" id="explainAgainRow" style="display:none;">
+        <button class="btn btn-soft" onclick="openExplain(${i})">✍️ Try again</button>
+        <button class="btn btn-green" onclick="goTab('explain')">More questions →</button>
+      </div>
+    </div>`;
+  $('explainText').focus();
+}
+
+async function sendExplain(){
+  const e = EXPLAIN_QS[explainIdx];
+  const text = ($('explainText').value || '').trim();
+  const box = $('explainResult');
+  if (text.length < 5) { toast('Write your explanation first! ✍️'); return; }
+  if (!aiReady()) {
+    box.style.display = 'block';
+    box.innerHTML = `<div class="ai-title">🤖 AI teacher</div>Sorry, the AI is not available right now. Please try again later.`;
+    return;
+  }
+  const btn = $('explainSend');
+  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>The AI teacher is reading…`;
+  try {
+    const prompt = `You are a warm, encouraging maths teacher marking a Primary 3 (about 9 years old) Singapore student's written explanation about fractions. Mark the UNDERSTANDING of the maths idea — completely ignore spelling, grammar and punctuation mistakes. The child may write in simple or broken English; that is fine.
+
+QUESTION GIVEN TO THE STUDENT:
+${e.q}
+
+WHAT A GOOD ANSWER SHOWS (marking guide):
+${e.rubric}
+
+STUDENT'S EXPLANATION:
+"""${text}"""
+
+Award stars for understanding:
+- 3 = the key idea is clearly there (even in kid words)
+- 2 = mostly understands, one small gap or fuzzy part
+- 1 = tried, but the main idea is missing or a real misconception shows
+- 0 = off-topic or no real attempt
+
+Return STRICT JSON only:
+{"stars": 0-3, "praise": "one warm sentence about what they got right (or their effort)", "fix": "one simple sentence on the most important thing to add or correct — empty string if 3 stars", "tip": "one short, concrete tip or picture-idea to deepen understanding"}
+Use words a 9-year-old easily reads. Short sentences. Never sarcastic, never harsh.`;
+    const raw = await askGemini(prompt, { maxOutputTokens: 500, temperature: 0.4 });
+    const out = parseAIJson(raw);
+    let stars = parseInt(out.stars, 10);
+    if (!(stars >= 0 && stars <= 3)) stars = 0;
+    const prevBest = progress.explainBest[e.id] || 0;
+    if (stars > prevBest) {
+      progress.explainBest[e.id] = stars;
+      saveProgress();
+      addStars(stars - prevBest, 'explain');
+    }
+    box.style.display = 'block';
+    box.innerHTML = `
+      <div class="ai-title">🤖 The AI teacher says:</div>
+      <div class="ai-stars">${'⭐'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
+      <p style="margin:6px 0;"><b>👍 </b>${esc(out.praise || 'Good try!')}</p>
+      ${out.fix ? `<p style="margin:6px 0;"><b>🔧 </b>${esc(out.fix)}</p>` : ''}
+      ${out.tip ? `<p style="margin:6px 0;"><b>💡 </b>${esc(out.tip)}</p>` : ''}
+      ${stars > prevBest ? `<p style="margin:10px 0 0; font-weight:800; color:var(--green-deep);">+${stars - prevBest} star${stars - prevBest > 1 ? 's' : ''} added to your total! 🎉</p>` : ''}`;
+    $('explainAgainRow').style.display = 'flex';
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (err) {
+    console.warn('explain marking error', err);
+    box.style.display = 'block';
+    box.innerHTML = `<div class="ai-title">🤖 AI teacher</div>Oops, something went wrong reaching the AI. Please try sending again!`;
+  } finally {
+    btn.disabled = false; btn.innerHTML = `Send to the AI teacher 🚀`;
+  }
+}
+
+// =====================================================================
+// Boot + expose inline handlers (module scope!)
+// =====================================================================
+window.goTab = goTab;
+window.openLesson = openLesson;
+window.gotoLessonStep = gotoLessonStep;
+window.nextLessonStep = nextLessonStep;
+window.doQuickCheck = doQuickCheck;
+window.l1SetDen = l1SetDen;
+window.l1SetNum = l1SetNum;
+window.l2SetK = l2SetK;
+window.l2SetFrac = l2SetFrac;
+window.l3SetG = l3SetG;
+window.l5Split = l5Split;
+window.startPractice = startPractice;
+window.nextPracticeQ = nextPracticeQ;
+window.checkPractice = checkPractice;
+window.askCoach = askCoach;
+window.openExplain = openExplain;
+window.sendExplain = sendExplain;
+
+$('versionBadge').textContent = APP_VERSION;
+renderStarCount();
+renderLearnHome();
+</script>
+</body>
+</html>
