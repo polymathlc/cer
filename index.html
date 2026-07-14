@@ -8049,7 +8049,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.111.0';
+const APP_VERSION = 'v1.111.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9958,7 +9958,7 @@ async function aiGenerateBlockAnswer(blockId, btn) {
     (block.type === 'answer'
       ? `It is a Claim-Evidence-Reasoning answer. Return ONLY JSON: {"claim":"...","evidence":"...","reasoning":"..."}\n`
       : `Return ONLY JSON: {"answer":"..."}\n`) +
-    `Rules: concise exam-style phrasing a P6 pupil could write; wrap the 3-8 most important science keywords in [[double brackets]] (e.g. [[evaporation]]); plain text only, no markdown.`;
+    `Rules: concise exam-style phrasing a P6 pupil could write; plain text only, no markdown, no [[brackets]].`;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '🤖 Crafting…'; }
   try {
@@ -9968,7 +9968,7 @@ async function aiGenerateBlockAnswer(blockId, btn) {
     let p = _parseAIJson(raw);
     if (Array.isArray(p)) p = p[0];
     if (!p || typeof p !== 'object') throw new Error('the AI returned an unexpected format — please try again');
-    const toHtml = t => escapeHtml(String(t || '').trim()).replace(/\n+/g, '<br>');
+    const toHtml = t => escapeHtml(String(t || '').replace(/\[\[|\]\]/g, '').trim()).replace(/\n+/g, '<br>');
     if (block.type === 'answer') {
       if (!String(p.claim || p.evidence || p.reasoning || '').trim()) throw new Error('the AI returned an empty answer — please try again');
       block.claim = toHtml(p.claim);
@@ -11799,7 +11799,7 @@ function _bulkPagePrompt(pageNo, pageCount) {
     _rectangleRules() +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, and set "correctIndex" to the 0-based correct option (work the correct answer out yourself if the paper shows no answer key); no "answer"/"plainanswer".\n` +
-    `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing the model answer yourself if the paper does not show one, and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
+    `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing the model answer yourself if the paper does not show one. Plain text only — no [[brackets]] anywhere.\n` +
     `- EVERY question (mcq AND open) must FINISH with ONE "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct. Write it yourself — papers almost never print one, so do NOT skip it just because it is not shown.\n` +
     `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
     `- "topicConfidence": how sure you are the chosen topic is right — "high" (clearly this topic), "medium" (likely), "low" (a guess).\n` +
@@ -12171,7 +12171,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount) {
     _rectangleRules() +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
-    `- If questionType is "open": include ONE answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer. In these answer fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
+    `- If questionType is "open": include ONE answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer. Plain text only — no [[brackets]] anywhere.\n` +
     `- ALWAYS finish with ONE "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct — write it yourself if the source shows none.\n` +
     `- Choose topic from EXACTLY this list: ${topics.join('; ')}.\n` +
     `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
@@ -13800,7 +13800,7 @@ function _regenPrompt(q, remark) {
     `Rules:\n` +
     `- Keep the SAME block types in the SAME order as the original (same number of image placeholders, same answer type, mcq stays mcq) — except ALWAYS finish with ONE "explanation" block (2-4 teacher sentences on WHY the answer is correct), even if the original had none.\n` +
     `- If a text block lists labelled items or options inline, put EACH on its own line separated by a real line break ("\\n").\n` +
-    `- For "answer"/"plainanswer" fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
+    `- Write "answer"/"plainanswer" fields as plain text only — no [[brackets]] anywhere.\n` +
     `- Choose topic from EXACTLY this list: ${currentTopics().join('; ')}.\n` +
     `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
     `- Use plain text only, no markdown.`;
