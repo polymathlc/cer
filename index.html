@@ -8031,7 +8031,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.101.0';
+const APP_VERSION = 'v1.102.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -8144,9 +8144,28 @@ let _skipCreateReset = false;
 // so we can scroll it back into view (the "specific segment").
 let _editReturnPage = null;
 let _ppReturnFocus = null;
+// Same idea for the Vetting List: when an edit starts there, we go back to the
+// list afterwards with the exact same view — _vetReturnScroll is the window
+// scroll position to restore, _vetReturnFocus the card to flash.
+let _vetReturnScroll = 0;
+let _vetReturnFocus = null;
 function editQuestionFromPapers(bankId, ppItemId) { editQuestion(bankId); _editReturnPage = 'papers'; _ppReturnFocus = ppItemId || null; _syncBackToPapersBtn(); }
-function _afterEditNavigate() { const dest = _editReturnPage || 'bank'; _editReturnPage = null; navigateTo(dest); }
-function _syncBackToPapersBtn() { const b = document.getElementById('backToPapersBtn'); if (b) b.style.display = (_editReturnPage === 'papers') ? '' : 'none'; }
+function _afterEditNavigate() { const dest = _editReturnPage || 'bank'; _editReturnPage = null; navigateTo(dest); if (dest === 'vetting') _vetFocusScroll(); }
+function _syncBackToPapersBtn() {
+  const b = document.getElementById('backToPapersBtn');
+  if (!b) return;
+  if (_editReturnPage === 'papers') {
+    b.style.display = '';
+    b.innerHTML = '&larr; Back to Past Papers';
+    b.title = 'Return to the Past Papers page, right where you left off';
+  } else if (_editReturnPage === 'vetting') {
+    b.style.display = '';
+    b.innerHTML = '&larr; Back to Vetting List';
+    b.title = 'Return to the Vetting List, right where you left off';
+  } else {
+    b.style.display = 'none';
+  }
+}
 // The top-left "← Back to Past Papers" affordance while editing a paper's
 // question — reuses the same discard-confirm + return as Cancel.
 function backToPapers() { cancelEdit(); }
@@ -13090,8 +13109,8 @@ function saveEditToBank() {
 }
 
 function cancelEdit() {
-  const backToPapers = _editReturnPage === 'papers';
-  showConfirm('Cancel Edit', `Discard changes and go back to ${backToPapers ? 'Past Papers' : 'the question bank'}?`, () => {
+  const backDest = _editReturnPage === 'papers' ? 'Past Papers' : _editReturnPage === 'vetting' ? 'the vetting list' : 'the question bank';
+  showConfirm('Cancel Edit', `Discard changes and go back to ${backDest}?`, () => {
     currentEditingQuestion = null;
     setEditMode(false);
     blocks = [];
@@ -13292,6 +13311,16 @@ function editQuestion(id) {
   if (!q) return;
   _editReturnPage = null;   // default: return to the Bank (callers may override after)
   _ppReturnFocus = null;
+  _vetReturnFocus = null;
+  _vetReturnScroll = 0;
+  // A vetting question goes back to the Vetting List afterwards, restoring the
+  // exact view (scroll position) so the admin can carry straight on vetting.
+  if (vettingList.some(v => v.id === id)) {
+    _editReturnPage = 'vetting';
+    _vetReturnFocus = id;
+    const vetPage = document.getElementById('page-vetting');
+    if (vetPage && vetPage.classList.contains('active')) _vetReturnScroll = window.scrollY || 0;
+  }
   _hideDupBanner();
   currentEditingQuestion = q.id;
   document.getElementById('questionTitle').value = q.title;
@@ -13547,7 +13576,7 @@ function renderVettingList() {
     const dup = (q._dupOf && q._dupOf.id && questionBank.some(b => b.id === q._dupOf.id)) ? q._dupOf : null;
     const dupBorder = dup ? ' style="border-color:#f59e0b;box-shadow:0 0 0 1px #f59e0b;"' : (isNew ? ' style="border-color:var(--accent-orange);box-shadow:0 0 0 1px var(--accent-orange);"' : '');
     return `
-      <div class="qb-card"${dupBorder}>
+      <div class="qb-card" data-vetid="${q.id}"${dupBorder}>
         <div class="qb-card-header">
           <div>
             <div class="qb-card-title">${escapeHtml(q.title)}</div>
@@ -13579,6 +13608,29 @@ function renderVettingList() {
       </div>`;
   }).join('');
   container.innerHTML = jobCards + qCards;
+}
+
+// Returning to the Vetting List after an edit: put the list back exactly as it
+// was (same scroll position) and flash the card that was just edited, so the
+// admin can carry straight on with the next question.
+function _vetFocusScroll() {
+  const y = _vetReturnScroll, id = _vetReturnFocus;
+  _vetReturnScroll = 0; _vetReturnFocus = null;
+  requestAnimationFrame(() => {
+    window.scrollTo(0, y);
+    if (!id) return;
+    const sel = '[data-vetid="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]';
+    const el = document.querySelector('#vettingListGrid ' + sel);
+    if (!el) return;   // approved/deleted out of vetting — the restored scroll is enough
+    const r = el.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > window.innerHeight) {
+      try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) { el.scrollIntoView(); }
+    }
+    const prevShadow = el.style.boxShadow;   // keep the duplicate-warning outline, if any
+    el.style.transition = 'box-shadow .3s ease';
+    el.style.boxShadow = '0 0 0 3px var(--primary, #4a7c59)';
+    setTimeout(() => { el.style.boxShadow = prevShadow; }, 2200);
+  });
 }
 
 function approveVetting(id) {
@@ -20425,8 +20477,9 @@ function moveEditToVetting() {
   updateCounts();
   renderQuestionBank();
   showToast('Question moved to vetting list', 'success');
-  _editReturnPage = null;   // moved out of the bank — don't bounce back to Past Papers
-  navigateTo('vetting');
+  // Land on the Vetting List; if the edit began there, restore the old view.
+  _editReturnPage = 'vetting';
+  _afterEditNavigate();
 }
 
 // =====================================================================
