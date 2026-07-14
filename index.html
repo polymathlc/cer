@@ -8031,7 +8031,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.102.0';
+const APP_VERSION = 'v1.103.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9731,6 +9731,7 @@ function renderBlocks() {
             <span class="toolbar-divider"></span>
             ${micForBlockHtml(block.id, 'content', 'Dictate the explanation')}
             ${improveBtnHtml(block.id, 'content')}
+            ${aiExplainBtnHtml(block.id)}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Enter explanation text… (you can paste a picture here too)"
                data-block-id="${block.id}" data-field="content"
@@ -9908,6 +9909,7 @@ async function aiGenerateBlockAnswer(blockId, btn) {
   const block = blocks.find(b => b.id === blockId);
   if (!block || (block.type !== 'answer' && block.type !== 'plainanswer')) return;
   if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+  syncEditorDomToBlocks();   // read the question exactly as it stands in the editor
   const hasContent = block.type === 'answer'
     ? [block.claim, block.evidence, block.reasoning].some(v => stripHtml(v || '').trim())
     : !!stripHtml(block.content || '').trim();
@@ -9973,6 +9975,75 @@ document.addEventListener('click', function (e) {
   if (!btn || btn.disabled) return;
   e.preventDefault();
   aiGenerateBlockAnswer(btn.getAttribute('data-aianswer'), btn);
+});
+
+// "🤖 AI explanation" button shown on every EXPLANATION block. Reads the whole
+// question as it currently stands in the editor — text, options (with the
+// correct one marked), model answers, tables and diagrams — and writes the
+// teacher explanation, grounded FIRST on the Teaching Notes database.
+function aiExplainBtnHtml(blockId) {
+  return `<button type="button" class="improve-btn" data-aiexplain="${blockId}" title="Write this explanation with AI — it reads the question as it currently stands (including the answer and diagrams) and bases the science on your Teaching Notes database">🤖 AI explanation</button>`;
+}
+async function aiGenerateBlockExplanation(blockId, btn) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || block.type !== 'explanation') return;
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+  syncEditorDomToBlocks();   // explain the question exactly as it stands in the editor
+  if (stripHtml(block.content || '').trim() && !confirm('Replace the current explanation with an AI-written one?')) return;
+
+  // The full question in block order — including the model answers, which the
+  // explanation must justify. Diagrams go along as images (best effort).
+  const ctxBits = [];
+  const media = [];
+  for (const b of blocks) {
+    if (b.type === 'text' && stripHtml(b.content || '').trim()) ctxBits.push(stripHtml(b.content));
+    else if (b.type === 'part' && ((b.label || '') + stripHtml(b.content || '')).trim()) ctxBits.push(((b.label || '') + ' ' + stripHtml(b.content || '')).trim());
+    else if (b.type === 'image' && b.url) { ctxBits.push('[diagram — attached as an image]'); if (media.length < 3) { try { media.push(await _blockImageToInline(b.id)); } catch (e) { console.warn('AI explanation: diagram skipped', e); } } }
+    else if (b.type === 'table') { try { ctxBits.push('[table] ' + (b.data || []).map(row => (row || []).map(c => stripHtml(String(c || ''))).join(' | ')).join(' ; ')); } catch (e) {} }
+    else if (b.type === 'mcq') {
+      const opts = b.options || [];
+      const ci = opts.findIndex(o => o.id === b.correctId);
+      ctxBits.push('[multiple-choice options] ' + opts.map((o, i) => (i + 1) + ') ' + stripHtml(o.text || '') + (i === ci ? ' <-- CORRECT ANSWER' : '')).join(' '));
+    }
+    else if (b.type === 'answer') ctxBits.push('[model answer] Claim: ' + stripHtml(b.claim || '') + ' | Evidence: ' + stripHtml(b.evidence || '') + ' | Reasoning: ' + stripHtml(b.reasoning || ''));
+    else if (b.type === 'plainanswer') ctxBits.push('[model answer] ' + stripHtml(b.content || ''));
+    else if (b.type === 'explanation') ctxBits.push(b.id === blockId ? '>>> THE EXPLANATION BOX TO WRITE <<<' : '[another explanation box — leave it alone]');
+  }
+  const topic = (document.getElementById('topicSelect') && document.getElementById('topicSelect').value) || '';
+  const title = (document.getElementById('questionTitle') && document.getElementById('questionTitle').value) || '';
+  const notesDb = _notesAnswerBlock(topic);
+  const prompt =
+    `You are a Singapore primary-school (PSLE) science teacher writing the EXPLANATION box of the practice question below — 2-4 sentences for a P3-P6 student explaining WHY the correct answer is correct.\n` +
+    (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
+    (title || topic ? `Question: "${title}"${topic ? ' — topic: ' + topic : ''}.\n` : '') +
+    `THE QUESTION, in order${media.length ? ' (diagrams attached as images)' : ''}:\n${ctxBits.join('\n').slice(0, 3500)}\n` +
+    `If a correct answer / model answer is shown above, your explanation MUST justify THAT answer (never contradict it); if none is shown, work the correct answer out yourself first.\n` +
+    `Return ONLY JSON: {"explanation":"..."}\n` +
+    `Rules: clear teacher voice a P3-P6 student understands; plain text only, no markdown, no [[brackets]].`;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '🤖 Writing…'; }
+  try {
+    const raw = media.length
+      ? await askGeminiVision(prompt, media, { maxOutputTokens: 700, json: true })
+      : await askGemini(prompt, { maxOutputTokens: 700, temperature: 0.25, json: true });
+    let p = _parseAIJson(raw);
+    if (Array.isArray(p)) p = p[0];
+    const expl = p && typeof p === 'object' ? String(p.explanation || p.text || '').trim() : '';
+    if (!expl) throw new Error('the AI returned an empty explanation — please try again');
+    block.content = escapeHtml(expl).replace(/\n+/g, '<br>');
+    renderBlocks();
+    showToast(notesDb ? '🤖 Explanation written from your Teaching Notes database — review it before saving' : '🤖 Explanation written — no Teaching Notes matched, so standard PSLE knowledge was used. Review it before saving', 'success');
+  } catch (e) {
+    console.error('AI explanation failed', e);
+    showToast('Could not write the explanation: ' + (e && e.message ? e.message : e), 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest && e.target.closest('[data-aiexplain]');
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
+  aiGenerateBlockExplanation(btn.getAttribute('data-aiexplain'), btn);
 });
 (function injectEditorToolStyles() {
   const css = `
@@ -11473,6 +11544,7 @@ function _bulkPagePrompt(pageNo, pageCount) {
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, and set "correctIndex" to the 0-based correct option (work the correct answer out yourself if the paper shows no answer key); no "answer"/"plainanswer".\n` +
     `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing the model answer yourself if the paper does not show one, and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
+    `- EVERY question (mcq AND open) must FINISH with ONE "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct. Write it yourself — papers almost never print one, so do NOT skip it just because it is not shown.\n` +
     `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
     `- "topicConfidence": how sure you are the chosen topic is right — "high" (clearly this topic), "medium" (likely), "low" (a guess).\n` +
     `- topic from EXACTLY: ${topics.join('; ')}.\n` +
@@ -11628,27 +11700,29 @@ async function aiAnswerAndExplain() {
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '✨ Thinking…'; }
   try {
-    // Assemble the question for the AI.
+    // Assemble the question for the AI — from the editor as it stands right now.
+    syncEditorDomToBlocks();
     const parts = [];
     const titleEl = document.getElementById('questionTitle');
     const topicEl = document.getElementById('topicSelect');
     if (titleEl && titleEl.value.trim()) parts.push('Title: ' + titleEl.value.trim());
     if (topicEl && topicEl.value) parts.push('Topic: ' + topicEl.value);
     let mcqBlock = null;
-    blocks.forEach(b => {
+    const media = [];
+    for (const b of blocks) {
       if (b.type === 'text') { const t = stripHtml(b.content || '').trim(); if (t) parts.push(t); }
       else if (b.type === 'part') { const t = ((b.label || '') + ' ' + stripHtml(b.content || '')).trim(); if (t) parts.push(t); }
       else if (b.type === 'mcq') { mcqBlock = b; parts.push('Options:\n' + (b.options || []).map((o, i) => `(${i + 1}) ${stripHtml(o.text || '')}`).join('\n')); }
-      else if (b.type === 'image') parts.push('[a diagram is shown' + (b.caption ? ': ' + b.caption : '') + ']');
-      else if (b.type === 'table') parts.push('[a table is shown]');
-    });
+      else if (b.type === 'image') {
+        parts.push('[a diagram is shown' + (b.caption ? ': ' + b.caption : '') + ']');
+        // Attach the diagrams (multimodal) so the AI can read them.
+        if (b.url && media.length < 3) { try { media.push(await _blockImageToInline(b.id)); } catch (e) { console.warn('image for AI answer', e); } }
+      }
+      else if (b.type === 'table') { try { parts.push('[table] ' + (b.data || []).map(row => (row || []).map(c => stripHtml(String(c || ''))).join(' | ')).join(' ; ')); } catch (e) { parts.push('[a table is shown]'); } }
+    }
     const hasCER = blocks.some(b => b.type === 'answer');
     const hasPlain = blocks.some(b => ['plainanswer', 'openLines', 'workingSpace'].includes(b.type));
     const context = parts.join('\n');
-    // Include the diagram (multimodal) so the AI can read it.
-    let media = [];
-    const imgBlock = blocks.find(b => b.type === 'image' && b.url);
-    if (imgBlock) { try { media = [await _blockImageToInline(imgBlock.id)]; } catch (e) { console.warn('image for AI answer', e); } }
     // Ask only for the fields this question needs.
     const wants = [];
     if (hasCER) wants.push('"claim":"...","evidence":"...","reasoning":"..."');
@@ -11656,8 +11730,10 @@ async function aiAnswerAndExplain() {
     if (mcqBlock) wants.push('"mcqCorrectIndex":<0-based index of the correct option listed above>');
     wants.push('"explanation":"a clear teacher explanation (2-4 sentences) of WHY the answer is correct, for a P3-P6 student"');
     const mg = ((document.getElementById('questionMarkingGuide') || {}).value || '').trim();
+    const notesDb = _notesAnswerBlock((topicEl && topicEl.value) || '');
     const prompt =
-      `You are a Singapore primary-school science teacher. Read this WHOLE question` + (media.length ? ' (a diagram is attached — study it)' : '') + ` and work out the correct answer and an explanation for a P3–P6 student.\n` +
+      `You are a Singapore primary-school science teacher. Read this WHOLE question` + (media.length ? ' (diagrams are attached — study them)' : '') + ` and work out the correct answer and an explanation for a P3–P6 student.\n` +
+      (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
       (mg ? `Teacher marking guide (follow it): ${mg}\n` : '') +
       `QUESTION:\n${context}\n\n` +
       `Return ONLY JSON: { ${wants.join(', ')} }. Plain text only — no markdown, no [[brackets]].`;
@@ -11840,7 +11916,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount) {
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
     `- If questionType is "open": include ONE answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer. In these answer fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
-    `- Optionally finish with one "explanation" block.\n` +
+    `- ALWAYS finish with ONE "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct — write it yourself if the source shows none.\n` +
     `- Choose topic from EXACTLY this list: ${topics.join('; ')}.\n` +
     `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
     `- Use plain text only, no markdown.`;
@@ -12927,7 +13003,10 @@ function normalizeLoadedQuestion(q) {
   return q;
 }
 
-function collectQuestionData() {
+// Pull the latest typed content from the editor DOM into blocks[], so that
+// saving AND every AI-generate feature work from the question exactly as it
+// stands (what the preview would show), never a stale copy.
+function syncEditorDomToBlocks() {
   // Sync contenteditable text/explanation blocks from DOM → blocks[]
   document.querySelectorAll('.content-editable[data-block-id]').forEach(el => {
     const bid = el.dataset.blockId;
@@ -12947,6 +13026,10 @@ function collectQuestionData() {
         if (block.data[r]) block.data[r][c] = cell.innerHTML;
     });
   });
+}
+
+function collectQuestionData() {
+  syncEditorDomToBlocks();
 
   // Deep-clone blocks so we don't mutate the live editor state
   const blocksClone = JSON.parse(JSON.stringify(blocks));
@@ -13459,7 +13542,7 @@ function _regenPrompt(q, remark) {
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
-    `- Keep the SAME block types in the SAME order as the original (same number of image placeholders, same answer type, mcq stays mcq).\n` +
+    `- Keep the SAME block types in the SAME order as the original (same number of image placeholders, same answer type, mcq stays mcq) — except ALWAYS finish with ONE "explanation" block (2-4 teacher sentences on WHY the answer is correct), even if the original had none.\n` +
     `- If a text block lists labelled items or options inline, put EACH on its own line separated by a real line break ("\\n").\n` +
     `- For "answer"/"plainanswer" fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
     `- Choose topic from EXACTLY this list: ${currentTopics().join('; ')}.\n` +
