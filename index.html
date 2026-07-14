@@ -8047,7 +8047,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.106.0';
+const APP_VERSION = 'v1.107.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -12139,7 +12139,7 @@ function _tagDuplicate(q) {
 // A hover-to-preview "See original question" control (reuses the bank hover).
 function _dupSeeOriginalBtn(dup, style) {
   return `<button type="button" class="btn btn-outline" style="${style || ''}" onclick="editQuestion('${dup.id}')"
-      onmouseenter="ppHoverShowBank(event,'${dup.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()"
+      onmouseenter="ppHoverShowBank(event,'${dup.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverChipLeave()"
       title="Hover to preview the existing question · click to open it">👁 See original question</button>`;
 }
 // Editor banner: check the question currently in the editor for a bank duplicate.
@@ -28755,7 +28755,7 @@ function ppChip(q){
   cls += ppDiffClass(q);
   const click = admin ? `ppOpenAssign('${q.id}')` : (bq ? `ppPractise('${q.id}')` : '');
   const mark = bq ? ' &#10003;' : '';
-  return `<span class="${cls}" data-ppid="${escapeHtml(String(q.id))}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${mark}${ppAccBadge(bq)}</span>`;
+  return `<span class="${cls}" data-ppid="${escapeHtml(String(q.id))}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverChipLeave()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${mark}${ppAccBadge(bq)}</span>`;
 }
 function ppDiffSelect(q){
   const d = ppDiff(q);
@@ -28769,7 +28769,7 @@ function ppDiffSelect(q){
 function ppChipEdit(q){
   const bq = ppBankQ(q.id);
   return `<span class="pp-chip-edit" data-ppid="${escapeHtml(String(q.id))}">
-    <span class="pp-chip open ${bq ? 'assigned' : ''}${ppDiffClass(q)}" title="Edit this question" onclick="ppEditQuestion('${q.id}')" onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${bq ? ' &#10003;' : ''}</span>
+    <span class="pp-chip open ${bq ? 'assigned' : ''}${ppDiffClass(q)}" title="Edit this question" onclick="ppEditQuestion('${q.id}')" onmouseenter="ppHoverShow(event,'${q.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverChipLeave()">Q${escapeHtml(String(q.n))}<span class="pp-chip-yr">${escapeHtml(String(q.year))}</span>${bq ? ' &#10003;' : ''}</span>
     ${ppDiffSelect(q)}
     <button class="pp-mini del" title="Remove question" onclick="ppDeleteQuestion('${q.id}')">&times;</button>
   </span>`;
@@ -28786,11 +28786,22 @@ function ppChipByKey(id){
   cls += ppDiffClass(q);
   const click = (admin && !ppEditMode) ? `ppOpenAssign('${id}')` : (!admin && bq ? `ppPractise('${id}')` : '');
   const mark = bq ? ' &#10003;' : '';
-  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">${escapeHtml(String(q.year))} Q${escapeHtml(String(q.n))}${mark}${ppAccBadge(bq)}</span>`;
+  return `<span class="${cls}" ${click ? `onclick="${click}"` : ''} onmouseenter="ppHoverShow(event,'${id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverChipLeave()">${escapeHtml(String(q.year))} Q${escapeHtml(String(q.n))}${mark}${ppAccBadge(bq)}</span>`;
 }
 
 // -------- hover preview --------
-function ppHoverEl(){ if (!_ppHoverEl) { _ppHoverEl = document.createElement('div'); _ppHoverEl.id = 'ppHover'; document.body.appendChild(_ppHoverEl); } return _ppHoverEl; }
+function ppHoverEl(){
+  if (!_ppHoverEl) {
+    _ppHoverEl = document.createElement('div');
+    _ppHoverEl.id = 'ppHover';
+    // Once the preview is locked open, the cursor can enter it: keep it open
+    // while inside, and close shortly after the cursor leaves it.
+    _ppHoverEl.addEventListener('mouseenter', () => { clearTimeout(_ppHoverGrace); });
+    _ppHoverEl.addEventListener('mouseleave', () => { if (_ppHoverLocked) ppHoverHide(); });
+    document.body.appendChild(_ppHoverEl);
+  }
+  return _ppHoverEl;
+}
 // "Not in syllabus" ribbon for the past-paper previews — explains why an
 // attached question shows here but never appears in practice.
 function _ppNisBadge(bq){
@@ -28823,12 +28834,17 @@ function ppHoverHtml(id){
 }
 let _ppHoverTimer = null;         // fires the "expand to full preview" after a dwell
 let _ppHoverLast = null;          // last pointer position, so we can re-anchor on expand
+let _ppHoverLocked = false;       // true once expanded: the card is interactive & scrollable
+let _ppHoverGrace = null;         // brief delay when leaving a chip, so the cursor can reach the card
 const PP_HOVER_EXPAND_MS = 4000;  // dwell time before the preview blooms open
 function _ppHoverOpen(html, ev){
   const el = ppHoverEl();
+  clearTimeout(_ppHoverGrace);
+  _ppHoverLocked = false;
   el.innerHTML = html;
   el.classList.remove('pp-hv-expanded');   // start collapsed every time
   el.style.display = 'block';
+  el.scrollTop = 0;
   ppHoverMove(ev);
   // Dwell for a few seconds on the same question → smoothly expand to full view.
   clearTimeout(_ppHoverTimer);
@@ -28866,7 +28882,17 @@ function ppHoverMove(ev){
 function ppHoverExpand(){
   const el = _ppHoverEl; if (!el || el.style.display !== 'block') return;
   el.classList.add('pp-hv-expanded');
+  _ppHoverLocked = true;   // now interactive & scrollable — the cursor can move into it
+  // A one-time hint that the card can be scrolled, if the content overflows.
+  if (!el.querySelector('.pp-hv-scrollhint')) {
+    const hint = document.createElement('div');
+    hint.className = 'pp-hv-scrollhint';
+    hint.textContent = '↕ scroll to read the whole question';
+    el.appendChild(hint);
+  }
   requestAnimationFrame(() => {
+    const hint = el.querySelector('.pp-hv-scrollhint');
+    if (hint) hint.style.display = (el.scrollHeight > el.clientHeight + 4) ? 'block' : 'none';
     const p = _ppHoverLast || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     const pad = 14, w = el.offsetWidth || 400;
     const targetH = Math.min(el.scrollHeight + 4, Math.round(window.innerHeight * 0.86));
@@ -28877,10 +28903,23 @@ function ppHoverExpand(){
     el.style.top = Math.max(8, y) + 'px';
   });
 }
+// A chip's mouse-leave: while the preview is locked open, don't close instantly —
+// give the cursor a moment to travel into the card (which cancels the close).
+function ppHoverChipLeave(){
+  if (_ppHoverLocked) { clearTimeout(_ppHoverGrace); _ppHoverGrace = setTimeout(ppHoverHide, 260); return; }
+  ppHoverHide();
+}
 function ppHoverHide(){
   clearTimeout(_ppHoverTimer);
+  clearTimeout(_ppHoverGrace);
+  _ppHoverLocked = false;
   if (_ppHoverEl) { _ppHoverEl.style.display = 'none'; _ppHoverEl.classList.remove('pp-hv-expanded'); }
 }
+// Esc closes a locked preview; a click anywhere outside it does too.
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && _ppHoverLocked) ppHoverHide(); });
+document.addEventListener('pointerdown', function (e) {
+  if (_ppHoverLocked && _ppHoverEl && !_ppHoverEl.contains(e.target) && !(e.target.closest && e.target.closest('.pp-chip, .pp-arow'))) ppHoverHide();
+}, true);
 
 // -------- edit mode --------
 function ppToggleEdit(){ if (!ppIsAdmin()) return; ppEditMode = !ppEditMode; ppHoverHide(); ppRenderBody(); }
@@ -28935,7 +28974,7 @@ function ppRenderAssignList(){
   const rows = shown.map(x => {
     const sel = x.id === cur;
     const same = x.topic === q.topic;
-    return `<div class="pp-arow ${sel ? 'sel' : ''}" onclick="ppAssign('${id}','${x.id}')" onmouseenter="ppHoverShowBank(event,'${x.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverHide()">
+    return `<div class="pp-arow ${sel ? 'sel' : ''}" onclick="ppAssign('${id}','${x.id}')" onmouseenter="ppHoverShowBank(event,'${x.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverChipLeave()">
       <div style="flex:1;min-width:0;">
         <div class="pp-arow-title">${escapeHtml(x.title || 'Untitled')}${sel ? ' <span style="color:var(--primary);font-weight:700;">&#10003; attached</span>' : ''}</div>
         <div class="pp-arow-sub">${same ? '<span class="pp-match">same topic</span> ' : ''}${escapeHtml(x.topic || '')}${x.category ? ' &middot; ' + escapeHtml(x.category) : ''}</div>
@@ -29568,9 +29607,16 @@ function ppStyles(){
   .pp-topic-yhead { font-size:0.74rem; font-weight:700; color:var(--text-muted); margin-bottom:7px; }
   .pp-bar-val { width:74px; flex:none; text-align:right; font-size:0.76rem; color:var(--text-muted); }
   #ppHover { position:fixed; z-index:4000; display:none; pointer-events:none; max-width:360px; max-height:340px; overflow:hidden; background:var(--surface,#fff); border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.16); padding:12px 14px; font-size:0.82rem; transform:translateY(0); will-change:max-height,transform; transition:max-height .55s cubic-bezier(.16,1,.3,1), box-shadow .5s ease, transform .5s cubic-bezier(.16,1,.3,1), border-color .5s ease; }
-  /* After ~4s of hovering, the partial preview blooms into a full one. */
-  #ppHover.pp-hv-expanded { max-width:420px; max-height:86vh; box-shadow:0 22px 60px rgba(0,0,0,0.26); transform:translateY(-3px); border-color:var(--primary,#4a7c59); transition:max-height .55s cubic-bezier(.16,1,.3,1), max-width .55s cubic-bezier(.16,1,.3,1), box-shadow .5s ease, transform .5s cubic-bezier(.16,1,.3,1), border-color .5s ease, top .5s cubic-bezier(.16,1,.3,1), left .5s cubic-bezier(.16,1,.3,1); }
-  #ppHover.pp-hv-expanded .pp-hv-preview { max-height:82vh; -webkit-mask-image:none; mask-image:none; }
+  /* After ~4s of hovering, the partial preview blooms into a full one, then
+     locks in place: it becomes interactive and scrollable so the cursor can
+     move into it and read the whole question. */
+  #ppHover.pp-hv-expanded { max-width:460px; max-height:86vh; overflow-y:auto; overflow-x:hidden; pointer-events:auto; box-shadow:0 22px 60px rgba(0,0,0,0.26); transform:translateY(-3px); border-color:var(--primary,#4a7c59); overscroll-behavior:contain; transition:max-height .55s cubic-bezier(.16,1,.3,1), max-width .55s cubic-bezier(.16,1,.3,1), box-shadow .5s ease, transform .5s cubic-bezier(.16,1,.3,1), border-color .5s ease, top .5s cubic-bezier(.16,1,.3,1), left .5s cubic-bezier(.16,1,.3,1); }
+  /* The whole card scrolls as one — let the preview grow to its full height. */
+  #ppHover.pp-hv-expanded .pp-hv-preview { max-height:none; overflow:visible; -webkit-mask-image:none; mask-image:none; }
+  #ppHover.pp-hv-expanded::-webkit-scrollbar { width:9px; }
+  #ppHover.pp-hv-expanded::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.22); border-radius:6px; border:2px solid var(--surface,#fff); }
+  #ppHover .pp-hv-scrollhint { display:none; }
+  #ppHover.pp-hv-expanded .pp-hv-scrollhint { display:block; position:sticky; bottom:-12px; margin:8px -14px -12px; padding:5px 14px; font-size:0.7rem; text-align:center; color:var(--text-muted); background:linear-gradient(transparent, var(--surface,#fff) 55%); pointer-events:none; }
   #ppHover .pp-hv-head { font-size:0.82rem; }
   #ppHover .pp-hv-topic { font-size:0.74rem; color:var(--text-muted); margin:3px 0 6px; display:flex; align-items:center; gap:5px; }
   #ppHover .pp-hv-title { font-weight:600; margin-bottom:3px; }
@@ -29631,6 +29677,7 @@ window.ppHoverShow = ppHoverShow;
 window.ppHoverShowBank = ppHoverShowBank;
 window.ppHoverMove = ppHoverMove;
 window.ppHoverHide = ppHoverHide;
+window.ppHoverChipLeave = ppHoverChipLeave;
 window.ppAddQuestion = ppAddQuestion;
 window.ppEditQuestion = ppEditQuestion;
 window.ppCloseQEdit = ppCloseQEdit;
