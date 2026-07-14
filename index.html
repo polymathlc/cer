@@ -4174,6 +4174,17 @@ option {
 .comm-quest-banner .cq-won { font-weight: 700; }
 .comm-quest-banner .cq-grade-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.8rem; font-weight: 600; padding: 4px 0; border-top: 1px solid rgba(255,255,255,0.18); }
 .comm-quest-banner .cq-grade-row:first-of-type { border-top: none; }
+/* finished flash-quiz winners — a compact, elegant recap instead of big dark banners */
+.comm-quest-winners { max-width: 620px; margin: 0 auto 14px; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+.comm-quest-winners .cqw-head { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-weight: 700; color: var(--text-muted); letter-spacing: 0.01em; margin-bottom: 4px; }
+.comm-quest-winners .cqw-head .cqw-count { margin-left: auto; font-weight: 600; opacity: 0.8; }
+.cqw-row { display: flex; align-items: center; gap: 11px; padding: 10px 0; border-top: 1px solid var(--border); }
+.cqw-row:first-of-type { border-top: none; }
+.cqw-row .cqw-trophy { flex-shrink: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 9px; font-size: 15px; background: linear-gradient(135deg,#fff7e6,#ffe9c7); }
+.cqw-row .cqw-body { flex: 1; min-width: 0; font-size: 0.86rem; line-height: 1.45; color: var(--text); }
+.cqw-row .cqw-body .cqw-name { font-weight: 700; }
+.cqw-row .cqw-body .cqw-quest { color: var(--text-muted); }
+.cqw-row .cqw-score { flex-shrink: 0; font-size: 0.76rem; font-weight: 700; color: var(--accent-orange, #d97706); background: var(--accent-orange-light, #fff3e0); border-radius: 999px; padding: 3px 11px; white-space: nowrap; }
 /* quest mode toggle + question picker */
 .comm-mode { display: flex; gap: 8px; margin-top: 10px; }
 .comm-mode-btn { flex: 1; padding: 9px 8px; border-radius: 10px; border: 2px solid var(--border, #d9d9e3); background: var(--surface, #fff); color: var(--text-muted); font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.15s; }
@@ -8031,7 +8042,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.104.0';
+const APP_VERSION = 'v1.105.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -25013,22 +25024,21 @@ function _renderQuestBanners() {
     if (q.winnerUid) return true;                // ended with a winner — celebrate it
     const hasEntries = q.scores && Object.keys(q.scores).length;
     return _isAdmin() && (q.mode === 'score' || q.mode === 'auto') && hasEntries; // admin can still award
-  }).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 6);
+  }).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 16);
   if (!list.length) { area.innerHTML = ''; return; }
   const student = currentUser && currentUser.role === 'student';
-  area.innerHTML = list.map(q => {
+  // Finished quests that already have a winner are just trophies — collapse them
+  // into one slim recap card so they don't crowd the board. Everything else
+  // (live quests, and ended ones the admin can still award) stays a banner.
+  const wonList = list.filter(q => !!q.winnerUid).slice(0, 5);
+  const bannerList = list.filter(q => !q.winnerUid).slice(0, 4);
+  const bannersHtml = bannerList.map(q => {
     const isScore = q.mode === 'score';
     const isAuto = q.mode === 'auto';
     const left = new Date(q.endAt).getTime() - Date.now();
     const expired = q.status === 'ended' || left <= 0;
-    const won = !!q.winnerUid;
     let timer, sub;
-    if (won) {
-      timer = '🏆<span>WINNER</span>';
-      const how = (isAuto && q.win === 'fastest' && q.winnerTimeMs != null) ? ' in ' + _fmtDuration(q.winnerTimeMs)
-        : ((isScore || isAuto) && q.winnerPct != null && !(isAuto && q.win === 'fastest')) ? ' with ' + Math.round(q.winnerPct) + '%' : '';
-      sub = '<div class="cq-won">🏆 ' + escapeHtml(q.winnerName || 'A student') + ' won the $10 voucher' + how + '!</div>';
-    } else if (expired) {
+    if (expired) {
       timer = '⌛<span>ENDED</span>';
       if (isAuto) {
         sub = _commAutoBannerSub(q, false);
@@ -25063,13 +25073,29 @@ function _renderQuestBanners() {
           : '<div class="cq-progress">Reward: ' + escapeHtml(q.prize || '$10 voucher') + ' · ' + q.count + ' questions' + (q.topic ? ' · ' + escapeHtml(q.topic) : '') + '</div>';
       }
     }
-    const endBtn = _isAdmin() && !expired && !won ? ' <button class="btn btn-outline btn-sm" onclick="commEndQuest(\'' + q._id + '\')">End</button>' : '';
-    return '<div class="comm-quest-banner' + (expired || won ? ' ended' : '') + '">' +
+    const endBtn = _isAdmin() && !expired ? ' <button class="btn btn-outline btn-sm" onclick="commEndQuest(\'' + q._id + '\')">End</button>' : '';
+    return '<div class="comm-quest-banner' + (expired ? ' ended' : '') + '">' +
       '<span class="cq-emoji">⚡</span>' +
       '<div class="cq-main"><div class="cq-title">' + escapeHtml(q.title || 'Encounter Quest') + endBtn + '</div>' +
       (q.desc ? '<div class="cq-desc">' + escapeHtml(q.desc) + '</div>' : '') + sub + '</div>' +
       '<div class="cq-timer">' + timer + '</div></div>';
   }).join('');
+  area.innerHTML = bannersHtml + _renderQuestWinnersStrip(wonList);
+}
+// Collapse finished, already-won flash quizzes into one compact recap card.
+function _renderQuestWinnersStrip(wonList) {
+  if (!wonList || !wonList.length) return '';
+  const rows = wonList.map(q => {
+    const isAuto = q.mode === 'auto', isScore = q.mode === 'score';
+    const how = (isAuto && q.win === 'fastest' && q.winnerTimeMs != null) ? _fmtDuration(q.winnerTimeMs)
+      : ((isScore || isAuto) && q.winnerPct != null && !(isAuto && q.win === 'fastest')) ? Math.round(q.winnerPct) + '%' : '';
+    const score = how ? '<span class="cqw-score">' + escapeHtml(how) + '</span>' : '';
+    const quest = q.title ? ' <span class="cqw-quest">· ' + escapeHtml(q.title) + '</span>' : '';
+    return '<div class="cqw-row"><span class="cqw-trophy">🏆</span>' +
+      '<div class="cqw-body"><span class="cqw-name">' + escapeHtml(q.winnerName || 'A student') + '</span> won the $10 voucher' + quest + '</div>' +
+      score + '</div>';
+  }).join('');
+  return '<div class="comm-quest-winners"><div class="cqw-head">🏆 Recent Flash Quiz winners</div>' + rows + '</div>';
 }
 function _commPostHtml(p, moderate) {
   const admin = _isAdmin();
