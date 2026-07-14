@@ -6997,11 +6997,16 @@ option {
         <button type="button" class="annot-tool" data-atool="line" title="Drag to draw a straight label line — hold Shift to snap to 45° angles">📏 Line</button>
         <button type="button" class="annot-tool" data-atool="text" title="Click to drop a text label">🔤 Text</button>
         <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Colour <input type="color" id="annotColor" value="#e23c3c" style="width:34px;height:28px;padding:0;border:1px solid var(--border);border-radius:6px;"></label>
-        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Size <input type="range" id="annotSize" min="2" max="40" value="8"></label>
+        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Brush <input type="range" id="annotSize" min="1" max="60" value="6" oninput="_annotSyncControls()" title="Brush size in image pixels — set to 1 to paint a single pixel"><span id="annotSizeVal" style="min-width:30px;font-variant-numeric:tabular-nums;">6&nbsp;px</span></label>
+        <span style="width:1px;height:20px;background:var(--border);"></span>
+        <button type="button" class="annot-tool" onclick="annotZoomStep(1/1.3)" title="Zoom out">➖</button>
+        <span id="annotZoomVal" style="font-size:0.78rem;min-width:44px;text-align:center;font-variant-numeric:tabular-nums;">100%</span>
+        <button type="button" class="annot-tool" onclick="annotZoomStep(1.3)" title="Zoom in">➕</button>
+        <button type="button" class="annot-tool" onclick="annotZoomFit()" title="Fit the whole image in view">⤢ Fit</button>
         <button type="button" class="btn btn-outline" style="padding:5px 10px;font-size:0.8rem;" onclick="annotUndo()">↶ Undo</button>
       </div>
       <div id="annotStage"><canvas id="annotCanvas"></canvas></div>
-      <p class="hint" style="margin-top:10px;">Erase / Paint: drag over the image. Line: drag from start to end. Text: click where the label goes, type, then Enter.</p>
+      <p class="hint" style="margin-top:10px;">Erase / Paint: drag over the image. Line: drag from start to end. Text: click where the label goes, type, then Enter.<br><b>Scroll</b> over the image to zoom (down to single pixels); <b>hold Space</b> (or the middle mouse button) and drag to pan. Set the brush to <b>1&nbsp;px</b> for pixel-perfect edits.</p>
     </div>
     <div class="overlay-foot">
       <button class="btn btn-ghost" onclick="closeAnnotTool()" type="button">Cancel</button>
@@ -8042,7 +8047,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.105.0';
+const APP_VERSION = 'v1.106.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11057,8 +11062,11 @@ async function applyCropTool() {
   .annot-tool { padding:6px 12px; border:1.5px solid var(--border,#e2ddd5); background:#fff; border-radius:8px; cursor:pointer; font-size:0.82rem; }
   .annot-tool:hover { border-color:var(--primary,#4a7c59); }
   .annot-tool.active { border-color:var(--primary,#4a7c59); background:var(--primary-light,#e8f3ec); color:var(--primary,#4a7c59); font-weight:700; }
-  #annotStage { position:relative; display:inline-block; max-width:100%; line-height:0; }
-  #annotCanvas { max-width:84vw; max-height:54vh; touch-action:none; cursor:crosshair; border:1px solid var(--border,#e2ddd5); border-radius:6px; }
+  #annotStage { position:relative; display:block; margin:0 auto; width:86vw; max-width:1080px; height:56vh; overflow:hidden; line-height:0; background:#eef0ee; border:1px solid var(--border,#e2ddd5); border-radius:6px; touch-action:none; }
+  #annotCanvas { position:absolute; top:0; left:0; transform-origin:0 0; touch-action:none; cursor:crosshair; image-rendering:auto; }
+  #annotCanvas.pixelated { image-rendering:pixelated; image-rendering:crisp-edges; }
+  #annotStage.panning, #annotStage.panning #annotCanvas { cursor:grabbing; }
+  #annotStage.canpan #annotCanvas { cursor:grab; }
   .annot-textbox { position:absolute; z-index:5; }
   .annot-textbox-input { border:1px dashed var(--primary,#4a7c59); background:rgba(255,255,255,0.92); border-radius:4px; outline:none; font-family:'DM Sans',sans-serif; font-weight:600; padding:1px 4px; line-height:1.3; min-width:60px; color:inherit; }
   .annot-textbox-handle { position:absolute; top:-19px; left:-1px; cursor:move; user-select:none; touch-action:none; background:var(--primary,#4a7c59); color:#fff; font-size:11px; line-height:1; padding:3px 6px; border-radius:4px 4px 0 0; white-space:nowrap; }`;
@@ -11084,10 +11092,14 @@ function openAnnotTool(blockId) {
     canvas.height = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    _annot = { blockId, canvas, ctx, tool: 'erase', color: '#e23c3c', size: 8, drawing: false, history: [], start: null, snap: null };
+    _annot = { blockId, canvas, ctx, tool: 'erase', color: '#e23c3c', size: 6, drawing: false, history: [], start: null, snap: null,
+      zoom: 1, fit: 1, panX: 0, panY: 0, space: false, panning: false };
     _annotSyncControls();
     _annotSetTool('erase');
     document.getElementById('annotOverlay').classList.add('show');
+    // Fit the image after the overlay is visible so the stage has real dimensions.
+    requestAnimationFrame(() => { annotZoomFit(); });
+    _annotBindZoomListeners();
   }).catch(e => { console.warn('open annot', e); showToast('Could not open touch-up for this image', 'error'); });
 }
 function _annotSyncControls() {
@@ -11095,6 +11107,90 @@ function _annotSyncControls() {
   const col = document.getElementById('annotColor'), sz = document.getElementById('annotSize');
   if (col) _annot.color = col.value || _annot.color;
   if (sz) _annot.size = parseInt(sz.value, 10) || _annot.size;
+  const lbl = document.getElementById('annotSizeVal');
+  if (lbl) lbl.innerHTML = _annot.size + '&nbsp;px';
+}
+// ---- Zoom & pan (Photoshop-style): the canvas is transformed inside a fixed
+// viewport; scroll zooms toward the cursor, Space/middle-drag pans. ----
+const ANNOT_MAX_DISPLAY = 40;   // up to 40 screen px per image pixel — see individual pixels
+function _annotDisplayScale() { return _annot ? _annot.fit * _annot.zoom : 1; }
+function _annotUpdateTransform() {
+  if (!_annot) return;
+  const c = _annot.canvas, s = _annotDisplayScale();
+  c.style.transform = 'translate(' + _annot.panX + 'px,' + _annot.panY + 'px) scale(' + s + ')';
+  c.classList.toggle('pixelated', s >= 3);   // crisp pixels once magnified
+  const zl = document.getElementById('annotZoomVal');
+  if (zl) zl.textContent = Math.round(s * 100) + '%';
+}
+function _annotStageBox() {
+  const st = document.getElementById('annotStage');
+  return st ? st.getBoundingClientRect() : { left: 0, top: 0, width: 1, height: 1 };
+}
+// Keep the image from being dragged fully out of the viewport.
+function _annotClampPan() {
+  if (!_annot) return;
+  const box = _annotStageBox(), s = _annotDisplayScale();
+  const w = _annot.canvas.width * s, h = _annot.canvas.height * s;
+  const margin = 40; // always keep at least this many px of image reachable
+  _annot.panX = Math.min(box.width - margin, Math.max(margin - w, _annot.panX));
+  _annot.panY = Math.min(box.height - margin, Math.max(margin - h, _annot.panY));
+}
+function annotZoomFit() {
+  if (!_annot) return;
+  const box = _annotStageBox();
+  _annot.fit = Math.min(box.width / _annot.canvas.width, box.height / _annot.canvas.height) || 1;
+  _annot.zoom = 1;
+  const s = _annotDisplayScale();
+  _annot.panX = (box.width - _annot.canvas.width * s) / 2;
+  _annot.panY = (box.height - _annot.canvas.height * s) / 2;
+  _annotUpdateTransform();
+}
+// Zoom about a viewport point (px relative to the stage). Keeps that point fixed.
+function _annotZoomAt(factor, vx, vy) {
+  if (!_annot) return;
+  const box = _annotStageBox();
+  if (vx == null) { vx = box.width / 2; vy = box.height / 2; }
+  const oldS = _annotDisplayScale();
+  const minZoom = 1, maxZoom = ANNOT_MAX_DISPLAY / (_annot.fit || 1);
+  const newZoom = Math.min(maxZoom, Math.max(minZoom, _annot.zoom * factor));
+  if (newZoom === _annot.zoom) return;
+  const newS = _annot.fit * newZoom;
+  // canvas-space point under the cursor stays put
+  const cx = (vx - _annot.panX) / oldS, cy = (vy - _annot.panY) / oldS;
+  _annot.zoom = newZoom;
+  _annot.panX = vx - cx * newS;
+  _annot.panY = vy - cy * newS;
+  _annotClampPan();
+  _annotUpdateTransform();
+}
+function annotZoomStep(factor) {
+  const box = _annotStageBox();
+  _annotZoomAt(factor, box.width / 2, box.height / 2);
+}
+function _annotWheel(e) {
+  if (!_annot) return;
+  e.preventDefault();   // never let the page/browser scroll or zoom
+  const box = _annotStageBox();
+  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  _annotZoomAt(factor, e.clientX - box.left, e.clientY - box.top);
+}
+function _annotTypingInField(e) {
+  const el = (e && e.target) || document.activeElement;
+  return !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
+}
+function _annotKeyDown(e) { if (_annot && e.code === 'Space' && !_annotTypingInField(e)) { _annot.space = true; const st = document.getElementById('annotStage'); if (st) st.classList.add('canpan'); e.preventDefault(); } }
+function _annotKeyUp(e) { if (_annot && e.code === 'Space') { _annot.space = false; const st = document.getElementById('annotStage'); if (st) st.classList.remove('canpan'); } }
+function _annotBindZoomListeners() {
+  const st = document.getElementById('annotStage');
+  if (st && !st._zoomBound) { st.addEventListener('wheel', _annotWheel, { passive: false }); st._zoomBound = true; }
+  window.addEventListener('keydown', _annotKeyDown);
+  window.addEventListener('keyup', _annotKeyUp);
+}
+function _annotUnbindZoomListeners() {
+  window.removeEventListener('keydown', _annotKeyDown);
+  window.removeEventListener('keyup', _annotKeyUp);
+  const st = document.getElementById('annotStage');
+  if (st) st.classList.remove('canpan', 'panning');
 }
 function _annotSetTool(t) {
   if (_annot) _annot.tool = t;
@@ -11115,7 +11211,22 @@ function annotUndo() {
 function _annotPt(e) {
   const c = _annot.canvas, r = c.getBoundingClientRect();
   const scale = c.width / r.width;
-  return { x: (e.clientX - r.left) * scale, y: (e.clientY - r.top) * (c.height / r.height), dispX: e.clientX - r.left, dispY: e.clientY - r.top, scale };
+  return { x: (e.clientX - r.left) * scale, y: (e.clientY - r.top) * (c.height / r.height), dispX: e.clientX - r.left, dispY: e.clientY - r.top, clientX: e.clientX, clientY: e.clientY, scale };
+}
+// Plot a crisp 1px line between two points (Bresenham) — no anti-aliasing, so a
+// 1px brush drags as clean single pixels, like a Photoshop pencil.
+function _annotPlotLine(ctx, x0, y0, x1, y1) {
+  x0 = Math.floor(x0); y0 = Math.floor(y0); x1 = Math.floor(x1); y1 = Math.floor(y1);
+  const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+  for (;;) {
+    ctx.fillRect(x0, y0, 1, 1);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x0 += sx; }
+    if (e2 < dx) { err += dx; y0 += sy; }
+  }
 }
 // Snap the end point to the nearest 45° from the start (PowerPoint-style).
 function _annotSnap45(s, p) {
@@ -11141,12 +11252,19 @@ function _annotDown(e) {
   _annot.drawing = true;
   _annot.last = p;
   _annot.shiftSeg = null; // Shift-straight segment state (start pt + snapshot)
-  const lw = Math.max(1, Math.round(_annot.size * p.scale));
+  // Brush size is measured in IMAGE pixels (Photoshop-style): size 1 = one pixel,
+  // independent of the current zoom, so precise edits are possible when zoomed in.
+  const lw = Math.max(1, Math.round(_annot.size));
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.strokeStyle = _annot.tool === 'erase' ? '#ffffff' : _annot.color;
   ctx.fillStyle = ctx.strokeStyle;
   ctx.lineWidth = lw;
-  ctx.beginPath(); ctx.arc(p.x, p.y, lw / 2, 0, Math.PI * 2); ctx.fill(); // a click paints a dot
+  if (lw <= 1) {
+    // A 1px brush paints a crisp single pixel (no anti-aliasing) — pixel-perfect.
+    ctx.fillRect(Math.floor(p.x), Math.floor(p.y), 1, 1);
+  } else {
+    ctx.beginPath(); ctx.arc(p.x, p.y, lw / 2, 0, Math.PI * 2); ctx.fill(); // a click paints a dot
+  }
   ctx.beginPath(); ctx.moveTo(p.x, p.y);
 }
 function _annotMove(e) {
@@ -11157,7 +11275,7 @@ function _annotMove(e) {
     const end = e.shiftKey ? _annotSnap45(_annot.start, p) : p;
     ctx.putImageData(_annot.snap, 0, 0);
     ctx.strokeStyle = _annot.color; ctx.lineCap = 'round';
-    ctx.lineWidth = Math.max(1, Math.round(_annot.size * p.scale));
+    ctx.lineWidth = Math.max(1, Math.round(_annot.size));
     ctx.beginPath(); ctx.moveTo(_annot.start.x, _annot.start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
     return;
   }
@@ -11185,8 +11303,13 @@ function _annotMove(e) {
     _annot.shiftSeg = null;
     ctx.beginPath(); ctx.moveTo(_annot.last.x, _annot.last.y);
   }
-  ctx.lineTo(p.x, p.y); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(p.x, p.y);
+  if (Math.max(1, Math.round(_annot.size)) <= 1) {
+    // Pixel-perfect 1px drag: plot crisp pixels between samples.
+    _annotPlotLine(ctx, _annot.last.x, _annot.last.y, p.x, p.y);
+  } else {
+    ctx.lineTo(p.x, p.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(p.x, p.y);
+  }
   _annot.last = p;
 }
 function _annotUp() { if (_annot) { _annot.drawing = false; _annot.start = null; _annot.snap = null; _annot.shiftSeg = null; _annot.last = null; } }
@@ -11199,8 +11322,10 @@ function _annotPlaceText(p) {
   // input ends up (not the original click point).
   const box = document.createElement('div');
   box.className = 'annot-textbox';
-  box.style.left = p.dispX + 'px';
-  box.style.top = p.dispY + 'px';
+  // Position relative to the stage viewport (the canvas is transformed within it).
+  const _sr = stage.getBoundingClientRect();
+  box.style.left = ((p.clientX != null ? p.clientX - _sr.left : p.dispX)) + 'px';
+  box.style.top = ((p.clientY != null ? p.clientY - _sr.top : p.dispY)) + 'px';
   const handle = document.createElement('div');
   handle.className = 'annot-textbox-handle';
   handle.textContent = '✥ drag';
@@ -11283,18 +11408,42 @@ async function applyAnnotTool() {
 function closeAnnotTool() {
   const o = document.getElementById('annotOverlay'); if (o) o.classList.remove('show');
   const s = document.getElementById('annotStage'); if (s) s.querySelectorAll('.annot-textbox').forEach(el => el.remove());
+  _annotUnbindZoomListeners();
   _annot = null;
 }
 document.addEventListener('click', function (e) {
   const t = e.target.closest && e.target.closest('[data-atool]');
   if (t) { e.preventDefault(); _annotSetTool(t.getAttribute('data-atool')); }
 });
+// Pan when Space is held or the middle mouse button is used; otherwise draw.
+function _annotPanStart(e) {
+  _annot.panning = true;
+  _annot.panFrom = { x: e.clientX, y: e.clientY, panX: _annot.panX, panY: _annot.panY };
+  const st = document.getElementById('annotStage'); if (st) st.classList.add('panning');
+  try { e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId); } catch (_) {}
+}
+function _annotPanMove(e) {
+  if (!_annot || !_annot.panning || !_annot.panFrom) return;
+  _annot.panX = _annot.panFrom.panX + (e.clientX - _annot.panFrom.x);
+  _annot.panY = _annot.panFrom.panY + (e.clientY - _annot.panFrom.y);
+  _annotClampPan();
+  _annotUpdateTransform();
+}
+function _annotPanEnd() {
+  if (_annot && _annot.panning) { _annot.panning = false; _annot.panFrom = null; const st = document.getElementById('annotStage'); if (st) st.classList.remove('panning'); }
+}
 document.addEventListener('pointerdown', function (e) {
   const c = document.getElementById('annotCanvas');
-  if (_annot && c && e.target === c) _annotDown(e);
+  if (!_annot || !c || e.target !== c) return;
+  if (_annot.space || e.button === 1) { e.preventDefault(); _annotPanStart(e); return; }
+  if (e.button === 0) _annotDown(e);
 });
-document.addEventListener('pointermove', function (e) { if (_annot && _annot.drawing) _annotMove(e); });
-document.addEventListener('pointerup', function () { _annotUp(); });
+document.addEventListener('pointermove', function (e) {
+  if (!_annot) return;
+  if (_annot.panning) { _annotPanMove(e); return; }
+  if (_annot.drawing) _annotMove(e);
+});
+document.addEventListener('pointerup', function () { _annotPanEnd(); _annotUp(); });
 
 // =====================================================================
 // AI QUESTION BUILDER — upload a screenshot/PDF of an exam question;
@@ -29554,6 +29703,9 @@ window.openAnnotTool = openAnnotTool;
 window.closeAnnotTool = closeAnnotTool;
 window.annotUndo = annotUndo;
 window.applyAnnotTool = applyAnnotTool;
+window.annotZoomFit = annotZoomFit;
+window.annotZoomStep = annotZoomStep;
+window._annotSyncControls = _annotSyncControls;
 window.showToast = showToast;
 window.showConfirm = showConfirm;
 window.closeConfirm = closeConfirm;
