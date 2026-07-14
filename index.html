@@ -6994,6 +6994,8 @@ option {
       <div class="annot-tools">
         <button type="button" class="annot-tool" data-atool="erase" title="Paint white over words to erase them — hold Shift to erase in a straight line">🩹 Erase</button>
         <button type="button" class="annot-tool" data-atool="paint" title="Paint over with the chosen colour — hold Shift to paint in a straight line">🖌️ Paint</button>
+        <button type="button" class="annot-tool" data-atool="fill" title="Fill an enclosed shape or area with the chosen colour (click inside it)">🪣 Fill</button>
+        <button type="button" class="annot-tool" data-atool="clone" title="Clone stamp: click to set a source point, then drag to copy that part of the picture elsewhere. Alt+click to re-set the source.">🧬 Clone</button>
         <button type="button" class="annot-tool" data-atool="line" title="Drag to draw a straight label line — hold Shift to snap to 45° angles">📏 Line</button>
         <button type="button" class="annot-tool" data-atool="text" title="Click to drop a text label">🔤 Text</button>
         <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Colour <input type="color" id="annotColor" value="#e23c3c" style="width:34px;height:28px;padding:0;border:1px solid var(--border);border-radius:6px;"></label>
@@ -7006,7 +7008,7 @@ option {
         <button type="button" class="btn btn-outline" style="padding:5px 10px;font-size:0.8rem;" onclick="annotUndo()">↶ Undo</button>
       </div>
       <div id="annotStage"><canvas id="annotCanvas"></canvas></div>
-      <p class="hint" style="margin-top:10px;">Erase / Paint: drag over the image. Line: drag from start to end. Text: click where the label goes, type, then Enter.<br><b>Scroll</b> over the image to zoom (down to single pixels); <b>hold Space</b> (or the middle mouse button) and drag to pan. Set the brush to <b>1&nbsp;px</b> for pixel-perfect edits.</p>
+      <p class="hint" style="margin-top:10px;">Erase / Paint: drag over the image. <b>Fill</b>: click inside a shape to flood it with colour. <b>Clone</b>: click to set the source, then drag to stamp that area elsewhere (Alt+click re-sets the source). Line: drag from start to end. Text: click, type, then Enter.<br><b>Scroll</b> over the image to zoom (down to single pixels); <b>hold Space</b> (or the middle mouse button) and drag to pan. Set the brush to <b>1&nbsp;px</b> for pixel-perfect edits.</p>
     </div>
     <div class="overlay-foot">
       <button class="btn btn-ghost" onclick="closeAnnotTool()" type="button">Cancel</button>
@@ -8047,7 +8049,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.109.0';
+const APP_VERSION = 'v1.110.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11069,7 +11071,11 @@ async function applyCropTool() {
   #annotStage.canpan #annotCanvas { cursor:grab; }
   .annot-textbox { position:absolute; z-index:5; }
   .annot-textbox-input { border:1px dashed var(--primary,#4a7c59); background:rgba(255,255,255,0.92); border-radius:4px; outline:none; font-family:'DM Sans',sans-serif; font-weight:600; padding:1px 4px; line-height:1.3; min-width:60px; color:inherit; }
-  .annot-textbox-handle { position:absolute; top:-19px; left:-1px; cursor:move; user-select:none; touch-action:none; background:var(--primary,#4a7c59); color:#fff; font-size:11px; line-height:1; padding:3px 6px; border-radius:4px 4px 0 0; white-space:nowrap; }`;
+  .annot-textbox-handle { position:absolute; top:-19px; left:-1px; cursor:move; user-select:none; touch-action:none; background:var(--primary,#4a7c59); color:#fff; font-size:11px; line-height:1; padding:3px 6px; border-radius:4px 4px 0 0; white-space:nowrap; }
+  #annotCloneSrc { position:absolute; z-index:6; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; border:2px solid #2563eb; background:rgba(37,99,235,0.18); box-shadow:0 0 0 1px rgba(255,255,255,0.8); pointer-events:none; }
+  #annotCloneSrc::before, #annotCloneSrc::after { content:''; position:absolute; background:#2563eb; }
+  #annotCloneSrc::before { left:6px; top:1px; width:2px; height:12px; }
+  #annotCloneSrc::after { top:6px; left:1px; height:2px; width:12px; }`;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
 })();
 
@@ -11093,7 +11099,7 @@ function openAnnotTool(blockId) {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     _annot = { blockId, canvas, ctx, tool: 'erase', color: '#e23c3c', size: 6, drawing: false, history: [], start: null, snap: null,
-      zoom: 1, fit: 1, panX: 0, panY: 0, space: false, panning: false };
+      zoom: 1, fit: 1, panX: 0, panY: 0, space: false, panning: false, cloneSrc: null, cloneSnap: null, cloneOff: null };
     _annotSyncControls();
     _annotSetTool('erase');
     document.getElementById('annotOverlay').classList.add('show');
@@ -11121,6 +11127,73 @@ function _annotUpdateTransform() {
   c.classList.toggle('pixelated', s >= 3);   // crisp pixels once magnified
   const zl = document.getElementById('annotZoomVal');
   if (zl) zl.textContent = Math.round(s * 100) + '%';
+  _annotUpdateCloneMarker();   // the source pin rides along with zoom / pan
+}
+// A small pin marking the clone-stamp source point, kept aligned under zoom/pan.
+function _annotUpdateCloneMarker() {
+  const st = document.getElementById('annotStage'); if (!st) return;
+  let m = document.getElementById('annotCloneSrc');
+  const show = _annot && _annot.tool === 'clone' && _annot.cloneSrc;
+  if (!show) { if (m) m.style.display = 'none'; return; }
+  if (!m) { m = document.createElement('div'); m.id = 'annotCloneSrc'; st.appendChild(m); }
+  const s = _annotDisplayScale();
+  m.style.display = 'block';
+  m.style.left = (_annot.panX + _annot.cloneSrc.x * s) + 'px';
+  m.style.top = (_annot.panY + _annot.cloneSrc.y * s) + 'px';
+}
+// hex → [r,g,b]
+function _annotHexToRgb(hex) {
+  hex = String(hex || '').replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  const n = parseInt(hex || '000000', 16) || 0;
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+// Paint-bucket flood fill: from the clicked pixel, recolour every connected
+// pixel whose colour is within tolerance of it — fills enclosed shapes/regions.
+function _annotFloodFill(sx, sy) {
+  const cv = _annot.canvas, ctx = _annot.ctx, W = cv.width, H = cv.height;
+  sx = Math.floor(sx); sy = Math.floor(sy);
+  if (sx < 0 || sy < 0 || sx >= W || sy >= H) return;
+  const img = ctx.getImageData(0, 0, W, H), out = img.data;
+  const src = new Uint8ClampedArray(out);   // stable copy for matching
+  const at = (x, y) => (y * W + x) * 4;
+  const s0 = at(sx, sy);
+  const tr = src[s0], tg = src[s0 + 1], tb = src[s0 + 2], ta = src[s0 + 3];
+  const fill = _annot.tool === 'erase' ? [255, 255, 255] : _annotHexToRgb(_annot.color);
+  const fr = fill[0], fg = fill[1], fb = fill[2];
+  if (Math.abs(tr - fr) < 2 && Math.abs(tg - fg) < 2 && Math.abs(tb - fb) < 2 && ta === 255) return; // already that colour
+  const TOL = 48 * 48 * 3;   // squared colour distance a pixel may differ and still count
+  const match = i => { const dr = src[i] - tr, dg = src[i + 1] - tg, db = src[i + 2] - tb, da = src[i + 3] - ta; return dr * dr + dg * dg + db * db + da * da <= TOL; };
+  const seen = new Uint8Array(W * H);
+  const stack = [[sx, sy]];
+  while (stack.length) {
+    let [x, y] = stack.pop();
+    while (x > 0 && match(at(x - 1, y))) x--;   // walk to the left edge of this span
+    let up = false, dn = false;
+    for (; x < W && match(at(x, y)); x++) {
+      const k = y * W + x; if (seen[k]) continue; seen[k] = 1;
+      const i = k * 4; out[i] = fr; out[i + 1] = fg; out[i + 2] = fb; out[i + 3] = 255;
+      if (y > 0) { const mu = match(at(x, y - 1)); if (mu && !up && !seen[k - W]) stack.push([x, y - 1]); up = mu; }
+      if (y < H - 1) { const md = match(at(x, y + 1)); if (md && !dn && !seen[k + W]) stack.push([x, y + 1]); dn = md; }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+// Clone stamp: copy a circular patch from the frozen source snapshot, offset so
+// the source point tracks the brush as you drag.
+function _annotCloneDab(ctx, x, y) {
+  if (!_annot.cloneSnap || !_annot.cloneOff) return;
+  const r = Math.max(1, Math.round(_annot.size)) / 2;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+  ctx.drawImage(_annot.cloneSnap, _annot.cloneOff.x, _annot.cloneOff.y);
+  ctx.restore();
+}
+function _annotCloneStroke(from, to) {
+  const ctx = _annot.ctx, r = Math.max(1, Math.round(_annot.size)) / 2;
+  const dx = to.x - from.x, dy = to.y - from.y, dist = Math.hypot(dx, dy);
+  const step = Math.max(1, r / 2), n = Math.max(1, Math.ceil(dist / step));
+  for (let i = 1; i <= n; i++) _annotCloneDab(ctx, from.x + dx * (i / n), from.y + dy * (i / n));
 }
 function _annotStageBox() {
   const st = document.getElementById('annotStage');
@@ -11196,7 +11269,8 @@ function _annotSetTool(t) {
   if (_annot) _annot.tool = t;
   document.querySelectorAll('.annot-tool').forEach(b => b.classList.toggle('active', b.getAttribute('data-atool') === t));
   const c = document.getElementById('annotCanvas');
-  if (c) c.style.cursor = t === 'text' ? 'text' : 'crosshair';
+  if (c) c.style.cursor = t === 'text' ? 'text' : (t === 'fill' ? 'cell' : 'crosshair');
+  _annotUpdateCloneMarker();   // show the clone-source pin only while the Clone tool is active
 }
 function _annotPushHistory() {
   if (!_annot) return;
@@ -11241,6 +11315,26 @@ function _annotDown(e) {
   _annotSyncControls();
   const p = _annotPt(e), ctx = _annot.ctx;
   if (_annot.tool === 'text') { _annotPlaceText(p); return; }
+  if (_annot.tool === 'fill') { _annotPushHistory(); _annotFloodFill(p.x, p.y); return; }
+  if (_annot.tool === 'clone') {
+    // First click (or Alt+click) sets the source; later drags stamp from it.
+    if (e.altKey || !_annot.cloneSrc) {
+      _annot.cloneSrc = { x: p.x, y: p.y };
+      _annotUpdateCloneMarker();
+      showToast('Clone source set — now drag to stamp that area elsewhere', 'info');
+      return;
+    }
+    _annotPushHistory();
+    const snap = document.createElement('canvas');
+    snap.width = _annot.canvas.width; snap.height = _annot.canvas.height;
+    snap.getContext('2d').drawImage(_annot.canvas, 0, 0);
+    _annot.cloneSnap = snap;
+    _annot.cloneOff = { x: p.x - _annot.cloneSrc.x, y: p.y - _annot.cloneSrc.y };
+    _annot.drawing = true;
+    _annot.last = p;
+    _annotCloneDab(ctx, p.x, p.y);
+    return;
+  }
   _annotPushHistory();
   if (_annot.tool === 'line') {
     _annot.start = p;
@@ -11271,6 +11365,7 @@ function _annotMove(e) {
   if (!_annot || !_annot.drawing) return;
   e.preventDefault();
   const p = _annotPt(e), ctx = _annot.ctx;
+  if (_annot.tool === 'clone') { _annotCloneStroke(_annot.last, p); _annot.last = p; return; }
   if (_annot.tool === 'line') {
     const end = e.shiftKey ? _annotSnap45(_annot.start, p) : p;
     ctx.putImageData(_annot.snap, 0, 0);
@@ -11312,7 +11407,7 @@ function _annotMove(e) {
   }
   _annot.last = p;
 }
-function _annotUp() { if (_annot) { _annot.drawing = false; _annot.start = null; _annot.snap = null; _annot.shiftSeg = null; _annot.last = null; } }
+function _annotUp() { if (_annot) { _annot.drawing = false; _annot.start = null; _annot.snap = null; _annot.shiftSeg = null; _annot.last = null; _annot.cloneSnap = null; _annot.cloneOff = null; } }
 function _annotPlaceText(p) {
   const stage = document.getElementById('annotStage');
   if (!stage) return;
@@ -11408,6 +11503,7 @@ async function applyAnnotTool() {
 function closeAnnotTool() {
   const o = document.getElementById('annotOverlay'); if (o) o.classList.remove('show');
   const s = document.getElementById('annotStage'); if (s) s.querySelectorAll('.annot-textbox').forEach(el => el.remove());
+  const cm = document.getElementById('annotCloneSrc'); if (cm) cm.remove();
   _annotUnbindZoomListeners();
   _annot = null;
 }
