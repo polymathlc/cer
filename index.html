@@ -8047,7 +8047,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.107.0';
+const APP_VERSION = 'v1.108.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28822,9 +28822,15 @@ function ppHoverHtml(id){
     // Student's live success rate on the attached question (all platforms).
     const st = questionStats(bq.id);
     const accLine = (st.percent != null) ? `<div class="pp-hv-note" style="color:var(--primary,#4a7c59);font-style:normal;">Your success rate: <strong>${st.percent}%</strong> (${st.correct}/${st.attempts} correct)</div>` : '';
+    // Admins get a direct "Edit question" button in the locked preview — it opens
+    // the block editor and, when they finish, brings them back to Past Papers
+    // scrolled to this very question, so they don't lose their place.
+    const editBtn = ppIsAdmin()
+      ? `<div class="pp-hv-actions"><button type="button" class="pp-hv-edit" onclick="ppHoverEditAttached('${escapeHtml(String(id))}','${escapeHtml(String(bq.id))}')">✏️ Edit question</button></div>`
+      : '';
     return head + `<div class="pp-hv-assigned">&#10003; Attached: ${escapeHtml(bq.title || 'Untitled')}</div>${_ppNisBadge(bq)}
-      <div class="pp-hv-preview">${renderQuestionPreviewHtml(bq.id)}</div>${accLine}
-      <div class="pp-hv-note">${ppIsAdmin() ? (ppEditMode ? 'Click to edit this question.' : 'Click to change or remove the attachment.') : 'Click to practise.'}</div>`;
+      <div class="pp-hv-preview">${renderQuestionPreviewHtml(bq.id)}</div>${accLine}${editBtn}
+      <div class="pp-hv-note">${ppIsAdmin() ? (ppEditMode ? 'Click the chip to edit this question.' : 'Click the chip to change or remove the attachment.') : 'Click to practise.'}</div>`;
   }
   const b = paperMap[id];
   const missing = b ? '<div class="pp-hv-note" style="color:var(--accent-red,#c0392b);">The attached question is not in the bank — it may be awaiting vetting approval, or it was deleted.</div>' : '';
@@ -28902,6 +28908,14 @@ function ppHoverExpand(){
     el.style.left = Math.max(8, x) + 'px';
     el.style.top = Math.max(8, y) + 'px';
   });
+}
+// Admin action from the locked preview: open the block editor for the attached
+// question, remembering to return to Past Papers (scrolled to this question)
+// when the edit is saved or cancelled — so no place is lost.
+function ppHoverEditAttached(ppId, bankId){
+  if (!ppIsAdmin()) return;
+  ppHoverHide();
+  editQuestionFromPapers(bankId, ppId);
 }
 // A chip's mouse-leave: while the preview is locked open, don't close instantly —
 // give the cursor a moment to travel into the card (which cancels the close).
@@ -29624,6 +29638,10 @@ function ppStyles(){
   #ppHover .pp-hv-assigned { font-weight:600; color:var(--primary,#4a7c59); margin-bottom:6px; }
   #ppHover .pp-hv-preview { max-height:200px; overflow:hidden; -webkit-mask-image:linear-gradient(#000 78%, transparent); mask-image:linear-gradient(#000 78%, transparent); font-size:0.8rem; transition:max-height .55s cubic-bezier(.16,1,.3,1); }
   #ppHover .pp-hv-note { font-size:0.73rem; color:var(--text-muted); margin-top:7px; font-style:italic; }
+  #ppHover .pp-hv-actions { margin-top:10px; }
+  #ppHover .pp-hv-edit { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; font-size:0.8rem; font-weight:700; color:#fff; background:var(--primary,#4a7c59); border:none; border-radius:9px; cursor:pointer; box-shadow:0 2px 6px rgba(49,99,66,0.22); transition:background .15s, transform .1s; }
+  #ppHover .pp-hv-edit:hover { background:var(--primary-dark,#3a6349); }
+  #ppHover .pp-hv-edit:active { transform:translateY(1px); }
   .pp-arow { display:flex; gap:10px; align-items:flex-start; padding:11px 12px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; cursor:pointer; }
   .pp-arow:hover { border-color:var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); }
   .pp-arow.sel { border-color:var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); }
@@ -29678,6 +29696,7 @@ window.ppHoverShowBank = ppHoverShowBank;
 window.ppHoverMove = ppHoverMove;
 window.ppHoverHide = ppHoverHide;
 window.ppHoverChipLeave = ppHoverChipLeave;
+window.ppHoverEditAttached = ppHoverEditAttached;
 window.ppAddQuestion = ppAddQuestion;
 window.ppEditQuestion = ppEditQuestion;
 window.ppCloseQEdit = ppCloseQEdit;
