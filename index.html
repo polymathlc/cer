@@ -8047,7 +8047,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.108.0';
+const APP_VERSION = 'v1.109.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28976,14 +28976,28 @@ async function ppAssignSetDiff(level){
   await ppSetDifficulty(_ppAssignKey, level);   // saves + re-renders the chips behind the modal
   ppRenderAssignDiff();                          // keep the modal open, refresh the highlight
 }
+// How recently a bank question was added — its createdAt timestamp, else the
+// millisecond stamp baked into its "q_<ms>_…" id, else 0 (treated as oldest).
+function _questionRecency(x){
+  if (x && x.createdAt) { const t = Date.parse(x.createdAt); if (!isNaN(t)) return t; }
+  const m = /^q_(\d{10,})/.exec(String((x && x.id) || ''));
+  return m ? Number(m[1]) : 0;
+}
 function ppRenderAssignList(){
   const id = _ppAssignKey; if (!id) return;
   const q = ppFindQ(id); if (!q) return;
   const term = (document.getElementById('ppAssignSearch')?.value || '').toLowerCase().trim();
   const cur = paperMap[id];
   let list = questionBank.slice();
-  if (term) list = list.filter(x => ((x.title || '') + ' ' + (x.topic || '') + ' ' + (x.category || '') + ' ' + getQuestionPreview(x)).toLowerCase().includes(term));
-  list.sort((a,b)=> ((a.topic === q.topic ? 0 : 1) - (b.topic === q.topic ? 0 : 1)) || String(a.title||'').localeCompare(String(b.title||'')));
+  if (term) {
+    list = list.filter(x => ((x.title || '') + ' ' + (x.topic || '') + ' ' + (x.category || '') + ' ' + getQuestionPreview(x)).toLowerCase().includes(term));
+    // While searching, float same-topic matches up, then alphabetical.
+    list.sort((a,b)=> ((a.topic === q.topic ? 0 : 1) - (b.topic === q.topic ? 0 : 1)) || String(a.title||'').localeCompare(String(b.title||'')));
+  } else {
+    // Default view: newest questions first — the one you just created and likely
+    // want to attach sits right at the top.
+    list.sort((a,b)=> _questionRecency(b) - _questionRecency(a) || String(a.title||'').localeCompare(String(b.title||'')));
+  }
   const shown = list.slice(0, 80);
   const rows = shown.map(x => {
     const sel = x.id === cur;
@@ -29001,7 +29015,7 @@ function ppRenderAssignList(){
   const pr = document.getElementById('ppAssignPractiseBtn'); if (pr) pr.style.display = cur ? '' : 'none';
   // Show "Edit this question" only when the attached question is in this bank.
   const ed = document.getElementById('ppEditQBtn'); if (ed) ed.style.display = (cur && questionBank.some(qb => qb.id === cur)) ? '' : 'none';
-  const cnt = document.getElementById('ppAssignCount'); if (cnt) cnt.textContent = list.length + ' question' + (list.length === 1 ? '' : 's') + (list.length > shown.length ? ' (showing first ' + shown.length + ')' : '');
+  const cnt = document.getElementById('ppAssignCount'); if (cnt) cnt.textContent = list.length + ' question' + (list.length === 1 ? '' : 's') + (list.length > shown.length ? ' (showing first ' + shown.length + ')' : '') + (term ? '' : ' · newest first');
 }
 async function ppAssign(id, qid){ ppHoverHide(); paperMap[id] = qid; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Question attached — students can now practise it', 'success'); }
 async function ppUnassign(){ const id = _ppAssignKey; if (!id) return; ppHoverHide(); delete paperMap[id]; await savePaperMap(); ppRenderAssignList(); ppRenderBody(); showToast('Attachment removed', 'info'); }
