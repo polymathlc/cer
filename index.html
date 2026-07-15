@@ -4404,7 +4404,7 @@ option {
 @keyframes tcgConfFall { to { transform: translateY(110vh) rotate(720deg); opacity: 0.4; } }
 /* ---- team picker ---- */
 .tcg-team-slots { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; }
-.tcg-team-slot { width: 200px; }
+.tcg-team-slot { width: 180px; }
 .tcg-team-slot .tcg-empty { border: 2.5px dashed var(--border); border-radius: 14px; min-height: 286px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-muted); font-size: 0.82rem; background: var(--surface-alt); }
 .tcg-team-slot .tcg-empty .big { font-size: 44px; opacity: 0.5; }
 .tcg-team-power { text-align: center; font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.95rem; margin: 14px 0 22px; }
@@ -4414,12 +4414,12 @@ option {
 .tcg-record b { font-size: 1.3rem; display: block; }
 .tcg-record span { font-size: 0.68rem; color: var(--text-muted); letter-spacing: 0.06em; }
 .tcgb-wrap { width: 100%; max-width: 1000px; }
-.tcgb-stage { position: relative; width: 100%; height: min(62vh, 540px); border-radius: 20px; overflow: hidden; background: linear-gradient(#1e1b4b 0%, #4338ca 42%, #0f766e 42.2%, #042f2e 100%); box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+.tcgb-stage { position: relative; width: 100%; height: min(72vh, 640px); border-radius: 20px; overflow: hidden; background: linear-gradient(#1e1b4b 0%, #4338ca 42%, #0f766e 42.2%, #042f2e 100%); box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
 .tcgb-stage::before { content: ''; position: absolute; left: 8%; top: 6%; width: 70px; height: 70px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fef9c3, #fde047 60%, transparent 72%); opacity: 0.9; }
 .tcgb-stage::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 115%, rgba(45,212,191,0.25), transparent 60%); pointer-events: none; }
-.tcgb-unit { position: absolute; width: 150px; text-align: center; transition: transform 0.28s cubic-bezier(.3,.9,.4,1.2), opacity 0.5s, filter 0.3s; will-change: transform; }
-.tcgb-sprite { font-size: 64px; line-height: 1; display: inline-block; filter: drop-shadow(0 10px 8px rgba(0,0,0,0.45)); animation: tcgIdle 2.4s ease-in-out infinite; }
-.tcgb-sprite img { width: 84px; height: 84px; object-fit: contain; }
+.tcgb-unit { position: absolute; width: 124px; text-align: center; transition: transform 0.28s cubic-bezier(.3,.9,.4,1.2), opacity 0.5s, filter 0.3s; will-change: transform; }
+.tcgb-sprite { font-size: 48px; line-height: 1; display: inline-block; filter: drop-shadow(0 10px 8px rgba(0,0,0,0.45)); animation: tcgIdle 2.4s ease-in-out infinite; }
+.tcgb-sprite img { width: 64px; height: 64px; object-fit: contain; }
 @keyframes tcgIdle { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .tcgb-unit.left .tcgb-sprite { transform: scaleX(-1); }
 .tcgb-unit.left .tcgb-sprite img { transform: none; }
@@ -4471,9 +4471,10 @@ option {
 .tcgb-result .word.lose { color: #f87171; text-shadow: 0 0 34px rgba(248,113,113,0.9); }
 .tcgb-result .sub { color: rgba(255,255,255,0.8); font-size: 0.95rem; }
 @media (max-width: 720px) {
-  .tcgb-unit { width: 104px; }
-  .tcgb-sprite { font-size: 44px; }
-  .tcgb-sprite img { width: 60px; height: 60px; }
+  .tcgb-unit { width: 82px; }
+  .tcgb-sprite { font-size: 32px; }
+  .tcgb-sprite img { width: 44px; height: 44px; }
+  .tcgb-hptext { display: none; }
   .tcgb-unit.lungeR { transform: translateX(64px) scale(1.08); }
   .tcgb-unit.lungeL { transform: translateX(-64px) scale(1.08); }
   .tcg-flip { width: 164px; }
@@ -4903,7 +4904,7 @@ option {
         <span class="ico">🕹️</span> Arcade
       </div>
       <!-- Monster Cards TCG (beta) — admins always; students only once the admin presses Release -->
-      <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Monster Cards — collect all 151 science monsters from booster packs bought with your points, build a team of 3 and auto-battle other trainers.">
+      <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Monster Cards — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
         <span class="ico">🃏</span> Monster Cards <span class="nav-beta">BETA</span>
       </div>
       <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire, and all 151 Monster Cards.">
@@ -6217,7 +6218,7 @@ option {
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>🃏 Monster Cards <span class="nav-beta" style="font-size:0.6rem;padding:3px 9px;">BETA</span></h2>
           </div>
-          <div class="subtitle">Collect all 151 science monsters! Open booster packs with the points you earn answering questions, build a team of 3, and auto-battle other trainers.</div>
+          <div class="subtitle">Collect all 151 legendary monsters! Open booster packs with the points you earn answering questions, build a team of 5, and auto-battle other trainers.</div>
         </div>
         <div class="tcg-gold-chip" id="tcgGoldChip">🪙 —</div>
       </div>
@@ -8251,7 +8252,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.114.0';
+const APP_VERSION = 'v1.115.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -24591,10 +24592,10 @@ function rpgPublishLeaderboard() {
       td: rpgGameBoardData("defenders"),
       raid: rpgGameBoardData("raiders"),
       spire: rpgGameBoardData("spire"),
-      // Monster Cards TCG: a complete team of 3 is published so other students
+      // Monster Cards TCG: a complete team of 5 is published so other students
       // can be matched against it in the Battle Arena (null until then).
-      tcg: (rpgState.tcg && Array.isArray(rpgState.tcg.team) && rpgState.tcg.team.length === 3) ? {
-        team: rpgState.tcg.team.slice(0, 3),
+      tcg: (rpgState.tcg && Array.isArray(rpgState.tcg.team) && rpgState.tcg.team.length === 5) ? {
+        team: rpgState.tcg.team.slice(0, 5),
         power: tcgTeamPower(rpgState.tcg.team),
         wins: rpgState.tcg.wins | 0,
         losses: rpgState.tcg.losses | 0,
@@ -27958,12 +27959,12 @@ const TCG_SKILLS = {
   nova:    { name: 'Supernova',        icon: '🌟', kind: 'blast',   pow: 1.35, desc: 'Detonates on ALL foes for 135% ATK.' },
   fang:    { name: 'Piercing Fang',    icon: '🗡️', kind: 'pierce',  pow: 1.50, desc: 'Hits one foe for 150% ATK — ignores DEF.' },
   arrow:   { name: 'Photon Arrow',     icon: '🏹', kind: 'pierce',  pow: 1.60, desc: 'Hits one foe for 160% ATK — ignores DEF.' },
-  drain:   { name: 'Life Drain',       icon: '🩸', kind: 'drain',   pow: 1.45, desc: 'Hits one foe for 145% ATK and heals self for 60% of the damage.' },
-  eclipse: { name: 'Umbral Feast',     icon: '🌑', kind: 'drain',   pow: 1.55, desc: 'Hits one foe for 155% ATK and heals self for 60% of the damage.' },
-  bloom:   { name: 'Soothing Bloom',   icon: '🌸', kind: 'heal',    pow: 2.60, desc: 'Restores the weakest ally for 260% HEAL.' },
-  aurora:  { name: 'Aurora Mend',      icon: '🌈', kind: 'heal',    pow: 2.90, desc: 'Restores the weakest ally for 290% HEAL.' },
-  rain:    { name: 'Renewal Rain',     icon: '💧', kind: 'healall', pow: 1.50, desc: 'Restores the whole team for 150% HEAL.' },
-  chorus:  { name: 'Healing Chorus',   icon: '🎶', kind: 'healall', pow: 1.60, desc: 'Restores the whole team for 160% HEAL.' },
+  drain:   { name: 'Life Drain',       icon: '🩸', kind: 'drain',   pow: 1.45, desc: 'Hits one foe for 145% ATK and heals self for 35% of the damage.' },
+  eclipse: { name: 'Umbral Feast',     icon: '🌑', kind: 'drain',   pow: 1.55, desc: 'Hits one foe for 155% ATK and heals self for 35% of the damage.' },
+  bloom:   { name: 'Soothing Bloom',   icon: '🌸', kind: 'heal',    pow: 1.80, desc: 'Restores the weakest ally for 180% HEAL.' },
+  aurora:  { name: 'Aurora Mend',      icon: '🌈', kind: 'heal',    pow: 2.00, desc: 'Restores the weakest ally for 200% HEAL.' },
+  rain:    { name: 'Renewal Rain',     icon: '💧', kind: 'healall', pow: 0.90, desc: 'Restores the whole team for 90% HEAL.' },
+  chorus:  { name: 'Healing Chorus',   icon: '🎶', kind: 'healall', pow: 1.00, desc: 'Restores the whole team for 100% HEAL.' },
   aegis:   { name: 'Crystal Aegis',    icon: '🛡️', kind: 'shield',  pow: 2.40, desc: 'Shields the weakest ally for 240% DEF.' },
   bark:    { name: 'Ironbark Guard',   icon: '🌳', kind: 'shield',  pow: 2.20, desc: 'Shields the weakest ally for 220% DEF.' },
   warcry:  { name: 'War Cry',          icon: '📣', kind: 'rage',    pow: 0.30, desc: "Raises the whole team's ATK by 30% for 2 rounds." },
@@ -27979,8 +27980,8 @@ const TCG_ROLE_MODS = {
   blast:   { atk: 1.15, def: 0.85, heal: 0.70, hp: 0.95, spd: 0 },
   pierce:  { atk: 1.18, def: 0.90, heal: 0.60, hp: 0.92, spd: 8 },
   drain:   { atk: 1.08, def: 0.95, heal: 0.90, hp: 1.00, spd: 4 },
-  heal:    { atk: 0.82, def: 1.00, heal: 1.65, hp: 0.98, spd: 0 },
-  healall: { atk: 0.80, def: 1.00, heal: 1.50, hp: 1.00, spd: -2 },
+  heal:    { atk: 0.82, def: 1.00, heal: 1.35, hp: 0.98, spd: 0 },
+  healall: { atk: 0.80, def: 1.00, heal: 1.25, hp: 1.00, spd: -2 },
   shield:  { atk: 0.85, def: 1.45, heal: 0.80, hp: 1.18, spd: -6 },
   rage:    { atk: 1.00, def: 1.10, heal: 0.90, hp: 1.08, spd: 0 },
   stun:    { atk: 1.05, def: 0.95, heal: 0.75, hp: 0.95, spd: 10 },
@@ -27990,96 +27991,169 @@ const TCG_ROLE_MODS = {
 // Do not reorder existing entries — a card's id (c001…c151) is its position.
 const TCG_GEN1 = {
   1: [ // 30 × 1★
-    ['Embercub', '🐹', 'flame', 'scratch'],  ['Puddling', '💧', 'aqua', 'rain'],
-    ['Sparkit', '🐭', 'spark', 'jolt'],      ['Pebblit', '🪨', 'terra', 'bark'],
-    ['Sproutle', '🌱', 'flora', 'bloom'],    ['Frostmite', '🦟', 'frost', 'freeze'],
-    ['Gloopling', '🟢', 'venom', 'spores'],  ['Glimmoth', '🦋', 'psychic', 'arrow'],
-    ['Lumibug', '🐞', 'light', 'bloom'],     ['Shadepup', '🐾', 'shadow', 'drain'],
-    ['Cogling', '⚙️', 'metal', 'aegis'],     ['Starlet', '🌟', 'cosmic', 'arrow'],
-    ['Finling', '🐟', 'aqua', 'fang'],       ['Chirpvolt', '🐤', 'spark', 'jolt'],
-    ['Wigglet', '🪱', 'terra', 'venomf'],    ['Funglet', '🍄', 'venom', 'spores'],
-    ['Buzzbee', '🐝', 'flora', 'fang'],      ['Shellsnail', '🐌', 'terra', 'bark'],
-    ['Cindershrew', '🐁', 'flame', 'scratch'], ['Dewdrop', '💦', 'aqua', 'rain'],
-    ['Mosskit', '🐈', 'flora', 'bloom'],     ['Hailpup', '🐶', 'frost', 'freeze'],
-    ['Gleamworm', '✨', 'light', 'drain'],   ['Batling', '🦇', 'shadow', 'drain'],
-    ['Tinbot', '🤖', 'metal', 'aegis'],      ['Cometfly', '🪰', 'cosmic', 'arrow'],
-    ['Zaplizard', '🦎', 'spark', 'storm'],   ['Puffowl', '🦉', 'psychic', 'bloom'],
-    ['Thornrat', '🐀', 'flora', 'venomf'],   ['Magmite', '🌋', 'flame', 'inferno']
+    ['Pyrrik, the Cinderwhelp', '🐹', 'flame', 'scratch'],
+    ['Nimue, the Dewborn', '💧', 'aqua', 'rain'],
+    ['Voltas, the Stormseed', '🐭', 'spark', 'jolt'],
+    ['Gorrim, the Pebblebound', '🪨', 'terra', 'bark'],
+    ['Thalia, the Seedmaiden', '🌱', 'flora', 'bloom'],
+    ['Krivv, the Frostgnat', '🦟', 'frost', 'freeze'],
+    ['Ozzik, the Sludgeborn', '🟢', 'venom', 'spores'],
+    ['Lyssa, the Dreammoth', '🦋', 'psychic', 'arrow'],
+    ['Lumen, the Dawnbeetle', '🐞', 'light', 'bloom'],
+    ['Umbrik, the Shadeling', '🐾', 'shadow', 'drain'],
+    ['Ferrik, the Cogsworn', '⚙️', 'metal', 'aegis'],
+    ['Astrel, the Starborn', '🌟', 'cosmic', 'arrow'],
+    ['Nerissa, the Tidefin', '🐟', 'aqua', 'fang'],
+    ['Zephyr, the Stormhatch', '🐤', 'spark', 'jolt'],
+    ['Vermis, the Gravewurm', '🪱', 'terra', 'venomf'],
+    ['Morel, the Sporeling', '🍄', 'venom', 'spores'],
+    ['Brammel, the Thornwing', '🐝', 'flora', 'fang'],
+    ['Torvus, the Shellwarden', '🐌', 'terra', 'bark'],
+    ['Cindra, the Emberling', '🐁', 'flame', 'scratch'],
+    ['Naiad, the Mistcaller', '💦', 'aqua', 'rain'],
+    ['Sylvie, the Mosswhisper', '🐈', 'flora', 'bloom'],
+    ['Boreas, the Hailborn', '🐶', 'frost', 'freeze'],
+    ['Lucent, the Gloamworm', '✨', 'light', 'drain'],
+    ['Vesper, the Nightwing', '🦇', 'shadow', 'drain'],
+    ['Cobbin, the Tinforged', '🤖', 'metal', 'aegis'],
+    ['Halyx, the Cometborn', '🪰', 'cosmic', 'arrow'],
+    ['Raizel, the Stormscale', '🦎', 'spark', 'storm'],
+    ['Oren, the Owlsage', '🦉', 'psychic', 'bloom'],
+    ['Bryar, the Thornveined', '🐀', 'flora', 'venomf'],
+    ['Ignatz, the Moltenborn', '🌋', 'flame', 'inferno']
   ],
   2: [ // 35 × 2★
-    ['Flarepup', '🐕', 'flame', 'bite'],     ['Aquafin', '🐠', 'aqua', 'tidal'],
-    ['Voltbunny', '🐇', 'spark', 'jolt'],    ['Terrapin', '🐢', 'terra', 'bark'],
-    ['Vinewhip', '🌿', 'flora', 'venomf'],   ['Chillfox', '🦊', 'frost', 'freeze'],
-    ['Toxifrog', '🐸', 'venom', 'venomf'],   ['Mindmouse', '🐭', 'psychic', 'arrow'],
-    ['Sunchick', '🐥', 'light', 'solar'],    ['Duskcat', '🐈‍⬛', 'shadow', 'drain'],
-    ['Beetlebolt', '🪲', 'metal', 'smash'],  ['Pufferstar', '🐡', 'cosmic', 'arrow'],
-    ['Emberimp', '👺', 'flame', 'inferno'],  ['Jellyshock', '🪼', 'spark', 'jolt'],
-    ['Corallite', '🪸', 'aqua', 'aegis'],    ['Dunecrab', '🦀', 'terra', 'smash'],
-    ['Prickleball', '🦔', 'flora', 'fang'],  ['Icefawn', '🦌', 'frost', 'aurora'],
-    ['Smogslug', '🌫️', 'venom', 'spores'],  ['Wispling', '👻', 'psychic', 'drain'],
-    ['Beaconbird', '🐦', 'light', 'bloom'],  ['Nightowl', '🦉', 'shadow', 'eclipse'],
-    ['Cogbeaver', '🦫', 'metal', 'bark'],    ['Meteormite', '☄️', 'cosmic', 'smash'],
-    ['Ashhound', '🐺', 'flame', 'bite'],     ['Bubblotter', '🦦', 'aqua', 'rain'],
-    ['Staticat', '🐱', 'spark', 'storm'],    ['Bouldertoad', '🗿', 'terra', 'smash'],
-    ['Fernfox', '🦊', 'flora', 'bloom'],     ['Sleetseal', '🦭', 'frost', 'freeze'],
-    ['Stingtail', '🦂', 'venom', 'venomf'],  ['Dreamlamb', '🐑', 'psychic', 'chorus'],
-    ['Prismpup', '🌈', 'light', 'aurora'],   ['Murkrat', '🐀', 'shadow', 'drain'],
-    ['Ironsnail', '🐌', 'metal', 'aegis']
+    ['Pyrros, the Emberhound', '🐕', 'flame', 'bite'],
+    ['Maren, the Waverider', '🐠', 'aqua', 'tidal'],
+    ['Voltara, the Hexhare', '🐇', 'spark', 'jolt'],
+    ['Tarn, the Shellbastion', '🐢', 'terra', 'bark'],
+    ['Ivessa, the Strangler', '🌿', 'flora', 'venomf'],
+    ['Kitsa, the Rimefox', '🦊', 'frost', 'freeze'],
+    ['Bufo, the Blightcroaker', '🐸', 'venom', 'venomf'],
+    ['Mesmeron, the Mindgnawer', '🐭', 'psychic', 'arrow'],
+    ['Soleil, the Dawnherald', '🐥', 'light', 'solar'],
+    ['Nyra, the Duskprowler', '🐈‍⬛', 'shadow', 'drain'],
+    ['Brakk, the Ironshell', '🪲', 'metal', 'smash'],
+    ['Orbys, the Starpuffer', '🐡', 'cosmic', 'arrow'],
+    ['Malzar, the Emberfiend', '👺', 'flame', 'inferno'],
+    ['Zelka, the Stormjelly', '🪼', 'spark', 'jolt'],
+    ['Coralia, the Reefwarden', '🪸', 'aqua', 'aegis'],
+    ['Skarn, the Dunebreaker', '🦀', 'terra', 'smash'],
+    ['Quilla, the Barbback', '🦔', 'flora', 'fang'],
+    ['Eirwen, the Snowfawn', '🦌', 'frost', 'aurora'],
+    ['Mephit, the Smogbringer', '🌫️', 'venom', 'spores'],
+    ['Echora, the Lostwhisper', '👻', 'psychic', 'drain'],
+    ['Aurelin, the Lightbearer', '🐦', 'light', 'bloom'],
+    ['Noctys, the Midnight Talon', '🦉', 'shadow', 'eclipse'],
+    ['Gnawrim, the Rustwright', '🦫', 'metal', 'bark'],
+    ['Perseon, the Skyfallen', '☄️', 'cosmic', 'smash'],
+    ['Vulkor, the Ashfang', '🐺', 'flame', 'bite'],
+    ['Lutra, the Tidesinger', '🦦', 'aqua', 'rain'],
+    ['Felyx, the Staticlaw', '🐱', 'spark', 'storm'],
+    ['Grond, the Stonetoad', '🗿', 'terra', 'smash'],
+    ['Ferna, the Gladewatcher', '🦊', 'flora', 'bloom'],
+    ['Skadia, the Floeborn', '🦭', 'frost', 'freeze'],
+    ['Vyxen, the Venomlash', '🦂', 'venom', 'venomf'],
+    ['Somnia, the Dreamherd', '🐑', 'psychic', 'chorus'],
+    ['Irisyl, the Prismhound', '🌈', 'light', 'aurora'],
+    ['Murgrim, the Gutterking', '🐀', 'shadow', 'drain'],
+    ['Ferrugo, the Rustshell', '🐌', 'metal', 'aegis']
   ],
   3: [ // 35 × 3★
-    ['Blazecoon', '🦝', 'flame', 'scratch'], ['Tidalturt', '🐢', 'aqua', 'aegis'],
-    ['Thunderam', '🐏', 'spark', 'horn'],    ['Cragolem', '🧱', 'terra', 'aegis'],
-    ['Bloomdeer', '🦌', 'flora', 'rain'],    ['Glacierpup', '🐺', 'frost', 'freeze'],
-    ['Vipervine', '🐍', 'venom', 'venomf'],  ['Psyfeline', '🐈', 'psychic', 'arrow'],
-    ['Solaram', '🌞', 'light', 'solar'],     ['Umbrabat', '🦇', 'shadow', 'eclipse'],
-    ['Steelstag', '🫎', 'metal', 'horn'],    ['Nebulynx', '🐆', 'cosmic', 'arrow'],
-    ['Pyroape', '🐒', 'flame', 'scratch'],   ['Marlinjet', '🐬', 'aqua', 'fang'],
-    ['Voltacuda', '🐟', 'spark', 'fang'],    ['Basaltboar', '🐗', 'terra', 'smash'],
-    ['Willowisp', '🍃', 'flora', 'drain'],   ['Cryostag', '❄️', 'frost', 'horn'],
-    ['Fumefly', '🦟', 'venom', 'spores'],    ['Oraclefox', '🦊', 'psychic', 'bloom'],
-    ['Radiantmoth', '🦋', 'light', 'aurora'], ['Gloomwolf', '🐺', 'shadow', 'bite'],
-    ['Bronzebison', '🦬', 'metal', 'bark'],  ['Astrohare', '🐇', 'cosmic', 'jolt'],
-    ['Salamancer', '🦎', 'flame', 'inferno'], ['Krakenling', '🦑', 'aqua', 'tidal'],
-    ['Zapfalcon', '🦅', 'spark', 'storm'],   ['Terradillo', '🦔', 'terra', 'aegis'],
-    ['Orchidmantis', '🦗', 'flora', 'fang'], ['Berghulk', '🧊', 'frost', 'smash'],
-    ['Toxigator', '🐊', 'venom', 'bite'],    ['Lunamoth', '🌙', 'psychic', 'chorus'],
-    ['Dawnpegasus', '🐴', 'light', 'rain'],  ['Wraithcrow', '🐦‍⬛', 'shadow', 'drain'],
-    ['Forgeturtle', '🐢', 'metal', 'aegis']
+    ['Bandyr, the Ashmasked', '🦝', 'flame', 'scratch'],
+    ['Galapos, the Tidebastion', '🐢', 'aqua', 'aegis'],
+    ['Voltram, the Thunderhorn', '🐏', 'spark', 'horn'],
+    ['Golgar, the Cragheart', '🧱', 'terra', 'aegis'],
+    ['Elowen, the Bloomtender', '🦌', 'flora', 'rain'],
+    ['Fenris, the Glacierhowl', '🐺', 'frost', 'freeze'],
+    ['Vissera, the Coilblight', '🐍', 'venom', 'venomf'],
+    ['Mirren, the Psywhisker', '🐈', 'psychic', 'arrow'],
+    ['Helion, the Suncrowned', '🌞', 'light', 'solar'],
+    ['Nocturne, the Veilwing', '🦇', 'shadow', 'eclipse'],
+    ['Ferrox, the Steelantler', '🫎', 'metal', 'horn'],
+    ['Lyrax, the Voidstalker', '🐆', 'cosmic', 'arrow'],
+    ['Brann, the Flamefist', '🐒', 'flame', 'scratch'],
+    ['Cerulos, the Spearfin', '🐬', 'aqua', 'fang'],
+    ['Zarrak, the Livewire', '🐟', 'spark', 'fang'],
+    ['Tuskar, the Basaltbreaker', '🐗', 'terra', 'smash'],
+    ['Salix, the Willowshade', '🍃', 'flora', 'drain'],
+    ['Cervyn, the Rimeantler', '❄️', 'frost', 'horn'],
+    ['Pestis, the Miasmawing', '🦟', 'venom', 'spores'],
+    ['Delphyne, the Farseer', '🦊', 'psychic', 'bloom'],
+    ['Selura, the Radiantveil', '🦋', 'light', 'aurora'],
+    ['Grimjaw, the Gloomfang', '🐺', 'shadow', 'bite'],
+    ['Brontes, the Bronzehide', '🦬', 'metal', 'bark'],
+    ['Lepus, the Starbounder', '🐇', 'cosmic', 'jolt'],
+    ['Salvax, the Flamecaller', '🦎', 'flame', 'inferno'],
+    ['Skallag, the Deepcoiler', '🦑', 'aqua', 'tidal'],
+    ['Aquilus, the Stormtalon', '🦅', 'spark', 'storm'],
+    ['Terrag, the Spineshield', '🦔', 'terra', 'aegis'],
+    ['Mantissa, the Bladepetal', '🦗', 'flora', 'fang'],
+    ['Jorgun, the Bergbreaker', '🧊', 'frost', 'smash'],
+    ['Sobrak, the Mirefang', '🐊', 'venom', 'bite'],
+    ['Lunara, the Moonveil', '🌙', 'psychic', 'chorus'],
+    ['Aurion, the Dawnstrider', '🐴', 'light', 'rain'],
+    ['Corvax, the Carrionwhisper', '🐦‍⬛', 'shadow', 'drain'],
+    ['Vulcanis, the Forgeshell', '🐢', 'metal', 'aegis']
   ],
   4: [ // 25 × 4★
-    ['Infernowl', '🦉', 'flame', 'inferno'], ['Maelstromray', '🌀', 'aqua', 'tidal'],
-    ['Voltigre', '🐅', 'spark', 'storm'],    ['Titanotort', '🐢', 'terra', 'aegis'],
-    ['Sylvanelk', '🦌', 'flora', 'rain'],    ['Permabear', '🐻‍❄️', 'frost', 'smash'],
-    ['Plaguewyrm', '🐛', 'venom', 'venomf'], ['Mentalisk', '🧠', 'psychic', 'arrow'],
-    ['Luxicorn', '🦄', 'light', 'aurora'],   ['Nocturnyx', '🐈‍⬛', 'shadow', 'eclipse'],
-    ['Mecharhino', '🦏', 'metal', 'horn'],   ['Cosmowl', '🌠', 'cosmic', 'arrow'],
-    ['Dragonewt', '🐲', 'flame', 'bite'],    ['Abysseel', '🐍', 'aqua', 'drain'],
-    ['Thunderoc', '🦅', 'spark', 'jolt'],    ['Obsidigolem', '🌋', 'terra', 'smash'],
-    ['Bloomserpent', '🌺', 'flora', 'chorus'], ['Blizzardclaw', '❄️', 'frost', 'freeze'],
-    ['Mireviper', '🐍', 'venom', 'venomf'],  ['Sphinxling', '🦁', 'psychic', 'bloom'],
-    ['Solarix', '🐦‍🔥', 'light', 'solar'],  ['Duskreaper', '💀', 'shadow', 'eclipse'],
-    ['Steelgriffin', '🦅', 'metal', 'fang'], ['Quasarkoi', '🐠', 'cosmic', 'rain'],
-    ['Cinderlion', '🦁', 'flame', 'roar']
+    ['Pyrothane, the Ashen Sage', '🦉', 'flame', 'inferno'],
+    ['Vortessa, the Maelstrom Queen', '🌀', 'aqua', 'tidal'],
+    ['Kirrag, the Stormtiger', '🐅', 'spark', 'storm'],
+    ['Atlan, the Worldshell', '🐢', 'terra', 'aegis'],
+    ['Cernun, the Sylvan Lord', '🦌', 'flora', 'rain'],
+    ['Bjornak, the Permafrost', '🐻‍❄️', 'frost', 'smash'],
+    ['Nagrith, the Rotcrawler', '🐛', 'venom', 'venomf'],
+    ['Psyrix, the Mindrender', '🧠', 'psychic', 'arrow'],
+    ['Lumessa, the Purelight', '🦄', 'light', 'aurora'],
+    ['Nyxara, the Duskempress', '🐈‍⬛', 'shadow', 'eclipse'],
+    ['Ferrogar, the Siegehorn', '🦏', 'metal', 'horn'],
+    ['Stellarion, the Nightwatcher', '🌠', 'cosmic', 'arrow'],
+    ['Drakov, the Emberscale', '🐲', 'flame', 'bite'],
+    ['Abyssia, the Depthcoil', '🐍', 'aqua', 'drain'],
+    ['Fulgar, the Skypiercer', '🦅', 'spark', 'jolt'],
+    ['Obsidius, the Moltencore', '🌋', 'terra', 'smash'],
+    ['Rosaria, the Bloomcaller', '🌺', 'flora', 'chorus'],
+    ['Borvina, the Whiteout', '❄️', 'frost', 'freeze'],
+    ['Vipraxa, the Mirequeen', '🐍', 'venom', 'venomf'],
+    ['Enigmus, the Riddlekeeper', '🦁', 'psychic', 'bloom'],
+    ['Solarius, the Radiant Phoenix', '🐦‍🔥', 'light', 'solar'],
+    ['Morthul, the Duskreaper', '💀', 'shadow', 'eclipse'],
+    ['Gryphus, the Steelwing', '🦅', 'metal', 'fang'],
+    ['Quasara, the Fallen Star', '🐠', 'cosmic', 'rain'],
+    ['Leovar, the Cinderking', '🦁', 'flame', 'roar']
   ],
   5: [ // 15 × 5★
-    ['Volcandragon', '🐉', 'flame', 'inferno'], ['Leviathorn', '🐋', 'aqua', 'tidal'],
-    ['Stormsphinx', '⛈️', 'spark', 'storm'],    ['Gaiataur', '🦬', 'terra', 'quake'],
-    ['Everbloom', '🌸', 'flora', 'chorus'],     ['Glacialisk', '🧊', 'frost', 'freeze'],
-    ['Basiliskrot', '🐍', 'venom', 'spores'],   ['Mindflayer', '🦑', 'psychic', 'drain'],
-    ['Seraphstag', '🦌', 'light', 'aurora'],    ['Voidpanther', '🐆', 'shadow', 'eclipse'],
-    ['Titanforge', '🤖', 'metal', 'aegis'],     ['Galaxikoi', '🌌', 'cosmic', 'nova'],
-    ['Phoenixmajor', '🐦‍🔥', 'flame', 'aurora'], ['Tsunamiwhale', '🐳', 'aqua', 'smash'],
-    ['Wardenoak', '🌳', 'flora', 'bark']
+    ['Volkarrion, the Flame Tyrant', '🐉', 'flame', 'inferno'],
+    ['Nereth, the Deep Sovereign', '🐋', 'aqua', 'tidal'],
+    ['Raivo, the Tempest Incarnate', '⛈️', 'spark', 'storm'],
+    ['Gaiagor, the Earthshaker', '🦬', 'terra', 'quake'],
+    ['Amara, the Everbloom', '🌸', 'flora', 'chorus'],
+    ['Cryvexa, the Frozen Warden', '🧊', 'frost', 'freeze'],
+    ['Sythrax, the Rotmonarch', '🐍', 'venom', 'spores'],
+    ['Illithar, the Thoughtdrinker', '🦑', 'psychic', 'drain'],
+    ['Solandra, the Lightmother', '🦌', 'light', 'aurora'],
+    ['Erevos, the Voidprowler', '🐆', 'shadow', 'eclipse'],
+    ['Vulcanor, the Worldforge', '🤖', 'metal', 'aegis'],
+    ['Andrella, the Startide', '🌌', 'cosmic', 'nova'],
+    ['Pyrelia, the Undying Flame', '🐦‍🔥', 'flame', 'aurora'],
+    ['Thalassor, the Tidal Colossus', '🐳', 'aqua', 'smash'],
+    ['Yggdris, the Elder Oak', '🌳', 'flora', 'bark']
   ],
   6: [ // 8 × 6★
-    ['Ignisrex', '🦖', 'flame', 'roar'],        ['Abyssalking', '🐙', 'aqua', 'tidal'],
-    ['Fulgurbeast', '🐲', 'spark', 'storm'],    ['Terramammoth', '🦣', 'terra', 'quake'],
-    ['Celestialdoe', '🦌', 'light', 'chorus'],  ['Nyxhydra', '🐍', 'shadow', 'eclipse'],
-    ['Chromegigas', '🦾', 'metal', 'smash'],    ['Cosmoseraph', '👼', 'cosmic', 'nova']
+    ['Ignarok, the Extinction Flame', '🦖', 'flame', 'roar'],
+    ['Dagrath, the Abyssal King', '🐙', 'aqua', 'tidal'],
+    ['Voltrannus, the Storm Eternal', '🐲', 'spark', 'storm'],
+    ['Mammorak, the Walking Mountain', '🦣', 'terra', 'quake'],
+    ['Celestine, the First Light', '🦌', 'light', 'chorus'],
+    ['Nyxthara, the Endless Night', '🐍', 'shadow', 'eclipse'],
+    ['Chromagog, the Iron Colossus', '🦾', 'metal', 'smash'],
+    ['Sera, the Archangel', '👼', 'cosmic', 'nova']
   ],
   7: [ // 3 × 7★ — the legendary trio
-    ['Heliozar', '☀️', 'light', 'solar'],       ['Umbrathys', '🌑', 'shadow', 'eclipse'],
-    ['Chronodrax', '🐉', 'cosmic', 'nova']
+    ['Auros, the Dawnfather', '☀️', 'light', 'solar'],
+    ['Draxx, the End Bringer', '🌑', 'shadow', 'eclipse'],
+    ['Aeonyx, the Timeless One', '🐉', 'cosmic', 'nova']
   ]
 };
 // Flatten to the master dex: id c001…c151 by position.
@@ -28117,6 +28191,8 @@ function tcgCardPower(id) {
   return Math.round(st.atk + st.def + st.heal + st.hp / 8 + st.spd / 2);
 }
 function tcgTeamPower(team) { return (team || []).reduce((a, id) => a + tcgCardPower(id), 0); }
+// "Vortessa, the Maelstrom Queen" → "Vortessa" for battle nameplates & the log.
+function tcgShortName(card) { return String((card && card.name) || '').split(',')[0]; }
 
 // ---- Booster packs (the ONLY way to get cards) ----
 const TCG_PACKS = [
@@ -28151,7 +28227,7 @@ function tcgHydrateState(saved) {
   Object.keys(s.cards || {}).forEach(id => { if (TCG_BY_ID[id] && (s.cards[id] | 0) > 0) cards[id] = s.cards[id] | 0; });
   return {
     cards,
-    team: Array.isArray(s.team) ? s.team.filter(id => TCG_BY_ID[id] && cards[id]).slice(0, 3) : [],
+    team: Array.isArray(s.team) ? s.team.filter(id => TCG_BY_ID[id] && cards[id]).slice(0, 5) : [],
     packs: s.packs | 0,
     wins: s.wins | 0,
     losses: s.losses | 0
@@ -28474,7 +28550,7 @@ function tcgConfetti(n) {
 }
 // -- Team tab --
 function tcgTeamHtml(s) {
-  const slots = [0, 1, 2].map(i => {
+  const slots = [0, 1, 2, 3, 4].map(i => {
     const id = s.team[i];
     const c = id && TCG_BY_ID[id];
     return '<div class="tcg-team-slot">' + (c
@@ -28482,9 +28558,9 @@ function tcgTeamHtml(s) {
       : '<div class="tcg-empty"><span class="big">➕</span><span>Pick a monster<br>from below</span></div>') + '</div>';
   }).join('');
   const owned = TCG_CARDS.filter(c => s.cards[c.id]);
-  return '<div class="tcg-section-note">Choose <b>3 monsters</b> to defend your name in the Battle Arena. Tap a card below to add it — tap a team card to remove it. Your team is saved automatically.</div>'
+  return '<div class="tcg-section-note">Choose <b>5 monsters</b> to defend your name in the Battle Arena. Tap a card below to add it — tap a team card to remove it. Your team is saved automatically.</div>'
     + '<div class="tcg-team-slots">' + slots + '</div>'
-    + '<div class="tcg-team-power">Team power: <b>' + tcgTeamPower(s.team).toLocaleString() + '</b>' + (s.team.length === 3 ? ' · ready for battle ⚔️' : ' · pick ' + (3 - s.team.length) + ' more') + '</div>'
+    + '<div class="tcg-team-power">Team power: <b>' + tcgTeamPower(s.team).toLocaleString() + '</b>' + (s.team.length === 5 ? ' · ready for battle ⚔️' : ' · pick ' + (5 - s.team.length) + ' more') + '</div>'
     + (owned.length
       ? '<div class="tcg-grid">' + owned.map(c => tcgCardHtml(c, {
           count: s.cards[c.id] | 0, inTeam: s.team.includes(c.id), onclick: "tcgToggleTeam('" + c.id + "')"
@@ -28497,20 +28573,20 @@ function tcgToggleTeam(id) {
   const at = s.team.indexOf(id);
   if (at >= 0) s.team.splice(at, 1);
   else {
-    if (s.team.length >= 3) { showToast('Your team is full — tap a team card to remove it first', 'error'); return; }
+    if (s.team.length >= 5) { showToast('Your team is full — tap a team card to remove it first', 'error'); return; }
     s.team.push(id);
   }
   rpgSave();
   try { rpgPublishLeaderboard(); } catch (e) {}
-  if (s.team.length === 3 && at < 0) showToast('Team ready! Head to the Battle Arena ⚔️', 'success');
+  if (s.team.length === 5 && at < 0) showToast('Team ready! Head to the Battle Arena ⚔️', 'success');
   tcgRenderBody();
 }
 // -- Arena tab --
 function tcgArenaHtml(s) {
-  const ready = s.team.length === 3;
+  const ready = s.team.length === 5;
   return '<div class="tcg-arena-head">'
     + '<h3 style="margin-bottom:6px;">⚔️ Battle Arena</h3>'
-    + '<p style="color:var(--text-muted);font-size:0.85rem;line-height:1.55;">Your 3 monsters battle another trainer\'s team automatically — sit back and enjoy the show. Matches are friendly: no points are won or lost.</p>'
+    + '<p style="color:var(--text-muted);font-size:0.85rem;line-height:1.55;">Your 5 monsters battle another trainer\'s team automatically — sit back and enjoy the show. Matches are friendly: no points are won or lost.</p>'
     + '<div class="tcg-record">'
     +   '<div><b style="color:#16a34a;">' + (s.wins | 0) + '</b><span>WINS</span></div>'
     +   '<div><b style="color:#dc2626;">' + (s.losses | 0) + '</b><span>LOSSES</span></div>'
@@ -28518,9 +28594,9 @@ function tcgArenaHtml(s) {
     + '</div>'
     + (ready
       ? '<button class="btn btn-primary" style="font-size:1rem;padding:12px 30px;" onclick="tcgFindBattle()">🔎 Find a battle</button>'
-      : '<div class="tcg-section-note">Pick 3 monsters on the <b>My Team</b> tab first.</div>')
+      : '<div class="tcg-section-note">Pick 5 monsters on the <b>My Team</b> tab first.</div>')
     + '</div>'
-    + (ready ? '<div class="tcg-grid" style="max-width:680px;margin:0 auto;grid-template-columns:repeat(3,1fr);">'
+    + (ready ? '<div class="tcg-grid" style="max-width:1080px;margin:0 auto;grid-template-columns:repeat(5,1fr);">'
         + s.team.map(id => tcgCardHtml(TCG_BY_ID[id], {})).join('') + '</div>' : '');
 }
 
@@ -28529,9 +28605,9 @@ function tcgArenaHtml(s) {
 const TCG_GHOSTS = ['Professor Quark', 'Ranger Sylva', 'Captain Nimbus', 'Dr. Helix', 'Sage Umbra', 'Pilot Comet', 'Keeper Flora', 'Warden Frost'];
 function _tcgGhostTeam(targetStars) {
   const team = [];
-  let budget = Math.max(3, Math.min(21, targetStars + (Math.floor(Math.random() * 3) - 1)));
-  for (let i = 0; i < 3; i++) {
-    const slotsLeft = 3 - i;
+  let budget = Math.max(5, Math.min(35, targetStars + (Math.floor(Math.random() * 3) - 1)));
+  for (let i = 0; i < 5; i++) {
+    const slotsLeft = 5 - i;
     let stars = Math.round(budget / slotsLeft) + (Math.floor(Math.random() * 3) - 1);
     stars = Math.max(1, Math.min(7, stars, budget - (slotsLeft - 1)));
     budget -= stars;
@@ -28547,7 +28623,7 @@ async function tcgFindOpponent() {
   let rows = null;
   try { rows = await rpgFetchLeaderboard(true); } catch (e) {}
   const candidates = (rows || []).filter(r => r && r.uid && r.uid !== (currentUser && currentUser.uid)
-    && r.tcg && Array.isArray(r.tcg.team) && r.tcg.team.length === 3 && r.tcg.team.every(id => TCG_BY_ID[id]));
+    && r.tcg && Array.isArray(r.tcg.team) && r.tcg.team.length === 5 && r.tcg.team.every(id => TCG_BY_ID[id]));
   if (candidates.length) {
     // Prefer the closest team power, with a little shuffle so rematches vary.
     candidates.sort((a, b) => Math.abs((a.tcg.power || tcgTeamPower(a.tcg.team)) - myPower) - Math.abs((b.tcg.power || tcgTeamPower(b.tcg.team)) - myPower));
@@ -28675,13 +28751,13 @@ async function _tcgAct(stage, unit, allies, foes) {
     unit.poison.turns--;
     if (unit.poison.turns <= 0) unit.poison = null;
     await tcgSleep(420);
-    if (unit.hp <= 0) { _tcgLog(escapeHtml(unit.card.name) + ' fainted from poison!'); if (el) el.classList.remove('acting'); await tcgSleep(500); return; }
+    if (unit.hp <= 0) { _tcgLog(escapeHtml(tcgShortName(unit.card)) + ' fainted from poison!'); if (el) el.classList.remove('acting'); await tcgSleep(500); return; }
   }
   if (unit.stun > 0) {
     unit.stun--;
     _tcgPopup(unit, '💫 stunned', 'status');
     _tcgRefreshUnit(unit);
-    _tcgLog(escapeHtml(unit.card.name) + ' is stunned and skips a turn!');
+    _tcgLog(escapeHtml(tcgShortName(unit.card)) + ' is stunned and skips a turn!');
     if (el) el.classList.remove('acting');
     await tcgSleep(620);
     return;
@@ -28700,7 +28776,7 @@ async function _tcgAct(stage, unit, allies, foes) {
       await _tcgLunge(unit);
       const targets = foes.filter(f => f.hp > 0);
       for (const t of targets) { const res = _tcgDamage(unit, t, sk.pow, false); _tcgHitFx(t, res); }
-      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> unleashes <b>' + escapeHtml(sk.name) + '</b> on the whole enemy team!');
+      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> unleashes <b>' + escapeHtml(sk.name) + '</b> on the whole enemy team!');
       await tcgSleep(760);
       _tcgUnlunge(unit);
     } else if (sk.kind === 'strike' || sk.kind === 'pierce' || sk.kind === 'drain' || sk.kind === 'stun' || sk.kind === 'poison') {
@@ -28709,34 +28785,34 @@ async function _tcgAct(stage, unit, allies, foes) {
         await _tcgLunge(unit);
         const res = _tcgDamage(unit, t, sk.pow, sk.kind === 'pierce');
         await _tcgHitFx(t, res);
-        if (sk.kind === 'drain') { const back = Math.round(res.dmg * 0.6); await _tcgHealFx(unit, back); }
+        if (sk.kind === 'drain') { const back = Math.round(res.dmg * 0.35); await _tcgHealFx(unit, back); }
         if (sk.kind === 'stun' && t.hp > 0) { t.stun = Math.max(t.stun, 1); _tcgPopup(t, '💫', 'status'); }
         if (sk.kind === 'poison' && t.hp > 0) { t.poison = { dmg: unit.atk * 0.4, turns: 3 }; _tcgPopup(t, '☠️', 'status'); }
         _tcgRefreshUnit(t);
-        _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> uses <b>' + escapeHtml(sk.name) + '</b> on ' + escapeHtml(t.card.name) + (res.crit ? ' — critical hit!' : '!'));
+        _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> uses <b>' + escapeHtml(sk.name) + '</b> on ' + escapeHtml(tcgShortName(t.card)) + (res.crit ? ' — critical hit!' : '!'));
         await tcgSleep(660);
         _tcgUnlunge(unit);
       }
     } else if (sk.kind === 'heal') {
       const amt = Math.round(unit.heal * sk.pow);
       await _tcgHealFx(hurtAlly, amt);
-      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> casts <b>' + escapeHtml(sk.name) + '</b> — ' + escapeHtml(hurtAlly.card.name) + ' recovers ' + amt + ' HP!');
+      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> casts <b>' + escapeHtml(sk.name) + '</b> — ' + escapeHtml(tcgShortName(hurtAlly.card)) + ' recovers ' + amt + ' HP!');
       await tcgSleep(700);
     } else if (sk.kind === 'healall') {
       const amt = Math.round(unit.heal * sk.pow);
       for (const a of allies.filter(x => x.hp > 0)) _tcgHealFx(a, amt);
-      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> sings <b>' + escapeHtml(sk.name) + '</b> — the whole team recovers!');
+      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> sings <b>' + escapeHtml(sk.name) + '</b> — the whole team recovers!');
       await tcgSleep(760);
     } else if (sk.kind === 'shield') {
       const t = allies.filter(a => a.hp > 0).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0] || unit;
       t.shield += Math.round(unit.def * sk.pow);
       _tcgPopup(t, '🛡️ +' + Math.round(unit.def * sk.pow), 'status');
       _tcgRefreshUnit(t);
-      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> raises <b>' + escapeHtml(sk.name) + '</b> around ' + escapeHtml(t.card.name) + '!');
+      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> raises <b>' + escapeHtml(sk.name) + '</b> around ' + escapeHtml(tcgShortName(t.card)) + '!');
       await tcgSleep(680);
     } else if (sk.kind === 'rage') {
       for (const a of allies.filter(x => x.hp > 0)) { a.atkUp = Math.max(a.atkUp, 2); a.atkUpPct = sk.pow; _tcgPopup(a, '📈 ATK up!', 'status'); _tcgRefreshUnit(a); }
-      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> lets out a <b>' + escapeHtml(sk.name) + '</b> — the team\'s attack rises!');
+      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> lets out a <b>' + escapeHtml(sk.name) + '</b> — the team\'s attack rises!');
       await tcgSleep(700);
     }
   } else {
@@ -28745,7 +28821,7 @@ async function _tcgAct(stage, unit, allies, foes) {
       await _tcgLunge(unit);
       const res = _tcgDamage(unit, t, 1.0, false);
       await _tcgHitFx(t, res);
-      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> attacks ' + escapeHtml(t.card.name) + (res.crit ? ' — critical hit!' : '.'));
+      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> attacks ' + escapeHtml(tcgShortName(t.card)) + (res.crit ? ' — critical hit!' : '.'));
       await tcgSleep(520);
       _tcgUnlunge(unit);
     }
@@ -28753,15 +28829,16 @@ async function _tcgAct(stage, unit, allies, foes) {
   if (el) el.classList.remove('acting');
 }
 function _tcgUnitHtml(u) {
-  const posOwn = [{ r: '5%', b: '32%' }, { r: '17%', b: '16%' }, { r: '3%', b: '4%' }];
-  const posFoe = [{ l: '5%', t: '13%' }, { l: '17%', t: '30%' }, { l: '3%', t: '47%' }];
+  // 5-a-side: staggered double columns so nameplates don't collide.
+  const posOwn = [{ r: '19%', b: '54%' }, { r: '0%', b: '41%' }, { r: '19%', b: '27%' }, { r: '0%', b: '14%' }, { r: '19%', b: '1%' }];
+  const posFoe = [{ l: '19%', t: '1%' }, { l: '0%', t: '14%' }, { l: '19%', t: '27%' }, { l: '0%', t: '40%' }, { l: '19%', t: '53%' }];
   const p = u.side === 'R' ? posOwn[u.slot] : posFoe[u.slot];
   const style = (p.l ? 'left:' + p.l + ';' : '') + (p.r ? 'right:' + p.r + ';' : '') + (p.t ? 'top:' + p.t + ';' : '') + (p.b ? 'bottom:' + p.b + ';' : '');
   const url = tcgArtUrl(u.card.id);
   return '<div class="tcgb-unit ' + (u.side === 'L' ? 'left' : 'right') + '" id="tcgbu-' + u.uid + '" style="' + style + '">'
     + '<span class="tcgb-sprite">' + (url ? '<img src="' + escapeHtml(url) + '" alt="">' : u.card.em) + '</span>'
     + '<div class="tcgb-plate">'
-    +   '<div class="tcgb-name">' + escapeHtml(u.card.name) + '</div>'
+    +   '<div class="tcgb-name">' + escapeHtml(tcgShortName(u.card)) + '</div>'
     +   '<div class="tcgb-stars">' + '★'.repeat(u.card.stars) + '</div>'
     +   '<div class="tcgb-hpbar"><div style="width:100%;"></div></div>'
     +   '<div class="tcgb-hptext">' + u.maxHp + ' / ' + u.maxHp + '</div>'
@@ -28782,7 +28859,7 @@ function tcgCloseBattle() {
 }
 async function tcgFindBattle() {
   const s = tcgState();
-  if (!s || s.team.length !== 3) { showToast('Pick 3 monsters on the My Team tab first', 'error'); return; }
+  if (!s || s.team.length !== 5) { showToast('Pick 5 monsters on the My Team tab first', 'error'); return; }
   showToast('Looking for an opponent…', 'info');
   const opp = await tcgFindOpponent();
   tcgRunBattle(s.team.slice(), { name: (currentUser && currentUser.name) || 'You' }, opp);
