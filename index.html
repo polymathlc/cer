@@ -4321,6 +4321,164 @@ option {
   .rpg-stat-chips { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* ==================== MONSTER CARDS TCG (beta) ==================== */
+.nav-beta { font-size: 0.55rem; font-weight: 800; letter-spacing: 0.06em; vertical-align: middle; background: linear-gradient(135deg,#8E24AA,#7B1FA2); color: #fff; border-radius: 999px; padding: 2px 7px; margin-left: 6px; }
+.tcg-gold-chip { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.9rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px; white-space: nowrap; }
+.tcg-admin-banner { max-width: 720px; margin: 0 auto 20px; border: 1px solid var(--border); border-radius: var(--radius-lg, 16px); padding: 20px 24px; background: linear-gradient(135deg, #faf5ff, #f5f3ff); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.tcg-admin-banner .tcg-ab-main { flex: 1; min-width: 220px; }
+.tcg-admin-banner h4 { font-size: 1rem; margin-bottom: 6px; }
+.tcg-admin-banner p { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
+.tcg-status-pill { display: inline-block; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em; border-radius: 999px; padding: 4px 12px; margin-bottom: 8px; }
+.tcg-status-pill.locked { background: #fef3c7; color: #92400e; }
+.tcg-status-pill.live { background: #dcfce7; color: #166534; }
+.tcg-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; justify-content: center; }
+.tcg-tab { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 10px 20px; font-size: 0.88rem; font-weight: 600; cursor: pointer; color: var(--text-muted); transition: all 0.15s; }
+.tcg-tab:hover { border-color: #8E24AA; color: #8E24AA; }
+.tcg-tab.active { background: linear-gradient(135deg,#8E24AA,#7B1FA2); border-color: transparent; color: #fff; box-shadow: 0 4px 12px rgba(142,36,170,0.3); }
+.tcg-section-note { text-align: center; color: var(--text-muted); font-size: 0.88rem; margin: 0 auto 20px; max-width: 620px; line-height: 1.55; }
+.tcg-dex-progress { max-width: 520px; margin: 0 auto 24px; text-align: center; }
+.tcg-dex-progress .tcg-dex-nums { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1.05rem; margin-bottom: 8px; }
+.tcg-dex-bar { height: 10px; border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--border); overflow: hidden; }
+.tcg-dex-bar > div { height: 100%; border-radius: 999px; background: linear-gradient(90deg,#8E24AA,#EC407A); transition: width 0.6s ease; }
+.tcg-filters { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+.tcg-filter-chip { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 13px; font-size: 0.78rem; font-weight: 600; cursor: pointer; color: var(--text-muted); }
+.tcg-filter-chip.active { background: #1e293b; color: #fff; border-color: #1e293b; }
+/* ---- card faces ---- */
+.tcg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 18px; }
+.tcg-card { position: relative; border-radius: 14px; padding: 12px 12px 14px; background: var(--tcg-bg, linear-gradient(160deg,#f8fafc,#e2e8f0)); border: 2.5px solid var(--tcg-frame, #94a3b8); box-shadow: 0 3px 10px rgba(15,23,42,0.10); display: flex; flex-direction: column; gap: 7px; transition: transform 0.15s, box-shadow 0.15s; }
+.tcg-card.clickable { cursor: pointer; }
+.tcg-card.clickable:hover { transform: translateY(-4px); box-shadow: 0 10px 22px rgba(15,23,42,0.18); }
+.tcg-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tcg-card-name { font-weight: 800; font-size: 0.92rem; line-height: 1.2; }
+.tcg-card-no { font-family: 'Space Mono', monospace; font-size: 0.62rem; color: var(--text-muted); font-weight: 700; }
+.tcg-stars { font-size: 0.72rem; letter-spacing: 1px; color: var(--tcg-star, #eab308); text-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+.tcg-art { height: 108px; border-radius: 10px; background: var(--tcg-art-bg, radial-gradient(circle at 50% 38%, #ffffff, #cbd5e1)); display: flex; align-items: center; justify-content: center; font-size: 58px; overflow: hidden; border: 1px solid rgba(15,23,42,0.08); }
+.tcg-art img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.tcg-elem { align-self: flex-start; font-size: 0.66rem; font-weight: 700; border-radius: 999px; padding: 3px 10px; background: rgba(255,255,255,0.75); border: 1px solid rgba(15,23,42,0.1); }
+.tcg-statsrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; font-family: 'Space Mono', monospace; font-size: 0.66rem; font-weight: 700; text-align: center; }
+.tcg-statsrow span { background: rgba(255,255,255,0.7); border-radius: 7px; padding: 4px 2px; border: 1px solid rgba(15,23,42,0.07); }
+.tcg-statsrow small { display: block; font-size: 0.5rem; font-weight: 600; color: var(--text-muted); letter-spacing: 0.04em; }
+.tcg-skill { font-size: 0.68rem; line-height: 1.45; background: rgba(255,255,255,0.72); border: 1px solid rgba(15,23,42,0.07); border-radius: 8px; padding: 7px 9px; min-height: 3.4em; }
+.tcg-skill b { display: block; font-size: 0.7rem; margin-bottom: 2px; }
+.tcg-count-badge { position: absolute; top: -8px; right: -8px; background: #1e293b; color: #fff; font-family: 'Space Mono', monospace; font-size: 0.62rem; font-weight: 700; border-radius: 999px; padding: 3px 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
+.tcg-new-badge { position: absolute; top: -8px; left: -8px; background: linear-gradient(135deg,#f59e0b,#ef4444); color: #fff; font-size: 0.6rem; font-weight: 800; border-radius: 999px; padding: 3px 9px; letter-spacing: 0.05em; box-shadow: 0 2px 6px rgba(0,0,0,0.25); animation: tcgPulse 1.2s ease-in-out infinite; }
+.tcg-team-badge { position: absolute; top: -8px; left: -8px; background: linear-gradient(135deg,#8E24AA,#7B1FA2); color: #fff; font-size: 0.6rem; font-weight: 800; border-radius: 999px; padding: 3px 9px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
+@keyframes tcgPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+.tcg-card.unowned { filter: saturate(0.15); opacity: 0.72; }
+.tcg-card.unowned .tcg-art > div { filter: brightness(0) opacity(0.55); }
+/* star tiers */
+.tcg-card.star-1 { --tcg-frame: #94a3b8; --tcg-bg: linear-gradient(160deg,#f8fafc,#e2e8f0); --tcg-star: #64748b; }
+.tcg-card.star-2 { --tcg-frame: #22c55e; --tcg-bg: linear-gradient(160deg,#f0fdf4,#bbf7d0); --tcg-star: #16a34a; }
+.tcg-card.star-3 { --tcg-frame: #3b82f6; --tcg-bg: linear-gradient(160deg,#eff6ff,#bfdbfe); --tcg-star: #2563eb; }
+.tcg-card.star-4 { --tcg-frame: #a855f7; --tcg-bg: linear-gradient(160deg,#faf5ff,#e9d5ff); --tcg-star: #9333ea; }
+.tcg-card.star-5 { --tcg-frame: #f97316; --tcg-bg: linear-gradient(160deg,#fff7ed,#fed7aa); --tcg-star: #ea580c; box-shadow: 0 3px 14px rgba(249,115,22,0.25); }
+.tcg-card.star-6 { --tcg-frame: #e11d48; --tcg-bg: linear-gradient(160deg,#fff1f2,#fecdd3); --tcg-star: #e11d48; box-shadow: 0 3px 16px rgba(225,29,72,0.3); }
+.tcg-card.star-7 { --tcg-star: #d97706; border: 2.5px solid transparent; background: linear-gradient(160deg,#fffbeb,#fef3c7) padding-box, linear-gradient(120deg,#f59e0b,#ec4899,#8b5cf6,#3b82f6,#f59e0b) border-box; background-size: 100% 100%, 300% 300%; animation: tcgHolo 4s linear infinite; box-shadow: 0 4px 20px rgba(236,72,153,0.35); }
+@keyframes tcgHolo { 0% { background-position: 0 0, 0% 50%; } 100% { background-position: 0 0, 300% 50%; } }
+/* ---- packs ---- */
+.tcg-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; max-width: 860px; margin: 0 auto; }
+.tcg-pack { border: 1px solid var(--border); border-radius: 18px; padding: 26px 22px; text-align: center; background: var(--surface); box-shadow: 0 3px 12px rgba(15,23,42,0.08); display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.tcg-pack-art { font-size: 58px; line-height: 1; margin-bottom: 4px; filter: drop-shadow(0 6px 10px rgba(15,23,42,0.25)); animation: tcgBobPack 2.6s ease-in-out infinite; }
+@keyframes tcgBobPack { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-7px) rotate(2deg); } }
+.tcg-pack h4 { font-size: 1.05rem; }
+.tcg-pack .tcg-pack-desc { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; min-height: 3.6em; }
+.tcg-pack .tcg-pack-odds { font-size: 0.68rem; color: var(--text-muted); line-height: 1.6; background: var(--surface-alt); border-radius: 10px; padding: 8px 12px; width: 100%; }
+.tcg-pack .btn { width: 100%; }
+/* pack opening ceremony */
+.tcg-overlay { position: fixed; inset: 0; z-index: 2600; background: rgba(10,8,24,0.94); display: flex; align-items: center; justify-content: center; padding: 18px; }
+.tcg-reveal-inner { max-width: 900px; width: 100%; max-height: 100%; overflow-y: auto; text-align: center; padding: 12px; }
+.tcg-reveal-title { color: #fff; font-size: 1.3rem; font-weight: 800; margin-bottom: 6px; }
+.tcg-reveal-sub { color: rgba(255,255,255,0.65); font-size: 0.85rem; margin-bottom: 22px; }
+.tcg-reveal-row { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; margin-bottom: 24px; }
+.tcg-flip { width: 200px; min-height: 286px; perspective: 900px; cursor: pointer; }
+.tcg-flip-inner { position: relative; width: 100%; height: 100%; min-height: 286px; transform-style: preserve-3d; transition: transform 0.65s cubic-bezier(.2,.7,.3,1.1); }
+.tcg-flip.flipped .tcg-flip-inner { transform: rotateY(180deg); }
+.tcg-flip-back, .tcg-flip-front { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 14px; }
+.tcg-flip-back { background: linear-gradient(150deg,#312e81,#6d28d9 55%,#312e81); border: 2.5px solid #a78bfa; display: flex; align-items: center; justify-content: center; font-size: 56px; box-shadow: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 30px rgba(167,139,250,0.4); animation: tcgCardGlow 1.8s ease-in-out infinite; }
+@keyframes tcgCardGlow { 0%,100% { box-shadow: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 30px rgba(167,139,250,0.35); } 50% { box-shadow: 0 8px 30px rgba(139,92,246,0.55), inset 0 0 44px rgba(167,139,250,0.6); } }
+.tcg-flip-front { transform: rotateY(180deg); }
+.tcg-flip-front .tcg-card { height: 100%; }
+.tcg-flip { animation: tcgDeal 0.5s ease backwards; }
+@keyframes tcgDeal { from { transform: translateY(60px) scale(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.tcg-confetti { position: fixed; width: 10px; height: 14px; top: -20px; z-index: 2700; pointer-events: none; animation: tcgConfFall linear forwards; }
+@keyframes tcgConfFall { to { transform: translateY(110vh) rotate(720deg); opacity: 0.4; } }
+/* ---- team picker ---- */
+.tcg-team-slots { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; }
+.tcg-team-slot { width: 200px; }
+.tcg-team-slot .tcg-empty { border: 2.5px dashed var(--border); border-radius: 14px; min-height: 286px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-muted); font-size: 0.82rem; background: var(--surface-alt); }
+.tcg-team-slot .tcg-empty .big { font-size: 44px; opacity: 0.5; }
+.tcg-team-power { text-align: center; font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.95rem; margin: 14px 0 22px; }
+/* ---- arena / battle ---- */
+.tcg-arena-head { max-width: 640px; margin: 0 auto 24px; border: 1px solid var(--border); border-radius: 18px; padding: 24px; text-align: center; background: var(--surface); }
+.tcg-record { display: flex; gap: 26px; justify-content: center; font-family: 'Space Mono', monospace; font-weight: 700; margin: 12px 0 18px; }
+.tcg-record b { font-size: 1.3rem; display: block; }
+.tcg-record span { font-size: 0.68rem; color: var(--text-muted); letter-spacing: 0.06em; }
+.tcgb-wrap { width: 100%; max-width: 1000px; }
+.tcgb-stage { position: relative; width: 100%; height: min(62vh, 540px); border-radius: 20px; overflow: hidden; background: linear-gradient(#1e1b4b 0%, #4338ca 42%, #0f766e 42.2%, #042f2e 100%); box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+.tcgb-stage::before { content: ''; position: absolute; left: 8%; top: 6%; width: 70px; height: 70px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fef9c3, #fde047 60%, transparent 72%); opacity: 0.9; }
+.tcgb-stage::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 115%, rgba(45,212,191,0.25), transparent 60%); pointer-events: none; }
+.tcgb-unit { position: absolute; width: 150px; text-align: center; transition: transform 0.28s cubic-bezier(.3,.9,.4,1.2), opacity 0.5s, filter 0.3s; will-change: transform; }
+.tcgb-sprite { font-size: 64px; line-height: 1; display: inline-block; filter: drop-shadow(0 10px 8px rgba(0,0,0,0.45)); animation: tcgIdle 2.4s ease-in-out infinite; }
+.tcgb-sprite img { width: 84px; height: 84px; object-fit: contain; }
+@keyframes tcgIdle { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.tcgb-unit.left .tcgb-sprite { transform: scaleX(-1); }
+.tcgb-unit.left .tcgb-sprite img { transform: none; }
+.tcgb-plate { margin-top: 4px; background: rgba(2,6,23,0.72); border: 1px solid rgba(148,163,184,0.35); border-radius: 10px; padding: 5px 8px 7px; backdrop-filter: blur(3px); }
+.tcgb-name { color: #fff; font-size: 0.66rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tcgb-stars { font-size: 0.52rem; color: #fbbf24; letter-spacing: 1px; }
+.tcgb-hpbar { height: 7px; border-radius: 999px; background: rgba(255,255,255,0.15); margin-top: 4px; overflow: hidden; }
+.tcgb-hpbar > div { height: 100%; border-radius: 999px; background: linear-gradient(90deg,#4ade80,#22c55e); transition: width 0.4s ease, background 0.4s; }
+.tcgb-hpbar > div.mid { background: linear-gradient(90deg,#fbbf24,#f59e0b); }
+.tcgb-hpbar > div.low { background: linear-gradient(90deg,#f87171,#ef4444); }
+.tcgb-hptext { font-family: 'Space Mono', monospace; font-size: 0.55rem; color: rgba(255,255,255,0.85); margin-top: 2px; }
+.tcgb-status { min-height: 14px; font-size: 0.6rem; margin-top: 2px; }
+.tcgb-unit.acting { z-index: 6; }
+.tcgb-unit.acting .tcgb-sprite { filter: drop-shadow(0 10px 8px rgba(0,0,0,0.45)) drop-shadow(0 0 14px rgba(250,204,21,0.9)); }
+.tcgb-unit.lungeR { transform: translateX(120px) scale(1.08); }
+.tcgb-unit.lungeL { transform: translateX(-120px) scale(1.08); }
+.tcgb-unit.hit { animation: tcgHit 0.45s ease; }
+@keyframes tcgHit { 0%,100% { transform: translateX(0); filter: none; } 20% { transform: translateX(-9px); filter: brightness(2.4) saturate(0.4) drop-shadow(0 0 10px #f87171); } 40% { transform: translateX(8px); } 60% { transform: translateX(-6px); filter: brightness(1.9); } 80% { transform: translateX(4px); } }
+.tcgb-unit.healed .tcgb-sprite { filter: drop-shadow(0 0 16px rgba(74,222,128,0.95)); }
+.tcgb-unit.dead { opacity: 0.14; filter: grayscale(1); transform: translateY(16px) rotate(8deg); }
+.tcgb-dmg { position: absolute; left: 50%; top: -6px; transform: translateX(-50%); font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1.25rem; color: #fff; text-shadow: 0 2px 0 #b91c1c, 0 0 12px rgba(239,68,68,0.8); animation: tcgDmgFloat 1.05s ease-out forwards; pointer-events: none; z-index: 8; white-space: nowrap; }
+.tcgb-dmg.heal { text-shadow: 0 2px 0 #15803d, 0 0 12px rgba(74,222,128,0.8); }
+.tcgb-dmg.crit { font-size: 1.6rem; color: #fde047; text-shadow: 0 2px 0 #b45309, 0 0 16px rgba(250,204,21,0.95); }
+.tcgb-dmg.status { font-size: 0.85rem; text-shadow: 0 2px 0 #6d28d9, 0 0 10px rgba(167,139,250,0.9); }
+@keyframes tcgDmgFloat { 0% { opacity: 0; transform: translate(-50%, 8px) scale(0.6); } 18% { opacity: 1; transform: translate(-50%, -8px) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -56px) scale(1); } }
+.tcgb-skillbanner { position: absolute; left: 0; right: 0; top: 34%; z-index: 10; text-align: center; pointer-events: none; }
+.tcgb-skillbanner .inner { display: inline-block; background: linear-gradient(90deg, transparent, rgba(2,6,23,0.9) 18%, rgba(2,6,23,0.9) 82%, transparent); color: #fff; font-weight: 800; font-size: 1.25rem; letter-spacing: 0.12em; padding: 12px 70px; text-transform: uppercase; animation: tcgBanner 1.1s cubic-bezier(.2,.8,.3,1) forwards; border-top: 1px solid rgba(250,204,21,0.7); border-bottom: 1px solid rgba(250,204,21,0.7); text-shadow: 0 0 18px rgba(250,204,21,0.8); }
+@keyframes tcgBanner { 0% { transform: translateX(-60vw) skewX(-12deg); opacity: 0; } 25% { transform: translateX(0) skewX(-12deg); opacity: 1; } 78% { transform: translateX(0) skewX(-12deg); opacity: 1; } 100% { transform: translateX(60vw) skewX(-12deg); opacity: 0; } }
+.tcgb-flash { position: absolute; inset: 0; z-index: 9; pointer-events: none; opacity: 0; }
+.tcgb-flash.go { animation: tcgFlash 0.55s ease; }
+@keyframes tcgFlash { 0% { opacity: 0; } 30% { opacity: 0.85; } 100% { opacity: 0; } }
+.tcgb-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; color: #fff; flex-wrap: wrap; }
+.tcgb-vsline { font-weight: 800; font-size: 0.95rem; }
+.tcgb-vsline small { color: rgba(255,255,255,0.6); font-weight: 600; }
+.tcgb-controls { display: flex; gap: 8px; }
+.tcgb-controls button { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.25); border-radius: 999px; padding: 7px 16px; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+.tcgb-controls button:hover { background: rgba(255,255,255,0.22); }
+.tcgb-controls button.on { background: #fbbf24; color: #422006; border-color: #fbbf24; }
+.tcgb-log { margin-top: 10px; background: rgba(2,6,23,0.8); border: 1px solid rgba(148,163,184,0.3); color: #e2e8f0; border-radius: 12px; padding: 10px 16px; font-size: 0.8rem; min-height: 42px; line-height: 1.5; }
+.tcgb-vs-splash { position: absolute; inset: 0; z-index: 12; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; background: radial-gradient(circle at center, rgba(76,29,149,0.92), rgba(2,6,23,0.97)); animation: tcgFadeOut 0.6s ease 1.7s forwards; }
+.tcgb-vs-splash .vs { font-size: 3.4rem; font-weight: 900; color: #fbbf24; text-shadow: 0 0 30px rgba(251,191,36,0.9); animation: tcgVsPop 0.6s cubic-bezier(.2,.8,.3,1.4); }
+.tcgb-vs-splash .who { color: #fff; font-weight: 800; font-size: 1.15rem; }
+@keyframes tcgVsPop { from { transform: scale(3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes tcgFadeOut { to { opacity: 0; visibility: hidden; } }
+.tcgb-result { position: absolute; inset: 0; z-index: 14; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 12px; background: rgba(2,6,23,0.82); }
+.tcgb-result.show { display: flex; }
+.tcgb-result .word { font-size: 3rem; font-weight: 900; letter-spacing: 0.08em; animation: tcgVsPop 0.7s cubic-bezier(.2,.8,.3,1.4); }
+.tcgb-result .word.win { color: #4ade80; text-shadow: 0 0 34px rgba(74,222,128,0.95); }
+.tcgb-result .word.lose { color: #f87171; text-shadow: 0 0 34px rgba(248,113,113,0.9); }
+.tcgb-result .sub { color: rgba(255,255,255,0.8); font-size: 0.95rem; }
+@media (max-width: 720px) {
+  .tcgb-unit { width: 104px; }
+  .tcgb-sprite { font-size: 44px; }
+  .tcgb-sprite img { width: 60px; height: 60px; }
+  .tcgb-unit.lungeR { transform: translateX(64px) scale(1.08); }
+  .tcgb-unit.lungeL { transform: translateX(-64px) scale(1.08); }
+  .tcg-flip { width: 164px; }
+}
+
 </style>
 </head>
 <body>
@@ -4744,7 +4902,11 @@ option {
       <div class="nav-item rpg-el" data-page="arcade" onclick="navigateTo('arcade')" style="display:none;" title="Arcade — Science Defenders, Raiders, Spire, Legends and Slayers, all in one place. Each play costs 1 game credit.">
         <span class="ico">🕹️</span> Arcade
       </div>
-      <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire.">
+      <!-- Monster Cards TCG (beta) — admins always; students only once the admin presses Release -->
+      <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Monster Cards — collect all 151 science monsters from booster packs bought with your points, build a team of 3 and auto-battle other trainers.">
+        <span class="ico">🃏</span> Monster Cards <span class="nav-beta">BETA</span>
+      </div>
+      <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire, and all 151 Monster Cards.">
         <span class="ico">🎨</span> Game Objects
       </div>
       <div class="nav-item" id="rpgHideToggle" style="display:none;"><span class="ico">🙈</span> Hide game</div>
@@ -6044,6 +6206,30 @@ option {
       </div>
       <div class="page-body" style="max-width:880px;">
         <div id="arcadeContainer"></div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: MONSTER CARDS TCG (beta — admin first, released to students with one click) ===== -->
+    <div class="page" id="page-tcg">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>🃏 Monster Cards <span class="nav-beta" style="font-size:0.6rem;padding:3px 9px;">BETA</span></h2>
+          </div>
+          <div class="subtitle">Collect all 151 science monsters! Open booster packs with the points you earn answering questions, build a team of 3, and auto-battle other trainers.</div>
+        </div>
+        <div class="tcg-gold-chip" id="tcgGoldChip">🪙 —</div>
+      </div>
+      <div class="page-body" style="max-width:1150px;">
+        <div id="tcgAdminBanner"></div>
+        <div class="tcg-tabs" id="tcgTabs">
+          <button class="tcg-tab active" data-tcgtab="dex" onclick="tcgSetTab('dex')" type="button">📖 Collection</button>
+          <button class="tcg-tab" data-tcgtab="packs" onclick="tcgSetTab('packs')" type="button">🎁 Booster Packs</button>
+          <button class="tcg-tab" data-tcgtab="team" onclick="tcgSetTab('team')" type="button">🛡️ My Team</button>
+          <button class="tcg-tab" data-tcgtab="arena" onclick="tcgSetTab('arena')" type="button">⚔️ Battle Arena</button>
+        </div>
+        <div id="tcgBody"><div class="ga-loading" style="text-align:center;color:#94a3b8;padding:30px;">Loading…</div></div>
       </div>
     </div>
 
@@ -8039,6 +8225,10 @@ async function enterApp(user) {
     if (document.querySelector('#page-home.active')) renderHomePage();
   }).catch(e => console.warn('rpg init', e));
 
+  // Monster Cards TCG: load the release flag + card art so the nav item and
+  // cards render correctly (admins always see it; students only when released).
+  tcgInit().catch(e => console.warn('tcg init', e));
+
   // Load message inbox so the unread badge shows on the Messages nav item.
   loadMessages().then(updateMsgBadge).catch(e => console.warn('messages init', e));
 
@@ -8061,7 +8251,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.113.0';
+const APP_VERSION = 'v1.114.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -8244,7 +8434,9 @@ function applyMcqCategory(q) {
 function navigateTo(page) {
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
-  if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'arcade' || page === 'defenders' || page === 'raiders' || page === 'spire' || page === 'legends' || page === 'slayers') && rpgGameHidden()) page = rpgHomePage();
+  if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'arcade' || page === 'defenders' || page === 'raiders' || page === 'spire' || page === 'legends' || page === 'slayers' || page === 'tcg') && rpgGameHidden()) page = rpgHomePage();
+  // Monster Cards is admin-only until the admin presses Release.
+  if (page === 'tcg' && !_isAdmin() && !tcgReleased()) page = rpgHomePage();
   if (page !== 'adventure') advAbandon();
   // Snap & Mark keeps marking in the background — reassure the student on leave.
   try {
@@ -8359,6 +8551,7 @@ function navigateTo(page) {
     else pushLegendsAssets();
   }
   if (page === 'gameassets') loadGameAssets();
+  if (page === 'tcg') tcgRenderPage();
   if (page === 'messages') loadMessagesPage();
   if (page === 'home') renderHomePage();
   if (page === 'arcade') renderArcadePage();
@@ -22429,6 +22622,7 @@ function rpgHydrate(saved) {
   st.star = Object.assign({ gold: 0, learn: 0, raids: 0, nova: false }, (saved && saved.star) || {});
   st.kills = Object.assign({}, (saved && saved.kills) || {});
   st.seenQ = Object.assign({}, (saved && saved.seenQ) || {});
+  st.tcg = tcgHydrateState(saved && saved.tcg); // Monster Cards TCG collection/team/record
   if (!Number.isFinite(st.xpBaseline)) st.xpBaseline = 0;
   if ((saved && saved.v || 1) < 2) { st.skills = {}; st.paths = {}; st.v = 2; } // tree rework: full free refund
   Object.keys(st.skills).forEach(id => {
@@ -23381,6 +23575,7 @@ function rpgApplyVisibility() {
   const active = !!rpgState;
   const show = active && !rpgState.hidden;
   document.querySelectorAll(".rpg-el").forEach(el => { el.style.display = show ? "" : "none"; });
+  try { tcgApplyNavVisibility(); } catch (_) {} // Monster Cards nav follows its own admin/release rules
   const toggle = $("rpgHideToggle");
   if (!toggle) return;
   toggle.style.display = active ? "" : "none";
@@ -24396,6 +24591,15 @@ function rpgPublishLeaderboard() {
       td: rpgGameBoardData("defenders"),
       raid: rpgGameBoardData("raiders"),
       spire: rpgGameBoardData("spire"),
+      // Monster Cards TCG: a complete team of 3 is published so other students
+      // can be matched against it in the Battle Arena (null until then).
+      tcg: (rpgState.tcg && Array.isArray(rpgState.tcg.team) && rpgState.tcg.team.length === 3) ? {
+        team: rpgState.tcg.team.slice(0, 3),
+        power: tcgTeamPower(rpgState.tcg.team),
+        wins: rpgState.tcg.wins | 0,
+        losses: rpgState.tcg.losses | 0,
+        dex: Object.keys(rpgState.tcg.cards || {}).length
+      } : null,
       updatedAt: new Date().toISOString()
     }).catch(e => console.warn("leaderboard publish", e));
   }, 1200);
@@ -27675,6 +27879,10 @@ async function loadGameAssets(){
   await loadSpireCardArt(true);
   html += spireCardArtAdminHtml();
 
+  // ===== Monster Cards TCG — one paste slot per monster (all 151) =====
+  await tcgLoadArt(true);
+  html += tcgArtAdminHtml();
+
   host.innerHTML = html;
 }
 
@@ -27708,6 +27916,965 @@ async function resetRpgArt(id){
     showToast('Reset to default', 'success');
   } catch (e) { console.error('rpg art reset', e); showToast('Reset failed', 'error'); }
 }
+
+// =====================================================================
+// MONSTER CARDS TCG (beta) — 151 collectible science monsters.
+// Cards come ONLY from booster packs bought with the hero's gold (the
+// points students earn answering questions). Students build a team of 3
+// and auto-battle other trainers' published teams, Final-Fantasy style.
+// Admin-only until the admin presses "Release to students" — the flag
+// lives at users/{adminUid}/settings/tcgConfig, read by every student.
+// Card art: every monster has a paste-a-PNG slot on the Game Objects
+// page (users/{adminUid}/settings/tcgArt), same flow as the other games.
+// =====================================================================
+const TCG_ELEMENTS = {
+  flame:   { icon: '🔥', name: 'Flame' },
+  aqua:    { icon: '💧', name: 'Aqua' },
+  spark:   { icon: '⚡', name: 'Spark' },
+  terra:   { icon: '🪨', name: 'Terra' },
+  flora:   { icon: '🌿', name: 'Flora' },
+  frost:   { icon: '❄️', name: 'Frost' },
+  venom:   { icon: '☠️', name: 'Venom' },
+  psychic: { icon: '🔮', name: 'Psychic' },
+  light:   { icon: '✨', name: 'Light' },
+  shadow:  { icon: '🌑', name: 'Shadow' },
+  metal:   { icon: '⚙️', name: 'Metal' },
+  cosmic:  { icon: '🌌', name: 'Cosmic' }
+};
+// One special skill per monster. kind drives the auto-battle mechanic:
+// strike/pierce = big single hit · blast = hits all foes · drain = hit + self-heal
+// heal/healall = restore HP · shield = absorb barrier · rage = team ATK buff
+// stun = hit + skip target's turn · poison = hit + damage over time.
+const TCG_SKILLS = {
+  scratch: { name: 'Wild Swipes',      icon: '💢', kind: 'strike',  pow: 1.85, desc: 'Slashes one foe for 185% ATK.' },
+  smash:   { name: 'Boulder Smash',    icon: '🪨', kind: 'strike',  pow: 2.15, desc: 'Crushes one foe for 215% ATK.' },
+  bite:    { name: 'Crunch Bite',      icon: '🦷', kind: 'strike',  pow: 1.95, desc: 'Chomps one foe for 195% ATK.' },
+  horn:    { name: 'Horn Rush',        icon: '🌀', kind: 'strike',  pow: 2.05, desc: 'Charges one foe for 205% ATK.' },
+  inferno: { name: 'Inferno Burst',    icon: '🔥', kind: 'blast',   pow: 1.10, desc: 'Scorches ALL foes for 110% ATK.' },
+  tidal:   { name: 'Tidal Wave',       icon: '🌊', kind: 'blast',   pow: 1.10, desc: 'Floods ALL foes for 110% ATK.' },
+  storm:   { name: 'Chain Lightning',  icon: '⚡', kind: 'blast',   pow: 1.15, desc: 'Zaps ALL foes for 115% ATK.' },
+  quake:   { name: 'Quake Stomp',      icon: '💥', kind: 'blast',   pow: 1.05, desc: 'Shakes ALL foes for 105% ATK.' },
+  solar:   { name: 'Solar Flare',      icon: '☀️', kind: 'blast',   pow: 1.20, desc: 'Sears ALL foes for 120% ATK.' },
+  nova:    { name: 'Supernova',        icon: '🌟', kind: 'blast',   pow: 1.35, desc: 'Detonates on ALL foes for 135% ATK.' },
+  fang:    { name: 'Piercing Fang',    icon: '🗡️', kind: 'pierce',  pow: 1.50, desc: 'Hits one foe for 150% ATK — ignores DEF.' },
+  arrow:   { name: 'Photon Arrow',     icon: '🏹', kind: 'pierce',  pow: 1.60, desc: 'Hits one foe for 160% ATK — ignores DEF.' },
+  drain:   { name: 'Life Drain',       icon: '🩸', kind: 'drain',   pow: 1.45, desc: 'Hits one foe for 145% ATK and heals self for 60% of the damage.' },
+  eclipse: { name: 'Umbral Feast',     icon: '🌑', kind: 'drain',   pow: 1.55, desc: 'Hits one foe for 155% ATK and heals self for 60% of the damage.' },
+  bloom:   { name: 'Soothing Bloom',   icon: '🌸', kind: 'heal',    pow: 2.60, desc: 'Restores the weakest ally for 260% HEAL.' },
+  aurora:  { name: 'Aurora Mend',      icon: '🌈', kind: 'heal',    pow: 2.90, desc: 'Restores the weakest ally for 290% HEAL.' },
+  rain:    { name: 'Renewal Rain',     icon: '💧', kind: 'healall', pow: 1.50, desc: 'Restores the whole team for 150% HEAL.' },
+  chorus:  { name: 'Healing Chorus',   icon: '🎶', kind: 'healall', pow: 1.60, desc: 'Restores the whole team for 160% HEAL.' },
+  aegis:   { name: 'Crystal Aegis',    icon: '🛡️', kind: 'shield',  pow: 2.40, desc: 'Shields the weakest ally for 240% DEF.' },
+  bark:    { name: 'Ironbark Guard',   icon: '🌳', kind: 'shield',  pow: 2.20, desc: 'Shields the weakest ally for 220% DEF.' },
+  warcry:  { name: 'War Cry',          icon: '📣', kind: 'rage',    pow: 0.30, desc: "Raises the whole team's ATK by 30% for 2 rounds." },
+  roar:    { name: 'Primal Roar',      icon: '🦁', kind: 'rage',    pow: 0.35, desc: "Raises the whole team's ATK by 35% for 2 rounds." },
+  jolt:    { name: 'Paralyzing Jolt',  icon: '⚡', kind: 'stun',    pow: 1.25, desc: 'Hits one foe for 125% ATK — it skips its next turn.' },
+  freeze:  { name: 'Flash Freeze',     icon: '❄️', kind: 'stun',    pow: 1.20, desc: 'Hits one foe for 120% ATK — it skips its next turn.' },
+  venomf:  { name: 'Venom Fang',       icon: '☠️', kind: 'poison',  pow: 1.00, desc: 'Hits one foe for 100% ATK and poisons it (40% ATK/turn, 3 turns).' },
+  spores:  { name: 'Toxic Spores',     icon: '🍄', kind: 'poison',  pow: 0.95, desc: 'Hits one foe for 95% ATK and poisons it (40% ATK/turn, 3 turns).' }
+};
+// How a monster's skill shapes its stat spread (role identity).
+const TCG_ROLE_MODS = {
+  strike:  { atk: 1.22, def: 0.92, heal: 0.60, hp: 1.00, spd: 2 },
+  blast:   { atk: 1.15, def: 0.85, heal: 0.70, hp: 0.95, spd: 0 },
+  pierce:  { atk: 1.18, def: 0.90, heal: 0.60, hp: 0.92, spd: 8 },
+  drain:   { atk: 1.08, def: 0.95, heal: 0.90, hp: 1.00, spd: 4 },
+  heal:    { atk: 0.82, def: 1.00, heal: 1.65, hp: 0.98, spd: 0 },
+  healall: { atk: 0.80, def: 1.00, heal: 1.50, hp: 1.00, spd: -2 },
+  shield:  { atk: 0.85, def: 1.45, heal: 0.80, hp: 1.18, spd: -6 },
+  rage:    { atk: 1.00, def: 1.10, heal: 0.90, hp: 1.08, spd: 0 },
+  stun:    { atk: 1.05, def: 0.95, heal: 0.75, hp: 0.95, spd: 10 },
+  poison:  { atk: 1.02, def: 0.95, heal: 0.80, hp: 0.98, spd: 6 }
+};
+// ---- Generation 1: all 151 monsters. [name, emoji, element, skill] per star tier.
+// Do not reorder existing entries — a card's id (c001…c151) is its position.
+const TCG_GEN1 = {
+  1: [ // 30 × 1★
+    ['Embercub', '🐹', 'flame', 'scratch'],  ['Puddling', '💧', 'aqua', 'rain'],
+    ['Sparkit', '🐭', 'spark', 'jolt'],      ['Pebblit', '🪨', 'terra', 'bark'],
+    ['Sproutle', '🌱', 'flora', 'bloom'],    ['Frostmite', '🦟', 'frost', 'freeze'],
+    ['Gloopling', '🟢', 'venom', 'spores'],  ['Glimmoth', '🦋', 'psychic', 'arrow'],
+    ['Lumibug', '🐞', 'light', 'bloom'],     ['Shadepup', '🐾', 'shadow', 'drain'],
+    ['Cogling', '⚙️', 'metal', 'aegis'],     ['Starlet', '🌟', 'cosmic', 'arrow'],
+    ['Finling', '🐟', 'aqua', 'fang'],       ['Chirpvolt', '🐤', 'spark', 'jolt'],
+    ['Wigglet', '🪱', 'terra', 'venomf'],    ['Funglet', '🍄', 'venom', 'spores'],
+    ['Buzzbee', '🐝', 'flora', 'fang'],      ['Shellsnail', '🐌', 'terra', 'bark'],
+    ['Cindershrew', '🐁', 'flame', 'scratch'], ['Dewdrop', '💦', 'aqua', 'rain'],
+    ['Mosskit', '🐈', 'flora', 'bloom'],     ['Hailpup', '🐶', 'frost', 'freeze'],
+    ['Gleamworm', '✨', 'light', 'drain'],   ['Batling', '🦇', 'shadow', 'drain'],
+    ['Tinbot', '🤖', 'metal', 'aegis'],      ['Cometfly', '🪰', 'cosmic', 'arrow'],
+    ['Zaplizard', '🦎', 'spark', 'storm'],   ['Puffowl', '🦉', 'psychic', 'bloom'],
+    ['Thornrat', '🐀', 'flora', 'venomf'],   ['Magmite', '🌋', 'flame', 'inferno']
+  ],
+  2: [ // 35 × 2★
+    ['Flarepup', '🐕', 'flame', 'bite'],     ['Aquafin', '🐠', 'aqua', 'tidal'],
+    ['Voltbunny', '🐇', 'spark', 'jolt'],    ['Terrapin', '🐢', 'terra', 'bark'],
+    ['Vinewhip', '🌿', 'flora', 'venomf'],   ['Chillfox', '🦊', 'frost', 'freeze'],
+    ['Toxifrog', '🐸', 'venom', 'venomf'],   ['Mindmouse', '🐭', 'psychic', 'arrow'],
+    ['Sunchick', '🐥', 'light', 'solar'],    ['Duskcat', '🐈‍⬛', 'shadow', 'drain'],
+    ['Beetlebolt', '🪲', 'metal', 'smash'],  ['Pufferstar', '🐡', 'cosmic', 'arrow'],
+    ['Emberimp', '👺', 'flame', 'inferno'],  ['Jellyshock', '🪼', 'spark', 'jolt'],
+    ['Corallite', '🪸', 'aqua', 'aegis'],    ['Dunecrab', '🦀', 'terra', 'smash'],
+    ['Prickleball', '🦔', 'flora', 'fang'],  ['Icefawn', '🦌', 'frost', 'aurora'],
+    ['Smogslug', '🌫️', 'venom', 'spores'],  ['Wispling', '👻', 'psychic', 'drain'],
+    ['Beaconbird', '🐦', 'light', 'bloom'],  ['Nightowl', '🦉', 'shadow', 'eclipse'],
+    ['Cogbeaver', '🦫', 'metal', 'bark'],    ['Meteormite', '☄️', 'cosmic', 'smash'],
+    ['Ashhound', '🐺', 'flame', 'bite'],     ['Bubblotter', '🦦', 'aqua', 'rain'],
+    ['Staticat', '🐱', 'spark', 'storm'],    ['Bouldertoad', '🗿', 'terra', 'smash'],
+    ['Fernfox', '🦊', 'flora', 'bloom'],     ['Sleetseal', '🦭', 'frost', 'freeze'],
+    ['Stingtail', '🦂', 'venom', 'venomf'],  ['Dreamlamb', '🐑', 'psychic', 'chorus'],
+    ['Prismpup', '🌈', 'light', 'aurora'],   ['Murkrat', '🐀', 'shadow', 'drain'],
+    ['Ironsnail', '🐌', 'metal', 'aegis']
+  ],
+  3: [ // 35 × 3★
+    ['Blazecoon', '🦝', 'flame', 'scratch'], ['Tidalturt', '🐢', 'aqua', 'aegis'],
+    ['Thunderam', '🐏', 'spark', 'horn'],    ['Cragolem', '🧱', 'terra', 'aegis'],
+    ['Bloomdeer', '🦌', 'flora', 'rain'],    ['Glacierpup', '🐺', 'frost', 'freeze'],
+    ['Vipervine', '🐍', 'venom', 'venomf'],  ['Psyfeline', '🐈', 'psychic', 'arrow'],
+    ['Solaram', '🌞', 'light', 'solar'],     ['Umbrabat', '🦇', 'shadow', 'eclipse'],
+    ['Steelstag', '🫎', 'metal', 'horn'],    ['Nebulynx', '🐆', 'cosmic', 'arrow'],
+    ['Pyroape', '🐒', 'flame', 'scratch'],   ['Marlinjet', '🐬', 'aqua', 'fang'],
+    ['Voltacuda', '🐟', 'spark', 'fang'],    ['Basaltboar', '🐗', 'terra', 'smash'],
+    ['Willowisp', '🍃', 'flora', 'drain'],   ['Cryostag', '❄️', 'frost', 'horn'],
+    ['Fumefly', '🦟', 'venom', 'spores'],    ['Oraclefox', '🦊', 'psychic', 'bloom'],
+    ['Radiantmoth', '🦋', 'light', 'aurora'], ['Gloomwolf', '🐺', 'shadow', 'bite'],
+    ['Bronzebison', '🦬', 'metal', 'bark'],  ['Astrohare', '🐇', 'cosmic', 'jolt'],
+    ['Salamancer', '🦎', 'flame', 'inferno'], ['Krakenling', '🦑', 'aqua', 'tidal'],
+    ['Zapfalcon', '🦅', 'spark', 'storm'],   ['Terradillo', '🦔', 'terra', 'aegis'],
+    ['Orchidmantis', '🦗', 'flora', 'fang'], ['Berghulk', '🧊', 'frost', 'smash'],
+    ['Toxigator', '🐊', 'venom', 'bite'],    ['Lunamoth', '🌙', 'psychic', 'chorus'],
+    ['Dawnpegasus', '🐴', 'light', 'rain'],  ['Wraithcrow', '🐦‍⬛', 'shadow', 'drain'],
+    ['Forgeturtle', '🐢', 'metal', 'aegis']
+  ],
+  4: [ // 25 × 4★
+    ['Infernowl', '🦉', 'flame', 'inferno'], ['Maelstromray', '🌀', 'aqua', 'tidal'],
+    ['Voltigre', '🐅', 'spark', 'storm'],    ['Titanotort', '🐢', 'terra', 'aegis'],
+    ['Sylvanelk', '🦌', 'flora', 'rain'],    ['Permabear', '🐻‍❄️', 'frost', 'smash'],
+    ['Plaguewyrm', '🐛', 'venom', 'venomf'], ['Mentalisk', '🧠', 'psychic', 'arrow'],
+    ['Luxicorn', '🦄', 'light', 'aurora'],   ['Nocturnyx', '🐈‍⬛', 'shadow', 'eclipse'],
+    ['Mecharhino', '🦏', 'metal', 'horn'],   ['Cosmowl', '🌠', 'cosmic', 'arrow'],
+    ['Dragonewt', '🐲', 'flame', 'bite'],    ['Abysseel', '🐍', 'aqua', 'drain'],
+    ['Thunderoc', '🦅', 'spark', 'jolt'],    ['Obsidigolem', '🌋', 'terra', 'smash'],
+    ['Bloomserpent', '🌺', 'flora', 'chorus'], ['Blizzardclaw', '❄️', 'frost', 'freeze'],
+    ['Mireviper', '🐍', 'venom', 'venomf'],  ['Sphinxling', '🦁', 'psychic', 'bloom'],
+    ['Solarix', '🐦‍🔥', 'light', 'solar'],  ['Duskreaper', '💀', 'shadow', 'eclipse'],
+    ['Steelgriffin', '🦅', 'metal', 'fang'], ['Quasarkoi', '🐠', 'cosmic', 'rain'],
+    ['Cinderlion', '🦁', 'flame', 'roar']
+  ],
+  5: [ // 15 × 5★
+    ['Volcandragon', '🐉', 'flame', 'inferno'], ['Leviathorn', '🐋', 'aqua', 'tidal'],
+    ['Stormsphinx', '⛈️', 'spark', 'storm'],    ['Gaiataur', '🦬', 'terra', 'quake'],
+    ['Everbloom', '🌸', 'flora', 'chorus'],     ['Glacialisk', '🧊', 'frost', 'freeze'],
+    ['Basiliskrot', '🐍', 'venom', 'spores'],   ['Mindflayer', '🦑', 'psychic', 'drain'],
+    ['Seraphstag', '🦌', 'light', 'aurora'],    ['Voidpanther', '🐆', 'shadow', 'eclipse'],
+    ['Titanforge', '🤖', 'metal', 'aegis'],     ['Galaxikoi', '🌌', 'cosmic', 'nova'],
+    ['Phoenixmajor', '🐦‍🔥', 'flame', 'aurora'], ['Tsunamiwhale', '🐳', 'aqua', 'smash'],
+    ['Wardenoak', '🌳', 'flora', 'bark']
+  ],
+  6: [ // 8 × 6★
+    ['Ignisrex', '🦖', 'flame', 'roar'],        ['Abyssalking', '🐙', 'aqua', 'tidal'],
+    ['Fulgurbeast', '🐲', 'spark', 'storm'],    ['Terramammoth', '🦣', 'terra', 'quake'],
+    ['Celestialdoe', '🦌', 'light', 'chorus'],  ['Nyxhydra', '🐍', 'shadow', 'eclipse'],
+    ['Chromegigas', '🦾', 'metal', 'smash'],    ['Cosmoseraph', '👼', 'cosmic', 'nova']
+  ],
+  7: [ // 3 × 7★ — the legendary trio
+    ['Heliozar', '☀️', 'light', 'solar'],       ['Umbrathys', '🌑', 'shadow', 'eclipse'],
+    ['Chronodrax', '🐉', 'cosmic', 'nova']
+  ]
+};
+// Flatten to the master dex: id c001…c151 by position.
+const TCG_CARDS = [];
+[1, 2, 3, 4, 5, 6, 7].forEach(stars => {
+  (TCG_GEN1[stars] || []).forEach(row => {
+    const n = TCG_CARDS.length + 1;
+    TCG_CARDS.push({ id: 'c' + String(n).padStart(3, '0'), num: n, name: row[0], em: row[1], element: row[2], skillId: row[3], stars });
+  });
+});
+const TCG_BY_ID = {};
+TCG_CARDS.forEach(c => { TCG_BY_ID[c.id] = c; });
+// Deterministic ±6% jitter per card so the same monster has the same stats
+// on every device with no stored stat data.
+function _tcgJitter(id, salt) {
+  let h = 2166136261;
+  const s = id + ':' + salt;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return 0.94 + ((h >>> 0) % 1000) / 1000 * 0.12;
+}
+function tcgStats(card) {
+  const s = card.stars;
+  const m = TCG_ROLE_MODS[TCG_SKILLS[card.skillId].kind];
+  return {
+    hp:   Math.round((200 + s * 80) * m.hp * _tcgJitter(card.id, 'hp')),
+    atk:  Math.round((42 + s * 20) * m.atk * _tcgJitter(card.id, 'atk')),
+    def:  Math.round((22 + s * 11) * m.def * _tcgJitter(card.id, 'def')),
+    heal: Math.round((18 + s * 9) * m.heal * _tcgJitter(card.id, 'heal')),
+    spd:  Math.round((70 + s * 6 + m.spd) * _tcgJitter(card.id, 'spd'))
+  };
+}
+function tcgCardPower(id) {
+  const c = TCG_BY_ID[id]; if (!c) return 0;
+  const st = tcgStats(c);
+  return Math.round(st.atk + st.def + st.heal + st.hp / 8 + st.spd / 2);
+}
+function tcgTeamPower(team) { return (team || []).reduce((a, id) => a + tcgCardPower(id), 0); }
+
+// ---- Booster packs (the ONLY way to get cards) ----
+const TCG_PACKS = [
+  { id: 'spark', name: 'Spark Pack', em: '🎴', cost: 120, cards: 3,
+    desc: '3 cards. A first taste of the dex — commons with a chance of something shiny.',
+    odds: { 1: 40, 2: 30, 3: 17, 4: 8, 5: 3.5, 6: 1.2, 7: 0.3 } },
+  { id: 'nova', name: 'Nova Pack', em: '🎁', cost: 320, cards: 5,
+    desc: '5 cards — the last card is guaranteed 3★ or better.',
+    odds: { 1: 34, 2: 30, 3: 20, 4: 10, 5: 4.2, 6: 1.4, 7: 0.4 },
+    bonusOdds: { 3: 62, 4: 25, 5: 9, 6: 3, 7: 1 } },
+  { id: 'galaxy', name: 'Galaxy Pack', em: '💠', cost: 750, cards: 5,
+    desc: '5 cards, nothing below 2★ — and the last card is guaranteed 4★ or better.',
+    odds: { 2: 45, 3: 30, 4: 16, 5: 6, 6: 2.5, 7: 0.5 },
+    bonusOdds: { 4: 68, 5: 22, 6: 8, 7: 2 } }
+];
+function _tcgRollStars(odds) {
+  const total = Object.values(odds).reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (const k of Object.keys(odds)) { r -= odds[k]; if (r <= 0) return +k; }
+  return +Object.keys(odds)[0];
+}
+function _tcgRollCard(odds) {
+  const stars = _tcgRollStars(odds);
+  const pool = TCG_CARDS.filter(c => c.stars === stars);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// ---- Per-student state (lives on rpgState.tcg, saved with the hero) ----
+function tcgHydrateState(saved) {
+  const s = (saved && typeof saved === 'object') ? saved : {};
+  const cards = {};
+  Object.keys(s.cards || {}).forEach(id => { if (TCG_BY_ID[id] && (s.cards[id] | 0) > 0) cards[id] = s.cards[id] | 0; });
+  return {
+    cards,
+    team: Array.isArray(s.team) ? s.team.filter(id => TCG_BY_ID[id] && cards[id]).slice(0, 3) : [],
+    packs: s.packs | 0,
+    wins: s.wins | 0,
+    losses: s.losses | 0
+  };
+}
+function tcgState() {
+  if (!rpgState) return null;
+  if (!rpgState.tcg || typeof rpgState.tcg !== 'object') rpgState.tcg = tcgHydrateState(null);
+  return rpgState.tcg;
+}
+
+// ---- Release gate: admin plays first, one click releases to students ----
+let _tcgConfig = null;
+function _tcgOwnerUid() { return (typeof adminUid !== 'undefined' && adminUid) || (currentUser && currentUser.uid) || null; }
+async function tcgLoadConfig(force) {
+  if (_tcgConfig && !force) return _tcgConfig;
+  const uid = _tcgOwnerUid();
+  if (!uid) { _tcgConfig = { released: false }; return _tcgConfig; }
+  try {
+    const snap = await getDoc(doc(db, 'users', uid, 'settings', 'tcgConfig'));
+    _tcgConfig = snap.exists() ? (snap.data() || {}) : { released: false };
+  } catch (e) { console.warn('tcg config load', e); _tcgConfig = _tcgConfig || { released: false }; }
+  return _tcgConfig;
+}
+function tcgReleased() { return !!(_tcgConfig && _tcgConfig.released); }
+async function tcgSetReleased(v) {
+  if (!_isAdmin()) return;
+  const on = (v === true || v === 'true');
+  if (on && !confirm('Release Monster Cards to all students? They will see it in their Game menu immediately.')) return;
+  if (!on && !confirm('Take Monster Cards back into beta? Students will no longer see it.')) return;
+  try {
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'tcgConfig'), { released: on, updatedAt: new Date().toISOString() }, { merge: true });
+    _tcgConfig = Object.assign({}, _tcgConfig, { released: on });
+    tcgApplyNavVisibility();
+    tcgRenderAdminBanner();
+    showToast(on ? '🚀 Monster Cards released to students!' : 'Monster Cards is back in beta (admins only)', 'success');
+  } catch (e) { console.error('tcg release', e); showToast('Could not update — check your connection', 'error'); }
+}
+function tcgAccessAllowed() { return _isAdmin() || tcgReleased(); }
+function tcgApplyNavVisibility() {
+  const nav = document.getElementById('navTcg');
+  if (!nav) return;
+  const show = !!currentUser && (_isAdmin() || (tcgReleased() && rpgState && !rpgState.hidden));
+  nav.style.display = show ? '' : 'none';
+}
+async function tcgInit() {
+  await tcgLoadConfig(true);
+  tcgApplyNavVisibility();
+  tcgLoadArt().catch(() => {});
+}
+
+// ---- Card art overrides (admin pastes a PNG per monster on Game Objects) ----
+let _tcgArt = null;
+async function tcgLoadArt(force) {
+  if (_tcgArt && !force) return _tcgArt;
+  const uid = _tcgOwnerUid();
+  if (!uid) { _tcgArt = _tcgArt || {}; return _tcgArt; }
+  try {
+    const snap = await getDoc(doc(db, 'users', uid, 'settings', 'tcgArt'));
+    _tcgArt = (snap.exists() && snap.data().overrides) ? snap.data().overrides : {};
+  } catch (e) { console.warn('tcg art load', e); _tcgArt = _tcgArt || {}; }
+  return _tcgArt;
+}
+function tcgArtUrl(id) { return (_tcgArt && _tcgArt[id]) || null; }
+async function _tcgArtApply(id, dataUrl) {
+  try {
+    if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
+    const scaled = await _scaleDownDataUrl(dataUrl, 512);
+    const url = await uploadImageDataUrl(scaled);
+    const uid = _tcgOwnerUid(); if (!uid) throw new Error('Not signed in');
+    await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: { [id]: url } }, { merge: true });
+    (_tcgArt = _tcgArt || {})[id] = url;
+    await loadGameAssets();
+    showToast('Card art updated', 'success');
+  } catch (e) { console.error('tcg art update', e); showToast('Update failed: ' + (e && e.message ? e.message : e), 'error'); }
+}
+function onTcgArtPaste(id, e) {
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items) { if (it.type && it.type.startsWith('image/')) { e.preventDefault(); _raidersFileToDataUrl(it.getAsFile(), du => _tcgArtApply(id, du)); return; } }
+  showToast('No image in clipboard — copy a PNG first', 'error');
+}
+function onTcgArtDrop(id, e) { e.preventDefault(); if (e.currentTarget) e.currentTarget.classList.remove('drag'); const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; _raidersFileToDataUrl(file, du => _tcgArtApply(id, du)); }
+function onTcgArtPick(id, e) { const file = e.target && e.target.files && e.target.files[0]; _raidersFileToDataUrl(file, du => _tcgArtApply(id, du)); if (e.target) e.target.value = ''; }
+async function resetTcgArt(id) {
+  try {
+    const uid = _tcgOwnerUid(); if (!uid) return;
+    await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: { [id]: deleteField() } }, { merge: true });
+    if (_tcgArt) delete _tcgArt[id];
+    await loadGameAssets();
+    showToast('Reset to default', 'success');
+  } catch (e) { console.error('tcg art reset', e); showToast('Reset failed', 'error'); }
+}
+// Game Objects page section — one paste slot per monster, grouped by star tier.
+function tcgArtAdminHtml() {
+  let html = '<h2 class="ga-game">🃏 Monster Cards TCG <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— paste a PNG for each of the 151 monsters; it shows as the card art everywhere (square images look best)</span></h2>';
+  [1, 2, 3, 4, 5, 6, 7].forEach(stars => {
+    const tier = TCG_CARDS.filter(c => c.stars === stars);
+    html += '<h3 class="ga-cat">' + '★'.repeat(stars) + ' ' + stars + '-star monsters (' + tier.length + ')</h3><div class="ga-cards">';
+    tier.forEach(c => {
+      const ov = tcgArtUrl(c.id);
+      html += '<div class="ga-card" id="tcgart-' + c.id + '">'
+        + '<div class="ga-prev">' + (ov ? '<img src="' + ov + '" alt="' + escapeHtml(c.name) + '">' : '<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + c.em + '</div>') + '</div>'
+        + '<div class="ga-name">#' + String(c.num).padStart(3, '0') + ' ' + escapeHtml(c.name) + '</div>'
+        + '<div class="ga-zone" tabindex="0"'
+        +   ' onpaste="onTcgArtPaste(\'' + c.id + '\', event)"'
+        +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
+        +   ' ondragleave="this.classList.remove(\'drag\')"'
+        +   ' ondrop="onTcgArtDrop(\'' + c.id + '\', event)"'
+        +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
+        + '<div class="ga-actions">'
+        +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onTcgArtPick(\'' + c.id + '\', event)"></label>'
+        +   (ov ? '<button class="btn btn-ghost ga-mini" onclick="resetTcgArt(\'' + c.id + '\')">Reset</button>' : '')
+        + '</div>'
+        + '<div class="ga-status ' + (ov ? 'custom' : '') + '">' + (ov ? '● Custom' : 'Default') + '</div>'
+        + '</div>';
+    });
+    html += '</div>';
+  });
+  return html;
+}
+
+// ---- Card face renderer (collection, packs, team, arena) ----
+function tcgArtHtml(card, big) {
+  const url = tcgArtUrl(card.id);
+  return url ? '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(card.name) + '">' : '<div>' + card.em + '</div>';
+}
+function tcgCardHtml(card, opts) {
+  opts = opts || {};
+  const st = tcgStats(card);
+  const sk = TCG_SKILLS[card.skillId];
+  const el = TCG_ELEMENTS[card.element];
+  const owned = opts.owned !== false;
+  const badges = (opts.isNew ? '<span class="tcg-new-badge">NEW!</span>' : '')
+    + (opts.inTeam ? '<span class="tcg-team-badge">⚔️ Team</span>' : '')
+    + (opts.count > 1 ? '<span class="tcg-count-badge">×' + opts.count + '</span>' : '');
+  return '<div class="tcg-card star-' + card.stars + (owned ? '' : ' unowned') + (opts.onclick ? ' clickable' : '') + '"'
+    + (opts.onclick ? ' onclick="' + opts.onclick + '"' : '') + '>'
+    + badges
+    + '<div class="tcg-card-top"><span class="tcg-card-name">' + (owned ? escapeHtml(card.name) : '???') + '</span><span class="tcg-card-no">#' + String(card.num).padStart(3, '0') + '</span></div>'
+    + '<div class="tcg-stars">' + '★'.repeat(card.stars) + '<span style="opacity:.28;">' + '★'.repeat(7 - card.stars) + '</span></div>'
+    + '<div class="tcg-art">' + tcgArtHtml(card) + '</div>'
+    + '<div class="tcg-elem">' + el.icon + ' ' + el.name + '</div>'
+    + '<div class="tcg-statsrow">'
+    +   '<span>' + st.atk + '<small>⚔️ ATK</small></span>'
+    +   '<span>' + st.def + '<small>🛡️ DEF</small></span>'
+    +   '<span>' + st.heal + '<small>💚 HEAL</small></span>'
+    +   '<span>' + st.hp + '<small>❤️ HP</small></span>'
+    + '</div>'
+    + '<div class="tcg-skill">' + (owned
+        ? '<b>' + sk.icon + ' ' + escapeHtml(sk.name) + '</b>' + escapeHtml(sk.desc)
+        : '<b>❓ Special skill</b>Collect this monster to reveal its skill.')
+    + '</div>'
+    + '</div>';
+}
+
+// ---- Page rendering ----
+let tcgTab = 'dex';
+let tcgDexFilter = 'all';
+function tcgUpdateGoldChip() {
+  const chip = document.getElementById('tcgGoldChip');
+  if (chip) chip.textContent = '🪙 ' + ((rpgState && rpgState.gold) | 0).toLocaleString() + ' points';
+}
+function tcgRenderAdminBanner() {
+  const host = document.getElementById('tcgAdminBanner');
+  if (!host) return;
+  if (!_isAdmin()) { host.innerHTML = ''; return; }
+  const live = tcgReleased();
+  host.innerHTML = '<div class="tcg-admin-banner">'
+    + '<div class="tcg-ab-main">'
+    +   '<span class="tcg-status-pill ' + (live ? 'live' : 'locked') + '">' + (live ? '🟢 RELEASED TO STUDENTS' : '🔒 BETA — ADMINS ONLY') + '</span>'
+    +   '<h4>' + (live ? 'Monster Cards is live' : 'You are play-testing Monster Cards') + '</h4>'
+    +   '<p>' + (live
+          ? 'Students can see the game in their Game menu, buy packs with their points and battle each other. You can take it back into beta at any time.'
+          : 'Students cannot see this game yet. Open packs, set a team and run battles to try everything — then press Release when you are happy. Card art is managed on the Game Objects page.')
+    +   '</p>'
+    + '</div>'
+    + (live
+        ? '<button class="btn btn-outline" onclick="tcgSetReleased(false)">⏸ Back to beta</button>'
+        : '<button class="btn btn-primary" onclick="tcgSetReleased(true)">🚀 Release to students</button>')
+    + '</div>';
+}
+function tcgSetTab(tab) {
+  tcgTab = tab;
+  document.querySelectorAll('#tcgTabs .tcg-tab').forEach(b => b.classList.toggle('active', b.dataset.tcgtab === tab));
+  tcgRenderBody();
+}
+async function tcgRenderPage() {
+  await tcgLoadConfig();
+  await tcgLoadArt();
+  if (!tcgAccessAllowed()) { try { navigateTo(rpgHomePage()); } catch (e) {} return; }
+  tcgUpdateGoldChip();
+  tcgRenderAdminBanner();
+  tcgRenderBody();
+}
+function tcgRenderBody() {
+  const host = document.getElementById('tcgBody');
+  if (!host) return;
+  const s = tcgState();
+  if (!s) { host.innerHTML = '<div class="tcg-section-note">Answer a question anywhere in the app to wake your hero, then come back!</div>'; return; }
+  if (tcgTab === 'dex') host.innerHTML = tcgDexHtml(s);
+  else if (tcgTab === 'packs') host.innerHTML = tcgPacksHtml(s);
+  else if (tcgTab === 'team') host.innerHTML = tcgTeamHtml(s);
+  else host.innerHTML = tcgArenaHtml(s);
+}
+// -- Collection tab --
+function tcgDexHtml(s) {
+  const ownedCount = Object.keys(s.cards).length;
+  const pct = Math.round(ownedCount / TCG_CARDS.length * 100);
+  const chips = [['all', 'All'], ['owned', 'Owned']].concat([1, 2, 3, 4, 5, 6, 7].map(n => [String(n), n + '★']));
+  let list = TCG_CARDS;
+  if (tcgDexFilter === 'owned') list = list.filter(c => s.cards[c.id]);
+  else if (tcgDexFilter !== 'all') list = list.filter(c => c.stars === +tcgDexFilter);
+  return '<div class="tcg-dex-progress">'
+    +   '<div class="tcg-dex-nums">' + ownedCount + ' / ' + TCG_CARDS.length + ' collected · ' + pct + '%</div>'
+    +   '<div class="tcg-dex-bar"><div style="width:' + pct + '%;"></div></div>'
+    + '</div>'
+    + '<div class="tcg-filters">' + chips.map(([v, label]) =>
+        '<button type="button" class="tcg-filter-chip' + (tcgDexFilter === v ? ' active' : '') + '" onclick="tcgSetDexFilter(\'' + v + '\')">' + label + '</button>').join('') + '</div>'
+    + (list.length ? '<div class="tcg-grid">' + list.map(c => tcgCardHtml(c, {
+        owned: !!s.cards[c.id], count: s.cards[c.id] | 0, inTeam: s.team.includes(c.id)
+      })).join('') + '</div>'
+      : '<div class="tcg-section-note">Nothing here yet — open a booster pack to start your collection! 🎁</div>');
+}
+function tcgSetDexFilter(v) { tcgDexFilter = v; tcgRenderBody(); }
+// -- Packs tab --
+function tcgPacksHtml(s) {
+  const gold = (rpgState && rpgState.gold) | 0;
+  const oddsLine = p => [1, 2, 3, 4, 5, 6, 7].filter(n => p.odds[n]).map(n => n + '★ ' + p.odds[n] + '%').join(' · ');
+  return '<div class="tcg-section-note">Booster packs are the <b>only</b> way to collect monsters. You have <b>🪙 ' + gold.toLocaleString() + ' points</b> — earn more by answering questions anywhere in the app.'
+    + (_isAdmin() ? ' <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="tcgAdminGold()">＋500 🪙 test points (admin)</button>' : '') + '</div>'
+    + '<div class="tcg-packs">' + TCG_PACKS.map(p =>
+      '<div class="tcg-pack">'
+      + '<div class="tcg-pack-art">' + p.em + '</div>'
+      + '<h4>' + escapeHtml(p.name) + '</h4>'
+      + '<div class="tcg-pack-desc">' + escapeHtml(p.desc) + '</div>'
+      + '<div class="tcg-pack-odds">' + oddsLine(p) + (p.bonusOdds ? '<br><b>Bonus card:</b> ' + Object.keys(p.bonusOdds).map(n => n + '★ ' + p.bonusOdds[n] + '%').join(' · ') : '') + '</div>'
+      + '<button class="btn btn-primary" ' + (gold < p.cost ? 'disabled style="opacity:.55;"' : '') + ' onclick="tcgBuyPack(\'' + p.id + '\')">Open · 🪙 ' + p.cost + '</button>'
+      + '</div>').join('') + '</div>'
+    + '<div class="tcg-section-note" style="margin-top:22px;">Opened so far: <b>' + (s.packs | 0) + ' pack' + (s.packs === 1 ? '' : 's') + '</b></div>';
+}
+function tcgAdminGold() {
+  if (!_isAdmin() || !rpgState) return;
+  rpgState.gold = (rpgState.gold | 0) + 500;
+  rpgSave(); tcgUpdateGoldChip(); tcgRenderBody();
+  showToast('+500 test points (admin preview)', 'success');
+}
+function tcgBuyPack(packId) {
+  const p = TCG_PACKS.find(x => x.id === packId);
+  const s = tcgState();
+  if (!p || !s || !rpgState) return;
+  if (((rpgState.gold | 0)) < p.cost) { showToast('Not enough points — answer more questions to earn 🪙 ' + p.cost, 'error'); return; }
+  rpgState.gold = (rpgState.gold | 0) - p.cost;
+  const pulls = [];
+  for (let i = 0; i < p.cards; i++) {
+    const odds = (p.bonusOdds && i === p.cards - 1) ? p.bonusOdds : p.odds;
+    const card = _tcgRollCard(odds);
+    const isNew = !s.cards[card.id];
+    s.cards[card.id] = (s.cards[card.id] | 0) + 1;
+    pulls.push({ card, isNew });
+  }
+  s.packs = (s.packs | 0) + 1;
+  rpgSave();
+  try { rpgPublishLeaderboard(); } catch (e) {}
+  tcgUpdateGoldChip();
+  tcgShowReveal(p, pulls);
+}
+// -- Pack opening ceremony --
+function tcgShowReveal(pack, pulls) {
+  const old = document.getElementById('tcgRevealOverlay');
+  if (old) old.remove();
+  const o = document.createElement('div');
+  o.className = 'tcg-overlay';
+  o.id = 'tcgRevealOverlay';
+  o.innerHTML = '<div class="tcg-reveal-inner">'
+    + '<div class="tcg-reveal-title">' + pack.em + ' ' + escapeHtml(pack.name) + ' opened!</div>'
+    + '<div class="tcg-reveal-sub">Tap each card to flip it over…</div>'
+    + '<div class="tcg-reveal-row">' + pulls.map((pl, i) =>
+        '<div class="tcg-flip" id="tcgflip-' + i + '" style="animation-delay:' + (i * 0.12) + 's;" onclick="tcgFlipCard(' + i + ')">'
+        + '<div class="tcg-flip-inner">'
+        +   '<div class="tcg-flip-back">🎴</div>'
+        +   '<div class="tcg-flip-front">' + tcgCardHtml(pl.card, { isNew: pl.isNew }) + '</div>'
+        + '</div></div>').join('') + '</div>'
+    + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">'
+    +   '<button class="btn btn-outline" style="color:#fff;border-color:rgba(255,255,255,0.4);" onclick="tcgFlipAll()">Flip all</button>'
+    +   '<button class="btn btn-primary" onclick="tcgCloseReveal()">Done</button>'
+    + '</div></div>';
+  document.body.appendChild(o);
+  o._pulls = pulls;
+}
+function tcgFlipCard(i) {
+  const o = document.getElementById('tcgRevealOverlay');
+  const f = document.getElementById('tcgflip-' + i);
+  if (!o || !f || f.classList.contains('flipped')) return;
+  f.classList.add('flipped');
+  const pl = o._pulls && o._pulls[i];
+  if (pl && pl.card.stars >= 5) tcgConfetti(pl.card.stars >= 7 ? 90 : 45);
+}
+function tcgFlipAll() {
+  const o = document.getElementById('tcgRevealOverlay');
+  if (!o) return;
+  (o._pulls || []).forEach((_, i) => setTimeout(() => tcgFlipCard(i), i * 220));
+}
+function tcgCloseReveal() {
+  const o = document.getElementById('tcgRevealOverlay');
+  if (o) o.remove();
+  tcgRenderBody();
+}
+function tcgConfetti(n) {
+  const colors = ['#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6', '#22c55e', '#ef4444', '#fde047'];
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement('div');
+    c.className = 'tcg-confetti';
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.background = colors[i % colors.length];
+    c.style.animationDuration = (1.6 + Math.random() * 1.6) + 's';
+    c.style.animationDelay = (Math.random() * 0.5) + 's';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 4000);
+  }
+}
+// -- Team tab --
+function tcgTeamHtml(s) {
+  const slots = [0, 1, 2].map(i => {
+    const id = s.team[i];
+    const c = id && TCG_BY_ID[id];
+    return '<div class="tcg-team-slot">' + (c
+      ? tcgCardHtml(c, { onclick: "tcgToggleTeam('" + c.id + "')" })
+      : '<div class="tcg-empty"><span class="big">➕</span><span>Pick a monster<br>from below</span></div>') + '</div>';
+  }).join('');
+  const owned = TCG_CARDS.filter(c => s.cards[c.id]);
+  return '<div class="tcg-section-note">Choose <b>3 monsters</b> to defend your name in the Battle Arena. Tap a card below to add it — tap a team card to remove it. Your team is saved automatically.</div>'
+    + '<div class="tcg-team-slots">' + slots + '</div>'
+    + '<div class="tcg-team-power">Team power: <b>' + tcgTeamPower(s.team).toLocaleString() + '</b>' + (s.team.length === 3 ? ' · ready for battle ⚔️' : ' · pick ' + (3 - s.team.length) + ' more') + '</div>'
+    + (owned.length
+      ? '<div class="tcg-grid">' + owned.map(c => tcgCardHtml(c, {
+          count: s.cards[c.id] | 0, inTeam: s.team.includes(c.id), onclick: "tcgToggleTeam('" + c.id + "')"
+        })).join('') + '</div>'
+      : '<div class="tcg-section-note">You don\'t own any monsters yet — open a booster pack first! 🎁</div>');
+}
+function tcgToggleTeam(id) {
+  const s = tcgState();
+  if (!s || !TCG_BY_ID[id] || !s.cards[id]) return;
+  const at = s.team.indexOf(id);
+  if (at >= 0) s.team.splice(at, 1);
+  else {
+    if (s.team.length >= 3) { showToast('Your team is full — tap a team card to remove it first', 'error'); return; }
+    s.team.push(id);
+  }
+  rpgSave();
+  try { rpgPublishLeaderboard(); } catch (e) {}
+  if (s.team.length === 3 && at < 0) showToast('Team ready! Head to the Battle Arena ⚔️', 'success');
+  tcgRenderBody();
+}
+// -- Arena tab --
+function tcgArenaHtml(s) {
+  const ready = s.team.length === 3;
+  return '<div class="tcg-arena-head">'
+    + '<h3 style="margin-bottom:6px;">⚔️ Battle Arena</h3>'
+    + '<p style="color:var(--text-muted);font-size:0.85rem;line-height:1.55;">Your 3 monsters battle another trainer\'s team automatically — sit back and enjoy the show. Matches are friendly: no points are won or lost.</p>'
+    + '<div class="tcg-record">'
+    +   '<div><b style="color:#16a34a;">' + (s.wins | 0) + '</b><span>WINS</span></div>'
+    +   '<div><b style="color:#dc2626;">' + (s.losses | 0) + '</b><span>LOSSES</span></div>'
+    +   '<div><b>' + tcgTeamPower(s.team).toLocaleString() + '</b><span>TEAM POWER</span></div>'
+    + '</div>'
+    + (ready
+      ? '<button class="btn btn-primary" style="font-size:1rem;padding:12px 30px;" onclick="tcgFindBattle()">🔎 Find a battle</button>'
+      : '<div class="tcg-section-note">Pick 3 monsters on the <b>My Team</b> tab first.</div>')
+    + '</div>'
+    + (ready ? '<div class="tcg-grid" style="max-width:680px;margin:0 auto;grid-template-columns:repeat(3,1fr);">'
+        + s.team.map(id => tcgCardHtml(TCG_BY_ID[id], {})).join('') + '</div>' : '');
+}
+
+// ---- Matchmaking: real student teams from the shared leaderboard, with
+// ghost trainers as a fallback so the arena always works (and pre-release).
+const TCG_GHOSTS = ['Professor Quark', 'Ranger Sylva', 'Captain Nimbus', 'Dr. Helix', 'Sage Umbra', 'Pilot Comet', 'Keeper Flora', 'Warden Frost'];
+function _tcgGhostTeam(targetStars) {
+  const team = [];
+  let budget = Math.max(3, Math.min(21, targetStars + (Math.floor(Math.random() * 3) - 1)));
+  for (let i = 0; i < 3; i++) {
+    const slotsLeft = 3 - i;
+    let stars = Math.round(budget / slotsLeft) + (Math.floor(Math.random() * 3) - 1);
+    stars = Math.max(1, Math.min(7, stars, budget - (slotsLeft - 1)));
+    budget -= stars;
+    const pool = TCG_CARDS.filter(c => c.stars === stars && !team.includes(c.id));
+    team.push(pool[Math.floor(Math.random() * pool.length)].id);
+  }
+  return team;
+}
+function tcgTeamStars(team) { return (team || []).reduce((a, id) => a + ((TCG_BY_ID[id] && TCG_BY_ID[id].stars) || 0), 0); }
+async function tcgFindOpponent() {
+  const s = tcgState();
+  const myPower = tcgTeamPower(s.team);
+  let rows = null;
+  try { rows = await rpgFetchLeaderboard(true); } catch (e) {}
+  const candidates = (rows || []).filter(r => r && r.uid && r.uid !== (currentUser && currentUser.uid)
+    && r.tcg && Array.isArray(r.tcg.team) && r.tcg.team.length === 3 && r.tcg.team.every(id => TCG_BY_ID[id]));
+  if (candidates.length) {
+    // Prefer the closest team power, with a little shuffle so rematches vary.
+    candidates.sort((a, b) => Math.abs((a.tcg.power || tcgTeamPower(a.tcg.team)) - myPower) - Math.abs((b.tcg.power || tcgTeamPower(b.tcg.team)) - myPower));
+    const pick = candidates[Math.floor(Math.random() * Math.min(3, candidates.length))];
+    return { name: pick.name || 'Trainer', ghost: false, tcgTeam: pick.tcg.team };
+  }
+  const name = TCG_GHOSTS[Math.floor(Math.random() * TCG_GHOSTS.length)];
+  return { name, tcgTeam: _tcgGhostTeam(tcgTeamStars(s.team)), ghost: true };
+}
+
+// ---- 3v3 auto battle — Final-Fantasy-style side view with full animation ----
+let _tcgBattle = null; // { token, speed, skip }
+function tcgSleep(ms) {
+  const b = _tcgBattle;
+  if (!b || b.skip) return Promise.resolve();
+  return new Promise(r => setTimeout(r, ms / (b.speed || 1)));
+}
+function _tcgMkUnit(cardId, side, slot) {
+  const c = TCG_BY_ID[cardId];
+  const st = tcgStats(c);
+  return {
+    uid: side + slot, card: c, side, slot,
+    hp: st.hp, maxHp: st.hp, atk: st.atk, def: st.def, heal: st.heal, spd: st.spd,
+    skill: TCG_SKILLS[c.skillId],
+    charge: Math.floor(Math.random() * 2), shield: 0, stun: 0,
+    poison: null, atkUp: 0, atkUpPct: 0
+  };
+}
+function _tcgUnitEl(u) { return document.getElementById('tcgbu-' + u.uid); }
+function _tcgHpClass(u) { const p = u.hp / u.maxHp; return p <= 0.28 ? 'low' : p <= 0.6 ? 'mid' : ''; }
+function _tcgRefreshUnit(u) {
+  const el = _tcgUnitEl(u);
+  if (!el) return;
+  const bar = el.querySelector('.tcgb-hpbar > div');
+  const pct = Math.max(0, Math.round(u.hp / u.maxHp * 100));
+  if (bar) { bar.style.width = pct + '%'; bar.className = _tcgHpClass(u); }
+  const txt = el.querySelector('.tcgb-hptext');
+  if (txt) txt.textContent = Math.max(0, Math.round(u.hp)) + ' / ' + u.maxHp;
+  const stat = el.querySelector('.tcgb-status');
+  if (stat) stat.textContent = (u.shield > 0 ? '🛡️' : '') + (u.stun > 0 ? '💫' : '') + (u.poison ? '☠️' : '') + (u.atkUp > 0 ? '📈' : '');
+  el.classList.toggle('dead', u.hp <= 0);
+}
+function _tcgPopup(u, text, cls) {
+  const el = _tcgUnitEl(u);
+  if (!el) return;
+  const d = document.createElement('div');
+  d.className = 'tcgb-dmg' + (cls ? ' ' + cls : '');
+  d.textContent = text;
+  el.appendChild(d);
+  setTimeout(() => d.remove(), 1100);
+}
+function _tcgLog(msg) {
+  const el = document.getElementById('tcgbLog');
+  if (el) el.innerHTML = msg;
+}
+async function _tcgBanner(stage, skill) {
+  const b = document.createElement('div');
+  b.className = 'tcgb-skillbanner';
+  b.innerHTML = '<div class="inner">' + skill.icon + ' ' + escapeHtml(skill.name) + '</div>';
+  stage.appendChild(b);
+  const colors = { strike: 'rgba(251,146,60,0.5)', blast: 'rgba(239,68,68,0.5)', pierce: 'rgba(148,163,184,0.55)', drain: 'rgba(168,85,247,0.5)', heal: 'rgba(74,222,128,0.5)', healall: 'rgba(74,222,128,0.5)', shield: 'rgba(96,165,250,0.5)', rage: 'rgba(251,191,36,0.55)', stun: 'rgba(250,204,21,0.55)', poison: 'rgba(132,204,22,0.5)' };
+  const flash = stage.querySelector('.tcgb-flash');
+  if (flash) {
+    flash.style.background = 'radial-gradient(circle at center, ' + (colors[skill.kind] || 'rgba(255,255,255,0.45)') + ', transparent 75%)';
+    flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go');
+  }
+  await tcgSleep(950);
+  b.remove();
+}
+function _tcgDamage(attacker, target, mult, ignoreDef) {
+  const atk = attacker.atk * (1 + (attacker.atkUp > 0 ? attacker.atkUpPct : 0));
+  let raw = atk * mult;
+  if (!ignoreDef) raw = raw * 100 / (100 + target.def);
+  raw *= 0.92 + Math.random() * 0.16;
+  const crit = Math.random() < 0.10;
+  if (crit) raw *= 1.5;
+  let dmg = Math.max(4, Math.round(raw));
+  if (target.shield > 0) {
+    const absorbed = Math.min(target.shield, dmg);
+    target.shield -= absorbed;
+    dmg -= absorbed;
+    if (absorbed > 0) _tcgPopup(target, '🛡️ -' + absorbed, 'status');
+  }
+  target.hp = Math.max(0, target.hp - dmg);
+  return { dmg, crit };
+}
+async function _tcgHitFx(target, res) {
+  const el = _tcgUnitEl(target);
+  if (el) { el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit'); }
+  _tcgPopup(target, (res.crit ? 'CRIT! ' : '') + '-' + res.dmg, res.crit ? 'crit' : '');
+  _tcgRefreshUnit(target);
+}
+async function _tcgHealFx(target, amount) {
+  target.hp = Math.min(target.maxHp, target.hp + amount);
+  const el = _tcgUnitEl(target);
+  if (el) { el.classList.add('healed'); setTimeout(() => el.classList.remove('healed'), 700); }
+  _tcgPopup(target, '+' + amount, 'heal');
+  _tcgRefreshUnit(target);
+}
+function _tcgPickTarget(foes) {
+  const alive = foes.filter(f => f.hp > 0);
+  if (!alive.length) return null;
+  if (Math.random() < 0.55) return alive.reduce((a, b) => (a.hp / a.maxHp <= b.hp / b.maxHp ? a : b));
+  return alive[Math.floor(Math.random() * alive.length)];
+}
+async function _tcgLunge(unit) {
+  const el = _tcgUnitEl(unit);
+  if (!el) return;
+  el.classList.add(unit.side === 'L' ? 'lungeR' : 'lungeL');
+  await tcgSleep(300);
+}
+function _tcgUnlunge(unit) {
+  const el = _tcgUnitEl(unit);
+  if (el) el.classList.remove('lungeR', 'lungeL');
+}
+async function _tcgAct(stage, unit, allies, foes) {
+  const el = _tcgUnitEl(unit);
+  if (el) el.classList.add('acting');
+  // Poison ticks at the start of the unit's turn.
+  if (unit.poison) {
+    const p = Math.round(unit.poison.dmg);
+    unit.hp = Math.max(0, unit.hp - p);
+    _tcgPopup(unit, '☠️ -' + p, 'status');
+    _tcgRefreshUnit(unit);
+    unit.poison.turns--;
+    if (unit.poison.turns <= 0) unit.poison = null;
+    await tcgSleep(420);
+    if (unit.hp <= 0) { _tcgLog(escapeHtml(unit.card.name) + ' fainted from poison!'); if (el) el.classList.remove('acting'); await tcgSleep(500); return; }
+  }
+  if (unit.stun > 0) {
+    unit.stun--;
+    _tcgPopup(unit, '💫 stunned', 'status');
+    _tcgRefreshUnit(unit);
+    _tcgLog(escapeHtml(unit.card.name) + ' is stunned and skips a turn!');
+    if (el) el.classList.remove('acting');
+    await tcgSleep(620);
+    return;
+  }
+  if (unit.atkUp > 0) unit.atkUp--;
+  unit.charge++;
+  const sk = unit.skill;
+  const healKinds = sk.kind === 'heal' || sk.kind === 'healall';
+  const hurtAlly = allies.filter(a => a.hp > 0).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+  const wantHeal = healKinds && hurtAlly && hurtAlly.hp / hurtAlly.maxHp < 0.72;
+  const useSkill = unit.charge >= 3 && (!healKinds || wantHeal);
+  if (useSkill) {
+    unit.charge = 0;
+    await _tcgBanner(stage, sk);
+    if (sk.kind === 'blast') {
+      await _tcgLunge(unit);
+      const targets = foes.filter(f => f.hp > 0);
+      for (const t of targets) { const res = _tcgDamage(unit, t, sk.pow, false); _tcgHitFx(t, res); }
+      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> unleashes <b>' + escapeHtml(sk.name) + '</b> on the whole enemy team!');
+      await tcgSleep(760);
+      _tcgUnlunge(unit);
+    } else if (sk.kind === 'strike' || sk.kind === 'pierce' || sk.kind === 'drain' || sk.kind === 'stun' || sk.kind === 'poison') {
+      const t = _tcgPickTarget(foes);
+      if (t) {
+        await _tcgLunge(unit);
+        const res = _tcgDamage(unit, t, sk.pow, sk.kind === 'pierce');
+        await _tcgHitFx(t, res);
+        if (sk.kind === 'drain') { const back = Math.round(res.dmg * 0.6); await _tcgHealFx(unit, back); }
+        if (sk.kind === 'stun' && t.hp > 0) { t.stun = Math.max(t.stun, 1); _tcgPopup(t, '💫', 'status'); }
+        if (sk.kind === 'poison' && t.hp > 0) { t.poison = { dmg: unit.atk * 0.4, turns: 3 }; _tcgPopup(t, '☠️', 'status'); }
+        _tcgRefreshUnit(t);
+        _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> uses <b>' + escapeHtml(sk.name) + '</b> on ' + escapeHtml(t.card.name) + (res.crit ? ' — critical hit!' : '!'));
+        await tcgSleep(660);
+        _tcgUnlunge(unit);
+      }
+    } else if (sk.kind === 'heal') {
+      const amt = Math.round(unit.heal * sk.pow);
+      await _tcgHealFx(hurtAlly, amt);
+      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> casts <b>' + escapeHtml(sk.name) + '</b> — ' + escapeHtml(hurtAlly.card.name) + ' recovers ' + amt + ' HP!');
+      await tcgSleep(700);
+    } else if (sk.kind === 'healall') {
+      const amt = Math.round(unit.heal * sk.pow);
+      for (const a of allies.filter(x => x.hp > 0)) _tcgHealFx(a, amt);
+      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> sings <b>' + escapeHtml(sk.name) + '</b> — the whole team recovers!');
+      await tcgSleep(760);
+    } else if (sk.kind === 'shield') {
+      const t = allies.filter(a => a.hp > 0).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0] || unit;
+      t.shield += Math.round(unit.def * sk.pow);
+      _tcgPopup(t, '🛡️ +' + Math.round(unit.def * sk.pow), 'status');
+      _tcgRefreshUnit(t);
+      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> raises <b>' + escapeHtml(sk.name) + '</b> around ' + escapeHtml(t.card.name) + '!');
+      await tcgSleep(680);
+    } else if (sk.kind === 'rage') {
+      for (const a of allies.filter(x => x.hp > 0)) { a.atkUp = Math.max(a.atkUp, 2); a.atkUpPct = sk.pow; _tcgPopup(a, '📈 ATK up!', 'status'); _tcgRefreshUnit(a); }
+      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> lets out a <b>' + escapeHtml(sk.name) + '</b> — the team\'s attack rises!');
+      await tcgSleep(700);
+    }
+  } else {
+    const t = _tcgPickTarget(foes);
+    if (t) {
+      await _tcgLunge(unit);
+      const res = _tcgDamage(unit, t, 1.0, false);
+      await _tcgHitFx(t, res);
+      _tcgLog('<b>' + escapeHtml(unit.card.name) + '</b> attacks ' + escapeHtml(t.card.name) + (res.crit ? ' — critical hit!' : '.'));
+      await tcgSleep(520);
+      _tcgUnlunge(unit);
+    }
+  }
+  if (el) el.classList.remove('acting');
+}
+function _tcgUnitHtml(u) {
+  const posOwn = [{ r: '5%', b: '32%' }, { r: '17%', b: '16%' }, { r: '3%', b: '4%' }];
+  const posFoe = [{ l: '5%', t: '13%' }, { l: '17%', t: '30%' }, { l: '3%', t: '47%' }];
+  const p = u.side === 'R' ? posOwn[u.slot] : posFoe[u.slot];
+  const style = (p.l ? 'left:' + p.l + ';' : '') + (p.r ? 'right:' + p.r + ';' : '') + (p.t ? 'top:' + p.t + ';' : '') + (p.b ? 'bottom:' + p.b + ';' : '');
+  const url = tcgArtUrl(u.card.id);
+  return '<div class="tcgb-unit ' + (u.side === 'L' ? 'left' : 'right') + '" id="tcgbu-' + u.uid + '" style="' + style + '">'
+    + '<span class="tcgb-sprite">' + (url ? '<img src="' + escapeHtml(url) + '" alt="">' : u.card.em) + '</span>'
+    + '<div class="tcgb-plate">'
+    +   '<div class="tcgb-name">' + escapeHtml(u.card.name) + '</div>'
+    +   '<div class="tcgb-stars">' + '★'.repeat(u.card.stars) + '</div>'
+    +   '<div class="tcgb-hpbar"><div style="width:100%;"></div></div>'
+    +   '<div class="tcgb-hptext">' + u.maxHp + ' / ' + u.maxHp + '</div>'
+    +   '<div class="tcgb-status"></div>'
+    + '</div></div>';
+}
+function tcgBattleSpeed(mult) {
+  if (_tcgBattle) _tcgBattle.speed = mult;
+  document.querySelectorAll('[data-tcgspeed]').forEach(b => b.classList.toggle('on', +b.dataset.tcgspeed === mult));
+}
+function tcgSkipBattle() { if (_tcgBattle) _tcgBattle.skip = true; }
+function tcgCloseBattle() {
+  if (_tcgBattle) _tcgBattle.token++;
+  _tcgBattle = null;
+  const o = document.getElementById('tcgBattleOverlay');
+  if (o) o.remove();
+  tcgRenderBody();
+}
+async function tcgFindBattle() {
+  const s = tcgState();
+  if (!s || s.team.length !== 3) { showToast('Pick 3 monsters on the My Team tab first', 'error'); return; }
+  showToast('Looking for an opponent…', 'info');
+  const opp = await tcgFindOpponent();
+  tcgRunBattle(s.team.slice(), { name: (currentUser && currentUser.name) || 'You' }, opp);
+}
+async function tcgRunBattle(myTeam, me, opp) {
+  const old = document.getElementById('tcgBattleOverlay');
+  if (old) old.remove();
+  _tcgBattle = { token: 1, speed: 1, skip: false };
+  const token = _tcgBattle.token;
+  const mine = myTeam.map((id, i) => _tcgMkUnit(id, 'R', i));
+  const theirs = opp.tcgTeam.map((id, i) => _tcgMkUnit(id, 'L', i));
+  const o = document.createElement('div');
+  o.className = 'tcg-overlay';
+  o.id = 'tcgBattleOverlay';
+  o.innerHTML = '<div class="tcgb-wrap">'
+    + '<div class="tcgb-topbar">'
+    +   '<div class="tcgb-vsline">' + escapeHtml(opp.name) + (opp.ghost ? ' <small>(ghost trainer)</small>' : '') + ' <small>vs</small> ' + escapeHtml(me.name) + '</div>'
+    +   '<div class="tcgb-controls">'
+    +     '<button type="button" data-tcgspeed="1" class="on" onclick="tcgBattleSpeed(1)">1×</button>'
+    +     '<button type="button" data-tcgspeed="2" onclick="tcgBattleSpeed(2)">2×</button>'
+    +     '<button type="button" data-tcgspeed="4" onclick="tcgBattleSpeed(4)">4×</button>'
+    +     '<button type="button" onclick="tcgSkipBattle()">⏭ Skip</button>'
+    +     '<button type="button" onclick="tcgCloseBattle()">✕</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="tcgb-stage" id="tcgbStage">'
+    +   '<div class="tcgb-vs-splash"><div class="who">' + escapeHtml(opp.name) + '</div><div class="vs">VS</div><div class="who">' + escapeHtml(me.name) + '</div></div>'
+    +   theirs.map(_tcgUnitHtml).join('') + mine.map(_tcgUnitHtml).join('')
+    +   '<div class="tcgb-flash"></div>'
+    +   '<div class="tcgb-result" id="tcgbResult"></div>'
+    + '</div>'
+    + '<div class="tcgb-log" id="tcgbLog">The battle begins…</div>'
+    + '</div>';
+  document.body.appendChild(o);
+  const stage = document.getElementById('tcgbStage');
+  await tcgSleep(2100); // VS splash
+  let round = 0;
+  while (round < 30) {
+    round++;
+    if (!_tcgBattle || _tcgBattle.token !== token) return; // closed
+    const order = mine.concat(theirs).filter(u => u.hp > 0).sort((a, b) => b.spd - a.spd || Math.random() - 0.5);
+    for (const u of order) {
+      if (!_tcgBattle || _tcgBattle.token !== token) return;
+      if (u.hp <= 0) continue;
+      const allies = u.side === 'R' ? mine : theirs;
+      const foes = u.side === 'R' ? theirs : mine;
+      if (!foes.some(f => f.hp > 0) || !allies.some(a => a.hp > 0)) break;
+      await _tcgAct(stage, u, allies, foes);
+      [].concat(mine, theirs).forEach(_tcgRefreshUnit);
+      if (!theirs.some(f => f.hp > 0) || !mine.some(f => f.hp > 0)) break;
+    }
+    if (!theirs.some(f => f.hp > 0) || !mine.some(f => f.hp > 0)) break;
+  }
+  if (!_tcgBattle || _tcgBattle.token !== token) return;
+  const myLeft = mine.reduce((a, u) => a + u.hp / u.maxHp, 0);
+  const theirLeft = theirs.reduce((a, u) => a + u.hp / u.maxHp, 0);
+  const win = theirLeft <= 0 ? true : myLeft <= 0 ? false : myLeft >= theirLeft;
+  const s = tcgState();
+  if (s) {
+    if (win) s.wins = (s.wins | 0) + 1; else s.losses = (s.losses | 0) + 1;
+    rpgSave();
+    try { rpgPublishLeaderboard(); } catch (e) {}
+  }
+  const res = document.getElementById('tcgbResult');
+  if (res) {
+    res.innerHTML = '<div class="word ' + (win ? 'win' : 'lose') + '">' + (win ? 'VICTORY!' : 'DEFEAT') + '</div>'
+      + '<div class="sub">' + (win ? 'Your monsters carried the day 🏆' : escapeHtml(opp.name) + ' takes this one — train up and try again!') + '</div>'
+      + '<button class="btn btn-primary" onclick="tcgCloseBattle()">Continue</button>';
+    res.classList.add('show');
+  }
+  if (win) tcgConfetti(70);
+  _tcgLog(win ? '<b>Victory!</b> Record: ' + ((s && s.wins) | 0) + 'W – ' + ((s && s.losses) | 0) + 'L' : '<b>Defeat.</b> Record: ' + ((s && s.wins) | 0) + 'W – ' + ((s && s.losses) | 0) + 'L');
+}
+
+// Inline handlers on the TCG page/overlays (module scope → must be on window).
+window.tcgSetTab = tcgSetTab;
+window.tcgSetDexFilter = tcgSetDexFilter;
+window.tcgBuyPack = tcgBuyPack;
+window.tcgAdminGold = tcgAdminGold;
+window.tcgFlipCard = tcgFlipCard;
+window.tcgFlipAll = tcgFlipAll;
+window.tcgCloseReveal = tcgCloseReveal;
+window.tcgToggleTeam = tcgToggleTeam;
+window.tcgFindBattle = tcgFindBattle;
+window.tcgBattleSpeed = tcgBattleSpeed;
+window.tcgSkipBattle = tcgSkipBattle;
+window.tcgCloseBattle = tcgCloseBattle;
+window.tcgSetReleased = tcgSetReleased;
+window.onTcgArtPaste = onTcgArtPaste;
+window.onTcgArtDrop = onTcgArtDrop;
+window.onTcgArtPick = onTcgArtPick;
+window.resetTcgArt = resetTcgArt;
 
 async function _scaleDownDataUrl(dataUrl, maxSide){
   const img = await _loadImageEl(dataUrl);
