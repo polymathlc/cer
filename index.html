@@ -2964,6 +2964,14 @@ option {
 
   /* Flag question overlay */
   .flag-question-btn { padding: 6px 10px; }
+
+  /* Community page mobile */
+  .comm-card { padding: 14px; }
+  #commPostType { max-width: 100% !important; }
+  .comm-quest-banner { flex-wrap: wrap; padding: 14px 16px; gap: 12px; }
+  .comm-quest-banner .cq-main { flex: 1 1 200px; }
+  .comm-post.pinned { padding: 12px; }
+  .comm-actions .btn { padding: 8px 12px; }
 }
 
 /* Small phones */
@@ -6042,7 +6050,10 @@ option {
     <div class="page" id="page-community">
       <div class="page-header">
         <div>
-          <h2>🏛️ Community</h2>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>🏛️ Community</h2>
+          </div>
           <div class="subtitle">Updates, news, guidance and surprise quests — leave a message and join in.</div>
         </div>
       </div>
@@ -8049,10 +8060,11 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.111.0';
+const APP_VERSION = 'v1.112.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
+  ensureMobileToggles();
   loadCustomTopics();
   rebuildTopicSelect();
   const adminItems = document.querySelectorAll('.admin-only');
@@ -8245,6 +8257,7 @@ function navigateTo(page) {
   const backdrop = document.getElementById('sidebarBackdrop');
   if (sidebar) sidebar.classList.remove('open');
   if (backdrop) backdrop.style.display = 'none';
+  ensureMobileToggles();
   if (page === 'create') {
     if (_skipCreateReset) {
       // Coming from editQuestion — switch to edit mode
@@ -8352,6 +8365,22 @@ function toggleSidebar() {
   if (backdrop) {
     backdrop.style.display = sidebar.classList.contains('open') ? 'block' : 'none';
   }
+}
+
+// Safety net: every page header must offer a way to open the sidebar on
+// mobile. Injects the hamburger into any .page-header that lacks one
+// (runs at startup and on every navigation, so dynamically rendered
+// headers are covered too).
+function ensureMobileToggles() {
+  document.querySelectorAll('.page-header').forEach((hdr) => {
+    if (hdr.querySelector('.mobile-toggle')) return;
+    const btn = document.createElement('button');
+    btn.className = 'mobile-toggle';
+    btn.setAttribute('aria-label', 'Open menu');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>';
+    btn.addEventListener('click', toggleSidebar);
+    hdr.insertBefore(btn, hdr.firstChild);
+  });
 }
 
 // =====================================================================
