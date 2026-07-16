@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://drive.usercontent.google.com" crossorigin>
 <link rel="dns-prefetch" href="https://lh3.googleusercontent.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet">
 <!-- New landing page: fonts, icons, Tailwind -->
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
@@ -4344,57 +4345,65 @@ option {
 .tcg-filter-chip { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 13px; font-size: 0.78rem; font-weight: 600; cursor: pointer; color: var(--text-muted); }
 .tcg-filter-chip.active { background: #1e293b; color: #fff; border-color: #1e293b; }
 /* ---- card faces ---- */
-.tcg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 18px; }
-.tcg-card { position: relative; border-radius: 14px; padding: 12px 12px 14px; background: var(--tcg-bg, linear-gradient(160deg,#f8fafc,#e2e8f0)); border: 2.5px solid var(--tcg-frame, #94a3b8); box-shadow: 0 3px 10px rgba(15,23,42,0.10); display: flex; flex-direction: column; gap: 7px; transition: transform 0.15s, box-shadow 0.15s; }
-.tcg-card.clickable { cursor: pointer; }
-.tcg-card.clickable:hover { transform: translateY(-4px); box-shadow: 0 10px 22px rgba(15,23,42,0.18); }
-.tcg-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.tcg-card-name { font-weight: 800; font-size: 0.92rem; line-height: 1.2; }
-.tcg-card-no { font-family: 'Space Mono', monospace; font-size: 0.62rem; color: var(--text-muted); font-weight: 700; }
-.tcg-stars { font-size: 0.72rem; letter-spacing: 1px; color: var(--tcg-star, #eab308); text-shadow: 0 1px 2px rgba(0,0,0,0.15); }
-.tcg-art { height: 158px; border-radius: 10px; background: var(--tcg-art-bg, radial-gradient(circle at 50% 38%, #ffffff, #cbd5e1)); display: flex; align-items: center; justify-content: center; font-size: 58px; overflow: hidden; border: 1px solid rgba(15,23,42,0.08); }
+.tcg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px; }
+/* ---- Realm of Embers card face ---- */
+.tcg-card { position: relative; border-radius: 16px; padding: 2px; background: linear-gradient(165deg,#ffd77a 0%,#8a6420 18%,#3a2f16 40%,#8a6420 62%,#ffd77a 82%,#6e5314 100%); box-shadow: 0 6px 18px rgba(0,0,0,0.45); display: flex; }
+.tcg-card.clickable { cursor: pointer; transition: transform 0.18s ease, box-shadow 0.18s ease; }
+.tcg-card.clickable:hover { transform: translateY(-5px); box-shadow: 0 16px 34px rgba(0,0,0,0.5), 0 0 26px rgba(240,181,66,0.45); }
+.tcg-card-inner { position: relative; width: 100%; border-radius: 14px; background: #0b0d13; overflow: hidden; display: flex; flex-direction: column; }
+.tcg-card-no { position: absolute; top: 8px; right: 8px; z-index: 4; font-family: 'Space Mono', monospace; font-size: 0.56rem; font-weight: 700; color: #f0b542; background: rgba(8,9,14,0.72); border: 1px solid rgba(240,181,66,0.35); border-radius: 999px; padding: 2px 8px; }
+.tcg-art { position: relative; width: 100%; aspect-ratio: 5 / 4; background: radial-gradient(circle at 50% 40%, #20242f, #0b0d13 76%); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .tcg-art img { width: 100%; height: 100%; object-fit: cover; }
-.tcg-elem { align-self: flex-start; font-size: 0.66rem; font-weight: 700; border-radius: 999px; padding: 3px 10px; background: rgba(255,255,255,0.75); border: 1px solid rgba(15,23,42,0.1); }
-.tcg-statsrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; font-family: 'Space Mono', monospace; font-size: 0.66rem; font-weight: 700; text-align: center; }
-.tcg-statsrow span { background: rgba(255,255,255,0.7); border-radius: 7px; padding: 4px 2px; border: 1px solid rgba(15,23,42,0.07); }
-.tcg-statsrow small { display: block; font-size: 0.5rem; font-weight: 600; color: var(--text-muted); letter-spacing: 0.04em; }
-.tcg-skill { font-size: 0.68rem; line-height: 1.45; background: rgba(255,255,255,0.72); border: 1px solid rgba(15,23,42,0.07); border-radius: 8px; padding: 7px 9px; min-height: 3.4em; }
-.tcg-skill b { display: block; font-size: 0.7rem; margin-bottom: 2px; }
-.tcg-count-badge { position: absolute; top: -8px; right: -8px; background: #1e293b; color: #fff; font-family: 'Space Mono', monospace; font-size: 0.62rem; font-weight: 700; border-radius: 999px; padding: 3px 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
-.tcg-new-badge { position: absolute; top: -8px; left: -8px; background: linear-gradient(135deg,#f59e0b,#ef4444); color: #fff; font-size: 0.6rem; font-weight: 800; border-radius: 999px; padding: 3px 9px; letter-spacing: 0.05em; box-shadow: 0 2px 6px rgba(0,0,0,0.25); animation: tcgPulse 1.2s ease-in-out infinite; }
-.tcg-team-badge { position: absolute; top: -8px; left: -8px; background: linear-gradient(135deg,#8E24AA,#7B1FA2); color: #fff; font-size: 0.6rem; font-weight: 800; border-radius: 999px; padding: 3px 9px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
+.tcg-art > div { font-size: 52px; line-height: 1; opacity: 0.82; }
+.tcg-art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,13,19,0.25) 0%, transparent 32%, transparent 60%, rgba(11,13,19,0.92) 92%, #0b0d13 100%); pointer-events: none; }
+.tcg-body { position: relative; z-index: 2; margin-top: -20px; padding: 0 9px 10px; display: flex; flex-direction: column; flex: 1; }
+.tcg-card-name { font-family: 'Cinzel', serif; font-weight: 700; text-align: center; color: #f5ead0; font-size: 0.95rem; line-height: 1.12; text-shadow: 0 0 16px rgba(240,181,66,0.45), 0 2px 5px rgba(0,0,0,0.9); padding: 0 4px; }
+.tcg-stars { display: flex; justify-content: center; gap: 3px; margin-top: 7px; }
+.tcg-star-pip { width: 12px; height: 12px; clip-path: polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%); background: rgba(240,181,66,0.16); }
+.tcg-star-pip.on { background: linear-gradient(160deg,#ffe9ad,#f0b542 45%,#a87b1f); box-shadow: 0 0 4px rgba(240,181,66,0.55); }
+.tcg-type { display: flex; align-items: center; gap: 8px; margin: 8px 6px 0; }
+.tcg-type .ln { flex: 1; height: 1px; }
+.tcg-type .ln.l { background: linear-gradient(90deg,transparent,rgba(240,181,66,0.55)); }
+.tcg-type .ln.r { background: linear-gradient(90deg,rgba(240,181,66,0.55),transparent); }
+.tcg-type .lbl { font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 1.5px; color: #b39a63; text-transform: uppercase; white-space: nowrap; }
+.tcg-skill { margin: 9px 2px 0; flex: 1; background: linear-gradient(180deg, rgba(24,28,40,0.85), rgba(15,18,27,0.9)); border: 1px solid rgba(240,181,66,0.2); border-radius: 9px; padding: 8px 10px; font-size: 0.64rem; line-height: 1.42; color: #c3c9d6; text-align: center; box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.04) inset; }
+.tcg-skill-name { color: #f0b542; font-weight: 700; }
+.tcg-statsrow { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 9px; }
+.tcg-stat { display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 9px; padding: 6px 0; font-family: 'Cinzel', serif; font-weight: 900; font-size: 0.92rem; }
+.tcg-stat svg { flex: none; }
+.tcg-stat.atk { background: linear-gradient(180deg, rgba(46,16,14,0.9), rgba(26,8,7,0.95)); border: 1px solid rgba(255,106,80,0.45); color: #ffe1d6; box-shadow: inset 0 0 14px rgba(255,90,60,0.18); }
+.tcg-stat.def { background: linear-gradient(180deg, rgba(14,26,46,0.9), rgba(7,13,26,0.95)); border: 1px solid rgba(96,160,255,0.45); color: #dcebff; box-shadow: inset 0 0 14px rgba(90,150,255,0.18); }
+.tcg-stat.heal { background: linear-gradient(180deg, rgba(13,38,22,0.9), rgba(6,19,11,0.95)); border: 1px solid rgba(90,220,140,0.45); color: #dcffe8; box-shadow: inset 0 0 14px rgba(80,220,130,0.18); }
+.tcg-stat.hp { background: linear-gradient(180deg, rgba(46,14,26,0.9), rgba(26,7,14,0.95)); border: 1px solid rgba(255,120,160,0.45); color: #ffdce8; box-shadow: inset 0 0 14px rgba(255,90,140,0.18); }
+.tcg-card.unowned { filter: saturate(0.2); opacity: 0.78; }
+.tcg-card.unowned .tcg-art > div { filter: brightness(0) opacity(0.5); }
+.tcg-card.unowned .tcg-card-name { color: #7c8290; text-shadow: none; }
+.tcg-card.star-6 .tcg-card-inner { box-shadow: inset 0 0 30px rgba(225,29,72,0.22); }
+.tcg-card.star-7 { animation: tcgEmberGlow 4.5s ease-in-out infinite; }
+.tcg-card.star-7 .tcg-card-inner { box-shadow: inset 0 0 32px rgba(255,120,60,0.25); }
+@keyframes tcgEmberGlow { 0%,100% { box-shadow: 0 6px 18px rgba(0,0,0,0.45), 0 0 20px rgba(240,181,66,0.28); } 50% { box-shadow: 0 6px 18px rgba(0,0,0,0.45), 0 0 42px rgba(255,120,60,0.5); } }
+.tcg-count-badge { position: absolute; top: -8px; right: -8px; z-index: 5; background: linear-gradient(180deg,#2a2010,#0b0d13); color: #f0b542; border: 1px solid rgba(240,181,66,0.55); font-family: 'Space Mono', monospace; font-size: 0.62rem; font-weight: 700; border-radius: 999px; padding: 3px 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+.tcg-new-badge { position: absolute; top: -8px; left: -8px; z-index: 5; background: linear-gradient(135deg,#f59e0b,#ef4444); color: #fff; font-size: 0.6rem; font-weight: 800; border-radius: 999px; padding: 3px 9px; letter-spacing: 0.05em; box-shadow: 0 2px 6px rgba(0,0,0,0.35); animation: tcgPulse 1.2s ease-in-out infinite; }
+.tcg-team-badge { position: absolute; top: -8px; left: -8px; z-index: 5; background: linear-gradient(135deg,#8a6420,#f0b542); color: #1a1206; font-size: 0.6rem; font-weight: 800; border-radius: 999px; padding: 3px 9px; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
 @keyframes tcgPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
-.tcg-card.unowned { filter: saturate(0.15); opacity: 0.72; }
-.tcg-card.unowned .tcg-art > div { filter: brightness(0) opacity(0.55); }
-/* star tiers */
-.tcg-card.star-1 { --tcg-frame: #94a3b8; --tcg-bg: linear-gradient(160deg,#f8fafc,#e2e8f0); --tcg-star: #64748b; }
-.tcg-card.star-2 { --tcg-frame: #22c55e; --tcg-bg: linear-gradient(160deg,#f0fdf4,#bbf7d0); --tcg-star: #16a34a; }
-.tcg-card.star-3 { --tcg-frame: #3b82f6; --tcg-bg: linear-gradient(160deg,#eff6ff,#bfdbfe); --tcg-star: #2563eb; }
-.tcg-card.star-4 { --tcg-frame: #a855f7; --tcg-bg: linear-gradient(160deg,#faf5ff,#e9d5ff); --tcg-star: #9333ea; }
-.tcg-card.star-5 { --tcg-frame: #f97316; --tcg-bg: linear-gradient(160deg,#fff7ed,#fed7aa); --tcg-star: #ea580c; box-shadow: 0 3px 14px rgba(249,115,22,0.25); }
-.tcg-card.star-6 { --tcg-frame: #e11d48; --tcg-bg: linear-gradient(160deg,#fff1f2,#fecdd3); --tcg-star: #e11d48; box-shadow: 0 3px 16px rgba(225,29,72,0.3); }
-.tcg-card.star-7 { --tcg-star: #d97706; border: 2.5px solid transparent; background: linear-gradient(160deg,#fffbeb,#fef3c7) padding-box, linear-gradient(120deg,#f59e0b,#ec4899,#8b5cf6,#3b82f6,#f59e0b) border-box; background-size: 100% 100%, 300% 300%; animation: tcgHolo 4s linear infinite; box-shadow: 0 4px 20px rgba(236,72,153,0.35); }
-@keyframes tcgHolo { 0% { background-position: 0 0, 0% 50%; } 100% { background-position: 0 0, 300% 50%; } }
 /* ---- enlarged card preview (Collection) ---- */
 .tcg-cell { display: flex; flex-direction: column; gap: 8px; }
 .tcg-cell .tcg-card { flex: 1; }
 .tcg-preview-btn { width: 100%; font-size: 0.76rem; padding: 7px 10px; }
 .tcg-zoom { max-width: min(92vw, 380px); width: 100%; animation: tcgZoomIn 0.28s cubic-bezier(.2,.8,.3,1.15); }
-.tcg-zoom .tcg-card { gap: 10px; padding: 16px 16px 18px; border-radius: 18px; }
-.tcg-zoom .tcg-card-name { font-size: 1.18rem; }
-.tcg-zoom .tcg-card-no { font-size: 0.78rem; }
-.tcg-zoom .tcg-stars { font-size: 0.95rem; letter-spacing: 2px; }
-.tcg-zoom .tcg-art { height: 300px; font-size: 110px; border-radius: 14px; }
-.tcg-zoom .tcg-elem { font-size: 0.8rem; padding: 5px 14px; }
-.tcg-zoom .tcg-statsrow { font-size: 0.85rem; gap: 6px; }
-.tcg-zoom .tcg-statsrow small { font-size: 0.62rem; }
-.tcg-zoom .tcg-skill { font-size: 0.85rem; line-height: 1.5; padding: 10px 12px; }
-.tcg-zoom .tcg-skill b { font-size: 0.88rem; }
+.tcg-zoom .tcg-body { margin-top: -28px; padding: 0 12px 14px; }
+.tcg-zoom .tcg-card-name { font-size: 1.5rem; }
+.tcg-zoom .tcg-card-no { font-size: 0.72rem; }
+.tcg-zoom .tcg-star-pip { width: 17px; height: 17px; }
+.tcg-zoom .tcg-type .lbl { font-size: 0.78rem; letter-spacing: 2px; }
+.tcg-zoom .tcg-skill { font-size: 0.9rem; line-height: 1.5; padding: 12px 14px; }
+.tcg-zoom .tcg-stat { font-size: 1.35rem; padding: 9px 0; }
+.tcg-zoom .tcg-stat svg { width: 20px; height: 20px; }
 @keyframes tcgZoomIn { from { transform: scale(0.72); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 /* ---- rarity halo while hovering a face-down pack card ---- */
 .tcg-flip { transition: transform 0.18s ease; }
 .tcg-flip:not(.flipped):hover { transform: translateY(-5px); }
-.tcg-flip:not(.flipped):hover .tcg-flip-back { animation: none; border-color: var(--halo, #a78bfa); box-shadow: 0 0 14px var(--halo, #a78bfa), 0 0 42px var(--halo, #a78bfa), inset 0 0 30px rgba(255,255,255,0.14); }
+.tcg-flip:not(.flipped):hover .tcg-flip-back { animation: none; border-color: var(--halo, #f0b542); box-shadow: 0 0 14px var(--halo, #f0b542), 0 0 42px var(--halo, #f0b542), inset 0 0 30px rgba(240,181,66,0.14); }
 .tcg-flip[data-stars="1"] { --halo: #94a3b8; }
 .tcg-flip[data-stars="2"] { --halo: #22c55e; }
 .tcg-flip[data-stars="3"] { --halo: #3b82f6; }
@@ -4422,7 +4431,24 @@ option {
 .tcg-flip-inner { position: relative; width: 100%; height: 100%; min-height: 336px; transform-style: preserve-3d; transition: transform 0.65s cubic-bezier(.2,.7,.3,1.1); }
 .tcg-flip.flipped .tcg-flip-inner { transform: rotateY(180deg); }
 .tcg-flip-back, .tcg-flip-front { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 14px; }
-.tcg-flip-back { background: linear-gradient(150deg,#312e81,#6d28d9 55%,#312e81); border: 2.5px solid #a78bfa; display: flex; align-items: center; justify-content: center; font-size: 56px; box-shadow: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 30px rgba(167,139,250,0.4); animation: tcgCardGlow 1.8s ease-in-out infinite; }
+.tcg-flip-back { background: radial-gradient(ellipse at 50% 42%, #171a26 0%, #0c0e15 55%, #08090e 100%); border: 2px solid #8a6420; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 30px rgba(240,181,66,0.12); }
+.tcg-back-crest { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.tcg-back-crest .fr1 { position: absolute; inset: 9px; border: 1px solid rgba(240,181,66,0.35); border-radius: 11px; }
+.tcg-back-crest .fr2 { position: absolute; inset: 14px; border: 1px solid rgba(240,181,66,0.14); border-radius: 8px; }
+.tcg-back-emblem { position: relative; width: 60%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; }
+.tcg-back-emblem .glow { position: absolute; inset: -14%; border-radius: 50%; background: radial-gradient(circle, rgba(240,181,66,0.22) 0%, transparent 62%); animation: tcgCrestPulse 4s ease-in-out infinite; }
+.tcg-back-emblem .ring { position: absolute; inset: 0; border-radius: 50%; border: 1px dashed rgba(240,181,66,0.5); animation: tcgRuneSpin 34s linear infinite; }
+.tcg-back-emblem .ring.r2 { inset: 12%; border-style: solid; border-color: rgba(240,181,66,0.28); animation-duration: 52s; animation-direction: reverse; }
+.tcg-back-disc { width: 66%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 38% 30%, #1c2030, #0b0d15 72%); border: 1.5px solid rgba(240,181,66,0.6); box-shadow: 0 0 34px rgba(240,181,66,0.25), inset 0 0 24px rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; }
+.tcg-back-diamond { width: 62%; aspect-ratio: 1; transform: rotate(45deg); border: 1.5px solid rgba(240,181,66,0.65); background: linear-gradient(135deg, rgba(240,181,66,0.1), rgba(240,181,66,0.02)); display: flex; align-items: center; justify-content: center; }
+.tcg-back-diamond svg { transform: rotate(-45deg); filter: drop-shadow(0 0 8px rgba(240,181,66,0.7)); }
+.tcg-back-word { position: absolute; bottom: 15px; left: 0; right: 0; display: flex; align-items: center; gap: 9px; justify-content: center; }
+.tcg-back-word span.t { font-family: 'Cinzel', serif; font-size: 0.54rem; letter-spacing: 2.5px; color: rgba(240,181,66,0.85); text-transform: uppercase; white-space: nowrap; }
+.tcg-back-word .ln { width: 24px; height: 1px; }
+.tcg-back-word .ln.l { background: linear-gradient(90deg,transparent,rgba(240,181,66,0.7)); }
+.tcg-back-word .ln.r { background: linear-gradient(90deg,rgba(240,181,66,0.7),transparent); }
+@keyframes tcgCrestPulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+@keyframes tcgRuneSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes tcgCardGlow { 0%,100% { box-shadow: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 30px rgba(167,139,250,0.35); } 50% { box-shadow: 0 8px 30px rgba(139,92,246,0.55), inset 0 0 44px rgba(167,139,250,0.6); } }
 .tcg-flip-front { transform: rotateY(180deg); }
 .tcg-flip-front .tcg-card { height: 100%; }
@@ -8281,7 +8307,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.117.0';
+const APP_VERSION = 'v1.118.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28398,6 +28424,35 @@ function tcgArtHtml(card, big) {
   const url = tcgArtUrl(card.id);
   return url ? '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(card.name) + '">' : '<div>' + card.em + '</div>';
 }
+// Gold-filled star pips (filled up to `n` of 7) for the Realm of Embers face.
+function tcgStarsHtml(n) {
+  let s = '';
+  for (let i = 0; i < 7; i++) s += '<div class="tcg-star-pip' + (i < n ? ' on' : '') + '"></div>';
+  return s;
+}
+// Small themed stat-icon SVGs (sword / shield / heal-cross / heart).
+const TCG_STAT_SVG = {
+  atk: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ff8a70" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 0 4px rgba(255,110,80,.75));"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"></path><path d="M13 19l6-6"></path><path d="M16 16l4 4"></path><path d="M19 21l2-2"></path></svg>',
+  def: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7ab2ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 0 4px rgba(110,170,255,.75));"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>',
+  heal: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6fe09a" stroke-width="2.2" stroke-linecap="round" style="filter:drop-shadow(0 0 4px rgba(90,220,140,.75));"><path d="M12 6v12"></path><path d="M6 12h12"></path></svg>',
+  hp: '<svg width="15" height="15" viewBox="0 0 24 24" fill="#ff8fb0" stroke="none" style="filter:drop-shadow(0 0 4px rgba(255,120,160,.75));"><path d="M12 21s-7.5-4.6-10-9.4C.7 8.4 2.2 5 5.5 5c2 0 3.3 1.1 4.2 2.3l.3.4.3-.4C11.2 6.1 12.5 5 14.5 5c3.3 0 4.8 3.4 3.5 6.6C19.5 16.4 12 21 12 21z"></path></svg>'
+};
+function tcgStatPill(kind, val) {
+  return '<div class="tcg-stat ' + kind + '">' + TCG_STAT_SVG[kind] + '<span>' + val + '</span></div>';
+}
+// Face-down Realm of Embers card back (pack reveal).
+function tcgCardBackHtml() {
+  return '<div class="tcg-back-crest">'
+    + '<div class="fr1"></div><div class="fr2"></div>'
+    + '<div class="tcg-back-emblem">'
+    +   '<div class="glow"></div><div class="ring"></div><div class="ring r2"></div>'
+    +   '<div class="tcg-back-disc"><div class="tcg-back-diamond">'
+    +     '<svg width="40" height="40" viewBox="0 0 24 24" fill="#f0b542" stroke="none"><path d="M12 2c1 3-1 4-2 6-1 2 0 4 2 4 1 0 2-1 2-2 1 2 2 3 2 5a6 6 0 0 1-12 0c0-3 2-5 3-7 1-2 2-4 5-6z"></path></svg>'
+    +   '</div></div>'
+    + '</div>'
+    + '<div class="tcg-back-word"><span class="ln l"></span><span class="t">Realm of Embers</span><span class="ln r"></span></div>'
+    + '</div>';
+}
 function tcgCardHtml(card, opts) {
   opts = opts || {};
   const st = tcgStats(card);
@@ -28410,19 +28465,21 @@ function tcgCardHtml(card, opts) {
   return '<div class="tcg-card star-' + card.stars + (owned ? '' : ' unowned') + (opts.onclick ? ' clickable' : '') + '"'
     + (opts.onclick ? ' onclick="' + opts.onclick + '"' : '') + '>'
     + badges
-    + '<div class="tcg-card-top"><span class="tcg-card-name">' + (owned ? escapeHtml(card.name) : '???') + '</span><span class="tcg-card-no">#' + String(card.num).padStart(3, '0') + '</span></div>'
-    + '<div class="tcg-stars">' + '★'.repeat(card.stars) + '<span style="opacity:.28;">' + '★'.repeat(7 - card.stars) + '</span></div>'
-    + '<div class="tcg-art">' + tcgArtHtml(card) + '</div>'
-    + '<div class="tcg-elem">' + el.icon + ' ' + el.name + '</div>'
-    + '<div class="tcg-statsrow">'
-    +   '<span>' + st.atk + '<small>⚔️ ATK</small></span>'
-    +   '<span>' + st.def + '<small>🛡️ DEF</small></span>'
-    +   '<span>' + st.heal + '<small>💚 HEAL</small></span>'
-    +   '<span>' + st.hp + '<small>❤️ HP</small></span>'
-    + '</div>'
-    + '<div class="tcg-skill">' + (owned
-        ? '<b>' + sk.icon + ' ' + escapeHtml(sk.name) + '</b>' + escapeHtml(sk.desc)
-        : '<b>❓ Special skill</b>Collect this monster to reveal its skill.')
+    + '<div class="tcg-card-inner">'
+    +   '<div class="tcg-card-no">#' + String(card.num).padStart(3, '0') + '</div>'
+    +   '<div class="tcg-art">' + tcgArtHtml(card) + '</div>'
+    +   '<div class="tcg-body">'
+    +     '<div class="tcg-card-name">' + (owned ? escapeHtml(card.name) : '???') + '</div>'
+    +     '<div class="tcg-stars">' + tcgStarsHtml(card.stars) + '</div>'
+    +     '<div class="tcg-type"><span class="ln l"></span><span class="lbl">' + el.icon + ' ' + escapeHtml(el.name) + '</span><span class="ln r"></span></div>'
+    +     '<div class="tcg-skill">' + (owned
+            ? '<span class="tcg-skill-name">' + sk.icon + ' ' + escapeHtml(sk.name) + '.</span> ' + escapeHtml(sk.desc)
+            : '<span class="tcg-skill-name">❓ Special skill.</span> Collect this monster to reveal its skill.')
+    +     '</div>'
+    +     '<div class="tcg-statsrow">'
+    +       tcgStatPill('atk', st.atk) + tcgStatPill('def', st.def) + tcgStatPill('heal', st.heal) + tcgStatPill('hp', st.hp)
+    +     '</div>'
+    +   '</div>'
     + '</div>'
     + '</div>';
 }
@@ -28577,7 +28634,7 @@ function tcgShowReveal(pack, pulls) {
     + '<div class="tcg-reveal-row">' + pulls.map((pl, i) =>
         '<div class="tcg-flip" id="tcgflip-' + i + '" data-stars="' + pl.card.stars + '" style="animation-delay:' + (i * 0.12) + 's;" onclick="tcgFlipCard(' + i + ')" title="Hover halo hints at the rarity…">'
         + '<div class="tcg-flip-inner">'
-        +   '<div class="tcg-flip-back"><span style="font-size:54px;color:rgba(255,255,255,0.9);text-shadow:0 0 20px rgba(196,181,253,0.95);">✦</span></div>'
+        +   '<div class="tcg-flip-back">' + tcgCardBackHtml() + '</div>'
         +   '<div class="tcg-flip-front">' + tcgCardHtml(pl.card, { isNew: pl.isNew }) + '</div>'
         + '</div></div>').join('') + '</div>'
     + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">'
