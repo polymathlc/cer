@@ -4352,8 +4352,8 @@ option {
 .tcg-card-name { font-weight: 800; font-size: 0.92rem; line-height: 1.2; }
 .tcg-card-no { font-family: 'Space Mono', monospace; font-size: 0.62rem; color: var(--text-muted); font-weight: 700; }
 .tcg-stars { font-size: 0.72rem; letter-spacing: 1px; color: var(--tcg-star, #eab308); text-shadow: 0 1px 2px rgba(0,0,0,0.15); }
-.tcg-art { height: 108px; border-radius: 10px; background: var(--tcg-art-bg, radial-gradient(circle at 50% 38%, #ffffff, #cbd5e1)); display: flex; align-items: center; justify-content: center; font-size: 58px; overflow: hidden; border: 1px solid rgba(15,23,42,0.08); }
-.tcg-art img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.tcg-art { height: 158px; border-radius: 10px; background: var(--tcg-art-bg, radial-gradient(circle at 50% 38%, #ffffff, #cbd5e1)); display: flex; align-items: center; justify-content: center; font-size: 58px; overflow: hidden; border: 1px solid rgba(15,23,42,0.08); }
+.tcg-art img { width: 100%; height: 100%; object-fit: cover; }
 .tcg-elem { align-self: flex-start; font-size: 0.66rem; font-weight: 700; border-radius: 999px; padding: 3px 10px; background: rgba(255,255,255,0.75); border: 1px solid rgba(15,23,42,0.1); }
 .tcg-statsrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; font-family: 'Space Mono', monospace; font-size: 0.66rem; font-weight: 700; text-align: center; }
 .tcg-statsrow span { background: rgba(255,255,255,0.7); border-radius: 7px; padding: 4px 2px; border: 1px solid rgba(15,23,42,0.07); }
@@ -4390,8 +4390,8 @@ option {
 .tcg-reveal-title { color: #fff; font-size: 1.3rem; font-weight: 800; margin-bottom: 6px; }
 .tcg-reveal-sub { color: rgba(255,255,255,0.65); font-size: 0.85rem; margin-bottom: 22px; }
 .tcg-reveal-row { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; margin-bottom: 24px; }
-.tcg-flip { width: 200px; min-height: 286px; perspective: 900px; cursor: pointer; }
-.tcg-flip-inner { position: relative; width: 100%; height: 100%; min-height: 286px; transform-style: preserve-3d; transition: transform 0.65s cubic-bezier(.2,.7,.3,1.1); }
+.tcg-flip { width: 200px; min-height: 336px; perspective: 900px; cursor: pointer; }
+.tcg-flip-inner { position: relative; width: 100%; height: 100%; min-height: 336px; transform-style: preserve-3d; transition: transform 0.65s cubic-bezier(.2,.7,.3,1.1); }
 .tcg-flip.flipped .tcg-flip-inner { transform: rotateY(180deg); }
 .tcg-flip-back, .tcg-flip-front { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 14px; }
 .tcg-flip-back { background: linear-gradient(150deg,#312e81,#6d28d9 55%,#312e81); border: 2.5px solid #a78bfa; display: flex; align-items: center; justify-content: center; font-size: 56px; box-shadow: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 30px rgba(167,139,250,0.4); animation: tcgCardGlow 1.8s ease-in-out infinite; }
@@ -4405,7 +4405,7 @@ option {
 /* ---- team picker ---- */
 .tcg-team-slots { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; margin-bottom: 10px; }
 .tcg-team-slot { width: 180px; }
-.tcg-team-slot .tcg-empty { border: 2.5px dashed var(--border); border-radius: 14px; min-height: 286px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-muted); font-size: 0.82rem; background: var(--surface-alt); }
+.tcg-team-slot .tcg-empty { border: 2.5px dashed var(--border); border-radius: 14px; min-height: 336px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-muted); font-size: 0.82rem; background: var(--surface-alt); }
 .tcg-team-slot .tcg-empty .big { font-size: 44px; opacity: 0.5; }
 .tcg-team-power { text-align: center; font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.95rem; margin: 14px 0 22px; }
 /* ---- arena / battle ---- */
@@ -8253,7 +8253,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.116.0';
+const APP_VERSION = 'v1.116.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
