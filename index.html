@@ -4412,6 +4412,54 @@ option {
 .tcg-flip[data-stars="6"] { --halo: #e11d48; }
 .tcg-flip[data-stars="7"]:not(.flipped):hover .tcg-flip-back { border-color: #fff; animation: tcgHalo7 1.3s linear infinite; }
 @keyframes tcgHalo7 { 0%,100% { box-shadow: 0 0 16px #f59e0b, 0 0 46px #f59e0b, inset 0 0 30px rgba(255,255,255,0.16); } 25% { box-shadow: 0 0 16px #ec4899, 0 0 50px #ec4899, inset 0 0 30px rgba(255,255,255,0.16); } 50% { box-shadow: 0 0 16px #8b5cf6, 0 0 46px #8b5cf6, inset 0 0 30px rgba(255,255,255,0.16); } 75% { box-shadow: 0 0 16px #3b82f6, 0 0 50px #3b82f6, inset 0 0 30px rgba(255,255,255,0.16); } }
+/* ---- card level badge, progress line & training quiz ---- */
+.tcg-card-lvl { position: absolute; top: 8px; left: 8px; z-index: 4; font-family: 'Cinzel', serif; font-weight: 900; font-size: 0.56rem; letter-spacing: 0.5px; color: #1a1206; background: linear-gradient(180deg,#ffe9ad,#f0b542); border: 1px solid rgba(240,181,66,0.7); border-radius: 999px; padding: 2px 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+.tcg-lvl-line { display: flex; align-items: center; gap: 6px; margin: 6px 6px 0; }
+.tcg-lvl-tag { font-family: 'Cinzel', serif; font-weight: 900; font-size: 0.62rem; color: #f0b542; white-space: nowrap; }
+.tcg-lvl-tag.big { font-size: 0.95rem; }
+.tcg-lvl-bar { flex: 1; height: 5px; border-radius: 999px; background: rgba(240,181,66,0.16); overflow: hidden; }
+.tcg-lvl-bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg,#ffe9ad,#f0b542); }
+.tcg-lvl-num { font-family: 'Space Mono', monospace; font-size: 0.52rem; color: #b39a63; white-space: nowrap; }
+.tcg-lvl-max { font-family: 'Cinzel', serif; font-weight: 900; font-size: 0.58rem; letter-spacing: 1px; color: #1a1206; background: linear-gradient(180deg,#ffd77a,#f0902b); border-radius: 999px; padding: 1px 8px; }
+.tcg-skill-up { color: #f0b542; font-weight: 700; }
+/* training panel (under the preview card) */
+.tcg-train-panel { width: min(92vw, 360px); background: linear-gradient(180deg, rgba(24,28,40,0.95), rgba(12,14,22,0.97)); border: 1px solid rgba(240,181,66,0.28); border-radius: 14px; padding: 16px 18px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.tcg-train-head { font-family: 'Cinzel', serif; color: #f5ead0; font-size: 1.05rem; }
+.tcg-train-head span { color: #9d8452; font-weight: 400; font-size: 0.85rem; }
+.tcg-xpbar { height: 9px; border-radius: 999px; background: rgba(240,181,66,0.14); overflow: hidden; margin: 12px 0 8px; }
+.tcg-xpbar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg,#ffe9ad,#f0b542 60%,#a87b1f); transition: width 0.5s cubic-bezier(.2,.8,.3,1); }
+.tcg-xpbar.wide { flex: 1; margin: 0; min-width: 90px; }
+.tcg-train-note { color: #c3c9d6; font-size: 0.82rem; line-height: 1.5; margin-bottom: 14px; }
+.tcg-train-panel .btn { width: 100%; }
+/* training quiz modal */
+.tcg-train-modal { width: min(94vw, 540px); max-height: 92vh; overflow-y: auto; background: radial-gradient(ellipse at 50% 0%, #181c28 0%, #0c0e15 60%, #08090e 100%); border: 1.5px solid rgba(240,181,66,0.35); border-radius: 18px; padding: 20px 22px 24px; box-shadow: 0 24px 70px rgba(0,0,0,0.7); position: relative; }
+.tcg-train-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tcg-train-title { font-family: 'Cinzel', serif; font-size: 1.15rem; color: #f5ead0; }
+.tcg-train-title b { color: #f0b542; }
+.tcg-train-x { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 999px; width: 34px; height: 34px; font-size: 1rem; cursor: pointer; flex: none; }
+.tcg-train-x:hover { background: rgba(255,255,255,0.18); }
+.tcg-train-status { display: flex; align-items: center; gap: 10px; margin: 14px 0 4px; padding: 10px 14px; background: rgba(2,6,23,0.5); border: 1px solid rgba(240,181,66,0.2); border-radius: 12px; }
+.tcg-train-status.flash { animation: tcgXpFlash 0.7s ease; }
+@keyframes tcgXpFlash { 0%,100% { box-shadow: none; } 40% { box-shadow: 0 0 0 2px rgba(240,181,66,0.7), 0 0 22px rgba(240,181,66,0.5); } }
+.tcg-quiz-count { font-family: 'Space Mono', monospace; font-size: 0.72rem; color: #c3c9d6; white-space: nowrap; }
+.tcg-quiz { margin-top: 14px; }
+.tcg-quiz-q { color: #eef1f7; font-size: 1.02rem; line-height: 1.5; font-weight: 600; margin-bottom: 14px; }
+.tcg-quiz-opts { display: flex; flex-direction: column; gap: 9px; }
+.tcg-quiz-opt { display: flex; align-items: center; gap: 10px; text-align: left; width: 100%; background: linear-gradient(180deg, rgba(28,33,48,0.9), rgba(17,20,30,0.95)); color: #dfe4ee; border: 1px solid rgba(148,163,184,0.28); border-radius: 11px; padding: 11px 14px; font-size: 0.92rem; line-height: 1.4; cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.1s; }
+.tcg-quiz-opt:hover:not(:disabled) { border-color: rgba(240,181,66,0.6); transform: translateY(-1px); }
+.tcg-quiz-opt:disabled { cursor: default; }
+.tcg-quiz-let { flex: none; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(240,181,66,0.16); color: #f0b542; font-weight: 800; font-size: 0.78rem; }
+.tcg-quiz-opt.right { border-color: #34d399; background: linear-gradient(180deg, rgba(16,52,34,0.95), rgba(9,30,20,0.97)); color: #d6ffe9; }
+.tcg-quiz-opt.right .tcg-quiz-let { background: #34d399; color: #05230f; }
+.tcg-quiz-opt.wrong { border-color: #f87171; background: linear-gradient(180deg, rgba(58,20,20,0.95), rgba(32,10,10,0.97)); color: #ffdada; }
+.tcg-quiz-opt.wrong .tcg-quiz-let { background: #f87171; color: #300; }
+.tcg-quiz-fb { margin-top: 14px; }
+.tcg-fb-ok { color: #6fe09a; font-weight: 700; font-size: 0.95rem; }
+.tcg-fb-no { color: #ff9a9a; font-weight: 700; font-size: 0.95rem; }
+.tcg-fb-ex { margin-top: 8px; color: #c3c9d6; font-size: 0.85rem; line-height: 1.5; background: rgba(2,6,23,0.5); border-left: 3px solid rgba(240,181,66,0.5); border-radius: 6px; padding: 8px 12px; }
+.tcg-quiz-done { text-align: center; color: #f5ead0; font-size: 1.05rem; line-height: 1.6; padding: 24px 8px; }
+.tcg-levelup-burst { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Cinzel', serif; font-weight: 900; font-size: 2.6rem; letter-spacing: 3px; color: #f0b542; text-shadow: 0 0 30px rgba(240,181,66,0.9), 0 0 60px rgba(255,120,60,0.6); pointer-events: none; z-index: 20; animation: tcgLevelUpPop 1.3s cubic-bezier(.2,.8,.3,1.2) forwards; }
+@keyframes tcgLevelUpPop { 0% { transform: scale(0.3); opacity: 0; } 20% { transform: scale(1.1); opacity: 1; } 70% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.05); opacity: 0; } }
 /* ---- packs ---- */
 .tcg-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; max-width: 860px; margin: 0 auto; }
 .tcg-pack { border: 1px solid var(--border); border-radius: 18px; padding: 26px 22px; text-align: center; background: var(--surface); box-shadow: 0 3px 12px rgba(15,23,42,0.08); display: flex; flex-direction: column; gap: 10px; align-items: center; }
@@ -8309,7 +8357,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.118.1';
+const APP_VERSION = 'v1.119.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28227,20 +28275,62 @@ function _tcgJitter(id, salt) {
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return 0.94 + ((h >>> 0) % 1000) / 1000 * 0.12;
 }
-function tcgStats(card) {
+// ---- Card levelling (1→99): 5 correct science questions = +1 level ----
+// Stats grow ~1.5%/level (about 2.5× at Lv99); the skill upgrades at Lv50 and
+// Lv99. Progress lives on the per-student tcg state (levels / lvlp).
+const TCG_LVL_MAX = 99, TCG_LVL_STEP = 5;
+function _tcgClampLvl(l) { l = l | 0; return l < 1 ? 1 : l > TCG_LVL_MAX ? TCG_LVL_MAX : l; }
+function _tcgLevelMult(level) { return 1 + (_tcgClampLvl(level) - 1) * 0.015; }
+function tcgSkillTier(level) { level = _tcgClampLvl(level); return level >= 99 ? 3 : level >= 50 ? 2 : 1; }
+function tcgLevel(id) { const s = tcgState(); return _tcgClampLvl((s && s.levels && s.levels[id]) || 1); }
+function tcgLvlProg(id) { const s = tcgState(); return Math.max(0, Math.min(TCG_LVL_STEP, (s && s.lvlp && s.lvlp[id]) | 0)); }
+// A leveled copy of a monster's skill — power scales up at Lv50 (+25%) and Lv99 (+50%).
+function tcgLeveledSkill(card, level) {
+  const base = TCG_SKILLS[card.skillId];
+  const tier = tcgSkillTier(level);
+  if (tier === 1) return Object.assign({}, base, { tier: 1, baseName: base.name });
+  const mult = tier === 3 ? 1.5 : 1.25;
+  return Object.assign({}, base, { tier, baseName: base.name, pow: +(base.pow * mult).toFixed(3), name: base.name + (tier === 3 ? ' ✦' : ' +') });
+}
+// Record one correct answer toward a card's next level. Returns a summary of
+// what happened (level-up / skill upgrade / already maxed) and persists.
+function tcgAddLevelProgress(id) {
+  const s = tcgState();
+  if (!s || !s.cards || !s.cards[id]) return null;
+  s.levels = s.levels || {}; s.lvlp = s.lvlp || {};
+  let lvl = tcgLevel(id);
+  if (lvl >= TCG_LVL_MAX) { s.lvlp[id] = 0; return { max: true, level: lvl, progress: 0 }; }
+  let p = ((s.lvlp[id] | 0) + 1);
+  const res = { leveledUp: false, level: lvl, progress: p, need: TCG_LVL_STEP };
+  if (p >= TCG_LVL_STEP) {
+    const tierBefore = tcgSkillTier(lvl);
+    lvl = _tcgClampLvl(lvl + 1);
+    p = 0;
+    s.levels[id] = lvl;
+    res.leveledUp = true; res.level = lvl; res.progress = 0;
+    res.skillUp = tcgSkillTier(lvl) > tierBefore;
+    res.maxed = lvl >= TCG_LVL_MAX;
+  }
+  s.lvlp[id] = p;
+  rpgSave();
+  return res;
+}
+function tcgStats(card, level) {
   const s = card.stars;
   const m = TCG_ROLE_MODS[TCG_SKILLS[card.skillId].kind];
+  const lv = _tcgClampLvl(level || 1);
+  const k = _tcgLevelMult(lv);
   return {
-    hp:   Math.round((200 + s * 80) * m.hp * _tcgJitter(card.id, 'hp')),
-    atk:  Math.round((42 + s * 20) * m.atk * _tcgJitter(card.id, 'atk')),
-    def:  Math.round((22 + s * 11) * m.def * _tcgJitter(card.id, 'def')),
-    heal: Math.round((18 + s * 9) * m.heal * _tcgJitter(card.id, 'heal')),
-    spd:  Math.round((70 + s * 6 + m.spd) * _tcgJitter(card.id, 'spd'))
+    hp:   Math.round((200 + s * 80) * m.hp * _tcgJitter(card.id, 'hp') * k),
+    atk:  Math.round((42 + s * 20) * m.atk * _tcgJitter(card.id, 'atk') * k),
+    def:  Math.round((22 + s * 11) * m.def * _tcgJitter(card.id, 'def') * k),
+    heal: Math.round((18 + s * 9) * m.heal * _tcgJitter(card.id, 'heal') * k),
+    spd:  Math.round((70 + s * 6 + m.spd) * _tcgJitter(card.id, 'spd') + (lv - 1) * 0.15)
   };
 }
 function tcgCardPower(id) {
   const c = TCG_BY_ID[id]; if (!c) return 0;
-  const st = tcgStats(c);
+  const st = tcgStats(c, tcgLevel(id));
   return Math.round(st.atk + st.def + st.heal + st.hp / 8 + st.spd / 2);
 }
 function tcgTeamPower(team) { return (team || []).reduce((a, id) => a + tcgCardPower(id), 0); }
@@ -28278,12 +28368,23 @@ function tcgHydrateState(saved) {
   const s = (saved && typeof saved === 'object') ? saved : {};
   const cards = {};
   Object.keys(s.cards || {}).forEach(id => { if (TCG_BY_ID[id] && (s.cards[id] | 0) > 0) cards[id] = s.cards[id] | 0; });
+  // Per-card level (1–99) and progress toward the next level (0–4 correct answers).
+  const levels = {}, lvlp = {};
+  const sl = (s.levels && typeof s.levels === 'object') ? s.levels : {};
+  const sp = (s.lvlp && typeof s.lvlp === 'object') ? s.lvlp : {};
+  Object.keys(cards).forEach(id => {
+    const lv = _tcgClampLvl((sl[id] | 0) || 1);
+    levels[id] = lv;
+    lvlp[id] = lv >= TCG_LVL_MAX ? 0 : Math.max(0, Math.min(TCG_LVL_STEP - 1, sp[id] | 0));
+  });
   return {
     cards,
     team: Array.isArray(s.team) ? s.team.filter(id => TCG_BY_ID[id] && cards[id]).slice(0, 5) : [],
     packs: s.packs | 0,
     wins: s.wins | 0,
-    losses: s.losses | 0
+    losses: s.losses | 0,
+    levels,
+    lvlp
   };
 }
 function tcgState() {
@@ -28457,25 +28558,38 @@ function tcgCardBackHtml() {
 }
 function tcgCardHtml(card, opts) {
   opts = opts || {};
-  const st = tcgStats(card);
-  const sk = TCG_SKILLS[card.skillId];
-  const el = TCG_ELEMENTS[card.element];
   const owned = opts.owned !== false;
+  const level = opts.level != null ? _tcgClampLvl(opts.level) : (owned ? tcgLevel(card.id) : 1);
+  const st = tcgStats(card, level);
+  const sk = owned ? tcgLeveledSkill(card, level) : TCG_SKILLS[card.skillId];
+  const el = TCG_ELEMENTS[card.element];
+  const prog = owned ? tcgLvlProg(card.id) : 0;
   const badges = (opts.isNew ? '<span class="tcg-new-badge">NEW!</span>' : '')
     + (opts.inTeam ? '<span class="tcg-team-badge">⚔️ Team</span>' : '')
     + (opts.count > 1 ? '<span class="tcg-count-badge">×' + opts.count + '</span>' : '');
+  const skDesc = escapeHtml(sk.desc) + (owned && sk.tier > 1
+    ? ' <span class="tcg-skill-up">(' + (sk.tier === 3 ? 'Lv99' : 'Lv50') + ' upgrade · power ×' + (sk.tier === 3 ? '1.5' : '1.25') + ')</span>' : '');
+  const lvlLine = owned
+    ? '<div class="tcg-lvl-line"><span class="tcg-lvl-tag">Lv ' + level + '</span>'
+        + (level >= TCG_LVL_MAX
+            ? '<span class="tcg-lvl-max">MAX</span>'
+            : '<span class="tcg-lvl-bar"><i style="width:' + Math.round(prog / TCG_LVL_STEP * 100) + '%;"></i></span><span class="tcg-lvl-num">' + prog + '/' + TCG_LVL_STEP + '</span>')
+      + '</div>'
+    : '';
   return '<div class="tcg-card star-' + card.stars + (owned ? '' : ' unowned') + (opts.onclick ? ' clickable' : '') + '"'
     + (opts.onclick ? ' onclick="' + opts.onclick + '"' : '') + '>'
     + badges
     + '<div class="tcg-card-inner">'
+    +   (owned ? '<div class="tcg-card-lvl">Lv ' + level + '</div>' : '')
     +   '<div class="tcg-card-no">#' + String(card.num).padStart(3, '0') + '</div>'
     +   '<div class="tcg-art">' + tcgArtHtml(card) + '</div>'
     +   '<div class="tcg-body">'
     +     '<div class="tcg-card-name">' + (owned ? escapeHtml(card.name) : '???') + '</div>'
     +     '<div class="tcg-stars">' + tcgStarsHtml(card.stars) + '</div>'
+    +     lvlLine
     +     '<div class="tcg-type"><span class="ln l"></span><span class="lbl">' + el.icon + ' ' + escapeHtml(el.name) + '</span><span class="ln r"></span></div>'
     +     '<div class="tcg-skill">' + (owned
-            ? '<span class="tcg-skill-name">' + sk.icon + ' ' + escapeHtml(sk.name) + '.</span> ' + escapeHtml(sk.desc)
+            ? '<span class="tcg-skill-name">' + sk.icon + ' ' + escapeHtml(sk.name) + '.</span> ' + skDesc
             : '<span class="tcg-skill-name">❓ Special skill.</span> Collect this monster to reveal its skill.')
     +     '</div>'
     +     '<div class="tcg-statsrow">'
@@ -28569,18 +28683,200 @@ function tcgPreviewCard(id) {
   o.className = 'tcg-overlay';
   o.id = 'tcgPreviewOverlay';
   o.addEventListener('click', e => { if (e.target === o) tcgClosePreview(); });
+  const owned = !!(s && s.cards[c.id]);
   o.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:16px;max-height:100%;overflow-y:auto;padding:12px;">'
     + '<div class="tcg-zoom">' + tcgCardHtml(c, {
-        owned: !!(s && s.cards[c.id]), count: s ? (s.cards[c.id] | 0) : 0, inTeam: !!(s && s.team.includes(c.id))
+        owned: owned, count: s ? (s.cards[c.id] | 0) : 0, inTeam: !!(s && s.team.includes(c.id))
       }) + '</div>'
+    + (owned ? tcgTrainPanelHtml(c.id) : '')
     + '<button class="btn btn-primary" type="button" onclick="tcgClosePreview()">Close</button>'
     + '</div>';
   document.body.appendChild(o);
+}
+// Small "level & train" panel shown under a card in the Preview modal.
+function tcgTrainPanelHtml(id) {
+  const level = tcgLevel(id);
+  const prog = tcgLvlProg(id);
+  const maxed = level >= TCG_LVL_MAX;
+  let milestone = '';
+  if (level < 50) milestone = 'Skill upgrade at Lv 50';
+  else if (level < 99) milestone = 'Final skill upgrade at Lv 99';
+  return '<div class="tcg-train-panel">'
+    + '<div class="tcg-train-head"><b>Level ' + level + '</b> <span>/ ' + TCG_LVL_MAX + '</span>' + (maxed ? ' <span class="tcg-lvl-max">MAX</span>' : '') + '</div>'
+    + (maxed
+        ? '<div class="tcg-train-note">This monster is fully trained — every stat and skill is maxed out! 🌟</div>'
+        : '<div class="tcg-xpbar"><i style="width:' + Math.round(prog / TCG_LVL_STEP * 100) + '%;"></i></div>'
+          + '<div class="tcg-train-note">' + prog + ' / ' + TCG_LVL_STEP + ' correct answers to reach Level ' + (level + 1) + (milestone ? ' · ' + milestone : '') + '</div>'
+          + '<button class="btn btn-primary" type="button" onclick="tcgTrainCard(\'' + id + '\')">🎓 Train — answer questions to level up</button>')
+    + '</div>';
 }
 function tcgClosePreview() {
   const o = document.getElementById('tcgPreviewOverlay');
   if (o) o.remove();
 }
+// ---- Training quiz: answer 5 science questions to level a monster up ----
+// A self-contained pool of quick multiple-choice science questions (so the
+// feature always works), topped up with any suitable MCQs from the live bank.
+const TCG_QUIZ = [
+  { q: 'Which part of a green plant makes food by photosynthesis?', opts: ['Roots', 'Leaves', 'Flowers', 'Stem'], a: 1, ex: 'Leaves hold chlorophyll, which traps sunlight to make food.' },
+  { q: 'Which gas do plants take IN for photosynthesis?', opts: ['Oxygen', 'Carbon dioxide', 'Nitrogen', 'Water vapour'], a: 1, ex: 'Plants take in carbon dioxide and give out oxygen when making food.' },
+  { q: 'Which gas do plants give OUT during photosynthesis?', opts: ['Carbon dioxide', 'Oxygen', 'Nitrogen', 'Hydrogen'], a: 1, ex: 'Photosynthesis releases oxygen.' },
+  { q: 'A tadpole is a young stage in the life cycle of a…', opts: ['Butterfly', 'Frog', 'Grasshopper', 'Bird'], a: 1, ex: 'Frogs go egg → tadpole → froglet → adult frog.' },
+  { q: 'Which animal has a life cycle with a pupa stage?', opts: ['Grasshopper', 'Butterfly', 'Cockroach', 'Chicken'], a: 1, ex: 'A butterfly’s 4-stage cycle is egg → larva → pupa → adult.' },
+  { q: 'Which of these is a non-living thing?', opts: ['Mushroom', 'Fern', 'Rock', 'Bacteria'], a: 2, ex: 'A rock does not grow, reproduce or respond — it is non-living.' },
+  { q: 'The basic unit of life is the…', opts: ['Atom', 'Cell', 'Organ', 'Tissue'], a: 1, ex: 'All living things are made of one or more cells.' },
+  { q: 'Which organ pumps blood around the body?', opts: ['Lungs', 'Heart', 'Liver', 'Kidney'], a: 1, ex: 'The heart pumps blood through the circulatory system.' },
+  { q: 'Which system breaks food down into simpler substances?', opts: ['Respiratory system', 'Digestive system', 'Circulatory system', 'Skeletal system'], a: 1, ex: 'The digestive system breaks food down so the body can absorb it.' },
+  { q: 'Digested food is absorbed into the blood mainly at the…', opts: ['Stomach', 'Small intestine', 'Large intestine', 'Gullet'], a: 1, ex: 'The small intestine absorbs digested food into the blood.' },
+  { q: 'We breathe in oxygen and breathe out mostly…', opts: ['Oxygen', 'Carbon dioxide', 'Nitrogen', 'Hydrogen'], a: 1, ex: 'Exhaled air has more carbon dioxide and water vapour.' },
+  { q: 'Which state of matter has a fixed shape AND a fixed volume?', opts: ['Solid', 'Liquid', 'Gas', 'Plasma'], a: 0, ex: 'A solid keeps both its shape and its volume.' },
+  { q: 'Which state of matter has no fixed shape but a fixed volume?', opts: ['Solid', 'Liquid', 'Gas', 'None'], a: 1, ex: 'A liquid takes the shape of its container but keeps its volume.' },
+  { q: 'Which state of matter can be compressed (squeezed smaller) easily?', opts: ['Solid', 'Liquid', 'Gas', 'Metal'], a: 2, ex: 'A gas has no fixed volume, so it can be compressed.' },
+  { q: 'Water changing from a liquid to a gas is called…', opts: ['Melting', 'Freezing', 'Evaporation', 'Condensation'], a: 2, ex: 'Evaporation is liquid turning into water vapour (gas).' },
+  { q: 'Water vapour changing back into liquid water is called…', opts: ['Evaporation', 'Condensation', 'Melting', 'Boiling'], a: 1, ex: 'Condensation is gas turning into liquid.' },
+  { q: 'Ice turning into water is an example of…', opts: ['Freezing', 'Melting', 'Evaporation', 'Condensation'], a: 1, ex: 'Melting is a solid turning into a liquid.' },
+  { q: 'Which of these makes water evaporate faster?', opts: ['Lower temperature', 'Wind blowing over it', 'Smaller surface area', 'Less sunlight'], a: 1, ex: 'Wind, heat and a larger surface area all speed up evaporation.' },
+  { q: 'Heat always flows from a…', opts: ['Colder object to a hotter one', 'Hotter object to a colder one', 'Big object to a small one', 'Light object to a heavy one'], a: 1, ex: 'Heat flows from hotter to colder until they are the same temperature.' },
+  { q: 'Which material is the best conductor of heat?', opts: ['Wood', 'Plastic', 'Metal', 'Rubber'], a: 2, ex: 'Metals are good conductors of heat.' },
+  { q: 'A material that does NOT let heat pass through easily is a good…', opts: ['Conductor', 'Insulator', 'Magnet', 'Reflector'], a: 1, ex: 'Insulators (like wood, plastic, air) slow heat down.' },
+  { q: 'Most metals will __ when they are heated.', opts: ['Shrink', 'Expand', 'Disappear', 'Freeze'], a: 1, ex: 'Matter usually expands when heated and contracts when cooled.' },
+  { q: 'Which of these is a good conductor of electricity?', opts: ['Copper', 'Plastic', 'Rubber', 'Glass'], a: 0, ex: 'Metals such as copper conduct electricity well.' },
+  { q: 'Adding more batteries in series to a circuit usually makes a bulb…', opts: ['Dimmer', 'Brighter', 'Turn off', 'Change colour'], a: 1, ex: 'More batteries in series push more current, so the bulb is brighter.' },
+  { q: 'If one bulb blows and ALL the bulbs go out, they are connected in…', opts: ['Parallel', 'Series', 'A short circuit', 'Reverse'], a: 1, ex: 'In series there is one path, so one broken bulb stops them all.' },
+  { q: 'Which material is attracted to a magnet?', opts: ['Copper', 'Iron', 'Aluminium', 'Wood'], a: 1, ex: 'Iron, nickel and cobalt are magnetic materials.' },
+  { q: 'Two LIKE poles of magnets (N and N) will…', opts: ['Attract', 'Repel', 'Do nothing', 'Stick together'], a: 1, ex: 'Like poles repel; unlike poles attract.' },
+  { q: 'Which force pulls objects down towards the Earth?', opts: ['Friction', 'Gravity', 'Magnetism', 'Elastic force'], a: 1, ex: 'Gravitational force pulls objects toward the Earth.' },
+  { q: 'The force that opposes motion between two surfaces is…', opts: ['Gravity', 'Friction', 'Magnetic force', 'Elastic force'], a: 1, ex: 'Friction acts against movement between touching surfaces.' },
+  { q: 'A stretched rubber band stores which kind of energy?', opts: ['Kinetic energy', 'Elastic potential energy', 'Heat energy', 'Light energy'], a: 1, ex: 'A stretched or compressed object stores elastic potential energy.' },
+  { q: 'A moving object mainly has…', opts: ['Potential energy', 'Kinetic energy', 'Only sound energy', 'No energy'], a: 1, ex: 'Kinetic energy is the energy of movement.' },
+  { q: 'The Sun is our main natural source of…', opts: ['Sound energy', 'Light and heat energy', 'Electrical energy', 'Chemical energy'], a: 1, ex: 'The Sun gives light and heat energy.' },
+  { q: 'A shadow forms when light is blocked by a(n)…', opts: ['Transparent object', 'Opaque object', 'Mirror', 'Empty gap'], a: 1, ex: 'Opaque objects block light, forming a shadow.' },
+  { q: 'Moving a light source closer to an object makes its shadow…', opts: ['Smaller', 'Larger', 'Disappear', 'Change colour'], a: 1, ex: 'The nearer the light, the larger the shadow.' },
+  { q: 'Seeds with wings or fine hairs are usually dispersed by…', opts: ['Water', 'Wind', 'Animals', 'Bursting'], a: 1, ex: 'Light, winged or hairy seeds are carried by the wind.' },
+  { q: 'A juicy, brightly coloured fruit is usually dispersed by…', opts: ['Wind', 'Water', 'Animals', 'Splitting open'], a: 2, ex: 'Animals eat the fruit and spread the seeds.' },
+  { q: 'For a flower to become a fruit, which must happen?', opts: ['Germination', 'Pollination and fertilisation', 'Evaporation', 'Dispersal'], a: 1, ex: 'Pollination then fertilisation lets a fruit and seeds form.' },
+  { q: 'Clearing large areas of forest is called…', opts: ['Reforestation', 'Deforestation', 'Conservation', 'Germination'], a: 1, ex: 'Deforestation removes trees and raises carbon dioxide levels.' },
+  { q: 'Which activity increases carbon dioxide in the air?', opts: ['Planting trees', 'Burning fuels', 'Recycling', 'Saving water'], a: 1, ex: 'Burning fuels releases carbon dioxide.' },
+  { q: 'All the members of ONE species living in an area form a…', opts: ['Community', 'Population', 'Habitat', 'Food chain'], a: 1, ex: 'A population is one species; a community is all populations together.' },
+  { q: 'In a food chain, the arrow points from the food to the…', opts: ['Producer', 'Consumer that eats it', 'Sun', 'Soil'], a: 1, ex: 'Arrows show energy flowing from the food to the eater.' },
+  { q: 'Green plants in a food chain are called…', opts: ['Consumers', 'Producers', 'Predators', 'Decomposers'], a: 1, ex: 'Producers make their own food; consumers eat other organisms.' },
+  { q: 'To make an experiment reliable, you should…', opts: ['Do it only once', 'Repeat it and take the average', 'Change many things at once', 'Guess the result'], a: 1, ex: 'Repeating and averaging makes results more reliable.' },
+  { q: 'Which instrument is used to measure the volume of a liquid?', opts: ['Ruler', 'Measuring cylinder', 'Weighing scale', 'Thermometer'], a: 1, ex: 'A measuring cylinder measures liquid volume (read at eye level).' }
+];
+// Pull suitable auto-gradable MCQs from the live question bank (text-only, no
+// diagrams) so training draws on the real syllabus content too. Best-effort.
+function _tcgBankMcqs() {
+  const out = [];
+  try {
+    (typeof questionBank !== 'undefined' && Array.isArray(questionBank) ? questionBank : []).forEach(q => {
+      if (!q || (q.status && q.status !== 'approved') || !Array.isArray(q.blocks)) return;
+      if (q.blocks.some(b => b && b.type === 'image' && b.url)) return; // skip diagram questions
+      const mcq = q.blocks.find(b => b && b.type === 'mcq' && b.correctId && Array.isArray(b.options) && b.options.length >= 2);
+      if (!mcq) return;
+      const ai = mcq.options.findIndex(o => o.id === mcq.correctId);
+      if (ai < 0) return;
+      const opts = mcq.options.map(o => stripHtml(o.text || '').trim());
+      if (opts.some(t => !t)) return;
+      const stem = q.blocks.filter(b => b && b.type === 'text' && b.content).map(b => stripHtml(b.content)).join(' ').replace(/\s+/g, ' ').trim();
+      if (!stem || stem.length < 8) return;
+      out.push({ q: stem, opts, a: ai, ex: '' });
+    });
+  } catch (e) {}
+  return out;
+}
+function _tcgQuizPool() { return TCG_QUIZ.concat(_tcgBankMcqs()); }
+function _tcgShuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+let _tcgQuiz = null;
+function tcgTrainCard(id) {
+  const s = tcgState();
+  if (!s || !s.cards[id]) { showToast('Collect this monster first', 'error'); return; }
+  tcgClosePreview();
+  const existing = document.getElementById('tcgTrainOverlay'); if (existing) existing.remove();
+  const pool = _tcgQuizPool();
+  if (!pool.length) { showToast('No practice questions available yet', 'error'); return; }
+  _tcgQuiz = { id, pool: _tcgShuffle(pool), i: 0, answered: false, cur: null };
+  const c = TCG_BY_ID[id];
+  const o = document.createElement('div');
+  o.className = 'tcg-overlay'; o.id = 'tcgTrainOverlay';
+  o.addEventListener('click', e => { if (e.target === o) tcgCloseTrain(); });
+  o.innerHTML = '<div class="tcg-train-modal">'
+    + '<div class="tcg-train-topbar"><div class="tcg-train-title">🎓 Training <b>' + escapeHtml(tcgShortName(c)) + '</b></div>'
+    + '<button type="button" class="tcg-train-x" onclick="tcgCloseTrain()">✕</button></div>'
+    + '<div class="tcg-train-status" id="tcgqStatus"></div>'
+    + '<div class="tcg-quiz" id="tcgqBody"></div>'
+    + '</div>';
+  document.body.appendChild(o);
+  _tcgQuizStatus();
+  _tcgQuizRender();
+}
+function _tcgQuizStatus(flash) {
+  const st = document.getElementById('tcgqStatus'); if (!st || !_tcgQuiz) return;
+  const id = _tcgQuiz.id, level = tcgLevel(id), prog = tcgLvlProg(id), maxed = level >= TCG_LVL_MAX;
+  st.innerHTML = '<span class="tcg-lvl-tag big">Lv ' + level + '</span>'
+    + (maxed ? '<span class="tcg-lvl-max">MAX</span>'
+      : '<span class="tcg-xpbar wide"><i style="width:' + Math.round(prog / TCG_LVL_STEP * 100) + '%;"></i></span>'
+        + '<span class="tcg-quiz-count">' + prog + ' / ' + TCG_LVL_STEP + ' to Lv ' + (level + 1) + '</span>');
+  if (flash) { st.classList.remove('flash'); void st.offsetWidth; st.classList.add('flash'); }
+}
+function _tcgQuizRender() {
+  const body = document.getElementById('tcgqBody'); if (!body || !_tcgQuiz) return;
+  const level = tcgLevel(_tcgQuiz.id);
+  if (level >= TCG_LVL_MAX) {
+    body.innerHTML = '<div class="tcg-quiz-done">🌟 <b>' + escapeHtml(tcgShortName(TCG_BY_ID[_tcgQuiz.id])) + '</b> is fully trained to Level ' + TCG_LVL_MAX + ' — max stats and skill!'
+      + '<div style="margin-top:14px;"><button class="btn btn-primary" type="button" onclick="tcgCloseTrain()">Done</button></div></div>';
+    return;
+  }
+  _tcgQuiz.answered = false;
+  const q = _tcgQuiz.pool[_tcgQuiz.i % _tcgQuiz.pool.length];
+  _tcgQuiz.cur = q;
+  body.innerHTML = '<div class="tcg-quiz-q">' + escapeHtml(q.q) + '</div>'
+    + '<div class="tcg-quiz-opts">'
+    + q.opts.map((o, idx) => '<button type="button" class="tcg-quiz-opt" data-i="' + idx + '" onclick="_tcgQuizAnswer(' + idx + ')">'
+        + '<span class="tcg-quiz-let">' + String.fromCharCode(65 + idx) + '</span>' + escapeHtml(o) + '</button>').join('')
+    + '</div>'
+    + '<div class="tcg-quiz-fb" id="tcgqFb"></div>';
+}
+function _tcgQuizAnswer(idx) {
+  if (!_tcgQuiz || _tcgQuiz.answered) return;
+  _tcgQuiz.answered = true;
+  const q = _tcgQuiz.cur;
+  const correct = idx === q.a;
+  const body = document.getElementById('tcgqBody');
+  const btns = body ? body.querySelectorAll('.tcg-quiz-opt') : [];
+  btns.forEach(b => { b.disabled = true; const i = +b.dataset.i; if (i === q.a) b.classList.add('right'); else if (i === idx) b.classList.add('wrong'); });
+  let msg = '';
+  if (correct) {
+    const res = tcgAddLevelProgress(_tcgQuiz.id);
+    _tcgQuizStatus(true);
+    if (res && res.leveledUp) {
+      _tcgLevelUpBurst();
+      msg = '<div class="tcg-fb-ok">✅ Correct! <b>Level up! → Lv ' + res.level + '</b>' + (res.skillUp ? ' · ⬆ <b>Skill upgraded!</b>' : '') + (res.maxed ? ' · 🌟 MAX level!' : '') + '</div>';
+      showToast(tcgShortName(TCG_BY_ID[_tcgQuiz.id]) + ' reached Level ' + res.level + (res.skillUp ? ' — skill upgraded!' : '') + '!', 'success');
+    } else if (res && res.max) {
+      msg = '<div class="tcg-fb-ok">✅ Correct! This monster is already fully trained.</div>';
+    } else {
+      msg = '<div class="tcg-fb-ok">✅ Correct! ' + (res ? res.progress : 0) + ' / ' + TCG_LVL_STEP + ' toward the next level.</div>';
+    }
+  } else {
+    msg = '<div class="tcg-fb-no">❌ Not quite — the correct answer is <b>' + String.fromCharCode(65 + q.a) + '</b>. Keep going, the next one counts!</div>';
+  }
+  if (q.ex) msg += '<div class="tcg-fb-ex">' + escapeHtml(q.ex) + '</div>';
+  msg += '<div style="margin-top:14px;text-align:center;"><button class="btn btn-primary" type="button" onclick="_tcgQuizNext()">Next question ▶</button></div>';
+  const fb = document.getElementById('tcgqFb');
+  if (fb) fb.innerHTML = msg;
+}
+function _tcgQuizNext() { if (!_tcgQuiz) return; _tcgQuiz.i++; _tcgQuizRender(); }
+function _tcgLevelUpBurst() {
+  const modal = document.querySelector('.tcg-train-modal'); if (!modal) return;
+  const d = document.createElement('div'); d.className = 'tcg-levelup-burst'; d.textContent = 'LEVEL UP!';
+  modal.appendChild(d); setTimeout(() => d.remove(), 1300);
+}
+function tcgCloseTrain() {
+  _tcgQuiz = null;
+  const o = document.getElementById('tcgTrainOverlay'); if (o) o.remove();
+  try { tcgRenderBody(); } catch (_) {}
+}
+
 // -- Packs tab --
 function tcgPacksHtml(s) {
   const gold = (rpgState && rpgState.gold) | 0;
@@ -28770,13 +29066,14 @@ function tcgSleep(ms) {
   if (!b || b.skip) return Promise.resolve();
   return new Promise(r => setTimeout(r, ms / (b.speed || 1)));
 }
-function _tcgMkUnit(cardId, side, slot) {
+function _tcgMkUnit(cardId, side, slot, level) {
   const c = TCG_BY_ID[cardId];
-  const st = tcgStats(c);
+  const lv = _tcgClampLvl(level || 1);
+  const st = tcgStats(c, lv);
   return {
-    uid: side + slot, card: c, side, slot,
+    uid: side + slot, card: c, side, slot, level: lv,
     hp: st.hp, maxHp: st.hp, atk: st.atk, def: st.def, heal: st.heal, spd: st.spd,
-    skill: TCG_SKILLS[c.skillId],
+    skill: tcgLeveledSkill(c, lv),
     charge: Math.floor(Math.random() * 2), shield: 0, stun: 0,
     poison: null, atkUp: 0, atkUpPct: 0
   };
@@ -28999,8 +29296,12 @@ async function tcgRunBattle(myTeam, me, opp) {
   if (old) old.remove();
   _tcgBattle = { token: 1, speed: 1, skip: false };
   const token = _tcgBattle.token;
-  const mine = myTeam.map((id, i) => _tcgMkUnit(id, 'R', i));
-  const theirs = opp.tcgTeam.map((id, i) => _tcgMkUnit(id, 'L', i));
+  const mine = myTeam.map((id, i) => _tcgMkUnit(id, 'R', i, tcgLevel(id)));
+  // Scale the opponent to ~85% of your team's average level so matches stay
+  // competitive as your monsters grow.
+  const myAvg = Math.round(myTeam.reduce((a, id) => a + tcgLevel(id), 0) / Math.max(1, myTeam.length));
+  const oppLvl = Math.max(1, Math.round(myAvg * 0.85));
+  const theirs = opp.tcgTeam.map((id, i) => _tcgMkUnit(id, 'L', i, oppLvl));
   const o = document.createElement('div');
   o.className = 'tcg-overlay';
   o.id = 'tcgBattleOverlay';
@@ -29069,6 +29370,10 @@ window.tcgSetTab = tcgSetTab;
 window.tcgSetDexFilter = tcgSetDexFilter;
 window.tcgPreviewCard = tcgPreviewCard;
 window.tcgClosePreview = tcgClosePreview;
+window.tcgTrainCard = tcgTrainCard;
+window.tcgCloseTrain = tcgCloseTrain;
+window._tcgQuizAnswer = _tcgQuizAnswer;
+window._tcgQuizNext = _tcgQuizNext;
 window.tcgBuyPack = tcgBuyPack;
 window.tcgAdminGold = tcgAdminGold;
 window.tcgFlipCard = tcgFlipCard;
