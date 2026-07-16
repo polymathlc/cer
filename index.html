@@ -4468,16 +4468,16 @@ option {
 .tcg-record b { font-size: 1.3rem; display: block; }
 .tcg-record span { font-size: 0.68rem; color: var(--text-muted); letter-spacing: 0.06em; }
 .tcgb-wrap { width: 100%; max-width: 1000px; }
-.tcgb-stage { position: relative; width: 100%; height: min(72vh, 640px); border-radius: 20px; overflow: hidden; background: linear-gradient(#1e1b4b 0%, #4338ca 42%, #0f766e 42.2%, #042f2e 100%); box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+.tcgb-stage { position: relative; width: 100%; height: clamp(500px, 72vh, 660px); border-radius: 20px; overflow: hidden; background: linear-gradient(#1e1b4b 0%, #4338ca 42%, #0f766e 42.2%, #042f2e 100%); box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
 .tcgb-stage::before { content: ''; position: absolute; left: 8%; top: 6%; width: 70px; height: 70px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fef9c3, #fde047 60%, transparent 72%); opacity: 0.9; }
 .tcgb-stage::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 115%, rgba(45,212,191,0.25), transparent 60%); pointer-events: none; }
-.tcgb-unit { position: absolute; width: 124px; text-align: center; transition: transform 0.28s cubic-bezier(.3,.9,.4,1.2), opacity 0.5s, filter 0.3s; will-change: transform; }
-.tcgb-sprite { font-size: 48px; line-height: 1; display: inline-block; filter: drop-shadow(0 10px 8px rgba(0,0,0,0.45)); animation: tcgIdle 2.4s ease-in-out infinite; }
-.tcgb-sprite img { width: 64px; height: 64px; object-fit: contain; }
+.tcgb-unit { position: absolute; width: 122px; text-align: center; transition: transform 0.28s cubic-bezier(.3,.9,.4,1.2), opacity 0.5s, filter 0.3s; will-change: transform; }
+.tcgb-sprite { font-size: 40px; line-height: 1; height: 54px; display: flex; align-items: flex-end; justify-content: center; filter: drop-shadow(0 8px 7px rgba(0,0,0,0.45)); animation: tcgIdle 2.4s ease-in-out infinite; }
+.tcgb-sprite img { width: 52px; height: 52px; object-fit: contain; }
 @keyframes tcgIdle { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .tcgb-unit.left .tcgb-sprite { transform: scaleX(-1); }
 .tcgb-unit.left .tcgb-sprite img { transform: none; }
-.tcgb-plate { margin-top: 4px; background: rgba(2,6,23,0.72); border: 1px solid rgba(148,163,184,0.35); border-radius: 10px; padding: 5px 8px 7px; backdrop-filter: blur(3px); }
+.tcgb-plate { margin-top: 3px; background: rgba(2,6,23,0.72); border: 1px solid rgba(148,163,184,0.35); border-radius: 10px; padding: 4px 8px 6px; backdrop-filter: blur(3px); }
 .tcgb-name { color: #fff; font-size: 0.66rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tcgb-stars { font-size: 0.52rem; color: #fbbf24; letter-spacing: 1px; }
 .tcgb-hpbar { height: 7px; border-radius: 999px; background: rgba(255,255,255,0.15); margin-top: 4px; overflow: hidden; }
@@ -4485,7 +4485,9 @@ option {
 .tcgb-hpbar > div.mid { background: linear-gradient(90deg,#fbbf24,#f59e0b); }
 .tcgb-hpbar > div.low { background: linear-gradient(90deg,#f87171,#ef4444); }
 .tcgb-hptext { font-family: 'Space Mono', monospace; font-size: 0.55rem; color: rgba(255,255,255,0.85); margin-top: 2px; }
-.tcgb-status { min-height: 14px; font-size: 0.6rem; margin-top: 2px; }
+.tcgb-status { min-height: 0; font-size: 0.6rem; }
+.tcgb-status:not(:empty) { margin-top: 2px; }
+.tcgb-status:empty { display: none; }
 .tcgb-unit.acting { z-index: 6; }
 .tcgb-unit.acting .tcgb-sprite { filter: drop-shadow(0 10px 8px rgba(0,0,0,0.45)) drop-shadow(0 0 14px rgba(250,204,21,0.9)); }
 .tcgb-unit.lungeR { transform: translateX(120px) scale(1.08); }
@@ -4525,9 +4527,9 @@ option {
 .tcgb-result .word.lose { color: #f87171; text-shadow: 0 0 34px rgba(248,113,113,0.9); }
 .tcgb-result .sub { color: rgba(255,255,255,0.8); font-size: 0.95rem; }
 @media (max-width: 720px) {
-  .tcgb-unit { width: 82px; }
-  .tcgb-sprite { font-size: 32px; }
-  .tcgb-sprite img { width: 44px; height: 44px; }
+  .tcgb-unit { width: 74px; }
+  .tcgb-sprite { font-size: 30px; height: 44px; }
+  .tcgb-sprite img { width: 42px; height: 42px; }
   .tcgb-hptext { display: none; }
   .tcgb-unit.lungeR { transform: translateX(64px) scale(1.08); }
   .tcgb-unit.lungeL { transform: translateX(-64px) scale(1.08); }
@@ -8307,7 +8309,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.118.0';
+const APP_VERSION = 'v1.118.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28956,9 +28958,10 @@ async function _tcgAct(stage, unit, allies, foes) {
   if (el) el.classList.remove('acting');
 }
 function _tcgUnitHtml(u) {
-  // 5-a-side: staggered double columns so nameplates don't collide.
-  const posOwn = [{ r: '19%', b: '54%' }, { r: '0%', b: '41%' }, { r: '19%', b: '27%' }, { r: '0%', b: '14%' }, { r: '19%', b: '1%' }];
-  const posFoe = [{ l: '19%', t: '1%' }, { l: '0%', t: '14%' }, { l: '19%', t: '27%' }, { l: '0%', t: '40%' }, { l: '19%', t: '53%' }];
+  // 5-a-side: staggered double columns spread over the full stage height with
+  // ~29% same-column spacing so a sprite never overlaps a neighbouring plate.
+  const posOwn = [{ r: '22%', b: '60%' }, { r: '0%', b: '45.5%' }, { r: '22%', b: '31%' }, { r: '0%', b: '16.5%' }, { r: '22%', b: '2%' }];
+  const posFoe = [{ l: '22%', t: '2%' }, { l: '0%', t: '16.5%' }, { l: '22%', t: '31%' }, { l: '0%', t: '45.5%' }, { l: '22%', t: '60%' }];
   const p = u.side === 'R' ? posOwn[u.slot] : posFoe[u.slot];
   const style = (p.l ? 'left:' + p.l + ';' : '') + (p.r ? 'right:' + p.r + ';' : '') + (p.t ? 'top:' + p.t + ';' : '') + (p.b ? 'bottom:' + p.b + ';' : '');
   const url = tcgAvatarUrl(u.card.id);
