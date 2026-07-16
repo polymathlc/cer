@@ -4907,7 +4907,7 @@ option {
       <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Monster Cards — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
         <span class="ico">🃏</span> Monster Cards <span class="nav-beta">BETA</span>
       </div>
-      <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire, and all 151 Monster Cards.">
+      <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire. Monster Cards art lives on the Monster Cards page's Card Art tab.">
         <span class="ico">🎨</span> Game Objects
       </div>
       <div class="nav-item" id="rpgHideToggle" style="display:none;"><span class="ico">🙈</span> Hide game</div>
@@ -6229,6 +6229,7 @@ option {
           <button class="tcg-tab" data-tcgtab="packs" onclick="tcgSetTab('packs')" type="button">🎁 Booster Packs</button>
           <button class="tcg-tab" data-tcgtab="team" onclick="tcgSetTab('team')" type="button">🛡️ My Team</button>
           <button class="tcg-tab" data-tcgtab="arena" onclick="tcgSetTab('arena')" type="button">⚔️ Battle Arena</button>
+          <button class="tcg-tab admin-only" data-tcgtab="art" onclick="tcgSetTab('art')" type="button">🎨 Card Art</button>
         </div>
         <div id="tcgBody"><div class="ga-loading" style="text-align:center;color:#94a3b8;padding:30px;">Loading…</div></div>
       </div>
@@ -8252,7 +8253,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.115.0';
+const APP_VERSION = 'v1.116.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -27880,10 +27881,6 @@ async function loadGameAssets(){
   await loadSpireCardArt(true);
   html += spireCardArtAdminHtml();
 
-  // ===== Monster Cards TCG — one paste slot per monster (all 151) =====
-  await tcgLoadArt(true);
-  html += tcgArtAdminHtml();
-
   host.innerHTML = html;
 }
 
@@ -28291,17 +28288,27 @@ async function tcgLoadArt(force) {
   } catch (e) { console.warn('tcg art load', e); _tcgArt = _tcgArt || {}; }
   return _tcgArt;
 }
-function tcgArtUrl(id) { return (_tcgArt && _tcgArt[id]) || null; }
+// Two graphics per monster: '<id>' is the trading-card art shown on the card
+// face; '<id>:av' is the battle avatar used on the arena stage. Each falls
+// back to the other so a single pasted image still shows everywhere.
+function tcgArtUrl(id) { return (_tcgArt && (_tcgArt[id] || _tcgArt[id + ':av'])) || null; }
+function tcgAvatarUrl(id) { return (_tcgArt && (_tcgArt[id + ':av'] || _tcgArt[id])) || null; }
+// Repaint whichever art surface is on screen after an upload/reset.
+function tcgArtRefresh() {
+  try { if (document.querySelector('#page-tcg.active')) tcgRenderBody(); } catch (e) {}
+  try { if (document.querySelector('#page-gameassets.active')) loadGameAssets(); } catch (e) {}
+}
 async function _tcgArtApply(id, dataUrl) {
   try {
     if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
-    const scaled = await _scaleDownDataUrl(dataUrl, 512);
+    // Battle avatars are small stage sprites; card art gets more resolution.
+    const scaled = await _scaleDownDataUrl(dataUrl, id.endsWith(':av') ? 256 : 512);
     const url = await uploadImageDataUrl(scaled);
     const uid = _tcgOwnerUid(); if (!uid) throw new Error('Not signed in');
     await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: { [id]: url } }, { merge: true });
     (_tcgArt = _tcgArt || {})[id] = url;
-    await loadGameAssets();
-    showToast('Card art updated', 'success');
+    tcgArtRefresh();
+    showToast(id.endsWith(':av') ? 'Battle avatar updated' : 'Card art updated', 'success');
   } catch (e) { console.error('tcg art update', e); showToast('Update failed: ' + (e && e.message ? e.message : e), 'error'); }
 }
 function onTcgArtPaste(id, e) {
@@ -28316,35 +28323,44 @@ async function resetTcgArt(id) {
     const uid = _tcgOwnerUid(); if (!uid) return;
     await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: { [id]: deleteField() } }, { merge: true });
     if (_tcgArt) delete _tcgArt[id];
-    await loadGameAssets();
+    tcgArtRefresh();
     showToast('Reset to default', 'success');
   } catch (e) { console.error('tcg art reset', e); showToast('Reset failed', 'error'); }
 }
-// Game Objects page section — one paste slot per monster, grouped by star tier.
+// Card Art tab (admin) — every monster has TWO paste slots: the trading-card
+// art (card face) and the battle avatar (arena sprite). Grouped by star tier.
 function tcgArtAdminHtml() {
-  let html = '<h2 class="ga-game">🃏 Monster Cards TCG <span style="font-weight:400;font-size:0.8rem;color:#94a3b8;">— paste a PNG for each of the 151 monsters; it shows as the card art everywhere (square images look best)</span></h2>';
+  const slotCard = (slotId, label, icon, thumb, name) =>
+    '<div class="ga-card">'
+    + '<div class="ga-prev">' + thumb + '</div>'
+    + '<div class="ga-name">' + icon + ' ' + label + '</div>'
+    + '<div class="ga-zone" tabindex="0"'
+    +   ' onpaste="onTcgArtPaste(\'' + slotId + '\', event)"'
+    +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
+    +   ' ondragleave="this.classList.remove(\'drag\')"'
+    +   ' ondrop="onTcgArtDrop(\'' + slotId + '\', event)"'
+    +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
+    + '<div class="ga-actions">'
+    +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onTcgArtPick(\'' + slotId + '\', event)"></label>'
+    +   (_tcgArt && _tcgArt[slotId] ? '<button class="btn btn-ghost ga-mini" onclick="resetTcgArt(\'' + slotId + '\')">Reset</button>' : '')
+    + '</div>'
+    + '<div class="ga-status ' + (_tcgArt && _tcgArt[slotId] ? 'custom' : '') + '">' + (_tcgArt && _tcgArt[slotId] ? '● Custom' : 'Default') + '</div>'
+    + '</div>';
+  let html = '<div class="tcg-section-note">Every monster carries <b>two graphics</b>: the <b>🃏 trading-card art</b> shown on the card face, and the <b>⚔️ battle avatar</b> that fights on the arena stage. Paste a PNG into either slot — until both are set, one image stands in for the other. Square images look best.</div>';
   [1, 2, 3, 4, 5, 6, 7].forEach(stars => {
     const tier = TCG_CARDS.filter(c => c.stars === stars);
-    html += '<h3 class="ga-cat">' + '★'.repeat(stars) + ' ' + stars + '-star monsters (' + tier.length + ')</h3><div class="ga-cards">';
+    html += '<h3 class="ga-cat">' + '★'.repeat(stars) + ' ' + stars + '-star monsters (' + tier.length + ')</h3>';
     tier.forEach(c => {
-      const ov = tcgArtUrl(c.id);
-      html += '<div class="ga-card" id="tcgart-' + c.id + '">'
-        + '<div class="ga-prev">' + (ov ? '<img src="' + ov + '" alt="' + escapeHtml(c.name) + '">' : '<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + c.em + '</div>') + '</div>'
-        + '<div class="ga-name">#' + String(c.num).padStart(3, '0') + ' ' + escapeHtml(c.name) + '</div>'
-        + '<div class="ga-zone" tabindex="0"'
-        +   ' onpaste="onTcgArtPaste(\'' + c.id + '\', event)"'
-        +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
-        +   ' ondragleave="this.classList.remove(\'drag\')"'
-        +   ' ondrop="onTcgArtDrop(\'' + c.id + '\', event)"'
-        +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
-        + '<div class="ga-actions">'
-        +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onTcgArtPick(\'' + c.id + '\', event)"></label>'
-        +   (ov ? '<button class="btn btn-ghost ga-mini" onclick="resetTcgArt(\'' + c.id + '\')">Reset</button>' : '')
-        + '</div>'
-        + '<div class="ga-status ' + (ov ? 'custom' : '') + '">' + (ov ? '● Custom' : 'Default') + '</div>'
-        + '</div>';
+      const cardOv = _tcgArt && _tcgArt[c.id];
+      const avOv = _tcgArt && _tcgArt[c.id + ':av'];
+      const em = '<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + c.em + '</div>';
+      const cardThumb = cardOv ? '<img src="' + cardOv + '" alt="' + escapeHtml(c.name) + '">' : em;
+      const avThumb = avOv ? '<img src="' + avOv + '" alt="' + escapeHtml(c.name) + ' avatar">' : (cardOv ? '<img src="' + cardOv + '" alt="" style="opacity:.45;">' : em);
+      html += '<div class="ga-objrow"><div style="font-weight:600;margin:6px 0;">#' + String(c.num).padStart(3, '0') + ' ' + escapeHtml(c.name) + '</div><div class="ga-cards">'
+        + slotCard(c.id, 'Trading card art', '🃏', cardThumb, c.name)
+        + slotCard(c.id + ':av', 'Battle avatar', '⚔️', avThumb, c.name)
+        + '</div></div>';
     });
-    html += '</div>';
   });
   return html;
 }
@@ -28401,7 +28417,7 @@ function tcgRenderAdminBanner() {
     +   '<h4>' + (live ? 'Monster Cards is live' : 'You are play-testing Monster Cards') + '</h4>'
     +   '<p>' + (live
           ? 'Students can see the game in their Game menu, buy packs with their points and battle each other. You can take it back into beta at any time.'
-          : 'Students cannot see this game yet. Open packs, set a team and run battles to try everything — then press Release when you are happy. Card art is managed on the Game Objects page.')
+          : 'Students cannot see this game yet. Open packs, set a team and run battles to try everything — then press Release when you are happy. Each monster\'s trading-card art and battle avatar live on the 🎨 Card Art tab.')
     +   '</p>'
     + '</div>'
     + (live
@@ -28430,6 +28446,7 @@ function tcgRenderBody() {
   if (tcgTab === 'dex') host.innerHTML = tcgDexHtml(s);
   else if (tcgTab === 'packs') host.innerHTML = tcgPacksHtml(s);
   else if (tcgTab === 'team') host.innerHTML = tcgTeamHtml(s);
+  else if (tcgTab === 'art') host.innerHTML = _isAdmin() ? tcgArtAdminHtml() : tcgDexHtml(s);
   else host.innerHTML = tcgArenaHtml(s);
 }
 // -- Collection tab --
@@ -28834,7 +28851,7 @@ function _tcgUnitHtml(u) {
   const posFoe = [{ l: '19%', t: '1%' }, { l: '0%', t: '14%' }, { l: '19%', t: '27%' }, { l: '0%', t: '40%' }, { l: '19%', t: '53%' }];
   const p = u.side === 'R' ? posOwn[u.slot] : posFoe[u.slot];
   const style = (p.l ? 'left:' + p.l + ';' : '') + (p.r ? 'right:' + p.r + ';' : '') + (p.t ? 'top:' + p.t + ';' : '') + (p.b ? 'bottom:' + p.b + ';' : '');
-  const url = tcgArtUrl(u.card.id);
+  const url = tcgAvatarUrl(u.card.id);
   return '<div class="tcgb-unit ' + (u.side === 'L' ? 'left' : 'right') + '" id="tcgbu-' + u.uid + '" style="' + style + '">'
     + '<span class="tcgb-sprite">' + (url ? '<img src="' + escapeHtml(url) + '" alt="">' : u.card.em) + '</span>'
     + '<div class="tcgb-plate">'
