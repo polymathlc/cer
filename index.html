@@ -4327,6 +4327,7 @@ option {
 .tcg-gold-chip { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.9rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px; white-space: nowrap; }
 .tcg-admin-banner { max-width: 720px; margin: 0 auto 20px; border: 1px solid var(--border); border-radius: var(--radius-lg, 16px); padding: 20px 24px; background: linear-gradient(135deg, #faf5ff, #f5f3ff); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .tcg-admin-banner .tcg-ab-main { flex: 1; min-width: 220px; }
+.tcg-admin-banner .tcg-ab-actions { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
 .tcg-admin-banner h4 { font-size: 1rem; margin-bottom: 6px; }
 .tcg-admin-banner p { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
 .tcg-status-pill { display: inline-block; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em; border-radius: 999px; padding: 4px 12px; margin-bottom: 8px; }
@@ -8397,7 +8398,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.121.0';
+const APP_VERSION = 'v1.122.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28798,9 +28799,12 @@ function tcgRenderAdminBanner() {
           : 'Students cannot see this game yet. Open packs, set a team and run battles to try everything — then press Release when you are happy. Each monster\'s trading-card art and battle avatar live on the 🎨 Card Art tab.')
     +   '</p>'
     + '</div>'
-    + (live
-        ? '<button class="btn btn-outline" onclick="tcgSetReleased(false)">⏸ Back to beta</button>'
-        : '<button class="btn btn-primary" onclick="tcgSetReleased(true)">🚀 Release to students</button>')
+    + '<div class="tcg-ab-actions">'
+    +   (live
+          ? '<button class="btn btn-outline" onclick="tcgSetReleased(false)">⏸ Back to beta</button>'
+          : '<button class="btn btn-primary" onclick="tcgSetReleased(true)">🚀 Release to students</button>')
+    +   '<button class="btn btn-outline" onclick="tcgAdminGrantAll()">🃏 Unlock all cards</button>'
+    + '</div>'
     + '</div>';
 }
 function tcgSetTab(tab) {
@@ -29090,6 +29094,19 @@ function tcgAdminGold() {
   rpgState.gold = (rpgState.gold | 0) + 500;
   rpgSave(); tcgUpdateGoldChip(); tcgRenderBody();
   showToast('+500 test points (admin preview)', 'success');
+}
+// Admin play-test helper: grant one copy of every monster so the full dex can
+// be tried without opening packs. Only fills gaps — owned counts/levels stay.
+function tcgAdminGrantAll() {
+  if (!_isAdmin()) return;
+  const s = tcgState();
+  if (!s) { showToast('Answer a question anywhere in the app to wake your hero first, then try again', 'error'); return; }
+  let added = 0;
+  TCG_CARDS.forEach(c => { if (!s.cards[c.id]) { s.cards[c.id] = 1; added++; } });
+  if (!added) { showToast('You already own all ' + TCG_CARDS.length + ' cards ✔', 'success'); return; }
+  rpgSave();
+  showToast('🃏 +' + added + ' cards — full dex unlocked (' + TCG_CARDS.length + '/' + TCG_CARDS.length + ')', 'success');
+  tcgRenderBody();
 }
 function tcgBuyPack(packId) {
   const p = TCG_PACKS.find(x => x.id === packId);
@@ -29650,6 +29667,7 @@ window._tcgQuizAnswer = _tcgQuizAnswer;
 window._tcgQuizNext = _tcgQuizNext;
 window.tcgBuyPack = tcgBuyPack;
 window.tcgAdminGold = tcgAdminGold;
+window.tcgAdminGrantAll = tcgAdminGrantAll;
 window.tcgFlipCard = tcgFlipCard;
 window.tcgFlipAll = tcgFlipAll;
 window.tcgCloseReveal = tcgCloseReveal;
