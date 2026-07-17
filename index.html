@@ -8403,7 +8403,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.123.0';
+const APP_VERSION = 'v1.124.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28119,7 +28119,11 @@ const TCG_SKILLS = {
   jolt:    { name: 'Paralyzing Jolt',  icon: '⚡', kind: 'stun',    pow: 1.25, desc: 'Hits one foe for 125% ATK — it skips its next turn.' },
   freeze:  { name: 'Flash Freeze',     icon: '❄️', kind: 'stun',    pow: 1.20, desc: 'Hits one foe for 120% ATK — it skips its next turn.' },
   venomf:  { name: 'Venom Fang',       icon: '☠️', kind: 'poison',  pow: 1.00, desc: 'Hits one foe for 100% ATK and poisons it (40% ATK/turn, 3 turns).' },
-  spores:  { name: 'Toxic Spores',     icon: '🍄', kind: 'poison',  pow: 0.95, desc: 'Hits one foe for 95% ATK and poisons it (40% ATK/turn, 3 turns).' }
+  spores:  { name: 'Toxic Spores',     icon: '🍄', kind: 'poison',  pow: 0.95, desc: 'Hits one foe for 95% ATK and poisons it (40% ATK/turn, 3 turns).' },
+  // Signature skills — one-of-a-kind mechanics reserved for the 7★ legendary trio.
+  sunrise: { name: 'Dawnfather Judgement', icon: '🌅', kind: 'dawn',   pow: 1.20, heal: 0.60, desc: 'Signature: sears ALL foes for 120% ATK while dawnlight washes over the team, healing every ally for 60% HEAL.' },
+  doom:    { name: 'Worldsend Curse',      icon: '🕯️', kind: 'curse',  pow: 1.50, desc: 'Signature: strikes one foe for 150% ATK and brands it with the end of the world — for 3 turns it takes +25% damage and cannot be healed.' },
+  chrono:  { name: 'Time Fracture',        icon: '⌛', kind: 'chrono', pow: 1.65, desc: 'Signature: shatters time for 165% ATK (ignores DEF). Time races around this monster — its skill charges twice as fast.' }
 };
 // How a monster's skill shapes its stat spread (role identity).
 const TCG_ROLE_MODS = {
@@ -28132,7 +28136,10 @@ const TCG_ROLE_MODS = {
   shield:  { atk: 0.85, def: 1.45, heal: 0.80, hp: 1.18, spd: -6 },
   rage:    { atk: 1.00, def: 1.10, heal: 0.90, hp: 1.08, spd: 0 },
   stun:    { atk: 1.05, def: 0.95, heal: 0.75, hp: 0.95, spd: 10 },
-  poison:  { atk: 1.02, def: 0.95, heal: 0.80, hp: 0.98, spd: 6 }
+  poison:  { atk: 1.02, def: 0.95, heal: 0.80, hp: 0.98, spd: 6 },
+  dawn:    { atk: 1.12, def: 0.95, heal: 1.05, hp: 1.00, spd: 2 },
+  curse:   { atk: 1.15, def: 0.95, heal: 0.70, hp: 1.00, spd: 6 },
+  chrono:  { atk: 1.18, def: 0.92, heal: 0.65, hp: 0.98, spd: 10 }
 };
 // ---- Elemental affinity: 5 combat elements in a super-effective ring. Each
 // deals ×2 to the one it "beats" and takes ×2 (deals ×0.5) to the one that
@@ -28224,170 +28231,170 @@ const TCG_STRATS_HEAL = [
 // ---- Generation 1: all 151 monsters. [name, emoji, element, skill] per star tier.
 // Do not reorder existing entries — a card's id (c001…c151) is its position.
 const TCG_GEN1 = {
-  1: [ // 30 × 1★
-    ['Pyrrik, the Cinderwhelp', '🐹', 'flame', 'scratch'],
-    ['Nimue, the Dewborn', '💧', 'aqua', 'rain'],
-    ['Voltas, the Stormseed', '🐭', 'spark', 'jolt'],
-    ['Gorrim, the Pebblebound', '🪨', 'terra', 'bark'],
-    ['Thalia, the Seedmaiden', '🌱', 'flora', 'bloom'],
-    ['Krivv, the Frostgnat', '🦟', 'frost', 'freeze'],
-    ['Ozzik, the Sludgeborn', '🟢', 'venom', 'spores'],
-    ['Lyssa, the Dreammoth', '🦋', 'psychic', 'arrow'],
-    ['Lumen, the Dawnbeetle', '🐞', 'light', 'bloom'],
-    ['Umbrik, the Shadeling', '🐾', 'shadow', 'drain'],
-    ['Ferrik, the Cogsworn', '⚙️', 'metal', 'aegis'],
-    ['Astrel, the Starborn', '🌟', 'cosmic', 'arrow'],
-    ['Nerissa, the Tidefin', '🐟', 'aqua', 'fang'],
-    ['Zephyr, the Stormhatch', '🐤', 'spark', 'jolt'],
-    ['Vermis, the Gravewurm', '🪱', 'terra', 'venomf'],
-    ['Morel, the Sporeling', '🍄', 'venom', 'spores'],
-    ['Brammel, the Thornwing', '🐝', 'flora', 'fang'],
-    ['Torvus, the Shellwarden', '🐌', 'terra', 'bark'],
-    ['Cindra, the Emberling', '🐁', 'flame', 'scratch'],
-    ['Naiad, the Mistcaller', '💦', 'aqua', 'rain'],
-    ['Sylvie, the Mosswhisper', '🐈', 'flora', 'bloom'],
-    ['Boreas, the Hailborn', '🐶', 'frost', 'freeze'],
-    ['Lucent, the Gloamworm', '✨', 'light', 'drain'],
-    ['Vesper, the Nightwing', '🦇', 'shadow', 'drain'],
-    ['Cobbin, the Tinforged', '🤖', 'metal', 'aegis'],
-    ['Halyx, the Cometborn', '🪰', 'cosmic', 'arrow'],
-    ['Raizel, the Stormscale', '🦎', 'spark', 'storm'],
-    ['Oren, the Owlsage', '🦉', 'psychic', 'bloom'],
-    ['Bryar, the Thornveined', '🐀', 'flora', 'venomf'],
-    ['Ignatz, the Moltenborn', '🌋', 'flame', 'inferno']
+  1: [ // 30 × 1★ — 5th column: the monster's unique skill name (mechanics from column 4)
+    ['Pyrrik, the Cinderwhelp', '🐹', 'flame', 'scratch', 'Cinder Swipes'],
+    ['Nimue, the Dewborn', '💧', 'aqua', 'rain', 'Dewfall Blessing'],
+    ['Voltas, the Stormseed', '🐭', 'spark', 'jolt', 'Static Sting'],
+    ['Gorrim, the Pebblebound', '🪨', 'terra', 'bark', 'Pebble Palisade'],
+    ['Thalia, the Seedmaiden', '🌱', 'flora', 'bloom', 'Seedlight Bloom'],
+    ['Krivv, the Frostgnat', '🦟', 'frost', 'freeze', 'Rimebite Chill'],
+    ['Ozzik, the Sludgeborn', '🟢', 'venom', 'spores', 'Sludge Burst'],
+    ['Lyssa, the Dreammoth', '🦋', 'psychic', 'arrow', 'Dreamdust Dart'],
+    ['Lumen, the Dawnbeetle', '🐞', 'light', 'bloom', 'Dawnspark Mend'],
+    ['Umbrik, the Shadeling', '🐾', 'shadow', 'drain', 'Shade Sip'],
+    ['Ferrik, the Cogsworn', '⚙️', 'metal', 'aegis', 'Cogwork Bulwark'],
+    ['Astrel, the Starborn', '🌟', 'cosmic', 'arrow', 'Starlit Dart'],
+    ['Nerissa, the Tidefin', '🐟', 'aqua', 'fang', 'Riptide Nip'],
+    ['Zephyr, the Stormhatch', '🐤', 'spark', 'jolt', 'Hatchling Zap'],
+    ['Vermis, the Gravewurm', '🪱', 'terra', 'venomf', 'Gravesoil Bite'],
+    ['Morel, the Sporeling', '🍄', 'venom', 'spores', 'Spore Puff'],
+    ['Brammel, the Thornwing', '🐝', 'flora', 'fang', 'Thornstinger'],
+    ['Torvus, the Shellwarden', '🐌', 'terra', 'bark', 'Wardenshell Guard'],
+    ['Cindra, the Emberling', '🐁', 'flame', 'scratch', 'Ember Scratch'],
+    ['Naiad, the Mistcaller', '💦', 'aqua', 'rain', 'Misting Call'],
+    ['Sylvie, the Mosswhisper', '🐈', 'flora', 'bloom', 'Mosslight Purr'],
+    ['Boreas, the Hailborn', '🐶', 'frost', 'freeze', 'Hailstone Nip'],
+    ['Lucent, the Gloamworm', '✨', 'light', 'drain', 'Gloamglow Leech'],
+    ['Vesper, the Nightwing', '🦇', 'shadow', 'drain', 'Nightwing Sip'],
+    ['Cobbin, the Tinforged', '🤖', 'metal', 'aegis', 'Tinplate Wall'],
+    ['Halyx, the Cometborn', '🪰', 'cosmic', 'arrow', 'Comet Dart'],
+    ['Raizel, the Stormscale', '🦎', 'spark', 'storm', 'Scaleshock Surge'],
+    ['Oren, the Owlsage', '🦉', 'psychic', 'bloom', 'Owlsage Remedy'],
+    ['Bryar, the Thornveined', '🐀', 'flora', 'venomf', 'Thornvein Prick'],
+    ['Ignatz, the Moltenborn', '🌋', 'flame', 'inferno', 'Magma Spittle']
   ],
   2: [ // 35 × 2★
-    ['Pyrros, the Emberhound', '🐕', 'flame', 'bite'],
-    ['Maren, the Waverider', '🐠', 'aqua', 'tidal'],
-    ['Voltara, the Hexhare', '🐇', 'spark', 'jolt'],
-    ['Tarn, the Shellbastion', '🐢', 'terra', 'bark'],
-    ['Ivessa, the Strangler', '🌿', 'flora', 'venomf'],
-    ['Kitsa, the Rimefox', '🦊', 'frost', 'freeze'],
-    ['Bufo, the Blightcroaker', '🐸', 'venom', 'venomf'],
-    ['Mesmeron, the Mindgnawer', '🐭', 'psychic', 'arrow'],
-    ['Soleil, the Dawnherald', '🐥', 'light', 'solar'],
-    ['Nyra, the Duskprowler', '🐈‍⬛', 'shadow', 'drain'],
-    ['Brakk, the Ironshell', '🪲', 'metal', 'smash'],
-    ['Orbys, the Starpuffer', '🐡', 'cosmic', 'arrow'],
-    ['Malzar, the Emberfiend', '👺', 'flame', 'inferno'],
-    ['Zelka, the Stormjelly', '🪼', 'spark', 'jolt'],
-    ['Coralia, the Reefwarden', '🪸', 'aqua', 'aegis'],
-    ['Skarn, the Dunebreaker', '🦀', 'terra', 'smash'],
-    ['Quilla, the Barbback', '🦔', 'flora', 'fang'],
-    ['Eirwen, the Snowfawn', '🦌', 'frost', 'aurora'],
-    ['Mephit, the Smogbringer', '🌫️', 'venom', 'spores'],
-    ['Echora, the Lostwhisper', '👻', 'psychic', 'drain'],
-    ['Aurelin, the Lightbearer', '🐦', 'light', 'bloom'],
-    ['Noctys, the Midnight Talon', '🦉', 'shadow', 'eclipse'],
-    ['Gnawrim, the Rustwright', '🦫', 'metal', 'bark'],
-    ['Perseon, the Skyfallen', '☄️', 'cosmic', 'smash'],
-    ['Vulkor, the Ashfang', '🐺', 'flame', 'bite'],
-    ['Lutra, the Tidesinger', '🦦', 'aqua', 'rain'],
-    ['Felyx, the Staticlaw', '🐱', 'spark', 'storm'],
-    ['Grond, the Stonetoad', '🗿', 'terra', 'smash'],
-    ['Ferna, the Gladewatcher', '🦊', 'flora', 'bloom'],
-    ['Skadia, the Floeborn', '🦭', 'frost', 'freeze'],
-    ['Vyxen, the Venomlash', '🦂', 'venom', 'venomf'],
-    ['Somnia, the Dreamherd', '🐑', 'psychic', 'chorus'],
-    ['Irisyl, the Prismhound', '🌈', 'light', 'aurora'],
-    ['Murgrim, the Gutterking', '🐀', 'shadow', 'drain'],
-    ['Ferrugo, the Rustshell', '🐌', 'metal', 'aegis']
+    ['Pyrros, the Emberhound', '🐕', 'flame', 'bite', 'Emberfang Crunch'],
+    ['Maren, the Waverider', '🐠', 'aqua', 'tidal', 'Curling Breaker'],
+    ['Voltara, the Hexhare', '🐇', 'spark', 'jolt', 'Hexspark Kick'],
+    ['Tarn, the Shellbastion', '🐢', 'terra', 'bark', 'Bastion Shell'],
+    ['Ivessa, the Strangler', '🌿', 'flora', 'venomf', 'Strangling Vines'],
+    ['Kitsa, the Rimefox', '🦊', 'frost', 'freeze', 'Rimefox Kiss'],
+    ['Bufo, the Blightcroaker', '🐸', 'venom', 'venomf', 'Blightcroak'],
+    ['Mesmeron, the Mindgnawer', '🐭', 'psychic', 'arrow', 'Mindgnaw Bolt'],
+    ['Soleil, the Dawnherald', '🐥', 'light', 'solar', 'Heralded Sunburst'],
+    ['Nyra, the Duskprowler', '🐈‍⬛', 'shadow', 'drain', 'Duskstalk Drain'],
+    ['Brakk, the Ironshell', '🪲', 'metal', 'smash', 'Ironshell Slam'],
+    ['Orbys, the Starpuffer', '🐡', 'cosmic', 'arrow', 'Starneedle Shot'],
+    ['Malzar, the Emberfiend', '👺', 'flame', 'inferno', 'Fiendfire Storm'],
+    ['Zelka, the Stormjelly', '🪼', 'spark', 'jolt', 'Jellyshock Tangle'],
+    ['Coralia, the Reefwarden', '🪸', 'aqua', 'aegis', 'Reefshield Bloom'],
+    ['Skarn, the Dunebreaker', '🦀', 'terra', 'smash', 'Dunecrusher Claw'],
+    ['Quilla, the Barbback', '🦔', 'flora', 'fang', 'Quillpierce'],
+    ['Eirwen, the Snowfawn', '🦌', 'frost', 'aurora', 'Snowlight Mend'],
+    ['Mephit, the Smogbringer', '🌫️', 'venom', 'spores', 'Choking Smog'],
+    ['Echora, the Lostwhisper', '👻', 'psychic', 'drain', 'Whispered Woe'],
+    ['Aurelin, the Lightbearer', '🐦', 'light', 'bloom', 'Lightbearer Grace'],
+    ['Noctys, the Midnight Talon', '🦉', 'shadow', 'eclipse', 'Midnight Talons'],
+    ['Gnawrim, the Rustwright', '🦫', 'metal', 'bark', 'Rustwright Rampart'],
+    ['Perseon, the Skyfallen', '☄️', 'cosmic', 'smash', 'Skyfall Impact'],
+    ['Vulkor, the Ashfang', '🐺', 'flame', 'bite', 'Ashfang Maul'],
+    ['Lutra, the Tidesinger', '🦦', 'aqua', 'rain', 'Tidesong Shower'],
+    ['Felyx, the Staticlaw', '🐱', 'spark', 'storm', 'Staticlaw Tempest'],
+    ['Grond, the Stonetoad', '🗿', 'terra', 'smash', 'Stonetongue Slam'],
+    ['Ferna, the Gladewatcher', '🦊', 'flora', 'bloom', 'Gladelight Mend'],
+    ['Skadia, the Floeborn', '🦭', 'frost', 'freeze', 'Floe Lock'],
+    ['Vyxen, the Venomlash', '🦂', 'venom', 'venomf', 'Venomlash Sting'],
+    ['Somnia, the Dreamherd', '🐑', 'psychic', 'chorus', 'Lullaby Chorus'],
+    ['Irisyl, the Prismhound', '🌈', 'light', 'aurora', 'Prismlight Glow'],
+    ['Murgrim, the Gutterking', '🐀', 'shadow', 'drain', 'Gutter Tithe'],
+    ['Ferrugo, the Rustshell', '🐌', 'metal', 'aegis', 'Rustshell Redoubt']
   ],
   3: [ // 35 × 3★
-    ['Bandyr, the Ashmasked', '🦝', 'flame', 'scratch'],
-    ['Galapos, the Tidebastion', '🐢', 'aqua', 'aegis'],
-    ['Voltram, the Thunderhorn', '🐏', 'spark', 'horn'],
-    ['Golgar, the Cragheart', '🧱', 'terra', 'aegis'],
-    ['Elowen, the Bloomtender', '🦌', 'flora', 'rain'],
-    ['Fenris, the Glacierhowl', '🐺', 'frost', 'freeze'],
-    ['Vissera, the Coilblight', '🐍', 'venom', 'venomf'],
-    ['Mirren, the Psywhisker', '🐈', 'psychic', 'arrow'],
-    ['Helion, the Suncrowned', '🌞', 'light', 'solar'],
-    ['Nocturne, the Veilwing', '🦇', 'shadow', 'eclipse'],
-    ['Ferrox, the Steelantler', '🫎', 'metal', 'horn'],
-    ['Lyrax, the Voidstalker', '🐆', 'cosmic', 'arrow'],
-    ['Brann, the Flamefist', '🐒', 'flame', 'scratch'],
-    ['Cerulos, the Spearfin', '🐬', 'aqua', 'fang'],
-    ['Zarrak, the Livewire', '🐟', 'spark', 'fang'],
-    ['Tuskar, the Basaltbreaker', '🐗', 'terra', 'smash'],
-    ['Salix, the Willowshade', '🍃', 'flora', 'drain'],
-    ['Cervyn, the Rimeantler', '❄️', 'frost', 'horn'],
-    ['Pestis, the Miasmawing', '🦟', 'venom', 'spores'],
-    ['Delphyne, the Farseer', '🦊', 'psychic', 'bloom'],
-    ['Selura, the Radiantveil', '🦋', 'light', 'aurora'],
-    ['Grimjaw, the Gloomfang', '🐺', 'shadow', 'bite'],
-    ['Brontes, the Bronzehide', '🦬', 'metal', 'bark'],
-    ['Lepus, the Starbounder', '🐇', 'cosmic', 'jolt'],
-    ['Salvax, the Flamecaller', '🦎', 'flame', 'inferno'],
-    ['Skallag, the Deepcoiler', '🦑', 'aqua', 'tidal'],
-    ['Aquilus, the Stormtalon', '🦅', 'spark', 'storm'],
-    ['Terrag, the Spineshield', '🦔', 'terra', 'aegis'],
-    ['Mantissa, the Bladepetal', '🦗', 'flora', 'fang'],
-    ['Jorgun, the Bergbreaker', '🧊', 'frost', 'smash'],
-    ['Sobrak, the Mirefang', '🐊', 'venom', 'bite'],
-    ['Lunara, the Moonveil', '🌙', 'psychic', 'chorus'],
-    ['Aurion, the Dawnstrider', '🐴', 'light', 'rain'],
-    ['Corvax, the Carrionwhisper', '🐦‍⬛', 'shadow', 'drain'],
-    ['Vulcanis, the Forgeshell', '🐢', 'metal', 'aegis']
+    ['Bandyr, the Ashmasked', '🦝', 'flame', 'scratch', 'Ashmask Ambush'],
+    ['Galapos, the Tidebastion', '🐢', 'aqua', 'aegis', 'Tidewall Aegis'],
+    ['Voltram, the Thunderhorn', '🐏', 'spark', 'horn', 'Thunderhorn Charge'],
+    ['Golgar, the Cragheart', '🧱', 'terra', 'aegis', 'Cragheart Bulwark'],
+    ['Elowen, the Bloomtender', '🦌', 'flora', 'rain', 'Petal Rainfall'],
+    ['Fenris, the Glacierhowl', '🐺', 'frost', 'freeze', 'Glacier Howl'],
+    ['Vissera, the Coilblight', '🐍', 'venom', 'venomf', 'Coilblight Bite'],
+    ['Mirren, the Psywhisker', '🐈', 'psychic', 'arrow', 'Psywhisker Lance'],
+    ['Helion, the Suncrowned', '🌞', 'light', 'solar', 'Crownfire Blaze'],
+    ['Nocturne, the Veilwing', '🦇', 'shadow', 'eclipse', 'Veilwing Feast'],
+    ['Ferrox, the Steelantler', '🫎', 'metal', 'horn', 'Steelantler Rush'],
+    ['Lyrax, the Voidstalker', '🐆', 'cosmic', 'arrow', 'Voidpounce Bolt'],
+    ['Brann, the Flamefist', '🐒', 'flame', 'scratch', 'Flamefist Flurry'],
+    ['Cerulos, the Spearfin', '🐬', 'aqua', 'fang', 'Spearfin Skewer'],
+    ['Zarrak, the Livewire', '🐟', 'spark', 'fang', 'Livewire Lunge'],
+    ['Tuskar, the Basaltbreaker', '🐗', 'terra', 'smash', 'Basaltbreaker Tusk'],
+    ['Salix, the Willowshade', '🍃', 'flora', 'drain', 'Willowshade Sap'],
+    ['Cervyn, the Rimeantler', '❄️', 'frost', 'horn', 'Rimeantler Charge'],
+    ['Pestis, the Miasmawing', '🦟', 'venom', 'spores', 'Miasma Cloud'],
+    ['Delphyne, the Farseer', '🦊', 'psychic', 'bloom', 'Farseer Blessing'],
+    ['Selura, the Radiantveil', '🦋', 'light', 'aurora', 'Radiantveil Shimmer'],
+    ['Grimjaw, the Gloomfang', '🐺', 'shadow', 'bite', 'Gloomfang Crush'],
+    ['Brontes, the Bronzehide', '🦬', 'metal', 'bark', 'Bronzehide Guard'],
+    ['Lepus, the Starbounder', '🐇', 'cosmic', 'jolt', 'Starbound Kick'],
+    ['Salvax, the Flamecaller', '🦎', 'flame', 'inferno', 'Called Flamestorm'],
+    ['Skallag, the Deepcoiler', '🦑', 'aqua', 'tidal', 'Deepcoil Undertow'],
+    ['Aquilus, the Stormtalon', '🦅', 'spark', 'storm', 'Stormtalon Dive'],
+    ['Terrag, the Spineshield', '🦔', 'terra', 'aegis', 'Spineshield Wall'],
+    ['Mantissa, the Bladepetal', '🦗', 'flora', 'fang', 'Bladepetal Slice'],
+    ['Jorgun, the Bergbreaker', '🧊', 'frost', 'smash', 'Bergbreaker Blow'],
+    ['Sobrak, the Mirefang', '🐊', 'venom', 'bite', 'Mirefang Deathroll'],
+    ['Lunara, the Moonveil', '🌙', 'psychic', 'chorus', 'Moonveil Serenade'],
+    ['Aurion, the Dawnstrider', '🐴', 'light', 'rain', 'Dawnstride Shower'],
+    ['Corvax, the Carrionwhisper', '🐦‍⬛', 'shadow', 'drain', 'Carrion Whisper'],
+    ['Vulcanis, the Forgeshell', '🐢', 'metal', 'aegis', 'Forgeshell Ward']
   ],
   4: [ // 25 × 4★
-    ['Pyrothane, the Ashen Sage', '🦉', 'flame', 'inferno'],
-    ['Vortessa, the Maelstrom Queen', '🌀', 'aqua', 'tidal'],
-    ['Kirrag, the Stormtiger', '🐅', 'spark', 'storm'],
-    ['Atlan, the Worldshell', '🐢', 'terra', 'aegis'],
-    ['Cernun, the Sylvan Lord', '🦌', 'flora', 'rain'],
-    ['Bjornak, the Permafrost', '🐻‍❄️', 'frost', 'smash'],
-    ['Nagrith, the Rotcrawler', '🐛', 'venom', 'venomf'],
-    ['Psyrix, the Mindrender', '🧠', 'psychic', 'arrow'],
-    ['Lumessa, the Purelight', '🦄', 'light', 'aurora'],
-    ['Nyxara, the Duskempress', '🐈‍⬛', 'shadow', 'eclipse'],
-    ['Ferrogar, the Siegehorn', '🦏', 'metal', 'horn'],
-    ['Stellarion, the Nightwatcher', '🌠', 'cosmic', 'arrow'],
-    ['Drakov, the Emberscale', '🐲', 'flame', 'bite'],
-    ['Abyssia, the Depthcoil', '🐍', 'aqua', 'drain'],
-    ['Fulgar, the Skypiercer', '🦅', 'spark', 'jolt'],
-    ['Obsidius, the Moltencore', '🌋', 'terra', 'smash'],
-    ['Rosaria, the Bloomcaller', '🌺', 'flora', 'chorus'],
-    ['Borvina, the Whiteout', '❄️', 'frost', 'freeze'],
-    ['Vipraxa, the Mirequeen', '🐍', 'venom', 'venomf'],
-    ['Enigmus, the Riddlekeeper', '🦁', 'psychic', 'bloom'],
-    ['Solarius, the Radiant Phoenix', '🐦‍🔥', 'light', 'solar'],
-    ['Morthul, the Duskreaper', '💀', 'shadow', 'eclipse'],
-    ['Gryphus, the Steelwing', '🦅', 'metal', 'fang'],
-    ['Quasara, the Fallen Star', '🐠', 'cosmic', 'rain'],
-    ['Leovar, the Cinderking', '🦁', 'flame', 'roar']
+    ['Pyrothane, the Ashen Sage', '🦉', 'flame', 'inferno', 'Sagefire Cataclysm'],
+    ['Vortessa, the Maelstrom Queen', '🌀', 'aqua', 'tidal', 'Royal Maelstrom'],
+    ['Kirrag, the Stormtiger', '🐅', 'spark', 'storm', 'Tigerstorm Barrage'],
+    ['Atlan, the Worldshell', '🐢', 'terra', 'aegis', 'Worldshell Aegis'],
+    ['Cernun, the Sylvan Lord', '🦌', 'flora', 'rain', 'Sylvan Renewal'],
+    ['Bjornak, the Permafrost', '🐻‍❄️', 'frost', 'smash', 'Permafrost Maul'],
+    ['Nagrith, the Rotcrawler', '🐛', 'venom', 'venomf', 'Rotcrawler Gnaw'],
+    ['Psyrix, the Mindrender', '🧠', 'psychic', 'arrow', 'Mindrend Spike'],
+    ['Lumessa, the Purelight', '🦄', 'light', 'aurora', 'Purelight Halo'],
+    ['Nyxara, the Duskempress', '🐈‍⬛', 'shadow', 'eclipse', 'Imperial Duskfeast'],
+    ['Ferrogar, the Siegehorn', '🦏', 'metal', 'horn', 'Siegehorn Ram'],
+    ['Stellarion, the Nightwatcher', '🌠', 'cosmic', 'arrow', 'Nightwatch Starshot'],
+    ['Drakov, the Emberscale', '🐲', 'flame', 'bite', 'Emberscale Snap'],
+    ['Abyssia, the Depthcoil', '🐍', 'aqua', 'drain', 'Depthcoil Squeeze'],
+    ['Fulgar, the Skypiercer', '🦅', 'spark', 'jolt', 'Skypiercer Bolt'],
+    ['Obsidius, the Moltencore', '🌋', 'terra', 'smash', 'Moltencore Eruption'],
+    ['Rosaria, the Bloomcaller', '🌺', 'flora', 'chorus', 'Bloomcall Chorale'],
+    ['Borvina, the Whiteout', '❄️', 'frost', 'freeze', 'Total Whiteout'],
+    ['Vipraxa, the Mirequeen', '🐍', 'venom', 'venomf', 'Mirequeen Kiss'],
+    ['Enigmus, the Riddlekeeper', '🦁', 'psychic', 'bloom', 'Riddlelight Boon'],
+    ['Solarius, the Radiant Phoenix', '🐦‍🔥', 'light', 'solar', 'Phoenix Sunflare'],
+    ['Morthul, the Duskreaper', '💀', 'shadow', 'eclipse', 'Duskreap Harvest'],
+    ['Gryphus, the Steelwing', '🦅', 'metal', 'fang', 'Steelwing Shear'],
+    ['Quasara, the Fallen Star', '🐠', 'cosmic', 'rain', 'Fallen Starlight'],
+    ['Leovar, the Cinderking', '🦁', 'flame', 'roar', 'Cinderking Decree']
   ],
   5: [ // 15 × 5★
-    ['Volkarrion, the Flame Tyrant', '🐉', 'flame', 'inferno'],
-    ['Nereth, the Deep Sovereign', '🐋', 'aqua', 'tidal'],
-    ['Raivo, the Tempest Incarnate', '⛈️', 'spark', 'storm'],
-    ['Gaiagor, the Earthshaker', '🦬', 'terra', 'quake'],
-    ['Amara, the Everbloom', '🌸', 'flora', 'chorus'],
-    ['Cryvexa, the Frozen Warden', '🧊', 'frost', 'freeze'],
-    ['Sythrax, the Rotmonarch', '🐍', 'venom', 'spores'],
-    ['Illithar, the Thoughtdrinker', '🦑', 'psychic', 'drain'],
-    ['Solandra, the Lightmother', '🦌', 'light', 'aurora'],
-    ['Erevos, the Voidprowler', '🐆', 'shadow', 'eclipse'],
-    ['Vulcanor, the Worldforge', '🤖', 'metal', 'aegis'],
-    ['Andrella, the Startide', '🌌', 'cosmic', 'nova'],
-    ['Pyrelia, the Undying Flame', '🐦‍🔥', 'flame', 'aurora'],
-    ['Thalassor, the Tidal Colossus', '🐳', 'aqua', 'smash'],
-    ['Yggdris, the Elder Oak', '🌳', 'flora', 'bark']
+    ['Volkarrion, the Flame Tyrant', '🐉', 'flame', 'inferno', 'Tyrannic Firestorm'],
+    ['Nereth, the Deep Sovereign', '🐋', 'aqua', 'tidal', 'Sovereign Depthsurge'],
+    ['Raivo, the Tempest Incarnate', '⛈️', 'spark', 'storm', 'Incarnate Tempest'],
+    ['Gaiagor, the Earthshaker', '🦬', 'terra', 'quake', 'Continental Shatter'],
+    ['Amara, the Everbloom', '🌸', 'flora', 'chorus', 'Everbloom Hymn'],
+    ['Cryvexa, the Frozen Warden', '🧊', 'frost', 'freeze', 'Absolute Permafreeze'],
+    ['Sythrax, the Rotmonarch', '🐍', 'venom', 'spores', 'Monarch Rotcloud'],
+    ['Illithar, the Thoughtdrinker', '🦑', 'psychic', 'drain', 'Thoughtdrink Feast'],
+    ['Solandra, the Lightmother', '🦌', 'light', 'aurora', 'Motherlight Aurora'],
+    ['Erevos, the Voidprowler', '🐆', 'shadow', 'eclipse', 'Voidprowl Feast'],
+    ['Vulcanor, the Worldforge', '🤖', 'metal', 'aegis', 'Worldforge Rampart'],
+    ['Andrella, the Startide', '🌌', 'cosmic', 'nova', 'Startide Cascade'],
+    ['Pyrelia, the Undying Flame', '🐦‍🔥', 'flame', 'aurora', 'Undying Flamelight'],
+    ['Thalassor, the Tidal Colossus', '🐳', 'aqua', 'smash', 'Colossal Wavebreak'],
+    ['Yggdris, the Elder Oak', '🌳', 'flora', 'bark', 'Elderroot Bastion']
   ],
   6: [ // 8 × 6★
-    ['Ignarok, the Extinction Flame', '🦖', 'flame', 'roar'],
-    ['Dagrath, the Abyssal King', '🐙', 'aqua', 'tidal'],
-    ['Voltrannus, the Storm Eternal', '🐲', 'spark', 'storm'],
-    ['Mammorak, the Walking Mountain', '🦣', 'terra', 'quake'],
-    ['Celestine, the First Light', '🦌', 'light', 'chorus'],
-    ['Nyxthara, the Endless Night', '🐍', 'shadow', 'eclipse'],
-    ['Chromagog, the Iron Colossus', '🦾', 'metal', 'smash'],
-    ['Sera, the Archangel', '👼', 'cosmic', 'nova']
+    ['Ignarok, the Extinction Flame', '🦖', 'flame', 'roar', 'Extinction Roar'],
+    ['Dagrath, the Abyssal King', '🐙', 'aqua', 'tidal', 'Abyssal Dominion'],
+    ['Voltrannus, the Storm Eternal', '🐲', 'spark', 'storm', 'Eternal Stormfury'],
+    ['Mammorak, the Walking Mountain', '🦣', 'terra', 'quake', 'Mountainfall Stomp'],
+    ['Celestine, the First Light', '🦌', 'light', 'chorus', 'First Light Chorale'],
+    ['Nyxthara, the Endless Night', '🐍', 'shadow', 'eclipse', 'Endless Nightfeast'],
+    ['Chromagog, the Iron Colossus', '🦾', 'metal', 'smash', 'Colossus Ironfall'],
+    ['Sera, the Archangel', '👼', 'cosmic', 'nova', 'Seraphic Judgement']
   ],
-  7: [ // 3 × 7★ — the legendary trio
-    ['Auros, the Dawnfather', '☀️', 'light', 'solar'],
-    ['Draxx, the End Bringer', '🌑', 'shadow', 'eclipse'],
-    ['Aeonyx, the Timeless One', '🐉', 'cosmic', 'nova']
+  7: [ // 3 × 7★ — the legendary trio, each with a signature one-of-a-kind skill
+    ['Auros, the Dawnfather', '☀️', 'light', 'sunrise', 'Dawnfather Judgement'],
+    ['Draxx, the End Bringer', '🌑', 'shadow', 'doom', 'Worldsend Curse'],
+    ['Aeonyx, the Timeless One', '🐉', 'cosmic', 'chrono', 'Time Fracture']
   ]
 };
 // Flatten to the master dex: id c001…c151 by position.
@@ -28395,7 +28402,7 @@ const TCG_CARDS = [];
 [1, 2, 3, 4, 5, 6, 7].forEach(stars => {
   (TCG_GEN1[stars] || []).forEach(row => {
     const n = TCG_CARDS.length + 1;
-    TCG_CARDS.push({ id: 'c' + String(n).padStart(3, '0'), num: n, name: row[0], em: row[1], element: row[2], skillId: row[3], stars });
+    TCG_CARDS.push({ id: 'c' + String(n).padStart(3, '0'), num: n, name: row[0], em: row[1], element: row[2], skillId: row[3], skillName: row[4] || null, stars });
   });
 });
 const TCG_BY_ID = {};
@@ -28417,13 +28424,16 @@ function _tcgLevelMult(level) { return 1 + (_tcgClampLvl(level) - 1) * 0.015; }
 function tcgSkillTier(level) { level = _tcgClampLvl(level); return level >= 99 ? 3 : level >= 50 ? 2 : 1; }
 function tcgLevel(id) { const s = tcgState(); return _tcgClampLvl((s && s.levels && s.levels[id]) || 1); }
 function tcgLvlProg(id) { const s = tcgState(); return Math.max(0, Math.min(TCG_LVL_STEP, (s && s.lvlp && s.lvlp[id]) | 0)); }
-// A leveled copy of a monster's skill — power scales up at Lv50 (+25%) and Lv99 (+50%).
+// A leveled copy of a monster's skill — power scales up at Lv50 (+25%) and Lv99
+// (+50%). Every monster carries its own signature skill name (card.skillName)
+// over the shared mechanics of its base skill.
 function tcgLeveledSkill(card, level) {
   const base = TCG_SKILLS[card.skillId];
+  const name0 = card.skillName || base.name;
   const tier = tcgSkillTier(level);
-  if (tier === 1) return Object.assign({}, base, { tier: 1, baseName: base.name });
+  if (tier === 1) return Object.assign({}, base, { tier: 1, name: name0, baseName: name0 });
   const mult = tier === 3 ? 1.5 : 1.25;
-  return Object.assign({}, base, { tier, baseName: base.name, pow: +(base.pow * mult).toFixed(3), name: base.name + (tier === 3 ? ' ✦' : ' +') });
+  return Object.assign({}, base, { tier, baseName: name0, pow: +(base.pow * mult).toFixed(3), name: name0 + (tier === 3 ? ' ✦' : ' +') });
 }
 // Record one correct answer toward a card's next level. Returns a summary of
 // what happened (level-up / skill upgrade / already maxed) and persists.
@@ -29413,7 +29423,7 @@ function _tcgMkUnit(cardId, side, slot, level) {
     hp: st.hp, maxHp: st.hp, atk: st.atk, def: st.def, heal: st.heal, spd: st.spd,
     skill: tcgLeveledSkill(c, lv),
     charge: Math.floor(Math.random() * 2), shield: 0, stun: 0,
-    poison: null, atkUp: 0, atkUpPct: 0,
+    poison: null, curse: null, atkUp: 0, atkUpPct: 0,
     strat: { attack: 'lowhp', heal: 'mosthurt' }, skillThresh: 3,
     critBonus: 0, emberAmp: 0, wardStatus: false, lifesteal: 0, thorns: 0, regen: 0, ctx: null
   };
@@ -29453,7 +29463,7 @@ function _tcgRefreshUnit(u) {
   const txt = el.querySelector('.tcgb-hptext');
   if (txt) txt.textContent = Math.max(0, Math.round(u.hp)) + ' / ' + u.maxHp;
   const stat = el.querySelector('.tcgb-status');
-  if (stat) stat.textContent = (u.shield > 0 ? '🛡️' : '') + (u.stun > 0 ? '💫' : '') + (u.poison ? '☠️' : '') + (u.atkUp > 0 ? '📈' : '');
+  if (stat) stat.textContent = (u.shield > 0 ? '🛡️' : '') + (u.stun > 0 ? '💫' : '') + (u.poison ? '☠️' : '') + (u.curse ? '🕯️' : '') + (u.atkUp > 0 ? '📈' : '');
   el.classList.toggle('dead', u.hp <= 0);
 }
 function _tcgPopup(u, text, cls) {
@@ -29474,7 +29484,7 @@ async function _tcgBanner(stage, skill) {
   b.className = 'tcgb-skillbanner';
   b.innerHTML = '<div class="inner">' + skill.icon + ' ' + escapeHtml(skill.name) + '</div>';
   stage.appendChild(b);
-  const colors = { strike: 'rgba(251,146,60,0.5)', blast: 'rgba(239,68,68,0.5)', pierce: 'rgba(148,163,184,0.55)', drain: 'rgba(168,85,247,0.5)', heal: 'rgba(74,222,128,0.5)', healall: 'rgba(74,222,128,0.5)', shield: 'rgba(96,165,250,0.5)', rage: 'rgba(251,191,36,0.55)', stun: 'rgba(250,204,21,0.55)', poison: 'rgba(132,204,22,0.5)' };
+  const colors = { strike: 'rgba(251,146,60,0.5)', blast: 'rgba(239,68,68,0.5)', pierce: 'rgba(148,163,184,0.55)', drain: 'rgba(168,85,247,0.5)', heal: 'rgba(74,222,128,0.5)', healall: 'rgba(74,222,128,0.5)', shield: 'rgba(96,165,250,0.5)', rage: 'rgba(251,191,36,0.55)', stun: 'rgba(250,204,21,0.55)', poison: 'rgba(132,204,22,0.5)', dawn: 'rgba(253,224,71,0.55)', curse: 'rgba(107,33,168,0.6)', chrono: 'rgba(45,212,191,0.55)' };
   const flash = stage.querySelector('.tcgb-flash');
   if (flash) {
     flash.style.background = 'radial-gradient(circle at center, ' + (colors[skill.kind] || 'rgba(255,255,255,0.45)') + ', transparent 75%)';
@@ -29493,6 +29503,7 @@ function _tcgDamage(attacker, target, mult, ignoreDef) {
   let em = tcgElemMult(attacker.card, target.card);
   if (em >= 2 && attacker.emberAmp) em = attacker.emberAmp; // Catalyst Prism ×2.5 / Wyrmheart Ruby ×3
   raw *= em;
+  if (target.curse) raw *= 1.25; // Worldsend Curse: cursed foes take +25% damage
   const crit = Math.random() < (0.10 + (attacker.critBonus || 0));
   if (crit) raw *= 1.5;
   let dmg = Math.max(4, Math.round(raw));
@@ -29505,7 +29516,7 @@ function _tcgDamage(attacker, target, mult, ignoreDef) {
   target.hp = Math.max(0, target.hp - dmg);
   if (target.hp <= 0) _tcgTryRevive(target);
   // Lifesteal artifacts (Leech Fang / Reaper Chalice): every hit feeds the attacker.
-  if (dmg > 0 && attacker.lifesteal && attacker.hp > 0 && attacker.hp < attacker.maxHp) {
+  if (dmg > 0 && attacker.lifesteal && attacker.hp > 0 && attacker.hp < attacker.maxHp && !attacker.curse) {
     const back = Math.round(dmg * attacker.lifesteal);
     if (back > 0) { attacker.hp = Math.min(attacker.maxHp, attacker.hp + back); _tcgPopup(attacker, '+' + back, 'heal'); _tcgRefreshUnit(attacker); }
   }
@@ -29539,6 +29550,7 @@ async function _tcgHitFx(target, res) {
   _tcgRefreshUnit(target);
 }
 async function _tcgHealFx(target, amount) {
+  if (target.curse) { _tcgPopup(target, '🚫 cursed', 'status'); return; } // curse blocks all healing
   target.hp = Math.min(target.maxHp, target.hp + amount);
   const el = _tcgUnitEl(target);
   if (el) { el.classList.add('healed'); setTimeout(() => el.classList.remove('healed'), 700); }
@@ -29564,8 +29576,14 @@ function _tcgUnlunge(unit) {
 async function _tcgAct(stage, unit, allies, foes) {
   const el = _tcgUnitEl(unit);
   if (el) el.classList.add('acting');
+  // A curse burns down at the start of the cursed monster's turn.
+  if (unit.curse) {
+    unit.curse.turns--;
+    if (unit.curse.turns <= 0) { unit.curse = null; _tcgPopup(unit, '🕯️ curse lifted', 'status'); }
+    _tcgRefreshUnit(unit);
+  }
   // Regen artifacts (Moss Band → Lifebloom Torc) tick at the start of the turn.
-  if (unit.regen && unit.hp > 0 && unit.hp < unit.maxHp) {
+  if (unit.regen && unit.hp > 0 && unit.hp < unit.maxHp && !unit.curse) {
     const r = Math.max(1, Math.round(unit.maxHp * unit.regen));
     unit.hp = Math.min(unit.maxHp, unit.hp + r);
     _tcgPopup(unit, '🌿 +' + r, 'heal');
@@ -29592,7 +29610,8 @@ async function _tcgAct(stage, unit, allies, foes) {
     return;
   }
   if (unit.atkUp > 0) unit.atkUp--;
-  unit.charge++;
+  // Time Fracture (Aeonyx): time runs double, so the skill charges twice as fast.
+  unit.charge += (unit.skill && unit.skill.kind === 'chrono') ? 2 : 1;
   const sk = unit.skill;
   const strat = unit.strat || { attack: 'lowhp', heal: 'mosthurt' };
   const healKinds = sk.kind === 'heal' || sk.kind === 'healall';
@@ -29610,15 +29629,16 @@ async function _tcgAct(stage, unit, allies, foes) {
       _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> unleashes <b>' + escapeHtml(sk.name) + '</b> on the whole enemy team!');
       await tcgSleep(760);
       _tcgUnlunge(unit);
-    } else if (sk.kind === 'strike' || sk.kind === 'pierce' || sk.kind === 'drain' || sk.kind === 'stun' || sk.kind === 'poison') {
+    } else if (sk.kind === 'strike' || sk.kind === 'pierce' || sk.kind === 'drain' || sk.kind === 'stun' || sk.kind === 'poison' || sk.kind === 'curse' || sk.kind === 'chrono') {
       const t = _tcgTargetByStrat(unit, foes, strat.attack);
       if (t) {
         await _tcgLunge(unit);
-        const res = _tcgDamage(unit, t, sk.pow, sk.kind === 'pierce');
+        const res = _tcgDamage(unit, t, sk.pow, sk.kind === 'pierce' || sk.kind === 'chrono');
         await _tcgHitFx(t, res);
         if (sk.kind === 'drain') { const back = Math.round(res.dmg * 0.35); await _tcgHealFx(unit, back); }
         if (sk.kind === 'stun' && t.hp > 0 && !t.wardStatus) { t.stun = Math.max(t.stun, 1); _tcgPopup(t, '💫', 'status'); }
         if (sk.kind === 'poison' && t.hp > 0 && !t.wardStatus) { t.poison = { dmg: unit.atk * 0.4, turns: 3 }; _tcgPopup(t, '☠️', 'status'); }
+        if (sk.kind === 'curse' && t.hp > 0) { t.curse = { turns: 3 }; _tcgPopup(t, '🕯️ CURSED', 'status'); }
         _tcgRefreshUnit(t);
         _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> uses <b>' + escapeHtml(sk.name) + '</b> on ' + escapeHtml(tcgShortName(t.card)) + (res.crit ? ' — critical hit!' : '!'));
         await tcgSleep(660);
@@ -29645,6 +29665,16 @@ async function _tcgAct(stage, unit, allies, foes) {
       for (const a of allies.filter(x => x.hp > 0)) { a.atkUp = Math.max(a.atkUp, 2); a.atkUpPct = sk.pow; _tcgPopup(a, '📈 ATK up!', 'status'); _tcgRefreshUnit(a); }
       _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> lets out a <b>' + escapeHtml(sk.name) + '</b> — the team\'s attack rises!');
       await tcgSleep(700);
+    } else if (sk.kind === 'dawn') {
+      // Dawnfather Judgement (Auros): scorch every foe AND bathe the team in healing light.
+      await _tcgLunge(unit);
+      const targets = foes.filter(f => f.hp > 0);
+      for (const t of targets) { const res = _tcgDamage(unit, t, sk.pow, false); _tcgHitFx(t, res); }
+      const amt = Math.round(unit.heal * (sk.heal || 0.6));
+      for (const a of allies.filter(x => x.hp > 0)) _tcgHealFx(a, amt);
+      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> calls down <b>' + escapeHtml(sk.name) + '</b> — dawn sears every foe and heals the whole team!');
+      await tcgSleep(820);
+      _tcgUnlunge(unit);
     }
   } else {
     const t = _tcgTargetByStrat(unit, foes, strat.attack);
