@@ -4487,6 +4487,18 @@ option {
 .tcg-arti.locked { opacity: 0.6; background: var(--surface-alt); }
 .tcg-arti.locked:hover { border-color: var(--border); transform: none; }
 .tcg-arti.locked .tcg-arti-stars { filter: grayscale(1); }
+/* ---- in-battle artifact badges (hover/tap to read the card) ---- */
+.tcgb-arti { position: absolute; top: 10px; z-index: 30; cursor: pointer; display: flex; flex-direction: column; gap: 3px; max-width: 46%; }
+.tcgb-arti.left { left: 10px; align-items: flex-start; }
+.tcgb-arti.right { right: 10px; align-items: flex-end; }
+.tcgb-arti-owner { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em; color: rgba(255,255,255,0.65); text-shadow: 0 1px 3px rgba(0,0,0,0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.tcgb-arti-pill { display: inline-flex; align-items: center; gap: 6px; background: rgba(15,23,42,0.78); border: 1px solid rgba(240,181,66,0.55); color: #ffe9ad; border-radius: 999px; padding: 5px 12px; font-size: 0.72rem; white-space: nowrap; box-shadow: 0 3px 10px rgba(0,0,0,0.4); }
+.tcgb-arti.none { cursor: default; }
+.tcgb-arti.none .tcgb-arti-pill { border-color: rgba(255,255,255,0.22); color: rgba(255,255,255,0.55); }
+.tcgb-arti-card { display: none; position: absolute; top: calc(100% + 8px); width: 250px; z-index: 40; filter: drop-shadow(0 12px 30px rgba(0,0,0,0.6)); }
+.tcgb-arti.left .tcgb-arti-card { left: 0; }
+.tcgb-arti.right .tcgb-arti-card { right: 0; }
+.tcgb-arti:hover .tcgb-arti-card, .tcgb-arti.open .tcgb-arti-card { display: block; }
 /* ---- dungeon leaderboard ---- */
 .tcg-board { max-width: 680px; margin: 0 auto; }
 .tcg-board-prize { text-align: center; border: 1px solid #f0b542; background: linear-gradient(180deg, #fffdf6, #fff4d6); border-radius: 16px; padding: 18px 22px; margin-bottom: 20px; font-size: 0.95rem; line-height: 1.6; }
@@ -8420,7 +8432,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.125.0';
+const APP_VERSION = 'v1.126.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -24769,7 +24781,8 @@ function rpgPublishLeaderboard() {
         losses: rpgState.tcg.losses | 0,
         dex: Object.keys(rpgState.tcg.cards || {}).length,
         floor: Math.max(1, ((rpgState.tcg.dungeon || {}).level | 0)),
-        clears: (rpgState.tcg.dungeon || {}).cleared | 0
+        clears: (rpgState.tcg.dungeon || {}).cleared | 0,
+        artifact: rpgState.tcg.artifact || null
       } : null,
       updatedAt: new Date().toISOString()
     }).catch(e => console.warn("leaderboard publish", e));
@@ -29426,7 +29439,7 @@ async function tcgFindOpponent() {
     // Prefer the closest team power, with a little shuffle so rematches vary.
     candidates.sort((a, b) => Math.abs((a.tcg.power || tcgTeamPower(a.tcg.team)) - myPower) - Math.abs((b.tcg.power || tcgTeamPower(b.tcg.team)) - myPower));
     const pick = candidates[Math.floor(Math.random() * Math.min(3, candidates.length))];
-    return { name: pick.name || 'Trainer', ghost: false, tcgTeam: pick.tcg.team };
+    return { name: pick.name || 'Trainer', ghost: false, tcgTeam: pick.tcg.team, artifact: pick.tcg.artifact || null };
   }
   const name = TCG_GHOSTS[Math.floor(Math.random() * TCG_GHOSTS.length)];
   return { name, tcgTeam: _tcgGhostTeam(tcgTeamStars(s.team)), ghost: true };
@@ -29792,6 +29805,20 @@ async function _tcgAct(stage, unit, allies, foes) {
   }
   if (el) el.classList.remove('acting');
 }
+// Artifact badge pinned to the battle stage (opponent top-left, you top-right).
+// Hover — or tap on touch screens — reveals the full artifact card so the
+// effect can be read mid-battle. Shows a muted "no artifact" pill when empty.
+function _tcgArtiBadge(art, side, ownerLabel) {
+  if (!art) {
+    return '<div class="tcgb-arti ' + side + ' none"><span class="tcgb-arti-owner">' + escapeHtml(ownerLabel) + '</span>'
+      + '<span class="tcgb-arti-pill">🔱 No artifact</span></div>';
+  }
+  return '<div class="tcgb-arti ' + side + '" onclick="this.classList.toggle(\'open\')" title="' + escapeHtml(art.name + ' — ' + art.blurb) + '">'
+    + '<span class="tcgb-arti-owner">' + escapeHtml(ownerLabel) + '</span>'
+    + '<span class="tcgb-arti-pill">' + art.icon + ' <b>' + escapeHtml(art.name) + '</b></span>'
+    + '<div class="tcgb-arti-card">' + tcgArtifactCardHtml(art) + '</div>'
+    + '</div>';
+}
 function _tcgUnitHtml(u) {
   // 5-a-side: staggered double columns spread over the full stage height with
   // ~29% same-column spacing so a sprite never overlaps a neighbouring plate.
@@ -29857,6 +29884,11 @@ async function tcgRunBattle(myTeam, me, opp) {
   mine.forEach(u => { u.ctx = myCtx; });
   if (s0 && s0.artifact) _tcgApplyArtifact(mine, s0.artifact, myCtx);
   const myArt = tcgArtifactById(s0 && s0.artifact);
+  // A real opponent's published artifact buffs their team too — fair is fair.
+  const theirCtx = { phoenixLeft: 0 };
+  theirs.forEach(u => { u.ctx = theirCtx; });
+  if (opp.artifact) _tcgApplyArtifact(theirs, opp.artifact, theirCtx);
+  const oppArt = tcgArtifactById(opp.artifact);
   const o = document.createElement('div');
   o.className = 'tcg-overlay';
   o.id = 'tcgBattleOverlay';
@@ -29877,6 +29909,7 @@ async function tcgRunBattle(myTeam, me, opp) {
     + '</div>'
     + '<div class="tcgb-stage" id="tcgbStage">'
     +   '<div class="tcgb-vs-splash"><div class="who">' + escapeHtml(opp.name) + '</div><div class="vs">VS</div><div class="who">' + escapeHtml(me.name) + '</div></div>'
+    +   _tcgArtiBadge(oppArt, 'left', opp.name) + _tcgArtiBadge(myArt, 'right', 'Your team')
     +   theirs.map(_tcgUnitHtml).join('') + mine.map(_tcgUnitHtml).join('')
     +   '<div class="tcgb-flash"></div>'
     +   '<div class="tcgb-result" id="tcgbResult"></div>'
