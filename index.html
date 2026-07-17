@@ -4390,6 +4390,11 @@ option {
 .tcg-cell { display: flex; flex-direction: column; gap: 8px; }
 .tcg-cell .tcg-card { flex: 1; }
 .tcg-preview-btn { width: 100%; font-size: 0.76rem; padding: 7px 10px; }
+.tcg-train-btn { width: 100%; font-size: 0.76rem; padding: 7px 10px; }
+.tcg-quiz-q .qp-qtext { color: #eef1f7; font-size: 1rem; line-height: 1.55; margin-bottom: 8px; }
+.tcg-quiz-q .qp-qtext:last-child { margin-bottom: 0; }
+.tcg-quiz-img { margin: 10px 0; text-align: center; }
+.tcg-quiz-img img { max-width: 100%; max-height: 300px; height: auto; border-radius: 8px; border: 1px solid rgba(148,163,184,0.3); background: #fff; padding: 4px; }
 .tcg-zoom { max-width: min(92vw, 380px); width: 100%; animation: tcgZoomIn 0.28s cubic-bezier(.2,.8,.3,1.15); }
 .tcg-zoom .tcg-body { margin-top: -28px; padding: 0 12px 14px; }
 .tcg-zoom .tcg-card-name { font-size: 1.5rem; }
@@ -4464,6 +4469,10 @@ option {
 .tcg-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; max-width: 860px; margin: 0 auto; }
 .tcg-pack { border: 1px solid var(--border); border-radius: 18px; padding: 26px 22px; text-align: center; background: var(--surface); box-shadow: 0 3px 12px rgba(15,23,42,0.08); display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .tcg-pack-art { font-size: 58px; line-height: 1; margin-bottom: 4px; filter: drop-shadow(0 6px 10px rgba(15,23,42,0.25)); animation: tcgBobPack 2.6s ease-in-out infinite; }
+.tcg-pack-svg { width: 80px; height: 92px; display: block; margin: 0 auto; }
+.tcg-pack-bronze .tcg-pack-art { filter: drop-shadow(0 6px 12px rgba(140,80,30,0.45)); }
+.tcg-pack-silver .tcg-pack-art { filter: drop-shadow(0 6px 12px rgba(120,130,145,0.45)); }
+.tcg-pack-gold .tcg-pack-art { filter: drop-shadow(0 6px 14px rgba(230,170,50,0.5)); }
 @keyframes tcgBobPack { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-7px) rotate(2deg); } }
 .tcg-pack h4 { font-size: 1.05rem; }
 .tcg-pack .tcg-pack-desc { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; min-height: 3.6em; }
@@ -8357,7 +8366,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.119.0';
+const APP_VERSION = 'v1.120.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28339,18 +28348,42 @@ function tcgShortName(card) { return String((card && card.name) || '').split(','
 
 // ---- Booster packs (the ONLY way to get cards) ----
 const TCG_PACKS = [
-  { id: 'spark', name: 'Spark Pack', em: '🎴', cost: 120, cards: 3,
+  { id: 'spark', name: 'Bronze Pack', tier: 'bronze', em: '🎴', cost: 120, cards: 3,
     desc: '3 cards. A first taste of the dex — commons with a chance of something shiny.',
     odds: { 1: 40, 2: 30, 3: 17, 4: 8, 5: 3.5, 6: 1.2, 7: 0.3 } },
-  { id: 'nova', name: 'Nova Pack', em: '🎁', cost: 320, cards: 5,
+  { id: 'nova', name: 'Silver Pack', tier: 'silver', em: '🎁', cost: 320, cards: 5,
     desc: '5 cards — the last card is guaranteed 3★ or better.',
     odds: { 1: 34, 2: 30, 3: 20, 4: 10, 5: 4.2, 6: 1.4, 7: 0.4 },
     bonusOdds: { 3: 62, 4: 25, 5: 9, 6: 3, 7: 1 } },
-  { id: 'galaxy', name: 'Galaxy Pack', em: '💠', cost: 750, cards: 5,
+  { id: 'galaxy', name: 'Gold Pack', tier: 'gold', em: '💠', cost: 750, cards: 5,
     desc: '5 cards, nothing below 2★ — and the last card is guaranteed 4★ or better.',
     odds: { 2: 45, 3: 30, 4: 16, 5: 6, 6: 2.5, 7: 0.5 },
     bonusOdds: { 4: 68, 5: 22, 6: 8, 7: 2 } }
 ];
+// Bronze / silver / gold trading-card icon for each pack tier.
+function tcgPackArt(tier) {
+  const c = {
+    bronze: ['#f2c295', '#cd7f32', '#7c4a1c'],
+    silver: ['#f4f7fa', '#c2ccd6', '#828e9c'],
+    gold:   ['#ffe9ad', '#f0b542', '#9a6f18']
+  }[tier] || ['#dfe4ea', '#aab3bd', '#6b7480'];
+  const g = 'tcgpk_' + tier;
+  return '<svg class="tcg-pack-svg" viewBox="0 0 88 100" role="img" aria-hidden="true">'
+    + '<defs>'
+    +   '<linearGradient id="' + g + '" x1="0" y1="0" x2="1" y2="1">'
+    +     '<stop offset="0" stop-color="' + c[0] + '"/><stop offset="0.55" stop-color="' + c[1] + '"/><stop offset="1" stop-color="' + c[2] + '"/>'
+    +   '</linearGradient>'
+    +   '<linearGradient id="' + g + '_sh" x1="0" y1="0" x2="0" y2="1">'
+    +     '<stop offset="0" stop-color="#fff" stop-opacity="0.5"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.05"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>'
+    +   '</linearGradient>'
+    + '</defs>'
+    + '<g transform="rotate(-7 44 50)">'
+    +   '<rect x="12" y="6" width="64" height="88" rx="11" fill="url(#' + g + ')" stroke="rgba(0,0,0,0.28)" stroke-width="1.5"/>'
+    +   '<rect x="12" y="6" width="64" height="44" rx="11" fill="url(#' + g + '_sh)"/>'
+    +   '<rect x="19" y="13" width="50" height="74" rx="7" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="1.6"/>'
+    +   '<path d="M44 30 L49.5 44 L64 45 L52.5 54 L56.5 68 L44 60 L31.5 68 L35.5 54 L24 45 L38.5 44 Z" fill="#fff" opacity="0.92" stroke="rgba(0,0,0,0.15)" stroke-width="0.8" stroke-linejoin="round"/>'
+    + '</g></svg>';
+}
 function _tcgRollStars(odds) {
   const total = Object.values(odds).reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
@@ -28664,12 +28697,16 @@ function tcgDexHtml(s) {
     + '</div>'
     + '<div class="tcg-filters">' + chips.map(([v, label]) =>
         '<button type="button" class="tcg-filter-chip' + (tcgDexFilter === v ? ' active' : '') + '" onclick="tcgSetDexFilter(\'' + v + '\')">' + label + '</button>').join('') + '</div>'
-    + (list.length ? '<div class="tcg-grid">' + list.map(c =>
-        '<div class="tcg-cell">' + tcgCardHtml(c, {
-          owned: !!s.cards[c.id], count: s.cards[c.id] | 0, inTeam: s.team.includes(c.id)
-        })
-        + '<button class="btn btn-outline tcg-preview-btn" type="button" onclick="tcgPreviewCard(\'' + c.id + '\')">🔍 Preview</button>'
-        + '</div>').join('') + '</div>'
+    + (list.length ? '<div class="tcg-grid">' + list.map(c => {
+        const owned = !!s.cards[c.id];
+        return '<div class="tcg-cell">' + tcgCardHtml(c, {
+            owned: owned, count: s.cards[c.id] | 0, inTeam: s.team.includes(c.id)
+          })
+          + '<button class="btn btn-outline tcg-preview-btn" type="button" onclick="tcgPreviewCard(\'' + c.id + '\')">🔍 Preview</button>'
+          + (owned ? '<button class="btn btn-primary tcg-train-btn" type="button" onclick="tcgTrainCard(\'' + c.id + '\')">🎓 Train'
+              + (tcgLevel(c.id) >= TCG_LVL_MAX ? ' · MAX' : ' · Lv ' + tcgLevel(c.id)) + '</button>' : '')
+          + '</div>';
+      }).join('') + '</div>'
       : '<div class="tcg-section-note">Nothing here yet — open a booster pack to start your collection! 🎁</div>');
 }
 function tcgSetDexFilter(v) { tcgDexFilter = v; tcgRenderBody(); }
@@ -28706,8 +28743,7 @@ function tcgTrainPanelHtml(id) {
     + (maxed
         ? '<div class="tcg-train-note">This monster is fully trained — every stat and skill is maxed out! 🌟</div>'
         : '<div class="tcg-xpbar"><i style="width:' + Math.round(prog / TCG_LVL_STEP * 100) + '%;"></i></div>'
-          + '<div class="tcg-train-note">' + prog + ' / ' + TCG_LVL_STEP + ' correct answers to reach Level ' + (level + 1) + (milestone ? ' · ' + milestone : '') + '</div>'
-          + '<button class="btn btn-primary" type="button" onclick="tcgTrainCard(\'' + id + '\')">🎓 Train — answer questions to level up</button>')
+          + '<div class="tcg-train-note">' + prog + ' / ' + TCG_LVL_STEP + ' correct answers to reach Level ' + (level + 1) + (milestone ? ' · ' + milestone : '') + '<br><span style="opacity:.75;">Use the <b>🎓 Train</b> button under this card to answer questions.</span></div>')
     + '</div>';
 }
 function tcgClosePreview() {
@@ -28763,28 +28799,40 @@ const TCG_QUIZ = [
   { q: 'To make an experiment reliable, you should…', opts: ['Do it only once', 'Repeat it and take the average', 'Change many things at once', 'Guess the result'], a: 1, ex: 'Repeating and averaging makes results more reliable.' },
   { q: 'Which instrument is used to measure the volume of a liquid?', opts: ['Ruler', 'Measuring cylinder', 'Weighing scale', 'Thermometer'], a: 1, ex: 'A measuring cylinder measures liquid volume (read at eye level).' }
 ];
-// Pull suitable auto-gradable MCQs from the live question bank (text-only, no
-// diagrams) so training draws on the real syllabus content too. Best-effort.
-function _tcgBankMcqs() {
+// Pull real questions from the live question bank (the database) — including the
+// ones with diagrams/pictures — as long as they have an auto-gradable multiple-
+// choice part. The full stem (text + images) is rendered so students answer the
+// actual syllabus questions, not plain text. Best-effort; safe if the bank is empty.
+function _tcgBankQuestions() {
   const out = [];
   try {
     (typeof questionBank !== 'undefined' && Array.isArray(questionBank) ? questionBank : []).forEach(q => {
       if (!q || (q.status && q.status !== 'approved') || !Array.isArray(q.blocks)) return;
-      if (q.blocks.some(b => b && b.type === 'image' && b.url)) return; // skip diagram questions
       const mcq = q.blocks.find(b => b && b.type === 'mcq' && b.correctId && Array.isArray(b.options) && b.options.length >= 2);
       if (!mcq) return;
       const ai = mcq.options.findIndex(o => o.id === mcq.correctId);
       if (ai < 0) return;
       const opts = mcq.options.map(o => stripHtml(o.text || '').trim());
       if (opts.some(t => !t)) return;
-      const stem = q.blocks.filter(b => b && b.type === 'text' && b.content).map(b => stripHtml(b.content)).join(' ').replace(/\s+/g, ' ').trim();
-      if (!stem || stem.length < 8) return;
-      out.push({ q: stem, opts, a: ai, ex: '' });
+      let html = '', hasStem = false;
+      q.blocks.forEach(b => {
+        if (!b) return;
+        if (b.type === 'text' && b.content && stripHtml(b.content).trim()) { html += '<div class="qp-qtext">' + b.content + '</div>'; hasStem = true; }
+        else if (b.type === 'image' && b.url) { html += '<div class="tcg-quiz-img"><img src="' + escapeHtml(transformImageUrl(b.url)) + '" onerror="handleImgError(this)" loading="lazy" decoding="async" style="' + imgSizeStyle(b) + '"></div>'; hasStem = true; }
+      });
+      if (!hasStem) return;
+      out.push({ html: html, opts: opts, a: ai, ex: '', db: true });
     });
   } catch (e) {}
   return out;
 }
-function _tcgQuizPool() { return TCG_QUIZ.concat(_tcgBankMcqs()); }
+// Fallback pool: quick built-in questions, used only when the bank has no
+// auto-gradable questions yet (so training never hard-breaks).
+function _tcgFallbackQuestions() {
+  return TCG_QUIZ.map(x => ({ html: '<div class="qp-qtext">' + escapeHtml(x.q) + '</div>', opts: x.opts, a: x.a, ex: x.ex, db: false }));
+}
+// Prefer real database questions; fall back to the built-in set if there are none.
+function _tcgQuizPool() { const db = _tcgBankQuestions(); return db.length ? db : _tcgFallbackQuestions(); }
 function _tcgShuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 let _tcgQuiz = null;
 function tcgTrainCard(id) {
@@ -28829,7 +28877,7 @@ function _tcgQuizRender() {
   _tcgQuiz.answered = false;
   const q = _tcgQuiz.pool[_tcgQuiz.i % _tcgQuiz.pool.length];
   _tcgQuiz.cur = q;
-  body.innerHTML = '<div class="tcg-quiz-q">' + escapeHtml(q.q) + '</div>'
+  body.innerHTML = '<div class="tcg-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
     + '<div class="tcg-quiz-opts">'
     + q.opts.map((o, idx) => '<button type="button" class="tcg-quiz-opt" data-i="' + idx + '" onclick="_tcgQuizAnswer(' + idx + ')">'
         + '<span class="tcg-quiz-let">' + String.fromCharCode(65 + idx) + '</span>' + escapeHtml(o) + '</button>').join('')
@@ -28884,8 +28932,8 @@ function tcgPacksHtml(s) {
   return '<div class="tcg-section-note">Booster packs are the <b>only</b> way to collect monsters. You have <b>🪙 ' + gold.toLocaleString() + ' points</b> — earn more by answering questions anywhere in the app.'
     + (_isAdmin() ? ' <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="tcgAdminGold()">＋500 🪙 test points (admin)</button>' : '') + '</div>'
     + '<div class="tcg-packs">' + TCG_PACKS.map(p =>
-      '<div class="tcg-pack">'
-      + '<div class="tcg-pack-art">' + p.em + '</div>'
+      '<div class="tcg-pack tcg-pack-' + p.tier + '">'
+      + '<div class="tcg-pack-art">' + tcgPackArt(p.tier) + '</div>'
       + '<h4>' + escapeHtml(p.name) + '</h4>'
       + '<div class="tcg-pack-desc">' + escapeHtml(p.desc) + '</div>'
       + '<div class="tcg-pack-odds">' + oddsLine(p) + (p.bonusOdds ? '<br><b>Bonus card:</b> ' + Object.keys(p.bonusOdds).map(n => n + '★ ' + p.bonusOdds[n] + '%').join(' · ') : '') + '</div>'
