@@ -4465,6 +4465,37 @@ option {
 .tcg-quiz-done { text-align: center; color: #f5ead0; font-size: 1.05rem; line-height: 1.6; padding: 24px 8px; }
 .tcg-levelup-burst { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Cinzel', serif; font-weight: 900; font-size: 2.6rem; letter-spacing: 3px; color: #f0b542; text-shadow: 0 0 30px rgba(240,181,66,0.9), 0 0 60px rgba(255,120,60,0.6); pointer-events: none; z-index: 20; animation: tcgLevelUpPop 1.3s cubic-bezier(.2,.8,.3,1.2) forwards; }
 @keyframes tcgLevelUpPop { 0% { transform: scale(0.3); opacity: 0; } 20% { transform: scale(1.1); opacity: 1; } 70% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.05); opacity: 0; } }
+/* ---- elemental affinity line on the card ---- */
+.tcg-aff { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 6px 6px 0; font-size: 0.62rem; }
+.tcg-aff-el { font-family: 'Cinzel', serif; font-weight: 700; color: #cfd6e2; letter-spacing: 0.3px; }
+.tcg-aff-vs { color: #6fe09a; font-weight: 700; }
+.tcg-aff-weak { color: #ff9a9a; font-weight: 700; }
+/* ---- team-tab loadout: artifacts + strategy ---- */
+.tcg-team-h { text-align: center; font-size: 1.05rem; margin: 26px 0 4px; }
+.tcg-team-sub { font-weight: 400; font-size: 0.8rem; color: var(--text-muted); }
+.tcg-loadout { max-width: 900px; margin: 0 auto 8px; }
+.tcg-arti-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 12px 0 4px; }
+.tcg-arti { text-align: left; background: var(--surface); border: 2px solid var(--border); border-radius: 14px; padding: 14px 16px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s; }
+.tcg-arti:hover { border-color: #f0b542; transform: translateY(-2px); }
+.tcg-arti.on { border-color: #f0b542; box-shadow: 0 0 0 3px rgba(240,181,66,0.28), 0 8px 20px rgba(240,181,66,0.2); background: linear-gradient(180deg, #fffdf6, #fff7e6); }
+.tcg-arti-ic { font-size: 1.8rem; line-height: 1; }
+.tcg-arti-name { font-weight: 800; font-size: 0.95rem; margin: 6px 0 4px; }
+.tcg-arti-blurb { font-size: 0.78rem; color: var(--text-muted); line-height: 1.45; }
+.tcg-strat-block { margin: 10px 0; }
+.tcg-strat-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; }
+.tcg-strat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.tcg-strat { text-align: left; background: var(--surface); border: 2px solid var(--border); border-radius: 12px; padding: 9px 12px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; display: flex; flex-direction: column; gap: 2px; }
+.tcg-strat:hover { border-color: #8E24AA; }
+.tcg-strat.on { border-color: #8E24AA; box-shadow: 0 0 0 3px rgba(142,36,170,0.22); background: linear-gradient(180deg, #faf5ff, #f5f0ff); }
+.tcg-strat-ic { font-size: 1.05rem; }
+.tcg-strat-name { font-weight: 800; font-size: 0.84rem; }
+.tcg-strat-blurb { font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; }
+.tcg-loadout-line { margin: 14px auto 4px; font-size: 0.9rem; color: var(--text); background: var(--surface-alt); border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px; display: inline-block; }
+.tcg-loadout-edit { color: var(--text-muted); font-size: 0.78rem; }
+.tcgb-plan { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 5px; font-size: 0.66rem; font-weight: 600; }
+.tcgb-plan span { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); border-radius: 999px; padding: 2px 9px; color: rgba(255,255,255,0.9); }
+.tcgb-dmg.super { color: #86efac; font-size: 1.42rem; text-shadow: 0 2px 0 #14532d, 0 0 16px rgba(74,222,128,0.95); }
+.tcgb-dmg.weak { color: #cbd5e1; font-size: 1rem; opacity: 0.9; text-shadow: 0 1px 0 #334155; }
 /* ---- packs ---- */
 .tcg-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; max-width: 860px; margin: 0 auto; }
 .tcg-pack { border: 1px solid var(--border); border-radius: 18px; padding: 26px 22px; text-align: center; background: var(--surface); box-shadow: 0 3px 12px rgba(15,23,42,0.08); display: flex; flex-direction: column; gap: 10px; align-items: center; }
@@ -8366,7 +8397,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.120.0';
+const APP_VERSION = 'v1.121.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28097,6 +28128,59 @@ const TCG_ROLE_MODS = {
   stun:    { atk: 1.05, def: 0.95, heal: 0.75, hp: 0.95, spd: 10 },
   poison:  { atk: 1.02, def: 0.95, heal: 0.80, hp: 0.98, spd: 6 }
 };
+// ---- Elemental affinity: 5 combat elements in a super-effective ring. Each
+// deals ×2 to the one it "beats" and takes ×2 (deals ×0.5) to the one that
+// beats it. Flame → Nature → Terra → Spark → Aqua → Flame.
+const TCG_AFFINITY = {
+  flame:  { icon: '🔥', name: 'Flame',  beats: 'nature' },
+  nature: { icon: '🌿', name: 'Nature', beats: 'terra' },
+  terra:  { icon: '🪨', name: 'Terra',  beats: 'spark' },
+  spark:  { icon: '⚡', name: 'Spark',  beats: 'aqua' },
+  aqua:   { icon: '💧', name: 'Aqua',   beats: 'flame' }
+};
+Object.keys(TCG_AFFINITY).forEach(k => { TCG_AFFINITY[TCG_AFFINITY[k].beats].weakTo = k; });
+// Map each of the 12 flavour elements onto one of the 5 combat elements.
+const TCG_ELEM_AFFINITY = {
+  flame: 'flame', light: 'flame',
+  aqua: 'aqua', frost: 'aqua', shadow: 'aqua',
+  spark: 'spark', cosmic: 'spark', psychic: 'spark',
+  terra: 'terra', metal: 'terra',
+  flora: 'nature', venom: 'nature'
+};
+function tcgAffinity(card) { return TCG_ELEM_AFFINITY[card && card.element] || 'flame'; }
+// Damage multiplier attacker→defender by the element ring.
+function tcgElemMult(attCard, defCard) {
+  const a = tcgAffinity(attCard), d = tcgAffinity(defCard);
+  if (TCG_AFFINITY[a] && TCG_AFFINITY[a].beats === d) return 2;
+  if (TCG_AFFINITY[d] && TCG_AFFINITY[d].beats === a) return 0.5;
+  return 1;
+}
+// ---- Artifacts: pick ONE to equip your whole team. Utility effects only
+// (no plain damage / healing / defense). Applied to the player's team in battle.
+const TCG_ARTIFACTS = [
+  { id: 'swift',   name: 'Swift Sigil',    icon: '⏳', blurb: 'Your whole team is faster (Speed +25%), so your monsters act sooner each round.' },
+  { id: 'keen',    name: 'Keen Lens',      icon: '🎯', blurb: 'Your team lands critical hits far more often (+18% crit chance).' },
+  { id: 'battery', name: 'Battery Core',   icon: '🔋', blurb: 'Skills charge one turn faster, so your monsters unleash their special skills sooner.' },
+  { id: 'ward',    name: 'Warding Charm',  icon: '🧿', blurb: 'Your team is immune to stun and poison — no more skipped turns or damage-over-time.' },
+  { id: 'ember',   name: 'Catalyst Prism', icon: '🔺', blurb: 'Super-effective element hits deal ×2.5 instead of ×2 — reward good matchups even more.' },
+  { id: 'phoenix', name: 'Phoenix Plume',  icon: '🪶', blurb: 'The first ally to faint is revived once at 35% HP. A second chance every battle.' }
+];
+function tcgArtifactById(id) { return TCG_ARTIFACTS.find(a => a.id === id) || null; }
+// ---- Auto-battle strategies the student picks (who to attack / who to heal).
+const TCG_STRATS_ATK = [
+  { id: 'lowhp',   name: 'Finisher',     icon: '🎯', blurb: 'Attack the foe with the LEAST health — finish them off.' },
+  { id: 'lowdef',  name: 'Bully',        icon: '💥', blurb: 'Attack the foe with the LOWEST defence — deal the most damage.' },
+  { id: 'highatk', name: 'Threat First', icon: '⚔️', blurb: 'Attack the foe with the HIGHEST attack — take out their damage dealer.' },
+  { id: 'highhp',  name: 'Giant Slayer', icon: '🗻', blurb: 'Attack the foe with the MOST health — chip down their tank.' },
+  { id: 'weakest', name: 'Type Hunter',  icon: '🔥', blurb: 'Attack a foe your element is super-effective against when possible.' },
+  { id: 'random',  name: 'Wildcard',     icon: '🎲', blurb: 'Attack a random foe — unpredictable spread damage.' }
+];
+const TCG_STRATS_HEAL = [
+  { id: 'mosthurt', name: 'Triage',    icon: '➕', blurb: 'Heal the ally with the lowest health fraction (most hurt).' },
+  { id: 'lowest',   name: 'Lifeline',  icon: '❤️', blurb: 'Heal the ally with the lowest HP number — save whoever is closest to fainting.' },
+  { id: 'carry',    name: 'Protect Carry', icon: '⚔️', blurb: 'Heal your highest-attack ally so your damage dealer stays alive.' },
+  { id: 'tank',     name: 'Bastion',   icon: '🛡️', blurb: 'Heal your toughest ally (highest max HP) to keep the wall standing.' }
+];
 // ---- Generation 1: all 151 monsters. [name, emoji, element, skill] per star tier.
 // Do not reorder existing entries — a card's id (c001…c151) is its position.
 const TCG_GEN1 = {
@@ -28410,6 +28494,7 @@ function tcgHydrateState(saved) {
     levels[id] = lv;
     lvlp[id] = lv >= TCG_LVL_MAX ? 0 : Math.max(0, Math.min(TCG_LVL_STEP - 1, sp[id] | 0));
   });
+  const strat = (s.strategy && typeof s.strategy === 'object') ? s.strategy : {};
   return {
     cards,
     team: Array.isArray(s.team) ? s.team.filter(id => TCG_BY_ID[id] && cards[id]).slice(0, 5) : [],
@@ -28417,13 +28502,68 @@ function tcgHydrateState(saved) {
     wins: s.wins | 0,
     losses: s.losses | 0,
     levels,
-    lvlp
+    lvlp,
+    artifact: (TCG_ARTIFACTS.some(a => a.id === s.artifact)) ? s.artifact : null,
+    strategy: {
+      attack: TCG_STRATS_ATK.some(x => x.id === strat.attack) ? strat.attack : 'lowhp',
+      heal: TCG_STRATS_HEAL.some(x => x.id === strat.heal) ? strat.heal : 'mosthurt'
+    }
   };
 }
 function tcgState() {
   if (!rpgState) return null;
   if (!rpgState.tcg || typeof rpgState.tcg !== 'object') rpgState.tcg = tcgHydrateState(null);
   return rpgState.tcg;
+}
+function tcgArtifact() { const s = tcgState(); return s ? tcgArtifactById(s.artifact) : null; }
+function tcgSetArtifact(id) {
+  const s = tcgState(); if (!s) return;
+  s.artifact = (s.artifact === id) ? null : (tcgArtifactById(id) ? id : null); // tap again to unequip
+  rpgSave();
+  try { rpgPublishLeaderboard(); } catch (e) {}
+  showToast(s.artifact ? tcgArtifactById(s.artifact).name + ' equipped' : 'Artifact removed', 'success');
+  tcgRenderBody();
+}
+function tcgStrategy() { const s = tcgState(); return (s && s.strategy) || { attack: 'lowhp', heal: 'mosthurt' }; }
+function tcgSetStrategy(kind, val) {
+  const s = tcgState(); if (!s) return;
+  s.strategy = s.strategy || { attack: 'lowhp', heal: 'mosthurt' };
+  if (kind === 'attack' && TCG_STRATS_ATK.some(x => x.id === val)) s.strategy.attack = val;
+  if (kind === 'heal' && TCG_STRATS_HEAL.some(x => x.id === val)) s.strategy.heal = val;
+  rpgSave();
+  tcgRenderBody();
+}
+// Choose which foe to attack, per the player's strategy (opponents use 'lowhp').
+function _tcgTargetByStrat(attacker, foes, strat) {
+  const alive = foes.filter(f => f.hp > 0);
+  if (!alive.length) return null;
+  const best = (score) => alive.reduce((a, b) => score(b) > score(a) ? b : a);
+  switch (strat) {
+    case 'lowdef':  return best(u => -u.def);
+    case 'highatk': return best(u => u.atk);
+    case 'highhp':  return best(u => u.maxHp);
+    case 'random':  return alive[Math.floor(Math.random() * alive.length)];
+    case 'weakest': {
+      const se = alive.filter(u => tcgElemMult(attacker.card, u.card) >= 2);
+      const pool = se.length ? se : alive;
+      return pool.reduce((a, b) => (b.hp < a.hp ? b : a));
+    }
+    case 'lowhp':
+    default:        return best(u => -u.hp);
+  }
+}
+// Choose which ally to heal / shield, per the player's strategy.
+function _tcgAllyByStrat(allies, strat) {
+  const alive = allies.filter(a => a.hp > 0);
+  if (!alive.length) return null;
+  const best = (score) => alive.reduce((a, b) => score(b) > score(a) ? b : a);
+  switch (strat) {
+    case 'lowest': return best(u => -u.hp);
+    case 'carry':  return best(u => u.atk);
+    case 'tank':   return best(u => u.maxHp);
+    case 'mosthurt':
+    default:       return best(u => -(u.hp / u.maxHp));
+  }
 }
 
 // ---- Release gate: admin plays first, one click releases to students ----
@@ -28621,6 +28761,10 @@ function tcgCardHtml(card, opts) {
     +     '<div class="tcg-stars">' + tcgStarsHtml(card.stars) + '</div>'
     +     lvlLine
     +     '<div class="tcg-type"><span class="ln l"></span><span class="lbl">' + el.icon + ' ' + escapeHtml(el.name) + '</span><span class="ln r"></span></div>'
+    +     (function () { const aff = TCG_AFFINITY[tcgAffinity(card)]; const beats = TCG_AFFINITY[aff.beats]; const weak = TCG_AFFINITY[aff.weakTo];
+          return '<div class="tcg-aff"><span class="tcg-aff-el">' + aff.icon + ' ' + aff.name + '</span>'
+            + '<span class="tcg-aff-vs" title="Deals double damage to ' + beats.name + '">▲ ' + beats.icon + '</span>'
+            + '<span class="tcg-aff-weak" title="Takes double damage from ' + weak.name + '">▼ ' + weak.icon + '</span></div>'; })()
     +     '<div class="tcg-skill">' + (owned
             ? '<span class="tcg-skill-name">' + sk.icon + ' ' + escapeHtml(sk.name) + '.</span> ' + skDesc
             : '<span class="tcg-skill-name">❓ Special skill.</span> Collect this monster to reveal its skill.')
@@ -29034,11 +29178,37 @@ function tcgTeamHtml(s) {
   return '<div class="tcg-section-note">Choose <b>5 monsters</b> to defend your name in the Battle Arena. Tap a card below to add it — tap a team card to remove it. Your team is saved automatically.</div>'
     + '<div class="tcg-team-slots">' + slots + '</div>'
     + '<div class="tcg-team-power">Team power: <b>' + tcgTeamPower(s.team).toLocaleString() + '</b>' + (s.team.length === 5 ? ' · ready for battle ⚔️' : ' · pick ' + (5 - s.team.length) + ' more') + '</div>'
+    + tcgArtifactPickerHtml(s)
+    + tcgStrategyPickerHtml(s)
+    + '<h3 class="tcg-team-h">Your monsters</h3>'
     + (owned.length
       ? '<div class="tcg-grid">' + owned.map(c => tcgCardHtml(c, {
           count: s.cards[c.id] | 0, inTeam: s.team.includes(c.id), onclick: "tcgToggleTeam('" + c.id + "')"
         })).join('') + '</div>'
       : '<div class="tcg-section-note">You don\'t own any monsters yet — open a booster pack first! 🎁</div>');
+}
+// Artifact chooser (equip ONE utility artifact for your whole team).
+function tcgArtifactPickerHtml(s) {
+  return '<div class="tcg-loadout">'
+    + '<h3 class="tcg-team-h">🔱 Artifact <span class="tcg-team-sub">— equip one for your whole team (tap again to remove)</span></h3>'
+    + '<div class="tcg-arti-grid">'
+    + TCG_ARTIFACTS.map(a => '<button type="button" class="tcg-arti' + (s.artifact === a.id ? ' on' : '') + '" onclick="tcgSetArtifact(\'' + a.id + '\')">'
+        + '<div class="tcg-arti-ic">' + a.icon + '</div><div class="tcg-arti-name">' + escapeHtml(a.name) + '</div>'
+        + '<div class="tcg-arti-blurb">' + escapeHtml(a.blurb) + '</div></button>').join('')
+    + '</div></div>';
+}
+// Auto-battle strategy chooser (who to attack / who to heal).
+function tcgStrategyPickerHtml(s) {
+  const strat = (s && s.strategy) || { attack: 'lowhp', heal: 'mosthurt' };
+  const row = (title, list, kind, cur) => '<div class="tcg-strat-block"><div class="tcg-strat-title">' + title + '</div><div class="tcg-strat-row">'
+    + list.map(x => '<button type="button" class="tcg-strat' + (cur === x.id ? ' on' : '') + '" title="' + escapeHtml(x.blurb) + '" onclick="tcgSetStrategy(\'' + kind + '\',\'' + x.id + '\')">'
+        + '<span class="tcg-strat-ic">' + x.icon + '</span><span class="tcg-strat-name">' + escapeHtml(x.name) + '</span>'
+        + '<span class="tcg-strat-blurb">' + escapeHtml(x.blurb) + '</span></button>').join('') + '</div></div>';
+  return '<div class="tcg-loadout">'
+    + '<h3 class="tcg-team-h">🧠 Battle strategy <span class="tcg-team-sub">— how your team fights on auto-battle</span></h3>'
+    + row('⚔️ Who to attack', TCG_STRATS_ATK, 'attack', strat.attack)
+    + row('➕ Who to heal / shield', TCG_STRATS_HEAL, 'heal', strat.heal)
+    + '</div>';
 }
 function tcgToggleTeam(id) {
   const s = tcgState();
@@ -29065,6 +29235,12 @@ function tcgArenaHtml(s) {
     +   '<div><b style="color:#dc2626;">' + (s.losses | 0) + '</b><span>LOSSES</span></div>'
     +   '<div><b>' + tcgTeamPower(s.team).toLocaleString() + '</b><span>TEAM POWER</span></div>'
     + '</div>'
+    + (function () { const art = tcgArtifactById(s.artifact); const st = (s.strategy) || {};
+        const an = (TCG_STRATS_ATK.find(x => x.id === st.attack) || {}).name || 'Finisher';
+        const hn = (TCG_STRATS_HEAL.find(x => x.id === st.heal) || {}).name || 'Triage';
+        return '<div class="tcg-loadout-line">' + (art ? art.icon + ' <b>' + escapeHtml(art.name) + '</b>' : 'No artifact')
+          + ' · ⚔️ <b>' + escapeHtml(an) + '</b> · ➕ <b>' + escapeHtml(hn) + '</b>'
+          + ' <span class="tcg-loadout-edit">(change on the 🛡️ My Team tab)</span></div>'; })()
     + (ready
       ? '<button class="btn btn-primary" style="font-size:1rem;padding:12px 30px;" onclick="tcgFindBattle()">🔎 Find a battle</button>'
       : '<div class="tcg-section-note">Pick 5 monsters on the <b>My Team</b> tab first.</div>')
@@ -29123,8 +29299,22 @@ function _tcgMkUnit(cardId, side, slot, level) {
     hp: st.hp, maxHp: st.hp, atk: st.atk, def: st.def, heal: st.heal, spd: st.spd,
     skill: tcgLeveledSkill(c, lv),
     charge: Math.floor(Math.random() * 2), shield: 0, stun: 0,
-    poison: null, atkUp: 0, atkUpPct: 0
+    poison: null, atkUp: 0, atkUpPct: 0,
+    strat: { attack: 'lowhp', heal: 'mosthurt' }, skillThresh: 3,
+    critBonus: 0, emberAmp: false, wardStatus: false, ctx: null
   };
+}
+// Equip the player's chosen artifact onto their whole team for a battle.
+function _tcgApplyArtifact(units, artId, ctx) {
+  const art = tcgArtifactById(artId);
+  if (!art) return;
+  units.forEach(u => { u.ctx = ctx; });
+  if (art.id === 'swift') units.forEach(u => { u.spd = Math.round(u.spd * 1.25); });
+  else if (art.id === 'keen') units.forEach(u => { u.critBonus = 0.18; });
+  else if (art.id === 'battery') units.forEach(u => { u.skillThresh = 2; });
+  else if (art.id === 'ward') units.forEach(u => { u.wardStatus = true; });
+  else if (art.id === 'ember') units.forEach(u => { u.emberAmp = true; });
+  else if (art.id === 'phoenix') ctx.phoenixLeft = 1;
 }
 function _tcgUnitEl(u) { return document.getElementById('tcgbu-' + u.uid); }
 function _tcgHpClass(u) { const p = u.hp / u.maxHp; return p <= 0.28 ? 'low' : p <= 0.6 ? 'mid' : ''; }
@@ -29172,7 +29362,12 @@ function _tcgDamage(attacker, target, mult, ignoreDef) {
   let raw = atk * mult;
   if (!ignoreDef) raw = raw * 100 / (100 + target.def);
   raw *= 0.92 + Math.random() * 0.16;
-  const crit = Math.random() < 0.10;
+  // Elemental matchup: ×2 super-effective (×2.5 with the Catalyst Prism artifact),
+  // ×0.5 resisted, ×1 neutral.
+  let em = tcgElemMult(attacker.card, target.card);
+  if (em >= 2 && attacker.emberAmp) em = 2.5;
+  raw *= em;
+  const crit = Math.random() < (0.10 + (attacker.critBonus || 0));
   if (crit) raw *= 1.5;
   let dmg = Math.max(4, Math.round(raw));
   if (target.shield > 0) {
@@ -29182,12 +29377,26 @@ function _tcgDamage(attacker, target, mult, ignoreDef) {
     if (absorbed > 0) _tcgPopup(target, '🛡️ -' + absorbed, 'status');
   }
   target.hp = Math.max(0, target.hp - dmg);
-  return { dmg, crit };
+  if (target.hp <= 0) _tcgTryRevive(target);
+  return { dmg, crit, eff: em > 1 ? 'super' : em < 1 ? 'weak' : '' };
+}
+// Phoenix Plume artifact: revive the first ally to faint, once, at 35% HP.
+function _tcgTryRevive(unit) {
+  if (unit.hp > 0 || !unit.ctx || !unit.ctx.phoenixLeft) return;
+  unit.ctx.phoenixLeft--;
+  unit.hp = Math.max(1, Math.round(unit.maxHp * 0.35));
+  unit.poison = null; unit.stun = 0;
+  _tcgPopup(unit, '🪶 Revive!', 'heal');
+  const el = _tcgUnitEl(unit);
+  if (el) { el.classList.remove('dead'); el.classList.add('healed'); setTimeout(() => el.classList.remove('healed'), 800); }
+  _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> is revived by the <b>Phoenix Plume</b>!');
 }
 async function _tcgHitFx(target, res) {
   const el = _tcgUnitEl(target);
   if (el) { el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit'); }
-  _tcgPopup(target, (res.crit ? 'CRIT! ' : '') + '-' + res.dmg, res.crit ? 'crit' : '');
+  const cls = res.crit ? 'crit' : (res.eff === 'super' ? 'super' : res.eff === 'weak' ? 'weak' : '');
+  const tag = res.eff === 'super' ? 'SUPER! ' : res.eff === 'weak' ? 'resist ' : '';
+  _tcgPopup(target, tag + (res.crit ? 'CRIT! ' : '') + '-' + res.dmg, cls);
   _tcgRefreshUnit(target);
 }
 async function _tcgHealFx(target, amount) {
@@ -29239,10 +29448,12 @@ async function _tcgAct(stage, unit, allies, foes) {
   if (unit.atkUp > 0) unit.atkUp--;
   unit.charge++;
   const sk = unit.skill;
+  const strat = unit.strat || { attack: 'lowhp', heal: 'mosthurt' };
   const healKinds = sk.kind === 'heal' || sk.kind === 'healall';
-  const hurtAlly = allies.filter(a => a.hp > 0).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
-  const wantHeal = healKinds && hurtAlly && hurtAlly.hp / hurtAlly.maxHp < 0.72;
-  const useSkill = unit.charge >= 3 && (!healKinds || wantHeal);
+  const hurtList = allies.filter(a => a.hp > 0 && a.hp / a.maxHp < 0.72);
+  const wantHeal = healKinds && hurtList.length > 0;
+  const hurtAlly = wantHeal ? _tcgAllyByStrat(hurtList, strat.heal) : _tcgAllyByStrat(allies, strat.heal);
+  const useSkill = unit.charge >= (unit.skillThresh || 3) && (!healKinds || wantHeal);
   if (useSkill) {
     unit.charge = 0;
     await _tcgBanner(stage, sk);
@@ -29254,14 +29465,14 @@ async function _tcgAct(stage, unit, allies, foes) {
       await tcgSleep(760);
       _tcgUnlunge(unit);
     } else if (sk.kind === 'strike' || sk.kind === 'pierce' || sk.kind === 'drain' || sk.kind === 'stun' || sk.kind === 'poison') {
-      const t = _tcgPickTarget(foes);
+      const t = _tcgTargetByStrat(unit, foes, strat.attack);
       if (t) {
         await _tcgLunge(unit);
         const res = _tcgDamage(unit, t, sk.pow, sk.kind === 'pierce');
         await _tcgHitFx(t, res);
         if (sk.kind === 'drain') { const back = Math.round(res.dmg * 0.35); await _tcgHealFx(unit, back); }
-        if (sk.kind === 'stun' && t.hp > 0) { t.stun = Math.max(t.stun, 1); _tcgPopup(t, '💫', 'status'); }
-        if (sk.kind === 'poison' && t.hp > 0) { t.poison = { dmg: unit.atk * 0.4, turns: 3 }; _tcgPopup(t, '☠️', 'status'); }
+        if (sk.kind === 'stun' && t.hp > 0 && !t.wardStatus) { t.stun = Math.max(t.stun, 1); _tcgPopup(t, '💫', 'status'); }
+        if (sk.kind === 'poison' && t.hp > 0 && !t.wardStatus) { t.poison = { dmg: unit.atk * 0.4, turns: 3 }; _tcgPopup(t, '☠️', 'status'); }
         _tcgRefreshUnit(t);
         _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> uses <b>' + escapeHtml(sk.name) + '</b> on ' + escapeHtml(tcgShortName(t.card)) + (res.crit ? ' — critical hit!' : '!'));
         await tcgSleep(660);
@@ -29278,7 +29489,7 @@ async function _tcgAct(stage, unit, allies, foes) {
       _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> sings <b>' + escapeHtml(sk.name) + '</b> — the whole team recovers!');
       await tcgSleep(760);
     } else if (sk.kind === 'shield') {
-      const t = allies.filter(a => a.hp > 0).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0] || unit;
+      const t = _tcgAllyByStrat(allies, strat.heal) || unit;
       t.shield += Math.round(unit.def * sk.pow);
       _tcgPopup(t, '🛡️ +' + Math.round(unit.def * sk.pow), 'status');
       _tcgRefreshUnit(t);
@@ -29290,12 +29501,12 @@ async function _tcgAct(stage, unit, allies, foes) {
       await tcgSleep(700);
     }
   } else {
-    const t = _tcgPickTarget(foes);
+    const t = _tcgTargetByStrat(unit, foes, strat.attack);
     if (t) {
       await _tcgLunge(unit);
       const res = _tcgDamage(unit, t, 1.0, false);
       await _tcgHitFx(t, res);
-      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> attacks ' + escapeHtml(tcgShortName(t.card)) + (res.crit ? ' — critical hit!' : '.'));
+      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> attacks ' + escapeHtml(tcgShortName(t.card)) + (res.eff === 'super' ? ' — super effective!' : res.crit ? ' — critical hit!' : '.'));
       await tcgSleep(520);
       _tcgUnlunge(unit);
     }
@@ -29350,12 +29561,25 @@ async function tcgRunBattle(myTeam, me, opp) {
   const myAvg = Math.round(myTeam.reduce((a, id) => a + tcgLevel(id), 0) / Math.max(1, myTeam.length));
   const oppLvl = Math.max(1, Math.round(myAvg * 0.85));
   const theirs = opp.tcgTeam.map((id, i) => _tcgMkUnit(id, 'L', i, oppLvl));
+  // Your chosen strategy drives your team's targeting/healing; the opponent uses
+  // sensible defaults. Your equipped artifact buffs your whole team.
+  const s0 = tcgState();
+  const myStrat = (s0 && s0.strategy) || { attack: 'lowhp', heal: 'mosthurt' };
+  mine.forEach(u => { u.strat = { attack: myStrat.attack, heal: myStrat.heal }; });
+  const myCtx = { phoenixLeft: 0 };
+  mine.forEach(u => { u.ctx = myCtx; });
+  if (s0 && s0.artifact) _tcgApplyArtifact(mine, s0.artifact, myCtx);
+  const myArt = tcgArtifactById(s0 && s0.artifact);
   const o = document.createElement('div');
   o.className = 'tcg-overlay';
   o.id = 'tcgBattleOverlay';
   o.innerHTML = '<div class="tcgb-wrap">'
     + '<div class="tcgb-topbar">'
-    +   '<div class="tcgb-vsline">' + escapeHtml(opp.name) + (opp.ghost ? ' <small>(ghost trainer)</small>' : '') + ' <small>vs</small> ' + escapeHtml(me.name) + '</div>'
+    +   '<div class="tcgb-vsline">' + escapeHtml(opp.name) + (opp.ghost ? ' <small>(ghost trainer)</small>' : '') + ' <small>vs</small> ' + escapeHtml(me.name)
+    +     '<div class="tcgb-plan"><span>' + (myArt ? myArt.icon + ' ' + escapeHtml(myArt.name) : 'No artifact') + '</span>'
+    +       '<span>🎯 ' + escapeHtml((TCG_STRATS_ATK.find(x => x.id === myStrat.attack) || {}).name || 'Finisher') + '</span>'
+    +       '<span>➕ ' + escapeHtml((TCG_STRATS_HEAL.find(x => x.id === myStrat.heal) || {}).name || 'Triage') + '</span></div>'
+    +   '</div>'
     +   '<div class="tcgb-controls">'
     +     '<button type="button" data-tcgspeed="1" class="on" onclick="tcgBattleSpeed(1)">1×</button>'
     +     '<button type="button" data-tcgspeed="2" onclick="tcgBattleSpeed(2)">2×</button>'
@@ -29420,6 +29644,8 @@ window.tcgPreviewCard = tcgPreviewCard;
 window.tcgClosePreview = tcgClosePreview;
 window.tcgTrainCard = tcgTrainCard;
 window.tcgCloseTrain = tcgCloseTrain;
+window.tcgSetArtifact = tcgSetArtifact;
+window.tcgSetStrategy = tcgSetStrategy;
 window._tcgQuizAnswer = _tcgQuizAnswer;
 window._tcgQuizNext = _tcgQuizNext;
 window.tcgBuyPack = tcgBuyPack;
