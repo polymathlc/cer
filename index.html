@@ -4481,7 +4481,12 @@ option {
 .tcg-arti.on { border-color: #f0b542; box-shadow: 0 0 0 3px rgba(240,181,66,0.28), 0 8px 20px rgba(240,181,66,0.2); background: linear-gradient(180deg, #fffdf6, #fff7e6); }
 .tcg-arti-ic { font-size: 1.8rem; line-height: 1; }
 .tcg-arti-name { font-weight: 800; font-size: 0.95rem; margin: 6px 0 4px; }
+.tcg-arti-stars { color: #f0b542; font-size: 0.78rem; letter-spacing: 2px; margin-bottom: 4px; text-shadow: 0 1px 2px rgba(154,111,24,0.35); }
+.tcg-arti-count { font-weight: 700; font-size: 0.74rem; color: var(--text-muted); }
 .tcg-arti-blurb { font-size: 0.78rem; color: var(--text-muted); line-height: 1.45; }
+.tcg-arti.locked { opacity: 0.6; background: var(--surface-alt); }
+.tcg-arti.locked:hover { border-color: var(--border); transform: none; }
+.tcg-arti.locked .tcg-arti-stars { filter: grayscale(1); }
 .tcg-strat-block { margin: 10px 0; }
 .tcg-strat-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; }
 .tcg-strat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
@@ -8398,7 +8403,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.122.0';
+const APP_VERSION = 'v1.123.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28158,13 +28163,47 @@ function tcgElemMult(attCard, defCard) {
 }
 // ---- Artifacts: pick ONE to equip your whole team. Utility effects only
 // (no plain damage / healing / defense). Applied to the player's team in battle.
+// Artifacts drop ONLY from booster packs (each pack rolls a bonus artifact
+// slot). Rarity runs 1★–7★ like monsters; `kind` + `pow` drive the battle
+// effect in _tcgApplyArtifact. Do not reuse ids — they live in student saves.
 const TCG_ARTIFACTS = [
-  { id: 'swift',   name: 'Swift Sigil',    icon: '⏳', blurb: 'Your whole team is faster (Speed +25%), so your monsters act sooner each round.' },
-  { id: 'keen',    name: 'Keen Lens',      icon: '🎯', blurb: 'Your team lands critical hits far more often (+18% crit chance).' },
-  { id: 'battery', name: 'Battery Core',   icon: '🔋', blurb: 'Skills charge one turn faster, so your monsters unleash their special skills sooner.' },
-  { id: 'ward',    name: 'Warding Charm',  icon: '🧿', blurb: 'Your team is immune to stun and poison — no more skipped turns or damage-over-time.' },
-  { id: 'ember',   name: 'Catalyst Prism', icon: '🔺', blurb: 'Super-effective element hits deal ×2.5 instead of ×2 — reward good matchups even more.' },
-  { id: 'phoenix', name: 'Phoenix Plume',  icon: '🪶', blurb: 'The first ally to faint is revived once at 35% HP. A second chance every battle.' }
+  // 1★ — trinkets
+  { id: 'pin',       name: 'Iron Pin',        icon: '📌', stars: 1, kind: 'def',         pow: 0.08, blurb: 'Your whole team takes a little less damage (Defence +8%).' },
+  { id: 'flint',     name: 'Flint Charm',     icon: '🧱', stars: 1, kind: 'atk',         pow: 0.06, blurb: 'Your whole team hits a little harder (Attack +6%).' },
+  { id: 'moss',      name: 'Moss Band',       icon: '🌿', stars: 1, kind: 'regen',       pow: 0.02, blurb: 'Every monster regrows 2% of its max HP at the start of its turn.' },
+  { id: 'pebble',    name: 'Pebble Ward',     icon: '🪨', stars: 1, kind: 'shieldstart', pow: 0.06, blurb: 'Every monster starts the battle with a small shield (6% of its max HP).' },
+  { id: 'vial',      name: 'Glow Vial',       icon: '🧪', stars: 1, kind: 'healamp',     pow: 0.10, blurb: 'Healing skills restore 10% more HP.' },
+  { id: 'feather',   name: 'Feather Token',   icon: '🪽', stars: 1, kind: 'swift',       pow: 0.08, blurb: 'Your whole team is a touch quicker (Speed +8%).' },
+  // 2★ — charms
+  { id: 'swift',     name: 'Swift Sigil',     icon: '⏳', stars: 2, kind: 'swift',       pow: 0.25, blurb: 'Your whole team is faster (Speed +25%), so your monsters act sooner each round.' },
+  { id: 'oak',       name: 'Oakheart Plate',  icon: '🪵', stars: 2, kind: 'def',         pow: 0.14, blurb: 'Your whole team takes less damage (Defence +14%).' },
+  { id: 'emberdrop', name: 'Ember Drop',      icon: '🔶', stars: 2, kind: 'atk',         pow: 0.10, blurb: 'Your whole team hits harder (Attack +10%).' },
+  { id: 'bud',       name: 'Spring Bud',      icon: '🌱', stars: 2, kind: 'regen',       pow: 0.03, blurb: 'Every monster regrows 3% of its max HP at the start of its turn.' },
+  { id: 'bead',      name: 'Aegis Bead',      icon: '📿', stars: 2, kind: 'shieldstart', pow: 0.10, blurb: 'Every monster starts the battle with a shield worth 10% of its max HP.' },
+  { id: 'sunchip',   name: 'Sun Chip',        icon: '☀️', stars: 2, kind: 'healamp',     pow: 0.18, blurb: 'Healing skills restore 18% more HP.' },
+  // 3★ — relics
+  { id: 'keen',      name: 'Keen Lens',       icon: '🎯', stars: 3, kind: 'crit',        pow: 0.18, blurb: 'Your team lands critical hits far more often (+18% crit chance).' },
+  { id: 'leech',     name: 'Leech Fang',      icon: '🩸', stars: 3, kind: 'lifesteal',   pow: 0.12, blurb: 'Every attack heals the attacker for 12% of the damage dealt.' },
+  { id: 'bramble',   name: 'Bramble Vest',    icon: '🌵', stars: 3, kind: 'thorns',      pow: 0.12, blurb: 'Foes that hit your monsters take 12% of the damage back.' },
+  { id: 'idol',      name: 'Stoneheart Idol', icon: '🗿', stars: 3, kind: 'hp',          pow: 0.10, blurb: 'Your whole team is beefier (Max HP +10%).' },
+  { id: 'gale',      name: 'Gale Feather',    icon: '🌬️', stars: 3, kind: 'swift',       pow: 0.40, blurb: 'Your whole team is much faster (Speed +40%).' },
+  // 4★ — treasures
+  { id: 'ward',      name: 'Warding Charm',   icon: '🧿', stars: 4, kind: 'ward',        pow: 1,    blurb: 'Your team is immune to stun and poison — no more skipped turns or damage-over-time.' },
+  { id: 'banner',    name: 'War Banner',      icon: '🚩', stars: 4, kind: 'atk',         pow: 0.16, blurb: 'Your whole team hits much harder (Attack +16%).' },
+  { id: 'torc',      name: 'Lifebloom Torc',  icon: '🌺', stars: 4, kind: 'regen',       pow: 0.05, blurb: 'Every monster regrows 5% of its max HP at the start of its turn.' },
+  { id: 'bulwark',   name: 'Bulwark Plate',   icon: '🏰', stars: 4, kind: 'shieldstart', pow: 0.16, blurb: 'Every monster starts the battle with a big shield (16% of its max HP).' },
+  { id: 'falcon',    name: 'Falcon Eye',      icon: '👁️', stars: 4, kind: 'crit',        pow: 0.26, blurb: 'Your team lands critical hits constantly (+26% crit chance).' },
+  // 5★ — wonders
+  { id: 'battery',   name: 'Battery Core',    icon: '🔋', stars: 5, kind: 'battery',     pow: 2,    blurb: 'Skills charge one turn faster, so your monsters unleash their special skills sooner.' },
+  { id: 'ember',     name: 'Catalyst Prism',  icon: '🔺', stars: 5, kind: 'ember',       pow: 2.5,  blurb: 'Super-effective element hits deal ×2.5 instead of ×2 — reward good matchups even more.' },
+  { id: 'chalice',   name: 'Reaper Chalice',  icon: '🏺', stars: 5, kind: 'lifesteal',   pow: 0.22, blurb: 'Every attack heals the attacker for 22% of the damage dealt.' },
+  { id: 'titan',     name: 'Titan Heart',     icon: '🫀', stars: 5, kind: 'hp',          pow: 0.18, blurb: 'Your whole team is far beefier (Max HP +18%).' },
+  // 6★ — legends
+  { id: 'phoenix',   name: 'Phoenix Plume',   icon: '🪶', stars: 6, kind: 'phoenix',     pow: 0.35, blurb: 'The first ally to faint is revived once at 35% HP. A second chance every battle.' },
+  { id: 'mirror',    name: 'Mirror Shell',    icon: '🐚', stars: 6, kind: 'thorns',      pow: 0.30, blurb: 'Foes that hit your monsters take 30% of the damage back.' },
+  // 7★ — myths
+  { id: 'wyrm',      name: 'Wyrmheart Ruby',  icon: '💎', stars: 7, kind: 'ember',       pow: 3,    blurb: 'Super-effective element hits deal ×3 damage instead of ×2 — devastating matchups.' },
+  { id: 'ankh',      name: 'Eternity Ankh',   icon: '☥', stars: 7, kind: 'phoenix',     pow: 0.60, blurb: 'The first ally to faint is reborn at 60% HP. Fainting is only a suggestion.' }
 ];
 function tcgArtifactById(id) { return TCG_ARTIFACTS.find(a => a.id === id) || null; }
 // ---- Auto-battle strategies the student picks (who to attack / who to heal).
@@ -28433,15 +28472,15 @@ function tcgShortName(card) { return String((card && card.name) || '').split(','
 
 // ---- Booster packs (the ONLY way to get cards) ----
 const TCG_PACKS = [
-  { id: 'spark', name: 'Bronze Pack', tier: 'bronze', em: '🎴', cost: 120, cards: 3,
-    desc: '3 cards. A first taste of the dex — commons with a chance of something shiny.',
+  { id: 'spark', name: 'Bronze Pack', tier: 'bronze', em: '🎴', cost: 120, cards: 3, artChance: 0.20,
+    desc: '3 cards. A first taste of the dex — commons with a chance of something shiny. 20% chance of a bonus 🔱 artifact.',
     odds: { 1: 40, 2: 30, 3: 17, 4: 8, 5: 3.5, 6: 1.2, 7: 0.3 } },
-  { id: 'nova', name: 'Silver Pack', tier: 'silver', em: '🎁', cost: 320, cards: 5,
-    desc: '5 cards — the last card is guaranteed 3★ or better.',
+  { id: 'nova', name: 'Silver Pack', tier: 'silver', em: '🎁', cost: 320, cards: 5, artChance: 0.45,
+    desc: '5 cards — the last card is guaranteed 3★ or better. 45% chance of a bonus 🔱 artifact.',
     odds: { 1: 34, 2: 30, 3: 20, 4: 10, 5: 4.2, 6: 1.4, 7: 0.4 },
     bonusOdds: { 3: 62, 4: 25, 5: 9, 6: 3, 7: 1 } },
-  { id: 'galaxy', name: 'Gold Pack', tier: 'gold', em: '💠', cost: 750, cards: 5,
-    desc: '5 cards, nothing below 2★ — and the last card is guaranteed 4★ or better.',
+  { id: 'galaxy', name: 'Gold Pack', tier: 'gold', em: '💠', cost: 750, cards: 5, artChance: 1,
+    desc: '5 cards, nothing below 2★ — the last card is guaranteed 4★ or better, and a bonus 🔱 artifact is ALWAYS included.',
     odds: { 2: 45, 3: 30, 4: 16, 5: 6, 6: 2.5, 7: 0.5 },
     bonusOdds: { 4: 68, 5: 22, 6: 8, 7: 2 } }
 ];
@@ -28480,6 +28519,12 @@ function _tcgRollCard(odds) {
   const pool = TCG_CARDS.filter(c => c.stars === stars);
   return pool[Math.floor(Math.random() * pool.length)];
 }
+// Bonus artifact slot: rarity rolled with the same star odds as the pack's cards.
+function _tcgRollArtifact(odds) {
+  const stars = _tcgRollStars(odds);
+  const pool = TCG_ARTIFACTS.filter(a => a.stars === stars);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 // ---- Per-student state (lives on rpgState.tcg, saved with the hero) ----
 function tcgHydrateState(saved) {
@@ -28496,6 +28541,9 @@ function tcgHydrateState(saved) {
     lvlp[id] = lv >= TCG_LVL_MAX ? 0 : Math.max(0, Math.min(TCG_LVL_STEP - 1, sp[id] | 0));
   });
   const strat = (s.strategy && typeof s.strategy === 'object') ? s.strategy : {};
+  // Owned artifacts ({id: count}) — dropped by booster packs, like cards.
+  const artifacts = {};
+  Object.keys(s.artifacts || {}).forEach(id => { if (tcgArtifactById(id) && (s.artifacts[id] | 0) > 0) artifacts[id] = s.artifacts[id] | 0; });
   return {
     cards,
     team: Array.isArray(s.team) ? s.team.filter(id => TCG_BY_ID[id] && cards[id]).slice(0, 5) : [],
@@ -28504,7 +28552,8 @@ function tcgHydrateState(saved) {
     losses: s.losses | 0,
     levels,
     lvlp,
-    artifact: (TCG_ARTIFACTS.some(a => a.id === s.artifact)) ? s.artifact : null,
+    artifacts,
+    artifact: artifacts[s.artifact] ? s.artifact : null,
     strategy: {
       attack: TCG_STRATS_ATK.some(x => x.id === strat.attack) ? strat.attack : 'lowhp',
       heal: TCG_STRATS_HEAL.some(x => x.id === strat.heal) ? strat.heal : 'mosthurt'
@@ -28519,7 +28568,12 @@ function tcgState() {
 function tcgArtifact() { const s = tcgState(); return s ? tcgArtifactById(s.artifact) : null; }
 function tcgSetArtifact(id) {
   const s = tcgState(); if (!s) return;
-  s.artifact = (s.artifact === id) ? null : (tcgArtifactById(id) ? id : null); // tap again to unequip
+  const a = tcgArtifactById(id);
+  if (s.artifact !== id && a && !((s.artifacts || {})[id] | 0)) {
+    showToast('You don\'t own ' + a.name + ' yet — artifacts drop from booster packs 🎁', 'error');
+    return;
+  }
+  s.artifact = (s.artifact === id) ? null : (a ? id : null); // tap again to unequip
   rpgSave();
   try { rpgPublishLeaderboard(); } catch (e) {}
   showToast(s.artifact ? tcgArtifactById(s.artifact).name + ' equipped' : 'Artifact removed', 'success');
@@ -28778,6 +28832,27 @@ function tcgCardHtml(card, opts) {
     + '</div>';
 }
 
+// Artifact card face (pack reveal) — same frame as monster cards, with the
+// star tier driving the border glow.
+function tcgArtifactCardHtml(a, opts) {
+  opts = opts || {};
+  const badges = (opts.isNew ? '<span class="tcg-new-badge">NEW!</span>' : '')
+    + (opts.count > 1 ? '<span class="tcg-count-badge">×' + opts.count + '</span>' : '');
+  return '<div class="tcg-card star-' + a.stars + '">'
+    + badges
+    + '<div class="tcg-card-inner">'
+    +   '<div class="tcg-card-no">🔱</div>'
+    +   '<div class="tcg-art"><div>' + a.icon + '</div></div>'
+    +   '<div class="tcg-body">'
+    +     '<div class="tcg-card-name">' + escapeHtml(a.name) + '</div>'
+    +     '<div class="tcg-stars">' + tcgStarsHtml(a.stars) + '</div>'
+    +     '<div class="tcg-type"><span class="ln l"></span><span class="lbl">🔱 Artifact</span><span class="ln r"></span></div>'
+    +     '<div class="tcg-skill"><span class="tcg-skill-name">' + a.icon + ' Team effect.</span> ' + escapeHtml(a.blurb) + '</div>'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
+}
+
 // ---- Page rendering ----
 let tcgTab = 'dex';
 let tcgDexFilter = 'all';
@@ -28803,7 +28878,7 @@ function tcgRenderAdminBanner() {
     +   (live
           ? '<button class="btn btn-outline" onclick="tcgSetReleased(false)">⏸ Back to beta</button>'
           : '<button class="btn btn-primary" onclick="tcgSetReleased(true)">🚀 Release to students</button>')
-    +   '<button class="btn btn-outline" onclick="tcgAdminGrantAll()">🃏 Unlock all cards</button>'
+    +   '<button class="btn btn-outline" onclick="tcgAdminGrantAll()">🃏 Unlock all cards & artifacts</button>'
     + '</div>'
     + '</div>';
 }
@@ -29077,7 +29152,7 @@ function tcgCloseTrain() {
 function tcgPacksHtml(s) {
   const gold = (rpgState && rpgState.gold) | 0;
   const oddsLine = p => [1, 2, 3, 4, 5, 6, 7].filter(n => p.odds[n]).map(n => n + '★ ' + p.odds[n] + '%').join(' · ');
-  return '<div class="tcg-section-note">Booster packs are the <b>only</b> way to collect monsters. You have <b>🪙 ' + gold.toLocaleString() + ' points</b> — earn more by answering questions anywhere in the app.'
+  return '<div class="tcg-section-note">Booster packs are the <b>only</b> way to collect monsters <b>and 🔱 artifacts</b>. You have <b>🪙 ' + gold.toLocaleString() + ' points</b> — earn more by answering questions anywhere in the app.'
     + (_isAdmin() ? ' <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="tcgAdminGold()">＋500 🪙 test points (admin)</button>' : '') + '</div>'
     + '<div class="tcg-packs">' + TCG_PACKS.map(p =>
       '<div class="tcg-pack tcg-pack-' + p.tier + '">'
@@ -29095,17 +29170,20 @@ function tcgAdminGold() {
   rpgSave(); tcgUpdateGoldChip(); tcgRenderBody();
   showToast('+500 test points (admin preview)', 'success');
 }
-// Admin play-test helper: grant one copy of every monster so the full dex can
-// be tried without opening packs. Only fills gaps — owned counts/levels stay.
+// Admin play-test helper: grant one copy of every monster AND every artifact
+// so everything can be tried without opening packs. Only fills gaps — owned
+// counts and levels stay untouched.
 function tcgAdminGrantAll() {
   if (!_isAdmin()) return;
   const s = tcgState();
   if (!s) { showToast('Answer a question anywhere in the app to wake your hero first, then try again', 'error'); return; }
-  let added = 0;
-  TCG_CARDS.forEach(c => { if (!s.cards[c.id]) { s.cards[c.id] = 1; added++; } });
-  if (!added) { showToast('You already own all ' + TCG_CARDS.length + ' cards ✔', 'success'); return; }
+  let addedC = 0, addedA = 0;
+  TCG_CARDS.forEach(c => { if (!s.cards[c.id]) { s.cards[c.id] = 1; addedC++; } });
+  s.artifacts = s.artifacts || {};
+  TCG_ARTIFACTS.forEach(a => { if (!s.artifacts[a.id]) { s.artifacts[a.id] = 1; addedA++; } });
+  if (!addedC && !addedA) { showToast('You already own all ' + TCG_CARDS.length + ' cards and all ' + TCG_ARTIFACTS.length + ' artifacts ✔', 'success'); return; }
   rpgSave();
-  showToast('🃏 +' + added + ' cards — full dex unlocked (' + TCG_CARDS.length + '/' + TCG_CARDS.length + ')', 'success');
+  showToast('🃏 +' + addedC + ' cards · 🔱 +' + addedA + ' artifacts — everything unlocked!', 'success');
   tcgRenderBody();
 }
 function tcgBuyPack(packId) {
@@ -29121,6 +29199,14 @@ function tcgBuyPack(packId) {
     const isNew = !s.cards[card.id];
     s.cards[card.id] = (s.cards[card.id] | 0) + 1;
     pulls.push({ card, isNew });
+  }
+  // Bonus artifact slot — the other pack prize, revealed as one extra card.
+  if (p.artChance && Math.random() < p.artChance) {
+    const arti = _tcgRollArtifact(p.odds);
+    s.artifacts = s.artifacts || {};
+    const isNew = !s.artifacts[arti.id];
+    s.artifacts[arti.id] = (s.artifacts[arti.id] | 0) + 1;
+    pulls.push({ arti, isNew });
   }
   s.packs = (s.packs | 0) + 1;
   rpgSave();
@@ -29139,10 +29225,10 @@ function tcgShowReveal(pack, pulls) {
     + '<div class="tcg-reveal-title">' + pack.em + ' ' + escapeHtml(pack.name) + ' opened!</div>'
     + '<div class="tcg-reveal-sub">Tap each card to flip it over…</div>'
     + '<div class="tcg-reveal-row">' + pulls.map((pl, i) =>
-        '<div class="tcg-flip" id="tcgflip-' + i + '" data-stars="' + pl.card.stars + '" style="animation-delay:' + (i * 0.12) + 's;" onclick="tcgFlipCard(' + i + ')" title="Hover halo hints at the rarity…">'
+        '<div class="tcg-flip" id="tcgflip-' + i + '" data-stars="' + (pl.card || pl.arti).stars + '" style="animation-delay:' + (i * 0.12) + 's;" onclick="tcgFlipCard(' + i + ')" title="Hover halo hints at the rarity…">'
         + '<div class="tcg-flip-inner">'
         +   '<div class="tcg-flip-back">' + tcgCardBackHtml() + '</div>'
-        +   '<div class="tcg-flip-front">' + tcgCardHtml(pl.card, { isNew: pl.isNew }) + '</div>'
+        +   '<div class="tcg-flip-front">' + (pl.arti ? tcgArtifactCardHtml(pl.arti, { isNew: pl.isNew }) : tcgCardHtml(pl.card, { isNew: pl.isNew })) + '</div>'
         + '</div></div>').join('') + '</div>'
     + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">'
     +   '<button class="btn btn-outline" style="color:#fff;border-color:rgba(255,255,255,0.4);" onclick="tcgFlipAll()">Flip all</button>'
@@ -29157,7 +29243,8 @@ function tcgFlipCard(i) {
   if (!o || !f || f.classList.contains('flipped')) return;
   f.classList.add('flipped');
   const pl = o._pulls && o._pulls[i];
-  if (pl && pl.card.stars >= 5) tcgConfetti(pl.card.stars >= 7 ? 90 : 45);
+  const stars = pl && (pl.card || pl.arti).stars;
+  if (stars >= 5) tcgConfetti(stars >= 7 ? 90 : 45);
 }
 function tcgFlipAll() {
   const o = document.getElementById('tcgRevealOverlay');
@@ -29205,13 +29292,23 @@ function tcgTeamHtml(s) {
       : '<div class="tcg-section-note">You don\'t own any monsters yet — open a booster pack first! 🎁</div>');
 }
 // Artifact chooser (equip ONE utility artifact for your whole team).
+// Artifacts drop from booster packs — unowned ones show locked until pulled.
 function tcgArtifactPickerHtml(s) {
+  const inv = s.artifacts || {};
+  const ownedN = TCG_ARTIFACTS.filter(a => inv[a.id]).length;
+  const list = TCG_ARTIFACTS.slice().sort((a, b) => a.stars - b.stars || a.name.localeCompare(b.name));
   return '<div class="tcg-loadout">'
-    + '<h3 class="tcg-team-h">🔱 Artifact <span class="tcg-team-sub">— equip one for your whole team (tap again to remove)</span></h3>'
+    + '<h3 class="tcg-team-h">🔱 Artifacts <span class="tcg-team-sub">— found in booster packs · equip ONE for your whole team (tap again to remove) · ' + ownedN + ' / ' + TCG_ARTIFACTS.length + ' collected</span></h3>'
     + '<div class="tcg-arti-grid">'
-    + TCG_ARTIFACTS.map(a => '<button type="button" class="tcg-arti' + (s.artifact === a.id ? ' on' : '') + '" onclick="tcgSetArtifact(\'' + a.id + '\')">'
-        + '<div class="tcg-arti-ic">' + a.icon + '</div><div class="tcg-arti-name">' + escapeHtml(a.name) + '</div>'
-        + '<div class="tcg-arti-blurb">' + escapeHtml(a.blurb) + '</div></button>').join('')
+    + list.map(a => {
+        const n = inv[a.id] | 0;
+        const owned = n > 0;
+        return '<button type="button" class="tcg-arti' + (s.artifact === a.id ? ' on' : '') + (owned ? '' : ' locked') + '" onclick="tcgSetArtifact(\'' + a.id + '\')">'
+          + '<div class="tcg-arti-ic">' + (owned ? a.icon : '🔒') + '</div>'
+          + '<div class="tcg-arti-name">' + escapeHtml(a.name) + (n > 1 ? ' <span class="tcg-arti-count">×' + n + '</span>' : '') + '</div>'
+          + '<div class="tcg-arti-stars">' + '★'.repeat(a.stars) + '</div>'
+          + '<div class="tcg-arti-blurb">' + (owned ? escapeHtml(a.blurb) : 'Locked — find this artifact in a booster pack to see what it does.') + '</div></button>';
+      }).join('')
     + '</div></div>';
 }
 // Auto-battle strategy chooser (who to attack / who to heal).
@@ -29318,20 +29415,32 @@ function _tcgMkUnit(cardId, side, slot, level) {
     charge: Math.floor(Math.random() * 2), shield: 0, stun: 0,
     poison: null, atkUp: 0, atkUpPct: 0,
     strat: { attack: 'lowhp', heal: 'mosthurt' }, skillThresh: 3,
-    critBonus: 0, emberAmp: false, wardStatus: false, ctx: null
+    critBonus: 0, emberAmp: 0, wardStatus: false, lifesteal: 0, thorns: 0, regen: 0, ctx: null
   };
 }
 // Equip the player's chosen artifact onto their whole team for a battle.
+// Effects are driven by the artifact's kind + pow so rarities scale cleanly.
 function _tcgApplyArtifact(units, artId, ctx) {
   const art = tcgArtifactById(artId);
   if (!art) return;
   units.forEach(u => { u.ctx = ctx; });
-  if (art.id === 'swift') units.forEach(u => { u.spd = Math.round(u.spd * 1.25); });
-  else if (art.id === 'keen') units.forEach(u => { u.critBonus = 0.18; });
-  else if (art.id === 'battery') units.forEach(u => { u.skillThresh = 2; });
-  else if (art.id === 'ward') units.forEach(u => { u.wardStatus = true; });
-  else if (art.id === 'ember') units.forEach(u => { u.emberAmp = true; });
-  else if (art.id === 'phoenix') ctx.phoenixLeft = 1;
+  const p = art.pow;
+  switch (art.kind) {
+    case 'swift':       units.forEach(u => { u.spd = Math.round(u.spd * (1 + p)); }); break;
+    case 'crit':        units.forEach(u => { u.critBonus = p; }); break;
+    case 'battery':     units.forEach(u => { u.skillThresh = p; }); break;
+    case 'ward':        units.forEach(u => { u.wardStatus = true; }); break;
+    case 'ember':       units.forEach(u => { u.emberAmp = p; }); break;
+    case 'phoenix':     ctx.phoenixLeft = 1; ctx.phoenixPct = p; ctx.phoenixName = art.name; break;
+    case 'atk':         units.forEach(u => { u.atk = Math.round(u.atk * (1 + p)); }); break;
+    case 'def':         units.forEach(u => { u.def = Math.round(u.def * (1 + p)); }); break;
+    case 'hp':          units.forEach(u => { const add = Math.round(u.maxHp * p); u.maxHp += add; u.hp += add; }); break;
+    case 'healamp':     units.forEach(u => { u.heal = Math.round(u.heal * (1 + p)); }); break;
+    case 'shieldstart': units.forEach(u => { u.shield += Math.round(u.maxHp * p); }); break;
+    case 'lifesteal':   units.forEach(u => { u.lifesteal = p; }); break;
+    case 'thorns':      units.forEach(u => { u.thorns = p; }); break;
+    case 'regen':       units.forEach(u => { u.regen = p; }); break;
+  }
 }
 function _tcgUnitEl(u) { return document.getElementById('tcgbu-' + u.uid); }
 function _tcgHpClass(u) { const p = u.hp / u.maxHp; return p <= 0.28 ? 'low' : p <= 0.6 ? 'mid' : ''; }
@@ -29382,7 +29491,7 @@ function _tcgDamage(attacker, target, mult, ignoreDef) {
   // Elemental matchup: ×2 super-effective (×2.5 with the Catalyst Prism artifact),
   // ×0.5 resisted, ×1 neutral.
   let em = tcgElemMult(attacker.card, target.card);
-  if (em >= 2 && attacker.emberAmp) em = 2.5;
+  if (em >= 2 && attacker.emberAmp) em = attacker.emberAmp; // Catalyst Prism ×2.5 / Wyrmheart Ruby ×3
   raw *= em;
   const crit = Math.random() < (0.10 + (attacker.critBonus || 0));
   if (crit) raw *= 1.5;
@@ -29395,18 +29504,31 @@ function _tcgDamage(attacker, target, mult, ignoreDef) {
   }
   target.hp = Math.max(0, target.hp - dmg);
   if (target.hp <= 0) _tcgTryRevive(target);
+  // Lifesteal artifacts (Leech Fang / Reaper Chalice): every hit feeds the attacker.
+  if (dmg > 0 && attacker.lifesteal && attacker.hp > 0 && attacker.hp < attacker.maxHp) {
+    const back = Math.round(dmg * attacker.lifesteal);
+    if (back > 0) { attacker.hp = Math.min(attacker.maxHp, attacker.hp + back); _tcgPopup(attacker, '+' + back, 'heal'); _tcgRefreshUnit(attacker); }
+  }
+  // Thorns artifacts (Bramble Vest / Mirror Shell): the defender bites back.
+  if (dmg > 0 && target.thorns && attacker.hp > 0) {
+    const spike = Math.max(1, Math.round(dmg * target.thorns));
+    attacker.hp = Math.max(0, attacker.hp - spike);
+    _tcgPopup(attacker, '🌵 -' + spike, 'status');
+    if (attacker.hp <= 0) _tcgTryRevive(attacker);
+    _tcgRefreshUnit(attacker);
+  }
   return { dmg, crit, eff: em > 1 ? 'super' : em < 1 ? 'weak' : '' };
 }
 // Phoenix Plume artifact: revive the first ally to faint, once, at 35% HP.
 function _tcgTryRevive(unit) {
   if (unit.hp > 0 || !unit.ctx || !unit.ctx.phoenixLeft) return;
   unit.ctx.phoenixLeft--;
-  unit.hp = Math.max(1, Math.round(unit.maxHp * 0.35));
+  unit.hp = Math.max(1, Math.round(unit.maxHp * (unit.ctx.phoenixPct || 0.35)));
   unit.poison = null; unit.stun = 0;
   _tcgPopup(unit, '🪶 Revive!', 'heal');
   const el = _tcgUnitEl(unit);
   if (el) { el.classList.remove('dead'); el.classList.add('healed'); setTimeout(() => el.classList.remove('healed'), 800); }
-  _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> is revived by the <b>Phoenix Plume</b>!');
+  _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> is revived by the <b>' + escapeHtml(unit.ctx.phoenixName || 'Phoenix Plume') + '</b>!');
 }
 async function _tcgHitFx(target, res) {
   const el = _tcgUnitEl(target);
@@ -29442,6 +29564,13 @@ function _tcgUnlunge(unit) {
 async function _tcgAct(stage, unit, allies, foes) {
   const el = _tcgUnitEl(unit);
   if (el) el.classList.add('acting');
+  // Regen artifacts (Moss Band → Lifebloom Torc) tick at the start of the turn.
+  if (unit.regen && unit.hp > 0 && unit.hp < unit.maxHp) {
+    const r = Math.max(1, Math.round(unit.maxHp * unit.regen));
+    unit.hp = Math.min(unit.maxHp, unit.hp + r);
+    _tcgPopup(unit, '🌿 +' + r, 'heal');
+    _tcgRefreshUnit(unit);
+  }
   // Poison ticks at the start of the unit's turn.
   if (unit.poison) {
     const p = Math.round(unit.poison.dmg);
