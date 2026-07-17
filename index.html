@@ -4487,6 +4487,21 @@ option {
 .tcg-arti.locked { opacity: 0.6; background: var(--surface-alt); }
 .tcg-arti.locked:hover { border-color: var(--border); transform: none; }
 .tcg-arti.locked .tcg-arti-stars { filter: grayscale(1); }
+/* ---- dungeon leaderboard ---- */
+.tcg-board { max-width: 680px; margin: 0 auto; }
+.tcg-board-prize { text-align: center; border: 1px solid #f0b542; background: linear-gradient(180deg, #fffdf6, #fff4d6); border-radius: 16px; padding: 18px 22px; margin-bottom: 20px; font-size: 0.95rem; line-height: 1.6; }
+.tcg-board-prize span { font-size: 0.8rem; color: var(--text-muted); }
+.tcg-board-rows { display: flex; flex-direction: column; gap: 10px; }
+.tcg-board-row { display: flex; align-items: center; gap: 14px; border: 1px solid var(--border); border-radius: 14px; padding: 12px 18px; background: var(--surface); }
+.tcg-board-row.top5 { border-color: #f0b542; box-shadow: 0 2px 10px rgba(240,181,66,0.18); }
+.tcg-board-row.me { outline: 2px solid #8E24AA; outline-offset: 1px; }
+.tcg-board-rank { width: 44px; text-align: center; font-weight: 800; font-size: 1.05rem; flex-shrink: 0; }
+.tcg-board-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tcg-board-who b { font-size: 0.95rem; }
+.tcg-board-who span { font-size: 0.74rem; color: var(--text-muted); }
+.tcg-board-floor { text-align: right; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0; }
+.tcg-board-floor b { font-size: 0.95rem; color: #8E24AA; }
+.tcg-board-voucher { font-size: 0.72rem; font-weight: 800; background: #fef3c7; color: #92400e; border-radius: 999px; padding: 2px 10px; }
 .tcg-strat-block { margin: 10px 0; }
 .tcg-strat-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; }
 .tcg-strat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
@@ -6368,7 +6383,7 @@ option {
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
             <h2>🃏 Monster Cards <span class="nav-beta" style="font-size:0.6rem;padding:3px 9px;">BETA</span></h2>
           </div>
-          <div class="subtitle">Collect all 151 legendary monsters! Open booster packs with the points you earn answering questions, build a team of 5, and auto-battle other trainers.</div>
+          <div class="subtitle">Collect all 151 legendary monsters! Open booster packs with the points you earn answering questions, build a team of 5, battle other trainers and climb the infinite Dungeon.</div>
         </div>
         <div class="tcg-gold-chip" id="tcgGoldChip">🪙 —</div>
       </div>
@@ -6379,6 +6394,8 @@ option {
           <button class="tcg-tab" data-tcgtab="packs" onclick="tcgSetTab('packs')" type="button">🎁 Booster Packs</button>
           <button class="tcg-tab" data-tcgtab="team" onclick="tcgSetTab('team')" type="button">🛡️ My Team</button>
           <button class="tcg-tab" data-tcgtab="arena" onclick="tcgSetTab('arena')" type="button">⚔️ Battle Arena</button>
+          <button class="tcg-tab" data-tcgtab="dungeon" onclick="tcgSetTab('dungeon')" type="button">🏰 Dungeon</button>
+          <button class="tcg-tab" data-tcgtab="board" onclick="tcgSetTab('board')" type="button">🏆 Leaderboard</button>
           <button class="tcg-tab admin-only" data-tcgtab="art" onclick="tcgSetTab('art')" type="button">🎨 Card Art</button>
         </div>
         <div id="tcgBody"><div class="ga-loading" style="text-align:center;color:#94a3b8;padding:30px;">Loading…</div></div>
@@ -8403,7 +8420,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.124.0';
+const APP_VERSION = 'v1.125.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -24750,7 +24767,9 @@ function rpgPublishLeaderboard() {
         power: tcgTeamPower(rpgState.tcg.team),
         wins: rpgState.tcg.wins | 0,
         losses: rpgState.tcg.losses | 0,
-        dex: Object.keys(rpgState.tcg.cards || {}).length
+        dex: Object.keys(rpgState.tcg.cards || {}).length,
+        floor: Math.max(1, ((rpgState.tcg.dungeon || {}).level | 0)),
+        clears: (rpgState.tcg.dungeon || {}).cleared | 0
       } : null,
       updatedAt: new Date().toISOString()
     }).catch(e => console.warn("leaderboard publish", e));
@@ -28554,7 +28573,11 @@ function tcgHydrateState(saved) {
   // Owned artifacts ({id: count}) — dropped by booster packs, like cards.
   const artifacts = {};
   Object.keys(s.artifacts || {}).forEach(id => { if (tcgArtifactById(id) && (s.artifacts[id] | 0) > 0) artifacts[id] = s.artifacts[id] | 0; });
+  // Infinite dungeon: every account starts at Floor 1. level = next floor to
+  // fight (the floor you have "reached"); cleared = total floors beaten.
+  const dg = (s.dungeon && typeof s.dungeon === 'object') ? s.dungeon : {};
   return {
+    dungeon: { level: Math.max(1, dg.level | 0), cleared: Math.max(0, dg.cleared | 0) },
     cards,
     team: Array.isArray(s.team) ? s.team.filter(id => TCG_BY_ID[id] && cards[id]).slice(0, 5) : [],
     packs: s.packs | 0,
@@ -28913,6 +28936,8 @@ function tcgRenderBody() {
   if (tcgTab === 'dex') host.innerHTML = tcgDexHtml(s);
   else if (tcgTab === 'packs') host.innerHTML = tcgPacksHtml(s);
   else if (tcgTab === 'team') host.innerHTML = tcgTeamHtml(s);
+  else if (tcgTab === 'dungeon') host.innerHTML = tcgDungeonHtml(s);
+  else if (tcgTab === 'board') { host.innerHTML = '<div class="ga-loading" style="text-align:center;color:#94a3b8;padding:30px;">Loading rankings…</div>'; tcgRenderBoard(); }
   else if (tcgTab === 'art') host.innerHTML = _isAdmin() ? tcgArtAdminHtml() : tcgDexHtml(s);
   else host.innerHTML = tcgArenaHtml(s);
 }
@@ -29407,6 +29432,84 @@ async function tcgFindOpponent() {
   return { name, tcgTeam: _tcgGhostTeam(tcgTeamStars(s.team)), ghost: true };
 }
 
+// ---- Infinite Dungeon: an endless PvE floor ladder. Every account starts at
+// Floor 1. Each floor fields a stronger keeper team (more stars, higher levels,
+// and past Floor 40 an ever-growing stat multiplier — it truly never ends).
+// Win to advance one floor; crush it (finish with most of your team's HP) and
+// you skip ahead several floors. Lose and you stay to train and retry.
+const TCG_DUNGEON_KEEPERS = ['Gatekeeper Morn', 'Warden Duskveil', 'Curator Ashfall', 'Keeper Nyxis', 'Overseer Gloom', 'Archivist Vael', 'Sentinel Korr', 'Chatelaine Umbra', 'Custodian Riven', 'Lord of the Deep Halls'];
+function _tcgDungeonStats(L) {
+  return {
+    stars: Math.min(35, 5 + Math.floor(L * 0.7)),          // team star budget 5→35
+    lvl: Math.min(99, 1 + Math.round((L - 1) * 1.5)),      // keeper monster level
+    statMult: +(1 + Math.max(0, L - 40) * 0.04).toFixed(2) // endless growth past Floor 40
+  };
+}
+function _tcgDungeonOpponent(L) {
+  const d = _tcgDungeonStats(L);
+  return {
+    name: TCG_DUNGEON_KEEPERS[(L - 1) % TCG_DUNGEON_KEEPERS.length] + ' · Floor ' + L,
+    ghost: true, dungeon: L, lvl: d.lvl, statMult: d.statMult,
+    tcgTeam: _tcgGhostTeam(d.stars)
+  };
+}
+function tcgEnterDungeon() {
+  const s = tcgState();
+  if (!s || s.team.length !== 5) { showToast('Pick 5 monsters on the My Team tab first', 'error'); return; }
+  const L = Math.max(1, (s.dungeon && s.dungeon.level) | 0);
+  tcgRunBattle(s.team.slice(), { name: (currentUser && currentUser.name) || 'You' }, _tcgDungeonOpponent(L));
+}
+// -- Dungeon tab --
+function tcgDungeonHtml(s) {
+  const dg = s.dungeon || { level: 1, cleared: 0 };
+  const L = Math.max(1, dg.level | 0);
+  const d = _tcgDungeonStats(L);
+  const ready = s.team.length === 5;
+  return '<div class="tcg-arena-head">'
+    + '<h3 style="margin-bottom:6px;">🏰 The Infinite Dungeon</h3>'
+    + '<p style="color:var(--text-muted);font-size:0.85rem;line-height:1.55;max-width:560px;margin:0 auto;">Endless floors, each with a stronger dungeon keeper. Win to climb. Win <b>easily</b> — finish with most of your team\'s health — and you leap several floors at once. Lose and you keep your floor: train up and try again.</p>'
+    + '<div class="tcg-record">'
+    +   '<div><b style="color:#8E24AA;">' + L + '</b><span>YOUR FLOOR</span></div>'
+    +   '<div><b style="color:#16a34a;">' + (dg.cleared | 0) + '</b><span>FLOORS BEATEN</span></div>'
+    +   '<div><b>' + tcgTeamPower(s.team).toLocaleString() + '</b><span>TEAM POWER</span></div>'
+    + '</div>'
+    + '<div class="tcg-loadout-line">Next: <b>' + escapeHtml(TCG_DUNGEON_KEEPERS[(L - 1) % TCG_DUNGEON_KEEPERS.length]) + '</b> · ' + d.stars + '★ team · monsters Lv ' + d.lvl + (d.statMult > 1 ? ' · power ×' + d.statMult : '') + '</div>'
+    + (ready
+      ? '<button class="btn btn-primary" style="font-size:1rem;padding:12px 30px;" onclick="tcgEnterDungeon()">🏰 Challenge Floor ' + L + '</button>'
+      : '<div class="tcg-section-note">Pick 5 monsters on the <b>My Team</b> tab first.</div>')
+    + '</div>'
+    + '<div class="tcg-section-note" style="margin-top:18px;">🏆 Your floor is your rank on the <b>Leaderboard</b> tab — the top 5 trainers each win a <b>$10 voucher</b>!</div>';
+}
+// -- Leaderboard tab: ranked by dungeon floor reached; top 5 win a $10 voucher.
+async function tcgRenderBoard() {
+  let rows = null;
+  try { rows = await rpgFetchLeaderboard(true); } catch (e) {}
+  const host = document.getElementById('tcgBody');
+  if (!host || tcgTab !== 'board') return; // user moved on while loading
+  const meUid = currentUser && currentUser.uid;
+  const list = (rows || []).filter(r => r && r.uid && r.tcg).map(r => ({
+    uid: r.uid, name: r.name || 'Trainer',
+    floor: Math.max(1, (r.tcg.floor | 0)),
+    clears: r.tcg.clears | 0,
+    power: r.tcg.power | 0,
+    dex: r.tcg.dex | 0
+  }));
+  list.sort((a, b) => b.floor - a.floor || b.clears - a.clears || b.power - a.power || a.name.localeCompare(b.name));
+  const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
+  host.innerHTML = '<div class="tcg-board">'
+    + '<div class="tcg-board-prize">🎟️ <b>Top 5 trainers each win a $10 voucher!</b><br><span>Climb the Infinite Dungeon — your rank is the floor you have reached.</span></div>'
+    + (list.length
+      ? '<div class="tcg-board-rows">' + list.map((r, i) =>
+          '<div class="tcg-board-row' + (i < 5 ? ' top5' : '') + (r.uid === meUid ? ' me' : '') + '">'
+          + '<div class="tcg-board-rank">' + medal(i) + '</div>'
+          + '<div class="tcg-board-who"><b>' + escapeHtml(r.name) + (r.uid === meUid ? ' (you)' : '') + '</b>'
+          +   '<span>' + (r.clears | 0) + ' floors beaten · ' + r.dex + '/' + TCG_CARDS.length + ' dex · power ' + r.power.toLocaleString() + '</span></div>'
+          + '<div class="tcg-board-floor"><b>Floor ' + r.floor + '</b>' + (i < 5 ? '<span class="tcg-board-voucher">🎟️ $10</span>' : '') + '</div>'
+          + '</div>').join('') + '</div>'
+      : '<div class="tcg-section-note">No trainers on the board yet — publish a team of 5 and clear dungeon floors to claim your rank!</div>')
+    + '</div>';
+}
+
 // ---- 3v3 auto battle — Final-Fantasy-style side view with full animation ----
 let _tcgBattle = null; // { token, speed, skip }
 function tcgSleep(ms) {
@@ -29735,8 +29838,16 @@ async function tcgRunBattle(myTeam, me, opp) {
   // Scale the opponent to ~85% of your team's average level so matches stay
   // competitive as your monsters grow.
   const myAvg = Math.round(myTeam.reduce((a, id) => a + tcgLevel(id), 0) / Math.max(1, myTeam.length));
-  const oppLvl = Math.max(1, Math.round(myAvg * 0.85));
+  // Dungeon keepers bring their own fixed level; arena opponents scale to you.
+  const oppLvl = opp.lvl || Math.max(1, Math.round(myAvg * 0.85));
   const theirs = opp.tcgTeam.map((id, i) => _tcgMkUnit(id, 'L', i, oppLvl));
+  // Endless dungeon growth: past Floor 40 keeper stats keep multiplying forever.
+  if (opp.statMult && opp.statMult > 1) theirs.forEach(u => {
+    u.maxHp = Math.round(u.maxHp * opp.statMult); u.hp = u.maxHp;
+    u.atk = Math.round(u.atk * opp.statMult);
+    u.def = Math.round(u.def * opp.statMult);
+    u.heal = Math.round(u.heal * opp.statMult);
+  });
   // Your chosen strategy drives your team's targeting/healing; the opponent uses
   // sensible defaults. Your equipped artifact buffs your whole team.
   const s0 = tcgState();
@@ -29797,20 +29908,39 @@ async function tcgRunBattle(myTeam, me, opp) {
   const theirLeft = theirs.reduce((a, u) => a + u.hp / u.maxHp, 0);
   const win = theirLeft <= 0 ? true : myLeft <= 0 ? false : myLeft >= theirLeft;
   const s = tcgState();
+  let subMsg = win ? 'Your monsters carried the day 🏆' : escapeHtml(opp.name) + ' takes this one — train up and try again!';
   if (s) {
-    if (win) s.wins = (s.wins | 0) + 1; else s.losses = (s.losses | 0) + 1;
+    if (opp.dungeon) {
+      // Dungeon progression: +1 floor per win, more if the floor was crushed.
+      s.dungeon = s.dungeon || { level: 1, cleared: 0 };
+      if (win) {
+        const ease = myLeft / Math.max(1, mine.length); // avg HP fraction left
+        const adv = ease >= 0.9 ? 5 : ease >= 0.7 ? 3 : 1;
+        s.dungeon.level = Math.max(s.dungeon.level | 0, opp.dungeon + adv);
+        s.dungeon.cleared = (s.dungeon.cleared | 0) + 1;
+        subMsg = adv > 1
+          ? 'Floor ' + opp.dungeon + ' crushed! You skip ahead ' + (adv - 1) + ' floors — next stop: Floor ' + s.dungeon.level + ' 🏰'
+          : 'Floor ' + opp.dungeon + ' cleared — next stop: Floor ' + s.dungeon.level + ' 🏰';
+      } else {
+        subMsg = 'Floor ' + opp.dungeon + ' stands strong. Train your monsters and challenge it again!';
+      }
+    } else {
+      if (win) s.wins = (s.wins | 0) + 1; else s.losses = (s.losses | 0) + 1;
+    }
     rpgSave();
     try { rpgPublishLeaderboard(); } catch (e) {}
   }
   const res = document.getElementById('tcgbResult');
   if (res) {
     res.innerHTML = '<div class="word ' + (win ? 'win' : 'lose') + '">' + (win ? 'VICTORY!' : 'DEFEAT') + '</div>'
-      + '<div class="sub">' + (win ? 'Your monsters carried the day 🏆' : escapeHtml(opp.name) + ' takes this one — train up and try again!') + '</div>'
+      + '<div class="sub">' + subMsg + '</div>'
       + '<button class="btn btn-primary" onclick="tcgCloseBattle()">Continue</button>';
     res.classList.add('show');
   }
   if (win) tcgConfetti(70);
-  _tcgLog(win ? '<b>Victory!</b> Record: ' + ((s && s.wins) | 0) + 'W – ' + ((s && s.losses) | 0) + 'L' : '<b>Defeat.</b> Record: ' + ((s && s.wins) | 0) + 'W – ' + ((s && s.losses) | 0) + 'L');
+  _tcgLog(opp.dungeon
+    ? (win ? '<b>Victory!</b> ' + subMsg : '<b>Defeat.</b> ' + subMsg)
+    : (win ? '<b>Victory!</b> Record: ' + ((s && s.wins) | 0) + 'W – ' + ((s && s.losses) | 0) + 'L' : '<b>Defeat.</b> Record: ' + ((s && s.wins) | 0) + 'W – ' + ((s && s.losses) | 0) + 'L'));
 }
 
 // Inline handlers on the TCG page/overlays (module scope → must be on window).
@@ -29832,6 +29962,7 @@ window.tcgFlipAll = tcgFlipAll;
 window.tcgCloseReveal = tcgCloseReveal;
 window.tcgToggleTeam = tcgToggleTeam;
 window.tcgFindBattle = tcgFindBattle;
+window.tcgEnterDungeon = tcgEnterDungeon;
 window.tcgBattleSpeed = tcgBattleSpeed;
 window.tcgSkipBattle = tcgSkipBattle;
 window.tcgCloseBattle = tcgCloseBattle;
