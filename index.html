@@ -12,6 +12,7 @@
 <link rel="dns-prefetch" href="https://lh3.googleusercontent.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <!-- New landing page: fonts, icons, Tailwind -->
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
@@ -2344,6 +2345,48 @@ option {
     page-break-before: always;
     page-break-after: auto;
   }
+
+  /* Front matter (cover page / cheat sheet) — printed before question 1,
+     each starting on its own sheet. */
+  .print-front-page {
+    page-break-after: always;
+  }
+  .print-cover-page {
+    position: relative;
+    height: 250mm;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-cover-deco { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .print-cover-head { position: relative; font-size: 8.5pt; font-weight: 500; letter-spacing: 0.32em; text-transform: uppercase; color: #111; padding-bottom: 7pt; border-bottom: 0.6pt solid #111; }
+  .print-cover-center { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20pt; padding-bottom: 28mm; }
+  .print-cover-logo { width: 130pt; height: auto; max-height: 130pt; object-fit: contain; }
+  .print-cover-title { font-family: 'Crimson Pro', Georgia, serif; font-size: 34pt; font-weight: 600; line-height: 1.1; letter-spacing: -0.01em; color: #111; margin: 0; padding: 0 12pt; word-break: break-word; }
+  .print-cover-sub { font-family: 'Crimson Pro', Georgia, serif; font-size: 15pt; font-weight: 400; font-style: italic; color: #666; margin-top: -12pt; }
+  .print-cover-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 26pt; width: 100%; max-width: 340pt; margin-top: 12pt; text-align: left; }
+  .print-cover-field-label { font-size: 8pt; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: #111; margin-bottom: 5pt; }
+  .print-cover-field-line { border-bottom: 0.8pt solid #111; height: 14pt; }
+  .print-cover-foot { position: relative; font-size: 8pt; font-weight: 400; letter-spacing: 0.28em; text-transform: uppercase; color: #666; padding-top: 7pt; border-top: 0.6pt solid #111; }
+
+  /* Cheat sheet — AI question-type pattern guide */
+  .print-cheatsheet-page {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-cs-header { text-align: center; margin-bottom: 14pt; padding-bottom: 10pt; border-bottom: 2pt solid #111; }
+  .print-cs-header h2 { font-size: 16pt; font-weight: 700; margin: 0 0 4pt; }
+  .print-cs-header p { font-size: 9pt; color: #555; margin: 0; }
+  .print-cs-intro { font-size: 9.5pt; color: #333; line-height: 1.55; margin-bottom: 12pt; }
+  .print-cs-group { border: 1pt solid #ccc; border-radius: 6pt; padding: 10pt 13pt; margin-bottom: 10pt; page-break-inside: avoid; background: #fafaf7; }
+  .print-cs-group h3 { font-size: 11pt; font-weight: 700; margin: 0 0 2pt; }
+  .print-cs-count { font-size: 8pt; color: #777; margin-bottom: 4pt; }
+  .print-cs-label { font-size: 8pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #4a7c59; margin: 7pt 0 3pt; }
+  .print-cs-group ul, .print-cs-tips ul { margin: 0; padding-left: 14pt; font-size: 9.5pt; line-height: 1.5; }
+  .print-cs-group li, .print-cs-tips li { margin-bottom: 2pt; }
+  .print-cs-tips { border: 1pt dashed #999; border-radius: 6pt; padding: 9pt 13pt; margin-top: 2pt; page-break-inside: avoid; }
 
   /* Print header */
   .print-q-header {
@@ -5661,6 +5704,18 @@ option {
 
         <div class="ws-question-grid" id="wsQuestionGrid"></div>
 
+        <div style="display:flex;flex-wrap:wrap;gap:10px 24px;align-items:center;justify-content:center;margin:18px auto 14px;padding:16px 24px;border:1.5px solid var(--border);border-radius:12px;background:var(--surface);max-width:720px;">
+          <span style="font-size:0.78rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">Extras</span>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Add an elegant Polymath cover page with the worksheet title and name / date fields as page 1">
+            <input type="checkbox" id="wsIncludeCover" style="width:16px;height:16px;accent-color:var(--primary);">
+            📄 Cover page
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="AI summarises and categorises the selected questions by type — how to spot each pattern and how to structure the answer — printed before the questions">
+            <input type="checkbox" id="wsIncludeCheatsheet" style="width:16px;height:16px;accent-color:var(--primary);">
+            🧠 Cheat sheet (AI pattern guide)
+          </label>
+        </div>
+
         <div class="ws-actions-bar">
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-outline" onclick="openWorksheetPreview()" id="wsPreviewBtn" title="Live A4 preview — add page breaks, then print or export PDF">
@@ -8894,7 +8949,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.129.1';
+const APP_VERSION = 'v1.130.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15968,6 +16023,9 @@ function doScaleAndPrint(output, opts) {
     const separatorH = 30; // approx height of .print-question-separator
     const chunks = Array.from(output.querySelectorAll('.print-question-chunk'));
     const answerKeys = Array.from(output.querySelectorAll('.print-answer-key-page'));
+    // Front matter (cover / cheat sheet) — kept aside and re-inserted FIRST,
+    // never packed, zoomed or given the standard footer.
+    const fronts = Array.from(output.querySelectorAll('.print-front-page'));
 
     if (chunks.length === 0) {
       // Fallback: no question chunks, just scale existing pages
@@ -16012,9 +16070,10 @@ function doScaleAndPrint(output, opts) {
       chunks.forEach((c, i) => c.classList.toggle('print-chunk-tall', tallFlags[i]));
       const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, sepH, pairFlags, tallFlags);
 
-      // Detach all chunks and answer keys from current DOM positions
+      // Detach all chunks, answer keys and front matter from current DOM positions
       chunks.forEach(c => c.remove());
       answerKeys.forEach(ak => ak.remove());
+      fronts.forEach(f => f.remove());
       output.innerHTML = '';
 
       // Build pages from groups, tracking each page's measured print height
@@ -16052,6 +16111,9 @@ function doScaleAndPrint(output, opts) {
         ak.appendChild(_createPrintPageFooter());
         output.appendChild(ak);
       });
+
+      // Front matter goes back in FIRST (cover, then cheat sheet), before Q1.
+      fronts.slice().reverse().forEach(f => output.insertBefore(f, output.firstChild));
 
       // Second rAF: scale any page whose MEASURED print height overflows the
       // physical A4 content area, with zoom (not transform) — zoom affects
@@ -19271,14 +19333,150 @@ function launchWorksheetPractice(questions) {
 }
 
 // ---- Print student worksheet with logo ----
-function printStudentWorksheet() {
+// =====================================================================
+// WORKSHEET EXTRAS — optional cover page (Polymath design) and optional
+// AI cheat sheet (summarises + categorises the selected questions by type
+// so students learn to recognise each pattern). Both print BEFORE Q1.
+// =====================================================================
+// Pastel decorative sprinkles for the cover (circles, shapes, science-y marks).
+function _wsCoverDecoSvg() {
+  return `<svg class="print-cover-deco" viewBox="0 0 210 297" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <circle cx="8" cy="14" r="26" fill="#a5e3dd" opacity="0.5"/>
+    <circle cx="36" cy="6" r="13" fill="#cdf0ec" opacity="0.6"/>
+    <circle cx="6" cy="46" r="9" fill="#7fd6cd" opacity="0.4"/>
+    <circle cx="28" cy="32" r="4.5" fill="#f5c1d6" opacity="0.65"/>
+    <circle cx="52" cy="14" r="3" fill="#a5e3dd" opacity="0.7"/>
+    <polygon points="42,26 52,30 44,38" fill="#bdebe6" opacity="0.8"/>
+    <rect x="14" y="58" width="7" height="7" rx="1" fill="#f9d8e6" transform="rotate(20 17.5 61.5)"/>
+    <text x="40" y="54" font-size="11" font-weight="600" fill="#6cc9c0" opacity="0.75" transform="rotate(-12 40 54)">π</text>
+    <text x="24" y="78" font-size="9" font-weight="500" fill="#eb9bbf" opacity="0.7" transform="rotate(15 24 78)">+</text>
+    <circle cx="202" cy="284" r="26" fill="#f5c1d6" opacity="0.5"/>
+    <circle cx="174" cy="292" r="13" fill="#fbe0eb" opacity="0.6"/>
+    <circle cx="204" cy="252" r="9" fill="#f0a8c8" opacity="0.4"/>
+    <circle cx="182" cy="266" r="4.5" fill="#a5e3dd" opacity="0.65"/>
+    <circle cx="156" cy="282" r="3" fill="#f5c1d6" opacity="0.7"/>
+    <polygon points="168,268 158,272 166,260" fill="#f9d8e6" opacity="0.8"/>
+    <rect x="190" y="232" width="7" height="7" rx="1" fill="#bdebe6" transform="rotate(-20 193.5 235.5)"/>
+    <text x="158" y="294" font-size="10" font-weight="600" fill="#eb9bbf" opacity="0.75" transform="rotate(10 158 294)">÷</text>
+    <text x="176" y="246" font-size="9" font-weight="500" fill="#6cc9c0" opacity="0.7" transform="rotate(-15 176 246)">×</text>
+    <polygon points="150,6 157,8 152,14" fill="#f9d8e6" opacity="0.75"/>
+    <circle cx="180" cy="10" r="4" fill="#bdebe6" opacity="0.6"/>
+    <text x="196" y="28" font-size="7" font-weight="500" fill="#eb9bbf" opacity="0.6" transform="rotate(18 196 28)">×</text>
+    <circle cx="203" cy="44" r="2.5" fill="#f5c1d6" opacity="0.6"/>
+    <text x="199" y="120" font-size="8" font-weight="500" fill="#6cc9c0" opacity="0.55" transform="rotate(-10 199 120)">+</text>
+    <circle cx="205" cy="160" r="3.5" fill="#fbe0eb" opacity="0.8"/>
+    <polygon points="202,196 208,199 203,205" fill="#bdebe6" opacity="0.65"/>
+    <circle cx="5" cy="120" r="3" fill="#f5c1d6" opacity="0.6"/>
+    <text x="3" y="166" font-size="8" font-weight="600" fill="#6cc9c0" opacity="0.55" transform="rotate(12 3 166)">=</text>
+    <polygon points="6,210 13,213 8,219" fill="#cdf0ec" opacity="0.8"/>
+    <text x="3" y="252" font-size="7" font-weight="500" fill="#eb9bbf" opacity="0.6" transform="rotate(-15 3 252)">%</text>
+    <circle cx="34" cy="290" r="4" fill="#a5e3dd" opacity="0.55"/>
+    <text x="58" y="294" font-size="8" font-weight="600" fill="#eb9bbf" opacity="0.6" transform="rotate(-8 58 294)">√</text>
+    <circle cx="100" cy="293" r="2.5" fill="#f9d8e6" opacity="0.8"/>
+    <polygon points="124,288 131,290 126,296" fill="#bdebe6" opacity="0.7"/>
+  </svg>`;
+}
+function _wsCoverHtml(title) {
+  return `<div class="print-front-page print-cover-page">
+    ${_wsCoverDecoSvg()}
+    <div class="print-cover-head">Polymath Learning Centre</div>
+    <div class="print-cover-center">
+      <img class="print-cover-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre logo" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2252%22 height=%2252%22 viewBox=%220 0 52 52%22%3E%3Crect width=%2252%22 height=%2252%22 rx=%2210%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2226%22 y=%2237%22 font-family=%22DM Sans,sans-serif%22 font-size=%2232%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
+      <h1 class="print-cover-title">${escapeHtml(title)}</h1>
+      <div class="print-cover-sub">Worksheet</div>
+      <div class="print-cover-fields">
+        <div><div class="print-cover-field-label">Name</div><div class="print-cover-field-line"></div></div>
+        <div><div class="print-cover-field-label">Date</div><div class="print-cover-field-line"></div></div>
+      </div>
+    </div>
+    <div class="print-cover-foot">Primary Science</div>
+  </div>`;
+}
+// Cache the AI cheat sheet per question selection, so Preview + Print don't
+// each pay for (and wait on) a fresh generation.
+let _wsCheatCache = { key: '', html: '' };
+function _wsRenderCheatsheet(data) {
+  const li = arr => (Array.isArray(arr) ? arr : []).filter(Boolean).map(x => '<li>' + escapeHtml(String(x)) + '</li>').join('');
+  let html = '<div class="print-front-page print-cheatsheet-page">';
+  html += '<div class="print-cs-header"><h2>🧠 Question-Type Cheat Sheet</h2><p>Spot the pattern → know the answer structure &middot; Polymath Learning Centre</p></div>';
+  if (data.intro) html += '<div class="print-cs-intro">' + escapeHtml(String(data.intro)) + '</div>';
+  (Array.isArray(data.groups) ? data.groups : []).forEach(g => {
+    if (!g || !g.type) return;
+    html += '<div class="print-cs-group"><h3>' + escapeHtml(String(g.type)) + '</h3>';
+    const qn = (Array.isArray(g.questions) ? g.questions : []).filter(n => n !== null && n !== undefined && n !== '');
+    if (qn.length) html += '<div class="print-cs-count">In this worksheet: question' + (qn.length === 1 ? ' ' : 's ') + escapeHtml(qn.join(', ')) + '</div>';
+    const spot = li(g.spot), ans = li(g.answer), traps = li(g.traps);
+    if (spot) html += '<div class="print-cs-label">How to spot it</div><ul>' + spot + '</ul>';
+    if (ans) html += '<div class="print-cs-label">How to answer it</div><ul>' + ans + '</ul>';
+    if (traps) html += '<div class="print-cs-label">Watch out for</div><ul>' + traps + '</ul>';
+    html += '</div>';
+  });
+  const tips = li(data.tips);
+  if (tips) html += '<div class="print-cs-tips"><div class="print-cs-label">Exam tips</div><ul>' + tips + '</ul></div>';
+  html += '</div>';
+  return html;
+}
+async function _wsCheatsheetHtml(selected) {
+  const key = selected.map(q => q.id).sort().join(',');
+  if (_wsCheatCache.key === key && _wsCheatCache.html) return _wsCheatCache.html;
+  showToast('🧠 AI is building the cheat sheet…', 'info');
+  const list = selected.map((q, i) => {
+    const text = stripHtml((q.blocks || []).filter(b => b.type === 'text').map(b => b.content).join(' ')).slice(0, 350);
+    return (i + 1) + '. [' + (q.category || 'General') + ' | ' + (q.topic || '') + '] ' + (q.title || '') + (text ? ' — ' + text : '');
+  }).join('\n');
+  const prompt = `You are a PSLE Science coach. Below are the questions on a student worksheet, each as: number. [skill | topic] title — question text.
+
+${list}
+
+Build a one-page CHEAT SHEET that teaches the student to RECOGNISE each question type on sight (pattern recognition) and know how to structure the answer. Group similar questions together (by skill/answer structure, NOT by topic). Keep every bullet short, concrete and in simple student-friendly language.
+
+Return ONLY JSON in exactly this shape:
+{
+ "intro": "1-2 sentences on how to use this sheet",
+ "groups": [
+   {
+     "type": "name of the question type (e.g. CER — Claim, Evidence, Reasoning)",
+     "questions": [1, 3],
+     "spot": ["clues/keywords in the question that reveal this type"],
+     "answer": ["the answer structure, step by step or sentence frames"],
+     "traps": ["common mistakes/traps for this type"]
+   }
+ ],
+ "tips": ["2-4 short overall exam tips"]
+}`;
+  try {
+    const raw = await askGemini(prompt, { maxOutputTokens: 3500, temperature: 0.4, json: true });
+    const data = _parseAIJson(raw);
+    if (!data || !Array.isArray(data.groups) || !data.groups.length) throw new Error('the AI returned no question groups');
+    const html = _wsRenderCheatsheet(data);
+    _wsCheatCache = { key, html };
+    showToast('Cheat sheet ready ✓', 'success');
+    return html;
+  } catch (e) {
+    console.warn('cheat sheet failed', e);
+    showToast('Could not build the cheat sheet (continuing without it): ' + (e && e.message ? e.message : e), 'error');
+    return '';
+  }
+}
+// Front matter (cover + cheat sheet) per the student's checkboxes.
+async function _wsFrontHtml(selected, title) {
+  const wantCover = !!document.getElementById('wsIncludeCover')?.checked;
+  const wantCheat = !!document.getElementById('wsIncludeCheatsheet')?.checked;
+  let html = '';
+  if (wantCover) html += _wsCoverHtml(title);
+  if (wantCheat) html += await _wsCheatsheetHtml(selected);
+  return html;
+}
+
+async function printStudentWorksheet() {
   if (wsSelectedIds.size === 0) {
     showToast('Select at least one question', 'error');
     return;
   }
   const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
-  doPrintStudentWorksheet(selected, title);
+  const frontHtml = await _wsFrontHtml(selected, title);
+  doPrintStudentWorksheet(selected, title, frontHtml);
 }
 
 // Build the worksheet print HTML (question chunks + answer key). Shared by the
@@ -19287,8 +19485,10 @@ function printStudentWorksheet() {
 function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // answerKeyExtras: also put MCQ correct answers, explanation blocks and
   // answer-key blocks into the printed answer key (used by past-paper prints).
+  // frontHtml: pre-built front-matter pages (cover / cheat sheet) placed
+  // before question 1 — each .print-front-page prints on its own sheet.
   const akExtras = !!(opts && opts.answerKeyExtras);
-  let allHtml = '';
+  let allHtml = (opts && opts.frontHtml) ? opts.frontHtml : '';
   const answerKeyData = [];
 
   selected.forEach((q, qIndex) => {
@@ -19394,9 +19594,9 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   return allHtml;
 }
 
-function doPrintStudentWorksheet(selected, worksheetTitle) {
+function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml) {
   const output = document.getElementById('printOutput');
-  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle);
+  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '' });
   autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
 }
 
@@ -19477,12 +19677,13 @@ function wsPullUp(qid) { // pull this question onto the previous page
 }
 function printFromPreview() { printStudentWorksheet(); }
 
-function renderWsPreview() {
+async function renderWsPreview() {
   const frame = document.getElementById('wsPreviewFrame');
   if (!frame) return;
   const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
-  const html = buildWorksheetHtml(selected, title);
+  const frontHtml = await _wsFrontHtml(selected, title);
+  const html = buildWorksheetHtml(selected, title, { frontHtml });
   const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"],link[rel="preconnect"]')).map(l => l.outerHTML).join('');
   const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
   if (!doc) return;
@@ -19512,9 +19713,13 @@ function _wsPreviewPack(doc) {
   if (!measure || !pagesEl) return;
   const chunks = Array.from(measure.querySelectorAll('.print-question-chunk'));
   const answerKeys = Array.from(measure.querySelectorAll('.print-answer-key-page'));
+  const fronts = Array.from(measure.querySelectorAll('.print-front-page'));
   pagesEl.innerHTML = '';
   if (!chunks.length) { measure.style.display = 'none'; return; }
   const heights = chunks.map(c => c.scrollHeight);
+  // Front-matter sheets (cover / cheat sheet): a long cheat sheet flows over
+  // several printed sheets, so count its real span while still measurable.
+  const frontSpans = fronts.map(f => Math.max(1, Math.ceil((f.scrollHeight || 1) / A4_CONTENT_PX)));
   // Same budget + MCQ-pairing + tall-question rules as the real printer
   // (doScaleAndPrint), measured in the same print-CSS context, so preview
   // and print paginate identically.
@@ -19540,9 +19745,9 @@ function _wsPreviewPack(doc) {
     if (h <= A4_CONTENT_PX || (A4_CONTENT_PX - 4) / h >= 0.7) return 1; // fits, or zooms to fit
     return spanOf(h);
   });
-  const totalPages = groupSpans.reduce((a, b) => a + b, 0) + akSpans.reduce((a, b) => a + b, 0);
+  const totalPages = frontSpans.reduce((a, b) => a + b, 0) + groupSpans.reduce((a, b) => a + b, 0) + akSpans.reduce((a, b) => a + b, 0);
   let pageNo = 0;
-  const addSheet = (span, build) => {
+  const addSheet = (span, build, noFooter) => {
     const from = pageNo + 1;
     pageNo += span;
     const sheet = doc.createElement('div'); sheet.className = 'wspv-sheet';
@@ -19555,9 +19760,10 @@ function _wsPreviewPack(doc) {
     pagesEl.appendChild(sheet);
     content.style.zoom = '';
     if (span > 1) return; // flows across sheets when printed — shown full-length here, never shrunk
-    const hWithFooter = content.scrollHeight + footerH; // real pages carry the footer
+    const hWithFooter = content.scrollHeight + (noFooter ? 0 : footerH); // real pages carry the footer (front matter doesn't)
     if (hWithFooter > A4_CONTENT_PX) content.style.zoom = Math.max(0.7, (A4_CONTENT_PX - 4) / hWithFooter); // match print scaling
   };
+  fronts.forEach((f, fi) => addSheet(frontSpans[fi], content => content.appendChild(f), true));
   pageGroups.forEach((group, gi) => addSheet(groupSpans[gi], content => {
     group.forEach((idx, pos) => {
       if (pos > 0) { const sep = doc.createElement('div'); sep.className = 'print-question-separator'; content.appendChild(sep); }
