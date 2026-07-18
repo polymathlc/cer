@@ -5735,10 +5735,6 @@ option {
             <input type="checkbox" id="wsIncludeCover" style="width:16px;height:16px;accent-color:var(--primary);">
             📄 Cover page
           </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="AI summarises and categorises the selected questions by type — how to spot each pattern and how to structure the answer — printed before the questions">
-            <input type="checkbox" id="wsIncludeCheatsheet" style="width:16px;height:16px;accent-color:var(--primary);">
-            🧠 Cheat sheet (AI pattern guide)
-          </label>
         </div>
 
         <div class="ws-actions-bar">
@@ -7186,11 +7182,7 @@ option {
     <h3 id="ppTopicTitle" style="margin-bottom:6px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;"></h3>
     <p id="ppTopicSub" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;"></p>
     <div id="ppTopicBody" style="flex:1;overflow-y:auto;min-height:100px;"></div>
-    <label id="ppTopicCheatRow" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.82rem;font-weight:500;margin-top:14px;padding:8px 12px;border:1.5px solid var(--border);border-radius:9px;background:var(--surface);" title="Add an AI-generated cheat sheet that summarises and categorises the key concepts in these questions, printed before the questions">
-      <input type="checkbox" id="ppTopicCheat" style="width:16px;height:16px;accent-color:var(--primary);">
-      🧠 Include a cheat sheet summarising the key concepts in these questions
-    </label>
-    <div class="btn-group" style="justify-content:space-between;margin-top:12px;gap:8px;flex-wrap:wrap;">
+    <div class="btn-group" style="justify-content:space-between;margin-top:16px;gap:8px;flex-wrap:wrap;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-primary" id="ppTopicPractiseBtn" title="Practise every available question in this list, one after another" onclick="ppTopicPractise()">▶ Practise all</button>
         <button class="btn btn-outline" id="ppTopicPrintBtn" title="Print every available question in this list as ONE worksheet — answer key on the last pages" onclick="ppTopicPrint()">🖨 Print worksheet</button>
@@ -8978,7 +8970,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.135.0';
+const APP_VERSION = 'v1.136.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -16035,18 +16027,25 @@ function _createPrintPageFooter() {
 // (its page allows inner breaks — see .print-chunk-tall), and closes its page
 // so nothing is packed after it. Shared by the printer and the live preview
 // so both paginate identically.
-function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH, pairFlags, tallFlags) {
+function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH, pairFlags, aloneFlags) {
   const pageGroups = [];
   if (!heights.length) return pageGroups;
   let currentGroup = [];
   let currentHeight = 0;
+  const flush = () => { if (currentGroup.length) { pageGroups.push(currentGroup); currentGroup = []; currentHeight = 0; } };
   for (let i = 0; i < heights.length; i++) {
-    const addedHeight = (currentGroup.length > 0 ? separatorH : 0) + heights[i];
     const forced = !!(forcedFlags && forcedFlags[i]);
     const merge = !!(mergeFlags && mergeFlags[i]);
-    const tall = !!(tallFlags && tallFlags[i]);
+    const alone = !!(aloneFlags && aloneFlags[i]);
+    // A question that needs its own page (shrunk-to-fit, or too big and flows
+    // across sheets): close whatever page is open and give it a page by itself,
+    // so it is never cut and never leaves a blank sheet.
+    if (alone) { flush(); pageGroups.push([i]); continue; }
+    const addedHeight = (currentGroup.length > 0 ? separatorH : 0) + heights[i];
+    // Two "about half a page or less" questions always share a sheet even if
+    // together they nudge just over the budget (the fit-zoom absorbs it).
     const pairUp = !!(pairFlags && pairFlags[i] && currentGroup.length === 1 && pairFlags[currentGroup[0]]);
-    const breakHere = currentGroup.length > 0 && (forced || (!merge && !tall && !pairUp && currentHeight + addedHeight > maxH));
+    const breakHere = currentGroup.length > 0 && (forced || (!merge && !pairUp && currentHeight + addedHeight > maxH));
     if (breakHere) {
       pageGroups.push(currentGroup);
       currentGroup = [i];
@@ -16055,14 +16054,40 @@ function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH, pa
       currentGroup.push(i);
       currentHeight += addedHeight;
     }
-    if (tall) { // flows to the sheet edge — nothing fits after it
-      pageGroups.push(currentGroup);
-      currentGroup = [];
-      currentHeight = 0;
-    }
   }
-  if (currentGroup.length > 0) pageGroups.push(currentGroup);
+  flush();
   return pageGroups;
+}
+
+// Smallest zoom we shrink a page to before deciding it's too big to fit one
+// sheet (then it becomes a one-question page that flows across sheets), and the
+// safety gap kept below the sheet edge so a page can never overflow and either
+// cut its content or bump itself to a fresh sheet (leaving a blank one).
+const PRINT_ZOOM_FLOOR = 0.55;
+const PRINT_FIT_SAFETY = 16;
+
+// Classify each question chunk for packing:
+//  - pair  : ~half a page or less → may share a sheet with another such question
+//  - solo  : taller than a page's budget but shrinks onto ONE sheet at ≥ floor
+//  - tall  : too big even shrunk → its own sheet(s), flows (never squashed)
+// solo + tall both take a page to themselves (aloneFlags).
+function _classifyPrintChunks(heights, footerH, budget) {
+  const half = Math.round(A4_CONTENT_PX / 2);
+  const usable = A4_CONTENT_PX - PRINT_FIT_SAFETY;
+  const pairFlags = [], soloFlags = [], tallFlags = [], aloneFlags = [];
+  heights.forEach((h, i) => {
+    // budget already reserves the footer, so a lone chunk fits a normal page
+    // when its own height (no footer) is within budget. Its full page height
+    // (chunk + footer) is what must be shrunk under the sheet if it doesn't.
+    const withFooter = h + footerH;
+    pairFlags[i] = h <= half;
+    if (h <= budget) { soloFlags[i] = false; tallFlags[i] = false; aloneFlags[i] = false; return; }
+    const canShrink = (usable / withFooter) >= PRINT_ZOOM_FLOOR;
+    soloFlags[i] = canShrink;
+    tallFlags[i] = !canShrink;
+    aloneFlags[i] = true;
+  });
+  return { pairFlags, soloFlags, tallFlags, aloneFlags, half };
 }
 
 // ---- Accurate A4 print measurement ----
@@ -16188,13 +16213,13 @@ function doScaleAndPrint(output, opts) {
       const merge = (opts && opts.mergeUpIds) || null;
       const forcedFlags = chunks.map(c => !!(forced && forced.has(c.dataset.qid)));
       const mergeFlags = chunks.map(c => !!(merge && merge.has(c.dataset.qid)));
-      // Compact MCQs (each within half the printable page) always pair 2-up.
-      const pairFlags = chunks.map((c, i) => halfPage > 0 && c.dataset.mcq === '1' && heights[i] <= halfPage);
-      // Questions taller than a whole page can't be shrunk readably — they
-      // flow across sheets instead (see .print-chunk-tall in the print CSS).
-      const tallFlags = heights.map(h => h > budget);
+      // Classify each question: pairable half-pagers, solo shrink-to-fit, or
+      // tall (flows across sheets). solo+tall get a page to themselves.
+      const cls = _classifyPrintChunks(heights, footerH, budget);
+      const pairFlags = cls.pairFlags;
+      const tallFlags = cls.tallFlags;
       chunks.forEach((c, i) => c.classList.toggle('print-chunk-tall', tallFlags[i]));
-      const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, sepH, pairFlags, tallFlags);
+      const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, sepH, pairFlags, cls.aloneFlags);
 
       // Detach all chunks, answer keys and front matter from current DOM positions
       chunks.forEach(c => c.remove());
@@ -16249,17 +16274,21 @@ function doScaleAndPrint(output, opts) {
         Array.from(pages).forEach((page, i) => {
           page.style.zoom = '';
           let h;
+          const usable = A4_CONTENT_PX - PRINT_FIT_SAFETY;
           if (mz) {
             if (i < pageHs.length) {
               if (pageTall[i]) return; // flows across sheets — never shrunk below readable
               h = pageHs[i];
-              if (h > A4_CONTENT_PX) page.style.zoom = Math.max(0.7, (A4_CONTENT_PX - 4) / h);
+              // Always keep the page within the sheet (minus a safety gap) so it
+              // can never overflow — that overflow is what cut content and left
+              // blank sheets. Near-full pages shrink to fit exactly one page.
+              if (h > usable) page.style.zoom = Math.max(PRINT_ZOOM_FLOOR, usable / h);
             } else {
               const akH = mz.akHeights[i - pageHs.length];
               h = (akH == null) ? page.scrollHeight : akH + footerH;
-              if (h > A4_CONTENT_PX) {
-                const z = (A4_CONTENT_PX - 4) / h;
-                if (z >= 0.7) page.style.zoom = z;
+              if (h > usable) {
+                const z = usable / h;
+                if (z >= PRINT_ZOOM_FLOOR) page.style.zoom = z;
                 else page.classList.add('print-page-tall'); // long answer key — let it paginate
               }
             }
@@ -19519,80 +19548,10 @@ function _wsCoverHtml(title) {
     <div class="print-cover-foot">Primary Science</div>
   </div>`;
 }
-// Cache the AI cheat sheet per question selection, so Preview + Print don't
-// each pay for (and wait on) a fresh generation.
-let _wsCheatCache = { key: '', html: '' };
-function _wsRenderCheatsheet(data) {
-  const li = arr => (Array.isArray(arr) ? arr : []).filter(Boolean).map(x => '<li>' + escapeHtml(String(x)) + '</li>').join('');
-  let html = '<div class="print-front-page print-cheatsheet-page">';
-  html += '<div class="print-cs-header"><h2>🧠 Question-Type Cheat Sheet</h2><p>Spot the pattern → know the answer structure &middot; Polymath Learning Centre</p></div>';
-  if (data.intro) html += '<div class="print-cs-intro">' + escapeHtml(String(data.intro)) + '</div>';
-  (Array.isArray(data.groups) ? data.groups : []).forEach(g => {
-    if (!g || !g.type) return;
-    html += '<div class="print-cs-group"><h3>' + escapeHtml(String(g.type)) + '</h3>';
-    const qn = (Array.isArray(g.questions) ? g.questions : []).filter(n => n !== null && n !== undefined && n !== '');
-    if (qn.length) html += '<div class="print-cs-count">In this worksheet: question' + (qn.length === 1 ? ' ' : 's ') + escapeHtml(qn.join(', ')) + '</div>';
-    const spot = li(g.spot), ans = li(g.answer), traps = li(g.traps);
-    if (spot) html += '<div class="print-cs-label">How to spot it</div><ul>' + spot + '</ul>';
-    if (ans) html += '<div class="print-cs-label">How to answer it</div><ul>' + ans + '</ul>';
-    if (traps) html += '<div class="print-cs-label">Watch out for</div><ul>' + traps + '</ul>';
-    html += '</div>';
-  });
-  const tips = li(data.tips);
-  if (tips) html += '<div class="print-cs-tips"><div class="print-cs-label">Exam tips</div><ul>' + tips + '</ul></div>';
-  html += '</div>';
-  return html;
-}
-async function _wsCheatsheetHtml(selected) {
-  const key = selected.map(q => q.id).sort().join(',');
-  if (_wsCheatCache.key === key && _wsCheatCache.html) return _wsCheatCache.html;
-  showToast('🧠 AI is building the cheat sheet…', 'info');
-  const list = selected.map((q, i) => {
-    const text = stripHtml((q.blocks || []).filter(b => b.type === 'text').map(b => b.content).join(' ')).slice(0, 350);
-    return (i + 1) + '. [' + (q.category || 'General') + ' | ' + (q.topic || '') + '] ' + (q.title || '') + (text ? ' — ' + text : '');
-  }).join('\n');
-  const prompt = `You are a PSLE Science coach. Below are the questions on a student worksheet, each as: number. [skill | topic] title — question text.
-
-${list}
-
-Build a one-page CHEAT SHEET that teaches the student to RECOGNISE each question type on sight (pattern recognition) and know how to structure the answer. Group similar questions together (by skill/answer structure, NOT by topic). Keep every bullet short, concrete and in simple student-friendly language.
-
-Return ONLY JSON in exactly this shape:
-{
- "intro": "1-2 sentences on how to use this sheet",
- "groups": [
-   {
-     "type": "name of the question type (e.g. CER — Claim, Evidence, Reasoning)",
-     "questions": [1, 3],
-     "spot": ["clues/keywords in the question that reveal this type"],
-     "answer": ["the answer structure, step by step or sentence frames"],
-     "traps": ["common mistakes/traps for this type"]
-   }
- ],
- "tips": ["2-4 short overall exam tips"]
-}`;
-  try {
-    const raw = await askGemini(prompt, { maxOutputTokens: 3500, temperature: 0.4, json: true });
-    const data = _parseAIJson(raw);
-    if (!data || !Array.isArray(data.groups) || !data.groups.length) throw new Error('the AI returned no question groups');
-    const html = _wsRenderCheatsheet(data);
-    _wsCheatCache = { key, html };
-    showToast('Cheat sheet ready ✓', 'success');
-    return html;
-  } catch (e) {
-    console.warn('cheat sheet failed', e);
-    showToast('Could not build the cheat sheet (continuing without it): ' + (e && e.message ? e.message : e), 'error');
-    return '';
-  }
-}
-// Front matter (cover + cheat sheet) per the student's checkboxes.
+// Front matter (optional cover page) per the student's checkbox.
 async function _wsFrontHtml(selected, title) {
   const wantCover = !!document.getElementById('wsIncludeCover')?.checked;
-  const wantCheat = !!document.getElementById('wsIncludeCheatsheet')?.checked;
-  let html = '';
-  if (wantCover) html += _wsCoverHtml(title);
-  if (wantCheat) html += await _wsCheatsheetHtml(selected);
-  return html;
+  return wantCover ? _wsCoverHtml(title) : '';
 }
 
 async function printStudentWorksheet() {
@@ -19862,10 +19821,11 @@ function _wsPreviewPack(doc) {
   const halfPage = Math.round(A4_CONTENT_PX / 2);
   const forcedFlags = chunks.map(c => wsManualBreaks.has(c.dataset.qid));
   const mergeFlags = chunks.map(c => wsMergeUp.has(c.dataset.qid));
-  const pairFlags = chunks.map((c, i) => c.dataset.mcq === '1' && heights[i] <= halfPage);
-  const tallFlags = heights.map(h => h > budget);
+  const cls = _classifyPrintChunks(heights, footerH, budget);
+  const pairFlags = cls.pairFlags;
+  const tallFlags = cls.tallFlags;
   chunks.forEach((c, i) => c.classList.toggle('print-chunk-tall', tallFlags[i]));
-  const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, separatorH, pairFlags, tallFlags);
+  const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, separatorH, pairFlags, cls.aloneFlags);
   measure.style.display = 'none';
   // How many printed sheets each group really spans — a tall question flows
   // over several sheets when printed (never shrunk below readable), and the
@@ -19875,7 +19835,7 @@ function _wsPreviewPack(doc) {
   const groupSpans = pageGroups.map(g => g.some(idx => tallFlags[idx]) ? spanOf(groupH(g)) : 1);
   const akSpans = answerKeys.map(ak => {
     const h = ak.scrollHeight + footerH;
-    if (h <= A4_CONTENT_PX || (A4_CONTENT_PX - 4) / h >= 0.7) return 1; // fits, or zooms to fit
+    if (h <= A4_CONTENT_PX || (A4_CONTENT_PX - PRINT_FIT_SAFETY) / h >= PRINT_ZOOM_FLOOR) return 1; // fits, or zooms to fit
     return spanOf(h);
   });
   const totalPages = frontSpans.reduce((a, b) => a + b, 0) + groupSpans.reduce((a, b) => a + b, 0) + akSpans.reduce((a, b) => a + b, 0);
@@ -19894,7 +19854,8 @@ function _wsPreviewPack(doc) {
     content.style.zoom = '';
     if (span > 1) return; // flows across sheets when printed — shown full-length here, never shrunk
     const hWithFooter = content.scrollHeight + (noFooter ? 0 : footerH); // real pages carry the footer (front matter doesn't)
-    if (hWithFooter > A4_CONTENT_PX) content.style.zoom = Math.max(0.7, (A4_CONTENT_PX - 4) / hWithFooter); // match print scaling
+    const usable = A4_CONTENT_PX - PRINT_FIT_SAFETY;
+    if (hWithFooter > usable) content.style.zoom = Math.max(PRINT_ZOOM_FLOOR, usable / hWithFooter); // match print scaling
   };
   fronts.forEach((f, fi) => addSheet(frontSpans[fi], content => content.appendChild(f), true));
   pageGroups.forEach((group, gi) => addSheet(groupSpans[gi], content => {
@@ -31832,6 +31793,20 @@ window.resetSpireCardArt = resetSpireCardArt;
 // Built-in seed below is the default until an admin saves changes.
 // =====================================================================
 const PP_SEED_Q = [
+  {"id":"s_2013_31","year":"2013","n":31,"bk":"B","marks":2,"topic":"Plant Reproduction","type":"open","title":"Seed dispersal, matching fruit to distribution","ans":"Tick the splitting/bursting fruit (right), NOT the feathery parachute; plant P's young plants are found close to the parent (peak at ~2 m and decreasing), so its seeds are dispersed only a short distance, meaning they are not wind-dispersed, while the parachute fruit is carried far by wind","detail":"Choose the correct fruit for plant P and explain using the bar graph: P's young plants cluster near the parent so its fruit disperses seeds a short distance (not the wind-borne parachute type) [2]."},
+  {"id":"s_2013_32","year":"2013","n":32,"bk":"B","marks":2,"topic":"Plant Systems","type":"open","title":"Leaf arrangement for light; weak climbing stems","ans":"(a) leaves are spread out and do not overlap so each leaf receives maximum sunlight for photosynthesis; (b) both plants R and S have weak/soft stems that cannot support the plant on their own, so they need support (the tree trunk / the pole)","detail":"(a) explain how the leaf arrangement helps photosynthesis [1]; (b) state a common characteristic of the stems of plant R and plant S [1]."},
+  {"id":"s_2013_33","year":"2013","n":33,"bk":"B","marks":3,"topic":"Living Together","type":"open","title":"Barnacle protection, dispersal, competition for space","ans":"(a) it withdraws/hides inside its hard shell so predators cannot reach it; (b) being carried to new places gives it new areas with more food and space and less competition, improving survival and spreading its kind; (c) the tiny green plants take up the space on the ship's surface, leaving less space for animal N to attach, so fewer animal N are found","detail":"(a) how animal N protects itself from predators [1]; (b) how being carried to new places benefits animal N [1]; (c) reason ships with many tiny green plants have fewer animal N (competition for attachment space) [1]."},
+  {"id":"s_2013_34","year":"2013","n":34,"bk":"B","marks":3,"topic":"Plant Systems","type":"open","title":"Light intensity and rate of photosynthesis","ans":"(a) as distance increases the light reaching the chloroplasts becomes dimmer/less intense, so photosynthesis is slower and takes longer to turn the mixture green; (b) a dark room ensures the lamp is the only light source, keeping the light received from other sources constant so only distance is varied; (c) tube W, because it turned green faster (5 s vs 9 s) at the same distance, showing more chloroplasts carrying out photosynthesis faster","detail":"(a) explain why time to turn green increases with distance [1]; (b) why a dark room makes it a fair test [1]; (c) state whether S or W had more chloroplasts and explain [1]."},
+  {"id":"s_2013_35","year":"2013","n":35,"bk":"B","marks":3,"topic":"Humans and the Environment","type":"open","title":"Bacterial decomposition of human waste","ans":"(a) decomposition (bacteria act as decomposers); (b) temperature; (c) use the soil-like substance as fertiliser/compost to help plants grow","detail":"(a) name the process by which bacteria turn waste into a soil-like substance [1]; (b) another environmental factor (besides air and water) affecting its speed [1]; (c) suggest one use for the soil-like substance [1]."},
+  {"id":"s_2013_36","year":"2013","n":36,"bk":"B","marks":4,"topic":"Living Together","type":"open","title":"Epiphyte on branches: light, competition, dispersal","ans":"(a) growing high on branches lets plant M receive more sunlight for photosynthesis, and there is less competition for sunlight (and space) than on the shaded ground; (b) plant M provides food (its fruits) for bird D; (c) sticky seeds stick to the bird's beak and are rubbed onto other branches, so the seeds are dispersed to suitable places (other tree branches) for germination","detail":"(a) two advantages for plant M growing on branches [2]; (b) how plant M benefits bird D [1]; (c) how sticky seeds benefit plant M (dispersal to branches) [1]."},
+  {"id":"s_2013_37","year":"2013","n":37,"bk":"B","marks":3,"topic":"Human and Plant Transport","type":"open","title":"Transpiration and mass change of potted plants","ans":"(a)(i) pot G lost mass because water was lost from the plant through transpiration and evaporated into the surrounding air; (a)(ii) in pot H the whole plant is sealed in the bag, so transpired water vapour condenses and stays inside, and no water escapes, so the mass is unchanged; (b) the change in mass would be smaller than pot G, because the oil blocks the stomata on the lower leaf surfaces, reducing transpiration and so less water is lost","detail":"(a)(i) explain the decrease in mass for pot G [1]; (a)(ii) explain no change in mass for pot H [1]; (b) state whether the mass change would be larger or smaller with oil-covered leaves and explain [1]."},
+  {"id":"s_2013_38","year":"2013","n":38,"bk":"B","marks":2,"topic":"Materials","type":"open","title":"Why a holed bottle sinks; sinking and material","ans":"(a) water entered the bottle through holes P and Q, replacing the air inside, so the bottle became heavier and sank; (b) no, he cannot conclude they are the same material, because both objects sinking only shows both are denser than water; different materials can both be denser than water and sink","detail":"(a) reason the bottle sank after a while [1]; (b) can it be concluded A and B are the same material, with a reason [1]."},
+  {"id":"s_2013_39","year":"2013","n":39,"bk":"B","marks":3,"topic":"Energy Conversion","type":"open","title":"Energy change on burning; poor heat conductor","ans":"(a) energy stored in the block (chemical/potential energy) is changed into heat energy + light energy; (b) material M is a poor conductor of heat (a good heat insulator), because point Q stayed at room temperature and did not heat up","detail":"(a) fill boxes: energy in the block changed into heat energy + light energy [2]; (b) suggest one property of material M from Q staying at room temperature (poor heat conductor) [1]."},
+  {"id":"s_2013_40","year":"2013","n":40,"bk":"B","marks":2,"topic":"Forces","type":"open","title":"Fair test for friction; heat from friction","ans":"(a) use the same type of surface for both set-ups (and change only the mass of the load) so that only the mass is varied; (b) friction between the moving tray and the surface produces heat, raising the tray's temperature","detail":"(a) suggest one change to make it a fair test (control the surface / vary only mass) [1]; (b) reason the tray's temperature rose after moving a long distance (friction produces heat) [1]."},
+  {"id":"s_2013_41","year":"2013","n":41,"bk":"B","marks":3,"topic":"Matter and its 3 States","type":"open","title":"Comparing rates of evaporation of liquids","ans":"(a) slowest to fastest: Y (5 h), X (3 h), Z (2 h) — the longer the time to evaporate, the slower the rate; (b)(i) similar beakers give the liquids the same exposed surface area, so surface area is kept constant; (b)(ii) placing them at the same place keeps temperature and air movement the same for all liquids","detail":"(a) order the liquids by rate of evaporation slowest to fastest: Y, X, Z [1]; (b)(i) how using similar beakers keeps it a fair test (same surface area) [1]; (b)(ii) how the same place keeps it fair (same temperature/air movement) [1]."},
+  {"id":"s_2013_42","year":"2013","n":42,"bk":"B","marks":2,"topic":"Matter and its 3 States","type":"open","title":"Fixed volume of water; air fills sealed container","ans":"(a) 70 cm³ — the sealed container's total volume stays 200 cm³; after removing 20 cm³ water the water is 130 cm³, so the air occupies 200 − 130 = 70 cm³ (the added 15 cm³ of air simply fills the extra space); (b) water has a fixed/definite volume (it does not change), while air has no fixed volume and fills all the remaining space in the container","detail":"(a) work out the final volume of air (70 cm³) [1]; (b) state the properties of water and air used: water has fixed volume, air has no fixed volume/fills its container [1]."},
+  {"id":"s_2013_43","year":"2013","n":43,"bk":"B","marks":4,"topic":"Magnets","type":"open","title":"Magnet vs magnetic material; strength along a magnet","ans":"(a) attraction alone is not enough, because a magnet attracts both magnets and magnetic materials (like iron), so object Y could just be a magnetic material; (b) turn object Y around and bring its other end near the magnet — if they ever repel, Y is a magnet (only two magnets repel); if it is only ever attracted, Y is a magnetic material; (c) ball Q was at the side/middle of the magnet where the magnetic force is weakest (the force is strongest at the poles/ends), so the force was too weak to hold Q, and it dropped","detail":"(a) why attraction cannot show Y is a magnet [1]; (b) what to do with only M and Y to decide, with explanation (test for repulsion) [2]; (c) explain why ball Q did not stay attached (weakest force away from the poles) [1]."},
+  {"id":"s_2013_44","year":"2013","n":44,"bk":"B","marks":4,"topic":"Electrical Systems","type":"open","title":"Electromagnet making-and-breaking circuit (bell)","ans":"(a) at point A the iron ball rested on the two iron contacts, completing the circuit so current flowed and lit the bulb; (b) current flowing through the coil turned the iron bar into an electromagnet, which attracted the iron ball (a magnetic material); (c) at point B the ball no longer touches the contacts, so the circuit is broken and no current flows; the iron bar loses its magnetism, so the ball is no longer attracted and falls back down to point A","detail":"(a) explain why the bulb lit when the ball was at A (circuit completed) [1]; (b) reason the ball was attracted to the iron bar (electromagnet) [1]; (c) state what happens to the ball at B and why (circuit broken, iron bar demagnetised, ball drops) [2]."},
   {"id":"s_2013_1","year":"2013","n":1,"bk":"A","marks":2,"topic":"Living and non-living things","type":"recall","title":"Feature common to insects and birds","ans":"Option 2 — They reproduce by laying eggs","detail":"Both insects and birds are egg-laying (oviparous), while body parts, body covering and whether young resemble adults all differ between the two groups. Tests recall of shared characteristics used to classify animals."},
   {"id":"s_2013_2","year":"2013","n":2,"bk":"A","marks":2,"topic":"Living Together","type":"application","title":"Frog adaptations for fast swimming","ans":"Option 1 — webbed feet: yes, streamlined body: yes","detail":"Webbed feet push more water and a streamlined body reduces resistance, so both help the frog swim fast. An application of structural adaptations to movement in water."},
   {"id":"s_2013_3","year":"2013","n":3,"bk":"A","marks":2,"topic":"Living Together","type":"recall","title":"How butterflies benefit from visiting flowers","ans":"Option 3 — feeding on the nectar","detail":"The butterfly gains directly by getting food (nectar); pollinating the flower benefits the plant, not the butterfly. Tests understanding of who benefits in an organism interaction."},
@@ -33022,7 +32997,6 @@ function ppCollectPrintable(hitIds){
 }
 async function ppDoPrint(items, missing, title, opts){
   if (!items.length) { showToast('Nothing to print — none of these questions have a bank question attached yet', 'error'); return; }
-  const wantCheat = !!(opts && opts.cheatsheet);
   const selected = items.map(it => Object.assign({}, it.bq, { title: it.refs.join(' / ') + ' — ' + (it.bq.title || 'Untitled') }));
   const output = document.getElementById('printOutput');
   // Preload every image first (progress shown), so measurement is accurate
@@ -33030,14 +33004,9 @@ async function ppDoPrint(items, missing, title, opts){
   _printProgressShow('Preparing worksheet…', 'Starting…');
   const urls = [];
   selected.forEach(q => (q.blocks || []).forEach(b => { if (b && b.url && (b.type === 'image' || b.type === 'answerKey')) urls.push(transformImageUrl(b.url)); }));
-  await _preloadImageUrls(urls, (done, tot) => _printProgressUpdate('Loading question images…', 0.05 + 0.55 * (done / tot), done + '/' + tot + ' images'));
-  let frontHtml = '';
-  if (wantCheat) {
-    _printProgressUpdate('🧠 Building the cheat sheet with AI…', 0.65, 'Summarising the key concepts');
-    frontHtml = await _wsCheatsheetHtml(selected);
-  }
-  _printProgressUpdate('Laying out pages…', 0.75, 'Measuring each question at print size');
-  output.innerHTML = buildWorksheetHtml(selected, title, { answerKeyExtras: true, plainNumbers: true, frontHtml });
+  await _preloadImageUrls(urls, (done, tot) => _printProgressUpdate('Loading question images…', 0.05 + 0.7 * (done / tot), done + '/' + tot + ' images'));
+  _printProgressUpdate('Laying out pages…', 0.8, 'Measuring each question at print size');
+  output.innerHTML = buildWorksheetHtml(selected, title, { answerKeyExtras: true, plainNumbers: true });
   autoscaleAndPrint(output);
   if (missing.length) {
     const list = missing.length > 6 ? missing.slice(0, 6).join(', ') + ' +' + (missing.length - 6) + ' more' : missing.join(', ');
@@ -33086,7 +33055,6 @@ function ppTopicOpen(idx, year){
   if (!topic) return;
   ppHoverHide();
   _ppTopicSel = { topic: topic, year: year || '' };
-  const cheat = document.getElementById('ppTopicCheat'); if (cheat) cheat.checked = false;
   ppTopicRender();
   const ov = document.getElementById('ppTopicOverlay'); if (ov) ov.classList.add('active');
 }
@@ -33125,8 +33093,7 @@ function ppTopicClose(){ const ov = document.getElementById('ppTopicOverlay'); i
 function ppTopicPrint(){
   if (!_ppTopicSel) return;
   const { items, missing } = ppCollectPrintable(ppTopicQs().map(q => q.id));
-  const cheatsheet = !!document.getElementById('ppTopicCheat')?.checked;
-  ppDoPrint(items, missing, _ppTopicSel.topic + (_ppTopicSel.year ? ' — PSLE ' + _ppTopicSel.year : ' — Past-Paper Questions'), { cheatsheet });
+  ppDoPrint(items, missing, _ppTopicSel.topic + (_ppTopicSel.year ? ' — PSLE ' + _ppTopicSel.year : ' — Past-Paper Questions'));
 }
 function ppTopicPractise(){
   if (!_ppTopicSel) return;
