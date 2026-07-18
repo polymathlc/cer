@@ -2666,10 +2666,13 @@ option {
     line-height: 0;
   }
 
-  /* Question chunk within grouped pages (auto-detect layout) */
+  /* Question chunk within grouped pages (auto-detect layout). break-inside
+     (modern) alongside page-break-inside (legacy) so the browser never splits
+     a question across a page even if our measurement slightly under-counts. */
   .print-question-chunk {
     overflow: visible;
     page-break-inside: avoid;
+    break-inside: avoid;
   }
   .print-question-separator {
     border-top: 1pt solid #ccc;
@@ -7183,7 +7186,11 @@ option {
     <h3 id="ppTopicTitle" style="margin-bottom:6px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;"></h3>
     <p id="ppTopicSub" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;"></p>
     <div id="ppTopicBody" style="flex:1;overflow-y:auto;min-height:100px;"></div>
-    <div class="btn-group" style="justify-content:space-between;margin-top:16px;gap:8px;flex-wrap:wrap;">
+    <label id="ppTopicCheatRow" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.82rem;font-weight:500;margin-top:14px;padding:8px 12px;border:1.5px solid var(--border);border-radius:9px;background:var(--surface);" title="Add an AI-generated cheat sheet that summarises and categorises the key concepts in these questions, printed before the questions">
+      <input type="checkbox" id="ppTopicCheat" style="width:16px;height:16px;accent-color:var(--primary);">
+      🧠 Include a cheat sheet summarising the key concepts in these questions
+    </label>
+    <div class="btn-group" style="justify-content:space-between;margin-top:12px;gap:8px;flex-wrap:wrap;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-primary" id="ppTopicPractiseBtn" title="Practise every available question in this list, one after another" onclick="ppTopicPractise()">▶ Practise all</button>
         <button class="btn btn-outline" id="ppTopicPrintBtn" title="Print every available question in this list as ONE worksheet — answer key on the last pages" onclick="ppTopicPrint()">🖨 Print worksheet</button>
@@ -8971,7 +8978,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.133.0';
+const APP_VERSION = 'v1.134.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15911,16 +15918,83 @@ function doPrintWorksheetOpen() {
 }
 
 // ===== SHARED: Auto-scale pages and trigger print =====
+// ---- Print progress overlay ----
+// Building a worksheet (loading every question's images, then measuring each
+// one at true print size) can take several seconds, during which the browser
+// print dialog hasn't opened yet — so it looks like "nothing happened". This
+// lightweight overlay shows live progress so the student knows it's working.
+(function injectPrintProgressStyles(){
+  const css = `
+  #printProgress{ position:fixed; inset:0; z-index:6000; display:none; align-items:center; justify-content:center; background:rgba(20,22,20,0.55); backdrop-filter:blur(2px); }
+  #printProgress.show{ display:flex; }
+  #printProgress .pp-card{ background:#fff; border-radius:16px; padding:26px 30px; max-width:340px; width:calc(100% - 48px); text-align:center; box-shadow:0 18px 50px rgba(0,0,0,0.28); }
+  #printProgress .pp-spin{ width:38px; height:38px; margin:2px auto 14px; border:4px solid var(--primary-light,#e8f3ec); border-top-color:var(--primary,#4a7c59); border-radius:50%; animation:ppspin 0.8s linear infinite; }
+  @keyframes ppspin{ to{ transform:rotate(360deg); } }
+  #printProgress .pp-msg{ font-size:0.95rem; font-weight:600; color:var(--text,#1a1a1a); line-height:1.45; }
+  #printProgress .pp-sub{ font-size:0.8rem; color:var(--text-muted,#7a756d); margin-top:6px; }
+  #printProgress .pp-bar{ height:7px; border-radius:6px; background:var(--primary-light,#e8f3ec); margin-top:14px; overflow:hidden; }
+  #printProgress .pp-bar-fill{ height:100%; width:0%; background:var(--primary,#4a7c59); border-radius:6px; transition:width 0.25s ease; }
+  @media print{ #printProgress{ display:none !important; } }`;
+  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+  const el = document.createElement('div'); el.id = 'printProgress';
+  el.innerHTML = `<div class="pp-card"><div class="pp-spin"></div><div class="pp-msg" id="printProgressMsg">Preparing worksheet…</div><div class="pp-sub" id="printProgressSub"></div><div class="pp-bar"><div class="pp-bar-fill" id="printProgressBar"></div></div></div>`;
+  (document.body || document.documentElement).appendChild(el);
+})();
+let _printProgressTimer = null;
+function _printProgressShow(msg, sub){
+  const o = document.getElementById('printProgress'); if (!o) return;
+  const m = document.getElementById('printProgressMsg'); if (m) m.textContent = msg || 'Preparing worksheet…';
+  const s = document.getElementById('printProgressSub'); if (s) s.textContent = sub || '';
+  const b = document.getElementById('printProgressBar'); if (b) b.style.width = '0%';
+  o.classList.add('show');
+  // Fail-safe: never leave the overlay stuck if something downstream throws.
+  if (_printProgressTimer) clearTimeout(_printProgressTimer);
+  _printProgressTimer = setTimeout(() => { o.classList.remove('show'); }, 40000);
+}
+function _printProgressUpdate(msg, frac, sub){
+  const m = document.getElementById('printProgressMsg'); if (m && msg != null) m.textContent = msg;
+  const s = document.getElementById('printProgressSub'); if (s && sub != null) s.textContent = sub;
+  const b = document.getElementById('printProgressBar'); if (b && frac != null) b.style.width = Math.max(0, Math.min(100, Math.round(frac * 100))) + '%';
+}
+function _printProgressHide(){ if (_printProgressTimer) { clearTimeout(_printProgressTimer); _printProgressTimer = null; } const o = document.getElementById('printProgress'); if (o) o.classList.remove('show'); }
+
+// Preload every image URL (in the live document, so the browser caches them)
+// before we build and measure the worksheet — cached images then report their
+// true size immediately, which both speeds up measurement AND stops questions
+// being cut across a page break because an unloaded image measured as 0-height.
+function _preloadImageUrls(urls, onProgress){
+  const uniq = [...new Set((urls || []).filter(Boolean))];
+  return new Promise(resolve => {
+    if (!uniq.length) { resolve(); return; }
+    let done = 0;
+    const tick = () => { done++; if (onProgress) onProgress(done, uniq.length); if (done >= uniq.length) resolve(); };
+    uniq.forEach(u => {
+      const im = new Image();
+      let settled = false;
+      const one = () => { if (settled) return; settled = true; tick(); };
+      im.onload = one; im.onerror = one;
+      im.src = u;
+      if (im.complete) one();                 // already cached
+      setTimeout(one, 12000);                 // per-image safety cap
+    });
+  });
+}
+
 function autoscaleAndPrint(output, opts) {
   // Wait for all images to load before printing
   const images = Array.from(output.querySelectorAll('img'));
   const unloaded = images.filter(img => !img.complete);
 
   if (unloaded.length > 0) {
+    _printProgressShow('Preparing worksheet…', 'Loading images 0/' + unloaded.length);
     let remaining = unloaded.length;
+    const total = unloaded.length;
+    let loaded = 0;
+    const proceed = () => { _printProgressUpdate('Laying out pages…', 0.9, 'Measuring each question at print size'); doScaleAndPrint(output, opts); };
     const onReady = () => {
-      remaining--;
-      if (remaining <= 0) doScaleAndPrint(output, opts);
+      loaded++; remaining--;
+      _printProgressUpdate(null, 0.1 + 0.75 * (loaded / total), 'Loading images ' + loaded + '/' + total);
+      if (remaining <= 0) proceed();
     };
     unloaded.forEach(img => {
       img.addEventListener('load', onReady, { once: true });
@@ -15930,10 +16004,12 @@ function autoscaleAndPrint(output, opts) {
     setTimeout(() => {
       if (remaining > 0) {
         remaining = 0;
-        doScaleAndPrint(output, opts);
+        proceed();
       }
-    }, 5000);
+    }, 12000);
   } else {
+    _printProgressShow('Laying out pages…', 'Measuring each question at print size');
+    _printProgressUpdate(null, 0.9);
     doScaleAndPrint(output, opts);
   }
 }
@@ -16092,6 +16168,7 @@ function doScaleAndPrint(output, opts) {
         }
       });
       output.style.cssText = 'display:none;';
+      _printProgressHide();
       window.print();
       pages.forEach(page => { page.style.zoom = ''; });
       return;
@@ -16198,6 +16275,7 @@ function doScaleAndPrint(output, opts) {
 
         // Hide output and trigger print
         output.style.cssText = 'display:none;';
+        _printProgressHide();
         window.print();
 
         // Clean up after print dialog closes
@@ -19537,6 +19615,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // frontHtml: pre-built front-matter pages (cover / cheat sheet) placed
   // before question 1 — each .print-front-page prints on its own sheet.
   const akExtras = !!(opts && opts.answerKeyExtras);
+  // plainNumbers: show a clean running "Question N" header and hide the bank
+  // question's own title + category/topic meta (used for PSLE-paper prints so
+  // the sheet shows just the question number, not the database title).
+  const plainNums = !!(opts && opts.plainNumbers);
   let allHtml = (opts && opts.frontHtml) ? opts.frontHtml : '';
   const answerKeyData = [];
 
@@ -19561,7 +19643,9 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
       </div>`;
     }
 
-    qHtml += `<div class="print-q-header">
+    qHtml += plainNums
+      ? `<div class="print-q-header print-q-header-plain"><h2>Question ${qIndex + 1}</h2></div>`
+      : `<div class="print-q-header">
       <h2>${escapeHtml(q.title)}</h2>
       <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
     </div>`;
@@ -19617,7 +19701,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
       });
       qHtml += `</div>`;
       allHtml += qHtml;
-      answerKeyData.push({ title: q.title, type: 'open', sections: qSections });
+      answerKeyData.push({ title: plainNums ? ('Question ' + (qIndex + 1)) : q.title, type: 'open', sections: qSections });
     }
   });
 
@@ -32906,11 +32990,24 @@ function ppCollectPrintable(hitIds){
   });
   return { items: [...seen.values()], missing };
 }
-function ppDoPrint(items, missing, title){
+async function ppDoPrint(items, missing, title, opts){
   if (!items.length) { showToast('Nothing to print — none of these questions have a bank question attached yet', 'error'); return; }
+  const wantCheat = !!(opts && opts.cheatsheet);
   const selected = items.map(it => Object.assign({}, it.bq, { title: it.refs.join(' / ') + ' — ' + (it.bq.title || 'Untitled') }));
   const output = document.getElementById('printOutput');
-  output.innerHTML = buildWorksheetHtml(selected, title, { answerKeyExtras: true });
+  // Preload every image first (progress shown), so measurement is accurate
+  // (no questions cut across pages) and the wait is visible, not a dead click.
+  _printProgressShow('Preparing worksheet…', 'Starting…');
+  const urls = [];
+  selected.forEach(q => (q.blocks || []).forEach(b => { if (b && b.url && (b.type === 'image' || b.type === 'answerKey')) urls.push(transformImageUrl(b.url)); }));
+  await _preloadImageUrls(urls, (done, tot) => _printProgressUpdate('Loading question images…', 0.05 + 0.55 * (done / tot), done + '/' + tot + ' images'));
+  let frontHtml = '';
+  if (wantCheat) {
+    _printProgressUpdate('🧠 Building the cheat sheet with AI…', 0.65, 'Summarising the key concepts');
+    frontHtml = await _wsCheatsheetHtml(selected);
+  }
+  _printProgressUpdate('Laying out pages…', 0.75, 'Measuring each question at print size');
+  output.innerHTML = buildWorksheetHtml(selected, title, { answerKeyExtras: true, plainNumbers: true, frontHtml });
   autoscaleAndPrint(output);
   if (missing.length) {
     const list = missing.length > 6 ? missing.slice(0, 6).join(', ') + ' +' + (missing.length - 6) + ' more' : missing.join(', ');
@@ -32959,6 +33056,7 @@ function ppTopicOpen(idx, year){
   if (!topic) return;
   ppHoverHide();
   _ppTopicSel = { topic: topic, year: year || '' };
+  const cheat = document.getElementById('ppTopicCheat'); if (cheat) cheat.checked = false;
   ppTopicRender();
   const ov = document.getElementById('ppTopicOverlay'); if (ov) ov.classList.add('active');
 }
@@ -32997,7 +33095,8 @@ function ppTopicClose(){ const ov = document.getElementById('ppTopicOverlay'); i
 function ppTopicPrint(){
   if (!_ppTopicSel) return;
   const { items, missing } = ppCollectPrintable(ppTopicQs().map(q => q.id));
-  ppDoPrint(items, missing, _ppTopicSel.topic + (_ppTopicSel.year ? ' — PSLE ' + _ppTopicSel.year : ' — Past-Paper Questions'));
+  const cheatsheet = !!document.getElementById('ppTopicCheat')?.checked;
+  ppDoPrint(items, missing, _ppTopicSel.topic + (_ppTopicSel.year ? ' — PSLE ' + _ppTopicSel.year : ' — Past-Paper Questions'), { cheatsheet });
 }
 function ppTopicPractise(){
   if (!_ppTopicSel) return;
