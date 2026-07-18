@@ -149,6 +149,88 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* ---------- Main row: sidebar + viewer ---------- */
+  #mainRow { flex: 1 1 auto; display: flex; overflow: hidden; }
+  #sideBar {
+    width: 250px;
+    flex: 0 0 250px;
+    border-right: 1px solid var(--line);
+    background: #FCFCFB;
+    overflow-y: auto;
+    padding: 20px 16px 30px;
+    display: none;
+  }
+  #sideBar.open { display: block; }
+  .sideCard {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    padding: 18px 16px;
+    margin-bottom: 16px;
+    animation: fadeUp 0.4s ease both;
+  }
+  .sideLevel {
+    display: inline-block;
+    background: var(--accent);
+    border: 1px solid var(--accent-strong);
+    border-radius: 999px;
+    padding: 4px 14px;
+    font-size: 0.78rem;
+    font-weight: bold;
+    margin-bottom: 12px;
+  }
+  .sideName { font-size: 1.02rem; font-weight: bold; line-height: 1.4; margin-bottom: 10px; overflow-wrap: break-word; }
+  .sideDay { font-size: 0.86rem; font-weight: bold; color: var(--ink-soft); }
+  .sideDate { font-size: 0.8rem; color: var(--ink-faint); margin-top: 3px; }
+  .sideHint { font-size: 0.76rem; color: var(--ink-faint); line-height: 1.5; }
+  .sideCard h4 { font-size: 0.9rem; margin-bottom: 10px; }
+  #kwCount { font-size: 0.78rem; color: var(--ink-faint); margin-bottom: 12px; line-height: 1.5; }
+  .reviseToggleRow {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 0.84rem; cursor: pointer; user-select: none;
+    margin-bottom: 12px;
+  }
+  .reviseToggleRow input { width: 17px; height: 17px; accent-color: var(--accent-deep); cursor: pointer; }
+  #kwInput {
+    width: 100%;
+    font-family: var(--font);
+    font-size: 0.88rem;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  #kwInput:focus { border-color: var(--accent-strong); box-shadow: 0 0 0 3px rgba(255, 224, 178, 0.5); }
+  #kwInput.shake { animation: shakeX 0.4s ease; }
+  #kwInput.good { border-color: var(--ok); box-shadow: 0 0 0 3px rgba(67, 160, 71, 0.18); }
+  #kwProgress { font-size: 0.8rem; color: var(--ink-soft); margin-top: 10px; font-variant-numeric: tabular-nums; }
+  #kwProgress .done { color: var(--ok); font-weight: bold; }
+  @keyframes shakeX {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    50% { transform: translateX(5px); }
+    75% { transform: translateX(-3px); }
+  }
+
+  /* ---------- Save modal fields ---------- */
+  .fieldRow { margin-bottom: 16px; }
+  .fieldRow label { display: block; font-size: 0.78rem; font-weight: bold; color: var(--ink-soft); margin-bottom: 6px; }
+  .fieldRow input {
+    width: 100%;
+    font-family: var(--font);
+    font-size: 0.92rem;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .fieldRow input:focus { border-color: var(--accent-strong); box-shadow: 0 0 0 3px rgba(255, 224, 178, 0.5); }
+  #saveDayPreview { font-size: 0.82rem; color: var(--accent-deep); font-weight: bold; margin-top: 7px; min-height: 1.1em; }
+  .modalActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+
   /* ---------- Viewer ---------- */
   #viewerArea {
     flex: 1 1 auto;
@@ -180,11 +262,31 @@
     font-family: var(--font);
     line-height: 1.35;
     word-wrap: break-word;
+    white-space: pre-wrap;
     outline: none;
     min-height: 1.2em;
     padding: 3px 5px;
     border-radius: 4px;
   }
+  .kwWord {
+    background: rgba(255, 224, 178, 0.85);
+    border-bottom: 2px solid var(--accent-deep);
+    border-radius: 3px;
+    padding: 0 2px;
+  }
+  .kwHidden {
+    background: #ECECEA;
+    border-bottom: 2px dashed var(--ink-faint);
+    color: var(--ink-faint);
+    letter-spacing: 1px;
+  }
+  .kwRevealed {
+    background: #DFF2E0;
+    border-bottom: 2px solid var(--ok);
+    animation: scaleIn 0.3s ease both;
+  }
+  svg.overlay.kwMode .annText span[data-w] { cursor: pointer; }
+  svg.overlay.kwMode .annText span[data-w]:hover { outline: 2px dashed var(--accent-deep); outline-offset: 1px; border-radius: 3px; }
   .annText[contenteditable="true"] {
     box-shadow: 0 0 0 2px var(--accent-deep);
     background: rgba(255, 249, 235, 0.92);
@@ -297,6 +399,13 @@
     .btn { padding: 8px 11px; font-size: 0.78rem; }
     .btnLabel { display: none; }
     #pagesContainer { padding: 16px 8px 70px; }
+    #sideBar.open {
+      position: absolute;
+      z-index: 40;
+      height: 100%;
+      box-shadow: var(--shadow-modal);
+    }
+    #mainRow { position: relative; }
   }
 </style>
 </head>
@@ -346,6 +455,9 @@
     </button>
     <button class="toolBtn" data-tool="arrow" title="Arrow (A)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/></svg>
+    </button>
+    <button class="toolBtn" data-tool="keyword" title="Mark keywords — click words in a text box (K)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="M15 7l3 3"/><path d="M18 4l2 2"/></svg>
     </button>
   </div>
   <div class="tSep"></div>
@@ -402,6 +514,16 @@
   <div class="tSep"></div>
 
   <div class="tGroup">
+    <button class="toolBtn active" id="tsToggleBtn" title="Show / hide annotation timestamps">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+    </button>
+    <button class="toolBtn" id="sideToggleBtn" title="Show / hide worksheet panel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9.5" y1="4" x2="9.5" y2="20"/></svg>
+    </button>
+  </div>
+  <div class="tSep"></div>
+
+  <div class="tGroup">
     <button class="btn" id="downloadBtn" title="Download PDF with annotations baked in">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       <span class="btnLabel">Download</span>
@@ -417,6 +539,30 @@
   </div>
 </div>
 
+<div id="mainRow">
+<aside id="sideBar">
+  <div class="sideCard" id="wsInfoCard">
+    <div class="sideLevel" id="wsLevel">Level —</div>
+    <div class="sideName" id="wsName">No worksheet loaded</div>
+    <div class="sideDay" id="wsDay"></div>
+    <div class="sideDate" id="wsDate"></div>
+  </div>
+  <div class="sideCard" id="revisePanel">
+    <h4>Keyword revision</h4>
+    <div id="kwCount">No keywords marked yet.</div>
+    <label class="reviseToggleRow">
+      <input type="checkbox" id="reviseToggle">
+      <span>Revise mode — hide keywords</span>
+    </label>
+    <input type="text" id="kwInput" placeholder="Type a keyword + Enter" autocomplete="off" disabled>
+    <div id="kwProgress"></div>
+  </div>
+  <div class="sideCard">
+    <div class="sideHint">Timestamps beside each annotation show when it was written —
+      match them against the lesson recording to find the explanation for that part.</div>
+  </div>
+</aside>
+
 <main id="viewerArea">
   <div id="emptyState">
     <h1>Annotate any PDF</h1>
@@ -429,6 +575,35 @@
   </div>
   <div id="pagesContainer"></div>
 </main>
+</div>
+
+<div class="modalBack" id="saveModal">
+  <div class="modalCard">
+    <div class="modalHead">
+      <h2>Save worksheet</h2>
+      <button class="modalClose" id="saveCloseBtn" title="Close">✕</button>
+    </div>
+    <div class="modalBody">
+      <div class="fieldRow">
+        <label for="saveNameInput">Worksheet name</label>
+        <input type="text" id="saveNameInput" placeholder="e.g. Fractions Practice 3" autocomplete="off">
+      </div>
+      <div class="fieldRow">
+        <label for="saveLevelInput">Level</label>
+        <input type="text" id="saveLevelInput" placeholder="e.g. P5" autocomplete="off">
+      </div>
+      <div class="fieldRow">
+        <label for="saveDateInput">Date of worksheet</label>
+        <input type="date" id="saveDateInput">
+        <div id="saveDayPreview"></div>
+      </div>
+      <div class="modalActions">
+        <button class="btn" id="saveCancelBtn">Cancel</button>
+        <button class="btn btnPrimary" id="saveConfirmBtn">Save to cloud</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="modalBack" id="docsModal">
   <div class="modalCard">
@@ -454,7 +629,7 @@
 'use strict';
 
 /* ================= Constants ================= */
-var APP_VERSION = 'v1.0.0';
+var APP_VERSION = 'v1.1.0';
 var ADMIN_EMAIL = 'chungzhikai@gmail.com';
 var COLLECTION = 'pdfAnnotator';
 var STORAGE_DIR = 'pdf-annotator';
@@ -497,6 +672,10 @@ var editingId = null;       // text annotation currently being edited
 var dirty = false;
 var currentUser = null;
 var annIdCounter = 1;
+var showTimestamps = true;
+var reviseMode = false;
+var revealedKw = {};        // normalised keyword -> true, revealed during revise mode
+var wsMeta = { level: '', date: '' };  // worksheet level + ISO date (name lives in docName)
 
 /* Drawing-in-progress state */
 var drawing = null;         // { ann, svgNode, page }
@@ -511,6 +690,20 @@ function el(name, attrs) {
 }
 function round2(n) { return Math.round(n * 100) / 100; }
 function newAnnId() { return 'a' + Date.now().toString(36) + (annIdCounter++); }
+function normWord(w) { return (w || '').toLowerCase().replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, ''); }
+function formatTs(ts) {
+  return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+}
+function dayFromISO(iso) {
+  if (!iso) return '';
+  var d = new Date(iso + 'T00:00:00');
+  return isNaN(d) ? '' : d.toLocaleDateString('en-SG', { weekday: 'long' });
+}
+function prettyDate(iso) {
+  if (!iso) return '';
+  var d = new Date(iso + 'T00:00:00');
+  return isNaN(d) ? '' : d.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 var toastTimer = null;
 function toast(msg, ms) {
@@ -527,6 +720,7 @@ function setDirty(v) {
   b.classList.remove('btnSaved');
   var label = b.querySelector('.btnLabel');
   if (label) label.textContent = 'Save';
+  if (typeof updateKwPanel === 'function') updateKwPanel();
 }
 
 /* ================= Undo / redo ================= */
@@ -576,6 +770,10 @@ async function loadPdf(bytes, name) {
   redoStack = [];
   selectedId = null;
   editingId = null;
+  wsMeta = { level: '', date: '' };
+  reviseMode = false;
+  revealedKw = {};
+  $('reviseToggle').checked = false;
   setDirty(false);
 
   // pdf.js transfers (detaches) the buffer it is given — hand it a copy.
@@ -609,6 +807,8 @@ async function loadPdf(bytes, name) {
     attachOverlayHandlers(p);
   }
   fitWidth();
+  if (window.innerWidth > 900) $('sideBar').classList.add('open');
+  renderSidebar();
   toast('Loaded “' + docName + '” — ' + pdfDoc.numPages + ' page' + (pdfDoc.numPages > 1 ? 's' : ''));
 }
 
@@ -659,6 +859,29 @@ function renderOverlay(p) {
   annotations.forEach(function (a) {
     if (a.page === p.num) svg.appendChild(annNode(a));
   });
+  if (showTimestamps) {
+    annotations.forEach(function (a) {
+      if (a.page !== p.num || !a.ts) return;
+      var node = svg.querySelector('[data-id="' + a.id + '"]');
+      if (!node) return;
+      var box;
+      try { box = node.getBBox(); } catch (e) { return; }
+      var label = el('text', {
+        x: Math.min(box.x + box.width + 5, p.baseW - 4),
+        y: Math.max(box.y + 8, 10),
+        'font-size': 8.5,
+        fill: '#8A8A84',
+        stroke: '#FFFFFF',
+        'stroke-width': 2.5,
+        'paint-order': 'stroke',
+        'text-anchor': box.x + box.width + 55 > p.baseW ? 'end' : 'start',
+        'pointer-events': 'none'
+      });
+      label.style.fontFamily = 'var(--font)';
+      label.textContent = formatTs(a.ts);
+      svg.appendChild(label);
+    });
+  }
   if (selectedId) {
     var selAnn = annotations.find(function (a) { return a.id === selectedId; });
     if (selAnn && selAnn.page === p.num) {
@@ -739,12 +962,139 @@ function annNode(a) {
     div.className = 'annText';
     div.style.fontSize = a.fontSize + 'px';
     div.style.color = a.color;
-    div.textContent = a.text || '';
+    if (editingId === a.id) {
+      div.textContent = a.text || '';
+    } else {
+      renderTextContent(div, a);
+    }
     div.contentEditable = (editingId === a.id) ? 'true' : 'false';
     fo.appendChild(div);
     g.appendChild(fo);
   }
   return g;
+}
+
+/* Render a text annotation's words as spans so keywords can be marked and,
+   in revise mode, hidden until a student types them. */
+function renderTextContent(div, a) {
+  div.innerHTML = '';
+  var tokens = (a.text || '').split(/(\s+)/);
+  var wordIndex = 0;
+  tokens.forEach(function (tok) {
+    if (!tok) return;
+    if (/^\s+$/.test(tok)) { div.appendChild(document.createTextNode(tok)); return; }
+    var span = document.createElement('span');
+    span.setAttribute('data-w', wordIndex);
+    var isKw = a.kw && a.kw.indexOf(wordIndex) !== -1;
+    if (isKw && reviseMode) {
+      if (revealedKw[normWord(tok)]) {
+        span.textContent = tok;
+        span.className = 'kwRevealed';
+      } else {
+        span.textContent = '_'.repeat(Math.max(4, tok.length));
+        span.className = 'kwHidden';
+      }
+    } else {
+      span.textContent = tok;
+      if (isKw) span.className = 'kwWord';
+    }
+    div.appendChild(span);
+    wordIndex++;
+  });
+}
+
+/* ================= Keywords & revision ================= */
+function allKeywordWords() {
+  // Returns [{ norm, word }] — one entry per marked keyword instance
+  var out = [];
+  annotations.forEach(function (a) {
+    if (a.type !== 'text' || !a.kw || !a.kw.length) return;
+    var words = (a.text || '').split(/\s+/).filter(function (w) { return w !== ''; });
+    a.kw.forEach(function (idx) {
+      if (words[idx] !== undefined && normWord(words[idx])) {
+        out.push({ norm: normWord(words[idx]), word: words[idx] });
+      }
+    });
+  });
+  return out;
+}
+
+function toggleKeyword(annId, wordIndex) {
+  var a = annotations.find(function (x) { return x.id === annId; });
+  if (!a || a.type !== 'text') return;
+  pushUndo();
+  a.kw = a.kw || [];
+  var pos = a.kw.indexOf(wordIndex);
+  if (pos === -1) a.kw.push(wordIndex); else a.kw.splice(pos, 1);
+  renderAllOverlays();
+  updateKwPanel();
+  setDirty(true);
+}
+
+function updateKwPanel() {
+  var words = allKeywordWords();
+  var countEl = $('kwCount');
+  var input = $('kwInput');
+  var progress = $('kwProgress');
+  if (!words.length) {
+    countEl.textContent = 'No keywords marked yet. Use the key tool and click words in a text box.';
+    input.disabled = true;
+    progress.textContent = '';
+    return;
+  }
+  countEl.textContent = words.length + ' keyword' + (words.length === 1 ? '' : 's') + ' in this worksheet.';
+  input.disabled = !reviseMode;
+  if (reviseMode) {
+    var found = words.filter(function (w) { return revealedKw[w.norm]; }).length;
+    progress.innerHTML = '<span class="' + (found === words.length ? 'done' : '') + '">' +
+      found + ' / ' + words.length + ' found' +
+      (found === words.length ? ' — well done! 🎉' : '') + '</span>';
+  } else {
+    progress.textContent = '';
+  }
+}
+
+function setReviseMode(on) {
+  reviseMode = on;
+  revealedKw = {};
+  $('kwInput').value = '';
+  renderAllOverlays();
+  updateKwPanel();
+  if (on) setTimeout(function () { $('kwInput').focus(); }, 50);
+}
+
+function tryKeyword(guess) {
+  var norm = normWord(guess);
+  if (!norm) return;
+  var input = $('kwInput');
+  var words = allKeywordWords();
+  var match = words.some(function (w) { return w.norm === norm; });
+  if (match && revealedKw[norm]) {
+    toast('“' + guess.trim() + '” — already found!');
+    input.value = '';
+    return;
+  }
+  if (match) {
+    revealedKw[norm] = true;
+    input.value = '';
+    input.classList.add('good');
+    setTimeout(function () { input.classList.remove('good'); }, 800);
+    renderAllOverlays();
+    updateKwPanel();
+  } else {
+    input.classList.remove('shake');
+    void input.offsetWidth; // restart the animation
+    input.classList.add('shake');
+  }
+}
+
+/* ================= Worksheet sidebar ================= */
+function renderSidebar() {
+  $('wsLevel').textContent = wsMeta.level ? wsMeta.level : 'Level —';
+  $('wsName').textContent = docName || 'No worksheet loaded';
+  $('wsDay').textContent = dayFromISO(wsMeta.date);
+  $('wsDate').textContent = prettyDate(wsMeta.date);
+  updateKwPanel();
 }
 
 /* ================= Pointer interaction ================= */
@@ -771,8 +1121,9 @@ function setTool(t) {
 
 function updateToolCursor() {
   pages.forEach(function (p) {
-    p.svg.classList.toggle('selectMode', tool === 'select');
+    p.svg.classList.toggle('selectMode', tool === 'select' || tool === 'keyword');
     p.svg.classList.toggle('textMode', tool === 'text');
+    p.svg.classList.toggle('kwMode', tool === 'keyword');
   });
 }
 
@@ -802,6 +1153,19 @@ function attachOverlayHandlers(p) {
     if (editingId) return; // let the text box handle it
     var pt = eventPoint(e, p);
 
+    if (tool === 'keyword') {
+      var span = e.target.closest ? e.target.closest('span[data-w]') : null;
+      var host = e.target.closest ? e.target.closest('[data-id]') : null;
+      if (span && host) {
+        toggleKeyword(host.getAttribute('data-id'), parseInt(span.getAttribute('data-w'), 10));
+      } else if (host) {
+        toast('Click an individual word in the text box to mark it as a keyword.');
+      } else {
+        toast('Keywords live in text boxes — click a word inside one.');
+      }
+      return;
+    }
+
     if (tool === 'select') {
       var target = e.target.closest ? e.target.closest('[data-id]') : null;
       if (target) {
@@ -820,14 +1184,15 @@ function attachOverlayHandlers(p) {
     e.preventDefault();
     svg.setPointerCapture(e.pointerId);
     var ann;
+    var now = Date.now();
     if (tool === 'pen' || tool === 'highlight') {
-      ann = { id: newAnnId(), page: p.num, type: tool, color: color, width: strokeW, points: [pt] };
+      ann = { id: newAnnId(), page: p.num, type: tool, color: color, width: strokeW, points: [pt], ts: now };
     } else if (tool === 'rect' || tool === 'ellipse') {
-      ann = { id: newAnnId(), page: p.num, type: tool, color: color, width: strokeW, x: pt.x, y: pt.y, w: 0, h: 0, _sx: pt.x, _sy: pt.y };
+      ann = { id: newAnnId(), page: p.num, type: tool, color: color, width: strokeW, x: pt.x, y: pt.y, w: 0, h: 0, _sx: pt.x, _sy: pt.y, ts: now };
     } else if (tool === 'line' || tool === 'arrow') {
-      ann = { id: newAnnId(), page: p.num, type: tool, color: color, width: strokeW, x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y };
+      ann = { id: newAnnId(), page: p.num, type: tool, color: color, width: strokeW, x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y, ts: now };
     } else if (tool === 'text') {
-      drawing = { ann: { id: newAnnId(), page: p.num, type: 'text', color: color, fontSize: fontSize, x: pt.x, y: pt.y, w: 220, h: fontSize * 1.9, text: '' }, page: p, isText: true };
+      drawing = { ann: { id: newAnnId(), page: p.num, type: 'text', color: color, fontSize: fontSize, x: pt.x, y: pt.y, w: 220, h: fontSize * 1.9, text: '', kw: [], ts: now }, page: p, isText: true };
       return;
     }
     drawing = { ann: ann, page: p, svgNode: null };
@@ -903,8 +1268,9 @@ function attachOverlayHandlers(p) {
   svg.addEventListener('pointerup', finishPointer);
   svg.addEventListener('pointercancel', function () { drawing = null; draggingSel = null; renderOverlay(p); });
 
-  /* Double-click a text annotation (in select mode) to edit it */
+  /* Double-click a text annotation (any tool except keyword-marking) to edit it */
   svg.addEventListener('dblclick', function (e) {
+    if (tool === 'keyword') return;
     var target = e.target.closest ? e.target.closest('[data-id]') : null;
     if (!target) return;
     var id = target.getAttribute('data-id');
@@ -1050,22 +1416,43 @@ async function saveDoc() {
     toast('Only ' + ADMIN_EMAIL + ' can save to the cloud.');
     return;
   }
+  // Every save runs through the worksheet-details dialog so the name,
+  // level and date can be adjusted each time.
+  $('saveNameInput').value = docName || '';
+  $('saveLevelInput').value = wsMeta.level || '';
+  $('saveDateInput').value = wsMeta.date || new Date().toISOString().slice(0, 10);
+  updateSaveDayPreview();
+  $('saveModal').classList.add('open');
+  setTimeout(function () { $('saveNameInput').focus(); }, 50);
+}
+
+function updateSaveDayPreview() {
+  var day = dayFromISO($('saveDateInput').value);
+  $('saveDayPreview').textContent = day ? day : '';
+}
+
+async function performSave() {
   var btn = $('saveBtn');
   var label = btn.querySelector('.btnLabel');
+  docName = $('saveNameInput').value.trim() || docName || 'Untitled';
+  wsMeta.level = $('saveLevelInput').value.trim();
+  wsMeta.date = $('saveDateInput').value;
+  $('saveModal').classList.remove('open');
+  renderSidebar();
   btn.disabled = true;
   if (label) label.textContent = 'Saving…';
   try {
     var isNew = !currentDocId;
     if (isNew) {
-      var name = window.prompt('Name this document:', docName) ;
-      if (name === null) { btn.disabled = false; if (label) label.textContent = 'Save'; return; }
-      docName = name.trim() || docName;
       currentDocId = db.collection(COLLECTION).doc().id;
       await storage.ref(STORAGE_DIR + '/' + currentDocId + '.pdf')
         .put(new Blob([pdfBytes], { type: 'application/pdf' }));
     }
     var payload = {
       name: docName,
+      level: wsMeta.level,
+      wsDate: wsMeta.date,
+      wsDay: dayFromISO(wsMeta.date),
       ownerUid: currentUser.uid,
       ownerEmail: currentUser.email,
       storagePath: STORAGE_DIR + '/' + currentDocId + '.pdf',
@@ -1115,7 +1502,12 @@ async function openDocsModal() {
       var meta = document.createElement('div');
       meta.className = 'docRowMeta';
       var when = d.updatedAt && d.updatedAt.toDate ? d.updatedAt.toDate().toLocaleString() : '';
-      meta.textContent = (d.pageCount || '?') + ' page' + (d.pageCount === 1 ? '' : 's') + (when ? ' · ' + when : '');
+      var bits = [];
+      if (d.level) bits.push(d.level);
+      if (d.wsDate) bits.push((d.wsDay ? d.wsDay + ' ' : '') + prettyDate(d.wsDate));
+      bits.push((d.pageCount || '?') + ' page' + (d.pageCount === 1 ? '' : 's'));
+      if (when) bits.push('saved ' + when);
+      meta.textContent = bits.join(' · ');
       info.appendChild(nm);
       info.appendChild(meta);
       row.appendChild(info);
@@ -1149,8 +1541,11 @@ async function openSavedDoc(id, data) {
     await loadPdf(new Uint8Array(buf), data.name || 'Untitled');
     annotations = JSON.parse(data.annotations || '[]');
     currentDocId = id;
+    wsMeta.level = data.level || '';
+    wsMeta.date = data.wsDate || '';
     setDirty(false);
     renderAllOverlays();
+    renderSidebar();
   } catch (e) {
     console.error(e);
     toast('Could not open: ' + (e.message || e));
@@ -1300,6 +1695,28 @@ $('zoomInBtn').addEventListener('click', function () { zoomBy(1.2); });
 $('zoomOutBtn').addEventListener('click', function () { zoomBy(1 / 1.2); });
 $('fitBtn').addEventListener('click', fitWidth);
 $('saveBtn').addEventListener('click', saveDoc);
+$('saveConfirmBtn').addEventListener('click', performSave);
+$('saveCancelBtn').addEventListener('click', function () { $('saveModal').classList.remove('open'); });
+$('saveCloseBtn').addEventListener('click', function () { $('saveModal').classList.remove('open'); });
+$('saveModal').addEventListener('click', function (e) {
+  if (e.target === $('saveModal')) $('saveModal').classList.remove('open');
+});
+$('saveDateInput').addEventListener('input', updateSaveDayPreview);
+$('saveNameInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') performSave(); });
+
+$('tsToggleBtn').addEventListener('click', function () {
+  showTimestamps = !showTimestamps;
+  $('tsToggleBtn').classList.toggle('active', showTimestamps);
+  renderAllOverlays();
+});
+$('sideToggleBtn').addEventListener('click', function () {
+  $('sideBar').classList.toggle('open');
+});
+$('reviseToggle').addEventListener('change', function (e) { setReviseMode(e.target.checked); });
+$('kwInput').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); tryKeyword(e.target.value); }
+});
+
 $('docsBtn').addEventListener('click', openDocsModal);
 $('docsCloseBtn').addEventListener('click', function () { $('docsModal').classList.remove('open'); });
 $('docsModal').addEventListener('click', function (e) {
@@ -1328,14 +1745,16 @@ var viewerArea = $('viewerArea');
 
 /* Keyboard shortcuts */
 document.addEventListener('keydown', function (e) {
-  var editingText = document.activeElement && document.activeElement.isContentEditable;
+  var ae = document.activeElement;
+  var editingText = ae && (ae.isContentEditable ||
+    ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT');
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
     saveDoc();
     return;
   }
   if (editingText) {
-    if (e.key === 'Escape') document.activeElement.blur();
+    if (e.key === 'Escape') ae.blur();
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
@@ -1347,7 +1766,7 @@ document.addEventListener('keydown', function (e) {
   if (e.key === '+' || e.key === '=') { zoomBy(1.2); return; }
   if (e.key === '-') { zoomBy(1 / 1.2); return; }
   if (e.key === 'Escape') { drawing = null; selectedId = null; renderAllOverlays(); return; }
-  var toolKeys = { v: 'select', p: 'pen', h: 'highlight', t: 'text', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow' };
+  var toolKeys = { v: 'select', p: 'pen', h: 'highlight', t: 'text', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', k: 'keyword' };
   if (!e.ctrlKey && !e.metaKey && !e.altKey && toolKeys[e.key.toLowerCase()]) setTool(toolKeys[e.key.toLowerCase()]);
 });
 
