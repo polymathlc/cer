@@ -8885,7 +8885,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.128.0';
+const APP_VERSION = 'v1.128.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -8921,6 +8921,27 @@ function configureSidebarForRole(role) {
   try { navigateTo(role === 'admin' ? 'community' : 'home'); } catch (_) {}
 }
 
+// Every admin account's uid, primary admin (config/admin) first. Approved
+// questions live in their ORIGINAL owner's bank (see _qRef/_ownerUidByQuestionId),
+// so content is spread across the admin accounts — the super admin loads the
+// union, and students must load the same union or a question attached to a
+// past paper by one admin shows "attached" to admins but "not available" to
+// students. Discovery failures are non-fatal: we always keep the primary uid.
+let _allAdminUidsCache = null;
+async function allAdminUids() {
+  if (_allAdminUidsCache) return _allAdminUidsCache;
+  const uids = adminUid ? [adminUid] : [];
+  try {
+    const profilesSnap = await getDocs(collection(db, 'userProfiles'));
+    profilesSnap.forEach(d => {
+      const p = d.data();
+      if (p && p.uid && ADMIN_EMAILS.includes(p.email) && !uids.includes(p.uid)) uids.push(p.uid);
+    });
+  } catch (e) { console.warn('admin uid discovery', e); }
+  _allAdminUidsCache = uids;
+  return uids;
+}
+
 async function loadAdminQuestions() {
   try {
     // First, get admin UID from config
@@ -8944,14 +8965,24 @@ async function loadAdminQuestions() {
     // Admin's custom categories, before questions normalize (the MCQ rule
     // respects custom categories) — also fills the student-side filters.
     await loadCustomCategories();
-    // Load all questions from admin's subcollection
-    const adminQCol = collection(db, 'users', adminUid, 'questions');
-    const qSnap = await getDocs(adminQCol);
+    // Load questions from EVERY admin account's subcollection (primary admin
+    // first, deduped by id) — the same union the super admin sees. Approved
+    // questions stay in their original owner's bank, so loading only one
+    // admin's collection hides the other admin's questions from students.
     questionBank = [];
-    qSnap.forEach(d => {
-      const q = d.data();
-      if (q && q.id) questionBank.push(normalizeLoadedQuestion(q));
-    });
+    const seenIds = new Set();
+    for (const uid of await allAdminUids()) {
+      try {
+        const qSnap = await getDocs(collection(db, 'users', uid, 'questions'));
+        qSnap.forEach(d => {
+          const q = d.data();
+          if (q && q.id && !seenIds.has(q.id)) {
+            seenIds.add(q.id);
+            questionBank.push(normalizeLoadedQuestion(q));
+          }
+        });
+      } catch (e) { console.warn('bank load for admin', uid, e); }
+    }
     updateCounts();
     populateWsTopicFilter();
     loadMarkingSettings(); // pick up the teacher's rubric for student practice
@@ -31739,10 +31770,27 @@ async function savePaperData(){
 async function loadPaperMap(force){
   if (_ppMapLoaded && !force) return;
   try {
-    const uid = ppOwnerUid();
-    if (uid && db) {
-      const snap = await getDoc(doc(db, 'users', uid, 'settings', 'paperMap'));
-      paperMap = (snap.exists() && snap.data() && snap.data().map && typeof snap.data().map === 'object') ? snap.data().map : {};
+    if (ppIsAdmin()) {
+      // Admins load ONLY their own map — savePaperMap writes it back wholesale
+      // (merge:false), so merging in the other admin's entries here would copy
+      // them into this admin's document on the next save.
+      const uid = ppOwnerUid();
+      if (uid && db) {
+        const snap = await getDoc(doc(db, 'users', uid, 'settings', 'paperMap'));
+        paperMap = (snap.exists() && snap.data() && snap.data().map && typeof snap.data().map === 'object') ? snap.data().map : {};
+      }
+    } else if (db) {
+      // Students read the UNION of every admin's attachments (primary admin
+      // wins on conflicts) — an attachment made from either admin account
+      // must be practisable regardless of which admin logged in last.
+      paperMap = {};
+      for (const uid of await allAdminUids()) {
+        try {
+          const snap = await getDoc(doc(db, 'users', uid, 'settings', 'paperMap'));
+          const m = (snap.exists() && snap.data() && snap.data().map && typeof snap.data().map === 'object') ? snap.data().map : {};
+          Object.keys(m).forEach(k => { if (!(k in paperMap)) paperMap[k] = m[k]; });
+        } catch (e) { console.warn('paperMap load for admin', uid, e); }
+      }
     }
   } catch (e) { console.warn('paperMap load', e); if (!paperMap) paperMap = {}; }
   // migrate legacy keys "2021-38" -> stable id "s_2021_38"
