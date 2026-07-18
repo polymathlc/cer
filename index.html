@@ -4867,7 +4867,11 @@ option {
     </button>
     <div id="loginError" class="auth-error">Invalid email or password</div>
     <div id="loginLoading" class="auth-loading"><div class="spinner"></div> Signing in...</div>
+    <div id="forgotPassInfo" style="display:none;background:var(--accent-blue-light,#eff6ff);color:var(--accent-blue,#2563eb);border-radius:10px;padding:12px 16px;margin-top:12px;font-size:0.84rem;line-height:1.55;text-align:left;"></div>
 
+    <div class="auth-footer-link">
+      Forgot your password? <a onclick="handleForgotPassword()">Reset it</a>
+    </div>
     <div class="auth-footer-link">
       Need a student account? <a onclick="showPage('registerPage')">Sign up</a>
     </div>
@@ -5102,9 +5106,14 @@ option {
         <div style="font-size:0.85rem;color:#fff;">Admin</div>
         <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);">Logged in</div>
       </div>
-      <button class="sidebar-logout-btn" onclick="handleLogout()" title="Sign Out">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-      </button>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:2px;">
+        <button class="sidebar-logout-btn" id="changePassBtn" onclick="openChangePassword()" title="Change my password" style="display:none;margin-left:0;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </button>
+        <button class="sidebar-logout-btn" onclick="handleLogout()" title="Sign Out" style="margin-left:0;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
     </div>
     <div class="app-version-badge admin-only" id="appVersionBadge" title="App version — bumps with every update so you can confirm the latest build is live"></div>
   </aside>
@@ -5924,7 +5933,7 @@ option {
                   <th>Total Logins</th>
                   <th>Questions Done</th>
                   <th>Avg Score</th>
-                  <th>Activity Log</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="usageStudentBody">
@@ -6783,6 +6792,81 @@ option {
   </div>
 </div>
 
+<!-- ==================== RESET STUDENT LOGIN DIALOG (Admin) ==================== -->
+<div class="confirm-overlay" id="resetLoginOverlay">
+  <div class="confirm-dialog" style="max-width:480px;text-align:left;max-height:88vh;overflow-y:auto;">
+    <div id="rlFormWrap">
+      <h3 style="margin-bottom:6px;">🔑 Reset Student Password</h3>
+      <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.6;margin-bottom:18px;">For a student who has <b>forgotten their password</b>. This unlinks their old sign-in and issues a fresh one with the <b>same username</b> and the new password you set below. All their progress — XP, gold, streaks, scores and history — is carried over automatically. The old password stops working.</p>
+
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:18px;line-height:1.9;font-size:0.9rem;">
+        <div><span style="color:var(--text-muted);">Student:</span> <b id="rlName"></b></div>
+        <div><span style="color:var(--text-muted);">Signs in as:</span> <b id="rlUsername"></b></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">New password <span style="font-weight:400;color:var(--text-muted);">(at least 6 characters)</span></label>
+        <div style="display:flex;gap:8px;">
+          <input id="rlPass" class="form-input" type="text" placeholder="Set a new password" autocomplete="off" style="flex:1;">
+          <button type="button" class="btn btn-outline" onclick="generateResetPassword()" title="Generate an easy-to-read password" style="white-space:nowrap;">🎲 Generate</button>
+        </div>
+      </div>
+
+      <div id="rlError" class="auth-error" style="margin-top:4px;">Something went wrong</div>
+      <div id="rlLoading" class="auth-loading"><div class="spinner"></div> <span id="rlLoadingText">Resetting…</span></div>
+
+      <div class="btn-group" style="justify-content:flex-end;margin-top:18px;">
+        <button class="btn btn-outline" id="rlCancelBtn" onclick="closeResetStudentLogin()">Cancel</button>
+        <button class="btn btn-primary" id="rlResetBtn" onclick="handleResetStudentLogin()">Reset Password</button>
+      </div>
+    </div>
+
+    <div id="rlSuccessWrap" style="display:none;">
+      <h3 style="margin-bottom:6px;">✅ Password reset</h3>
+      <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.6;margin-bottom:18px;">Hand these details to the student — they sign in exactly as before, just with the new password. Copy them now; the password can't be viewed again later.</p>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:18px;line-height:2;font-size:0.92rem;">
+        <div><span style="color:var(--text-muted);">Name:</span> <b id="rlDoneName"></b></div>
+        <div><span style="color:var(--text-muted);">Username:</span> <b id="rlDoneUser"></b></div>
+        <div><span style="color:var(--text-muted);">New password:</span> <b id="rlDonePass"></b></div>
+      </div>
+      <div id="rlDoneNote" style="display:none;background:var(--accent-orange-light,#fff7ed);color:var(--accent-orange,#ea580c);border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:0.83rem;line-height:1.55;"></div>
+      <div class="btn-group" style="justify-content:flex-end;">
+        <button class="btn btn-outline" onclick="copyResetCredentials()">📋 Copy details</button>
+        <button class="btn btn-primary" onclick="closeResetStudentLogin()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== CHANGE MY PASSWORD DIALOG (signed-in user) ==================== -->
+<div class="confirm-overlay" id="changePassOverlay">
+  <div class="confirm-dialog" style="max-width:440px;text-align:left;">
+    <h3 style="margin-bottom:6px;">🔑 Change Password</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.6;margin-bottom:18px;">Enter your current password, then choose a new one. You'll use the new password the next time you sign in.</p>
+
+    <div class="form-group">
+      <label class="form-label">Current password</label>
+      <input id="cpCurrent" class="form-input" type="password" placeholder="Your current password" autocomplete="current-password">
+    </div>
+    <div class="form-group">
+      <label class="form-label">New password <span style="font-weight:400;color:var(--text-muted);">(at least 6 characters)</span></label>
+      <input id="cpNew" class="form-input" type="password" placeholder="New password" autocomplete="new-password">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Confirm new password</label>
+      <input id="cpConfirm" class="form-input" type="password" placeholder="Re-enter new password" autocomplete="new-password">
+    </div>
+
+    <div id="cpError" class="auth-error" style="margin-top:4px;">Something went wrong</div>
+    <div id="cpLoading" class="auth-loading"><div class="spinner"></div> Updating password…</div>
+
+    <div class="btn-group" style="justify-content:flex-end;margin-top:18px;">
+      <button class="btn btn-outline" onclick="closeChangePassword()">Cancel</button>
+      <button class="btn btn-primary" id="cpSaveBtn" onclick="handleChangePassword()">Change Password</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== AI BUILD (paste / drop / upload) DIALOG ==================== -->
 <div class="confirm-overlay" id="aiBuildOverlay">
   <div class="confirm-dialog" style="max-width:520px;text-align:left;">
@@ -7429,7 +7513,11 @@ import {
   browserPopupRedirectResolver,
   onAuthStateChanged,
   signOut,
-  updateProfile
+  updateProfile,
+  sendPasswordResetEmail,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 import {
   getFirestore,
@@ -7447,6 +7535,7 @@ import {
   updateDoc,
   increment,
   onSnapshot,
+  writeBatch,
   Timestamp
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 // App Check (protects the Gemini quota from abuse) + Firebase AI Logic (free-tier Gemini)
@@ -8034,6 +8123,15 @@ window.closeCreateStudent = closeCreateStudent;
 window.generateStudentPassword = generateStudentPassword;
 window.handleCreateStudent = handleCreateStudent;
 window.copyStudentCredentials = copyStudentCredentials;
+window.handleForgotPassword = handleForgotPassword;
+window.openChangePassword = openChangePassword;
+window.closeChangePassword = closeChangePassword;
+window.handleChangePassword = handleChangePassword;
+window.openResetStudentLogin = openResetStudentLogin;
+window.closeResetStudentLogin = closeResetStudentLogin;
+window.generateResetPassword = generateResetPassword;
+window.handleResetStudentLogin = handleResetStudentLogin;
+window.copyResetCredentials = copyResetCredentials;
 
 // =====================================================================
 // PAGE NAVIGATION (Landing / Login / Register / App)
@@ -8046,6 +8144,8 @@ function showPage(pageId) {
   // Clear error states when switching
   document.querySelectorAll('.auth-error').forEach(e => e.style.display = 'none');
   document.querySelectorAll('.auth-loading').forEach(e => e.classList.remove('active'));
+  const fp = document.getElementById('forgotPassInfo');
+  if (fp) fp.style.display = 'none';
 }
 
 // =====================================================================
@@ -8053,12 +8153,15 @@ function showPage(pageId) {
 // =====================================================================
 async function handleEmailLogin() {
   // Accepts a real email OR a centre username (mapped to its synthetic email).
-  const email = _loginIdToEmail(document.getElementById('loginEmail').value);
+  const rawId = document.getElementById('loginEmail').value;
+  const candidates = _loginCandidateEmails(rawId);
   const pass = document.getElementById('loginPass').value;
   const errorEl = document.getElementById('loginError');
   const loadingEl = document.getElementById('loginLoading');
+  const infoEl = document.getElementById('forgotPassInfo');
+  if (infoEl) infoEl.style.display = 'none';
 
-  if (!email || !pass) {
+  if (!candidates.length || !pass) {
     errorEl.textContent = 'Please enter both your username (or email) and password';
     errorEl.style.display = 'block';
     return;
@@ -8069,7 +8172,20 @@ async function handleEmailLogin() {
   document.getElementById('loginBtn').disabled = true;
 
   try {
-    await signInWithEmailAndPassword(auth, email, pass);
+    let cred = null, firstErr = null;
+    for (const email of candidates) {
+      try { cred = await signInWithEmailAndPassword(auth, email, pass); break; }
+      catch (err) {
+        if (!firstErr) firstErr = err;
+        // Only keep scanning on "no such account / wrong password" — anything
+        // else (throttling, network) applies to every candidate equally.
+        const c = err && err.code;
+        if (c !== 'auth/invalid-credential' && c !== 'auth/user-not-found' && c !== 'auth/wrong-password') { firstErr = err; break; }
+      }
+    }
+    if (!cred) throw (firstErr || new Error('Sign-in failed'));
+    const u = (rawId || '').trim().toLowerCase();
+    if (u && !u.includes('@')) { try { localStorage.setItem(_loginHintKey(u), cred.user.email); } catch (e) {} }
     // onAuthStateChanged will handle the rest
   } catch (error) {
     loadingEl.classList.remove('active');
@@ -8077,6 +8193,80 @@ async function handleEmailLogin() {
     errorEl.textContent = getAuthErrorMessage(error.code);
     errorEl.style.display = 'block';
     setTimeout(() => { errorEl.style.display = 'none'; }, 5000);
+  }
+}
+
+// "Forgot password?" on the login page. Real emails get Firebase's reset
+// email; centre usernames have no inbox, so the student is pointed to their
+// teacher (who resets it from the Usage dashboard's 🔑 button).
+async function handleForgotPassword() {
+  const raw = (document.getElementById('loginEmail').value || '').trim();
+  const errorEl = document.getElementById('loginError');
+  const infoEl = document.getElementById('forgotPassInfo');
+  errorEl.style.display = 'none';
+  if (!raw) {
+    errorEl.textContent = 'Type your username or email above first, then tap "Reset it"';
+    errorEl.style.display = 'block';
+    setTimeout(() => { errorEl.style.display = 'none'; }, 5000);
+    return;
+  }
+  if (!raw.includes('@')) {
+    infoEl.innerHTML = '🧑‍🏫 Centre usernames don\'t have an email inbox, so ask your <b>teacher</b> to reset your password — it takes them one click and all your XP, gold and progress stay safe.';
+    infoEl.style.display = 'block';
+    return;
+  }
+  try {
+    await sendPasswordResetEmail(auth, raw);
+    infoEl.innerHTML = '📬 Password reset email sent to <b>' + escapeHtml(raw) + '</b> — check your inbox (and spam folder), then sign in with your new password.';
+    infoEl.style.display = 'block';
+  } catch (error) {
+    errorEl.textContent = getAuthErrorMessage(error.code);
+    errorEl.style.display = 'block';
+    setTimeout(() => { errorEl.style.display = 'none'; }, 5000);
+  }
+}
+
+// ---- Change my password (signed-in email/password accounts) ----
+function openChangePassword() {
+  ['cpCurrent', 'cpNew', 'cpConfirm'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('cpError').style.display = 'none';
+  document.getElementById('cpLoading').classList.remove('active');
+  document.getElementById('cpSaveBtn').disabled = false;
+  document.getElementById('changePassOverlay').classList.add('active');
+}
+function closeChangePassword() {
+  document.getElementById('changePassOverlay').classList.remove('active');
+}
+async function handleChangePassword() {
+  const cur = document.getElementById('cpCurrent').value;
+  const next = document.getElementById('cpNew').value;
+  const confirm2 = document.getElementById('cpConfirm').value;
+  const errorEl = document.getElementById('cpError');
+  const showErr = msg => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
+  errorEl.style.display = 'none';
+
+  if (!cur || !next) return showErr('Please fill in every field');
+  if (next !== confirm2) return showErr('New passwords do not match');
+  if (next.length < 6) return showErr('New password must be at least 6 characters');
+  const user = auth.currentUser;
+  if (!user || !user.email) return showErr('You need to be signed in to change your password');
+
+  const loadingEl = document.getElementById('cpLoading');
+  loadingEl.classList.add('active');
+  document.getElementById('cpSaveBtn').disabled = true;
+  try {
+    await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, cur));
+    await updatePassword(user, next);
+    closeChangePassword();
+    showToast('Password changed ✓ — use the new one next time you sign in', 'success');
+  } catch (error) {
+    const c = error && error.code;
+    showErr(c === 'auth/wrong-password' || c === 'auth/invalid-credential'
+      ? 'Current password is incorrect'
+      : getAuthErrorMessage(c));
+  } finally {
+    loadingEl.classList.remove('active');
+    document.getElementById('cpSaveBtn').disabled = false;
   }
 }
 
@@ -8195,6 +8385,26 @@ function _loginIdToEmail(id) {
   const s = (id || '').trim();
   return s && !s.includes('@') ? s.toLowerCase() + '@' + STUDENT_USERNAME_DOMAIN : s;
 }
+// After an admin password reset, the student's sign-in lives at
+// username.rN@domain (Firebase Auth can't reuse the old address). Login
+// therefore tries the base address first, then .r2 … .r9, so the student
+// keeps typing the SAME username forever. A per-device hint remembers which
+// address worked last, making repeat logins a single attempt.
+const RESET_SUFFIX_MAX = 9;
+function _loginHintKey(u) { return 'sq_login_email_' + u; }
+function _loginCandidateEmails(rawId) {
+  const s = (rawId || '').trim();
+  if (!s) return [];
+  if (s.includes('@')) return [s];
+  const u = s.toLowerCase();
+  const list = [u + '@' + STUDENT_USERNAME_DOMAIN];
+  for (let n = 2; n <= RESET_SUFFIX_MAX; n++) list.push(u + '.r' + n + '@' + STUDENT_USERNAME_DOMAIN);
+  let hint = null;
+  try { hint = localStorage.getItem(_loginHintKey(u)); } catch (e) {}
+  const i = hint ? list.indexOf(hint) : -1;
+  if (i > 0) { list.splice(i, 1); list.unshift(hint); }
+  return list;
+}
 let _studentCreator = null; // { auth, db } on the secondary app
 function _getStudentCreator() {
   if (!_studentCreator) {
@@ -8301,6 +8511,217 @@ function copyStudentCredentials() {
 }
 
 // =====================================================================
+// ADMIN — RESET A STUDENT'S PASSWORD (unlink & re-issue)
+// A browser app can't change another Firebase Auth user's password, so the
+// reset UNLINKS instead: a brand-new auth account is created at
+// username.rN@domain with the new password, all of the student's progress
+// is copied across to it, and the old account is retired. The login page
+// scans those .rN addresses (see _loginCandidateEmails), so the student
+// keeps signing in with the SAME username they always had.
+// =====================================================================
+let _resetTarget = null; // { uid, name, username, email }
+
+// Base centre username for an account: strip the synthetic domain and any
+// .rN reset suffix; for real emails, sanitise the local part.
+function _usernameFromEmail(email) {
+  let local = (email || '').toLowerCase().split('@')[0];
+  local = local.replace(/\.r[2-9]$/, '');
+  return local.replace(/[^a-z0-9._-]/g, '');
+}
+
+function openResetStudentLogin(uid) {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  const s = _usageStudentStats[uid] || {};
+  const email = s.email || '';
+  const username = _usernameFromEmail(email);
+  if (!username || username.length < 3) {
+    showToast('This account has no usable username — create a fresh account for the student instead', 'error');
+    return;
+  }
+  _resetTarget = { uid, name: s.name || 'Student', username, email };
+  document.getElementById('rlName').textContent = _resetTarget.name;
+  document.getElementById('rlUsername').textContent =
+    email.toLowerCase().endsWith('@' + STUDENT_USERNAME_DOMAIN) ? username : email;
+  document.getElementById('rlPass').value = '';
+  document.getElementById('rlError').style.display = 'none';
+  document.getElementById('rlLoading').classList.remove('active');
+  document.getElementById('rlResetBtn').disabled = false;
+  document.getElementById('rlCancelBtn').disabled = false;
+  document.getElementById('rlFormWrap').style.display = '';
+  document.getElementById('rlSuccessWrap').style.display = 'none';
+  document.getElementById('resetLoginOverlay').classList.add('active');
+}
+
+function closeResetStudentLogin() {
+  document.getElementById('resetLoginOverlay').classList.remove('active');
+}
+
+function generateResetPassword() {
+  const words = ['comet', 'rocket', 'magnet', 'photon', 'fossil', 'nebula', 'crystal', 'volcano', 'gravity', 'neuron', 'plasma', 'quartz', 'meteor', 'oxygen', 'proton'];
+  const w = words[Math.floor(Math.random() * words.length)];
+  document.getElementById('rlPass').value = w + Math.floor(1000 + Math.random() * 9000);
+}
+
+// Copy one users/{uid}/{col}/{docId} doc from the old account to the new one.
+async function _copyUserDoc(scDb, oldUid, newUid, col, docId) {
+  try {
+    const s = await getDoc(doc(db, 'users', oldUid, col, docId));
+    if (s.exists()) await setDoc(doc(scDb, 'users', newUid, col, docId), s.data());
+  } catch (e) { console.warn('reset copy ' + col + '/' + docId, e); }
+}
+
+async function handleResetStudentLogin() {
+  const t = _resetTarget;
+  const pass = document.getElementById('rlPass').value;
+  const errorEl = document.getElementById('rlError');
+  const showErr = msg => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
+  errorEl.style.display = 'none';
+  if (!currentUser || currentUser.role !== 'admin' || !t) return;
+  if (!pass || pass.length < 6) return showErr('New password must be at least 6 characters');
+
+  const loadingEl = document.getElementById('rlLoading');
+  const setStep = txt => { document.getElementById('rlLoadingText').textContent = txt; };
+  loadingEl.classList.add('active');
+  document.getElementById('rlResetBtn').disabled = true;
+  document.getElementById('rlCancelBtn').disabled = true;
+  const sc = _getStudentCreator();
+  try {
+    // 1) Old profile — level / avatar / family details come along for the ride.
+    let oldProf = {};
+    try {
+      const s = await getDoc(doc(db, 'userProfiles', t.uid));
+      if (s.exists()) oldProf = s.data() || {};
+    } catch (e) { console.warn('reset profile read', e); }
+    if (oldProf.supersededBy) throw new Error('This sign-in was already reset — reload the usage data and reset the newest entry instead.');
+
+    // 2) Create the replacement sign-in at the next free .rN address.
+    setStep('Creating the new sign-in…');
+    let cred = null, newEmail = null;
+    for (let n = 2; n <= RESET_SUFFIX_MAX && !cred; n++) {
+      newEmail = t.username + '.r' + n + '@' + STUDENT_USERNAME_DOMAIN;
+      try { cred = await createUserWithEmailAndPassword(sc.auth, newEmail, pass); }
+      catch (err) {
+        if (!(err && err.code === 'auth/email-already-in-use')) throw err;
+      }
+    }
+    if (!cred) throw new Error('This account has been reset too many times — create a fresh account for the student instead.');
+    const newUid = cred.user.uid;
+    try { await updateProfile(cred.user, { displayName: t.name }); } catch (e) { console.warn('reset display name', e); }
+
+    // 3) Carry everything over. Reads run as the admin (primary app); writes
+    // run as the freshly signed-in student (secondary app) so rules that only
+    // allow writing your own documents are still satisfied.
+    setStep('Carrying progress over…');
+    await setDoc(doc(sc.db, 'userProfiles', newUid), {
+      uid: newUid,
+      email: newEmail,
+      username: t.username,
+      displayName: oldProf.displayName || t.name,
+      role: 'student',
+      level: oldProf.level || null,
+      avatar: oldProf.avatar || null,
+      students: oldProf.students || null,
+      address: oldProf.address || null,
+      createdBy: currentUser.uid,
+      createdAt: Timestamp.now(),
+      resetOf: t.uid
+    }, { merge: true });
+    await _copyUserDoc(sc.db, t.uid, newUid, 'settings', 'scienceRpg');   // hero XP, gold, streaks
+    await _copyUserDoc(sc.db, t.uid, newUid, 'stats', 'performance');     // CER report data
+    try {
+      const wsSnap = await getDocs(collection(db, 'users', t.uid, 'worksheets'));
+      for (const d of wsSnap.docs) await setDoc(doc(sc.db, 'users', newUid, 'worksheets', d.id), d.data());
+    } catch (e) { console.warn('reset worksheets copy', e); }
+    try {
+      const s = await getDoc(doc(db, 'cerLeaderboard', t.uid));
+      if (s.exists()) await setDoc(doc(sc.db, 'cerLeaderboard', newUid), Object.assign({}, s.data(), { email: newEmail }));
+    } catch (e) { console.warn('reset cer board copy', e); }
+    try {
+      const s = await getDoc(doc(db, 'scienceGameLeaderboard', t.uid));
+      if (s.exists()) await setDoc(doc(sc.db, 'scienceGameLeaderboard', newUid), Object.assign({}, s.data(), { uid: newUid }));
+    } catch (e) { console.warn('reset game board copy', e); }
+
+    // Practice history — keeps "unattempted-first" serving and the admin's
+    // activity log intact. Batched, 400 writes at a time.
+    setStep('Copying practice history…');
+    let oldAttemptRefs = [];
+    try {
+      const aSnap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', t.uid)));
+      const docs = aSnap.docs;
+      oldAttemptRefs = docs.map(d => d.ref);
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = writeBatch(sc.db);
+        docs.slice(i, i + 400).forEach(d => {
+          const nd = Object.assign({}, d.data(), { uid: newUid });
+          if (nd.email) nd.email = newEmail;
+          batch.set(doc(collection(sc.db, 'questionAttempts')), nd);
+        });
+        await batch.commit();
+        setStep('Copying practice history… (' + Math.min(i + 400, docs.length) + '/' + docs.length + ')');
+      }
+    } catch (e) { console.warn('reset attempts copy', e); }
+
+    await signOut(sc.auth); // ends the secondary session only
+
+    // 4) Retire the old sign-in (as admin) so it vanishes from dashboards and
+    // can't fork the student's progress if the old password resurfaces.
+    setStep('Unlinking the old sign-in…');
+    await setDoc(doc(db, 'userProfiles', t.uid), {
+      supersededBy: newUid, retired: true, retiredAt: Timestamp.now()
+    }, { merge: true });
+    // Shared retired map — students' leaderboards read this to hide old entries.
+    try {
+      await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'retiredAccounts'),
+        { uids: { [t.uid]: true } }, { merge: true });
+    } catch (e) { console.warn('reset retired map', e); }
+    _retiredUidsCache = null; // this session's leaderboard filter picks up the change
+    // Best-effort cleanup of the old public docs (rules may forbid — the
+    // retired map above keeps them hidden either way).
+    try { await deleteDoc(doc(db, 'cerLeaderboard', t.uid)); } catch (e) {}
+    try { await deleteDoc(doc(db, 'scienceGameLeaderboard', t.uid)); } catch (e) {}
+    try {
+      for (let i = 0; i < oldAttemptRefs.length; i += 400) {
+        const batch = writeBatch(db);
+        oldAttemptRefs.slice(i, i + 400).forEach(r => batch.delete(r));
+        await batch.commit();
+      }
+    } catch (e) { console.warn('reset attempts cleanup', e); }
+
+    // 5) Show the new credentials.
+    document.getElementById('rlDoneName').textContent = t.name;
+    document.getElementById('rlDoneUser').textContent = t.username;
+    document.getElementById('rlDonePass').textContent = pass;
+    const note = document.getElementById('rlDoneNote');
+    if (t.email && t.email.includes('@') && !t.email.endsWith('@' + STUDENT_USERNAME_DOMAIN)) {
+      note.innerHTML = '⚠️ This student used to sign in with <b>' + escapeHtml(t.email) + '</b>. From now on they sign in with the <b>username</b> shown above instead (their old email no longer works here).';
+      note.style.display = '';
+    } else {
+      note.style.display = 'none';
+    }
+    document.getElementById('rlFormWrap').style.display = 'none';
+    document.getElementById('rlSuccessWrap').style.display = '';
+    try { loadUsageDashboard(); } catch (e) {}
+  } catch (error) {
+    console.error('reset student login failed', error);
+    try { if (sc.auth.currentUser) await signOut(sc.auth); } catch (e) {}
+    showErr(error && error.code ? getAuthErrorMessage(error.code) : (error && error.message) || 'Something went wrong — please try again');
+  } finally {
+    loadingEl.classList.remove('active');
+    document.getElementById('rlResetBtn').disabled = false;
+    document.getElementById('rlCancelBtn').disabled = false;
+  }
+}
+
+function copyResetCredentials() {
+  const txt = 'Science Quest login (password reset)\nName: ' + document.getElementById('rlDoneName').textContent +
+    '\nUsername: ' + document.getElementById('rlDoneUser').textContent +
+    '\nNew password: ' + document.getElementById('rlDonePass').textContent;
+  navigator.clipboard.writeText(txt)
+    .then(() => showToast('New login details copied', 'success'))
+    .catch(() => showToast('Could not copy — please note the details down', 'error'));
+}
+
+// =====================================================================
 // AUTH STATE LISTENER
 // =====================================================================
 const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'abigail.yew@stanfordmanpower.com'];
@@ -8338,6 +8759,22 @@ async function recordLogin(user) {
 async function enterApp(user) {
   const displayName = user.displayName || user.email.split('@')[0];
   const isAdmin = ADMIN_EMAILS.includes(user.email);
+  // A retired sign-in (its password was reset by the admin) must not fork the
+  // student's progress — bounce it back to the login page.
+  if (!isAdmin) {
+    try {
+      const prof = await getDoc(doc(db, 'userProfiles', user.uid));
+      if (prof.exists() && prof.data().supersededBy) {
+        await signOut(auth);
+        showPage('loginPage');
+        showToast('Your password was reset — sign in with the new password from your teacher', 'error');
+        return;
+      }
+    } catch (e) { console.warn('superseded check', e); }
+  }
+  // "Change password" only makes sense for email/password sign-ins (not Google).
+  const cpBtn = document.getElementById('changePassBtn');
+  if (cpBtn) cpBtn.style.display = (user.providerData || []).some(p => p && p.providerId === 'password') ? '' : 'none';
   currentUser = {
     uid: user.uid,
     email: user.email,
@@ -8432,7 +8869,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.126.0';
+const APP_VERSION = 'v1.127.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20094,7 +20531,8 @@ async function loadMyReport() {
   let percentile = null, peers = 0;
   try {
     const snap = await getDocs(collection(db, 'cerLeaderboard'));
-    const scores = []; snap.forEach(d => { const v = d.data(); if (v && typeof v.score100 === 'number') scores.push(v.score100); });
+    const retired = await _getRetiredUids();
+    const scores = []; snap.forEach(d => { if (retired.has(d.id)) return; const v = d.data(); if (v && typeof v.score100 === 'number') scores.push(v.score100); });
     peers = scores.length;
     if (peers > 1) { const atOrBelow = scores.filter(s => s <= p.score100).length; percentile = Math.max(1, Math.round(100 * atOrBelow / peers)); }
   } catch (e) { console.warn('leaderboard read', e); }
@@ -20557,11 +20995,14 @@ async function loadUsageDashboard() {
   if (!currentUser || currentUser.role !== 'admin') return;
 
   try {
-    // Load all user profiles (students only)
+    // Load all user profiles (students only). Accounts retired by a password
+    // reset are excluded everywhere — their progress lives on the new uid.
     const profilesSnap = await getDocs(collection(db, 'userProfiles'));
     const profiles = {};
+    const retiredUids = new Set();
     profilesSnap.forEach(d => {
       const p = d.data();
+      if (p.supersededBy || p.retired) { retiredUids.add(p.uid || d.id); return; }
       if (p.role !== 'admin') profiles[p.uid] = p;
     });
 
@@ -20570,7 +21011,7 @@ async function loadUsageDashboard() {
     const allLogins = [];
     loginsSnap.forEach(d => {
       const l = d.data();
-      if (!ADMIN_EMAILS.includes(l.email)) allLogins.push(l);
+      if (!ADMIN_EMAILS.includes(l.email) && !retiredUids.has(l.uid)) allLogins.push(l);
     });
 
     // Sort by timestamp descending
@@ -20585,7 +21026,7 @@ async function loadUsageDashboard() {
     const allAttempts = [];
     attemptsSnap.forEach(d => {
       const a = d.data();
-      allAttempts.push(a);
+      if (!retiredUids.has(a.uid)) allAttempts.push(a);
     });
 
     // Compute per-student stats
@@ -20693,7 +21134,10 @@ async function loadUsageDashboard() {
           <td style="text-align:center;"><span style="background:var(--accent-blue-light);color:var(--accent-blue);padding:2px 10px;border-radius:10px;font-family:'Space Mono',monospace;font-size:0.75rem;font-weight:600;">${s.loginCount}</span></td>
           <td style="text-align:center;"><span style="background:var(--accent-orange-light);color:var(--accent-orange);padding:2px 10px;border-radius:10px;font-family:'Space Mono',monospace;font-size:0.75rem;font-weight:600;">${s.questionsAttempted}</span></td>
           <td style="text-align:center;font-family:'Space Mono',monospace;font-size:0.82rem;font-weight:600;color:${s.totalBlanks > 0 ? 'var(--primary)' : 'var(--text-muted)'};">${avgScore}</td>
-          <td style="text-align:center;"><span class="usage-open-hint">View log&nbsp;›</span></td>
+          <td style="text-align:center;white-space:nowrap;" onclick="event.stopPropagation()">
+            <button class="btn btn-outline" onclick="openResetStudentLogin('${escapeHtml(s.uid)}')" title="Reset this student's password — for when they've forgotten it. Their username and all progress are kept." style="padding:4px 10px;font-size:0.78rem;margin-right:6px;">🔑 Reset</button>
+            <span class="usage-open-hint clickable" onclick="showStudentDetail('${escapeHtml(s.uid)}')" style="cursor:pointer;">View log&nbsp;›</span>
+          </td>
         </tr>`;
       }).join('');
     }
@@ -24830,12 +25274,31 @@ async function rpgRaidHtml() {
 }
 let rpgBoardTab = "month";
 let rpgBoardRows = null;
+// Accounts retired by an admin password reset: their leaderboard docs are
+// deleted where rules allow, but this shared map (written by the admin,
+// readable like the other admin settings docs) hides any that survive.
+let _retiredUidsCache = null;
+async function _getRetiredUids() {
+  if (_retiredUidsCache) return _retiredUidsCache;
+  const owner = (currentUser && currentUser.role === 'admin') ? currentUser.uid : adminUid;
+  const out = new Set();
+  if (owner) {
+    try {
+      const s = await getDoc(doc(db, 'users', owner, 'settings', 'retiredAccounts'));
+      const uids = (s.exists() && s.data().uids) || {};
+      Object.keys(uids).forEach(u => { if (uids[u]) out.add(u); });
+    } catch (e) { console.warn('retired map read', e); }
+  }
+  _retiredUidsCache = out;
+  return out;
+}
 async function rpgFetchLeaderboard(force) {
   if (rpgBoardRows && !force) return rpgBoardRows;
   const rows = [];
   try {
+    const retired = await _getRetiredUids();
     const snap = await getDocs(collection(db, "scienceGameLeaderboard"));
-    snap.forEach(d => { const r = d.data(); if (r && r.uid && r.name) rows.push(r); });
+    snap.forEach(d => { const r = d.data(); if (r && r.uid && r.name && !retired.has(r.uid) && !retired.has(d.id)) rows.push(r); });
   } catch (e) { console.warn("leaderboard load", e); return null; }
   rpgBoardRows = rows;
   return rows;
