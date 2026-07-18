@@ -8894,7 +8894,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.129.0';
+const APP_VERSION = 'v1.129.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -10862,7 +10862,7 @@ async function aiGenerateBlockAnswer(blockId, btn) {
     (block.type === 'answer'
       ? `It is a Claim-Evidence-Reasoning answer. Return ONLY JSON: {"claim":"...","evidence":"...","reasoning":"..."}\n`
       : `Return ONLY JSON: {"answer":"..."}\n`) +
-    `Rules: concise exam-style phrasing a P6 pupil could write; wrap the 3-8 most important science keywords in [[double brackets]] (e.g. [[evaporation]]); plain text only, no markdown.`;
+    `Rules: concise exam-style phrasing a P6 pupil could write; plain text only, no markdown, no [[brackets]] or other markers around keywords.`;
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '🤖 Crafting…'; }
   try {
@@ -10872,7 +10872,9 @@ async function aiGenerateBlockAnswer(blockId, btn) {
     let p = _parseAIJson(raw);
     if (Array.isArray(p)) p = p[0];
     if (!p || typeof p !== 'object') throw new Error('the AI returned an unexpected format — please try again');
-    const toHtml = t => escapeHtml(String(t || '').trim()).replace(/\n+/g, '<br>');
+    // Strip any [[keyword]] marks the AI adds despite the prompt — the teacher
+    // should see clean answer text, never the double-bracket markers.
+    const toHtml = t => escapeHtml(String(t || '').replace(/\[\[|\]\]/g, '').trim()).replace(/\n+/g, '<br>');
     if (block.type === 'answer') {
       if (!String(p.claim || p.evidence || p.reasoning || '').trim()) throw new Error('the AI returned an empty answer — please try again');
       block.claim = toHtml(p.claim);
