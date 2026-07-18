@@ -236,6 +236,26 @@ body {
   font-size: 0.72rem;
   font-family: 'Space Mono', monospace;
 }
+/* PSLE Papers — highlighted in gold so the real-exam material stands out */
+.nav-item.nav-psle {
+  color: #ffd97a;
+  font-weight: 700;
+  background: linear-gradient(90deg, rgba(245,158,11,0.20), rgba(245,158,11,0.05));
+  border: 1px solid rgba(245,158,11,0.45);
+}
+.nav-item.nav-psle svg { color: #fbbf24; }
+.nav-item.nav-psle:hover {
+  background: linear-gradient(90deg, rgba(245,158,11,0.32), rgba(245,158,11,0.12));
+  color: #ffe6a3;
+}
+.nav-item.nav-psle.active {
+  background: linear-gradient(90deg, #b45309, #d97706);
+  border-color: #f59e0b;
+  color: #fff;
+}
+.nav-item.nav-psle.active svg { color: #fff; }
+.nav-psle-star { margin-left: auto; font-size: 0.8rem; color: #fbbf24; }
+.nav-item.nav-psle.active .nav-psle-star { color: #fff; }
 .sidebar-footer {
   padding: 16px 20px;
   border-top: 1px solid rgba(255,255,255,0.08);
@@ -5079,9 +5099,10 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         Teaching Notes
       </div>
-      <div class="nav-item" data-page="papers" onclick="navigateTo('papers')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7"/><path d="M9 11h5"/></svg>
-        Past Papers
+      <div class="nav-item nav-psle" data-page="papers" onclick="navigateTo('papers')" title="Real PSLE Science papers, question by question — analyse, practise and play them">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12.5V17c0 1.66 2.69 3 6 3s6-1.34 6-3v-4.5"/><path d="M22 10v6"/></svg>
+        PSLE Papers
+        <span class="nav-psle-star">★</span>
       </div>
       <div class="nav-section-label admin-only">Schedule</div>
       <div class="nav-item admin-only" data-page="scheduled" onclick="navigateTo('scheduled')">
@@ -5187,7 +5208,7 @@ option {
         <div>
           <div style="display:flex;align-items:center;gap:10px;">
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
-            <button class="btn btn-outline" id="backToPapersBtn" onclick="backToPapers()" style="display:none;padding:6px 12px;font-size:0.85rem;white-space:nowrap;" title="Return to the Past Papers page, right where you left off">&larr; Back to Past Papers</button>
+            <button class="btn btn-outline" id="backToPapersBtn" onclick="backToPapers()" style="display:none;padding:6px 12px;font-size:0.85rem;white-space:nowrap;" title="Return to the PSLE Papers page, right where you left off">&larr; Back to PSLE Papers</button>
             <h2 id="createPageTitle">Create Question</h2>
           </div>
           <div class="subtitle" id="createPageSubtitle">Build a question with blocks. Answers and blanks are optional — every question is marked by AI.</div>
@@ -5316,9 +5337,9 @@ option {
         <div class="form-group">
           <label class="form-label" style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600;">
             <input type="checkbox" id="questionNotInSyllabus" style="width:18px;height:18px;flex:0 0 auto;cursor:pointer;">
-            <span>🚫 Not in syllabus <span style="font-weight:400;color:var(--text-muted);">— hide from every practice mode, but keep it in Past Papers</span></span>
+            <span>🚫 Not in syllabus <span style="font-weight:400;color:var(--text-muted);">— hide from every practice mode, but keep it in PSLE Papers</span></span>
           </label>
-          <div style="font-size:0.8rem;color:var(--text-muted);margin:4px 0 0 27px;line-height:1.5;">For questions on topics no longer in the syllabus (e.g. cell systems). It won't be served in Quick / Topical / Practice mode, but it still shows on the <strong>Past Papers</strong> page (marked <em>Not in syllabus</em>) so students aren't confused about a missing question.</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);margin:4px 0 0 27px;line-height:1.5;">For questions on topics no longer in the syllabus (e.g. cell systems). It won't be served in Quick / Topical / Practice mode, but it still shows on the <strong>PSLE Papers</strong> page (marked <em>Not in syllabus</em>) so students aren't confused about a missing question.</div>
         </div>
 
         <!-- Blocks List -->
@@ -5508,9 +5529,9 @@ option {
         <div>
           <div style="display:flex;align-items:center;gap:10px;">
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
-            <h2>Past Papers</h2>
+            <h2>🎓 PSLE Papers</h2>
           </div>
-          <div class="subtitle">PSLE Science 2021–2023, classified by topic — attach bank questions so students can practise from each paper</div>
+          <div class="subtitle">Real PSLE Science papers (2014–2023), classified by topic — attach bank questions so students can practise from each paper</div>
         </div>
       </div>
       <div class="page-body">
@@ -6336,7 +6357,7 @@ option {
               <button class="rpg-tab active" data-rpgboard="month" type="button">📅 This Month</button>
               <button class="rpg-tab" data-rpgboard="lastmonth" type="button">🗓️ Last Month</button>
               <button class="rpg-tab" data-rpgboard="alltime" type="button">⭐ All-Time</button>
-              <button class="rpg-tab" data-rpgboard="papers" type="button">📄 Past Papers</button>
+              <button class="rpg-tab" data-rpgboard="papers" type="button">🎓 PSLE Papers</button>
               <button class="rpg-tab" data-rpgboard="td" type="button">🧪 Tower Defense</button>
               <button class="rpg-tab" data-rpgboard="raid" type="button">👾 Raiders</button>
               <button class="rpg-tab" data-rpgboard="spire" type="button">🃏 Spire</button>
@@ -8949,7 +8970,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.130.0';
+const APP_VERSION = 'v1.131.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9106,8 +9127,8 @@ function _syncBackToPapersBtn() {
   if (!b) return;
   if (_editReturnPage === 'papers') {
     b.style.display = '';
-    b.innerHTML = '&larr; Back to Past Papers';
-    b.title = 'Return to the Past Papers page, right where you left off';
+    b.innerHTML = '&larr; Back to PSLE Papers';
+    b.title = 'Return to the PSLE Papers page, right where you left off';
   } else if (_editReturnPage === 'vetting') {
     b.style.display = '';
     b.innerHTML = '&larr; Back to Vetting List';
@@ -14641,7 +14662,7 @@ function saveEditToBank() {
 }
 
 function cancelEdit() {
-  const backDest = _editReturnPage === 'papers' ? 'Past Papers' : _editReturnPage === 'vetting' ? 'the vetting list' : 'the question bank';
+  const backDest = _editReturnPage === 'papers' ? 'PSLE Papers' : _editReturnPage === 'vetting' ? 'the vetting list' : 'the question bank';
   showConfirm('Cancel Edit', `Discard changes and go back to ${backDest}?`, () => {
     currentEditingQuestion = null;
     setEditMode(false);
@@ -14802,7 +14823,7 @@ function renderQuestionBank() {
               <span class="qb-tag category">${escapeHtml(qCategory)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
-              ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="Hidden from practice; still shown in Past Papers">🚫 Not in syllabus</span>` : ''}
+              ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="Hidden from practice; still shown in PSLE Papers">🚫 Not in syllabus</span>` : ''}
               ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
             </div>
           </div>
@@ -32383,7 +32404,7 @@ function ppRenderBody(){
   const practiceCard = `
     <div class="pp-card">
       <h3 class="pp-h">Practise the papers</h3>
-      <p class="pp-sub">Do the attached questions right here on the system — the whole set or one year's paper — or load them into a mini-game (MCQ and open-ended). <b>Game bonus: every past-paper question answered inside a game counts ×2 on the Questions and Past Papers leaderboards.</b></p>
+      <p class="pp-sub">Do the attached questions right here on the system — the whole set or one year's paper — or load them into a mini-game (MCQ and open-ended). <b>Game bonus: every past-paper question answered inside a game counts ×2 on the Questions and PSLE Papers leaderboards.</b></p>
       ${practiceRows}
     </div>`;
 
@@ -33060,7 +33081,7 @@ function _ppGameBannerSync(){
         const hdr = page.querySelector('.page-header');
         if (hdr) hdr.insertAdjacentElement('afterend', b); else page.prepend(b);
       }
-      b.innerHTML = `<div style="flex:1;min-width:220px;">🎯 <b>Past-paper mode — ${escapeHtml(_ppGameSel.label)}.</b> This game serves only the ${_ppGameSel.count} attached past-paper question${_ppGameSel.count === 1 ? '' : 's'} (MCQ + open-ended self-check). Every question you answer here counts <b>×2</b> on the Questions and Past Papers leaderboards!</div><button class="btn btn-outline btn-sm" type="button" style="flex:none;" onclick="ppGameExit()">✖ Exit past-paper mode</button>`;
+      b.innerHTML = `<div style="flex:1;min-width:220px;">🎯 <b>Past-paper mode — ${escapeHtml(_ppGameSel.label)}.</b> This game serves only the ${_ppGameSel.count} attached past-paper question${_ppGameSel.count === 1 ? '' : 's'} (MCQ + open-ended self-check). Every question you answer here counts <b>×2</b> on the Questions and PSLE Papers leaderboards!</div><button class="btn btn-outline btn-sm" type="button" style="flex:none;" onclick="ppGameExit()">✖ Exit past-paper mode</button>`;
     } else if (b) b.remove();
   });
 }
