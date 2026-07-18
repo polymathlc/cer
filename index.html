@@ -2918,6 +2918,7 @@ option {
 .vetting-badge.approved { background: var(--primary-light); color: var(--primary); }
 .vetting-badge.rejected { background: var(--accent-red-light); color: var(--accent-red); }
 .vetting-badge.flagged { background: #fee2e2; color: #dc2626; }
+.vetting-added { display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; font-weight: 500; color: var(--text-muted); white-space: nowrap; }
 .vetting-flag-note { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; font-size: 0.78rem; line-height: 1.4; }
 .vetting-flag-note .vfn-comment { margin-top: 4px; color: #7f1d1d; font-style: italic; }
 
@@ -8970,7 +8971,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.132.0';
+const APP_VERSION = 'v1.133.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15106,6 +15107,22 @@ function deleteQuestion(id) {
 // =====================================================================
 // VETTING LIST
 // =====================================================================
+// When a question entered the vetting list: its vettedAt if set (e.g. a bank
+// question flagged back to vetting), otherwise its createdAt. Lets the admin
+// see at a glance which pending questions are recent / still relevant.
+function _vetAddedAt(q) { return (q && (q.vettedAt || q.createdAt)) || ''; }
+// Small "🕓 Added …" stamp for a vetting card. Relative time (e.g. "3h ago"),
+// with the full local date/time on hover.
+function _vetTimeLabel(q) {
+  const iso = _vetAddedAt(q);
+  if (!iso) return '';
+  const rel = _commTimeAgo(iso);
+  if (!rel) return '';
+  let full = iso;
+  try { full = new Date(iso).toLocaleString(); } catch (_) {}
+  return `<div class="vetting-added" title="Added to vetting: ${escapeHtml(full)}">🕓 Added ${escapeHtml(rel)}</div>`;
+}
+
 function renderVettingList() {
   const container = document.getElementById('vettingListGrid');
   // Live "processing" / "failed" placeholders from Rapid add, shown on top.
@@ -15121,7 +15138,17 @@ function renderVettingList() {
     return;
   }
 
-  const qCards = vettingList.map(q => {
+  // Newest additions first, so the most recently added (most relevant to review
+  // now) sit at the top. Falls back to array order when timestamps are missing.
+  const ordered = vettingList
+    .map((q, i) => ({ q, i }))
+    .sort((a, b) => {
+      const ta = Date.parse(_vetAddedAt(a.q)) || 0, tb = Date.parse(_vetAddedAt(b.q)) || 0;
+      return tb - ta || a.i - b.i;
+    })
+    .map(x => x.q);
+
+  const qCards = ordered.map(q => {
     const statusClass = q.status || 'pending';
     const isNew = _rapidJustAdded.has(q.id); // freshly added via Rapid add this session
     const preview = getQuestionPreview(q);
@@ -15140,6 +15167,7 @@ function renderVettingList() {
               ${isNew ? '<span class="qb-tag" style="background:var(--accent-orange-light);color:var(--accent-orange);" title="Just added by Rapid add — review and approve">⚡ Just added</span>' : ''}
               ${q.topicConfidence === 'low' ? '<span class="qb-tag" style="background:#fee2e2;color:#dc2626;" title="AI was unsure of this topic — please check it">⚠ check topic</span>' : q.topicConfidence === 'medium' ? '<span class="qb-tag" style="background:#fef3c7;color:#b45309;" title="AI was fairly sure of this topic — worth a glance">~ topic?</span>' : ''}
               <span class="vetting-badge ${statusClass}">${statusClass.charAt(0).toUpperCase() + statusClass.slice(1)}</span>
+              ${_vetTimeLabel(q)}
             </div>
           </div>
           <div class="qb-card-actions">
@@ -22635,6 +22663,7 @@ async function flagMoveToVetting(flagDocId, questionId) {
     const f = flaggedQuestions.find(x => x._docId === flagDocId);
     q.status = 'flagged';
     if (f) q._flag = _flagInfo(f);
+    q.vettedAt = new Date().toISOString();   // it re-enters vetting now, regardless of when it was first created
     questionBank.splice(qIdx, 1);
     vettingList.unshift(q);
     deleteQuestionDoc(questionId);
