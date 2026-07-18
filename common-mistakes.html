@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Common Mistakes Tracker — Polymath Learning Centre</title>
+<style>
+:root {
+  /* === Surface & Background === */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #FAFAFA;
+  --bg-tertiary: #F3F3F0;
+  --border-subtle: #E8E8E4;
+  --border-medium: #D4D4CF;
+
+  /* === Text === */
+  --text-primary: #1A1A1A;
+  --text-secondary: #5C5C5C;
+  --text-tertiary: #8A8A8A;
+  --text-inverse: #FFFFFF;
+
+  /* === Accent: Science (soft blue) === */
+  --accent-light: #BBDEFB;
+  --accent-base: #64B5F6;
+  --accent-dark: #42A5F5;
+  --accent-bg: #E3F2FD;
+
+  /* === Semantic (wrong / correct) === */
+  --wrong-bg: #FFF5F5;
+  --wrong-border: #FFCDD2;
+  --wrong-text: #C62828;
+  --correct-bg: #F1F8E9;
+  --correct-border: #C8E6C9;
+  --correct-text: #2E7D32;
+
+  /* === Shadows === */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-md: 0 2px 4px rgba(0,0,0,0.05), 0 6px 20px rgba(0,0,0,0.08);
+  --shadow-lg: 0 4px 6px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.1);
+  --shadow-button: 0 1px 2px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-button-hover: 0 2px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.12);
+
+  /* === Spacing === */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+  --space-2xl: 64px;
+
+  /* === Radius === */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* === Typography === */
+  --font-family: 'Century Gothic', CenturyGothic, AppleGothic, sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-md: 1.125rem;
+  --font-size-lg: 1.5rem;
+  --font-size-xl: 2rem;
+  --font-size-2xl: 2.5rem;
+
+  /* === Transitions === */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.25s ease;
+  --transition-slow: 0.4s ease;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { font-size: 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+body {
+  font-family: var(--font-family);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+img { max-width: 100%; display: block; }
+input, button, select, textarea { font-family: inherit; }
+
+/* ===== Header ===== */
+.polymath-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+
+.polymath-logo { height: 58px; width: auto; object-fit: contain; }
+
+.header-actions {
+  position: absolute;
+  right: var(--space-lg);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.print-btn {
+  background: none;
+  border: 1.5px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-base);
+}
+
+.print-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-base);
+  background: var(--accent-bg);
+  box-shadow: var(--shadow-button);
+}
+
+.print-btn svg {
+  width: 20px; height: 20px;
+  stroke: currentColor; fill: none;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+
+.user-chip {
+  display: none;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 6px 12px 6px 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+}
+
+.user-chip.visible { display: flex; }
+
+.user-avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--accent-light);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: var(--font-size-sm);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+
+.user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.user-name {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sign-out-link {
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.sign-out-link:hover { color: var(--wrong-text); background: var(--wrong-bg); }
+
+/* ===== Layout ===== */
+.page-container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--space-xl) var(--space-lg) var(--space-2xl);
+}
+
+.page-title {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+  margin-bottom: var(--space-sm);
+}
+
+.page-subtitle {
+  font-size: var(--font-size-md);
+  font-weight: 400;
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 560px;
+  margin: 0 auto var(--space-xl);
+}
+
+/* ===== Sign-in view ===== */
+.auth-card {
+  max-width: 460px;
+  margin: var(--space-2xl) auto;
+  padding: var(--space-2xl) var(--space-xl);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+}
+
+.auth-emoji { font-size: 2.8rem; margin-bottom: var(--space-md); }
+
+.auth-card h2 {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  margin-bottom: var(--space-sm);
+}
+
+.auth-card p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  margin-bottom: var(--space-xl);
+  line-height: 1.7;
+}
+
+.google-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 13px 30px;
+  background: var(--bg-primary);
+  border: 1.5px solid var(--border-medium);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  box-shadow: var(--shadow-button);
+  transition: all var(--transition-base);
+  min-width: 240px;
+}
+
+.google-btn:hover {
+  border-color: var(--accent-base);
+  background: var(--accent-bg);
+  box-shadow: var(--shadow-button-hover);
+  transform: translateY(-1px);
+}
+
+.google-btn:active { transform: translateY(0.5px); box-shadow: var(--shadow-xs); }
+
+.google-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+.auth-error {
+  display: none;
+  margin-top: var(--space-lg);
+  padding: var(--space-md);
+  background: var(--wrong-bg);
+  border: 1px solid var(--wrong-border);
+  border-radius: var(--radius-md);
+  color: var(--wrong-text);
+  font-size: var(--font-size-sm);
+}
+
+.auth-error.visible { display: block; }
+
+/* ===== Stats row ===== */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+  max-width: 640px;
+  margin: 0 auto var(--space-xl);
+}
+
+.stat-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md) var(--space-lg);
+  text-align: center;
+  box-shadow: var(--shadow-xs);
+}
+
+.stat-value {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: transform var(--transition-fast);
+}
+
+.stat-value.pulse { animation: resultPulse 0.3s ease; }
+
+.stat-label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.stat-mastered .stat-value { color: var(--correct-text); }
+.stat-shaky .stat-value { color: #E65100; }
+
+/* ===== Toolbar ===== */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-xl);
+}
+
+.search-input {
+  flex: 1 1 200px;
+  max-width: 300px;
+  padding: 11px 18px;
+  border: 1.5px solid var(--border-medium);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  background: var(--bg-primary);
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.search-input:focus { border-color: var(--accent-base); box-shadow: 0 0 0 3px var(--accent-bg); }
+
+.topic-select {
+  padding: 11px 16px;
+  border: 1.5px solid var(--border-medium);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.topic-select:focus { border-color: var(--accent-base); }
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: 12px 28px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all var(--transition-base);
+  user-select: none;
+  outline: none;
+}
+
+.btn:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 2px; }
+
+.btn-primary {
+  background: var(--accent-light);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-button);
+}
+.btn-primary:hover { background: var(--accent-base); box-shadow: var(--shadow-button-hover); transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0.5px); box-shadow: var(--shadow-xs); }
+
+.btn-secondary {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1.5px solid var(--border-medium);
+  box-shadow: var(--shadow-xs);
+}
+.btn-secondary:hover {
+  border-color: var(--accent-base);
+  background: var(--accent-bg);
+  box-shadow: var(--shadow-button);
+  transform: translateY(-1px);
+}
+
+.btn-ghost { background: transparent; color: var(--text-secondary); padding: 8px 16px; }
+.btn-ghost:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+
+.btn-sm { padding: 8px 20px; font-size: var(--font-size-sm); }
+.btn-lg { padding: 16px 36px; font-size: var(--font-size-md); }
+
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* ===== Mistake cards ===== */
+.mistake-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.mistake-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg) var(--space-xl);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow var(--transition-base), transform var(--transition-base);
+  animation: fadeInUp 0.4s ease-out both;
+}
+
+.mistake-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+
+.mistake-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.mistake-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.topic-chip {
+  display: inline-block;
+  padding: 3px 12px;
+  background: var(--accent-bg);
+  color: var(--accent-dark);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mastery-dots { display: inline-flex; gap: 4px; align-items: center; }
+
+.mastery-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-medium);
+}
+
+.mastery-dot.filled { background: var(--correct-border); border-color: var(--correct-text); }
+
+.mastery-tag {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--correct-text);
+}
+
+.card-actions { display: flex; gap: var(--space-xs); flex-shrink: 0; }
+
+.icon-btn {
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: all var(--transition-fast);
+}
+
+.icon-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.icon-btn.danger:hover { background: var(--wrong-bg); color: var(--wrong-text); }
+
+.mistake-question {
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  line-height: 1.55;
+  margin-bottom: var(--space-md);
+}
+
+.answer-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.answer-box {
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  line-height: 1.65;
+}
+
+.answer-box .answer-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-sm);
+}
+
+.answer-wrong { background: var(--wrong-bg); border: 1px solid var(--wrong-border); }
+.answer-wrong .answer-label { color: var(--wrong-text); }
+
+.answer-correct { background: var(--correct-bg); border: 1px solid var(--correct-border); }
+.answer-correct .answer-label { color: var(--correct-text); }
+
+.answer-correct strong, .explanation-box strong { color: var(--text-primary); }
+
+.explanation-box {
+  padding: var(--space-md) var(--space-lg);
+  background: var(--accent-bg);
+  border-left: 4px solid var(--accent-base);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.explanation-box .answer-label {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-dark);
+  margin-bottom: var(--space-sm);
+}
+
+/* ===== Empty state ===== */
+.empty-state {
+  text-align: center;
+  padding: var(--space-2xl) var(--space-lg);
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.empty-state .auth-emoji { margin-bottom: var(--space-md); }
+
+.empty-state h3 { font-size: var(--font-size-lg); font-weight: 700; margin-bottom: var(--space-sm); }
+
+.empty-state p { color: var(--text-secondary); margin-bottom: var(--space-lg); line-height: 1.7; }
+
+.empty-state .btn { margin: var(--space-xs); }
+
+.loading-state {
+  text-align: center;
+  padding: var(--space-2xl);
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.spinner {
+  width: 34px; height: 34px;
+  border: 3px solid var(--accent-bg);
+  border-top-color: var(--accent-base);
+  border-radius: 50%;
+  margin: 0 auto var(--space-md);
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== Modal ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26,26,26,0.45);
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-xl) var(--space-md);
+  z-index: 200;
+  overflow-y: auto;
+}
+
+.modal-overlay.visible { display: flex; animation: fadeIn 0.2s ease; }
+
+.modal-card {
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-xl);
+  width: 100%;
+  max-width: 560px;
+  animation: scaleIn 0.25s ease;
+}
+
+.modal-card h3 { font-size: var(--font-size-lg); font-weight: 700; margin-bottom: var(--space-lg); }
+
+.form-group { margin-bottom: var(--space-lg); }
+
+.form-group label {
+  display: block;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-sm);
+}
+
+.form-group input, .form-group textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1.5px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  background: var(--bg-primary);
+  outline: none;
+  transition: all var(--transition-fast);
+  resize: vertical;
+}
+
+.form-group textarea { min-height: 74px; }
+
+.form-group input:focus, .form-group textarea:focus {
+  border-color: var(--accent-base);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+.form-hint { font-size: var(--font-size-xs); color: var(--text-tertiary); margin-top: var(--space-xs); }
+
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-md);
+  margin-top: var(--space-xl);
+}
+
+/* ===== Practice mode ===== */
+.practice-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-secondary);
+  z-index: 150;
+  display: none;
+  overflow-y: auto;
+}
+
+.practice-overlay.visible { display: block; animation: fadeIn 0.25s ease; }
+
+.practice-container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: var(--space-xl) var(--space-lg) var(--space-2xl);
+}
+
+.practice-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-lg);
+}
+
+.practice-progress-text {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: var(--space-xl);
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent-base);
+  border-radius: var(--radius-full);
+  transition: width 0.4s ease;
+}
+
+.practice-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl);
+  box-shadow: var(--shadow-md);
+  animation: scaleIn 0.3s ease;
+}
+
+.practice-topic { margin-bottom: var(--space-md); }
+
+.practice-question {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  line-height: 1.5;
+  margin-bottom: var(--space-lg);
+}
+
+.practice-prompt {
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  margin-bottom: var(--space-lg);
+  line-height: 1.7;
+}
+
+.practice-reveal { display: none; }
+.practice-reveal.visible { display: block; animation: fadeInUp 0.35s ease; }
+
+.practice-rate-row {
+  display: none;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+.practice-rate-row.visible { display: grid; animation: fadeInUp 0.35s ease 0.15s both; }
+
+.rate-btn {
+  padding: 14px 20px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  border: 1.5px solid;
+}
+
+.rate-btn-got {
+  background: var(--correct-bg);
+  border-color: var(--correct-border);
+  color: var(--correct-text);
+}
+.rate-btn-got:hover { background: var(--correct-border); transform: translateY(-1px); box-shadow: var(--shadow-button); }
+
+.rate-btn-shaky {
+  background: var(--wrong-bg);
+  border-color: var(--wrong-border);
+  color: var(--wrong-text);
+}
+.rate-btn-shaky:hover { background: var(--wrong-border); transform: translateY(-1px); box-shadow: var(--shadow-button); }
+
+.practice-done {
+  text-align: center;
+  padding: var(--space-2xl) var(--space-lg);
+  animation: scaleIn 0.3s ease;
+}
+
+.practice-done h2 { font-size: var(--font-size-xl); font-weight: 700; margin-bottom: var(--space-md); }
+
+.practice-done p { color: var(--text-secondary); margin-bottom: var(--space-xl); line-height: 1.7; }
+
+.practice-score {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  color: var(--accent-dark);
+  margin-bottom: var(--space-md);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== Toast ===== */
+.toast {
+  position: fixed;
+  bottom: var(--space-lg);
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: var(--text-primary);
+  color: var(--text-inverse);
+  padding: 12px 24px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 300;
+  pointer-events: none;
+}
+
+.toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ===== Version badge (admin only) ===== */
+.version-badge {
+  display: none;
+  text-align: center;
+  margin-top: var(--space-2xl);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  letter-spacing: 0.05em;
+}
+
+.version-badge.visible { display: block; }
+
+/* ===== Animations ===== */
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes resultPulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
+@keyframes confettiFall {
+  0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+
+.confetti-piece {
+  position: fixed;
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  top: -10px;
+  animation: confettiFall 2.5s ease-in forwards;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+.animate-in { animation: fadeInUp 0.5s ease-out both; }
+
+/* ===== Responsive ===== */
+@media (max-width: 600px) {
+  .answer-pair { grid-template-columns: 1fr; }
+  .stats-row { grid-template-columns: repeat(3, 1fr); gap: var(--space-sm); }
+  .stat-card { padding: var(--space-sm) var(--space-xs); }
+  .stat-value { font-size: var(--font-size-lg); }
+  .mistake-card { padding: var(--space-lg); }
+  .user-name { display: none; }
+  .practice-rate-row { grid-template-columns: 1fr; }
+  .header-actions { right: var(--space-sm); }
+}
+
+/* ===== Print ===== */
+@media print {
+  @page { size: A4; margin: 15mm 20mm; }
+
+  .print-btn, .header-actions, .toolbar, .card-actions, .practice-overlay,
+  .modal-overlay, .toast, .confetti-piece, .version-badge, .empty-state .btn {
+    display: none !important;
+  }
+
+  body { background: white !important; color: #1A1A1A !important; font-size: 11pt; line-height: 1.6; }
+
+  .polymath-header { border-bottom: 1px solid #ccc !important; padding: 8mm 0 !important; }
+  .polymath-logo { height: 48px !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+
+  .page-container { max-width: 100% !important; padding: 0 !important; }
+
+  .mistake-card, .stat-card {
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+    background: white !important;
+    page-break-inside: avoid;
+  }
+
+  .mistake-card:hover { transform: none !important; }
+
+  .answer-wrong { background: #fff5f5 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .answer-correct { background: #f1f8e9 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .explanation-box { background: #eef6fd !important; border-left: 3px solid #42A5F5 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .topic-chip { background: #e3f2fd !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+
+  h1, h2, h3 { page-break-after: avoid; }
+
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="polymath-header">
+  <img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj"
+       alt="Polymath Learning Centre"
+       class="polymath-logo" />
+  <div class="header-actions">
+    <div class="user-chip" id="userChip">
+      <div class="user-avatar" id="userAvatar"></div>
+      <span class="user-name" id="userName"></span>
+      <button class="sign-out-link" id="signOutBtn" title="Sign out">Sign out</button>
+    </div>
+    <button class="print-btn" onclick="window.print()" title="Print / Save as PDF" aria-label="Print this page">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6 9V2h12v7"/>
+        <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+        <rect x="6" y="14" width="12" height="8"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main class="page-container">
+  <h1 class="page-title">Common Mistakes Tracker</h1>
+  <p class="page-subtitle">Keep a record of the mistakes you make in science, learn the correct answers, and practise until you never make them again.</p>
+
+  <!-- ===== Sign-in view ===== -->
+  <section id="authView">
+    <div class="auth-card animate-in">
+      <div class="auth-emoji">📒</div>
+      <h2>Your personal mistake journal</h2>
+      <p>Sign in with Google so your mistakes are saved safely in the cloud — you can come back to them from any device.</p>
+      <button class="google-btn" id="googleSignInBtn">
+        <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Sign in with Google
+      </button>
+      <div class="auth-error" id="authError"></div>
+    </div>
+  </section>
+
+  <!-- ===== Main app view ===== -->
+  <section id="appView" style="display:none">
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-value" id="statTotal">0</div>
+        <div class="stat-label">Mistakes logged</div>
+      </div>
+      <div class="stat-card stat-mastered">
+        <div class="stat-value" id="statMastered">0</div>
+        <div class="stat-label">Mastered</div>
+      </div>
+      <div class="stat-card stat-shaky">
+        <div class="stat-value" id="statShaky">0</div>
+        <div class="stat-label">Still practising</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <input type="text" class="search-input" id="searchInput" placeholder="Search your mistakes…">
+      <select class="topic-select" id="topicFilter">
+        <option value="">All topics</option>
+      </select>
+      <button class="btn btn-secondary btn-sm" id="addMistakeBtn">＋ Add mistake</button>
+      <button class="btn btn-primary btn-sm" id="startPracticeBtn">▶ Practise</button>
+    </div>
+
+    <div class="loading-state" id="loadingState">
+      <div class="spinner"></div>
+      Loading your mistakes…
+    </div>
+
+    <div class="empty-state" id="emptyState" style="display:none">
+      <div class="auth-emoji">🌱</div>
+      <h3>No mistakes here yet — that's a fresh start!</h3>
+      <p>Add your first mistake with the button above, or load the six classic science mistakes to see how the journal works.</p>
+      <button class="btn btn-primary" id="seedBtn">Load the 6 starter mistakes</button>
+    </div>
+
+    <div class="mistake-list" id="mistakeList"></div>
+
+    <div class="version-badge" id="versionBadge"></div>
+  </section>
+</main>
+
+<!-- ===== Add / Edit modal ===== -->
+<div class="modal-overlay" id="mistakeModal">
+  <div class="modal-card">
+    <h3 id="modalTitle">Add a mistake</h3>
+    <form id="mistakeForm">
+      <div class="form-group">
+        <label for="fieldTopic">Topic</label>
+        <input type="text" id="fieldTopic" list="topicSuggestions" placeholder="e.g. Magnets, Materials, Diversity" required>
+        <datalist id="topicSuggestions"></datalist>
+      </div>
+      <div class="form-group">
+        <label for="fieldQuestion">Question</label>
+        <textarea id="fieldQuestion" placeholder="What was the question?" required></textarea>
+      </div>
+      <div class="form-group">
+        <label for="fieldWrong">Wrong answer (what you wrote)</label>
+        <textarea id="fieldWrong" placeholder="The answer that lost you the marks" required></textarea>
+      </div>
+      <div class="form-group">
+        <label for="fieldCorrect">Correct answer</label>
+        <textarea id="fieldCorrect" placeholder="The answer that earns full marks" required></textarea>
+        <div class="form-hint">Tip: wrap key words in **double asterisks** to make them bold.</div>
+      </div>
+      <div class="form-group">
+        <label for="fieldExplanation">Explanation — why the wrong answer is wrong</label>
+        <textarea id="fieldExplanation" placeholder="What should you remember next time?" required></textarea>
+      </div>
+      <div class="modal-buttons">
+        <button type="button" class="btn btn-ghost" id="cancelModalBtn">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="saveMistakeBtn">Save mistake</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== Practice overlay ===== -->
+<div class="practice-overlay" id="practiceOverlay">
+  <div class="practice-container">
+    <div class="practice-top">
+      <span class="practice-progress-text" id="practiceProgressText">1 / 6</span>
+      <button class="btn btn-ghost btn-sm" id="exitPracticeBtn">✕ Exit practice</button>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="practiceProgressFill"></div></div>
+
+    <div id="practiceCardArea"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script>
+'use strict';
+
+/* =====================================================
+   Common Mistakes Tracker — Polymath Learning Centre
+   ===================================================== */
+
+var APP_VERSION = 'v1.0.0';
+var ADMIN_EMAIL = 'chungzhikai@gmail.com';
+var MASTERY_TARGET = 3; // consecutive "I remembered" ratings to count as mastered
+
+firebase.initializeApp({
+  apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
+  authDomain: "mathgen--app.firebaseapp.com",
+  projectId: "mathgen--app",
+  storageBucket: "mathgen--app.firebasestorage.app",
+  messagingSenderId: "165654161198",
+  appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf",
+  measurementId: "G-0MWZFG211D"
+});
+
+var auth = firebase.auth();
+var db = firebase.firestore();
+
+var currentUser = null;
+var mistakes = [];           // live array of {id, ...data}
+var unsubscribeMistakes = null;
+var editingMistakeId = null;
+
+/* ---------- Starter mistakes (from the Common Mistakes table) ---------- */
+var STARTER_MISTAKES = [
+  {
+    topic: 'Diversity',
+    question: 'State a difference between a chicken and a lion.',
+    wrongAnswer: 'The chicken is a bird while the lion is a mammal.',
+    correctAnswer: 'The chicken has **feathers** as outer body covering while the lion has **fur** as outer body covering.',
+    explanation: 'Do not use classification to compare living things. Instead, use **characteristics**.'
+  },
+  {
+    topic: 'Diversity',
+    question: 'State a characteristic that helps you identify an insect.',
+    wrongAnswer: 'Insects lay eggs.',
+    correctAnswer: 'Insects have **6 legs**.',
+    explanation: 'Use special characteristics of the group of living things and not a common one.'
+  },
+  {
+    topic: 'Materials',
+    question: 'Which of the tested materials is most suitable to be used to make a rain coat?',
+    wrongAnswer: 'Material A as it absorbed the least amount of water.',
+    correctAnswer: 'Material A as it **absorbed no water**, hence it is **waterproof**.',
+    explanation: 'Being waterproof means that you do not absorb any water, rather than absorbed the least amount of water.'
+  },
+  {
+    topic: 'Magnets',
+    question: 'Why did the magnets move away from each other?',
+    wrongAnswer: 'They repelled.',
+    correctAnswer: 'Their **like-poles are facing** each other, causing them to repel.',
+    explanation: 'Whenever you mention attraction or repulsion, you have to mention their unlike poles or like poles are facing each other.'
+  },
+  {
+    topic: 'Magnets',
+    question: 'Why did the magnet move towards steel door?',
+    wrongAnswer: 'The steel door attracted the magnet.',
+    correctAnswer: 'The **magnet attracted** the **steel door**, pulling itself over to the steel door.',
+    explanation: 'Do not mention a magnetic material attracting a magnet as it is the magnet that does the attraction.'
+  },
+  {
+    topic: 'Magnets',
+    question: 'State a property that the rod must have to be made into an electromagnet.',
+    wrongAnswer: 'The rod must be an electrical conductor.',
+    correctAnswer: 'The rod must be made of a **magnetic** material.',
+    explanation: 'Electric current does not flow through the rod itself, so it is not electrical conductivity that makes it an electromagnet.'
+  }
+];
+
+/* ---------- Helpers ---------- */
+
+function escapeHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Escapes HTML, then turns **text** into <strong>text</strong>
+function formatRichText(str) {
+  return escapeHtml(str).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+
+function showToast(message) {
+  var toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('visible');
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(function () { toast.classList.remove('visible'); }, 2400);
+}
+
+function launchConfetti(count) {
+  var colors = ['#BBDEFB', '#64B5F6', '#C8E6C9', '#FFE0B2', '#D1C4E9'];
+  for (var i = 0; i < (count || 30); i++) {
+    var el = document.createElement('div');
+    el.className = 'confetti-piece';
+    el.style.left = Math.random() * 100 + 'vw';
+    el.style.background = colors[Math.floor(Math.random() * colors.length)];
+    el.style.animationDelay = Math.random() * 0.5 + 's';
+    el.style.animationDuration = (2 + Math.random() * 1.5) + 's';
+    document.body.appendChild(el);
+    (function (node) { setTimeout(function () { node.remove(); }, 4000); })(el);
+  }
+}
+
+function streakOf(mistake) {
+  return mistake.streak || 0;
+}
+
+function isMastered(mistake) {
+  return streakOf(mistake) >= MASTERY_TARGET;
+}
+
+function mistakesCollection() {
+  return db.collection('commonMistakes').doc(currentUser.uid).collection('mistakes');
+}
+
+/* ---------- Auth ---------- */
+
+document.getElementById('googleSignInBtn').addEventListener('click', function () {
+  var provider = new firebase.auth.GoogleAuthProvider();
+  var errorBox = document.getElementById('authError');
+  errorBox.classList.remove('visible');
+  auth.signInWithPopup(provider).catch(function (err) {
+    // Popup blockers / embedded browsers: fall back to redirect flow
+    if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user' ||
+                err.code === 'auth/cancelled-popup-request' || err.code === 'auth/operation-not-supported-in-this-environment')) {
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') return;
+      auth.signInWithRedirect(provider).catch(function (redirectErr) {
+        errorBox.textContent = 'Sign-in failed: ' + redirectErr.message;
+        errorBox.classList.add('visible');
+      });
+      return;
+    }
+    errorBox.textContent = 'Sign-in failed: ' + (err && err.message ? err.message : 'unknown error');
+    errorBox.classList.add('visible');
+  });
+});
+
+document.getElementById('signOutBtn').addEventListener('click', function () {
+  auth.signOut();
+});
+
+auth.onAuthStateChanged(function (user) {
+  currentUser = user;
+  var authView = document.getElementById('authView');
+  var appView = document.getElementById('appView');
+  var userChip = document.getElementById('userChip');
+
+  if (unsubscribeMistakes) { unsubscribeMistakes(); unsubscribeMistakes = null; }
+
+  if (user) {
+    authView.style.display = 'none';
+    appView.style.display = 'block';
+    userChip.classList.add('visible');
+    document.getElementById('userName').textContent = user.displayName || user.email;
+
+    var avatar = document.getElementById('userAvatar');
+    if (user.photoURL) {
+      avatar.innerHTML = '<img src="' + escapeHtml(user.photoURL) + '" alt="" referrerpolicy="no-referrer">';
+    } else {
+      avatar.textContent = (user.displayName || user.email || '?').charAt(0).toUpperCase();
+    }
+
+    var versionBadge = document.getElementById('versionBadge');
+    versionBadge.textContent = 'Common Mistakes Tracker ' + APP_VERSION;
+    versionBadge.classList.toggle('visible', user.email === ADMIN_EMAIL);
+
+    subscribeToMistakes();
+  } else {
+    authView.style.display = 'block';
+    appView.style.display = 'none';
+    userChip.classList.remove('visible');
+    mistakes = [];
+  }
+});
+
+/* ---------- Firestore live sync ---------- */
+
+function subscribeToMistakes() {
+  document.getElementById('loadingState').style.display = 'block';
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('mistakeList').innerHTML = '';
+
+  unsubscribeMistakes = mistakesCollection()
+    .orderBy('createdAt', 'asc')
+    .onSnapshot(function (snapshot) {
+      mistakes = [];
+      snapshot.forEach(function (doc) {
+        var data = doc.data();
+        data.id = doc.id;
+        mistakes.push(data);
+      });
+      document.getElementById('loadingState').style.display = 'none';
+      renderTopicOptions();
+      renderMistakes();
+      renderStats();
+    }, function (err) {
+      document.getElementById('loadingState').style.display = 'none';
+      showToast('Could not load your mistakes: ' + err.message);
+    });
+}
+
+/* ---------- Rendering ---------- */
+
+function getFilteredMistakes() {
+  var query = document.getElementById('searchInput').value.trim().toLowerCase();
+  var topic = document.getElementById('topicFilter').value;
+
+  return mistakes.filter(function (m) {
+    if (topic && (m.topic || '') !== topic) return false;
+    if (!query) return true;
+    var haystack = [m.topic, m.question, m.wrongAnswer, m.correctAnswer, m.explanation].join(' ').toLowerCase();
+    return haystack.indexOf(query) !== -1;
+  });
+}
+
+function renderTopicOptions() {
+  var topics = [];
+  mistakes.forEach(function (m) {
+    if (m.topic && topics.indexOf(m.topic) === -1) topics.push(m.topic);
+  });
+  topics.sort();
+
+  var filter = document.getElementById('topicFilter');
+  var previous = filter.value;
+  filter.innerHTML = '<option value="">All topics</option>';
+  var datalist = document.getElementById('topicSuggestions');
+  datalist.innerHTML = '';
+
+  topics.forEach(function (topic) {
+    var option = document.createElement('option');
+    option.value = topic;
+    option.textContent = topic;
+    filter.appendChild(option);
+    datalist.appendChild(option.cloneNode(true));
+  });
+  if (topics.indexOf(previous) !== -1) filter.value = previous;
+}
+
+function masteryDotsHtml(mistake) {
+  var html = '<span class="mastery-dots" title="Consecutive correct recalls (' + MASTERY_TARGET + ' = mastered)">';
+  for (var i = 0; i < MASTERY_TARGET; i++) {
+    html += '<span class="mastery-dot' + (i < streakOf(mistake) ? ' filled' : '') + '"></span>';
+  }
+  html += '</span>';
+  if (isMastered(mistake)) html += '<span class="mastery-tag">✓ Mastered</span>';
+  return html;
+}
+
+function renderMistakes() {
+  var list = document.getElementById('mistakeList');
+  var emptyState = document.getElementById('emptyState');
+  var filtered = getFilteredMistakes();
+
+  if (mistakes.length === 0) {
+    emptyState.style.display = 'block';
+    list.innerHTML = '';
+    return;
+  }
+  emptyState.style.display = 'none';
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="loading-state">Nothing matches your search.</div>';
+    return;
+  }
+
+  var html = '';
+  filtered.forEach(function (m, index) {
+    html +=
+      '<article class="mistake-card" style="animation-delay:' + Math.min(index * 0.06, 0.4) + 's">' +
+        '<div class="mistake-card-top">' +
+          '<div class="mistake-meta">' +
+            '<span class="topic-chip">' + escapeHtml(m.topic || 'General') + '</span>' +
+            masteryDotsHtml(m) +
+          '</div>' +
+          '<div class="card-actions">' +
+            '<button class="icon-btn" title="Edit" onclick="openEditModal(\'' + m.id + '\')">✏️</button>' +
+            '<button class="icon-btn danger" title="Delete" onclick="deleteMistake(\'' + m.id + '\')">🗑️</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="mistake-question">' + formatRichText(m.question) + '</div>' +
+        '<div class="answer-pair">' +
+          '<div class="answer-box answer-wrong">' +
+            '<div class="answer-label">✗ Wrong answer</div>' +
+            formatRichText(m.wrongAnswer) +
+          '</div>' +
+          '<div class="answer-box answer-correct">' +
+            '<div class="answer-label">✓ Correct answer</div>' +
+            formatRichText(m.correctAnswer) +
+          '</div>' +
+        '</div>' +
+        '<div class="explanation-box">' +
+          '<div class="answer-label">Why</div>' +
+          formatRichText(m.explanation) +
+        '</div>' +
+      '</article>';
+  });
+  list.innerHTML = html;
+}
+
+function renderStats() {
+  var mastered = mistakes.filter(isMastered).length;
+  setStat('statTotal', mistakes.length);
+  setStat('statMastered', mastered);
+  setStat('statShaky', mistakes.length - mastered);
+}
+
+function setStat(id, value) {
+  var el = document.getElementById(id);
+  if (el.textContent !== String(value)) {
+    el.textContent = value;
+    el.classList.remove('pulse');
+    void el.offsetWidth;
+    el.classList.add('pulse');
+  }
+}
+
+document.getElementById('searchInput').addEventListener('input', renderMistakes);
+document.getElementById('topicFilter').addEventListener('change', renderMistakes);
+
+/* ---------- Add / Edit / Delete ---------- */
+
+function openAddModal() {
+  editingMistakeId = null;
+  document.getElementById('modalTitle').textContent = 'Add a mistake';
+  document.getElementById('mistakeForm').reset();
+  document.getElementById('mistakeModal').classList.add('visible');
+  document.getElementById('fieldTopic').focus();
+}
+
+function openEditModal(id) {
+  var mistake = mistakes.find(function (m) { return m.id === id; });
+  if (!mistake) return;
+  editingMistakeId = id;
+  document.getElementById('modalTitle').textContent = 'Edit mistake';
+  document.getElementById('fieldTopic').value = mistake.topic || '';
+  document.getElementById('fieldQuestion').value = mistake.question || '';
+  document.getElementById('fieldWrong').value = mistake.wrongAnswer || '';
+  document.getElementById('fieldCorrect').value = mistake.correctAnswer || '';
+  document.getElementById('fieldExplanation').value = mistake.explanation || '';
+  document.getElementById('mistakeModal').classList.add('visible');
+}
+
+function closeModal() {
+  document.getElementById('mistakeModal').classList.remove('visible');
+  editingMistakeId = null;
+}
+
+document.getElementById('addMistakeBtn').addEventListener('click', openAddModal);
+document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+document.getElementById('mistakeModal').addEventListener('click', function (e) {
+  if (e.target === this) closeModal();
+});
+
+document.getElementById('mistakeForm').addEventListener('submit', function (e) {
+  e.preventDefault();
+  if (!currentUser) return;
+
+  var payload = {
+    topic: document.getElementById('fieldTopic').value.trim(),
+    question: document.getElementById('fieldQuestion').value.trim(),
+    wrongAnswer: document.getElementById('fieldWrong').value.trim(),
+    correctAnswer: document.getElementById('fieldCorrect').value.trim(),
+    explanation: document.getElementById('fieldExplanation').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  var saveBtn = document.getElementById('saveMistakeBtn');
+  saveBtn.disabled = true;
+
+  var operation;
+  if (editingMistakeId) {
+    operation = mistakesCollection().doc(editingMistakeId).update(payload);
+  } else {
+    payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    payload.streak = 0;
+    payload.timesReviewed = 0;
+    payload.timesGot = 0;
+    operation = mistakesCollection().add(payload);
+  }
+
+  operation.then(function () {
+    closeModal();
+    showToast(editingMistakeId ? 'Mistake updated' : 'Mistake saved to the cloud ✓');
+  }).catch(function (err) {
+    showToast('Save failed: ' + err.message);
+  }).finally(function () {
+    saveBtn.disabled = false;
+  });
+});
+
+function deleteMistake(id) {
+  var mistake = mistakes.find(function (m) { return m.id === id; });
+  if (!mistake) return;
+  var ok = window.confirm('Delete this mistake?\n\n“' + mistake.question + '”');
+  if (!ok) return;
+  mistakesCollection().doc(id).delete().then(function () {
+    showToast('Mistake deleted');
+  }).catch(function (err) {
+    showToast('Delete failed: ' + err.message);
+  });
+}
+
+/* ---------- Seed starter mistakes ---------- */
+
+document.getElementById('seedBtn').addEventListener('click', function () {
+  if (!currentUser) return;
+  var seedBtn = document.getElementById('seedBtn');
+  seedBtn.disabled = true;
+  seedBtn.textContent = 'Loading…';
+
+  var batch = db.batch();
+  STARTER_MISTAKES.forEach(function (starter, index) {
+    var ref = mistakesCollection().doc();
+    batch.set(ref, {
+      topic: starter.topic,
+      question: starter.question,
+      wrongAnswer: starter.wrongAnswer,
+      correctAnswer: starter.correctAnswer,
+      explanation: starter.explanation,
+      streak: 0,
+      timesReviewed: 0,
+      timesGot: 0,
+      seedIndex: index,
+      createdAt: firebase.firestore.Timestamp.fromMillis(Date.now() + index) // preserve order
+    });
+  });
+
+  batch.commit().then(function () {
+    showToast('6 starter mistakes loaded ✓');
+  }).catch(function (err) {
+    showToast('Could not load starters: ' + err.message);
+  }).finally(function () {
+    seedBtn.disabled = false;
+    seedBtn.textContent = 'Load the 6 starter mistakes';
+  });
+});
+
+/* ---------- Practice mode ---------- */
+
+var practiceQueue = [];
+var practiceIndex = 0;
+var practiceGotCount = 0;
+
+document.getElementById('startPracticeBtn').addEventListener('click', startPractice);
+document.getElementById('exitPracticeBtn').addEventListener('click', exitPractice);
+
+function startPractice() {
+  var pool = getFilteredMistakes();
+  if (pool.length === 0) {
+    showToast(mistakes.length === 0 ? 'Add some mistakes first!' : 'No mistakes match your current filter.');
+    return;
+  }
+
+  // Weakest first: sort by streak ascending, shuffle within equal streaks
+  practiceQueue = pool.slice().sort(function (a, b) {
+    var diff = streakOf(a) - streakOf(b);
+    return diff !== 0 ? diff : Math.random() - 0.5;
+  });
+  practiceIndex = 0;
+  practiceGotCount = 0;
+
+  document.getElementById('practiceOverlay').classList.add('visible');
+  document.body.style.overflow = 'hidden';
+  renderPracticeCard();
+}
+
+function exitPractice() {
+  document.getElementById('practiceOverlay').classList.remove('visible');
+  document.body.style.overflow = '';
+}
+
+function renderPracticeCard() {
+  var area = document.getElementById('practiceCardArea');
+  var total = practiceQueue.length;
+
+  document.getElementById('practiceProgressText').textContent =
+    Math.min(practiceIndex + 1, total) + ' / ' + total;
+  document.getElementById('practiceProgressFill').style.width =
+    (practiceIndex / total * 100) + '%';
+
+  if (practiceIndex >= total) {
+    finishPractice();
+    return;
+  }
+
+  var mistake = practiceQueue[practiceIndex];
+  area.innerHTML =
+    '<div class="practice-card">' +
+      '<div class="practice-topic"><span class="topic-chip">' + escapeHtml(mistake.topic || 'General') + '</span></div>' +
+      '<div class="practice-question">' + formatRichText(mistake.question) + '</div>' +
+      '<p class="practice-prompt">Say your answer out loud or in your head — the full sentence, the way you would write it in an exam. Then reveal the answer.</p>' +
+      '<button class="btn btn-primary btn-lg" id="revealBtn">Show the answer</button>' +
+      '<div class="practice-reveal" id="practiceReveal">' +
+        '<div class="answer-pair" style="margin-top:var(--space-lg)">' +
+          '<div class="answer-box answer-wrong">' +
+            '<div class="answer-label">✗ The old mistake</div>' +
+            formatRichText(mistake.wrongAnswer) +
+          '</div>' +
+          '<div class="answer-box answer-correct">' +
+            '<div class="answer-label">✓ Correct answer</div>' +
+            formatRichText(mistake.correctAnswer) +
+          '</div>' +
+        '</div>' +
+        '<div class="explanation-box">' +
+          '<div class="answer-label">Why</div>' +
+          formatRichText(mistake.explanation) +
+        '</div>' +
+      '</div>' +
+      '<div class="practice-rate-row" id="practiceRateRow">' +
+        '<button class="rate-btn rate-btn-got" id="rateGotBtn">✓ I remembered it</button>' +
+        '<button class="rate-btn rate-btn-shaky" id="rateShakyBtn">✗ Still shaky</button>' +
+      '</div>' +
+    '</div>';
+
+  document.getElementById('revealBtn').addEventListener('click', function () {
+    this.style.display = 'none';
+    document.getElementById('practiceReveal').classList.add('visible');
+    document.getElementById('practiceRateRow').classList.add('visible');
+  });
+
+  document.getElementById('rateGotBtn').addEventListener('click', function () { rateCurrentMistake(true); });
+  document.getElementById('rateShakyBtn').addEventListener('click', function () { rateCurrentMistake(false); });
+}
+
+function rateCurrentMistake(remembered) {
+  var mistake = practiceQueue[practiceIndex];
+  var previousStreak = streakOf(mistake);
+  var newStreak = remembered ? previousStreak + 1 : 0;
+
+  // Optimistic local update so stats/dots refresh even before the snapshot returns
+  mistake.streak = newStreak;
+  if (remembered) practiceGotCount++;
+
+  mistakesCollection().doc(mistake.id).update({
+    streak: newStreak,
+    timesReviewed: firebase.firestore.FieldValue.increment(1),
+    timesGot: firebase.firestore.FieldValue.increment(remembered ? 1 : 0),
+    lastReviewedAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(function (err) {
+    showToast('Could not save progress: ' + err.message);
+  });
+
+  if (remembered && newStreak === MASTERY_TARGET && previousStreak === MASTERY_TARGET - 1) {
+    launchConfetti(25);
+    showToast('Mastered! 🎉');
+  }
+
+  practiceIndex++;
+  renderPracticeCard();
+}
+
+function finishPractice() {
+  var total = practiceQueue.length;
+  document.getElementById('practiceProgressFill').style.width = '100%';
+  var area = document.getElementById('practiceCardArea');
+  var allGot = practiceGotCount === total;
+
+  area.innerHTML =
+    '<div class="practice-done">' +
+      '<div class="auth-emoji">' + (allGot ? '🏆' : '💪') + '</div>' +
+      '<h2>' + (allGot ? 'Perfect round!' : 'Good work!') + '</h2>' +
+      '<div class="practice-score">' + practiceGotCount + ' / ' + total + '</div>' +
+      '<p>' + (allGot
+        ? 'You remembered every single correct answer. Keep the streaks going — three in a row makes a mistake “mastered”.'
+        : 'The ones you marked “still shaky” will come first next time you practise. Little and often beats cramming!') + '</p>' +
+      '<button class="btn btn-primary btn-lg" id="practiceAgainBtn">Practise again</button> ' +
+      '<button class="btn btn-secondary btn-lg" id="practiceDoneBtn">Back to my journal</button>' +
+    '</div>';
+
+  if (allGot) launchConfetti(40);
+
+  document.getElementById('practiceAgainBtn').addEventListener('click', startPractice);
+  document.getElementById('practiceDoneBtn').addEventListener('click', exitPractice);
+}
+
+/* ---------- Expose handlers used by inline onclick ---------- */
+window.openEditModal = openEditModal;
+window.deleteMistake = deleteMistake;
+
+/* ---------- Keyboard shortcuts ---------- */
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') {
+    if (document.getElementById('mistakeModal').classList.contains('visible')) closeModal();
+    else if (document.getElementById('practiceOverlay').classList.contains('visible')) exitPractice();
+  }
+});
+</script>
+
+</body>
+</html>
