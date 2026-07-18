@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Annotator — Polymath Learning Centre</title>
+<style>
+  :root {
+    --bg: #FFFFFF;
+    --bg-viewer: #F3F2F0;
+    --ink: #1A1A1A;
+    --ink-soft: #55554F;
+    --ink-faint: #8A8A84;
+    --accent: #FFE0B2;
+    --accent-strong: #FFCC80;
+    --accent-deep: #E8A54B;
+    --line: #ECECEA;
+    --danger: #E53935;
+    --ok: #43A047;
+    --radius: 14px;
+    --radius-sm: 10px;
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-btn: 0 1px 2px rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-btn-hover: 0 2px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.12);
+    --shadow-modal: 0 4px 6px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.1);
+    --font: 'Century Gothic', CenturyGothic, AppleGothic, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font);
+    color: var(--ink);
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ---------- Header ---------- */
+  .polymath-header {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 10px 22px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
+    flex: 0 0 auto;
+  }
+  .polymath-logo { height: 46px; display: block; }
+  .headerTitle { font-size: 1.15rem; font-weight: bold; letter-spacing: 0.01em; }
+  .headerSub { font-size: 0.78rem; color: var(--ink-faint); margin-top: 2px; }
+  .versionTag { font-size: 0.7rem; color: var(--ink-faint); margin-left: 4px; font-weight: normal; }
+  .headerSpacer { flex: 1; }
+  .authArea { display: flex; align-items: center; gap: 12px; }
+  .authAvatar { width: 34px; height: 34px; border-radius: 50%; box-shadow: var(--shadow-btn); }
+  .authInfo { text-align: right; line-height: 1.35; }
+  .authName { font-size: 0.85rem; font-weight: bold; }
+  .authRole { font-size: 0.72rem; color: var(--ink-faint); }
+  .authRole.isAdmin { color: var(--ok); font-weight: bold; }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    font-family: var(--font);
+    font-size: 0.85rem;
+    padding: 9px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+    box-shadow: var(--shadow-btn);
+    transition: box-shadow 0.25s ease, transform 0.25s ease, background 0.2s ease;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .btn:hover { box-shadow: var(--shadow-btn-hover); transform: translateY(-1px); }
+  .btn:active { transform: translateY(0.5px); box-shadow: var(--shadow-btn); }
+  .btn:disabled { opacity: 0.45; cursor: default; transform: none; box-shadow: none; }
+  .btnPrimary { background: var(--accent); border-color: var(--accent-strong); font-weight: bold; }
+  .btnPrimary:hover { background: var(--accent-strong); }
+  .btnSaved { background: #DFF2E0 !important; border-color: #BCE3BE !important; }
+  .btn svg { width: 16px; height: 16px; display: block; }
+
+  /* ---------- Toolbar ---------- */
+  #toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--line);
+    background: #FCFCFB;
+    flex: 0 0 auto;
+  }
+  .tGroup { display: flex; align-items: center; gap: 5px; }
+  .tSep { width: 1px; height: 26px; background: var(--line); margin: 0 6px; }
+  .toolBtn {
+    width: 38px; height: 38px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    position: relative;
+  }
+  .toolBtn svg { width: 19px; height: 19px; display: block; }
+  .toolBtn:hover { background: #F1F0EE; transform: translateY(-1px); }
+  .toolBtn.active {
+    background: var(--accent);
+    border-color: var(--accent-strong);
+    color: var(--ink);
+    box-shadow: var(--shadow-btn);
+  }
+  .colorChip {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px var(--line), var(--shadow-btn);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .colorChip:hover { transform: translateY(-1px) scale(1.08); }
+  .colorChip.active { box-shadow: 0 0 0 2px var(--ink), var(--shadow-btn); }
+  #customColor {
+    width: 26px; height: 26px; padding: 0; border: none;
+    border-radius: 50%; cursor: pointer; background: none;
+  }
+  #customColor::-webkit-color-swatch-wrapper { padding: 0; }
+  #customColor::-webkit-color-swatch { border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+  .tSelect {
+    font-family: var(--font);
+    font-size: 0.8rem;
+    padding: 7px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  #zoomLabel {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    min-width: 48px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Viewer ---------- */
+  #viewerArea {
+    flex: 1 1 auto;
+    overflow: auto;
+    background: var(--bg-viewer);
+    position: relative;
+  }
+  #pagesContainer { padding: 28px 20px 80px; }
+  .pageWrap {
+    position: relative;
+    margin: 0 auto 26px;
+    background: #fff;
+    box-shadow: var(--shadow-card);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .pageWrap canvas { display: block; width: 100%; height: 100%; }
+  .pageWrap svg.overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    cursor: crosshair;
+  }
+  .pageWrap svg.overlay.selectMode { cursor: default; }
+  .pageWrap svg.overlay.textMode { cursor: text; }
+  .annText {
+    font-family: var(--font);
+    line-height: 1.35;
+    word-wrap: break-word;
+    outline: none;
+    min-height: 1.2em;
+    padding: 3px 5px;
+    border-radius: 4px;
+  }
+  .annText[contenteditable="true"] {
+    box-shadow: 0 0 0 2px var(--accent-deep);
+    background: rgba(255, 249, 235, 0.92);
+    cursor: text;
+  }
+  .annText:empty::before { content: 'Type…'; color: #B9B9B2; }
+  g[data-id] { pointer-events: all; }
+
+  /* ---------- Empty state ---------- */
+  #emptyState {
+    max-width: 560px;
+    margin: 9vh auto 0;
+    background: #fff;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    padding: 56px 44px;
+    text-align: center;
+    animation: fadeUp 0.5s ease both;
+  }
+  #emptyState h1 { font-size: 1.7rem; letter-spacing: 0.01em; margin-bottom: 14px; }
+  #emptyState p { color: var(--ink-soft); font-size: 0.98rem; line-height: 1.6; margin-bottom: 28px; }
+  #dropHint { margin-top: 20px; font-size: 0.8rem; color: var(--ink-faint); }
+  #viewerArea.dragOver::after {
+    content: 'Drop PDF to open';
+    position: absolute; inset: 12px;
+    border: 2px dashed var(--accent-deep);
+    border-radius: var(--radius);
+    background: rgba(255, 224, 178, 0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem; font-weight: bold; color: var(--accent-deep);
+    pointer-events: none;
+    z-index: 30;
+  }
+
+  /* ---------- Modal ---------- */
+  .modalBack {
+    position: fixed; inset: 0;
+    background: rgba(20, 20, 18, 0.35);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    z-index: 100;
+    padding: 7vh 16px;
+  }
+  .modalBack.open { display: flex; }
+  .modalCard {
+    background: #fff;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-modal);
+    width: 100%;
+    max-width: 520px;
+    max-height: 78vh;
+    display: flex;
+    flex-direction: column;
+    animation: scaleIn 0.25s ease both;
+  }
+  .modalHead {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 26px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .modalHead h2 { font-size: 1.15rem; }
+  .modalClose {
+    border: none; background: none; cursor: pointer;
+    font-size: 1.3rem; color: var(--ink-faint); padding: 4px 8px; border-radius: 8px;
+  }
+  .modalClose:hover { background: #F1F0EE; }
+  .modalBody { padding: 14px 26px 26px; overflow-y: auto; }
+  .docRow {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 12px;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s ease;
+  }
+  .docRow:hover { background: #F8F7F5; }
+  .docRowInfo { flex: 1; min-width: 0; }
+  .docRowName { font-weight: bold; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .docRowMeta { font-size: 0.75rem; color: var(--ink-faint); margin-top: 3px; }
+  .docRow .btn { padding: 7px 13px; font-size: 0.78rem; }
+  .docsEmpty { text-align: center; color: var(--ink-faint); padding: 30px 0 16px; font-size: 0.9rem; }
+
+  /* ---------- Toast ---------- */
+  #toast {
+    position: fixed;
+    bottom: 28px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--ink);
+    color: #fff;
+    padding: 12px 22px;
+    border-radius: 12px;
+    font-size: 0.86rem;
+    box-shadow: var(--shadow-modal);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    z-index: 200;
+    max-width: 88vw;
+    text-align: center;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+  @media (max-width: 640px) {
+    .polymath-logo { height: 38px; }
+    .headerSub { display: none; }
+    .authInfo { display: none; }
+    #toolbar { padding: 8px 10px; gap: 5px; }
+    .btn { padding: 8px 11px; font-size: 0.78rem; }
+    .btnLabel { display: none; }
+    #pagesContainer { padding: 16px 8px 70px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="polymath-header">
+  <img src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj"
+       alt="Polymath Learning Centre" class="polymath-logo" />
+  <div>
+    <div class="headerTitle">PDF Annotator <span class="versionTag" id="versionTag"></span></div>
+    <div class="headerSub">Upload · mark up · save to the cloud</div>
+  </div>
+  <div class="headerSpacer"></div>
+  <div class="authArea" id="authArea"></div>
+</header>
+
+<div id="toolbar">
+  <div class="tGroup">
+    <button class="btn" id="uploadBtn" title="Open a PDF from your device">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span class="btnLabel">Open PDF</span>
+    </button>
+  </div>
+  <div class="tSep"></div>
+
+  <div class="tGroup" id="toolButtons">
+    <button class="toolBtn" data-tool="select" title="Select / move (V)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3l7 17 2.5-7.5L21 10z"/></svg>
+    </button>
+    <button class="toolBtn" data-tool="pen" title="Pen (P)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+    </button>
+    <button class="toolBtn" data-tool="highlight" title="Highlighter (H)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l6-6 4 4-6 6z"/><path d="M9 11l-4 4 2 2-3 3h6l1-1 2 2 6-6"/></svg>
+    </button>
+    <button class="toolBtn" data-tool="text" title="Text box (T)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="9" y1="20" x2="15" y2="20"/></svg>
+    </button>
+    <button class="toolBtn" data-tool="rect" title="Rectangle (R)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="14" rx="1"/></svg>
+    </button>
+    <button class="toolBtn" data-tool="ellipse" title="Ellipse (O)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="8.5" ry="6.5"/></svg>
+    </button>
+    <button class="toolBtn" data-tool="line" title="Line (L)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="19" x2="19" y2="5"/></svg>
+    </button>
+    <button class="toolBtn" data-tool="arrow" title="Arrow (A)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/></svg>
+    </button>
+  </div>
+  <div class="tSep"></div>
+
+  <div class="tGroup" id="colorChips">
+    <div class="colorChip" data-color="#1A1A1A" style="background:#1A1A1A" title="Black"></div>
+    <div class="colorChip" data-color="#E53935" style="background:#E53935" title="Red"></div>
+    <div class="colorChip" data-color="#1E88E5" style="background:#1E88E5" title="Blue"></div>
+    <div class="colorChip" data-color="#43A047" style="background:#43A047" title="Green"></div>
+    <div class="colorChip" data-color="#FFEB3B" style="background:#FFEB3B" title="Yellow"></div>
+    <input type="color" id="customColor" value="#E53935" title="Custom colour">
+  </div>
+  <div class="tGroup">
+    <select class="tSelect" id="strokeSelect" title="Stroke thickness">
+      <option value="2">Thin</option>
+      <option value="3" selected>Medium</option>
+      <option value="6">Thick</option>
+      <option value="12">Marker</option>
+    </select>
+    <select class="tSelect" id="fontSelect" title="Text size">
+      <option value="12">Aa 12</option>
+      <option value="16" selected>Aa 16</option>
+      <option value="22">Aa 22</option>
+      <option value="30">Aa 30</option>
+    </select>
+  </div>
+  <div class="tSep"></div>
+
+  <div class="tGroup">
+    <button class="toolBtn" id="undoBtn" title="Undo (Ctrl+Z)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>
+    </button>
+    <button class="toolBtn" id="redoBtn" title="Redo (Ctrl+Y)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg>
+    </button>
+    <button class="toolBtn" id="deleteBtn" title="Delete selected (Del)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+    </button>
+  </div>
+  <div class="tSep"></div>
+
+  <div class="tGroup">
+    <button class="toolBtn" id="zoomOutBtn" title="Zoom out (-)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
+    <span id="zoomLabel">120%</span>
+    <button class="toolBtn" id="zoomInBtn" title="Zoom in (+)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/><line x1="8" y1="11" x2="14" y2="11"/><line x1="11" y1="8" x2="11" y2="14"/></svg>
+    </button>
+    <button class="toolBtn" id="fitBtn" title="Fit to width">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 4 4 4 4 9"/><polyline points="15 4 20 4 20 9"/><polyline points="9 20 4 20 4 15"/><polyline points="15 20 20 20 20 15"/></svg>
+    </button>
+  </div>
+  <div class="tSep"></div>
+
+  <div class="tGroup">
+    <button class="btn" id="downloadBtn" title="Download PDF with annotations baked in">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span class="btnLabel">Download</span>
+    </button>
+    <button class="btn btnPrimary" id="saveBtn" title="Save PDF + annotations to the cloud (Ctrl+S)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      <span class="btnLabel">Save</span>
+    </button>
+    <button class="btn" id="docsBtn" title="Open a previously saved PDF">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span class="btnLabel">My PDFs</span>
+    </button>
+  </div>
+</div>
+
+<main id="viewerArea">
+  <div id="emptyState">
+    <h1>Annotate any PDF</h1>
+    <p>Open a PDF, then write on it with the pen, highlight key lines, drop in
+       text boxes, shapes and arrows, and zoom in for detail. Save it to the cloud
+       and pick up exactly where you left off — or download a copy with everything
+       stamped onto the PDF itself.</p>
+    <button class="btn btnPrimary" id="emptyUploadBtn" style="font-size:0.95rem; padding: 12px 26px;">Choose a PDF</button>
+    <div id="dropHint">…or drag &amp; drop a PDF anywhere on this page</div>
+  </div>
+  <div id="pagesContainer"></div>
+</main>
+
+<div class="modalBack" id="docsModal">
+  <div class="modalCard">
+    <div class="modalHead">
+      <h2>My saved PDFs</h2>
+      <button class="modalClose" id="docsCloseBtn" title="Close">✕</button>
+    </div>
+    <div class="modalBody" id="docsList"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="fileInput" accept="application/pdf,.pdf" hidden>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+
+<script>
+'use strict';
+
+/* ================= Constants ================= */
+var APP_VERSION = 'v1.0.0';
+var ADMIN_EMAIL = 'chungzhikai@gmail.com';
+var COLLECTION = 'pdfAnnotator';
+var STORAGE_DIR = 'pdf-annotator';
+var SVG_NS = 'http://www.w3.org/2000/svg';
+
+document.getElementById('versionTag').textContent = APP_VERSION;
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+firebase.initializeApp({
+  apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
+  authDomain: "mathgen--app.firebaseapp.com",
+  projectId: "mathgen--app",
+  storageBucket: "mathgen--app.firebasestorage.app",
+  messagingSenderId: "165654161198",
+  appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf",
+  measurementId: "G-0MWZFG211D"
+});
+var db = firebase.firestore();
+var auth = firebase.auth();
+var storage = firebase.storage();
+
+/* ================= State ================= */
+var pdfDoc = null;          // pdf.js document
+var pdfBytes = null;        // Uint8Array of the original PDF (kept for save/export)
+var docName = '';
+var currentDocId = null;    // Firestore doc id once saved
+var pages = [];             // { num, baseW, baseH, viewport1, wrap, canvas, svg, renderTask }
+var scale = 1.2;
+var annotations = [];       // see annotation shapes below
+var undoStack = [];
+var redoStack = [];
+var tool = 'pen';
+var color = '#E53935';
+var strokeW = 3;
+var fontSize = 16;
+var selectedId = null;
+var editingId = null;       // text annotation currently being edited
+var dirty = false;
+var currentUser = null;
+var annIdCounter = 1;
+
+/* Drawing-in-progress state */
+var drawing = null;         // { ann, svgNode, page }
+var draggingSel = null;     // { id, startX, startY, node, snapshot }
+
+/* ================= Small helpers ================= */
+function $(id) { return document.getElementById(id); }
+function el(name, attrs) {
+  var node = document.createElementNS(SVG_NS, name);
+  if (attrs) for (var k in attrs) node.setAttribute(k, attrs[k]);
+  return node;
+}
+function round2(n) { return Math.round(n * 100) / 100; }
+function newAnnId() { return 'a' + Date.now().toString(36) + (annIdCounter++); }
+
+var toastTimer = null;
+function toast(msg, ms) {
+  var t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove('show'); }, ms || 2600);
+}
+
+function setDirty(v) {
+  dirty = v;
+  var b = $('saveBtn');
+  b.classList.remove('btnSaved');
+  var label = b.querySelector('.btnLabel');
+  if (label) label.textContent = 'Save';
+}
+
+/* ================= Undo / redo ================= */
+function snapshot() { return JSON.stringify(annotations); }
+function pushUndo(snap) {
+  undoStack.push(snap !== undefined ? snap : snapshot());
+  if (undoStack.length > 100) undoStack.shift();
+  redoStack = [];
+}
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(snapshot());
+  annotations = JSON.parse(undoStack.pop());
+  afterHistoryChange();
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(snapshot());
+  annotations = JSON.parse(redoStack.pop());
+  afterHistoryChange();
+}
+function afterHistoryChange() {
+  if (selectedId && !annotations.some(function (a) { return a.id === selectedId; })) selectedId = null;
+  editingId = null;
+  renderAllOverlays();
+  setDirty(true);
+}
+
+/* ================= PDF loading & page rendering ================= */
+function openFilePicker() { $('fileInput').click(); }
+
+async function loadPdfFromFile(file) {
+  if (!file || file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+    toast('Please choose a PDF file.');
+    return;
+  }
+  var buf = await file.arrayBuffer();
+  await loadPdf(new Uint8Array(buf), file.name.replace(/\.pdf$/i, ''));
+}
+
+async function loadPdf(bytes, name) {
+  pdfBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  docName = name || 'Untitled';
+  currentDocId = null;
+  annotations = [];
+  undoStack = [];
+  redoStack = [];
+  selectedId = null;
+  editingId = null;
+  setDirty(false);
+
+  // pdf.js transfers (detaches) the buffer it is given — hand it a copy.
+  pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
+
+  $('emptyState').style.display = 'none';
+  var container = $('pagesContainer');
+  container.innerHTML = '';
+  pages = [];
+
+  for (var n = 1; n <= pdfDoc.numPages; n++) {
+    var page = await pdfDoc.getPage(n);
+    var viewport1 = page.getViewport({ scale: 1 });
+    var wrap = document.createElement('div');
+    wrap.className = 'pageWrap';
+    var canvas = document.createElement('canvas');
+    var svg = el('svg', {
+      viewBox: '0 0 ' + viewport1.width + ' ' + viewport1.height,
+      preserveAspectRatio: 'none'
+    });
+    svg.classList.add('overlay');
+    wrap.appendChild(canvas);
+    wrap.appendChild(svg);
+    container.appendChild(wrap);
+    var p = {
+      num: n, page: page, viewport1: viewport1,
+      baseW: viewport1.width, baseH: viewport1.height,
+      wrap: wrap, canvas: canvas, svg: svg, renderTask: null
+    };
+    pages.push(p);
+    attachOverlayHandlers(p);
+  }
+  fitWidth();
+  toast('Loaded “' + docName + '” — ' + pdfDoc.numPages + ' page' + (pdfDoc.numPages > 1 ? 's' : ''));
+}
+
+function applyScale() {
+  $('zoomLabel').textContent = Math.round(scale * 100) + '%';
+  pages.forEach(function (p) {
+    p.wrap.style.width = (p.baseW * scale) + 'px';
+    p.wrap.style.height = (p.baseH * scale) + 'px';
+    renderPageCanvas(p);
+  });
+  updateToolCursor();
+}
+
+function renderPageCanvas(p) {
+  if (p.renderTask) { try { p.renderTask.cancel(); } catch (e) {} }
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var viewport = p.page.getViewport({ scale: scale * dpr });
+  p.canvas.width = Math.floor(viewport.width);
+  p.canvas.height = Math.floor(viewport.height);
+  var ctx = p.canvas.getContext('2d');
+  p.renderTask = p.page.render({ canvasContext: ctx, viewport: viewport });
+  p.renderTask.promise.catch(function () { /* cancelled — fine */ });
+}
+
+function zoomBy(factor) {
+  var area = $('viewerArea');
+  var ratio = area.scrollTop / Math.max(1, area.scrollHeight);
+  scale = Math.min(4, Math.max(0.25, scale * factor));
+  applyScale();
+  area.scrollTop = ratio * area.scrollHeight;
+}
+
+function fitWidth() {
+  if (!pages.length) return;
+  var avail = $('viewerArea').clientWidth - 48;
+  scale = Math.min(4, Math.max(0.25, avail / pages[0].baseW));
+  applyScale();
+}
+
+/* ================= Annotation rendering ================= */
+function renderAllOverlays() {
+  pages.forEach(renderOverlay);
+}
+
+function renderOverlay(p) {
+  var svg = p.svg;
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  annotations.forEach(function (a) {
+    if (a.page === p.num) svg.appendChild(annNode(a));
+  });
+  if (selectedId) {
+    var selAnn = annotations.find(function (a) { return a.id === selectedId; });
+    if (selAnn && selAnn.page === p.num) {
+      var node = svg.querySelector('[data-id="' + selectedId + '"]');
+      if (node) {
+        var box = node.getBBox();
+        svg.appendChild(el('rect', {
+          x: box.x - 4, y: box.y - 4, width: box.width + 8, height: box.height + 8,
+          fill: 'none', stroke: '#1E88E5', 'stroke-width': 1.5,
+          'stroke-dasharray': '5 4', 'pointer-events': 'none', rx: 3
+        }));
+      }
+    }
+  }
+}
+
+function pathFromPoints(pts) {
+  if (!pts.length) return '';
+  var d = 'M ' + pts[0].x + ' ' + pts[0].y;
+  for (var i = 1; i < pts.length; i++) d += ' L ' + pts[i].x + ' ' + pts[i].y;
+  return d;
+}
+
+function arrowHeadPoints(a) {
+  var ang = Math.atan2(a.y2 - a.y1, a.x2 - a.x1);
+  var hl = 9 + a.width * 2.5;
+  return [
+    { x: a.x2 - hl * Math.cos(ang - 0.45), y: a.y2 - hl * Math.sin(ang - 0.45) },
+    { x: a.x2 - hl * Math.cos(ang + 0.45), y: a.y2 - hl * Math.sin(ang + 0.45) }
+  ];
+}
+
+function annNode(a) {
+  var g = el('g');
+  g.setAttribute('data-id', a.id);
+  var shape;
+  if (a.type === 'pen' || a.type === 'highlight') {
+    shape = el('path', {
+      d: pathFromPoints(a.points), fill: 'none', stroke: a.color,
+      'stroke-width': a.width, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+    });
+    if (a.type === 'highlight') shape.setAttribute('stroke-opacity', '0.4');
+    g.appendChild(shape);
+  } else if (a.type === 'rect') {
+    g.appendChild(el('rect', {
+      x: a.x, y: a.y, width: a.w, height: a.h, fill: 'none',
+      stroke: a.color, 'stroke-width': a.width, rx: 2
+    }));
+    // invisible fill so the interior is clickable for select/move
+    g.appendChild(el('rect', { x: a.x, y: a.y, width: a.w, height: a.h, fill: 'transparent', stroke: 'none' }));
+  } else if (a.type === 'ellipse') {
+    g.appendChild(el('ellipse', {
+      cx: a.x + a.w / 2, cy: a.y + a.h / 2, rx: a.w / 2, ry: a.h / 2,
+      fill: 'none', stroke: a.color, 'stroke-width': a.width
+    }));
+    g.appendChild(el('ellipse', {
+      cx: a.x + a.w / 2, cy: a.y + a.h / 2, rx: a.w / 2, ry: a.h / 2,
+      fill: 'transparent', stroke: 'none'
+    }));
+  } else if (a.type === 'line') {
+    g.appendChild(el('line', {
+      x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2,
+      stroke: a.color, 'stroke-width': a.width, 'stroke-linecap': 'round'
+    }));
+  } else if (a.type === 'arrow') {
+    var heads = arrowHeadPoints(a);
+    g.appendChild(el('path', {
+      d: 'M ' + a.x1 + ' ' + a.y1 + ' L ' + a.x2 + ' ' + a.y2 +
+         ' M ' + heads[0].x + ' ' + heads[0].y + ' L ' + a.x2 + ' ' + a.y2 +
+         ' L ' + heads[1].x + ' ' + heads[1].y,
+      fill: 'none', stroke: a.color, 'stroke-width': a.width,
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+    }));
+  } else if (a.type === 'text') {
+    var fo = el('foreignObject', { x: a.x, y: a.y, width: a.w, height: Math.max(a.h, a.fontSize * 1.8) });
+    fo.style.overflow = 'visible';
+    var div = document.createElement('div');
+    div.className = 'annText';
+    div.style.fontSize = a.fontSize + 'px';
+    div.style.color = a.color;
+    div.textContent = a.text || '';
+    div.contentEditable = (editingId === a.id) ? 'true' : 'false';
+    fo.appendChild(div);
+    g.appendChild(fo);
+  }
+  return g;
+}
+
+/* ================= Pointer interaction ================= */
+function eventPoint(e, p) {
+  var rect = p.svg.getBoundingClientRect();
+  return {
+    x: round2((e.clientX - rect.left) * (p.baseW / rect.width)),
+    y: round2((e.clientY - rect.top) * (p.baseH / rect.height))
+  };
+}
+
+function setTool(t) {
+  tool = t;
+  if (t !== 'select') { selectedId = null; renderAllOverlays(); }
+  if (t === 'highlight' && strokeW < 10) { strokeW = 12; $('strokeSelect').value = '12'; }
+  if (t === 'highlight' && (color === '#1A1A1A' || color === '#E53935' || color === '#1E88E5' || color === '#43A047')) {
+    setColor('#FFEB3B');
+  }
+  document.querySelectorAll('#toolButtons .toolBtn').forEach(function (b) {
+    b.classList.toggle('active', b.getAttribute('data-tool') === t);
+  });
+  updateToolCursor();
+}
+
+function updateToolCursor() {
+  pages.forEach(function (p) {
+    p.svg.classList.toggle('selectMode', tool === 'select');
+    p.svg.classList.toggle('textMode', tool === 'text');
+  });
+}
+
+function setColor(c) {
+  color = c;
+  document.querySelectorAll('.colorChip').forEach(function (chip) {
+    chip.classList.toggle('active', chip.getAttribute('data-color') === c);
+  });
+  $('customColor').value = /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#E53935';
+  // Recolour the selected annotation, if any
+  if (selectedId) {
+    var a = annotations.find(function (x) { return x.id === selectedId; });
+    if (a && a.color !== c) {
+      pushUndo();
+      a.color = c;
+      renderAllOverlays();
+      setDirty(true);
+    }
+  }
+}
+
+function attachOverlayHandlers(p) {
+  var svg = p.svg;
+
+  svg.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (editingId) return; // let the text box handle it
+    var pt = eventPoint(e, p);
+
+    if (tool === 'select') {
+      var target = e.target.closest ? e.target.closest('[data-id]') : null;
+      if (target) {
+        var id = target.getAttribute('data-id');
+        selectedId = id;
+        renderOverlay(p);
+        var node = svg.querySelector('[data-id="' + id + '"]');
+        draggingSel = { id: id, startX: pt.x, startY: pt.y, node: node, page: p, snapshot: snapshot(), moved: false };
+        svg.setPointerCapture(e.pointerId);
+      } else {
+        if (selectedId) { selectedId = null; renderAllOverlays(); }
+      }
+      return;
+    }
+
+    e.preventDefault();
+    svg.setPointerCapture(e.pointerId);
+    var ann;
+    if (tool === 'pen' || tool === 'highlight') {
+      ann = { id: newAnnId(), page: p.num, type: tool, color: color, width: strokeW, points: [pt] };
+    } else if (tool === 'rect' || tool === 'ellipse') {
+      ann = { id: newAnnId(), page: p.num, type: tool, color: color, width: strokeW, x: pt.x, y: pt.y, w: 0, h: 0, _sx: pt.x, _sy: pt.y };
+    } else if (tool === 'line' || tool === 'arrow') {
+      ann = { id: newAnnId(), page: p.num, type: tool, color: color, width: strokeW, x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y };
+    } else if (tool === 'text') {
+      drawing = { ann: { id: newAnnId(), page: p.num, type: 'text', color: color, fontSize: fontSize, x: pt.x, y: pt.y, w: 220, h: fontSize * 1.9, text: '' }, page: p, isText: true };
+      return;
+    }
+    drawing = { ann: ann, page: p, svgNode: null };
+    redrawTemp();
+  });
+
+  svg.addEventListener('pointermove', function (e) {
+    if (draggingSel && draggingSel.page === p) {
+      var pt = eventPoint(e, p);
+      var dx = pt.x - draggingSel.startX;
+      var dy = pt.y - draggingSel.startY;
+      if (Math.abs(dx) + Math.abs(dy) > 0.5) draggingSel.moved = true;
+      if (draggingSel.node) draggingSel.node.setAttribute('transform', 'translate(' + dx + ' ' + dy + ')');
+      return;
+    }
+    if (!drawing || drawing.page !== p || drawing.isText) return;
+    var pt2 = eventPoint(e, p);
+    var a = drawing.ann;
+    if (a.type === 'pen' || a.type === 'highlight') {
+      var last = a.points[a.points.length - 1];
+      if (Math.abs(pt2.x - last.x) + Math.abs(pt2.y - last.y) >= 1) a.points.push(pt2);
+    } else if (a.type === 'rect' || a.type === 'ellipse') {
+      a.x = Math.min(a._sx, pt2.x); a.y = Math.min(a._sy, pt2.y);
+      a.w = Math.abs(pt2.x - a._sx); a.h = Math.abs(pt2.y - a._sy);
+    } else if (a.type === 'line' || a.type === 'arrow') {
+      a.x2 = pt2.x; a.y2 = pt2.y;
+    }
+    redrawTemp();
+  });
+
+  function finishPointer(e) {
+    if (draggingSel && draggingSel.page === p) {
+      var pt = eventPoint(e, p);
+      var dx = round2(pt.x - draggingSel.startX);
+      var dy = round2(pt.y - draggingSel.startY);
+      if (draggingSel.moved && (dx || dy)) {
+        var snap = draggingSel.snapshot;
+        var a = annotations.find(function (x) { return x.id === draggingSel.id; });
+        if (a) {
+          pushUndo(snap);
+          translateAnn(a, dx, dy);
+          setDirty(true);
+        }
+      }
+      draggingSel = null;
+      renderOverlay(p);
+      return;
+    }
+    if (!drawing || drawing.page !== p) return;
+    var a2 = drawing.ann;
+    drawing = null;
+    if (a2.type === 'text') {
+      pushUndo();
+      annotations.push(a2);
+      editingId = a2.id;
+      renderOverlay(p);
+      focusTextAnn(p, a2.id);
+      setDirty(true);
+      return;
+    }
+    delete a2._sx; delete a2._sy;
+    var tooSmall =
+      ((a2.type === 'rect' || a2.type === 'ellipse') && a2.w < 3 && a2.h < 3) ||
+      ((a2.type === 'line' || a2.type === 'arrow') && Math.abs(a2.x2 - a2.x1) < 3 && Math.abs(a2.y2 - a2.y1) < 3) ||
+      ((a2.type === 'pen' || a2.type === 'highlight') && a2.points.length < 2);
+    if (!tooSmall) {
+      pushUndo();
+      annotations.push(a2);
+      setDirty(true);
+    }
+    renderOverlay(p);
+  }
+  svg.addEventListener('pointerup', finishPointer);
+  svg.addEventListener('pointercancel', function () { drawing = null; draggingSel = null; renderOverlay(p); });
+
+  /* Double-click a text annotation (in select mode) to edit it */
+  svg.addEventListener('dblclick', function (e) {
+    var target = e.target.closest ? e.target.closest('[data-id]') : null;
+    if (!target) return;
+    var id = target.getAttribute('data-id');
+    var a = annotations.find(function (x) { return x.id === id; });
+    if (a && a.type === 'text') {
+      selectedId = id;
+      editingId = id;
+      renderOverlay(p);
+      focusTextAnn(p, id);
+    }
+  });
+}
+
+function redrawTemp() {
+  if (!drawing) return;
+  var p = drawing.page;
+  if (drawing.svgNode) p.svg.removeChild(drawing.svgNode);
+  drawing.svgNode = annNode(drawing.ann);
+  drawing.svgNode.setAttribute('pointer-events', 'none');
+  p.svg.appendChild(drawing.svgNode);
+}
+
+function translateAnn(a, dx, dy) {
+  if (a.points) a.points.forEach(function (pt) { pt.x = round2(pt.x + dx); pt.y = round2(pt.y + dy); });
+  if (a.x !== undefined) { a.x = round2(a.x + dx); a.y = round2(a.y + dy); }
+  if (a.x1 !== undefined) {
+    a.x1 = round2(a.x1 + dx); a.y1 = round2(a.y1 + dy);
+    a.x2 = round2(a.x2 + dx); a.y2 = round2(a.y2 + dy);
+  }
+}
+
+function focusTextAnn(p, id) {
+  var node = p.svg.querySelector('[data-id="' + id + '"] .annText');
+  if (!node) return;
+  node.contentEditable = 'true';
+  setTimeout(function () {
+    node.focus();
+    var range = document.createRange();
+    range.selectNodeContents(node);
+    range.collapse(false);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }, 0);
+  node.addEventListener('input', function () {
+    var a = annotations.find(function (x) { return x.id === id; });
+    if (a) {
+      a.h = Math.max(node.scrollHeight, a.fontSize * 1.8);
+      node.parentNode.setAttribute('height', a.h);
+    }
+  });
+  node.addEventListener('blur', function () {
+    var a = annotations.find(function (x) { return x.id === id; });
+    if (!a) return;
+    var text = node.innerText.replace(/\n+$/, '');
+    if (!text.trim()) {
+      annotations = annotations.filter(function (x) { return x.id !== id; });
+      if (selectedId === id) selectedId = null;
+    } else {
+      a.text = text;
+      a.h = Math.max(node.scrollHeight, a.fontSize * 1.8);
+    }
+    if (editingId === id) editingId = null;
+    renderOverlay(p);
+    setDirty(true);
+  }, { once: true });
+}
+
+function deleteSelected() {
+  if (!selectedId) { toast('Select an annotation first (arrow tool).'); return; }
+  pushUndo();
+  annotations = annotations.filter(function (a) { return a.id !== selectedId; });
+  selectedId = null;
+  renderAllOverlays();
+  setDirty(true);
+}
+
+/* ================= Auth ================= */
+function isAdmin(user) { return !!user && user.email === ADMIN_EMAIL; }
+
+async function signIn() {
+  var provider = new firebase.auth.GoogleAuthProvider();
+  try {
+    await auth.signInWithPopup(provider);
+  } catch (e) {
+    if (e && e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
+      toast('Sign-in failed: ' + (e.message || e));
+    }
+  }
+}
+
+function renderAuthArea() {
+  var area = $('authArea');
+  area.innerHTML = '';
+  if (!currentUser) {
+    var btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Sign in with Google';
+    btn.addEventListener('click', signIn);
+    area.appendChild(btn);
+    return;
+  }
+  var info = document.createElement('div');
+  info.className = 'authInfo';
+  var name = document.createElement('div');
+  name.className = 'authName';
+  name.textContent = currentUser.displayName || currentUser.email;
+  var role = document.createElement('div');
+  role.className = 'authRole' + (isAdmin(currentUser) ? ' isAdmin' : '');
+  role.textContent = isAdmin(currentUser) ? '● Admin — cloud saving on' : 'View only — saving disabled';
+  info.appendChild(name);
+  info.appendChild(role);
+  area.appendChild(info);
+  if (currentUser.photoURL) {
+    var img = document.createElement('img');
+    img.className = 'authAvatar';
+    img.src = currentUser.photoURL;
+    img.referrerPolicy = 'no-referrer';
+    img.alt = '';
+    area.appendChild(img);
+  }
+  var out = document.createElement('button');
+  out.className = 'btn';
+  out.textContent = 'Sign out';
+  out.addEventListener('click', function () { auth.signOut(); });
+  area.appendChild(out);
+}
+
+auth.onAuthStateChanged(function (user) {
+  currentUser = user;
+  renderAuthArea();
+});
+
+/* ================= Cloud save / load ================= */
+async function saveDoc() {
+  if (!pdfDoc) { toast('Open a PDF first.'); return; }
+  if (!currentUser) {
+    toast('Sign in with Google to save.');
+    await signIn();
+    if (!currentUser) return;
+  }
+  if (!isAdmin(currentUser)) {
+    toast('Only ' + ADMIN_EMAIL + ' can save to the cloud.');
+    return;
+  }
+  var btn = $('saveBtn');
+  var label = btn.querySelector('.btnLabel');
+  btn.disabled = true;
+  if (label) label.textContent = 'Saving…';
+  try {
+    var isNew = !currentDocId;
+    if (isNew) {
+      var name = window.prompt('Name this document:', docName) ;
+      if (name === null) { btn.disabled = false; if (label) label.textContent = 'Save'; return; }
+      docName = name.trim() || docName;
+      currentDocId = db.collection(COLLECTION).doc().id;
+      await storage.ref(STORAGE_DIR + '/' + currentDocId + '.pdf')
+        .put(new Blob([pdfBytes], { type: 'application/pdf' }));
+    }
+    var payload = {
+      name: docName,
+      ownerUid: currentUser.uid,
+      ownerEmail: currentUser.email,
+      storagePath: STORAGE_DIR + '/' + currentDocId + '.pdf',
+      pageCount: pdfDoc.numPages,
+      annotations: JSON.stringify(annotations),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (isNew) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    await db.collection(COLLECTION).doc(currentDocId).set(payload, { merge: true });
+    dirty = false;
+    btn.classList.add('btnSaved');
+    if (label) label.textContent = '✓ Saved';
+    toast('Saved “' + docName + '” to the cloud.');
+  } catch (e) {
+    console.error(e);
+    toast('Save failed: ' + (e.message || e));
+    if (label) label.textContent = 'Save';
+  }
+  btn.disabled = false;
+}
+
+async function openDocsModal() {
+  if (!currentUser) {
+    toast('Sign in with Google to see your saved PDFs.');
+    await signIn();
+    if (!currentUser) return;
+  }
+  $('docsModal').classList.add('open');
+  var list = $('docsList');
+  list.innerHTML = '<div class="docsEmpty">Loading…</div>';
+  try {
+    var snap = await db.collection(COLLECTION).orderBy('updatedAt', 'desc').limit(60).get();
+    list.innerHTML = '';
+    if (snap.empty) {
+      list.innerHTML = '<div class="docsEmpty">No saved PDFs yet. Open a PDF, annotate it and press Save.</div>';
+      return;
+    }
+    snap.forEach(function (docSnap) {
+      var d = docSnap.data();
+      var row = document.createElement('div');
+      row.className = 'docRow';
+      var info = document.createElement('div');
+      info.className = 'docRowInfo';
+      var nm = document.createElement('div');
+      nm.className = 'docRowName';
+      nm.textContent = d.name || 'Untitled';
+      var meta = document.createElement('div');
+      meta.className = 'docRowMeta';
+      var when = d.updatedAt && d.updatedAt.toDate ? d.updatedAt.toDate().toLocaleString() : '';
+      meta.textContent = (d.pageCount || '?') + ' page' + (d.pageCount === 1 ? '' : 's') + (when ? ' · ' + when : '');
+      info.appendChild(nm);
+      info.appendChild(meta);
+      row.appendChild(info);
+      var openBtn = document.createElement('button');
+      openBtn.className = 'btn btnPrimary';
+      openBtn.textContent = 'Open';
+      openBtn.addEventListener('click', function () { openSavedDoc(docSnap.id, d); });
+      row.appendChild(openBtn);
+      if (isAdmin(currentUser)) {
+        var delBtn = document.createElement('button');
+        delBtn.className = 'btn';
+        delBtn.textContent = 'Delete';
+        delBtn.addEventListener('click', function () { deleteSavedDoc(docSnap.id, d, row); });
+        row.appendChild(delBtn);
+      }
+      list.appendChild(row);
+    });
+  } catch (e) {
+    console.error(e);
+    list.innerHTML = '<div class="docsEmpty">Could not load documents: ' + (e.message || e) + '</div>';
+  }
+}
+
+async function openSavedDoc(id, data) {
+  $('docsModal').classList.remove('open');
+  toast('Opening “' + (data.name || 'Untitled') + '”…');
+  try {
+    var url = await storage.ref(data.storagePath).getDownloadURL();
+    var resp = await fetch(url);
+    var buf = await resp.arrayBuffer();
+    await loadPdf(new Uint8Array(buf), data.name || 'Untitled');
+    annotations = JSON.parse(data.annotations || '[]');
+    currentDocId = id;
+    setDirty(false);
+    renderAllOverlays();
+  } catch (e) {
+    console.error(e);
+    toast('Could not open: ' + (e.message || e));
+  }
+}
+
+async function deleteSavedDoc(id, data, rowEl) {
+  if (!window.confirm('Delete “' + (data.name || 'Untitled') + '” from the cloud? This cannot be undone.')) return;
+  try {
+    await db.collection(COLLECTION).doc(id).delete();
+    try { await storage.ref(data.storagePath).delete(); } catch (e) { /* file may be gone */ }
+    if (rowEl) rowEl.remove();
+    if (currentDocId === id) currentDocId = null;
+    toast('Deleted.');
+  } catch (e) {
+    toast('Delete failed: ' + (e.message || e));
+  }
+}
+
+/* ================= Flattened PDF download ================= */
+function hexToRgb01(hex) {
+  var m = /^#?([0-9a-f]{6})$/i.exec(hex || '#1A1A1A');
+  var v = m ? parseInt(m[1], 16) : 0x1A1A1A;
+  return { r: ((v >> 16) & 255) / 255, g: ((v >> 8) & 255) / 255, b: (v & 255) / 255 };
+}
+
+async function downloadAnnotated() {
+  if (!pdfDoc) { toast('Open a PDF first.'); return; }
+  var btn = $('downloadBtn');
+  btn.disabled = true;
+  toast('Preparing PDF…');
+  try {
+    var PDFDocument = PDFLib.PDFDocument;
+    var rgb = PDFLib.rgb;
+    var StandardFonts = PDFLib.StandardFonts;
+    var LineCapStyle = PDFLib.LineCapStyle;
+    var outDoc = await PDFDocument.load(pdfBytes);
+    var font = await outDoc.embedFont(StandardFonts.Helvetica);
+
+    annotations.forEach(function (a) {
+      var pageInfo = pages[a.page - 1];
+      if (!pageInfo) return;
+      var page = outDoc.getPage(a.page - 1);
+      var H = page.getHeight();
+      var vp = pageInfo.viewport1;
+      function cv(x, y) {
+        var pt = vp.convertToPdfPoint(x, y);
+        return { x: pt[0], y: pt[1] };
+      }
+      var c = hexToRgb01(a.color);
+      var col = rgb(c.r, c.g, c.b);
+
+      function strokePath(basePts, opacity) {
+        if (basePts.length < 2) return;
+        var d = '';
+        basePts.forEach(function (bp, i) {
+          if (bp === null) { d += ' M'; return; } // segment break marker
+          var q = cv(bp.x, bp.y);
+          d += (i === 0 ? 'M ' : (d.slice(-1) === 'M' ? ' ' : ' L ')) + q.x + ' ' + (H - q.y);
+        });
+        page.drawSvgPath(d, {
+          x: 0, y: H,
+          borderColor: col, borderWidth: a.width,
+          borderOpacity: opacity, borderLineCap: LineCapStyle.Round
+        });
+      }
+
+      if (a.type === 'pen') {
+        strokePath(a.points, 1);
+      } else if (a.type === 'highlight') {
+        strokePath(a.points, 0.4);
+      } else if (a.type === 'rect') {
+        var p1 = cv(a.x, a.y), p2 = cv(a.x + a.w, a.y + a.h);
+        page.drawRectangle({
+          x: Math.min(p1.x, p2.x), y: Math.min(p1.y, p2.y),
+          width: Math.abs(p2.x - p1.x), height: Math.abs(p2.y - p1.y),
+          borderColor: col, borderWidth: a.width
+        });
+      } else if (a.type === 'ellipse') {
+        var ctr = cv(a.x + a.w / 2, a.y + a.h / 2);
+        var edge = cv(a.x + a.w, a.y + a.h);
+        page.drawEllipse({
+          x: ctr.x, y: ctr.y,
+          xScale: Math.abs(edge.x - ctr.x), yScale: Math.abs(edge.y - ctr.y),
+          borderColor: col, borderWidth: a.width
+        });
+      } else if (a.type === 'line') {
+        strokePath([{ x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 }], 1);
+      } else if (a.type === 'arrow') {
+        var heads = arrowHeadPoints(a);
+        strokePath([{ x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 }], 1);
+        strokePath([heads[0], { x: a.x2, y: a.y2 }, heads[1]], 1);
+      } else if (a.type === 'text' && a.text) {
+        var lines = a.text.split('\n');
+        var lh = a.fontSize * 1.35;
+        lines.forEach(function (line, i) {
+          var anchor = cv(a.x + 5, a.y + 3 + a.fontSize * 0.95 + i * lh);
+          page.drawText(line, { x: anchor.x, y: anchor.y, size: a.fontSize, font: font, color: col });
+        });
+      }
+    });
+
+    var outBytes = await outDoc.save();
+    var blob = new Blob([outBytes], { type: 'application/pdf' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (docName || 'annotated') + ' (annotated).pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+  } catch (e) {
+    console.error(e);
+    toast('Download failed: ' + (e.message || e));
+  }
+  btn.disabled = false;
+}
+
+/* ================= Wiring ================= */
+$('uploadBtn').addEventListener('click', openFilePicker);
+$('emptyUploadBtn').addEventListener('click', openFilePicker);
+$('fileInput').addEventListener('change', function (e) {
+  if (e.target.files && e.target.files[0]) loadPdfFromFile(e.target.files[0]);
+  e.target.value = '';
+});
+
+document.querySelectorAll('#toolButtons .toolBtn').forEach(function (b) {
+  b.addEventListener('click', function () { setTool(b.getAttribute('data-tool')); });
+});
+document.querySelectorAll('.colorChip').forEach(function (chip) {
+  chip.addEventListener('click', function () { setColor(chip.getAttribute('data-color')); });
+});
+$('customColor').addEventListener('input', function (e) { setColor(e.target.value); });
+$('strokeSelect').addEventListener('change', function (e) { strokeW = parseFloat(e.target.value); });
+$('fontSelect').addEventListener('change', function (e) {
+  fontSize = parseFloat(e.target.value);
+  if (selectedId) {
+    var a = annotations.find(function (x) { return x.id === selectedId; });
+    if (a && a.type === 'text') { pushUndo(); a.fontSize = fontSize; renderAllOverlays(); setDirty(true); }
+  }
+});
+
+$('undoBtn').addEventListener('click', undo);
+$('redoBtn').addEventListener('click', redo);
+$('deleteBtn').addEventListener('click', deleteSelected);
+$('zoomInBtn').addEventListener('click', function () { zoomBy(1.2); });
+$('zoomOutBtn').addEventListener('click', function () { zoomBy(1 / 1.2); });
+$('fitBtn').addEventListener('click', fitWidth);
+$('saveBtn').addEventListener('click', saveDoc);
+$('docsBtn').addEventListener('click', openDocsModal);
+$('docsCloseBtn').addEventListener('click', function () { $('docsModal').classList.remove('open'); });
+$('docsModal').addEventListener('click', function (e) {
+  if (e.target === $('docsModal')) $('docsModal').classList.remove('open');
+});
+$('downloadBtn').addEventListener('click', downloadAnnotated);
+
+/* Drag & drop */
+var viewerArea = $('viewerArea');
+['dragenter', 'dragover'].forEach(function (evt) {
+  document.body.addEventListener(evt, function (e) {
+    e.preventDefault();
+    viewerArea.classList.add('dragOver');
+  });
+});
+['dragleave', 'drop'].forEach(function (evt) {
+  document.body.addEventListener(evt, function (e) {
+    e.preventDefault();
+    if (evt === 'dragleave' && e.relatedTarget) return;
+    viewerArea.classList.remove('dragOver');
+    if (evt === 'drop' && e.dataTransfer.files && e.dataTransfer.files[0]) {
+      loadPdfFromFile(e.dataTransfer.files[0]);
+    }
+  });
+});
+
+/* Keyboard shortcuts */
+document.addEventListener('keydown', function (e) {
+  var editingText = document.activeElement && document.activeElement.isContentEditable;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    saveDoc();
+    return;
+  }
+  if (editingText) {
+    if (e.key === 'Escape') document.activeElement.blur();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selectedId) { e.preventDefault(); deleteSelected(); }
+    return;
+  }
+  if (e.key === '+' || e.key === '=') { zoomBy(1.2); return; }
+  if (e.key === '-') { zoomBy(1 / 1.2); return; }
+  if (e.key === 'Escape') { drawing = null; selectedId = null; renderAllOverlays(); return; }
+  var toolKeys = { v: 'select', p: 'pen', h: 'highlight', t: 'text', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow' };
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && toolKeys[e.key.toLowerCase()]) setTool(toolKeys[e.key.toLowerCase()]);
+});
+
+window.addEventListener('beforeunload', function (e) {
+  if (dirty && annotations.length) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+window.addEventListener('resize', function () {
+  // keep the fitted look sensible on rotation / resize without forcing re-fit
+});
+
+setTool('pen');
+setColor('#E53935');
+</script>
+</body>
+</html>
