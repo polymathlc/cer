@@ -2316,16 +2316,18 @@ option {
     margin: 18mm 16mm 20mm 16mm;
   }
 
-  /* Each question on its own page, scaled to fit */
+  /* Each question page on its own sheet. Sheets force a break BEFORE the
+     next one — never after the last — because a trailing page-break-after
+     emits a blank final sheet, and stacked with the answer key's forced
+     break it produced a blank page between the worksheet and the key. */
   .print-question-page {
-    page-break-after: always;
     page-break-inside: avoid;
     max-width: 100%;
     padding: 0;
     overflow: visible;
   }
-  .print-question-page:last-of-type:not(.print-answer-key-page) {
-    page-break-after: always;
+  .print-question-page + .print-question-page {
+    page-break-before: always;
   }
   .print-question-page img {
     max-width: 100%;
@@ -2603,7 +2605,7 @@ option {
 
   /* Question chunk within grouped pages (auto-detect layout) */
   .print-question-chunk {
-    overflow: hidden;
+    overflow: visible;
     page-break-inside: avoid;
   }
   .print-question-separator {
@@ -2638,6 +2640,20 @@ option {
     color: #888;
     line-height: 1.3;
     font-style: italic;
+  }
+
+  /* A question (or answer key) measured taller than one sheet flows across
+     sheets instead of being shrunk unreadably or spilling blank pages.
+     Writing boxes and CER sections keep their own page-break-inside:avoid,
+     so no answer box is ever cut in half. Must come last in this block so
+     it overrides the avoid/flex rules above. */
+  .print-chunk-tall {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+  .print-page-tall {
+    display: block;
+    page-break-inside: auto;
   }
 }
 
@@ -8869,7 +8885,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.127.0';
+const APP_VERSION = 'v1.128.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15558,9 +15574,14 @@ function _createPrintPageFooter() {
 // "move to previous page" override), OR the page holds a single compact MCQ and
 // chunk i is one too (pairFlags — each fits within half the printable page), in
 // which case the two always share the page and the zoom step absorbs the few
-// per cent they may nudge over the budget. Shared by the printer and the live
-// preview so both paginate identically.
-function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH, pairFlags) {
+// per cent they may nudge over the budget. tallFlags marks chunks taller than
+// a whole page: instead of breaking to a fresh sheet (which used to leave the
+// previous page mostly blank and still overflow), a tall chunk joins the
+// current page to fill its remaining space, flows across sheets from there
+// (its page allows inner breaks — see .print-chunk-tall), and closes its page
+// so nothing is packed after it. Shared by the printer and the live preview
+// so both paginate identically.
+function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH, pairFlags, tallFlags) {
   const pageGroups = [];
   if (!heights.length) return pageGroups;
   let currentGroup = [];
@@ -15569,8 +15590,9 @@ function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH, pa
     const addedHeight = (currentGroup.length > 0 ? separatorH : 0) + heights[i];
     const forced = !!(forcedFlags && forcedFlags[i]);
     const merge = !!(mergeFlags && mergeFlags[i]);
+    const tall = !!(tallFlags && tallFlags[i]);
     const pairUp = !!(pairFlags && pairFlags[i] && currentGroup.length === 1 && pairFlags[currentGroup[0]]);
-    const breakHere = currentGroup.length > 0 && (forced || (!merge && !pairUp && currentHeight + addedHeight > maxH));
+    const breakHere = currentGroup.length > 0 && (forced || (!merge && !tall && !pairUp && currentHeight + addedHeight > maxH));
     if (breakHere) {
       pageGroups.push(currentGroup);
       currentGroup = [i];
@@ -15578,6 +15600,11 @@ function packChunkIndices(heights, forcedFlags, mergeFlags, maxH, separatorH, pa
     } else {
       currentGroup.push(i);
       currentHeight += addedHeight;
+    }
+    if (tall) { // flows to the sheet edge — nothing fits after it
+      pageGroups.push(currentGroup);
+      currentGroup = [];
+      currentHeight = 0;
     }
   }
   if (currentGroup.length > 0) pageGroups.push(currentGroup);
@@ -15596,6 +15623,19 @@ function _printFooterHeightIn(doc, container) {
   holder.innerHTML = _createPrintPageFooter().outerHTML;
   container.appendChild(holder);
   const h = holder.getBoundingClientRect().height;
+  holder.remove();
+  return h;
+}
+
+// Height one .print-question-separator really occupies (border + margins),
+// measured in the same print-CSS context — replaces a hard-coded guess that
+// let page estimates drift near the sheet boundary. The 1px spacer divs stop
+// the separator's margins collapsing out of the holder's height.
+function _printSeparatorHeightIn(doc, container) {
+  const holder = doc.createElement('div');
+  holder.innerHTML = '<div style="height:1px;"></div><div class="print-question-separator"></div><div style="height:1px;"></div>';
+  container.appendChild(holder);
+  const h = Math.max(0, holder.getBoundingClientRect().height - 2);
   holder.remove();
   return h;
 }
@@ -15636,6 +15676,7 @@ function _printMeasureChunks(html, cb) {
           heights,
           akHeights,
           footerH,
+          sepH: _printSeparatorHeightIn(doc, m),  // real separator height (border + margins)
           budget: A4_CONTENT_PX - footerH - 10,   // per-page room for chunks (footer + breathing space reserved)
           half: Math.round(A4_CONTENT_PX / 2)     // "fits within half the page" threshold for MCQ pairing
         });
@@ -15661,9 +15702,12 @@ function doScaleAndPrint(output, opts) {
       pages.forEach(page => {
         page.appendChild(_createPrintPageFooter());
         page.style.zoom = '';
+        page.classList.remove('print-page-tall');
         const h = page.scrollHeight;
         if (h > maxH) {
-          page.style.zoom = Math.max(0.7, maxH / h);
+          const z = maxH / h;
+          if (z >= 0.7) page.style.zoom = z;
+          else page.classList.add('print-page-tall'); // too tall to shrink readably — flow across sheets
         }
       });
       output.style.cssText = 'display:none;';
@@ -15678,6 +15722,7 @@ function doScaleAndPrint(output, opts) {
       const budget = mz ? mz.budget : 740;
       const halfPage = mz ? mz.half : 0;  // 0 → no MCQ pairing without real measurements
       const footerH = mz ? mz.footerH : 0;
+      const sepH = (mz && mz.sepH != null) ? mz.sepH : separatorH;
 
       // Group into pages, honouring any manual page breaks (forced before the
       // questions whose ids are in opts.forcedBreakIds).
@@ -15687,7 +15732,11 @@ function doScaleAndPrint(output, opts) {
       const mergeFlags = chunks.map(c => !!(merge && merge.has(c.dataset.qid)));
       // Compact MCQs (each within half the printable page) always pair 2-up.
       const pairFlags = chunks.map((c, i) => halfPage > 0 && c.dataset.mcq === '1' && heights[i] <= halfPage);
-      const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, separatorH, pairFlags);
+      // Questions taller than a whole page can't be shrunk readably — they
+      // flow across sheets instead (see .print-chunk-tall in the print CSS).
+      const tallFlags = heights.map(h => h > budget);
+      chunks.forEach((c, i) => c.classList.toggle('print-chunk-tall', tallFlags[i]));
+      const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, sepH, pairFlags, tallFlags);
 
       // Detach all chunks and answer keys from current DOM positions
       chunks.forEach(c => c.remove());
@@ -15695,7 +15744,9 @@ function doScaleAndPrint(output, opts) {
       output.innerHTML = '';
 
       // Build pages from groups, tracking each page's measured print height
+      // and whether it holds a tall (multi-sheet) question.
       const pageHs = [];
+      const pageTall = [];
       pageGroups.forEach(group => {
         const page = document.createElement('div');
         page.className = 'print-question-page';
@@ -15705,12 +15756,15 @@ function doScaleAndPrint(output, opts) {
             const sep = document.createElement('div');
             sep.className = 'print-question-separator';
             page.appendChild(sep);
-            h += separatorH;
+            h += sepH;
           }
           page.appendChild(chunks[chunkIdx]);
           h += heights[chunkIdx];
         });
+        const tall = group.some(idx => tallFlags[idx]);
+        if (tall) page.classList.add('print-page-tall');
         pageHs.push(h);
+        pageTall.push(tall);
         output.appendChild(page);
       });
 
@@ -15734,15 +15788,26 @@ function doScaleAndPrint(output, opts) {
           page.style.zoom = '';
           let h;
           if (mz) {
-            if (i < pageHs.length) h = pageHs[i];
-            else {
+            if (i < pageHs.length) {
+              if (pageTall[i]) return; // flows across sheets — never shrunk below readable
+              h = pageHs[i];
+              if (h > A4_CONTENT_PX) page.style.zoom = Math.max(0.7, (A4_CONTENT_PX - 4) / h);
+            } else {
               const akH = mz.akHeights[i - pageHs.length];
               h = (akH == null) ? page.scrollHeight : akH + footerH;
+              if (h > A4_CONTENT_PX) {
+                const z = (A4_CONTENT_PX - 4) / h;
+                if (z >= 0.7) page.style.zoom = z;
+                else page.classList.add('print-page-tall'); // long answer key — let it paginate
+              }
             }
-            if (h > A4_CONTENT_PX) page.style.zoom = Math.max(0.7, (A4_CONTENT_PX - 4) / h);
           } else {
             h = page.scrollHeight;
-            if (h > 740) page.style.zoom = Math.max(0.7, 740 / h);
+            if (h > 740) {
+              const z = 740 / h;
+              if (z >= 0.7) page.style.zoom = z;
+              else page.classList.add('print-page-tall');
+            }
           }
         });
 
@@ -19171,39 +19236,55 @@ function _wsPreviewPack(doc) {
   const measure = doc.getElementById('wsMeasure');
   const pagesEl = doc.getElementById('wsPages');
   if (!measure || !pagesEl) return;
-  const separatorH = 30;
   const chunks = Array.from(measure.querySelectorAll('.print-question-chunk'));
   const answerKeys = Array.from(measure.querySelectorAll('.print-answer-key-page'));
   pagesEl.innerHTML = '';
   if (!chunks.length) { measure.style.display = 'none'; return; }
   const heights = chunks.map(c => c.scrollHeight);
-  // Same budget + MCQ-pairing rules as the real printer (doScaleAndPrint),
-  // measured in the same print-CSS context, so preview and print paginate
-  // identically.
+  // Same budget + MCQ-pairing + tall-question rules as the real printer
+  // (doScaleAndPrint), measured in the same print-CSS context, so preview
+  // and print paginate identically.
   const footerH = _printFooterHeightIn(doc, measure);
+  const separatorH = _printSeparatorHeightIn(doc, measure);
   const budget = A4_CONTENT_PX - footerH - 10;
   const halfPage = Math.round(A4_CONTENT_PX / 2);
   const forcedFlags = chunks.map(c => wsManualBreaks.has(c.dataset.qid));
   const mergeFlags = chunks.map(c => wsMergeUp.has(c.dataset.qid));
   const pairFlags = chunks.map((c, i) => c.dataset.mcq === '1' && heights[i] <= halfPage);
-  const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, separatorH, pairFlags);
+  const tallFlags = heights.map(h => h > budget);
+  chunks.forEach((c, i) => c.classList.toggle('print-chunk-tall', tallFlags[i]));
+  const pageGroups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, separatorH, pairFlags, tallFlags);
   measure.style.display = 'none';
-  const totalPages = pageGroups.length + answerKeys.length;
+  // How many printed sheets each group really spans — a tall question flows
+  // over several sheets when printed (never shrunk below readable), and the
+  // answer key does the same once fit-to-page would drop below 0.7 zoom.
+  const groupH = g => g.reduce((s, idx, pos) => s + heights[idx] + (pos > 0 ? separatorH : 0), footerH);
+  const spanOf = h => Math.max(1, Math.ceil(h / A4_CONTENT_PX));
+  const groupSpans = pageGroups.map(g => g.some(idx => tallFlags[idx]) ? spanOf(groupH(g)) : 1);
+  const akSpans = answerKeys.map(ak => {
+    const h = ak.scrollHeight + footerH;
+    if (h <= A4_CONTENT_PX || (A4_CONTENT_PX - 4) / h >= 0.7) return 1; // fits, or zooms to fit
+    return spanOf(h);
+  });
+  const totalPages = groupSpans.reduce((a, b) => a + b, 0) + akSpans.reduce((a, b) => a + b, 0);
   let pageNo = 0;
-  const addSheet = (build) => {
-    pageNo++;
+  const addSheet = (span, build) => {
+    const from = pageNo + 1;
+    pageNo += span;
     const sheet = doc.createElement('div'); sheet.className = 'wspv-sheet';
     const content = doc.createElement('div'); content.className = 'wspv-content';
     build(content);
     sheet.appendChild(content);
-    const pno = doc.createElement('div'); pno.className = 'wspv-pageno'; pno.textContent = 'Page ' + pageNo + ' of ' + totalPages;
+    const pno = doc.createElement('div'); pno.className = 'wspv-pageno';
+    pno.textContent = (span > 1 ? 'Pages ' + from + '–' + pageNo : 'Page ' + pageNo) + ' of ' + totalPages;
     sheet.appendChild(pno);
     pagesEl.appendChild(sheet);
     content.style.zoom = '';
+    if (span > 1) return; // flows across sheets when printed — shown full-length here, never shrunk
     const hWithFooter = content.scrollHeight + footerH; // real pages carry the footer
     if (hWithFooter > A4_CONTENT_PX) content.style.zoom = Math.max(0.7, (A4_CONTENT_PX - 4) / hWithFooter); // match print scaling
   };
-  pageGroups.forEach(group => addSheet(content => {
+  pageGroups.forEach((group, gi) => addSheet(groupSpans[gi], content => {
     group.forEach((idx, pos) => {
       if (pos > 0) { const sep = doc.createElement('div'); sep.className = 'print-question-separator'; content.appendChild(sep); }
       const chunk = chunks[idx];
@@ -19227,7 +19308,7 @@ function _wsPreviewPack(doc) {
       content.appendChild(chunk);
     });
   }));
-  answerKeys.forEach(ak => addSheet(content => content.appendChild(ak)));
+  answerKeys.forEach((ak, ai) => addSheet(akSpans[ai], content => content.appendChild(ak)));
   const cnt = document.getElementById('wsPreviewPageCount');
   if (cnt) cnt.textContent = '· ' + totalPages + ' page' + (totalPages === 1 ? '' : 's');
 }
