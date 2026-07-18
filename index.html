@@ -236,6 +236,26 @@ body {
   font-size: 0.72rem;
   font-family: 'Space Mono', monospace;
 }
+/* PSLE Papers — highlighted in gold so the real-exam material stands out */
+.nav-item.nav-psle {
+  color: #ffd97a;
+  font-weight: 700;
+  background: linear-gradient(90deg, rgba(245,158,11,0.20), rgba(245,158,11,0.05));
+  border: 1px solid rgba(245,158,11,0.45);
+}
+.nav-item.nav-psle svg { color: #fbbf24; }
+.nav-item.nav-psle:hover {
+  background: linear-gradient(90deg, rgba(245,158,11,0.32), rgba(245,158,11,0.12));
+  color: #ffe6a3;
+}
+.nav-item.nav-psle.active {
+  background: linear-gradient(90deg, #b45309, #d97706);
+  border-color: #f59e0b;
+  color: #fff;
+}
+.nav-item.nav-psle.active svg { color: #fff; }
+.nav-psle-star { margin-left: auto; font-size: 0.8rem; color: #fbbf24; }
+.nav-item.nav-psle.active .nav-psle-star { color: #fff; }
 .sidebar-footer {
   padding: 16px 20px;
   border-top: 1px solid rgba(255,255,255,0.08);
@@ -5079,9 +5099,10 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         Teaching Notes
       </div>
-      <div class="nav-item" data-page="papers" onclick="navigateTo('papers')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7"/><path d="M9 11h5"/></svg>
-        Past Papers
+      <div class="nav-item nav-psle" data-page="papers" onclick="navigateTo('papers')" title="Real PSLE Science papers, question by question — analyse, practise and play them">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12.5V17c0 1.66 2.69 3 6 3s6-1.34 6-3v-4.5"/><path d="M22 10v6"/></svg>
+        PSLE Papers
+        <span class="nav-psle-star">★</span>
       </div>
       <div class="nav-section-label admin-only">Schedule</div>
       <div class="nav-item admin-only" data-page="scheduled" onclick="navigateTo('scheduled')">
@@ -5187,7 +5208,7 @@ option {
         <div>
           <div style="display:flex;align-items:center;gap:10px;">
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
-            <button class="btn btn-outline" id="backToPapersBtn" onclick="backToPapers()" style="display:none;padding:6px 12px;font-size:0.85rem;white-space:nowrap;" title="Return to the Past Papers page, right where you left off">&larr; Back to Past Papers</button>
+            <button class="btn btn-outline" id="backToPapersBtn" onclick="backToPapers()" style="display:none;padding:6px 12px;font-size:0.85rem;white-space:nowrap;" title="Return to the PSLE Papers page, right where you left off">&larr; Back to PSLE Papers</button>
             <h2 id="createPageTitle">Create Question</h2>
           </div>
           <div class="subtitle" id="createPageSubtitle">Build a question with blocks. Answers and blanks are optional — every question is marked by AI.</div>
@@ -5316,9 +5337,9 @@ option {
         <div class="form-group">
           <label class="form-label" style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600;">
             <input type="checkbox" id="questionNotInSyllabus" style="width:18px;height:18px;flex:0 0 auto;cursor:pointer;">
-            <span>🚫 Not in syllabus <span style="font-weight:400;color:var(--text-muted);">— hide from every practice mode, but keep it in Past Papers</span></span>
+            <span>🚫 Not in syllabus <span style="font-weight:400;color:var(--text-muted);">— hide from every practice mode, but keep it in PSLE Papers</span></span>
           </label>
-          <div style="font-size:0.8rem;color:var(--text-muted);margin:4px 0 0 27px;line-height:1.5;">For questions on topics no longer in the syllabus (e.g. cell systems). It won't be served in Quick / Topical / Practice mode, but it still shows on the <strong>Past Papers</strong> page (marked <em>Not in syllabus</em>) so students aren't confused about a missing question.</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);margin:4px 0 0 27px;line-height:1.5;">For questions on topics no longer in the syllabus (e.g. cell systems). It won't be served in Quick / Topical / Practice mode, but it still shows on the <strong>PSLE Papers</strong> page (marked <em>Not in syllabus</em>) so students aren't confused about a missing question.</div>
         </div>
 
         <!-- Blocks List -->
@@ -5508,9 +5529,9 @@ option {
         <div>
           <div style="display:flex;align-items:center;gap:10px;">
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
-            <h2>Past Papers</h2>
+            <h2>🎓 PSLE Papers</h2>
           </div>
-          <div class="subtitle">PSLE Science 2021–2023, classified by topic — attach bank questions so students can practise from each paper</div>
+          <div class="subtitle">Real PSLE Science papers (2014–2023), classified by topic — attach bank questions so students can practise from each paper</div>
         </div>
       </div>
       <div class="page-body">
@@ -6336,7 +6357,7 @@ option {
               <button class="rpg-tab active" data-rpgboard="month" type="button">📅 This Month</button>
               <button class="rpg-tab" data-rpgboard="lastmonth" type="button">🗓️ Last Month</button>
               <button class="rpg-tab" data-rpgboard="alltime" type="button">⭐ All-Time</button>
-              <button class="rpg-tab" data-rpgboard="papers" type="button">📄 Past Papers</button>
+              <button class="rpg-tab" data-rpgboard="papers" type="button">🎓 PSLE Papers</button>
               <button class="rpg-tab" data-rpgboard="td" type="button">🧪 Tower Defense</button>
               <button class="rpg-tab" data-rpgboard="raid" type="button">👾 Raiders</button>
               <button class="rpg-tab" data-rpgboard="spire" type="button">🃏 Spire</button>
@@ -8949,7 +8970,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.130.0';
+const APP_VERSION = 'v1.132.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9106,8 +9127,8 @@ function _syncBackToPapersBtn() {
   if (!b) return;
   if (_editReturnPage === 'papers') {
     b.style.display = '';
-    b.innerHTML = '&larr; Back to Past Papers';
-    b.title = 'Return to the Past Papers page, right where you left off';
+    b.innerHTML = '&larr; Back to PSLE Papers';
+    b.title = 'Return to the PSLE Papers page, right where you left off';
   } else if (_editReturnPage === 'vetting') {
     b.style.display = '';
     b.innerHTML = '&larr; Back to Vetting List';
@@ -14641,7 +14662,7 @@ function saveEditToBank() {
 }
 
 function cancelEdit() {
-  const backDest = _editReturnPage === 'papers' ? 'Past Papers' : _editReturnPage === 'vetting' ? 'the vetting list' : 'the question bank';
+  const backDest = _editReturnPage === 'papers' ? 'PSLE Papers' : _editReturnPage === 'vetting' ? 'the vetting list' : 'the question bank';
   showConfirm('Cancel Edit', `Discard changes and go back to ${backDest}?`, () => {
     currentEditingQuestion = null;
     setEditMode(false);
@@ -14802,7 +14823,7 @@ function renderQuestionBank() {
               <span class="qb-tag category">${escapeHtml(qCategory)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
-              ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="Hidden from practice; still shown in Past Papers">🚫 Not in syllabus</span>` : ''}
+              ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="Hidden from practice; still shown in PSLE Papers">🚫 Not in syllabus</span>` : ''}
               ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
             </div>
           </div>
@@ -31698,6 +31719,50 @@ window.resetSpireCardArt = resetSpireCardArt;
 // Built-in seed below is the default until an admin saves changes.
 // =====================================================================
 const PP_SEED_Q = [
+  {"id":"s_2014_1","year":"2014","n":1,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"recall","title":"Which organism does not reproduce by spores","ans":"Option 2 — Hibiscus plant","detail":"Ferns, mushrooms and moulds reproduce by spores; the hibiscus is a flowering plant that reproduces by seeds. Direct recall of reproduction methods."},
+  {"id":"s_2014_2","year":"2014","n":2,"bk":"A","marks":2,"topic":"Plant Systems","type":"recall","title":"Correct statement about photosynthesis","ans":"Option 2 — takes in carbon dioxide, gives out oxygen, light needed","detail":"Photosynthesis uses light energy to make food, absorbing carbon dioxide and releasing oxygen. Recall of the inputs and outputs of photosynthesis."},
+  {"id":"s_2014_3","year":"2014","n":3,"bk":"A","marks":2,"topic":"Life Cycles","type":"application","title":"Which seed can germinate from a conditions table","ans":"Option 1 — Seed A","detail":"Germination needs water, air and warmth (not light); only seed A has water, air and a warm 30°C. Applying germination requirements to a table of conditions."},
+  {"id":"s_2014_4","year":"2014","n":4,"bk":"A","marks":2,"topic":"Living and non-living things","type":"application","title":"Feature common to three different cells","ans":"Option 4 — They contain nucleus and cell membrane","detail":"All cells share a nucleus and a cell membrane; not all have cell walls or can photosynthesise. Identifying the features common to every cell."},
+  {"id":"s_2014_5","year":"2014","n":5,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"application","title":"How seeds of plants P, Q and R were dispersed","ans":"Option 3 — P animal, Q wind, R explosive action","detail":"Wind-dispersed seeds (Q) scatter far and wide downwind, animal-dispersed (P) stay clustered near the plant, and explosive dispersal (R) flings seeds in an arc around the parent. Interpreting dispersal patterns."},
+  {"id":"s_2014_6","year":"2014","n":6,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"recall","title":"Processes needed for a plant to produce seeds","ans":"Option 3 — pollination and fertilisation","detail":"Seeds form only after pollination is followed by fertilisation; germination is seed to seedling, not seed production. Recall of the reproduction sequence."},
+  {"id":"s_2014_7","year":"2014","n":7,"bk":"A","marks":2,"topic":"Human and Plant Transport","type":"application","title":"Why climbing plant died when its stem was cut","ans":"Option 2 — The part above X had no water","detail":"Cutting the stem at X stops water and minerals travelling up from the roots, so the part above dries out and dies. Applying knowledge of water transport in the stem."},
+  {"id":"s_2014_8","year":"2014","n":8,"bk":"A","marks":2,"topic":"Human and Plant Respiration","type":"application","title":"Colour of CO2 indicator in three set-ups","ans":"Option 2 — X yellow, Y red, Z red","detail":"Respiring insects raise carbon dioxide so P turns yellow (X); the illuminated plant photosynthesises and uses up CO2 so P stays red (Y); the empty tube Z stays red. Comparing respiration and photosynthesis."},
+  {"id":"s_2014_9","year":"2014","n":9,"bk":"A","marks":2,"topic":"Living and non-living things","type":"recall","title":"Correct statements about green plants","ans":"Option 4 — A, B, C and D","detail":"Green plants make their own food, need energy for life processes, are made of cells with cell walls, and cannot move about freely — all four statements are true. Recall of plant characteristics."},
+  {"id":"s_2014_10","year":"2014","n":10,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"experimental","title":"Variables to keep constant in seed-wing test","ans":"Option 3 — A, C and D only","detail":"Wing length is the variable being investigated, so mass of seeds, drop height and the place must be kept constant. Fair-test control of variables."},
+  {"id":"s_2014_11","year":"2014","n":11,"bk":"A","marks":2,"topic":"Plant Systems","type":"recall","title":"Which pupils correctly named plant-cell parts","ans":"Option 4 — Ann, Ben, Chris and Dawn","detail":"Chloroplast (A) makes food, cell wall (B) supports and gives shape, nucleus (C) controls activities, and cell membrane (D) controls movement in and out — all four are correct. Recall of plant-cell structures."},
+  {"id":"s_2014_12","year":"2014","n":12,"bk":"A","marks":2,"topic":"Human Body Systems","type":"application","title":"Path of food before it enters the blood","ans":"Option 3 — A → B → C → E (mouth, gullet, stomach, small intestine)","detail":"Digested food is absorbed into the blood at the small intestine (E), so the route is mouth → gullet → stomach → small intestine. Tracing the digestive pathway from a labelled diagram."},
+  {"id":"s_2014_13","year":"2014","n":13,"bk":"A","marks":2,"topic":"Human and Plant Transport","type":"application","title":"Why stem swelled above the removed ring","ans":"Option 1 — Only the tubes carrying food at K were removed","detail":"Removing the outer ring cuts the food-carrying tubes, so food moving down piles up above K and swells it, while the inner water tubes stay intact and keep the plant alive. Applying transport-tube knowledge."},
+  {"id":"s_2014_14","year":"2014","n":14,"bk":"A","marks":2,"topic":"Food Chains and Webs","type":"application","title":"Population most affected if H dies out","ans":"Option 3 — L","detail":"L feeds only on H, so losing H hits L hardest, whereas K and Q have other food sources. Reasoning about dependency within a food web."},
+  {"id":"s_2014_15","year":"2014","n":15,"bk":"A","marks":2,"topic":"Humans and the Environment","type":"recall","title":"Impacts of deforestation by burning","ans":"Option 4 — A, B, C and D","detail":"Burning forests causes soil erosion, smoke air pollution, loss of habitat, and extra carbon dioxide that drives global warming — all four impacts. Recall of human impact on the environment."},
+  {"id":"s_2014_16","year":"2014","n":16,"bk":"A","marks":2,"topic":"Heat","type":"application","title":"Temperature of melting ice and its water","ans":"Option 3 — the water around the block of ice is 0°C","detail":"While ice is still melting, the melt-water in contact with it stays at 0°C. Understanding temperature during a change of state."},
+  {"id":"s_2014_17","year":"2014","n":17,"bk":"A","marks":2,"topic":"Matter and its 3 States","type":"application","title":"Why more air fits into an inflated tyre","ans":"Option 4 — Air does not have a definite volume","detail":"A gas can be compressed, so extra air squeezes into the same space in the tyre. Applying the property that gases have no fixed volume."},
+  {"id":"s_2014_18","year":"2014","n":18,"bk":"A","marks":2,"topic":"Forces","type":"application","title":"Incorrect statement about box sliding down slope","ans":"Option 3 — the box stopped at H because there was no force acting on it","detail":"This statement is wrong: gravity and friction still act on the box; it stops because friction opposes and overcomes its motion. Identifying forces on a moving object."},
+  {"id":"s_2014_19","year":"2014","n":19,"bk":"A","marks":2,"topic":"Heat","type":"application","title":"Why hot water helps loosen a metal lid","ans":"Option 2 — Heat causes the lid to expand more than the jar","detail":"Metal expands more than glass when heated, so the lid loosens from the jar. Applying differential expansion of materials."},
+  {"id":"s_2014_20","year":"2014","n":20,"bk":"A","marks":2,"topic":"Water and its 3 States","type":"experimental","title":"Set-ups to test surface area on evaporation","ans":"Option 3 — D and B","detail":"To test only surface area, change the exposed area (120 vs 50 cm²) while volume (300 ml), temperature (35°C) and wind (absent) are kept the same. Choosing a valid fair-test pair."},
+  {"id":"s_2014_21","year":"2014","n":21,"bk":"A","marks":2,"topic":"Heat","type":"application","title":"How to cool a cup of hot water faster","ans":"Option 3 — Place the cup on a metal plate","detail":"Metal is a good conductor of heat and carries heat away from the water, so it cools faster. Applying heat conduction."},
+  {"id":"s_2014_22","year":"2014","n":22,"bk":"A","marks":2,"topic":"Materials","type":"application","title":"Properties of a harbour buffer material","ans":"Option 1 — flexible and strong","detail":"The buffer must bend and compress to cushion the boat yet be strong enough not to break. Choosing a material by its required properties."},
+  {"id":"s_2014_23","year":"2014","n":23,"bk":"A","marks":2,"topic":"Forces","type":"application","title":"Change that makes block P slide further","ans":"Option 4 — increasing the height of the slope","detail":"Releasing R from a greater height gives it more energy, so it hits P harder and P slides further before friction stops it. Linking release height to distance moved against friction."},
+  {"id":"s_2014_24","year":"2014","n":24,"bk":"A","marks":2,"topic":"Electrical Systems","type":"application","title":"Identify the insulator and the faulty bulb","ans":"Option 4 — Q is the insulator and bulb M is not working","detail":"At first only L lights, so M's branch fails; after swapping P and Q no bulb lights, showing Q blocks current (an insulator) and bulb M is itself faulty. Deducing circuit faults from observations."},
+  {"id":"s_2014_25","year":"2014","n":25,"bk":"A","marks":2,"topic":"Magnets","type":"application","title":"Effect of using one battery on the electromagnet","ans":"Option 1 — pointer moves downwards, electromagnet strength decreased","detail":"Using one battery instead of two weakens the electromagnet, so it repels the bar magnet less and the spring lowers the pointer. Applying how current affects electromagnet strength."},
+  {"id":"s_2014_26","year":"2014","n":26,"bk":"A","marks":2,"topic":"Magnets","type":"application","title":"Why the iron toy stays attached to the magnet","ans":"Option 4 — The weight of D is less than the magnetic force of M","detail":"The magnetic force pulling on the iron tip is greater than the toy's weight, so it stays held up. Comparing magnetic force with weight."},
+  {"id":"s_2014_27","year":"2014","n":27,"bk":"A","marks":2,"topic":"Energy Conversion","type":"application","title":"Which is not an example of energy conversion","ans":"Option 2 — cooling hot water in a cup","detail":"Cooling hot water is heat being lost to the surroundings, not energy changing from one form to another. Distinguishing energy transfer from energy conversion."},
+  {"id":"s_2014_28","year":"2014","n":28,"bk":"A","marks":2,"topic":"Magnets","type":"application","title":"Which magnet-and-iron-bar arrangement is possible","ans":"Option 3","detail":"The original line fixes the poles (K–L and M–P attract, making J,L,P one pole and K,M,Q the other); only arrangement 3 has every magnet-to-magnet contact between unlike poles that attract. Pole-tracking with magnets and an induced iron bar."},
+  {"id":"s_2014_29","year":"2014","n":29,"bk":"A","marks":2,"topic":"Electrical Systems","type":"experimental","title":"Deduce the hidden circuit from bulb findings","ans":"Option 1 — L and M in parallel, in series with N","detail":"Removing the bulb at N (the series bulb) stops all bulbs lighting, while removing L or M leaves the other parallel branch and N still lit. Deducing a circuit arrangement from test results."},
+  {"id":"s_2014_30","year":"2014","n":30,"bk":"A","marks":2,"topic":"Light","type":"application","title":"Match objects to shadows by distance from torch","ans":"Option 2 — A square frame, B disc, C bar","detail":"The nearest object (A) casts the largest shadow, the big square frame, while the farthest object (C) casts the smallest, the thin bar. Relating shadow size to distance from the light source."},
+  {"id":"s_2014_31","year":"2014","n":31,"bk":"B","marks":3,"topic":"Human and Plant Transport","type":"open","title":"Blood flow: heart, lung blood, body blood","ans":"(a) heart; (b) blood in E has less oxygen / more carbon dioxide than blood in F (E goes to lungs, F comes from lungs); (c) carbon dioxide (G is blood returning from the body to the heart)","detail":"(a) identify organ S as the heart [1]; (b) blood in E is deoxygenated (less oxygen/more carbon dioxide) while blood in F from the lungs is oxygenated [1]; (c) name carbon dioxide — G carries blood from the body back to the heart, so it has more CO₂ than H which carries blood from heart to body [1]."},
+  {"id":"s_2014_32","year":"2014","n":32,"bk":"B","marks":2,"topic":"Human and Plant Transport","type":"open","title":"Transpiration set-up: oil purpose, fewer roots line","ans":"(a) the oil prevents water evaporating directly from the water surface, so any drop in water level is due to water taken up/lost by the plant; (b) line P — the plant with fewer roots absorbs less water, so its water level drops more slowly (stays higher)","detail":"(a) state that the oil stops direct evaporation of water from the surface so the fall in level measures only water absorbed by the plant [1]; (b) choose line P and explain fewer roots absorb less water so the level falls less/more slowly [1]."},
+  {"id":"s_2014_33","year":"2014","n":33,"bk":"B","marks":3,"topic":"Living Together","type":"open","title":"Fish preferred temperature and oxygen in water","ans":"(a) 28°C (most fish gathered in section C); (b) hot weather raised the water temperature, so there was less oxygen dissolved in the water and the fish died from lack of oxygen; (c) with no sunlight the green plants could not photosynthesise to release oxygen, so there was too little oxygen in the water and the fish died","detail":"(a) read from the data that fish F preferred 28°C [1]; (b) higher temperature means less dissolved oxygen, so the fish lacked oxygen and died [1]; (c) no sunlight means plants cannot photosynthesise, so less oxygen is produced and the fish die from lack of oxygen [1]."},
+  {"id":"s_2014_34","year":"2014","n":34,"bk":"B","marks":4,"topic":"Living and non-living things","type":"open","title":"Conditions for fungus growth; slippers and foot fungus","ans":"(a) Box R — it is warm and has water (moisture); fungus needs warmth and water to grow, and only R provides both; (b) slippers let air flow around the feet so sweat evaporates and the feet stay dry (and cooler), so the fungus lacks the moisture/warmth it needs to grow","detail":"(a) name Box R [1] and give the reason that it is both warm and has water/moisture, the conditions fungus needs [1]; (b) explain that open slippers allow air circulation so sweat evaporates, keeping feet dry/cool [1] which deprives the fungus of the moisture (and warmth) needed to grow [1]."},
+  {"id":"s_2014_35","year":"2014","n":35,"bk":"B","marks":4,"topic":"Life Cycles","type":"open","title":"Fly life cycle: insect feature, temperature, wound eggs","ans":"(a) it has three pairs of legs (six legs) / body divided into head, thorax and abdomen; (b)(i) as temperature increases, the length of one complete life cycle decreases; (b)(ii) the open wound provides ready food (flesh) for the larvae to feed and grow, and the animal's warm body keeps the eggs/larvae warm so they develop faster","detail":"(a) state one insect feature of the adult, e.g. three pairs of legs or three body parts [1]; (b)(i) higher temperature gives a shorter (fewer-day) life cycle [1]; (b)(ii) give and explain two benefits — food source from the flesh for the larvae [1] and warmth/moisture of the living body speeding development and protecting the young [1]."},
+  {"id":"s_2014_36","year":"2014","n":36,"bk":"B","marks":2,"topic":"Humans and the Environment","type":"open","title":"Sea turtles and global warming","ans":"(a) global warming melts ice and raises the sea level, so beaches are flooded/covered by seawater and turtles lose their nesting places; (b) higher temperatures produce mostly (or only) female turtles, so too few males are hatched to mate and reproduce, so fewer young are produced and numbers fall","detail":"(a) explain that rising sea levels from global warming submerge the beaches used for laying eggs [1]; (b) suggest that with too few males (only females at high temperature) there are not enough turtles to reproduce, so the population decreases [1]."},
+  {"id":"s_2014_37","year":"2014","n":37,"bk":"B","marks":2,"topic":"Heat","type":"open","title":"Air temperature vs distance; camel's long legs","ans":"(a) as the distance Y from the water increases, the temperature of the air decreases (then levels off); (b) long legs keep the camel's body high above the hot sand where the air is cooler, so its body gains less heat and does not overheat","detail":"(a) state the inverse relationship — greater distance from the hot water gives lower air temperature [1]; (b) relate to the data: long legs raise the body far from the hot sand where the surrounding air is cooler, so the body stays cooler/gains less heat [1]."},
+  {"id":"s_2014_38","year":"2014","n":38,"bk":"B","marks":3,"topic":"Water and its 3 States","type":"open","title":"Water collection under cones on wet sand","ans":"(a) heat from the sun evaporates water from the wet sand; the water vapour rises, touches the cooler inner surface of the cone, condenses into water droplets, which trickle down and collect at the base; (b) cone J has a larger base opening covering more wet sand, so more water evaporates under it and more is collected","detail":"(a) describe evaporation of water from the sand then condensation of the vapour on the cooler cone surface into collected droplets [2]; (b) larger base of J covers a bigger area of wet sand so more water evaporates and is collected [1]."},
+  {"id":"s_2014_39","year":"2014","n":39,"bk":"B","marks":4,"topic":"Magnets","type":"open","title":"Electromagnet attracts bar; circuit and material properties","ans":"(a) when the switch is closed, current flows through the coil and the iron rod becomes an electromagnet, which attracts magnetic bar P so it moves to touch the rod; (b) the bulb went off, because bar P moving away from Y broke the circuit so no current flowed through the bulb; (c) bar Q is a conductor of electricity (bulb lit) and is non-magnetic / not attracted to a magnet (Q did not move)","detail":"(a) current makes the iron rod an electromagnet that attracts bar P [1]; (b) bulb goes off because P leaving Y breaks the circuit/stops the current [1]; (c) state two properties of Q's material — it conducts electricity and it is non-magnetic [2]."},
+  {"id":"s_2014_40","year":"2014","n":40,"bk":"B","marks":2,"topic":"Materials","type":"open","title":"Strength of string materials for a kite","ans":"(a) strength (how much force/pull the material can withstand before breaking); (b) material R — it broke only at a higher reading (45 vs 8 units), so it is stronger and can withstand the pull without breaking when flying a kite","detail":"(a) name the property as strength [1]; (b) choose R and explain it is stronger, withstanding a larger force before breaking, so it is less likely to snap [1]."},
+  {"id":"s_2014_41","year":"2014","n":41,"bk":"B","marks":2,"topic":"Matter and its 3 States","type":"open","title":"Substance with boiling point 24°C","ans":"(a) at 30°C (above its 24°C boiling point) T is a gas and would evaporate/escape into the air, so a sealed container stops it escaping; (b) no — only the boiling point is given, not the melting point, so we cannot tell whether T is a solid or a liquid at 0°C (only that it is not a gas)","detail":"(a) explain that 30°C is above the boiling point so T becomes gas and would escape unless sealed [1]; (b) state we cannot tell, because the melting point is unknown so we don't know if T is solid or liquid at 0°C [1]."},
+  {"id":"s_2014_42","year":"2014","n":42,"bk":"B","marks":3,"topic":"Forces","type":"open","title":"Friction: effect of mass and area of contact","ans":"(a) the greater the mass, the greater the friction (heavier block moves a shorter distance); (b) no — G and H have the same mass but different areas of contact yet moved the same distance, so area did not affect friction; (c) 12 cm (W has the same 30 g mass as F, and area does not matter, so it moves the same distance as F)","detail":"(a) state that greater mass gives greater friction [1]; (b) conclude area of contact has no effect, comparing G and H (same mass, different area, same distance) [1]; (c) W (30 g) behaves like F, so distance moved = 12 cm [1]."},
+  {"id":"s_2014_43","year":"2014","n":43,"bk":"B","marks":3,"topic":"Heat","type":"open","title":"Expansion of heated sheets; glass cup cracking","ans":"(a) sheet Z was closer to/in contact with the heater, so it gained more heat and expanded more, becoming longer; (b)(i) glass is a poor conductor of heat, so the inner wall touching the hot water heats up first while heat travels slowly through the thick glass, leaving the outer wall cooler; (b)(ii) the inner wall heated and expanded quickly while the cool outer wall had not expanded, so the uneven expansion stressed the glass and cracked it","detail":"(a) Z nearer the heater gains more heat and expands more [1]; (b)(i) glass is a poor heat conductor so heat reaches the outer wall slowly, keeping it cooler [1]; (b)(ii) uneven/unequal expansion of hot inner wall vs cool outer wall cracks the cup [1]."},
+  {"id":"s_2014_44","year":"2014","n":44,"bk":"B","marks":3,"topic":"Energy Conversion","type":"open","title":"Rubber-band toy energy conversion","ans":"(a) (elastic) potential energy in the rubber band changes into kinetic energy + sound energy; (b) turn/wind the roller more times to twist the rubber band more, storing more elastic potential energy, which converts to more kinetic energy so the toy moves further","detail":"(a) label the input as elastic potential energy and the outputs as kinetic energy and sound energy [2]; (b) wind the rubber band more to store more elastic potential energy, giving more kinetic energy and a longer distance [1]."},
   {"id":"s_2023_1","year":"2023","n":1,"bk":"A","marks":2,"topic":"Humans and the Environment","type":"recall","title":"One effect of deforestation","ans":"Increase in carbon dioxide","detail":"Fewer trees → less photosynthesis removing CO₂, so atmospheric carbon dioxide rises. A direct human-impact recall item."},
   {"id":"s_2023_2","year":"2023","n":2,"bk":"A","marks":2,"topic":"Life Cycles","type":"recall","title":"Which group has a three-stage life cycle","ans":"Chicken, frog and grasshopper","detail":"Three-stage (no pupa): grasshopper, chicken and frog. Butterfly and beetle are four-stage. Tests stage counts across groups."},
   {"id":"s_2023_3","year":"2023","n":3,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"application","title":"What structures R and S help seeds do","ans":"Disperse","detail":"A parachute/feathery structure and a winged/hooked one are seed-dispersal adaptations. Apply dispersal knowledge to unfamiliar structures."},
@@ -32383,7 +32448,7 @@ function ppRenderBody(){
   const practiceCard = `
     <div class="pp-card">
       <h3 class="pp-h">Practise the papers</h3>
-      <p class="pp-sub">Do the attached questions right here on the system — the whole set or one year's paper — or load them into a mini-game (MCQ and open-ended). <b>Game bonus: every past-paper question answered inside a game counts ×2 on the Questions and Past Papers leaderboards.</b></p>
+      <p class="pp-sub">Do the attached questions right here on the system — the whole set or one year's paper — or load them into a mini-game (MCQ and open-ended). <b>Game bonus: every past-paper question answered inside a game counts ×2 on the Questions and PSLE Papers leaderboards.</b></p>
       ${practiceRows}
     </div>`;
 
@@ -33060,7 +33125,7 @@ function _ppGameBannerSync(){
         const hdr = page.querySelector('.page-header');
         if (hdr) hdr.insertAdjacentElement('afterend', b); else page.prepend(b);
       }
-      b.innerHTML = `<div style="flex:1;min-width:220px;">🎯 <b>Past-paper mode — ${escapeHtml(_ppGameSel.label)}.</b> This game serves only the ${_ppGameSel.count} attached past-paper question${_ppGameSel.count === 1 ? '' : 's'} (MCQ + open-ended self-check). Every question you answer here counts <b>×2</b> on the Questions and Past Papers leaderboards!</div><button class="btn btn-outline btn-sm" type="button" style="flex:none;" onclick="ppGameExit()">✖ Exit past-paper mode</button>`;
+      b.innerHTML = `<div style="flex:1;min-width:220px;">🎯 <b>Past-paper mode — ${escapeHtml(_ppGameSel.label)}.</b> This game serves only the ${_ppGameSel.count} attached past-paper question${_ppGameSel.count === 1 ? '' : 's'} (MCQ + open-ended self-check). Every question you answer here counts <b>×2</b> on the Questions and PSLE Papers leaderboards!</div><button class="btn btn-outline btn-sm" type="button" style="flex:none;" onclick="ppGameExit()">✖ Exit past-paper mode</button>`;
     } else if (b) b.remove();
   });
 }
