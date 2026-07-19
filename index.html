@@ -3001,6 +3001,13 @@ option {
 .ar-oeq-year { margin-bottom: 26px; }
 .ar-oeq-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 0 12px; font-size: 0.9rem; }
 .ar-row.ok { border-left: 4px solid #2f9e5f; background: #f2fbf6; }
+/* Answer Keys page */
+.ak-card { border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 14px; background: var(--surface); }
+.ak-card-top { display: flex; align-items: center; gap: 12px; }
+.ak-qthumb { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); flex: 0 0 auto; }
+.ak-card-info { flex: 1; min-width: 0; }
+.ak-card-title { font-weight: 700; font-size: 0.92rem; line-height: 1.35; margin-bottom: 5px; }
+.ak-card-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 
 .filter-bar {
   display: flex;
@@ -5134,6 +5141,11 @@ option {
         Answer Key Check
         <span class="badge" id="ansreviewCount" style="display:none;">0</span>
       </div>
+      <div class="nav-item admin-only" data-page="answerkeys" onclick="navigateTo('answerkeys')" title="Add answer-key explanations and pictures to annotation questions">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 10h.01"/><path d="M12 10h.01"/><path d="M16 10h.01"/></svg>
+        Answer Keys
+        <span class="badge" id="answerKeysNavCount" style="display:none;">0</span>
+      </div>
       <div class="nav-item admin-only" data-page="vetting" onclick="navigateTo('vetting')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         Vetting List
@@ -5426,6 +5438,18 @@ option {
         </div>
 
         <div class="form-group">
+          <label class="form-label">📝 Answer-key explanation &amp; picture <span style="font-weight:400;color:var(--text-muted);">(optional — shown on the printed answer key when you export a worksheet; ideal for annotation questions that have no answer block)</span></label>
+          <textarea id="questionAnswerKeyNote" class="form-input" rows="2" placeholder="e.g. Tick the box next to the splitting fruit (right); label part X as the anther." style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">
+            <input type="hidden" id="questionAnswerKeyImage">
+            <label class="btn btn-outline" style="cursor:pointer;font-size:0.82rem;">🖼 Upload answer-key image<input type="file" accept="image/*" style="display:none;" onchange="onAnswerKeyImagePick(this)"></label>
+            <button type="button" class="btn btn-outline" id="answerKeyImageRemove" style="display:none;font-size:0.82rem;color:var(--accent-red);" onclick="clearAnswerKeyImage()">Remove image</button>
+            <span id="answerKeyImageStatus" style="font-size:0.8rem;color:var(--text-muted);"></span>
+          </div>
+          <img id="answerKeyImagePreview" alt="Answer-key image" style="display:none;max-width:100%;max-height:220px;margin-top:8px;border:1px solid var(--border);border-radius:8px;">
+        </div>
+
+        <div class="form-group">
           <label class="form-label" style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600;">
             <input type="checkbox" id="questionNotInSyllabus" style="width:18px;height:18px;flex:0 0 auto;cursor:pointer;">
             <span>🚫 Not in syllabus <span style="font-weight:400;color:var(--text-muted);">— hide from every practice mode, but keep it in PSLE Papers</span></span>
@@ -5622,6 +5646,32 @@ option {
       </div>
       <div class="page-body" style="max-width:960px;">
         <div class="question-bank-grid" id="vettingListGrid"></div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: ANSWER KEYS (add explanation + picture answer keys, esp. annotation Qs) ===== -->
+    <div class="page" id="page-answerkeys">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Answer Keys</h2>
+          </div>
+          <div class="subtitle">Give annotation questions (and any question with no answer block) an answer-key explanation and picture — shown when you export a worksheet's answer key</div>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:820px;">
+        <div class="filter-bar" style="margin-bottom:16px;">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="answerKeysSearch" placeholder="Search title / topic…" oninput="renderAnswerKeysPage()">
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;white-space:nowrap;">
+            <input type="checkbox" id="answerKeysOnlyMissing" checked onchange="renderAnswerKeysPage()"> Only ones still missing an answer key
+          </label>
+        </div>
+        <div class="ar-note" style="margin-bottom:16px;">Showing <b><span id="answerKeysCount">0</span></b> question(s). Add an explanation and/or upload a picture (e.g. the diagram with the correct ticks and labels), then <b>Save</b>. It will appear on the answer-key pages when you print or export a worksheet that includes this question.</div>
+        <div id="answerKeysList"></div>
       </div>
     </div>
 
@@ -9092,7 +9142,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.143.0';
+const APP_VERSION = 'v1.144.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9379,6 +9429,7 @@ function navigateTo(page) {
       document.getElementById('topicSelect').value = 'Heat';
       const cs2 = document.getElementById('categorySelect2'); if (cs2) cs2.value = '';
       const ts2 = document.getElementById('topicSelect2'); if (ts2) ts2.value = '';
+  if (typeof _setAnswerKeyFields === 'function') _setAnswerKeyFields('', '');
       const annEl = document.getElementById('questionAnnotation');
       if (annEl) annEl.checked = false;
       const nisEl = document.getElementById('questionNotInSyllabus');
@@ -9393,6 +9444,7 @@ function navigateTo(page) {
   }
   _skipCreateReset = false;
   if (page === 'bank') renderQuestionBank();
+  if (page === 'answerkeys') renderAnswerKeysPage();
   if (page === 'ansreview') renderAnswerReview();
   if (page === 'papers') renderPapersPage();
   if (page === 'notes') renderNotesPage();
@@ -11655,6 +11707,140 @@ async function uploadImageDataUrl(dataUrl) {
   return await getDownloadURL(ref);
 }
 
+// ---- Answer-key explanation + image (question editor) ----
+function _renderAnswerKeyPreview() {
+  const img = (document.getElementById('questionAnswerKeyImage')?.value || '').trim();
+  const prev = document.getElementById('answerKeyImagePreview');
+  const rm = document.getElementById('answerKeyImageRemove');
+  if (prev) { if (img) { prev.src = transformImageUrl(img); prev.style.display = ''; } else { prev.style.display = 'none'; prev.removeAttribute('src'); } }
+  if (rm) rm.style.display = img ? '' : 'none';
+}
+function _setAnswerKeyFields(note, img) {
+  const t = document.getElementById('questionAnswerKeyNote'); if (t) t.value = note || '';
+  const h = document.getElementById('questionAnswerKeyImage'); if (h) h.value = img || '';
+  const s = document.getElementById('answerKeyImageStatus'); if (s) s.textContent = '';
+  _renderAnswerKeyPreview();
+}
+async function onAnswerKeyImagePick(input) {
+  const file = input.files && input.files[0]; if (!file) return;
+  const status = document.getElementById('answerKeyImageStatus');
+  if (status) status.textContent = '⏳ Uploading…';
+  try {
+    const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+    const url = await uploadImageDataUrl(dataUrl);
+    const h = document.getElementById('questionAnswerKeyImage'); if (h) h.value = url;
+    _renderAnswerKeyPreview();
+    if (status) status.textContent = 'Uploaded ✓';
+  } catch (err) {
+    console.error('answer-key image upload failed', err);
+    if (status) status.textContent = 'Upload failed';
+    showToast('Upload failed: ' + (err && err.message ? err.message : err), 'error');
+  } finally { input.value = ''; }
+}
+function clearAnswerKeyImage() {
+  const h = document.getElementById('questionAnswerKeyImage'); if (h) h.value = '';
+  const s = document.getElementById('answerKeyImageStatus'); if (s) s.textContent = '';
+  _renderAnswerKeyPreview();
+}
+// Answer-key section (note + image) contributed by a question for printed answer
+// keys — mainly for annotation questions that have no answer block.
+function _qAnswerKeyExtraSection(q) {
+  const note = (q && typeof q.answerKeyNote === 'string') ? q.answerKeyNote.trim() : '';
+  const img = (q && typeof q.answerKeyImage === 'string') ? q.answerKeyImage.trim() : '';
+  if (!note && !img) return null;
+  let content = note ? escapeHtmlKeepLines(note) : '';
+  if (img) content += `<div style="margin-top:6px;"><img src="${escapeHtml(transformImageUrl(img))}" style="max-width:100%;max-height:220pt;"></div>`;
+  return { label: 'Answer', content };
+}
+
+// ---- Answer Keys admin page: bulk-add answer-key notes/pictures ----
+// A question "needs" an answer key when it's an annotation question or has no
+// answer-bearing block (so nothing would print on the answer-key pages).
+function _needsAnswerKey(q) {
+  if (!q || !Array.isArray(q.blocks)) return false;
+  const hasAns = q.blocks.some(b => b && ['answer', 'plainanswer', 'mcq', 'answerLine', 'answerKey'].includes(b.type));
+  return !!q.annotation || !hasAns;
+}
+function _hasAnswerKeyExtra(q) {
+  return !!((q && q.answerKeyNote && String(q.answerKeyNote).trim()) || (q && q.answerKeyImage && String(q.answerKeyImage).trim()));
+}
+function _qFirstImageUrl(q) {
+  const b = ((q && q.blocks) || []).find(x => x && x.type === 'image' && x.url);
+  return b ? b.url : '';
+}
+function renderAnswerKeysPage() {
+  const el = document.getElementById('answerKeysList');
+  if (!el) return;
+  const onlyMissing = !!document.getElementById('answerKeysOnlyMissing')?.checked;
+  const term = (document.getElementById('answerKeysSearch')?.value || '').trim().toLowerCase();
+  let list = questionBank.filter(_needsAnswerKey);
+  if (onlyMissing) list = list.filter(q => !_hasAnswerKeyExtra(q));
+  if (term) list = list.filter(q => ((q.title || '') + ' ' + (q.topic || '')).toLowerCase().includes(term));
+  const cntEl = document.getElementById('answerKeysCount'); if (cntEl) cntEl.textContent = list.length;
+  const navBadge = document.getElementById('answerKeysNavCount');
+  if (navBadge) { const miss = questionBank.filter(q => _needsAnswerKey(q) && !_hasAnswerKeyExtra(q)).length; if (miss) { navBadge.style.display = ''; navBadge.textContent = miss; } else navBadge.style.display = 'none'; }
+  if (!list.length) {
+    el.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><h3>${onlyMissing ? 'Nothing missing an answer key' : 'No matching questions'}</h3><p>${onlyMissing ? 'Every annotation question here has an answer-key explanation or picture. Untick the filter to see them all.' : 'Try a different search.'}</p></div>`;
+    return;
+  }
+  el.innerHTML = list.map(q => {
+    const qimg = _qFirstImageUrl(q);
+    const cur = (q.answerKeyImage || '').trim();
+    return `<div class="ak-card">
+      <div class="ak-card-top">
+        ${qimg ? `<img class="ak-qthumb" src="${escapeHtml(transformImageUrl(qimg))}" alt="question image">` : ''}
+        <div class="ak-card-info">
+          <div class="ak-card-title">${escapeHtml(q.title || 'Untitled')}</div>
+          <div class="ak-card-meta">
+            <span class="qb-tag topic">${escapeHtml(q.topic || '')}</span>
+            ${q.annotation ? '<span class="qb-tag" style="background:#e0f2fe;color:#0369a1;">✍️ annotation</span>' : ''}
+            ${_hasAnswerKeyExtra(q) ? '<span class="qb-tag" style="background:#dcfce7;color:#166534;">✓ has answer key</span>' : '<span class="qb-tag" style="background:#fee2e2;color:#991b1b;">no answer key</span>'}
+          </div>
+        </div>
+        <button class="btn btn-outline" style="font-size:0.78rem;" onclick="editQuestion('${q.id}')">Open editor</button>
+      </div>
+      <textarea id="akNote_${q.id}" class="form-input" rows="2" placeholder="Answer-key explanation (e.g. tick the splitting fruit; label X as the anther)…" style="font-size:0.86rem;margin-top:10px;">${escapeHtml(q.answerKeyNote || '')}</textarea>
+      <input type="hidden" id="akImgUrl_${q.id}" value="${escapeHtml(cur)}">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">
+        <label class="btn btn-outline" style="cursor:pointer;font-size:0.78rem;">🖼 Upload answer picture<input type="file" accept="image/*" style="display:none;" onchange="onAkPageImagePick('${q.id}',this)"></label>
+        <button class="btn btn-outline" style="font-size:0.78rem;color:var(--accent-red);${cur ? '' : 'display:none;'}" id="akImgRemove_${q.id}" onclick="akPageClearImage('${q.id}')">Remove</button>
+        <span id="akImgStatus_${q.id}" style="font-size:0.78rem;color:var(--text-muted);"></span>
+        <button class="btn btn-primary" style="font-size:0.8rem;margin-left:auto;" onclick="saveAnswerKeyFor('${q.id}')">Save</button>
+      </div>
+      <img id="akImgPrev_${q.id}" alt="answer key" style="max-width:100%;max-height:220px;margin-top:8px;border:1px solid var(--border);border-radius:8px;${cur ? '' : 'display:none;'}" ${cur ? `src="${escapeHtml(transformImageUrl(cur))}"` : ''}>
+    </div>`;
+  }).join('');
+}
+async function onAkPageImagePick(id, input) {
+  const file = input.files && input.files[0]; if (!file) return;
+  const status = document.getElementById('akImgStatus_' + id); if (status) status.textContent = '⏳ Uploading…';
+  try {
+    const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+    const url = await uploadImageDataUrl(dataUrl);
+    const h = document.getElementById('akImgUrl_' + id); if (h) h.value = url;
+    const prev = document.getElementById('akImgPrev_' + id); if (prev) { prev.src = transformImageUrl(url); prev.style.display = ''; }
+    const rm = document.getElementById('akImgRemove_' + id); if (rm) rm.style.display = '';
+    if (status) status.textContent = 'Uploaded ✓ — remember to Save';
+  } catch (err) {
+    console.error('answer-key image upload failed', err);
+    if (status) status.textContent = 'Upload failed';
+    showToast('Upload failed: ' + (err && err.message ? err.message : err), 'error');
+  } finally { input.value = ''; }
+}
+function akPageClearImage(id) {
+  const h = document.getElementById('akImgUrl_' + id); if (h) h.value = '';
+  const prev = document.getElementById('akImgPrev_' + id); if (prev) { prev.style.display = 'none'; prev.removeAttribute('src'); }
+  const rm = document.getElementById('akImgRemove_' + id); if (rm) rm.style.display = 'none';
+  const st = document.getElementById('akImgStatus_' + id); if (st) st.textContent = 'Removed — remember to Save';
+}
+async function saveAnswerKeyFor(id) {
+  const q = questionBank.find(x => x.id === id); if (!q) return;
+  q.answerKeyNote = (document.getElementById('akNote_' + id)?.value || '').trim();
+  q.answerKeyImage = (document.getElementById('akImgUrl_' + id)?.value || '').trim();
+  const ok = await saveQuestion(q);
+  if (ok) { showToast('Answer key saved ✓', 'success'); renderAnswerKeysPage(); }
+}
+
 function handleImagePaste(blockId, e) {
   const items = (e.clipboardData && e.clipboardData.items) || [];
   for (const it of items) {
@@ -13078,6 +13264,7 @@ function _populateEditorFromAi(data) {
   if (topEl && data.topic && Array.from(topEl.options).some(o => o.value === data.topic)) topEl.value = data.topic;
   const cs2 = document.getElementById('categorySelect2'); if (cs2) cs2.value = '';
   const ts2 = document.getElementById('topicSelect2'); if (ts2) ts2.value = '';
+  if (typeof _setAnswerKeyFields === 'function') _setAnswerKeyFields('', '');
   const mgEl = document.getElementById('questionMarkingGuide');
   if (mgEl) mgEl.value = '';
 
@@ -14697,6 +14884,8 @@ function collectQuestionData() {
     topic: primaryTopic,
     topic2: (rawTopic2 && rawTopic2 !== primaryTopic) ? rawTopic2 : '',
     markingGuide: (document.getElementById('questionMarkingGuide')?.value || '').trim(),
+    answerKeyNote: (document.getElementById('questionAnswerKeyNote')?.value || '').trim(),
+    answerKeyImage: (document.getElementById('questionAnswerKeyImage')?.value || '').trim(),
     annotation: !!(document.getElementById('questionAnnotation') && document.getElementById('questionAnnotation').checked),
     notInSyllabus: !!(document.getElementById('questionNotInSyllabus') && document.getElementById('questionNotInSyllabus').checked),
     blocks: blocksClone,
@@ -14877,10 +15066,12 @@ function clearForm() {
     document.getElementById('topicSelect').value = 'Heat';
     const cs2 = document.getElementById('categorySelect2'); if (cs2) cs2.value = '';
     const ts2 = document.getElementById('topicSelect2'); if (ts2) ts2.value = '';
+  if (typeof _setAnswerKeyFields === 'function') _setAnswerKeyFields('', '');
     const mgEl = document.getElementById('questionMarkingGuide');
     if (mgEl) mgEl.value = '';
     const annEl = document.getElementById('questionAnnotation');
     if (annEl) annEl.checked = false;
+    _setAnswerKeyFields('', '');
     const nisEl = document.getElementById('questionNotInSyllabus');
     if (nisEl) nisEl.checked = false;
     _hideDupBanner();
@@ -15197,6 +15388,7 @@ function editQuestion(id) {
   if (mgEl) mgEl.value = q.markingGuide || '';
   const annEl = document.getElementById('questionAnnotation');
   if (annEl) annEl.checked = !!q.annotation;
+  _setAnswerKeyFields(q.answerKeyNote || '', q.answerKeyImage || '');
   const nisEl = document.getElementById('questionNotInSyllabus');
   if (nisEl) nisEl.checked = !!q.notInSyllabus;
 
@@ -16195,6 +16387,8 @@ function doPrintWorksheetOpen() {
 
     qHtml += `</div>`;
     allHtml += qHtml;
+    const _akExtra = _qAnswerKeyExtraSection(q);
+    if (_akExtra) qSections.push(_akExtra);
     answerKeyData.push({ title: q.title, sections: qSections });
   });
 
@@ -19996,6 +20190,8 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
       });
       qHtml += `</div>`;
       allHtml += qHtml;
+      const _akExtra = _qAnswerKeyExtraSection(q);
+      if (_akExtra) qSections.push(_akExtra);
       answerKeyData.push({ title: plainNums ? ('Question ' + (qIndex + 1)) : q.title, type: 'open', sections: qSections });
     }
   });
@@ -33640,6 +33836,7 @@ function ppCreateForAssign(){
   blocks = []; selectedBlanks = {}; currentEditingQuestion = null;
   const cs2 = document.getElementById('categorySelect2'); if (cs2) cs2.value = '';
   const ts2 = document.getElementById('topicSelect2'); if (ts2) ts2.value = '';
+  if (typeof _setAnswerKeyFields === 'function') _setAnswerKeyFields('', '');
   const titleEl = document.getElementById('questionTitle');
   if (titleEl) titleEl.value = q.title || (q.year + ' Q' + q.n);
   const cat = (q.bk === 'B' || q.type === 'open') ? 'PSLE - OEQ' : 'PSLE - MCQ';
@@ -33715,7 +33912,7 @@ async function ppDoPrint(items, missing, title, opts){
   // (no questions cut across pages) and the wait is visible, not a dead click.
   _printProgressShow('Preparing worksheet…', 'Starting…');
   const urls = [];
-  selected.forEach(q => (q.blocks || []).forEach(b => { if (b && b.url && (b.type === 'image' || b.type === 'answerKey')) urls.push(transformImageUrl(b.url)); }));
+  selected.forEach(q => { if (q.answerKeyImage) urls.push(transformImageUrl(q.answerKeyImage)); (q.blocks || []).forEach(b => { if (b && b.url && (b.type === 'image' || b.type === 'answerKey')) urls.push(transformImageUrl(b.url)); }); });
   await _preloadImageUrls(urls, (done, tot) => _printProgressUpdate('Loading question images…', 0.05 + 0.7 * (done / tot), done + '/' + tot + ' images'));
   _printProgressUpdate('Laying out pages…', 0.8, 'Measuring each question at print size');
   output.innerHTML = buildWorksheetHtml(selected, title, { answerKeyExtras: true, plainNumbers: true });
@@ -34318,6 +34515,12 @@ window.arStampOption = arStampOption;
 window.arEditQuestion = arEditQuestion;
 window.renderOeqReview = renderOeqReview;
 window.runOeqCompare = runOeqCompare;
+window.onAnswerKeyImagePick = onAnswerKeyImagePick;
+window.clearAnswerKeyImage = clearAnswerKeyImage;
+window.renderAnswerKeysPage = renderAnswerKeysPage;
+window.onAkPageImagePick = onAkPageImagePick;
+window.akPageClearImage = akPageClearImage;
+window.saveAnswerKeyFor = saveAnswerKeyFor;
 window.ppAddQuestion = ppAddQuestion;
 window.ppEditQuestion = ppEditQuestion;
 window.ppCloseQEdit = ppCloseQEdit;
