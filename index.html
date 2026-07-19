@@ -2963,6 +2963,37 @@ option {
 .ai-search-status.error { color: var(--accent-red); }
 .qb-tag.ai-match { background: var(--primary-light); color: var(--primary); font-weight: 700; }
 
+/* Answer Key Check */
+.ar-summary { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 18px 20px; margin-bottom: 20px; }
+.ar-sum-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.ar-stat { flex: 1; min-width: 110px; border-radius: var(--radius-sm); padding: 12px 14px; text-align: center; border: 1px solid var(--border); background: var(--surface-alt); }
+.ar-stat b { display: block; font-size: 1.6rem; font-weight: 800; line-height: 1.1; }
+.ar-stat span { font-size: 0.76rem; color: var(--text-muted); }
+.ar-stat.ok b { color: #2f9e5f; }
+.ar-stat.bad b { color: var(--accent-red); }
+.ar-stat.warn b { color: #b8860b; }
+.ar-stat.miss b { color: var(--text-muted); }
+.ar-note { font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; margin-top: 14px; }
+.ar-h { font-size: 0.95rem; font-weight: 700; margin: 22px 0 10px; }
+.ar-row { display: flex; gap: 14px; align-items: center; justify-content: space-between; border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; margin-bottom: 10px; flex-wrap: wrap; }
+.ar-row.bad { border-left: 4px solid var(--accent-red); background: #fef5f5; }
+.ar-row.warn { border-left: 4px solid #e0b032; background: #fffdf3; }
+.ar-row.miss { border-left: 4px solid var(--text-muted); background: var(--surface-alt); }
+.ar-row-main { flex: 1; min-width: 220px; }
+.ar-row-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.ar-yq { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.9rem; }
+.ar-tag { font-size: 0.72rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+.ar-tag.bad { background: #fbdcdc; color: #b02a2a; }
+.ar-tag.warn { background: #f7edcf; color: #8a6d10; }
+.ar-tag.miss { background: var(--border); color: var(--text-muted); }
+.ar-row-title { font-weight: 600; font-size: 0.9rem; line-height: 1.4; margin-bottom: 4px; }
+.ar-row-ans { font-size: 0.83rem; color: var(--text-muted); line-height: 1.5; }
+.ar-row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ar-row-actions .btn { font-size: 0.8rem; padding: 8px 14px; }
+.ar-details { margin-top: 6px; }
+.ar-details > summary { cursor: pointer; list-style: revert; }
+.ar-details > summary::-webkit-details-marker { display: revert; }
+
 .filter-bar {
   display: flex;
   align-items: center;
@@ -5090,6 +5121,11 @@ option {
         Question Bank
         <span class="badge" id="bankCount">0</span>
       </div>
+      <div class="nav-item admin-only" data-page="ansreview" onclick="navigateTo('ansreview')" title="Cross-check the PSLE paper answers against the official answer keys">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M22 12v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+        Answer Key Check
+        <span class="badge" id="ansreviewCount" style="display:none;">0</span>
+      </div>
       <div class="nav-item admin-only" data-page="vetting" onclick="navigateTo('vetting')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         Vetting List
@@ -5578,6 +5614,26 @@ option {
       </div>
       <div class="page-body" style="max-width:960px;">
         <div class="question-bank-grid" id="vettingListGrid"></div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: ANSWER KEY CHECK (cross-check PSLE paper answers vs official keys) ===== -->
+    <div class="page" id="page-ansreview">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Answer Key Check</h2>
+          </div>
+          <div class="subtitle">Cross-check the PSLE paper answers in the app against the official answer keys</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-primary" onclick="renderAnswerReview()">↻ Re-run check</button>
+        </div>
+      </div>
+      <div class="page-body" style="max-width:900px;">
+        <div id="ansreviewSummary"></div>
+        <div id="ansreviewResults"></div>
       </div>
     </div>
 
@@ -9024,7 +9080,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.141.0';
+const APP_VERSION = 'v1.142.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9325,6 +9381,7 @@ function navigateTo(page) {
   }
   _skipCreateReset = false;
   if (page === 'bank') renderQuestionBank();
+  if (page === 'ansreview') renderAnswerReview();
   if (page === 'papers') renderPapersPage();
   if (page === 'notes') renderNotesPage();
   if (page === 'vetting') renderVettingList();
@@ -32768,6 +32825,143 @@ function ppMergeSeedContent(){
     });
   } catch (e) { console.warn('pp seed merge', e); }
 }
+
+// =====================================================================
+// ANSWER KEY CHECK — cross-check the MCQ (Booklet A) answers stored in the
+// past-paper segment against the OFFICIAL answer keys (option numbers) for the
+// years we have keys for. Flags mismatches and answers missing an option
+// number so an admin can read, edit, or one-click fix them.
+// =====================================================================
+const PP_ANSWER_KEYS = {
+  '2014': {1:2,2:2,3:1,4:4,5:2,6:3,7:2,8:2,9:4,10:3,11:3,12:3,13:1,14:3,15:4,16:3,17:4,18:3,19:2,20:3,21:3,22:1,23:4,24:4,25:1,26:4,27:2,28:2,29:1,30:1},
+  '2015': {1:3,2:1,3:2,4:2,5:3,6:3,7:2,8:4,9:2,10:3,11:4,12:1,13:3,14:1,15:4,16:1,17:2,18:2,19:4,20:2,21:3,22:4,23:1,24:3,25:4,26:4,27:2,28:3,29:1,30:1},
+  '2017': {1:1,2:2,3:1,4:3,5:2,6:3,7:2,8:3,9:2,10:2,11:3,12:2,13:2,14:3,15:4,16:4,17:1,18:4,19:2,20:3,21:2,22:4,23:3,24:4,25:3,26:4,27:3,28:3},
+  '2022': {1:2,2:3,3:4,4:4,5:1,6:4,7:2,8:3,9:4,10:3,11:3,12:1,13:4,14:3,15:1,16:4,17:3,18:2,19:2,20:4,21:4,22:4,23:3,24:1,25:2,26:1,27:3,28:3},
+  '2023': {1:2,2:2,3:4,4:4,5:2,6:3,7:3,8:2,9:2,10:3,11:1,12:2,13:3,14:4,15:3,16:2,17:4,18:3,19:1,20:3,21:4,22:4,23:4,24:4,25:1,26:1,27:1,28:4}
+};
+// Pull an option number (1–4) out of a stored answer string, or null if none.
+function _arOptionNum(ans){
+  const s = String(ans || '');
+  let m = s.match(/option\s*([1-4])\b/i);          // "Option 3 — ..."
+  if (m) return Number(m[1]);
+  m = s.match(/^\s*\(?([1-4])\)/);                  // "(3)" or "3)"
+  if (m) return Number(m[1]);
+  return null;
+}
+// Build the check results across every year we have an official key for.
+function _arBuildResults(){
+  const rows = [];
+  Object.keys(PP_ANSWER_KEYS).sort().forEach(yr => {
+    const key = PP_ANSWER_KEYS[yr];
+    Object.keys(key).map(Number).sort((a,b)=>a-b).forEach(n => {
+      const official = key[n];
+      const q = ppQuestions().find(x => String(x.year) === yr && Number(x.n) === n && (x.bk || 'A') === 'A');
+      if (!q) { rows.push({ yr, n, official, status: 'missing' }); return; }
+      const appOpt = _arOptionNum(q.ans);
+      let status;
+      if (appOpt == null) status = 'nonumber';
+      else if (appOpt === official) status = 'ok';
+      else status = 'mismatch';
+      rows.push({ yr, n, official, appOpt, status, id: q.id, title: q.title, ans: q.ans });
+    });
+  });
+  return rows;
+}
+function renderAnswerReview(){
+  const sumEl = document.getElementById('ansreviewSummary');
+  const resEl = document.getElementById('ansreviewResults');
+  if (!sumEl || !resEl) return;
+  // Make sure paper data is loaded before checking.
+  if (!_ppDataLoaded) {
+    sumEl.innerHTML = '<div class="ar-note">Loading the past-paper data…</div>';
+    resEl.innerHTML = '';
+    loadPaperData().then(() => renderAnswerReview());
+    return;
+  }
+  const rows = _arBuildResults();
+  const mism = rows.filter(r => r.status === 'mismatch');
+  const noNum = rows.filter(r => r.status === 'nonumber');
+  const missing = rows.filter(r => r.status === 'missing');
+  const ok = rows.filter(r => r.status === 'ok');
+  const badge = document.getElementById('ansreviewCount');
+  if (badge){ const total = mism.length + noNum.length; if (total){ badge.style.display=''; badge.textContent = total; } else badge.style.display='none'; }
+
+  const yrs = Object.keys(PP_ANSWER_KEYS).sort().join(', ');
+  sumEl.innerHTML = `
+    <div class="ar-summary">
+      <div class="ar-sum-row">
+        <div class="ar-stat ok"><b>${ok.length}</b><span>match the key</span></div>
+        <div class="ar-stat bad"><b>${mism.length}</b><span>discrepancies</span></div>
+        <div class="ar-stat warn"><b>${noNum.length}</b><span>no option number</span></div>
+        ${missing.length ? `<div class="ar-stat miss"><b>${missing.length}</b><span>missing in app</span></div>` : ''}
+      </div>
+      <div class="ar-note">Checked Booklet&nbsp;A (MCQ) answers for <b>${yrs}</b> against the official answer keys. ${mism.length ? 'Red items below disagree with the official answer — read each one and click <b>Fix</b> if the official key is right, or <b>Edit</b> to change it yourself.' : (noNum.length ? 'No disagreements found. The amber items simply have no option number recorded — you can stamp the official one in.' : 'Everything checked matches the official answer keys. ✔')}</div>
+    </div>`;
+
+  const rowHtml = (r, kind) => {
+    const yq = `${r.yr} Q${r.n}`;
+    const officialTxt = `Option ${r.official}`;
+    if (kind === 'mismatch') {
+      return `<div class="ar-row bad">
+        <div class="ar-row-main">
+          <div class="ar-row-head"><span class="ar-yq">${escapeHtml(yq)}</span><span class="ar-tag bad">app says Option ${r.appOpt} · key says Option ${r.official}</span></div>
+          <div class="ar-row-title">${escapeHtml(r.title || '')}</div>
+          <div class="ar-row-ans"><b>App answer:</b> ${escapeHtml(r.ans || '')}</div>
+        </div>
+        <div class="ar-row-actions">
+          <button class="btn btn-primary" onclick="arFixToOfficial('${r.id}',${r.official})">Fix → Option ${r.official}</button>
+          <button class="btn btn-outline" onclick="arEditQuestion('${r.id}')">Edit</button>
+        </div>
+      </div>`;
+    }
+    if (kind === 'nonumber') {
+      return `<div class="ar-row warn">
+        <div class="ar-row-main">
+          <div class="ar-row-head"><span class="ar-yq">${escapeHtml(yq)}</span><span class="ar-tag warn">official: ${officialTxt}</span></div>
+          <div class="ar-row-title">${escapeHtml(r.title || '')}</div>
+          <div class="ar-row-ans"><b>App answer:</b> ${escapeHtml(r.ans || '') || '<i>(blank)</i>'}</div>
+        </div>
+        <div class="ar-row-actions">
+          <button class="btn btn-outline" onclick="arStampOption('${r.id}',${r.official})" title="Prepend 'Option ${r.official}' to the recorded answer">Stamp Option ${r.official}</button>
+          <button class="btn btn-outline" onclick="arEditQuestion('${r.id}')">Edit</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="ar-row miss">
+      <div class="ar-row-main">
+        <div class="ar-row-head"><span class="ar-yq">${escapeHtml(yq)}</span><span class="ar-tag miss">not in the app — official: ${officialTxt}</span></div>
+      </div>
+    </div>`;
+  };
+
+  let html = '';
+  if (mism.length) html += `<h3 class="ar-h">✗ Discrepancies (${mism.length})</h3>` + mism.map(r => rowHtml(r,'mismatch')).join('');
+  if (noNum.length) html += `<details class="ar-details"${mism.length ? '' : ' open'}><summary class="ar-h">⚠ No option number recorded (${noNum.length}) — click to review</summary>${noNum.map(r => rowHtml(r,'nonumber')).join('')}</details>`;
+  if (missing.length) html += `<details class="ar-details"><summary class="ar-h">Missing in the app (${missing.length})</summary>${missing.map(r => rowHtml(r,'missing')).join('')}</details>`;
+  if (!html) html = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><h3>All good</h3><p>Every checked answer matches the official keys.</p></div>`;
+  resEl.innerHTML = html;
+}
+// Correct a mismatched answer to the official option. Keeps the old wording but
+// re-stamps the option number and flags the description for review.
+async function arFixToOfficial(id, official){
+  const q = ppFindQ(id); if (!q) return;
+  const rest = String(q.ans || '').replace(/^\s*option\s*[1-4]\s*[—\-:]*\s*/i, '').trim();
+  q.ans = `Option ${official}${rest ? ' — ' + rest : ''} (corrected to the official answer key — review the wording)`;
+  await savePaperData();
+  showToast(`Set ${q.year} Q${q.n} to Option ${official}`, 'success');
+  renderAnswerReview();
+}
+// Stamp the official option number onto a text-only answer (prepend it).
+async function arStampOption(id, official){
+  const q = ppFindQ(id); if (!q) return;
+  const cur = String(q.ans || '').trim();
+  q.ans = `Option ${official}${cur ? ' — ' + cur : ''}`;
+  await savePaperData();
+  showToast(`Stamped Option ${official} onto ${q.year} Q${q.n}`, 'success');
+  renderAnswerReview();
+}
+function arEditQuestion(id){ const q = ppFindQ(id); if (q) ppOpenQEdit(q); }
+
 async function savePaperData(){
   if (!ppIsAdmin() || !db) return;
   try {
@@ -33734,6 +33928,9 @@ async function ppSaveQuestionEditor(){
   await savePaperData();
   ppCloseQEdit();
   ppRenderBody();
+  // If the Answer Key Check page is the one open, refresh it too.
+  const arPage = document.getElementById('page-ansreview');
+  if (arPage && arPage.classList.contains('active')) renderAnswerReview();
   showToast('Saved', 'success');
 }
 async function ppDeleteQuestion(id){
@@ -33976,6 +34173,10 @@ window.ppHoverMove = ppHoverMove;
 window.ppHoverHide = ppHoverHide;
 window.ppHoverChipLeave = ppHoverChipLeave;
 window.ppHoverEditAttached = ppHoverEditAttached;
+window.renderAnswerReview = renderAnswerReview;
+window.arFixToOfficial = arFixToOfficial;
+window.arStampOption = arStampOption;
+window.arEditQuestion = arEditQuestion;
 window.ppAddQuestion = ppAddQuestion;
 window.ppEditQuestion = ppEditQuestion;
 window.ppCloseQEdit = ppCloseQEdit;
