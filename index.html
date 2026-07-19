@@ -9024,7 +9024,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.140.0';
+const APP_VERSION = 'v1.140.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -33030,7 +33030,7 @@ let _ppHoverTimer = null;         // fires the "expand to full preview" after a 
 let _ppHoverLast = null;          // last pointer position, so we can re-anchor on expand
 let _ppHoverLocked = false;       // true once expanded: the card is interactive & scrollable
 let _ppHoverGrace = null;         // brief delay when leaving a chip, so the cursor can reach the card
-const PP_HOVER_EXPAND_MS = 4000;  // dwell time before the preview blooms open
+const PP_HOVER_EXPAND_MS = 2000;  // dwell time before the preview blooms open
 function _ppHoverOpen(html, ev){
   const el = ppHoverEl();
   clearTimeout(_ppHoverGrace);
