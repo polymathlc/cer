@@ -2926,6 +2926,40 @@ option {
 .vetting-flag-note .vfn-comment { margin-top: 4px; color: #7f1d1d; font-style: italic; }
 
 /* ========== FILTER BAR ========== */
+/* AI question search */
+.ai-search-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+.ai-search-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ai-search-row .search-box { flex: 1; min-width: 220px; position: relative; }
+.ai-search-row .search-box svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--primary);
+}
+.ai-search-row .search-box input {
+  width: 100%;
+  padding: 10px 14px 10px 38px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.88rem;
+  background: var(--surface);
+  color: var(--text);
+}
+.ai-search-row .search-box input:focus { outline: none; border-color: var(--primary); }
+.ai-search-status { font-size: 0.82rem; color: var(--text-muted); margin-top: 12px; line-height: 1.5; }
+.ai-search-status.error { color: var(--accent-red); }
+.qb-tag.ai-match { background: var(--primary-light); color: var(--primary); font-weight: 700; }
+
 .filter-bar {
   display: flex;
   align-items: center;
@@ -5457,6 +5491,17 @@ option {
         </div>
       </div>
       <div class="page-body" style="max-width:960px;">
+        <div class="ai-search-card">
+          <div class="ai-search-row">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>
+              <input id="bankAiSearch" placeholder="Ask AI anything, e.g. find all questions that involve expansion of objects" onkeydown="if(event.key==='Enter')runBankAiSearch()">
+            </div>
+            <button class="btn btn-primary" id="bankAiSearchBtn" onclick="runBankAiSearch()">AI Search</button>
+            <button class="btn btn-outline" id="bankAiClearBtn" onclick="clearBankAiSearch()" style="display:none;">Clear</button>
+          </div>
+          <div class="ai-search-status" id="bankAiSearchStatus" style="display:none;"></div>
+        </div>
         <div class="filter-bar">
           <div class="search-box">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -8970,7 +9015,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.136.0';
+const APP_VERSION = 'v1.137.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -14777,6 +14822,91 @@ function parseSearchTokens(raw) {
   return tokens;
 }
 
+// ---- AI question search: rank the bank by a natural-language instruction ----
+let bankAiRanking = null;   // Map(question id -> relevance score 0-100), null when inactive
+let bankAiBusy = false;
+
+function _bankAiStatus(msg, isError = false) {
+  const el = document.getElementById('bankAiSearchStatus');
+  if (!el) return;
+  if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.style.display = 'block';
+  el.classList.toggle('error', isError);
+  el.textContent = msg;
+}
+
+function _bankAiSnippet(q) {
+  return extractQuestionSearchText(q).slice(0, 240);
+}
+
+async function runBankAiSearch() {
+  const instruction = (document.getElementById('bankAiSearch')?.value || '').trim();
+  if (!instruction) { _bankAiStatus('Type an instruction first, e.g. "find all questions that involve expansion of objects".', true); return; }
+  if (bankAiBusy) return;
+  if (!geminiModel) { _bankAiStatus('AI is not ready yet — please wait a moment and try again.', true); return; }
+  if (questionBank.length === 0) { _bankAiStatus('The question bank is empty.', true); return; }
+
+  bankAiBusy = true;
+  const btn = document.getElementById('bankAiSearchBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Searching…'; }
+  const CHUNK = 100;
+  const scores = new Map();
+  try {
+    for (let i = 0; i < questionBank.length; i += CHUNK) {
+      const batch = questionBank.slice(i, i + CHUNK);
+      _bankAiStatus(`AI is reading the bank… (${Math.min(i + CHUNK, questionBank.length)}/${questionBank.length} questions)`);
+      const lines = batch.map(q => `${q.id} | ${_bankAiSnippet(q)}`).join('\n');
+      const prompt = `You are helping a science teacher search a question bank.
+Teacher's instruction: "${instruction}"
+
+Below is a list of questions, one per line, in the format: id | text.
+Find every question that matches the instruction and rate how relevant each one is.
+
+Rules:
+- Return ONLY a JSON array, no other text.
+- Each element: {"id":"<id exactly as given>","score":<integer 1-100, 100 = most relevant>}.
+- Include ONLY questions genuinely relevant to the instruction; omit irrelevant ones entirely.
+- If nothing matches, return [].
+
+Questions:
+${lines}`;
+      const raw = await askGemini(prompt, { maxOutputTokens: 4096, temperature: 0, json: true });
+      const data = _parseAIJson(raw);
+      if (Array.isArray(data)) {
+        const batchIds = new Set(batch.map(q => q.id));
+        data.forEach(item => {
+          if (!item || typeof item.id !== 'string' || !batchIds.has(item.id)) return;
+          const score = Math.max(0, Math.min(100, Math.round(Number(item.score) || 0)));
+          if (score > 0) scores.set(item.id, score);
+        });
+      }
+    }
+    bankAiRanking = scores;
+    const clearBtn = document.getElementById('bankAiClearBtn');
+    if (clearBtn) clearBtn.style.display = '';
+    _bankAiStatus(scores.size === 0
+      ? `AI found no questions matching "${instruction}". Try rephrasing your instruction.`
+      : `AI found ${scores.size} relevant question${scores.size === 1 ? '' : 's'} for "${instruction}" — sorted from most to least relevant.`);
+    renderQuestionBank();
+  } catch (err) {
+    console.error('AI bank search failed', err);
+    _bankAiStatus(`AI search failed: ${err.message || err}. Please try again.`, true);
+  } finally {
+    bankAiBusy = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'AI Search'; }
+  }
+}
+
+function clearBankAiSearch() {
+  bankAiRanking = null;
+  const input = document.getElementById('bankAiSearch');
+  if (input) input.value = '';
+  const clearBtn = document.getElementById('bankAiClearBtn');
+  if (clearBtn) clearBtn.style.display = 'none';
+  _bankAiStatus('');
+  renderQuestionBank();
+}
+
 function renderQuestionBank() {
   const container = document.getElementById('questionBankGrid');
   const searchRaw = (document.getElementById('bankSearch')?.value || '').trim();
@@ -14798,9 +14928,20 @@ function renderQuestionBank() {
     }
     return true;
   });
-  
+
+  if (bankAiRanking) {
+    filtered = filtered
+      .filter(q => bankAiRanking.has(q.id))
+      .sort((a, b) => bankAiRanking.get(b.id) - bankAiRanking.get(a.id));
+  }
+
   if (filtered.length === 0) {
-    container.innerHTML = `
+    container.innerHTML = bankAiRanking ? `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <h3>No matching questions</h3>
+        <p>AI found no questions for that instruction — try rephrasing it, or clear the AI search</p>
+      </div>` : `
       <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         <h3>No questions yet</h3>
@@ -14814,12 +14955,14 @@ function renderQuestionBank() {
     const qLevel = getTopicLevel(q.topic || '');
     const qCategory = normalizeCategoryValue(q.category);
     const qSource = questionSource(q);
+    const aiScore = bankAiRanking ? bankAiRanking.get(q.id) : null;
     return `
       <div class="qb-card" ondblclick="editQuestion('${q.id}')">
         <div class="qb-card-header">
           <div>
             <div class="qb-card-title">${escapeHtml(q.title)}</div>
             <div class="qb-card-meta">
+              ${aiScore != null ? `<span class="qb-tag ai-match" title="AI relevance to your instruction">★ ${aiScore}% match</span>` : ''}
               <span class="qb-tag category">${escapeHtml(qCategory)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
@@ -33681,6 +33824,8 @@ window.showConfirm = showConfirm;
 window.closeConfirm = closeConfirm;
 window.renderBlocks = renderBlocks;
 window.renderQuestionBank = renderQuestionBank;
+window.runBankAiSearch = runBankAiSearch;
+window.clearBankAiSearch = clearBankAiSearch;
 window.renderStudentView = renderStudentView;
 window.saveBlockContent = saveBlockContent;
 window.updateTableDimensions = updateTableDimensions;
