@@ -1396,6 +1396,9 @@ option {
 }
 .qb-tag.category { background: var(--accent-blue-light); color: var(--accent-blue); }
 .qb-tag.topic { background: var(--primary-light); color: var(--primary); }
+/* Secondary (2nd) category/topic tags — same colour, dashed outline + a leading "+" so they read as an extra label. */
+.qb-tag.alt { background: transparent; border: 1px dashed currentColor; opacity: 0.9; }
+.qb-tag.alt::before { content: "+ "; opacity: 0.7; }
 .qb-tag.blanks { background: var(--yellow-highlight); color: #8a7a10; border: 1px solid var(--yellow-border); }
 .qb-tag.source { background: #f3e8ff; color: #7c3aed; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qb-card-preview {
@@ -5315,6 +5318,9 @@ option {
                 <option value="__custom__">⚙ Add / remove categories…</option>
               </optgroup>
             </select>
+            <select id="categorySelect2" class="form-select" style="margin-top:8px;" title="Optional 2nd category — the question is filed under both">
+              <option value="">+ Add 2nd category (optional)</option>
+            </select>
           </div>
           <div class="form-group">
             <label class="form-label">Question Title <button type="button" class="mic-btn" data-mic="questionTitle" title="Dictate the question title" style="width:26px;height:26px;font-size:0.85rem;vertical-align:middle;">🎤</button></label>
@@ -5355,6 +5361,9 @@ option {
               <optgroup label="── Manage ──">
                 <option value="__custom__">⚙ Add / remove topics…</option>
               </optgroup>
+            </select>
+            <select id="topicSelect2" class="form-select" style="margin-top:8px;" title="Optional 2nd topic — the question is filed under both">
+              <option value="">+ Add 2nd topic (optional)</option>
             </select>
           </div>
         </div>
@@ -9015,7 +9024,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.138.0';
+const APP_VERSION = 'v1.139.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9211,6 +9220,39 @@ function normalizeCategoryValue(category) {
   return category || 'CER';
 }
 
+// ── Secondary classifier support ──────────────────────────────────────────
+// A question may carry an optional 2nd topic (q.topic2) and 2nd category
+// (q.category2) so it can be filed under two skills/topics at once — e.g. a
+// question that is BOTH "PSLE - MCQ" and "Reliability". All list-building,
+// filtering, matching, searching and display below treat the primary and
+// secondary values as a small set.
+function qSecondaryTopic(q) { return (q && typeof q.topic2 === 'string') ? q.topic2.trim() : ''; }
+function qSecondaryCategory(q) {
+  const c = (q && typeof q.category2 === 'string') ? q.category2.trim() : '';
+  return c ? normalizeCategoryValue(c) : '';
+}
+function qTopicList(q) {
+  const out = [];
+  [((q && q.topic) || ''), qSecondaryTopic(q)].forEach(t => { t = (t || '').trim(); if (t && !out.includes(t)) out.push(t); });
+  return out;
+}
+function qCategoryList(q) {
+  const out = [];
+  [normalizeCategoryValue(q && q.category), qSecondaryCategory(q)].forEach(c => { if (c && !out.includes(c)) out.push(c); });
+  return out;
+}
+function qMatchesTopic(q, t) { return !t ? true : qTopicList(q).includes(t); }
+function qMatchesCategory(q, c) { return !c ? true : qCategoryList(q).includes(c); }
+// Extra tag(s) for a question's 2nd category / 2nd topic — empty string when none.
+function qSecondaryTagsHtml(q) {
+  const c2 = qSecondaryCategory(q);
+  const t2 = qSecondaryTopic(q);
+  let html = '';
+  if (c2 && c2 !== normalizeCategoryValue(q && q.category)) html += `<span class="qb-tag category alt" title="2nd category">${escapeHtml(c2)}</span>`;
+  if (t2 && t2 !== (((q && q.topic) || '').trim())) html += `<span class="qb-tag topic alt" title="2nd topic">${escapeHtml(t2)}</span>`;
+  return html;
+}
+
 // Every question that contains a multiple-choice block is categorised under the
 // "Multiple Choice Question" category, regardless of any other category picked —
 // EXCEPT when the author deliberately filed it under a PSLE category, which we
@@ -9267,6 +9309,8 @@ function navigateTo(page) {
       document.getElementById('questionTitle').value = '';
       document.getElementById('categorySelect').value = 'CER';
       document.getElementById('topicSelect').value = 'Heat';
+      const cs2 = document.getElementById('categorySelect2'); if (cs2) cs2.value = '';
+      const ts2 = document.getElementById('topicSelect2'); if (ts2) ts2.value = '';
       const annEl = document.getElementById('questionAnnotation');
       if (annEl) annEl.checked = false;
       const nisEl = document.getElementById('questionNotInSyllabus');
@@ -12963,6 +13007,8 @@ function _populateEditorFromAi(data) {
   if (catEl && data.category && Array.from(catEl.options).some(o => o.value === data.category)) catEl.value = data.category;
   const topEl = document.getElementById('topicSelect');
   if (topEl && data.topic && Array.from(topEl.options).some(o => o.value === data.topic)) topEl.value = data.topic;
+  const cs2 = document.getElementById('categorySelect2'); if (cs2) cs2.value = '';
+  const ts2 = document.getElementById('topicSelect2'); if (ts2) ts2.value = '';
   const mgEl = document.getElementById('questionMarkingGuide');
   if (mgEl) mgEl.value = '';
 
@@ -14496,6 +14542,12 @@ function normalizeLoadedQuestion(q) {
   if (!q || !Array.isArray(q.blocks)) return q;
   q.category = normalizeCategoryValue(q.category);
   applyMcqCategory(q); // MCQ questions always sit in the Multiple Choice Question category
+  // Optional 2nd category: normalise it, and drop it if it just duplicates the primary.
+  if (q.category2 && typeof q.category2 === 'string') {
+    const c2 = normalizeCategoryValue(q.category2.trim());
+    q.category2 = (c2 && c2 !== q.category) ? c2 : '';
+  }
+  if (q.topic2 && typeof q.topic2 === 'string' && q.topic2.trim() === (q.topic || '').trim()) q.topic2 = '';
   q.blocks.forEach(block => {
     if (block.type !== 'table') return;
     // Restore data
@@ -14563,11 +14615,18 @@ function collectQuestionData() {
     }
   });
   
+  const primaryCat = normalizeCategoryValue(document.getElementById('categorySelect').value);
+  const primaryTopic = document.getElementById('topicSelect').value;
+  const rawCat2 = (document.getElementById('categorySelect2')?.value || '').trim();
+  const cat2 = rawCat2 ? normalizeCategoryValue(rawCat2) : '';
+  const rawTopic2 = (document.getElementById('topicSelect2')?.value || '').trim();
   return applyMcqCategory({
     id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
     title: document.getElementById('questionTitle').value || 'Untitled',
-    category: normalizeCategoryValue(document.getElementById('categorySelect').value),
-    topic: document.getElementById('topicSelect').value,
+    category: primaryCat,
+    category2: (cat2 && cat2 !== primaryCat) ? cat2 : '',
+    topic: primaryTopic,
+    topic2: (rawTopic2 && rawTopic2 !== primaryTopic) ? rawTopic2 : '',
     markingGuide: (document.getElementById('questionMarkingGuide')?.value || '').trim(),
     annotation: !!(document.getElementById('questionAnnotation') && document.getElementById('questionAnnotation').checked),
     notInSyllabus: !!(document.getElementById('questionNotInSyllabus') && document.getElementById('questionNotInSyllabus').checked),
@@ -14747,6 +14806,8 @@ function clearForm() {
     document.getElementById('questionTitle').value = '';
     document.getElementById('categorySelect').value = 'CER';
     document.getElementById('topicSelect').value = 'Heat';
+    const cs2 = document.getElementById('categorySelect2'); if (cs2) cs2.value = '';
+    const ts2 = document.getElementById('topicSelect2'); if (ts2) ts2.value = '';
     const mgEl = document.getElementById('questionMarkingGuide');
     if (mgEl) mgEl.value = '';
     const annEl = document.getElementById('questionAnnotation');
@@ -14773,7 +14834,7 @@ function stripHtmlToText(html) {
 }
 
 function extractQuestionSearchText(q) {
-  const parts = [q.title || '', q.topic || '', q.category || '', getTopicLevel(q.topic || ''), questionSource(q)];
+  const parts = [q.title || '', q.topic || '', qSecondaryTopic(q), q.category || '', qSecondaryCategory(q), getTopicLevel(q.topic || ''), questionSource(q)];
   (q.blocks || []).forEach(block => {
     if (!block || !block.type) return;
     if (block.type === 'text') parts.push(stripHtmlToText(block.content));
@@ -14917,8 +14978,8 @@ function renderQuestionBank() {
   const sourceFilter = document.getElementById('bankFilterSource')?.value || '';
 
   let filtered = questionBank.filter(q => {
-    if (topicFilter && q.topic !== topicFilter) return false;
-    if (catFilter && normalizeCategoryValue(q.category) !== catFilter) return false;
+    if (topicFilter && !qMatchesTopic(q, topicFilter)) return false;
+    if (catFilter && !qMatchesCategory(q, catFilter)) return false;
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
     const qLevel = getTopicLevel(q.topic || '');
     if (levelFilter && qLevel !== levelFilter) return false;
@@ -14965,6 +15026,7 @@ function renderQuestionBank() {
               ${aiScore != null ? `<span class="qb-tag ai-match" title="AI relevance to your instruction">★ ${aiScore}% match</span>` : ''}
               <span class="qb-tag category">${escapeHtml(qCategory)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+              ${qSecondaryTagsHtml(q)}
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
               ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="Hidden from practice; still shown in PSLE Papers">🚫 Not in syllabus</span>` : ''}
               ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
@@ -15033,6 +15095,15 @@ function editQuestion(id) {
   }
   catSel.value = qCat;
   _lastCategoryValue = qCat;
+  // Optional 2nd category
+  const catSel2 = document.getElementById('categorySelect2');
+  if (catSel2) {
+    const qCat2 = qSecondaryCategory(q);
+    if (qCat2 && !Array.from(catSel2.options).some(o => o.value === qCat2)) {
+      const o = document.createElement('option'); o.value = qCat2; o.textContent = qCat2; catSel2.appendChild(o);
+    }
+    catSel2.value = qCat2 || '';
+  }
   const mgEl = document.getElementById('questionMarkingGuide');
   if (mgEl) mgEl.value = q.markingGuide || '';
   const annEl = document.getElementById('questionAnnotation');
@@ -15054,7 +15125,16 @@ function editQuestion(id) {
   }
   topicSelect.value = q.topic;
   _lastTopicValue = q.topic;
-  
+  // Optional 2nd topic
+  const topicSelect2 = document.getElementById('topicSelect2');
+  if (topicSelect2) {
+    const qTopic2 = qSecondaryTopic(q);
+    if (qTopic2 && !Array.from(topicSelect2.options).some(o => o.value === qTopic2)) {
+      const o = document.createElement('option'); o.value = qTopic2; o.textContent = qTopic2; topicSelect2.appendChild(o);
+    }
+    topicSelect2.value = qTopic2 || '';
+  }
+
   blocks = JSON.parse(JSON.stringify(q.blocks));
   selectedBlanks = JSON.parse(JSON.stringify(q.blanks || {}));
   
@@ -15213,7 +15293,9 @@ async function confirmRegenerate() {
       id: 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
       title: (parsed.title ? String(parsed.title) : orig.title) + ' (Regenerated)',
       category: normalizeCategoryValue(orig.category),
+      category2: qSecondaryCategory(orig),
       topic: orig.topic,
+      topic2: qSecondaryTopic(orig),
       markingGuide: orig.markingGuide || '',
       blocks: newBlocks,
       blanks: built.selectedBlanks,
@@ -16682,7 +16764,7 @@ function updateCounts() {
 function populateTopicFilter() {
   const sel = document.getElementById('bankFilterTopic');
   if (!sel) return;
-  const topics = [...new Set(questionBank.map(q => q.topic))];
+  const topics = [...new Set(questionBank.flatMap(q => qTopicList(q)))];
   sel.innerHTML = '<option value="">All Topics</option>';
   topics.forEach(t => {
     const opt = document.createElement('option');
@@ -16851,6 +16933,19 @@ function rebuildTopicSelect() {
   sel.innerHTML = html;
   if (cur && Array.from(sel.options).some(o => o.value === cur && o.value !== '__custom__')) sel.value = cur;
   else { const all = currentTopics(); sel.value = all.includes('Heat') ? 'Heat' : (all[0] || ''); }
+  // Optional 2nd-topic select: same options, a "None" placeholder, no Manage entry.
+  const sel2 = document.getElementById('topicSelect2');
+  if (sel2) {
+    const cur2 = sel2.value || '';
+    let html2 = '<option value="">+ Add 2nd topic (optional)</option>';
+    TOPIC_LEVELS.forEach(lv => {
+      html2 += `<optgroup label="── ${lv} ──">`;
+      byLevel[lv].forEach(t => { html2 += `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`; });
+      html2 += `</optgroup>`;
+    });
+    sel2.innerHTML = html2;
+    sel2.value = (cur2 && Array.from(sel2.options).some(o => o.value === cur2)) ? cur2 : '';
+  }
 }
 function openManageTopics() {
   renderManageTopicsList();
@@ -16967,6 +17062,13 @@ function rebuildCategorySelects() {
     const cur = (authoring.value && authoring.value !== '__custom__') ? authoring.value : 'CER';
     authoring.innerHTML = groupsHtml + '<optgroup label="── Manage ──"><option value="__custom__">⚙ Add / remove categories…</option></optgroup>';
     authoring.value = allCategories().includes(cur) ? cur : 'CER';
+  }
+  // Optional 2nd-category select: same options, a "None" placeholder, no Manage entry.
+  const authoring2 = document.getElementById('categorySelect2');
+  if (authoring2) {
+    const cur2 = authoring2.value || '';
+    authoring2.innerHTML = '<option value="">+ Add 2nd category (optional)</option>' + groupsHtml;
+    authoring2.value = (cur2 && allCategories().includes(cur2)) ? cur2 : '';
   }
   ['bankFilterCategory', 'wsFilterCategory', 'cqFilterCategory'].forEach(id => {
     const sel = document.getElementById(id);
@@ -19197,6 +19299,7 @@ async function snapMarkQuestion(q, photoIdx) {
           <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
           <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
           <span class="qb-tag topic">${escapeHtml(q.topic || '')}</span>
+          ${qSecondaryTagsHtml(q)}
         </div>
       </div>
       <div class="practice-card-body">
@@ -19241,7 +19344,7 @@ let savedWorksheets = [];
 function populateWsTopicFilter() {
   const sel = document.getElementById('wsFilterTopic');
   if (!sel) return;
-  const topics = [...new Set(questionBank.map(q => q.topic))].sort();
+  const topics = [...new Set(questionBank.flatMap(q => qTopicList(q)))].sort();
   sel.innerHTML = '<option value="">All Topics</option>';
   topics.forEach(t => {
     const opt = document.createElement('option');
@@ -19278,8 +19381,8 @@ function renderWsQuestions() {
   const searchRaw = (document.getElementById('wsSearch')?.value || '').trim().toLowerCase();
 
   let filtered = questionBank.filter(q => {
-    if (topicFilter && q.topic !== topicFilter) return false;
-    if (catFilter && normalizeCategoryValue(q.category) !== catFilter) return false;
+    if (topicFilter && !qMatchesTopic(q, topicFilter)) return false;
+    if (catFilter && !qMatchesCategory(q, catFilter)) return false;
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
     if (formatFilter === 'mcq' && !qpHasMcq(q)) return false;
     if (formatFilter === 'written' && !qpHasWritten(q)) return false;
@@ -19316,6 +19419,7 @@ function renderWsQuestions() {
           <div class="ws-q-meta">
             <span class="qb-tag category">${escapeHtml(qCategory)}</span>
             <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+            ${qSecondaryTagsHtml(q)}
             <span class="qb-tag">${escapeHtml(qLevel)}</span>
             ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
           </div>
@@ -20585,8 +20689,8 @@ function qpAvailableTopics(typeFilter) {
     if (!qInSyllabus(q)) return;          // not in syllabus → never offered in practice
     if (!qpMatchesType(q, typeFilter)) return;
     if (!qWithinStudentLevel(q)) return; // topics above the student's level never show
-    const t = q.topic || 'General';
-    counts[t] = (counts[t] || 0) + 1;
+    const ts = qTopicList(q);
+    (ts.length ? ts : ['General']).forEach(t => { counts[t] = (counts[t] || 0) + 1; });
   });
   return counts;
 }
@@ -20615,7 +20719,7 @@ function buildQpQueue(level) {
   const pool = questionBank.filter(q => {
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
     if (!qpMatchesType(q, type)) return false;
-    if (topic && (q.topic || 'General') !== topic) return false;
+    if (topic) { const ts = qTopicList(q); if (!(ts.length ? ts.includes(topic) : topic === 'General')) return false; }
     return getLevelNumber(getTopicLevel(q.topic || '')) <= levelNum;
   });
 
@@ -20837,6 +20941,7 @@ function renderQpQuestion(q) {
           <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
           <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+          ${qSecondaryTagsHtml(q)}
         </div>
       </div>
       <div class="practice-card-body">`;
@@ -21490,8 +21595,7 @@ function tpRenderTopics() {
   const topicCounts = {};
   questionBank.forEach(q => {
     if (questionHasMarkableAnswer(q) && qInSyllabus(q)) {
-      const t = q.topic || '';
-      topicCounts[t] = (topicCounts[t] || 0) + 1;
+      qTopicList(q).forEach(t => { topicCounts[t] = (topicCounts[t] || 0) + 1; });
     }
   });
 
@@ -21604,7 +21708,7 @@ async function tpStartPractice() {
   await loadAttemptStats();
   const questionsByTopic = {};
   tpActiveTopics.forEach(topic => {
-    const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && qInSyllabus(q) && q.topic === topic && qWithinStudentLevel(q));
+    const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && qInSyllabus(q) && qMatchesTopic(q, topic) && qWithinStudentLevel(q));
     questionsByTopic[topic] = orderByAttemptPriority(markable);
   });
 
@@ -21714,6 +21818,7 @@ function tpRenderQuestion(q) {
           <span class="qp-level-badge">${escapeHtml(qLevel)}</span>
           <span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
           <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+          ${qSecondaryTagsHtml(q)}
         </div>
       </div>
       <div class="practice-card-body">`;
@@ -22446,7 +22551,7 @@ function renderScheduleQuestionList() {
 
   let filtered = questionBank.filter(q => {
     if (searchTerm) {
-      const haystack = (q.title + ' ' + q.topic + ' ' + q.category).toLowerCase();
+      const haystack = (q.title + ' ' + q.topic + ' ' + qSecondaryTopic(q) + ' ' + q.category + ' ' + qSecondaryCategory(q)).toLowerCase();
       return haystack.includes(searchTerm);
     }
     return true;
@@ -25054,8 +25159,9 @@ function rpgRolloverMonth() {
 // A past-year exam-paper question is one filed under a PSLE category. Used for
 // the Past Papers leaderboard segment (counted once per month, like monthQ).
 function isPastPaperQuestion(q) {
-  const c = (typeof normalizeCategoryValue === 'function' ? normalizeCategoryValue(q && q.category) : (q && q.category)) || '';
-  return /^PSLE\b/i.test(String(c).trim());
+  const cats = (typeof qCategoryList === 'function') ? qCategoryList(q)
+    : [((typeof normalizeCategoryValue === 'function' ? normalizeCategoryValue(q && q.category) : (q && q.category)) || '')];
+  return cats.some(c => /^PSLE\b/i.test(String(c).trim()));
 }
 
 // Make sure the mini-game score store exists and its month bucket is current.
@@ -26581,7 +26687,7 @@ function commPopulateQuestFilters() {
   const topicSel = document.getElementById('cqFilterTopic');
   if (topicSel) {
     const prev = topicSel.value;
-    const topics = [...new Set((questionBank || []).map(q => q.topic).filter(Boolean))].sort();
+    const topics = [...new Set((questionBank || []).flatMap(q => qTopicList(q)))].sort();
     topicSel.innerHTML = '<option value="">All Topics</option>';
     topics.forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; topicSel.appendChild(o); });
     if (prev && topics.includes(prev)) topicSel.value = prev;
@@ -26619,8 +26725,8 @@ function commRenderQuestPicker() {
 
   const filtered = (questionBank || []).filter(q => {
     if (!q || q.id == null) return false;
-    if (topicFilter && q.topic !== topicFilter) return false;
-    if (catFilter && normalizeCategoryValue(q.category) !== catFilter) return false;
+    if (topicFilter && !qMatchesTopic(q, topicFilter)) return false;
+    if (catFilter && !qMatchesCategory(q, catFilter)) return false;
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
     if (formatFilter === 'mcq' && !qpHasMcq(q)) return false;
     if (formatFilter === 'written' && !qpHasWritten(q)) return false;
@@ -26649,6 +26755,7 @@ function commRenderQuestPicker() {
           '<div class="ws-q-meta">' +
             '<span class="qb-tag category">' + escapeHtml(qCategory) + '</span>' +
             '<span class="qb-tag topic">' + escapeHtml(q.topic || '') + '</span>' +
+            qSecondaryTagsHtml(q) +
             '<span class="qb-tag">' + escapeHtml(qLevel) + '</span>' +
             (qSource ? '<span class="qb-tag source" title="' + escapeHtml(qSource) + '">' + escapeHtml(qSource) + '</span>' : '') +
           '</div>' +
@@ -33096,6 +33203,8 @@ function ppCreateForAssign(){
 
   // Fresh editor, prefilled from the past-paper question
   blocks = []; selectedBlanks = {}; currentEditingQuestion = null;
+  const cs2 = document.getElementById('categorySelect2'); if (cs2) cs2.value = '';
+  const ts2 = document.getElementById('topicSelect2'); if (ts2) ts2.value = '';
   const titleEl = document.getElementById('questionTitle');
   if (titleEl) titleEl.value = q.title || (q.year + ' Q' + q.n);
   const cat = (q.bk === 'B' || q.type === 'open') ? 'PSLE - OEQ' : 'PSLE - MCQ';
