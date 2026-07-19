@@ -9024,7 +9024,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.139.0';
+const APP_VERSION = 'v1.140.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -14910,11 +14910,16 @@ async function runBankAiSearch() {
   bankAiBusy = true;
   const btn = document.getElementById('bankAiSearchBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Searching…'; }
-  const CHUNK = 100;
+  // Small batches keep each JSON response well under the model's output-token
+  // cap — a big batch with many matches used to overflow and truncate the JSON,
+  // which then failed to parse and sank the whole search.
+  const CHUNK = 40;
   const scores = new Map();
+  let failedChunks = 0, totalChunks = 0;
   try {
     for (let i = 0; i < questionBank.length; i += CHUNK) {
       const batch = questionBank.slice(i, i + CHUNK);
+      totalChunks++;
       _bankAiStatus(`AI is reading the bank… (${Math.min(i + CHUNK, questionBank.length)}/${questionBank.length} questions)`);
       const lines = batch.map(q => `${q.id} | ${_bankAiSnippet(q)}`).join('\n');
       const prompt = `You are helping a science teacher search a question bank.
@@ -14924,30 +14929,45 @@ Below is a list of questions, one per line, in the format: id | text.
 Find every question that matches the instruction and rate how relevant each one is.
 
 Rules:
-- Return ONLY a JSON array, no other text.
-- Each element: {"id":"<id exactly as given>","score":<integer 1-100, 100 = most relevant>}.
-- Include ONLY questions genuinely relevant to the instruction; omit irrelevant ones entirely.
-- If nothing matches, return [].
+- Return ONLY a JSON array, nothing else — no markdown, no commentary.
+- Each element must be exactly: {"id":"<id copied exactly from the list>","score":<integer 1-100, 100 = most relevant>}.
+- Include ONLY genuinely relevant questions; omit the rest. If nothing matches, return [].
 
 Questions:
 ${lines}`;
-      const raw = await askGemini(prompt, { maxOutputTokens: 4096, temperature: 0, json: true });
-      const data = _parseAIJson(raw);
-      if (Array.isArray(data)) {
-        const batchIds = new Set(batch.map(q => q.id));
-        data.forEach(item => {
-          if (!item || typeof item.id !== 'string' || !batchIds.has(item.id)) return;
-          const score = Math.max(0, Math.min(100, Math.round(Number(item.score) || 0)));
-          if (score > 0) scores.set(item.id, score);
-        });
+      let data;
+      try {
+        const raw = await askGemini(prompt, { maxOutputTokens: 8192, temperature: 0, json: true });
+        data = _parseAIJson(raw);
+      } catch (chunkErr) {
+        // One unparseable batch (e.g. a truncated response) shouldn't sink the
+        // whole search — skip it and keep going with the rest.
+        console.warn('AI search: skipping a batch that failed to parse', chunkErr);
+        failedChunks++;
+        continue;
       }
+      const arr = Array.isArray(data) ? data : (data && Array.isArray(data.results) ? data.results : []);
+      const batchIds = new Set(batch.map(q => q.id));
+      arr.forEach(item => {
+        if (!item || typeof item.id !== 'string' || !batchIds.has(item.id)) return;
+        let score = Math.round(Number(item.score));
+        if (!Number.isFinite(score)) score = 50;   // ranked but unscored → middling relevance
+        score = Math.max(1, Math.min(100, score));
+        scores.set(item.id, score);
+      });
+    }
+    if (failedChunks === totalChunks) {
+      // Every batch failed — surface it as an error rather than "no matches".
+      _bankAiStatus('AI search could not be completed right now — please try again.', true);
+      return;
     }
     bankAiRanking = scores;
     const clearBtn = document.getElementById('bankAiClearBtn');
     if (clearBtn) clearBtn.style.display = '';
+    const partialNote = failedChunks ? ` (${failedChunks} of ${totalChunks} batches couldn't be read — results may be incomplete)` : '';
     _bankAiStatus(scores.size === 0
-      ? `AI found no questions matching "${instruction}". Try rephrasing your instruction.`
-      : `AI found ${scores.size} relevant question${scores.size === 1 ? '' : 's'} for "${instruction}" — sorted from most to least relevant.`);
+      ? `AI found no questions matching "${instruction}". Try rephrasing your instruction.${partialNote}`
+      : `AI found ${scores.size} relevant question${scores.size === 1 ? '' : 's'} for "${instruction}" — sorted from most to least relevant.${partialNote}`);
     renderQuestionBank();
   } catch (err) {
     console.error('AI bank search failed', err);
@@ -32499,6 +32519,9 @@ const PP_SEED_Q = [
   {"id":"s_2015_42","year":"2015","n":42,"bk":"B","marks":4,"topic":"Light","type":"open","title":"Counting balls with a light source and sensor","ans":"Each ball blocks the light so the reading drops to 0 — count the dips (5 balls); the dips have different widths, so the balls were not all at the same speed","detail":"(a) as each ball passes through the hole it blocks the light, so the sensor reading falls to zero; counting how many times it drops to 0 gives the number of balls [2]; (b) there are five dips, so five balls went through [1]; (c) no — the dips are of different widths, so the balls blocked the light for different lengths of time, meaning they moved at different speeds [1]."},
   {"id":"s_2015_43","year":"2015","n":43,"bk":"B","marks":3,"topic":"Materials","type":"open","title":"Comparing how much strips bend under a load","ans":"Strip Q bends least (strongest/most rigid) for a food tray; keep the strips' length and thickness the same; most water = Q, least = P","detail":"(a) strip Q bends the least (smallest d), so it is the strongest/most rigid and best for a food tray that must not sag [1]; (b) keep the length and the thickness/width of the strips the same for a fair test [1]; (c) to bend every strip by the same d, the stiffest strip Q needs the most water and the floppiest strip P needs the least [1]."},
   {"id":"s_2015_44","year":"2015","n":44,"bk":"B","marks":4,"topic":"Matter and its 3 States","type":"open","title":"Separating substance J from T by their melting points","ans":"Heat above J's melting point but below T's so only J melts and runs into the dish; set the heater below T's melting point; use a bar-shaped mould for a bar","detail":"(a)(i) heat the mixture to a temperature above J's melting point but below T's, so only J melts and flows out into the dish, then cools into solid J [2]; (ii) set the heater below the melting point of substance T (and above J's) [1]; (b) collect the molten J in a bar-shaped (rectangular) mould so it solidifies into a bar [1]."},
+  {"id":"s_2025_1","year":"2025","n":1,"bk":"A","marks":2,"topic":"","type":"recall","title":"2025 Booklet A Q1 — to be added","ans":"","detail":"Placeholder for 2025 PSLE Science Booklet A, Question 1. Edit this entry to add the question, or attach a bank question to it."},
+  {"id":"s_2025_2","year":"2025","n":2,"bk":"A","marks":2,"topic":"","type":"recall","title":"2025 Booklet A Q2 — to be added","ans":"","detail":"Placeholder for 2025 PSLE Science Booklet A, Question 2. Edit this entry to add the question, or attach a bank question to it."},
+  {"id":"s_2025_3","year":"2025","n":3,"bk":"A","marks":2,"topic":"","type":"recall","title":"2025 Booklet A Q3 — to be added","ans":"","detail":"Placeholder for 2025 PSLE Science Booklet A, Question 3. Edit this entry to add the question, or attach a bank question to it."},
   {"id":"s_2025_4","year":"2025","n":4,"bk":"A","marks":2,"topic":"Human Reproduction","type":"recall","title":"Where sperms and pollen grains are produced","ans":"Option 3 — sperms: testes, pollen grains: anther","detail":"Sperms are the male sex cells made in the testes (human), while pollen grains carry the male sex cells of a plant and are produced in the anther of a flower. Tests recall of male reproductive parts in humans and plants."},
   {"id":"s_2025_5","year":"2025","n":5,"bk":"A","marks":2,"topic":"Life Cycles","type":"recall","title":"Function of seed leaves","ans":"Option 3 — provide food for the germinating seed before leaves develop","detail":"The seed leaves (cotyledons) store food that nourishes the young plant as it germinates, until its true leaves grow and can make food by photosynthesis. They store food rather than make it, so option 4 is wrong."},
   {"id":"s_2025_6","year":"2025","n":6,"bk":"A","marks":2,"topic":"Plant Reproduction","type":"application","title":"K made of many small fruits from one flower","ans":"Option 4 — It has many ovaries and many ovules.","detail":"Each small fruit develops from one ovary, so many small fruits means the flower had many ovaries; each fruit contains seeds, and each seed develops from an ovule, so there were many ovules too. Applies the ovary-to-fruit and ovule-to-seed relationship."},
@@ -32641,19 +32664,30 @@ async function loadPaperData(force){
   ppMergeSeedContent();   // bring in past-year papers shipped in code that a saved copy predates
   _ppDataLoaded = true;
 }
+// Specific seed question ids to backfill even into a YEAR the saved data already
+// has (we normally only add whole new years). Used when we ship questions that
+// were missing from a paper we'd already added — e.g. the 2025 Booklet A Q1–Q3
+// placeholders added after the rest of 2025 shipped. Listed explicitly so this
+// never resurrects a question the admin deliberately deleted.
+const PP_BACKFILL_IDS = new Set(['s_2025_1', 's_2025_2', 's_2025_3']);
 // A saved paperData copy (once an admin edits difficulty/attachments) replaces the
 // built-in seed, so a whole new past-year paper added to PP_SEED_Q would never show.
-// Merge in every seed question for any YEAR the saved data doesn't have yet — this
-// won't resurrect individually-deleted questions inside an existing year — and add
-// those new questions' recurring-concept links without touching existing years' notes.
+// Merge in every seed question for any YEAR the saved data doesn't have yet (this
+// won't resurrect individually-deleted questions inside an existing year), plus any
+// explicitly-listed PP_BACKFILL_IDS still missing, and add those new questions'
+// recurring-concept links without touching existing years' notes.
 function ppMergeSeedContent(){
   try {
     const q = Array.isArray(ppData.questions) ? ppData.questions : (ppData.questions = []);
     const savedYears = new Set(q.map(x => String(x.year)));
+    const present = new Set(q.map(x => x.id));
     const addQ = PP_SEED_Q.filter(s => !savedYears.has(String(s.year)));
-    if (!addQ.length) return;
-    ppData.questions = q.concat(addQ.map(ppClone));
-    const newIds = new Set(addQ.map(s => s.id));
+    const addIds = new Set(addQ.map(s => s.id));
+    const backfill = PP_SEED_Q.filter(s => PP_BACKFILL_IDS.has(s.id) && !present.has(s.id) && !addIds.has(s.id));
+    const toAdd = addQ.concat(backfill);
+    if (!toAdd.length) return;
+    ppData.questions = q.concat(toAdd.map(ppClone));
+    const newIds = new Set(toAdd.map(s => s.id));
     const rec = Array.isArray(ppData.recurring) ? ppData.recurring : (ppData.recurring = []);
     const byId = {}; rec.forEach(r => { if (r && r.id) byId[r.id] = r; });
     PP_SEED_R.forEach(sr => {
