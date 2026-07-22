@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Science Strike — Roguelite FPS (BETA)</title>
+<!--
+  SCIENCE STRIKE — roguelite first-person dungeon shooter (BETA)
+
+  Part of the Polymath Science Quest family (index.html). Shares the same
+  Firebase project ("mathgen--app"), Google sign-in, App Check (reCAPTCHA v3)
+  and question bank (users/{adminUid}/questions) as the main CER app.
+
+  Release gate: SAME pattern as Monster Cards TCG in index.html — admins
+  always get in (BETA), students only after an admin presses "Release to
+  students" (flag in users/{adminUid}/settings/fpsConfig, written by the
+  admin who clicks). index.html shows/hides its "Science Strike" nav item
+  from the same flag.
+
+  Game design:
+  - Pure-canvas raycaster FPS (no external engine): WASD + mouse look
+    (pointer lock), infinite procedurally generated dungeon floors that
+    scale up forever.
+  - CS-style crosshair: the gap blooms out while moving/firing and settles
+    when still; the current gap IS the real shot spread.
+  - Borderlands-style loot: enemies drop weapons on colored light beams in
+    six rarities (Common → Mythic). Rare+ weapons roll elemental effects
+    (fire burn, ice slow, shock stun, poison stack); Mythic weapons add a
+    unique special effect (chain lightning, explosive rounds, lifesteal,
+    frost nova, twin shot) on top of big damage.
+  - Science questions from the shared bank pop up every 15 seconds of play.
+    Correct answers build a streak that raises loot luck; streak milestones
+    guarantee minimum rarities on the next drop. Wrong answers reset it.
+  - Roguelite meta: runs earn Science Cores to spend on permanent upgrades
+    (stored per-student in localStorage).
+-->
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #141926;
+    --panel2: #1b2233;
+    --line: #2a3550;
+    --text: #e8ecf5;
+    --muted: #93a0b8;
+    --primary: #5b8cff;
+    --good: #43d17c;
+    --bad: #ff5d6c;
+    --r-common: #9aa3ad;
+    --r-uncommon: #4cc463;
+    --r-rare: #3ea2ff;
+    --r-epic: #b264f5;
+    --r-legendary: #ffa028;
+    --r-mythic: #ff3b6b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+  }
+  .screen {
+    position: fixed; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: radial-gradient(1200px 700px at 50% 20%, #131a2c 0%, var(--bg) 60%);
+    z-index: 30; overflow-y: auto; padding: 28px 16px;
+  }
+  .screen.active { display: flex; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 36px 34px;
+    max-width: 560px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  }
+  .card h1 { font-size: 1.9rem; letter-spacing: 0.02em; margin-bottom: 10px; }
+  .card h1 .beta { font-size: 0.65rem; vertical-align: middle; background: #3a2a55; color: #d9baff; border: 1px solid #6b4fa0; padding: 3px 8px; border-radius: 999px; margin-left: 8px; letter-spacing: 0.12em; }
+  .card p.sub { color: var(--muted); line-height: 1.6; margin: 10px 0 22px; }
+  .btn {
+    display: inline-block; border: none; cursor: pointer;
+    border-radius: 12px; padding: 13px 26px; font-size: 1rem; font-weight: 600;
+    background: var(--primary); color: #fff; margin: 6px 5px;
+    transition: transform 0.12s, filter 0.12s;
+  }
+  .btn:hover { filter: brightness(1.12); transform: translateY(-1px); }
+  .btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+  .btn.good { background: var(--good); color: #06281a; }
+  .btn.warn { background: #7a3d4a; }
+  .btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+  .pill { display: inline-block; padding: 6px 14px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; }
+  .pill.beta { background: #33235a; color: #d9baff; border: 1px solid #6b4fa0; }
+  .pill.live { background: #123a26; color: #6fe3a1; border: 1px solid #2c7a4f; }
+  .admin-panel {
+    margin-top: 26px; padding: 20px 22px; border-radius: 14px;
+    background: var(--panel2); border: 1px dashed #4a5a80; text-align: center;
+  }
+  .admin-panel h3 { font-size: 0.85rem; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 12px; }
+  .meta-box { margin-top: 24px; text-align: left; background: var(--panel2); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
+  .meta-box h3 { font-size: 0.95rem; margin-bottom: 4px; }
+  .meta-box .cores { color: #ffd76a; font-weight: 700; }
+  .up-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #232c42; }
+  .up-row:last-child { border-bottom: none; }
+  .up-row .nm { font-weight: 600; }
+  .up-row .lv { color: var(--muted); font-size: 0.8rem; }
+  .up-row button { padding: 8px 14px; font-size: 0.85rem; margin: 0; }
+  .howto { margin-top: 22px; text-align: left; color: var(--muted); font-size: 0.85rem; line-height: 1.7; background: var(--panel2); border-radius: 14px; padding: 18px 22px; }
+  .howto b { color: var(--text); }
+  #gameWrap { position: fixed; inset: 0; display: none; background: #000; }
+  #gameWrap.active { display: block; }
+  #gameCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* ---------- HUD ---------- */
+  .hud { position: absolute; pointer-events: none; font-family: 'Segoe UI', system-ui, sans-serif; }
+  #hudTop { top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; align-items: center; }
+  .hud-chip { background: rgba(10,14,24,0.72); border: 1px solid rgba(120,140,190,0.35); border-radius: 10px; padding: 8px 14px; font-size: 0.85rem; font-weight: 600; }
+  #hudStreak.hot { color: #ffb347; border-color: #ffb347; }
+  #hudBottomLeft { left: 20px; bottom: 20px; }
+  #hpBarWrap { width: 240px; height: 16px; background: rgba(10,14,24,0.7); border: 1px solid rgba(120,140,190,0.4); border-radius: 8px; overflow: hidden; margin-top: 8px; }
+  #hpBar { height: 100%; width: 100%; background: linear-gradient(90deg, #2fbf71, #43d17c); transition: width 0.15s; }
+  #hpText { font-size: 0.8rem; color: var(--muted); }
+  #hudBottomRight { right: 20px; bottom: 20px; text-align: right; }
+  #wpnName { font-weight: 700; font-size: 1rem; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
+  #wpnAmmo { font-size: 1.6rem; font-weight: 800; letter-spacing: 0.05em; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
+  #wpnAmmo .rl { color: #ffb347; font-size: 0.9rem; font-weight: 600; }
+  #qTimer { position: absolute; top: 16px; right: 20px; }
+  #dmgVignette { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,40,50,0.55) 100%); transition: opacity 0.25s; }
+  #pickupBar {
+    position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%);
+    background: rgba(10,14,24,0.88); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 20px; min-width: 340px; max-width: 480px; display: none; pointer-events: none;
+  }
+  #pickupBar .rar { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.14em; }
+  #pickupBar .inm { font-weight: 700; font-size: 1.05rem; margin: 2px 0 6px; }
+  #pickupBar .stats { color: var(--muted); font-size: 0.8rem; line-height: 1.55; }
+  #pickupBar .keyhint { margin-top: 8px; font-size: 0.78rem; color: #ffd76a; }
+  #toastMsg { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); background: rgba(12,18,30,0.9); border: 1px solid var(--line); padding: 10px 20px; border-radius: 10px; font-weight: 600; display: none; }
+  /* ---------- overlays ---------- */
+  .overlay {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(5,8,15,0.82); z-index: 40; overflow-y: auto; padding: 24px 14px;
+  }
+  .overlay.active { display: flex; }
+  .qcard { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; max-width: 640px; width: 100%; padding: 30px 30px 26px; }
+  .qcard .qtag { font-size: 0.72rem; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; margin-bottom: 12px; }
+  .qcard .qtag .tpc { color: #8fb4ff; }
+  #qStem { font-size: 1.02rem; line-height: 1.65; margin-bottom: 20px; }
+  #qStem img { max-width: 100%; border-radius: 10px; margin: 8px 0; }
+  .qopt {
+    display: block; width: 100%; text-align: left; background: var(--panel2);
+    border: 1px solid var(--line); color: var(--text); border-radius: 12px;
+    padding: 13px 16px; margin: 9px 0; font-size: 0.95rem; cursor: pointer; line-height: 1.5;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .qopt:hover { border-color: var(--primary); }
+  .qopt.correct { border-color: var(--good); background: #12301f; }
+  .qopt.wrong { border-color: var(--bad); background: #331419; }
+  .qopt:disabled { cursor: default; }
+  #qFeedback { margin-top: 14px; font-size: 0.9rem; line-height: 1.6; display: none; }
+  #qFeedback .verdict { font-weight: 700; margin-bottom: 6px; }
+  #qFeedback .explain { color: var(--muted); }
+  #qContinue { margin-top: 14px; display: none; }
+  .death-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; margin: 20px 0; text-align: left; }
+  .death-stats .k { color: var(--muted); font-size: 0.82rem; }
+  .death-stats .v { font-weight: 700; font-size: 1.1rem; }
+  #versionBadge { position: fixed; bottom: 10px; right: 12px; z-index: 60; font-size: 0.68rem; color: #5a6780; letter-spacing: 0.06em; display: none; font-family: monospace; }
+</style>
+</head>
+<body>
+
+<!-- ========== AUTH ========== -->
+<div class="screen active" id="authScreen">
+  <div class="card">
+    <h1>🔫 Science Strike<span class="beta">BETA</span></h1>
+    <p class="sub">A roguelite first-person dungeon shooter. Fight through infinite floors, grab rarer and rarer loot — and keep your science streak alive to boost your luck.</p>
+    <button class="btn" id="signInBtn">Sign in with Google</button>
+    <p class="sub" style="margin-top:18px;font-size:0.8rem;">Same account as Science Quest.</p>
+    <div><a class="btn ghost" href="index.html">← Back to Science Quest</a></div>
+  </div>
+</div>
+
+<!-- ========== LOCKED (students, pre-release) ========== -->
+<div class="screen" id="lockedScreen">
+  <div class="card">
+    <h1>🔒 Not released yet</h1>
+    <p class="sub">Science Strike is still in beta testing. Your teacher will release it when it's ready — check back soon!</p>
+    <a class="btn" href="index.html">← Back to Science Quest</a>
+  </div>
+</div>
+
+<!-- ========== MENU ========== -->
+<div class="screen" id="menuScreen">
+  <div class="card" style="max-width:620px;">
+    <h1>🔫 Science Strike<span class="beta" id="menuBetaTag">BETA</span></h1>
+    <p class="sub" id="menuHello">Infinite dungeon. Infinite loot. Every 15 seconds, science decides your luck.</p>
+    <button class="btn good" id="playBtn" style="font-size:1.15rem;padding:15px 42px;">▶ Start Run</button>
+    <div style="margin-top:4px;"><a class="btn ghost" href="index.html">← Back to Science Quest</a></div>
+
+    <div class="meta-box" id="metaBox">
+      <h3>🧬 Permanent upgrades <span style="float:right;" class="cores" id="coresLabel">⚛ 0 cores</span></h3>
+      <p style="color:var(--muted);font-size:0.78rem;margin-bottom:6px;">Earn Science Cores every run (floors, kills, correct answers). Upgrades persist forever — that's the "lite" in roguelite.</p>
+      <div id="upgradeRows"></div>
+    </div>
+
+    <div class="howto">
+      <b>Controls:</b> WASD move · mouse look · click shoot · R reload · E pick up loot · Esc pause<br>
+      <b>Crosshair</b> blooms while you move and fire — stand still for accurate shots.<br>
+      <b>Loot rarities:</b>
+      <span style="color:var(--r-common)">Common</span> ·
+      <span style="color:var(--r-uncommon)">Uncommon</span> ·
+      <span style="color:var(--r-rare)">Rare</span> ·
+      <span style="color:var(--r-epic)">Epic</span> ·
+      <span style="color:var(--r-legendary)">Legendary</span> ·
+      <span style="color:var(--r-mythic)">Mythic</span> (unique special effects!)<br>
+      <b>Elements:</b> 🔥 burn · ❄ slow · ⚡ stun · ☠ poison<br>
+      <b>Questions:</b> one every 15s. Streaks raise loot luck; milestones (3/5/8/12) guarantee better drops. A wrong answer resets the streak.<br>
+      Clear every enemy on a floor to open the portal to the next one. Dungeons never end — how deep can you go?
+    </div>
+
+    <div class="admin-panel" id="adminPanel" style="display:none;">
+      <h3>ADMIN — RELEASE CONTROL</h3>
+      <div style="margin-bottom:12px;"><span class="pill beta" id="relPill">🔒 BETA — ADMINS ONLY</span></div>
+      <button class="btn" id="releaseBtn">🚀 Release to students</button>
+      <p style="color:var(--muted);font-size:0.76rem;margin-top:10px;">Releasing shows the Science Strike button to students in the Science Quest sidebar and unlocks this page for them. You can take it back into beta at any time.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ========== GAME ========== -->
+<div id="gameWrap">
+  <canvas id="gameCanvas"></canvas>
+  <div id="dmgVignette"></div>
+
+  <div class="hud" id="hudTop">
+    <div class="hud-chip" id="hudFloor">Floor 1</div>
+    <div class="hud-chip" id="hudKills">👾 0/6</div>
+    <div class="hud-chip" id="hudStreak">🔥 Streak 0 · Luck +0%</div>
+  </div>
+  <div class="hud" id="qTimer"><div class="hud-chip" id="hudQTimer">🧪 next question 15s</div></div>
+
+  <div class="hud" id="hudBottomLeft">
+    <div id="hpText">HP</div>
+    <div id="hpBarWrap"><div id="hpBar"></div></div>
+  </div>
+
+  <div class="hud" id="hudBottomRight">
+    <div id="wpnName">Blaster</div>
+    <div id="wpnAmmo">12 <span class="rl">/ ∞</span></div>
+  </div>
+
+  <div class="hud" id="pickupBar"></div>
+  <div class="hud" id="toastMsg"></div>
+
+  <!-- question overlay -->
+  <div class="overlay" id="questionOverlay">
+    <div class="qcard">
+      <div class="qtag">🧪 SCIENCE CHECK · <span class="tpc" id="qTopic"></span> · streak <span id="qStreakNow">0</span></div>
+      <div id="qStem"></div>
+      <div id="qOptions"></div>
+      <div id="qFeedback"><div class="verdict"></div><div class="explain"></div></div>
+      <button class="btn" id="qContinue">Continue ▶</button>
+    </div>
+  </div>
+
+  <!-- pause overlay -->
+  <div class="overlay" id="pauseOverlay">
+    <div class="qcard" style="max-width:420px;text-align:center;">
+      <h2 style="margin-bottom:8px;">⏸ Paused</h2>
+      <p style="color:var(--muted);margin-bottom:18px;">Click Resume to lock the mouse again.</p>
+      <button class="btn good" id="resumeBtn">▶ Resume</button>
+      <button class="btn warn" id="abandonBtn">Abandon run</button>
+    </div>
+  </div>
+
+  <!-- death overlay -->
+  <div class="overlay" id="deathOverlay">
+    <div class="qcard" style="max-width:480px;text-align:center;">
+      <h2 style="font-size:1.6rem;">☠️ Run over</h2>
+      <div class="death-stats" id="deathStats"></div>
+      <div style="font-size:1.05rem;margin-bottom:16px;">Earned <span class="cores" style="color:#ffd76a;font-weight:800;" id="deathCores">⚛ 0</span> Science Cores</div>
+      <button class="btn good" id="againBtn">↻ Run it back</button>
+      <button class="btn ghost" id="deathMenuBtn">Menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="versionBadge">Science Strike v0.1.0 BETA</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, getDocs, collection, addDoc, Timestamp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+
+/* ════════════════ FIREBASE (same project as index.html) ════════════════ */
+const firebaseConfig = {
+  apiKey: "AIzaSyAUSI3Uh28IeqASEp0JhH4QPaVt-O3meBo",
+  authDomain: "mathgen--app.firebaseapp.com",
+  projectId: "mathgen--app",
+  storageBucket: "mathgen--app.firebasestorage.app",
+  messagingSenderId: "165654161198",
+  appId: "1:165654161198:web:16c8bd60eb3a2aa7edbcbf",
+  measurementId: "G-0MWZFG211D"
+};
+const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'abigail.yew@stanfordmanpower.com'];
+const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
+
+const app = initializeApp(firebaseConfig);
+if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
+  try { initializeAppCheck(app, { provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true }); }
+  catch (e) { console.warn("App Check init failed:", e); }
+}
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+let currentUser = null;      // { uid, email, name, role }
+let adminUid = null;         // primary admin from config/admin
+let fpsConfig = { released: false };
+let questions = [];          // extracted MCQ pool
+let qCursor = 0;
+
+const $ = id => document.getElementById(id);
+const isAdmin = () => !!(currentUser && currentUser.role === 'admin');
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $('gameWrap').classList.remove('active');
+  if (id === 'gameWrap') $('gameWrap').classList.add('active');
+  else $(id).classList.add('active');
+}
+
+/* ---------- auth flow ---------- */
+$('signInBtn').addEventListener('click', async () => {
+  try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+  catch (e) { console.warn('sign-in', e); alert('Sign-in failed — please try again.'); }
+});
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { currentUser = null; showScreen('authScreen'); return; }
+  currentUser = {
+    uid: user.uid, email: user.email || '',
+    name: user.displayName || (user.email || '').split('@')[0],
+    role: ADMIN_EMAILS.includes(user.email) ? 'admin' : 'student'
+  };
+  $('versionBadge').style.display = isAdmin() ? 'block' : 'none';
+  await loadReleaseGate();
+  if (!isAdmin() && !fpsConfig.released) { showScreen('lockedScreen'); return; }
+  enterMenu();
+  loadQuestions();   // background — the run can start before it finishes
+});
+
+/* ---------- release gate (same pattern as Monster Cards in index.html) ---------- */
+async function loadReleaseGate() {
+  try {
+    const cfg = await getDoc(doc(db, 'config', 'admin'));
+    adminUid = cfg.exists() ? cfg.data().uid : null;
+  } catch (e) { console.warn('config/admin read', e); }
+  const owner = adminUid || currentUser.uid;
+  try {
+    const snap = await getDoc(doc(db, 'users', owner, 'settings', 'fpsConfig'));
+    fpsConfig = snap.exists() ? (snap.data() || { released: false }) : { released: false };
+  } catch (e) { console.warn('fpsConfig read', e); fpsConfig = { released: false }; }
+}
+
+async function setReleased(on) {
+  if (!isAdmin()) return;
+  const msg = on
+    ? 'Release Science Strike to all students? They will see it in the Science Quest sidebar immediately.'
+    : 'Take Science Strike back into beta? Students will no longer see it.';
+  if (!confirm(msg)) return;
+  try {
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'fpsConfig'),
+      { released: on, updatedAt: new Date().toISOString() }, { merge: true });
+    fpsConfig = Object.assign({}, fpsConfig, { released: on });
+    renderAdminPanel();
+  } catch (e) { console.error('fps release', e); alert('Could not update — check your connection.'); }
+}
+
+function renderAdminPanel() {
+  const panel = $('adminPanel');
+  if (!isAdmin()) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const live = !!fpsConfig.released;
+  const pill = $('relPill');
+  pill.className = 'pill ' + (live ? 'live' : 'beta');
+  pill.textContent = live ? '🟢 RELEASED TO STUDENTS' : '🔒 BETA — ADMINS ONLY';
+  const btn = $('releaseBtn');
+  btn.textContent = live ? '⏸ Back to beta' : '🚀 Release to students';
+  btn.onclick = () => setReleased(!live);
+}
+
+/* ---------- question bank (union across admin accounts, like index.html) ---------- */
+function stripHtml(html) { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.textContent || '').trim(); }
+
+function extractMcq(q) {
+  const blocks = (q && q.blocks) || [];
+  const mcq = blocks.find(b => b.type === 'mcq' && (b.options || []).length >= 2);
+  if (!mcq || !q.id) return null;
+  const answer = (mcq.options || []).findIndex(o => o.id === mcq.correctId);
+  if (answer < 0) return null;
+  if (mcq.options.some(o => !stripHtml(o.text || ''))) return null;
+  let stemHtml = '';
+  const plain = [];
+  for (const b of blocks) {
+    if (b.type === 'text' && b.content) { stemHtml += '<div>' + b.content + '</div>'; plain.push(stripHtml(b.content)); }
+    else if (b.type === 'part' && (b.content || b.label)) { stemHtml += '<div><strong>' + (b.label || '') + '</strong> ' + (b.content || '') + '</div>'; plain.push(stripHtml(b.content || '')); }
+    else if (b.type === 'image' && b.url) { stemHtml += '<div style="text-align:center;"><img src="' + b.url + '" loading="eager"></div>'; plain.push('[diagram]'); }
+  }
+  if (!plain.join('').trim()) return null;
+  return {
+    id: q.id, title: q.title || '', topic: q.topic || 'Science',
+    stemHtml, options: mcq.options.map(o => stripHtml(o.text)), answer,
+    explain: (() => { const ex = blocks.find(b => b.type === 'explanation'); return ex ? stripHtml(ex.content || '') : ''; })()
+  };
+}
+
+async function loadQuestions() {
+  try {
+    const uids = [];
+    if (adminUid) uids.push(adminUid);
+    try {
+      const profs = await getDocs(collection(db, 'userProfiles'));
+      profs.forEach(d => { const p = d.data(); if (p && p.uid && ADMIN_EMAILS.includes(p.email) && !uids.includes(p.uid)) uids.push(p.uid); });
+    } catch (e) { console.warn('admin uid discovery', e); }
+    const pool = []; const seen = new Set();
+    for (const uid of uids) {
+      try {
+        const snap = await getDocs(collection(db, 'users', uid, 'questions'));
+        snap.forEach(d => {
+          const q = d.data();
+          if (!q || !q.id || seen.has(q.id) || q.status === 'pending' || q.status === 'flagged') return;
+          seen.add(q.id);
+          const m = extractMcq(q);
+          if (m) pool.push(m);
+        });
+      } catch (e) { console.warn('bank load', uid, e); }
+    }
+    // shuffle once; serve round-robin so questions don't repeat until exhausted
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    questions = pool; qCursor = 0;
+    console.log('Science Strike: loaded', pool.length, 'MCQs from the bank');
+  } catch (e) { console.error('loadQuestions', e); }
+}
+
+function nextQuestion() {
+  if (!questions.length) return null;
+  const q = questions[qCursor % questions.length];
+  qCursor++;
+  return q;
+}
+
+function recordAttempt(q, correct, ms) {
+  try {
+    if (!currentUser || currentUser.role !== 'student' || !q) return;
+    addDoc(collection(db, 'questionAttempts'), {
+      uid: currentUser.uid, email: currentUser.email, displayName: currentUser.name,
+      questionId: q.id, questionTitle: q.title || '',
+      score: correct ? 1 : 0, totalBlanks: 1, answerHash: '',
+      ms: Math.max(0, Math.round(ms || 0)), timestamp: Timestamp.now(), mode: 'fps'
+    }).catch(err => console.warn('fps attempt log failed', err));
+  } catch (e) { console.warn('fps attempt log', e); }
+}
+
+/* ════════════════ META PROGRESSION (roguelite persistence) ════════════════ */
+const UPGRADES = [
+  { key: 'vit',   name: '❤️ Vitality',   desc: '+20 max HP per level',            base: 40 },
+  { key: 'dmg',   name: '⚔️ Firepower',  desc: '+8% weapon damage per level',      base: 50 },
+  { key: 'luck',  name: '🍀 Fortune',    desc: '+6% loot luck per level',          base: 60 },
+  { key: 'speed', name: '👟 Agility',    desc: '+5% move speed per level',         base: 45 },
+  { key: 'mag',   name: '📦 Deep Mags',  desc: '+12% magazine size per level',     base: 40 },
+];
+let meta = { cores: 0, up: { vit: 0, dmg: 0, luck: 0, speed: 0, mag: 0 } };
+
+function metaKey() { return 'fpsMeta_' + (currentUser ? currentUser.uid : 'anon'); }
+function loadMeta() {
+  try { const raw = localStorage.getItem(metaKey()); if (raw) { const m = JSON.parse(raw); if (m && m.up) meta = m; } }
+  catch (e) { /* fresh meta */ }
+}
+function saveMeta() { try { localStorage.setItem(metaKey(), JSON.stringify(meta)); } catch (e) {} }
+function upgradeCost(u, lv) { return Math.round(u.base * Math.pow(1.6, lv)); }
+
+function renderMeta() {
+  $('coresLabel').textContent = '⚛ ' + meta.cores + ' cores';
+  const host = $('upgradeRows');
+  host.innerHTML = '';
+  UPGRADES.forEach(u => {
+    const lv = meta.up[u.key] || 0;
+    const cost = upgradeCost(u, lv);
+    const row = document.createElement('div');
+    row.className = 'up-row';
+    row.innerHTML = '<div><div class="nm">' + u.name + ' <span class="lv">Lv ' + lv + '</span></div>'
+      + '<div class="lv">' + u.desc + '</div></div>';
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = '⚛ ' + cost;
+    btn.disabled = meta.cores < cost;
+    btn.addEventListener('click', () => {
+      if (meta.cores < cost) return;
+      meta.cores -= cost; meta.up[u.key] = lv + 1; saveMeta(); renderMeta();
+    });
+    row.appendChild(btn);
+    host.appendChild(row);
+  });
+}
+
+function enterMenu() {
+  loadMeta();
+  $('menuHello').textContent = 'Welcome, ' + currentUser.name + '. Infinite dungeon. Infinite loot. Every 15 seconds, science decides your luck.';
+  renderMeta();
+  renderAdminPanel();
+  showScreen('menuScreen');
+}
+
+/* ════════════════ RNG ════════════════ */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ════════════════ LOOT SYSTEM ════════════════ */
+const RARITIES = [
+  { key: 'common',    name: 'COMMON',    color: '#9aa3ad', w: 100, mult: 1.00 },
+  { key: 'uncommon',  name: 'UNCOMMON',  color: '#4cc463', w: 55,  mult: 1.25 },
+  { key: 'rare',      name: 'RARE',      color: '#3ea2ff', w: 26,  mult: 1.55 },
+  { key: 'epic',      name: 'EPIC',      color: '#b264f5', w: 11,  mult: 1.95 },
+  { key: 'legendary', name: 'LEGENDARY', color: '#ffa028', w: 4,   mult: 2.50 },
+  { key: 'mythic',    name: 'MYTHIC',    color: '#ff3b6b', w: 1.2, mult: 3.40 },
+];
+const ELEMENTS = {
+  none:   { icon: '',   name: '',        color: '#ccc' },
+  fire:   { icon: '🔥', name: 'Blazing', color: '#ff7a3c' },
+  ice:    { icon: '❄',  name: 'Frozen',  color: '#7fd4ff' },
+  shock:  { icon: '⚡', name: 'Volt',    color: '#ffe45c' },
+  poison: { icon: '☠',  name: 'Toxic',   color: '#8ee649' },
+};
+const SPECIALS = [
+  { key: 'chain', name: 'Chain Lightning', desc: 'Hits arc to a nearby enemy for 60% damage' },
+  { key: 'boom',  name: 'Explosive Rounds', desc: 'Shots detonate, splashing 50% damage nearby' },
+  { key: 'vamp',  name: 'Vampiric', desc: 'Heal 12% of damage dealt' },
+  { key: 'nova',  name: 'Frost Nova', desc: 'Kills freeze every enemy near the victim' },
+  { key: 'twin',  name: 'Twin Shot', desc: 'Every trigger pull fires twice' },
+];
+const ARCHETYPES = [
+  { key: 'blaster', name: 'Blaster',   dmg: 16, rof: 3.4, mag: 12, reload: 1.0, pellets: 1, spread: 0.5, bloom: 1.5, kick: 2.0 },
+  { key: 'pulse',   name: 'Pulse SMG', dmg: 7,  rof: 9.5, mag: 32, reload: 1.5, pellets: 1, spread: 1.3, bloom: 0.8, kick: 0.9 },
+  { key: 'scatter', name: 'Scatter',   dmg: 7,  rof: 1.2, mag: 6,  reload: 1.9, pellets: 8, spread: 5.0, bloom: 3.5, kick: 5.0 },
+  { key: 'rail',    name: 'Railgun',   dmg: 55, rof: 0.9, mag: 4,  reload: 1.7, pellets: 1, spread: 0.12, bloom: 2.2, kick: 6.0 },
+  { key: 'arc',     name: 'Arc Cannon', dmg: 24, rof: 2.4, mag: 10, reload: 1.4, pellets: 1, spread: 0.8, bloom: 1.8, kick: 3.0, minRarity: 3 },
+];
+const PREFIX = { common: ['Rusty', 'Basic', 'Standard'], uncommon: ['Tuned', 'Field', 'Keen'], rare: ['Vector', 'Prime', 'Quantum'], epic: ['Nova', 'Phantom', 'Eclipse'], legendary: ['Apex', 'Sovereign', 'Dread'], mythic: ['MYTHIC', 'Omega', 'Singularity'] };
+
+// Luck: 1.0 = base. Streak + Fortune upgrade push the weight curve toward the top tiers.
+function rollRarity(rng, luck, minTier) {
+  const lb = Math.max(1, luck);
+  let total = 0; const ws = [];
+  for (let i = 0; i < RARITIES.length; i++) {
+    let w = RARITIES[i].w * Math.pow(lb, i);   // higher tiers gain more from luck
+    if (minTier && i < minTier) w = 0;
+    ws.push(w); total += w;
+  }
+  if (total <= 0) return Math.min(minTier || 0, RARITIES.length - 1);
+  let r = rng() * total;
+  for (let i = 0; i < ws.length; i++) { r -= ws[i]; if (r <= 0) return i; }
+  return 0;
+}
+
+function makeWeapon(rng, floor, luck, minTier) {
+  const tier = rollRarity(rng, luck, minTier);
+  const rar = RARITIES[tier];
+  const pool = ARCHETYPES.filter(a => !a.minRarity || tier >= a.minRarity);
+  const arch = pool[Math.floor(rng() * pool.length)];
+  // element: rare 60%, epic/legendary always, mythic always (+special)
+  let element = 'none';
+  if (tier >= 3 || (tier === 2 && rng() < 0.6)) {
+    const els = Object.keys(ELEMENTS).filter(k => k !== 'none');
+    element = els[Math.floor(rng() * els.length)];
+  }
+  const special = tier === 5 ? SPECIALS[Math.floor(rng() * SPECIALS.length)] : null;
+  const floorScale = 1 + floor * 0.12;
+  const jitter = 0.9 + rng() * 0.2;
+  const names = PREFIX[rar.key];
+  const el = ELEMENTS[element];
+  return {
+    kind: 'weapon', tier, rarity: rar, arch, element, special,
+    name: ((el.name ? el.name + ' ' : '') + names[Math.floor(rng() * names.length)] + ' ' + arch.name),
+    dmg: Math.round(arch.dmg * rar.mult * floorScale * jitter * (special ? 1.25 : 1)),
+    rof: arch.rof * (1 + tier * 0.04),
+    mag: Math.round(arch.mag * (1 + tier * 0.08)),
+    reload: arch.reload * (1 - tier * 0.04),
+    pellets: arch.pellets,
+    spread: arch.spread * (1 - tier * 0.06),
+    bloom: arch.bloom, kick: arch.kick,
+    elPower: 0.5 + tier * 0.18,
+  };
+}
+
+function weaponDps(w) { return Math.round(w.dmg * w.pellets * w.rof * (w.special && w.special.key === 'twin' ? 2 : 1)); }
+
+/* ════════════════ GAME STATE ════════════════ */
+const QUESTION_INTERVAL = 15000;   // ms of unpaused play between science checks
+const FOV = Math.PI / 3;
+const REND_W = 960, REND_H = 540;
+
+let G = null;   // whole run state — null when no run active
+let raf = 0, lastT = 0;
+
+const canvas = $('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = REND_W; canvas.height = REND_H;
+
+const keys = {};
+let pointerLocked = false;
+
+function startRun() {
+  const mHp = 100 + (meta.up.vit || 0) * 20;
+  G = {
+    seed: (Math.random() * 1e9) | 0,
+    floor: 1,
+    player: {
+      x: 2.5, y: 2.5, dir: 0,
+      hp: mHp, maxHp: mHp,
+      speedMult: 1 + (meta.up.speed || 0) * 0.05,
+      dmgMult: 1 + (meta.up.dmg || 0) * 0.08,
+      magMult: 1 + (meta.up.mag || 0) * 0.12,
+    },
+    weapon: null, ammo: 0, reloading: 0,
+    fireCd: 0, bloomNow: 0,
+    map: null, mw: 0, mh: 0,
+    enemies: [], projectiles: [], loots: [], particles: [], floaters: [],
+    portal: null, portalOpen: false,
+    kills: 0, totalKills: 0, quota: 0,
+    streak: 0, bestStreak: 0, qCorrect: 0, qTotal: 0,
+    nextDropFloorTier: 0,     // guaranteed min rarity for the NEXT drop (streak milestones)
+    qTimerMs: QUESTION_INTERVAL,
+    qOpenedAt: 0, activeQ: null,
+    paused: false, over: false,
+    startedAt: performance.now(),
+    theme: 0,
+  };
+  const a = ARCHETYPES[0]; // everyone starts every run with the same common Blaster
+  equipWeapon({
+    kind: 'weapon', tier: 0, rarity: RARITIES[0], arch: a, element: 'none', special: null,
+    name: 'Training Blaster', dmg: a.dmg, rof: a.rof, mag: a.mag, reload: a.reload,
+    pellets: a.pellets, spread: a.spread, bloom: a.bloom, kick: a.kick, elPower: 0.5,
+  });
+  buildFloor();
+  showScreen('gameWrap');
+  hideOverlays();
+  updateHud();
+  requestLock();
+  lastT = performance.now();
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(tick);
+}
+
+function luckNow() {
+  // streak: +12% per streak point (soft-capped), fortune upgrade: +6%/lv
+  const s = Math.min(G ? G.streak : 0, 15);
+  return 1 + s * 0.12 + (meta.up.luck || 0) * 0.06;
+}
+
+function equipWeapon(w) {
+  G.weapon = w;
+  G.ammo = magSize();
+  G.reloading = 0;
+  updateHud();
+}
+function magSize() { return Math.max(1, Math.round(G.weapon.mag * G.player.magMult)); }
+
+/* ---------- floor generation: rooms + corridors, seeded, scales forever ---------- */
+function buildFloor() {
+  const f = G.floor;
+  const rng = mulberry32(G.seed + f * 7919);
+  const size = Math.min(40, 22 + Math.floor(f * 1.5));
+  const map = Array.from({ length: size }, () => Array(size).fill(1));
+  const rooms = [];
+  const nRooms = Math.min(14, 5 + Math.floor(f * 0.8));
+  for (let i = 0; i < nRooms * 6 && rooms.length < nRooms; i++) {
+    const w = 3 + Math.floor(rng() * 5), h = 3 + Math.floor(rng() * 5);
+    const x = 1 + Math.floor(rng() * (size - w - 2)), y = 1 + Math.floor(rng() * (size - h - 2));
+    if (rooms.some(r => x < r.x + r.w + 1 && x + w + 1 > r.x && y < r.y + r.h + 1 && y + h + 1 > r.y)) continue;
+    rooms.push({ x, y, w, h, cx: x + w / 2, cy: y + h / 2 });
+    for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) map[yy][xx] = 0;
+  }
+  if (rooms.length < 2) { // pathological seed — carve a fallback arena
+    for (let yy = 1; yy < size - 1; yy++) for (let xx = 1; xx < size - 1; xx++) map[yy][xx] = 0;
+    rooms.length = 0;
+    rooms.push({ x: 1, y: 1, w: 4, h: 4, cx: 3, cy: 3 }, { x: size - 5, y: size - 5, w: 4, h: 4, cx: size - 3, cy: size - 3 });
+  }
+  // connect each room to the next with L corridors
+  for (let i = 1; i < rooms.length; i++) {
+    const a = rooms[i - 1], b = rooms[i];
+    let x = Math.floor(a.cx), y = Math.floor(a.cy);
+    const tx = Math.floor(b.cx), ty = Math.floor(b.cy);
+    while (x !== tx) { map[y][x] = 0; x += x < tx ? 1 : -1; }
+    while (y !== ty) { map[y][x] = 0; y += y < ty ? 1 : -1; }
+    map[y][x] = 0;
+  }
+  G.map = map; G.mw = size; G.mh = size;
+  G.theme = f % 5;
+  // player starts in room 0
+  G.player.x = rooms[0].cx; G.player.y = rooms[0].cy;
+  G.player.dir = rng() * Math.PI * 2;
+  // portal in the room farthest from start
+  let far = rooms[0], fd = -1;
+  for (const r of rooms) { const d = (r.cx - rooms[0].cx) ** 2 + (r.cy - rooms[0].cy) ** 2; if (d > fd) { fd = d; far = r; } }
+  G.portal = { x: far.cx, y: far.cy };
+  G.portalOpen = false;
+  // enemies in the other rooms
+  G.enemies = []; G.projectiles = []; G.loots = []; G.particles = []; G.floaters = [];
+  const isBossFloor = f % 5 === 0;
+  const count = Math.min(22, 5 + Math.floor(f * 1.4));
+  const hpScale = 1 + f * 0.22;
+  for (let i = 0; i < count; i++) {
+    const r = rooms[1 + Math.floor(rng() * Math.max(1, rooms.length - 1))] || rooms[0];
+    const ex = r.x + 0.5 + rng() * (r.w - 1), ey = r.y + 0.5 + rng() * (r.h - 1);
+    if (Math.hypot(ex - G.player.x, ey - G.player.y) < 4) continue;
+    G.enemies.push(makeEnemy(rng, ex, ey, hpScale, f));
+  }
+  if (isBossFloor) {
+    G.enemies.push(Object.assign(makeEnemy(rng, far.cx + 1, far.cy + 1, hpScale, f), {
+      type: 'warden', name: 'Floor Warden', hp: 320 * hpScale, maxHp: 320 * hpScale,
+      speed: 0.85, dmg: 16 + f, ranged: true, size: 1.5, boss: true, fireCd: 0,
+    }));
+  }
+  G.kills = 0; G.quota = G.enemies.length;
+  updateHud();
+  toast('🏰 Floor ' + f + (isBossFloor ? ' — WARDEN FLOOR' : '') + ' · clear all enemies to open the portal');
+}
+
+const ENEMY_TYPES = [
+  { type: 'crawler',  hp: 30, speed: 1.7, dmg: 8,  ranged: false, size: 0.9 },
+  { type: 'drone',    hp: 22, speed: 1.25, dmg: 7, ranged: true,  size: 0.8 },
+  { type: 'sentinel', hp: 48, speed: 0.95, dmg: 11, ranged: true, size: 1.05 },
+  { type: 'brute',    hp: 95, speed: 1.05, dmg: 18, ranged: false, size: 1.25 },
+];
+function makeEnemy(rng, x, y, hpScale, floor) {
+  const t = ENEMY_TYPES[Math.floor(rng() * Math.min(ENEMY_TYPES.length, 2 + Math.floor(floor / 2)))];
+  return {
+    type: t.type, x, y, hp: t.hp * hpScale, maxHp: t.hp * hpScale,
+    speed: t.speed * (1 + floor * 0.015), dmg: t.dmg + Math.floor(floor * 0.8),
+    ranged: t.ranged, size: t.size, state: 'idle',
+    burn: 0, poison: 0, slow: 0, stun: 0, hitFlash: 0, atkCd: 0, fireCd: 0, wanderDir: rng() * 6.28, wanderT: 0,
+  };
+}
+
+/* ---------- map helpers ---------- */
+function solid(x, y) {
+  const xi = x | 0, yi = y | 0;
+  if (xi < 0 || yi < 0 || xi >= G.mw || yi >= G.mh) return true;
+  return G.map[yi][xi] === 1;
+}
+function tryMove(e, nx, ny, rad) {
+  if (!solid(nx + rad, e.y) && !solid(nx - rad, e.y)) e.x = nx;
+  if (!solid(e.x, ny + rad) && !solid(e.x, ny - rad)) e.y = ny;
+}
+function lineOfSight(x0, y0, x1, y1) {
+  const d = Math.hypot(x1 - x0, y1 - y0);
+  const steps = Math.ceil(d * 4);
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (solid(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return false;
+  }
+  return true;
+}
+
+/* ════════════════ INPUT ════════════════ */
+function requestLock() { canvas.requestPointerLock && canvas.requestPointerLock(); }
+document.addEventListener('pointerlockchange', () => {
+  pointerLocked = document.pointerLockElement === canvas;
+  if (!pointerLocked && G && !G.over && !G.activeQ && !overlayVisible('deathOverlay')) {
+    G.paused = true;
+    $('pauseOverlay').classList.add('active');
+  }
+});
+document.addEventListener('mousemove', e => {
+  if (!pointerLocked || !G || G.paused || G.activeQ) return;
+  G.player.dir += e.movementX * 0.0026;
+});
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (!G || G.over) return;
+  if (e.code === 'KeyR' && !G.paused && !G.activeQ) startReload();
+  if (e.code === 'KeyE' && !G.paused && !G.activeQ) tryPickup();
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+let mouseDown = false;
+canvas.addEventListener('mousedown', e => {
+  if (!G || G.paused || G.over || G.activeQ) return;
+  if (!pointerLocked) { requestLock(); return; }
+  if (e.button === 0) mouseDown = true;
+});
+document.addEventListener('mouseup', () => { mouseDown = false; });
+
+$('resumeBtn').addEventListener('click', () => {
+  $('pauseOverlay').classList.remove('active');
+  if (G) { G.paused = false; requestLock(); }
+});
+$('abandonBtn').addEventListener('click', () => { if (G) endRun(); });
+$('againBtn').addEventListener('click', () => { hideOverlays(); startRun(); });
+$('deathMenuBtn').addEventListener('click', () => { hideOverlays(); G = null; cancelAnimationFrame(raf); enterMenu(); });
+$('playBtn').addEventListener('click', startRun);
+
+function overlayVisible(id) { return $(id).classList.contains('active'); }
+function hideOverlays() { document.querySelectorAll('#gameWrap .overlay').forEach(o => o.classList.remove('active')); }
+
+/* ════════════════ COMBAT ════════════════ */
+function startReload() {
+  if (G.reloading > 0 || G.ammo >= magSize()) return;
+  G.reloading = G.weapon.reload;
+}
+function currentSpreadDeg() {
+  const w = G.weapon;
+  return w.spread + G.bloomNow;
+}
+function shoot() {
+  const w = G.weapon;
+  if (G.fireCd > 0 || G.reloading > 0) return;
+  if (G.ammo <= 0) { startReload(); return; }
+  G.ammo--;
+  G.fireCd = 1 / w.rof;
+  const shots = (w.special && w.special.key === 'twin') ? 2 : 1;
+  for (let s = 0; s < shots; s++) {
+    for (let p = 0; p < w.pellets; p++) {
+      const sp = currentSpreadDeg() * Math.PI / 180;
+      const a = G.player.dir + (Math.random() - 0.5) * 2 * sp;
+      hitscan(a, w);
+    }
+  }
+  G.bloomNow = Math.min(G.bloomNow + w.kick * w.bloom * 0.35, 14);
+  G.flash = 0.08;
+  if (G.ammo <= 0) startReload();
+  updateHud();
+}
+function hitscan(angle, w) {
+  const px = G.player.x, py = G.player.y;
+  const dx = Math.cos(angle), dy = Math.sin(angle);
+  // wall distance along the ray
+  let wallD = 0.0;
+  { let d = 0; while (d < 40) { d += 0.04; if (solid(px + dx * d, py + dy * d)) break; } wallD = d; }
+  // nearest enemy the ray passes through
+  let best = null, bestD = wallD;
+  for (const e of G.enemies) {
+    if (e.hp <= 0) continue;
+    const ex = e.x - px, ey = e.y - py;
+    const t = ex * dx + ey * dy;
+    if (t < 0.2 || t > bestD) continue;
+    const perp = Math.abs(ex * dy - ey * dx);
+    if (perp < 0.36 * e.size) { best = e; bestD = t; }
+  }
+  spawnTracer(px, py, px + dx * bestD, py + dy * bestD);
+  if (!best) return;
+  const dmg = Math.round(w.dmg * G.player.dmgMult * (0.9 + Math.random() * 0.2));
+  damageEnemy(best, dmg, w, true);
+}
+function damageEnemy(e, dmg, w, applyEffects) {
+  e.hp -= dmg;
+  e.hitFlash = 0.12;
+  e.state = 'chase';
+  addFloater(e, dmg, w && w.element !== 'none' ? ELEMENTS[w.element].color : '#fff');
+  if (w && applyEffects) {
+    const pw = w.elPower || 0.5;
+    if (w.element === 'fire') { e.burn = Math.max(e.burn, 3); e.burnDps = dmg * 0.15 * (1 + pw); }
+    if (w.element === 'poison') { e.poison = Math.min((e.poison || 0) + 2.5, 8); e.poisonDps = dmg * 0.10 * (1 + pw); }
+    if (w.element === 'ice') e.slow = Math.max(e.slow, 1.6 + pw);
+    if (w.element === 'shock' && Math.random() < 0.22 + pw * 0.1) e.stun = Math.max(e.stun, 0.8);
+    if (w.special) {
+      if (w.special.key === 'vamp') healPlayer(dmg * 0.12);
+      if (w.special.key === 'chain') {
+        let near = null, nd = 6;
+        for (const o of G.enemies) {
+          if (o === e || o.hp <= 0) continue;
+          const d = Math.hypot(o.x - e.x, o.y - e.y);
+          if (d < nd && lineOfSight(e.x, e.y, o.x, o.y)) { near = o; nd = d; }
+        }
+        if (near) { spawnTracer(e.x, e.y, near.x, near.y, '#ffe45c'); damageEnemy(near, Math.round(dmg * 0.6), null, false); }
+      }
+      if (w.special.key === 'boom') {
+        for (const o of G.enemies) {
+          if (o === e || o.hp <= 0) continue;
+          if (Math.hypot(o.x - e.x, o.y - e.y) < 2.2) damageEnemy(o, Math.round(dmg * 0.5), null, false);
+        }
+        spawnBoom(e.x, e.y);
+      }
+    }
+  }
+  if (e.hp <= 0) onEnemyKilled(e, w);
+}
+function onEnemyKilled(e, w) {
+  G.kills++; G.totalKills++;
+  if (w && w.special && w.special.key === 'nova') {
+    for (const o of G.enemies) {
+      if (o === e || o.hp <= 0) continue;
+      if (Math.hypot(o.x - e.x, o.y - e.y) < 3.5) { o.slow = Math.max(o.slow, 3); o.stun = Math.max(o.stun, 1.2); }
+    }
+    spawnBoom(e.x, e.y, '#7fd4ff');
+  }
+  rollDrop(e);
+  if (G.kills >= G.quota && !G.portalOpen) {
+    G.portalOpen = true;
+    toast('🌀 Portal open! Step in to descend to floor ' + (G.floor + 1));
+  }
+  updateHud();
+}
+function rollDrop(e) {
+  const rng = mulberry32((G.seed ^ (G.totalKills * 2654435761)) | 0);
+  const dropChance = e.boss ? 1 : 0.34;
+  if (rng() > dropChance && !G.nextDropFloorTier) {
+    if (rng() < 0.22) G.loots.push({ kind: 'health', x: e.x, y: e.y, amt: 25 + G.floor * 2 });
+    return;
+  }
+  const minTier = Math.max(G.nextDropFloorTier, e.boss ? 3 : 0);
+  G.nextDropFloorTier = 0;   // milestone guarantee is consumed by this drop
+  const w = makeWeapon(rng, G.floor, luckNow(), minTier);
+  G.loots.push(Object.assign({ x: e.x, y: e.y }, { kind: 'weapon', w }));
+  if (w.tier >= 4) toast(w.rarity.name + ' drop! ' + w.name, w.rarity.color);
+}
+function healPlayer(n) { G.player.hp = Math.min(G.player.maxHp, G.player.hp + n); updateHud(); }
+function damagePlayer(n) {
+  if (G.over) return;
+  G.player.hp -= n;
+  $('dmgVignette').style.opacity = '1';
+  setTimeout(() => { $('dmgVignette').style.opacity = '0'; }, 220);
+  if (G.player.hp <= 0) { G.player.hp = 0; endRun(); }
+  updateHud();
+}
+
+/* ---------- effects ---------- */
+function spawnTracer(x0, y0, x1, y1, color) { G.particles.push({ kind: 'tracer', x0, y0, x1, y1, t: 0.09, color: color || '#ffd9a0' }); }
+function spawnBoom(x, y, color) { G.particles.push({ kind: 'boom', x, y, t: 0.4, color: color || '#ff9a3c' }); }
+function addFloater(e, dmg, color) { G.floaters.push({ x: e.x, y: e.y, z: 0.6, dmg, t: 0.8, color }); }
+
+/* ---------- pickups ---------- */
+function nearestLoot() {
+  let best = null, bd = 1.1;
+  for (const l of G.loots) {
+    const d = Math.hypot(l.x - G.player.x, l.y - G.player.y);
+    if (d < bd) { best = l; bd = d; }
+  }
+  return best;
+}
+function tryPickup() {
+  const l = nearestLoot();
+  if (!l) return;
+  if (l.kind === 'health') {
+    healPlayer(l.amt);
+    toast('❤️ +' + l.amt + ' HP');
+    G.loots.splice(G.loots.indexOf(l), 1);
+    return;
+  }
+  equipWeapon(l.w);
+  toast('Equipped ' + l.w.name, l.w.rarity.color);
+  G.loots.splice(G.loots.indexOf(l), 1);
+}
+function renderPickupBar() {
+  const bar = $('pickupBar');
+  const l = nearestLoot();
+  if (!l || G.activeQ || G.paused) { bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  if (l.kind === 'health') {
+    bar.innerHTML = '<div class="inm">❤️ Med Cell</div><div class="stats">Restores ' + l.amt + ' HP</div><div class="keyhint">[E] use</div>';
+    return;
+  }
+  const w = l.w, cur = G.weapon;
+  const el = w.element !== 'none' ? ELEMENTS[w.element].icon + ' ' + ELEMENTS[w.element].name + ' element' : 'No element';
+  bar.innerHTML =
+    '<div class="rar" style="color:' + w.rarity.color + '">' + w.rarity.name + '</div>'
+    + '<div class="inm" style="color:' + w.rarity.color + '">' + w.name + '</div>'
+    + '<div class="stats">DMG ' + w.dmg + ' × ' + w.pellets + ' · ' + w.rof.toFixed(1) + '/s · mag ' + Math.round(w.mag * G.player.magMult)
+    + ' · DPS ' + weaponDps(w) + ' <span style="color:' + (weaponDps(w) >= weaponDps(cur) ? 'var(--good)' : 'var(--bad)') + '">('
+    + (weaponDps(w) >= weaponDps(cur) ? '+' : '') + (weaponDps(w) - weaponDps(cur)) + ' vs yours)</span><br>'
+    + el + (w.special ? ' · <b style="color:var(--r-mythic)">' + w.special.name + '</b> — ' + w.special.desc : '') + '</div>'
+    + '<div class="keyhint">[E] equip (replaces ' + cur.name + ')</div>';
+}
+
+/* ════════════════ QUESTIONS every 15s ════════════════ */
+function openQuestion() {
+  const q = nextQuestion();
+  if (!q) { G.qTimerMs = QUESTION_INTERVAL; toast('No vetted MCQ questions in the bank yet — free pass!'); return; }
+  G.activeQ = q;
+  G.qOpenedAt = performance.now();
+  document.exitPointerLock && document.exitPointerLock();
+  $('qTopic').textContent = q.topic;
+  $('qStreakNow').textContent = G.streak;
+  $('qStem').innerHTML = q.stemHtml;
+  $('qFeedback').style.display = 'none';
+  $('qContinue').style.display = 'none';
+  const host = $('qOptions');
+  host.innerHTML = '';
+  q.options.forEach((opt, i) => {
+    const b = document.createElement('button');
+    b.className = 'qopt';
+    b.textContent = String.fromCharCode(65 + i) + '. ' + opt;
+    b.addEventListener('click', () => answerQuestion(i, b));
+    host.appendChild(b);
+  });
+  $('questionOverlay').classList.add('active');
+}
+function answerQuestion(i, btn) {
+  const q = G.activeQ;
+  if (!q) return;
+  const ms = performance.now() - G.qOpenedAt;
+  const correct = i === q.answer;
+  document.querySelectorAll('#qOptions .qopt').forEach((b, idx) => {
+    b.disabled = true;
+    if (idx === q.answer) b.classList.add('correct');
+  });
+  if (!correct) btn.classList.add('wrong');
+  G.qTotal++;
+  const fb = $('qFeedback');
+  const verdict = fb.querySelector('.verdict');
+  const explain = fb.querySelector('.explain');
+  if (correct) {
+    G.qCorrect++; G.streak++;
+    G.bestStreak = Math.max(G.bestStreak, G.streak);
+    let milestone = '';
+    if (G.streak === 3)  { G.nextDropFloorTier = Math.max(G.nextDropFloorTier, 1); milestone = ' Next drop is at least UNCOMMON!'; }
+    if (G.streak === 5)  { G.nextDropFloorTier = Math.max(G.nextDropFloorTier, 2); milestone = ' Next drop is at least RARE!'; }
+    if (G.streak === 8)  { G.nextDropFloorTier = Math.max(G.nextDropFloorTier, 3); milestone = ' Next drop is at least EPIC!'; }
+    if (G.streak === 12) { G.nextDropFloorTier = Math.max(G.nextDropFloorTier, 4); milestone = ' Next drop is at least LEGENDARY!!'; }
+    healPlayer(10);
+    verdict.textContent = '✔ Correct! Streak ' + G.streak + ' → loot luck +' + Math.round((luckNow() - 1) * 100) + '%. +10 HP.' + milestone;
+    verdict.style.color = 'var(--good)';
+  } else {
+    G.streak = 0;
+    verdict.textContent = '✘ Not quite. Streak reset — your loot luck is back to base.';
+    verdict.style.color = 'var(--bad)';
+  }
+  explain.textContent = q.explain || '';
+  fb.style.display = 'block';
+  $('qContinue').style.display = 'inline-block';
+  recordAttempt(q, correct, ms);
+  updateHud();
+}
+$('qContinue').addEventListener('click', () => {
+  G.activeQ = null;
+  G.qTimerMs = QUESTION_INTERVAL;
+  $('questionOverlay').classList.remove('active');
+  requestLock();
+});
+
+/* ════════════════ RUN END ════════════════ */
+function endRun() {
+  if (!G || G.over) return;
+  G.over = true;
+  document.exitPointerLock && document.exitPointerLock();
+  const mins = (performance.now() - G.startedAt) / 60000;
+  const cores = Math.max(1, Math.round(G.floor * 10 + G.totalKills * 1 + G.qCorrect * 5));
+  meta.cores += cores; saveMeta();
+  $('deathStats').innerHTML =
+    '<div><div class="k">Floors reached</div><div class="v">' + G.floor + '</div></div>'
+    + '<div><div class="k">Enemies defeated</div><div class="v">' + G.totalKills + '</div></div>'
+    + '<div><div class="k">Science answered</div><div class="v">' + G.qCorrect + '/' + G.qTotal + '</div></div>'
+    + '<div><div class="k">Best streak</div><div class="v">🔥 ' + G.bestStreak + '</div></div>'
+    + '<div><div class="k">Final weapon</div><div class="v" style="color:' + G.weapon.rarity.color + ';font-size:0.85rem;">' + G.weapon.name + '</div></div>'
+    + '<div><div class="k">Run time</div><div class="v">' + mins.toFixed(1) + ' min</div></div>';
+  $('deathCores').textContent = '⚛ ' + cores;
+  hideOverlays();
+  $('deathOverlay').classList.add('active');
+}
+
+/* ════════════════ SIM ════════════════ */
+function tick(now) {
+  raf = requestAnimationFrame(tick);
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  if (!G || G.over) { if (G) render(); return; }
+  if (G.paused || G.activeQ) { render(); return; }
+
+  const P = G.player;
+  // question countdown runs only while actually playing
+  G.qTimerMs -= dt * 1000;
+  if (G.qTimerMs <= 0) { openQuestion(); render(); return; }
+
+  // movement
+  const fwd = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
+  const str = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
+  const moving = fwd !== 0 || str !== 0;
+  if (moving) {
+    const sp = 3.1 * P.speedMult * dt;
+    const nx = P.x + (Math.cos(P.dir) * fwd - Math.sin(P.dir) * str) * sp;
+    const ny = P.y + (Math.sin(P.dir) * fwd + Math.cos(P.dir) * str) * sp;
+    tryMove(P, nx, ny, 0.22);
+  }
+  // crosshair bloom: movement raises the floor, firing spikes it, stillness settles it
+  const moveBloom = moving ? 2.6 : 0;
+  G.bloomNow = Math.max(moveBloom, G.bloomNow - dt * 9);
+  if (mouseDown) shoot();
+  if (G.fireCd > 0) G.fireCd -= dt;
+  if (G.reloading > 0) {
+    G.reloading -= dt;
+    if (G.reloading <= 0) { G.reloading = 0; G.ammo = magSize(); updateHud(); }
+  }
+
+  // portal
+  if (G.portalOpen && Math.hypot(P.x - G.portal.x, P.y - G.portal.y) < 0.8) {
+    G.floor++;
+    healPlayer(20);
+    buildFloor();
+  }
+
+  // enemies
+  for (const e of G.enemies) {
+    if (e.hp <= 0) continue;
+    if (e.hitFlash > 0) e.hitFlash -= dt;
+    // DoTs
+    if (e.burn > 0) { e.burn -= dt; e.hp -= (e.burnDps || 3) * dt; if (e.hp <= 0) { onEnemyKilled(e, null); continue; } }
+    if (e.poison > 0) { e.poison -= dt; e.hp -= (e.poisonDps || 2) * dt; if (e.hp <= 0) { onEnemyKilled(e, null); continue; } }
+    if (e.stun > 0) { e.stun -= dt; continue; }
+    const slowMult = e.slow > 0 ? 0.45 : 1;
+    if (e.slow > 0) e.slow -= dt;
+    const d = Math.hypot(P.x - e.x, P.y - e.y);
+    const sees = d < 11 && lineOfSight(e.x, e.y, P.x, P.y);
+    if (sees) e.state = 'chase';
+    if (e.state === 'chase') {
+      const ang = Math.atan2(P.y - e.y, P.x - e.x);
+      if (!e.ranged || d > 4.5) {
+        const sp = e.speed * slowMult * dt;
+        tryMove(e, e.x + Math.cos(ang) * sp, e.y + Math.sin(ang) * sp, 0.3);
+      }
+      if (e.ranged) {
+        e.fireCd -= dt;
+        if (e.fireCd <= 0 && sees && d < 10) {
+          e.fireCd = e.boss ? 0.9 : 1.6;
+          G.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(ang) * 5.5, dy: Math.sin(ang) * 5.5, dmg: e.dmg, t: 4 });
+        }
+      } else {
+        e.atkCd -= dt;
+        if (d < 1.0 && e.atkCd <= 0) { e.atkCd = 0.9; damagePlayer(e.dmg); }
+      }
+    } else {
+      // idle wander
+      e.wanderT -= dt;
+      if (e.wanderT <= 0) { e.wanderT = 1.5 + Math.random() * 2; e.wanderDir = Math.random() * Math.PI * 2; }
+      const sp = e.speed * 0.3 * slowMult * dt;
+      tryMove(e, e.x + Math.cos(e.wanderDir) * sp, e.y + Math.sin(e.wanderDir) * sp, 0.3);
+    }
+  }
+  G.enemies = G.enemies.filter(e => e.hp > 0);
+
+  // enemy projectiles
+  for (const pr of G.projectiles) {
+    pr.t -= dt;
+    pr.x += pr.dx * dt; pr.y += pr.dy * dt;
+    if (solid(pr.x, pr.y)) pr.t = 0;
+    else if (Math.hypot(pr.x - P.x, pr.y - P.y) < 0.4) { damagePlayer(pr.dmg); pr.t = 0; }
+  }
+  G.projectiles = G.projectiles.filter(p => p.t > 0);
+  for (const p of G.particles) p.t -= dt;
+  G.particles = G.particles.filter(p => p.t > 0);
+  for (const fl of G.floaters) { fl.t -= dt; fl.z += dt * 0.7; }
+  G.floaters = G.floaters.filter(f => f.t > 0);
+
+  renderPickupBar();
+  updateQTimerHud();
+  render();
+}
+
+/* ════════════════ RENDER (raycaster) ════════════════ */
+const THEMES = [
+  { wall: [92, 104, 138], ceil: '#10131d', floor: '#1c202c' },
+  { wall: [128, 88, 88],  ceil: '#160f0f', floor: '#241a18' },
+  { wall: [84, 122, 96],  ceil: '#0d1510', floor: '#18231c' },
+  { wall: [122, 100, 140], ceil: '#130f1a', floor: '#201a2a' },
+  { wall: [140, 120, 82], ceil: '#17130c', floor: '#262015' },
+];
+let zbuf = new Float32Array(REND_W);
+
+function render() {
+  if (!G) return;
+  const P = G.player;
+  const th = THEMES[G.theme];
+  // ceiling & floor
+  ctx.fillStyle = th.ceil; ctx.fillRect(0, 0, REND_W, REND_H / 2);
+  ctx.fillStyle = th.floor; ctx.fillRect(0, REND_H / 2, REND_W, REND_H / 2);
+  // walls
+  for (let col = 0; col < REND_W; col++) {
+    const camX = 2 * col / REND_W - 1;
+    const ang = P.dir + Math.atan(camX * Math.tan(FOV / 2));
+    const cd = Math.cos(ang - P.dir);
+    let mapX = P.x | 0, mapY = P.y | 0;
+    const rdx = Math.cos(ang), rdy = Math.sin(ang);
+    const ddx = Math.abs(1 / (rdx || 1e-9)), ddy = Math.abs(1 / (rdy || 1e-9));
+    let sx, sy, sdx, sdy;
+    if (rdx < 0) { sx = -1; sdx = (P.x - mapX) * ddx; } else { sx = 1; sdx = (mapX + 1 - P.x) * ddx; }
+    if (rdy < 0) { sy = -1; sdy = (P.y - mapY) * ddy; } else { sy = 1; sdy = (mapY + 1 - P.y) * ddy; }
+    let side = 0, dist = 0, guard = 0;
+    while (guard++ < 128) {
+      if (sdx < sdy) { sdx += ddx; mapX += sx; side = 0; } else { sdy += ddy; mapY += sy; side = 1; }
+      if (mapX < 0 || mapY < 0 || mapX >= G.mw || mapY >= G.mh || G.map[mapY][mapX] === 1) break;
+    }
+    dist = side === 0 ? (sdx - ddx) : (sdy - ddy);
+    const perp = Math.max(0.08, dist * cd);
+    zbuf[col] = perp;
+    const h = Math.min(REND_H * 2, REND_H / perp);
+    const shade = Math.max(0.18, 1 - perp / 14) * (side === 1 ? 0.75 : 1);
+    const rr = (th.wall[0] * shade) | 0, gg = (th.wall[1] * shade) | 0, bb = (th.wall[2] * shade) | 0;
+    ctx.fillStyle = 'rgb(' + rr + ',' + gg + ',' + bb + ')';
+    ctx.fillRect(col, (REND_H - h) / 2, 1, h);
+  }
+  // sprites: portal + loot + enemies + projectiles, far → near
+  const sprites = [];
+  sprites.push({ sx: G.portal.x, sy: G.portal.y, kind: 'portal' });
+  for (const l of G.loots) sprites.push({ sx: l.x, sy: l.y, kind: 'loot', l });
+  for (const e of G.enemies) sprites.push({ sx: e.x, sy: e.y, kind: 'enemy', e });
+  for (const pr of G.projectiles) sprites.push({ sx: pr.x, sy: pr.y, kind: 'proj' });
+  for (const fl of G.floaters) sprites.push({ sx: fl.x, sy: fl.y, kind: 'floater', fl });
+  for (const s of sprites) {
+    const dx = s.sx - P.x, dy = s.sy - P.y;
+    s.dist = dx * dx + dy * dy;
+  }
+  sprites.sort((a, b) => b.dist - a.dist);
+  for (const s of sprites) drawSprite(s);
+  drawTracers();
+  // muzzle flash & weapon block
+  drawWeaponHud();
+  drawCrosshair();
+}
+
+// project a world point to screen x + perp depth; null if behind the camera
+function projectPoint(wx, wy) {
+  const P = G.player;
+  const dx = wx - P.x, dy = wy - P.y;
+  let rel = Math.atan2(dy, dx) - P.dir;
+  while (rel > Math.PI) rel -= Math.PI * 2;
+  while (rel < -Math.PI) rel += Math.PI * 2;
+  const dist = Math.hypot(dx, dy);
+  const perp = dist * Math.cos(rel);
+  if (perp <= 0.1 || Math.abs(rel) > FOV / 2 + 0.8) return null;
+  return { x: (REND_W / 2) * (1 + Math.tan(rel) / Math.tan(FOV / 2)), perp };
+}
+function drawTracers() {
+  for (const p of G.particles) {
+    if (p.kind !== 'tracer') continue;
+    const end = projectPoint(p.x1, p.y1);
+    if (!end) continue;
+    // draw from the weapon muzzle (bottom right block) toward the impact point
+    ctx.globalAlpha = Math.max(0, p.t / 0.09) * 0.8;
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(REND_W / 2 + 223, REND_H - 100);
+    ctx.lineTo(end.x, REND_H / 2 + Math.min(40, end.perp));
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawSprite(s) {
+  const P = G.player;
+  const dx = s.sx - P.x, dy = s.sy - P.y;
+  const dist = Math.sqrt(s.dist);
+  if (dist < 0.2 || dist > 24) return;
+  let rel = Math.atan2(dy, dx) - P.dir;
+  while (rel > Math.PI) rel -= Math.PI * 2;
+  while (rel < -Math.PI) rel += Math.PI * 2;
+  if (Math.abs(rel) > FOV / 2 + 0.6) return;
+  const perp = dist * Math.cos(rel);
+  if (perp <= 0.1) return;
+  const screenX = (REND_W / 2) * (1 + Math.tan(rel) / Math.tan(FOV / 2));
+  const size = REND_H / perp;
+
+  if (s.kind === 'portal') {
+    const open = G.portalOpen;
+    const h = size * 1.4, w = size * 0.8;
+    drawClipped(screenX, w, perp, (x0, x1) => {
+      const grd = ctx.createLinearGradient(0, REND_H / 2 - h / 2, 0, REND_H / 2 + h / 2);
+      grd.addColorStop(0, open ? 'rgba(90,220,255,0)' : 'rgba(120,120,140,0)');
+      grd.addColorStop(0.5, open ? 'rgba(90,220,255,0.85)' : 'rgba(120,120,140,0.4)');
+      grd.addColorStop(1, open ? 'rgba(90,220,255,0)' : 'rgba(120,120,140,0)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(x0, REND_H / 2 - h / 2, x1 - x0, h);
+    });
+    return;
+  }
+  if (s.kind === 'loot') {
+    const l = s.l;
+    const color = l.kind === 'health' ? '#43d17c' : l.w.rarity.color;
+    const h = size * 1.5, w = size * 0.22;
+    drawClipped(screenX, w, perp, (x0, x1) => {
+      const grd = ctx.createLinearGradient(0, REND_H / 2 - h / 2, 0, REND_H / 2 + h / 2);
+      grd.addColorStop(0, color + '00');
+      grd.addColorStop(0.75, color + 'cc');
+      grd.addColorStop(1, color + 'ff');
+      ctx.fillStyle = grd;
+      ctx.fillRect(x0, REND_H / 2 - h / 2, x1 - x0, h * 0.98);
+      ctx.fillStyle = color;
+      ctx.fillRect(x0, REND_H / 2 + h * 0.42, x1 - x0, Math.max(2, size * 0.1));
+    });
+    return;
+  }
+  if (s.kind === 'proj') {
+    const r = Math.max(2, size * 0.07);
+    if (perp < zbuf[Math.max(0, Math.min(REND_W - 1, screenX | 0))]) {
+      ctx.fillStyle = '#ff6a5c';
+      ctx.beginPath(); ctx.arc(screenX, REND_H / 2 + size * 0.05, r, 0, 7); ctx.fill();
+    }
+    return;
+  }
+  if (s.kind === 'floater') {
+    const fl = s.fl;
+    if (perp < zbuf[Math.max(0, Math.min(REND_W - 1, screenX | 0))]) {
+      ctx.globalAlpha = Math.max(0, fl.t / 0.8);
+      ctx.fillStyle = fl.color;
+      ctx.font = 'bold ' + Math.max(10, size * 0.1) + 'px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(fl.dmg), screenX, REND_H / 2 - size * (0.25 + fl.z * 0.3));
+      ctx.globalAlpha = 1;
+    }
+    return;
+  }
+  // enemy
+  const e = s.e;
+  const eh = size * 0.9 * e.size, ew = size * 0.62 * e.size;
+  const top = REND_H / 2 + size * 0.45 - eh;
+  drawClipped(screenX, ew, perp, (x0, x1) => {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x0, 0, x1 - x0, REND_H); ctx.clip();
+    drawEnemyBody(e, screenX, top, ew, eh);
+    ctx.restore();
+  });
+  // hp bar (drawn unclipped above the sprite when its center is visible)
+  const cx = Math.max(0, Math.min(REND_W - 1, screenX | 0));
+  if (perp < zbuf[cx]) {
+    const bw = ew * 0.9;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(screenX - bw / 2, top - 8, bw, 4);
+    ctx.fillStyle = e.boss ? '#ff5d9e' : '#ff5d6c';
+    ctx.fillRect(screenX - bw / 2, top - 8, bw * Math.max(0, e.hp / e.maxHp), 4);
+    // status pips
+    let px = screenX - bw / 2;
+    ctx.font = '10px monospace'; ctx.textAlign = 'left';
+    if (e.burn > 0) { ctx.fillText('🔥', px, top - 12); px += 12; }
+    if (e.poison > 0) { ctx.fillText('☠', px, top - 12); px += 12; }
+    if (e.slow > 0) { ctx.fillText('❄', px, top - 12); px += 12; }
+    if (e.stun > 0) { ctx.fillText('⚡', px, top - 12); }
+  }
+}
+// draw a sprite in 2px strips, skipping strips hidden behind walls
+function drawClipped(screenX, w, perp, drawFn) {
+  const x0 = Math.max(0, (screenX - w / 2) | 0);
+  const x1 = Math.min(REND_W - 1, (screenX + w / 2) | 0);
+  let runStart = -1;
+  for (let x = x0; x <= x1; x += 2) {
+    const vis = perp < zbuf[x];
+    if (vis && runStart < 0) runStart = x;
+    if ((!vis || x + 2 > x1) && runStart >= 0) {
+      const end = !vis ? x : x1 + 1;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(runStart, 0, end - runStart, REND_H); ctx.clip();
+      drawFn(runStart, end);
+      ctx.restore();
+      runStart = -1;
+    }
+  }
+}
+const ENEMY_COLORS = { crawler: '#5ec46a', drone: '#9fb2c8', sentinel: '#5c8fff', brute: '#e05c50', warden: '#c05cff' };
+function drawEnemyBody(e, cx, top, w, h) {
+  const c = ENEMY_COLORS[e.type] || '#aaa';
+  ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : c;
+  // body
+  ctx.beginPath();
+  if (e.type === 'drone') {
+    ctx.ellipse(cx, top + h * 0.45, w * 0.42, h * 0.3, 0, 0, 7);
+  } else if (e.type === 'crawler') {
+    ctx.ellipse(cx, top + h * 0.68, w * 0.48, h * 0.32, 0, 0, 7);
+  } else {
+    ctx.roundRect(cx - w * 0.35, top + h * 0.18, w * 0.7, h * 0.75, w * 0.12);
+  }
+  ctx.fill();
+  // eyes
+  ctx.fillStyle = e.hitFlash > 0 ? '#f00' : '#0d1117';
+  const ey = top + h * (e.type === 'crawler' ? 0.6 : 0.38);
+  ctx.beginPath(); ctx.arc(cx - w * 0.14, ey, Math.max(1.5, w * 0.06), 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + w * 0.14, ey, Math.max(1.5, w * 0.06), 0, 7); ctx.fill();
+  if (e.boss) {
+    ctx.fillStyle = '#ffd76a';
+    ctx.font = 'bold ' + Math.max(8, w * 0.2) + 'px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('♛', cx, top + h * 0.12);
+  }
+}
+function drawWeaponHud() {
+  // simple first-person weapon block bottom-center, kicks up on fire
+  const w = G.weapon;
+  const kick = G.fireCd > 0 ? 8 : 0;
+  const bx = REND_W / 2 + 120, by = REND_H - 70 + kick;
+  ctx.fillStyle = '#20262f';
+  ctx.fillRect(bx, by, 130, 80);
+  ctx.fillStyle = w.rarity.color;
+  ctx.fillRect(bx, by, 130, 8);
+  ctx.fillStyle = '#141920';
+  ctx.fillRect(bx + 90, by - 26, 26, 30);
+  if (G.flash && G.flash > 0) {
+    G.flash -= 0.016;
+    ctx.fillStyle = 'rgba(255,220,140,0.85)';
+    ctx.beginPath(); ctx.arc(bx + 103, by - 34, 14 + Math.random() * 8, 0, 7); ctx.fill();
+  }
+  // tracers/booms in world already drawn as sprites? tracers are screen-space lines on the minimap-less view:
+  for (const p of G.particles) {
+    if (p.kind !== 'boom') continue;
+    // world-space boom → screen flash circle via sprite math is overkill; brief screen glow instead
+    ctx.fillStyle = 'rgba(255,160,80,' + (p.t * 0.25) + ')';
+    ctx.fillRect(0, 0, REND_W, REND_H);
+  }
+}
+function drawCrosshair() {
+  const cx = REND_W / 2, cy = REND_H / 2;
+  // gap in px mirrors the real spread in degrees (CS-style bloom)
+  const gap = 6 + currentSpreadDeg() * 6;
+  const len = 9, t = 2;
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.fillRect(cx - gap - len, cy - t / 2, len, t);
+  ctx.fillRect(cx + gap, cy - t / 2, len, t);
+  ctx.fillRect(cx - t / 2, cy - gap - len, t, len);
+  ctx.fillRect(cx - t / 2, cy + gap, t, len);
+  if (G.reloading > 0) {
+    ctx.fillStyle = '#ffb347';
+    ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('RELOADING', cx, cy + 34);
+  }
+}
+
+/* ════════════════ HUD ════════════════ */
+function updateHud() {
+  if (!G) return;
+  $('hudFloor').textContent = '🏰 Floor ' + G.floor;
+  $('hudKills').textContent = G.portalOpen ? '🌀 Portal open!' : '👾 ' + G.kills + '/' + G.quota;
+  const luckPct = Math.round((luckNow() - 1) * 100);
+  const st = $('hudStreak');
+  st.textContent = '🔥 Streak ' + G.streak + ' · Luck +' + luckPct + '%';
+  st.classList.toggle('hot', G.streak >= 3);
+  $('hpBar').style.width = Math.max(0, (G.player.hp / G.player.maxHp) * 100) + '%';
+  $('hpText').textContent = 'HP ' + Math.ceil(G.player.hp) + ' / ' + G.player.maxHp;
+  const w = G.weapon;
+  $('wpnName').textContent = (w.element !== 'none' ? ELEMENTS[w.element].icon + ' ' : '') + w.name + (w.special ? ' ★' : '');
+  $('wpnName').style.color = w.rarity.color;
+  $('wpnAmmo').innerHTML = (G.reloading > 0 ? '…' : G.ammo) + ' <span class="rl">/ ∞</span>';
+}
+function updateQTimerHud() {
+  $('hudQTimer').textContent = '🧪 next question ' + Math.max(0, Math.ceil(G.qTimerMs / 1000)) + 's';
+}
+let toastT = 0;
+function toast(msg, color) {
+  const t = $('toastMsg');
+  t.textContent = msg;
+  t.style.color = color || 'var(--text)';
+  t.style.display = 'block';
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { t.style.display = 'none'; }, 2600);
+}
+
+</script>
+</body>
+</html>

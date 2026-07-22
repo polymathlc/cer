@@ -5330,6 +5330,10 @@ option {
       <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Monster Cards — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
         <span class="ico">🃏</span> Monster Cards <span class="nav-beta">BETA</span>
       </div>
+      <!-- Science Strike FPS (beta, fps.html) — admins always; students only once the admin presses Release -->
+      <div class="nav-item" id="navFps" onclick="openFpsGame()" style="display:none;" title="Science Strike — roguelite first-person dungeon shooter with Borderlands-style loot. Answer a science question every 15 seconds to boost your loot luck.">
+        <span class="ico">🔫</span> Science Strike <span class="nav-beta">BETA</span>
+      </div>
       <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire. Monster Cards art lives on the Monster Cards page's Card Art tab.">
         <span class="ico">🎨</span> Game Objects
       </div>
@@ -9197,6 +9201,10 @@ async function enterApp(user) {
   // cards render correctly (admins always see it; students only when released).
   tcgInit().catch(e => console.warn('tcg init', e));
 
+  // Science Strike FPS (fps.html): same beta/release gate — the nav item shows
+  // for admins always, and for students only once an admin presses Release.
+  fpsNavInit().catch(e => console.warn('fps nav init', e));
+
   // Load message inbox so the unread badge shows on the Messages nav item.
   loadMessages().then(updateMsgBadge).catch(e => console.warn('messages init', e));
 
@@ -9219,7 +9227,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.148.0';
+const APP_VERSION = 'v1.149.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -25834,6 +25842,7 @@ function rpgApplyVisibility() {
   const show = active && !rpgState.hidden;
   document.querySelectorAll(".rpg-el").forEach(el => { el.style.display = show ? "" : "none"; });
   try { tcgApplyNavVisibility(); } catch (_) {} // Monster Cards nav follows its own admin/release rules
+  try { fpsApplyNavVisibility(); } catch (_) {} // Science Strike nav follows the same admin/release rules
   const toggle = $("rpgHideToggle");
   if (!toggle) return;
   toggle.style.display = active ? "" : "none";
@@ -30799,6 +30808,34 @@ function tcgApplyNavVisibility() {
   const show = !!currentUser && (_isAdmin() || (tcgReleased() && rpgState && !rpgState.hidden));
   nav.style.display = show ? '' : 'none';
 }
+// ---- Science Strike FPS (fps.html) — same beta/release gate as Monster Cards.
+// The game lives on its own page; index.html only shows/hides the nav entry.
+// Admins always see it (BETA); students only after an admin presses "Release
+// to students" inside fps.html (flag in users/{uid}/settings/fpsConfig).
+let _fpsConfig = null;
+async function fpsLoadConfig(force) {
+  if (_fpsConfig && !force) return _fpsConfig;
+  const uid = _tcgOwnerUid();
+  if (!uid) { _fpsConfig = { released: false }; return _fpsConfig; }
+  try {
+    const snap = await getDoc(doc(db, 'users', uid, 'settings', 'fpsConfig'));
+    _fpsConfig = snap.exists() ? (snap.data() || {}) : { released: false };
+  } catch (e) { console.warn('fps config load', e); _fpsConfig = _fpsConfig || { released: false }; }
+  return _fpsConfig;
+}
+function fpsReleased() { return !!(_fpsConfig && _fpsConfig.released); }
+function fpsApplyNavVisibility() {
+  const nav = document.getElementById('navFps');
+  if (!nav) return;
+  const show = !!currentUser && (_isAdmin() || (fpsReleased() && rpgState && !rpgState.hidden));
+  nav.style.display = show ? '' : 'none';
+}
+async function fpsNavInit() {
+  await fpsLoadConfig(true);
+  fpsApplyNavVisibility();
+}
+function openFpsGame() { window.location.href = 'fps.html'; }
+
 async function tcgInit() {
   await tcgLoadConfig(true);
   tcgApplyNavVisibility();
@@ -32098,6 +32135,7 @@ window.tcgBattleSpeed = tcgBattleSpeed;
 window.tcgSkipBattle = tcgSkipBattle;
 window.tcgCloseBattle = tcgCloseBattle;
 window.tcgSetReleased = tcgSetReleased;
+window.openFpsGame = openFpsGame;
 window.onTcgArtPaste = onTcgArtPaste;
 window.onTcgArtDrop = onTcgArtDrop;
 window.onTcgArtPick = onTcgArtPick;
