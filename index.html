@@ -2705,6 +2705,45 @@ option {
     margin: 10pt 0;
   }
 
+  /* Learning-objective banner (syllabus-grouped PDF) — a rounded card that
+     introduces each objective before its questions. */
+  .print-lo-chunk { margin-bottom: 6pt; }
+  .print-lo-banner {
+    border: 1pt solid #cfe0d4;
+    border-left: 4pt solid #4a7c59;
+    border-radius: 8pt;
+    background: #f4f9f5;
+    padding: 12pt 16pt 13pt;
+    margin: 2pt 0 4pt;
+  }
+  .print-lo-banner .print-lo-meta {
+    font-family: 'Space Mono', monospace;
+    font-size: 8pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #4a7c59;
+    font-weight: 700;
+    margin-bottom: 4pt;
+  }
+  .print-lo-banner .print-lo-title {
+    font-size: 13.5pt;
+    font-weight: 700;
+    margin: 0 0 5pt;
+    color: #1f2a22;
+  }
+  .print-lo-banner .print-lo-intro {
+    font-size: 10pt;
+    line-height: 1.6;
+    color: #333;
+    margin: 0;
+  }
+  .print-lo-banner .print-lo-count {
+    font-size: 8.5pt;
+    color: #6b7d70;
+    margin-top: 7pt;
+    font-weight: 600;
+  }
+
   /* Page footer — logo + copyright on every printed page */
   .print-question-page {
     display: flex;
@@ -5955,6 +5994,10 @@ option {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               Print / Save PDF
             </button>
+            <button class="btn btn-primary" onclick="generateSyllabusPdf()" id="wsSyllabusBtn" style="background:var(--primary-dark,#3a6347);" title="Sort the selected questions into MOE syllabus learning objectives, each with a short intro, and print as a PDF">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h5"/></svg>
+              Generate PDF (by syllabus)
+            </button>
             <button class="btn btn-primary" onclick="practiceCurrentWorksheet()" id="wsPracticeBtn" style="background:var(--accent-blue);">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
               Practice
@@ -9174,7 +9217,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.146.1';
+const APP_VERSION = 'v1.147.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20160,6 +20203,22 @@ async function printStudentWorksheet() {
   doPrintStudentWorksheet(selected, title, frontHtml);
 }
 
+// Worksheet title banner + name/date/class strip printed at the top of page 1.
+function _wsHeaderHtml(worksheetTitle) {
+  return `<div class="print-worksheet-header">
+        <img class="print-worksheet-header-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2252%22 height=%2252%22 viewBox=%220 0 52 52%22%3E%3Crect width=%2252%22 height=%2252%22 rx=%2210%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2226%22 y=%2237%22 font-family=%22DM Sans,sans-serif%22 font-size=%2232%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
+        <div class="print-worksheet-header-text">
+          <h1>${escapeHtml(worksheetTitle)}</h1>
+          <p>Polymath Learning Centre</p>
+        </div>
+      </div>
+      <div class="print-student-info">
+        <span>Name: ___________________________</span>
+        <span>Date: _______________</span>
+        <span>Class: ___________</span>
+      </div>`;
+}
+
 // Build the worksheet print HTML (question chunks + answer key). Shared by the
 // printer and the live preview so the two render identically. Each chunk carries
 // data-qid so the packer can honour manual page breaks keyed by question.
@@ -20173,28 +20232,27 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // question's own title + category/topic meta (used for PSLE-paper prints so
   // the sheet shows just the question number, not the database title).
   const plainNums = !!(opts && opts.plainNumbers);
+  // sectionHtmlById: map of question id → learning-objective banner HTML. The
+  // banner is emitted as its OWN chunk immediately before that question, so the
+  // packer can key a forced page break on it (data-qid "__lo__<qid>") — used by
+  // the syllabus-grouped PDF.
+  const sectionById = (opts && opts.sectionHtmlById) || null;
   let allHtml = (opts && opts.frontHtml) ? opts.frontHtml : '';
   const answerKeyData = [];
 
   selected.forEach((q, qIndex) => {
+    const secHtml = sectionById ? (sectionById[q.id] || '') : '';
+    if (secHtml) {
+      allHtml += `<div class="print-question-chunk print-lo-chunk" data-qid="__lo__${escapeHtml(String(q.id || ''))}">` +
+        (qIndex === 0 ? _wsHeaderHtml(worksheetTitle) : '') + secHtml + `</div>`;
+    }
     // MCQ-style questions (no writing boxes) are flagged so the packer can
     // pair two compact ones onto a single page.
     const isMcq = q.blocks.some(b => b.type === 'mcq') && !q.blocks.some(b => b.type === 'answer' || b.type === 'plainanswer');
     let qHtml = `<div class="print-question-chunk" data-qid="${escapeHtml(String(q.id || ''))}"${isMcq ? ' data-mcq="1"' : ''}>`;
 
-    if (qIndex === 0) {
-      qHtml += `<div class="print-worksheet-header">
-        <img class="print-worksheet-header-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2252%22 height=%2252%22 viewBox=%220 0 52 52%22%3E%3Crect width=%2252%22 height=%2252%22 rx=%2210%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2226%22 y=%2237%22 font-family=%22DM Sans,sans-serif%22 font-size=%2232%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
-        <div class="print-worksheet-header-text">
-          <h1>${escapeHtml(worksheetTitle)}</h1>
-          <p>Polymath Learning Centre</p>
-        </div>
-      </div>
-      <div class="print-student-info">
-        <span>Name: ___________________________</span>
-        <span>Date: _______________</span>
-        <span>Class: ___________</span>
-      </div>`;
+    if (qIndex === 0 && !secHtml) {
+      qHtml += _wsHeaderHtml(worksheetTitle);
     }
 
     qHtml += plainNums
@@ -20287,6 +20345,325 @@ function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml) {
   const output = document.getElementById('printOutput');
   output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '' });
   autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
+}
+
+// =====================================================================
+// SYLLABUS-GROUPED PDF — sorts the selected worksheet questions into the
+// learning objectives of the MOE Primary Science Syllabus 2023 (the Learning
+// Outcomes tables, P3–P6 Standard), prints a short intro banner for each
+// objective and all of its questions under it. Classification is done by the
+// AI in one batched call, with a topic + keyword fallback if AI is offline.
+// =====================================================================
+const SYLLABUS_LO_TOPICS = [
+  // ---------- DIVERSITY ----------
+  { topic: 'Diversity of Living and Non-Living Things', level: 'P3', theme: 'Diversity', los: [
+    { id: 'div-living', title: 'Characteristics of living things',
+      intro: 'Living things need air, food and water to survive, and they grow, respond to changes around them and reproduce. These characteristics help us tell living things apart from non-living things.',
+      obj: 'Describe the characteristics of living things (need water, food and air to survive; grow, respond and reproduce) and infer differences between living and non-living things.',
+      kw: ['living thing', 'non-living', 'survive', 'respond', 'reproduce', 'characteristic'] },
+    { id: 'div-groups', title: 'Classifying living things into broad groups',
+      intro: 'We classify the great variety of living things into broad groups — plants (flowering, non-flowering), animals (amphibians, birds, fish, insects, mammals, reptiles), fungi and bacteria — based on their similarities and differences.',
+      obj: 'Recognise broad groups of living things (flowering/non-flowering plants; amphibians, birds, fish, insects, mammals, reptiles; fungi such as mould, mushroom, yeast; bacteria) and classify them based on common observable characteristics.',
+      kw: ['classify', 'flowering', 'mammal', 'reptile', 'amphibian', 'insect', 'fungi', 'fungus', 'bacteria', 'mould', 'mushroom', 'yeast', 'group'] },
+  ] },
+  { topic: 'Diversity of Materials', level: 'P3', theme: 'Diversity', los: [
+    { id: 'div-materials', title: 'Properties and uses of materials',
+      intro: 'Different materials — wood, metal, ceramic, rubber, glass, plastic and fabric — have different physical properties such as strength, flexibility, the ability to float or sink, being waterproof and transparency. We choose a material for a use because of its properties.',
+      obj: 'Relate the use of materials (wood, metal, ceramic, rubber, glass, plastic, fabric) to their physical properties, and compare strength, flexibility, ability to float/sink in water, waterproof-ness and transparency.',
+      kw: ['material', 'waterproof', 'flexib', 'transparen', 'float', 'sink', 'strength', 'rubber', 'fabric', 'ceramic'] },
+  ] },
+  // ---------- CYCLES ----------
+  { topic: 'Cycles in Plants and Animals (Life Cycles)', level: 'P3', theme: 'Cycles', los: [
+    { id: 'cyc-lifecycles', title: 'Life cycles of plants and animals',
+      intro: 'Different living things have different life cycles. A plant grows from a seed into a young plant and then an adult plant, while animals such as the chicken, frog, grasshopper, beetle, butterfly and mosquito go through their own repeated stages of change.',
+      obj: 'Show an understanding that different living things have different life cycles; observe and compare the life cycles of plants grown from seeds and of animals (chicken, cockroach, frog, grasshopper, beetle, butterfly, mosquito).',
+      kw: ['life cycle', 'egg', 'larva', 'pupa', 'nymph', 'caterpillar', 'tadpole', 'young plant', 'adult', 'stage'] },
+  ] },
+  { topic: 'Cycles in Plants and Animals (Reproduction)', level: 'P5', theme: 'Cycles', los: [
+    { id: 'rep-cell', title: 'The cell — basic unit of life',
+      intro: 'A cell is the basic unit of life. All living things are made of cells, and the parts of a cell work together to keep it alive.',
+      obj: 'Recognise that a cell is a basic unit of life.',
+      kw: ['cell', 'nucleus', 'cell wall', 'chloroplast', 'cell membrane', 'cytoplasm'] },
+    { id: 'rep-heredity', title: 'Reproduction and passing on characteristics',
+      intro: 'Living things reproduce to ensure the continuity of their kind. Many characteristics of an organism are passed on from parents to their offspring, which is why offspring resemble their parents.',
+      obj: 'Show an understanding that living things reproduce to ensure continuity of their kind and that many characteristics of an organism are passed on from parents to offspring.',
+      kw: ['offspring', 'parent', 'inherit', 'continuity', 'passed on', 'resemble'] },
+    { id: 'rep-plants', title: 'Sexual reproduction in flowering plants',
+      intro: 'Flowering plants reproduce sexually through pollination, fertilisation (seed production), seed dispersal and germination. Fertilisation happens when a male reproductive cell fuses with a female reproductive cell. Some plants reproduce from spores instead of seeds.',
+      obj: 'Describe processes in the sexual reproduction of flowering plants — pollination, fertilisation (seed production), seed dispersal and germination; investigate the ways plants reproduce (spores, seeds).',
+      kw: ['pollinat', 'fertilis', 'dispers', 'germinat', 'seed', 'spore', 'pollen', 'stigma', 'anther', 'ovary', 'fruit', 'petal', 'flower'] },
+    { id: 'rep-human', title: 'Human reproduction',
+      intro: 'In humans, fertilisation occurs when a sperm fuses with an egg, and the fertilised egg develops in the womb. The ovaries produce eggs and the testes produce sperms — the same idea of fertilisation as in flowering plants.',
+      obj: 'Recognise the process of fertilisation in the sexual reproduction of humans (sperm fuses with egg; fertilised egg develops in the womb; ovaries produce eggs, testes produce sperms) and the similarity with fertilisation in flowering plants.',
+      kw: ['sperm', 'egg cell', 'womb', 'ovary', 'ovaries', 'testes', 'fertilised egg', 'human reproduction'] },
+  ] },
+  { topic: 'Cycles in Matter and Water (Matter)', level: 'P4', theme: 'Cycles', los: [
+    { id: 'mat-states', title: 'Matter and its three states',
+      intro: 'Matter is anything that has mass and occupies space. It exists as solid, liquid or gas — the three states differ in whether they have a definite shape and a definite volume.',
+      obj: 'State that matter is anything that has mass and occupies space; differentiate among the three states of matter (solid, liquid, gas) in terms of shape and volume; measure mass and volume.',
+      kw: ['matter', 'mass', 'volume', 'occupies space', 'definite shape', 'solid', 'liquid', 'gas'] },
+  ] },
+  { topic: 'Cycles in Matter and Water (Water)', level: 'P5', theme: 'Cycles', los: [
+    { id: 'wat-states', title: 'Water and its changes of state',
+      intro: 'Water exists in three interchangeable states. It changes state by melting, freezing, boiling, evaporation and condensation — ice melts at 0 °C (the melting point) and water boils at 100 °C (the boiling point) — as it gains or loses heat.',
+      obj: 'Recognise that water can exist in three interchangeable states; show an understanding of melting, freezing, boiling/evaporation and condensation, the melting point of ice and boiling point of water; investigate the effect of heat gain or loss on the temperature and state of water.',
+      kw: ['melt', 'freez', 'boil', 'condens', 'steam', 'ice', 'water vapour', 'change of state', '0 °c', '100 °c', '0°c', '100°c'] },
+    { id: 'wat-evap', title: 'Evaporation and its rate',
+      intro: 'Evaporation happens when a liquid changes to a gas below its boiling point. The rate of evaporation is affected by wind, temperature and the exposed surface area of the liquid.',
+      obj: 'Investigate the factors which affect the rate of evaporation — wind, temperature and exposed surface area.',
+      kw: ['evaporat', 'rate of evaporation', 'wind', 'exposed surface', 'surface area', 'dry', 'dries'] },
+    { id: 'wat-cycle', title: 'The water cycle and keeping water clean',
+      intro: 'Evaporation and condensation drive the water cycle, which returns water to the Earth and makes it a self-sustaining system. Water is essential to life processes but is a limited natural resource, so we must conserve it and prevent water pollution.',
+      obj: 'Show an understanding of the roles of evaporation and condensation in the water cycle; recognise the importance of the water cycle and of water to life processes; describe the impact of water pollution on Earth’s water resources.',
+      kw: ['water cycle', 'cloud', 'rain', 'water pollution', 'conserve water', 'reservoir', 'limited natural resource'] },
+  ] },
+  // ---------- SYSTEMS ----------
+  { topic: 'Human System (Digestive System)', level: 'P4', theme: 'Systems', topics: ['Human Body Systems'], los: [
+    { id: 'hum-digest', title: 'The digestive system',
+      intro: 'The digestive system breaks food down so it can be absorbed by the body. Food passes through the mouth, gullet, stomach, small intestine and large intestine, and each part has its own function.',
+      obj: 'Identify the human systems in the body and their functions (digestive, respiratory, circulatory, skeletal, muscular); identify the parts of the human digestive system (mouth, gullet, stomach, small intestine, large intestine) and describe their functions.',
+      kw: ['digest', 'stomach', 'gullet', 'small intestine', 'large intestine', 'mouth', 'saliva', 'absorb', 'food is broken'] },
+  ] },
+  { topic: 'Human System (Respiratory and Circulatory Systems)', level: 'P5', theme: 'Systems', topics: ['Human and Plant Respiration', 'Human Body Systems'], los: [
+    { id: 'hum-air', title: 'Air and the gases in it',
+      intro: 'Air is made up of gases such as nitrogen, carbon dioxide, oxygen and water vapour. We use oxygen from the air to release energy from food.',
+      obj: 'Recognise that air is made up of gases such as nitrogen, carbon dioxide, oxygen and water vapour.',
+      kw: ['nitrogen', 'oxygen', 'carbon dioxide', 'water vapour', 'gases in air', 'composition of air'] },
+    { id: 'hum-respcirc', title: 'The respiratory and circulatory systems',
+      intro: 'The respiratory system (nose, windpipe, lungs) takes in oxygen and removes carbon dioxide, while the circulatory system (heart, blood, blood vessels) transports these substances around the body. Each part has its own function.',
+      obj: 'Identify the parts of the human respiratory (nose, windpipe, lungs) and circulatory systems (heart, blood, blood vessels) and describe their functions.',
+      kw: ['respiratory', 'circulatory', 'lungs', 'windpipe', 'nose', 'heart', 'blood vessel', 'breathe', 'breathing', 'inhale', 'exhale', 'pulse'] },
+    { id: 'hum-integration', title: 'Systems working together and gas exchange',
+      intro: 'The digestive, respiratory and circulatory systems work together to carry out life processes. Plants, fish and humans all take in oxygen and give out carbon dioxide, but in different ways.',
+      obj: 'Recognise the integration of the digestive, respiratory and circulatory systems in carrying out life processes; compare how plants, fish and humans take in oxygen and give out carbon dioxide.',
+      kw: ['work together', 'integration', 'gas exchange', 'gills', 'fish take in', 'oxygen and give out', 'life processes'] },
+  ] },
+  { topic: 'Transport in Humans and Plants', level: 'P5', theme: 'Systems', topics: ['Human and Plant Transport'], los: [
+    { id: 'trans-human', title: 'Transport of substances in humans',
+      intro: 'In humans, blood vessels transport digested food, oxygen and carbon dioxide around the body. Blood carries what cells need to them and takes waste gases away.',
+      obj: 'Compare the ways in which substances are transported within plants and humans — in humans, blood vessels transport digested food, oxygen and carbon dioxide.',
+      kw: ['blood', 'blood vessel', 'transport', 'digested food', 'carries oxygen', 'oxygen-rich', 'oxygen-poor'] },
+    { id: 'trans-plant', title: 'The plant transport system',
+      intro: 'Plants have tubes that transport food and water. Water-carrying tubes move water and mineral salts, while food-carrying tubes move the food (sugar) made in the leaves to the rest of the plant.',
+      obj: 'Identify the parts of the plant transport system and describe their functions; investigate how food and water are transported in the plant; compare transport in plants and humans.',
+      kw: ['water-carrying', 'food-carrying', 'tubes', 'transport in plant', 'red dye', 'stem', 'mineral salts', 'transpiration'] },
+  ] },
+  { topic: 'Plant System (Plant Parts and Functions)', level: 'P4', theme: 'Systems', topics: ['Plant Systems'], los: [
+    { id: 'plt-parts', title: 'Parts of a plant and their functions',
+      intro: 'A plant has different parts — the leaf, stem and root — and each part has its own function that helps the plant to live and grow.',
+      obj: 'Identify the different parts of plants (leaf, stem, root) and state their functions.',
+      kw: ['leaf', 'stem', 'root', 'plant part', 'function of the leaf', 'function of the root', 'anchor'] },
+  ] },
+  { topic: 'Electrical System', level: 'P5', theme: 'Systems', topics: ['Electrical Systems'], los: [
+    { id: 'elec-circuit', title: 'Electric circuits and how current flows',
+      intro: 'An electric circuit with an energy source (battery) and other components (wire, bulb, switch) forms an electrical system. A closed circuit allows current to flow so the bulb lights up; an open circuit does not.',
+      obj: 'Recognise that an electric circuit forms an electrical system; show an understanding that a closed circuit allows current to flow; construct simple circuits from circuit diagrams.',
+      kw: ['circuit', 'battery', 'bulb', 'switch', 'closed circuit', 'open circuit', 'current', 'wire', 'circuit diagram'] },
+    { id: 'elec-conductors', title: 'Electrical conductors and insulators',
+      intro: 'Some materials let electric current pass through them (conductors) while others do not (insulators). This is why wires are made of metal but covered in plastic.',
+      obj: 'Identify electrical conductors and insulators.',
+      kw: ['conductor', 'insulator', 'conduct electricity', 'metal wire', 'plastic cover'] },
+    { id: 'elec-variables', title: 'What affects the current in a circuit',
+      intro: 'Changing the number of batteries or bulbs, and whether bulbs are arranged in series or in parallel, changes the current and how brightly the bulbs light up.',
+      obj: 'Investigate the effect of some variables on the current in a circuit — number of batteries (in series) and number of bulbs (in series and parallel).',
+      kw: ['series', 'parallel', 'brighter', 'brightness', 'dimmer', 'number of batteries', 'number of bulbs', 'blew', 'lit up'] },
+  ] },
+  // ---------- INTERACTIONS ----------
+  { topic: 'Interaction of Forces (Magnets)', level: 'P3', theme: 'Interactions', topics: ['Magnets'], los: [
+    { id: 'mag-magnets', title: 'Magnets and their characteristics',
+      intro: 'A magnet can exert a push or a pull. Magnets have two poles, unlike poles attract and like poles repel, and magnets attract magnetic materials such as iron and steel.',
+      obj: 'Recognise that a magnet can exert a push or a pull; identify the characteristics of magnets (two poles, north-south, attract/repel, attract magnetic materials); compare magnetic and non-magnetic materials; make a magnet.',
+      kw: ['magnet', 'pole', 'attract', 'repel', 'north', 'south', 'magnetic material', 'iron', 'steel', 'stroke method'] },
+  ] },
+  { topic: 'Interaction of Forces (Frictional, Gravitational, Elastic Spring Force)', level: 'P6', theme: 'Interactions', topics: ['Forces'], los: [
+    { id: 'for-effects', title: 'What a force is and what it does',
+      intro: 'A force is a push or a pull. A force can move a stationary object, speed it up, slow it down, change its direction, stop a moving object, or change its shape.',
+      obj: 'Identify a force as a push or a pull; show an understanding of the effects of a force (move, speed up, slow down, change direction, stop, change shape).',
+      kw: ['push', 'pull', 'force', 'move', 'speed up', 'slow down', 'change direction', 'change the shape', 'stationary'] },
+    { id: 'for-types', title: 'Types of forces',
+      intro: 'There are different types of forces — magnetic force, gravitational force, elastic spring force and frictional force — each acting in its own way.',
+      obj: 'Recognise and give examples of the different types of forces — magnetic, gravitational, elastic spring and frictional force.',
+      kw: ['types of force', 'magnetic force', 'gravitational force', 'elastic spring force', 'frictional force', 'give examples of force'] },
+    { id: 'for-friction', title: 'Frictional force',
+      intro: 'Friction is a force that acts against the motion of objects moving over a surface. It can slow objects down and depends on the surfaces in contact.',
+      obj: 'Investigate the effect of frictional force on the motion of objects.',
+      kw: ['friction', 'frictional force', 'rough surface', 'smooth surface', 'slows down', 'rubbing', 'grip'] },
+    { id: 'for-elastic', title: 'Elastic spring force',
+      intro: 'A stretched or compressed spring produces an elastic spring force. The more a spring is stretched or compressed, the larger the force it exerts.',
+      obj: 'Investigate the effects of elastic spring force.',
+      kw: ['spring', 'elastic', 'stretch', 'compress', 'extension', 'rubber band', 'force-extension'] },
+    { id: 'for-gravity', title: 'Gravitational force and weight',
+      intro: 'Objects have weight because of the gravitational force acting on them. Gravity is a pull towards the Earth.',
+      obj: 'Recognise that objects have weight because of the gravitational force acting on the object.',
+      kw: ['gravity', 'gravitational', 'weight', 'weigh', 'falls', 'pull of the earth', 'newton'] },
+  ] },
+  { topic: 'Interactions within the Environment', level: 'P6', theme: 'Interactions', topics: ['Living Together', 'Food Chains and Webs', 'Humans and the Environment'], los: [
+    { id: 'env-survival', title: 'Factors affecting survival',
+      intro: 'The survival of an organism depends on physical factors of the environment (temperature, light, water), the availability of food, and the other organisms present. When the environment becomes unfavourable, organisms adapt and survive, move away, or die.',
+      obj: 'Identify the factors that affect the survival of an organism (physical characteristics, availability of food, types of other organisms); show an understanding of the effect on organisms when the environment becomes unfavourable.',
+      kw: ['survival', 'survive', 'unfavourable', 'temperature', 'availability of food', 'environment', 'move to other places', 'die'] },
+    { id: 'env-food', title: 'Food chains and food webs',
+      intro: 'Energy passes from the Sun through living things. In a food chain and food web, producers, consumers, predators and prey each have a role, and decomposers return nutrients to the environment.',
+      obj: 'Show an understanding of the energy pathway from the Sun through living things and identify the roles of organisms (producers, consumers, predators, prey) in a food chain and food web.',
+      kw: ['food chain', 'food web', 'producer', 'consumer', 'predator', 'prey', 'decomposer', 'energy pathway', 'arrow'] },
+    { id: 'env-community', title: 'Organisms, populations and communities',
+      intro: 'An organism is a living thing, a population is a group of organisms of the same kind living together, and a community is made up of many populations. Different habitats support different communities.',
+      obj: 'Differentiate among organism, population and community; show an understanding that different habitats (garden, field, pond, seashore, tree, mangrove swamp) support different communities.',
+      kw: ['population', 'community', 'organism', 'habitat', 'pond', 'seashore', 'mangrove', 'garden', 'field'] },
+    { id: 'env-adapt', title: 'Adaptations for survival',
+      intro: 'Adaptations are structural or behavioural features that enhance survival — helping organisms cope with physical factors, obtain food, escape predators, or reproduce by attracting mates or dispersing seeds and fruits.',
+      obj: 'Show an understanding that adaptations serve to enhance survival and can be structural or behavioural (cope with physical factors, obtain food, escape predators, reproduce).',
+      kw: ['adapt', 'adaptation', 'structural', 'behavioural', 'camouflage', 'escape predator', 'suited to', 'survive better'] },
+    { id: 'env-manimpact', title: "Man's impact on the environment",
+      intro: 'People affect the environment in positive ways (conservation, reforestation) and negative ways (depleting resources, deforestation, pollution and global warming). Our choices matter for the survival of living things.',
+      obj: "Give examples of man's positive and negative impact on the environment (conservation, reforestation; depleting natural resources, deforestation, pollution, global warming).",
+      kw: ['pollution', 'deforestation', 'conservation', 'reforestation', 'global warming', 'human impact', 'man’s impact', 'environment', 'recycle'] },
+  ] },
+  // ---------- ENERGY ----------
+  { topic: 'Energy Forms and Uses (Light)', level: 'P4', theme: 'Energy', topics: ['Light'], los: [
+    { id: 'lgt-light', title: 'Light, reflection and shadows',
+      intro: 'An object can be seen when it gives out light or reflects light. Light travels in straight lines, so a shadow forms when an object blocks the light. The shadow changes with the shape, size and position of the object and the distances involved.',
+      obj: 'Recognise that an object can be seen when it reflects light or is a source of light; recognise that light travels in straight lines and shadows form when light is blocked; investigate the variables that affect shadows.',
+      kw: ['light', 'reflect', 'shadow', 'source of light', 'straight line', 'blocked', 'screen', 'shape of shadow'] },
+  ] },
+  { topic: 'Energy Forms and Uses (Heat)', level: 'P4', theme: 'Energy', topics: ['Heat'], los: [
+    { id: 'heat-basics', title: 'Heat, temperature and heat flow',
+      intro: 'Heat is a form of energy and temperature is a measure of how hot something is. Heat flows from a hotter to a colder object until both reach the same temperature, and gaining or losing heat changes an object’s temperature.',
+      obj: 'Identify sources of heat; state that heat is a form of energy and temperature measures degree of hotness; differentiate heat and temperature; show that heat flows from hotter to colder until temperatures are equal; relate temperature change to heat gain or loss.',
+      kw: ['heat', 'temperature', 'hotter', 'colder', 'heat flows', 'thermometer', 'degree of hotness', 'same temperature', 'source of heat'] },
+    { id: 'heat-effects', title: 'Effects of heat gain or loss (expansion and conduction)',
+      intro: 'Gaining or losing heat has everyday effects: objects expand when heated and contract when cooled, and matter changes state. Some materials are good conductors of heat (metals) and others are poor conductors (wood, plastic, air, rubber).',
+      obj: 'List effects of heat gain/loss in everyday life (contraction/expansion of solids, liquids and gases; change in state of matter); identify good and poor conductors of heat.',
+      kw: ['expand', 'expansion', 'contract', 'contraction', 'conductor of heat', 'poor conductor', 'good conductor', 'insulator', 'change in state', 'metal', 'gap', 'fit'] },
+  ] },
+  { topic: 'Energy Forms and Uses (Photosynthesis)', level: 'P6', theme: 'Energy', topics: ['Energy in Food'], los: [
+    { id: 'photo-energy', title: 'How living things obtain energy',
+      intro: 'Living things need energy from respiration to carry out life processes, and the Sun is our primary source of energy. Plants make their own food while animals get energy by eating other living things.',
+      obj: 'Recognise that living things need energy from respiration; recognise the Sun as the primary source of energy; differentiate between the ways plants and animals obtain energy.',
+      kw: ['respiration', 'release of energy', 'primary source', 'the sun', 'obtain energy', 'make food', 'animals obtain'] },
+    { id: 'photo-photosynthesis', title: 'Photosynthesis',
+      intro: 'Plants make food by photosynthesis, which needs water, light energy and carbon dioxide and produces sugar and oxygen.',
+      obj: 'Investigate the requirements (water, light energy and carbon dioxide) for photosynthesis (production of sugar and oxygen).',
+      kw: ['photosynthesis', 'sugar', 'oxygen', 'carbon dioxide', 'light energy', 'chlorophyll', 'leaf makes food', 'green plant'] },
+  ] },
+  { topic: 'Energy Conversion', level: 'P6', theme: 'Energy', topics: ['Energy Conversion'], los: [
+    { id: 'econv-forms', title: 'Forms of energy',
+      intro: 'Energy comes in various forms — kinetic, potential, light, electrical, sound and heat energy. Most of our energy is derived in some way from the Sun.',
+      obj: 'Recognise that energy from most energy resources is derived from the Sun; recognise and give examples of forms of energy (kinetic, potential, light, electrical, sound, heat).',
+      kw: ['kinetic energy', 'potential energy', 'light energy', 'electrical energy', 'sound energy', 'heat energy', 'form of energy', 'stored energy'] },
+    { id: 'econv-conversion', title: 'Energy conversion',
+      intro: 'Energy can be converted from one form to another. For example, a stretched rubber band or wound spring converts stored (potential) energy into kinetic energy, sound and heat.',
+      obj: 'Investigate energy conversion from one form to another.',
+      kw: ['energy conversion', 'converted', 'convert', 'change from', 'into kinetic', 'into sound', 'into heat', 'rubber band', 'spring', 'toy car'] },
+  ] },
+];
+
+// Flat list of learning objectives in syllabus order, each carrying its parent
+// topic/level/theme and the app topic names it maps to (for the fallback).
+function _flatSyllabusLOs() {
+  const out = [];
+  SYLLABUS_LO_TOPICS.forEach(t => (t.los || []).forEach(lo => out.push(
+    Object.assign({}, lo, { topic: t.topic, level: t.level, theme: t.theme, appTopics: t.topics || [] })
+  )));
+  return out;
+}
+
+// The intro banner printed above each learning objective's questions.
+function _loBannerHtml(lo, count) {
+  return `<div class="print-lo-banner">
+    <div class="print-lo-meta">${escapeHtml(lo.level)} &middot; ${escapeHtml(lo.theme)} &middot; ${escapeHtml(lo.topic)}</div>
+    <h2 class="print-lo-title">${escapeHtml(lo.title)}</h2>
+    <p class="print-lo-intro">${escapeHtml(lo.intro)}</p>
+    <div class="print-lo-count">${count} question${count === 1 ? '' : 's'} in this learning objective</div>
+  </div>`;
+}
+
+// Fallback classifier — keyword hits (weighted) plus a small bonus when the
+// question's app topic matches the objective's topic. Returns a loId or null.
+function _classifyLOByKeyword(q) {
+  const text = extractQuestionSearchText(q); // already lowercased
+  const qTopic = (q.topic || '').toLowerCase();
+  let best = null, bestScore = 0;
+  _flatSyllabusLOs().forEach(lo => {
+    let score = 0;
+    (lo.kw || []).forEach(k => { const kk = String(k || '').toLowerCase(); if (kk && text.includes(kk)) score += 2; });
+    if ((lo.appTopics || []).some(t => String(t).toLowerCase() === qTopic)) score += 1;
+    if (score > bestScore) { bestScore = score; best = lo.id; }
+  });
+  return bestScore > 0 ? best : null;
+}
+
+// AI classifier — one batched call mapping each question index → loId.
+async function _classifyLOsWithAI(selected) {
+  const los = _flatSyllabusLOs();
+  const objList = los.map(lo => `${lo.id} | ${lo.level} ${lo.topic} — ${lo.title}: ${lo.obj}`).join('\n');
+  const qList = selected.map((q, i) => {
+    const txt = extractQuestionSearchText(q).slice(0, 320);
+    return `${i + 1}. [topic: ${q.topic || '?'}] ${stripHtmlToText(q.title || '')} :: ${txt}`;
+  }).join('\n');
+  const prompt =
+    `You are sorting Singapore MOE Primary Science questions into the syllabus Learning Objectives listed below. ` +
+    `For EACH question pick the SINGLE best-fitting objective id — the objective whose science content the question actually tests, not just a loosely related topic.\n\n` +
+    `LEARNING OBJECTIVES (id | level topic — title: outcome):\n${objList}\n\n` +
+    `QUESTIONS:\n${qList}\n\n` +
+    `Return ONLY a JSON array with one entry per question, e.g. [{"n":1,"id":"heat-effects"},{"n":2,"id":"wat-states"}]. ` +
+    `"id" must be exactly one of the ids above, or "other" if truly none fit.`;
+  const raw = await askGemini(prompt, { maxOutputTokens: Math.min(6000, 300 + selected.length * 45), temperature: 0, json: true });
+  const arr = _parseAIJson(raw);
+  const valid = new Set(los.map(l => l.id));
+  const map = {};
+  (Array.isArray(arr) ? arr : []).forEach(e => {
+    const n = parseInt(e && e.n, 10);
+    const id = e && String(e.id || '');
+    if (n >= 1 && n <= selected.length && valid.has(id)) map[n - 1] = id;
+  });
+  return map;
+}
+
+// Build & print a worksheet whose questions are grouped under syllabus learning
+// objectives, each introduced by a short banner. AI classifies; a keyword/topic
+// pass fills anything the AI missed; leftovers go into a final "Other" section.
+async function generateSyllabusPdf() {
+  if (wsSelectedIds.size === 0) { showToast('Select at least one question', 'error'); return; }
+  const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
+  const title = (document.getElementById('wsTitle')?.value || '').trim() || 'Science Worksheet';
+
+  _printProgressShow('Sorting by syllabus…', 'Matching your questions to learning objectives');
+  let aiMap = {};
+  try { aiMap = await _classifyLOsWithAI(selected); }
+  catch (e) { console.warn('AI learning-objective classify failed; using keyword fallback', e); }
+
+  const loById = {};
+  _flatSyllabusLOs().forEach(lo => { loById[lo.id] = lo; });
+
+  // Every question gets a loId: AI → keyword/topic → 'other'.
+  const assign = selected.map((q, i) => aiMap[i] || _classifyLOByKeyword(q) || 'other');
+
+  // Group, keeping syllabus order; the 'other' bucket always comes last.
+  const groups = new Map();
+  selected.forEach((q, i) => { const id = assign[i]; if (!groups.has(id)) groups.set(id, []); groups.get(id).push(q); });
+  const order = _flatSyllabusLOs().map(l => l.id).concat(['other']);
+
+  const orderedQs = [];
+  const sectionHtmlById = {};
+  const forced = new Set();
+  let firstGroup = true;
+  order.forEach(id => {
+    const qs = groups.get(id);
+    if (!qs || !qs.length) return;
+    const lo = loById[id] || { level: '', theme: 'Other', topic: 'Other', title: 'Other questions',
+      intro: 'Questions that did not fall neatly under a single syllabus learning objective.' };
+    sectionHtmlById[qs[0].id] = _loBannerHtml(lo, qs.length);
+    if (!firstGroup) forced.add('__lo__' + qs[0].id); // each objective starts a fresh page
+    firstGroup = false;
+    qs.forEach(q => orderedQs.push(q));
+  });
+
+  _printProgressUpdate('Laying out pages…', 0.85, 'Building your syllabus worksheet');
+  const frontHtml = await _wsFrontHtml(selected, title);
+  const output = document.getElementById('printOutput');
+  output.innerHTML = buildWorksheetHtml(orderedQs, title, { frontHtml, sectionHtmlById });
+  autoscaleAndPrint(output, { forcedBreakIds: forced });
 }
 
 // =====================================================================
@@ -34774,6 +35151,7 @@ window.wsPreviewBack = wsPreviewBack;
 window.onWsCardClick = onWsCardClick;
 window.saveWorksheet = saveWorksheet;
 window.printStudentWorksheet = printStudentWorksheet;
+window.generateSyllabusPdf = generateSyllabusPdf;
 window.openWorksheetPreview = openWorksheetPreview;
 window.closeWorksheetPreview = closeWorksheetPreview;
 window.wsBreakBefore = wsBreakBefore;
