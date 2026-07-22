@@ -177,6 +177,28 @@ body {
   align-items: center;
   gap: 12px;
 }
+.sidebar-collapse-btn {
+  margin-left: auto;
+  width: 28px; height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius-sm);
+  color: rgba(255,255,255,0.6);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.sidebar-collapse-btn:hover { background: rgba(255,255,255,0.14); color: #fff; }
+.sidebar-collapse-btn svg { width: 15px; height: 15px; }
+/* Desktop: collapsing the sidebar slides it away so the content area gets the full width */
+@media (min-width: 769px) {
+  body.sidebar-collapsed .sidebar { transform: translateX(-100%); }
+  body.sidebar-collapsed .main-content { margin-left: 0; }
+  body.sidebar-collapsed .mobile-toggle { display: flex; }
+}
 .sidebar-brand-logo {
   width: 40px;
   height: 40px;
@@ -285,6 +307,7 @@ body {
   margin-left: 260px;
   flex: 1;
   min-height: 100vh;
+  transition: margin-left var(--transition);
 }
 .page-header {
   background: var(--surface);
@@ -5106,6 +5129,9 @@ option {
       <h1>Keywords Learning Portal</h1>
       <span>Polymath Learning Centre</span>
       </div>
+      <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Collapse sidebar" aria-label="Collapse sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
     </div>
     <nav class="sidebar-nav">
       <!-- Home (students) — the simple landing screen -->
@@ -9142,7 +9168,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.144.0';
+const APP_VERSION = 'v1.145.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9520,6 +9546,12 @@ function navigateTo(page) {
 }
 
 function toggleSidebar() {
+  // Desktop: collapse/expand the fixed sidebar so the content area can use the full width
+  if (window.innerWidth > 768) {
+    const collapsed = document.body.classList.toggle('sidebar-collapsed');
+    try { localStorage.setItem('sidebarCollapsed', collapsed ? '1' : '0'); } catch (e) {}
+    return;
+  }
   const sidebar = document.getElementById('sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
   sidebar.classList.toggle('open');
@@ -9527,6 +9559,12 @@ function toggleSidebar() {
     backdrop.style.display = sidebar.classList.contains('open') ? 'block' : 'none';
   }
 }
+
+// Restore the collapsed state from the last visit (desktop only; harmless on mobile
+// where the drawer CSS takes over)
+try {
+  if (localStorage.getItem('sidebarCollapsed') === '1') document.body.classList.add('sidebar-collapsed');
+} catch (e) {}
 
 // Safety net: every page header must offer a way to open the sidebar on
 // mobile. Injects the hamburger into any .page-header that lacks one
