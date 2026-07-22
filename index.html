@@ -9174,7 +9174,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.146.0';
+const APP_VERSION = 'v1.146.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -34670,6 +34670,7 @@ window.showConfirm = showConfirm;
 window.closeConfirm = closeConfirm;
 window.renderBlocks = renderBlocks;
 window.renderQuestionBank = renderQuestionBank;
+window.renderVettingList = renderVettingList;
 window.runBankAiSearch = runBankAiSearch;
 window.clearBankAiSearch = clearBankAiSearch;
 window.renderStudentView = renderStudentView;
