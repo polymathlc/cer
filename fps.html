@@ -33,6 +33,11 @@
     guarantee minimum rarities on the next drop. Wrong answers reset it.
   - Roguelite meta: runs earn Science Cores to spend on permanent upgrades
     (stored per-student in localStorage).
+  - Rendering: enemies are pre-rendered detailed sprite canvases (2-frame
+    walk cycle + white hit-flash silhouette), occluded by walls at 1px
+    column resolution. Guns are procedural per-archetype viewmodels with
+    walk bob, recoil kickback and muzzle flash; firing also kicks the
+    camera (horizon shift + horizontal aim drift) CS-style.
 -->
 <style>
   :root {
@@ -286,7 +291,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v0.1.0 BETA</div>
+<div id="versionBadge">Science Strike v0.2.0 BETA</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -630,7 +635,7 @@ function startRun() {
       magMult: 1 + (meta.up.mag || 0) * 0.12,
     },
     weapon: null, ammo: 0, reloading: 0,
-    fireCd: 0, bloomNow: 0,
+    fireCd: 0, bloomNow: 0, viewKick: 0, gunKick: 0, flash: 0,
     map: null, mw: 0, mh: 0,
     enemies: [], projectiles: [], loots: [], particles: [], floaters: [],
     portal: null, portalOpen: false,
@@ -747,6 +752,7 @@ function makeEnemy(rng, x, y, hpScale, floor) {
     speed: t.speed * (1 + floor * 0.015), dmg: t.dmg + Math.floor(floor * 0.8),
     ranged: t.ranged, size: t.size, state: 'idle',
     burn: 0, poison: 0, slow: 0, stun: 0, hitFlash: 0, atkCd: 0, fireCd: 0, wanderDir: rng() * 6.28, wanderT: 0,
+    animPhase: rng() < 0.5 ? 0 : 1,   // desync the walk cycles
   };
 }
 
@@ -833,8 +839,12 @@ function shoot() {
       hitscan(a, w);
     }
   }
-  G.bloomNow = Math.min(G.bloomNow + w.kick * w.bloom * 0.35, 14);
-  G.flash = 0.08;
+  // recoil: crosshair bloom + camera view-kick (muzzle climb) + aim drift + gun kickback
+  G.bloomNow = Math.min(G.bloomNow + w.kick * w.bloom * 0.8, 10);
+  G.viewKick = Math.min(70, (G.viewKick || 0) + w.kick * 4.5);
+  G.gunKick = 1;
+  G.player.dir += (Math.random() - 0.5) * 0.004 * w.kick;
+  G.flash = 0.07;
   if (G.ammo <= 0) startReload();
   updateHud();
 }
@@ -1089,8 +1099,13 @@ function tick(now) {
     tryMove(P, nx, ny, 0.22);
   }
   // crosshair bloom: movement raises the floor, firing spikes it, stillness settles it
-  const moveBloom = moving ? 2.6 : 0;
+  const moveBloom = moving ? 3.2 : 0;
   G.bloomNow = Math.max(moveBloom, G.bloomNow - dt * 9);
+  // recoil recovery + weapon bob
+  G.viewKick = (G.viewKick || 0) * Math.exp(-dt * 8);
+  G.gunKick = (G.gunKick || 0) * Math.exp(-dt * 11);
+  if (G.flash > 0) G.flash -= dt;
+  if (moving) bobT += dt;
   if (mouseDown) shoot();
   if (G.fireCd > 0) G.fireCd -= dt;
   if (G.reloading > 0) {
@@ -1122,7 +1137,7 @@ function tick(now) {
       const ang = Math.atan2(P.y - e.y, P.x - e.x);
       if (!e.ranged || d > 4.5) {
         const sp = e.speed * slowMult * dt;
-        tryMove(e, e.x + Math.cos(ang) * sp, e.y + Math.sin(ang) * sp, 0.3);
+        tryMove(e, e.x + Math.cos(ang) * sp, e.y + Math.sin(ang) * sp, 0.34);
       }
       if (e.ranged) {
         e.fireCd -= dt;
@@ -1139,7 +1154,7 @@ function tick(now) {
       e.wanderT -= dt;
       if (e.wanderT <= 0) { e.wanderT = 1.5 + Math.random() * 2; e.wanderDir = Math.random() * Math.PI * 2; }
       const sp = e.speed * 0.3 * slowMult * dt;
-      tryMove(e, e.x + Math.cos(e.wanderDir) * sp, e.y + Math.sin(e.wanderDir) * sp, 0.3);
+      tryMove(e, e.x + Math.cos(e.wanderDir) * sp, e.y + Math.sin(e.wanderDir) * sp, 0.34);
     }
   }
   G.enemies = G.enemies.filter(e => e.hp > 0);
@@ -1171,14 +1186,16 @@ const THEMES = [
   { wall: [140, 120, 82], ceil: '#17130c', floor: '#262015' },
 ];
 let zbuf = new Float32Array(REND_W);
+let HOR = REND_H / 2;   // horizon line — shifts with recoil view-kick (muzzle climb)
 
 function render() {
   if (!G) return;
   const P = G.player;
   const th = THEMES[G.theme];
+  HOR = REND_H / 2 + Math.min(70, G.viewKick || 0);
   // ceiling & floor
-  ctx.fillStyle = th.ceil; ctx.fillRect(0, 0, REND_W, REND_H / 2);
-  ctx.fillStyle = th.floor; ctx.fillRect(0, REND_H / 2, REND_W, REND_H / 2);
+  ctx.fillStyle = th.ceil; ctx.fillRect(0, 0, REND_W, Math.max(0, HOR));
+  ctx.fillStyle = th.floor; ctx.fillRect(0, Math.max(0, HOR), REND_W, REND_H - HOR);
   // walls
   for (let col = 0; col < REND_W; col++) {
     const camX = 2 * col / REND_W - 1;
@@ -1202,7 +1219,7 @@ function render() {
     const shade = Math.max(0.18, 1 - perp / 14) * (side === 1 ? 0.75 : 1);
     const rr = (th.wall[0] * shade) | 0, gg = (th.wall[1] * shade) | 0, bb = (th.wall[2] * shade) | 0;
     ctx.fillStyle = 'rgb(' + rr + ',' + gg + ',' + bb + ')';
-    ctx.fillRect(col, (REND_H - h) / 2, 1, h);
+    ctx.fillRect(col, HOR - h / 2, 1, h);
   }
   // sprites: portal + loot + enemies + projectiles, far → near
   const sprites = [];
@@ -1218,8 +1235,7 @@ function render() {
   sprites.sort((a, b) => b.dist - a.dist);
   for (const s of sprites) drawSprite(s);
   drawTracers();
-  // muzzle flash & weapon block
-  drawWeaponHud();
+  drawViewModel();
   drawCrosshair();
 }
 
@@ -1240,13 +1256,13 @@ function drawTracers() {
     if (p.kind !== 'tracer') continue;
     const end = projectPoint(p.x1, p.y1);
     if (!end) continue;
-    // draw from the weapon muzzle (bottom right block) toward the impact point
+    // from roughly the viewmodel muzzle toward the impact point
     ctx.globalAlpha = Math.max(0, p.t / 0.09) * 0.8;
     ctx.strokeStyle = p.color;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(REND_W / 2 + 223, REND_H - 100);
-    ctx.lineTo(end.x, REND_H / 2 + Math.min(40, end.perp));
+    ctx.moveTo(REND_W / 2 + 70, REND_H - 150);
+    ctx.lineTo(end.x, HOR + Math.min(40, end.perp));
     ctx.stroke();
     ctx.globalAlpha = 1;
   }
@@ -1270,12 +1286,12 @@ function drawSprite(s) {
     const open = G.portalOpen;
     const h = size * 1.4, w = size * 0.8;
     drawClipped(screenX, w, perp, (x0, x1) => {
-      const grd = ctx.createLinearGradient(0, REND_H / 2 - h / 2, 0, REND_H / 2 + h / 2);
+      const grd = ctx.createLinearGradient(0, HOR - h / 2, 0, HOR + h / 2);
       grd.addColorStop(0, open ? 'rgba(90,220,255,0)' : 'rgba(120,120,140,0)');
       grd.addColorStop(0.5, open ? 'rgba(90,220,255,0.85)' : 'rgba(120,120,140,0.4)');
       grd.addColorStop(1, open ? 'rgba(90,220,255,0)' : 'rgba(120,120,140,0)');
       ctx.fillStyle = grd;
-      ctx.fillRect(x0, REND_H / 2 - h / 2, x1 - x0, h);
+      ctx.fillRect(x0, HOR - h / 2, x1 - x0, h);
     });
     return;
   }
@@ -1284,14 +1300,14 @@ function drawSprite(s) {
     const color = l.kind === 'health' ? '#43d17c' : l.w.rarity.color;
     const h = size * 1.5, w = size * 0.22;
     drawClipped(screenX, w, perp, (x0, x1) => {
-      const grd = ctx.createLinearGradient(0, REND_H / 2 - h / 2, 0, REND_H / 2 + h / 2);
+      const grd = ctx.createLinearGradient(0, HOR - h / 2, 0, HOR + h / 2);
       grd.addColorStop(0, color + '00');
       grd.addColorStop(0.75, color + 'cc');
       grd.addColorStop(1, color + 'ff');
       ctx.fillStyle = grd;
-      ctx.fillRect(x0, REND_H / 2 - h / 2, x1 - x0, h * 0.98);
+      ctx.fillRect(x0, HOR - h / 2, x1 - x0, h * 0.98);
       ctx.fillStyle = color;
-      ctx.fillRect(x0, REND_H / 2 + h * 0.42, x1 - x0, Math.max(2, size * 0.1));
+      ctx.fillRect(x0, HOR + h * 0.42, x1 - x0, Math.max(2, size * 0.1));
     });
     return;
   }
@@ -1299,7 +1315,7 @@ function drawSprite(s) {
     const r = Math.max(2, size * 0.07);
     if (perp < zbuf[Math.max(0, Math.min(REND_W - 1, screenX | 0))]) {
       ctx.fillStyle = '#ff6a5c';
-      ctx.beginPath(); ctx.arc(screenX, REND_H / 2 + size * 0.05, r, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(screenX, HOR + size * 0.05, r, 0, 7); ctx.fill();
     }
     return;
   }
@@ -1310,22 +1326,23 @@ function drawSprite(s) {
       ctx.fillStyle = fl.color;
       ctx.font = 'bold ' + Math.max(10, size * 0.1) + 'px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(String(fl.dmg), screenX, REND_H / 2 - size * (0.25 + fl.z * 0.3));
+      ctx.fillText(String(fl.dmg), screenX, HOR - size * (0.25 + fl.z * 0.3));
       ctx.globalAlpha = 1;
     }
     return;
   }
-  // enemy
+  // enemy — pre-rendered detailed sprite: 2-frame walk cycle, white flash on hit
   const e = s.e;
-  const eh = size * 0.9 * e.size, ew = size * 0.62 * e.size;
-  const top = REND_H / 2 + size * 0.45 - eh;
-  drawClipped(screenX, ew, perp, (x0, x1) => {
-    ctx.save();
-    ctx.beginPath(); ctx.rect(x0, 0, x1 - x0, REND_H); ctx.clip();
-    drawEnemyBody(e, screenX, top, ew, eh);
-    ctx.restore();
+  const spr = enemySprites[e.type] || enemySprites.crawler;
+  const eh = size * 0.95 * e.size;
+  const ew = eh * (SPR_W / SPR_H);
+  const top = HOR + size * 0.48 - eh;
+  const frame = (((performance.now() / 260) | 0) + (e.animPhase || 0)) % 2;
+  const img = e.hitFlash > 0 ? spr.white[frame] : spr.frames[frame];
+  drawClipped(screenX, ew, perp, () => {
+    ctx.drawImage(img, screenX - ew / 2, top, ew, eh);
   });
-  // hp bar (drawn unclipped above the sprite when its center is visible)
+  // hp bar (drawn above the sprite when its center column is visible)
   const cx = Math.max(0, Math.min(REND_W - 1, screenX | 0));
   if (perp < zbuf[cx]) {
     const bw = ew * 0.9;
@@ -1342,83 +1359,276 @@ function drawSprite(s) {
     if (e.stun > 0) { ctx.fillText('⚡', px, top - 12); }
   }
 }
-// draw a sprite in 2px strips, skipping strips hidden behind walls
+// draw a sprite only where it is in front of the walls, at 1px resolution —
+// contiguous visible column runs are batched into single clipped draws.
 function drawClipped(screenX, w, perp, drawFn) {
-  const x0 = Math.max(0, (screenX - w / 2) | 0);
-  const x1 = Math.min(REND_W - 1, (screenX + w / 2) | 0);
+  const x0 = Math.max(0, Math.floor(screenX - w / 2));
+  const x1 = Math.min(REND_W - 1, Math.ceil(screenX + w / 2));
   let runStart = -1;
-  for (let x = x0; x <= x1; x += 2) {
-    const vis = perp < zbuf[x];
+  for (let x = x0; x <= x1 + 1; x++) {
+    const vis = x <= x1 && perp < zbuf[x];
     if (vis && runStart < 0) runStart = x;
-    if ((!vis || x + 2 > x1) && runStart >= 0) {
-      const end = !vis ? x : x1 + 1;
+    if (!vis && runStart >= 0) {
       ctx.save();
-      ctx.beginPath(); ctx.rect(runStart, 0, end - runStart, REND_H); ctx.clip();
-      drawFn(runStart, end);
+      ctx.beginPath(); ctx.rect(runStart, 0, x - runStart, REND_H); ctx.clip();
+      drawFn(runStart, x);
       ctx.restore();
       runStart = -1;
     }
   }
 }
-const ENEMY_COLORS = { crawler: '#5ec46a', drone: '#9fb2c8', sentinel: '#5c8fff', brute: '#e05c50', warden: '#c05cff' };
-function drawEnemyBody(e, cx, top, w, h) {
-  const c = ENEMY_COLORS[e.type] || '#aaa';
-  ctx.fillStyle = e.hitFlash > 0 ? '#ffffff' : c;
-  // body
-  ctx.beginPath();
-  if (e.type === 'drone') {
-    ctx.ellipse(cx, top + h * 0.45, w * 0.42, h * 0.3, 0, 0, 7);
-  } else if (e.type === 'crawler') {
-    ctx.ellipse(cx, top + h * 0.68, w * 0.48, h * 0.32, 0, 0, 7);
-  } else {
-    ctx.roundRect(cx - w * 0.35, top + h * 0.18, w * 0.7, h * 0.75, w * 0.12);
-  }
-  ctx.fill();
-  // eyes
-  ctx.fillStyle = e.hitFlash > 0 ? '#f00' : '#0d1117';
-  const ey = top + h * (e.type === 'crawler' ? 0.6 : 0.38);
-  ctx.beginPath(); ctx.arc(cx - w * 0.14, ey, Math.max(1.5, w * 0.06), 0, 7); ctx.fill();
-  ctx.beginPath(); ctx.arc(cx + w * 0.14, ey, Math.max(1.5, w * 0.06), 0, 7); ctx.fill();
-  if (e.boss) {
-    ctx.fillStyle = '#ffd76a';
-    ctx.font = 'bold ' + Math.max(8, w * 0.2) + 'px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('♛', cx, top + h * 0.12);
+
+/* ---------- pre-rendered enemy sprites (proper monsters, not blobs) ---------- */
+const SPR_W = 96, SPR_H = 128;
+const enemySprites = {};
+function sprCanvas(draw) { const c = document.createElement('canvas'); c.width = SPR_W; c.height = SPR_H; draw(c.getContext('2d')); return c; }
+function buildEnemySprites() {
+  for (const t of ['crawler', 'drone', 'sentinel', 'brute', 'warden']) {
+    const frames = [0, 1].map(f => sprCanvas(g => drawEnemyArt(g, t, f)));
+    // white silhouette variants for the hit flash
+    const white = frames.map(src => sprCanvas(g => {
+      g.drawImage(src, 0, 0);
+      g.globalCompositeOperation = 'source-in';
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, SPR_W, SPR_H);
+    }));
+    enemySprites[t] = { frames, white };
   }
 }
-function drawWeaponHud() {
-  // simple first-person weapon block bottom-center, kicks up on fire
-  const w = G.weapon;
-  const kick = G.fireCd > 0 ? 8 : 0;
-  const bx = REND_W / 2 + 120, by = REND_H - 70 + kick;
-  ctx.fillStyle = '#20262f';
-  ctx.fillRect(bx, by, 130, 80);
-  ctx.fillStyle = w.rarity.color;
-  ctx.fillRect(bx, by, 130, 8);
-  ctx.fillStyle = '#141920';
-  ctx.fillRect(bx + 90, by - 26, 26, 30);
-  if (G.flash && G.flash > 0) {
-    G.flash -= 0.016;
-    ctx.fillStyle = 'rgba(255,220,140,0.85)';
-    ctx.beginPath(); ctx.arc(bx + 103, by - 34, 14 + Math.random() * 8, 0, 7); ctx.fill();
+function drawEnemyArt(g, type, f) {
+  const W = SPR_W, H = SPR_H, cx = W / 2;
+  const sway = f ? 3 : -3;          // 2-frame walk cycle offset
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  const ell = (x, y, rx, ry, fill, rot) => { g.fillStyle = fill; g.beginPath(); g.ellipse(x, y, rx, ry, rot || 0, 0, 7); g.fill(); };
+  const rr = (x, y, w2, h2, r, fill) => { g.fillStyle = fill; g.beginPath(); g.roundRect(x, y, w2, h2, r); g.fill(); };
+  const glow = (color, blur, fn) => { g.save(); g.shadowColor = color; g.shadowBlur = blur; fn(); g.restore(); };
+
+  if (type === 'crawler') {
+    // six-legged acid beetle
+    g.strokeStyle = '#245c2e'; g.lineWidth = 5;
+    for (let i = 0; i < 3; i++) {
+      const y0 = 86 + i * 10, lift = ((i + f) % 2) ? -8 : 4;
+      g.beginPath(); g.moveTo(cx - 14, y0); g.quadraticCurveTo(cx - 34, y0 + lift - 10, cx - 42, y0 + 22); g.stroke();
+      g.beginPath(); g.moveTo(cx + 14, y0); g.quadraticCurveTo(cx + 34, y0 - lift - 10, cx + 42, y0 + 22); g.stroke();
+    }
+    const bod = g.createRadialGradient(cx, 84, 6, cx, 84, 40);
+    bod.addColorStop(0, '#7ee06a'); bod.addColorStop(1, '#2f7a38');
+    ell(cx, 86 + (f ? 2 : 0), 34, 26, bod);
+    ell(cx, 98, 26, 12, '#215a2b');                       // belly shadow
+    for (let i = -2; i <= 2; i++) {                        // back spikes
+      g.fillStyle = '#1c4a24';
+      g.beginPath(); g.moveTo(cx + i * 12 - 4, 68); g.lineTo(cx + i * 12, 52 + Math.abs(i) * 4); g.lineTo(cx + i * 12 + 4, 68); g.fill();
+    }
+    glow('#ffe24d', 8, () => { ell(cx - 12, 78, 6, 7, '#ffe24d'); ell(cx + 12, 78, 6, 7, '#ffe24d'); });
+    ell(cx - 12, 79, 2.4, 4, '#1a1a1a'); ell(cx + 12, 79, 2.4, 4, '#1a1a1a');   // slit pupils
+    g.fillStyle = '#123018'; g.beginPath(); g.arc(cx, 95, 9, 0.15 * Math.PI, 0.85 * Math.PI); g.fill();
+    g.fillStyle = '#f4fff0';                               // fangs
+    g.beginPath(); g.moveTo(cx - 7, 96); g.lineTo(cx - 4, 104); g.lineTo(cx - 1, 96); g.fill();
+    g.beginPath(); g.moveTo(cx + 1, 96); g.lineTo(cx + 4, 104); g.lineTo(cx + 7, 96); g.fill();
+  } else if (type === 'drone') {
+    // hovering scout drone: rotor, dome, gun pod, thruster
+    g.strokeStyle = '#6b7688'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(cx, 30); g.lineTo(cx, 44); g.stroke();       // rotor mast
+    ell(cx, 28, f ? 34 : 14, 4, 'rgba(180,195,215,0.8)');                // spinning rotor
+    const dome = g.createLinearGradient(0, 44, 0, 92);
+    dome.addColorStop(0, '#c3ccd9'); dome.addColorStop(0.5, '#8d99ab'); dome.addColorStop(1, '#5a6474');
+    ell(cx, 68 + sway * 0.5, 30, 26, dome);
+    rr(cx - 34, 62 + sway * 0.5, 10, 14, 4, '#727e90');                  // side pods
+    rr(cx + 24, 62 + sway * 0.5, 10, 14, 4, '#727e90');
+    glow('#5ce1ff', 10, () => { ell(cx, 66 + sway * 0.5, 12, 8, '#5ce1ff'); });  // visor eye
+    ell(cx + (f ? 4 : -4), 66 + sway * 0.5, 4, 5, '#0b3a4a');            // scanning pupil
+    rr(cx - 4, 90 + sway * 0.5, 8, 18, 3, '#3d4552');                    // gun barrel
+    glow('#ffb35c', 12, () => { ell(cx, 112 + sway, 10, 5 + (f ? 2 : 0), 'rgba(255,179,92,0.85)'); }); // thruster
+  } else if (type === 'sentinel') {
+    // armored ranged robot
+    rr(cx - 22 - sway, 96, 12, 26, 4, '#31405e');                        // legs (alternating)
+    rr(cx + 10 + sway, 96, 12, 26, 4, '#31405e');
+    rr(cx - 18, 88, 36, 14, 4, '#25314a');                               // pelvis
+    const chest = g.createLinearGradient(0, 40, 0, 92);
+    chest.addColorStop(0, '#5d80c4'); chest.addColorStop(1, '#33456e');
+    rr(cx - 26, 44, 52, 48, 8, chest);
+    rr(cx - 26, 44, 52, 10, 8, '#7396dd');                               // chest plate highlight
+    rr(cx - 34, 42, 12, 22, 4, '#2b3a5c');                               // shoulder pads
+    rr(cx + 22, 42, 12, 22, 4, '#2b3a5c');
+    rr(cx + 26, 60, 8, 30, 3, '#42557f');                                // gun arm
+    glow('#7fd4ff', 8, () => { rr(cx + 24, 88, 12, 8, 2, '#7fd4ff'); }); // cannon glow
+    rr(cx - 12, 26, 24, 20, 6, '#3c5484');                               // head
+    glow('#66f0ff', 9, () => { rr(cx - 9, 33, 18, 5, 2, '#66f0ff'); });  // visor strip
+    g.strokeStyle = '#66f0ff'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(cx + 10, 26); g.lineTo(cx + 16, 16); g.stroke();  // antenna
+  } else if (type === 'brute') {
+    // hulking melee bruiser
+    rr(cx - 20, 100, 16, 22, 5, '#5e2620');                              // legs
+    rr(cx + 4, 100, 16, 22, 5, '#5e2620');
+    const torso = g.createLinearGradient(0, 40, 0, 104);
+    torso.addColorStop(0, '#e46a54'); torso.addColorStop(1, '#8e3428');
+    g.beginPath();                                                        // massive tapering torso
+    g.moveTo(cx - 38, 52); g.lineTo(cx + 38, 52); g.lineTo(cx + 24, 104); g.lineTo(cx - 24, 104);
+    g.closePath(); g.fillStyle = torso; g.fill();
+    const armLift = f ? -14 : 0;
+    ell(cx - 40, 66 + armLift, 12, 22, '#b04434', -0.2);                 // arms + fists
+    ell(cx + 40, 66 - armLift, 12, 22, '#b04434', 0.2);
+    ell(cx - 42, 88 + armLift, 11, 10, '#7c2b1f');
+    ell(cx + 42, 88 - armLift, 11, 10, '#7c2b1f');
+    g.strokeStyle = '#6d271c'; g.lineWidth = 3;                          // chest scars
+    g.beginPath(); g.moveTo(cx - 10, 62); g.lineTo(cx + 4, 78); g.stroke();
+    g.beginPath(); g.moveTo(cx + 12, 58); g.lineTo(cx + 2, 70); g.stroke();
+    ell(cx, 40, 16, 14, '#c2503c');                                      // head
+    g.fillStyle = '#e8d9b0';                                             // horns
+    g.beginPath(); g.moveTo(cx - 14, 34); g.quadraticCurveTo(cx - 26, 24, cx - 20, 14); g.lineTo(cx - 12, 26); g.fill();
+    g.beginPath(); g.moveTo(cx + 14, 34); g.quadraticCurveTo(cx + 26, 24, cx + 20, 14); g.lineTo(cx + 12, 26); g.fill();
+    glow('#ffd24d', 6, () => { ell(cx - 6, 38, 3.2, 3.2, '#ffd24d'); ell(cx + 6, 38, 3.2, 3.2, '#ffd24d'); });
+    g.strokeStyle = '#4a1a12'; g.lineWidth = 2;                          // scowl
+    g.beginPath(); g.moveTo(cx - 9, 33); g.lineTo(cx - 3, 36); g.stroke();
+    g.beginPath(); g.moveTo(cx + 9, 33); g.lineTo(cx + 3, 36); g.stroke();
+  } else {
+    // warden — robed floating boss
+    const robe = g.createLinearGradient(0, 30, 0, 126);
+    robe.addColorStop(0, '#a45ce8'); robe.addColorStop(1, '#3d1a66');
+    g.beginPath();                                                        // swaying robe
+    g.moveTo(cx - 24, 44);
+    g.quadraticCurveTo(cx - 36, 90, cx - 20 + sway, 126);
+    g.lineTo(cx + 20 + sway, 126);
+    g.quadraticCurveTo(cx + 36, 90, cx + 24, 44);
+    g.closePath(); g.fillStyle = robe; g.fill();
+    rr(cx - 30, 40, 60, 14, 6, '#6e35b0');                               // shoulders
+    ell(cx, 30, 15, 16, '#2a1445');                                      // hood
+    glow('#e05cff', 12, () => { ell(cx - 6, 30, 3.5, 4.5, '#e05cff'); ell(cx + 6, 30, 3.5, 4.5, '#e05cff'); });
+    g.fillStyle = '#ffd76a';                                             // crown
+    g.beginPath();
+    g.moveTo(cx - 14, 18); g.lineTo(cx - 14, 8); g.lineTo(cx - 7, 15); g.lineTo(cx, 6);
+    g.lineTo(cx + 7, 15); g.lineTo(cx + 14, 8); g.lineTo(cx + 14, 18); g.closePath(); g.fill();
+    g.strokeStyle = '#8a6bd8'; g.lineWidth = 4;                          // staff
+    g.beginPath(); g.moveTo(cx + 30, 40); g.lineTo(cx + 34, 118); g.stroke();
+    glow('#c96bff', f ? 18 : 10, () => { ell(cx + 30, 32, 8 + (f ? 2 : 0), 8 + (f ? 2 : 0), '#c96bff'); });
+    glow('#c96bff', 8, () => {                                           // orbiting orbs
+      ell(cx - 34, 60 + sway * 2, 4, 4, '#c96bff');
+      ell(cx - 38, 84 - sway * 2, 3, 3, '#9a4de0');
+    });
   }
-  // tracers/booms in world already drawn as sprites? tracers are screen-space lines on the minimap-less view:
+}
+buildEnemySprites();
+
+/* ---------- first-person gun viewmodels (per archetype, procedural) ---------- */
+let bobT = 0;   // walk-bob clock — advances only while moving
+function drawViewModel() {
+  const w = G.weapon;
+  const kick = G.gunKick || 0;
+  const bobX = Math.sin(bobT * 7) * 6;
+  const bobY = Math.abs(Math.cos(bobT * 7)) * 5;
+  ctx.save();
+  ctx.translate(
+    REND_W / 2 + 150 + bobX + kick * 22,
+    REND_H + 8 + bobY + kick * 34 + (G.reloading > 0 ? 46 : 0)
+  );
+  ctx.rotate(-0.42 - kick * 0.13 + (G.reloading > 0 ? 0.3 : 0));
+  drawGun(w);
+  ctx.restore();
+  // explosive-rounds screen glow
   for (const p of G.particles) {
     if (p.kind !== 'boom') continue;
-    // world-space boom → screen flash circle via sprite math is overkill; brief screen glow instead
     ctx.fillStyle = 'rgba(255,160,80,' + (p.t * 0.25) + ')';
     ctx.fillRect(0, 0, REND_W, REND_H);
   }
 }
+// Drawn pointing left (toward the crosshair) from a grip at the origin.
+function drawGun(w) {
+  const rc = w.rarity.color;
+  const el = w.element !== 'none' ? ELEMENTS[w.element].color : null;
+  const body = '#262c38', dark = '#161b23', mid = '#333c4d', steel = '#49556c';
+  const rr = (x, y, w2, h2, r, fill) => { ctx.fillStyle = fill; ctx.beginPath(); ctx.roundRect(x, y, w2, h2, r); ctx.fill(); };
+  const glow = (color, blur, fn) => { ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = blur; fn(); ctx.restore(); };
+  let muzzleX = -120;
+  const k = w.arch.key;
+  if (k === 'blaster') {
+    muzzleX = -108;
+    rr(-30, -6, 34, 52, 6, dark);                       // grip
+    rr(-108, -26, 100, 26, 5, body);                    // slide
+    rr(-108, -26, 100, 8, 5, mid);                      // slide top
+    rr(-46, -4, 34, 14, 3, dark);                       // trigger housing
+    rr(-104, -30, 10, 6, 2, steel);                     // front sight
+    rr(-108, 0, 100, 4, 2, rc);                         // rarity stripe
+  } else if (k === 'pulse') {
+    muzzleX = -140;
+    rr(-26, -8, 30, 50, 6, dark);                       // grip
+    rr(4, -20, 26, 20, 5, dark);                        // stock
+    rr(-140, -24, 148, 26, 5, body);
+    rr(-140, -24, 148, 7, 5, mid);
+    rr(-78, 2, 18, 40, 4, dark);                        // long magazine
+    rr(-78, 38, 18, 6, 3, rc);                          // mag base in rarity color
+    rr(-116, -10, 30, 14, 4, mid);                      // front grip/rail
+    rr(-136, -30, 8, 8, 2, steel);                      // sight post
+    rr(-140, -2, 148, 4, 2, rc);
+  } else if (k === 'scatter') {
+    muzzleX = -180;
+    rr(-24, -8, 30, 50, 6, dark);
+    rr(6, -22, 26, 26, 6, dark);                        // stock
+    rr(-70, -24, 82, 26, 5, body);                      // receiver
+    rr(-180, -20, 112, 14, 6, steel);                   // barrel tube
+    rr(-180, -22, 14, 18, 4, '#20262f');                // wide bore
+    rr(-138, -2, 44, 14, 5, dark);                      // pump
+    rr(-138, 10, 44, 4, 2, rc);
+    rr(-70, -28, 82, 6, 3, mid);
+  } else if (k === 'rail') {
+    muzzleX = -204;
+    rr(-28, -8, 32, 52, 6, dark);
+    rr(-186, -26, 172, 30, 7, body);                    // long housing
+    rr(-204, -14, 20, 8, 3, steel);                     // barrel tip
+    for (let i = 0; i < 5; i++) {                       // charge coils
+      glow(el || rc, 8, () => rr(-172 + i * 32, -22, 8, 22, 3, el || rc));
+    }
+    rr(-186, 2, 172, 4, 2, rc);
+    rr(-120, -34, 30, 8, 3, mid);                       // top rail sight
+  } else {
+    // arc cannon
+    muzzleX = -168;
+    rr(-30, -8, 34, 52, 7, dark);
+    rr(-140, -30, 130, 36, 10, body);
+    glow(el || '#8fd0ff', 16, () => {                   // energy core
+      ctx.fillStyle = el || '#8fd0ff';
+      ctx.beginPath(); ctx.arc(-72, -12, 13, 0, 7); ctx.fill();
+    });
+    g_arcProngs(muzzleX, el || rc, rr);
+    rr(-140, 0, 130, 5, 2, rc);
+  }
+  // muzzle flash — star burst at the barrel tip
+  if (G.flash && G.flash > 0) {
+    glow('#ffd9a0', 22, () => {
+      ctx.fillStyle = 'rgba(255,225,160,0.95)';
+      const r0 = 10 + Math.random() * 8;
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4 + Math.random() * 0.3;
+        const rad = i % 2 ? r0 : r0 * 2.1;
+        ctx.lineTo(muzzleX - 6 + Math.cos(a) * rad, -12 + Math.sin(a) * rad);
+      }
+      ctx.closePath(); ctx.fill();
+    });
+  }
+}
+function g_arcProngs(mx, color, rr) {
+  rr(mx, -26, 30, 8, 3, '#3a4356');
+  rr(mx, -6, 30, 8, 3, '#3a4356');
+  ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = 10;
+  ctx.strokeStyle = color; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(mx + 4, -18); ctx.lineTo(mx + 26, -6); ctx.stroke();
+  ctx.restore();
+}
 function drawCrosshair() {
   const cx = REND_W / 2, cy = REND_H / 2;
-  // gap in px mirrors the real spread in degrees (CS-style bloom)
-  const gap = 6 + currentSpreadDeg() * 6;
-  const len = 9, t = 2;
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
-  ctx.fillRect(cx - gap - len, cy - t / 2, len, t);
-  ctx.fillRect(cx + gap, cy - t / 2, len, t);
-  ctx.fillRect(cx - t / 2, cy - gap - len, t, len);
-  ctx.fillRect(cx - t / 2, cy + gap, t, len);
+  // CS-style crosshair: the gap mirrors the live spread — wide while moving
+  // and firing (recoil bloom), snapping tight when you stand still.
+  const gap = Math.round(5 + currentSpreadDeg() * 8);
+  const len = 13, t = 3;
+  const arm = (x, y, w2, h2) => {
+    ctx.fillStyle = 'rgba(4,10,6,0.8)';                 // dark outline for contrast
+    ctx.fillRect(x - 1, y - 1, w2 + 2, h2 + 2);
+    ctx.fillStyle = 'rgba(70,255,120,0.95)';            // classic CS green
+    ctx.fillRect(x, y, w2, h2);
+  };
+  arm(cx - gap - len, cy - t / 2, len, t);
+  arm(cx + gap, cy - t / 2, len, t);
+  arm(cx - t / 2, cy - gap - len, t, len);
+  arm(cx - t / 2, cy + gap, t, len);
   if (G.reloading > 0) {
     ctx.fillStyle = '#ffb347';
     ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
