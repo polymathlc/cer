@@ -14,11 +14,11 @@
   using the drawing toolbar, and submit it for AI marking.
 
   Marking stack: SAME as the main Science CER app (index.html) —
-  Firebase AI Logic (Gemini 3.5 Flash, vision) on the shared Polymath
+  Firebase AI Logic (Gemini 3.6 Flash, vision) on the shared Polymath
   Firebase project "mathgen--app", protected by App Check (reCAPTCHA
   v3). No backend server, no exposed secret key — only the public
-  Firebase config ships here. Calls disable Gemini "thinking"
-  (thinkingBudget: 0) and request strict JSON, exactly like the CER
+  Firebase config ships here. Calls keep Gemini "thinking" minimal
+  (thinkingLevel: "minimal") and request strict JSON, exactly like the CER
   app's AI marking, and responses go through the same tolerant JSON
   repair parser.
 
@@ -1723,7 +1723,7 @@ input, button, select, textarea { font-family: inherit; }
         <label>Marking engine</label>
         <div class="admin-engine-row" id="engineRow">
           <div class="admin-engine-option selected" data-engine="gemini" role="button" tabindex="0">
-            Gemini 3.5 Flash
+            Gemini 3.6 Flash
             <span class="engine-note">Firebase AI Logic &middot; same as CER app &middot; no key needed</span>
           </div>
           <div class="admin-engine-option" data-engine="openai" role="button" tabindex="0">
@@ -1768,14 +1768,14 @@ input, button, select, textarea { font-family: inherit; }
   </div>
 </div>
 
-<div class="version-badge" id="versionBadge">Bar Model Studio v1.4</div>
+<div class="version-badge" id="versionBadge">Bar Model Studio v1.5</div>
 
 <!-- ══════════════════════════════════════════════════════════════════
      FIREBASE AI LOGIC (Gemini) — module script
      Same AI marking stack as the main Science CER app (index.html):
      shared Polymath Firebase project "mathgen--app", App Check with
      reCAPTCHA v3 protecting the Gemini quota, and the same
-     gemini-3.5-flash model with thinking disabled (thinkingBudget: 0)
+     gemini-3.6-flash model with minimal thinking (thinkingLevel: "minimal")
      so the whole token budget goes to the marking itself. Only the
      public config ships to the client; no secret key, no backend.
      ══════════════════════════════════════════════════════════════════ -->
@@ -1820,7 +1820,7 @@ input, button, select, textarea { font-family: inherit; }
   }
 
   // Same model the CER app marks with (see AI_MODEL in index.html)
-  const AI_MODEL = "gemini-3.5-flash";
+  const AI_MODEL = "gemini-3.6-flash";
   let geminiModel = null;
   try {
     const aiInstance = getAI(firebaseApp, { backend: new GoogleAIBackend() });
@@ -1834,7 +1834,7 @@ input, button, select, textarea { font-family: inherit; }
    * askGeminiVision(promptText, imageBase64, mimeType, options) → Promise<string>
    * Mirrors the CER app's multimodal call shape: prompt + inline image,
    * temperature 0.2 (marking should be consistent, not creative),
-   * thinkingBudget 0, and strict-JSON response mode by default.
+   * thinkingLevel "minimal", and strict-JSON response mode by default.
    * options: { maxOutputTokens?: number, json?: boolean }
    */
   window.askGeminiVision = async function (promptText, imageBase64, mimeType, options) {
@@ -1847,7 +1847,7 @@ input, button, select, textarea { font-family: inherit; }
     const generationConfig = {
       maxOutputTokens: options.maxOutputTokens || 1200,
       temperature: 0.2,
-      thinkingConfig: { thinkingBudget: 0 }
+      thinkingConfig: { thinkingLevel: "minimal" }
     };
     if (options.json !== false) generationConfig.responseMimeType = "application/json";
     const result = await geminiModel.generateContent({
@@ -3399,7 +3399,7 @@ function renderReferenceModel(shapes) {
    AI MARKING PIPELINE — same recipe as the Science CER app
    1. Snapshot the student's SVG → PNG (base64)
    2. Serialise the element list into a human-readable structure summary
-   3. Send scenario + rubric + structure + image to Gemini 3.5 Flash
+   3. Send scenario + rubric + structure + image to Gemini 3.6 Flash
       (Firebase AI Logic, App Check protected — see the module script)
    4. Parse the strict-JSON verdict through the CER app's tolerant JSON
       repair parser and animate the feedback panel
@@ -3785,7 +3785,7 @@ async function runAiCheck() {
 
     /* Engine routing:
        - "openai" + a saved key  → ChatGPT vision marking
-       - anything else           → Gemini 3.5 Flash via Firebase AI
+       - anything else           → Gemini 3.6 Flash via Firebase AI
          Logic (the same engine + App Check protection as the Science
          CER app's AI marking).
        If ChatGPT fails (bad key, quota, network), fall back to Gemini
@@ -3807,11 +3807,11 @@ async function runAiCheck() {
       } catch (openAiError) {
         console.warn('ChatGPT marking failed, falling back to Gemini:', openAiError);
         rawResponse = await window.askGeminiVision(prompt, pngBase64, 'image/png', { maxOutputTokens: 1200, json: true });
-        engineUsed = 'Gemini 3.5 Flash (ChatGPT unavailable — fell back)';
+        engineUsed = 'Gemini 3.6 Flash (ChatGPT unavailable — fell back)';
       }
     } else {
       rawResponse = await window.askGeminiVision(prompt, pngBase64, 'image/png', { maxOutputTokens: 1200, json: true });
-      engineUsed = 'Gemini 3.5 Flash';
+      engineUsed = 'Gemini 3.6 Flash';
     }
 
     var result = parseMarkingResponse(rawResponse);
@@ -4315,7 +4315,7 @@ adminSaveBtn.addEventListener('click', function () {
     adminSaveStatus.classList.remove('error');
     adminSaveStatus.textContent = engine === 'openai'
       ? 'Saved — marking on this device now uses ' + openaiModelSelect.value + '.'
-      : 'Saved — marking on this device uses Gemini 3.5 Flash.';
+      : 'Saved — marking on this device uses Gemini 3.6 Flash.';
   } catch (error) {
     adminSaveStatus.textContent = 'Could not save — localStorage is blocked in this browser.';
     adminSaveStatus.classList.add('error');
