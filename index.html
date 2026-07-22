@@ -7922,7 +7922,7 @@ const googleProvider = new GoogleAuthProvider();
 //         Until a real key is pasted, App Check stays off and AI still
 //         works while App Check enforcement is disabled.
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-3.5-flash"; // higher quality (~4x the cost of 2.5 Flash, still <1c/question)
+const AI_MODEL = "gemini-3.6-flash"; // higher quality (~4x the cost of 2.5 Flash, still <1c/question)
 
 if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
   try {
@@ -7957,11 +7957,13 @@ try {
 const imageAiReady = () => geminiImageModels.length > 0;
 
 // Single swap-point for all model calls. Returns trimmed text.
-// thinkingBudget:0 disables Gemini 2.5 "thinking" so the whole token budget
-// goes to the actual answer (faster + cheaper for our short tasks).
+// thinkingLevel:"minimal" keeps Gemini "thinking" to a minimum so the whole
+// token budget goes to the actual answer (faster + cheaper for our short
+// tasks). Gemini 3.x rejects the older numeric thinkingBudget with
+// 400 INVALID_ARGUMENT.
 async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, json = false } = {}) {
   if (!geminiModel) throw new Error("AI is not configured yet");
-  const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingBudget: 0 } };
+  const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingLevel: "minimal" } };
   if (json) generationConfig.responseMimeType = "application/json";
   const res = await geminiModel.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -9217,7 +9219,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.147.0';
+const APP_VERSION = 'v1.148.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -13209,7 +13211,7 @@ async function askGeminiVision(prompt, media, { maxOutputTokens = 2048, json = f
   if (!geminiModel) throw new Error('AI is not configured yet');
   const parts = [{ text: prompt }];
   (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
-  const generationConfig = { maxOutputTokens, temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } };
+  const generationConfig = { maxOutputTokens, temperature: 0.2, thinkingConfig: { thinkingLevel: "minimal" } };
   if (json) generationConfig.responseMimeType = 'application/json';
   const res = await geminiModel.generateContent({ contents: [{ role: 'user', parts }], generationConfig });
   return (res.response.text() || '').trim();

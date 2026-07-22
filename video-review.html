@@ -524,7 +524,7 @@ const firebaseConfig = {
 };
 const ADMIN_EMAILS = ['chungzhikai@gmail.com'];
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-3.5-flash";
+const AI_MODEL = "gemini-3.6-flash";
 const LESSONS_COL = 'videoLessons';   // shared lesson library (admin writes, students read)
 const PROFILES_COL = 'videoProfiles'; // per-student name / level / subject
 
@@ -1009,7 +1009,7 @@ document.getElementById('aiTsFile').addEventListener('change', async e => {
         maxOutputTokens: 2048,
         temperature: 0.1,
         responseMimeType: 'application/json',
-        thinkingConfig: { thinkingBudget: 0 }
+        thinkingConfig: { thinkingLevel: "minimal" }
       }
     });
     let raw = (res.response.text() || '').trim();

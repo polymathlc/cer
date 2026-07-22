@@ -28,7 +28,7 @@ const firebaseConfig = {
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
 
 // Model used app-wide (text + vision)
-const AI_MODEL = "gemini-3.5-flash";
+const AI_MODEL = "gemini-3.6-flash";
 ```
 
 If the new app is hosted on a NEW domain (not `polymathlc.github.io`), add that
@@ -49,7 +49,7 @@ import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.
 
 const firebaseConfig = { /* …from section 1… */ };
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-3.5-flash";
+const AI_MODEL = "gemini-3.6-flash";
 
 const app = initializeApp(firebaseConfig);
 
@@ -76,14 +76,17 @@ const aiReady = () => !!geminiModel;
 
 ## 3. Text call — `askGemini`
 
-`thinkingBudget: 0` disables Gemini "thinking" so the whole token budget goes
-to the answer (faster + cheaper for short tasks). `json: true` switches on
-strict-JSON response mode.
+`thinkingLevel: "minimal"` keeps Gemini "thinking" to a minimum so the whole
+token budget goes to the answer (faster + cheaper for short tasks). Gemini 3.x
+rejects the older numeric `thinkingBudget` with 400 INVALID_ARGUMENT. Valid
+levels are `"minimal"`, `"low"`, `"medium"`, `"high"` — use `"minimal"` for
+short/fast tasks; bump to `"high"` only for genuinely hard reasoning.
+`json: true` switches on strict-JSON response mode.
 
 ```js
 async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, json = false } = {}) {
   if (!geminiModel) throw new Error("AI is not configured yet");
-  const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingBudget: 0 } };
+  const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingLevel: "minimal" } };
   if (json) generationConfig.responseMimeType = "application/json";
   const res = await geminiModel.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -111,7 +114,7 @@ async function askGeminiVision(promptText, imageBase64, mimeType, options) {
   const generationConfig = {
     maxOutputTokens: options.maxOutputTokens || 1200,
     temperature: 0.2,
-    thinkingConfig: { thinkingBudget: 0 }
+    thinkingConfig: { thinkingLevel: "minimal" }
   };
   if (options.json !== false) generationConfig.responseMimeType = "application/json";
   const result = await geminiModel.generateContent({

@@ -266,7 +266,7 @@ const firebaseConfig = {
   measurementId: "G-0MWZFG211D"
 };
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-3.5-flash";
+const AI_MODEL = "gemini-3.6-flash";
 
 let geminiModel = null;
 const aiReady = () => !!geminiModel;
@@ -291,7 +291,7 @@ async function askGemini(prompt, { maxOutputTokens = 700, temperature = 0.4 } = 
   if (!geminiModel) throw new Error("AI is not available right now");
   const res = await geminiModel.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens, temperature, responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } }
+    generationConfig: { maxOutputTokens, temperature, responseMimeType: "application/json", thinkingConfig: { thinkingLevel: "minimal" } }
   });
   return (res.response.text() || "").trim();
 }
