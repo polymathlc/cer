@@ -40,11 +40,17 @@
     INSTANT they're earned (kills, wave clears, correct answers) so a
     student can leave any time and lose nothing.
   - Classes & skill trees: Soldier / Sniper / Engineer, each with a
-    4-tier tree (press I or the on-screen button — opening it pauses the
-    run; purchases apply immediately). Class F actives: Bullet Time
+    100-node 10-tier tree built from prerequisite chains (family nodes
+    I→X + capstones; press I or the on-screen button — opening it pauses
+    the run; purchases apply immediately). Class F actives: Bullet Time
     (world slow-mo), Snare Trap, Auto-Turret; Engineer passives include
     healing drones + shock coils; Sniper gets Deadeye crit-box vision,
-    huge range and piercing.
+    Scope Master extra zoom, huge range and piercing.
+  - Bullet physics: every non-laser shot is a real projectile that leaves
+    the muzzle with a glowing tracer trail and flies until it hits an
+    enemy, a tree TRUNK (only the trunk blocks — not the whole tile), or
+    max range. Vertical aim is frozen at fire time; each of the 25 enemy
+    types has its own crit band matched to where its head really is.
   - Weapons: 9 archetypes incl. scoped assault rifle + sniper rail
     (right-click ADS with real zoom + scope overlay), crossbow bolts,
     piercing laser beam, plasma stream. ONE drawGunModel() renders both
@@ -285,9 +291,10 @@
 
     <div class="howto">
       <b>Controls:</b> WASD move · mouse look (left/right AND up/down) · click shoot · <b>right-click aim/scope</b> · R reload · E pick up loot · <b>Q grenade</b> · <b>F class ability</b> · <b>I skill tree</b> · Esc pause<br>
-      <b>Classes:</b> 🪖 Soldier (assault rifle, Bullet Time) · 🎯 Sniper (huge range, slow heavy shots, sees crit boxes, traps) · 🔧 Engineer (turrets, healing drones). Each has its own skill tree — cores are banked and saved the instant you earn them, so you can stop any time and lose nothing.<br>
+      <b>Classes:</b> 🪖 Soldier (assault rifle, Bullet Time) · 🎯 Sniper (huge range, slow heavy shots, sees crit boxes, traps) · 🔧 Engineer (turrets, healing drones). Each class has a <b>100-node skill tree</b> with prerequisites — cores are banked and saved the instant you earn them, so you can stop any time and lose nothing.<br>
+      <b>Bullets are real:</b> every shot streaks out of your muzzle as a glowing tracer and flies until it hits a monster, a tree trunk, or runs out of range. Enemies standing beside trees CAN be shot — only the trunk itself blocks bullets.<br>
       <b>Crosshair</b> blooms while you move and fire — stand still (or scope in) for accurate shots.<br>
-      <b>Headshots:</b> every enemy has a small critical zone (the head) — hit it for <b>×2 damage</b>. Enemies are tanky, so crits are the fast way to drop them. Aim too high or into the floor and the shot misses!<br>
+      <b>Headshots:</b> all 25 monster types have their own small critical zone where their head ACTUALLY is (a beetle's head is low, a mech's is high) — hit it for <b>×2 damage</b>. Enemies are tanky, so crits are the fast way to drop them. Aim too high or into the floor and the shot misses!<br>
       <b>Loot rarities:</b>
       <span style="color:var(--r-common)">Common</span> ·
       <span style="color:var(--r-uncommon)">Uncommon</span> ·
@@ -390,7 +397,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v0.5.0 BETA</div>
+<div id="versionBadge">Science Strike v0.6.0 BETA</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -643,63 +650,142 @@ const CLASSES = {
     activeSkill: 'turretkit', activeName: 'Auto-Turret',
   },
 };
-// Extensive per-class trees. Deeper tiers unlock once (tier-1)*2 points are
-// spent in the tree. `active` nodes unlock/upgrade the class's F ability.
-const SKILL_TREES = {
+// ═══════════ 100-NODE SKILL TREES PER CLASS ═══════════
+// Each class tree is built from FAMILIES of chained nodes (Rifleman I → X,
+// each requiring the previous) plus tier-10 CAPSTONES that require a finished
+// family. All balance code reads skillLv(family) = number of owned nodes in
+// that family. 97 family nodes + 3 capstones = exactly 100 per class.
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+const TIER_COST = [0, 20, 28, 40, 55, 75, 100, 135, 180, 240, 320];
+const TREE_SPECS = {
   soldier: [
-    { key: 'conditioning', tier: 1, name: '👟 Conditioning', max: 3, cost: 30, desc: '+5% move speed per level' },
-    { key: 'grit',         tier: 1, name: '🛡 Grit', max: 3, cost: 30, desc: '+15 max HP per level' },
-    { key: 'suppressive',  tier: 1, name: '🔫 Suppressive Fire', max: 3, cost: 40, desc: '+8% fire rate per level' },
-    { key: 'bullettime',   tier: 2, name: '⏳ Bullet Time', max: 3, cost: 90, active: true, desc: 'F: slow the whole world for 2.5s (+0.8s per level) while you move at near-full speed. 24s cooldown.' },
-    { key: 'grenadier',    tier: 2, name: '💣 Grenadier', max: 3, cost: 50, desc: '+1 starting grenade and +20% grenade damage per level' },
-    { key: 'adrenaline',   tier: 2, name: '❤️ Adrenaline', max: 3, cost: 45, desc: 'Kills heal 3 HP per level' },
-    { key: 'shrapnel',     tier: 3, name: '🧨 Shrapnel Rounds', max: 2, cost: 80, desc: 'Grenades also burst into 6 shrapnel pellets per level' },
-    { key: 'juggernaut',   tier: 3, name: '🦾 Juggernaut', max: 2, cost: 85, desc: 'Take 10% less damage per level' },
-    { key: 'laststand',    tier: 4, name: '💀 Last Stand', max: 1, cost: 140, desc: 'Below 25% HP, deal +40% damage' },
-    { key: 'warmachine',   tier: 4, name: '⚙️ War Machine', max: 1, cost: 150, desc: 'Bullet Time also reloads your weapon instantly when triggered' },
+    ['rifleman',    '🔫 Rifleman',        10, 1, '+3% weapon damage per node'],
+    ['grit',        '🛡 Grit',            10, 1, '+8 max HP per node'],
+    ['conditioning','👟 Conditioning',     8, 1, '+4% move speed per node'],
+    ['suppressive', '🔥 Suppressive Fire', 8, 2, '+3% fire rate per node'],
+    ['ammofeed',    '📦 Ammo Feed',        8, 2, '+4% magazine size per node'],
+    ['steadyaim',   '🫁 Steady Aim',       8, 2, 'crosshair settles 6% faster per node'],
+    ['grenadier',   '💣 Grenadier',        8, 3, '+10% grenade damage per node, +1 starting grenade per 2 nodes'],
+    ['adrenaline',  '❤️ Adrenaline',       6, 3, 'kills heal 1.5 HP per node'],
+    ['shrapnel',    '🧨 Shrapnel Rounds',  6, 4, 'every grenade sprays 3 extra shrapnel per node'],
+    ['juggernaut',  '🦾 Juggernaut',       8, 4, 'take 5% less damage per node'],
+    ['commando',    '💥 Commando',         6, 5, '+8% grenade blast radius per node'],
+    ['bullettime',  '⏳ Bullet Time',      5, 5, 'F: slow the whole world for 2s (+0.6s per node). 24s cooldown.', true],
+    ['warmachine',  '⚙️ War Machine',      3, 7, 'Bullet Time also refills your magazine; extra nodes heal 10 HP on cast'],
+    ['laststand',   '💀 Last Stand',       3, 8, '+15% damage per node while below 25% HP'],
   ],
   sniper: [
-    { key: 'marksman',     tier: 1, name: '🎯 Marksman', max: 3, cost: 30, desc: '+15% weapon damage per level' },
-    { key: 'steadyhands',  tier: 1, name: '🖐 Steady Hands', max: 3, cost: 30, desc: '-12% spread per level' },
-    { key: 'deadeye',      tier: 1, name: '👁 Deadeye Vision', max: 1, cost: 45, desc: 'SEE every enemy\'s critical box highlighted in gold' },
-    { key: 'longbarrel',   tier: 2, name: '📏 Long Barrel', max: 2, cost: 55, desc: '+40% shot range per level (range is already huge for snipers)' },
-    { key: 'heavyrounds',  tier: 2, name: '🔩 Heavy Rounds', max: 2, cost: 60, desc: '+30% damage but -10% fire rate per level — slow and POWERFUL' },
-    { key: 'trapkit',      tier: 2, name: '🪤 Snare Trap', max: 3, cost: 90, active: true, desc: 'F: lay a trap that roots the next enemy for 2s and deals heavy damage. More traps + damage per level. 8s cooldown.' },
-    { key: 'critscholar',  tier: 3, name: '📚 Crit Scholar', max: 2, cost: 85, desc: 'Headshot crits deal ×2.5 then ×3 instead of ×2' },
-    { key: 'piercing',     tier: 3, name: '➹ Piercing Shot', max: 2, cost: 80, desc: 'Shots pierce +1 enemy per level (70% damage after each)' },
-    { key: 'ghost',        tier: 4, name: '👻 Ghost', max: 1, cost: 130, desc: 'Enemies notice you from much closer — sneak around waves' },
-    { key: 'executioner',  tier: 4, name: '⚔️ Executioner', max: 1, cost: 150, desc: '+50% damage to enemies below 30% HP' },
+    ['marksman',    '🎯 Marksman',        10, 1, '+4% weapon damage per node'],
+    ['steadyhands', '🖐 Steady Hands',    10, 1, '-4% spread per node'],
+    ['ballistics',  '🚀 Ballistics',       8, 1, 'bullets fly 8% faster per node'],
+    ['longbarrel',  '📏 Long Barrel',      8, 2, '+12% shot range per node'],
+    ['breathcontrol','🫁 Breath Control',  8, 2, 'aiming down sights steadies 3% harder per node'],
+    ['deadeye',     '👁 Deadeye Vision',   1, 2, 'SEE every enemy\'s critical box highlighted in gold'],
+    ['heavyrounds', '🔩 Heavy Rounds',     8, 3, '+8% damage but -3% fire rate per node — slow and POWERFUL'],
+    ['critscholar', '📚 Crit Scholar',     8, 3, 'headshot crits deal +0.15× more per node'],
+    ['scopemaster', '🔭 Scope Master',     6, 4, '+0.5× extra scope magnification per node'],
+    ['hollowpoint', '🕳 Hollow Point',     6, 4, 'the critical box grows slightly per node'],
+    ['trapkit',     '🪤 Snare Trap',       5, 5, 'F: lay a trap that roots + damages. More traps and damage per node. 8s cd.', true],
+    ['windreader',  '🍃 Wind Reader',      7, 5, '-8% recoil kick per node'],
+    ['piercing',    '➹ Piercing Shot',     4, 6, 'shots pierce +1 enemy per node (70% damage after each)'],
+    ['ghost',       '👻 Ghost',            4, 7, 'enemies notice you from 1.5m closer per node'],
+    ['executioner', '⚔️ Executioner',      4, 8, '+15% damage per node to enemies below 30% HP'],
   ],
   engineer: [
-    { key: 'tinker',       tier: 1, name: '🔧 Tinker', max: 3, cost: 30, desc: '+10% magazine size per level' },
-    { key: 'plating',      tier: 1, name: '🛡 Reinforced Plating', max: 3, cost: 30, desc: '+20 max HP per level' },
-    { key: 'scrapper',     tier: 1, name: '🧲 Scrapper', max: 2, cost: 45, desc: '+6% loot drop chance per level' },
-    { key: 'turretkit',    tier: 2, name: '🗼 Auto-Turret', max: 3, cost: 90, active: true, desc: 'F: deploy a turret that shoots nearby enemies for 20s. Damage + duration per level. 16s cooldown.' },
-    { key: 'fastloader',   tier: 2, name: '⚡ Fast Loader', max: 3, cost: 45, desc: '15% faster reloads per level' },
-    { key: 'healdrone',    tier: 2, name: '🚁 Healing Drone', max: 3, cost: 70, desc: 'A drone orbits you, healing 1.2 HP/s per level' },
-    { key: 'overclock',    tier: 3, name: '🌀 Overclock', max: 2, cost: 85, desc: 'Turrets fire 30% faster per level' },
-    { key: 'shockcoils',   tier: 3, name: '⚡ Shock Coils', max: 2, cost: 80, desc: 'Every 2s, zap the nearest enemy within 3m per level of coil charge' },
-    { key: 'doubledeploy', tier: 4, name: '🗼🗼 Double Deploy', max: 1, cost: 150, desc: 'Two turrets can be active at once' },
-    { key: 'magnetfield',  tier: 4, name: '🧲 Magnet Field', max: 1, cost: 130, desc: 'Loot and health pickups fly to you from 3× further away' },
+    ['tinker',      '🔧 Tinker',          10, 1, '+4% magazine size per node'],
+    ['plating',     '🛡 Reinforced Plating',10, 1, '+8 max HP per node'],
+    ['scrapper',    '🧲 Scrapper',         8, 1, '+2% loot drop chance per node'],
+    ['fastloader',  '⚡ Fast Loader',      8, 2, '6% faster reloads per node'],
+    ['fortify',     '🏗 Fortify',          8, 2, 'turrets last 15% longer per node'],
+    ['roboticist',  '🤖 Roboticist',       8, 3, 'turrets deal 10% more damage per node'],
+    ['turretkit',   '🗼 Auto-Turret',      5, 3, 'F: deploy an auto-turret. Damage + duration per node. 16s cooldown.', true],
+    ['healdrone',   '🚁 Healing Drone',    8, 4, 'a drone orbits you, healing 0.5 HP/s per node'],
+    ['overclock',   '🌀 Overclock',        8, 4, 'turrets fire 12% faster per node'],
+    ['shockcoils',  '⚡ Shock Coils',      8, 5, 'zap the nearest enemy every 2s — bigger radius + damage per node'],
+    ['gadgeteer',   '🎛 Gadgeteer',        8, 5, 'F ability cooldown -5% per node'],
+    ['magnetfield', '🧲 Magnet Field',     6, 6, 'loot flies to you from further away per node'],
+    ['doubledeploy','🗼🗼 Double Deploy',  2, 7, '+1 simultaneous turret per node'],
   ],
 };
+const CAPSTONES = {
+  soldier: [
+    { key: 'cap_rambo',    name: '🎖 RAMBO',     desc: '+15% all weapon damage',      req: 'rifleman10' },
+    { key: 'cap_titan',    name: '🗿 TITAN',     desc: '+80 max HP',                  req: 'grit10' },
+    { key: 'cap_warlord',  name: '👑 WARLORD',   desc: 'F ability cooldown -20%',     req: 'juggernaut8' },
+  ],
+  sniper: [
+    { key: 'cap_longshot', name: '🌠 LONGSHOT',  desc: '+30% shot range',             req: 'longbarrel8' },
+    { key: 'cap_hawk',     name: '🦅 HAWKEYE',   desc: 'crits deal +0.5× more',       req: 'critscholar8' },
+    { key: 'cap_wraith',   name: '🌫 WRAITH',    desc: 'move at full speed while scoped', req: 'ghost4' },
+  ],
+  engineer: [
+    { key: 'cap_fortress', name: '🏰 FORTRESS',  desc: 'turrets deal +30% damage',    req: 'roboticist8' },
+    { key: 'cap_medic',    name: '⚕️ FIELD MEDIC', desc: 'healing drone heals ×2',    req: 'healdrone8' },
+    { key: 'cap_junkrat',  name: '♻️ JUNK KING', desc: '+5% loot drop chance',        req: 'scrapper8' },
+  ],
+};
+const SKILL_TREES = {};
+const SKILL_FAM_MAX = {};
+for (const cls of Object.keys(TREE_SPECS)) {
+  const nodes = [];
+  SKILL_FAM_MAX[cls] = {};
+  for (const [fam, name, n, t, desc, active] of TREE_SPECS[cls]) {
+    SKILL_FAM_MAX[cls][fam] = n;
+    for (let i = 0; i < n; i++) {
+      const tier = Math.min(10, t + (i >> 1));
+      nodes.push({
+        key: fam + (i + 1), fam, tier,
+        name: name + (n > 1 ? ' ' + ROMAN[i] : ''),
+        cost: TIER_COST[tier], desc, active: !!active,
+        req: i === 0 ? null : fam + i,
+      });
+    }
+  }
+  for (const c of CAPSTONES[cls]) {
+    SKILL_FAM_MAX[cls][c.key] = 1;
+    nodes.push({ key: c.key, fam: c.key, tier: 10, name: c.name, cost: TIER_COST[10], desc: c.desc, req: c.req, capstone: true });
+  }
+  SKILL_TREES[cls] = nodes;
+}
 function ensureMetaShape() {
   if (!Number.isFinite(meta.cores)) meta.cores = 0;   // never let the bank go NaN
   if (!meta.up) meta.up = { vit: 0, dmg: 0, luck: 0, speed: 0, mag: 0 };
   if (!meta.class || !CLASSES[meta.class]) meta.class = 'soldier';
   if (!meta.skills) meta.skills = {};
   for (const c of Object.keys(CLASSES)) if (!meta.skills[c]) meta.skills[c] = {};
+  // migrate v0.5.0 saves: {marksman: 2} (family levels) → {marksman1:1, marksman2:1}
+  for (const cls of Object.keys(CLASSES)) {
+    const b = meta.skills[cls];
+    for (const k of Object.keys(b)) {
+      if (/\d$/.test(k) || k.startsWith('cap_')) continue;
+      const lv = b[k] | 0;
+      delete b[k];
+      const maxN = (SKILL_FAM_MAX[cls] && SKILL_FAM_MAX[cls][k]) || 0;
+      for (let i = 1; i <= Math.min(lv, maxN); i++) b[k + i] = 1;
+    }
+  }
+  rebuildSkillCache();
+}
+// skillLv(fam) is hot (called per shot/frame) — cache family counts.
+let _skillCache = null;
+function rebuildSkillCache() {
+  const cls = (G && G.cls) || meta.class || 'soldier';
+  const bucket = (meta.skills && meta.skills[cls]) || {};
+  const out = {};
+  for (const n of SKILL_TREES[cls]) if (bucket[n.key]) out[n.fam] = (out[n.fam] || 0) + 1;
+  _skillCache = out;
 }
 function skillLv(key) {
-  const cls = (G && G.cls) || meta.class || 'soldier';
-  return (meta.skills && meta.skills[cls] && meta.skills[cls][key]) || 0;
+  if (!_skillCache) rebuildSkillCache();
+  return _skillCache[key] || 0;
 }
 function classMods() { return CLASSES[(G && G.cls) || meta.class || 'soldier'].mods; }
 function treePoints(cls) {
   const s = meta.skills[cls] || {};
   return Object.values(s).reduce((n, v) => n + v, 0);
 }
-function tierUnlocked(cls, tier) { return tier === 1 || treePoints(cls) >= (tier - 1) * 2; }
+function tierUnlocked(cls, tier) { return tier === 1 || treePoints(cls) >= (tier - 1) * 3; }
+
 
 // Cores are banked and SAVED the moment they are earned (kills, wave clears,
 // correct answers) — a student can close the tab any time and lose nothing.
@@ -735,6 +821,7 @@ function renderClassRow() {
       + '<div class="cds" style="margin-top:6px;color:#8fb4ff;">' + treePoints(key) + ' skill pts</div>';
     card.addEventListener('click', () => {
       meta.class = key; saveMeta();
+      rebuildSkillCache();
       renderClassRow();
     });
     host.appendChild(card);
@@ -769,46 +856,56 @@ function closeSkills() {
 function renderSkills() {
   const cls = (G && G.cls) || meta.class || 'soldier';
   const c = CLASSES[cls];
-  $('skillTitle').textContent = c.icon + ' ' + c.name + ' — Skill Tree';
+  const bucket = meta.skills[cls] || {};
+  const owned = treePoints(cls);
+  $('skillTitle').textContent = c.icon + ' ' + c.name + ' — Skill Tree (' + owned + '/100)';
   $('skillCores').textContent = '⚛ ' + meta.cores;
+  const nodeName = key => {
+    const n = SKILL_TREES[cls].find(x => x.key === key);
+    return n ? n.name : key;
+  };
   const tiers = {};
   for (const n of SKILL_TREES[cls]) (tiers[n.tier] = tiers[n.tier] || []).push(n);
   const host = $('skillTiers');
   host.innerHTML = '';
-  for (const tier of Object.keys(tiers).sort()) {
-    const unlocked = tierUnlocked(cls, +tier);
+  for (const tier of Object.keys(tiers).map(Number).sort((a, b) => a - b)) {
+    const unlocked = tierUnlocked(cls, tier);
     const div = document.createElement('div');
     div.className = 'skill-tier' + (unlocked ? '' : ' locked');
-    div.innerHTML = '<div class="tlab">TIER ' + tier + (unlocked ? '' : ' — spend ' + ((tier - 1) * 2) + ' points in earlier tiers to unlock') + '</div>';
+    div.innerHTML = '<div class="tlab">TIER ' + tier + (unlocked ? '' : ' — locked · spend ' + ((tier - 1) * 3) + ' points in earlier tiers') + '</div>';
     const grid = document.createElement('div');
     grid.className = 'skill-grid';
     for (const n of tiers[tier]) {
-      const lv = (meta.skills[cls] && meta.skills[cls][n.key]) || 0;
-      const cost = Math.round(n.cost * Math.pow(1.5, lv));
+      const have = !!bucket[n.key];
+      const reqOk = !n.req || !!bucket[n.req];
+      const buyable = !have && unlocked && reqOk;
       const node = document.createElement('div');
-      node.className = 'skill-node' + (lv >= n.max ? ' maxed' : '') + (unlocked ? '' : ' locked');
+      node.className = 'skill-node' + (have ? ' maxed' : '') + (unlocked && reqOk || have ? '' : ' locked');
       node.innerHTML = '<div><span class="snm">' + n.name + '</span>'
         + (n.active ? '<span class="active-tag">F ACTIVE</span>' : '')
-        + '<span class="slv">Lv ' + lv + '/' + n.max + '</span></div>'
-        + '<div class="sds">' + n.desc + '</div>';
-      if (lv < n.max && unlocked) {
+        + (n.capstone ? '<span class="active-tag" style="background:#4a3510;color:#ffd76a;">CAPSTONE</span>' : '')
+        + '<span class="slv">' + (have ? '✔ OWNED' : '⚛ ' + n.cost) + '</span></div>'
+        + '<div class="sds">' + n.desc
+        + (!reqOk && !have ? '<br><b style="color:#ffb347;">Requires: ' + nodeName(n.req) + '</b>' : '')
+        + '</div>';
+      if (buyable) {
         const btn = document.createElement('button');
         btn.className = 'btn';
-        btn.textContent = '⚛ ' + cost;
-        btn.disabled = meta.cores < cost;
+        btn.textContent = 'Learn · ⚛ ' + n.cost;
+        btn.disabled = meta.cores < n.cost;
         btn.addEventListener('click', () => {
           loadMeta();   // read-modify-write against the freshest save
-          const curLv = (meta.skills[cls] && meta.skills[cls][n.key]) || 0;
-          const curCost = Math.round(n.cost * Math.pow(1.5, curLv));
-          if (curLv >= n.max || meta.cores < curCost) { renderSkills(); return; }
-          meta.cores -= curCost;
-          meta.skills[cls][n.key] = curLv + 1;
+          const b2 = meta.skills[cls];
+          if (b2[n.key] || meta.cores < n.cost || (n.req && !b2[n.req])) { renderSkills(); return; }
+          meta.cores -= n.cost;
+          b2[n.key] = 1;
           saveMeta();                      // instant save — nothing is ever lost
+          rebuildSkillCache();
           applySkillsLive();               // mid-run: character updates immediately
           renderSkills();
         });
         node.appendChild(btn);
-      } else if (!unlocked) {
+      } else if (!have) {
         const b = document.createElement('button');
         b.className = 'btn'; b.disabled = true; b.textContent = '🔒';
         node.appendChild(b);
@@ -821,14 +918,15 @@ function renderSkills() {
 }
 // Re-derive live stats mid-run so a purchase takes effect on the spot.
 function applySkillsLive() {
+  rebuildSkillCache();
   if (!G || G.over) return;
   const P = G.player;
-  const newMax = 100 + (meta.up.vit || 0) * 20 + skillLv('grit') * 15 + skillLv('plating') * 20;
+  const newMax = 100 + (meta.up.vit || 0) * 20 + skillLv('grit') * 8 + skillLv('plating') * 8 + skillLv('cap_titan') * 80;
   if (newMax > P.maxHp) P.hp += newMax - P.maxHp;   // buying HP heals the difference
   P.maxHp = newMax;
-  P.speedMult = (1 + (meta.up.speed || 0) * 0.05) * (1 + skillLv('conditioning') * 0.05);
+  P.speedMult = (1 + (meta.up.speed || 0) * 0.05) * (1 + skillLv('conditioning') * 0.04);
   P.dmgMult = 1 + (meta.up.dmg || 0) * 0.08;
-  P.magMult = (1 + (meta.up.mag || 0) * 0.12) * (1 + skillLv('tinker') * 0.10);
+  P.magMult = (1 + (meta.up.mag || 0) * 0.12) * (1 + skillLv('tinker') * 0.04 + skillLv('ammofeed') * 0.04);
   updateHud();
 }
 
@@ -865,18 +963,23 @@ const SPECIALS = [
   { key: 'nova',  name: 'Frost Nova', desc: 'Kills freeze every enemy near the victim' },
   { key: 'twin',  name: 'Twin Shot', desc: 'Every trigger pull fires twice' },
 ];
-// proj: 'hitscan' (instant), 'beam' (instant piercing laser), 'bolt' (travelling
-// arrow), 'stream' (short-range plasma blobs). scope: ADS zoom factor.
+// proj: 'bullet' (real travelling bullet with a trail — flies from the muzzle
+// until it hits something or reaches max range), 'beam' (instant piercing
+// laser), 'bolt' (travelling arrow), 'stream' (short-range plasma blobs).
+// scope: ADS zoom factor. speed: bullet velocity in world units/s.
 const ARCHETYPES = [
-  { key: 'blaster',  name: 'Blaster',      proj: 'hitscan', dmg: 16, rof: 3.4, mag: 12, reload: 1.0, pellets: 1, spread: 0.5, bloom: 1.5, kick: 2.0 },
-  { key: 'pulse',    name: 'Pulse SMG',    proj: 'hitscan', dmg: 7,  rof: 9.5, mag: 32, reload: 1.5, pellets: 1, spread: 1.3, bloom: 0.8, kick: 0.9 },
-  { key: 'assault',  name: 'Assault Rifle', proj: 'hitscan', dmg: 11, rof: 6.5, mag: 26, reload: 1.6, pellets: 1, spread: 1.0, bloom: 1.0, kick: 1.6, scope: 1.7 },
-  { key: 'scatter',  name: 'Scatter',      proj: 'hitscan', dmg: 7,  rof: 1.2, mag: 6,  reload: 1.9, pellets: 8, spread: 5.0, bloom: 3.5, kick: 5.0 },
-  { key: 'rail',     name: 'Sniper Rail',  proj: 'hitscan', dmg: 55, rof: 0.9, mag: 4,  reload: 1.7, pellets: 1, spread: 0.12, bloom: 2.2, kick: 6.0, scope: 3.4, pierce: 1 },
-  { key: 'crossbow', name: 'Crossbow',     proj: 'bolt',    dmg: 42, rof: 1.3, mag: 5,  reload: 1.6, pellets: 1, spread: 0.3, bloom: 1.5, kick: 3.0, pierce: 1 },
-  { key: 'laser',    name: 'Laser Beam',   proj: 'beam',    dmg: 19, rof: 3.0, mag: 14, reload: 1.3, pellets: 1, spread: 0.1, bloom: 0.6, kick: 1.2, pierce: 2, minRarity: 2 },
-  { key: 'plasma',   name: 'Plasma Thrower', proj: 'stream', dmg: 6, rof: 11,  mag: 42, reload: 1.8, pellets: 1, spread: 4.0, bloom: 0.5, kick: 0.6, range: 6, minRarity: 2 },
-  { key: 'arc',      name: 'Arc Cannon',   proj: 'hitscan', dmg: 24, rof: 2.4, mag: 10, reload: 1.4, pellets: 1, spread: 0.8, bloom: 1.8, kick: 3.0, minRarity: 3 },
+  { key: 'blaster',  name: 'Blaster',       proj: 'bullet', dmg: 16, rof: 3.4, mag: 12, reload: 1.0, pellets: 1, spread: 0.5, bloom: 1.5, kick: 2.0, speed: 34 },
+  { key: 'pulse',    name: 'Pulse SMG',     proj: 'bullet', dmg: 7,  rof: 9.5, mag: 32, reload: 1.5, pellets: 1, spread: 1.3, bloom: 0.8, kick: 0.9, speed: 32 },
+  { key: 'carbine',  name: 'Carbine',       proj: 'bullet', dmg: 9,  rof: 8.0, mag: 30, reload: 1.4, pellets: 1, spread: 1.1, bloom: 0.9, kick: 1.2, scope: 1.5, speed: 38 },
+  { key: 'assault',  name: 'Assault Rifle', proj: 'bullet', dmg: 11, rof: 6.5, mag: 26, reload: 1.6, pellets: 1, spread: 1.0, bloom: 1.0, kick: 1.6, scope: 1.8, speed: 40 },
+  { key: 'battle',   name: 'Battle Rifle',  proj: 'bullet', dmg: 16, rof: 4.2, mag: 20, reload: 1.7, pellets: 1, spread: 0.8, bloom: 1.2, kick: 2.2, scope: 2.3, speed: 44, minRarity: 1 },
+  { key: 'scatter',  name: 'Scatter',       proj: 'bullet', dmg: 7,  rof: 1.2, mag: 6,  reload: 1.9, pellets: 8, spread: 5.0, bloom: 3.5, kick: 5.0, speed: 26 },
+  { key: 'dmr',      name: 'DMR',           proj: 'bullet', dmg: 32, rof: 2.0, mag: 8,  reload: 1.6, pellets: 1, spread: 0.3, bloom: 1.8, kick: 3.5, scope: 3.0, pierce: 1, speed: 52, minRarity: 2 },
+  { key: 'rail',     name: 'Sniper Rail',   proj: 'bullet', dmg: 55, rof: 0.9, mag: 4,  reload: 1.7, pellets: 1, spread: 0.12, bloom: 2.2, kick: 6.0, scope: 4.5, pierce: 1, speed: 62 },
+  { key: 'crossbow', name: 'Crossbow',      proj: 'bolt',   dmg: 42, rof: 1.3, mag: 5,  reload: 1.6, pellets: 1, spread: 0.3, bloom: 1.5, kick: 3.0, pierce: 1, speed: 18 },
+  { key: 'laser',    name: 'Laser Beam',    proj: 'beam',   dmg: 19, rof: 3.0, mag: 14, reload: 1.3, pellets: 1, spread: 0.1, bloom: 0.6, kick: 1.2, pierce: 2, minRarity: 2 },
+  { key: 'plasma',   name: 'Plasma Thrower', proj: 'stream', dmg: 6, rof: 11,  mag: 42, reload: 1.8, pellets: 1, spread: 4.0, bloom: 0.5, kick: 0.6, range: 6, minRarity: 2, speed: 10 },
+  { key: 'arc',      name: 'Arc Cannon',    proj: 'bullet', dmg: 24, rof: 2.4, mag: 10, reload: 1.4, pellets: 1, spread: 0.8, bloom: 1.8, kick: 3.0, speed: 30, minRarity: 3 },
 ];
 const PREFIX = { common: ['Rusty', 'Basic', 'Standard'], uncommon: ['Tuned', 'Field', 'Keen'], rare: ['Vector', 'Prime', 'Quantum'], epic: ['Nova', 'Phantom', 'Eclipse'], legendary: ['Apex', 'Sovereign', 'Dread'], mythic: ['MYTHIC', 'Omega', 'Singularity'] };
 
@@ -958,7 +1061,7 @@ function startRun() {
     fireCd: 0, bloomNow: 0, viewKick: 0, gunKick: 0, flash: 0,
     ads: 0,                     // 0..1 aim-down-sights lerp (right mouse, scoped weapons)
     enemies: [], projectiles: [], pProj: [], loots: [], particles: [], floaters: [],
-    grenades: { type: 'frag', count: 2 + (cls === 'soldier' ? 0 : -1) + skillLv('grenadier') },
+    grenades: { type: 'frag', count: 2 + (cls === 'soldier' ? 0 : -1) + Math.floor(skillLv('grenadier') / 2) },
     grenadeEnts: [], fields: [], deployables: [],
     cdF: 0, timeSlow: 0,
     totalKills: 0, coresEarned: 0,
@@ -1037,15 +1140,43 @@ function spawnWave() {
 }
 
 // Bulky on purpose: body shots take several hits — the fast way to kill is
-// landing headshot crits for x2.
+// landing headshot crits. crit:[y0,y1] is each type's REAL head zone as a
+// fraction of its sprite height (squat beetles have low heads!). spec drives
+// the procedural art generator; the first four are hand-drawn.
 const ENEMY_TYPES = [
-  { type: 'crawler',  hp: 55,  speed: 1.7, dmg: 8,  ranged: false, size: 0.9 },
-  { type: 'drone',    hp: 40,  speed: 1.25, dmg: 7, ranged: true,  size: 0.8 },
-  { type: 'sentinel', hp: 85,  speed: 0.95, dmg: 11, ranged: true, size: 1.05 },
-  { type: 'brute',    hp: 170, speed: 1.05, dmg: 18, ranged: false, size: 1.25 },
+  { type: 'crawler',    hp: 55,  speed: 1.7,  dmg: 8,  ranged: false, size: 0.9,  crit: [0.50, 0.68] },
+  { type: 'drone',      hp: 40,  speed: 1.25, dmg: 7,  ranged: true,  size: 0.8,  crit: [0.28, 0.46] },
+  { type: 'sentinel',   hp: 85,  speed: 0.95, dmg: 11, ranged: true,  size: 1.05, crit: [0.14, 0.32] },
+  { type: 'brute',      hp: 170, speed: 1.05, dmg: 18, ranged: false, size: 1.25, crit: [0.18, 0.34] },
+  { type: 'fanghound',  hp: 60,  speed: 2.0,  dmg: 9,  ranged: false, size: 0.95, crit: [0.16, 0.34], spec: { plan: 'beast', hue: 18 } },
+  { type: 'stingwasp',  hp: 45,  speed: 2.2,  dmg: 8,  ranged: false, size: 0.75, crit: [0.30, 0.50], spec: { plan: 'flyer', hue: 48 } },
+  { type: 'raider',     hp: 75,  speed: 1.3,  dmg: 11, ranged: true,  size: 1.0,  crit: [0.10, 0.26], spec: { plan: 'humanoid', hue: 0 } },
+  { type: 'acidooze',   hp: 100, speed: 0.9,  dmg: 10, ranged: false, size: 0.95, crit: [0.42, 0.62], spec: { plan: 'slime', hue: 95 } },
+  { type: 'hunterdroid',hp: 70,  speed: 1.5,  dmg: 10, ranged: true,  size: 0.85, crit: [0.14, 0.30], spec: { plan: 'mech', hue: 175 } },
+  { type: 'dunestalker',hp: 70,  speed: 1.8,  dmg: 10, ranged: false, size: 0.9,  crit: [0.16, 0.34], spec: { plan: 'beast', hue: 40 } },
+  { type: 'emberbat',   hp: 40,  speed: 2.4,  dmg: 7,  ranged: false, size: 0.7,  crit: [0.30, 0.50], spec: { plan: 'flyer', hue: 8 } },
+  { type: 'cultist',    hp: 65,  speed: 1.2,  dmg: 12, ranged: true,  size: 0.95, crit: [0.10, 0.26], spec: { plan: 'humanoid', hue: 285 } },
+  { type: 'voltspider', hp: 60,  speed: 1.9,  dmg: 9,  ranged: false, size: 0.85, crit: [0.34, 0.54], spec: { plan: 'beast', hue: 55 } },
+  { type: 'scrapwalker',hp: 110, speed: 0.8,  dmg: 13, ranged: true,  size: 1.1,  crit: [0.10, 0.26], spec: { plan: 'mech', hue: 210 } },
+  { type: 'frostwolf',  hp: 80,  speed: 1.9,  dmg: 11, ranged: false, size: 0.95, crit: [0.16, 0.34], spec: { plan: 'beast', hue: 195 } },
+  { type: 'stormcrow',  hp: 55,  speed: 2.0,  dmg: 9,  ranged: true,  size: 0.85, crit: [0.30, 0.50], spec: { plan: 'flyer', hue: 215 } },
+  { type: 'marauder',   hp: 95,  speed: 1.35, dmg: 13, ranged: false, size: 1.05, crit: [0.10, 0.26], spec: { plan: 'humanoid', hue: 25 } },
+  { type: 'frostooze',  hp: 110, speed: 0.8,  dmg: 11, ranged: false, size: 1.0,  crit: [0.42, 0.62], spec: { plan: 'slime', hue: 190 } },
+  { type: 'thornboar',  hp: 95,  speed: 1.4,  dmg: 12, ranged: false, size: 1.05, crit: [0.16, 0.34], spec: { plan: 'beast', hue: 95 } },
+  { type: 'shaderay',   hp: 60,  speed: 1.7,  dmg: 10, ranged: true,  size: 0.9,  crit: [0.30, 0.50], spec: { plan: 'flyer', hue: 250 } },
+  { type: 'pylonmech',  hp: 130, speed: 0.7,  dmg: 15, ranged: true,  size: 1.15, crit: [0.10, 0.26], spec: { plan: 'mech', hue: 275 } },
+  { type: 'emberhound', hp: 75,  speed: 1.85, dmg: 12, ranged: false, size: 0.95, crit: [0.16, 0.34], spec: { plan: 'beast', hue: 5 } },
+  { type: 'voidacolyte',hp: 85,  speed: 1.15, dmg: 14, ranged: true,  size: 1.0,  crit: [0.10, 0.26], spec: { plan: 'humanoid', hue: 260 } },
+  { type: 'plagueooze', hp: 120, speed: 0.85, dmg: 12, ranged: false, size: 1.05, crit: [0.42, 0.62], spec: { plan: 'slime', hue: 70 } },
+  { type: 'siegegolem', hp: 220, speed: 0.6,  dmg: 22, ranged: false, size: 1.35, crit: [0.10, 0.26], spec: { plan: 'mech', hue: 35 } },
 ];
+const ENEMY_INDEX = {};
+for (const t of ENEMY_TYPES) ENEMY_INDEX[t.type] = t;
+ENEMY_INDEX.warden = { type: 'warden', crit: [0.08, 0.24] };
 function makeEnemy(rng, x, y, hpScale, floor) {
-  const t = ENEMY_TYPES[Math.floor(rng() * Math.min(ENEMY_TYPES.length, 2 + Math.floor(floor / 2)))];
+  // variety ramps fast: 4 types at wave 1, all 25 by wave 22
+  const poolN = Math.min(ENEMY_TYPES.length, 3 + floor);
+  const t = ENEMY_TYPES[Math.floor(rng() * poolN)];
   return {
     type: t.type, x, y, hp: t.hp * hpScale, maxHp: t.hp * hpScale,
     speed: t.speed * (1 + floor * 0.015), dmg: t.dmg + Math.floor(floor * 0.8),
@@ -1139,32 +1270,35 @@ function hideOverlays() { document.querySelectorAll('#gameWrap .overlay').forEac
 // call time so skill purchases mid-run apply instantly.
 function effDmg(w) {
   let d = w.dmg * G.player.dmgMult * classMods().dmg;
-  d *= 1 + skillLv('marksman') * 0.15;
-  d *= 1 + skillLv('heavyrounds') * 0.30;
-  if (skillLv('laststand') && G.player.hp < G.player.maxHp * 0.25) d *= 1.4;
+  d *= 1 + skillLv('marksman') * 0.04 + skillLv('rifleman') * 0.03 + skillLv('cap_rambo') * 0.15;
+  d *= 1 + skillLv('heavyrounds') * 0.08;
+  if (G.player.hp < G.player.maxHp * 0.25) d *= 1 + skillLv('laststand') * 0.15;
   return d;
 }
 function effRof(w) {
   let r = w.rof * classMods().rof;
-  r *= 1 + skillLv('suppressive') * 0.08;
-  r *= 1 - skillLv('heavyrounds') * 0.10;
+  r *= 1 + skillLv('suppressive') * 0.03;
+  r *= 1 - skillLv('heavyrounds') * 0.03;
   return Math.max(0.4, r);
 }
 function effRange() {
-  return classMods().range * (1 + skillLv('longbarrel') * 0.4);
+  return classMods().range * (1 + skillLv('longbarrel') * 0.12 + skillLv('cap_longshot') * 0.3);
 }
-function critMult() { return classMods().critMult + skillLv('critscholar') * 0.5; }
+function critMult() { return classMods().critMult + skillLv('critscholar') * 0.15 + skillLv('cap_hawk') * 0.5; }
 function pierceCount(w) { return (w.arch.pierce || 0) + skillLv('piercing'); }
+function abilityCdMult() { return Math.max(0.4, 1 - skillLv('gadgeteer') * 0.05 - skillLv('cap_warlord') * 0.2); }
+function bulletSpeed(w) { return (w.arch.speed || 34) * (1 + skillLv('ballistics') * 0.08); }
 
 function startReload() {
   if (G.reloading > 0 || G.ammo >= magSize()) return;
-  G.reloading = G.weapon.reload * (1 - skillLv('fastloader') * 0.15);
+  G.reloading = G.weapon.reload * (1 - skillLv('fastloader') * 0.06);
 }
 function currentSpreadDeg() {
   const w = G.weapon;
   let s = (w.spread + G.bloomNow) * classMods().spread;
-  s *= 1 - skillLv('steadyhands') * 0.12;
-  s *= 1 - 0.65 * (G.ads || 0);            // aiming down sights tightens hard
+  s *= 1 - skillLv('steadyhands') * 0.04;
+  // aiming down sights tightens hard; Breath Control tightens harder
+  s *= 1 - Math.min(0.92, 0.65 + skillLv('breathcontrol') * 0.03) * (G.ads || 0);
   return Math.max(0.05, s);
 }
 function shoot() {
@@ -1178,17 +1312,17 @@ function shoot() {
     for (let p = 0; p < w.pellets; p++) {
       const sp = currentSpreadDeg() * Math.PI / 180;
       const a = G.player.dir + (Math.random() - 0.5) * 2 * sp;
-      if (w.arch.proj === 'bolt') spawnBolt(a, w);
-      else if (w.arch.proj === 'stream') spawnPlasma(a, w);
-      else hitscan(a, w, w.arch.proj === 'beam');
+      if (w.arch.proj === 'beam') fireBeam(a, w);
+      else spawnBullet(a, w, w.arch.proj);   // bullet / bolt / stream — all real projectiles
     }
   }
   // recoil: crosshair bloom + camera view-kick (muzzle climb) + aim drift + gun kickback
   const adsCalm = 1 - 0.6 * (G.ads || 0);   // scoping in soaks most of the kick
+  const wind = 1 - skillLv('windreader') * 0.08;
   G.bloomNow = Math.min(G.bloomNow + w.kick * w.bloom * 0.8 * adsCalm, 10);
-  G.viewKick = Math.min(70, (G.viewKick || 0) + w.kick * 4.5 * adsCalm);
+  G.viewKick = Math.min(70, (G.viewKick || 0) + w.kick * 4.5 * adsCalm * wind);
   G.gunKick = 1;
-  G.player.dir += (Math.random() - 0.5) * 0.004 * w.kick * adsCalm;
+  G.player.dir += (Math.random() - 0.5) * 0.004 * w.kick * adsCalm * wind;
   G.flash = 0.07;
   if (G.ammo <= 0) startReload();
   updateHud();
@@ -1197,17 +1331,93 @@ function shoot() {
 function playerShotDamage(w, crit, victim) {
   let dmg = effDmg(w) * (0.9 + Math.random() * 0.2);
   if (crit) dmg *= critMult();
-  if (skillLv('executioner') && victim.hp < victim.maxHp * 0.3) dmg *= 1.5;
+  if (victim.hp < victim.maxHp * 0.3) dmg *= 1 + skillLv('executioner') * 0.15;
   return Math.round(dmg);
 }
-function hitscan(angle, w, isBeam) {
+// Bullets are stopped only by tree TRUNKS (a thin core in the cell), not the
+// whole tile — an enemy standing beside a tree really can be shot. Rocks are
+// low, so bullets fly clean over them. (Movement still collides with the full
+// cell via solid().)
+function solidShot(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  if (obstacleAt(ix, iy) !== 'tree') return false;
+  const dx = x - (ix + 0.5), dy = y - (iy + 0.5);
+  return dx * dx + dy * dy < 0.09;   // trunk radius 0.3
+}
+// Per-enemy-type critical band (fractions of the sprite height where the head
+// actually is in the art), widened by the sniper's Hollow Point skill.
+function critBand(e) {
+  const t = ENEMY_INDEX[e.type];
+  const b = (t && t.crit) || [0.08, 0.22];
+  const wdn = skillLv('hollowpoint') * 0.012;
+  return [Math.max(0.02, b[0] - wdn), Math.min(0.9, b[1] + wdn)];
+}
+
+/* ════════════════ BULLET PHYSICS ════════════════
+   Every non-beam shot is a real projectile: it leaves the muzzle, streaks
+   across the world with a visible trail, and only stops when it hits an
+   enemy (pierce permitting), a tree trunk, or flies out to max range. The
+   vertical-aim geometry is captured at the moment of firing. */
+function spawnBullet(angle, w, kind) {
+  const P = G.player;
+  const sp = bulletSpeed(w);
+  const range = kind === 'stream' ? (w.arch.range || 6) : effRange();
+  const ox = P.x + Math.cos(angle) * 0.4, oy = P.y + Math.sin(angle) * 0.4;   // leaves the nozzle
+  G.pProj.push({
+    kind, x: ox, y: oy, ox, oy,
+    dx: Math.cos(angle) * sp, dy: Math.sin(angle) * sp,
+    t: range / sp, w,
+    pierce: 1 + (kind === 'stream' ? 0 : pierceCount(w)),
+    falloff: 1,
+    hitSet: new Set(),
+    hor0: HOR, zoom0: ZOOM,          // aim geometry frozen at the muzzle
+  });
+}
+function bulletImpact(p) {
+  G.particles.push({ kind: 'spark', x: p.x, y: p.y, t: 0.18, color: p.kind === 'stream' ? '#8ee6ff' : '#ffd9a0' });
+}
+function updatePProj(dt) {
+  const aimY = REND_H / 2;
+  for (const p of G.pProj) {
+    if (p.t <= 0) continue;
+    p.t -= dt;
+    const steps = 3;   // sub-step so 60 u/s rail slugs can't tunnel through enemies
+    outer:
+    for (let s = 0; s < steps; s++) {
+      p.x += p.dx * dt / steps; p.y += p.dy * dt / steps;
+      if (solidShot(p.x, p.y)) { bulletImpact(p); p.t = 0; break; }
+      for (const e of G.enemies) {
+        if (e.hp <= 0 || p.hitSet.has(e)) continue;
+        if (Math.hypot(e.x - p.x, e.y - p.y) >= 0.4 * e.size) continue;
+        // vertical check: the bullet flies along the crosshair line — the aim
+        // captured at the muzzle decides head/body/miss at this distance
+        const d0 = Math.max(0.25, Math.hypot(e.x - p.ox, e.y - p.oy));
+        const sizeS = REND_H * (p.zoom0 || 1) / d0;
+        const eh = sizeS * 0.95 * e.size;
+        const top = (p.hor0 || REND_H / 2) + sizeS * 0.48 - eh;
+        if (aimY < top || aimY > top + eh) continue;     // sails over / under this one
+        p.hitSet.add(e);
+        const band = critBand(e);
+        const crit = p.kind !== 'stream'
+          && aimY > top + eh * band[0] && aimY < top + eh * band[1]
+          && Math.hypot(e.x - p.x, e.y - p.y) < 0.2 * e.size;
+        const dmg = Math.round(playerShotDamage(p.w, crit, e) * p.falloff * (p.kind === 'stream' ? 0.9 : 1));
+        damageEnemy(e, dmg, p.w, true, crit);
+        if (p.kind === 'stream' && e.hp > 0) { e.burn = Math.max(e.burn, 1.5); e.burnDps = Math.max(e.burnDps || 0, dmg * 0.4); }
+        p.pierce--; p.falloff *= 0.7;
+        if (p.pierce <= 0) { bulletImpact(p); p.t = 0; break outer; }
+      }
+    }
+  }
+  G.pProj = G.pProj.filter(p => p.t > 0);
+}
+// Laser: the one instant weapon — a piercing light beam.
+function fireBeam(angle, w) {
   const px = G.player.x, py = G.player.y;
   const dx = Math.cos(angle), dy = Math.sin(angle);
   const range = effRange();
-  // wall/tree distance along the ray
-  let wallD = 0.0;
-  { let d = 0; while (d < range) { d += 0.04; if (solid(px + dx * d, py + dy * d)) break; } wallD = d; }
-  // every enemy the ray crosses horizontally, nearest first
+  let wallD = range;
+  { let d = 0; while (d < range) { d += 0.04; if (solidShot(px + dx * d, py + dy * d)) { wallD = d; break; } } }
   const cands = [];
   for (const e of G.enemies) {
     if (e.hp <= 0) continue;
@@ -1218,8 +1428,6 @@ function hitscan(angle, w, isBeam) {
     if (perp < 0.36 * e.size) cands.push({ e, t, perp });
   }
   cands.sort((a, b) => a.t - b.t);
-  // vertical check: the shot travels along the crosshair line (screen centre) —
-  // aim over a head or into the ground and the shot sails past.
   const aimY = REND_H / 2;
   let remaining = 1 + pierceCount(w);
   let falloff = 1;
@@ -1227,53 +1435,21 @@ function hitscan(angle, w, isBeam) {
   const victims = [];
   for (const c of cands) {
     if (remaining <= 0) break;
-    const size = REND_H * ZOOM / c.t;   // must match drawSprite's scoped-in geometry
+    const size = REND_H * ZOOM / c.t;
     const eh = size * 0.95 * c.e.size;
     const top = HOR + size * 0.48 - eh;
     if (aimY < top || aimY > top + eh) continue;
-    // small critical zone: the head band, near the sprite's centre line
-    const crit = aimY > top + eh * 0.05 && aimY < top + eh * 0.18 && c.perp < 0.16 * c.e.size;
+    const band = critBand(c.e);
+    const crit = aimY > top + eh * band[0] && aimY < top + eh * band[1] && c.perp < 0.16 * c.e.size;
     victims.push({ e: c.e, crit, falloff });
     hitD = c.t;
     remaining--;
-    falloff *= 0.7;   // each pierced enemy soaks 30%
+    falloff *= 0.7;
   }
-  if (isBeam) spawnBeam(px, py, px + dx * (victims.length ? hitD : wallD), py + dy * (victims.length ? hitD : wallD), w);
-  else spawnTracer(px, py, px + dx * hitD, py + dy * hitD);
+  spawnBeam(px, py, px + dx * (victims.length ? hitD : wallD), py + dy * (victims.length ? hitD : wallD), w);
   for (const v of victims) {
     damageEnemy(v.e, Math.round(playerShotDamage(w, v.crit, v.e) * v.falloff), w, true, v.crit);
   }
-}
-/* ---------- player projectiles: crossbow bolts & plasma blobs ---------- */
-function spawnBolt(angle, w) {
-  G.pProj.push({ kind: 'bolt', x: G.player.x, y: G.player.y, dx: Math.cos(angle) * 16, dy: Math.sin(angle) * 16, t: effRange() / 16, w, pierce: 1 + pierceCount(w), hitSet: new Set() });
-}
-function spawnPlasma(angle, w) {
-  const sp = 9 + Math.random() * 2;
-  const range = w.arch.range || 6;
-  G.pProj.push({ kind: 'plasma', x: G.player.x, y: G.player.y, dx: Math.cos(angle) * sp, dy: Math.sin(angle) * sp, t: range / sp, w, pierce: 1, hitSet: new Set() });
-}
-function updatePProj(dt) {
-  for (const p of G.pProj) {
-    p.t -= dt;
-    const steps = 2;   // sub-step so fast bolts don't tunnel through enemies
-    for (let s = 0; s < steps && p.t > 0; s++) {
-      p.x += p.dx * dt / steps; p.y += p.dy * dt / steps;
-      if (solid(p.x, p.y)) { p.t = 0; break; }
-      for (const e of G.enemies) {
-        if (e.hp <= 0 || p.hitSet.has(e)) continue;
-        if (Math.hypot(e.x - p.x, e.y - p.y) < 0.42 * e.size) {
-          p.hitSet.add(e);
-          const dmg = playerShotDamage(p.w, false, e);
-          damageEnemy(e, p.kind === 'plasma' ? Math.round(dmg * 0.9) : dmg, p.w, true, false);
-          if (p.kind === 'plasma') { e.burn = Math.max(e.burn, 1.5); e.burnDps = Math.max(e.burnDps || 0, dmg * 0.4); }
-          p.pierce--;
-          if (p.pierce <= 0) { p.t = 0; break; }
-        }
-      }
-    }
-  }
-  G.pProj = G.pProj.filter(p => p.t > 0);
 }
 
 function damageEnemy(e, dmg, w, applyEffects, crit) {
@@ -1314,7 +1490,7 @@ function onEnemyKilled(e, w) {
   G.totalKills++;
   awardCores(e.boss ? 10 : 1);      // banked + saved instantly
   const adren = skillLv('adrenaline');
-  if (adren) healPlayer(adren * 3);
+  if (adren) healPlayer(adren * 1.5);
   if (w && w.special && w.special.key === 'nova') {
     for (const o of G.enemies) {
       if (o === e || o.hp <= 0) continue;
@@ -1334,7 +1510,7 @@ const GRENADE_TYPES = {
 };
 function rollDrop(e) {
   const rng = mulberry32((G.seed ^ (G.totalKills * 2654435761)) | 0);
-  const dropChance = (e.boss ? 1 : 0.34) + skillLv('scrapper') * 0.06;
+  const dropChance = (e.boss ? 1 : 0.34) + skillLv('scrapper') * 0.02 + skillLv('cap_junkrat') * 0.05;
   if (rng() > dropChance && !G.nextDropFloorTier) {
     const r2 = rng();
     if (r2 < 0.20) G.loots.push({ kind: 'health', x: e.x, y: e.y, amt: 25 + G.wave * 2, z: 0.6, vz: 1.5 });
@@ -1355,7 +1531,7 @@ function rollDrop(e) {
 function healPlayer(n) { G.player.hp = Math.min(G.player.maxHp, G.player.hp + n); updateHud(); }
 function damagePlayer(n) {
   if (G.over) return;
-  n *= 1 - skillLv('juggernaut') * 0.10;
+  n *= 1 - skillLv('juggernaut') * 0.05;
   G.player.hp -= n;
   $('dmgVignette').style.opacity = '1';
   setTimeout(() => { $('dmgVignette').style.opacity = '0'; }, 220);
@@ -1390,23 +1566,24 @@ function updateGrenades(dt) {
 }
 function explodeGrenade(g) {
   const lvG = skillLv('grenadier');
-  const base = (60 + G.wave * 4) * (1 + 0.2 * lvG);
+  const base = (60 + G.wave * 4) * (1 + 0.10 * lvG);
+  const rMul = 1 + skillLv('commando') * 0.08;   // Commando widens every blast
   spawnBoom(g.x, g.y, g.type === 'ice' ? '#7fd4ff' : g.type === 'shock' ? '#ffe45c' : '#ff9a3c');
   const aoe = (radius, fn) => {
     for (const e of G.enemies) {
       if (e.hp <= 0) continue;
       const d = Math.hypot(e.x - g.x, e.y - g.y);
-      if (d < radius) fn(e, d);
+      if (d < radius * rMul) fn(e, d);
     }
   };
-  if (g.type === 'frag') aoe(2.6, (e, d) => damageEnemy(e, Math.round(base * (1 - d / 3.2)), null, false));
-  if (g.type === 'fire') G.fields.push({ type: 'fire', x: g.x, y: g.y, r: 2.2, t: 5, dps: 14 + G.wave * 1.5 });
-  if (g.type === 'ice') G.fields.push({ type: 'ice', x: g.x, y: g.y, r: 2.4, t: 4.5 });
+  if (g.type === 'frag') aoe(2.6, (e, d) => damageEnemy(e, Math.round(base * (1 - d / (3.2 * rMul))), null, false));
+  if (g.type === 'fire') G.fields.push({ type: 'fire', x: g.x, y: g.y, r: 2.2 * rMul, t: 5, dps: 14 + G.wave * 1.5 });
+  if (g.type === 'ice') G.fields.push({ type: 'ice', x: g.x, y: g.y, r: 2.4 * rMul, t: 4.5 });
   if (g.type === 'shock') aoe(3.0, e => { e.stun = Math.max(e.stun, 1.6); damageEnemy(e, Math.round(base * 0.6), null, false); });
-  if (g.type === 'shrap') aoe(4.0, (e, d) => damageEnemy(e, Math.round((26 + G.wave * 2) * (1 - d / 5)), null, false));
+  if (g.type === 'shrap') aoe(4.0, (e, d) => damageEnemy(e, Math.round((26 + G.wave * 2) * (1 - d / (5 * rMul))), null, false));
   // Soldier's Shrapnel Rounds: EVERY grenade also sprays pellets
   const shr = skillLv('shrapnel');
-  if (shr && g.type !== 'shrap') aoe(3.2, (e, d) => damageEnemy(e, Math.round(shr * 6 * 3 * (1 - d / 4)), null, false));
+  if (shr && g.type !== 'shrap') aoe(3.2, (e, d) => damageEnemy(e, Math.round(shr * 3 * 4 * (1 - d / 4)), null, false));
 }
 function updateFields(dt) {
   for (const f of G.fields) {
@@ -1429,22 +1606,27 @@ function useAbility() {
   if (!lv) { toast('Unlock ' + c.activeName + ' in the skill tree [I] to use F!'); return; }
   if (G.cdF > 0) { toast('⏳ ' + c.activeName + ' ready in ' + Math.ceil(G.cdF) + 's'); return; }
   if (G.cls === 'soldier') {
-    G.timeSlow = 2.5 + 0.8 * lv;
-    G.cdF = 24;
-    if (skillLv('warmachine')) { G.reloading = 0; G.ammo = magSize(); }
+    G.timeSlow = 2 + 0.6 * lv;
+    G.cdF = 24 * abilityCdMult();
+    const wm = skillLv('warmachine');
+    if (wm) { G.reloading = 0; G.ammo = magSize(); if (wm > 1) healPlayer((wm - 1) * 10); }
     toast('⏳ BULLET TIME — the world crawls');
   } else if (G.cls === 'sniper') {
     const traps = G.deployables.filter(d => d.kind === 'trap');
     if (traps.length >= lv + 1) G.deployables.splice(G.deployables.indexOf(traps[0]), 1);
     G.deployables.push({ kind: 'trap', x: G.player.x + Math.cos(G.player.dir) * 1.2, y: G.player.y + Math.sin(G.player.dir) * 1.2, life: 40, lv });
-    G.cdF = 8;
+    G.cdF = 8 * abilityCdMult();
     toast('🪤 Snare trap armed');
   } else {
-    const maxT = skillLv('doubledeploy') ? 2 : 1;
+    const maxT = 1 + skillLv('doubledeploy');
     const ts = G.deployables.filter(d => d.kind === 'turret');
     if (ts.length >= maxT) G.deployables.splice(G.deployables.indexOf(ts[0]), 1);
-    G.deployables.push({ kind: 'turret', x: G.player.x + Math.cos(G.player.dir) * 1.0, y: G.player.y + Math.sin(G.player.dir) * 1.0, life: 20 + 4 * lv, fireCd: 0, lv });
-    G.cdF = 16;
+    G.deployables.push({
+      kind: 'turret',
+      x: G.player.x + Math.cos(G.player.dir) * 1.0, y: G.player.y + Math.sin(G.player.dir) * 1.0,
+      life: (18 + 3 * lv) * (1 + skillLv('fortify') * 0.15), fireCd: 0, lv,
+    });
+    G.cdF = 16 * abilityCdMult();
     toast('🗼 Auto-turret online');
   }
   updateHud();
@@ -1453,7 +1635,7 @@ function updateDeployables(dt) {
   for (const d of G.deployables) {
     d.life -= dt;
     if (d.kind === 'turret') {
-      d.fireCd -= dt * (1 + skillLv('overclock') * 0.3);
+      d.fireCd -= dt * (1 + skillLv('overclock') * 0.12);
       if (d.fireCd <= 0) {
         let near = null, nd = 10;
         for (const e of G.enemies) {
@@ -1464,15 +1646,16 @@ function updateDeployables(dt) {
         if (near) {
           d.fireCd = 0.5;
           spawnTracer(d.x, d.y, near.x, near.y, '#8fd0ff');
-          damageEnemy(near, Math.round((8 + 4 * d.lv) * (1 + G.wave * 0.06)), null, false);
+          const tdmg = (8 + 3 * d.lv) * (1 + skillLv('roboticist') * 0.10 + skillLv('cap_fortress') * 0.30);
+          damageEnemy(near, Math.round(tdmg * (1 + G.wave * 0.06)), null, false);
         } else d.fireCd = 0.2;
       }
     } else if (d.kind === 'trap') {
       for (const e of G.enemies) {
         if (e.hp <= 0) continue;
         if (Math.hypot(e.x - d.x, e.y - d.y) < 0.9) {
-          e.stun = Math.max(e.stun, 2 + 0.5 * d.lv);
-          damageEnemy(e, Math.round((30 + 15 * d.lv) * (1 + G.wave * 0.08)), null, false);
+          e.stun = Math.max(e.stun, 2 + 0.4 * d.lv);
+          damageEnemy(e, Math.round((30 + 12 * d.lv) * (1 + G.wave * 0.08)), null, false);
           d.life = 0;   // consumed
           break;
         }
@@ -1482,19 +1665,19 @@ function updateDeployables(dt) {
   G.deployables = G.deployables.filter(d => d.life > 0);
   // Engineer passives: healing drone regen + shock coils
   const drone = skillLv('healdrone');
-  if (drone && G.player.hp < G.player.maxHp) healPlayer(drone * 1.2 * dt);
+  if (drone && G.player.hp < G.player.maxHp) healPlayer(drone * 0.5 * (skillLv('cap_medic') ? 2 : 1) * dt);
   const coils = skillLv('shockcoils');
   if (coils) {
     G.coilT = (G.coilT || 0) - dt;
     if (G.coilT <= 0) {
       G.coilT = 2;
-      let near = null, nd = 3 * coils;
+      let near = null, nd = 1.5 + 0.4 * coils;
       for (const e of G.enemies) {
         if (e.hp <= 0) continue;
         const dist = Math.hypot(e.x - G.player.x, e.y - G.player.y);
         if (dist < nd) { near = e; nd = dist; }
       }
-      if (near) { spawnTracer(G.player.x, G.player.y, near.x, near.y, '#ffe45c'); damageEnemy(near, 8 * coils, null, false); }
+      if (near) { spawnTracer(G.player.x, G.player.y, near.x, near.y, '#ffe45c'); damageEnemy(near, 4 * coils, null, false); }
     }
   }
 }
@@ -1683,14 +1866,15 @@ function tick(now) {
   const moving = fwd !== 0 || str !== 0;
   if (moving) {
     const slowWalk = G.timeSlow > 0 ? 0.8 : 1;   // slight slow-mo drag on the player
-    const sp = 3.1 * P.speedMult * (1 - 0.4 * G.ads) * slowWalk * dt;
+    const adsSlow = skillLv('cap_wraith') ? 0 : 0.4;   // WRAITH: full speed while scoped
+    const sp = 3.1 * P.speedMult * (1 - adsSlow * G.ads) * slowWalk * dt;
     const nx = P.x + (Math.cos(P.dir) * fwd - Math.sin(P.dir) * str) * sp;
     const ny = P.y + (Math.sin(P.dir) * fwd + Math.cos(P.dir) * str) * sp;
     tryMove(P, nx, ny, 0.22);
   }
   // crosshair bloom: movement raises the floor, firing spikes it, stillness settles it
   const moveBloom = moving ? 3.2 : 0;
-  G.bloomNow = Math.max(moveBloom, G.bloomNow - dt * 9);
+  G.bloomNow = Math.max(moveBloom, G.bloomNow - dt * 9 * (1 + skillLv('steadyaim') * 0.06));
   // recoil recovery + weapon bob
   G.viewKick = (G.viewKick || 0) * Math.exp(-dt * 8);
   G.gunKick = (G.gunKick || 0) * Math.exp(-dt * 11);
@@ -1717,7 +1901,7 @@ function tick(now) {
   }
 
   // enemies (world time — crawls during Bullet Time)
-  const aggro = 11 - skillLv('ghost') * 3;
+  const aggro = 11 - skillLv('ghost') * 1.5;
   for (const e of G.enemies) {
     if (e.hp <= 0) continue;
     if (e.hitFlash > 0) e.hitFlash -= dt;
@@ -1770,7 +1954,7 @@ function tick(now) {
   updateFields(wdt);
   updateDeployables(wdt);
   // loot physics: guns tumble to the grass, magnet pull, auto-collect consumables
-  const magnetR = skillLv('magnetfield') ? 3.5 : 0;
+  const magnetR = skillLv('magnetfield') ? 2 + skillLv('magnetfield') * 0.5 : 0;
   const autoCollect = [];
   for (const l of G.loots) {
     if (l.vz !== undefined && (l.z > 0 || Math.abs(l.vz) > 0.05)) {
@@ -1803,7 +1987,9 @@ let TAN_HALF = BASE_TAN_HALF;  // narrows while aiming down a scope
 let ZOOM = 1;                  // matching magnification for vertical scale
 function refreshZoom() {
   if (!G || !G.weapon) { ZOOM = 1; TAN_HALF = BASE_TAN_HALF; return; }
-  ZOOM = 1 + ((G.weapon.arch.scope || 1) - 1) * (G.ads || 0);
+  // Scope Master (sniper) adds extra magnification to any scoped weapon
+  const sc = G.weapon.arch.scope ? G.weapon.arch.scope + skillLv('scopemaster') * 0.5 : 1;
+  ZOOM = 1 + (sc - 1) * (G.ads || 0);
   TAN_HALF = BASE_TAN_HALF / ZOOM;
 }
 const ROAD_EVERY = 26;         // road grid pitch in world cells
@@ -1829,8 +2015,8 @@ function obstacleAt(ix, iy) {
   return null;
 }
 
-// low-res ground buffer upscaled with smoothing OFF → chunky Minecraft blocks
-const GB_W = 240, GB_H = 168;
+// ground buffer upscaled with smoothing OFF → crisp blocks; higher res = HD
+const GB_W = 384, GB_H = 216;
 const groundCanvas = document.createElement('canvas');
 groundCanvas.width = GB_W; groundCanvas.height = GB_H;
 const groundCtx = groundCanvas.getContext('2d');
@@ -1918,17 +2104,28 @@ function drawSky(P) {
     ctx.fillRect(sx - 46, sy, 92, 14);
     ctx.fillRect(sx - 30, sy - 12, 60, 12);
   }
-  // mountain ridges: far hazy blue range, then a nearer green-grey one
-  drawRidge(P, 1.0, 46, 66, '#9db5d6', 0, 2.1, 4.2);
-  drawRidge(P, 1.6, 24, 78, '#7d9c85', 8.3, 1.1, 5.9);
+  // three mountain ranges: far snowy peaks, mid hazy blue, near green-grey
+  drawRidge(P, 0.7, 72, 52, '#b9c9e2', 3.7, 5.1, 1.2, '#eef4fc');
+  drawRidge(P, 1.0, 46, 66, '#9db5d6', 0, 2.1, 4.2, '#dfe9f6');
+  drawRidge(P, 1.6, 24, 78, '#7d9c85', 8.3, 1.1, 5.9, null);
+  // soft haze band hugging the horizon
+  const hz = ctx.createLinearGradient(0, HOR - 26, 0, HOR);
+  hz.addColorStop(0, 'rgba(224,238,252,0)');
+  hz.addColorStop(1, 'rgba(224,238,252,0.55)');
+  ctx.fillStyle = hz;
+  ctx.fillRect(0, HOR - 26, REND_W, 26);
 }
-function drawRidge(P, freq, base, amp, color, s1, s2, s3) {
-  ctx.fillStyle = color;
+function drawRidge(P, freq, base, amp, color, s1, s2, s3, snow) {
   for (let x = 0; x < REND_W; x += 4) {
     const rel = Math.atan(((2 * x / REND_W) - 1) * TAN_HALF);
     const a = P.dir + rel;
     const h = base + amp * ridgeNoise(a * freq, s1, s2, s3);
+    ctx.fillStyle = color;
     ctx.fillRect(x, HOR - h, 4, h + 1);
+    if (snow && h > base + amp * 0.62) {   // snow caps on the tall peaks
+      ctx.fillStyle = snow;
+      ctx.fillRect(x, HOR - h, 4, Math.min(12, (h - (base + amp * 0.62)) * 0.6 + 3));
+    }
   }
 }
 function drawGround(P) {
@@ -1957,8 +2154,12 @@ function drawGround(P) {
       } else {
         const h = cellHash(ix, iy);
         if (h > 0.976 && h < 0.988) { r = 228; g2 = 202; b = 84; }   // wildflowers
+        else if (h > 0.988) { r = 214; g2 = 224; b = 232; }          // white clover
         else { const v = 0.8 + h * 0.35; r = 74 * v; g2 = 152 * v; b = 58 * v; }
       }
+      // sub-cell micro-texture: 3×3 grain inside each block for an HD feel
+      const m = 0.92 + cellHash(Math.floor(wx * 3), Math.floor(wy * 3)) * 0.16;
+      r *= m; g2 *= m; b *= m;
       // fade to the horizon sky colour with distance
       r += (214 - r) * fog; g2 += (235 - g2) * fog; b += (250 - b) * fog;
       d[o] = r; d[o + 1] = g2; d[o + 2] = b; d[o + 3] = 255;
@@ -2045,6 +2246,19 @@ function projectPoint(wx, wy) {
 }
 function drawTracers() {
   for (const p of G.particles) {
+    if (p.kind === 'spark') {
+      // impact flash where a bullet stopped
+      const pt = projectPoint(p.x, p.y);
+      if (pt) {
+        const r = Math.max(2.5, (REND_H * ZOOM / pt.perp) * 0.05) * (p.t / 0.18);
+        ctx.save(); ctx.shadowColor = p.color; ctx.shadowBlur = 10;
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.max(0, p.t / 0.18);
+        ctx.beginPath(); ctx.arc(pt.x, HOR + Math.min(40, pt.perp), r, 0, 7); ctx.fill();
+        ctx.globalAlpha = 1; ctx.restore();
+      }
+      continue;
+    }
     if (p.kind !== 'tracer' && p.kind !== 'beam') continue;
     const end = projectPoint(p.x1, p.y1);
     if (!end) continue;
@@ -2168,24 +2382,25 @@ function drawSprite(s) {
     return;
   }
   if (s.kind === 'pProj') {
+    // live bullet: drawn as a bright head with a tracer trail that streaks
+    // from the muzzle line out toward where the crosshair was pointing
     const p = s.p;
-    if (perp < zbuf[Math.max(0, Math.min(REND_W - 1, screenX | 0))]) {
-      const gy = HOR + size * 0.02;
-      if (p.kind === 'bolt') {
-        // arrow: shaft along its flight direction, projected to screen space
-        const va = Math.atan2(p.dy, p.dx) - P.dir;
-        const len = Math.max(6, size * 0.35), sw = Math.cos(va);
-        ctx.strokeStyle = '#d8c9a0'; ctx.lineWidth = Math.max(2, size * 0.03);
-        ctx.beginPath(); ctx.moveTo(screenX - len * sw / 2, gy); ctx.lineTo(screenX + len * sw / 2, gy); ctx.stroke();
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(screenX + len * sw / 2, gy, Math.max(1.5, size * 0.03), 0, 7); ctx.fill();
-      } else {
-        ctx.save(); ctx.shadowColor = '#6fe3ff'; ctx.shadowBlur = 12;
-        ctx.fillStyle = 'rgba(140,235,255,0.9)';
-        ctx.beginPath(); ctx.arc(screenX, gy, Math.max(3, size * 0.08), 0, 7); ctx.fill();
-        ctx.restore();
-      }
-    }
+    const travelled = Math.hypot(p.x - p.ox, p.y - p.oy);
+    const frac = Math.min(1, travelled / 6);   // climbs from muzzle to eye line
+    const mx = REND_W / 2 + 150, my = REND_H - 120;
+    const bx = screenX, by = my + (REND_H / 2 - my) * frac;
+    const tx = bx - (bx - mx) * 0.16, ty = by - (by - my) * 0.16;
+    const col = p.kind === 'stream' ? 'rgba(140,235,255,0.95)' : p.kind === 'bolt' ? '#d8c9a0' : '#ffd9a0';
+    ctx.save();
+    ctx.shadowColor = col; ctx.shadowBlur = p.kind === 'stream' ? 12 : 8;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = p.kind === 'bolt' ? 2 : 3;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(bx, by); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = p.kind === 'stream' ? col : '#fff4dd';
+    ctx.beginPath(); ctx.arc(bx, by, p.kind === 'stream' ? Math.max(3, size * 0.07) : 2.5, 0, 7); ctx.fill();
+    ctx.restore();
     return;
   }
   if (s.kind === 'proj') {
@@ -2217,17 +2432,21 @@ function drawSprite(s) {
   const frame = (((performance.now() / 260) | 0) + (e.animPhase || 0)) % 2;
   const img = e.hitFlash > 0 ? spr.white[frame] : spr.frames[frame];
   drawClipped(screenX, ew, perp, () => {
+    // contact shadow grounds the monster on the grass
+    ctx.fillStyle = 'rgba(6,10,6,0.30)';
+    ctx.beginPath(); ctx.ellipse(screenX, HOR + size * 0.47, ew * 0.38, Math.max(2, ew * 0.09), 0, 0, 7); ctx.fill();
     ctx.drawImage(img, screenX - ew / 2, top, ew, eh);
   });
   // hp bar (drawn above the sprite when its center column is visible)
   const cx = Math.max(0, Math.min(REND_W - 1, screenX | 0));
   if (perp < zbuf[cx]) {
-    // Deadeye Vision (sniper skill): the actual crit box, drawn in gold
+    // Deadeye Vision (sniper skill): the enemy's REAL crit box, drawn in gold
     if (skillLv('deadeye')) {
+      const [b0, b1] = critBand(e);
       const cw = 0.16 * e.size * size * 2;
       ctx.strokeStyle = 'rgba(255,210,77,0.9)';
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(screenX - cw / 2, top + eh * 0.05, cw, eh * 0.13);
+      ctx.strokeRect(screenX - cw / 2, top + eh * b0, cw, eh * (b1 - b0));
     }
     const bw = ew * 0.9;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -2266,16 +2485,137 @@ function drawClipped(screenX, w, perp, drawFn) {
 const SPR_W = 96, SPR_H = 128;
 const enemySprites = {};
 function sprCanvas(draw) { const c = document.createElement('canvas'); c.width = SPR_W; c.height = SPR_H; draw(c.getContext('2d')); return c; }
+// crisp dark outline around every monster so they pop against the terrain
+function outlined(src) {
+  return sprCanvas(g => {
+    const sil = sprCanvas(g2 => {
+      g2.drawImage(src, 0, 0);
+      g2.globalCompositeOperation = 'source-in';
+      g2.fillStyle = 'rgba(10,14,10,0.9)'; g2.fillRect(0, 0, SPR_W, SPR_H);
+    });
+    for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1]]) {
+      g.drawImage(sil, ox, oy);
+    }
+    g.drawImage(src, 0, 0);
+  });
+}
 function buildEnemySprites() {
-  for (const t of ['crawler', 'drone', 'sentinel', 'brute', 'warden']) {
-    const frames = [0, 1].map(f => sprCanvas(g => drawEnemyArt(g, t, f)));
-    // white silhouette variants for the hit flash
+  const hand = { crawler: 1, drone: 1, sentinel: 1, brute: 1, warden: 1 };
+  const all = ENEMY_TYPES.map(t => t).concat([{ type: 'warden' }]);
+  for (const t of all) {
+    const frames = [0, 1].map(f => outlined(sprCanvas(g => {
+      if (hand[t.type]) drawEnemyArt(g, t.type, f);
+      else drawVariantArt(g, t.spec, f);
+    })));
     const white = frames.map(src => sprCanvas(g => {
       g.drawImage(src, 0, 0);
       g.globalCompositeOperation = 'source-in';
       g.fillStyle = '#ffffff'; g.fillRect(0, 0, SPR_W, SPR_H);
     }));
-    enemySprites[t] = { frames, white };
+    enemySprites[t.type] = { frames, white };
+  }
+}
+// ---------- procedural monster generator: 5 body plans × hue = 21 varieties ----------
+function drawVariantArt(g, spec, f) {
+  const W = SPR_W, H = SPR_H, cx = W / 2;
+  const hue = spec.hue, sway = f ? 3 : -3;
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  const C = (s, l) => 'hsl(' + hue + ',' + s + '%,' + l + '%)';
+  const ell = (x, y, rx, ry, fill, rot) => { g.fillStyle = fill; g.beginPath(); g.ellipse(x, y, rx, ry, rot || 0, 0, 7); g.fill(); };
+  const rr = (x, y, w2, h2, r, fill) => { g.fillStyle = fill; g.beginPath(); g.roundRect(x, y, w2, h2, r); g.fill(); };
+  const glow = (color, blur, fn) => { g.save(); g.shadowColor = color; g.shadowBlur = blur; fn(); g.restore(); };
+  const grad = (y0, y1, l0, l1, s) => {
+    const gr = g.createLinearGradient(0, y0, 0, y1);
+    gr.addColorStop(0, C(s, l0)); gr.addColorStop(1, C(s, l1));
+    return gr;
+  };
+  if (spec.plan === 'beast') {
+    // four-legged predator: haunches, chest, snarling head with horns
+    g.strokeStyle = C(45, 22); g.lineWidth = 7;
+    for (const [lx, lift] of [[-26, f ? -6 : 3], [-8, f ? 3 : -6], [10, f ? -5 : 4], [26, f ? 4 : -5]]) {
+      g.beginPath(); g.moveTo(cx + lx, 96); g.lineTo(cx + lx + (f ? 3 : -3), 122); g.stroke();
+    }
+    ell(cx, 88 + (f ? 2 : 0), 38, 24, grad(60, 112, 45, 24, 55));           // body
+    ell(cx - 20, 80, 20, 18, C(50, 38));                                     // shoulder mass
+    ell(cx, 52 + sway * 0.5, 20, 16, grad(34, 70, 50, 30, 55));              // head
+    g.fillStyle = C(40, 20);                                                 // jaw
+    g.beginPath(); g.arc(cx, 62 + sway * 0.5, 12, 0.1 * Math.PI, 0.9 * Math.PI); g.fill();
+    g.fillStyle = '#f4f0e0';                                                 // fangs
+    g.beginPath(); g.moveTo(cx - 8, 62); g.lineTo(cx - 5, 71); g.lineTo(cx - 2, 62); g.fill();
+    g.beginPath(); g.moveTo(cx + 2, 62); g.lineTo(cx + 5, 71); g.lineTo(cx + 8, 62); g.fill();
+    g.fillStyle = C(50, 30);                                                 // horns
+    g.beginPath(); g.moveTo(cx - 14, 44); g.quadraticCurveTo(cx - 24, 32, cx - 18, 24); g.lineTo(cx - 10, 38); g.fill();
+    g.beginPath(); g.moveTo(cx + 14, 44); g.quadraticCurveTo(cx + 24, 32, cx + 18, 24); g.lineTo(cx + 10, 38); g.fill();
+    for (let i = -2; i <= 2; i++) {                                          // back ridge
+      g.fillStyle = C(48, 26);
+      g.beginPath(); g.moveTo(cx + i * 13 - 4, 72); g.lineTo(cx + i * 13, 60); g.lineTo(cx + i * 13 + 4, 72); g.fill();
+    }
+    glow(C(90, 65), 8, () => { ell(cx - 8, 50 + sway * 0.5, 3.5, 4, C(90, 70)); ell(cx + 8, 50 + sway * 0.5, 3.5, 4, C(90, 70)); });
+  } else if (spec.plan === 'mech') {
+    // walker robot: piston legs, armored chassis, sensor head, side cannons
+    rr(cx - 26 - sway, 92, 12, 30, 4, C(15, 26));                            // legs
+    rr(cx + 14 + sway, 92, 12, 30, 4, C(15, 26));
+    rr(cx - 30 - sway, 116, 20, 8, 3, C(15, 32));                            // feet
+    rr(cx + 10 + sway, 116, 20, 8, 3, C(15, 32));
+    rr(cx - 30, 52, 60, 44, 8, grad(52, 96, 42, 22, 25));                    // chassis
+    rr(cx - 30, 52, 60, 10, 8, C(25, 52));                                   // top plate
+    glow(C(85, 60), 12, () => { ell(cx, 74, 9, 9, C(85, 62)); });            // power core
+    rr(cx - 42, 58, 12, 26, 4, C(20, 30));                                   // cannon pods
+    rr(cx + 30, 58, 12, 26, 4, C(20, 30));
+    glow(C(85, 60), 6, () => { rr(cx - 40, 82, 8, 5, 2, C(85, 62)); rr(cx + 32, 82, 8, 5, 2, C(85, 62)); });
+    rr(cx - 14, 30, 28, 22, 6, C(20, 36));                                   // head
+    glow(C(85, 65), 9, () => { rr(cx - 10, 38, 20, 6, 2, C(85, 68)); });     // visor
+    g.strokeStyle = C(30, 45); g.lineWidth = 2;                              // antenna
+    g.beginPath(); g.moveTo(cx + 12, 30); g.lineTo(cx + 20, 16); g.stroke();
+    glow(C(85, 60), 6, () => { ell(cx + 20, 15, 2.5, 2.5, C(85, 65)); });
+  } else if (spec.plan === 'humanoid') {
+    // armed raider: legs, jacket torso, helmeted head, held gun
+    rr(cx - 16 - sway, 92, 12, 30, 4, C(20, 20));                            // legs
+    rr(cx + 4 + sway, 92, 12, 30, 4, C(20, 20));
+    const tor = grad(46, 94, 45, 25, 45);
+    rr(cx - 20, 48, 40, 46, 8, tor);                                         // torso
+    rr(cx - 20, 48, 40, 8, 8, C(50, 55));                                    // collar
+    rr(cx - 28, 52, 10, 28, 4, C(40, 32));                                   // arms
+    rr(cx + 18, 52, 10, 28, 4, C(40, 32));
+    rr(cx - 30, 74, 44, 7, 3, '#3a3f4a');                                    // held rifle
+    rr(cx - 34, 70, 10, 6, 2, '#2b303a');
+    ell(cx, 34, 13, 14, C(35, 55));                                          // head
+    rr(cx - 12, 24, 24, 10, 5, C(45, 30));                                   // helmet
+    glow(C(90, 62), 7, () => { rr(cx - 8, 34, 16, 4, 2, C(90, 66)); });      // visor slit
+    rr(cx - 22, 88, 44, 5, 2, C(55, 40));                                    // belt
+  } else if (spec.plan === 'flyer') {
+    // hovering winged creature — bobs instead of walking
+    const bob = f ? 4 : -4;
+    g.fillStyle = C(40, 32);                                                 // wings
+    g.beginPath(); g.moveTo(cx - 8, 58 + bob);
+    g.quadraticCurveTo(cx - 52, 30 + bob + (f ? 14 : -8), cx - 44, 66 + bob);
+    g.quadraticCurveTo(cx - 26, 72 + bob, cx - 8, 64 + bob); g.fill();
+    g.beginPath(); g.moveTo(cx + 8, 58 + bob);
+    g.quadraticCurveTo(cx + 52, 30 + bob + (f ? 14 : -8), cx + 44, 66 + bob);
+    g.quadraticCurveTo(cx + 26, 72 + bob, cx + 8, 64 + bob); g.fill();
+    ell(cx, 64 + bob, 16, 22, grad(42 + bob, 86 + bob, 48, 26, 50));         // body
+    ell(cx, 46 + bob, 11, 10, C(45, 40));                                    // head
+    glow(C(90, 62), 8, () => { ell(cx - 4, 45 + bob, 3, 3.5, C(90, 68)); ell(cx + 4, 45 + bob, 3, 3.5, C(90, 68)); });
+    g.fillStyle = C(50, 30);                                                 // stinger tail
+    g.beginPath(); g.moveTo(cx - 4, 84 + bob); g.lineTo(cx, 106 + bob); g.lineTo(cx + 4, 84 + bob); g.fill();
+    ell(cx, 118, 20, 4, 'rgba(0,0,0,0.25)');                                 // hover shadow
+  } else {
+    // slime: translucent blob with a glowing nucleus (the crit spot!)
+    const squish = f ? 4 : 0;
+    const bod = g.createRadialGradient(cx, 92, 8, cx, 92, 42);
+    bod.addColorStop(0, 'hsla(' + hue + ',70%,60%,0.95)');
+    bod.addColorStop(1, 'hsla(' + hue + ',65%,32%,0.9)');
+    g.fillStyle = bod;
+    g.beginPath();
+    g.moveTo(cx - 40 - squish, 118);
+    g.quadraticCurveTo(cx - 44 - squish, 66 + squish, cx, 58 + squish);
+    g.quadraticCurveTo(cx + 44 + squish, 66 + squish, cx + 40 + squish, 118);
+    g.closePath(); g.fill();
+    for (const [bx, by, br] of [[-18, 84, 5], [14, 96, 4], [2, 74, 3]]) {    // bubbles
+      ell(cx + bx, by + squish, br, br, 'hsla(' + hue + ',80%,72%,0.5)');
+    }
+    glow(C(95, 68), 12, () => { ell(cx, 78 + squish, 9, 9, C(95, 66)); });   // nucleus
+    ell(cx - 3, 75 + squish, 3, 3, '#ffffff');                               // nucleus shine
   }
 }
 function drawEnemyArt(g, type, f) {
@@ -2395,25 +2735,37 @@ buildEnemySprites();
 /* ---------- blocky Minecraft-style world props (12×16 pixel grid) ---------- */
 const obstacleSprites = {};
 function buildObstacleSprites() {
+  // finer 24×32 pixel grid = HD props
   obstacleSprites.tree = sprCanvas(g => {
-    const px = 8;
+    const px = 4;
     const put2 = (x, y, w2, h2, c) => { g.fillStyle = c; g.fillRect(x * px, y * px, w2 * px, h2 * px); };
-    put2(5, 10, 2, 6, '#6b4a2b');      // trunk
-    put2(5, 10, 1, 6, '#7d5732');      // trunk highlight
-    put2(1, 5, 10, 2, '#357f36');      // canopy — stacked leaf blocks
-    put2(2, 3, 8, 3, '#3e8f3e');
-    put2(3, 1, 6, 3, '#4aa348');
-    put2(4, 2, 3, 1, '#5cb85a');       // sunlit top
-    put2(2, 7, 8, 2, '#2e6f30');       // canopy underside
+    put2(10, 20, 4, 11, '#6b4a2b');    // trunk with bark shading
+    put2(10, 20, 1, 11, '#7d5732');
+    put2(13, 20, 1, 11, '#553a20');
+    put2(8, 30, 2, 2, '#5e4126');      // root flare
+    put2(14, 30, 2, 2, '#5e4126');
+    put2(3, 10, 18, 6, '#2e6f30');     // layered canopy, dark → light
+    put2(4, 6, 16, 6, '#357f36');
+    put2(6, 3, 12, 5, '#3e8f3e');
+    put2(8, 1, 8, 4, '#4aa348');
+    put2(9, 2, 3, 1, '#5cb85a');       // sunlit clusters
+    put2(14, 4, 3, 2, '#54ad52');
+    put2(5, 8, 3, 2, '#46984a');
+    put2(15, 9, 4, 2, '#46984a');
+    put2(4, 14, 4, 2, '#255c28');      // shaded underside
+    put2(16, 13, 4, 2, '#255c28');
   });
   obstacleSprites.rock = sprCanvas(g => {
-    const px = 8;
+    const px = 4;
     const put2 = (x, y, w2, h2, c) => { g.fillStyle = c; g.fillRect(x * px, y * px, w2 * px, h2 * px); };
-    put2(2, 11, 8, 4, '#8b9097');
-    put2(3, 9, 6, 2, '#9aa0a8');
-    put2(4, 8, 3, 1, '#a8aeb6');
-    put2(2, 15, 8, 1, '#767b82');
-    put2(6, 11, 3, 2, '#7d838b');      // shadowed facet
+    put2(4, 22, 16, 8, '#8b9097');
+    put2(6, 18, 12, 4, '#9aa0a8');
+    put2(8, 16, 6, 2, '#a8aeb6');
+    put2(4, 30, 16, 2, '#767b82');
+    put2(13, 22, 6, 5, '#7d838b');     // shadowed facet
+    put2(5, 24, 4, 3, '#98a0a8');
+    put2(9, 17, 2, 1, '#c0c6cd');      // quartz glint
+    put2(5, 28, 5, 2, '#6f8f5f');      // moss
   });
 }
 buildObstacleSprites();
@@ -2467,6 +2819,40 @@ function drawGunModel(g, w) {
     rr(-120, -10, 34, 12, 4, mid);                      // handguard
     scopeGlass(-96, -38);                               // red-dot optic
     rr(-150, -2, 160, 4, 2, rc);
+  } else if (k === 'carbine') {
+    muzzleX = -150;
+    rr(-24, -8, 28, 46, 6, dark);                       // grip
+    rr(2, -22, 24, 22, 5, dark);                        // collapsed stock
+    rr(-134, -22, 140, 24, 5, body);
+    rr(-134, -22, 140, 6, 5, mid);
+    rr(-58, 0, 14, 30, 4, dark);                        // short mag
+    rr(-58, 26, 14, 6, 3, rc);
+    rr(-150, -14, 18, 8, 3, steel);
+    scopeGlass(-84, -34);
+    rr(-134, -2, 140, 4, 2, rc);
+  } else if (k === 'battle') {
+    muzzleX = -178;
+    rr(-26, -8, 30, 50, 6, dark);
+    rr(10, -26, 30, 28, 6, wood);                       // wooden stock
+    rr(-158, -24, 170, 26, 5, body);
+    rr(-158, -24, 170, 7, 5, mid);
+    rr(-70, 2, 18, 36, 4, dark);
+    rr(-70, 34, 18, 6, 3, rc);
+    rr(-178, -16, 24, 9, 3, steel);
+    scopeGlass(-104, -40);
+    rr(-122, -10, 36, 13, 4, wood);                     // wood handguard
+    rr(-158, -2, 170, 4, 2, rc);
+  } else if (k === 'dmr') {
+    muzzleX = -196;
+    rr(-28, -8, 32, 50, 6, dark);
+    rr(8, -24, 28, 28, 6, dark);
+    rr(-178, -22, 186, 24, 6, body);
+    rr(-196, -14, 22, 7, 3, steel);                     // long barrel
+    rr(-70, 2, 16, 32, 4, dark);
+    rr(-70, 30, 16, 6, 3, rc);
+    scopeGlass(-110, -40);
+    rr(-150, 2, 8, 22, 3, mid);                         // bipod leg
+    rr(-178, -2, 186, 4, 2, rc);
   } else if (k === 'scatter') {
     muzzleX = -180;
     rr(-24, -8, 30, 50, 6, dark);
