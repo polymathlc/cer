@@ -18,9 +18,13 @@
   from the same flag.
 
   Game design:
-  - Pure-canvas raycaster FPS (no external engine): WASD + mouse look
-    (pointer lock), infinite procedurally generated dungeon floors that
-    scale up forever.
+  - Pure-canvas open-world FPS (no external engine): WASD + mouse look
+    (pointer lock), an infinite procedural Minecraft-style overworld —
+    blocky grass with wildflowers, a grid of dashed roads, scattered
+    solid trees/rocks, parallax mountain ridges, sun and drifting clouds.
+    Enemies come in INFINITE WAVES that scale forever (Warden boss every
+    5th wave); a rotating minimap radar shows enemy blips (rim-clamped
+    when far), roads, loot and props.
   - CS-style crosshair: the gap blooms out while moving/firing and settles
     when still; the current gap IS the real shot spread.
   - Borderlands-style loot: enemies drop weapons on colored light beams in
@@ -183,7 +187,7 @@
 <div class="screen active" id="authScreen">
   <div class="card">
     <h1>🔫 Science Strike<span class="beta">BETA</span></h1>
-    <p class="sub">A roguelite first-person dungeon shooter. Fight through infinite floors, grab rarer and rarer loot — and keep your science streak alive to boost your luck.</p>
+    <p class="sub">A roguelite open-world shooter. Survive infinite waves under an open sky, grab rarer and rarer loot — and keep your science streak alive to boost your luck.</p>
     <button class="btn" id="signInBtn">Sign in with Google</button>
     <p class="sub" style="margin-top:18px;font-size:0.8rem;">Same account as Science Quest.</p>
     <div><a class="btn ghost" href="index.html">← Back to Science Quest</a></div>
@@ -203,7 +207,7 @@
 <div class="screen" id="menuScreen">
   <div class="card" style="max-width:620px;">
     <h1>🔫 Science Strike<span class="beta" id="menuBetaTag">BETA</span></h1>
-    <p class="sub" id="menuHello">Infinite dungeon. Infinite loot. Every 15 seconds, science decides your luck.</p>
+    <p class="sub" id="menuHello">Open world. Infinite waves. Every 15 seconds, science decides your luck.</p>
     <button class="btn good" id="playBtn" style="font-size:1.15rem;padding:15px 42px;">▶ Start Run</button>
     <div style="margin-top:4px;"><a class="btn ghost" href="index.html">← Back to Science Quest</a></div>
 
@@ -226,7 +230,8 @@
       <span style="color:var(--r-mythic)">Mythic</span> (unique special effects!)<br>
       <b>Elements:</b> 🔥 burn · ❄ slow · ⚡ stun · ☠ poison<br>
       <b>Questions:</b> one every 15s. Streaks raise loot luck; milestones (3/5/8/12) guarantee better drops. A wrong answer resets the streak.<br>
-      Clear every enemy on a floor to open the portal to the next one. Dungeons never end — how deep can you go?
+      <b>Minimap</b> (top-left): red blips are enemies — far ones stick to the rim so you always know which way to turn. Grey lines are roads, the sun sits at a fixed compass point.<br>
+      Wipe a wave to get a 5-second breather, then a bigger wave rolls in. Waves never end — how long can you last?
     </div>
 
     <div class="admin-panel" id="adminPanel" style="display:none;">
@@ -244,7 +249,7 @@
   <div id="dmgVignette"></div>
 
   <div class="hud" id="hudTop">
-    <div class="hud-chip" id="hudFloor">Floor 1</div>
+    <div class="hud-chip" id="hudFloor">Wave 1</div>
     <div class="hud-chip" id="hudKills">👾 0/6</div>
     <div class="hud-chip" id="hudStreak">🔥 Streak 0 · Luck +0%</div>
   </div>
@@ -296,7 +301,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v0.3.0 BETA</div>
+<div id="versionBadge">Science Strike v0.4.0 BETA</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -517,7 +522,7 @@ function renderMeta() {
 
 function enterMenu() {
   loadMeta();
-  $('menuHello').textContent = 'Welcome, ' + currentUser.name + '. Infinite dungeon. Infinite loot. Every 15 seconds, science decides your luck.';
+  $('menuHello').textContent = 'Welcome, ' + currentUser.name + '. Open world. Infinite waves. Every 15 seconds, science decides your luck.';
   renderMeta();
   renderAdminPanel();
   showScreen('menuScreen');
@@ -631,9 +636,9 @@ function startRun() {
   const mHp = 100 + (meta.up.vit || 0) * 20;
   G = {
     seed: (Math.random() * 1e9) | 0,
-    floor: 1,
+    wave: 1, breakT: 0,
     player: {
-      x: 2.5, y: 2.5, dir: 0, pitch: 0,
+      x: 1, y: 1, dir: -Math.PI / 4, pitch: 0,   // start on a road crossing, looking into the world
       hp: mHp, maxHp: mHp,
       speedMult: 1 + (meta.up.speed || 0) * 0.05,
       dmgMult: 1 + (meta.up.dmg || 0) * 0.08,
@@ -641,17 +646,14 @@ function startRun() {
     },
     weapon: null, ammo: 0, reloading: 0,
     fireCd: 0, bloomNow: 0, viewKick: 0, gunKick: 0, flash: 0,
-    map: null, mw: 0, mh: 0,
     enemies: [], projectiles: [], loots: [], particles: [], floaters: [],
-    portal: null, portalOpen: false,
-    kills: 0, totalKills: 0, quota: 0,
+    totalKills: 0,
     streak: 0, bestStreak: 0, qCorrect: 0, qTotal: 0,
     nextDropFloorTier: 0,     // guaranteed min rarity for the NEXT drop (streak milestones)
     qTimerMs: QUESTION_INTERVAL,
     qOpenedAt: 0, activeQ: null,
     paused: false, over: false,
     startedAt: performance.now(),
-    theme: 0,
   };
   const a = ARCHETYPES[0]; // everyone starts every run with the same common Blaster
   equipWeapon({
@@ -659,7 +661,7 @@ function startRun() {
     name: 'Training Blaster', dmg: a.dmg, rof: a.rof, mag: a.mag, reload: a.reload,
     pellets: a.pellets, spread: a.spread, bloom: a.bloom, kick: a.kick, elPower: 0.5,
   });
-  buildFloor();
+  spawnWave();
   showScreen('gameWrap');
   hideOverlays();
   updateHud();
@@ -683,65 +685,36 @@ function equipWeapon(w) {
 }
 function magSize() { return Math.max(1, Math.round(G.weapon.mag * G.player.magMult)); }
 
-/* ---------- floor generation: rooms + corridors, seeded, scales forever ---------- */
-function buildFloor() {
-  const f = G.floor;
-  const rng = mulberry32(G.seed + f * 7919);
-  const size = Math.min(40, 22 + Math.floor(f * 1.5));
-  const map = Array.from({ length: size }, () => Array(size).fill(1));
-  const rooms = [];
-  const nRooms = Math.min(14, 5 + Math.floor(f * 0.8));
-  for (let i = 0; i < nRooms * 6 && rooms.length < nRooms; i++) {
-    const w = 3 + Math.floor(rng() * 5), h = 3 + Math.floor(rng() * 5);
-    const x = 1 + Math.floor(rng() * (size - w - 2)), y = 1 + Math.floor(rng() * (size - h - 2));
-    if (rooms.some(r => x < r.x + r.w + 1 && x + w + 1 > r.x && y < r.y + r.h + 1 && y + h + 1 > r.y)) continue;
-    rooms.push({ x, y, w, h, cx: x + w / 2, cy: y + h / 2 });
-    for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) map[yy][xx] = 0;
+/* ---------- infinite waves: enemies spawn in a ring around the player ---------- */
+function findSpawn(rng) {
+  for (let a = 0; a < 60; a++) {
+    const ang = rng() * 6.283, d = 11 + rng() * 8;
+    const x = G.player.x + Math.cos(ang) * d, y = G.player.y + Math.sin(ang) * d;
+    if (!solid(x, y)) return { x, y };
   }
-  if (rooms.length < 2) { // pathological seed — carve a fallback arena
-    for (let yy = 1; yy < size - 1; yy++) for (let xx = 1; xx < size - 1; xx++) map[yy][xx] = 0;
-    rooms.length = 0;
-    rooms.push({ x: 1, y: 1, w: 4, h: 4, cx: 3, cy: 3 }, { x: size - 5, y: size - 5, w: 4, h: 4, cx: size - 3, cy: size - 3 });
-  }
-  // connect each room to the next with L corridors
-  for (let i = 1; i < rooms.length; i++) {
-    const a = rooms[i - 1], b = rooms[i];
-    let x = Math.floor(a.cx), y = Math.floor(a.cy);
-    const tx = Math.floor(b.cx), ty = Math.floor(b.cy);
-    while (x !== tx) { map[y][x] = 0; x += x < tx ? 1 : -1; }
-    while (y !== ty) { map[y][x] = 0; y += y < ty ? 1 : -1; }
-    map[y][x] = 0;
-  }
-  G.map = map; G.mw = size; G.mh = size;
-  G.theme = f % 5;
-  // player starts in room 0
-  G.player.x = rooms[0].cx; G.player.y = rooms[0].cy;
-  G.player.dir = rng() * Math.PI * 2;
-  // portal in the room farthest from start
-  let far = rooms[0], fd = -1;
-  for (const r of rooms) { const d = (r.cx - rooms[0].cx) ** 2 + (r.cy - rooms[0].cy) ** 2; if (d > fd) { fd = d; far = r; } }
-  G.portal = { x: far.cx, y: far.cy };
-  G.portalOpen = false;
-  // enemies in the other rooms
-  G.enemies = []; G.projectiles = []; G.loots = []; G.particles = []; G.floaters = [];
-  const isBossFloor = f % 5 === 0;
-  const count = Math.min(22, 5 + Math.floor(f * 1.4));
-  const hpScale = 1 + f * 0.22;
+  return { x: G.player.x + 12, y: G.player.y };
+}
+function spawnWave() {
+  const wv = G.wave;
+  const rng = mulberry32(G.seed + wv * 7919);
+  const isBossWave = wv % 5 === 0;
+  const count = Math.min(24, 5 + Math.floor(wv * 1.6));
+  const hpScale = 1 + wv * 0.18;
   for (let i = 0; i < count; i++) {
-    const r = rooms[1 + Math.floor(rng() * Math.max(1, rooms.length - 1))] || rooms[0];
-    const ex = r.x + 0.5 + rng() * (r.w - 1), ey = r.y + 0.5 + rng() * (r.h - 1);
-    if (Math.hypot(ex - G.player.x, ey - G.player.y) < 4) continue;
-    G.enemies.push(makeEnemy(rng, ex, ey, hpScale, f));
+    const pos = findSpawn(rng);
+    const e = makeEnemy(rng, pos.x, pos.y, hpScale, wv);
+    e.state = 'chase';   // waves converge on the player from all sides
+    G.enemies.push(e);
   }
-  if (isBossFloor) {
-    G.enemies.push(Object.assign(makeEnemy(rng, far.cx + 1, far.cy + 1, hpScale, f), {
-      type: 'warden', name: 'Floor Warden', hp: 550 * hpScale, maxHp: 550 * hpScale,
-      speed: 0.85, dmg: 16 + f, ranged: true, size: 1.5, boss: true, fireCd: 0,
+  if (isBossWave) {
+    const pos = findSpawn(rng);
+    G.enemies.push(Object.assign(makeEnemy(rng, pos.x, pos.y, hpScale, wv), {
+      type: 'warden', name: 'Warden', hp: 550 * hpScale, maxHp: 550 * hpScale,
+      speed: 0.85, dmg: 16 + wv, ranged: true, size: 1.5, boss: true, fireCd: 0, state: 'chase',
     }));
   }
-  G.kills = 0; G.quota = G.enemies.length;
   updateHud();
-  toast('🏰 Floor ' + f + (isBossFloor ? ' — WARDEN FLOOR' : '') + ' · clear all enemies to open the portal');
+  toast('🌊 Wave ' + wv + (isBossWave ? ' — WARDEN INBOUND!' : '') + ' · watch the minimap');
 }
 
 // Bulky on purpose: body shots take several hits — the fast way to kill is
@@ -763,11 +736,11 @@ function makeEnemy(rng, x, y, hpScale, floor) {
   };
 }
 
-/* ---------- map helpers ---------- */
+/* ---------- world helpers ---------- */
+// The infinite world's only solid cells are procedural trees/rocks (Minecraft-
+// style block collision) — obstacleAt() is defined with the renderer below.
 function solid(x, y) {
-  const xi = x | 0, yi = y | 0;
-  if (xi < 0 || yi < 0 || xi >= G.mw || yi >= G.mh) return true;
-  return G.map[yi][xi] === 1;
+  return obstacleAt(Math.floor(x), Math.floor(y)) !== null;
 }
 function tryMove(e, nx, ny, rad) {
   if (!solid(nx + rad, e.y) && !solid(nx - rad, e.y)) e.x = nx;
@@ -930,7 +903,7 @@ function damageEnemy(e, dmg, w, applyEffects, crit) {
   if (e.hp <= 0) onEnemyKilled(e, w);
 }
 function onEnemyKilled(e, w) {
-  G.kills++; G.totalKills++;
+  G.totalKills++;
   if (w && w.special && w.special.key === 'nova') {
     for (const o of G.enemies) {
       if (o === e || o.hp <= 0) continue;
@@ -939,22 +912,18 @@ function onEnemyKilled(e, w) {
     spawnBoom(e.x, e.y, '#7fd4ff');
   }
   rollDrop(e);
-  if (G.kills >= G.quota && !G.portalOpen) {
-    G.portalOpen = true;
-    toast('🌀 Portal open! Step in to descend to floor ' + (G.floor + 1));
-  }
   updateHud();
 }
 function rollDrop(e) {
   const rng = mulberry32((G.seed ^ (G.totalKills * 2654435761)) | 0);
   const dropChance = e.boss ? 1 : 0.34;
   if (rng() > dropChance && !G.nextDropFloorTier) {
-    if (rng() < 0.22) G.loots.push({ kind: 'health', x: e.x, y: e.y, amt: 25 + G.floor * 2 });
+    if (rng() < 0.22) G.loots.push({ kind: 'health', x: e.x, y: e.y, amt: 25 + G.wave * 2 });
     return;
   }
   const minTier = Math.max(G.nextDropFloorTier, e.boss ? 3 : 0);
   G.nextDropFloorTier = 0;   // milestone guarantee is consumed by this drop
-  const w = makeWeapon(rng, G.floor, luckNow(), minTier);
+  const w = makeWeapon(rng, G.wave, luckNow(), minTier);
   G.loots.push(Object.assign({ x: e.x, y: e.y }, { kind: 'weapon', w }));
   if (w.tier >= 4) toast(w.rarity.name + ' drop! ' + w.name, w.rarity.color);
 }
@@ -1088,10 +1057,10 @@ function endRun() {
   G.over = true;
   document.exitPointerLock && document.exitPointerLock();
   const mins = (performance.now() - G.startedAt) / 60000;
-  const cores = Math.max(1, Math.round(G.floor * 10 + G.totalKills * 1 + G.qCorrect * 5));
+  const cores = Math.max(1, Math.round(G.wave * 12 + G.totalKills * 1 + G.qCorrect * 5));
   meta.cores += cores; saveMeta();
   $('deathStats').innerHTML =
-    '<div><div class="k">Floors reached</div><div class="v">' + G.floor + '</div></div>'
+    '<div><div class="k">Waves survived</div><div class="v">🌊 ' + G.wave + '</div></div>'
     + '<div><div class="k">Enemies defeated</div><div class="v">' + G.totalKills + '</div></div>'
     + '<div><div class="k">Science answered</div><div class="v">' + G.qCorrect + '/' + G.qTotal + '</div></div>'
     + '<div><div class="k">Best streak</div><div class="v">🔥 ' + G.bestStreak + '</div></div>'
@@ -1140,11 +1109,16 @@ function tick(now) {
     if (G.reloading <= 0) { G.reloading = 0; G.ammo = magSize(); updateHud(); }
   }
 
-  // portal
-  if (G.portalOpen && Math.hypot(P.x - G.portal.x, P.y - G.portal.y) < 0.8) {
-    G.floor++;
-    healPlayer(20);
-    buildFloor();
+  // infinite waves: short breather once a wave is wiped, then the next rolls in
+  if (G.enemies.length === 0 && !G.breakT) {
+    G.breakT = 5;
+    healPlayer(15);
+    toast('✅ Wave ' + G.wave + ' cleared! +15 HP · next wave in 5s');
+    updateHud();
+  }
+  if (G.breakT > 0) {
+    G.breakT -= dt;
+    if (G.breakT <= 0) { G.breakT = 0; G.wave++; spawnWave(); }
   }
 
   // enemies
@@ -1204,53 +1178,62 @@ function tick(now) {
   render();
 }
 
-/* ════════════════ RENDER (raycaster) ════════════════ */
-const THEMES = [
-  { wall: [92, 104, 138], ceil: '#10131d', floor: '#1c202c' },
-  { wall: [128, 88, 88],  ceil: '#160f0f', floor: '#241a18' },
-  { wall: [84, 122, 96],  ceil: '#0d1510', floor: '#18231c' },
-  { wall: [122, 100, 140], ceil: '#130f1a', floor: '#201a2a' },
-  { wall: [140, 120, 82], ceil: '#17130c', floor: '#262015' },
-];
+/* ════════════════ RENDER (open-world outdoor renderer) ════════════════ */
 let zbuf = new Float32Array(REND_W);
-let HOR = REND_H / 2;   // horizon line — shifts with recoil view-kick (muzzle climb)
+let HOR = REND_H / 2;          // horizon line — shifts with pitch + recoil view-kick
+const VIEW_DIST = 26;          // fog / far clip in world units
+const TAN_HALF = Math.tan(FOV / 2);
+const ROAD_EVERY = 26;         // road grid pitch in world cells
+
+// deterministic per-cell hash — the whole infinite world grows from this
+function cellHash(ix, iy) {
+  let h = (ix * 374761393 + iy * 668265263) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function isRoad(ix, iy) {
+  const rx = ((ix % ROAD_EVERY) + ROAD_EVERY) % ROAD_EVERY;
+  const ry = ((iy % ROAD_EVERY) + ROAD_EVERY) % ROAD_EVERY;
+  return rx < 2 || ry < 2;
+}
+// trees/rocks are the world's only solid blocks; roads stay clear
+function obstacleAt(ix, iy) {
+  if (isRoad(ix, iy)) return null;
+  const h = cellHash(ix, iy);
+  if (h < 0.045) return 'tree';
+  if (h > 0.988) return 'rock';
+  return null;
+}
+
+// low-res ground buffer upscaled with smoothing OFF → chunky Minecraft blocks
+const GB_W = 240, GB_H = 168;
+const groundCanvas = document.createElement('canvas');
+groundCanvas.width = GB_W; groundCanvas.height = GB_H;
+const groundCtx = groundCanvas.getContext('2d');
+const groundImg = groundCtx.createImageData(GB_W, GB_H);
 
 function render() {
   if (!G) return;
   const P = G.player;
-  const th = THEMES[G.theme];
   HOR = Math.max(70, Math.min(REND_H - 40, REND_H / 2 + (P.pitch || 0) + Math.min(70, G.viewKick || 0)));
-  // ceiling & floor
-  ctx.fillStyle = th.ceil; ctx.fillRect(0, 0, REND_W, Math.max(0, HOR));
-  ctx.fillStyle = th.floor; ctx.fillRect(0, Math.max(0, HOR), REND_W, REND_H - HOR);
-  // walls
-  for (let col = 0; col < REND_W; col++) {
-    const camX = 2 * col / REND_W - 1;
-    const ang = P.dir + Math.atan(camX * Math.tan(FOV / 2));
-    const cd = Math.cos(ang - P.dir);
-    let mapX = P.x | 0, mapY = P.y | 0;
-    const rdx = Math.cos(ang), rdy = Math.sin(ang);
-    const ddx = Math.abs(1 / (rdx || 1e-9)), ddy = Math.abs(1 / (rdy || 1e-9));
-    let sx, sy, sdx, sdy;
-    if (rdx < 0) { sx = -1; sdx = (P.x - mapX) * ddx; } else { sx = 1; sdx = (mapX + 1 - P.x) * ddx; }
-    if (rdy < 0) { sy = -1; sdy = (P.y - mapY) * ddy; } else { sy = 1; sdy = (mapY + 1 - P.y) * ddy; }
-    let side = 0, dist = 0, guard = 0;
-    while (guard++ < 128) {
-      if (sdx < sdy) { sdx += ddx; mapX += sx; side = 0; } else { sdy += ddy; mapY += sy; side = 1; }
-      if (mapX < 0 || mapY < 0 || mapX >= G.mw || mapY >= G.mh || G.map[mapY][mapX] === 1) break;
+  zbuf.fill(VIEW_DIST);   // no walls — depth-sorted sprites occlude each other
+  drawSky(P);
+  drawGround(P);
+  // gather nearby world obstacles once — reused by sprites AND the minimap
+  const obstacles = [];
+  const pix = Math.floor(P.x), piy = Math.floor(P.y);
+  for (let iy = piy - 20; iy <= piy + 20; iy++) {
+    for (let ix = pix - 20; ix <= pix + 20; ix++) {
+      const kind = obstacleAt(ix, iy);
+      if (!kind) continue;
+      const dx = ix + 0.5 - P.x, dy = iy + 0.5 - P.y;
+      if (dx * dx + dy * dy > 400) continue;
+      obstacles.push({ x: ix + 0.5, y: iy + 0.5, kind });
     }
-    dist = side === 0 ? (sdx - ddx) : (sdy - ddy);
-    const perp = Math.max(0.08, dist * cd);
-    zbuf[col] = perp;
-    const h = Math.min(REND_H * 2, REND_H / perp);
-    const shade = Math.max(0.18, 1 - perp / 14) * (side === 1 ? 0.75 : 1);
-    const rr = (th.wall[0] * shade) | 0, gg = (th.wall[1] * shade) | 0, bb = (th.wall[2] * shade) | 0;
-    ctx.fillStyle = 'rgb(' + rr + ',' + gg + ',' + bb + ')';
-    ctx.fillRect(col, HOR - h / 2, 1, h);
   }
-  // sprites: portal + loot + enemies + projectiles, far → near
   const sprites = [];
-  sprites.push({ sx: G.portal.x, sy: G.portal.y, kind: 'portal' });
+  for (const o of obstacles) sprites.push({ sx: o.x, sy: o.y, kind: o.kind });
   for (const l of G.loots) sprites.push({ sx: l.x, sy: l.y, kind: 'loot', l });
   for (const e of G.enemies) sprites.push({ sx: e.x, sy: e.y, kind: 'enemy', e });
   for (const pr of G.projectiles) sprites.push({ sx: pr.x, sy: pr.y, kind: 'proj' });
@@ -1263,7 +1246,156 @@ function render() {
   for (const s of sprites) drawSprite(s);
   drawTracers();
   drawViewModel();
+  drawMinimap(obstacles);
   drawCrosshair();
+}
+
+function wrapAngle(a) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+// periodic ridge noise so mountains tile seamlessly around the full compass
+function ridgeNoise(a, s1, s2, s3) {
+  return (Math.sin(a * 3 + s1) + Math.sin(a * 7 + s2) * 0.5 + Math.sin(a * 13 + s3) * 0.25 + 1.75) / 3.5;
+}
+function drawSky(P) {
+  const grd = ctx.createLinearGradient(0, 0, 0, HOR);
+  grd.addColorStop(0, '#5fb2ff');
+  grd.addColorStop(1, '#d9eeff');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, REND_W, HOR);
+  // sun at a fixed compass bearing — a landmark for navigation
+  const sunRel = wrapAngle(0.9 - P.dir);
+  if (Math.abs(sunRel) < FOV) {
+    const sx = REND_W / 2 * (1 + Math.tan(sunRel) / TAN_HALF);
+    ctx.save(); ctx.shadowColor = '#fff3b0'; ctx.shadowBlur = 40;
+    ctx.fillStyle = '#fff3b0';
+    ctx.beginPath(); ctx.arc(sx, HOR - 170, 26, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  // drifting blocky clouds
+  const t = performance.now() / 1000;
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  for (let i = 0; i < 7; i++) {
+    const rel = wrapAngle(i * 0.9 + t * 0.008 - P.dir);
+    if (Math.abs(rel) > FOV) continue;
+    const sx = REND_W / 2 * (1 + Math.tan(rel) / TAN_HALF);
+    const sy = HOR - 210 + (i % 3) * 34;
+    ctx.fillRect(sx - 46, sy, 92, 14);
+    ctx.fillRect(sx - 30, sy - 12, 60, 12);
+  }
+  // mountain ridges: far hazy blue range, then a nearer green-grey one
+  drawRidge(P, 1.0, 46, 66, '#9db5d6', 0, 2.1, 4.2);
+  drawRidge(P, 1.6, 24, 78, '#7d9c85', 8.3, 1.1, 5.9);
+}
+function drawRidge(P, freq, base, amp, color, s1, s2, s3) {
+  ctx.fillStyle = color;
+  for (let x = 0; x < REND_W; x += 4) {
+    const rel = Math.atan(((2 * x / REND_W) - 1) * TAN_HALF);
+    const a = P.dir + rel;
+    const h = base + amp * ridgeNoise(a * freq, s1, s2, s3);
+    ctx.fillRect(x, HOR - h, 4, h + 1);
+  }
+}
+function drawGround(P) {
+  const d = groundImg.data;
+  const sinD = Math.sin(P.dir), cosD = Math.cos(P.dir);
+  const groundH = REND_H - HOR;
+  let o = 0;
+  for (let ry = 0; ry < GB_H; ry++) {
+    const sy = HOR + (ry + 0.5) * groundH / GB_H;
+    const rowDist = REND_H / (2 * (sy - HOR));   // same projection as the old wall math
+    const fx = P.x + cosD * rowDist, fy = P.y + sinD * rowDist;
+    const rxs = -sinD * rowDist * TAN_HALF, rys = cosD * rowDist * TAN_HALF;
+    const fog = Math.min(1, Math.max(0, (rowDist - 4) / VIEW_DIST)) * 0.9;
+    for (let rx = 0; rx < GB_W; rx++) {
+      const tOff = 2 * rx / GB_W - 1;
+      const wx = fx + rxs * tOff, wy = fy + rys * tOff;
+      const ix = Math.floor(wx), iy = Math.floor(wy);
+      let r, g2, b;
+      if (isRoad(ix, iy)) {
+        const rxm = ((ix % ROAD_EVERY) + ROAD_EVERY) % ROAD_EVERY;
+        const rym = ((iy % ROAD_EVERY) + ROAD_EVERY) % ROAD_EVERY;
+        const dash = (rxm === 1 && rym >= 2 && ((iy % 6) + 6) % 6 < 2)
+                  || (rym === 1 && rxm >= 2 && ((ix % 6) + 6) % 6 < 2);
+        if (dash) { r = 222; g2 = 214; b = 160; }              // painted centre dashes
+        else { const v = 84 + cellHash(ix, iy) * 22; r = v; g2 = v + 3; b = v + 8; }
+      } else {
+        const h = cellHash(ix, iy);
+        if (h > 0.976 && h < 0.988) { r = 228; g2 = 202; b = 84; }   // wildflowers
+        else { const v = 0.8 + h * 0.35; r = 74 * v; g2 = 152 * v; b = 58 * v; }
+      }
+      // fade to the horizon sky colour with distance
+      r += (214 - r) * fog; g2 += (235 - g2) * fog; b += (250 - b) * fog;
+      d[o] = r; d[o + 1] = g2; d[o + 2] = b; d[o + 3] = 255;
+      o += 4;
+    }
+  }
+  groundCtx.putImageData(groundImg, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(groundCanvas, 0, HOR, REND_W, groundH);
+  ctx.imageSmoothingEnabled = true;
+}
+
+/* ---------- minimap: player-up rotating radar, enemies as red blips ---------- */
+function drawMinimap(obstacles) {
+  const S = 150, x0 = 14, y0 = 14, c = S / 2, cxm = x0 + c, cym = y0 + c, scale = 2.9;
+  const P = G.player;
+  const a = -P.dir - Math.PI / 2, ca = Math.cos(a), sa = Math.sin(a);
+  const put = (wx, wy, clampRim) => {
+    let px2 = ((wx - P.x) * ca - (wy - P.y) * sa) * scale;
+    let py2 = ((wx - P.x) * sa + (wy - P.y) * ca) * scale;
+    if (clampRim) {
+      const dd = Math.hypot(px2, py2), max = c - 7;
+      if (dd > max) { px2 *= max / dd; py2 *= max / dd; }
+    }
+    return { x: cxm + px2, y: cym + py2 };
+  };
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cxm, cym, c, 0, 7); ctx.clip();
+  ctx.fillStyle = 'rgba(10,16,12,0.78)';
+  ctx.fillRect(x0, y0, S, S);
+  // road grid
+  ctx.strokeStyle = 'rgba(150,155,165,0.55)'; ctx.lineWidth = 2 * scale;
+  for (let k = Math.floor((P.x - 30) / ROAD_EVERY); k <= Math.floor((P.x + 30) / ROAD_EVERY); k++) {
+    const p1 = put(k * ROAD_EVERY + 1, P.y - 30), p2 = put(k * ROAD_EVERY + 1, P.y + 30);
+    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+  }
+  for (let k = Math.floor((P.y - 30) / ROAD_EVERY); k <= Math.floor((P.y + 30) / ROAD_EVERY); k++) {
+    const p1 = put(P.x - 30, k * ROAD_EVERY + 1), p2 = put(P.x + 30, k * ROAD_EVERY + 1);
+    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+  }
+  // trees & rocks
+  for (const ob of obstacles) {
+    const p = put(ob.x, ob.y);
+    ctx.fillStyle = ob.kind === 'tree' ? 'rgba(52,120,60,0.9)' : 'rgba(130,130,135,0.9)';
+    ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
+  }
+  // loot beams
+  for (const l of G.loots) {
+    const p = put(l.x, l.y);
+    ctx.fillStyle = l.kind === 'health' ? '#43d17c' : l.w.rarity.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, 7); ctx.fill();
+  }
+  // enemies — clamped to the rim when far so you always see where they are
+  for (const e of G.enemies) {
+    if (e.hp <= 0) continue;
+    const p = put(e.x, e.y, true);
+    ctx.fillStyle = e.boss ? '#c05cff' : '#ff4b57';
+    ctx.beginPath(); ctx.arc(p.x, p.y, e.boss ? 4.5 : 3, 0, 7); ctx.fill();
+  }
+  // player wedge, always centre facing up
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.moveTo(cxm, cym - 6); ctx.lineTo(cxm - 4.5, cym + 5); ctx.lineTo(cxm + 4.5, cym + 5); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(160,180,200,0.6)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cxm, cym, c, 0, 7); ctx.stroke();
+  // N marker on the rim
+  const n = put(P.x, P.y - 1000, true);
+  const dxn = n.x - cxm, dyn = n.y - cym, m = Math.hypot(dxn, dyn) || 1;
+  ctx.fillStyle = '#dfe8f5'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('N', cxm + dxn / m * (c - 11), cym + dyn / m * (c - 11) + 4);
 }
 
 // project a world point to screen x + perp depth; null if behind the camera
@@ -1276,7 +1408,7 @@ function projectPoint(wx, wy) {
   const dist = Math.hypot(dx, dy);
   const perp = dist * Math.cos(rel);
   if (perp <= 0.1 || Math.abs(rel) > FOV / 2 + 0.8) return null;
-  return { x: (REND_W / 2) * (1 + Math.tan(rel) / Math.tan(FOV / 2)), perp };
+  return { x: (REND_W / 2) * (1 + Math.tan(rel) / TAN_HALF), perp };
 }
 function drawTracers() {
   for (const p of G.particles) {
@@ -1309,16 +1441,14 @@ function drawSprite(s) {
   const screenX = (REND_W / 2) * (1 + Math.tan(rel) / Math.tan(FOV / 2));
   const size = REND_H / perp;
 
-  if (s.kind === 'portal') {
-    const open = G.portalOpen;
-    const h = size * 1.4, w = size * 0.8;
-    drawClipped(screenX, w, perp, (x0, x1) => {
-      const grd = ctx.createLinearGradient(0, HOR - h / 2, 0, HOR + h / 2);
-      grd.addColorStop(0, open ? 'rgba(90,220,255,0)' : 'rgba(120,120,140,0)');
-      grd.addColorStop(0.5, open ? 'rgba(90,220,255,0.85)' : 'rgba(120,120,140,0.4)');
-      grd.addColorStop(1, open ? 'rgba(90,220,255,0)' : 'rgba(120,120,140,0)');
-      ctx.fillStyle = grd;
-      ctx.fillRect(x0, HOR - h / 2, x1 - x0, h);
+  if (s.kind === 'tree' || s.kind === 'rock') {
+    const spr = obstacleSprites[s.kind];
+    const hf = s.kind === 'tree' ? 2.5 : 1.0;
+    const eh = size * hf;
+    const ew = eh * (SPR_W / SPR_H) * (s.kind === 'tree' ? 1.05 : 1.35);
+    const top = HOR + size * 0.48 - eh;
+    drawClipped(screenX, ew, perp, () => {
+      ctx.drawImage(spr, screenX - ew / 2, top, ew, eh);
     });
     return;
   }
@@ -1535,6 +1665,32 @@ function drawEnemyArt(g, type, f) {
 }
 buildEnemySprites();
 
+/* ---------- blocky Minecraft-style world props (12×16 pixel grid) ---------- */
+const obstacleSprites = {};
+function buildObstacleSprites() {
+  obstacleSprites.tree = sprCanvas(g => {
+    const px = 8;
+    const put2 = (x, y, w2, h2, c) => { g.fillStyle = c; g.fillRect(x * px, y * px, w2 * px, h2 * px); };
+    put2(5, 10, 2, 6, '#6b4a2b');      // trunk
+    put2(5, 10, 1, 6, '#7d5732');      // trunk highlight
+    put2(1, 5, 10, 2, '#357f36');      // canopy — stacked leaf blocks
+    put2(2, 3, 8, 3, '#3e8f3e');
+    put2(3, 1, 6, 3, '#4aa348');
+    put2(4, 2, 3, 1, '#5cb85a');       // sunlit top
+    put2(2, 7, 8, 2, '#2e6f30');       // canopy underside
+  });
+  obstacleSprites.rock = sprCanvas(g => {
+    const px = 8;
+    const put2 = (x, y, w2, h2, c) => { g.fillStyle = c; g.fillRect(x * px, y * px, w2 * px, h2 * px); };
+    put2(2, 11, 8, 4, '#8b9097');
+    put2(3, 9, 6, 2, '#9aa0a8');
+    put2(4, 8, 3, 1, '#a8aeb6');
+    put2(2, 15, 8, 1, '#767b82');
+    put2(6, 11, 3, 2, '#7d838b');      // shadowed facet
+  });
+}
+buildObstacleSprites();
+
 /* ---------- first-person gun viewmodels (per archetype, procedural) ---------- */
 let bobT = 0;   // walk-bob clock — advances only while moving
 function drawViewModel() {
@@ -1666,8 +1822,9 @@ function drawCrosshair() {
 /* ════════════════ HUD ════════════════ */
 function updateHud() {
   if (!G) return;
-  $('hudFloor').textContent = '🏰 Floor ' + G.floor;
-  $('hudKills').textContent = G.portalOpen ? '🌀 Portal open!' : '👾 ' + G.kills + '/' + G.quota;
+  $('hudFloor').textContent = '🌊 Wave ' + G.wave;
+  const alive = G.enemies.filter(e => e.hp > 0).length;
+  $('hudKills').textContent = alive === 0 ? '⏳ next wave…' : '👾 ' + alive + ' left';
   const luckPct = Math.round((luckNow() - 1) * 100);
   const st = $('hudStreak');
   st.textContent = '🔥 Streak ' + G.streak + ' · Luck +' + luckPct + '%';
