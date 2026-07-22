@@ -5671,6 +5671,12 @@ option {
         </div>
       </div>
       <div class="page-body" style="max-width:960px;">
+        <div class="filter-bar" style="margin-bottom:16px;">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="vettingSearch" placeholder="Search words or \"phrases\" in title/content..." oninput="renderVettingList()">
+          </div>
+        </div>
         <div class="question-bank-grid" id="vettingListGrid"></div>
       </div>
     </div>
@@ -9168,7 +9174,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.145.0';
+const APP_VERSION = 'v1.146.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15165,6 +15171,9 @@ function extractQuestionSearchText(q) {
       parts.push(stripHtmlToText(block.answer));
     } else if (block.type === 'answerKey') {
       parts.push(stripHtmlToText(block.text));
+    } else if (block.type === 'fillblank') {
+      // [[answer]] markers become plain words so the blanked answers are searchable too
+      parts.push(stripHtmlToText(String(block.text || '').replace(/\[\[|\]\]/g, ' ')));
     }
   });
   return parts.join(' ').toLowerCase();
@@ -15681,9 +15690,27 @@ function renderVettingList() {
     return;
   }
 
+  // Search filter — same engine as the Question Bank: every token (or "quoted
+  // phrase") must appear somewhere in the title, tags or block content.
+  const searchTokens = parseSearchTokens((document.getElementById('vettingSearch')?.value || '').trim());
+  const visible = searchTokens.length === 0 ? vettingList : vettingList.filter(q => {
+    const haystack = extractQuestionSearchText(q);
+    return searchTokens.every(token => haystack.includes(token));
+  });
+
+  if (visible.length === 0 && searchTokens.length > 0) {
+    container.innerHTML = jobCards + `
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <h3>No matching questions</h3>
+        <p>No vetting questions match your search — try fewer or different words</p>
+      </div>`;
+    return;
+  }
+
   // Newest additions first, so the most recently added (most relevant to review
   // now) sit at the top. Falls back to array order when timestamps are missing.
-  const ordered = vettingList
+  const ordered = visible
     .map((q, i) => ({ q, i }))
     .sort((a, b) => {
       const ta = Date.parse(_vetAddedAt(a.q)) || 0, tb = Date.parse(_vetAddedAt(b.q)) || 0;
