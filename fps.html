@@ -405,7 +405,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v0.7.1 BETA</div>
+<div id="versionBadge">Science Strike v0.7.2 BETA</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -560,6 +560,9 @@ async function loadQuestions() {
         snap.forEach(d => {
           const q = d.data();
           if (!q || !q.id || seen.has(q.id) || q.status === 'pending' || q.status === 'flagged') return;
+          // retired topics (e.g. Cell Systems) are past-paper-completion only —
+          // mirror index.html's qInSyllabus rule so they never appear in the FPS
+          if (q.notInSyllabus || /cell\s*system/i.test(q.topic || '')) return;
           seen.add(q.id);
           const m = extractMcq(q);
           if (m) pool.push(m);
