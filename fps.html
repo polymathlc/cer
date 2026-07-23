@@ -313,6 +313,7 @@
       <b>Elements:</b> 🔥 burn · ❄ slow · ⚡ stun · ☠ poison<br>
       <b>Questions:</b> one every 15s. Streaks raise loot luck; milestones (3/5/8/12) guarantee better drops. A wrong answer resets the streak.<br>
       <b>Minimap</b> (top-left): red blips are enemies — far ones stick to the rim so you always know which way to turn. Grey lines are roads, the sun sits at a fixed compass point.<br>
+      <b>Waves:</b> most of every wave is a swarm of tiny minions that barely scratch you — mow them down! A few real enemies fight among them, and every so often a 💀 <b>ELITE</b> (orange HP bar and minimap blip) hunts you with serious damage — but it always drops Rare-or-better loot.<br>
       Wipe a wave to get a 5-second breather, then a bigger wave rolls in. Waves never end — how long can you last?
     </div>
 
@@ -405,7 +406,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v0.7.2 BETA</div>
+<div id="versionBadge">Science Strike v0.8.0 BETA</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -1150,19 +1151,61 @@ function findSpawn(rng) {
   }
   return { x: G.player.x + 12, y: G.player.y };
 }
+// Power-fantasy wave recipe: ~70% of every wave is a SWARM of tiny, fragile
+// minions that barely scratch you — pure slaughter fodder — with a core of
+// regular enemies, and every so often a hulking ELITE peppered in.
+const MINION_BASES = ['crawler', 'stingwasp', 'emberbat', 'voltspider', 'fanghound', 'acidooze'];
+const ELITE_BASES = ['brute', 'siegegolem', 'scrapwalker', 'pylonmech', 'marauder', 'thornboar', 'frostwolf'];
+function makeMinion(rng, x, y, wave) {
+  const base = ENEMY_INDEX[MINION_BASES[Math.floor(rng() * MINION_BASES.length)]];
+  const hp = (9 + wave * 0.8) * (0.85 + rng() * 0.3);   // one or two hits and it pops
+  return {
+    type: base.type, x, y, hp, maxHp: hp,
+    speed: base.speed * 1.1, dmg: Math.min(4, 1 + wave * 0.12),   // barely tickles
+    ranged: false, size: base.size * 0.6, state: 'chase', minion: true,
+    burn: 0, poison: 0, slow: 0, stun: 0, hitFlash: 0, atkCd: 0, fireCd: 0,
+    wanderDir: rng() * 6.28, wanderT: 0, animPhase: rng() < 0.5 ? 0 : 1,
+  };
+}
+function makeElite(rng, x, y, wave, hpScale) {
+  const base = ENEMY_INDEX[ELITE_BASES[Math.floor(rng() * ELITE_BASES.length)]];
+  const e = makeEnemy(rng, x, y, hpScale, wave);
+  return Object.assign(e, {
+    type: base.type,
+    hp: base.hp * hpScale * 5, maxHp: base.hp * hpScale * 5,
+    dmg: Math.round((base.dmg + wave * 0.8) * 2.2),
+    speed: base.speed * 0.9,
+    ranged: base.ranged, size: base.size * 1.4,
+    elite: true, state: 'chase', fireCd: 0,
+  });
+}
 function spawnWave() {
   const wv = G.wave;
   const rng = mulberry32(G.seed + wv * 7919);
   const isBossWave = wv % 5 === 0;
-  const count = Math.min(24, 5 + Math.floor(wv * 1.6));
   const hpScale = 1 + wv * 0.18;
-  for (let i = 0; i < count; i++) {
+  const idle = () => skillLv('ghost') ? 'idle' : 'chase';
+  // the swarm: lots of fodder to mow down
+  const swarmN = Math.min(22, 8 + Math.floor(wv * 1.4));
+  for (let i = 0; i < swarmN; i++) {
+    const pos = findSpawn(rng);
+    const e = makeMinion(rng, pos.x, pos.y, wv);
+    e.state = idle();
+    G.enemies.push(e);
+  }
+  // the core: a handful of real enemies
+  const coreN = Math.min(9, 2 + Math.floor(wv * 0.7));
+  for (let i = 0; i < coreN; i++) {
     const pos = findSpawn(rng);
     const e = makeEnemy(rng, pos.x, pos.y, hpScale, wv);
-    // waves converge on the player — unless the sniper's Ghost skill keeps
-    // them unaware until they wander into the (reduced) aggro radius
-    e.state = skillLv('ghost') ? 'idle' : 'chase';
+    e.state = idle();
     G.enemies.push(e);
+  }
+  // the spice: an ELITE every 3rd wave (and randomly later on)
+  const eliteN = (wv % 3 === 0 ? 1 : 0) + (wv >= 8 && rng() < 0.35 ? 1 : 0);
+  for (let i = 0; i < eliteN; i++) {
+    const pos = findSpawn(rng);
+    G.enemies.push(makeElite(rng, pos.x, pos.y, wv, hpScale));
   }
   if (isBossWave) {
     const pos = findSpawn(rng);
@@ -1172,7 +1215,9 @@ function spawnWave() {
     }));
   }
   updateHud();
-  toast('🌊 Wave ' + wv + (isBossWave ? ' — WARDEN INBOUND!' : '') + ' · watch the minimap');
+  toast('🌊 Wave ' + wv
+    + (isBossWave ? ' — WARDEN INBOUND!' : eliteN ? ' — 💀 an ELITE hunts you!' : '')
+    + ' · watch the minimap');
 }
 
 // Bulky on purpose: body shots take several hits — the fast way to kill is
@@ -1532,7 +1577,7 @@ function damageEnemy(e, dmg, w, applyEffects, crit) {
 }
 function onEnemyKilled(e, w) {
   G.totalKills++;
-  awardCores(e.boss ? 10 : 1);      // banked + saved instantly
+  awardCores(e.boss ? 10 : e.elite ? 5 : 1);      // banked + saved instantly
   const adren = skillLv('adrenaline');
   if (adren) healPlayer(adren * 1.5);
   if (w && w.special && w.special.key === 'nova') {
@@ -1554,7 +1599,8 @@ const GRENADE_TYPES = {
 };
 function rollDrop(e) {
   const rng = mulberry32((G.seed ^ (G.totalKills * 2654435761)) | 0);
-  const dropChance = (e.boss ? 1 : 0.34) + skillLv('scrapper') * 0.02 + skillLv('cap_junkrat') * 0.05;
+  // minions are loot-stingy (they die by the dozen); elites always drop big
+  const dropChance = (e.boss || e.elite ? 1 : e.minion ? 0.07 : 0.34) + skillLv('scrapper') * 0.02 + skillLv('cap_junkrat') * 0.05;
   if (rng() > dropChance && !G.nextDropFloorTier) {
     const r2 = rng();
     if (r2 < 0.20) G.loots.push({ kind: 'health', x: e.x, y: e.y, amt: 25 + G.wave * 2, z: 0.6, vz: 1.5 });
@@ -1565,7 +1611,7 @@ function rollDrop(e) {
     }
     return;
   }
-  const minTier = Math.max(G.nextDropFloorTier, e.boss ? 3 : 0);
+  const minTier = Math.max(G.nextDropFloorTier, e.boss ? 3 : e.elite ? 2 : 0);
   G.nextDropFloorTier = 0;   // milestone guarantee is consumed by this drop
   const w = makeWeapon(rng, G.wave, luckNow(), minTier);
   // the whole gun model tumbles out of the enemy and lands on the grass
@@ -2269,8 +2315,8 @@ function drawMinimap(obstacles) {
   for (const e of G.enemies) {
     if (e.hp <= 0) continue;
     const p = put(e.x, e.y, true);
-    ctx.fillStyle = e.boss ? '#c05cff' : '#ff4b57';
-    ctx.beginPath(); ctx.arc(p.x, p.y, e.boss ? 4.5 : 3, 0, 7); ctx.fill();
+    ctx.fillStyle = e.boss ? '#c05cff' : e.elite ? '#ffa028' : '#ff4b57';
+    ctx.beginPath(); ctx.arc(p.x, p.y, e.boss ? 4.5 : e.elite ? 4 : e.minion ? 2.2 : 3, 0, 7); ctx.fill();
   }
   // player wedge, always centre facing up
   ctx.fillStyle = '#ffffff';
@@ -2521,8 +2567,12 @@ function drawSprite(s) {
     const bw = ew * 0.9;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(screenX - bw / 2, top - 8, bw, 4);
-    ctx.fillStyle = e.boss ? '#ff5d9e' : '#ff5d6c';
+    ctx.fillStyle = e.boss ? '#ff5d9e' : e.elite ? '#ffa028' : '#ff5d6c';
     ctx.fillRect(screenX - bw / 2, top - 8, bw * Math.max(0, e.hp / e.maxHp), 4);
+    if (e.elite) {   // elites announce themselves
+      ctx.font = 'bold ' + Math.max(9, size * 0.09) + 'px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('💀', screenX, top - 14);
+    }
     // status pips
     let px = screenX - bw / 2;
     ctx.font = '10px monospace'; ctx.textAlign = 'left';
