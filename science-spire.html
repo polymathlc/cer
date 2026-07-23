@@ -1139,11 +1139,16 @@ var QBANK = [
 var SEEN_STATS = {};
 var Q_CYCLE = {};
 function _qLast(q){ var s = q && q.id != null ? SEEN_STATS[q.id] : null; return (s && s.last) || 0; }
+var _sessionAsked = [];   // last served ids — no back-to-back repeats after a round reset
 function pickQuestion(){
   if(!QBANK.length) return null;
   // Every question served once this round? Start the next round.
   if(QBANK.every(function(q){ return q.id != null && Q_CYCLE[q.id]; })) Q_CYCLE = {};
   var pool = QBANK.filter(function(q){ return !(q.id != null && Q_CYCLE[q.id]); });
+  // Never re-serve one of the last few questions while any alternative exists.
+  var avoid = _sessionAsked.slice(-3);
+  var freshPool = pool.filter(function(q){ return !(q && q.id != null && avoid.indexOf(q.id) >= 0); });
+  if(freshPool.length) pool = freshPool;
   var unseen = pool.filter(function(q){ return !(q && q.id != null && SEEN_STATS[q.id]); });
   var choice;
   if(unseen.length){
@@ -1152,7 +1157,13 @@ function pickQuestion(){
     pool.sort(function(a,b){ return _qLast(a) - _qLast(b); }); // last done longest ago first
     choice = pool[0];
   }
-  if(choice && choice.id != null) Q_CYCLE[choice.id] = 1;
+  if(choice && choice.id != null){
+    Q_CYCLE[choice.id] = 1;
+    _sessionAsked.push(choice.id);
+    if(_sessionAsked.length > 12) _sessionAsked.shift();
+    // Tell the parent it was SHOWN so the cross-game rotation stops re-serving it.
+    try{ if(usingBank && embedded()) window.parent.postMessage({ type:'SD_SHOWN', questionId:choice.id }, '*'); }catch(e){}
+  }
   return choice;
 }
 function noteQuestionAnswered(q, correct){
@@ -1178,7 +1189,7 @@ function _showPlayLimit(){ toast("Out of game credits — answer 5 questions in 
 
 /* ============================ MESSAGING ============================ */
 var _bankTries=0, _assetTries=0;
-function requestBank(){ if(usingBank) return; if(!embedded()) return; try{ window.parent.postMessage({type:'SD_REQUEST_QUESTIONS'},'*'); }catch(e){} _bankTries++; if(_bankTries<8&&!usingBank) setTimeout(requestBank,1200); }
+function requestBank(){ if(usingBank) return; if(!embedded()) return; try{ window.parent.postMessage({type:'SD_REQUEST_QUESTIONS'},'*'); }catch(e){} _bankTries++; if(!usingBank) setTimeout(requestBank, _bankTries<8?1200:5000); /* keep asking — a slow bank load must not strand the sitting on the fallback questions */ }
 function requestAssets(){ if(!embedded()) return; try{ window.parent.postMessage({type:'SPIRE_REQUEST_ASSETS'},'*'); }catch(e){} _assetTries++; if(_assetTries<5) setTimeout(requestAssets,1500); }
 window.addEventListener('message', function(ev){
   var d=ev&&ev.data; if(!d) return;

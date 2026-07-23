@@ -6701,7 +6701,7 @@ option {
           </div>
           <div class="subtitle">Top-down action RPG — pick a class, grow a Diablo-style skill tree, and answer a science question every 20 seconds. Beta: no game leaderboard yet, but questions still count.</div>
         </div>
-        <a class="btn btn-outline" href="science-legends.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+        <a class="btn btn-outline admin-only" href="science-legends.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
       </div>
       <iframe id="legendsFrame" class="embed-frame" title="Science Legends — Top-Down Action RPG MCQ (BETA)"></iframe>
     </div>
@@ -6715,7 +6715,7 @@ option {
           </div>
           <div class="subtitle">Dungeon crawler — procedural floors, idle monster packs, boss loot, and questions powered by action points: answer wrong and you fight the next turn on ⅓ actions.</div>
         </div>
-        <a class="btn btn-outline" href="science-slayers.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+        <a class="btn btn-outline admin-only" href="science-slayers.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
       </div>
       <iframe id="slayersFrame" class="embed-frame" title="Science Slayers — Dungeon Crawler MCQ (BETA)"></iframe>
     </div>
@@ -9240,7 +9240,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.153.0';
+const APP_VERSION = 'v1.154.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -17648,7 +17648,7 @@ function onPracticeStudentChange() {
   const sel = document.getElementById('practiceStudentSelect');
   activeStudentIndex = sel.value !== '' ? parseInt(sel.value) : -1;
   practiceSessionResults = [];   // a new student starts a fresh session
-  _practiceServed = {};
+  _practiceServed = _practiceServedLoad(students[activeStudentIndex]);
   if (activeStudentIndex >= 0) {
     renderPracticeReady();
   } else {
@@ -17702,7 +17702,14 @@ function getQuestionsForLevel(level) {
 }
 
 let practiceSessionResults = []; // per-question results for the end-of-session report
-let _practiceServed = {};        // qid -> times served THIS session (rotation for count ties)
+// qid -> times served to this student profile (rotation for count ties).
+// Persisted per (admin uid + profile name) so switching students or reloading
+// the page no longer restarts the rotation from scratch — attempts on this
+// page aren't written to the shared log, so this map is its only memory.
+let _practiceServed = {};
+function _practiceServedKey(stu) { return 'practiceServed_' + ((currentUser && currentUser.uid) || 'anon') + '_' + ((stu && stu.name) || ''); }
+function _practiceServedLoad(stu) { if (!stu) return {}; try { return JSON.parse(localStorage.getItem(_practiceServedKey(stu))) || {}; } catch (_) { return {}; } }
+function _practiceServedSave(stu) { if (!stu) return; try { localStorage.setItem(_practiceServedKey(stu), JSON.stringify(_practiceServed)); } catch (_) {} }
 
 async function loadRandomPracticeQuestion() {
   rpgQuestionChanged();
@@ -17733,6 +17740,7 @@ async function loadRandomPracticeQuestion() {
   ordered.sort((a, b) => (_practiceServed[a.id] || 0) - (_practiceServed[b.id] || 0)); // stable: keeps count-priority within equal serves
   const q = ordered[0];
   _practiceServed[q.id] = (_practiceServed[q.id] || 0) + 1;
+  _practiceServedSave(student);
   renderPracticeQuestion(q, student);
 }
 
@@ -21225,8 +21233,10 @@ async function famSaveAddress() {
 // everywhere: questions never attempted first, then lowest best-percentage.
 let _qAttemptStats = null;   // { '<questionId>': { n, correct, best } }
 let _qAttemptStatsAt = 0;
+let _qAttemptStatsUid = '';  // who the cache belongs to — never reuse across accounts
 async function loadAttemptStats(force) {
   if (!currentUser || !currentUser.uid || !db) { _qAttemptStats = _qAttemptStats || {}; return _qAttemptStats; }
+  if (_qAttemptStatsUid !== currentUser.uid) { _qAttemptStats = null; _qAttemptStatsAt = 0; }
   if (_qAttemptStats && !force && (Date.now() - _qAttemptStatsAt) < 5 * 60 * 1000) return _qAttemptStats;
   try {
     const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', currentUser.uid)));
@@ -21242,6 +21252,7 @@ async function loadAttemptStats(force) {
     });
     _qAttemptStats = stats;
     _qAttemptStatsAt = Date.now();
+    _qAttemptStatsUid = currentUser.uid;
   } catch (e) { console.warn('attempt stats load', e); _qAttemptStats = _qAttemptStats || {}; }
   return _qAttemptStats;
 }
@@ -21490,9 +21501,13 @@ function buildQpQueue(level) {
   const served = new Set(qpLoadSeen());
   const unattempted = ordered.filter(q => !stats[String(q.id)]);
   const attempted = ordered.filter(q => !!stats[String(q.id)]);
+  // Recently-served demotion applies to BOTH groups: a question opened and
+  // abandoned last session keeps its attempt-priority rank, so without this it
+  // would lead the queue again every single sitting.
   return unattempted.filter(q => !served.has(String(q.id)))
     .concat(unattempted.filter(q => served.has(String(q.id))))
-    .concat(attempted);
+    .concat(attempted.filter(q => !served.has(String(q.id))))
+    .concat(attempted.filter(q => served.has(String(q.id))));
 }
 
 // Student shortcut: jump straight into MCQ-only Quick Practice.
@@ -22465,9 +22480,14 @@ async function tpStartPractice() {
   // (orderByAttemptPriority shuffles within those groups).
   await loadAttemptStats();
   const questionsByTopic = {};
+  const tpServed = new Set(qpLoadSeen());   // same served memory as quick practice
   tpActiveTopics.forEach(topic => {
     const markable = questionBank.filter(q => questionHasMarkableAnswer(q) && qInSyllabus(q) && qMatchesTopic(q, topic) && qWithinStudentLevel(q));
-    questionsByTopic[topic] = orderByAttemptPriority(markable);
+    const ordered = orderByAttemptPriority(markable);
+    // Demote questions served recently in any practice session so abandoned
+    // sessions don't lead with the same questions every time.
+    questionsByTopic[topic] = ordered.filter(q => !tpServed.has(String(q.id)))
+      .concat(ordered.filter(q => tpServed.has(String(q.id))));
   });
 
   // Interleave: round-robin across topics, skip exhausted topics
@@ -22554,7 +22574,9 @@ function tpLoadNextQuestion() {
     tpUpdateProgress();
     return;
   }
-  tpRenderQuestion(tpQueue[tpIndex]);
+  const _tpQ = tpQueue[tpIndex];
+  if (_tpQ && _tpQ.id) qpMarkServed(_tpQ.id); // shared served memory with quick practice
+  tpRenderQuestion(_tpQ);
   tpUpdateProgress();
 }
 
@@ -25853,6 +25875,9 @@ function rpgOnSignOut() {
   advToken++; adv = null;
   rpgState = null;
   rpgBoardRows = null;
+  // Drop the attempt-stats cache: on a shared device the next sign-in must
+  // not inherit this student's serving order.
+  _qAttemptStats = null; _qAttemptStatsAt = 0; _qAttemptStatsUid = '';
   rpgApplyVisibility();
   const battle = $("rpgBattle");
   if (battle) { battle.style.display = "none"; battle.innerHTML = ""; }
@@ -29780,57 +29805,76 @@ function _noteQuestionForCredit(qid) {
 function _playsLeftPayload() { const n = _creditsLeft(); return { defenders: n, raiders: n, spire: n, legends: n, slayers: n }; }
 
 // ---- No-repeat rotation for game questions (invisible to students) ----
-// A per-student localStorage counter marks every question a game mode has
-// served. Games only receive questions with NO counter this cycle; once every
-// eligible question carries a counter, the counters reset and a fresh cycle
-// begins. The key is shared with Science Strike (fps.html) so the rotation
-// spans every game mode. The counter is internal bookkeeping — it is never
-// rendered anywhere a student can see.
+// A per-student localStorage map stamps every question a game mode serves with
+// the time it was last shown. Games receive never-served questions first; when
+// those run low, the payload is topped up with the least-recently-served ones
+// so a run always has enough variety and nothing comes back until everything
+// else has had a turn. The key is shared with Science Strike (fps.html) so the
+// rotation spans every game mode, and the map is never bulk-reset — recency
+// alone decides what rotates back in. Internal bookkeeping only — the stamps
+// are never rendered anywhere a student can see.
 function _gqKey() { return 'gameQSeen_' + ((currentUser && currentUser.uid) || 'guest'); }
 function _gqLoad() { try { return JSON.parse(localStorage.getItem(_gqKey())) || {}; } catch (e) { return {}; } }
 function _gqSave(m) { try { localStorage.setItem(_gqKey(), JSON.stringify(m)); } catch (e) {} }
-function _gqMark(id) { if (!id) return; const m = _gqLoad(); m[id] = (m[id] || 0) + 1; _gqSave(m); }
+// The games' built-in demo/fallback questions (b0…b7, sp_f*, builtin_*) must
+// never enter the rotation map — those ids don't exist in the real bank.
+function _gqRealId(id) { return !!id && !/^(b\d+|sp_f\d+|builtin_\d+)$/.test(String(id)); }
+function _gqMark(id) { if (!_gqRealId(id)) return; const m = _gqLoad(); m[id] = Date.now(); _gqSave(m); }
 function _gqFilterPool(pool) {
   if (!Array.isArray(pool) || pool.length < 2) return pool;
   const m = _gqLoad();
-  const unseen = pool.filter(q => q && !m[q.id]);
-  if (unseen.length >= 4) return unseen;   // still fresh questions left this cycle
-  // cycle complete (or nearly — a game needs a handful to run): reset the
-  // counters for this pool and start the rotation over
-  let changed = false;
-  for (const q of pool) { if (q && m[q.id]) { delete m[q.id]; changed = true; } }
-  if (changed) _gqSave(m);
-  return pool;
+  const unseen = [], seenQs = [];
+  for (const q of pool) { if (q) (m[q.id] ? seenQs : unseen).push(q); }
+  // A run needs a decent spread of questions, so the payload never shrinks
+  // below a floor (or the whole pool when it's smaller than the floor).
+  const floor = Math.min(pool.length, Math.max(12, Math.min(30, Math.ceil(pool.length / 3))));
+  if (unseen.length >= floor) return unseen;
+  // Top up with the least-recently-served. Legacy cycle counters (tiny
+  // numbers) sort as ancient stamps, so they rotate back in first — no
+  // migration needed.
+  seenQs.sort((a, b) => (m[a.id] || 0) - (m[b.id] || 0));
+  return unseen.concat(seenQs.slice(0, floor - unseen.length));
 }
 
+// Build the SD_QUESTIONS payload for a game frame: bank (or past-paper pool)
+// → hidden no-repeat rotation → cross-mode attempt stats. Reused by the
+// initial frame request AND every run start, so long sittings never play from
+// a stale pool snapshot.
+async function _sdQuestionsPayload(source) {
+  let questions = [];
+  // Past-paper mode: the game launched from the Past Papers page gets ONLY
+  // the selected portion's attached questions (MCQ + OEQ self-check).
+  const ppMode = _ppGameFrameMatches(source);
+  try { questions = ppMode ? ppGamePool(_ppGameSel.year) : buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
+  // rotation: never-served questions first, least-recently-served top-up
+  try { questions = _gqFilterPool(questions); } catch (e) { console.warn('gq filter', e); }
+  const seenStats = await _sdSeenStats();
+  return {
+    type: 'SD_QUESTIONS',
+    questions,
+    seenIds: Object.keys(seenStats),
+    seenStats,
+    studentKey: (currentUser && currentUser.uid) || 'guest',
+    studentName: (currentUser && currentUser.name) || '',
+    playLimit: _dailyCreditAllowance(),
+    playsLeft: _playsLeftPayload()
+  };
+}
 window.addEventListener('message', function (ev) {
   const d = ev && ev.data;
   if (!d) return;
   if (d.type === 'SD_REQUEST_QUESTIONS') {
     (async () => {
-      let questions = [];
-      // Past-paper mode: the game launched from the Past Papers page gets ONLY
-      // the selected portion's attached questions (MCQ + OEQ self-check).
-      const ppMode = _ppGameFrameMatches(ev.source);
-      try { questions = ppMode ? ppGamePool(_ppGameSel.year) : buildDefenderQuestions(); } catch (e) { console.warn('SD bank extract failed', e); }
-      // rotation: serve only questions without a shown-counter this cycle
-      try { questions = _gqFilterPool(questions); } catch (e) { console.warn('gq filter', e); }
-      const seenStats = await _sdSeenStats();
-      const payload = {
-        type: 'SD_QUESTIONS',
-        questions,
-        seenIds: Object.keys(seenStats),
-        seenStats,
-        studentKey: (currentUser && currentUser.uid) || 'guest',
-        studentName: (currentUser && currentUser.name) || '',
-        playLimit: _dailyCreditAllowance(),
-        playsLeft: _playsLeftPayload()
-      };
+      const payload = await _sdQuestionsPayload(ev.source);
       try { ev.source && ev.source.postMessage(payload, '*'); } catch (e) {}
     })();
   } else if (d.type === 'SD_RECORD') {
-    try { _gqMark(d && d.questionId); } catch (e) {}   // count it as shown this cycle
+    try { _gqMark(d && d.questionId); } catch (e) {}   // stamp it as served in the rotation
     _sdRecordAttempt(d);
+  } else if (d.type === 'SD_SHOWN') {
+    // A game displayed this question (answered or not — skips and abandoned
+    // runs count too), so the rotation must not serve it again soon.
+    try { _gqMark(d && d.questionId); } catch (e) {}
   } else if (d.type === 'SD_FLAG') {
     _sdRecordFlag(d, ev.source);
   } else if (d.type === 'SD_SCORE') {
@@ -29848,6 +29892,12 @@ window.addEventListener('message', function (ev) {
   } else if (d.type === 'SD_PLAY_START') {
     _spendCredit();
     try { ev.source && ev.source.postMessage({ type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() }, '*'); } catch (e) {}
+    // Every run start also gets a freshly rotation-filtered pool, so questions
+    // served earlier in the sitting (in this or any other game) drop out.
+    (async () => {
+      const payload = await _sdQuestionsPayload(ev.source);
+      try { ev.source && ev.source.postMessage(payload, '*'); } catch (e) {}
+    })();
   } else if (d.type === 'LEGENDS_REQUEST_ASSETS') {
     (async () => {
       const overrides = await loadLegendsSpriteOverrides();
@@ -31334,7 +31384,7 @@ function _tcgBankQuestions() {
         else if (b.type === 'image' && b.url) { html += '<div class="tcg-quiz-img"><img src="' + escapeHtml(transformImageUrl(b.url)) + '" onerror="handleImgError(this)" loading="lazy" decoding="async" style="' + imgSizeStyle(b) + '"></div>'; hasStem = true; }
       });
       if (!hasStem) return;
-      out.push({ html: html, opts: opts, a: ai, ex: '', db: true });
+      out.push({ id: q.id || '', html: html, opts: opts, a: ai, ex: '', db: true });
     });
   } catch (e) {}
   return out;
@@ -31347,6 +31397,13 @@ function _tcgFallbackQuestions() {
 // Prefer real database questions; fall back to the built-in set if there are none.
 function _tcgQuizPool() { const db = _tcgBankQuestions(); return db.length ? db : _tcgFallbackQuestions(); }
 function _tcgShuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+// Persistent per-student trainer rotation: every question served in Monster
+// Cards training is stamped, and the pool is ordered least-recently-served
+// first — so closing/reopening the trainer (or switching monsters) no longer
+// reshuffles recently-answered questions straight back in.
+function _tcgServedKey() { return 'tcgTrainServed_' + ((currentUser && currentUser.uid) || 'guest'); }
+function _tcgServedLoad() { try { return JSON.parse(localStorage.getItem(_tcgServedKey())) || {}; } catch (e) { return {}; } }
+function _tcgServedMark(id) { if (!id) return; try { const m = _tcgServedLoad(); m[id] = Date.now(); localStorage.setItem(_tcgServedKey(), JSON.stringify(m)); } catch (e) {} }
 let _tcgQuiz = null;
 function tcgTrainCard(id) {
   const s = tcgState();
@@ -31355,7 +31412,10 @@ function tcgTrainCard(id) {
   const existing = document.getElementById('tcgTrainOverlay'); if (existing) existing.remove();
   const pool = _tcgQuizPool();
   if (!pool.length) { showToast('No practice questions available yet', 'error'); return; }
-  _tcgQuiz = { id, pool: _tcgShuffle(pool), i: 0, answered: false, cur: null };
+  // Shuffle for a random tie-break, then serve least-recently-trained first.
+  const servedMap = _tcgServedLoad();
+  const ordered = _tcgShuffle(pool).sort((a, b) => (servedMap[a.id] || 0) - (servedMap[b.id] || 0));
+  _tcgQuiz = { id, pool: ordered, i: 0, answered: false, cur: null };
   const c = TCG_BY_ID[id];
   const o = document.createElement('div');
   o.className = 'tcg-overlay'; o.id = 'tcgTrainOverlay';
@@ -31390,6 +31450,7 @@ function _tcgQuizRender() {
   _tcgQuiz.answered = false;
   const q = _tcgQuiz.pool[_tcgQuiz.i % _tcgQuiz.pool.length];
   _tcgQuiz.cur = q;
+  if (q && q.id) _tcgServedMark(q.id);
   body.innerHTML = '<div class="tcg-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
     + '<div class="tcg-quiz-opts">'
     + q.opts.map((o, idx) => '<button type="button" class="tcg-quiz-opt" data-i="' + idx + '" onclick="_tcgQuizAnswer(' + idx + ')">'
@@ -31402,6 +31463,22 @@ function _tcgQuizAnswer(idx) {
   _tcgQuiz.answered = true;
   const q = _tcgQuiz.cur;
   const correct = idx === q.a;
+  // Training answers on real bank questions count as attempts everywhere else:
+  // stamp the shared game rotation and write the teacher-visible attempt log,
+  // so practice/quests/games stop re-serving trainer-grinded questions as new.
+  if (q.db && q.id) {
+    try { _gqMark(q.id); } catch (e) {}
+    if (currentUser && currentUser.role === 'student') {
+      try { noteAttemptLocally(q.id, correct ? 1 : 0, 1); } catch (e) {}
+      try {
+        addDoc(collection(db, 'questionAttempts'), {
+          uid: currentUser.uid, email: currentUser.email, displayName: currentUser.name,
+          questionId: q.id, questionTitle: '', score: correct ? 1 : 0, totalBlanks: 1,
+          answerHash: '', ms: 0, timestamp: Timestamp.now(), mode: 'tcg-train'
+        }).catch(err => console.warn('tcg attempt log failed', err));
+      } catch (e) {}
+    }
+  }
   const body = document.getElementById('tcgqBody');
   const btns = body ? body.querySelectorAll('.tcg-quiz-opt') : [];
   btns.forEach(b => { b.disabled = true; const i = +b.dataset.i; if (i === q.a) b.classList.add('right'); else if (i === idx) b.classList.add('wrong'); });

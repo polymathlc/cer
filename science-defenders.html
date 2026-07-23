@@ -2241,6 +2241,11 @@ function pickQuestion(){
     if(usingBankQuestions) toast("Full round done — starting a new round!", 'energy');
   }
   var pool = filtered.filter(function(q){ return !student.cycle[q.id]; });
+  // Never re-serve one of the last few questions while any alternative exists —
+  // a tiny topic pool can otherwise repeat back-to-back right after a round reset.
+  var avoid = sessionAsked.slice(-3);
+  var freshPool = pool.filter(function(q){ return avoid.indexOf(q.id) < 0; });
+  if(freshPool.length) pool = freshPool;
   var unseen = pool.filter(function(q){ return !isSeen(q); });
   var choice;
   if(unseen.length){
@@ -2254,6 +2259,8 @@ function pickQuestion(){
     choice = pool[0];
   }
   student.cycle[choice.id] = 1;
+  sessionAsked.push(choice.id);
+  if(sessionAsked.length > 12) sessionAsked.shift();
   saveStudent();
   return choice;
 }
@@ -2303,6 +2310,13 @@ function openQuestion(){
   qState.answered = false;
   qState.active = true;
   qState.shownAt = performance.now();   // for the anti-rush "questions done" gate
+  // Tell the parent it was SHOWN (answered or skipped) so the cross-game
+  // rotation stops re-serving it — skips used to stay invisible forever.
+  try{
+    if(usingBankQuestions && window.parent && window.parent !== window){
+      window.parent.postMessage({ type:'SD_SHOWN', questionId:q.id }, '*');
+    }
+  }catch(e){}
 
   var diff = DIFFICULTY[G.difficulty];
   qState.maxTimer = diff.qTime;
@@ -2834,11 +2848,14 @@ function applyBankQuestions(list){
              len:(typeof q.len === 'number' ? q.len : (q.q || '').length) };
   });
   if(!cleaned.length) return;
+  var firstLoad = !usingBankQuestions;
   QUESTION_BANK.length = 0;
   Array.prototype.push.apply(QUESTION_BANK, cleaned);
   usingBankQuestions = true;
   rebuildTopicOptions();
-  if(G.running) toast('Loaded ' + cleaned.length + ' science questions from the bank', 'good');
+  // The parent re-pushes a refreshed pool at every run start — only announce
+  // the very first arrival, not every refresh.
+  if(G.running && firstLoad) toast('Loaded ' + cleaned.length + ' science questions from the bank', 'good');
 }
 
 /* Rebuild the Topic dropdown from the real topics in the bank so filtering
@@ -2867,8 +2884,10 @@ function requestBankQuestions(){
   if(!(window.parent && window.parent !== window)) return; // standalone: keep samples
   try { window.parent.postMessage({ type:'SD_REQUEST_QUESTIONS' }, '*'); } catch(e){}
   _bankReqTries++;
-  if(_bankReqTries < 8 && !usingBankQuestions){
-    setTimeout(requestBankQuestions, 1200); // bank may still be loading from Firestore
+  // Keep asking until the bank arrives (fast at first, then gently) — a slow
+  // Firestore load must not strand the whole sitting on the built-in samples.
+  if(!usingBankQuestions){
+    setTimeout(requestBankQuestions, _bankReqTries < 8 ? 1200 : 5000);
   }
 }
 

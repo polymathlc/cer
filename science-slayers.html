@@ -4363,7 +4363,7 @@ var ELO_MIN = 600, ELO_MAX = 2400, ELO_DEFAULT = 1200;
 var studentKey = 'guest';
 var qElo = {};
 var student = { ability: ELO_DEFAULT, seen: {} };
-var sessionAsked = [];
+var sessionAsked = [];   // last served ids — no back-to-back repeats after a round reset
 var usingBankQuestions = false;
 
 var QUESTION_BANK = [
@@ -4405,6 +4405,10 @@ function pickQuestion(){
     if (usingBankQuestions) toast("Full round done — starting a new round!", 'energy');
   }
   var pool = QUESTION_BANK.filter(function(q){ return !student.cycle[q.id]; });
+  // Never re-serve one of the last few questions while any alternative exists.
+  var avoid = sessionAsked.slice(-3);
+  var freshPool = pool.filter(function(q){ return avoid.indexOf(q.id) < 0; });
+  if (freshPool.length) pool = freshPool;
   var unseen = pool.filter(function(q){ return !isSeen(q); });
   var ch;
   if (unseen.length){
@@ -4418,6 +4422,8 @@ function pickQuestion(){
     ch = pool[0];
   }
   student.cycle[ch.id] = 1;
+  sessionAsked.push(ch.id);
+  if (sessionAsked.length > 12) sessionAsked.shift();
   saveStudent();
   return ch;
 }
@@ -4453,6 +4459,8 @@ function openQuestion(){
   }
   qState.current = q; qState.answered = false; qState.active = true;
   qState.shownAt = performance.now();
+  // Tell the parent it was SHOWN so the cross-game rotation stops re-serving it.
+  try{ if (usingBankQuestions && embedded()) window.parent.postMessage({ type:'SD_SHOWN', questionId:q.id }, '*'); }catch(e){}
   $('qTopic').textContent = q.topic || 'Science';
   var qStem = $('qStem');
   if (q.html){ qStem.innerHTML = q.html; wireQuestionImages(qStem); } else { qStem.textContent = q.q; }
@@ -4584,7 +4592,9 @@ function requestBankQuestions(){
   if (!embedded()) return;
   try { window.parent.postMessage({ type: 'SD_REQUEST_QUESTIONS' }, '*'); } catch(e){}
   _bankReqTries++;
-  if (_bankReqTries < 8 && !usingBankQuestions) setTimeout(requestBankQuestions, 1200);
+  // Keep asking until the bank arrives — a slow Firestore load must not
+  // strand the whole sitting on the built-in demo questions.
+  if (!usingBankQuestions) setTimeout(requestBankQuestions, _bankReqTries < 8 ? 1200 : 5000);
 }
 var _metaReqTries = 0;
 function requestMeta(){

@@ -423,13 +423,13 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.0.0</div>
+<div id="versionBadge">Science Strike v1.1.0</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, getDocs, collection, addDoc, Timestamp, increment } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, getDocs, collection, addDoc, Timestamp, increment, query, where } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
 /* ════════════════ FIREBASE (same project as index.html) ════════════════ */
 const firebaseConfig = {
@@ -587,32 +587,56 @@ async function loadQuestions() {
         });
       } catch (e) { console.warn('bank load', uid, e); }
     }
-    // shuffle once; serve round-robin so questions don't repeat until exhausted
     for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
     questions = pool; qCursor = 0;
     console.log('Science Strike: loaded', pool.length, 'MCQs from the bank');
+    // Cross-device memory: fold the student's Firestore attempt history into
+    // the local rotation map, so a new device / cleared browser doesn't
+    // restart the no-repeat rotation from scratch.
+    try {
+      if (currentUser && currentUser.uid) {
+        const att = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', currentUser.uid)));
+        const m = qSeenLoad(); let changed = false;
+        att.forEach(d => {
+          const a = d.data(); if (!a || !a.questionId) return;
+          const ts = (a.timestamp && typeof a.timestamp.toMillis === 'function') ? a.timestamp.toMillis() : 0;
+          if (ts && (!m[a.questionId] || m[a.questionId] < ts)) { m[a.questionId] = ts; changed = true; }
+        });
+        if (changed) qSeenSave(m);
+      }
+    } catch (e) { console.warn('attempt history seed', e); }
   } catch (e) { console.error('loadQuestions', e); }
 }
 
 // ---- No-repeat rotation (invisible to students) ----
-// Shares the 'gameQSeen_<uid>' localStorage counter with index.html's arcade
-// games: only questions without a counter this cycle are served; once every
-// eligible question has been counted, the counters reset and a new cycle
-// starts. The counter itself is never shown anywhere.
+// Shares the 'gameQSeen_<uid>' localStorage map with index.html's arcade
+// games. Each entry is the time the question was last shown in ANY game mode.
+// Never-shown questions are served first; once everything has been shown, the
+// least-recently-shown come back — the map is never bulk-reset, so a question
+// answered minutes ago can't jump straight back in (here or in the arcade).
+// The stamps are internal bookkeeping and never shown anywhere.
 function qSeenKey() { return 'gameQSeen_' + ((currentUser && currentUser.uid) || 'guest'); }
 function qSeenLoad() { try { return JSON.parse(localStorage.getItem(qSeenKey())) || {}; } catch (e) { return {}; } }
 function qSeenSave(m) { try { localStorage.setItem(qSeenKey(), JSON.stringify(m)); } catch (e) {} }
+let _recentQIds = [];   // last few served this session — never repeat back-to-back
 function nextQuestion() {
   if (!questions.length) return null;
   const m = qSeenLoad();
-  let pool = questions.filter(q => !m[q.id]);
-  if (!pool.length) {   // cycle complete — reset counters for the eligible pool
-    for (const q of questions) delete m[q.id];
-    pool = questions;
+  const recentCap = Math.max(1, Math.min(5, questions.length - 1));
+  const recent = new Set(_recentQIds.slice(-recentCap));
+  let pool = questions.filter(q => !m[q.id] && !recent.has(q.id));
+  if (!pool.length) {
+    // Everything has been shown at least once — serve the least-recently-shown
+    // few. Legacy cycle counters (tiny numbers) sort as ancient stamps.
+    const ranked = questions.filter(q => !recent.has(q.id)).sort((a, b) => (m[a.id] || 0) - (m[b.id] || 0));
+    pool = ranked.slice(0, Math.max(1, Math.min(8, ranked.length)));
+    if (!pool.length) pool = questions;   // pool smaller than the recent window
   }
   const q = pool[Math.floor(Math.random() * pool.length)];
-  m[q.id] = (m[q.id] || 0) + 1;   // counted as shown the moment it appears
+  m[q.id] = Date.now();   // stamped as shown the moment it appears
   qSeenSave(m);
+  _recentQIds.push(q.id);
+  if (_recentQIds.length > 8) _recentQIds.shift();
   return q;
 }
 
