@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Science Strike — Roguelite FPS (BETA)</title>
+<title>Science Strike — Roguelite FPS</title>
 <!--
-  SCIENCE STRIKE — roguelite first-person dungeon shooter (BETA)
+  SCIENCE STRIKE — roguelite first-person dungeon shooter
 
   Part of the Polymath Science Quest family (index.html). Shares the same
   Firebase project ("mathgen--app"), Google sign-in, App Check (reCAPTCHA v3)
   and question bank (users/{adminUid}/questions) as the main CER app.
 
   Release gate: SAME pattern as Monster Cards TCG in index.html — admins
-  always get in (BETA), students only after an admin presses "Release to
+  always get in, students only after an admin presses "Release to
   students" (flag in users/{adminUid}/settings/fpsConfig, written by the
   admin who clicks). index.html shows/hides its "Science Strike" nav item
   from the same flag.
@@ -111,7 +111,6 @@
     box-shadow: 0 24px 60px rgba(0,0,0,0.5);
   }
   .card h1 { font-size: 1.9rem; letter-spacing: 0.02em; margin-bottom: 10px; }
-  .card h1 .beta { font-size: 0.65rem; vertical-align: middle; background: #3a2a55; color: #d9baff; border: 1px solid #6b4fa0; padding: 3px 8px; border-radius: 999px; margin-left: 8px; letter-spacing: 0.12em; }
   .card p.sub { color: var(--muted); line-height: 1.6; margin: 10px 0 22px; }
   .btn {
     display: inline-block; border: none; cursor: pointer;
@@ -261,7 +260,7 @@
 <!-- ========== AUTH ========== -->
 <div class="screen active" id="authScreen">
   <div class="card">
-    <h1>🔫 Science Strike<span class="beta">BETA</span></h1>
+    <h1>🔫 Science Strike</h1>
     <p class="sub">A roguelite open-world shooter. Survive infinite waves under an open sky, grab rarer and rarer loot — and keep your science streak alive to boost your luck.</p>
     <button class="btn" id="signInBtn">Sign in with Google</button>
     <p class="sub" style="margin-top:18px;font-size:0.8rem;">Same account as Science Quest.</p>
@@ -273,7 +272,7 @@
 <div class="screen" id="lockedScreen">
   <div class="card">
     <h1>🔒 Not released yet</h1>
-    <p class="sub">Science Strike is still in beta testing. Your teacher will release it when it's ready — check back soon!</p>
+    <p class="sub">Science Strike hasn't been released to students yet. Your teacher will open it up when it's ready — check back soon!</p>
     <a class="btn" href="index.html">← Back to Science Quest</a>
   </div>
 </div>
@@ -281,7 +280,7 @@
 <!-- ========== MENU ========== -->
 <div class="screen" id="menuScreen">
   <div class="card" style="max-width:620px;">
-    <h1>🔫 Science Strike<span class="beta" id="menuBetaTag">BETA</span></h1>
+    <h1>🔫 Science Strike</h1>
     <p class="sub" id="menuHello">Open world. Infinite waves. Every 15 seconds, science decides your luck.</p>
     <button class="btn good" id="playBtn" style="font-size:1.15rem;padding:15px 42px;">▶ Start Run</button>
     <div style="margin-top:4px;">
@@ -320,9 +319,9 @@
 
     <div class="admin-panel" id="adminPanel" style="display:none;">
       <h3>ADMIN — RELEASE CONTROL</h3>
-      <div style="margin-bottom:12px;"><span class="pill beta" id="relPill">🔒 BETA — ADMINS ONLY</span></div>
+      <div style="margin-bottom:12px;"><span class="pill beta" id="relPill">🔒 HIDDEN — ADMINS ONLY</span></div>
       <button class="btn" id="releaseBtn">🚀 Release to students</button>
-      <p style="color:var(--muted);font-size:0.76rem;margin-top:10px;">Releasing shows the Science Strike button to students in the Science Quest sidebar and unlocks this page for them. You can take it back into beta at any time.</p>
+      <p style="color:var(--muted);font-size:0.76rem;margin-top:10px;">Releasing shows the Science Strike button to students in the Science Quest sidebar and unlocks this page for them. You can hide it again at any time.</p>
     </div>
   </div>
 </div>
@@ -424,7 +423,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v0.9.0 BETA</div>
+<div id="versionBadge">Science Strike v1.0.0</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -506,7 +505,7 @@ async function setReleased(on) {
   if (!isAdmin()) return;
   const msg = on
     ? 'Release Science Strike to all students? They will see it in the Science Quest sidebar immediately.'
-    : 'Take Science Strike back into beta? Students will no longer see it.';
+    : 'Hide Science Strike from students? They will no longer see it.';
   if (!confirm(msg)) return;
   try {
     await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'fpsConfig'),
@@ -523,9 +522,9 @@ function renderAdminPanel() {
   const live = !!fpsConfig.released;
   const pill = $('relPill');
   pill.className = 'pill ' + (live ? 'live' : 'beta');
-  pill.textContent = live ? '🟢 RELEASED TO STUDENTS' : '🔒 BETA — ADMINS ONLY';
+  pill.textContent = live ? '🟢 RELEASED TO STUDENTS' : '🔒 HIDDEN — ADMINS ONLY';
   const btn = $('releaseBtn');
-  btn.textContent = live ? '⏸ Back to beta' : '🚀 Release to students';
+  btn.textContent = live ? '⏸ Hide from students' : '🚀 Release to students';
   btn.onclick = () => setReleased(!live);
 }
 

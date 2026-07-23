@@ -5341,9 +5341,9 @@ option {
       <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Monster Cards — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
         <span class="ico">🃏</span> Monster Cards <span class="nav-beta">BETA</span>
       </div>
-      <!-- Science Strike FPS (beta, fps.html) — admins always; students only once the admin presses Release -->
+      <!-- Science Strike FPS (fps.html) — admins always; students only once the admin presses Release -->
       <div class="nav-item" id="navFps" onclick="openFpsGame()" style="display:none;" title="Science Strike — roguelite first-person dungeon shooter with Borderlands-style loot. Answer a science question every 15 seconds to boost your loot luck.">
-        <span class="ico">🔫</span> Science Strike <span class="nav-beta">BETA</span>
+        <span class="ico">🔫</span> Science Strike
       </div>
       <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire. Monster Cards art lives on the Monster Cards page's Card Art tab.">
         <span class="ico">🎨</span> Game Objects
@@ -6610,6 +6610,7 @@ option {
         <div class="rpg-prize-banner">
           <span class="rpg-prize-line">🎁 <b>Monthly prize:</b> the top 5 students with the most <b>questions done</b> each month win a <b>$10 Popular voucher</b> each. Questions only count once, and need a genuine answer.</span>
           <span class="rpg-prize-line">🕹️ <b>Arcade prizes:</b> the top 3 each month in <b>Science Defenders</b> and <b>Science Raiders</b> also win a <b>$10 Popular voucher</b> each.</span>
+          <span class="rpg-prize-line">🔫 <b>Science Strike prize:</b> the top 3 by <b>correct answers</b> in Science Strike win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🎟️ <b>Streak prize:</b> practise <b>10+ questions every day for 30 days in a row</b> and win a <b>$10 Popular voucher</b> — track your progress on the Your Hero page.</span>
           <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 all-time XP earners win <b>$200, $100 and $50 Popular vouchers</b>.</span>
         </div>
@@ -6623,6 +6624,7 @@ option {
               <button class="rpg-tab" data-rpgboard="td" type="button">🧪 Tower Defense</button>
               <button class="rpg-tab" data-rpgboard="raid" type="button">👾 Raiders</button>
               <button class="rpg-tab" data-rpgboard="spire" type="button">🃏 Spire</button>
+              <button class="rpg-tab" data-rpgboard="fps" type="button">🔫 Strike</button>
             </div>
             <button class="btn btn-ghost btn-sm" id="rpgBoardRefresh" type="button">Refresh</button>
           </div>
@@ -9238,7 +9240,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.151.0';
+const APP_VERSION = 'v1.152.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -26968,10 +26970,12 @@ async function rpgFetchLeaderboard(force) {
   return rows;
 }
 // The "td" / "raid" tabs rank by this month's best mini-game score; "month" /
-// "lastmonth" rank by UNIQUE QUESTIONS DONE; "alltime" ranks by XP.
+// "lastmonth" rank by UNIQUE QUESTIONS DONE; "alltime" ranks by XP; "fps"
+// (Science Strike) ranks by all-time correct answers from fps.html's `fps` field.
 function rpgIsGameTab() { return rpgBoardTab === "td" || rpgBoardTab === "raid" || rpgBoardTab === "spire"; }
 function rpgBoardMetric(r) {
   if (rpgBoardTab === "alltime") return r.xp || 0;
+  if (rpgBoardTab === "fps") return (r.fps && r.fps.correct) | 0;
   if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey() ? (r.monthQ || 0) : 0;
   if (rpgBoardTab === "papers") return r.monthKey === rpgMonthKey() ? (r.papersQ || 0) : 0;
   if (rpgIsGameTab()) {
@@ -26984,10 +26988,14 @@ function rpgBoardMetric(r) {
   if (r.lastMonthKey === prev) return r.lastMonthQ || 0;  // rolled over
   return 0;
 }
-function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : rpgIsGameTab() ? "pts" : "questions"; }
+function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : rpgBoardTab === "fps" ? "correct" : rpgIsGameTab() ? "pts" : "questions"; }
 // Pretty value for a row: game tabs show the run's label (e.g. "Floor 7 · 142 kills").
 function rpgBoardValueHtml(r) {
   const sub = (rpgBoardTab === "month" || rpgBoardTab === "papers") ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : rpgIsGameTab() ? "best this month" : "all-time";
+  if (rpgBoardTab === "fps") {
+    const f = r.fps || {};
+    return `${r.shownVal} correct<span>🌊 wave ${f.bestWave | 0} · 👾 ${f.kills | 0} kills</span>`;
+  }
   if (rpgIsGameTab()) {
     const g = r[rpgBoardTab] || {};
     const lbl = (g.monthKey === rpgMonthKey() && g.monthLabel) ? g.monthLabel : (r.shownVal + " pts");
@@ -26997,6 +27005,7 @@ function rpgBoardValueHtml(r) {
 }
 function rpgPrizeBadge(rank) {
   if (rpgBoardTab === "papers") return "";   // ranking board only — no prize attached
+  if (rpgBoardTab === "fps") return rank <= 3 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rpgIsGameTab()) return rank <= 3 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rpgBoardTab !== "alltime") return rank <= 5 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rank === 1) return `<span class="rpg-board-prize">🏆 $200 voucher</span>`;
@@ -27006,6 +27015,7 @@ function rpgPrizeBadge(rank) {
 }
 function rpgRowClass(rank) {
   if (rpgBoardTab === "papers") return "";
+  if (rpgBoardTab === "fps") return rank <= 3 ? `prize-${rank}` : "";
   if (rpgIsGameTab()) return rank <= 3 ? `prize-${rank}` : "";
   if (rpgBoardTab !== "alltime") return rank <= 5 ? "prize-month" : "";
   return rank <= 3 ? `prize-${rank}` : "";
@@ -27039,7 +27049,9 @@ async function rpgRenderLeaderboard(force = false) {
       updatedAt: new Date().toISOString()
     };
     const i = rows.findIndex(r => r.uid === currentUser.uid);
-    if (i >= 0) rows[i] = mine; else rows.push(mine);
+    // merge over the fetched row — it may carry fields we don't track locally
+    // (e.g. Science Strike's `fps` stats, published by fps.html)
+    if (i >= 0) rows[i] = Object.assign({}, rows[i], mine); else rows.push(mine);
   }
   const list = rows.map(r => Object.assign({}, r, { shownVal: rpgBoardMetric(r) }))
     .filter(r => r.shownVal > 0)
@@ -27051,6 +27063,7 @@ async function rpgRenderLeaderboard(force = false) {
       : rpgBoardTab === "td" ? "No Science Defenders runs this month yet — play to claim the top spot!"
       : rpgBoardTab === "raid" ? "No Science Raiders runs this month yet — dive in to top the board!"
       : rpgBoardTab === "spire" ? "No Science Spire climbs this month yet — build a deck and claim the top!"
+      : rpgBoardTab === "fps" ? "No Science Strike answers yet — jump into a run and answer questions to claim the board!"
       : "No heroes on the board yet — solve questions to earn XP!";
     body.innerHTML = `<div class="empty-note">${why}</div>`;
     return;
