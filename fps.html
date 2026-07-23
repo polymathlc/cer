@@ -286,6 +286,7 @@
     <button class="btn good" id="playBtn" style="font-size:1.15rem;padding:15px 42px;">▶ Start Run</button>
     <div style="margin-top:4px;">
       <button class="btn" id="menuSkillsBtn">🧠 Skill Tree</button>
+      <button class="btn" id="menuBoardBtn">🏆 Leaderboard</button>
       <a class="btn ghost" href="index.html">← Back to Science Quest</a>
     </div>
 
@@ -386,10 +387,27 @@
       <div class="death-stats" id="deathStats"></div>
       <div style="font-size:1.05rem;margin-bottom:16px;">Banked <span class="cores" style="color:#ffd76a;font-weight:800;" id="deathCores">⚛ 0</span> Science Cores this run — already saved. Spend them in the skill tree [I]!</div>
       <button class="btn good" id="againBtn">↻ Run it back</button>
+      <button class="btn" id="deathBoardBtn">🏆 Leaderboard</button>
       <button class="btn ghost" id="deathMenuBtn">Menu</button>
     </div>
   </div>
 </div>
+
+<!-- leaderboard overlay: ranked by correct answers, top 3 win a $10 voucher -->
+<div id="boardOverlay" style="position:fixed;inset:0;display:none;background:rgba(5,8,15,0.9);z-index:72;overflow-y:auto;padding:24px 14px;">
+  <div class="skill-panel" style="max-width:560px;">
+    <div class="skill-head">
+      <h2>🏆 Science Strike Leaderboard</h2>
+      <button class="btn ghost" id="boardCloseBtn" style="padding:8px 16px;">✕ Close</button>
+    </div>
+    <div style="background:#241d33;border:1px solid #4a3d66;border-radius:12px;padding:14px 18px;margin:12px 0 16px;line-height:1.6;">
+      <b style="color:#ffd76a;">🎁 Top 3 students win a $10 voucher!</b><br>
+      <span style="color:var(--muted);font-size:0.85rem;">Ranked by total correct answers in Science Strike. Every question you get right in a run counts — keep playing, keep climbing.</span>
+    </div>
+    <div id="boardRows"></div>
+  </div>
+</div>
+<style>#boardOverlay.active { display: flex; }</style>
 
 <!-- skill tree overlay: usable from the menu AND mid-run (pauses the game) -->
 <div id="skillOverlay">
@@ -406,13 +424,13 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v0.8.0 BETA</div>
+<div id="versionBadge">Science Strike v0.9.0 BETA</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, getDocs, collection, addDoc, Timestamp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, getDocs, collection, addDoc, Timestamp, increment } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
 /* ════════════════ FIREBASE (same project as index.html) ════════════════ */
 const firebaseConfig = {
@@ -599,6 +617,78 @@ function nextQuestion() {
   return q;
 }
 
+/* ---------- shared leaderboard (scienceGameLeaderboard/{uid}, fps field) ----------
+   Ranked by total correct answers in Science Strike. Students write only their
+   own doc (same rules as the existing game leaderboard); admins stay off the
+   board. Top 3 win a $10 voucher — shown on the board, tallied automatically. */
+let _myFpsBoard = null;   // cached own stats, for bestWave comparisons
+function fpsPublish(fields) {
+  if (!currentUser || currentUser.role !== 'student') return;
+  setDoc(doc(db, 'scienceGameLeaderboard', currentUser.uid), {
+    uid: currentUser.uid,
+    name: currentUser.name,
+    fps: fields,
+  }, { merge: true }).catch(e => console.warn('fps board publish', e));
+}
+async function loadMyFpsBoard() {
+  if (!currentUser) return;
+  try {
+    const snap = await getDoc(doc(db, 'scienceGameLeaderboard', currentUser.uid));
+    _myFpsBoard = (snap.exists() && snap.data().fps) || { correct: 0, kills: 0, bestWave: 0 };
+  } catch (e) { _myFpsBoard = _myFpsBoard || { correct: 0, kills: 0, bestWave: 0 }; }
+}
+async function openBoard() {
+  $('boardRows').innerHTML = '<div style="color:var(--muted);padding:16px;">Loading…</div>';
+  $('boardOverlay').classList.add('active');
+  if (G && !G.over) { G.paused = true; document.exitPointerLock && document.exitPointerLock(); }
+  try {
+    const snap = await getDocs(collection(db, 'scienceGameLeaderboard'));
+    const rows = [];
+    snap.forEach(d => {
+      const x = d.data();
+      if (x && x.fps && (x.fps.correct | 0) > 0) rows.push({ uid: x.uid, name: x.name || 'Student', correct: x.fps.correct | 0, kills: x.fps.kills | 0, bestWave: x.fps.bestWave | 0 });
+    });
+    rows.sort((a, b) => b.correct - a.correct || b.bestWave - a.bestWave);
+    const myUid = currentUser && currentUser.uid;
+    const esc = s => String(s).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+    const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
+    let html = '';
+    rows.slice(0, 10).forEach((r, i) => {
+      const me = r.uid === myUid;
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;margin:5px 0;'
+        + (i < 3 ? 'background:#241d33;border:1px solid #4a3d66;' : 'background:var(--panel2);border:1px solid var(--line);')
+        + (me ? 'outline:2px solid var(--primary);' : '') + '">'
+        + '<div style="width:36px;font-weight:800;">' + medal(i) + '</div>'
+        + '<div style="flex:1;font-weight:600;">' + esc(r.name) + (me ? ' (you)' : '') + (i < 3 ? ' <span style="color:#ffd76a;font-size:0.72rem;font-weight:800;">$10 VOUCHER</span>' : '') + '</div>'
+        + '<div style="color:var(--good);font-weight:700;">✔ ' + r.correct + '</div>'
+        + '<div style="color:var(--muted);font-size:0.8rem;">🌊 ' + r.bestWave + ' · 👾 ' + r.kills + '</div>'
+        + '</div>';
+    });
+    const myIdx = rows.findIndex(r => r.uid === myUid);
+    if (myIdx >= 10) {
+      const r = rows[myIdx];
+      html += '<div style="text-align:center;color:var(--muted);margin:4px 0;">⋯</div>'
+        + '<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);outline:2px solid var(--primary);">'
+        + '<div style="width:36px;font-weight:800;">#' + (myIdx + 1) + '</div>'
+        + '<div style="flex:1;font-weight:600;">' + esc(r.name) + ' (you)</div>'
+        + '<div style="color:var(--good);font-weight:700;">✔ ' + r.correct + '</div>'
+        + '<div style="color:var(--muted);font-size:0.8rem;">🌊 ' + r.bestWave + ' · 👾 ' + r.kills + '</div>'
+        + '</div>';
+    }
+    $('boardRows').innerHTML = html || '<div style="color:var(--muted);padding:16px;">No entries yet — answer questions in a run to get on the board!</div>';
+  } catch (e) {
+    console.warn('board load', e);
+    $('boardRows').innerHTML = '<div style="color:var(--bad);padding:16px;">Could not load the leaderboard — check your connection.</div>';
+  }
+}
+function closeBoard() {
+  $('boardOverlay').classList.remove('active');
+  if (G && !G.over && !G.activeQ && !overlayVisible('pauseOverlay') && !overlayVisible('deathOverlay')) {
+    G.paused = false;
+    requestLock();
+  }
+}
+
 function recordAttempt(q, correct, ms) {
   try {
     if (!currentUser || currentUser.role !== 'student' || !q) return;
@@ -659,6 +749,7 @@ function renderMeta() {
 
 function enterMenu() {
   loadMeta();
+  loadMyFpsBoard();   // background — caches own leaderboard stats
   $('menuHello').textContent = 'Welcome, ' + currentUser.name + '. Pick a class, spec your skill tree, and survive. Every 15 seconds, science decides your luck.';
   renderMeta();
   renderClassRow();
@@ -1339,6 +1430,9 @@ $('playBtn').addEventListener('click', startRun);
 $('menuSkillsBtn').addEventListener('click', openSkills);
 $('skillBtn').addEventListener('click', openSkills);
 $('skillCloseBtn').addEventListener('click', closeSkills);
+$('menuBoardBtn').addEventListener('click', openBoard);
+$('deathBoardBtn').addEventListener('click', openBoard);
+$('boardCloseBtn').addEventListener('click', closeBoard);
 canvas.addEventListener('contextmenu', e => e.preventDefault());   // right-click = ADS
 // while in-game, an accidental right-click over any overlay (e.g. the science
 // question) must not pop the browser context menu
@@ -1891,6 +1985,9 @@ function answerQuestion(i, btn) {
     if (G.streak === 12) { G.nextDropFloorTier = Math.max(G.nextDropFloorTier, 4); milestone = ' Next drop is at least LEGENDARY!!'; }
     healPlayer(10);
     awardCores(5);   // banked + saved on the spot
+    // leaderboard: every correct answer counts, published live
+    fpsPublish({ correct: increment(1) });
+    if (_myFpsBoard) _myFpsBoard.correct = (_myFpsBoard.correct | 0) + 1;
     verdict.textContent = '✔ Correct! +5 ⚛ cores (banked instantly). Streak ' + G.streak + ' → loot luck +' + Math.round((luckNow() - 1) * 100) + '%. +10 HP.' + milestone;
     verdict.style.color = 'var(--good)';
   } else {
@@ -1919,6 +2016,10 @@ function endRun() {
   const mins = (performance.now() - G.startedAt) / 60000;
   // cores were banked + saved the moment they were earned; nothing awarded here
   const cores = G.coresEarned || 0;
+  // leaderboard: bank the run's kills + best wave
+  const bw = Math.max((_myFpsBoard && _myFpsBoard.bestWave) | 0, G.wave);
+  fpsPublish({ kills: increment(G.totalKills), bestWave: bw });
+  if (_myFpsBoard) { _myFpsBoard.kills = (_myFpsBoard.kills | 0) + G.totalKills; _myFpsBoard.bestWave = bw; }
   $('deathStats').innerHTML =
     '<div><div class="k">Waves survived</div><div class="v">🌊 ' + G.wave + '</div></div>'
     + '<div><div class="k">Enemies defeated</div><div class="v">' + G.totalKills + '</div></div>'

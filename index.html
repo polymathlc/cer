@@ -4889,6 +4889,17 @@ option {
 </head>
 <body>
 
+<!-- ==================== NEW GAME ANNOUNCEMENT (Science Strike release) ==================== -->
+<div id="fpsAnnounce" style="display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1200;width:min(660px,calc(100vw - 28px));background:linear-gradient(135deg,#1a2440,#141926);border:1px solid #3d5490;border-radius:16px;padding:20px 24px;box-shadow:0 18px 48px rgba(0,0,0,0.45);color:#e8ecf5;font-family:'DM Sans',system-ui,sans-serif;">
+  <button id="fpsAnnounceClose" title="Dismiss" style="position:absolute;top:10px;right:12px;background:none;border:none;color:#93a0b8;font-size:1.1rem;cursor:pointer;padding:4px;">✕</button>
+  <div style="font-weight:800;font-size:1.05rem;letter-spacing:0.01em;margin-bottom:8px;">🎉 NEW GAME RELEASED — 🔫 Science Strike!</div>
+  <div style="color:#b9c4da;font-size:0.9rem;line-height:1.6;margin-bottom:14px;">An open-world shooter where science questions power up your loot. The <b>leaderboard is live</b> — ranked by correct answers — and the <b style="color:#ffd76a;">top 3 students win a $10 voucher</b>. Good luck!</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <button onclick="openFpsGame()" style="background:#5b8cff;color:#fff;border:none;border-radius:10px;padding:11px 22px;font-weight:700;font-size:0.92rem;cursor:pointer;">🔫 Play Science Strike</button>
+    <button id="fpsAnnounceLater" style="background:transparent;color:#93a0b8;border:1px solid #2a3550;border-radius:10px;padding:11px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">Later</button>
+  </div>
+</div>
+
 <!-- ==================== IMAGE PRELOAD OVERLAY ==================== -->
 <div class="preload-overlay" id="preloadOverlay" style="display:none;">
   <img class="preload-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Loading" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2280%22 height=%2280%22 viewBox=%220 0 80 80%22%3E%3Crect width=%2280%22 height=%2280%22 rx=%2216%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2240%22 y=%2256%22 font-family=%22DM Sans,sans-serif%22 font-size=%2248%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
@@ -9227,7 +9238,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.150.2';
+const APP_VERSION = 'v1.151.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -26844,6 +26855,8 @@ function rpgPublishLeaderboard() {
   clearTimeout(rpgPublishTimer);
   rpgPublishTimer = setTimeout(() => {
     if (!rpgState || !currentUser) return;
+    // merge:true — Science Strike (fps.html) stores its leaderboard stats in a
+    // `fps` field on this same doc; a plain overwrite would wipe them.
     setDoc(doc(db, "scienceGameLeaderboard", currentUser.uid), {
       uid: currentUser.uid,
       name: currentUser.name || "Student",
@@ -26880,7 +26893,7 @@ function rpgPublishLeaderboard() {
         artifact: rpgState.tcg.artifact || null
       } : null,
       updatedAt: new Date().toISOString()
-    }).catch(e => console.warn("leaderboard publish", e));
+    }, { merge: true }).catch(e => console.warn("leaderboard publish", e));
   }, 1200);
 }
 // ---- Class raid boss: one shared weekly HP pool the whole class chips away ----
@@ -30877,8 +30890,24 @@ function fpsApplyNavVisibility() {
 async function fpsNavInit() {
   await fpsLoadConfig(true);
   fpsApplyNavVisibility();
+  fpsShowAnnounce();
 }
 function openFpsGame() { window.location.href = 'fps.html'; }
+// ---- Release announcement banner (top of screen, dismissible per device) ----
+const FPS_ANNOUNCE_KEY = 'fpsAnnounceDismissed_v1';
+function fpsShowAnnounce() {
+  const el = document.getElementById('fpsAnnounce');
+  if (!el) return;
+  const dismissed = (() => { try { return localStorage.getItem(FPS_ANNOUNCE_KEY) === '1'; } catch (e) { return false; } })();
+  el.style.display = (currentUser && fpsReleased() && !dismissed) ? 'block' : 'none';
+}
+function fpsDismissAnnounce() {
+  try { localStorage.setItem(FPS_ANNOUNCE_KEY, '1'); } catch (e) {}
+  const el = document.getElementById('fpsAnnounce');
+  if (el) el.style.display = 'none';
+}
+document.getElementById('fpsAnnounceClose').addEventListener('click', fpsDismissAnnounce);
+document.getElementById('fpsAnnounceLater').addEventListener('click', fpsDismissAnnounce);
 
 async function tcgInit() {
   await tcgLoadConfig(true);
