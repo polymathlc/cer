@@ -9227,7 +9227,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.149.0';
+const APP_VERSION = 'v1.149.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -16436,10 +16436,7 @@ function doPrintWorksheetOpen() {
       </div>`;
     }
 
-    qHtml += `<div class="print-q-header">
-      <h2>${escapeHtml(q.title)}</h2>
-      <div class="print-q-meta">${escapeHtml(q.category)} &middot; ${escapeHtml(q.topic)}</div>
-    </div>`;
+    qHtml += `<div class="print-q-header print-q-header-plain"><h2>Question ${qIndex + 1}</h2></div>`;
 
     const qSections = [];
 
@@ -16507,7 +16504,7 @@ function doPrintWorksheetOpen() {
     allHtml += qHtml;
     const _akExtra = _qAnswerKeyExtraSection(q);
     if (_akExtra) qSections.push(_akExtra);
-    answerKeyData.push({ title: q.title, sections: qSections });
+    answerKeyData.push({ title: 'Question ' + (qIndex + 1), sections: qSections });
   });
 
   // Answer Key Page (open ended — full answer text)
@@ -20238,10 +20235,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // frontHtml: pre-built front-matter pages (cover / cheat sheet) placed
   // before question 1 — each .print-front-page prints on its own sheet.
   const akExtras = !!(opts && opts.answerKeyExtras);
-  // plainNumbers: show a clean running "Question N" header and hide the bank
-  // question's own title + category/topic meta (used for PSLE-paper prints so
-  // the sheet shows just the question number, not the database title).
-  const plainNums = !!(opts && opts.plainNumbers);
+  // Every worksheet print/export now uses a clean running "Question N" header
+  // and hides the bank question's own title + category/topic meta — the sheet
+  // shows just the question number, never the database title.
+  const plainNums = true;
   // sectionHtmlById: map of question id → learning-objective banner HTML. The
   // banner is emitted as its OWN chunk immediately before that question, so the
   // packer can key a forced page break on it (data-qid "__lo__<qid>") — used by
