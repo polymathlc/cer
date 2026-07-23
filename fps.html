@@ -182,6 +182,11 @@
   #qStem { font-size: 1.02rem; line-height: 1.65; margin-bottom: 20px; }
   /* cap diagram height so a long question + tall screenshot still fits without zooming */
   #qStem img { max-width: 100%; max-height: 280px; object-fit: contain; border-radius: 10px; margin: 8px auto; display: block; }
+  /* ＋/− image zoom controls */
+  .qimgwrap { position: relative; text-align: center; overflow: auto; max-height: 420px; }
+  .qzoom { position: absolute; top: 6px; right: 6px; display: flex; gap: 5px; z-index: 3; }
+  .qzoom button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: rgba(12,18,30,0.88); color: var(--text); font-size: 1rem; line-height: 1; cursor: pointer; }
+  .qzoom button:hover { border-color: var(--primary); }
   .qopt {
     display: block; width: 100%; text-align: left; background: var(--panel2);
     border: 1px solid var(--line); color: var(--text); border-radius: 12px;
@@ -400,7 +405,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v0.6.2 BETA</div>
+<div id="versionBadge">Science Strike v0.7.0 BETA</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -508,6 +513,16 @@ function renderAdminPanel() {
 /* ---------- question bank (union across admin accounts, like index.html) ---------- */
 function stripHtml(html) { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.textContent || '').trim(); }
 
+// ＋/− zoom buttons on question diagrams (same inline-IIFE pattern as the
+// arcade games in index.html, so no global function wiring is needed)
+const QZOOM_JS = "(function(bt,d){var i=bt.parentNode.parentNode.querySelector('img');if(!i.dataset.w0){i.dataset.w0=i.getBoundingClientRect().width||i.naturalWidth||200;}var z=parseFloat(i.dataset.z||'1')*(d>0?1.3:1/1.3);z=Math.max(0.4,Math.min(4,z));i.dataset.z=z;i.style.width=(i.dataset.w0*z)+'px';i.style.maxWidth='none';i.style.maxHeight='none';})(this,";
+function qZoomBtns() {
+  return '<div class="qzoom">'
+    + '<button type="button" onclick="' + QZOOM_JS + '1)">＋</button>'
+    + '<button type="button" onclick="' + QZOOM_JS + '-1)">−</button>'
+    + '</div>';
+}
+
 function extractMcq(q) {
   const blocks = (q && q.blocks) || [];
   const mcq = blocks.find(b => b.type === 'mcq' && (b.options || []).length >= 2);
@@ -520,7 +535,7 @@ function extractMcq(q) {
   for (const b of blocks) {
     if (b.type === 'text' && b.content) { stemHtml += '<div>' + b.content + '</div>'; plain.push(stripHtml(b.content)); }
     else if (b.type === 'part' && (b.content || b.label)) { stemHtml += '<div><strong>' + (b.label || '') + '</strong> ' + (b.content || '') + '</div>'; plain.push(stripHtml(b.content || '')); }
-    else if (b.type === 'image' && b.url) { stemHtml += '<div style="text-align:center;"><img src="' + b.url + '" loading="eager"></div>'; plain.push('[diagram]'); }
+    else if (b.type === 'image' && b.url) { stemHtml += '<div class="qimgwrap"><img src="' + b.url + '" loading="eager">' + qZoomBtns() + '</div>'; plain.push('[diagram]'); }
   }
   if (!plain.join('').trim()) return null;
   return {
@@ -558,10 +573,25 @@ async function loadQuestions() {
   } catch (e) { console.error('loadQuestions', e); }
 }
 
+// ---- No-repeat rotation (invisible to students) ----
+// Shares the 'gameQSeen_<uid>' localStorage counter with index.html's arcade
+// games: only questions without a counter this cycle are served; once every
+// eligible question has been counted, the counters reset and a new cycle
+// starts. The counter itself is never shown anywhere.
+function qSeenKey() { return 'gameQSeen_' + ((currentUser && currentUser.uid) || 'guest'); }
+function qSeenLoad() { try { return JSON.parse(localStorage.getItem(qSeenKey())) || {}; } catch (e) { return {}; } }
+function qSeenSave(m) { try { localStorage.setItem(qSeenKey(), JSON.stringify(m)); } catch (e) {} }
 function nextQuestion() {
   if (!questions.length) return null;
-  const q = questions[qCursor % questions.length];
-  qCursor++;
+  const m = qSeenLoad();
+  let pool = questions.filter(q => !m[q.id]);
+  if (!pool.length) {   // cycle complete — reset counters for the eligible pool
+    for (const q of questions) delete m[q.id];
+    pool = questions;
+  }
+  const q = pool[Math.floor(Math.random() * pool.length)];
+  m[q.id] = (m[q.id] || 0) + 1;   // counted as shown the moment it appears
+  qSeenSave(m);
   return q;
 }
 
