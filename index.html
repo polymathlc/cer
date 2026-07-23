@@ -9227,7 +9227,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.150.1';
+const APP_VERSION = 'v1.150.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -17667,7 +17667,15 @@ function renderPracticeReady() {
 
 // Out-of-syllabus questions are kept in the bank and shown on the Past Papers
 // page, but never served in any general practice mode.
-function qInSyllabus(q) { return !(q && q.notInSyllabus); }
+function qInSyllabus(q) {
+  if (!q) return true;
+  if (q.notInSyllabus) return false;
+  // Retired topics (Cell Systems) are past-paper-completion ONLY — never
+  // served in any practice or game mode, even if the admin missed ticking
+  // the "Not in syllabus" flag on an individual question.
+  if (/cell\s*system/i.test(q.topic || '')) return false;
+  return true;
+}
 
 function getQuestionsForLevel(level) {
   const maxLevel = getLevelNumber(level);
@@ -29479,6 +29487,7 @@ function _sdSeedElo(q) {
 function buildDefenderQuestions() {
   return (questionBank || [])
     .filter(q => q && q.status !== 'pending' && q.status !== 'flagged')
+    .filter(qInSyllabus)         // retired topics (e.g. Cell Systems) never reach the games
     .filter(qWithinStudentLevel) // games never serve questions above the student's level
     .map(_sdExtractMcq)
     .filter(Boolean);
@@ -31249,6 +31258,7 @@ function _tcgBankQuestions() {
   try {
     (typeof questionBank !== 'undefined' && Array.isArray(questionBank) ? questionBank : []).forEach(q => {
       if (!q || (q.status && q.status !== 'approved') || !Array.isArray(q.blocks)) return;
+      if (!qInSyllabus(q)) return;   // retired topics never reach the Monster Cards quiz
       const mcq = q.blocks.find(b => b && b.type === 'mcq' && b.correctId && Array.isArray(b.options) && b.options.length >= 2);
       if (!mcq) return;
       const ai = mcq.options.findIndex(o => o.id === mcq.correctId);
