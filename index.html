@@ -9227,7 +9227,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.150.0';
+const APP_VERSION = 'v1.150.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -31321,7 +31321,7 @@ function _tcgQuizRender() {
   body.innerHTML = '<div class="tcg-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
     + '<div class="tcg-quiz-opts">'
     + q.opts.map((o, idx) => '<button type="button" class="tcg-quiz-opt" data-i="' + idx + '" onclick="_tcgQuizAnswer(' + idx + ')">'
-        + '<span class="tcg-quiz-let">' + String.fromCharCode(65 + idx) + '</span>' + escapeHtml(o) + '</button>').join('')
+        + '<span class="tcg-quiz-let">' + (idx + 1) + '</span>' + escapeHtml(o) + '</button>').join('')
     + '</div>'
     + '<div class="tcg-quiz-fb" id="tcgqFb"></div>';
 }
@@ -31347,7 +31347,7 @@ function _tcgQuizAnswer(idx) {
       msg = '<div class="tcg-fb-ok">✅ Correct! ' + (res ? res.progress : 0) + ' / ' + TCG_LVL_STEP + ' toward the next level.</div>';
     }
   } else {
-    msg = '<div class="tcg-fb-no">❌ Not quite — the correct answer is <b>' + String.fromCharCode(65 + q.a) + '</b>. Keep going, the next one counts!</div>';
+    msg = '<div class="tcg-fb-no">❌ Not quite — the correct answer is <b>(' + (q.a + 1) + ')</b>. Keep going, the next one counts!</div>';
   }
   if (q.ex) msg += '<div class="tcg-fb-ex">' + escapeHtml(q.ex) + '</div>';
   msg += '<div style="margin-top:14px;text-align:center;"><button class="btn btn-primary" type="button" onclick="_tcgQuizNext()">Next question ▶</button></div>';
