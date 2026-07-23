@@ -9240,7 +9240,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.152.0';
+const APP_VERSION = 'v1.153.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -28090,6 +28090,22 @@ function _renderQuestWinnersStrip(wonList) {
   }).join('');
   return '<div class="comm-quest-winners"><div class="cqw-head">🏆 Recent Flash Quiz winners</div>' + rows + '</div>';
 }
+// Built-in Science Strike release announcement — rendered client-side at the
+// top of the feed once the game is released (not a Firestore doc, so it can't
+// be un-pinned or deleted and needs no write).
+function _commFpsAnnouncePost() {
+  if (!fpsReleased()) return null;
+  return {
+    _id: '__fpsAnnounce', _builtin: true,
+    type: 'news', pinned: true, status: 'approved',
+    title: '🎉 NEW GAME RELEASED — 🔫 Science Strike!',
+    text: 'An open-world roguelite shooter where science questions power up your loot. Survive infinite waves, hunt rarer and rarer gear, and answer a question every 15 seconds to boost your luck. The leaderboard is live on the Leaderboard page (🔫 Strike tab) — ranked by correct answers, and the top 3 win a $10 Popular voucher each. Find Science Strike in the sidebar. Good luck!',
+    _ctaHtml: '<div class="comm-actions"><button class="btn btn-primary" onclick="openFpsGame()">🔫 Play Science Strike</button></div>',
+    authorUid: '', authorName: COMM_ADMIN_NAME, authorRole: 'admin',
+    authorAvatar: COMM_ADMIN_AVATAR, authorStatus: COMM_ADMIN_STATUS,
+    createdAt: ''
+  };
+}
 function _commPostHtml(p, moderate) {
   const admin = _isAdmin();
   const isStaff = p.authorRole === 'admin';
@@ -28101,7 +28117,8 @@ function _commPostHtml(p, moderate) {
   const statusLabel = isStaff ? COMM_ADMIN_STATUS : _commStudentStatus(_commPostCount(p.authorUid));
   const statusPill = '<span class="comm-status' + (isStaff ? ' polymath' : '') + '">' + escapeHtml(statusLabel) + '</span>';
   let actions = '';
-  if (moderate) actions = '<div class="comm-actions"><button class="btn btn-primary" onclick="commApprove(\'' + p._id + '\')">✓ Approve</button><button class="btn btn-outline" onclick="commReject(\'' + p._id + '\')">✕ Reject</button></div>';
+  if (p._builtin) actions = '';   // no moderation on the synthetic announcement — there's no doc behind it
+  else if (moderate) actions = '<div class="comm-actions"><button class="btn btn-primary" onclick="commApprove(\'' + p._id + '\')">✓ Approve</button><button class="btn btn-outline" onclick="commReject(\'' + p._id + '\')">✕ Reject</button></div>';
   else if (admin) actions = '<div class="comm-actions"><button class="btn btn-outline" onclick="commPin(\'' + p._id + '\',\'' + (p.pinned ? 'false' : 'true') + '\')">' + (p.pinned ? '📌 Unpin' : '📌 Pin') + '</button><button class="btn btn-outline" onclick="commDelete(\'' + p._id + '\')">🗑 Delete</button></div>';
   return '<div class="comm-post' + (p.pinned && !moderate ? ' pinned' : '') + '">' +
     '<div class="comm-ava' + (isStaff ? ' admin' : '') + '">' + ava + '</div>' +
@@ -28110,13 +28127,15 @@ function _commPostHtml(p, moderate) {
     '<span class="comm-time">' + _commTimeAgo(p.createdAt) + '</span>' + (p.pinned && !moderate ? ' 📌' : '') + '</div>' +
     (p.title ? '<div class="comm-title">' + escapeHtml(p.title) + '</div>' : '') +
     (p.text ? '<div class="comm-text">' + escapeHtml(p.text) + '</div>' : '') +
-    img + actions +
+    img + (p._ctaHtml || '') + actions +
     '</div></div>';
 }
 function _renderCommFeed() {
   const feed = document.getElementById('commFeed'); if (!feed) return;
   const posts = _commPosts.filter(p => p.status === 'approved')
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  const fpsPost = _commFpsAnnouncePost();
+  if (fpsPost) posts.unshift(fpsPost);
   if (!posts.length) { feed.innerHTML = '<div class="empty-note">No posts yet. ' + (_isAdmin() ? 'Share the first update above!' : 'Check back soon!') + '</div>'; return; }
   feed.innerHTML = posts.map(p => _commPostHtml(p, false)).join('');
 }
@@ -30904,6 +30923,7 @@ async function fpsNavInit() {
   await fpsLoadConfig(true);
   fpsApplyNavVisibility();
   fpsShowAnnounce();
+  try { _renderCommFeed(); } catch (_) {}  // community feed's built-in Strike announcement waits on this flag
 }
 function openFpsGame() { window.location.href = 'fps.html'; }
 // ---- Release announcement banner (top of screen, dismissible per device) ----
