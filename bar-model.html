@@ -1744,7 +1744,8 @@ input, button, select, textarea { font-family: inherit; }
       <div class="admin-field">
         <label for="openaiModelSelect">ChatGPT model</label>
         <select id="openaiModelSelect">
-          <option value="gpt-4o-mini" selected>gpt-4o-mini &mdash; fast &amp; cheap (recommended)</option>
+          <option value="gpt-5.6-sol" selected>gpt-5.6-sol &mdash; newest (recommended)</option>
+          <option value="gpt-4o-mini">gpt-4o-mini &mdash; fast &amp; cheap</option>
           <option value="gpt-4o">gpt-4o &mdash; strongest vision marking</option>
           <option value="gpt-4.1-mini">gpt-4.1-mini</option>
           <option value="gpt-4.1">gpt-4.1</option>
@@ -1768,7 +1769,7 @@ input, button, select, textarea { font-family: inherit; }
   </div>
 </div>
 
-<div class="version-badge" id="versionBadge">Bar Model Studio v1.5</div>
+<div class="version-badge" id="versionBadge">Bar Model Studio v1.6</div>
 
 <!-- ══════════════════════════════════════════════════════════════════
      FIREBASE AI LOGIC (Gemini) — module script
@@ -4086,8 +4087,8 @@ function getStoredOpenAiKey() {
 }
 
 function getStoredOpenAiModel() {
-  try { return localStorage.getItem(STORAGE_KEYS.openaiModel) || 'gpt-4o-mini'; }
-  catch (e) { return 'gpt-4o-mini'; }
+  try { return localStorage.getItem(STORAGE_KEYS.openaiModel) || 'gpt-5.6-sol'; }
+  catch (e) { return 'gpt-5.6-sol'; }
 }
 
 function getStoredMarkingEngine() {
@@ -4098,10 +4099,10 @@ function getStoredMarkingEngine() {
 /* ── ChatGPT vision marking call ─────────────────────────────────── */
 
 async function askOpenAiVision(promptText, pngBase64, apiKey) {
+  var model = getStoredOpenAiModel();
+  var isGpt5 = /^gpt-5/.test(model);
   var body = {
-    model: getStoredOpenAiModel(),
-    temperature: 0.2,
-    max_tokens: 900,
+    model: model,
     response_format: { type: 'json_object' },
     messages: [
       {
@@ -4119,6 +4120,10 @@ async function askOpenAiVision(promptText, pngBase64, apiKey) {
       }
     ]
   };
+  // gpt-5.x models reject max_tokens and non-default temperature — they take
+  // max_completion_tokens and always run at their own default temperature
+  if (isGpt5) { body.max_completion_tokens = 1200; }
+  else { body.max_tokens = 900; body.temperature = 0.2; }
 
   var response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
