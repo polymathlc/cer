@@ -159,6 +159,9 @@
   #wpnAmmo .rl { color: #ffb347; font-size: 0.9rem; font-weight: 600; }
   #qTimer { position: absolute; top: 16px; right: 20px; }
   #dmgVignette { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,40,50,0.55) 100%); transition: opacity 0.25s; }
+  /* low-HP heartbeat pulse (CSS animation overrides the inline opacity) */
+  #dmgVignette.lowhp { animation: lowHpPulse 1.15s ease-in-out infinite; }
+  @keyframes lowHpPulse { 0%, 100% { opacity: 0.22; } 50% { opacity: 0.62; } }
   #pickupBar {
     position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%);
     background: rgba(10,14,24,0.88); border: 1px solid var(--line); border-radius: 14px;
@@ -253,6 +256,23 @@
   }
   #skillBtn:hover { border-color: var(--primary); }
   #versionBadge { position: fixed; bottom: 10px; right: 12px; z-index: 60; font-size: 0.68rem; color: #5a6780; letter-spacing: 0.06em; display: none; font-family: monospace; }
+  /* ---------- wave-clear upgrade draft ---------- */
+  .draft-row { display: flex; gap: 12px; margin-top: 16px; }
+  .draft-card {
+    flex: 1; background: var(--panel2); border: 2px solid var(--line); border-radius: 14px;
+    padding: 18px 12px 14px; cursor: pointer; text-align: center;
+    transition: border-color 0.12s, transform 0.12s;
+  }
+  .draft-card:hover { transform: translateY(-3px); border-color: var(--primary); }
+  .draft-card.rare { border-color: #2b5c8f; }
+  .draft-card.epic { border-color: var(--r-epic); box-shadow: 0 0 18px rgba(178,100,245,0.28); }
+  .draft-card .dic { font-size: 2rem; }
+  .draft-card .dnm { font-weight: 700; margin: 8px 0 6px; font-size: 0.95rem; }
+  .draft-card .dds { color: var(--muted); font-size: 0.78rem; line-height: 1.5; min-height: 46px; }
+  .draft-card .drar { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.14em; margin-top: 8px; }
+  .draft-card .dkey { margin-top: 8px; font-size: 0.75rem; color: #ffd76a; font-weight: 700; }
+  .mod-chip { display: inline-block; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 3px 9px; margin: 2px 3px 2px 0; font-size: 0.75rem; font-weight: 600; }
+  .mfr-tag { display: inline-block; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.08em; background: #2a3550; color: #ffd76a; border-radius: 6px; padding: 2px 7px; margin-right: 6px; vertical-align: middle; }
 </style>
 </head>
 <body>
@@ -312,9 +332,11 @@
       <span style="color:var(--r-mythic)">Mythic</span> (unique special effects!)<br>
       <b>Elements:</b> 🔥 burn · ❄ slow · ⚡ stun · ☠ poison<br>
       <b>Questions:</b> one every 15s. Streaks raise loot luck; milestones (3/5/8/12) guarantee better drops. A wrong answer resets the streak.<br>
+      <b>After each wave:</b> draft 1 of 3 upgrades · a supply chest drops. Chests guarantee UNCOMMON+ loot.<br>
       <b>Minimap</b> (top-left): red blips are enemies — far ones stick to the rim so you always know which way to turn. Grey lines are roads, the sun sits at a fixed compass point.<br>
       <b>Waves:</b> most of every wave is a swarm of tiny minions that barely scratch you — mow them down! A few real enemies fight among them, and every so often a 💀 <b>ELITE</b> (orange HP bar and minimap blip) hunts you with serious damage — but it always drops Rare-or-better loot.<br>
-      Wipe a wave to get a 5-second breather, then a bigger wave rolls in. Waves never end — how long can you last?
+      Wipe a wave to get a 5-second breather, then a bigger wave rolls in. Waves never end — how long can you last?<br>
+      Enemies flash red before they strike — keep moving! Press <b>M</b> to mute sound.
     </div>
 
     <div class="admin-panel" id="adminPanel" style="display:none;">
@@ -347,6 +369,7 @@
     <div class="hud-chip" id="hudCores">⚛ 0</div>
     <div class="hud-chip" id="hudGrenade">💣 ×2 [Q]</div>
     <div class="hud-chip" id="hudAbility">✨ [F]</div>
+    <div class="hud-chip" id="hudSfx">🔊 [M]</div>
   </div>
   <div class="hud" id="skillBtn">🧠 Skills [I]</div>
 
@@ -366,6 +389,15 @@
       <div id="qOptions"></div>
       <div id="qFeedback"><div class="verdict"></div><div class="explain"></div></div>
       <button class="btn" id="qContinue">Continue ▶</button>
+    </div>
+  </div>
+
+  <!-- wave-clear upgrade draft overlay -->
+  <div class="overlay" id="draftOverlay">
+    <div class="qcard" style="max-width:760px;text-align:center;">
+      <div class="qtag" id="draftTitle">⚙️ WAVE CLEARED — CHOOSE AN UPGRADE</div>
+      <div class="draft-row" id="draftCards"></div>
+      <p style="color:var(--muted);font-size:0.75rem;margin-top:14px;">Upgrades stack for the rest of this run. Click a card or press 1 / 2 / 3.</p>
     </div>
   </div>
 
@@ -423,7 +455,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.1.0</div>
+<div id="versionBadge">Science Strike v1.3.0</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -942,6 +974,7 @@ function tierUnlocked(cls, tier) { return tier === 1 || treePoints(cls) >= (tier
 // correct answers) — a student can close the tab any time and lose nothing.
 function awardCores(n) {
   if (!n) return;
+  if (G && G.mods && G.mods.cores) n = Math.round(n * (1 + G.mods.cores * 0.10));   // drafted: Core Siphon
   loadMeta();   // re-sync first so a sibling tab's banked cores are never clobbered
   meta.cores += n;
   if (G) G.coresEarned = (G.coresEarned || 0) + n;
@@ -1091,6 +1124,97 @@ function mulberry32(a) {
   };
 }
 
+/* ═══ AUDIO ═══
+   All sound is synthesized live with WebAudio — no audio files. The context
+   is created/resumed lazily on the first user gesture (autoplay policy). */
+let actx = null, sfxMaster = null, noiseBuf = null;
+let sfxMuted = false;
+try { sfxMuted = localStorage.getItem('fpsMuted') === '1'; } catch (e) {}
+function ensureAudio() {
+  if (!actx) {
+    try {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      sfxMaster = actx.createGain();
+      sfxMaster.gain.value = 0.35;   // master volume
+      sfxMaster.connect(actx.destination);
+      noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    } catch (e) { actx = null; return; }
+  }
+  if (actx.state === 'suspended') actx.resume();
+}
+document.addEventListener('pointerdown', ensureAudio);
+document.addEventListener('keydown', ensureAudio);
+function toggleMute() {
+  sfxMuted = !sfxMuted;
+  try { localStorage.setItem('fpsMuted', sfxMuted ? '1' : '0'); } catch (e) {}
+  if (!sfxMuted) { ensureAudio(); blip(880, 0.06, 'sine', 0.2); }
+  if (G) updateHud();
+}
+// core synth helpers: an enveloped oscillator blip (optional pitch slide),
+// and a filtered white-noise burst (optional filter sweep)
+function blip(freq, dur, type, vol, slide, delay) {
+  if (!actx || sfxMuted) return;
+  const t0 = actx.currentTime + (delay || 0);
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type || 'square';
+  o.frequency.setValueAtTime(Math.max(20, freq), t0);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, slide), t0 + dur);
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  o.connect(g); g.connect(sfxMaster);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+function noiseBurst(dur, vol, filterFreq, endFreq, delay) {
+  if (!actx || sfxMuted) return;
+  const t0 = actx.currentTime + (delay || 0);
+  const src = actx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  const f = actx.createBiquadFilter(); f.type = 'lowpass';
+  f.frequency.setValueAtTime(filterFreq || 1200, t0);
+  if (endFreq) f.frequency.exponentialRampToValueAtTime(Math.max(30, endFreq), t0 + dur);
+  const g = actx.createGain();
+  g.gain.setValueAtTime(vol, t0);
+  g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  src.connect(f); f.connect(g); g.connect(sfxMaster);
+  src.start(t0); src.stop(t0 + dur + 0.02);
+}
+let lastHitSfx = 0;
+const sfx = {
+  shoot(kind) {
+    if (kind === 'bolt') { blip(430, 0.12, 'triangle', 0.3, 130); noiseBurst(0.05, 0.12, 2500); }
+    else if (kind === 'beam') { blip(920, 0.15, 'sawtooth', 0.22, 190); }
+    else if (kind === 'stream') { blip(210, 0.08, 'sine', 0.16, 110); }
+    else { noiseBurst(0.09, 0.4, 3200); blip(170, 0.06, 'square', 0.22, 60); }
+  },
+  hit() {   // short tick — throttled so plasma streams don't machine-gun it
+    const n = performance.now();
+    if (n - lastHitSfx < 50) return;
+    lastHitSfx = n;
+    blip(1350, 0.04, 'square', 0.1);
+  },
+  crit() { blip(1900, 0.08, 'square', 0.16); blip(2600, 0.1, 'square', 0.12, null, 0.05); },
+  kill() { blip(720, 0.1, 'square', 0.2, 140); },
+  reload() { blip(850, 0.05, 'square', 0.18); blip(620, 0.06, 'square', 0.18, null, 0.13); },   // click-clack
+  reloadEnd() { blip(1150, 0.06, 'square', 0.2); },
+  pickup(kind, tier) {   // chime — higher weapon rarity = higher pitch
+    const base = 480 * Math.pow(1.16, tier || 0);
+    blip(base, 0.09, 'sine', 0.22); blip(base * 1.5, 0.12, 'sine', 0.2, null, 0.07);
+  },
+  chest() { blip(180, 0.18, 'sawtooth', 0.16, 90); blip(660, 0.1, 'sine', 0.2, null, 0.14); blip(990, 0.14, 'sine', 0.18, null, 0.22); },   // creak + chime
+  draft() { noiseBurst(0.3, 0.22, 500, 3200); },   // whoosh
+  draftPick() { blip(700, 0.07, 'square', 0.2); blip(1050, 0.09, 'square', 0.18, null, 0.07); },
+  waveHorn() { for (const f of [146.8, 185, 220]) blip(f, 0.5, 'sawtooth', 0.14); blip(293.7, 0.5, 'sawtooth', 0.1, null, 0.02); },
+  bossSting() { for (const f of [82.4, 98, 123.5]) blip(f, 0.9, 'sawtooth', 0.16); blip(41.2, 0.9, 'sine', 0.2); },   // low minor chord
+  qPop() { blip(1150, 0.07, 'sine', 0.16); },
+  qGood() { blip(660, 0.09, 'sine', 0.22); blip(880, 0.14, 'sine', 0.22, null, 0.09); },
+  qBad() { blip(160, 0.32, 'sawtooth', 0.2, 85); },
+  hurt() { noiseBurst(0.12, 0.35, 480); blip(120, 0.12, 'sine', 0.28, 55); },
+  boom(near) { const v = 0.15 + 0.45 * (near === undefined ? 1 : near); noiseBurst(0.45, v, 420, 90); blip(72, 0.4, 'sine', v * 0.7, 34); },
+  combo() { blip(523, 0.07, 'square', 0.16); blip(659, 0.07, 'square', 0.16, null, 0.06); blip(784, 0.1, 'square', 0.18, null, 0.12); },   // rising arpeggio
+  death() { blip(420, 1.0, 'sawtooth', 0.26, 46); noiseBurst(0.8, 0.2, 300, 60); },
+};
+
 /* ════════════════ LOOT SYSTEM ════════════════ */
 const RARITIES = [
   { key: 'common',    name: 'COMMON',    color: '#9aa3ad', w: 100, mult: 1.00 },
@@ -1106,6 +1230,8 @@ const ELEMENTS = {
   ice:    { icon: '❄',  name: 'Frozen',  color: '#7fd4ff' },
   shock:  { icon: '⚡', name: 'Volt',    color: '#ffe45c' },
   poison: { icon: '☠',  name: 'Toxic',   color: '#8ee649' },
+  slag:   { icon: '🟣', name: 'Slag',    color: '#c77dff' },
+  corrosive: { icon: '🧪', name: 'Corrosive', color: '#b8e62e' },
 };
 const SPECIALS = [
   { key: 'chain', name: 'Chain Lightning', desc: 'Hits arc to a nearby enemy for 60% damage' },
@@ -1133,6 +1259,17 @@ const ARCHETYPES = [
   { key: 'arc',      name: 'Arc Cannon',    proj: 'bullet', dmg: 24, rof: 2.4, mag: 10, reload: 1.4, pellets: 1, spread: 0.8, bloom: 1.8, kick: 3.0, speed: 30, minRarity: 3 },
 ];
 const PREFIX = { common: ['Rusty', 'Basic', 'Standard'], uncommon: ['Tuned', 'Field', 'Keen'], rare: ['Vector', 'Prime', 'Quantum'], epic: ['Nova', 'Phantom', 'Eclipse'], legendary: ['Apex', 'Sovereign', 'Dread'], mythic: ['MYTHIC', 'Omega', 'Singularity'] };
+// Manufacturers: every rolled weapon comes from one of these, tweaking its
+// stats and prefixing its name. apply() mutates the finished weapon object
+// BEFORE the name is built so VOLTAIC's forced element shows up in the name.
+const MFRS = [
+  { key: 'junkyard', name: 'JUNKYARD DOG', apply(w) { w.dmg = Math.round(w.dmg * 1.15); w.spread *= 1.25; } },
+  { key: 'voltaic',  name: 'VOLTAIC',      apply(w) { w.element = 'shock'; w.rof *= 1.08; } },
+  { key: 'crimson',  name: 'CRIMSON LANCE', apply(w) { w.rof *= 1.15; w.mag = Math.round(w.mag * 1.2); } },
+  { key: 'oracle',   name: 'ORACLE CORP',  apply(w) { w.elPower *= 1.3; w.critBonus = (w.critBonus || 0) + 0.15; } },
+];
+// small manufacturer chip shown before weapon names (pickup bar + HUD)
+function mfrTag(w) { return w && w.mfr ? '<span class="mfr-tag">' + w.mfr.name + '</span>' : ''; }
 
 // Luck: 1.0 = base. Streak + Fortune upgrade push the weight curve toward the top tiers.
 function rollRarity(rng, luck, minTier) {
@@ -1163,11 +1300,10 @@ function makeWeapon(rng, floor, luck, minTier) {
   const special = tier === 5 ? SPECIALS[Math.floor(rng() * SPECIALS.length)] : null;
   const floorScale = 1 + floor * 0.12;
   const jitter = 0.9 + rng() * 0.2;
-  const names = PREFIX[rar.key];
-  const el = ELEMENTS[element];
-  return {
-    kind: 'weapon', tier, rarity: rar, arch, element, special,
-    name: ((el.name ? el.name + ' ' : '') + names[Math.floor(rng() * names.length)] + ' ' + arch.name),
+  const mfr = MFRS[Math.floor(rng() * MFRS.length)];
+  const w = {
+    kind: 'weapon', tier, rarity: rar, arch, element, special, mfr,
+    name: '',
     dmg: Math.round(arch.dmg * rar.mult * floorScale * jitter * (special ? 1.25 : 1)),
     rof: arch.rof * (1 + tier * 0.04),
     mag: Math.round(arch.mag * (1 + tier * 0.08)),
@@ -1177,6 +1313,11 @@ function makeWeapon(rng, floor, luck, minTier) {
     bloom: arch.bloom, kick: arch.kick,
     elPower: 0.5 + tier * 0.18,
   };
+  mfr.apply(w);   // VOLTAIC overrides the element roll to shock, etc.
+  const names = PREFIX[rar.key];
+  const el = ELEMENTS[w.element];
+  w.name = mfr.name + ' ' + ((el.name ? el.name + ' ' : '') + names[Math.floor(rng() * names.length)] + ' ' + arch.name);
+  return w;
 }
 
 function weaponDps(w) { return Math.round(w.dmg * w.pellets * w.rof * (w.special && w.special.key === 'twin' ? 2 : 1)); }
@@ -1208,16 +1349,22 @@ function startRun() {
       hp: 1, maxHp: 1,
       speedMult: 1, dmgMult: 1, magMult: 1,
     },
-    weapon: null, ammo: 0, reloading: 0,
-    fireCd: 0, bloomNow: 0, viewKick: 0, gunKick: 0, flash: 0,
+    weapon: null, ammo: 0, reloading: 0, reloadTotal: 0,
+    fireCd: 0, bloomNow: 0, viewKick: 0, yawKick: 0, gunKick: 0, flash: 0,
     ads: 0,                     // 0..1 aim-down-sights lerp (right mouse, scoped weapons)
     enemies: [], projectiles: [], pProj: [], loots: [], particles: [], floaters: [],
+    casings: [], corpses: [], dmgDirs: [],   // feel lists — all hard-capped
+    trauma: 0, hitmark: null, banner: null,
     grenades: { type: 'frag', count: 2 + (cls === 'soldier' ? 0 : -1) + Math.floor(skillLv('grenadier') / 2) },
     grenadeEnts: [], fields: [], deployables: [],
     cdF: 0, timeSlow: 0,
     totalKills: 0, coresEarned: 0,
     streak: 0, bestStreak: 0, qCorrect: 0, qTotal: 0,
     nextDropFloorTier: 0,     // guaranteed min rarity for the NEXT drop (streak milestones)
+    mods: {}, modsTaken: [],  // run-scoped drafted upgrades: key → stacks, names for the death recap
+    combo: 0, comboT: 0,      // kill combo: chained kills within 3s of each other
+    focusT: 0,                // 🧠 FOCUS buff from correct answers: +25% damage while > 0
+    draftOpen: false, draftOffers: null,
     qTimerMs: QUESTION_INTERVAL,
     qOpenedAt: 0, activeQ: null,
     paused: false, over: false,
@@ -1245,7 +1392,7 @@ function startRun() {
 function luckNow() {
   // streak: +12% per streak point (soft-capped), fortune upgrade: +6%/lv
   const s = Math.min(G ? G.streak : 0, 15);
-  return 1 + s * 0.12 + (meta.up.luck || 0) * 0.06;
+  return 1 + s * 0.12 + (meta.up.luck || 0) * 0.06 + ((G && G.mods && G.mods.luck) || 0) * 0.10;
 }
 
 function equipWeapon(w) {
@@ -1254,7 +1401,7 @@ function equipWeapon(w) {
   G.reloading = 0;
   updateHud();
 }
-function magSize() { return Math.max(1, Math.round(G.weapon.mag * G.player.magMult)); }
+function magSize() { return Math.max(1, Math.round(G.weapon.mag * G.player.magMult * (1 + (G.mods.mag || 0) * 0.25))); }
 
 /* ---------- infinite waves: enemies spawn in a ring around the player ---------- */
 function findSpawn(rng) {
@@ -1278,6 +1425,7 @@ function makeMinion(rng, x, y, wave) {
     speed: base.speed * 1.1, dmg: Math.min(4, 1 + wave * 0.12),   // barely tickles
     ranged: false, size: base.size * 0.6, state: 'chase', minion: true,
     burn: 0, poison: 0, slow: 0, stun: 0, hitFlash: 0, atkCd: 0, fireCd: 0,
+    spawnT: 0.35, windup: 0, charge: 0,   // spawn-in scale + attack telegraphs
     wanderDir: rng() * 6.28, wanderT: 0, animPhase: rng() < 0.5 ? 0 : 1,
   };
 }
@@ -1306,6 +1454,7 @@ function spawnWave() {
     const e = makeMinion(rng, pos.x, pos.y, wv);
     e.state = idle();
     G.enemies.push(e);
+    spawnPoof(pos.x, pos.y);
   }
   // the core: a handful of real enemies
   const coreN = Math.min(9, 2 + Math.floor(wv * 0.7));
@@ -1314,12 +1463,14 @@ function spawnWave() {
     const e = makeEnemy(rng, pos.x, pos.y, hpScale, wv);
     e.state = idle();
     G.enemies.push(e);
+    spawnPoof(pos.x, pos.y);
   }
   // the spice: an ELITE every 3rd wave (and randomly later on)
   const eliteN = (wv % 3 === 0 ? 1 : 0) + (wv >= 8 && rng() < 0.35 ? 1 : 0);
   for (let i = 0; i < eliteN; i++) {
     const pos = findSpawn(rng);
     G.enemies.push(makeElite(rng, pos.x, pos.y, wv, hpScale));
+    spawnPoof(pos.x, pos.y);
   }
   if (isBossWave) {
     const pos = findSpawn(rng);
@@ -1327,7 +1478,16 @@ function spawnWave() {
       type: 'warden', name: 'Warden', hp: 550 * hpScale, maxHp: 550 * hpScale,
       speed: 0.85, dmg: 16 + wv, ranged: true, size: 1.5, boss: true, fireCd: 0, state: 'chase',
     }));
+    spawnPoof(pos.x, pos.y);
+    G.trauma = Math.min(1, (G.trauma || 0) + 0.5);   // the ground shakes when the Warden lands
   }
+  // big center-screen banner + horn (boss waves get the low sting instead)
+  G.banner = {
+    t: 1.8, t0: 1.8, boss: isBossWave,
+    title: isBossWave ? '⚠ WARDEN ⚠' : 'WAVE ' + wv,
+    sub: G.enemies.length + ' HOSTILES',
+  };
+  if (isBossWave) sfx.bossSting(); else sfx.waveHorn();
   updateHud();
   toast('🌊 Wave ' + wv
     + (isBossWave ? ' — WARDEN INBOUND!' : eliteN ? ' — 💀 an ELITE hunts you!' : '')
@@ -1377,6 +1537,7 @@ function makeEnemy(rng, x, y, hpScale, floor) {
     speed: t.speed * (1 + floor * 0.015), dmg: t.dmg + Math.floor(floor * 0.8),
     ranged: t.ranged, size: t.size, state: 'idle',
     burn: 0, poison: 0, slow: 0, stun: 0, hitFlash: 0, atkCd: 0, fireCd: 0, wanderDir: rng() * 6.28, wanderT: 0,
+    spawnT: 0.35, windup: 0, charge: 0,   // spawn-in scale + attack telegraphs
     animPhase: rng() < 0.5 ? 0 : 1,   // desync the walk cycles
   };
 }
@@ -1405,25 +1566,38 @@ function lineOfSight(x0, y0, x1, y1) {
 function requestLock() { canvas.requestPointerLock && canvas.requestPointerLock(); }
 document.addEventListener('pointerlockchange', () => {
   pointerLocked = document.pointerLockElement === canvas;
-  if (!pointerLocked && G && !G.over && !G.activeQ && !skillsOpen && !overlayVisible('deathOverlay')) {
+  if (!pointerLocked && G && !G.over && !G.activeQ && !G.draftOpen && !skillsOpen && !overlayVisible('deathOverlay')) {
     G.paused = true;
     $('pauseOverlay').classList.add('active');
   }
 });
+// look-sway state: the viewmodel lags behind recent mouse movement (springy)
+let swayX = 0, swayY = 0, swayVX = 0, swayVY = 0;
 document.addEventListener('mousemove', e => {
-  if (!pointerLocked || !G || G.paused || G.activeQ) return;
-  G.player.dir += e.movementX * 0.0026;
+  if (!pointerLocked || !G || G.paused || G.activeQ || G.draftOpen) return;
+  // aiming down sights halves mouse sensitivity at full scope
+  const adsSens = 1 - 0.5 * (G.ads || 0);
+  G.player.dir += e.movementX * 0.0026 * adsSens;
   // vertical look: y-shear pitch (positive = looking up). Shots respect it —
   // aim over a head or into the floor and you miss; hit the head band for x2.
-  G.player.pitch = Math.max(-150, Math.min(180, (G.player.pitch || 0) - e.movementY * 0.55));
+  G.player.pitch = Math.max(-150, Math.min(180, (G.player.pitch || 0) - e.movementY * 0.55 * adsSens));
+  swayVX += e.movementX * 0.9;
+  swayVY += e.movementY * 0.6;
 });
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
+  if (e.code === 'KeyM') toggleMute();   // mute toggle works in menus too
   if (!G || G.over) return;
-  if (e.code === 'KeyR' && !G.paused && !G.activeQ) startReload();
-  if (e.code === 'KeyE' && !G.paused && !G.activeQ) tryPickup();
-  if (e.code === 'KeyQ' && !G.paused && !G.activeQ) throwGrenade();
-  if (e.code === 'KeyF' && !G.paused && !G.activeQ) useAbility();
+  if (e.code === 'KeyR' && !G.paused && !G.activeQ && !G.draftOpen) startReload();
+  if (e.code === 'KeyE' && !G.paused && !G.activeQ && !G.draftOpen) tryPickup();
+  if (e.code === 'KeyQ' && !G.paused && !G.activeQ && !G.draftOpen) throwGrenade();
+  if (e.code === 'KeyF' && !G.paused && !G.activeQ && !G.draftOpen) useAbility();
+});
+// 1/2/3 picks a card while the wave-clear upgrade draft is open
+document.addEventListener('keydown', e => {
+  if (!G || !G.draftOpen) return;
+  const n = { Digit1: 0, Digit2: 1, Digit3: 2, Numpad1: 0, Numpad2: 1, Numpad3: 2 }[e.code];
+  if (n !== undefined) pickDraft(n);
 });
 // I toggles the skill tree anywhere (menu, mid-run — the run pauses)
 document.addEventListener('keydown', e => {
@@ -1435,7 +1609,7 @@ document.addEventListener('keyup', e => { keys[e.code] = false; });
 let mouseDown = false;
 let adsHeld = false;   // right mouse button — aim down sights on scoped weapons
 canvas.addEventListener('mousedown', e => {
-  if (!G || G.paused || G.over || G.activeQ) return;
+  if (!G || G.paused || G.over || G.activeQ || G.draftOpen) return;
   if (!pointerLocked) { requestLock(); return; }
   if (e.button === 0) mouseDown = true;
   if (e.button === 2) adsHeld = true;
@@ -1475,6 +1649,8 @@ function effDmg(w) {
   let d = w.dmg * G.player.dmgMult * classMods().dmg;
   d *= 1 + skillLv('marksman') * 0.04 + skillLv('rifleman') * 0.03 + skillLv('cap_rambo') * 0.15;
   d *= 1 + skillLv('heavyrounds') * 0.08;
+  d *= 1 + (G.mods.dmg || 0) * 0.12;              // drafted: Overcharged Rounds
+  if (G.focusT > 0) d *= 1.25;                    // 🧠 FOCUS buff from correct answers
   if (G.player.hp < G.player.maxHp * 0.25) d *= 1 + skillLv('laststand') * 0.15;
   return d;
 }
@@ -1482,24 +1658,32 @@ function effRof(w) {
   let r = w.rof * classMods().rof;
   r *= 1 + skillLv('suppressive') * 0.03;
   r *= 1 - skillLv('heavyrounds') * 0.03;
+  r *= 1 + (G.mods.rof || 0) * 0.10;              // drafted: Trigger Discipline
   return Math.max(0.4, r);
 }
 function effRange() {
   return classMods().range * (1 + skillLv('longbarrel') * 0.12 + skillLv('cap_longshot') * 0.3);
 }
-function critMult() { return classMods().critMult + skillLv('critscholar') * 0.15 + skillLv('cap_hawk') * 0.5; }
+function critMult() {
+  // ORACLE CORP weapons carry a flat crit bonus; drafted crit stacks multiply the total
+  const base = classMods().critMult + skillLv('critscholar') * 0.15 + skillLv('cap_hawk') * 0.5 + ((G.weapon && G.weapon.critBonus) || 0);
+  return base * (1 + (G.mods.crit || 0) * 0.08);
+}
 function pierceCount(w) { return (w.arch.pierce || 0) + skillLv('piercing'); }
 function abilityCdMult() { return Math.max(0.4, 1 - skillLv('gadgeteer') * 0.05 - skillLv('cap_warlord') * 0.2); }
 function bulletSpeed(w) { return (w.arch.speed || 34) * (1 + skillLv('ballistics') * 0.08); }
 
 function startReload() {
   if (G.reloading > 0 || G.ammo >= magSize()) return;
-  G.reloading = G.weapon.reload * (1 - skillLv('fastloader') * 0.06);
+  G.reloading = G.weapon.reload * (1 - skillLv('fastloader') * 0.06) * Math.max(0.4, 1 - (G.mods.reload || 0) * 0.15);
+  G.reloadTotal = G.reloading;   // for the eased reload dip animation
+  sfx.reload();
 }
 function currentSpreadDeg() {
   const w = G.weapon;
   let s = (w.spread + G.bloomNow) * classMods().spread;
   s *= 1 - skillLv('steadyhands') * 0.04;
+  s *= Math.max(0.3, 1 - (G.mods.spread || 0) * 0.15);   // drafted: Stabilizers (tames bloom too)
   // aiming down sights tightens hard; Breath Control tightens harder
   s *= 1 - Math.min(0.92, 0.65 + skillLv('breathcontrol') * 0.03) * (G.ads || 0);
   return Math.max(0.05, s);
@@ -1519,14 +1703,29 @@ function shoot() {
       else spawnBullet(a, w, w.arch.proj);   // bullet / bolt / stream — all real projectiles
     }
   }
+  // drafted +1 PROJECTILE: one extra round per stack, fired with a slight angle
+  // offset (on a scattergun this simply reads as one more pellet)
+  for (let x = 0; x < (G.mods.projectile || 0); x++) {
+    const sp = currentSpreadDeg() * Math.PI / 180;
+    const a = G.player.dir + (Math.random() - 0.5) * 2 * sp + 0.035;
+    if (w.arch.proj === 'beam') fireBeam(a, w);
+    else spawnBullet(a, w, w.arch.proj);
+  }
   // recoil: crosshair bloom + camera view-kick (muzzle climb) + aim drift + gun kickback
   const adsCalm = 1 - 0.6 * (G.ads || 0);   // scoping in soaks most of the kick
   const wind = 1 - skillLv('windreader') * 0.08;
   G.bloomNow = Math.min(G.bloomNow + w.kick * w.bloom * 0.8 * adsCalm, 10);
   G.viewKick = Math.min(70, (G.viewKick || 0) + w.kick * 4.5 * adsCalm * wind);
+  // small random YAW kick too — applied to the camera as a decaying offset
+  // (G.yawKick recenters on its own, unlike the permanent CS-style drift below)
+  G.yawKick = (G.yawKick || 0) + (Math.random() - 0.5) * w.kick * 0.002 * adsCalm * wind;
   G.gunKick = 1;
   G.player.dir += (Math.random() - 0.5) * 0.004 * w.kick * adsCalm * wind;
   G.flash = 0.07;
+  sfx.shoot(w.arch.proj);
+  // eject a brass casing — screen-space, arcs right off the viewmodel
+  G.casings.push({ x: REND_W / 2 + 150 + Math.random() * 22, y: REND_H - 118, vx: 130 + Math.random() * 90, vy: -150 - Math.random() * 70, rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 22, t: 0.6 });
+  if (G.casings.length > 24) G.casings.shift();
   if (G.ammo <= 0) startReload();
   updateHud();
 }
@@ -1561,8 +1760,35 @@ function critBand(e) {
    across the world with a visible trail, and only stops when it hits an
    enemy (pierce permitting), a tree trunk, or flies out to max range. The
    vertical-aim geometry is captured at the moment of firing. */
+// training-wheels aim assist: bullet/bolt shots whose ray passes within ~0.6°
+// of an enemy's crit band snap onto the crit. Deliberately tiny and silent —
+// NOT applied to beams (already instant) or plasma streams.
+function aimAssist(angle) {
+  const P = G.player;
+  const win = 0.6 * Math.PI / 180;
+  let best = null, bestD = 1e9;
+  for (const e of G.enemies) {
+    if (e.hp <= 0) continue;
+    const d0 = Math.hypot(e.x - P.x, e.y - P.y);
+    if (d0 < 0.5 || d0 > effRange()) continue;
+    const rel = wrapAngle(Math.atan2(e.y - P.y, e.x - P.x) - angle);
+    if (Math.abs(rel) > win) continue;
+    if (!lineOfSight(P.x, P.y, e.x, e.y)) continue;
+    // the snap only helps if the frozen vertical aim actually crosses the
+    // crit band at this range (same geometry updatePProj uses)
+    const sizeS = REND_H * ZOOM / d0;
+    const eh = sizeS * 0.95 * e.size;
+    const top = HOR + sizeS * 0.48 - eh;
+    const band = critBand(e);
+    const aimY = REND_H / 2;
+    if (aimY < top + eh * band[0] || aimY > top + eh * band[1]) continue;
+    if (d0 < bestD) { bestD = d0; best = e; }
+  }
+  return best ? Math.atan2(best.y - P.y, best.x - P.x) : angle;
+}
 function spawnBullet(angle, w, kind) {
   const P = G.player;
+  if (kind === 'bullet' || kind === 'bolt') angle = aimAssist(angle);
   const sp = bulletSpeed(w);
   const range = kind === 'stream' ? (w.arch.range || 6) : effRange();
   const ox = P.x + Math.cos(angle) * 0.4, oy = P.y + Math.sin(angle) * 0.4;   // leaves the nozzle
@@ -1578,7 +1804,13 @@ function spawnBullet(angle, w, kind) {
   });
 }
 function bulletImpact(p) {
-  G.particles.push({ kind: 'spark', x: p.x, y: p.y, t: 0.18, color: p.kind === 'stream' ? '#8ee6ff' : '#ffd9a0' });
+  // 2–3 spark chips wherever the bullet stops (enemy or tree trunk)
+  const col = p.kind === 'stream' ? '#8ee6ff' : '#ffd9a0';
+  const n = 2 + (Math.random() < 0.5 ? 1 : 0);
+  for (let i = 0; i < n; i++) {
+    G.particles.push({ kind: 'spark', x: p.x + (Math.random() - 0.5) * 0.22, y: p.y + (Math.random() - 0.5) * 0.22, t: 0.13 + Math.random() * 0.07, color: col });
+  }
+  sfx.hit();
 }
 function updatePProj(dt) {
   const aimY = REND_H / 2;
@@ -1653,6 +1885,7 @@ function fireBeam(angle, w) {
     falloff *= 0.7;
   }
   spawnBeam(px, py, px + dx * (victims.length ? hitD : wallD), py + dy * (victims.length ? hitD : wallD), w);
+  if (victims.length) sfx.hit();
   for (const v of victims) {
     damageEnemy(v.e, Math.round(playerShotDamage(w, v.crit, v.e) * v.falloff), w, true, v.crit);
   }
@@ -1660,16 +1893,27 @@ function fireBeam(angle, w) {
 
 function damageEnemy(e, dmg, w, applyEffects, crit) {
   if (e.hp <= 0) return;   // an enemy dies exactly once (pierce/boom/chain ordering)
+  if (e.slag > 0) dmg = Math.round(dmg * 1.35);   // slagged targets take amplified damage
   e.hp -= dmg;
   e.hitFlash = 0.12;
   e.state = 'chase';
+  // knockback lurch: shove the enemy a hair away from the player (walls permitting)
+  const pa = Math.atan2(e.y - G.player.y, e.x - G.player.x);
+  tryMove(e, e.x + Math.cos(pa) * 0.12, e.y + Math.sin(pa) * 0.12, 0.34);
   addFloater(e, dmg, crit ? '#ffd24d' : (w && w.element !== 'none' ? ELEMENTS[w.element].color : '#fff'), crit);
+  if (applyEffects) {   // direct player hits flash the crosshair hitmarker
+    G.hitmark = { t: crit ? 0.22 : 0.15, kind: crit ? 'crit' : 'hit' };
+    if (crit) sfx.crit();
+  }
+  if (applyEffects && G.mods.lifesteal) healPlayer(dmg * 0.04 * G.mods.lifesteal);   // drafted: Vampiric Rounds
   if (w && applyEffects) {
-    const pw = w.elPower || 0.5;
+    const pw = (w.elPower || 0.5) * (1 + (G.mods.elPow || 0) * 0.2);   // drafted: Catalyst Rounds
     if (w.element === 'fire') { e.burn = Math.max(e.burn, 3); e.burnDps = dmg * 0.15 * (1 + pw); }
     if (w.element === 'poison') { e.poison = Math.min((e.poison || 0) + 2.5, 8); e.poisonDps = dmg * 0.10 * (1 + pw); }
     if (w.element === 'ice') e.slow = Math.max(e.slow, 1.6 + pw);
     if (w.element === 'shock' && Math.random() < 0.22 + pw * 0.1) e.stun = Math.max(e.stun, 0.8);
+    if (w.element === 'slag') e.slag = Math.max(e.slag || 0, 4);
+    if (w.element === 'corrosive') { e.corr = Math.max(e.corr || 0, 3); e.corrDps = dmg * 0.12 * (1 + pw); e.shred = 4; }
     if (w.special) {
       if (w.special.key === 'vamp') healPlayer(dmg * 0.12);
       if (w.special.key === 'chain') {
@@ -1690,13 +1934,33 @@ function damageEnemy(e, dmg, w, applyEffects, crit) {
       }
     }
   }
-  if (e.hp <= 0) onEnemyKilled(e, w);
+  if (e.hp <= 0) onEnemyKilled(e, w, crit, dmg);
 }
-function onEnemyKilled(e, w) {
+function onEnemyKilled(e, w, crit, dmg) {
   G.totalKills++;
   awardCores(e.boss ? 10 : e.elite ? 5 : 1);      // banked + saved instantly
+  sfx.kill();
+  G.hitmark = { t: 0.3, kind: 'kill' };           // big red X for the kill confirm
+  // corpse: tips over, sinks and fades (purely visual — gameplay removes the
+  // enemy from G.enemies as before). Capped, oldest drops first.
+  const ichor = ichorColor(e);
+  if (G.corpses.length >= 20) G.corpses.shift();
+  G.corpses.push({ e, t: 1.2, ichor, dir: Math.random() < 0.5 ? -1 : 1 });
+  ichorBurst(e.x, e.y, ichor);
+  // kill combo: chain kills within 3s; milestones every 5 pay out cores
+  G.combo++; G.comboT = 3;
+  if (G.combo >= 5 && G.combo % 5 === 0) { toast('🔥 COMBO ×' + G.combo, '#ffb347'); awardCores(G.combo); sfx.combo(); }
   const adren = skillLv('adrenaline');
   if (adren) healPlayer(adren * 1.5);
+  // drafted HEADSHOTS DETONATE: only real crit kills (the same `crit` flag the
+  // bullet/beam head-band checks produce) set off the AoE
+  if (crit && G.mods.headboom && dmg) {
+    for (const o of G.enemies) {
+      if (o === e || o.hp <= 0) continue;
+      if (Math.hypot(o.x - e.x, o.y - e.y) < 2.5) damageEnemy(o, Math.max(1, Math.round(dmg * 0.4)), null, false);
+    }
+    spawnBoom(e.x, e.y, '#ffd24d');
+  }
   if (w && w.special && w.special.key === 'nova') {
     for (const o of G.enemies) {
       if (o === e || o.hp <= 0) continue;
@@ -1720,8 +1984,12 @@ function rollDrop(e) {
   const dropChance = (e.boss || e.elite ? 1 : e.minion ? 0.07 : 0.34) + skillLv('scrapper') * 0.02 + skillLv('cap_junkrat') * 0.05;
   if (rng() > dropChance && !G.nextDropFloorTier) {
     const r2 = rng();
-    if (r2 < 0.20) G.loots.push({ kind: 'health', x: e.x, y: e.y, amt: 25 + G.wave * 2, z: 0.6, vz: 1.5 });
-    else if (r2 < 0.34) {
+    // need-weighted mercy drops: below half HP med cells are twice as likely;
+    // out of grenades, grenade bundles are twice as likely
+    const hpCut = (G.player.hp / G.player.maxHp) < 0.5 ? 0.40 : 0.20;
+    const grCut = hpCut + (G.grenades.count === 0 ? 0.28 : 0.14);
+    if (r2 < hpCut) G.loots.push({ kind: 'health', x: e.x, y: e.y, amt: 25 + G.wave * 2, z: 0.6, vz: 1.5 });
+    else if (r2 < grCut) {
       const keys2 = Object.keys(GRENADE_TYPES);
       const gtype = keys2[Math.floor(rng() * keys2.length)];
       G.loots.push({ kind: 'grenade', x: e.x, y: e.y, gtype, n: 2, z: 0.6, vz: 1.5 });
@@ -1736,10 +2004,18 @@ function rollDrop(e) {
   if (w.tier >= 4) toast(w.rarity.name + ' drop! ' + w.name, w.rarity.color);
 }
 function healPlayer(n) { G.player.hp = Math.min(G.player.maxHp, G.player.hp + n); updateHud(); }
-function damagePlayer(n) {
+function damagePlayer(n, src) {
   if (G.over) return;
   n *= 1 - skillLv('juggernaut') * 0.05;
+  if (G.mods.thorns && src && src.hp > 0) damageEnemy(src, Math.max(1, Math.round(n * 0.12 * G.mods.thorns)), null, false);   // drafted: Reactive Plating
   G.player.hp -= n;
+  sfx.hurt();
+  G.trauma = Math.min(1, (G.trauma || 0) + 0.35);
+  // red arc at the screen edge pointing toward the attacker (capped at 3)
+  if (src && src.x !== undefined) {
+    if (G.dmgDirs.length >= 3) G.dmgDirs.shift();
+    G.dmgDirs.push({ ang: Math.atan2(src.y - G.player.y, src.x - G.player.x), t: 0.8 });
+  }
   $('dmgVignette').style.opacity = '1';
   setTimeout(() => { $('dmgVignette').style.opacity = '0'; }, 220);
   if (G.player.hp <= 0) { G.player.hp = 0; endRun(); }
@@ -1773,7 +2049,7 @@ function updateGrenades(dt) {
 }
 function explodeGrenade(g) {
   const lvG = skillLv('grenadier');
-  const base = (60 + G.wave * 4) * (1 + 0.10 * lvG);
+  const base = (60 + G.wave * 4) * (1 + 0.10 * lvG) * (1 + (G.mods.gren || 0) * 0.15);   // Demolition Kit stacks
   const rMul = 1 + skillLv('commando') * 0.08;   // Commando widens every blast
   spawnBoom(g.x, g.y, g.type === 'ice' ? '#7fd4ff' : g.type === 'shock' ? '#ffe45c' : '#ff9a3c');
   const aoe = (radius, fn) => {
@@ -1892,7 +2168,32 @@ function updateDeployables(dt) {
 /* ---------- effects ---------- */
 function spawnTracer(x0, y0, x1, y1, color) { G.particles.push({ kind: 'tracer', x0, y0, x1, y1, t: 0.09, color: color || '#ffd9a0' }); }
 function spawnBeam(x0, y0, x1, y1, w) { G.particles.push({ kind: 'beam', x0, y0, x1, y1, t: 0.13, color: w.element !== 'none' ? ELEMENTS[w.element].color : '#ff5ce1' }); }
-function spawnBoom(x, y, color) { G.particles.push({ kind: 'boom', x, y, t: 0.4, color: color || '#ff9a3c' }); }
+function spawnBoom(x, y, color) {
+  G.particles.push({ kind: 'boom', x, y, t: 0.4, color: color || '#ff9a3c' });
+  // every explosion: distance-scaled boom sfx + screen-shake trauma
+  const d = Math.hypot(x - G.player.x, y - G.player.y);
+  const near = Math.max(0, 1 - d / 9);
+  G.trauma = Math.min(1, (G.trauma || 0) + 0.3 * near);
+  sfx.boom(near);
+}
+// little debris puffs: spawn-in poofs, death ichor, impact chips
+function spawnPoof(x, y) {
+  for (let i = 0; i < 5; i++) {
+    G.particles.push({ kind: 'bit', x, y, vx: (Math.random() - 0.5) * 2.6, vy: (Math.random() - 0.5) * 2.6, t: 0.35 + Math.random() * 0.2, t0: 0.55, color: '#cfd8c8', r: 0.05 });
+  }
+}
+function ichorBurst(x, y, color) {
+  for (let i = 0; i < 6 + (Math.random() * 5 | 0); i++) {
+    G.particles.push({ kind: 'bit', x, y, vx: (Math.random() - 0.5) * 3.4, vy: (Math.random() - 0.5) * 3.4, t: 0.45 + Math.random() * 0.3, t0: 0.75, color, r: 0.06 });
+  }
+}
+// each monster bleeds its own colour (matches its procedural art hue)
+function ichorColor(e) {
+  if (e.boss) return '#7a2bd8';
+  const t = ENEMY_INDEX[e.type];
+  if (t && t.spec) return 'hsl(' + t.spec.hue + ',65%,42%)';
+  return { crawler: '#4da34a', drone: '#7f8ca3', sentinel: '#4a6ab0', brute: '#b03a2a', warden: '#7a2bd8' }[e.type] || '#6fae4f';
+}
 function addFloater(e, dmg, color, crit) { G.floaters.push({ x: e.x, y: e.y, z: 0.6, dmg, t: crit ? 1.0 : 0.8, color, crit: !!crit }); }
 
 /* ---------- pickups ---------- */
@@ -1913,14 +2214,24 @@ function collectLoot(l) {
   if (i < 0) return;
   if (l.kind === 'health') {
     healPlayer(l.amt);
+    sfx.pickup('health');
     toast('❤️ +' + l.amt + ' HP');
   } else if (l.kind === 'grenade') {
     const gt = GRENADE_TYPES[l.gtype];
     G.grenades.type = l.gtype;
     G.grenades.count += l.n;
+    sfx.pickup('grenade');
     toast(gt.icon + ' +' + l.n + ' ' + gt.name + ' grenades (' + gt.desc + ') — throw with Q');
+  } else if (l.kind === 'chest') {
+    // open first, THEN decide: the chest's weapon drops as a normal ground gun
+    // so the usual compare bar / [E] equip flow handles it
+    awardCores(5 + G.wave);
+    sfx.chest();
+    G.loots.push({ x: l.x, y: l.y, kind: 'weapon', w: l.w, z: 0.7, vz: 2.2, spin: Math.random() * 6.28 });
+    toast('📦 Chest opened — ' + l.w.rarity.name + ' ' + l.w.name + ' inside! +' + (5 + G.wave) + ' ⚛', l.w.rarity.color);
   } else {
     equipWeapon(l.w);
+    sfx.pickup('weapon', l.w.tier);   // rarer loot rings higher
     toast('Equipped ' + l.w.name, l.w.rarity.color);
   }
   G.loots.splice(i, 1);
@@ -1940,16 +2251,113 @@ function renderPickupBar() {
     bar.innerHTML = '<div class="inm">' + gt.icon + ' ' + gt.name + ' Grenades ×' + l.n + '</div><div class="stats">' + gt.desc + ' — throw with [Q]</div><div class="keyhint">[E] take (or walk over it)</div>';
     return;
   }
+  if (l.kind === 'chest') {
+    bar.innerHTML = '<div class="rar" style="color:' + l.w.rarity.color + '">SUPPLY DROP</div>'
+      + '<div class="inm">📦 Supply Chest</div>'
+      + '<div class="stats">Guaranteed <b>UNCOMMON+</b> weapon + cores inside</div>'
+      + '<div class="keyhint">[E] open</div>';
+    return;
+  }
   const w = l.w, cur = G.weapon;
   const el = w.element !== 'none' ? ELEMENTS[w.element].icon + ' ' + ELEMENTS[w.element].name + ' element' : 'No element';
   bar.innerHTML =
     '<div class="rar" style="color:' + w.rarity.color + '">' + w.rarity.name + '</div>'
-    + '<div class="inm" style="color:' + w.rarity.color + '">' + w.name + '</div>'
+    + '<div class="inm" style="color:' + w.rarity.color + '">' + mfrTag(w) + w.name + '</div>'
     + '<div class="stats">DMG ' + w.dmg + ' × ' + w.pellets + ' · ' + w.rof.toFixed(1) + '/s · mag ' + Math.round(w.mag * G.player.magMult)
     + ' · DPS ' + weaponDps(w) + ' <span style="color:' + (weaponDps(w) >= weaponDps(cur) ? 'var(--good)' : 'var(--bad)') + '">('
     + (weaponDps(w) >= weaponDps(cur) ? '+' : '') + (weaponDps(w) - weaponDps(cur)) + ' vs yours)</span><br>'
     + el + (w.special ? ' · <b style="color:var(--r-mythic)">' + w.special.name + '</b> — ' + w.special.desc : '') + '</div>'
     + '<div class="keyhint">[E] equip (replaces ' + cur.name + ')</div>';
+}
+
+/* ════════════════ WAVE-CLEAR UPGRADE DRAFT + SUPPLY CHEST ════════════════
+   Roguelike draft: after every wave clear the sim pauses and offers 3 of these
+   stacking, run-scoped upgrades (G.mods). Offers are rarity-weighted
+   ~60/30/10 common/rare/epic; 3 distinct picks per draft. */
+const DRAFT_UPGRADES = [
+  { key: 'dmg',        icon: '⚔️', name: 'Overcharged Rounds',  desc: '+12% weapon damage',                              rar: 'common' },
+  { key: 'rof',        icon: '🔩', name: 'Trigger Discipline',  desc: '+10% fire rate',                                  rar: 'common' },
+  { key: 'mag',        icon: '📦', name: 'Extended Mags',       desc: '+25% magazine size',                              rar: 'common' },
+  { key: 'reload',     icon: '🤲', name: 'Quick Hands',         desc: '−15% reload time',                                rar: 'common' },
+  { key: 'speed',      icon: '👟', name: 'Fleetfoot',           desc: '+8% move speed',                                  rar: 'common' },
+  { key: 'spread',     icon: '🎯', name: 'Stabilizers',         desc: '−15% spread & crosshair bloom',                   rar: 'common' },
+  { key: 'hp',         icon: '❤️', name: 'Field Plate',         desc: '+25 max HP, and heal 25 right now',               rar: 'common' },
+  { key: 'gren',       icon: '💣', name: 'Demolition Kit',      desc: '+2 grenades now · +15% grenade damage',           rar: 'common' },
+  { key: 'cores',      icon: '⚛', name: 'Core Siphon',         desc: '+10% Science Core gain',                          rar: 'common' },
+  { key: 'crit',       icon: '💢', name: 'Deadeye Rounds',      desc: '+8% critical hit damage',                         rar: 'rare' },
+  { key: 'elPow',      icon: '🧪', name: 'Catalyst Rounds',     desc: '+20% elemental power',                            rar: 'rare' },
+  { key: 'lifesteal',  icon: '🩸', name: 'Vampiric Rounds',     desc: 'Heal 4% of all damage you deal',                  rar: 'rare' },
+  { key: 'thorns',     icon: '🌵', name: 'Reactive Plating',    desc: 'Reflect 12% of damage taken back at the attacker', rar: 'rare' },
+  { key: 'luck',       icon: '🍀', name: "Rabbit's Foot",       desc: '+10% loot luck',                                  rar: 'rare' },
+  { key: 'headboom',   icon: '💥', name: 'HEADSHOTS DETONATE',  desc: 'Crit kills explode for 40% damage in a small AoE', rar: 'epic' },
+  { key: 'projectile', icon: '🔱', name: '+1 PROJECTILE',       desc: 'Every shot fires one extra bullet/pellet',        rar: 'epic' },
+];
+const DRAFT_RAR_W = { common: 60, rare: 30, epic: 10 };
+const DRAFT_RAR_COLOR = { common: 'var(--r-common)', rare: 'var(--r-rare)', epic: 'var(--r-epic)' };
+function rollDraftOffers() {
+  const rng = mulberry32((G.seed ^ (G.wave * 92821)) | 0);
+  const pool = DRAFT_UPGRADES.slice();
+  const offers = [];
+  while (offers.length < 3 && pool.length) {
+    let total = 0;
+    for (const u of pool) total += DRAFT_RAR_W[u.rar];
+    let r = rng() * total, idx = pool.length - 1;
+    for (let i = 0; i < pool.length; i++) { r -= DRAFT_RAR_W[pool[i].rar]; if (r <= 0) { idx = i; break; } }
+    offers.push(pool.splice(idx, 1)[0]);
+  }
+  return offers;
+}
+function openDraft() {
+  G.draftOpen = true;
+  G.draftOffers = rollDraftOffers();
+  sfx.draft();
+  document.exitPointerLock && document.exitPointerLock();
+  mouseDown = false; adsHeld = false;   // don't carry a held trigger into the pick
+  $('draftTitle').textContent = '⚙️ WAVE ' + G.wave + ' CLEARED — CHOOSE AN UPGRADE';
+  const host = $('draftCards');
+  host.innerHTML = '';
+  G.draftOffers.forEach((u, i) => {
+    const card = document.createElement('div');
+    card.className = 'draft-card ' + u.rar;
+    card.innerHTML = '<div class="dic">' + u.icon + '</div>'
+      + '<div class="dnm">' + u.name + '</div>'
+      + '<div class="dds">' + u.desc + '</div>'
+      + '<div class="drar" style="color:' + DRAFT_RAR_COLOR[u.rar] + '">' + u.rar.toUpperCase() + '</div>'
+      + '<div class="dkey">[ ' + (i + 1) + ' ]</div>';
+    card.addEventListener('click', () => pickDraft(i));
+    host.appendChild(card);
+  });
+  $('draftOverlay').classList.add('active');
+}
+function pickDraft(i) {
+  if (!G || !G.draftOpen || !G.draftOffers) return;
+  const u = G.draftOffers[i];
+  if (!u) return;
+  G.mods[u.key] = (G.mods[u.key] || 0) + 1;
+  G.modsTaken.push(u.name);
+  sfx.draftPick();
+  if (u.key === 'hp') { G.player.maxHp += 25; healPlayer(25); }
+  if (u.key === 'gren') G.grenades.count += 2;
+  toast(u.icon + ' ' + u.name + ' drafted!', DRAFT_RAR_COLOR[u.rar]);
+  closeDraft();
+}
+function closeDraft() {
+  G.draftOpen = false;
+  G.draftOffers = null;
+  $('draftOverlay').classList.remove('active');
+  G.breakT = 5;   // the 5s breather only starts once the draft is done
+  updateHud();
+  requestLock();
+}
+// Supply chest: tumbles down 2–3 units from the player on every wave clear.
+// Its weapon is pre-rolled UNCOMMON+; opening it drops the gun as normal loot.
+function spawnChest() {
+  const rng = mulberry32((G.seed ^ (G.wave * 31337)) | 0);
+  const ang = rng() * 6.283, d = 2 + rng();
+  let x = G.player.x + Math.cos(ang) * d, y = G.player.y + Math.sin(ang) * d;
+  if (solid(x, y)) { x = G.player.x; y = G.player.y; }
+  G.loots.push({ kind: 'chest', x, y, z: 0.6, vz: 2.0, w: makeWeapon(rng, G.wave, luckNow(), 1) });
+  toast('📦 Supply chest inbound!');
 }
 
 /* ════════════════ QUESTIONS every 15s ════════════════ */
@@ -1958,6 +2366,7 @@ function openQuestion() {
   if (!q) { G.qTimerMs = QUESTION_INTERVAL; toast('No vetted MCQ questions in the bank yet — free pass!'); return; }
   G.activeQ = q;
   G.qOpenedAt = performance.now();
+  sfx.qPop();
   document.exitPointerLock && document.exitPointerLock();
   $('qTopic').textContent = q.topic;
   $('qStreakNow').textContent = G.streak;
@@ -1999,6 +2408,7 @@ function answerQuestion(i, btn) {
   const verdict = fb.querySelector('.verdict');
   const explain = fb.querySelector('.explain');
   if (correct) {
+    sfx.qGood();
     G.qCorrect++; G.streak++;
     G.bestStreak = Math.max(G.bestStreak, G.streak);
     let milestone = '';
@@ -2007,13 +2417,18 @@ function answerQuestion(i, btn) {
     if (G.streak === 8)  { G.nextDropFloorTier = Math.max(G.nextDropFloorTier, 3); milestone = ' Next drop is at least EPIC!'; }
     if (G.streak === 12) { G.nextDropFloorTier = Math.max(G.nextDropFloorTier, 4); milestone = ' Next drop is at least LEGENDARY!!'; }
     healPlayer(10);
+    G.ammo = magSize();        // instant mag refill
+    G.reloading = 0;
+    G.grenades.count += 1;     // +1 of whatever grenade type you're holding
+    G.focusT = 3;              // 🧠 FOCUS: +25% damage for 3s (consumed in effDmg)
     awardCores(5);   // banked + saved on the spot
     // leaderboard: every correct answer counts, published live
     fpsPublish({ correct: increment(1) });
     if (_myFpsBoard) _myFpsBoard.correct = (_myFpsBoard.correct | 0) + 1;
-    verdict.textContent = '✔ Correct! +5 ⚛ cores (banked instantly). Streak ' + G.streak + ' → loot luck +' + Math.round((luckNow() - 1) * 100) + '%. +10 HP.' + milestone;
+    verdict.textContent = '✔ Correct! +10 HP · mag refilled · +1 grenade · 🧠 FOCUS +25% dmg 3s · +5 ⚛ · streak ' + G.streak + ' → loot luck +' + Math.round((luckNow() - 1) * 100) + '%.' + milestone;
     verdict.style.color = 'var(--good)';
   } else {
+    sfx.qBad();
     G.streak = 0;
     verdict.textContent = '✘ Not quite. Streak reset — your loot luck is back to base.';
     verdict.style.color = 'var(--bad)';
@@ -2035,6 +2450,8 @@ $('qContinue').addEventListener('click', () => {
 function endRun() {
   if (!G || G.over) return;
   G.over = true;
+  sfx.death();
+  $('dmgVignette').classList.remove('lowhp');
   document.exitPointerLock && document.exitPointerLock();
   const mins = (performance.now() - G.startedAt) / 60000;
   // cores were banked + saved the moment they were earned; nothing awarded here
@@ -2049,7 +2466,9 @@ function endRun() {
     + '<div><div class="k">Science answered</div><div class="v">' + G.qCorrect + '/' + G.qTotal + '</div></div>'
     + '<div><div class="k">Best streak</div><div class="v">🔥 ' + G.bestStreak + '</div></div>'
     + '<div><div class="k">Final weapon</div><div class="v" style="color:' + G.weapon.rarity.color + ';font-size:0.85rem;">' + G.weapon.name + '</div></div>'
-    + '<div><div class="k">Run time</div><div class="v">' + mins.toFixed(1) + ' min</div></div>';
+    + '<div><div class="k">Run time</div><div class="v">' + mins.toFixed(1) + ' min</div></div>'
+    + '<div style="grid-column:1/-1;"><div class="k">Upgrades drafted</div><div class="v" style="font-size:0.85rem;font-weight:600;">'
+    + (G.modsTaken.length ? G.modsTaken.map(n => '<span class="mod-chip">' + n + '</span>').join('') : '—') + '</div></div>';
   $('deathCores').textContent = '⚛ ' + cores;
   hideOverlays();
   $('deathOverlay').classList.add('active');
@@ -2061,7 +2480,7 @@ function tick(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
   if (!G || G.over) { if (G) render(); return; }
-  if (G.paused || G.activeQ) { render(); return; }
+  if (G.paused || G.activeQ || G.draftOpen) { render(); return; }
 
   const P = G.player;
   // question countdown runs only while actually playing
@@ -2071,6 +2490,12 @@ function tick(now) {
   // Bullet Time (Soldier F): the WORLD runs on wdt, the player mostly on dt
   const wdt = dt * (G.timeSlow > 0 ? 0.35 : 1);
   if (G.timeSlow > 0) G.timeSlow -= dt;
+  if (G.focusT > 0) G.focusT -= dt;   // 🧠 FOCUS buff ticks down
+  // kill combo window: 3s without a kill drops the chain
+  if (G.comboT > 0) {
+    G.comboT -= dt;
+    if (G.comboT <= 0 && G.combo > 0) { G.combo = 0; updateHud(); }
+  }
   if (G.cdF > 0) {
     const prevSec = Math.ceil(G.cdF);
     G.cdF -= dt;
@@ -2090,7 +2515,7 @@ function tick(now) {
   if (moving) {
     const slowWalk = G.timeSlow > 0 ? 0.8 : 1;   // slight slow-mo drag on the player
     const adsSlow = skillLv('cap_wraith') ? 0 : 0.4;   // WRAITH: full speed while scoped
-    const sp = 3.1 * P.speedMult * (1 - adsSlow * G.ads) * slowWalk * dt;
+    const sp = 3.1 * P.speedMult * (1 + (G.mods.speed || 0) * 0.08) * (1 - adsSlow * G.ads) * slowWalk * dt;
     const nx = P.x + (Math.cos(P.dir) * fwd - Math.sin(P.dir) * str) * sp;
     const ny = P.y + (Math.sin(P.dir) * fwd + Math.cos(P.dir) * str) * sp;
     tryMove(P, nx, ny, 0.22);
@@ -2100,22 +2525,32 @@ function tick(now) {
   G.bloomNow = Math.max(moveBloom, G.bloomNow - dt * 9 * (1 + skillLv('steadyaim') * 0.06));
   // recoil recovery + weapon bob
   G.viewKick = (G.viewKick || 0) * Math.exp(-dt * 8);
+  G.yawKick = (G.yawKick || 0) * Math.exp(-dt * 8);   // yaw kick recenters on its own
   G.gunKick = (G.gunKick || 0) * Math.exp(-dt * 11);
+  if (G.trauma > 0) G.trauma = Math.max(0, G.trauma - dt * 1.4);   // screen shake decays
+  // viewmodel look-sway spring: lags opposite recent mouse movement
+  swayX = (swayX + swayVX * dt * 0.06) * Math.exp(-dt * 7);
+  swayY = (swayY + swayVY * dt * 0.06) * Math.exp(-dt * 7);
+  swayVX *= Math.exp(-dt * 12);
+  swayVY *= Math.exp(-dt * 12);
   if (G.flash > 0) G.flash -= dt;
   if (moving) bobT += dt;
   if (mouseDown) shoot();
   if (G.fireCd > 0) G.fireCd -= dt;
   if (G.reloading > 0) {
     G.reloading -= dt;
-    if (G.reloading <= 0) { G.reloading = 0; G.ammo = magSize(); updateHud(); }
+    if (G.reloading <= 0) { G.reloading = 0; G.ammo = magSize(); sfx.reloadEnd(); updateHud(); }
   }
 
-  // infinite waves: short breather once a wave is wiped, then the next rolls in
+  // infinite waves: wave wipe → upgrade draft + supply chest, THEN the 5s
+  // breather (breakT is set in closeDraft so the countdown never runs behind
+  // the overlay), then the next wave rolls in
   if (G.enemies.length === 0 && !G.breakT) {
-    G.breakT = 5;
     healPlayer(15);
     awardCores(10 + G.wave * 2);   // wave-clear bonus, banked + saved instantly
-    toast('✅ Wave ' + G.wave + ' cleared! +' + (10 + G.wave * 2) + ' ⚛ banked · +15 HP · next wave in 5s');
+    toast('✅ Wave ' + G.wave + ' cleared! +' + (10 + G.wave * 2) + ' ⚛ banked · +15 HP');
+    spawnChest();
+    openDraft();
     updateHud();
   }
   if (G.breakT > 0) {
@@ -2131,12 +2566,35 @@ function tick(now) {
     // DoTs
     if (e.burn > 0) { e.burn -= wdt; e.hp -= (e.burnDps || 3) * wdt; if (e.hp <= 0) { onEnemyKilled(e, null); continue; } }
     if (e.poison > 0) { e.poison -= wdt; e.hp -= (e.poisonDps || 2) * wdt; if (e.hp <= 0) { onEnemyKilled(e, null); continue; } }
-    if (e.stun > 0) { e.stun -= wdt; continue; }
+    if (e.corr > 0) { e.corr -= wdt; e.hp -= (e.corrDps || 2) * wdt; if (e.hp <= 0) { onEnemyKilled(e, null); continue; } }
+    if (e.slag > 0) e.slag -= wdt;    // slag damage-amp wears off
+    if (e.shred > 0) e.shred -= wdt;  // corrosive armor-shred wears off
+    if (e.spawnT > 0) e.spawnT -= wdt;   // spawn-in scale-up
+    if (e.stun > 0) { e.stun -= wdt; e.windup = 0; e.charge = 0; continue; }   // stun cancels telegraphs
     const slowMult = e.slow > 0 ? 0.45 : 1;
     if (e.slow > 0) e.slow -= wdt;
     const d = Math.hypot(P.x - e.x, P.y - e.y);
     const sees = d < aggro && lineOfSight(e.x, e.y, P.x, P.y);
     if (sees) e.state = 'chase';
+    // melee windup telegraph: the enemy flashes red, holds still, then swings
+    if (e.windup > 0) {
+      e.windup -= wdt;
+      if (e.windup <= 0) {
+        e.atkCd = 0.9;
+        if (d < 1.3) damagePlayer(e.dmg * (e.shred > 0 ? 0.8 : 1), e);   // a beat to dodge out
+      }
+      continue;   // rooted while winding up
+    }
+    // ranged charge telegraph: the enemy glows, THEN the projectile leaves
+    if (e.charge > 0) {
+      e.charge -= wdt;
+      if (e.charge <= 0) {
+        const ang2 = Math.atan2(P.y - e.y, P.x - e.x);
+        if (lineOfSight(e.x, e.y, P.x, P.y)) {
+          G.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(ang2) * 5.5, dy: Math.sin(ang2) * 5.5, dmg: e.dmg * (e.shred > 0 ? 0.8 : 1), t: 4, src: e });
+        }
+      }
+    }
     if (e.state === 'chase') {
       const ang = Math.atan2(P.y - e.y, P.x - e.x);
       if (!e.ranged || d > 4.5) {
@@ -2145,13 +2603,14 @@ function tick(now) {
       }
       if (e.ranged) {
         e.fireCd -= wdt;
-        if (e.fireCd <= 0 && sees && d < 10) {
+        if (e.fireCd <= 0 && sees && d < 10 && !(e.charge > 0)) {
           e.fireCd = e.boss ? 0.9 : 1.6;
-          G.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(ang) * 5.5, dy: Math.sin(ang) * 5.5, dmg: e.dmg, t: 4 });
+          e.charge = 0.4;   // glow first, fire when the charge expires
         }
       } else {
         e.atkCd -= wdt;
-        if (d < 1.0 && e.atkCd <= 0) { e.atkCd = 0.9; damagePlayer(e.dmg); }
+        // shred (corrosive): this enemy hits 20% softer while its armor is melting
+        if (d < 1.0 && e.atkCd <= 0 && !(e.windup > 0)) e.windup = 0.35;   // telegraph, then strike
       }
     } else {
       // idle wander
@@ -2168,7 +2627,7 @@ function tick(now) {
     pr.t -= wdt;
     pr.x += pr.dx * wdt; pr.y += pr.dy * wdt;
     if (solid(pr.x, pr.y)) pr.t = 0;
-    else if (Math.hypot(pr.x - P.x, pr.y - P.y) < 0.4) { damagePlayer(pr.dmg); pr.t = 0; }
+    else if (Math.hypot(pr.x - P.x, pr.y - P.y) < 0.4) { damagePlayer(pr.dmg, pr.src); pr.t = 0; }
   }
   G.projectiles = G.projectiles.filter(p => p.t > 0);
   // player projectiles, grenades, ground fields, turrets/traps/drones
@@ -2191,10 +2650,30 @@ function tick(now) {
     if ((l.kind === 'health' || l.kind === 'grenade') && d < 0.7) autoCollect.push(l);
   }
   for (const l of autoCollect) collectLoot(l);
-  for (const p of G.particles) p.t -= dt;
+  for (const p of G.particles) {
+    p.t -= dt;
+    if (p.kind === 'bit') {   // debris: poofs, ichor — drifts and settles
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.vx *= Math.exp(-dt * 3); p.vy *= Math.exp(-dt * 3);
+    }
+  }
   G.particles = G.particles.filter(p => p.t > 0);
+  if (G.particles.length > 240) G.particles.splice(0, G.particles.length - 240);   // hard cap
   for (const fl of G.floaters) { fl.t -= dt; fl.z += dt * 0.7; }
   G.floaters = G.floaters.filter(f => f.t > 0);
+  // feel timers: corpses, shell casings, hitmarkers, damage-direction arcs, wave banner
+  for (const c of G.corpses) c.t -= dt;
+  G.corpses = G.corpses.filter(c => c.t > 0);
+  for (const c of G.casings) {
+    c.t -= dt;
+    c.x += c.vx * dt; c.y += c.vy * dt;
+    c.vy += 900 * dt; c.rot += c.vr * dt;
+  }
+  G.casings = G.casings.filter(c => c.t > 0 && c.y < REND_H + 30);
+  if (G.hitmark && G.hitmark.t > 0) G.hitmark.t -= dt;
+  for (const dd of G.dmgDirs) dd.t -= dt;
+  G.dmgDirs = G.dmgDirs.filter(d2 => d2.t > 0);
+  if (G.banner && G.banner.t > 0) G.banner.t -= dt;
 
   renderPickupBar();
   updateQTimerHud();
@@ -2249,6 +2728,18 @@ function render() {
   if (!G) return;
   const P = G.player;
   refreshZoom();
+  // screen shake: trauma² drives a random frame offset + a tiny roll
+  const tr = Math.min(1, G.trauma || 0);
+  const sh = tr * tr * 6;
+  ctx.save();
+  if (sh > 0.05) {
+    ctx.translate(REND_W / 2, REND_H / 2);
+    ctx.rotate((Math.random() - 0.5) * 0.012 * tr * tr);
+    ctx.translate(-REND_W / 2 + (Math.random() - 0.5) * 2 * sh, -REND_H / 2 + (Math.random() - 0.5) * 2 * sh);
+  }
+  // recoil yaw kick: borrow it onto the camera direction for this frame only
+  const yk = G.yawKick || 0;
+  P.dir += yk;
   HOR = Math.max(70, Math.min(REND_H - 40, REND_H / 2 + (P.pitch || 0) + Math.min(70, G.viewKick || 0)));
   zbuf.fill(VIEW_DIST);   // no walls — depth-sorted sprites occlude each other
   drawSky(P);
@@ -2273,6 +2764,7 @@ function render() {
   for (const gr of G.grenadeEnts) sprites.push({ sx: gr.x, sy: gr.y, kind: 'grenadeEnt', gr });
   for (const p of G.pProj) sprites.push({ sx: p.x, sy: p.y, kind: 'pProj', p });
   for (const e of G.enemies) sprites.push({ sx: e.x, sy: e.y, kind: 'enemy', e });
+  for (const c of G.corpses) sprites.push({ sx: c.e.x, sy: c.e.y, kind: 'corpse', c });
   for (const pr of G.projectiles) sprites.push({ sx: pr.x, sy: pr.y, kind: 'proj' });
   for (const fl of G.floaters) sprites.push({ sx: fl.x, sy: fl.y, kind: 'floater', fl });
   for (const s of sprites) {
@@ -2286,10 +2778,13 @@ function render() {
   drawScopeOverlay();
   drawMinimap(obstacles);
   drawCrosshair();
+  drawBanner();
   if (G.timeSlow > 0) {   // bullet-time tint
     ctx.fillStyle = 'rgba(80,140,255,0.10)';
     ctx.fillRect(0, 0, REND_W, REND_H);
   }
+  P.dir -= yk;   // hand the yaw kick back — it decays in tick(), not here
+  ctx.restore();
 }
 
 function wrapAngle(a) {
@@ -2429,18 +2924,25 @@ function drawMinimap(obstacles) {
     ctx.fillStyle = ob.kind === 'tree' ? 'rgba(52,120,60,0.9)' : 'rgba(130,130,135,0.9)';
     ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
   }
-  // loot beams
+  // loot beams — supply chests get a bright gold blip
   for (const l of G.loots) {
     const p = put(l.x, l.y);
-    ctx.fillStyle = l.kind === 'health' ? '#43d17c' : l.kind === 'grenade' ? '#ffd76a' : (l.w ? l.w.rarity.color : '#ffd76a');
-    ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, 7); ctx.fill();
+    ctx.fillStyle = l.kind === 'chest' ? '#ffd76a' : l.kind === 'health' ? '#43d17c' : l.kind === 'grenade' ? '#ffd76a' : (l.w ? l.w.rarity.color : '#ffd76a');
+    ctx.beginPath(); ctx.arc(p.x, p.y, l.kind === 'chest' ? 3.5 : 2.5, 0, 7); ctx.fill();
   }
-  // enemies — clamped to the rim when far so you always see where they are
+  // enemies — clamped to the rim when far so you always see where they are;
+  // the boss is a larger pulsing red blip you can't miss
   for (const e of G.enemies) {
     if (e.hp <= 0) continue;
     const p = put(e.x, e.y, true);
-    ctx.fillStyle = e.boss ? '#c05cff' : e.elite ? '#ffa028' : '#ff4b57';
-    ctx.beginPath(); ctx.arc(p.x, p.y, e.boss ? 4.5 : e.elite ? 4 : e.minion ? 2.2 : 3, 0, 7); ctx.fill();
+    if (e.boss) {
+      const pr = 5.5 + Math.sin(performance.now() / 170) * 1.8;
+      ctx.fillStyle = '#ff2d3c';
+      ctx.beginPath(); ctx.arc(p.x, p.y, pr, 0, 7); ctx.fill();
+      continue;
+    }
+    ctx.fillStyle = e.elite ? '#ffa028' : '#ff4b57';
+    ctx.beginPath(); ctx.arc(p.x, p.y, e.elite ? 4 : e.minion ? 2.2 : 3, 0, 7); ctx.fill();
   }
   // player wedge, always centre facing up
   ctx.fillStyle = '#ffffff';
@@ -2469,6 +2971,18 @@ function projectPoint(wx, wy) {
 }
 function drawTracers() {
   for (const p of G.particles) {
+    if (p.kind === 'bit') {
+      // debris mote: spawn poofs, ichor drops, impact chips
+      const pt = projectPoint(p.x, p.y);
+      if (pt) {
+        const r = Math.max(1.5, (REND_H * ZOOM / pt.perp) * (p.r || 0.05));
+        ctx.globalAlpha = Math.max(0, Math.min(1, p.t / (p.t0 || 0.6)));
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(pt.x, HOR + Math.min(40, pt.perp), r, 0, 7); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      continue;
+    }
     if (p.kind === 'spark') {
       // impact flash where a bullet stopped
       const pt = projectPoint(p.x, p.y);
@@ -2565,6 +3079,25 @@ function drawSprite(s) {
       });
       return;
     }
+    if (l.kind === 'chest') {
+      // supply crate sitting on the grass, rarity beam behind it like gun drops
+      const img = chestSprite(l.w.rarity.color);
+      const gw = size * 0.85, gh = gw * (img.height / img.width);
+      const lift = (l.z || 0) * size;
+      const gy = HOR + size * 0.48 - gh - lift;
+      const color = l.w.rarity.color;
+      const bh = size * 1.5, bw = size * 0.12;
+      drawClipped(screenX, Math.max(gw, bw), perp, () => {
+        const grd = ctx.createLinearGradient(0, HOR - bh / 2, 0, HOR + bh / 2);
+        grd.addColorStop(0, color + '00');
+        grd.addColorStop(0.8, color + '99');
+        grd.addColorStop(1, color + 'dd');
+        ctx.fillStyle = grd;
+        ctx.fillRect(screenX - bw / 2, HOR - bh / 2, bw, bh * 0.98);
+        ctx.drawImage(img, screenX - gw / 2, gy, gw, gh);
+      });
+      return;
+    }
     const color = l.kind === 'health' ? '#43d17c' : '#ffd76a';
     const h = size * 1.1, w = size * 0.2;
     const lift = (l.z || 0) * size;
@@ -2658,41 +3191,97 @@ function drawSprite(s) {
       ctx.fillStyle = fl.color;
       ctx.font = 'bold ' + Math.max(10, size * (fl.crit ? 0.16 : 0.1)) + 'px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText((fl.crit ? 'CRIT ' : '') + fl.dmg, screenX, HOR - size * (0.25 + fl.z * 0.3));
+      if (fl.crit) {   // "CRIT" rides above the number, not inline with it
+        ctx.font = 'bold ' + Math.max(9, size * 0.09) + 'px monospace';
+        ctx.fillText('CRIT', screenX, HOR - size * (0.25 + fl.z * 0.3) - Math.max(11, size * 0.17));
+        ctx.font = 'bold ' + Math.max(10, size * 0.16) + 'px monospace';
+      }
+      ctx.fillText(fl.dmg, screenX, HOR - size * (0.25 + fl.z * 0.3));
       ctx.globalAlpha = 1;
     }
+    return;
+  }
+  if (s.kind === 'corpse') {
+    // fallen monster: tips over, sinks into the grass and fades (visual only)
+    const c = s.c, ce = c.e;
+    const cspr = enemySprites[ce.type] || enemySprites.crawler;
+    const ceh = size * 0.95 * ce.size;
+    const cew = ceh * (SPR_W / SPR_H);
+    const prog = 1 - c.t / 1.2;                      // 0 → 1 over the corpse's life
+    const rot = Math.min(Math.PI / 2, prog * 2.4);   // keels over sideways
+    const sink = prog * ceh * 0.22;
+    drawClipped(screenX, cew, perp, () => {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, c.t / 0.55));
+      ctx.translate(screenX, HOR + size * 0.48 - sink);
+      ctx.rotate(rot * (c.dir || 1));
+      ctx.drawImage(cspr.frames[0], -cew / 2, -ceh, cew, ceh);
+      ctx.restore();
+    });
     return;
   }
   // enemy — pre-rendered detailed sprite: 2-frame walk cycle, white flash on hit
   const e = s.e;
   const spr = enemySprites[e.type] || enemySprites.crawler;
-  const eh = size * 0.95 * e.size;
+  // spawn-in: scales up from 0.2 over e.spawnT; hit-flash adds a squash pulse
+  let scaleM = 1;
+  if ((e.spawnT || 0) > 0) scaleM = 0.2 + 0.8 * (1 - e.spawnT / 0.35);
+  if (e.hitFlash > 0) scaleM *= 1 + 0.12 * (e.hitFlash / 0.12);   // eases back as hitFlash decays
+  if ((e.charge || 0) > 0) scaleM *= 1 + 0.05 * Math.sin(performance.now() / 40);   // charge shiver
+  const eh = size * 0.95 * e.size * scaleM;
   const ew = eh * (SPR_W / SPR_H);
-  const top = HOR + size * 0.48 - eh;
+  // walk cycle: slight vertical bob + a waddle lean while chasing
+  let bobO = 0, lean = 0;
+  if (e.state === 'chase') {
+    const wt = performance.now() / 1000 * (5 + e.speed * 2.5) + (e.animPhase || 0) * 3.14;
+    bobO = Math.sin(wt) * size * 0.012;
+    lean = Math.sin(wt * 0.5) * 0.05;
+  }
+  const top = HOR + size * 0.48 - eh + bobO;
   const frame = (((performance.now() / 260) | 0) + (e.animPhase || 0)) % 2;
-  const img = e.hitFlash > 0 ? spr.white[frame] : spr.frames[frame];
+  // melee windup telegraph: blink white + a red glow so the strike reads fair
+  const windBlink = (e.windup || 0) > 0 && ((performance.now() / 90) | 0) % 2 === 0;
+  const img = (e.hitFlash > 0 || windBlink) ? spr.white[frame] : spr.frames[frame];
   drawClipped(screenX, ew, perp, () => {
     // contact shadow grounds the monster on the grass
     ctx.fillStyle = 'rgba(6,10,6,0.30)';
     ctx.beginPath(); ctx.ellipse(screenX, HOR + size * 0.47, ew * 0.38, Math.max(2, ew * 0.09), 0, 0, 7); ctx.fill();
-    ctx.drawImage(img, screenX - ew / 2, top, ew, eh);
-  });
-  // hp bar (drawn above the sprite when its center column is visible)
-  const cx = Math.max(0, Math.min(REND_W - 1, screenX | 0));
-  if (perp < zbuf[cx]) {
-    // Deadeye Vision (sniper skill): the enemy's REAL crit box, drawn in gold
-    if (skillLv('deadeye')) {
-      const [b0, b1] = critBand(e);
-      const cw = 0.16 * e.size * size * 2;
-      ctx.strokeStyle = 'rgba(255,210,77,0.9)';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(screenX - cw / 2, top + eh * b0, cw, eh * (b1 - b0));
+    // elite/boss presence: a soft aura ring under the sprite
+    if (e.elite || e.boss) {
+      const pulse = 0.22 + 0.13 * Math.sin(performance.now() / 220);
+      ctx.fillStyle = e.boss ? 'rgba(192,36,60,' + pulse + ')' : 'rgba(62,162,255,' + pulse + ')';
+      ctx.beginPath(); ctx.ellipse(screenX, HOR + size * 0.47, ew * 0.62, Math.max(3, ew * 0.16), 0, 0, 7); ctx.fill();
     }
-    const bw = ew * 0.9;
+    // telegraph glows: red for melee windup, bright white for a ranged charge
+    if ((e.windup || 0) > 0 || (e.charge || 0) > 0) {
+      const ga = 0.3 + 0.25 * Math.sin(performance.now() / 70);
+      ctx.fillStyle = (e.windup || 0) > 0 ? 'rgba(255,45,60,' + ga + ')' : 'rgba(235,245,255,' + ga + ')';
+      ctx.beginPath(); ctx.ellipse(screenX, top + eh * 0.5, ew * 0.72, eh * 0.55, 0, 0, 7); ctx.fill();
+    }
+    ctx.save();
+    ctx.translate(screenX, HOR + size * 0.48);
+    ctx.transform(1, 0, lean, 1, 0, 0);   // waddle lean in the movement rhythm
+    ctx.drawImage(img, -ew / 2, -eh, ew, eh);
+    ctx.restore();
+  });
+  // Deadeye Vision (sniper skill): the enemy's REAL crit box, drawn in gold —
+  // always on once owned, even before the enemy has taken damage
+  const cx = Math.max(0, Math.min(REND_W - 1, screenX | 0));
+  if (perp < zbuf[cx] && skillLv('deadeye')) {
+    const [b0, b1] = critBand(e);
+    const cw = 0.16 * e.size * size * 2;
+    ctx.strokeStyle = 'rgba(255,210,77,0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(screenX - cw / 2, top + eh * b0, cw, eh * (b1 - b0));
+  }
+  // floating hp bar (drawn above the sprite when its center column is visible) —
+  // only once the enemy has taken damage; the boss bar is always up, and wider
+  if (perp < zbuf[cx] && (e.hp < e.maxHp || e.boss)) {
+    const bw = ew * (e.boss ? 1.35 : 0.9);
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(screenX - bw / 2, top - 8, bw, 4);
+    ctx.fillRect(screenX - bw / 2, top - 8, bw, e.boss ? 6 : 4);
     ctx.fillStyle = e.boss ? '#ff5d9e' : e.elite ? '#ffa028' : '#ff5d6c';
-    ctx.fillRect(screenX - bw / 2, top - 8, bw * Math.max(0, e.hp / e.maxHp), 4);
+    ctx.fillRect(screenX - bw / 2, top - 8, bw * Math.max(0, e.hp / e.maxHp), e.boss ? 6 : 4);
     if (e.elite) {   // elites announce themselves
       ctx.font = 'bold ' + Math.max(9, size * 0.09) + 'px monospace'; ctx.textAlign = 'center';
       ctx.fillText('💀', screenX, top - 14);
@@ -3191,21 +3780,61 @@ function gunModelSprite(w) {
   }
   return c;
 }
+// supply chest sprite: chunky crate with trim tinted by the rarity of the gun
+// inside, cached per rarity colour like the other procedural sprites
+const chestSpriteCache = new Map();
+function chestSprite(color) {
+  let c = chestSpriteCache.get(color);
+  if (!c) {
+    c = sprCanvas(g => {
+      const px = 4;
+      const put2 = (x, y, w2, h2, col) => { g.fillStyle = col; g.fillRect(x * px, y * px, w2 * px, h2 * px); };
+      put2(4, 15, 16, 13, '#3a4356');      // crate body
+      put2(4, 15, 16, 3, '#4a566d');       // lid
+      put2(5, 16, 14, 1, '#5a6884');       // lid highlight
+      put2(4, 26, 16, 2, '#2b3140');       // base shadow
+      put2(4, 15, 1, 13, color);           // rarity trim straps
+      put2(19, 15, 1, 13, color);
+      put2(11, 15, 2, 13, color);
+      g.save(); g.shadowColor = color; g.shadowBlur = 8;
+      put2(11, 19, 2, 3, '#ffffff');       // glowing latch
+      g.restore();
+      put2(6, 21, 3, 2, '#333c4d');        // panel details
+      put2(15, 21, 3, 2, '#333c4d');
+    });
+    chestSpriteCache.set(color, c);
+  }
+  return c;
+}
 function drawViewModel() {
   const w = G.weapon;
   const kick = G.gunKick || 0;
   const ads = G.ads || 0;
   const bobX = Math.sin(bobT * 7) * 6 * (1 - ads * 0.8);
   const bobY = Math.abs(Math.cos(bobT * 7)) * 5 * (1 - ads * 0.8);
+  // idle breathing sway (slow sin) + look-sway: the gun lags opposite recent
+  // mouse movement; both blend with (never replace) the walk bob above
+  const nowS = performance.now() / 1000;
+  const calm = 1 - ads * 0.75;
+  const brX = Math.sin(nowS * 1.7) * 2 * calm;
+  const brY = Math.cos(nowS * 1.3) * 2.5 * calm;
+  const swX = Math.max(-26, Math.min(26, -swayX)) * (1 - ads * 0.6);
+  const swY = Math.max(-16, Math.min(16, -swayY)) * 0.5 * (1 - ads * 0.6);
+  // reload: the gun dips down and rolls, easing down then back up with progress
+  let relDip = 0;
+  if (G.reloading > 0) {
+    const pr = Math.max(0, Math.min(1, 1 - G.reloading / (G.reloadTotal || 1)));
+    relDip = Math.sin(pr * Math.PI);
+  }
   // hip: gun sits big in the lower-right like a real shooter; ADS pulls it to centre
   const hipX = REND_W / 2 + 175, hipY = REND_H + 34, hipR = -0.40;
   const adsX = REND_W / 2 + 88, adsY = REND_H + 6, adsR = -0.30;
   ctx.save();
   ctx.translate(
-    hipX + (adsX - hipX) * ads + bobX + kick * 22,
-    hipY + (adsY - hipY) * ads + bobY + kick * 34 + (G.reloading > 0 ? 52 : 0)
+    hipX + (adsX - hipX) * ads + bobX + brX + swX + kick * 22,
+    hipY + (adsY - hipY) * ads + bobY + brY + swY + kick * 34 + relDip * 96
   );
-  ctx.rotate(hipR + (adsR - hipR) * ads - kick * 0.13 + (G.reloading > 0 ? 0.3 : 0));
+  ctx.rotate(hipR + (adsR - hipR) * ads - kick * 0.13 + relDip * 0.55 + swX * 0.0012);
   ctx.scale(1.45, 1.45);   // big, partially off-screen — like holding it
   const muzzleX = drawGunModel(ctx, G.weapon);
   // muzzle flash — star burst at the actual barrel tip
@@ -3223,6 +3852,18 @@ function drawViewModel() {
     ctx.restore();
   }
   ctx.restore();
+  // ejected shell casings: screen-space brass tumbling off to the right
+  for (const c of G.casings) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, c.t / 0.25);
+    ctx.translate(c.x, c.y);
+    ctx.rotate(c.rot);
+    ctx.fillStyle = '#c8a24a';
+    ctx.fillRect(-4, -1.6, 8, 3.2);
+    ctx.fillStyle = '#8a6c28';
+    ctx.fillRect(2, -1.6, 2, 3.2);
+    ctx.restore();
+  }
   // explosive screen glow
   for (const p of G.particles) {
     if (p.kind !== 'boom') continue;
@@ -3286,20 +3927,55 @@ function buildDeployableSprites() {
 buildDeployableSprites();
 function drawCrosshair() {
   const cx = REND_W / 2, cy = REND_H / 2;
+  // damage-direction arcs: red wedges at the screen edge pointing at attackers
+  for (const dd of G.dmgDirs) {
+    const rel = wrapAngle(dd.ang - G.player.dir);
+    const sa = rel - Math.PI / 2;   // rel 0 (dead ahead) reads as the top of the ring
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, dd.t / 0.8) * 0.85;
+    ctx.strokeStyle = '#ff2d3c';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.arc(cx, cy, REND_H * 0.4, sa - 0.35, sa + 0.35);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // hitmarker X-flash: white on hit, gold on crit, big red on a kill
+  if (G.hitmark && G.hitmark.t > 0) {
+    const k = G.hitmark;
+    const kill = k.kind === 'kill';
+    const g2 = kill ? 11 : 8, armL = kill ? 10 : 7;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, k.t / 0.12);
+    ctx.strokeStyle = kill ? '#ff4b57' : k.kind === 'crit' ? '#ffd24d' : '#ffffff';
+    ctx.lineWidth = kill ? 3.5 : 2.5;
+    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + sx * g2, cy + sy * g2);
+      ctx.lineTo(cx + sx * (g2 + armL), cy + sy * (g2 + armL));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // scoped weapons hide the hip crosshair once fully aimed (scope reticle instead)
+  if (G.ads > 0.7 && G.weapon.arch.scope) return;
   // CS-style crosshair: the gap mirrors the live spread — wide while moving
   // and firing (recoil bloom), snapping tight when you stand still.
   const gap = Math.round(5 + currentSpreadDeg() * 8);
   const len = 13, t = 3;
+  // tinted by the current weapon's element (plain bone when elementless)
+  const col = G.weapon.element !== 'none' ? ELEMENTS[G.weapon.element].color : '#e8e0cc';
   const arm = (x, y, w2, h2) => {
     ctx.fillStyle = 'rgba(4,10,6,0.8)';                 // dark outline for contrast
     ctx.fillRect(x - 1, y - 1, w2 + 2, h2 + 2);
-    ctx.fillStyle = 'rgba(70,255,120,0.95)';            // classic CS green
+    ctx.fillStyle = col;
     ctx.fillRect(x, y, w2, h2);
   };
   arm(cx - gap - len, cy - t / 2, len, t);
   arm(cx + gap, cy - t / 2, len, t);
   arm(cx - t / 2, cy - gap - len, t, len);
   arm(cx - t / 2, cy + gap, t, len);
+  arm(cx - 1.5, cy - 1.5, 3, 3);   // center dot
   if (G.reloading > 0) {
     ctx.fillStyle = '#ffb347';
     ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
@@ -3307,21 +3983,51 @@ function drawCrosshair() {
   }
 }
 
+/* ---------- wave banner: slams in at spawnWave, holds, fades ---------- */
+function drawBanner() {
+  const b = G.banner;
+  if (!b || b.t <= 0) return;
+  const age = b.t0 - b.t;
+  const a = b.t < 0.4 ? b.t / 0.4 : 1;          // fade out at the tail
+  let sc = 1;
+  if (age < 0.22) { const k = age / 0.22; sc = 2.4 - 1.4 * (1 - Math.pow(1 - k, 3)); }   // slam-scale in
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, a);
+  ctx.translate(REND_W / 2, REND_H * 0.28);
+  ctx.scale(sc, sc);
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 44px monospace';
+  ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(0,0,0,0.78)';
+  ctx.strokeText(b.title, 0, 0);
+  ctx.fillStyle = b.boss ? '#ff4b57' : '#ffd76a';
+  ctx.fillText(b.title, 0, 0);
+  ctx.font = 'bold 18px monospace';
+  ctx.lineWidth = 4;
+  ctx.strokeText(b.sub, 0, 30);
+  ctx.fillStyle = '#e8ecf5';
+  ctx.fillText(b.sub, 0, 30);
+  ctx.restore();
+}
+
 /* ════════════════ HUD ════════════════ */
 function updateHud() {
   if (!G) return;
   $('hudFloor').textContent = '🌊 Wave ' + G.wave;
   const alive = G.enemies.filter(e => e.hp > 0).length;
-  $('hudKills').textContent = alive === 0 ? '⏳ next wave…' : '👾 ' + alive + ' left';
+  const comboTxt = G.combo >= 2 ? ' · 🔥×' + G.combo : '';
+  $('hudKills').textContent = (alive === 0 ? '⏳ next wave…' : '👾 ' + alive + ' left') + comboTxt;
   const luckPct = Math.round((luckNow() - 1) * 100);
   const st = $('hudStreak');
   st.textContent = '🔥 Streak ' + G.streak + ' · Luck +' + luckPct + '%';
   st.classList.toggle('hot', G.streak >= 3);
   $('hpBar').style.width = Math.max(0, (G.player.hp / G.player.maxHp) * 100) + '%';
   $('hpText').textContent = 'HP ' + Math.ceil(G.player.hp) + ' / ' + Math.round(G.player.maxHp);
+  // low-HP heartbeat pulse on the damage vignette
+  $('dmgVignette').classList.toggle('lowhp', !G.over && G.player.hp < G.player.maxHp * 0.3);
+  $('hudSfx').textContent = (sfxMuted ? '🔇' : '🔊') + ' [M]';
   const w = G.weapon;
   if (w) {   // startRun derives player stats before the first weapon is equipped
-    $('wpnName').textContent = (w.element !== 'none' ? ELEMENTS[w.element].icon + ' ' : '') + w.name + (w.special ? ' ★' : '');
+    $('wpnName').innerHTML = mfrTag(w) + (w.element !== 'none' ? ELEMENTS[w.element].icon + ' ' : '') + w.name + (w.special ? ' ★' : '');
     $('wpnName').style.color = w.rarity.color;
     $('wpnAmmo').innerHTML = (G.reloading > 0 ? '…' : G.ammo) + ' <span class="rl">/ ∞</span>';
   }
