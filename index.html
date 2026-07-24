@@ -4893,7 +4893,7 @@ option {
 <div id="fpsAnnounce" style="display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1200;width:min(660px,calc(100vw - 28px));background:linear-gradient(135deg,#1a2440,#141926);border:1px solid #3d5490;border-radius:16px;padding:20px 24px;box-shadow:0 18px 48px rgba(0,0,0,0.45);color:#e8ecf5;font-family:'DM Sans',system-ui,sans-serif;">
   <button id="fpsAnnounceClose" title="Dismiss" style="position:absolute;top:10px;right:12px;background:none;border:none;color:#93a0b8;font-size:1.1rem;cursor:pointer;padding:4px;">✕</button>
   <div style="font-weight:800;font-size:1.05rem;letter-spacing:0.01em;margin-bottom:8px;">🎉 NEW GAME RELEASED — 🔫 Science Strike!</div>
-  <div style="color:#b9c4da;font-size:0.9rem;line-height:1.6;margin-bottom:14px;">An open-world shooter where science questions power up your loot. The <b>leaderboard is live</b> — ranked by correct answers — and the <b style="color:#ffd76a;">top 3 students win a $10 voucher</b>. Good luck!</div>
+  <div style="color:#b9c4da;font-size:0.9rem;line-height:1.6;margin-bottom:14px;">An open-world shooter where science questions power up your loot — now <b>out of beta and open to everyone</b>. Its leaderboard lives on the <b>Leaderboard</b> page under the <b>🔫 Strike</b> tab, ranked by correct answers, and the <b style="color:#ffd76a;">top 3 students each win a $10 voucher</b>. Good luck!</div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;">
     <button onclick="openFpsGame()" style="background:#5b8cff;color:#fff;border:none;border-radius:10px;padding:11px 22px;font-weight:700;font-size:0.92rem;cursor:pointer;">🔫 Play Science Strike</button>
     <button id="fpsAnnounceLater" style="background:transparent;color:#93a0b8;border:1px solid #2a3550;border-radius:10px;padding:11px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">Later</button>
@@ -5345,7 +5345,7 @@ option {
       <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Monster Cards — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
         <span class="ico">🃏</span> Monster Cards <span class="nav-beta">BETA</span>
       </div>
-      <!-- Science Strike FPS (fps.html) — admins always; students only once the admin presses Release -->
+      <!-- Science Strike FPS (fps.html) — fully released: everyone signed in sees it -->
       <div class="nav-item" id="navFps" onclick="openFpsGame()" style="display:none;" title="Science Strike — roguelite first-person dungeon shooter with Borderlands-style loot. Answer a science question every 15 seconds to boost your loot luck.">
         <span class="ico">🔫</span> Science Strike
       </div>
@@ -9329,8 +9329,8 @@ async function enterApp(user) {
   // cards render correctly (admins always see it; students only when released).
   tcgInit().catch(e => console.warn('tcg init', e));
 
-  // Science Strike FPS (fps.html): same beta/release gate — the nav item shows
-  // for admins always, and for students only once an admin presses Release.
+  // Science Strike FPS (fps.html): fully released — show the nav item for
+  // every signed-in user and surface the release announcement.
   fpsNavInit().catch(e => console.warn('fps nav init', e));
 
   // Load message inbox so the unread badge shows on the Messages nav item.
@@ -9344,7 +9344,7 @@ async function enterApp(user) {
   // The practice-reminder email links to index.html#practice so a student lands
   // straight on the practice page in one click.
   const hash = (location.hash || '').replace('#', '');
-  if (hash === 'raiders' || hash === 'defenders' || hash === 'spire' || hash === 'legends' || hash === 'slayers') {
+  if (hash === 'raiders' || hash === 'defenders' || hash === 'spire' || hash === 'legends' || hash === 'slayers' || hash === 'leaderboard') {
     setTimeout(() => { try { navigateTo(hash); } catch (e) {} }, 300);
   } else if (hash === 'practice') {
     setTimeout(() => { try { navigateTo(rpgPracticePage()); } catch (e) {} }, 300);
@@ -9355,7 +9355,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.155.0';
+const APP_VERSION = 'v1.156.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -26008,7 +26008,7 @@ function rpgApplyVisibility() {
   const show = active && !rpgState.hidden;
   document.querySelectorAll(".rpg-el").forEach(el => { el.style.display = show ? "" : "none"; });
   try { tcgApplyNavVisibility(); } catch (_) {} // Monster Cards nav follows its own admin/release rules
-  try { fpsApplyNavVisibility(); } catch (_) {} // Science Strike nav follows the same admin/release rules
+  try { fpsApplyNavVisibility(); } catch (_) {} // Science Strike nav (released to everyone, still respects Hide game)
   const toggle = $("rpgHideToggle");
   if (!toggle) return;
   toggle.style.display = active ? "" : "none";
@@ -28236,10 +28236,9 @@ function _renderQuestWinnersStrip(wonList) {
   return '<div class="comm-quest-winners"><div class="cqw-head">🏆 Recent Flash Quiz winners</div>' + rows + '</div>';
 }
 // Built-in Science Strike release announcement — rendered client-side at the
-// top of the feed once the game is released (not a Firestore doc, so it can't
-// be un-pinned or deleted and needs no write).
+// top of the feed (not a Firestore doc, so it can't be un-pinned or deleted
+// and needs no write). The game is fully released, so it always shows.
 function _commFpsAnnouncePost() {
-  if (!fpsReleased()) return null;
   return {
     _id: '__fpsAnnounce', _builtin: true,
     type: 'news', pinned: true, status: 'approved',
@@ -31067,33 +31066,22 @@ function tcgApplyNavVisibility() {
   const show = !!currentUser && (_isAdmin() || (tcgReleased() && rpgState && !rpgState.hidden));
   nav.style.display = show ? '' : 'none';
 }
-// ---- Science Strike FPS (fps.html) — same beta/release gate as Monster Cards.
+// ---- Science Strike FPS (fps.html) — FULLY RELEASED (out of beta).
 // The game lives on its own page; index.html only shows/hides the nav entry.
-// Admins always see it (BETA); students only after an admin presses "Release
-// to students" inside fps.html (flag in users/{uid}/settings/fpsConfig).
-let _fpsConfig = null;
-async function fpsLoadConfig(force) {
-  if (_fpsConfig && !force) return _fpsConfig;
-  const uid = _tcgOwnerUid();
-  if (!uid) { _fpsConfig = { released: false }; return _fpsConfig; }
-  try {
-    const snap = await getDoc(doc(db, 'users', uid, 'settings', 'fpsConfig'));
-    _fpsConfig = snap.exists() ? (snap.data() || {}) : { released: false };
-  } catch (e) { console.warn('fps config load', e); _fpsConfig = _fpsConfig || { released: false }; }
-  return _fpsConfig;
-}
-function fpsReleased() { return !!(_fpsConfig && _fpsConfig.released); }
+// No release flag any more: every signed-in user sees it (students still lose
+// it while "Hide game" is on, like the rest of the game layer).
+// Its leaderboard lives on the Leaderboard page ("🔫 Strike" tab) — the game
+// page itself has no board UI, it only publishes stats.
 function fpsApplyNavVisibility() {
   const nav = document.getElementById('navFps');
   if (!nav) return;
-  const show = !!currentUser && (_isAdmin() || (fpsReleased() && rpgState && !rpgState.hidden));
+  const show = !!currentUser && (_isAdmin() || (rpgState && !rpgState.hidden));
   nav.style.display = show ? '' : 'none';
 }
 async function fpsNavInit() {
-  await fpsLoadConfig(true);
   fpsApplyNavVisibility();
   fpsShowAnnounce();
-  try { _renderCommFeed(); } catch (_) {}  // community feed's built-in Strike announcement waits on this flag
+  try { _renderCommFeed(); } catch (_) {}  // community feed carries the built-in Strike announcement
 }
 function openFpsGame() { window.location.href = 'fps.html'; }
 // ---- Release announcement banner (top of screen, dismissible per device) ----
@@ -31102,7 +31090,7 @@ function fpsShowAnnounce() {
   const el = document.getElementById('fpsAnnounce');
   if (!el) return;
   const dismissed = (() => { try { return localStorage.getItem(FPS_ANNOUNCE_KEY) === '1'; } catch (e) { return false; } })();
-  el.style.display = (currentUser && fpsReleased() && !dismissed) ? 'block' : 'none';
+  el.style.display = (currentUser && !dismissed) ? 'block' : 'none';
 }
 function fpsDismissAnnounce() {
   try { localStorage.setItem(FPS_ANNOUNCE_KEY, '1'); } catch (e) {}
