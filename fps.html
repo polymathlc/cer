@@ -11,11 +11,14 @@
   Firebase project ("mathgen--app"), Google sign-in, App Check (reCAPTCHA v3)
   and question bank (users/{adminUid}/questions) as the main CER app.
 
-  Release gate: SAME pattern as Monster Cards TCG in index.html — admins
-  always get in, students only after an admin presses "Release to
-  students" (flag in users/{adminUid}/settings/fpsConfig, written by the
-  admin who clicks). index.html shows/hides its "Science Strike" nav item
-  from the same flag.
+  Release status: FULLY RELEASED (out of beta) — every signed-in Science
+  Quest user gets straight in, no release flag, no locked screen. The
+  "Science Strike" nav item in index.html is always visible too.
+
+  Leaderboard: this page has NO leaderboard UI of its own. It only PUBLISHES
+  stats into the shared scienceGameLeaderboard/{uid} doc (the `fps` field);
+  the board itself lives in index.html's Leaderboard page, "🔫 Strike" tab
+  (top 3 by correct answers win a $10 voucher each).
 
   Game design:
   - Pure-canvas open-world FPS (no external engine): WASD + mouse look
@@ -123,14 +126,16 @@
   .btn.good { background: var(--good); color: #06281a; }
   .btn.warn { background: #7a3d4a; }
   .btn:disabled { opacity: 0.45; cursor: default; transform: none; }
-  .pill { display: inline-block; padding: 6px 14px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; }
-  .pill.beta { background: #33235a; color: #d9baff; border: 1px solid #6b4fa0; }
-  .pill.live { background: #123a26; color: #6fe3a1; border: 1px solid #2c7a4f; }
-  .admin-panel {
-    margin-top: 26px; padding: 20px 22px; border-radius: 14px;
-    background: var(--panel2); border: 1px dashed #4a5a80; text-align: center;
+  /* "the leaderboard lives in Science Quest now" note on the menu card */
+  .board-note {
+    margin: 22px auto 4px; max-width: 460px; text-align: left;
+    padding: 18px 20px; border-radius: 14px; line-height: 1.75;
+    background: #241d33; border: 1px solid #4a3d66;
+    color: var(--muted); font-size: 0.86rem;
   }
-  .admin-panel h3 { font-size: 0.85rem; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 12px; }
+  .board-note b { color: var(--text); }
+  .board-note a { display: inline-block; margin-top: 10px; color: #8fb4ff; font-weight: 700; text-decoration: none; }
+  .board-note a:hover { text-decoration: underline; }
   .meta-box { margin-top: 24px; text-align: left; background: var(--panel2); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
   .meta-box h3 { font-size: 0.95rem; margin-bottom: 4px; }
   .meta-box .cores { color: #ffd76a; font-weight: 700; }
@@ -288,15 +293,6 @@
   </div>
 </div>
 
-<!-- ========== LOCKED (students, pre-release) ========== -->
-<div class="screen" id="lockedScreen">
-  <div class="card">
-    <h1>🔒 Not released yet</h1>
-    <p class="sub">Science Strike hasn't been released to students yet. Your teacher will open it up when it's ready — check back soon!</p>
-    <a class="btn" href="index.html">← Back to Science Quest</a>
-  </div>
-</div>
-
 <!-- ========== MENU ========== -->
 <div class="screen" id="menuScreen">
   <div class="card" style="max-width:620px;">
@@ -305,8 +301,14 @@
     <button class="btn good" id="playBtn" style="font-size:1.15rem;padding:15px 42px;">▶ Start Run</button>
     <div style="margin-top:4px;">
       <button class="btn" id="menuSkillsBtn">🧠 Skill Tree</button>
-      <button class="btn" id="menuBoardBtn">🏆 Leaderboard</button>
       <a class="btn ghost" href="index.html">← Back to Science Quest</a>
+    </div>
+
+    <div class="board-note">
+      🏆 <b>Leaderboard moved.</b> Every correct answer you give in a run counts towards the
+      <b>🔫 Strike</b> board on the Science Quest <b>Leaderboard</b> page — and the
+      <b style="color:#ffd76a;">top 3 students each win a $10 Popular voucher</b>.
+      <a href="index.html#leaderboard">Open the leaderboard →</a>
     </div>
 
     <div class="class-row" id="classRow"></div>
@@ -339,12 +341,6 @@
       Enemies flash red before they strike — keep moving! Press <b>M</b> to mute sound.
     </div>
 
-    <div class="admin-panel" id="adminPanel" style="display:none;">
-      <h3>ADMIN — RELEASE CONTROL</h3>
-      <div style="margin-bottom:12px;"><span class="pill beta" id="relPill">🔒 HIDDEN — ADMINS ONLY</span></div>
-      <button class="btn" id="releaseBtn">🚀 Release to students</button>
-      <p style="color:var(--muted);font-size:0.76rem;margin-top:10px;">Releasing shows the Science Strike button to students in the Science Quest sidebar and unlocks this page for them. You can hide it again at any time.</p>
-    </div>
   </div>
 </div>
 
@@ -418,27 +414,11 @@
       <div class="death-stats" id="deathStats"></div>
       <div style="font-size:1.05rem;margin-bottom:16px;">Banked <span class="cores" style="color:#ffd76a;font-weight:800;" id="deathCores">⚛ 0</span> Science Cores this run — already saved. Spend them in the skill tree [I]!</div>
       <button class="btn good" id="againBtn">↻ Run it back</button>
-      <button class="btn" id="deathBoardBtn">🏆 Leaderboard</button>
       <button class="btn ghost" id="deathMenuBtn">Menu</button>
     </div>
   </div>
 </div>
 
-<!-- leaderboard overlay: ranked by correct answers, top 3 win a $10 voucher -->
-<div id="boardOverlay" style="position:fixed;inset:0;display:none;background:rgba(5,8,15,0.9);z-index:72;overflow-y:auto;padding:24px 14px;">
-  <div class="skill-panel" style="max-width:560px;">
-    <div class="skill-head">
-      <h2>🏆 Science Strike Leaderboard</h2>
-      <button class="btn ghost" id="boardCloseBtn" style="padding:8px 16px;">✕ Close</button>
-    </div>
-    <div style="background:#241d33;border:1px solid #4a3d66;border-radius:12px;padding:14px 18px;margin:12px 0 16px;line-height:1.6;">
-      <b style="color:#ffd76a;">🎁 Top 3 students win a $10 voucher!</b><br>
-      <span style="color:var(--muted);font-size:0.85rem;">Ranked by total correct answers in Science Strike. Every question you get right in a run counts — keep playing, keep climbing.</span>
-    </div>
-    <div id="boardRows"></div>
-  </div>
-</div>
-<style>#boardOverlay.active { display: flex; }</style>
 
 <!-- skill tree overlay: usable from the menu AND mid-run (pauses the game) -->
 <div id="skillOverlay">
@@ -455,7 +435,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.3.0</div>
+<div id="versionBadge">Science Strike v1.4.0</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -486,7 +466,6 @@ const db = getFirestore(app);
 
 let currentUser = null;      // { uid, email, name, role }
 let adminUid = null;         // primary admin from config/admin
-let fpsConfig = { released: false };
 let questions = [];          // extracted MCQ pool
 let qCursor = 0;
 
@@ -514,50 +493,17 @@ onAuthStateChanged(auth, async (user) => {
     role: ADMIN_EMAILS.includes(user.email) ? 'admin' : 'student'
   };
   $('versionBadge').style.display = isAdmin() ? 'block' : 'none';
-  await loadReleaseGate();
-  if (!isAdmin() && !fpsConfig.released) { showScreen('lockedScreen'); return; }
-  enterMenu();
-  loadQuestions();   // background — the run can start before it finishes
+  await loadAdminUid();
+  enterMenu();     // fully released — every signed-in user goes straight in
+  loadQuestions(); // background — the run can start before it finishes
 });
 
-/* ---------- release gate (same pattern as Monster Cards in index.html) ---------- */
-async function loadReleaseGate() {
+/* ---------- primary admin uid (owner of the shared question bank) ---------- */
+async function loadAdminUid() {
   try {
     const cfg = await getDoc(doc(db, 'config', 'admin'));
     adminUid = cfg.exists() ? cfg.data().uid : null;
   } catch (e) { console.warn('config/admin read', e); }
-  const owner = adminUid || currentUser.uid;
-  try {
-    const snap = await getDoc(doc(db, 'users', owner, 'settings', 'fpsConfig'));
-    fpsConfig = snap.exists() ? (snap.data() || { released: false }) : { released: false };
-  } catch (e) { console.warn('fpsConfig read', e); fpsConfig = { released: false }; }
-}
-
-async function setReleased(on) {
-  if (!isAdmin()) return;
-  const msg = on
-    ? 'Release Science Strike to all students? They will see it in the Science Quest sidebar immediately.'
-    : 'Hide Science Strike from students? They will no longer see it.';
-  if (!confirm(msg)) return;
-  try {
-    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'fpsConfig'),
-      { released: on, updatedAt: new Date().toISOString() }, { merge: true });
-    fpsConfig = Object.assign({}, fpsConfig, { released: on });
-    renderAdminPanel();
-  } catch (e) { console.error('fps release', e); alert('Could not update — check your connection.'); }
-}
-
-function renderAdminPanel() {
-  const panel = $('adminPanel');
-  if (!isAdmin()) { panel.style.display = 'none'; return; }
-  panel.style.display = 'block';
-  const live = !!fpsConfig.released;
-  const pill = $('relPill');
-  pill.className = 'pill ' + (live ? 'live' : 'beta');
-  pill.textContent = live ? '🟢 RELEASED TO STUDENTS' : '🔒 HIDDEN — ADMINS ONLY';
-  const btn = $('releaseBtn');
-  btn.textContent = live ? '⏸ Hide from students' : '🚀 Release to students';
-  btn.onclick = () => setReleased(!live);
 }
 
 /* ---------- question bank (union across admin accounts, like index.html) ---------- */
@@ -673,9 +619,11 @@ function nextQuestion() {
 }
 
 /* ---------- shared leaderboard (scienceGameLeaderboard/{uid}, fps field) ----------
-   Ranked by total correct answers in Science Strike. Students write only their
-   own doc (same rules as the existing game leaderboard); admins stay off the
-   board. Top 3 win a $10 voucher — shown on the board, tallied automatically. */
+   PUBLISH ONLY — the board itself is rendered by index.html's Leaderboard page
+   ("🔫 Strike" tab), ranked by total correct answers, top 3 win a $10 voucher.
+   Students write only their own doc (same rules as the existing game
+   leaderboard); admins stay off the board. Always {merge:true} so the RPG
+   fields on the same doc survive. */
 let _myFpsBoard = null;   // cached own stats, for bestWave comparisons
 function fpsPublish(fields) {
   if (!currentUser || currentUser.role !== 'student') return;
@@ -692,58 +640,6 @@ async function loadMyFpsBoard() {
     _myFpsBoard = (snap.exists() && snap.data().fps) || { correct: 0, kills: 0, bestWave: 0 };
   } catch (e) { _myFpsBoard = _myFpsBoard || { correct: 0, kills: 0, bestWave: 0 }; }
 }
-async function openBoard() {
-  $('boardRows').innerHTML = '<div style="color:var(--muted);padding:16px;">Loading…</div>';
-  $('boardOverlay').classList.add('active');
-  if (G && !G.over) { G.paused = true; document.exitPointerLock && document.exitPointerLock(); }
-  try {
-    const snap = await getDocs(collection(db, 'scienceGameLeaderboard'));
-    const rows = [];
-    snap.forEach(d => {
-      const x = d.data();
-      if (x && x.fps && (x.fps.correct | 0) > 0) rows.push({ uid: x.uid, name: x.name || 'Student', correct: x.fps.correct | 0, kills: x.fps.kills | 0, bestWave: x.fps.bestWave | 0 });
-    });
-    rows.sort((a, b) => b.correct - a.correct || b.bestWave - a.bestWave);
-    const myUid = currentUser && currentUser.uid;
-    const esc = s => String(s).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
-    const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
-    let html = '';
-    rows.slice(0, 10).forEach((r, i) => {
-      const me = r.uid === myUid;
-      html += '<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;margin:5px 0;'
-        + (i < 3 ? 'background:#241d33;border:1px solid #4a3d66;' : 'background:var(--panel2);border:1px solid var(--line);')
-        + (me ? 'outline:2px solid var(--primary);' : '') + '">'
-        + '<div style="width:36px;font-weight:800;">' + medal(i) + '</div>'
-        + '<div style="flex:1;font-weight:600;">' + esc(r.name) + (me ? ' (you)' : '') + (i < 3 ? ' <span style="color:#ffd76a;font-size:0.72rem;font-weight:800;">$10 VOUCHER</span>' : '') + '</div>'
-        + '<div style="color:var(--good);font-weight:700;">✔ ' + r.correct + '</div>'
-        + '<div style="color:var(--muted);font-size:0.8rem;">🌊 ' + r.bestWave + ' · 👾 ' + r.kills + '</div>'
-        + '</div>';
-    });
-    const myIdx = rows.findIndex(r => r.uid === myUid);
-    if (myIdx >= 10) {
-      const r = rows[myIdx];
-      html += '<div style="text-align:center;color:var(--muted);margin:4px 0;">⋯</div>'
-        + '<div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);outline:2px solid var(--primary);">'
-        + '<div style="width:36px;font-weight:800;">#' + (myIdx + 1) + '</div>'
-        + '<div style="flex:1;font-weight:600;">' + esc(r.name) + ' (you)</div>'
-        + '<div style="color:var(--good);font-weight:700;">✔ ' + r.correct + '</div>'
-        + '<div style="color:var(--muted);font-size:0.8rem;">🌊 ' + r.bestWave + ' · 👾 ' + r.kills + '</div>'
-        + '</div>';
-    }
-    $('boardRows').innerHTML = html || '<div style="color:var(--muted);padding:16px;">No entries yet — answer questions in a run to get on the board!</div>';
-  } catch (e) {
-    console.warn('board load', e);
-    $('boardRows').innerHTML = '<div style="color:var(--bad);padding:16px;">Could not load the leaderboard — check your connection.</div>';
-  }
-}
-function closeBoard() {
-  $('boardOverlay').classList.remove('active');
-  if (G && !G.over && !G.activeQ && !overlayVisible('pauseOverlay') && !overlayVisible('deathOverlay')) {
-    G.paused = false;
-    requestLock();
-  }
-}
-
 function recordAttempt(q, correct, ms) {
   try {
     if (!currentUser || currentUser.role !== 'student' || !q) return;
@@ -808,7 +704,6 @@ function enterMenu() {
   $('menuHello').textContent = 'Welcome, ' + currentUser.name + '. Pick a class, spec your skill tree, and survive. Every 15 seconds, science decides your luck.';
   renderMeta();
   renderClassRow();
-  renderAdminPanel();
   showScreen('menuScreen');
 }
 
@@ -1627,9 +1522,6 @@ $('playBtn').addEventListener('click', startRun);
 $('menuSkillsBtn').addEventListener('click', openSkills);
 $('skillBtn').addEventListener('click', openSkills);
 $('skillCloseBtn').addEventListener('click', closeSkills);
-$('menuBoardBtn').addEventListener('click', openBoard);
-$('deathBoardBtn').addEventListener('click', openBoard);
-$('boardCloseBtn').addEventListener('click', closeBoard);
 canvas.addEventListener('contextmenu', e => e.preventDefault());   // right-click = ADS
 // while in-game, an accidental right-click over any overlay (e.g. the science
 // question) must not pop the browser context menu
