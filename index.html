@@ -5268,6 +5268,10 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
         AI Question Guide
       </div>
+      <div class="nav-item admin-only" onclick="openAiEngineSettings()" title="Choose which AI powers the app — Gemini (default) or ChatGPT with your own OpenAI key. The choice is saved on this device.">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3"/><path d="M15 1v3"/><path d="M9 20v3"/><path d="M15 20v3"/><path d="M1 9h3"/><path d="M1 15h3"/><path d="M20 9h3"/><path d="M20 15h3"/></svg>
+        AI Engine
+      </div>
       <div class="nav-item admin-only" data-page="notes" onclick="navigateTo('notes')" title="Teaching Notes — upload your PDF notes; the AI extracts the topics, keywords and marking standards and follows them whenever it builds questions or marks answers.">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         Teaching Notes
@@ -7063,6 +7067,47 @@ option {
   </div>
 </div>
 
+<!-- ==================== AI ENGINE DIALOG (Admin) ==================== -->
+<div class="confirm-overlay" id="aiEngineOverlay">
+  <div class="confirm-dialog" style="max-width:560px;text-align:left;max-height:88vh;overflow-y:auto;">
+    <h3 style="margin-bottom:4px;">AI Engine</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Choose which AI answers every request in this app — question building, marking, explanations. Your choice is saved on this device and stays until you change it. If ChatGPT ever fails, the app falls back to Gemini automatically.</p>
+
+    <div class="form-group">
+      <label class="form-label">Engine</label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:0.9rem;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
+        <input type="radio" name="aiEngineChoice" value="gemini" checked>
+        <span><strong>Gemini 3.6 Flash</strong> <span style="color:var(--text-muted);">— Firebase AI Logic &middot; default &middot; no key needed</span></span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;font-size:0.9rem;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
+        <input type="radio" name="aiEngineChoice" value="openai">
+        <span><strong>ChatGPT</strong> <span style="color:var(--text-muted);">— OpenAI API &middot; your own key required</span></span>
+      </label>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">ChatGPT model</label>
+      <select id="aiEngineModel" class="form-input">
+        <option value="gpt-5.6-sol" selected>gpt-5.6-sol &mdash; newest (recommended)</option>
+        <option value="gpt-4o-mini">gpt-4o-mini &mdash; fast &amp; cheap</option>
+        <option value="gpt-4o">gpt-4o</option>
+        <option value="gpt-4.1">gpt-4.1</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">OpenAI API key</label>
+      <input type="password" id="aiEngineKey" class="form-input" placeholder="sk-..." autocomplete="off" spellcheck="false">
+      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;">The key is saved only in this browser (localStorage) on this device — it is never uploaded, synced or committed anywhere. Anyone with access to this device's developer tools could read it, so paste it only on machines you control. Devices without a key simply keep using Gemini.</p>
+    </div>
+
+    <div class="btn-group" style="justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeAiEngineSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAiEngineSettings()">Save AI Engine</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== TEACHING NOTE EDITOR DIALOG (Admin) ==================== -->
 <div class="confirm-overlay" id="noteEditOverlay">
   <div class="confirm-dialog" style="max-width:620px;text-align:left;max-height:88vh;overflow-y:auto;">
@@ -7973,12 +8018,52 @@ try {
 } catch (e) { console.warn("Firebase image AI init failed:", e); }
 const imageAiReady = () => geminiImageModels.length > 0;
 
+// ── Optional ChatGPT (OpenAI) engine ─────────────────────────────────
+// Admin-only toggle (sidebar → AI Engine). The choice, model and key live in
+// localStorage on this device only — same pattern as bar-model.html. When
+// active, askGemini/askGeminiVision route through OpenAI first and fall back
+// to Gemini on any failure, so students without a key are never affected.
+const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model' };
+const OPENAI_DEFAULT_MODEL = 'gpt-5.6-sol';
+function getAiEngine() { try { return localStorage.getItem(AI_ENGINE_STORE.engine) || 'gemini'; } catch (e) { return 'gemini'; } }
+function getOpenAiKey() { try { return (localStorage.getItem(AI_ENGINE_STORE.key) || '').trim(); } catch (e) { return ''; } }
+function getOpenAiModel() { try { return localStorage.getItem(AI_ENGINE_STORE.model) || OPENAI_DEFAULT_MODEL; } catch (e) { return OPENAI_DEFAULT_MODEL; } }
+function openAiActive() { return getAiEngine() === 'openai' && !!getOpenAiKey(); }
+
+async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, json = false } = {}) {
+  const model = getOpenAiModel();
+  const content = [{ type: 'text', text: prompt }];
+  (media || []).forEach(m => content.push({ type: 'image_url', image_url: { url: 'data:' + m.mimeType + ';base64,' + m.data, detail: 'high' } }));
+  const body = { model, messages: [{ role: 'user', content }], max_completion_tokens: Math.max(1024, maxOutputTokens) };
+  if (json) body.response_format = { type: 'json_object' };
+  // gpt-5.x models only run at their default temperature; sending one is a 400
+  if (temperature !== undefined && !/^gpt-5/.test(model)) body.temperature = temperature;
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getOpenAiKey() },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    let detail = '';
+    try { const ej = await res.json(); detail = ej && ej.error ? ej.error.message : ''; } catch (e) { /* non-JSON error body */ }
+    throw new Error('OpenAI API error ' + res.status + (detail ? ': ' + detail : ''));
+  }
+  const data = await res.json();
+  const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (typeof text !== 'string' || !text) throw new Error('OpenAI returned an unexpected response shape.');
+  return text.trim();
+}
+
 // Single swap-point for all model calls. Returns trimmed text.
 // thinkingLevel:"minimal" keeps Gemini "thinking" to a minimum so the whole
 // token budget goes to the actual answer (faster + cheaper for our short
 // tasks). Gemini 3.x rejects the older numeric thinkingBudget with
 // 400 INVALID_ARGUMENT.
 async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, json = false } = {}) {
+  if (openAiActive()) {
+    try { return await askOpenAI(prompt, null, { maxOutputTokens, temperature, json }); }
+    catch (e) { console.warn('ChatGPT engine failed, falling back to Gemini:', e); }
+  }
   if (!geminiModel) throw new Error("AI is not configured yet");
   const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingLevel: "minimal" } };
   if (json) generationConfig.responseMimeType = "application/json";
@@ -8068,7 +8153,7 @@ async function askGeminiCached(prompt, opts) {
   try { sessionStorage.setItem(key, out); } catch (e) {}
   return out;
 }
-window.__aiReady = () => !!geminiModel;
+window.__aiReady = () => !!geminiModel || openAiActive();
 
 // =====================================================================
 // AI MARKING GUIDE — teacher's rubric/style, injected into grading prompts
@@ -8090,6 +8175,36 @@ async function loadMarkingSettings() {
       };
     }
   } catch (e) { console.warn('Could not load marking settings:', e); }
+}
+
+function openAiEngineSettings() {
+  const eng = getAiEngine();
+  document.querySelectorAll('input[name="aiEngineChoice"]').forEach(r => { r.checked = r.value === eng; });
+  const modelSel = document.getElementById('aiEngineModel');
+  modelSel.value = getOpenAiModel();
+  if (!modelSel.value) modelSel.value = OPENAI_DEFAULT_MODEL;   // stored model no longer offered
+  document.getElementById('aiEngineKey').value = getOpenAiKey();
+  document.getElementById('aiEngineOverlay').classList.add('active');
+}
+
+function closeAiEngineSettings() {
+  document.getElementById('aiEngineOverlay').classList.remove('active');
+}
+
+function saveAiEngineSettings() {
+  const picked = document.querySelector('input[name="aiEngineChoice"]:checked');
+  const eng = picked ? picked.value : 'gemini';
+  const key = (document.getElementById('aiEngineKey').value || '').trim();
+  const model = document.getElementById('aiEngineModel').value || OPENAI_DEFAULT_MODEL;
+  if (eng === 'openai' && !key) { showToast('Paste your OpenAI API key to use ChatGPT', 'error'); return; }
+  try {
+    localStorage.setItem(AI_ENGINE_STORE.engine, eng);
+    localStorage.setItem(AI_ENGINE_STORE.model, model);
+    if (key) localStorage.setItem(AI_ENGINE_STORE.key, key);
+    else localStorage.removeItem(AI_ENGINE_STORE.key);
+  } catch (e) { showToast('Could not save: ' + (e && e.message ? e.message : e), 'error'); return; }
+  closeAiEngineSettings();
+  showToast(eng === 'openai' ? 'AI engine set to ChatGPT (' + model + ') — saved on this device' : 'AI engine set to Gemini', 'success');
 }
 
 function openMarkingSettings() {
@@ -9240,7 +9355,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.154.0';
+const APP_VERSION = 'v1.155.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -13229,6 +13344,11 @@ function _fileToBase64(file) {
 
 // Multimodal Gemini call: a text prompt plus inline image/PDF parts.
 async function askGeminiVision(prompt, media, { maxOutputTokens = 2048, json = false } = {}) {
+  // ChatGPT engine handles image media only — PDFs always go to Gemini
+  if (openAiActive() && !(media || []).some(m => !/^image\//.test(m.mimeType || ''))) {
+    try { return await askOpenAI(prompt, media, { maxOutputTokens, temperature: 0.2, json }); }
+    catch (e) { console.warn('ChatGPT engine failed, falling back to Gemini:', e); }
+  }
   if (!geminiModel) throw new Error('AI is not configured yet');
   const parts = [{ text: prompt }];
   (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
@@ -35445,6 +35565,9 @@ window.moveEditToVetting = moveEditToVetting;
 window.openFlagDialog = openFlagDialog;
 window.closeFlagDialog = closeFlagDialog;
 window.openMarkingSettings = openMarkingSettings;
+window.openAiEngineSettings = openAiEngineSettings;
+window.closeAiEngineSettings = closeAiEngineSettings;
+window.saveAiEngineSettings = saveAiEngineSettings;
 window.closeMarkingSettings = closeMarkingSettings;
 window.saveMarkingSettings = saveMarkingSettings;
 window.openGenSettings = openGenSettings;
