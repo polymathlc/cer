@@ -9355,7 +9355,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.156.0';
+const APP_VERSION = 'v1.156.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -29560,6 +29560,12 @@ function rpgWireStaticEvents() {
     if (unequip) { rpgUnequip(unequip.dataset.rpgUnequip); return; }
     const buy = e.target.closest("[data-rpg-buy]");
     if (buy) rpgBuy(buy.dataset.rpgBuy);
+  });
+  // Daily quests render inside #rpgHeroStats (not the tab body) — wire their own delegation.
+  const heroStats = $("rpgHeroStats");
+  if (heroStats) heroStats.addEventListener("click", e => {
+    const quest = e.target.closest("[data-rpg-quest]");
+    if (quest) rpgClaimQuest(Number(quest.dataset.rpgQuest));
   });
   const equipRow = $("rpgEquipRow");
   if (equipRow) equipRow.addEventListener("click", e => {
