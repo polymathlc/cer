@@ -5791,6 +5791,17 @@ option {
           <select id="bankFilterSource" onchange="renderQuestionBank()">
             <option value="">All Sources</option>
           </select>
+          <select id="bankFilterDifficulty" onchange="renderQuestionBank()" title="Measured difficulty — the % of simulated average-P6 attempts that were correct">
+            <option value="">Any difficulty</option>
+            <option value="very hard">🎯 Very hard (&lt;30%)</option>
+            <option value="hard">🎯 Hard (30–49%)</option>
+            <option value="medium">🎯 Medium (50–69%)</option>
+            <option value="easy">🎯 Easy (70–84%)</option>
+            <option value="very easy">🎯 Very easy (85%+)</option>
+            <option value="none">Not measured yet</option>
+          </select>
+          <button class="btn btn-outline" id="bankCalibBtn" onclick="calibrateFilteredQuestions()"
+            title="Have the AI sit every question shown here as 5 average P6 pupils, 20 attempts each, and record the % correct as its difficulty">🎯 Measure difficulty</button>
         </div>
         <div class="question-bank-grid" id="questionBankGrid"></div>
       </div>
@@ -9444,7 +9455,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.165.0';
+const APP_VERSION = 'v1.166.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15669,14 +15680,339 @@ function clearBankAiSearch() {
   renderQuestionBank();
 }
 
-function renderQuestionBank() {
-  const container = document.getElementById('questionBankGrid');
+// =====================================================================
+// DIFFICULTY CALIBRATION — measure how hard a question really is by having
+// the AI sit it as a class of average Primary 6 students.
+//
+// CALIB_STUDENTS simulated students each attempt the question CALIB_ATTEMPTS
+// times. They are given the question EXACTLY as a student sees it and never the
+// answer key, and they are told to let themselves be tricked — a tempting wrong
+// option or a two-step inference is supposed to catch them, because that is the
+// signal we are trying to measure. MCQ answers are then marked locally against
+// the real key (no model in the loop, no room for it to mark itself generously);
+// written answers are marked in a second pass that DOES see the key.
+//
+// The result is one number per question: the percentage of attempts that earned
+// the mark. Low percentage = hard. It is stored on the question as q.calib and
+// is what "difficulty" means everywhere from here on — the bank badge, the bank
+// filter, and "give me the hardest questions" when Ai-nstein builds a worksheet.
+//
+// Deliberately NOT wired into rpgQuestionDifficulty: that drives gold/XP, and
+// silently repricing every reward in the game is a separate decision.
+// =====================================================================
+const CALIB_STUDENTS = 5;     // simulated students per question
+const CALIB_ATTEMPTS = 20;    // attempts each student makes
+const CALIB_BANDS = [
+  { min: 85, band: 'very easy', color: '#15803d', bg: '#dcfce7' },
+  { min: 70, band: 'easy',      color: '#4d7c0f', bg: '#ecfccb' },
+  { min: 50, band: 'medium',    color: '#a16207', bg: '#fef9c3' },
+  { min: 30, band: 'hard',      color: '#c2410c', bg: '#ffedd5' },
+  { min: 0,  band: 'very hard', color: '#b91c1c', bg: '#fee2e2' },
+];
+function calibBandFor(pct) { return CALIB_BANDS.find(b => pct >= b.min) || CALIB_BANDS[CALIB_BANDS.length - 1]; }
+function qCalib(q) {
+  const c = q && q.calib;
+  return (c && typeof c.pct === 'number' && c.attempts > 0) ? c : null;
+}
+// Sort key: hardest first. Uncalibrated questions sort last either way — an
+// unmeasured question is not evidence of anything.
+function qCalibPct(q) { const c = qCalib(q); return c ? c.pct : null; }
+
+// The five personas, so the five runs are not five copies of the same student.
+const CALIB_PERSONAS = [
+  'You are careful and you read the whole question, but your understanding is average and you sometimes mix up related ideas.',
+  'You rush. You often answer before reading the whole question, and long stems or two-step reasoning catch you out.',
+  'You memorise definitions rather than understanding them, so applying an idea to an unfamiliar situation is where you slip.',
+  'You reason well when you concentrate, but you only concentrate about half the time; on the other attempts you fall for the obvious trap.',
+  'English is your weaker subject, so wordy questions and "explain" questions cost you marks even when you know the science.',
+];
+
+// Break a question into the items a student actually has to answer: every MCQ
+// block, and every part that expects writing.
+function _calibItems(q) {
+  const items = [];
+  let stem = '';
+  (q.blocks || []).forEach(b => {
+    if (!b) return;
+    if (b.type === 'text' || b.type === 'part') {
+      stem += ' ' + stripHtml((b.label ? b.label + ' ' : '') + (b.content || ''));
+    } else if (b.type === 'mcq') {
+      items.push({ kind: 'mcq', stem: stem.trim(),
+        options: (b.options || []).map(o => stripHtml(o.text || '')),
+        correct: (b.options || []).findIndex(o => o.id === b.correctId) + 1 });
+      stem = '';
+    } else if (b.type === 'answer') {
+      items.push({ kind: 'written', stem: stem.trim(),
+        model: [b.claim, b.evidence, b.reasoning].map(x => stripHtml(x || '')).filter(Boolean).join(' ') });
+      stem = '';
+    } else if (b.type === 'plainanswer') {
+      items.push({ kind: 'written', stem: stem.trim(), model: stripHtml(b.content || '') });
+      stem = '';
+    } else if (b.type === 'fillblank') {
+      const parsed = _fbParse(b.text || '');
+      items.push({ kind: 'written',
+        stem: (stem + ' ' + parsed.map(p => p.type === 'blank' ? '______' : p.text).join('')).trim(),
+        model: parsed.filter(p => p.type === 'blank').map(p => p.answer).join('; ') });
+      stem = '';
+    }
+  });
+  // A picture-only or answer-less question can't be sat; the caller reports that.
+  return items.filter(it => it.kind === 'mcq' ? (it.options || []).length >= 2 && it.correct >= 1 : true);
+}
+
+// What the simulated student sees. No keys, ever.
+function _calibStudentView(items) {
+  return items.map((it, i) => {
+    const head = 'ITEM ' + (i + 1) + (it.kind === 'mcq' ? ' (multiple choice — answer with the option number)' : ' (write your answer)');
+    const body = it.stem ? '\n' + _docClip(it.stem, 900) : '';
+    const opts = it.kind === 'mcq' ? '\n' + it.options.map((o, oi) => (oi + 1) + '. ' + _docClip(o, 200)).join('\n') : '';
+    return head + body + opts;
+  }).join('\n\n');
+}
+
+async function _calibRunStudent(items, personaIdx) {
+  const prompt = [
+    'You are simulating ONE Singapore Primary 6 pupil of AVERAGE ability sitting a science question. ' + CALIB_PERSONAS[personaIdx % CALIB_PERSONAS.length],
+    '',
+    'Answer the question below ' + CALIB_ATTEMPTS + ' separate times, as that pupil, on ' + CALIB_ATTEMPTS + ' different days.',
+    '',
+    'THIS IS THE WHOLE POINT — do not answer like an expert:',
+    '- You are 12. You know the Singapore primary science syllabus reasonably but not perfectly.',
+    '- LET YOURSELF BE TRICKED. If an option is a tempting misconception, if the question needs two steps of reasoning, or if it quietly changes something a pupil would assume stays the same, then an average pupil often gets it wrong. Answer the way that pupil would, mistakes included.',
+    '- Vary across the ' + CALIB_ATTEMPTS + ' attempts the way a real child does: some careful, some careless. Only give the same answer every time if the question is genuinely easy for you.',
+    '- Written answers must sound like a 12-year-old: one or two short sentences, often missing a linking idea.',
+    '- Never work out what the "expected" answer is and then give it. Answer honestly as the pupil.',
+    '',
+    'THE QUESTION:',
+    _calibStudentView(items),
+    '',
+    'Reply with ONLY this JSON:',
+    '{"attempts":[{"items":[' + items.map(it => it.kind === 'mcq' ? '{"option":<option number>}' : '{"answer":"<what the pupil wrote>"}').join(',') + ']}]}',
+    'The "attempts" array must have exactly ' + CALIB_ATTEMPTS + ' entries, each with exactly ' + items.length + ' item answer(s) in the same order.',
+  ].join('\n');
+  const raw = await askGemini(prompt, { maxOutputTokens: 4096, temperature: 1.0, json: true });
+  const parsed = _parseAIJson(raw);
+  const attempts = Array.isArray(parsed && parsed.attempts) ? parsed.attempts : [];
+  return attempts.slice(0, CALIB_ATTEMPTS).map(a => Array.isArray(a && a.items) ? a.items : []);
+}
+
+// Mark the written answers. This pass DOES see the model answer; it never sees
+// which pupil or attempt an answer came from, so it can't drift into a pattern.
+async function _calibMarkWritten(items, attempts) {
+  const jobs = [];
+  attempts.forEach((att, ai) => {
+    items.forEach((it, ii) => {
+      if (it.kind !== 'written') return;
+      const given = String((att[ii] && att[ii].answer) || '').trim();
+      jobs.push({ ref: ai + ':' + ii, ii, given });
+    });
+  });
+  if (!jobs.length) return {};
+  const byItem = {};
+  items.forEach((it, ii) => { if (it.kind === 'written') byItem[ii] = it; });
+  const prompt = [
+    'You are marking Singapore primary school science answers, exactly as a teacher would.',
+    'For each answer below decide if it would EARN THE MARK: the required science idea must be there. Spelling, grammar and childish phrasing do not lose the mark. A vague answer that misses the key idea, or names a process without its effect where the question asks why, does NOT earn the mark.',
+    '',
+    'THE QUESTIONS AND THEIR ACCEPTED ANSWERS:',
+    Object.keys(byItem).map(ii => 'ITEM ' + (Number(ii) + 1) + ': ' + _docClip(byItem[ii].stem, 500) + '\n  ACCEPTED: ' + (_docClip(byItem[ii].model, 500) || '(no model answer recorded — mark on whether the science is right)')).join('\n'),
+    '',
+    'THE ANSWERS TO MARK:',
+    jobs.map(j => '"' + j.ref + '" (ITEM ' + (j.ii + 1) + '): ' + JSON.stringify(j.given || '(blank)')).join('\n'),
+    '',
+    'Reply with ONLY this JSON: {"marks":{"<ref>":true or false, ...}} covering every ref above.',
+  ].join('\n');
+  const raw = await askGemini(prompt, { maxOutputTokens: 2048, temperature: 0, json: true });
+  const parsed = _parseAIJson(raw);
+  return (parsed && typeof parsed.marks === 'object' && parsed.marks) || {};
+}
+
+// Calibrate one question: 5 students × 20 attempts, marked, reduced to a %.
+// onStep(done, total, note) reports progress; abort.stop halts between calls.
+async function calibrateQuestion(q, onStep, abort) {
+  const items = _calibItems(q);
+  if (!items.length) throw new Error('nothing to answer in this question');
+  const total = CALIB_STUDENTS * 2;
+  let step = 0;
+  const perStudent = [];
+  let correct = 0, marked = 0;
+  for (let s = 0; s < CALIB_STUDENTS; s++) {
+    if (abort && abort.stop) throw new Error('stopped');
+    if (onStep) onStep(step, total, 'student ' + (s + 1) + ' of ' + CALIB_STUDENTS + ' sitting it');
+    const attempts = await _calibRunStudent(items, s);
+    step++;
+    if (!attempts.length) { if (onStep) onStep(++step, total, 'no answers came back'); continue; }
+    if (abort && abort.stop) throw new Error('stopped');
+    const needsMarking = items.some(it => it.kind === 'written');
+    if (onStep) onStep(step, total, needsMarking ? 'marking student ' + (s + 1) + '’s answers' : 'marking student ' + (s + 1));
+    const marks = needsMarking ? await _calibMarkWritten(items, attempts) : {};
+    step++;
+    let sCorrect = 0, sMarked = 0;
+    attempts.forEach((att, ai) => {
+      items.forEach((it, ii) => {
+        sMarked++;
+        if (it.kind === 'mcq') {
+          const picked = parseInt((att[ii] || {}).option, 10);
+          if (picked === it.correct) sCorrect++;
+        } else if (marks[ai + ':' + ii] === true) sCorrect++;
+      });
+    });
+    perStudent.push(sMarked ? Math.round((sCorrect / sMarked) * 100) : 0);
+    correct += sCorrect; marked += sMarked;
+  }
+  if (!marked) throw new Error('no usable answers came back');
+  const pct = Math.round((correct / marked) * 100);
+  return {
+    pct,
+    band: calibBandFor(pct).band,
+    attempts: marked,
+    students: perStudent.length,
+    perStudent,
+    itemCount: items.length,
+    runsEach: CALIB_ATTEMPTS,
+    at: new Date().toISOString(),
+  };
+}
+
+// ---- the buttons ----------------------------------------------------------
+let _calibRun = null;   // { stop } while a batch is going
+
+function calibBadgeHtml(q) {
+  const c = qCalib(q);
+  if (!c) return '<span class="qb-tag calib-none" title="Difficulty not measured yet — use 🎯 to have the AI sit it as 5 average P6 students">🎯 not measured</span>';
+  const b = calibBandFor(c.pct);
+  const tip = c.pct + '% of ' + c.attempts + ' simulated attempts were correct (' + c.students + ' pupils × ' + c.runsEach +
+    ' attempts, measured ' + new Date(c.at).toLocaleDateString() + ')';
+  return '<span class="qb-tag" style="background:' + b.bg + ';color:' + b.color + ';border:1px solid ' + b.color + '33;" title="' + escapeHtml(tip) + '">🎯 ' + c.pct + '% · ' + b.band + '</span>';
+}
+
+async function calibrateOneQuestion(id) {
+  const q = questionBank.find(x => x && x.id === id);
+  if (!q) return;
+  if (_calibRun) { showToast('A calibration run is already going', 'info'); return; }
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+  _calibRun = { stop: false };
+  _calibProgressShow(1);
+  try {
+    const calib = await calibrateQuestion(q, (done, total, note) =>
+      _calibProgressUpdate(0, 1, note, done / total), _calibRun);
+    q.calib = calib;
+    await saveQuestion(q);
+    showToast('Difficulty measured: ' + calib.pct + '% correct → ' + calib.band, 'success');
+  } catch (e) {
+    console.warn('calibrate', e);
+    showToast(/stopped/.test(e && e.message) ? 'Calibration stopped' : 'Calibration failed: ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    _calibRun = null;
+    _calibProgressHide();
+    renderQuestionBank();
+  }
+}
+
+// Calibrate everything currently on screen — whatever the search, filters or AI
+// search have narrowed the bank down to.
+async function calibrateFilteredQuestions() {
+  if (_calibRun) { showToast('A calibration run is already going', 'info'); return; }
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+  const list = _bankFilteredQuestions();
+  const todo = list.filter(q => _calibItems(q).length);
+  if (!todo.length) { showToast('Nothing here can be sat by a pupil (no questions with answers)', 'info'); return; }
+  const calls = todo.length * CALIB_STUDENTS * 2;
+  showConfirm('Measure difficulty',
+    'Have the AI sit ' + todo.length + ' question' + (todo.length === 1 ? '' : 's') + ' as ' + CALIB_STUDENTS +
+    ' average P6 pupils, ' + CALIB_ATTEMPTS + ' attempts each. That is about ' + calls +
+    ' AI calls and will take a while — you can stop at any point and keep whatever has finished.',
+    async () => {
+      _calibRun = { stop: false };
+      _calibProgressShow(todo.length);
+      let done = 0, failed = 0;
+      for (const q of todo) {
+        if (_calibRun.stop) break;
+        try {
+          const calib = await calibrateQuestion(q, (s, t, note) =>
+            _calibProgressUpdate(done, todo.length, (q.title || 'question') + ' — ' + note, s / t), _calibRun);
+          q.calib = calib;
+          await saveQuestion(q);
+        } catch (e) {
+          if (/stopped/.test(e && e.message)) break;
+          console.warn('calibrate', q.id, e);
+          failed++;
+        }
+        done++;
+        _calibProgressUpdate(done, todo.length, 'measured ' + done + ' of ' + todo.length, 0);
+        renderQuestionBank();
+      }
+      const stopped = _calibRun.stop;
+      _calibRun = null;
+      _calibProgressHide();
+      renderQuestionBank();
+      showToast((stopped ? 'Stopped after ' : 'Measured ') + done + ' of ' + todo.length +
+        (failed ? ' (' + failed + ' failed)' : ''), stopped ? 'info' : 'success');
+    });
+}
+
+function calibStopRun() { if (_calibRun) { _calibRun.stop = true; showToast('Finishing the current question, then stopping…', 'info'); } }
+
+function _calibProgressShow(total) {
+  let el = document.getElementById('calibProgress');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'calibProgress';
+    document.body.appendChild(el);
+  }
+  el.innerHTML =
+    '<div class="calib-prog-card">' +
+      '<div class="calib-prog-title">🎯 Measuring difficulty</div>' +
+      '<div class="calib-prog-note" id="calibProgNote">Starting…</div>' +
+      '<div class="calib-prog-bar"><span id="calibProgFill"></span></div>' +
+      '<div class="calib-prog-row"><span id="calibProgCount">0 of ' + total + '</span>' +
+      '<button type="button" class="btn btn-outline" onclick="calibStopRun()">Stop</button></div>' +
+    '</div>';
+  el.classList.add('show');
+}
+function _calibProgressUpdate(done, total, note, within) {
+  const fill = document.getElementById('calibProgFill');
+  const noteEl = document.getElementById('calibProgNote');
+  const countEl = document.getElementById('calibProgCount');
+  const frac = total ? Math.min(1, (done + (within || 0)) / total) : 0;
+  if (fill) fill.style.width = Math.round(frac * 100) + '%';
+  if (noteEl) noteEl.textContent = note || '';
+  if (countEl) countEl.textContent = done + ' of ' + total;
+}
+function _calibProgressHide() {
+  const el = document.getElementById('calibProgress');
+  if (el) el.classList.remove('show');
+}
+
+(function injectCalibStyles() {
+  const css = `
+  #calibProgress { display: none; position: fixed; bottom: 18px; left: 18px; z-index: 1200; }
+  #calibProgress.show { display: block; }
+  .calib-prog-card { width: min(340px, calc(100vw - 36px)); padding: 18px 20px 16px; border-radius: 16px;
+    background: var(--surface, #fff); border: 1px solid var(--border, #e2ddd5); box-shadow: 0 16px 44px rgba(20,18,16,0.26);
+    font-family: 'DM Sans', system-ui, sans-serif; }
+  .calib-prog-title { font-weight: 700; font-size: 0.92rem; line-height: 1.3; }
+  .calib-prog-note { margin-top: 8px; font-size: 0.78rem; line-height: 1.5; color: var(--text-muted, #7a756d); min-height: 2.4em; }
+  .calib-prog-bar { margin-top: 12px; height: 7px; border-radius: 999px; background: var(--bg-tertiary, #f0efeb); overflow: hidden; }
+  .calib-prog-bar span { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--primary, #4a7c59); transition: width .3s ease; }
+  .calib-prog-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px;
+    font-size: 0.76rem; color: var(--text-muted, #7a756d); }
+  .calib-prog-row .btn { padding: 6px 14px; font-size: 0.76rem; }
+  .qb-tag.calib-none { background: var(--bg-tertiary, #f2f1ec); color: var(--text-muted, #7a756d); }`;
+  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+})();
+
+// Exactly what the bank is showing right now — search, every filter, and the AI
+// search ranking. The grid and the "measure difficulty" button read the same
+// function so the button can never act on a different set than the eye sees.
+function _bankFilteredQuestions() {
   const searchRaw = (document.getElementById('bankSearch')?.value || '').trim();
   const searchTokens = parseSearchTokens(searchRaw);
   const topicFilter = document.getElementById('bankFilterTopic')?.value || '';
   const catFilter = document.getElementById('bankFilterCategory')?.value || '';
   const levelFilter = document.getElementById('bankFilterLevel')?.value || '';
   const sourceFilter = document.getElementById('bankFilterSource')?.value || '';
+  const diffFilter = document.getElementById('bankFilterDifficulty')?.value || '';
 
   let filtered = questionBank.filter(q => {
     if (topicFilter && !qMatchesTopic(q, topicFilter)) return false;
@@ -15684,6 +16020,11 @@ function renderQuestionBank() {
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
     const qLevel = getTopicLevel(q.topic || '');
     if (levelFilter && qLevel !== levelFilter) return false;
+    if (diffFilter) {
+      const c = qCalib(q);
+      if (diffFilter === 'none') { if (c) return false; }
+      else if (!c || calibBandFor(c.pct).band !== diffFilter) return false;
+    }
     if (searchTokens.length > 0) {
       const haystack = extractQuestionSearchText(q);
       if (!searchTokens.every(token => haystack.includes(token))) return false;
@@ -15695,6 +16036,20 @@ function renderQuestionBank() {
     filtered = filtered
       .filter(q => bankAiRanking.has(q.id))
       .sort((a, b) => bankAiRanking.get(b.id) - bankAiRanking.get(a.id));
+  } else if (diffFilter) {
+    filtered.sort((a, b) => (qCalibPct(a) ?? 999) - (qCalibPct(b) ?? 999));   // hardest first
+  }
+  return filtered;
+}
+
+function renderQuestionBank() {
+  const container = document.getElementById('questionBankGrid');
+  const filtered = _bankFilteredQuestions();
+  const calibBtn = document.getElementById('bankCalibBtn');
+  if (calibBtn) {
+    const n = filtered.filter(q => _calibItems(q).length).length;
+    calibBtn.textContent = '🎯 Measure difficulty' + (n ? ' (' + n + ')' : '');
+    calibBtn.disabled = !n;
   }
 
   if (filtered.length === 0) {
@@ -15729,11 +16084,13 @@ function renderQuestionBank() {
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               ${qSecondaryTagsHtml(q)}
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
+              ${calibBadgeHtml(q)}
               ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="Hidden from practice; still shown in PSLE Papers">🚫 Not in syllabus</span>` : ''}
               ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
             </div>
           </div>
           <div class="qb-card-actions">
+            <button class="qb-action-btn" title="Measure how hard this question is — the AI sits it as 5 average P6 pupils, 20 attempts each" onclick="event.stopPropagation();calibrateOneQuestion('${q.id}')">🎯</button>
             <button class="qb-action-btn" title="Edit" onclick="event.stopPropagation();editQuestion('${q.id}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </button>
@@ -36453,7 +36810,8 @@ async function _ainsteinParseWorksheetSpec(text) {
     lines,
     '',
     'Reply with ONLY this JSON:',
-    '{"title":"short worksheet name","mcq":0,"written":0,"topics":["exact topic name"],"unmatched":["anything they asked for with no matching topic"]}',
+    '{"title":"short worksheet name","mcq":0,"written":0,"topics":["exact topic name"],"unmatched":["anything they asked for with no matching topic"],"difficulty":"hardest" | "easiest" | "any"}',
+    '- "difficulty" is "hardest" when they ask for the hardest / most difficult / most challenging / trickiest questions, "easiest" when they ask for easy ones or want to warm up, and "any" when they do not say.',
     '- "mcq" and "written" are how many of each kind they asked for. 0 if they did not ask for that kind. If they gave one total without saying which kind, split it evenly.',
     '- Map every topic they named onto the closest EXACT name from the list — "adaptions" is "Adaptations", "plants" may be a longer plant topic name.',
     '- If something they asked for has no matching topic in the list, put their exact words in "unmatched" and leave it out of "topics".',
@@ -36469,6 +36827,7 @@ async function _ainsteinParseWorksheetSpec(text) {
     title: String((p && p.title) || 'Practice Worksheet').slice(0, 80),
     mcq: clamp(p && p.mcq),
     written: clamp(p && p.written),
+    difficulty: ['hardest', 'easiest'].includes(p && p.difficulty) ? p.difficulty : 'any',
     topics, unmatched,
   };
   if (!spec.mcq && !spec.written) spec.mcq = 10;          // asked for "a worksheet" with no numbers
@@ -36480,7 +36839,7 @@ async function _ainsteinParseWorksheetSpec(text) {
 // topic is used as a topic; anything else ("plant reproduction" when the bank
 // files it under something broader) falls back to concept matching, so a name
 // the bank doesn't use as a topic still finds its questions.
-function _ainsteinWsPool(name, fmt, isTopic) {
+function _ainsteinWsPool(name, fmt, isTopic, difficulty) {
   const key = _docNorm(name);
   const terms = isTopic ? null : _ainsteinConceptTerms(name);
   const out = [];
@@ -36499,8 +36858,17 @@ function _ainsteinWsPool(name, fmt, isTopic) {
     }
   });
   const stats = _qAttemptStats || {};
-  // Best concept match first, then questions they've never attempted.
-  out.sort((a, b) => (b.score - a.score) || ((stats[String(a.q.id)] ? 1 : 0) - (stats[String(b.q.id)] ? 1 : 0)));
+  if (difficulty === 'hardest' || difficulty === 'easiest') {
+    // Measured difficulty leads (see the calibration section): the % of
+    // simulated average-P6 attempts that were correct, so LOW = hard. A question
+    // nobody has measured sorts last either way — an unmeasured question is not
+    // evidence of being hard or easy.
+    const rank = q => { const p = qCalibPct(q); return p == null ? Infinity : (difficulty === 'hardest' ? p : -p); };
+    out.sort((a, b) => (rank(a.q) - rank(b.q)) || (b.score - a.score));
+  } else {
+    // Best concept match first, then questions they've never attempted.
+    out.sort((a, b) => (b.score - a.score) || ((stats[String(a.q.id)] ? 1 : 0) - (stats[String(b.q.id)] ? 1 : 0)));
+  }
   return out.map(x => x.q);
 }
 
@@ -36516,7 +36884,7 @@ function _ainsteinPickForWorksheet(spec) {
     const quota = spec[fmt] || 0;
     perFormat[fmt] = 0;
     if (!quota || !wanted.length) return;
-    const pools = wanted.map(w => ({ name: w.name, list: _ainsteinWsPool(w.name, fmt, w.isTopic).filter(q => !used.has(String(q.id))) }));
+    const pools = wanted.map(w => ({ name: w.name, list: _ainsteinWsPool(w.name, fmt, w.isTopic, spec.difficulty).filter(q => !used.has(String(q.id))) }));
     // Round-robin so 20 questions over 4 topics is 5 each, not 20 from the first.
     let added = 0, exhausted = false;
     while (added < quota && !exhausted) {
@@ -36538,7 +36906,11 @@ function _ainsteinPickForWorksheet(spec) {
   const shortfall = [];
   if (spec.mcq && perFormat.mcq < spec.mcq) shortfall.push({ fmt: 'MCQ', got: perFormat.mcq, want: spec.mcq });
   if (spec.written && perFormat.written < spec.written) shortfall.push({ fmt: 'open-ended', got: perFormat.written, want: spec.written });
-  return { picked, byTopic, perFormat, shortfall };
+  // How much of a difficulty-ordered set is actually backed by measurements.
+  const measured = picked.filter(q => qCalib(q));
+  const diffNote = { asked: spec.difficulty, measured: measured.length, total: picked.length,
+    avgPct: measured.length ? Math.round(measured.reduce((s, q) => s + qCalib(q).pct, 0) / measured.length) : null };
+  return { picked, byTopic, perFormat, shortfall, diffNote };
 }
 
 // Build it, save it to the student's account, and hand back a card to render.
@@ -36548,7 +36920,7 @@ async function _ainsteinBuildWorksheet(msg, studentQuestion) {
     _ainsteinRender();
     const spec = await _ainsteinParseWorksheetSpec(studentQuestion);
     if (!spec) throw new Error('no matching topics');
-    const { picked, byTopic, perFormat, shortfall } = _ainsteinPickForWorksheet(spec);
+    const { picked, byTopic, perFormat, shortfall, diffNote } = _ainsteinPickForWorksheet(spec);
     if (!picked.length) throw new Error('nothing in the bank matched');
     const token = 'aw' + (++_ainsteinWsSeq);
     const ws = {
@@ -36558,7 +36930,7 @@ async function _ainsteinBuildWorksheet(msg, studentQuestion) {
       format: 'open',
       createdAt: new Date().toISOString(),
       source: 'ainstein',
-      spec: { mcq: perFormat.mcq, written: perFormat.written, topics: spec.topics, asked: String(studentQuestion).slice(0, 300) },
+      spec: { mcq: perFormat.mcq, written: perFormat.written, topics: spec.topics, difficulty: spec.difficulty, asked: String(studentQuestion).slice(0, 300) },
     };
     // Persist first, then show it as saved — never claim a save that failed.
     let saved = false;
@@ -36569,7 +36941,7 @@ async function _ainsteinBuildWorksheet(msg, studentQuestion) {
       savedWorksheets.unshift(ws);                       // newest first, as the page sorts
       if (_ainsteinPageId() === 'myworksheets') { try { renderSavedWorksheets(); } catch (_) {} }
     }
-    _ainsteinWorksheets.set(token, { ws, byTopic, perFormat, shortfall, unmatched: spec.unmatched, saved });
+    _ainsteinWorksheets.set(token, { ws, byTopic, perFormat, shortfall, diffNote, unmatched: spec.unmatched, saved });
     msg.wsPending = false;
     msg.worksheet = { token };
     _ainsteinRender();
@@ -36584,14 +36956,23 @@ async function _ainsteinBuildWorksheet(msg, studentQuestion) {
 function _ainsteinWsHtml(ref) {
   const rec = _ainsteinWorksheets.get(ref && ref.token);
   if (!rec) return '';
-  const { ws, byTopic, perFormat, shortfall, unmatched, saved } = rec;
+  const { ws, byTopic, perFormat, shortfall, diffNote, unmatched, saved } = rec;
   const bits = [];
   if (perFormat.mcq) bits.push(perFormat.mcq + ' MCQ');
   if (perFormat.written) bits.push(perFormat.written + ' open-ended');
+  if (diffNote && diffNote.asked === 'hardest') bits.push('hardest first');
+  else if (diffNote && diffNote.asked === 'easiest') bits.push('easiest first');
   const chips = Object.keys(byTopic).map(t =>
     '<span class="ainstein-ws-chip">' + escapeHtml(_docClip(t, 28)) + ' <b>' + byTopic[t] + '</b></span>').join('');
   const notes = [];
   shortfall.forEach(s => notes.push('You asked for ' + s.want + ' ' + s.fmt + ' but the bank only has ' + s.got + ' at your level on these topics.'));
+  if (diffNote && diffNote.asked !== 'any') {
+    notes.push(diffNote.measured
+      ? 'Sorted by measured difficulty — ' + diffNote.measured + ' of ' + diffNote.total +
+        ' have been measured (average ' + diffNote.avgPct + '% of pupils get them right)' +
+        (diffNote.measured < diffNote.total ? '; the unmeasured ones went last.' : '.')
+      : 'None of these have had their difficulty measured yet, so I could only pick by topic.');
+  }
   (unmatched || []).forEach(u => notes.push('I matched “' + _docClip(u, 40) + '” by what the questions are about — there\'s no topic with that exact name.'));
   notes.push(saved ? 'Saved to My Worksheets, so you can come back to it any time.'
                    : 'I couldn\'t save this one to your account — practise or print it now while it\'s here.');
@@ -37287,6 +37668,9 @@ window.ainsteinQuizAnother = ainsteinQuizAnother;
 window.ainsteinWsPractice = ainsteinWsPractice;
 window.ainsteinWsPdf = ainsteinWsPdf;
 window.ainsteinWsOpenSaved = ainsteinWsOpenSaved;
+window.calibrateOneQuestion = calibrateOneQuestion;
+window.calibrateFilteredQuestions = calibrateFilteredQuestions;
+window.calibStopRun = calibStopRun;
 window.commPreviewImg = commPreviewImg;
 window.commAdminPost = commAdminPost;
 window.commCreateQuest = commCreateQuest;

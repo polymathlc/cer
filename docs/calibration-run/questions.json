@@ -1,0 +1,99 @@
+[
+  {
+    "id": "f01",
+    "type": "mcq",
+    "topic": "Plants",
+    "question": "Which of these does a green plant need in order to make food?",
+    "options": ["Light", "Soil", "Wind", "Sound"]
+  },
+  {
+    "id": "f02",
+    "type": "mcq",
+    "topic": "Heat",
+    "question": "A metal ball passes easily through a metal ring at room temperature. The ball is heated strongly for two minutes and then no longer passes through the ring. Why not?",
+    "options": [
+      "The ball expanded when it was heated.",
+      "The ball became heavier when it was heated.",
+      "The ring contracted when the ball was heated.",
+      "The ball melted slightly at its surface."
+    ]
+  },
+  {
+    "id": "f03",
+    "type": "mcq",
+    "topic": "Light",
+    "question": "A torch shines on a ball and a shadow is formed on a screen behind it. The ball is then moved closer to the torch, without moving the torch or the screen. What happens to the shadow on the screen?",
+    "options": [
+      "It becomes larger.",
+      "It becomes smaller.",
+      "It stays exactly the same size.",
+      "It disappears completely."
+    ]
+  },
+  {
+    "id": "f04",
+    "type": "mcq",
+    "topic": "Energy",
+    "question": "A battery-powered torch is switched on. Which energy conversion takes place in the torch bulb?",
+    "options": [
+      "Electrical energy to light energy and heat energy",
+      "Electrical energy to light energy only",
+      "Chemical energy to light energy only",
+      "Light energy to electrical energy"
+    ]
+  },
+  {
+    "id": "f05",
+    "type": "mcq",
+    "topic": "Matter",
+    "question": "Two blocks are placed in water. Block A floats. Block B sinks. Both blocks have exactly the same mass. Which statement must be true?",
+    "options": [
+      "Block A takes up more space than block B.",
+      "Block A is heavier than block B.",
+      "Block B takes up more space than block A.",
+      "Block B is made of metal."
+    ]
+  },
+  {
+    "id": "f06",
+    "type": "mcq",
+    "topic": "Adaptations",
+    "question": "A cactus lives in a hot, dry desert. Its leaves are reduced to thin spines. How does this help the cactus to survive?",
+    "options": [
+      "It loses less water to the surroundings.",
+      "It can absorb more water from the air.",
+      "It can make more food in the day.",
+      "It keeps the cactus cool at night."
+    ]
+  },
+  {
+    "id": "f07",
+    "type": "mcq",
+    "topic": "Electricity",
+    "question": "In a circuit with one battery, one switch and two bulbs arranged in a single loop, one bulb is removed from its holder. What happens to the other bulb?",
+    "options": [
+      "It goes out, because the circuit is now open.",
+      "It becomes brighter, because it gets all the electricity.",
+      "It stays exactly as bright as before.",
+      "It becomes dimmer but stays lit."
+    ]
+  },
+  {
+    "id": "f08",
+    "type": "open",
+    "topic": "Matter",
+    "question": "A glass of iced water is left on a table in a room. After ten minutes, droplets of water are seen on the outside of the glass. Explain how the droplets of water were formed."
+  },
+  {
+    "id": "f09",
+    "type": "open",
+    "topic": "Plant Reproduction",
+    "question": "A gardener removes all the insects from a greenhouse containing flowering plants. After some months, he notices that the plants produce far fewer fruits than before. Explain why."
+  },
+  {
+    "id": "f10",
+    "type": "open",
+    "topic": "Heat",
+    "question": "Two identical cups are filled with the same amount of hot water at the same temperature. Cup A is wrapped in a thick towel and cup B is left uncovered. After 20 minutes, explain which cup contains water at a higher temperature and why."
+  }
+]
