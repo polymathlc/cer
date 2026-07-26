@@ -7153,7 +7153,7 @@ option {
 <div class="confirm-overlay" id="aiEngineOverlay">
   <div class="confirm-dialog" style="max-width:560px;text-align:left;max-height:88vh;overflow-y:auto;">
     <h3 style="margin-bottom:4px;">AI Engine</h3>
-    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Choose which AI answers every request in this app — question building, marking, explanations. Your choice is saved on this device and stays until you change it. If ChatGPT ever fails, the app falls back to Gemini automatically.</p>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Choose which AI powers every mode in this app — <strong>Create Question's AI answer &amp; explanation, Build from screenshot / PDF, Rapid add</strong>, plus marking and explanations. Switch to ChatGPT gpt-5.6-sol for heavy-duty question building, and back to Gemini for everyday use. Your choice is saved on this device and stays until you change it. If ChatGPT ever fails, the app falls back to Gemini automatically.</p>
 
     <div class="form-group">
       <label class="form-label">Engine</label>
@@ -8115,7 +8115,10 @@ function openAiActive() { return getAiEngine() === 'openai' && !!getOpenAiKey();
 async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, json = false } = {}) {
   const model = getOpenAiModel();
   const content = [{ type: 'text', text: prompt }];
-  (media || []).forEach(m => content.push({ type: 'image_url', image_url: { url: 'data:' + m.mimeType + ';base64,' + m.data, detail: 'high' } }));
+  (media || []).forEach((m, i) => {
+    if (/^image\//.test(m.mimeType || '')) content.push({ type: 'image_url', image_url: { url: 'data:' + m.mimeType + ';base64,' + m.data, detail: 'high' } });
+    else content.push({ type: 'file', file: { filename: 'upload-' + (i + 1) + '.pdf', file_data: 'data:' + (m.mimeType || 'application/pdf') + ';base64,' + m.data } });
+  });
   const body = { model, messages: [{ role: 'user', content }], max_completion_tokens: Math.max(1024, maxOutputTokens) };
   if (json) body.response_format = { type: 'json_object' };
   // gpt-5.x models only run at their default temperature; sending one is a 400
@@ -9437,7 +9440,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.158.0';
+const APP_VERSION = 'v1.159.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -13426,8 +13429,7 @@ function _fileToBase64(file) {
 
 // Multimodal Gemini call: a text prompt plus inline image/PDF parts.
 async function askGeminiVision(prompt, media, { maxOutputTokens = 2048, json = false } = {}) {
-  // ChatGPT engine handles image media only — PDFs always go to Gemini
-  if (openAiActive() && !(media || []).some(m => !/^image\//.test(m.mimeType || ''))) {
+  if (openAiActive()) {
     try { return await askOpenAI(prompt, media, { maxOutputTokens, temperature: 0.2, json }); }
     catch (e) { console.warn('ChatGPT engine failed, falling back to Gemini:', e); }
   }
