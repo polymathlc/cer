@@ -1,0 +1,356 @@
+{
+ "rows": [
+  {
+   "q": "f05",
+   "type": "mcq",
+   "label": "Matter — equal mass, one floats one sinks",
+   "pct": 38,
+   "n": 100,
+   "band": "hard",
+   "spread": "A:40% B:35% C:30% D:50% E:35%"
+  },
+  {
+   "q": "f08",
+   "type": "open",
+   "label": "Matter — droplets outside a cold glass",
+   "pct": 51,
+   "n": 100,
+   "band": "medium",
+   "spread": "A:45% B:50% C:55% D:70% E:35%"
+  },
+  {
+   "q": "f03",
+   "type": "mcq",
+   "label": "Light — ball moved closer to torch, shadow size",
+   "pct": 54,
+   "n": 100,
+   "band": "medium",
+   "spread": "A:55% B:50% C:45% D:60% E:60%"
+  },
+  {
+   "q": "f09",
+   "type": "open",
+   "label": "Plant reproduction — no insects, fewer fruits",
+   "pct": 64,
+   "n": 100,
+   "band": "medium",
+   "spread": "A:65% B:55% C:55% D:85% E:60%"
+  },
+  {
+   "q": "f07",
+   "type": "mcq",
+   "label": "Electricity — series bulb removed",
+   "pct": 66,
+   "n": 100,
+   "band": "medium",
+   "spread": "A:70% B:60% C:65% D:65% E:70%"
+  },
+  {
+   "q": "f04",
+   "type": "mcq",
+   "label": "Energy — torch bulb conversion (light AND heat)",
+   "pct": 67,
+   "n": 100,
+   "band": "medium",
+   "spread": "A:60% B:65% C:70% D:75% E:65%"
+  },
+  {
+   "q": "f10",
+   "type": "open",
+   "label": "Heat — towel-wrapped cup stays hotter",
+   "pct": 67,
+   "n": 100,
+   "band": "medium",
+   "spread": "A:70% B:60% C:70% D:80% E:55%"
+  },
+  {
+   "q": "f02",
+   "type": "mcq",
+   "label": "Heat — ball no longer fits ring (expansion)",
+   "pct": 78,
+   "n": 100,
+   "band": "easy",
+   "spread": "A:75% B:80% C:75% D:80% E:80%"
+  },
+  {
+   "q": "f06",
+   "type": "mcq",
+   "label": "Adaptations — cactus spines",
+   "pct": 88,
+   "n": 100,
+   "band": "very easy",
+   "spread": "A:85% B:90% C:90% D:90% E:85%"
+  },
+  {
+   "q": "f01",
+   "type": "mcq",
+   "label": "Plants — what a plant needs to make food",
+   "pct": 93,
+   "n": 100,
+   "band": "very easy",
+   "spread": "A:95% B:95% C:95% D:90% E:90%"
+  }
+ ],
+ "tally": {
+  "f01": {
+   "correct": 93,
+   "n": 100,
+   "perStudent": {
+    "B": {
+     "c": 19,
+     "n": 20
+    },
+    "D": {
+     "c": 18,
+     "n": 20
+    },
+    "A": {
+     "c": 19,
+     "n": 20
+    },
+    "C": {
+     "c": 19,
+     "n": 20
+    },
+    "E": {
+     "c": 18,
+     "n": 20
+    }
+   }
+  },
+  "f02": {
+   "correct": 78,
+   "n": 100,
+   "perStudent": {
+    "B": {
+     "c": 16,
+     "n": 20
+    },
+    "D": {
+     "c": 16,
+     "n": 20
+    },
+    "A": {
+     "c": 15,
+     "n": 20
+    },
+    "C": {
+     "c": 15,
+     "n": 20
+    },
+    "E": {
+     "c": 16,
+     "n": 20
+    }
+   }
+  },
+  "f03": {
+   "correct": 54,
+   "n": 100,
+   "perStudent": {
+    "B": {
+     "c": 10,
+     "n": 20
+    },
+    "D": {
+     "c": 12,
+     "n": 20
+    },
+    "A": {
+     "c": 11,
+     "n": 20
+    },
+    "C": {
+     "c": 9,
+     "n": 20
+    },
+    "E": {
+     "c": 12,
+     "n": 20
+    }
+   }
+  },
+  "f04": {
+   "correct": 67,
+   "n": 100,
+   "perStudent": {
+    "B": {
+     "c": 13,
+     "n": 20
+    },
+    "D": {
+     "c": 15,
+     "n": 20
+    },
+    "A": {
+     "c": 12,
+     "n": 20
+    },
+    "C": {
+     "c": 14,
+     "n": 20
+    },
+    "E": {
+     "c": 13,
+     "n": 20
+    }
+   }
+  },
+  "f05": {
+   "correct": 38,
+   "n": 100,
+   "perStudent": {
+    "B": {
+     "c": 7,
+     "n": 20
+    },
+    "D": {
+     "c": 10,
+     "n": 20
+    },
+    "A": {
+     "c": 8,
+     "n": 20
+    },
+    "C": {
+     "c": 6,
+     "n": 20
+    },
+    "E": {
+     "c": 7,
+     "n": 20
+    }
+   }
+  },
+  "f06": {
+   "correct": 88,
+   "n": 100,
+   "perStudent": {
+    "B": {
+     "c": 18,
+     "n": 20
+    },
+    "D": {
+     "c": 18,
+     "n": 20
+    },
+    "A": {
+     "c": 17,
+     "n": 20
+    },
+    "C": {
+     "c": 18,
+     "n": 20
+    },
+    "E": {
+     "c": 17,
+     "n": 20
+    }
+   }
+  },
+  "f07": {
+   "correct": 66,
+   "n": 100,
+   "perStudent": {
+    "B": {
+     "c": 12,
+     "n": 20
+    },
+    "D": {
+     "c": 13,
+     "n": 20
+    },
+    "A": {
+     "c": 14,
+     "n": 20
+    },
+    "C": {
+     "c": 13,
+     "n": 20
+    },
+    "E": {
+     "c": 14,
+     "n": 20
+    }
+   }
+  },
+  "f08": {
+   "correct": 51,
+   "n": 100,
+   "perStudent": {
+    "B": {
+     "c": 10,
+     "n": 20
+    },
+    "D": {
+     "c": 14,
+     "n": 20
+    },
+    "A": {
+     "c": 9,
+     "n": 20
+    },
+    "C": {
+     "c": 11,
+     "n": 20
+    },
+    "E": {
+     "c": 7,
+     "n": 20
+    }
+   }
+  },
+  "f09": {
+   "correct": 64,
+   "n": 100,
+   "perStudent": {
+    "B": {
+     "c": 11,
+     "n": 20
+    },
+    "D": {
+     "c": 17,
+     "n": 20
+    },
+    "A": {
+     "c": 13,
+     "n": 20
+    },
+    "C": {
+     "c": 11,
+     "n": 20
+    },
+    "E": {
+     "c": 12,
+     "n": 20
+    }
+   }
+  },
+  "f10": {
+   "correct": 67,
+   "n": 100,
+   "perStudent": {
+    "B": {
+     "c": 12,
+     "n": 20
+    },
+    "D": {
+     "c": 16,
+     "n": 20
+    },
+    "A": {
+     "c": 14,
+     "n": 20
+    },
+    "C": {
+     "c": 14,
+     "n": 20
+    },
+    "E": {
+     "c": 11,
+     "n": 20
+    }
+   }
+  }
+ }
+}
