@@ -9444,7 +9444,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.163.0';
+const APP_VERSION = 'v1.164.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -35754,6 +35754,14 @@ function _ainsteinGuardFor(q) {
 // Returns { forModel, guard } — guard is the answer key for the CURRENT
 // question and is never serialised into the prompt as a checkable secret.
 function _ainsteinQuestionContext() {
+  // A question mounted inside the panel is the one they're actually working on,
+  // so it wins over whatever the page behind is showing.
+  if (_ainsteinQuiz && _ainsteinQuiz.q) {
+    return {
+      forModel: { current: _ainsteinQBrief(_ainsteinQuiz.q), position: 'a practice question you opened for them inside this chat' },
+      guard: _ainsteinGuardFor(_ainsteinQuiz.q),
+    };
+  }
   const page = _ainsteinPageId();
   let list = null, idx = -1;
   if (page === 'quickpractice' && Array.isArray(qpQueue) && qpIndex >= 0) { list = qpQueue; idx = qpIndex; }
@@ -35880,6 +35888,7 @@ function _ainsteinFindSimilar(concept, extra, want, excludeIds) {
     if (!q || q.id == null || skip.has(String(q.id))) return;
     if (!qInSyllabus(q)) return;                     // excluded from practice
     if (!qWithinStudentLevel(q)) return;             // never above the student's level
+    if (q.annotation) return;                        // drawing pads need the full page, not a panel
     const mcq = qpHasMcq(q), written = qpHasWritten(q);
     if (!mcq && !written) return;                    // nothing to practise on
     const score = _ainsteinConceptScore(q, concept, terms);
@@ -35903,6 +35912,9 @@ function _ainsteinFindSimilar(concept, extra, want, excludeIds) {
 // The format the student is working in right now, so "another one like this"
 // means another of the same kind.
 function _ainsteinCurrentFormat() {
+  if (_ainsteinQuiz && _ainsteinQuiz.q) {
+    return qpHasMcq(_ainsteinQuiz.q) ? 'mcq' : qpHasWritten(_ainsteinQuiz.q) ? 'written' : 'any';
+  }
   const qctx = _ainsteinQuestionContext();
   if (!qctx) return 'any';
   const page = _ainsteinPageId();
@@ -35913,12 +35925,24 @@ function _ainsteinCurrentFormat() {
   return qpHasMcq(q) ? 'mcq' : qpHasWritten(q) ? 'written' : 'any';
 }
 
-function _ainsteinCurrentQId() {
+// The question showing on the page behind the panel, if any.
+function _ainsteinPageQId() {
   const page = _ainsteinPageId();
   const list = page === 'quickpractice' ? qpQueue : page === 'topicalpractice' ? tpQueue : null;
   const idx = page === 'quickpractice' ? qpIndex : tpIndex;
   const q = list && list[idx];
   return q && q.id != null ? String(q.id) : '';
+}
+
+// The one they are working on right now: the panel's, else the page's.
+function _ainsteinCurrentQId() {
+  if (_ainsteinQuiz && _ainsteinQuiz.q && _ainsteinQuiz.q.id != null) return String(_ainsteinQuiz.q.id);
+  return _ainsteinPageQId();
+}
+
+// Never offer a question they already have open — in the panel or behind it.
+function _ainsteinBusyQIds() {
+  return [_ainsteinCurrentQId(), _ainsteinPageQId()].filter(Boolean);
 }
 
 // Mint a temporary link for one question and return the offer to render.
@@ -35949,7 +35973,6 @@ function _ainsteinMakeOffer(found, concept, want) {
 function _ainsteinBuildOffer(parsed, studentQuestion) {
   try {
     const pr = (parsed && typeof parsed.practice === 'object' && parsed.practice) || {};
-    const currentId = _ainsteinCurrentQId();
     const qctx = _ainsteinQuestionContext();
     let concept = String(pr.concept || '').trim();
     if (!concept) {
@@ -35960,7 +35983,7 @@ function _ainsteinBuildOffer(parsed, studentQuestion) {
     }
     const kw = Array.isArray(pr.keywords) ? pr.keywords.filter(k => typeof k === 'string').join(' ') : '';
     const want = ['mcq', 'written'].includes(pr.format) ? pr.format : _ainsteinCurrentFormat();
-    const exclude = [currentId].concat(Array.from(_ainsteinOffers.values()).map(o => o.qid));
+    const exclude = _ainsteinBusyQIds().concat(Array.from(_ainsteinOffers.values()).map(o => o.qid));
     const found = _ainsteinFindSimilar(concept, kw, want, exclude);
     if (!found) return null;
     return _ainsteinMakeOffer(found, concept, want);
@@ -35974,11 +35997,12 @@ function _ainsteinOfferHtml(offer) {
   const dead = o.used || mins <= 0;
   const kind = o.format === 'mcq' ? 'MCQ' : o.format === 'written' ? 'open-ended question' : 'question';
   const concept = _docClip(o.concept || o.topic || 'this concept', 46);
+  const here = ' Opens right here — you won\'t lose your place.';
   const note = o.used ? 'Already opened — ask me for another one.'
     : mins <= 0 ? 'This link has expired — ask me for another one.'
-    : o.fellBack === 'written' ? 'No more MCQs on this — here\'s an open-ended one. Link good for ' + mins + ' min.'
-    : o.fellBack === 'mcq' ? 'No open-ended ones left on this — here\'s an MCQ. Link good for ' + mins + ' min.'
-    : 'Link good for ' + mins + ' min.';
+    : o.fellBack === 'written' ? 'No more MCQs on this — here\'s an open-ended one.' + here
+    : o.fellBack === 'mcq' ? 'No open-ended ones left on this — here\'s an MCQ.' + here
+    : 'Good for ' + mins + ' min.' + here;
   return '<div class="ainstein-offer' + (dead ? ' dead' : '') + '">' +
     '<button type="button" class="ainstein-offer-btn"' + (dead ? ' disabled' : '') +
       ' onclick="ainsteinTrySimilar(\'' + o.token + '\')">' +
@@ -35992,18 +36016,24 @@ function _ainsteinOfferHtml(offer) {
   '</div>';
 }
 
-// Open the offered question as a one-question practice run. Same handover the
-// encounter quests use: seed the Quick Practice queue, then navigate.
+// ---- practising inside the panel -------------------------------------------
+// The offered question is mounted INSIDE Ai-nstein and the panel grows to fit
+// it. Nothing about the page behind is touched — no navigation, and the Quick
+// Practice queue, the topical queue and any live quest run are all left exactly
+// as they were — so a student can take a detour on the same concept and go
+// straight back to the question or activity they were in the middle of.
 //
-// It is deliberately the REAL Quick Practice pipeline and not a side channel, so
-// a question opened from Ai-nstein scores exactly like one the student reached
-// themselves: marking calls recordCerPerformance → rpgOnMarked, which banks
-// gold/XP, advances the battle and streak, counts toward the monthly
-// questions-done tally and republishes both boards (rpgPublishLeaderboard and
-// cerLeaderboard), while the attempt itself is logged to questionAttempts +
-// noteAttemptLocally for My Report. The mode string stays 'quickpractice-open'
-// for the same reason — nothing downstream can tell it apart, so nothing
-// downstream can quietly drop it.
+// It still scores like any other question. The marking pipeline is driven by the
+// container selector, so buildOpenBody('#ainsteinQuizBody', … mode
+// 'quickpractice-open') reaches recordCerPerformance → rpgOnMarked exactly as
+// the Quick Practice page does: gold/XP, the battle round, the streak, the
+// monthly questions-done tally and both boards (rpgPublishLeaderboard and
+// cerLeaderboard), plus a questionAttempts row and noteAttemptLocally for My
+// Report. The mode string is deliberately identical — nothing downstream can
+// tell these apart, so nothing downstream can quietly drop them.
+const AINSTEIN_QUIZ_SEL = '#ainsteinQuizBody';
+let _ainsteinQuiz = null;      // { q, concept, done } while a question is mounted
+
 async function ainsteinTrySimilar(token) {
   const o = _ainsteinOffers.get(token);
   if (!o) { showToast('That practice link is no longer available — ask me for another.', 'info'); return; }
@@ -36011,21 +36041,83 @@ async function ainsteinTrySimilar(token) {
   if (Date.now() > o.expiresAt) { showToast('That practice link has expired — ask me for another.', 'info'); _ainsteinRender(); return; }
   const q = (Array.isArray(questionBank) ? questionBank : []).find(x => x && String(x.id) === o.qid);
   if (!q) { showToast('That question isn\'t on your device yet — try again shortly.', 'error'); return; }
-  // Never tear down a live encounter-quest run to open a practice question —
-  // the quest queue and its score would be lost. The link keeps until they're
-  // done, so nothing is wasted.
-  if (_questRun) { showToast('Finish your quest run first, then tap this again 👍', 'info'); return; }
   o.used = true;
-  qpQueue = [q];
-  qpIndex = -1;
-  qpAnswered = 0;
-  qpSessionResults = [];
-  ainsteinToggle(false);
   _ainsteinRender();
-  navigateTo('quickpractice');
-  showToast('🎯 Same idea, new question — have a go!', 'success');
-  try { await preloadQueueImages(qpQueue); } catch (_) {}
-  loadNextQpQuestion();
+  await _ainsteinOpenQuiz(q, o.concept);
+}
+
+async function _ainsteinOpenQuiz(q, concept) {
+  const panel = _ainsteinEl('ainsteinPanel');
+  const body = _ainsteinEl('ainsteinQuizBody');
+  if (!panel || !body) return;
+  _ainsteinQuiz = { q, concept: concept || q.topic || '', done: false };
+  const lvl = getTopicLevel(q.topic || '');
+  const kind = qpHasMcq(q) ? 'MCQ' : 'Open-ended';
+  _ainsteinEl('ainsteinQuizTitle').textContent = q.title || 'Practice question';
+  _ainsteinEl('ainsteinQuizMeta').textContent = [q.topic || '', lvl, kind].filter(Boolean).join(' · ');
+  _ainsteinEl('ainsteinQuizScore').textContent = '';
+  _ainsteinEl('ainsteinQuizNote').textContent = 'Answer it right here — your page is still open behind me, exactly where you left it.';
+  body.innerHTML = '<div class="ainstein-quiz-wait">Getting it ready…</div>';
+  panel.classList.add('open', 'quiz');
+  _ainsteinEl('ainsteinBubble')?.classList.add('active');
+  try { await preloadQueueImages([q]); } catch (_) {}
+  // Still the question we opened? (They may have gone back to chat meanwhile.)
+  if (!_ainsteinQuiz || _ainsteinQuiz.q !== q) return;
+  body.innerHTML = buildOpenBody(q, AINSTEIN_QUIZ_SEL, {
+    scoreElId: 'ainsteinQuizScore', scorePrefix: 'Score', mode: 'quickpractice-open',
+    onAllMarked: _ainsteinQuizMarked,
+  });
+  try { if (q.id) qpMarkServed(q.id); } catch (_) {}
+  body.scrollTop = 0;
+}
+
+// Marked — same reward path as the practice pages, plus a nudge back to work.
+function _ainsteinQuizMarked(res) {
+  if (_ainsteinQuiz) _ainsteinQuiz.done = true;
+  const note = _ainsteinEl('ainsteinQuizNote');
+  const pct = res && res.total ? Math.round((res.score / res.total) * 100) : 0;
+  if (note) {
+    note.textContent = pct >= 80
+      ? 'Nice one — that\'s the idea. Your points are banked; head back whenever you\'re ready.'
+      : pct >= 50
+        ? 'Getting there. Read the explanation, then try another one or go back to your work.'
+        : 'Have a read of the explanation below — then let\'s try another one on this.';
+  }
+}
+
+// Back to the conversation. The question is left mounted, so they can ask for a
+// clue about it and pick up exactly where they stopped.
+function ainsteinQuizBack() {
+  const panel = _ainsteinEl('ainsteinPanel');
+  if (panel) panel.classList.remove('quiz');
+  if (_ainsteinQuiz && _ainsteinQuiz.done) _ainsteinQuiz = null;   // finished — no resume chip
+  _ainsteinRender();
+  setTimeout(() => _ainsteinEl('ainsteinInput')?.focus(), 60);
+}
+
+function ainsteinQuizResume() {
+  if (!_ainsteinQuiz) return;
+  _ainsteinEl('ainsteinPanel')?.classList.add('open', 'quiz');
+}
+
+// "Another one" — ask for a fresh question on the same concept and swap it in.
+async function ainsteinQuizAnother() {
+  const concept = (_ainsteinQuiz && _ainsteinQuiz.concept) || '';
+  const cur = _ainsteinQuiz && _ainsteinQuiz.q;
+  if (!concept) { ainsteinQuizBack(); return; }
+  const want = cur ? (qpHasMcq(cur) ? 'mcq' : 'written') : 'any';
+  const exclude = (cur && cur.id != null ? [String(cur.id)] : [])
+    .concat(_ainsteinBusyQIds())
+    .concat(Array.from(_ainsteinOffers.values()).map(o => o.qid));
+  const found = _ainsteinFindSimilar(concept, '', want, exclude);
+  if (!found) {
+    const note = _ainsteinEl('ainsteinQuizNote');
+    if (note) note.textContent = 'That\'s every question I have on this one! Ask me about something else and I\'ll find you more.';
+    return;
+  }
+  const offer = _ainsteinMakeOffer(found, concept, want);
+  offer.used = true;
+  await _ainsteinOpenQuiz(found.q, concept);
 }
 
 // ---- teaching videos -------------------------------------------------------
@@ -36237,6 +36329,47 @@ function ainsteinVideoFullscreen(token) {
   } catch (_) { window.open('https://www.youtube.com/watch?v=' + v.id, '_blank', 'noopener'); }
 }
 
+// ---- what to practise next -------------------------------------------------
+// So Ai-nstein can answer "what should I practise?" from the student's actual
+// record rather than guessing. Compact on purpose — it rides along on every ask,
+// and the model only needs enough to name ONE thing and say why.
+function _ainsteinStudyProfile() {
+  const p = (typeof cerPerf !== 'undefined' && cerPerf) || null;
+  const stats = _qAttemptStats || {};
+  const lines = [];
+  if (!p || !p.attempts) {
+    // Nothing marked yet — still useful: say what the bank can offer them.
+    const counts = qpAvailableTopics('all');
+    const topics = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 8);
+    if (!topics.length) return '';
+    lines.push('They have no marked work yet, so there is no weak topic to point at. Topics available to practise (with how many questions): ' +
+      topics.map(t => t + ' ' + counts[t]).join(', ') + '.');
+    return lines.join('\n');
+  }
+  lines.push('Overall mastery ' + (p.score100 || 0) + '/100 over ' + p.attempts + ' marked questions.');
+  const acc = _topicAccuracy(p).sort((a, b) => a.acc - b.acc);
+  if (acc.length) {
+    lines.push('Accuracy by topic, weakest first: ' + acc.slice(0, 8).map(x => x.topic + ' ' + x.acc + '% (' + x.n + ')').join(', ') + '.');
+  }
+  const types = Object.entries(p.types || {})
+    .map(([t, d]) => ({ name: t === 'open' ? 'open-ended' : 'MCQ', acc: d.possible ? Math.round(100 * d.score / d.possible) : 0, n: d.attempts || 0 }))
+    .filter(x => x.n > 0);
+  if (types.length) lines.push('Accuracy by question type: ' + types.map(t => t.name + ' ' + t.acc + '%').join(', ') + '.');
+  const cats = Object.entries(p.categories || {})
+    .map(([c, d]) => ({ name: c, acc: d.possible ? Math.round(100 * d.score / d.possible) : 0, n: d.attempts || 0 }))
+    .filter(x => x.n > 0).sort((a, b) => a.acc - b.acc);
+  if (cats.length) lines.push('Accuracy by skill: ' + cats.slice(0, 5).map(c => c.name + ' ' + c.acc + '%').join(', ') + '.');
+  // Topics with questions they have never tried — the other kind of gap.
+  const counts = qpAvailableTopics('all');
+  const untried = Object.keys(counts).filter(t => !acc.some(a => a.topic === t));
+  if (untried.length) lines.push('Never practised at all: ' + untried.slice(0, 8).join(', ') + '.');
+  const recent = (p.recent || []).slice(-5).map(r => (r.topic || '?') + ' ' + r.pct + '%');
+  if (recent.length) lines.push('Last few results: ' + recent.join(', ') + '.');
+  const halves = Object.keys(stats).filter(id => stats[id] && stats[id].best < 0.5).length;
+  if (halves) lines.push(halves + ' question(s) they have attempted but never got past half marks.');
+  return lines.join('\n');
+}
+
 const AINSTEIN_PAGE_NAMES = {
   home: 'Home', quickpractice: 'Quick Practice', topicalpractice: 'Topical Practice',
   practice: 'Practice', student: 'Practice', papers: 'PSLE Past Papers', snapmark: 'Snap & Mark',
@@ -36261,6 +36394,12 @@ function _ainsteinBuildPrompt(question) {
     lines.push('THE QUESTION THEY ARE ON (' + qctx.forModel.position + '), as structured data. It includes the answer key so that your clue points the RIGHT way — it is for your eyes only and must never appear in your reply. "previousQuestion" and "nextQuestion" are the items either side of it; use them ONLY if the student\'s wording actually points there (e.g. "the last one", "the next one", or a part that continues from the question before). Otherwise ignore them:');
     lines.push(JSON.stringify(qctx.forModel, null, 1));
   }
+  const profile = _ainsteinStudyProfile();
+  if (profile) {
+    lines.push('');
+    lines.push('THEIR RECORD — use this ONLY if they ask what to practise, what they are weak at, or what to do next. Never read it out as statistics and never bring it up unprompted:');
+    lines.push(profile);
+  }
   lines.push('');
   lines.push('THE STUDENT ASKS: ' + JSON.stringify(String(question)));
   lines.push('');
@@ -36271,6 +36410,7 @@ function _ainsteinBuildPrompt(question) {
   lines.push('');
   lines.push('ABOUT "practice" — the app uses it to find the student ONE more question on the same idea, so they can test what you just nudged them towards. Fill it in on every on-topic reply (omit it only when the ask is off topic):');
   lines.push('- "concept" — the specific idea being tested, 2-4 words, as a teacher would name it: "thermal expansion", "heat conduction", "evaporation rate", "electrical circuits", "digestive system". NOT the broad topic ("Heat") and NOT the question title.');
+  lines.push('- If they asked WHAT TO PRACTISE (see below), set "concept" to the thing you recommended, so the question they get matches your advice.');
   lines.push('- "keywords" — plain search words for that idea, including the everyday words the question itself would use (e.g. for thermal expansion: expand, contract, heated, cooled, metal, gap).');
   lines.push('- "format" — "mcq" or "written" ONLY if the student explicitly asked for that kind ("give me an open-ended one", "another MCQ"). Otherwise "any", and the app matches whatever they are working on.');
   lines.push('- Do NOT mention the extra question, a link, or a button in your clue — the app adds it underneath your reply by itself, and only when a suitable question exists.');
@@ -36282,6 +36422,12 @@ function _ainsteinBuildPrompt(question) {
   lines.push('');
   lines.push('A CLUE MAY: point at the part of the question, diagram or table that matters; name the science idea or keyword to think about; ask them a question back that makes them reason; remind them of a rule or definition they should already know; work through a DIFFERENT but similar example; or tell them which of their own ideas is worth following up.');
   lines.push('A CLUE MAY NOT: state the answer or any part of it; name, number or quote the correct option; rule options out until only one is left; give any sentence they could copy into the answer box; say whether an answer they propose is right or wrong; or spell the reasoning all the way through to the conclusion. Always stop one clear step short and hand the last step back to them.');
+  lines.push('');
+  lines.push('IF THEY ASK WHAT TO PRACTISE ("what should I do next", "what am I weak at", "give me something to work on", "which topic should I revise"), that is on topic and you answer it properly — it is advice, not an answer to a question, so the no-answers rule does not apply:');
+  lines.push('- Recommend exactly ONE thing from THEIR RECORD above, named as a specific concept, not a whole topic. Say in one short sentence why it is the one worth doing now (lowest accuracy, never tried, or a slip in their last few results).');
+  lines.push('- If they have no record yet, pick something fundamental from the topics listed and say everyone starts there.');
+  lines.push('- Never quote the percentages back at them or make them feel bad about a weak topic. "Let\'s sharpen up X" beats "you are bad at X".');
+  lines.push('- Do not list several options or write a study timetable. One thing, one reason, then the app offers them a question on it.');
   lines.push('');
   lines.push('Style: warm, encouraging, plain English, 2-4 short sentences, and end by putting the thinking back on them. No markdown, no headings, no bullet symbols.');
   lines.push('- If you cannot tell what they need from the screen, say so and ask them which part they are stuck on.');
@@ -36342,7 +36488,8 @@ function _ainsteinRender() {
       '<p>Stuck on something on your screen? Ask me and I\'ll give you a clue.</p>' +
       '<p>Type your question, or tap <b>🎤</b> and just say it out loud.</p>' +
       '<p><b>I never give answers</b> — only nudges to help you work it out yourself. Don\'t bother asking, it won\'t work!</p>' +
-      '<p>Want more practice on the same idea? Ask, and I\'ll find you another question on it. Still not clicking? I\'ll find you a video to watch.</p>' +
+      '<p>Want more practice on the same idea? Ask, and I\'ll find you another question — you answer it right here, without losing your place. Still not clicking? I\'ll find you a video to watch.</p>' +
+      '<p><button type="button" class="ainstein-preset" onclick="ainsteinAsk(\'What should I practise next?\')">What should I practise next?</button></p>' +
       '<p class="ainstein-warn">Off-topic questions cost an extra credit, so keep them about your work.</p>' +
       '</div>';
     return;
@@ -36351,6 +36498,7 @@ function _ainsteinRender() {
   // already playing keeps playing while the conversation carries on around it.
   log.querySelector('.ainstein-empty')?.remove();
   log.querySelector('.ainstein-typing-wrap')?.remove();
+  log.querySelector('.ainstein-resume-wrap')?.remove();
   _ainstein.history.forEach((m, i) => {
     const key = _ainsteinItemKey(m, i);
     const cur = log.children[i];
@@ -36380,6 +36528,14 @@ function _ainsteinRender() {
     t.innerHTML = '<div class="ainstein-msg ai ainstein-typing"><span></span><span></span><span></span></div>';
     log.appendChild(t);
   }
+  // A question they opened and stepped away from mid-answer — one tap back in.
+  if (_ainsteinQuiz && !_ainsteinQuiz.done) {
+    const r = document.createElement('div');
+    r.className = 'ainstein-item ainstein-resume-wrap';
+    r.innerHTML = '<button type="button" class="ainstein-resume" onclick="ainsteinQuizResume()">' +
+      '↩ Back to “' + escapeHtml(_docClip(_ainsteinQuiz.q.title || 'your practice question', 44)) + '”</button>';
+    log.appendChild(r);
+  }
   log.scrollTop = log.scrollHeight;
 }
 
@@ -36392,15 +36548,25 @@ function ainsteinToggle(force) {
   if (open) {
     _ainsteinPaint();
     _ainsteinRender();
-    // Warm the attempt log so a practice offer can prefer a question the
-    // student has never seen. Fire and forget — matching works without it.
+    // Warm the attempt log and the performance record: the first lets a practice
+    // offer prefer a question they've never seen, the second is what "what should
+    // I practise?" is answered from. Fire and forget — both degrade gracefully.
     if (!_qAttemptStats) loadAttemptStats().catch(() => {});
+    if (typeof cerPerf === 'undefined' || !cerPerf) { try { loadCerPerf().catch(() => {}); } catch (_) {} }
     setTimeout(() => _ainsteinEl('ainsteinInput')?.focus(), 60);
   } else if (_voice.active && _voice.btn && _voice.btn.id === 'ainsteinMic') {
     // Closing mid-recording: stop and still transcribe, so nothing the student
     // said is lost — it will be waiting in the box next time they open up.
     _stopVoice();
   }
+}
+
+// Ask on the student's behalf — used by the suggestion chips in the empty state.
+function ainsteinAsk(text) {
+  const input = _ainsteinEl('ainsteinInput');
+  if (!input) return;
+  input.value = String(text || '');
+  ainsteinSend();
 }
 
 async function ainsteinSend() {
@@ -36521,6 +36687,38 @@ async function ainsteinSend() {
     box-shadow: 0 20px 60px rgba(20,18,16,0.28); overflow: hidden;
     flex-direction: column; font-family: 'DM Sans', system-ui, sans-serif; }
   #ainsteinPanel.open { display: flex; }
+  /* Practising inside the panel: it grows to give the question room to breathe,
+     but stays a panel — the page underneath, and whatever the student was doing
+     on it, is never navigated away from. */
+  #ainsteinPanel.quiz { width: min(760px, calc(100vw - 36px)); max-height: min(88vh, calc(100vh - 130px)); }
+  #ainsteinPanel.quiz #ainsteinLog, #ainsteinPanel.quiz .ainstein-foot { display: none; }
+  #ainsteinQuiz { display: none; flex-direction: column; flex: 1; min-height: 0; }
+  #ainsteinPanel.quiz #ainsteinQuiz { display: flex; }
+  .ainstein-quiz-bar { display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+    border-bottom: 1px solid var(--border, #e2ddd5); background: var(--bg-soft, #f7f9fc); }
+  .ainstein-quiz-back { flex-shrink: 0; cursor: pointer; border: 1px solid var(--border, #e2ddd5);
+    background: var(--surface, #fff); color: var(--text, #1a1a1a); font: inherit; font-size: 0.8rem;
+    padding: 9px 14px; border-radius: 11px; }
+  .ainstein-quiz-back:hover { border-color: var(--primary, #4a7c59); }
+  .ainstein-quiz-what { min-width: 0; }
+  .ainstein-quiz-what b { display: block; font-size: 0.9rem; line-height: 1.35; }
+  .ainstein-quiz-what span { display: block; font-size: 0.75rem; line-height: 1.45; color: var(--text-muted, #7a756d); margin-top: 3px; }
+  #ainsteinQuizScore { margin-left: auto; flex-shrink: 0; font-size: 0.8rem; font-weight: 700; color: var(--text-muted, #7a756d); }
+  #ainsteinQuizBody { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 22px 24px; }
+  .ainstein-quiz-wait { padding: 28px 12px; text-align: center; color: var(--text-muted, #7a756d); font-size: 0.88rem; }
+  .ainstein-quiz-foot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    padding: 14px 20px 16px; border-top: 1px solid var(--border, #e2ddd5); background: var(--surface, #fff); }
+  .ainstein-quiz-foot .ainstein-quiz-note { font-size: 0.74rem; line-height: 1.5; color: var(--text-muted, #7a756d); flex: 1; min-width: 140px; }
+  /* Chip in the chat view offering the way back into a question left open. */
+  .ainstein-resume { display: flex; align-items: center; gap: 10px; width: 100%; cursor: pointer; text-align: left;
+    padding: 12px 15px; border: 1px dashed var(--primary, #4a7c59); border-radius: 14px;
+    background: var(--bg-soft, #f7f9fc); color: var(--primary-dark, #3d6749); font: inherit; font-size: 0.82rem; font-weight: 600; }
+  .ainstein-resume:hover { background: #eef4ef; }
+  @media (max-width: 560px) {
+    #ainsteinPanel.quiz { width: auto; max-height: calc(100vh - 100px); }
+    #ainsteinQuizBody { padding: 16px 14px 20px; }
+  }
+
   .ainstein-head { display: flex; align-items: center; gap: 14px; padding: 18px 20px;
     border-bottom: 1px solid var(--border, #e2ddd5); background: var(--bg-soft, #f7f9fc); }
   .ainstein-head img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
@@ -36586,6 +36784,10 @@ async function ainsteinSend() {
   .ainstein-empty p:last-child { margin-bottom: 0; }
   .ainstein-empty b { color: var(--text, #1a1a1a); }
   .ainstein-warn { font-size: 0.78rem; color: #a8620f; }
+  .ainstein-preset { cursor: pointer; font: inherit; font-size: 0.82rem; font-weight: 600;
+    padding: 10px 16px; border-radius: 12px; border: 1px solid var(--primary, #4a7c59);
+    background: var(--surface, #fff); color: var(--primary-dark, #3d6749); }
+  .ainstein-preset:hover { background: var(--bg-soft, #f7f9fc); }
 
   .ainstein-foot { border-top: 1px solid var(--border, #e2ddd5); padding: 14px 16px 16px; background: var(--surface, #fff); }
   .ainstein-row { display: flex; gap: 10px; align-items: flex-end; }
@@ -36633,6 +36835,22 @@ async function ainsteinSend() {
         <button class="ainstein-close" type="button" aria-label="Close">✕</button>
       </div>
       <div id="ainsteinLog"></div>
+      <div id="ainsteinQuiz">
+        <div class="ainstein-quiz-bar">
+          <button class="ainstein-quiz-back" type="button" onclick="ainsteinQuizBack()">← Chat</button>
+          <div class="ainstein-quiz-what">
+            <b id="ainsteinQuizTitle">Practice question</b>
+            <span id="ainsteinQuizMeta"></span>
+          </div>
+          <div id="ainsteinQuizScore"></div>
+        </div>
+        <div id="ainsteinQuizBody"></div>
+        <div class="ainstein-quiz-foot">
+          <div class="ainstein-quiz-note" id="ainsteinQuizNote">Answer it right here — your page is still open behind me, exactly where you left it.</div>
+          <button class="ainstein-vid-btn ghost" type="button" onclick="ainsteinQuizAnother()">Another one</button>
+          <button class="ainstein-vid-btn" type="button" onclick="ainsteinQuizBack()">Done</button>
+        </div>
+      </div>
       <div class="ainstein-foot">
         <div class="ainstein-row">
           <textarea id="ainsteinInput" rows="1" placeholder="Ask for a clue — type it or tap 🎤"></textarea>
@@ -36683,6 +36901,10 @@ function ainsteinOnSignOut() {
   ainsteinToggle(false);
   const b = _ainsteinEl('ainsteinBubble');
   if (b) b.classList.remove('show');
+  _ainsteinQuiz = null;
+  _ainsteinEl('ainsteinPanel')?.classList.remove('quiz');
+  const qb = _ainsteinEl('ainsteinQuizBody');
+  if (qb) qb.innerHTML = '';
   _ainstein.history = [];
   _ainsteinOffers.clear();      // no practice link outlives the session
   _ainsteinVideos.clear();
@@ -36694,6 +36916,10 @@ window.ainsteinToggle = ainsteinToggle;
 window.ainsteinSend = ainsteinSend;
 window.ainsteinTrySimilar = ainsteinTrySimilar;
 window.ainsteinVideoFullscreen = ainsteinVideoFullscreen;
+window.ainsteinAsk = ainsteinAsk;
+window.ainsteinQuizBack = ainsteinQuizBack;
+window.ainsteinQuizResume = ainsteinQuizResume;
+window.ainsteinQuizAnother = ainsteinQuizAnother;
 window.commPreviewImg = commPreviewImg;
 window.commAdminPost = commAdminPost;
 window.commCreateQuest = commCreateQuest;
