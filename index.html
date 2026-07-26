@@ -9444,7 +9444,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.161.0';
+const APP_VERSION = 'v1.162.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -35785,6 +35785,223 @@ function _ainsteinLeaksAnswer(reply, guard) {
 }
 const AINSTEIN_BLOCKED_CLUE = "Nice try — but I only do clues, never answers! Here's a nudge instead: read the question again and pick out the ONE thing that changes or is different. Then ask yourself what that change does. What do you reckon happens because of it?";
 
+// ---- "try a similar question" offers ---------------------------------------
+// A clue is worth more if the student can immediately test the idea on a FRESH
+// question. So with each on-topic reply Ai-nstein also hands over a temporary
+// link to another bank question on the same concept — a thermal-expansion MCQ
+// after a thermal-expansion MCQ, and if the bank has no more MCQs on it, the
+// open-ended one instead.
+//
+// The model only names the concept (and which format the student asked for);
+// the question itself is chosen HERE, from the real bank, so a link can never
+// point at something that doesn't exist. Links are single-use and expire, so an
+// old chat scrolled back to weeks later can't reopen a stale practice run.
+const AINSTEIN_OFFER_TTL_MS = 30 * 60 * 1000;   // a link stays good for 30 minutes
+const _ainsteinOffers = new Map();              // token → { qid, concept, format, fellBack, expiresAt, used }
+let _ainsteinOfferSeq = 0;
+let _ainsteinOfferTimer = null;
+const _ainsteinTextCache = new Map();           // question id → lowercased searchable text
+
+const AINSTEIN_STOPWORDS = new Set(['the','and','for','with','that','this','from','what','when','which','will','would','have','has','are','was','were','been','into','than','then','they','them','their','there','here','some','more','most','much','very','also','only','each','both','over','under','after','before','because','about','does','done','did','can','could','should','must','make','makes','made','used','using','use','uses','give','given','gives','show','shows','shown','state','explain','why','how','who','whom','whose','question','answer','answers','following','diagram','table','picture','above','below','best','same','different','other','another','part','parts','based','student','pupil','science','mcq','open','ended','one','two','three','four','five']);
+
+// Content words worth matching on: 4+ letters, not a stopword.
+function _ainsteinConceptTerms(s) {
+  const out = [];
+  _ainsteinWords(s).forEach(w => {
+    if (w.length < 4 || AINSTEIN_STOPWORDS.has(w) || /^\d+$/.test(w)) return;
+    if (!out.includes(w)) out.push(w);
+  });
+  return out;
+}
+
+// Everything about a question that describes its concept: title, topics,
+// category, the question text and the MCQ option wording. Cached per question —
+// scoring runs over the whole bank on every ask.
+function _ainsteinSearchText(q) {
+  const key = String(q && q.id);
+  if (_ainsteinTextCache.has(key)) return _ainsteinTextCache.get(key);
+  const p = _docQParts(q);
+  let txt = [q.title || '', q.topic || '', qSecondaryTopic(q), q.category || '', p.text].join(' ');
+  if (p.mcq) txt += ' ' + (p.mcq.options || []).map(o => stripHtml(o.text || '')).join(' ');
+  const norm = ' ' + _docNorm(txt).slice(0, 2000) + ' ';
+  _ainsteinTextCache.set(key, norm);
+  return norm;
+}
+
+// How well one question matches a concept. The concept phrase appearing whole
+// ("thermal expansion") is worth far more than its words turning up apart, and a
+// hit in the title/topic beats one buried in the body.
+function _ainsteinConceptScore(q, phrase, terms) {
+  const body = _ainsteinSearchText(q);
+  const head = ' ' + _docNorm([q.title || '', q.topic || '', qSecondaryTopic(q)].join(' ')) + ' ';
+  let score = 0;
+  const ph = _docNorm(phrase);
+  if (ph && ph.indexOf(' ') > 0) {                       // multi-word concept
+    if (head.includes(' ' + ph + ' ') || head.includes(ph)) score += 14;
+    else if (body.includes(ph)) score += 10;
+  }
+  terms.forEach(t => {
+    if (head.includes(' ' + t)) score += 4;
+    else if (body.includes(' ' + t)) score += 2;
+  });
+  return score;
+}
+
+// Pick the best fresh question on a concept.
+//   concept  — the phrase to match, kept whole ("thermal expansion") so the
+//              phrase bonus in _ainsteinConceptScore can fire
+//   extra    — looser search words to widen the net (expand, contract, metal…)
+//   want     — 'mcq' | 'written' | 'any'  (the format the student asked for, or
+//              the format of the question they are on)
+//   excludeIds — the question they are on, and anything already offered.
+// Returns { q, fellBack } — fellBack is the format actually served when the
+// wanted one had nothing left, so the chip can say so.
+function _ainsteinFindSimilar(concept, extra, want, excludeIds) {
+  if (!Array.isArray(questionBank) || !questionBank.length) return null;
+  const terms = _ainsteinConceptTerms(concept + ' ' + (extra || ''));
+  if (!terms.length) return null;
+  const skip = new Set((excludeIds || []).map(String));
+  const stats = _qAttemptStats || {};
+  const scored = [];
+  questionBank.forEach(q => {
+    if (!q || q.id == null || skip.has(String(q.id))) return;
+    if (!qInSyllabus(q)) return;                     // excluded from practice
+    if (!qWithinStudentLevel(q)) return;             // never above the student's level
+    const mcq = qpHasMcq(q), written = qpHasWritten(q);
+    if (!mcq && !written) return;                    // nothing to practise on
+    const score = _ainsteinConceptScore(q, concept, terms);
+    if (score < 6) return;                           // too loose to call "the same concept"
+    scored.push({ q, score, mcq, written, fresh: stats[String(q.id)] ? 0 : 1 });
+  });
+  if (!scored.length) return null;
+  // Best concept match first; among equals, one they've never attempted.
+  scored.sort((a, b) => (b.score - a.score) || (b.fresh - a.fresh));
+  const has = fmt => scored.find(s => fmt === 'mcq' ? s.mcq : s.written);
+  if (want === 'mcq' || want === 'written') {
+    const exact = has(want);
+    if (exact) return { q: exact.q, fellBack: '' };
+    const other = has(want === 'mcq' ? 'written' : 'mcq');
+    if (other) return { q: other.q, fellBack: want === 'mcq' ? 'written' : 'mcq' };
+    return null;
+  }
+  return { q: scored[0].q, fellBack: '' };
+}
+
+// The format the student is working in right now, so "another one like this"
+// means another of the same kind.
+function _ainsteinCurrentFormat() {
+  const qctx = _ainsteinQuestionContext();
+  if (!qctx) return 'any';
+  const page = _ainsteinPageId();
+  const list = page === 'quickpractice' ? qpQueue : page === 'topicalpractice' ? tpQueue : null;
+  const idx = page === 'quickpractice' ? qpIndex : tpIndex;
+  const q = list && list[idx];
+  if (!q) return 'any';
+  return qpHasMcq(q) ? 'mcq' : qpHasWritten(q) ? 'written' : 'any';
+}
+
+function _ainsteinCurrentQId() {
+  const page = _ainsteinPageId();
+  const list = page === 'quickpractice' ? qpQueue : page === 'topicalpractice' ? tpQueue : null;
+  const idx = page === 'quickpractice' ? qpIndex : tpIndex;
+  const q = list && list[idx];
+  return q && q.id != null ? String(q.id) : '';
+}
+
+// Mint a temporary link for one question and return the offer to render.
+function _ainsteinMakeOffer(found, concept, want) {
+  const token = 'ao' + (++_ainsteinOfferSeq) + '_' + Math.random().toString(36).slice(2, 8);
+  const offer = {
+    token,
+    qid: String(found.q.id),
+    title: found.q.title || 'Practice question',
+    topic: found.q.topic || '',
+    concept: concept,
+    format: found.fellBack || want,
+    fellBack: found.fellBack,
+    expiresAt: Date.now() + AINSTEIN_OFFER_TTL_MS,
+    used: false,
+  };
+  _ainsteinOffers.set(token, offer);
+  // Re-render once it lapses so a dead link visibly greys out instead of
+  // looking live until it's tapped.
+  if (_ainsteinOfferTimer) clearTimeout(_ainsteinOfferTimer);
+  _ainsteinOfferTimer = setTimeout(() => { _ainsteinOfferTimer = null; _ainsteinRender(); }, AINSTEIN_OFFER_TTL_MS + 500);
+  return offer;
+}
+
+// Build the offer for a reply, if the concept in play has a fresh question.
+// `ask` is what the model named; falls back to the current question's own
+// wording so an offer still appears when the model names nothing.
+function _ainsteinBuildOffer(parsed, studentQuestion) {
+  try {
+    const pr = (parsed && typeof parsed.practice === 'object' && parsed.practice) || {};
+    const currentId = _ainsteinCurrentQId();
+    const qctx = _ainsteinQuestionContext();
+    let concept = String(pr.concept || '').trim();
+    if (!concept) {
+      // No concept from the model: use the topic + title of what they're on, or
+      // the content words of what they asked.
+      const cur = qctx && qctx.forModel && qctx.forModel.current;
+      concept = cur ? [cur.topic || '', cur.title || ''].filter(Boolean).join(' ') : String(studentQuestion || '');
+    }
+    const kw = Array.isArray(pr.keywords) ? pr.keywords.filter(k => typeof k === 'string').join(' ') : '';
+    const want = ['mcq', 'written'].includes(pr.format) ? pr.format : _ainsteinCurrentFormat();
+    const exclude = [currentId].concat(Array.from(_ainsteinOffers.values()).map(o => o.qid));
+    const found = _ainsteinFindSimilar(concept, kw, want, exclude);
+    if (!found) return null;
+    return _ainsteinMakeOffer(found, concept, want);
+  } catch (e) { console.warn('ainstein offer', e); return null; }
+}
+
+function _ainsteinOfferHtml(offer) {
+  const o = _ainsteinOffers.get(offer && offer.token);
+  if (!o) return '';
+  const mins = Math.ceil((o.expiresAt - Date.now()) / 60000);
+  const dead = o.used || mins <= 0;
+  const kind = o.format === 'mcq' ? 'MCQ' : o.format === 'written' ? 'open-ended question' : 'question';
+  const concept = _docClip(o.concept || o.topic || 'this concept', 46);
+  const note = o.used ? 'Already opened — ask me for another one.'
+    : mins <= 0 ? 'This link has expired — ask me for another one.'
+    : o.fellBack === 'written' ? 'No more MCQs on this — here\'s an open-ended one. Link good for ' + mins + ' min.'
+    : o.fellBack === 'mcq' ? 'No open-ended ones left on this — here\'s an MCQ. Link good for ' + mins + ' min.'
+    : 'Link good for ' + mins + ' min.';
+  return '<div class="ainstein-offer' + (dead ? ' dead' : '') + '">' +
+    '<button type="button" class="ainstein-offer-btn"' + (dead ? ' disabled' : '') +
+      ' onclick="ainsteinTrySimilar(\'' + o.token + '\')">' +
+      '<span class="ainstein-offer-ico">🎯</span>' +
+      '<span class="ainstein-offer-txt">' +
+        '<b>Try another ' + escapeHtml(kind) + '</b>' +
+        '<span>on ' + escapeHtml(concept) + '</span>' +
+      '</span>' +
+    '</button>' +
+    '<div class="ainstein-offer-meta">' + escapeHtml(note) + '</div>' +
+  '</div>';
+}
+
+// Open the offered question as a one-question practice run. Same handover the
+// encounter quests use: seed the Quick Practice queue, then navigate.
+async function ainsteinTrySimilar(token) {
+  const o = _ainsteinOffers.get(token);
+  if (!o) { showToast('That practice link is no longer available — ask me for another.', 'info'); return; }
+  if (o.used) { showToast('You\'ve already opened that one — ask me for another.', 'info'); return; }
+  if (Date.now() > o.expiresAt) { showToast('That practice link has expired — ask me for another.', 'info'); _ainsteinRender(); return; }
+  const q = (Array.isArray(questionBank) ? questionBank : []).find(x => x && String(x.id) === o.qid);
+  if (!q) { showToast('That question isn\'t on your device yet — try again shortly.', 'error'); return; }
+  o.used = true;
+  _questRun = null;                 // a practice link is not part of any quest
+  qpQueue = [q];
+  qpIndex = -1;
+  qpAnswered = 0;
+  qpSessionResults = [];
+  ainsteinToggle(false);
+  _ainsteinRender();
+  navigateTo('quickpractice');
+  showToast('🎯 Same idea, new question — have a go!', 'success');
+  try { await preloadQueueImages(qpQueue); } catch (_) {}
+  loadNextQpQuestion();
+}
+
 const AINSTEIN_PAGE_NAMES = {
   home: 'Home', quickpractice: 'Quick Practice', topicalpractice: 'Topical Practice',
   practice: 'Practice', student: 'Practice', papers: 'PSLE Past Papers', snapmark: 'Snap & Mark',
@@ -35815,7 +36032,13 @@ function _ainsteinBuildPrompt(question) {
   lines.push('FIRST decide if the question is ON TOPIC. On topic means: about anything on the screen above, about the question they are on or its neighbours, about the science topic they are studying, or about how to use this part of the app. A general primary-science question counts as on topic even if it is not literally printed on the screen. Asking you outright for the answer IS on topic — never penalise that, just give a clue instead. OFF topic means chit-chat, jokes, games, other subjects unrelated to what is on screen, personal questions about you, or anything that is not about their learning.');
   lines.push('');
   lines.push('Then reply with ONLY this JSON:');
-  lines.push('{"relevant": true or false, "clue": "your reply to the student", "used": "page" | "current" | "previous" | "next"}');
+  lines.push('{"relevant": true or false, "clue": "your reply to the student", "used": "page" | "current" | "previous" | "next", "practice": {"concept": "the science concept being tested", "keywords": ["3-6 words the app can search the question bank with"], "format": "mcq" | "written" | "any"}}');
+  lines.push('');
+  lines.push('ABOUT "practice" — the app uses it to find the student ONE more question on the same idea, so they can test what you just nudged them towards. Fill it in on every on-topic reply (omit it only when the ask is off topic):');
+  lines.push('- "concept" — the specific idea being tested, 2-4 words, as a teacher would name it: "thermal expansion", "heat conduction", "evaporation rate", "electrical circuits", "digestive system". NOT the broad topic ("Heat") and NOT the question title.');
+  lines.push('- "keywords" — plain search words for that idea, including the everyday words the question itself would use (e.g. for thermal expansion: expand, contract, heated, cooled, metal, gap).');
+  lines.push('- "format" — "mcq" or "written" ONLY if the student explicitly asked for that kind ("give me an open-ended one", "another MCQ"). Otherwise "any", and the app matches whatever they are working on.');
+  lines.push('- Do NOT mention the extra question, a link, or a button in your clue — the app adds it underneath your reply by itself, and only when a suitable question exists.');
   lines.push('');
   lines.push('A CLUE MAY: point at the part of the question, diagram or table that matters; name the science idea or keyword to think about; ask them a question back that makes them reason; remind them of a rule or definition they should already know; work through a DIFFERENT but similar example; or tell them which of their own ideas is worth following up.');
   lines.push('A CLUE MAY NOT: state the answer or any part of it; name, number or quote the correct option; rule options out until only one is left; give any sentence they could copy into the answer box; say whether an answer they propose is right or wrong; or spell the reasoning all the way through to the conclusion. Always stop one clear step short and hand the last step back to them.');
@@ -35862,11 +36085,13 @@ function _ainsteinRender() {
       '<p>Stuck on something on your screen? Ask me and I\'ll give you a clue.</p>' +
       '<p>Type your question, or tap <b>🎤</b> and just say it out loud.</p>' +
       '<p><b>I never give answers</b> — only nudges to help you work it out yourself. Don\'t bother asking, it won\'t work!</p>' +
+      '<p>Want more practice on the same idea? Ask, and I\'ll find you another question on it.</p>' +
       '<p class="ainstein-warn">Off-topic questions cost an extra credit, so keep them about your work.</p>' +
       '</div>';
     return;
   }
-  log.innerHTML = _ainstein.history.map(m => _ainsteinBubbleHtml(m.text, m.who)).join('') +
+  log.innerHTML = _ainstein.history.map(m =>
+      _ainsteinBubbleHtml(m.text, m.who) + (m.offer ? _ainsteinOfferHtml(m.offer) : '')).join('') +
     (_ainstein.busy ? '<div class="ainstein-msg ai ainstein-typing"><span></span><span></span><span></span></div>' : '');
   log.scrollTop = log.scrollHeight;
 }
@@ -35880,6 +36105,9 @@ function ainsteinToggle(force) {
   if (open) {
     _ainsteinPaint();
     _ainsteinRender();
+    // Warm the attempt log so a practice offer can prefer a question the
+    // student has never seen. Fire and forget — matching works without it.
+    if (!_qAttemptStats) loadAttemptStats().catch(() => {});
     setTimeout(() => _ainsteinEl('ainsteinInput')?.focus(), 60);
   } else if (_voice.active && _voice.btn && _voice.btn.id === 'ainsteinMic') {
     // Closing mid-recording: stop and still transcribe, so nothing the student
@@ -35933,7 +36161,10 @@ async function ainsteinSend() {
       text += '\n\n(That one was off topic, so it cost 2 credits.' +
         (left === Infinity ? ')' : ' You have ' + left + ' left today.)');
     }
-    _ainstein.history.push({ who: 'ai', text, offTopic: !relevant });
+    // On-topic replies come with a temporary link to one more question on the
+    // same concept — only if the bank actually has a fresh one to offer.
+    const offer = relevant ? _ainsteinBuildOffer(parsed, question) : null;
+    _ainstein.history.push({ who: 'ai', text, offTopic: !relevant, offer: offer || null });
   } catch (e) {
     console.warn('ainstein ask failed', e);
     // A failed call is our problem, not the student's — no credit is taken.
@@ -35986,6 +36217,22 @@ async function ainsteinSend() {
   .ainstein-typing span:nth-child(2) { animation-delay: .18s; }
   .ainstein-typing span:nth-child(3) { animation-delay: .36s; }
   @keyframes ainsteinBlink { 0%, 60%, 100% { opacity: .25; } 30% { opacity: 1; } }
+  /* Temporary "try another question on this concept" link under a clue. */
+  .ainstein-offer { align-self: flex-start; max-width: 86%; margin: 2px 0 4px; }
+  .ainstein-offer-btn { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer;
+    padding: 13px 15px; border: 1px solid var(--primary, #4a7c59); border-radius: 16px;
+    background: var(--bg-soft, #f7f9fc); color: var(--text, #1a1a1a); font: inherit;
+    transition: background .16s ease, transform .16s ease; }
+  .ainstein-offer-btn:hover { background: #eef4ef; transform: translateY(-1px); }
+  .ainstein-offer-ico { font-size: 1.15rem; line-height: 1; flex-shrink: 0; }
+  .ainstein-offer-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .ainstein-offer-txt b { font-size: 0.86rem; line-height: 1.35; color: var(--primary-dark, #3d6749); }
+  .ainstein-offer-txt span { font-size: 0.8rem; line-height: 1.45; color: var(--text-muted, #7a756d); }
+  .ainstein-offer-meta { margin: 7px 4px 0; font-size: 0.72rem; line-height: 1.5; color: var(--text-muted, #7a756d); }
+  .ainstein-offer.dead .ainstein-offer-btn { border-color: var(--border, #e2ddd5); background: var(--bg-tertiary, #f2f1ec);
+    cursor: not-allowed; opacity: .6; transform: none; }
+  .ainstein-offer.dead .ainstein-offer-txt b { color: var(--text-muted, #7a756d); }
+
   .ainstein-empty { text-align: center; color: var(--text-muted, #7a756d); font-size: 0.86rem; line-height: 1.65; padding: 12px 6px; }
   .ainstein-empty img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; margin-bottom: 14px; }
   .ainstein-empty p { margin: 0 0 10px; }
@@ -36076,6 +36323,8 @@ function ainsteinOnSignIn() {
   const b = _ainsteinEl('ainsteinBubble');
   if (b) b.classList.add('show');
   _ainstein.history = [];
+  _ainsteinOffers.clear();
+  _ainsteinTextCache.clear();   // the bank was just (re)loaded — re-read it
   ainsteinLoadCredits();
 }
 function ainsteinOnSignOut() {
@@ -36083,11 +36332,13 @@ function ainsteinOnSignOut() {
   const b = _ainsteinEl('ainsteinBubble');
   if (b) b.classList.remove('show');
   _ainstein.history = [];
+  _ainsteinOffers.clear();      // no practice link outlives the session
 }
 
 window.navigateTo = navigateTo;
 window.ainsteinToggle = ainsteinToggle;
 window.ainsteinSend = ainsteinSend;
+window.ainsteinTrySimilar = ainsteinTrySimilar;
 window.commPreviewImg = commPreviewImg;
 window.commAdminPost = commAdminPost;
 window.commCreateQuest = commCreateQuest;
