@@ -1161,6 +1161,13 @@ option {
 .btn-orange:hover { background: #c07a24; transform: translateY(-1px); }
 .btn-blue { background: var(--accent-blue); color: #fff; }
 .btn-blue:hover { background: #3d5f90; transform: translateY(-1px); }
+/* "Check answer" — the one button a student is looking for once they've
+   written something, so it is the brightest thing on the question card. A
+   deliberately louder green than --primary, which is the muted house green
+   used for ordinary actions. */
+.btn-check { background: #16a34a; color: #fff; box-shadow: 0 2px 8px rgba(22,163,74,0.30); }
+.btn-check:hover { background: #15873d; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(22,163,74,0.38); }
+.btn-check:disabled { background: #a7d8b8; box-shadow: none; cursor: default; transform: none; }
 
 /* ========== PREVIEW MODE ========== */
 .preview-overlay {
@@ -7108,7 +7115,7 @@ option {
 <div class="confirm-overlay" id="markingSettingsOverlay">
   <div class="confirm-dialog" style="max-width:560px;text-align:left;max-height:88vh;overflow-y:auto;">
     <h3 style="margin-bottom:4px;">AI Marking Guide</h3>
-    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Tell the AI how you mark. These instructions are applied to every "AI Mark" grading across Practice, Student View and Worksheets.</p>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Tell the AI how you mark. These instructions are applied to every "Check answer" grading across Practice, Student View and Worksheets.</p>
 
     <div class="form-group">
       <label class="form-label">Strictness</label>
@@ -7502,7 +7509,7 @@ option {
       </button>
     </div>
     <div style="padding:10px 28px 4px;background:var(--surface-alt);border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-muted);">
-      This is exactly how students will see this question in practice mode — each part has its own 💡 Hint and 🤖 AI Mark buttons, so try answering yourself.
+      This is exactly how students will see this question in practice mode — each part has its own 💡 Hint and ✓ Check answer buttons, so try answering yourself.
     </div>
     <div class="preview-body" id="studentPreviewBody" style="padding:20px 28px;"></div>
     <div style="padding:0 28px 20px;display:flex;gap:10px;justify-content:space-between;align-items:center;">
@@ -9455,7 +9462,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.168.0';
+const APP_VERSION = 'v1.168.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -11817,7 +11824,7 @@ function renderImportedBlockStudent(block, q) {
 
 // Visual feedback when a student picks an MCQ option. Show a NEUTRAL "selected"
 // highlight only — never reveal correctness here, or we'd give the answer away
-// before the student checks. Right/wrong colouring happens after AI Mark/check
+// before the student checks. Right/wrong colouring happens after Check answer
 // (see markOpenQuestion / markQuestionPart).
 function markMcqChoice(input) {
   const wrap = input.closest('.mcq-block');
@@ -14968,7 +14975,7 @@ function renderStudentPreviewBody() {
   </div>`;
   html += `<div class="student-card-body" style="padding:0;">`;
   // The same open-ended answer boxes students get in practice — every part has
-  // its own AI Mark + Hint buttons.
+  // its own Check answer + Hint buttons.
   html += buildOpenBody(q, '#studentPreviewBody', {
     scoreElId: 'studentPreviewResult', scorePrefix: 'AI Score', mode: 'preview'
   });
@@ -16693,7 +16700,7 @@ function renderStudentView() {
   </div>`;
   html += `<div class="student-card-body">`;
   // The same open-ended answer boxes students get in practice — every part has
-  // its own AI Mark + Hint buttons.
+  // its own Check answer + Hint buttons.
   html += buildOpenBody(q, '#studentViewContainer', {
     scoreElId: 'svScoreDisplay', scorePrefix: 'AI Score', mode: 'practice'
   });
@@ -18396,12 +18403,12 @@ let _openSurfaceCfg = {};        // containerSel -> { scoreElId, scorePrefix, mo
 let _openPartResults = {};       // containerSel -> { 'open:<oidx>'|'mcq:<blockId>': { verdict, pts, expected, student } }
 let _openFinalized = {};         // containerSel -> true once the attempt has been recorded
 
-// Hint + AI Mark buttons for ONE part of a question (an answer box or an MCQ),
+// Hint + Check answer buttons for ONE part of a question (an answer box or an MCQ),
 // plus the box the hint is written into.
 function _partActionsHtml(containerSel, kind, pid) {
   return `<div class="part-actions" style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
       <button type="button" class="btn btn-outline part-ai-btn" style="padding:5px 12px;font-size:0.8rem;" data-part-hint="${containerSel}" data-kind="${kind}" data-pid="${pid}" title="Get a hint for this part — it won't give away the answer">💡 Hint</button>
-      <button type="button" class="btn btn-blue part-ai-btn" style="padding:5px 12px;font-size:0.8rem;" data-part-mark="${containerSel}" data-kind="${kind}" data-pid="${pid}" title="Have the AI mark this part">🤖 AI Mark</button>
+      <button type="button" class="btn btn-check part-ai-btn" style="padding:5px 12px;font-size:0.8rem;" data-part-mark="${containerSel}" data-kind="${kind}" data-pid="${pid}" title="Check this part — the AI marks it and tells you how you did">✓ Check answer</button>
     </div>
     <div class="part-hint-box" data-hint-for="${kind}:${pid}" style="display:none;margin-top:6px;padding:8px 12px;border:1px solid var(--accent-orange);background:var(--accent-orange-light,#fff3e0);border-radius:8px;font-size:0.85rem;line-height:1.55;"></div>`;
 }
@@ -18548,7 +18555,7 @@ document.addEventListener('click', function (e) {
 // Generic open-ended body for ANY practice surface (Practice / Quick / Topical).
 // Records each textarea's expected (model) answer in _openItemsStore[containerSel].
 // markCfg ({ scoreElId, scorePrefix, mode, onAllMarked }) tells the per-part
-// AI Mark buttons where to show the running score and what to do once every
+// Check answer buttons where to show the running score and what to do once every
 // part of the question has been marked.
 function buildOpenBody(q, containerSel, markCfg) {
   const items = [];
@@ -18631,7 +18638,7 @@ function buildOpenBody(q, containerSel, markCfg) {
         addAnswer(
           `<div class="fb-sentence" style="line-height:2.4;margin-bottom:10px;">${sentence}</div>` +
           `<div class="fb-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
-            <button type="button" class="btn btn-blue" data-fb-check="${containerSel}" data-fb-block="${block.id}" style="padding:6px 14px;font-size:0.82rem;">🤖 Check answers</button>
+            <button type="button" class="btn btn-check" data-fb-check="${containerSel}" data-fb-block="${block.id}" style="padding:6px 14px;font-size:0.82rem;">✓ Check answers</button>
           </div>
           <div class="fb-feedback" data-fb-fb="${block.id}" style="margin:2px 0 4px;"></div>`
         );
@@ -18730,8 +18737,8 @@ function annotationPadHtml(block, q, containerSel) {
         <div class="dgn-textlayer" id="${pid}_tl"></div>
       </div>
       <div class="dgn-actions" style="margin-top:10px;">
-        <button type="button" class="btn btn-outline" data-dgn-check="${containerSel}" style="padding:7px 14px;font-size:0.83rem;" title="Reveal the model answer">✅ Check answer</button>
-        <button type="button" class="btn btn-blue" data-dgn-aicheck="${containerSel}" data-dgn-pid="${pid}" style="padding:7px 14px;font-size:0.83rem;" title="Have the AI mark your annotations on this diagram">🤖 AI Check${label ? ' — ' + escapeHtml(label) : ''}</button>
+        <button type="button" class="btn btn-check" data-dgn-aicheck="${containerSel}" data-dgn-pid="${pid}" style="padding:7px 14px;font-size:0.83rem;" title="Check your annotations on this diagram — the AI marks them and tells you how you did">✓ Check answer${label ? ' — ' + escapeHtml(label) : ''}</button>
+        <button type="button" class="btn btn-outline" data-dgn-check="${containerSel}" style="padding:7px 14px;font-size:0.83rem;" title="Show the model answer without marking your work">👁 Show model answer</button>
       </div>
       <div class="dgn-feedback" data-dgn-fb-pad="${pid}" style="margin-top:6px;"></div>
     </div>`;
@@ -19373,8 +19380,8 @@ function renderOpenPhotoPreview(containerSel) {
   if (!p) { el.innerHTML = ''; return; }
   el.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <img src="${p.dataUrl}" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">
-      <span style="font-size:0.82rem;color:var(--primary);">Photo attached — the AI can read it for a single part (🤖 AI Mark) or mark the whole page:</span>
-      <button type="button" class="btn btn-blue part-ai-btn" id="openPhotoMarkBtn_${key}" data-openphoto-markall="${containerSel}" style="padding:6px 14px;font-size:0.82rem;">🤖 Mark all parts from photo</button>
+      <span style="font-size:0.82rem;color:var(--primary);">Photo attached — the AI can read it for a single part (✓ Check answer) or check the whole page:</span>
+      <button type="button" class="btn btn-check part-ai-btn" id="openPhotoMarkBtn_${key}" data-openphoto-markall="${containerSel}" style="padding:6px 14px;font-size:0.82rem;">✓ Check all parts from photo</button>
       <button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:0.8rem;" data-openphoto-remove="${containerSel}">Remove</button>
     </div>`;
 }
@@ -19598,7 +19605,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
   let aiModelAnswer = '';
   if (needAi) {
     const orig = btn ? btn.innerHTML : '';
-    if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = 'Checking…'; }
     if (scoreEl) scoreEl.textContent = 'Marking with AI…';
     try {
       const list = aiEntries.map(({ e, i }) => {
@@ -19760,7 +19767,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
 
 // =====================================================================
 // PER-PART AI MARKING + HINTS — every answer box / MCQ gets its own
-// "🤖 AI Mark" and "💡 Hint" buttons instead of one big per-question button.
+// "✓ Check answer" and "💡 Hint" buttons instead of one big per-question button.
 // =====================================================================
 function _setPartResult(containerSel, key, verdict, pts, expected, student) {
   (_openPartResults[containerSel] = _openPartResults[containerSel] || {})[key] = { verdict, pts, expected, student };
@@ -19913,7 +19920,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
   }
 
   const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = 'Marking…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Checking…'; }
   if (fbEl) fbEl.innerHTML = '';
 
   let parsed = null;
@@ -20594,7 +20601,7 @@ function wsPreviewTryIt(qId) {
   const el = document.getElementById('wsPreview_' + qId);
   if (!q || !el) return;
   el.innerHTML =
-    `<div style="margin-bottom:8px;font-size:0.8rem;color:var(--text-muted);">✍️ Type your answers below — each part has its own 💡 Hint and 🤖 AI Mark buttons, exactly like practice mode.</div>` +
+    `<div style="margin-bottom:8px;font-size:0.8rem;color:var(--text-muted);">✍️ Type your answers below — each part has its own 💡 Hint and ✓ Check answer buttons, exactly like practice mode.</div>` +
     buildOpenBody(q, '#wsPreview_' + qId, {
       scoreElId: 'wsPrevScore_' + qId, scorePrefix: 'AI Score', mode: 'preview'
     }) +
