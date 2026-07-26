@@ -8909,6 +8909,7 @@ async function handleGoogleSignIn() {
 async function handleLogout() {
   try {
     await signOut(auth);
+    try { ainsteinOnSignOut(); } catch (e) {}
     showPage('landingPage');
     showToast('Signed out successfully', 'info');
   } catch (error) {
@@ -9435,12 +9436,15 @@ async function enterApp(user) {
     setTimeout(() => { try { navigateTo(rpgPracticePage()); } catch (e) {} }, 300);
   }
 
+  // Ai-nstein rides along on every page from here on.
+  try { ainsteinOnSignIn(); } catch (e) { console.warn('ainstein init', e); }
+
   showToast('Welcome, ' + displayName + '!', 'success');
 }
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.159.0';
+const APP_VERSION = 'v1.160.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -35565,7 +35569,417 @@ window.ppRenderConceptPicker = ppRenderConceptPicker;
 window.ppCeToggleHit = ppCeToggleHit;
 // ============ end PAST PAPER ANALYSIS ============
 
+// =====================================================================
+// AI-NSTEIN — the study buddy that follows the student to every page.
+//
+// A floating bubble sits in the corner of every page. Tapping it opens a chat
+// where the student can ask about whatever is on screen; Ai-nstein reads the
+// live page (and, in the practice modes, the question they are on plus the one
+// before and after it) and answers from that.
+//
+// Every student gets AINSTEIN_DAILY_CREDITS questions a day. A question costs
+// one credit. An off-topic question costs an extra one on top — the "removed
+// from quota" penalty — so idle chatter eats the allowance twice as fast.
+// Teachers/admins are never metered.
+//
+// Credits live in users/{uid}/settings/ainstein and are mirrored to
+// localStorage, so the count survives a reload and still holds if Firestore is
+// briefly unreachable. Both are keyed by date and refill on the first ask of a
+// new day, the same shape the game-credit pool uses.
+// =====================================================================
+const AINSTEIN_DAILY_CREDITS = 20;   // questions a student may ask per day
+const AINSTEIN_OFFTOPIC_COST = 1;    // EXTRA credit removed for an off-topic ask
+const AINSTEIN_IMG = 'https://www.dropbox.com/scl/fi/9kgt7eose94ofj4zed6bh/Ai-nstein.png?rlkey=6legh5m13yavfz95ca7sgpk6x&raw=1';
+// Drawn if the image can't load (offline, or Dropbox blocked on a school
+// network) so the bubble is never an empty box.
+const AINSTEIN_FALLBACK_IMG = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#4a7c59"/>' +
+  '<circle cx="32" cy="26" r="11" fill="#fff"/><path d="M12 58a20 20 0 0 1 40 0z" fill="#fff"/>' +
+  '<text x="32" y="31" font-family="DM Sans,sans-serif" font-size="12" font-weight="700" fill="#4a7c59" text-anchor="middle">Ai</text></svg>');
+
+let _ainstein = { day: null, left: AINSTEIN_DAILY_CREDITS, loaded: false, busy: false, history: [] };
+
+function _ainsteinKey() { return 'ainsteinCredits:' + (currentUser ? currentUser.uid : 'anon'); }
+function _ainsteinUnlimited() { return !currentUser || currentUser.role !== 'student'; }
+
+// Roll the pool over to today if the stored day is stale.
+function _ainsteinRoll(rec) {
+  const today = _todayKey();
+  if (!rec || rec.day !== today) return { day: today, left: AINSTEIN_DAILY_CREDITS };
+  return { day: today, left: Math.max(0, Math.min(AINSTEIN_DAILY_CREDITS, rec.left | 0)) };
+}
+
+// localStorage first so the badge is right on the very first paint, then
+// reconcile with the cloud. Where both have today's record we keep the LOWER
+// balance, so clearing site data doesn't hand out a fresh 20.
+async function ainsteinLoadCredits() {
+  let local = null;
+  try { local = JSON.parse(localStorage.getItem(_ainsteinKey()) || 'null'); } catch (_) {}
+  _ainstein = Object.assign(_ainstein, _ainsteinRoll(local), { loaded: true });
+  _ainsteinPaint();
+  if (!currentUser) return;
+  try {
+    const snap = await getDoc(doc(db, 'users', currentUser.uid, 'settings', 'ainstein'));
+    const cloud = _ainsteinRoll(snap.exists() ? snap.data() : null);
+    const localToday = local && local.day === cloud.day;
+    _ainstein.day = cloud.day;
+    _ainstein.left = localToday ? Math.min(cloud.left, _ainsteinRoll(local).left) : cloud.left;
+    _ainsteinPaint();
+  } catch (e) { console.warn('ainstein credits load', e); }
+}
+
+function _ainsteinPersist() {
+  const rec = { day: _ainstein.day, left: _ainstein.left, updatedAt: new Date().toISOString() };
+  try { localStorage.setItem(_ainsteinKey(), JSON.stringify(rec)); } catch (_) {}
+  if (!currentUser) return;
+  setDoc(doc(db, 'users', currentUser.uid, 'settings', 'ainstein'), rec)
+    .catch(e => console.warn('ainstein credits save', e));
+}
+
+function ainsteinCreditsLeft() {
+  if (_ainsteinUnlimited()) return Infinity;
+  const rolled = _ainsteinRoll(_ainstein);
+  _ainstein.day = rolled.day; _ainstein.left = rolled.left;
+  return _ainstein.left;
+}
+
+function _ainsteinSpend(n) {
+  if (_ainsteinUnlimited()) return;
+  ainsteinCreditsLeft();                       // rolls the day over first
+  _ainstein.left = Math.max(0, _ainstein.left - n);
+  _ainsteinPersist();
+  _ainsteinPaint();
+}
+
+// ---- what Ai-nstein can see -----------------------------------------------
+
+// The rendered text of the page the student is actually looking at. innerText
+// (not textContent) is the point: it returns only what is VISIBLE, so hidden
+// pages, collapsed panels and admin-only controls never leak in.
+function _ainsteinPageText() {
+  const pageEl = document.querySelector('.page.active');
+  if (!pageEl) return '';
+  let txt = '';
+  try { txt = pageEl.innerText || ''; } catch (_) { txt = pageEl.textContent || ''; }
+  return txt.replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ').trim().slice(0, 6000);
+}
+
+function _ainsteinPageId() {
+  const pageEl = document.querySelector('.page.active');
+  return pageEl ? pageEl.id.replace(/^page-/, '') : 'home';
+}
+
+// Compact, readable rendering of one bank question for the model.
+function _ainsteinQBrief(q) {
+  if (!q) return null;
+  const p = _docQParts(q);
+  const out = {
+    title: _docClip(p.title, 120),
+    topic: q.topic || '',
+    question: _docClip(p.text, 900),
+  };
+  if (p.mcq) {
+    out.options = (p.mcq.options || []).map((o, i) => (i + 1) + '. ' + _docClip(stripHtml(o.text || ''), 160));
+    const correct = (p.mcq.options || []).findIndex(o => o.id === p.mcq.correctId);
+    if (correct >= 0) out.correctOption = correct + 1;
+  }
+  p.answers.forEach(a => {
+    if (a.kind === 'cer') out.modelAnswer = _docClip([a.claim, a.evidence, a.reasoning].filter(Boolean).join(' '), 700);
+    else if (a.text) out.modelAnswer = _docClip(a.text, 700);
+  });
+  const exp = (q.blocks || []).find(b => b.type === 'explanation');
+  if (exp) out.explanation = _docClip(stripHtml(exp.content || ''), 500);
+  return out;
+}
+
+// The question the student is on, plus its neighbours. A student often means
+// "the one before this" when they say "the last one", and a multi-part item can
+// carry its setup in the previous question — so both are offered, labelled, for
+// the model to use only if the wording actually points at them.
+function _ainsteinQuestionContext() {
+  const page = _ainsteinPageId();
+  let list = null, idx = -1;
+  if (page === 'quickpractice' && Array.isArray(qpQueue) && qpIndex >= 0) { list = qpQueue; idx = qpIndex; }
+  else if (page === 'topicalpractice' && Array.isArray(tpQueue) && tpIndex >= 0) { list = tpQueue; idx = tpIndex; }
+  if (!list || !list[idx]) return null;
+  const ctx = { current: _ainsteinQBrief(list[idx]) };
+  if (list[idx - 1]) ctx.previousQuestion = _ainsteinQBrief(list[idx - 1]);
+  if (list[idx + 1]) ctx.nextQuestion = _ainsteinQBrief(list[idx + 1]);
+  ctx.position = 'question ' + (idx + 1) + ' of ' + list.length;
+  return ctx;
+}
+
+const AINSTEIN_PAGE_NAMES = {
+  home: 'Home', quickpractice: 'Quick Practice', topicalpractice: 'Topical Practice',
+  practice: 'Practice', student: 'Practice', papers: 'PSLE Past Papers', snapmark: 'Snap & Mark',
+  myreport: 'My Report', myworksheets: 'My Worksheets', community: 'Community', messages: 'Messages',
+  leaderboard: 'Leaderboard', character: 'My Character', adventure: 'Dungeon', arcade: 'Arcade',
+};
+
+function _ainsteinBuildPrompt(question) {
+  const page = _ainsteinPageId();
+  const qctx = _ainsteinQuestionContext();
+  const lines = [];
+  lines.push('You are Ai-nstein, a friendly primary-school science study buddy inside the Polymath Learning Centre app. You are talking to a Singapore primary-school student (P3-P6).');
+  lines.push('');
+  lines.push('WHAT YOU CAN SEE — the student is on the "' + (AINSTEIN_PAGE_NAMES[page] || page) + '" page. This is the text visible on their screen right now:');
+  lines.push('"""');
+  lines.push(_ainsteinPageText() || '(this page has no readable text on it)');
+  lines.push('"""');
+  if (qctx) {
+    lines.push('');
+    lines.push('THE QUESTION THEY ARE ON (' + qctx.position + '), as structured data. "previousQuestion" and "nextQuestion" are the items either side of it — use them ONLY if the student\'s wording actually points there (e.g. "the last one", "the next one", or a part that continues from the question before). Otherwise ignore them:');
+    lines.push(JSON.stringify(qctx, null, 1));
+  }
+  lines.push('');
+  lines.push('THE STUDENT ASKS: ' + JSON.stringify(String(question)));
+  lines.push('');
+  lines.push('FIRST decide if the question is ON TOPIC. On topic means: about anything on the screen above, about the question they are on or its neighbours, about the science topic they are studying, or about how to use this part of the app. A general primary-science question counts as on topic even if it is not literally printed on the screen. OFF topic means chit-chat, jokes, games, other subjects unrelated to what is on screen, personal questions about you, or anything that is not about their learning.');
+  lines.push('');
+  lines.push('Then reply with ONLY this JSON:');
+  lines.push('{"relevant": true or false, "answer": "your reply to the student", "used": "page" | "current" | "previous" | "next"}');
+  lines.push('');
+  lines.push('Rules for "answer":');
+  lines.push('- If relevant: answer the question properly, and say WHY — a P5 student should finish reading knowing the reasoning, not just the result. Warm, plain English, 2-5 short sentences. No markdown, no headings, no bullet symbols.');
+  lines.push('- If the answer is not on the screen and you are not sure, say so rather than guessing.');
+  lines.push('- If NOT relevant: do not answer it. In one friendly sentence, tell them it is off topic and remind them that off-topic questions cost an extra credit from their daily 20, then invite them to ask about what is on their screen.');
+  lines.push('- "used" says which source you actually leaned on.');
+  return lines.join('\n');
+}
+
+// ---- the chat itself -------------------------------------------------------
+
+function _ainsteinEl(id) { return document.getElementById(id); }
+
+function _ainsteinPaint() {
+  const badge = _ainsteinEl('ainsteinBadge');
+  const pill = _ainsteinEl('ainsteinCredits');
+  const left = ainsteinCreditsLeft();
+  const label = left === Infinity ? '∞' : String(left);
+  if (badge) {
+    badge.textContent = label;
+    badge.classList.toggle('out', left !== Infinity && left <= 0);
+  }
+  if (pill) pill.textContent = left === Infinity ? 'Unlimited (teacher)' : label + ' of ' + AINSTEIN_DAILY_CREDITS + ' questions left today';
+}
+
+// escapeHtml, not escapeHtmlKeepLines: the latter strips anything that looks
+// like a tag (a student typing "a<b>c" would lose part of it) and collapses
+// blank lines. Here the CSS already sets white-space: pre-wrap, so plain
+// escaping keeps the text exactly as typed, paragraph breaks and all.
+function _ainsteinBubbleHtml(text, who) {
+  return '<div class="ainstein-msg ' + who + '">' + escapeHtml(text) + '</div>';
+}
+
+function _ainsteinRender() {
+  const log = _ainsteinEl('ainsteinLog');
+  if (!log) return;
+  if (!_ainstein.history.length) {
+    log.innerHTML = '<div class="ainstein-empty">' +
+      '<img src="' + AINSTEIN_IMG + '" alt="" onerror="this.onerror=null;this.src=\'' + AINSTEIN_FALLBACK_IMG + '\';">' +
+      '<p><b>Hi, I\'m Ai-nstein!</b></p>' +
+      '<p>Ask me anything about what\'s on your screen — a question you\'re stuck on, a word you don\'t know, or why an answer works.</p>' +
+      '<p class="ainstein-warn">Off-topic questions cost an extra credit, so keep them about your work!</p>' +
+      '</div>';
+    return;
+  }
+  log.innerHTML = _ainstein.history.map(m => _ainsteinBubbleHtml(m.text, m.who)).join('') +
+    (_ainstein.busy ? '<div class="ainstein-msg ai ainstein-typing"><span></span><span></span><span></span></div>' : '');
+  log.scrollTop = log.scrollHeight;
+}
+
+function ainsteinToggle(force) {
+  const panel = _ainsteinEl('ainsteinPanel');
+  if (!panel) return;
+  const open = force == null ? !panel.classList.contains('open') : !!force;
+  panel.classList.toggle('open', open);
+  _ainsteinEl('ainsteinBubble')?.classList.toggle('active', open);
+  if (open) {
+    _ainsteinPaint();
+    _ainsteinRender();
+    setTimeout(() => _ainsteinEl('ainsteinInput')?.focus(), 60);
+  }
+}
+
+async function ainsteinSend() {
+  const input = _ainsteinEl('ainsteinInput');
+  if (!input || _ainstein.busy) return;
+  const question = String(input.value || '').trim();
+  if (!question) return;
+
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast('Ai-nstein is still waking up — try again in a moment', 'info');
+    return;
+  }
+  if (ainsteinCreditsLeft() <= 0) {
+    // Repaint too: the balance may have moved in another tab, or the day may
+    // have rolled over inside ainsteinCreditsLeft() just now.
+    _ainstein.history.push({ who: 'ai', text: "You've used all " + AINSTEIN_DAILY_CREDITS + " of today's questions. I'll be back with a fresh " + AINSTEIN_DAILY_CREDITS + " tomorrow — keep going on your own for now, you've got this!" });
+    _ainsteinPaint();
+    _ainsteinRender();
+    return;
+  }
+
+  input.value = '';
+  _ainstein.history.push({ who: 'me', text: question });
+  _ainstein.busy = true;
+  _ainsteinRender();
+
+  try {
+    const raw = await askGemini(_ainsteinBuildPrompt(question), { maxOutputTokens: 700, temperature: 0.4, json: true });
+    let parsed = null;
+    try { parsed = _parseAIJson(raw); } catch (_) { parsed = null; }
+    const relevant = parsed ? parsed.relevant !== false : true;   // unparseable → treat as relevant, never punish for our own glitch
+    const answer = (parsed && String(parsed.answer || '').trim()) ||
+      (raw || '').trim() || "I couldn't work that one out — try asking it a different way.";
+    // One credit for asking, one more if it was off topic.
+    _ainsteinSpend(relevant ? 1 : 1 + AINSTEIN_OFFTOPIC_COST);
+    const left = ainsteinCreditsLeft();
+    let text = answer;
+    if (!relevant) {
+      text += '\n\n(That one was off topic, so it cost 2 credits.' +
+        (left === Infinity ? ')' : ' You have ' + left + ' left today.)');
+    }
+    _ainstein.history.push({ who: 'ai', text, offTopic: !relevant });
+  } catch (e) {
+    console.warn('ainstein ask failed', e);
+    // A failed call is our problem, not the student's — no credit is taken.
+    _ainstein.history.push({ who: 'ai', text: "I couldn't reach my brain just then — check your connection and ask me again. That one didn't cost you a credit." });
+  } finally {
+    _ainstein.busy = false;
+    _ainsteinRender();
+  }
+}
+
+// ---- mount -----------------------------------------------------------------
+
+(function injectAinstein() {
+  const css = `
+  #ainsteinBubble { display: none; position: fixed; bottom: 18px; right: 18px; z-index: 890;
+    width: 64px; height: 64px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
+    background: var(--surface, #fff); box-shadow: 0 8px 26px rgba(20,18,16,0.26);
+    transition: transform .18s ease, box-shadow .18s ease; }
+  #ainsteinBubble.show { display: block; }
+  #ainsteinBubble:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 12px 32px rgba(20,18,16,0.32); }
+  #ainsteinBubble.active { transform: scale(0.94); }
+  #ainsteinBubble img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+  #ainsteinBadge { position: absolute; top: -4px; right: -4px; min-width: 24px; height: 24px; padding: 0 6px;
+    border-radius: 999px; background: var(--primary, #4a7c59); color: #fff;
+    font-family: 'Space Mono', monospace; font-size: 0.72rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
+  #ainsteinBadge.out { background: #b3261e; }
+
+  #ainsteinPanel { display: none; position: fixed; bottom: 94px; right: 18px; z-index: 895;
+    width: min(400px, calc(100vw - 36px)); max-height: min(560px, calc(100vh - 130px));
+    background: var(--surface, #fff); border: 1px solid var(--border, #e2ddd5); border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(20,18,16,0.28); overflow: hidden;
+    flex-direction: column; font-family: 'DM Sans', system-ui, sans-serif; }
+  #ainsteinPanel.open { display: flex; }
+  .ainstein-head { display: flex; align-items: center; gap: 14px; padding: 18px 20px;
+    border-bottom: 1px solid var(--border, #e2ddd5); background: var(--bg-soft, #f7f9fc); }
+  .ainstein-head img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+  .ainstein-head .ainstein-name { font-weight: 700; font-size: 1rem; line-height: 1.3; }
+  .ainstein-head .ainstein-sub { font-size: 0.76rem; color: var(--text-muted, #7a756d); margin-top: 3px; line-height: 1.4; }
+  .ainstein-close { margin-left: auto; align-self: flex-start; background: none; border: none; cursor: pointer;
+    font-size: 1.2rem; line-height: 1; color: var(--text-muted, #7a756d); width: 32px; height: 32px; border-radius: 9px; }
+  .ainstein-close:hover { background: var(--bg-tertiary, #f0efeb); color: var(--text, #1a1a1a); }
+
+  #ainsteinLog { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-height: 140px; }
+  .ainstein-msg { max-width: 86%; padding: 12px 15px; border-radius: 16px; font-size: 0.88rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+  .ainstein-msg.me { align-self: flex-end; background: var(--primary, #4a7c59); color: #fff; border-bottom-right-radius: 5px; }
+  .ainstein-msg.ai { align-self: flex-start; background: var(--bg-tertiary, #f2f1ec); color: var(--text, #1a1a1a); border-bottom-left-radius: 5px; }
+  .ainstein-typing { display: flex; gap: 5px; align-items: center; padding: 14px 16px; }
+  .ainstein-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted, #9a958d); animation: ainsteinBlink 1.2s infinite; }
+  .ainstein-typing span:nth-child(2) { animation-delay: .18s; }
+  .ainstein-typing span:nth-child(3) { animation-delay: .36s; }
+  @keyframes ainsteinBlink { 0%, 60%, 100% { opacity: .25; } 30% { opacity: 1; } }
+  .ainstein-empty { text-align: center; color: var(--text-muted, #7a756d); font-size: 0.86rem; line-height: 1.65; padding: 12px 6px; }
+  .ainstein-empty img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; margin-bottom: 14px; }
+  .ainstein-empty p { margin: 0 0 10px; }
+  .ainstein-empty p:last-child { margin-bottom: 0; }
+  .ainstein-empty b { color: var(--text, #1a1a1a); }
+  .ainstein-warn { font-size: 0.78rem; color: #a8620f; }
+
+  .ainstein-foot { border-top: 1px solid var(--border, #e2ddd5); padding: 14px 16px 16px; background: var(--surface, #fff); }
+  .ainstein-row { display: flex; gap: 10px; align-items: flex-end; }
+  #ainsteinInput { flex: 1; min-width: 0; resize: none; font-family: inherit; font-size: 0.88rem; line-height: 1.5;
+    padding: 11px 14px; border: 1px solid var(--border, #e2ddd5); border-radius: 13px; background: var(--surface, #fff);
+    color: var(--text, #1a1a1a); max-height: 110px; }
+  #ainsteinInput:focus { outline: none; border-color: var(--primary, #4a7c59); box-shadow: 0 0 0 3px rgba(74,124,89,0.14); }
+  #ainsteinSend { flex-shrink: 0; border: none; cursor: pointer; background: var(--primary, #4a7c59); color: #fff;
+    width: 42px; height: 42px; border-radius: 13px; font-size: 1rem; }
+  #ainsteinSend:hover { background: var(--primary-dark, #3d6749); }
+  #ainsteinSend:disabled { opacity: .5; cursor: not-allowed; }
+  #ainsteinCredits { margin-top: 10px; font-size: 0.74rem; color: var(--text-muted, #7a756d); text-align: center; }
+
+  /* The daily-quest chip lives in the same corner — lift it above the bubble. */
+  #questChip { bottom: 96px !important; }
+  @media (max-width: 560px) {
+    #ainsteinBubble { width: 56px; height: 56px; bottom: 14px; right: 14px; }
+    #ainsteinPanel { bottom: 78px; right: 12px; left: 12px; width: auto; max-height: calc(100vh - 110px); }
+    #questChip { bottom: 82px !important; }
+  }
+  @media print { #ainsteinBubble, #ainsteinPanel { display: none !important; } }`;
+  const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+
+  const host = document.createElement('div');
+  host.innerHTML = `
+    <button id="ainsteinBubble" type="button" title="Ask Ai-nstein about this page" aria-label="Ask Ai-nstein">
+      <img src="${AINSTEIN_IMG}" alt="Ai-nstein" onerror="this.onerror=null;this.src='${AINSTEIN_FALLBACK_IMG}';">
+      <span id="ainsteinBadge">${AINSTEIN_DAILY_CREDITS}</span>
+    </button>
+    <div id="ainsteinPanel" role="dialog" aria-label="Chat with Ai-nstein">
+      <div class="ainstein-head">
+        <img src="${AINSTEIN_IMG}" alt="" onerror="this.onerror=null;this.src='${AINSTEIN_FALLBACK_IMG}';">
+        <div>
+          <div class="ainstein-name">Ai-nstein</div>
+          <div class="ainstein-sub">Ask me about what's on your screen</div>
+        </div>
+        <button class="ainstein-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <div id="ainsteinLog"></div>
+      <div class="ainstein-foot">
+        <div class="ainstein-row">
+          <textarea id="ainsteinInput" rows="1" placeholder="Ask about this page…"></textarea>
+          <button id="ainsteinSend" type="button" aria-label="Send">➤</button>
+        </div>
+        <div id="ainsteinCredits"></div>
+      </div>
+    </div>`;
+  const mount = document.body || document.documentElement;
+  while (host.firstElementChild) mount.appendChild(host.firstElementChild);
+
+  document.getElementById('ainsteinBubble').addEventListener('click', () => ainsteinToggle());
+  document.querySelector('#ainsteinPanel .ainstein-close').addEventListener('click', () => ainsteinToggle(false));
+  document.getElementById('ainsteinSend').addEventListener('click', ainsteinSend);
+  const input = document.getElementById('ainsteinInput');
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ainsteinSend(); }
+    if (e.key === 'Escape') ainsteinToggle(false);
+  });
+  // Grow the box with the question, up to the CSS max-height.
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(110, input.scrollHeight) + 'px'; });
+  _ainsteinRender();
+})();
+
+// Show the bubble once someone is signed in, and load their allowance. Called
+// from enterApp; safe to call again on a re-auth.
+function ainsteinOnSignIn() {
+  const b = _ainsteinEl('ainsteinBubble');
+  if (b) b.classList.add('show');
+  _ainstein.history = [];
+  ainsteinLoadCredits();
+}
+function ainsteinOnSignOut() {
+  ainsteinToggle(false);
+  const b = _ainsteinEl('ainsteinBubble');
+  if (b) b.classList.remove('show');
+  _ainstein.history = [];
+}
+
 window.navigateTo = navigateTo;
+window.ainsteinToggle = ainsteinToggle;
+window.ainsteinSend = ainsteinSend;
 window.commPreviewImg = commPreviewImg;
 window.commAdminPost = commAdminPost;
 window.commCreateQuest = commCreateQuest;
