@@ -9455,7 +9455,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.166.0';
+const APP_VERSION = 'v1.166.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15367,16 +15367,27 @@ function addToBank() {
   saveQuestion(q); // async, non-blocking
 }
 
-// The editor form has no fields for provenance (worksheet source, citation,
-// concepts), so an edited question is rebuilt without them — carry them over
-// from the stored copy so they survive edits.
+// Everything collectQuestionData() builds from the editor form. Anything else
+// on a stored question (provenance, measured difficulty, flags, future fields)
+// has no field in the editor, so a save would silently drop it.
+const EDITOR_OWNED_QUESTION_FIELDS = new Set([
+  'id', 'title', 'category', 'category2', 'topic', 'topic2', 'markingGuide',
+  'answerKeyNote', 'answerKeyImage', 'annotation', 'notInSyllabus',
+  'blocks', 'blanks', 'createdAt', 'createdBy',
+]);
+
+// An edited question is rebuilt from scratch by collectQuestionData(), so every
+// stored field the editor does NOT own (source, concepts, q.calib, …) would be
+// lost on save. Carry them all over from the stored copy — an allowlist, not a
+// hand-maintained list of names, so a new field can never quietly go missing.
 function carryOverQuestionMeta(q) {
   const prev = questionBank.find(qb => qb.id === q.id) || vettingList.find(v => v.id === q.id);
   if (!prev) return;
-  if (prev.source) q.source = prev.source;
-  if (prev.sourceWorksheet) q.sourceWorksheet = prev.sourceWorksheet;
-  if (Array.isArray(prev.concepts) && prev.concepts.length) q.concepts = prev.concepts;
-  if (prev.createdAt) q.createdAt = prev.createdAt;
+  Object.keys(prev).forEach(k => {
+    if (EDITOR_OWNED_QUESTION_FIELDS.has(k)) return;
+    if (q[k] === undefined) q[k] = prev[k];
+  });
+  if (prev.createdAt) q.createdAt = prev.createdAt;   // editor stamps a fresh one
 }
 
 function saveEditedQuestion() {
@@ -15760,6 +15771,23 @@ function _calibItems(q) {
   return items.filter(it => it.kind === 'mcq' ? (it.options || []).length >= 2 && it.correct >= 1 : true);
 }
 
+// A fingerprint of everything a simulated student actually sits: the stems, the
+// options, the model answers. Stored on q.calib when the reading is taken, so a
+// later edit can tell whether the number still describes THIS question. Editing
+// the title, topic, or the answer-key explanation changes none of it, so those
+// edits leave a measured difficulty untouched.
+function _calibSignature(items) {
+  return JSON.stringify(items.map(it => it.kind === 'mcq'
+    ? ['m', it.stem, it.options, it.correct]
+    : ['w', it.stem, it.model]));
+}
+// The reading was taken before the question was changed in a way that matters.
+function qCalibStale(q) {
+  const c = qCalib(q);
+  if (!c || !c.sig) return false;   // readings taken before signatures existed
+  return c.sig !== _calibSignature(_calibItems(q));
+}
+
 // What the simulated student sees. No keys, ever.
 function _calibStudentView(items) {
   return items.map((it, i) => {
@@ -15870,6 +15898,7 @@ async function calibrateQuestion(q, onStep, abort) {
     perStudent,
     itemCount: items.length,
     runsEach: CALIB_ATTEMPTS,
+    sig: _calibSignature(items),
     at: new Date().toISOString(),
   };
 }
@@ -15881,9 +15910,13 @@ function calibBadgeHtml(q) {
   const c = qCalib(q);
   if (!c) return '<span class="qb-tag calib-none" title="Difficulty not measured yet — use 🎯 to have the AI sit it as 5 average P6 students">🎯 not measured</span>';
   const b = calibBandFor(c.pct);
+  const stale = qCalibStale(q);
   const tip = c.pct + '% of ' + c.attempts + ' simulated attempts were correct (' + c.students + ' pupils × ' + c.runsEach +
-    ' attempts, measured ' + new Date(c.at).toLocaleDateString() + ')';
-  return '<span class="qb-tag" style="background:' + b.bg + ';color:' + b.color + ';border:1px solid ' + b.color + '33;" title="' + escapeHtml(tip) + '">🎯 ' + c.pct + '% · ' + b.band + '</span>';
+    ' attempts, measured ' + new Date(c.at).toLocaleDateString() + ')' +
+    (stale ? ' — the question has been edited since, so press 🎯 to re-measure' : '');
+  return '<span class="qb-tag" style="background:' + b.bg + ';color:' + b.color + ';border:1px ' + (stale ? 'dashed' : 'solid') +
+    ' ' + b.color + '33;' + (stale ? 'opacity:.75;' : '') + '" title="' + escapeHtml(tip) + '">🎯 ' + c.pct + '% · ' + b.band +
+    (stale ? ' · edited' : '') + '</span>';
 }
 
 async function calibrateOneQuestion(id) {
