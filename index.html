@@ -9444,7 +9444,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.164.0';
+const APP_VERSION = 'v1.164.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -12425,13 +12425,19 @@ document.addEventListener('click', function (e) {
 // A mic button is any element with class "mic-btn"; its target is either
 // data-mic="<element id>" or the field inside the nearest [data-mic-wrap].
 // =====================================================================
-const _voice = { active: false, recorder: null, chunks: [], stream: null, btn: null, target: null, mime: '' };
+// A recording is capped: an open mic left running would send a huge audio blob
+// to the model (and cost a fortune) for what is meant to be one spoken question.
+const VOICE_MAX_MS = 60000;
+const _voice = { active: false, recorder: null, chunks: [], stream: null, btn: null, target: null, mime: '',
+                 endsAt: 0, hardStop: null, tick: null, cancelled: false, hitLimit: false };
 (function injectMicStyles() {
   const css = `
   .mic-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;min-width:30px;border:1px solid var(--border,#e2ddd5);background:#fff;border-radius:8px;cursor:pointer;font-size:0.95rem;line-height:1;padding:0;vertical-align:middle;}
   .mic-btn:hover{border-color:var(--primary,#4a7c59);}
   .mic-btn.recording{background:#fee2e2;border-color:#dc2626;animation:micpulse 1s ease-in-out infinite;}
   .mic-btn.busy{opacity:.6;cursor:default;}
+  .mic-cancel{cursor:pointer;font:inherit;font-size:0.72rem;line-height:1;padding:5px 10px;margin-left:6px;border-radius:8px;border:1px solid var(--border,#e2ddd5);background:#fff;color:var(--text-muted,#7a756d);}
+  .mic-cancel:hover{border-color:#dc2626;color:#b3261e;}
   @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5);}50%{box-shadow:0 0 0 5px rgba(220,38,38,0);}}`;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
 })();
@@ -12447,22 +12453,35 @@ function micForBlockHtml(blockId, field, title) {
 // we then mirror what the mic is doing into it, for surfaces (like Ai-nstein's
 // chat panel) where a toast in the far corner is easy to miss.
 let _micStatusTimer = null;
-function _micStatus(btn, msg, holdMs) {
+function _micStatus(btn, msg, holdMs, withCancel) {
   const id = btn && btn.getAttribute && btn.getAttribute('data-mic-status');
   if (!id) return;
   const el = document.getElementById(id);
   if (!el) return;
   if (_micStatusTimer) { clearTimeout(_micStatusTimer); _micStatusTimer = null; }
-  el.textContent = msg || '';
+  el.innerHTML = msg
+    ? '<span>' + escapeHtml(msg) + '</span>' +
+      (withCancel ? ' <button type="button" class="mic-cancel" onclick="voiceCancel()">Cancel</button>' : '')
+    : '';
   el.classList.toggle('show', !!msg);
-  if (msg && holdMs) _micStatusTimer = setTimeout(() => { el.textContent = ''; el.classList.remove('show'); }, holdMs);
+  if (msg && holdMs) _micStatusTimer = setTimeout(() => { el.innerHTML = ''; el.classList.remove('show'); }, holdMs);
 }
 function _setMic(btn, state) {
   if (!btn) return;
   btn.classList.remove('recording', 'busy');
-  if (state === 'recording') { btn.classList.add('recording'); btn.textContent = '⏹'; btn.title = 'Click to stop and transcribe'; _micStatus(btn, '🎙️ Listening… tap ⏹ when you\'re done'); }
+  if (state === 'recording') { btn.classList.add('recording'); btn.textContent = '⏹'; btn.title = 'Click to stop and transcribe'; _micCountdown(btn); }
   else if (state === 'busy') { btn.classList.add('busy'); btn.textContent = '⏳'; btn.title = 'Transcribing…'; _micStatus(btn, 'Writing down what you said…'); }
   else { btn.textContent = '🎤'; btn.title = 'Voice input — click to speak, click again to stop'; _micStatus(btn, ''); }
+}
+// While recording, count down to the hard limit so a student can see the mic is
+// live and how long they have left — and can throw the recording away.
+function _micCountdown(btn) {
+  const paint = () => {
+    const left = Math.max(0, Math.ceil((_voice.endsAt - Date.now()) / 1000));
+    _micStatus(btn, '🎙️ Listening… ' + left + 's left — tap ⏹ when you\'re done', 0, true);
+  };
+  paint();
+  _voice.tick = setInterval(() => { if (_voice.active) paint(); else clearInterval(_voice.tick); }, 1000);
 }
 function _pickAudioMime() {
   const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
@@ -12513,23 +12532,46 @@ async function _startVoice(btn, target) {
     rec.ondataavailable = ev => { if (ev.data && ev.data.size) _voice.chunks.push(ev.data); };
     rec.onstop = _finishVoice;
     rec.start();
-    Object.assign(_voice, { active: true, recorder: rec, stream, btn, target, mime: rec.mimeType || mime || 'audio/webm' });
+    Object.assign(_voice, { active: true, recorder: rec, stream, btn, target, mime: rec.mimeType || mime || 'audio/webm',
+      endsAt: Date.now() + VOICE_MAX_MS, cancelled: false, hitLimit: false });
+    // Hard stop at the cap: transcribe what we have rather than record forever.
+    _voice.hardStop = setTimeout(() => { if (_voice.active) { _voice.hitLimit = true; _stopVoice(); } }, VOICE_MAX_MS);
     _setMic(btn, 'recording');
     showToast('🎙️ Listening… click the mic again to stop', 'info');
   } catch (e) { console.warn('mic start failed', e); showToast('Microphone access denied or unavailable', 'error'); }
 }
+function _clearVoiceTimers() {
+  if (_voice.hardStop) { clearTimeout(_voice.hardStop); _voice.hardStop = null; }
+  if (_voice.tick) { clearInterval(_voice.tick); _voice.tick = null; }
+}
 function _stopVoice() {
   if (!_voice.active || !_voice.recorder) return;
   _voice.active = false;
+  _clearVoiceTimers();
   _setMic(_voice.btn, 'busy');
-  showToast('Transcribing…', 'info');
+  if (_voice.hitLimit) _micStatus(_voice.btn, 'That\'s the ' + Math.round(VOICE_MAX_MS / 1000) + '-second limit — writing down what I got…');
+  showToast(_voice.hitLimit ? 'Reached the recording limit — transcribing what I got…' : 'Transcribing…', 'info');
   try { _voice.recorder.stop(); } catch (_) {}
 }
+// Throw the recording away: no transcription, no AI call, nothing inserted.
+function voiceCancel() {
+  if (!_voice.active || !_voice.recorder) return;
+  _voice.active = false;
+  _voice.cancelled = true;
+  _clearVoiceTimers();
+  const btn = _voice.btn;
+  _setMic(btn, 'idle');
+  _micStatus(btn, 'Recording thrown away — tap 🎤 to start again.', 4000);
+  showToast('Recording discarded', 'info');
+  try { _voice.recorder.stop(); } catch (_) {}   // onstop → _finishVoice, which bails out
+}
 async function _finishVoice() {
-  const { btn, target, mime, stream } = _voice;
+  const { btn, target, mime, stream, cancelled } = _voice;
   const blob = new Blob(_voice.chunks, { type: mime });
   if (stream) stream.getTracks().forEach(t => t.stop());
   _voice.recorder = null; _voice.stream = null; _voice.chunks = [];
+  _clearVoiceTimers();
+  if (cancelled) { _voice.btn = null; _voice.target = null; _voice.cancelled = false; return; }
   let note = '';
   try {
     if (!blob.size) throw new Error('no audio captured');
@@ -12548,7 +12590,7 @@ async function _finishVoice() {
   finally {
     _setMic(btn, 'idle');
     _micStatus(btn, note, 5000);
-    _voice.btn = null; _voice.target = null;
+    _voice.btn = null; _voice.target = null; _voice.hitLimit = false;
   }
 }
 document.addEventListener('click', function (e) {
@@ -35819,8 +35861,9 @@ const AINSTEIN_BLOCKED_CLUE = "Nice try — but I only do clues, never answers! 
 // old chat scrolled back to weeks later can't reopen a stale practice run.
 const AINSTEIN_OFFER_TTL_MS = 30 * 60 * 1000;   // a link stays good for 30 minutes
 const _ainsteinOffers = new Map();              // token → { qid, concept, format, fellBack, expiresAt, used }
+const _ainsteinOpened = new Set();              // question ids actually practised this session
 let _ainsteinOfferSeq = 0;
-let _ainsteinOfferTimer = null;
+const _ainsteinOfferTimers = new Set();         // one expiry re-render per live offer
 const _ainsteinTextCache = new Map();           // question id → lowercased searchable text
 
 const AINSTEIN_STOPWORDS = new Set(['the','and','for','with','that','this','from','what','when','which','will','would','have','has','are','was','were','been','into','than','then','they','them','their','there','here','some','more','most','much','very','also','only','each','both','over','under','after','before','because','about','does','done','did','can','could','should','must','make','makes','made','used','using','use','uses','give','given','gives','show','shows','shown','state','explain','why','how','who','whom','whose','question','answer','answers','following','diagram','table','picture','above','below','best','same','different','other','another','part','parts','based','student','pupil','science','mcq','open','ended','one','two','three','four','five']);
@@ -35945,31 +35988,50 @@ function _ainsteinBusyQIds() {
   return [_ainsteinCurrentQId(), _ainsteinPageQId()].filter(Boolean);
 }
 
-// Mint a temporary link for one question and return the offer to render.
-function _ainsteinMakeOffer(found, concept, want) {
+// What a fresh search must skip: anything open right now, plus every question
+// they have actually PRACTISED this session. Deliberately not "everything ever
+// offered" — a chip that lapsed untouched must leave its question available, or
+// a chatty student burns through the pool without answering a single one.
+function _ainsteinTakenQIds() {
+  return _ainsteinBusyQIds().concat(Array.from(_ainsteinOpened));
+}
+
+// Mint a temporary link. It stores the CONCEPT, not a reserved question — the
+// question is chosen when the chip is tapped (see ainsteinTrySimilar), so a chip
+// nobody touches costs the bank nothing. `found` is the dry-run match that
+// proved at least one question exists, and only its format labels the chip.
+function _ainsteinMakeOffer(found, concept, want, keywords) {
   const token = 'ao' + (++_ainsteinOfferSeq) + '_' + Math.random().toString(36).slice(2, 8);
   const offer = {
     token,
-    qid: String(found.q.id),
-    title: found.q.title || 'Practice question',
-    topic: found.q.topic || '',
     concept: concept,
+    keywords: keywords || '',
+    want: want,
     format: found.fellBack || want,
     fellBack: found.fellBack,
     expiresAt: Date.now() + AINSTEIN_OFFER_TTL_MS,
     used: false,
   };
   _ainsteinOffers.set(token, offer);
-  // Re-render once it lapses so a dead link visibly greys out instead of
-  // looking live until it's tapped.
-  if (_ainsteinOfferTimer) clearTimeout(_ainsteinOfferTimer);
-  _ainsteinOfferTimer = setTimeout(() => { _ainsteinOfferTimer = null; _ainsteinRender(); }, AINSTEIN_OFFER_TTL_MS + 500);
+  // Re-render when it lapses so a dead link visibly greys out instead of looking
+  // live until it's tapped. One timer per offer — a single shared one meant only
+  // the newest chip ever refreshed, leaving older ones showing a stale countdown.
+  const timer = setTimeout(() => { _ainsteinOfferTimers.delete(timer); _ainsteinRender(); }, AINSTEIN_OFFER_TTL_MS + 500);
+  _ainsteinOfferTimers.add(timer);
   return offer;
 }
 
-// Build the offer for a reply, if the concept in play has a fresh question.
-// `ask` is what the model named; falls back to the current question's own
-// wording so an offer still appears when the model names nothing.
+// A chip on this concept that is still live and untapped.
+function _ainsteinLiveOfferFor(concept, want) {
+  const key = _docNorm(concept);
+  const now = Date.now();
+  for (const o of _ainsteinOffers.values()) {
+    if (!o.used && now < o.expiresAt && o.want === want && _docNorm(o.concept) === key) return o;
+  }
+  return null;
+}
+
+// Build the offer for a reply, if the concept in play has a question to give.
 function _ainsteinBuildOffer(parsed, studentQuestion) {
   try {
     const pr = (parsed && typeof parsed.practice === 'object' && parsed.practice) || {};
@@ -35983,10 +36045,18 @@ function _ainsteinBuildOffer(parsed, studentQuestion) {
     }
     const kw = Array.isArray(pr.keywords) ? pr.keywords.filter(k => typeof k === 'string').join(' ') : '';
     const want = ['mcq', 'written'].includes(pr.format) ? pr.format : _ainsteinCurrentFormat();
-    const exclude = _ainsteinBusyQIds().concat(Array.from(_ainsteinOffers.values()).map(o => o.qid));
-    const found = _ainsteinFindSimilar(concept, kw, want, exclude);
+    // Already offering this? Move that chip down to the newest reply rather than
+    // stacking a second one they'd have to choose between.
+    const live = _ainsteinLiveOfferFor(concept, want);
+    if (live) {
+      _ainstein.history.forEach(m => { if (m.offer && m.offer.token === live.token) m.offer = null; });
+      return live;
+    }
+    // Dry run only — proves a question exists so the chip is honest, without
+    // reserving it. Whatever is best at tap time is what they actually get.
+    const found = _ainsteinFindSimilar(concept, kw, want, _ainsteinTakenQIds());
     if (!found) return null;
-    return _ainsteinMakeOffer(found, concept, want);
+    return _ainsteinMakeOffer(found, concept, want, kw);
   } catch (e) { console.warn('ainstein offer', e); return null; }
 }
 
@@ -35996,7 +36066,7 @@ function _ainsteinOfferHtml(offer) {
   const mins = Math.ceil((o.expiresAt - Date.now()) / 60000);
   const dead = o.used || mins <= 0;
   const kind = o.format === 'mcq' ? 'MCQ' : o.format === 'written' ? 'open-ended question' : 'question';
-  const concept = _docClip(o.concept || o.topic || 'this concept', 46);
+  const concept = _docClip(o.concept || 'this concept', 46);
   const here = ' Opens right here — you won\'t lose your place.';
   const note = o.used ? 'Already opened — ask me for another one.'
     : mins <= 0 ? 'This link has expired — ask me for another one.'
@@ -36039,11 +36109,19 @@ async function ainsteinTrySimilar(token) {
   if (!o) { showToast('That practice link is no longer available — ask me for another.', 'info'); return; }
   if (o.used) { showToast('You\'ve already opened that one — ask me for another.', 'info'); return; }
   if (Date.now() > o.expiresAt) { showToast('That practice link has expired — ask me for another.', 'info'); _ainsteinRender(); return; }
-  const q = (Array.isArray(questionBank) ? questionBank : []).find(x => x && String(x.id) === o.qid);
-  if (!q) { showToast('That question isn\'t on your device yet — try again shortly.', 'error'); return; }
+  // The question is chosen NOW, from what is still unpractised — so a chip left
+  // sitting for twenty minutes still opens the best available question, and the
+  // ones they never tapped were never taken out of circulation.
+  const found = _ainsteinFindSimilar(o.concept, o.keywords, o.want, _ainsteinTakenQIds());
+  if (!found) {
+    showToast('I\'ve run out of questions on that one — ask me about something else.', 'info');
+    o.used = true; _ainsteinRender();
+    return;
+  }
   o.used = true;
+  o.fellBack = found.fellBack;
   _ainsteinRender();
-  await _ainsteinOpenQuiz(q, o.concept);
+  await _ainsteinOpenQuiz(found.q, o.concept);
 }
 
 async function _ainsteinOpenQuiz(q, concept) {
@@ -36051,6 +36129,7 @@ async function _ainsteinOpenQuiz(q, concept) {
   const body = _ainsteinEl('ainsteinQuizBody');
   if (!panel || !body) return;
   _ainsteinQuiz = { q, concept: concept || q.topic || '', done: false };
+  if (q.id != null) _ainsteinOpened.add(String(q.id));   // practised — don't offer it again
   const lvl = getTopicLevel(q.topic || '');
   const kind = qpHasMcq(q) ? 'MCQ' : 'Open-ended';
   _ainsteinEl('ainsteinQuizTitle').textContent = q.title || 'Practice question';
@@ -36106,10 +36185,7 @@ async function ainsteinQuizAnother() {
   const cur = _ainsteinQuiz && _ainsteinQuiz.q;
   if (!concept) { ainsteinQuizBack(); return; }
   const want = cur ? (qpHasMcq(cur) ? 'mcq' : 'written') : 'any';
-  const exclude = (cur && cur.id != null ? [String(cur.id)] : [])
-    .concat(_ainsteinBusyQIds())
-    .concat(Array.from(_ainsteinOffers.values()).map(o => o.qid));
-  const found = _ainsteinFindSimilar(concept, '', want, exclude);
+  const found = _ainsteinFindSimilar(concept, '', want, _ainsteinTakenQIds());
   if (!found) {
     const note = _ainsteinEl('ainsteinQuizNote');
     if (note) note.textContent = 'That\'s every question I have on this one! Ask me about something else and I\'ll find you more.';
@@ -36136,6 +36212,7 @@ async function ainsteinQuizAnother() {
 //   3. If nothing verifies, no embed at all — just a button that opens a normal
 //      YouTube search. A safe "look here" always beats a wrong video.
 const _ainsteinVideos = new Map();      // token → { id, title, source, concept }
+const _ainsteinVideoByConcept = new Map();  // normalised concept → token already shown
 let _ainsteinVideoSeq = 0;
 const _ainsteinAskedConcepts = new Map();   // concept → times asked this session
 
@@ -36248,6 +36325,7 @@ async function _ainsteinResolveVideo(concept, extra, asked) {
     why: asked ? '' : 'Looks like this one is being tricky — watch this, then come back to it.',
   };
   _ainsteinVideos.set(token, rec);
+  _ainsteinVideoByConcept.set(_docNorm(concept), token);   // found once, kept for the session
   return rec;
 }
 
@@ -36298,6 +36376,15 @@ async function _ainsteinMaybeVideo(msg, parsed, studentQuestion) {
     // The model spots "I don't get it"; the app spots the same concept coming
     // round again, or a half-marks history on the question they're looking at.
     if (!asked && !_ainsteinIsStruggling(concept)) return;
+    // One video per concept per session. Without this, "struggling" stays true
+    // for the rest of the session once they've asked twice, so every later reply
+    // would hunt for another video — a fresh AI call and a duplicate card each
+    // time. If they ask again outright, hand back the one we already found.
+    const shown = _ainsteinVideoByConcept.get(_docNorm(concept));
+    if (shown && _ainsteinVideos.has(shown)) {
+      if (asked) { msg.video = _ainsteinVideos.get(shown); _ainsteinRender(); }
+      return;
+    }
     const kw = Array.isArray(pr.keywords) ? pr.keywords.filter(k => typeof k === 'string').join(' ') : '';
     msg.videoPending = true;
     _ainsteinRender();
@@ -36503,14 +36590,18 @@ function _ainsteinRender() {
     const key = _ainsteinItemKey(m, i);
     const cur = log.children[i];
     if (cur && cur.getAttribute('data-akey') === key) return;
-    // Only the practice link changed (it lapsed, or was opened)? Swap that chip
-    // alone — rewriting the message would reload a video sitting above it.
-    if (cur && m.offer) {
+    // Only the practice link changed — it lapsed, was opened, or moved down to a
+    // newer reply? Patch that chip alone; rewriting the message would reload a
+    // video sitting above it.
+    if (cur) {
       const was = (cur.getAttribute('data-akey') || '').split('|');
       const now = key.split('|');
-      const chip = cur.querySelector('.ainstein-offer');
-      if (chip && was.length === 4 && was.slice(0, 3).join('|') === now.slice(0, 3).join('|')) {
-        chip.outerHTML = _ainsteinOfferHtml(m.offer);
+      if (was.length === 4 && was.slice(0, 3).join('|') === now.slice(0, 3).join('|')) {
+        const chip = cur.querySelector('.ainstein-offer');
+        const html = m.offer ? _ainsteinOfferHtml(m.offer) : '';
+        if (chip && html) chip.outerHTML = html;
+        else if (chip) chip.remove();
+        else if (html) cur.insertAdjacentHTML('beforeend', html);
         cur.setAttribute('data-akey', key);
         return;
       }
@@ -36554,10 +36645,12 @@ function ainsteinToggle(force) {
     if (!_qAttemptStats) loadAttemptStats().catch(() => {});
     if (typeof cerPerf === 'undefined' || !cerPerf) { try { loadCerPerf().catch(() => {}); } catch (_) {} }
     setTimeout(() => _ainsteinEl('ainsteinInput')?.focus(), 60);
-  } else if (_voice.active && _voice.btn && _voice.btn.id === 'ainsteinMic') {
+  } else {
     // Closing mid-recording: stop and still transcribe, so nothing the student
     // said is lost — it will be waiting in the box next time they open up.
-    _stopVoice();
+    if (_voice.active && _voice.btn && _voice.btn.id === 'ainsteinMic') _stopVoice();
+    // Hand the keyboard back to the thing they clicked to get here.
+    _ainsteinEl('ainsteinBubble')?.focus();
   }
 }
 
@@ -36834,8 +36927,8 @@ async function ainsteinSend() {
         </div>
         <button class="ainstein-close" type="button" aria-label="Close">✕</button>
       </div>
-      <div id="ainsteinLog"></div>
-      <div id="ainsteinQuiz">
+      <div id="ainsteinLog" role="log" aria-live="polite" aria-label="Chat with Ai-nstein"></div>
+      <div id="ainsteinQuiz" role="region" aria-label="Practice question">
         <div class="ainstein-quiz-bar">
           <button class="ainstein-quiz-back" type="button" onclick="ainsteinQuizBack()">← Chat</button>
           <div class="ainstein-quiz-what">
@@ -36878,10 +36971,21 @@ async function ainsteinSend() {
   const input = document.getElementById('ainsteinInput');
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ainsteinSend(); }
-    if (e.key === 'Escape') ainsteinToggle(false);
   });
   // Grow the box with the question, up to the CSS max-height.
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(110, input.scrollHeight) + 'px'; });
+  // Escape, from anywhere: drop the recording, else leave the question, else
+  // close. Bound on the document because in the question view the composer is
+  // hidden, so a keydown handler on the input could never fire.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    const panel = document.getElementById('ainsteinPanel');
+    if (!panel || !panel.classList.contains('open')) return;
+    if (_voice.active && _voice.btn && _voice.btn.id === 'ainsteinMic') { e.preventDefault(); voiceCancel(); return; }
+    e.preventDefault();
+    if (panel.classList.contains('quiz')) ainsteinQuizBack();
+    else ainsteinToggle(false);
+  });
   _ainsteinRender();
 })();
 
@@ -36893,6 +36997,8 @@ function ainsteinOnSignIn() {
   _ainstein.history = [];
   _ainsteinOffers.clear();
   _ainsteinVideos.clear();
+  _ainsteinVideoByConcept.clear();
+  _ainsteinOpened.clear();
   _ainsteinAskedConcepts.clear();
   _ainsteinTextCache.clear();   // the bank was just (re)loaded — re-read it
   ainsteinLoadCredits();
@@ -36908,6 +37014,8 @@ function ainsteinOnSignOut() {
   _ainstein.history = [];
   _ainsteinOffers.clear();      // no practice link outlives the session
   _ainsteinVideos.clear();
+  _ainsteinVideoByConcept.clear();
+  _ainsteinOpened.clear();
   _ainsteinAskedConcepts.clear();
 }
 
@@ -36917,6 +37025,7 @@ window.ainsteinSend = ainsteinSend;
 window.ainsteinTrySimilar = ainsteinTrySimilar;
 window.ainsteinVideoFullscreen = ainsteinVideoFullscreen;
 window.ainsteinAsk = ainsteinAsk;
+window.voiceCancel = voiceCancel;
 window.ainsteinQuizBack = ainsteinQuizBack;
 window.ainsteinQuizResume = ainsteinQuizResume;
 window.ainsteinQuizAnother = ainsteinQuizAnother;
