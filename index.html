@@ -9476,7 +9476,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.169.0';
+const APP_VERSION = 'v1.169.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -37178,7 +37178,8 @@ async function _ainsteinParseWorksheetSpec(text) {
     '- "mcq" and "written" are how many of each kind they asked for. 0 if they did not ask for that kind. If they gave one total without saying which kind, split it evenly.',
     '- Map every topic they named onto the closest EXACT name from the list — "adaptions" is "Adaptations", "plants" may be a longer plant topic name.',
     '- If something they asked for has no matching topic in the list, put their exact words in "unmatched" and leave it out of "topics".',
-    '- "title" names the worksheet the way a teacher would, e.g. "Heat, Matter & Adaptations Practice". No date.',
+    '- If they named NO topic at all ("give me 20 hard MCQs", "I just want to practise now"), leave BOTH "topics" and "unmatched" empty. That is a perfectly normal request — the app will then draw from every topic. Never invent a topic they did not ask for, and never put words like "difficult", "hard", "mcq" or "now" into "unmatched"; those describe the questions, not a topic.',
+    '- "title" names the worksheet the way a teacher would, e.g. "Heat, Matter & Adaptations Practice", or "Mixed Practice" when no topic was named. No date.',
   ].join('\n');
   const raw = await askGemini(prompt, { maxOutputTokens: 400, temperature: 0.2, json: true });
   const p = _parseAIJson(raw);
@@ -37194,7 +37195,16 @@ async function _ainsteinParseWorksheetSpec(text) {
     topics, unmatched,
   };
   if (!spec.mcq && !spec.written) spec.mcq = 10;          // asked for "a worksheet" with no numbers
-  if (!spec.topics.length && !spec.unmatched.length) return null;
+  // "Give me 20 hard MCQs now" names no topic — and that is a complete, ordinary
+  // request, not a failure. Naming no topic means ANY topic, so the whole bank
+  // becomes the pool and the round-robin below spreads the set across it.
+  // Refusing here and asking them to list topics is exactly the kind of
+  // hoop-jumping a study buddy should never put a child through.
+  if (!spec.topics.length && !spec.unmatched.length) {
+    spec.topics = known.slice();
+    spec.anyTopic = true;
+    if (/practice worksheet$/i.test(spec.title)) spec.title = 'Mixed Practice';
+  }
   return spec;
 }
 
@@ -37211,7 +37221,12 @@ function _ainsteinWsPool(name, fmt, isTopic, difficulty) {
     if (!qInSyllabus(q) || !qWithinStudentLevel(q)) return;
     if (fmt === 'mcq' ? !qpHasMcq(q) : !qpHasWritten(q)) return;
     if (isTopic) {
-      if (!qTopicList(q).some(t => _docNorm(t) === key)) return;
+      // A question with no topic at all is counted under "General" by
+      // qpAvailableTopics, so it has to be findable under that name too —
+      // otherwise it is listed as available and then never served.
+      const ts = qTopicList(q);
+      const names = ts.length ? ts : ['General'];
+      if (!names.some(t => _docNorm(t) === key)) return;
       out.push({ q, score: 1 });
     } else {
       if (!terms || !terms.length) return;
@@ -37243,12 +37258,11 @@ function _ainsteinPickForWorksheet(spec) {
   const picked = [];
   const byTopic = {};
   const perFormat = {};
-  ['mcq', 'written'].forEach(fmt => {
-    const quota = spec[fmt] || 0;
-    perFormat[fmt] = 0;
-    if (!quota || !wanted.length) return;
-    const pools = wanted.map(w => ({ name: w.name, list: _ainsteinWsPool(w.name, fmt, w.isTopic, spec.difficulty).filter(q => !used.has(String(q.id))) }));
-    // Round-robin so 20 questions over 4 topics is 5 each, not 20 from the first.
+  const toppedUp = [];
+  // Deal one question at a time from each pool in turn, so 20 questions over 4
+  // topics is 5 each rather than 20 from the first. Returns how many it landed.
+  const deal = (sources, fmt, quota) => {
+    const pools = sources.map(w => ({ name: w.name, list: _ainsteinWsPool(w.name, fmt, w.isTopic, spec.difficulty).filter(q => !used.has(String(q.id))) }));
     let added = 0, exhausted = false;
     while (added < quota && !exhausted) {
       exhausted = true;
@@ -37264,6 +37278,28 @@ function _ainsteinPickForWorksheet(spec) {
         added++;
       }
     }
+    return added;
+  };
+  ['mcq', 'written'].forEach(fmt => {
+    const quota = spec[fmt] || 0;
+    perFormat[fmt] = 0;
+    if (!quota) return;
+    let added = wanted.length ? deal(wanted, fmt, quota) : 0;
+    // Asked for 20 on Heat and the bank only has 6? Make up the difference from
+    // every other topic instead of handing back a stub. A child who asked for 20
+    // questions wants 20 questions; which topics they come from is the app's
+    // problem, not theirs. The card says where the extras came from.
+    if (added < quota) {
+      const named = new Set(wanted.map(w => _docNorm(w.name)));
+      const rest = _ainsteinWsTopicCounts().map(c => c.topic)
+        .filter(t => !named.has(_docNorm(t)))
+        .map(t => ({ name: t, isTopic: true }));
+      if (rest.length) {
+        const extra = deal(rest, fmt, quota - added);
+        if (extra) toppedUp.push({ fmt: fmt === 'mcq' ? 'MCQ' : 'open-ended', n: extra });
+        added += extra;
+      }
+    }
     perFormat[fmt] = added;
   });
   const shortfall = [];
@@ -37273,7 +37309,7 @@ function _ainsteinPickForWorksheet(spec) {
   const measured = picked.filter(q => qUsage(q));
   const diffNote = { asked: spec.difficulty, measured: measured.length, total: picked.length,
     avgPct: measured.length ? Math.round(measured.reduce((s, q) => s + qUsage(q).pct, 0) / measured.length) : null };
-  return { picked, byTopic, perFormat, shortfall, diffNote };
+  return { picked, byTopic, perFormat, shortfall, diffNote, toppedUp, anyTopic: !!spec.anyTopic };
 }
 
 // Build it, save it to the student's account, and hand back a card to render.
@@ -37282,9 +37318,9 @@ async function _ainsteinBuildWorksheet(msg, studentQuestion) {
     msg.wsPending = true;
     _ainsteinRender();
     const spec = await _ainsteinParseWorksheetSpec(studentQuestion);
-    if (!spec) throw new Error('no matching topics');
-    const { picked, byTopic, perFormat, shortfall, diffNote } = _ainsteinPickForWorksheet(spec);
-    if (!picked.length) throw new Error('nothing in the bank matched');
+    if (!spec) throw new Error('there are no questions in the bank at your level yet');
+    const { picked, byTopic, perFormat, shortfall, diffNote, toppedUp, anyTopic } = _ainsteinPickForWorksheet(spec);
+    if (!picked.length) throw new Error('the bank has nothing of that kind at your level yet');
     const token = 'aw' + (++_ainsteinWsSeq);
     const ws = {
       id: 'ws_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
@@ -37304,14 +37340,14 @@ async function _ainsteinBuildWorksheet(msg, studentQuestion) {
       savedWorksheets.unshift(ws);                       // newest first, as the page sorts
       if (_ainsteinPageId() === 'myworksheets') { try { renderSavedWorksheets(); } catch (_) {} }
     }
-    _ainsteinWorksheets.set(token, { ws, byTopic, perFormat, shortfall, diffNote, unmatched: spec.unmatched, saved });
+    _ainsteinWorksheets.set(token, { ws, byTopic, perFormat, shortfall, diffNote, unmatched: spec.unmatched, saved, toppedUp, anyTopic });
     msg.wsPending = false;
     msg.worksheet = { token };
     _ainsteinRender();
   } catch (e) {
     console.warn('ainstein worksheet', e);
     msg.wsPending = false;
-    msg.wsError = 'I couldn\'t build that one — tell me the topics and how many of each kind you want, and I\'ll try again.';
+    msg.wsError = 'I couldn\'t build that one — ' + ((e && e.message) || 'something went wrong') + '. Try asking again, or name a topic and how many questions you want.';
     _ainsteinRender();
   }
 }
@@ -37319,7 +37355,7 @@ async function _ainsteinBuildWorksheet(msg, studentQuestion) {
 function _ainsteinWsHtml(ref) {
   const rec = _ainsteinWorksheets.get(ref && ref.token);
   if (!rec) return '';
-  const { ws, byTopic, perFormat, shortfall, diffNote, unmatched, saved } = rec;
+  const { ws, byTopic, perFormat, shortfall, diffNote, unmatched, saved, toppedUp, anyTopic } = rec;
   const bits = [];
   if (perFormat.mcq) bits.push(perFormat.mcq + ' MCQ');
   if (perFormat.written) bits.push(perFormat.written + ' open-ended');
@@ -37328,7 +37364,9 @@ function _ainsteinWsHtml(ref) {
   const chips = Object.keys(byTopic).map(t =>
     '<span class="ainstein-ws-chip">' + escapeHtml(_docClip(t, 28)) + ' <b>' + byTopic[t] + '</b></span>').join('');
   const notes = [];
-  shortfall.forEach(s => notes.push('You asked for ' + s.want + ' ' + s.fmt + ' but the bank only has ' + s.got + ' at your level on these topics.'));
+  if (anyTopic) notes.push('You didn\'t name a topic, so I spread these across everything at your level.');
+  (toppedUp || []).forEach(t => notes.push('The topics you named ran out, so ' + t.n + ' of the ' + t.fmt + ' came from other topics to make up your number.'));
+  shortfall.forEach(s => notes.push('You asked for ' + s.want + ' ' + s.fmt + ' but the whole bank only has ' + s.got + ' at your level.'));
   if (diffNote && diffNote.asked !== 'any') {
     notes.push(diffNote.measured
       ? 'Sorted by how students actually did — ' + diffNote.measured + ' of ' + diffNote.total +
@@ -37507,7 +37545,8 @@ function _ainsteinBuildPrompt(question, shotImages) {
     lines.push('A CLUE MAY NOT: state the answer or any part of it; name, number or quote the correct option; rule options out until only one is left; give any sentence they could copy into the answer box; say whether an answer they propose is right or wrong; or spell the reasoning all the way through to the conclusion. Always stop one clear step short and hand the last step back to them.');
   }
   lines.push('');
-  lines.push('ABOUT "worksheet" — set it to true when they are asking you to PREPARE A SET of questions rather than asking about one: "make me a worksheet with 20 MCQ and 20 open-ended on heat and matter", "prepare a paper on plant reproduction", "give me 15 questions on adaptations to print". It is true even when they do not use the word worksheet, as long as they want a batch put together. It is false for a single question, a clue, or general chat.');
+  lines.push('ABOUT "worksheet" — set it to true when they are asking you to PREPARE A SET of questions rather than asking about one: "make me a worksheet with 20 MCQ and 20 open-ended on heat and matter", "prepare a paper on plant reproduction", "give me 15 questions on adaptations to print", "i just want to practice 20 difficult mcq questions now", "let me practise". It is true even when they do not use the word worksheet, as long as they want a batch put together, and it is true whether or not they name a topic — no topic simply means any topic. It is false for a single question, a clue, or general chat.');
+  lines.push('- NEVER ask them which topics they want, how many, or what kind. Whatever they gave you is enough: the app fills in anything they left out and draws from every topic when they named none. Asking a child to fill in a form before they can practise is exactly what this feature exists to avoid.');
   lines.push('- When it is true, the app builds the worksheet, saves it to their account and shows it under your reply. Your "clue" is then just ONE friendly line saying you are putting it together — do not list the questions, do not name the topics back, do not promise anything about printing, and do not ask them to confirm.');
   lines.push('');
   lines.push('IF THEY ASK WHAT TO PRACTISE ("what should I do next", "what am I weak at", "give me something to work on", "which topic should I revise"), that is on topic and you answer it properly — it is advice, not an answer to a question, so the no-answers rule does not apply:');
@@ -37599,7 +37638,7 @@ function _ainsteinRender() {
       '<p>Type your question, or tap <b>🎤</b> and just say it out loud.</p>' +
       rule +
       '<p>Want more practice on the same idea? Ask, and I\'ll find you another question — you answer it right here, without losing your place. Still not clicking? I\'ll find you a video to watch.</p>' +
-      '<p>Need a whole set? Just say <b>“make me a worksheet with 20 MCQ and 20 open-ended on heat and matter”</b> and I\'ll build it, save it to My Worksheets and set it up to print.</p>' +
+      '<p>Need a whole set? Just say <b>“give me 20 hard MCQs”</b> — or name topics if you want, like <b>“20 MCQ and 20 open-ended on heat and matter”</b>. I\'ll build it, save it to My Worksheets and set it up to print.</p>' +
       '<p><button type="button" class="ainstein-preset" onclick="ainsteinAsk(\'What should I practise next?\')">What should I practise next?</button></p>' +
       '<p class="ainstein-warn">Off-topic questions cost an extra credit, so keep them about your work.</p>' +
       '</div>';
