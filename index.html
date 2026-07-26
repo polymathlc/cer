@@ -5791,17 +5791,17 @@ option {
           <select id="bankFilterSource" onchange="renderQuestionBank()">
             <option value="">All Sources</option>
           </select>
-          <select id="bankFilterDifficulty" onchange="renderQuestionBank()" title="Measured difficulty — the % of simulated average-P6 attempts that were correct">
+          <select id="bankFilterDifficulty" onchange="renderQuestionBank()" title="Difficulty measured from real student usage — the % of marks students have actually earned on the question">
             <option value="">Any difficulty</option>
-            <option value="very hard">🎯 Very hard (&lt;30%)</option>
-            <option value="hard">🎯 Hard (30–49%)</option>
-            <option value="medium">🎯 Medium (50–69%)</option>
-            <option value="easy">🎯 Easy (70–84%)</option>
-            <option value="very easy">🎯 Very easy (85%+)</option>
-            <option value="none">Not measured yet</option>
+            <option value="very hard">📊 Very hard (&lt;30%)</option>
+            <option value="hard">📊 Hard (30–49%)</option>
+            <option value="medium">📊 Medium (50–69%)</option>
+            <option value="easy">📊 Easy (70–84%)</option>
+            <option value="very easy">📊 Very easy (85%+)</option>
+            <option value="none">No attempts yet</option>
           </select>
-          <button class="btn btn-outline" id="bankCalibBtn" onclick="calibrateFilteredQuestions()"
-            title="Have the AI sit every question shown here as 5 average P6 pupils, 20 attempts each, and record the % correct as its difficulty">🎯 Measure difficulty</button>
+          <button class="btn btn-outline" id="bankUsageBtn" onclick="refreshQuestionUsage()"
+            title="Re-read every student attempt ever logged and update each question's difficulty">🔄 Refresh difficulty</button>
         </div>
         <div class="question-bank-grid" id="questionBankGrid"></div>
       </div>
@@ -9455,7 +9455,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.166.1';
+const APP_VERSION = 'v1.167.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -15377,7 +15377,7 @@ const EDITOR_OWNED_QUESTION_FIELDS = new Set([
 ]);
 
 // An edited question is rebuilt from scratch by collectQuestionData(), so every
-// stored field the editor does NOT own (source, concepts, q.calib, …) would be
+// stored field the editor does NOT own (source, concepts, q.usage, …) would be
 // lost on save. Carry them all over from the stored copy — an allowlist, not a
 // hand-maintained list of names, so a new field can never quietly go missing.
 function carryOverQuestionMeta(q) {
@@ -15692,346 +15692,200 @@ function clearBankAiSearch() {
 }
 
 // =====================================================================
-// DIFFICULTY CALIBRATION — measure how hard a question really is by having
-// the AI sit it as a class of average Primary 6 students.
+// DIFFICULTY — measured from real student usage, nothing else.
 //
-// CALIB_STUDENTS simulated students each attempt the question CALIB_ATTEMPTS
-// times. They are given the question EXACTLY as a student sees it and never the
-// answer key, and they are told to let themselves be tricked — a tempting wrong
-// option or a two-step inference is supposed to catch them, because that is the
-// signal we are trying to measure. MCQ answers are then marked locally against
-// the real key (no model in the loop, no room for it to mark itself generously);
-// written answers are marked in a second pass that DOES see the key.
+// The difficulty of a question is the percentage of marks real students have
+// actually earned on it: every attempt ever logged to the `questionAttempts`
+// collection, added up. High percentage = students get it right = easy. Low
+// percentage = hard. No simulation, no AI estimate, no hand-set rating — if
+// nobody has attempted a question, it simply has no difficulty yet.
 //
-// The result is one number per question: the percentage of attempts that earned
-// the mark. Low percentage = hard. It is stored on the question as q.calib and
-// is what "difficulty" means everywhere from here on — the bank badge, the bank
-// filter, and "give me the hardest questions" when Ai-nstein builds a worksheet.
+// Every attempt row carries { questionId, score, totalBlanks, uid }, and rows
+// have been written since the app went live, so one pass over the collection
+// gives the full backdated picture for every question in the bank.
+//
+// The aggregate is cached in memory for the session, and written back onto each
+// question doc as q.usage so the number lives in the database next to the
+// question (and is available to anything that reads a question without doing a
+// collection scan).
 //
 // Deliberately NOT wired into rpgQuestionDifficulty: that drives gold/XP, and
 // silently repricing every reward in the game is a separate decision.
 // =====================================================================
-const CALIB_STUDENTS = 5;     // simulated students per question
-const CALIB_ATTEMPTS = 20;    // attempts each student makes
-const CALIB_BANDS = [
-  { min: 85, band: 'very easy', color: '#15803d', bg: '#dcfce7' },
-  { min: 70, band: 'easy',      color: '#4d7c0f', bg: '#ecfccb' },
-  { min: 50, band: 'medium',    color: '#a16207', bg: '#fef9c3' },
-  { min: 30, band: 'hard',      color: '#c2410c', bg: '#ffedd5' },
-  { min: 0,  band: 'very hard', color: '#b91c1c', bg: '#fee2e2' },
+const USAGE_MIN_ATTEMPTS = 3;   // below this the number is shown but flagged as thin
+
+// Bands only name the colour for the filter dropdown; the card tint itself is a
+// continuous green→red scale so "very green" really is very green.
+const USAGE_BANDS = [
+  { min: 85, band: 'very easy' },
+  { min: 70, band: 'easy'      },
+  { min: 50, band: 'medium'    },
+  { min: 30, band: 'hard'      },
+  { min: 0,  band: 'very hard' },
 ];
-function calibBandFor(pct) { return CALIB_BANDS.find(b => pct >= b.min) || CALIB_BANDS[CALIB_BANDS.length - 1]; }
-function qCalib(q) {
-  const c = q && q.calib;
-  return (c && typeof c.pct === 'number' && c.attempts > 0) ? c : null;
-}
-// Sort key: hardest first. Uncalibrated questions sort last either way — an
-// unmeasured question is not evidence of anything.
-function qCalibPct(q) { const c = qCalib(q); return c ? c.pct : null; }
+function usageBandFor(pct) { return (USAGE_BANDS.find(b => pct >= b.min) || USAGE_BANDS[USAGE_BANDS.length - 1]).band; }
 
-// The five personas, so the five runs are not five copies of the same student.
-const CALIB_PERSONAS = [
-  'You are careful and you read the whole question, but your understanding is average and you sometimes mix up related ideas.',
-  'You rush. You often answer before reading the whole question, and long stems or two-step reasoning catch you out.',
-  'You memorise definitions rather than understanding them, so applying an idea to an unfamiliar situation is where you slip.',
-  'You reason well when you concentrate, but you only concentrate about half the time; on the other attempts you fall for the obvious trap.',
-  'English is your weaker subject, so wordy questions and "explain" questions cost you marks even when you know the science.',
-];
+// Green at 100% correct (easy) → red at 0% (hard). The curve is deliberately
+// bent (^1.6) rather than linear: a straight mapping leaves anything under half
+// marks looking beige, when a question most students fail should look alarming.
+// So red arrives early — 30% correct is already firmly red, 50% is orange, and
+// only genuinely well-answered questions get the strong greens.
+function usageHue(pct) { return Math.round(130 * Math.pow(Math.max(0, Math.min(100, pct)) / 100, 1.6)); }
+function usageColor(pct)    { return `hsl(${usageHue(pct)} 72% 31%)`; }
+function usageTint(pct)     { return `hsl(${usageHue(pct)} 78% 93%)`; }
+function usageEdge(pct)     { return `hsl(${usageHue(pct)} 62% 58%)`; }
 
-// Break a question into the items a student actually has to answer: every MCQ
-// block, and every part that expects writing.
-function _calibItems(q) {
-  const items = [];
-  let stem = '';
-  (q.blocks || []).forEach(b => {
-    if (!b) return;
-    if (b.type === 'text' || b.type === 'part') {
-      stem += ' ' + stripHtml((b.label ? b.label + ' ' : '') + (b.content || ''));
-    } else if (b.type === 'mcq') {
-      items.push({ kind: 'mcq', stem: stem.trim(),
-        options: (b.options || []).map(o => stripHtml(o.text || '')),
-        correct: (b.options || []).findIndex(o => o.id === b.correctId) + 1 });
-      stem = '';
-    } else if (b.type === 'answer') {
-      items.push({ kind: 'written', stem: stem.trim(),
-        model: [b.claim, b.evidence, b.reasoning].map(x => stripHtml(x || '')).filter(Boolean).join(' ') });
-      stem = '';
-    } else if (b.type === 'plainanswer') {
-      items.push({ kind: 'written', stem: stem.trim(), model: stripHtml(b.content || '') });
-      stem = '';
-    } else if (b.type === 'fillblank') {
-      const parsed = _fbParse(b.text || '');
-      items.push({ kind: 'written',
-        stem: (stem + ' ' + parsed.map(p => p.type === 'blank' ? '______' : p.text).join('')).trim(),
-        model: parsed.filter(p => p.type === 'blank').map(p => p.answer).join('; ') });
-      stem = '';
-    }
-  });
-  // A picture-only or answer-less question can't be sat; the caller reports that.
-  return items.filter(it => it.kind === 'mcq' ? (it.options || []).length >= 2 && it.correct >= 1 : true);
-}
+// { '<questionId>': { attempts, students, earned, marks, pct } } across ALL students.
+let _qUsage = null;
+let _qUsageAt = 0;
+let _qUsageLoading = null;
 
-// A fingerprint of everything a simulated student actually sits: the stems, the
-// options, the model answers. Stored on q.calib when the reading is taken, so a
-// later edit can tell whether the number still describes THIS question. Editing
-// the title, topic, or the answer-key explanation changes none of it, so those
-// edits leave a measured difficulty untouched.
-function _calibSignature(items) {
-  return JSON.stringify(items.map(it => it.kind === 'mcq'
-    ? ['m', it.stem, it.options, it.correct]
-    : ['w', it.stem, it.model]));
+// The one reading for a question: the live aggregate if this session has
+// scanned the log, otherwise whatever was last written onto the question doc.
+function qUsage(q) {
+  if (!q || q.id == null) return null;
+  const live = _qUsage ? _qUsage[String(q.id)] : null;
+  const rec = live || (q.usage && typeof q.usage.pct === 'number' ? q.usage : null);
+  return (rec && rec.attempts > 0 && typeof rec.pct === 'number') ? rec : null;
 }
-// The reading was taken before the question was changed in a way that matters.
-function qCalibStale(q) {
-  const c = qCalib(q);
-  if (!c || !c.sig) return false;   // readings taken before signatures existed
-  return c.sig !== _calibSignature(_calibItems(q));
-}
+// Sort key: hardest first. A question nobody has attempted sorts last either
+// way — no usage is not evidence of being hard or easy.
+function qUsagePct(q) { const u = qUsage(q); return u ? u.pct : null; }
 
-// What the simulated student sees. No keys, ever.
-function _calibStudentView(items) {
-  return items.map((it, i) => {
-    const head = 'ITEM ' + (i + 1) + (it.kind === 'mcq' ? ' (multiple choice — answer with the option number)' : ' (write your answer)');
-    const body = it.stem ? '\n' + _docClip(it.stem, 900) : '';
-    const opts = it.kind === 'mcq' ? '\n' + it.options.map((o, oi) => (oi + 1) + '. ' + _docClip(o, 200)).join('\n') : '';
-    return head + body + opts;
-  }).join('\n\n');
-}
+// One pass over every attempt ever logged, aggregated per question. Admin only
+// (students may only read their own rows).
+async function loadQuestionUsage(force) {
+  if (!db || !_isAdmin()) return _qUsage || {};
+  if (_qUsage && !force && (Date.now() - _qUsageAt) < 10 * 60 * 1000) return _qUsage;
+  if (_qUsageLoading) return _qUsageLoading;
+  _qUsageLoading = (async () => {
+    try {
+      // Accounts retired by a password reset are skipped — their work is
+      // already counted again under the new uid.
+      const retired = new Set();
+      try {
+        const profs = await getDocs(collection(db, 'userProfiles'));
+        profs.forEach(d => { const p = d.data() || {}; if (p.supersededBy || p.retired) retired.add(p.uid || d.id); });
+      } catch (e) { console.warn('usage: profiles', e); }
 
-async function _calibRunStudent(items, personaIdx) {
-  const prompt = [
-    'You are simulating ONE Singapore Primary 6 pupil of AVERAGE ability sitting a science question. ' + CALIB_PERSONAS[personaIdx % CALIB_PERSONAS.length],
-    '',
-    'Answer the question below ' + CALIB_ATTEMPTS + ' separate times, as that pupil, on ' + CALIB_ATTEMPTS + ' different days.',
-    '',
-    'THIS IS THE WHOLE POINT — do not answer like an expert:',
-    '- You are 12. You know the Singapore primary science syllabus reasonably but not perfectly.',
-    '- LET YOURSELF BE TRICKED. If an option is a tempting misconception, if the question needs two steps of reasoning, or if it quietly changes something a pupil would assume stays the same, then an average pupil often gets it wrong. Answer the way that pupil would, mistakes included.',
-    '- Vary across the ' + CALIB_ATTEMPTS + ' attempts the way a real child does: some careful, some careless. Only give the same answer every time if the question is genuinely easy for you.',
-    '- Written answers must sound like a 12-year-old: one or two short sentences, often missing a linking idea.',
-    '- Never work out what the "expected" answer is and then give it. Answer honestly as the pupil.',
-    '',
-    'THE QUESTION:',
-    _calibStudentView(items),
-    '',
-    'Reply with ONLY this JSON:',
-    '{"attempts":[{"items":[' + items.map(it => it.kind === 'mcq' ? '{"option":<option number>}' : '{"answer":"<what the pupil wrote>"}').join(',') + ']}]}',
-    'The "attempts" array must have exactly ' + CALIB_ATTEMPTS + ' entries, each with exactly ' + items.length + ' item answer(s) in the same order.',
-  ].join('\n');
-  const raw = await askGemini(prompt, { maxOutputTokens: 4096, temperature: 1.0, json: true });
-  const parsed = _parseAIJson(raw);
-  const attempts = Array.isArray(parsed && parsed.attempts) ? parsed.attempts : [];
-  return attempts.slice(0, CALIB_ATTEMPTS).map(a => Array.isArray(a && a.items) ? a.items : []);
-}
-
-// Mark the written answers. This pass DOES see the model answer; it never sees
-// which pupil or attempt an answer came from, so it can't drift into a pattern.
-async function _calibMarkWritten(items, attempts) {
-  const jobs = [];
-  attempts.forEach((att, ai) => {
-    items.forEach((it, ii) => {
-      if (it.kind !== 'written') return;
-      const given = String((att[ii] && att[ii].answer) || '').trim();
-      jobs.push({ ref: ai + ':' + ii, ii, given });
-    });
-  });
-  if (!jobs.length) return {};
-  const byItem = {};
-  items.forEach((it, ii) => { if (it.kind === 'written') byItem[ii] = it; });
-  const prompt = [
-    'You are marking Singapore primary school science answers, exactly as a teacher would.',
-    'For each answer below decide if it would EARN THE MARK: the required science idea must be there. Spelling, grammar and childish phrasing do not lose the mark. A vague answer that misses the key idea, or names a process without its effect where the question asks why, does NOT earn the mark.',
-    '',
-    'THE QUESTIONS AND THEIR ACCEPTED ANSWERS:',
-    Object.keys(byItem).map(ii => 'ITEM ' + (Number(ii) + 1) + ': ' + _docClip(byItem[ii].stem, 500) + '\n  ACCEPTED: ' + (_docClip(byItem[ii].model, 500) || '(no model answer recorded — mark on whether the science is right)')).join('\n'),
-    '',
-    'THE ANSWERS TO MARK:',
-    jobs.map(j => '"' + j.ref + '" (ITEM ' + (j.ii + 1) + '): ' + JSON.stringify(j.given || '(blank)')).join('\n'),
-    '',
-    'Reply with ONLY this JSON: {"marks":{"<ref>":true or false, ...}} covering every ref above.',
-  ].join('\n');
-  const raw = await askGemini(prompt, { maxOutputTokens: 2048, temperature: 0, json: true });
-  const parsed = _parseAIJson(raw);
-  return (parsed && typeof parsed.marks === 'object' && parsed.marks) || {};
-}
-
-// Calibrate one question: 5 students × 20 attempts, marked, reduced to a %.
-// onStep(done, total, note) reports progress; abort.stop halts between calls.
-async function calibrateQuestion(q, onStep, abort) {
-  const items = _calibItems(q);
-  if (!items.length) throw new Error('nothing to answer in this question');
-  const total = CALIB_STUDENTS * 2;
-  let step = 0;
-  const perStudent = [];
-  let correct = 0, marked = 0;
-  for (let s = 0; s < CALIB_STUDENTS; s++) {
-    if (abort && abort.stop) throw new Error('stopped');
-    if (onStep) onStep(step, total, 'student ' + (s + 1) + ' of ' + CALIB_STUDENTS + ' sitting it');
-    const attempts = await _calibRunStudent(items, s);
-    step++;
-    if (!attempts.length) { if (onStep) onStep(++step, total, 'no answers came back'); continue; }
-    if (abort && abort.stop) throw new Error('stopped');
-    const needsMarking = items.some(it => it.kind === 'written');
-    if (onStep) onStep(step, total, needsMarking ? 'marking student ' + (s + 1) + '’s answers' : 'marking student ' + (s + 1));
-    const marks = needsMarking ? await _calibMarkWritten(items, attempts) : {};
-    step++;
-    let sCorrect = 0, sMarked = 0;
-    attempts.forEach((att, ai) => {
-      items.forEach((it, ii) => {
-        sMarked++;
-        if (it.kind === 'mcq') {
-          const picked = parseInt((att[ii] || {}).option, 10);
-          if (picked === it.correct) sCorrect++;
-        } else if (marks[ai + ':' + ii] === true) sCorrect++;
+      const snap = await getDocs(collection(db, 'questionAttempts'));
+      const agg = {};
+      const seenUids = {};
+      snap.forEach(d => {
+        const a = d.data();
+        if (!a || a.questionId == null) return;
+        if (retired.has(a.uid)) return;
+        const marks = Number(a.totalBlanks) || 0;
+        if (marks <= 0) return;                                  // nothing was marked — not evidence
+        const earned = Math.max(0, Math.min(marks, Number(a.score) || 0));
+        const id = String(a.questionId);
+        const r = agg[id] || (agg[id] = { attempts: 0, students: 0, earned: 0, marks: 0, pct: 0, full: 0 });
+        r.attempts++; r.earned += earned; r.marks += marks;
+        if (earned >= marks) r.full++;                            // attempts that were fully correct
+        const u = seenUids[id] || (seenUids[id] = new Set());
+        if (a.uid) u.add(a.uid);
       });
-    });
-    perStudent.push(sMarked ? Math.round((sCorrect / sMarked) * 100) : 0);
-    correct += sCorrect; marked += sMarked;
-  }
-  if (!marked) throw new Error('no usable answers came back');
-  const pct = Math.round((correct / marked) * 100);
-  return {
-    pct,
-    band: calibBandFor(pct).band,
-    attempts: marked,
-    students: perStudent.length,
-    perStudent,
-    itemCount: items.length,
-    runsEach: CALIB_ATTEMPTS,
-    sig: _calibSignature(items),
-    at: new Date().toISOString(),
-  };
+      Object.keys(agg).forEach(id => {
+        const r = agg[id];
+        r.students = (seenUids[id] || new Set()).size;
+        r.pct = Math.round((r.earned / r.marks) * 100);
+      });
+      _qUsage = agg;
+      _qUsageAt = Date.now();
+      _persistQuestionUsage().catch(e => console.warn('usage persist', e));   // store it in the database, non-blocking
+    } catch (e) {
+      console.warn('question usage load', e);
+      _qUsage = _qUsage || {};
+    }
+    return _qUsage;
+  })();
+  try { return await _qUsageLoading; } finally { _qUsageLoading = null; }
 }
 
-// ---- the buttons ----------------------------------------------------------
-let _calibRun = null;   // { stop } while a batch is going
-
-function calibBadgeHtml(q) {
-  const c = qCalib(q);
-  if (!c) return '<span class="qb-tag calib-none" title="Difficulty not measured yet — use 🎯 to have the AI sit it as 5 average P6 students">🎯 not measured</span>';
-  const b = calibBandFor(c.pct);
-  const stale = qCalibStale(q);
-  const tip = c.pct + '% of ' + c.attempts + ' simulated attempts were correct (' + c.students + ' pupils × ' + c.runsEach +
-    ' attempts, measured ' + new Date(c.at).toLocaleDateString() + ')' +
-    (stale ? ' — the question has been edited since, so press 🎯 to re-measure' : '');
-  return '<span class="qb-tag" style="background:' + b.bg + ';color:' + b.color + ';border:1px ' + (stale ? 'dashed' : 'solid') +
-    ' ' + b.color + '33;' + (stale ? 'opacity:.75;' : '') + '" title="' + escapeHtml(tip) + '">🎯 ' + c.pct + '% · ' + b.band +
-    (stale ? ' · edited' : '') + '</span>';
-}
-
-async function calibrateOneQuestion(id) {
-  const q = questionBank.find(x => x && x.id === id);
-  if (!q) return;
-  if (_calibRun) { showToast('A calibration run is already going', 'info'); return; }
-  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
-  _calibRun = { stop: false };
-  _calibProgressShow(1);
-  try {
-    const calib = await calibrateQuestion(q, (done, total, note) =>
-      _calibProgressUpdate(0, 1, note, done / total), _calibRun);
-    q.calib = calib;
-    await saveQuestion(q);
-    showToast('Difficulty measured: ' + calib.pct + '% correct → ' + calib.band, 'success');
-  } catch (e) {
-    console.warn('calibrate', e);
-    showToast(/stopped/.test(e && e.message) ? 'Calibration stopped' : 'Calibration failed: ' + (e && e.message ? e.message : e), 'error');
-  } finally {
-    _calibRun = null;
-    _calibProgressHide();
-    renderQuestionBank();
+// Write each question's reading onto its own doc, so the percentage lives in
+// the database beside the question. Only writes what actually changed. The same
+// pass drops q.calib, the old AI-simulated rating, wherever it is still stored.
+async function _persistQuestionUsage() {
+  if (!_qUsage || !_isAdmin()) return;
+  const at = new Date().toISOString();
+  const dirty = [];
+  let purged = 0;
+  questionBank.forEach(q => {
+    if (!q || q.id == null) return;
+    let changed = false;
+    if (q.calib !== undefined) { delete q.calib; changed = true; purged++; }
+    const r = _qUsage[String(q.id)];
+    const prev = q.usage || null;
+    if (!r) {
+      if (prev) { delete q.usage; changed = true; }    // every attempt on it is gone
+    } else if (!prev || prev.attempts !== r.attempts || prev.pct !== r.pct || prev.marks !== r.marks) {
+      q.usage = { pct: r.pct, attempts: r.attempts, students: r.students, earned: r.earned, marks: r.marks, full: r.full, at };
+      changed = true;
+    }
+    if (changed) dirty.push(q);
+  });
+  if (purged) console.info('Removed simulated difficulty ratings from ' + purged + ' question(s)');
+  // The first run rewrites every question that has ever been attempted, so go in
+  // small batches rather than firing hundreds of writes at once.
+  for (let i = 0; i < dirty.length; i += 15) {
+    await Promise.all(dirty.slice(i, i + 15).map(q => saveQuestion(q)));
   }
 }
 
-// Calibrate everything currently on screen — whatever the search, filters or AI
-// search have narrowed the bank down to.
-async function calibrateFilteredQuestions() {
-  if (_calibRun) { showToast('A calibration run is already going', 'info'); return; }
-  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
-  const list = _bankFilteredQuestions();
-  const todo = list.filter(q => _calibItems(q).length);
-  if (!todo.length) { showToast('Nothing here can be sat by a pupil (no questions with answers)', 'info'); return; }
-  const calls = todo.length * CALIB_STUDENTS * 2;
-  showConfirm('Measure difficulty',
-    'Have the AI sit ' + todo.length + ' question' + (todo.length === 1 ? '' : 's') + ' as ' + CALIB_STUDENTS +
-    ' average P6 pupils, ' + CALIB_ATTEMPTS + ' attempts each. That is about ' + calls +
-    ' AI calls and will take a while — you can stop at any point and keep whatever has finished.',
-    async () => {
-      _calibRun = { stop: false };
-      _calibProgressShow(todo.length);
-      let done = 0, failed = 0;
-      for (const q of todo) {
-        if (_calibRun.stop) break;
-        try {
-          const calib = await calibrateQuestion(q, (s, t, note) =>
-            _calibProgressUpdate(done, todo.length, (q.title || 'question') + ' — ' + note, s / t), _calibRun);
-          q.calib = calib;
-          await saveQuestion(q);
-        } catch (e) {
-          if (/stopped/.test(e && e.message)) break;
-          console.warn('calibrate', q.id, e);
-          failed++;
-        }
-        done++;
-        _calibProgressUpdate(done, todo.length, 'measured ' + done + ' of ' + todo.length, 0);
-        renderQuestionBank();
-      }
-      const stopped = _calibRun.stop;
-      _calibRun = null;
-      _calibProgressHide();
-      renderQuestionBank();
-      showToast((stopped ? 'Stopped after ' : 'Measured ') + done + ' of ' + todo.length +
-        (failed ? ' (' + failed + ' failed)' : ''), stopped ? 'info' : 'success');
-    });
+// Pull fresh numbers and redraw. Wired to the bank's refresh button.
+async function refreshQuestionUsage() {
+  const btn = document.getElementById('bankUsageBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Reading usage…'; }
+  await loadQuestionUsage(true);
+  renderQuestionBank();
+  if (btn) { btn.disabled = false; btn.textContent = '🔄 Refresh difficulty'; }
+  showToast('Difficulty updated from student usage ✓', 'success');
 }
 
-function calibStopRun() { if (_calibRun) { _calibRun.stop = true; showToast('Finishing the current question, then stopping…', 'info'); } }
-
-function _calibProgressShow(total) {
-  let el = document.getElementById('calibProgress');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'calibProgress';
-    document.body.appendChild(el);
-  }
-  el.innerHTML =
-    '<div class="calib-prog-card">' +
-      '<div class="calib-prog-title">🎯 Measuring difficulty</div>' +
-      '<div class="calib-prog-note" id="calibProgNote">Starting…</div>' +
-      '<div class="calib-prog-bar"><span id="calibProgFill"></span></div>' +
-      '<div class="calib-prog-row"><span id="calibProgCount">0 of ' + total + '</span>' +
-      '<button type="button" class="btn btn-outline" onclick="calibStopRun()">Stop</button></div>' +
-    '</div>';
-  el.classList.add('show');
-}
-function _calibProgressUpdate(done, total, note, within) {
-  const fill = document.getElementById('calibProgFill');
-  const noteEl = document.getElementById('calibProgNote');
-  const countEl = document.getElementById('calibProgCount');
-  const frac = total ? Math.min(1, (done + (within || 0)) / total) : 0;
-  if (fill) fill.style.width = Math.round(frac * 100) + '%';
-  if (noteEl) noteEl.textContent = note || '';
-  if (countEl) countEl.textContent = done + ' of ' + total;
-}
-function _calibProgressHide() {
-  const el = document.getElementById('calibProgress');
-  if (el) el.classList.remove('show');
+// Load once, quietly, the first time an admin opens the bank — so the grid is
+// colour-coded on arrival without anyone pressing anything.
+function ensureQuestionUsage() {
+  if (!_isAdmin() || _qUsage || _qUsageLoading) return;
+  loadQuestionUsage().then(() => renderQuestionBank()).catch(() => {});
 }
 
-(function injectCalibStyles() {
+function usageBadgeHtml(q) {
+  const u = qUsage(q);
+  if (!u) return '<span class="qb-tag usage-none" title="No student has attempted this question yet, so it has no measured difficulty">📊 no attempts yet</span>';
+  const thin = u.attempts < USAGE_MIN_ATTEMPTS;
+  const tip = 'Students scored ' + u.earned + ' of ' + u.marks + ' marks (' + u.pct + '%) over ' +
+    u.attempts + ' attempt' + (u.attempts === 1 ? '' : 's') +
+    (u.students ? ' by ' + u.students + ' student' + (u.students === 1 ? '' : 's') : '') +
+    '. ' + u.full + ' attempt' + (u.full === 1 ? ' was' : 's were') + ' fully correct.' +
+    (thin ? ' Only a few attempts so far — treat it as a rough reading.' : '');
+  return '<span class="qb-tag" style="background:' + usageTint(u.pct) + ';color:' + usageColor(u.pct) +
+    ';border:1px ' + (thin ? 'dashed' : 'solid') + ' ' + usageEdge(u.pct) + ';" title="' + escapeHtml(tip) + '">📊 ' +
+    u.pct + '% · ' + usageBandFor(u.pct) + ' · ' + u.attempts + '×</span>';
+}
+
+// The card itself: green when students find it easy, red when they don't. The
+// colours ride in as custom properties so the stylesheet keeps ownership of the
+// hover state instead of an inline style winning over it.
+function usageCardAttrs(q) {
+  const u = qUsage(q);
+  if (!u) return '';
+  return ' class="qb-card has-usage" style="--u-tint:' + usageTint(u.pct) + ';--u-edge:' + usageEdge(u.pct) +
+    ';--u-ink:' + usageColor(u.pct) + ';"';
+}
+
+(function injectUsageStyles() {
   const css = `
-  #calibProgress { display: none; position: fixed; bottom: 18px; left: 18px; z-index: 1200; }
-  #calibProgress.show { display: block; }
-  .calib-prog-card { width: min(340px, calc(100vw - 36px)); padding: 18px 20px 16px; border-radius: 16px;
-    background: var(--surface, #fff); border: 1px solid var(--border, #e2ddd5); box-shadow: 0 16px 44px rgba(20,18,16,0.26);
-    font-family: 'DM Sans', system-ui, sans-serif; }
-  .calib-prog-title { font-weight: 700; font-size: 0.92rem; line-height: 1.3; }
-  .calib-prog-note { margin-top: 8px; font-size: 0.78rem; line-height: 1.5; color: var(--text-muted, #7a756d); min-height: 2.4em; }
-  .calib-prog-bar { margin-top: 12px; height: 7px; border-radius: 999px; background: var(--bg-tertiary, #f0efeb); overflow: hidden; }
-  .calib-prog-bar span { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--primary, #4a7c59); transition: width .3s ease; }
-  .calib-prog-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px;
-    font-size: 0.76rem; color: var(--text-muted, #7a756d); }
-  .calib-prog-row .btn { padding: 6px 14px; font-size: 0.76rem; }
-  .qb-tag.calib-none { background: var(--bg-tertiary, #f2f1ec); color: var(--text-muted, #7a756d); }`;
+  .qb-tag.usage-none { background: var(--bg-tertiary, #f2f1ec); color: var(--text-muted, #7a756d); }
+  .qb-card.has-usage {
+    background: var(--u-tint);
+    border-color: var(--u-edge);
+    box-shadow: inset 7px 0 0 var(--u-ink);
+    padding-left: 27px;
+  }
+  .qb-card.has-usage:hover {
+    border-color: var(--u-ink);
+    box-shadow: inset 7px 0 0 var(--u-ink), var(--shadow-sm);
+  }`;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
 })();
 
@@ -16054,9 +15908,9 @@ function _bankFilteredQuestions() {
     const qLevel = getTopicLevel(q.topic || '');
     if (levelFilter && qLevel !== levelFilter) return false;
     if (diffFilter) {
-      const c = qCalib(q);
-      if (diffFilter === 'none') { if (c) return false; }
-      else if (!c || calibBandFor(c.pct).band !== diffFilter) return false;
+      const u = qUsage(q);
+      if (diffFilter === 'none') { if (u) return false; }
+      else if (!u || usageBandFor(u.pct) !== diffFilter) return false;
     }
     if (searchTokens.length > 0) {
       const haystack = extractQuestionSearchText(q);
@@ -16070,7 +15924,7 @@ function _bankFilteredQuestions() {
       .filter(q => bankAiRanking.has(q.id))
       .sort((a, b) => bankAiRanking.get(b.id) - bankAiRanking.get(a.id));
   } else if (diffFilter) {
-    filtered.sort((a, b) => (qCalibPct(a) ?? 999) - (qCalibPct(b) ?? 999));   // hardest first
+    filtered.sort((a, b) => (qUsagePct(a) ?? 999) - (qUsagePct(b) ?? 999));   // hardest first
   }
   return filtered;
 }
@@ -16078,12 +15932,7 @@ function _bankFilteredQuestions() {
 function renderQuestionBank() {
   const container = document.getElementById('questionBankGrid');
   const filtered = _bankFilteredQuestions();
-  const calibBtn = document.getElementById('bankCalibBtn');
-  if (calibBtn) {
-    const n = filtered.filter(q => _calibItems(q).length).length;
-    calibBtn.textContent = '🎯 Measure difficulty' + (n ? ' (' + n + ')' : '');
-    calibBtn.disabled = !n;
-  }
+  ensureQuestionUsage();   // first admin visit: colour the grid without being asked
 
   if (filtered.length === 0) {
     container.innerHTML = bankAiRanking ? `
@@ -16107,7 +15956,7 @@ function renderQuestionBank() {
     const qSource = questionSource(q);
     const aiScore = bankAiRanking ? bankAiRanking.get(q.id) : null;
     return `
-      <div class="qb-card" ondblclick="editQuestion('${q.id}')">
+      <div${usageCardAttrs(q) || ' class="qb-card"'} ondblclick="editQuestion('${q.id}')">
         <div class="qb-card-header">
           <div>
             <div class="qb-card-title">${escapeHtml(q.title)}</div>
@@ -16117,13 +15966,12 @@ function renderQuestionBank() {
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               ${qSecondaryTagsHtml(q)}
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
-              ${calibBadgeHtml(q)}
+              ${usageBadgeHtml(q)}
               ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="Hidden from practice; still shown in PSLE Papers">🚫 Not in syllabus</span>` : ''}
               ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
             </div>
           </div>
           <div class="qb-card-actions">
-            <button class="qb-action-btn" title="Measure how hard this question is — the AI sits it as 5 average P6 pupils, 20 attempts each" onclick="event.stopPropagation();calibrateOneQuestion('${q.id}')">🎯</button>
             <button class="qb-action-btn" title="Edit" onclick="event.stopPropagation();editQuestion('${q.id}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </button>
@@ -36892,11 +36740,11 @@ function _ainsteinWsPool(name, fmt, isTopic, difficulty) {
   });
   const stats = _qAttemptStats || {};
   if (difficulty === 'hardest' || difficulty === 'easiest') {
-    // Measured difficulty leads (see the calibration section): the % of
-    // simulated average-P6 attempts that were correct, so LOW = hard. A question
-    // nobody has measured sorts last either way — an unmeasured question is not
-    // evidence of being hard or easy.
-    const rank = q => { const p = qCalibPct(q); return p == null ? Infinity : (difficulty === 'hardest' ? p : -p); };
+    // Real student usage leads (see the difficulty section): the % of marks
+    // students have actually earned, so LOW = hard. A question nobody has
+    // attempted sorts last either way — no usage is not evidence of being hard
+    // or easy.
+    const rank = q => { const p = qUsagePct(q); return p == null ? Infinity : (difficulty === 'hardest' ? p : -p); };
     out.sort((a, b) => (rank(a.q) - rank(b.q)) || (b.score - a.score));
   } else {
     // Best concept match first, then questions they've never attempted.
@@ -36939,10 +36787,10 @@ function _ainsteinPickForWorksheet(spec) {
   const shortfall = [];
   if (spec.mcq && perFormat.mcq < spec.mcq) shortfall.push({ fmt: 'MCQ', got: perFormat.mcq, want: spec.mcq });
   if (spec.written && perFormat.written < spec.written) shortfall.push({ fmt: 'open-ended', got: perFormat.written, want: spec.written });
-  // How much of a difficulty-ordered set is actually backed by measurements.
-  const measured = picked.filter(q => qCalib(q));
+  // How much of a difficulty-ordered set is actually backed by student usage.
+  const measured = picked.filter(q => qUsage(q));
   const diffNote = { asked: spec.difficulty, measured: measured.length, total: picked.length,
-    avgPct: measured.length ? Math.round(measured.reduce((s, q) => s + qCalib(q).pct, 0) / measured.length) : null };
+    avgPct: measured.length ? Math.round(measured.reduce((s, q) => s + qUsage(q).pct, 0) / measured.length) : null };
   return { picked, byTopic, perFormat, shortfall, diffNote };
 }
 
@@ -37001,10 +36849,10 @@ function _ainsteinWsHtml(ref) {
   shortfall.forEach(s => notes.push('You asked for ' + s.want + ' ' + s.fmt + ' but the bank only has ' + s.got + ' at your level on these topics.'));
   if (diffNote && diffNote.asked !== 'any') {
     notes.push(diffNote.measured
-      ? 'Sorted by measured difficulty — ' + diffNote.measured + ' of ' + diffNote.total +
-        ' have been measured (average ' + diffNote.avgPct + '% of pupils get them right)' +
-        (diffNote.measured < diffNote.total ? '; the unmeasured ones went last.' : '.')
-      : 'None of these have had their difficulty measured yet, so I could only pick by topic.');
+      ? 'Sorted by how students actually did — ' + diffNote.measured + ' of ' + diffNote.total +
+        ' have been attempted before (students average ' + diffNote.avgPct + '% on them)' +
+        (diffNote.measured < diffNote.total ? '; the ones nobody has tried went last.' : '.')
+      : 'Nobody has attempted these yet, so I could only pick by topic.');
   }
   (unmatched || []).forEach(u => notes.push('I matched “' + _docClip(u, 40) + '” by what the questions are about — there\'s no topic with that exact name.'));
   notes.push(saved ? 'Saved to My Worksheets, so you can come back to it any time.'
@@ -37701,9 +37549,7 @@ window.ainsteinQuizAnother = ainsteinQuizAnother;
 window.ainsteinWsPractice = ainsteinWsPractice;
 window.ainsteinWsPdf = ainsteinWsPdf;
 window.ainsteinWsOpenSaved = ainsteinWsOpenSaved;
-window.calibrateOneQuestion = calibrateOneQuestion;
-window.calibrateFilteredQuestions = calibrateFilteredQuestions;
-window.calibStopRun = calibStopRun;
+window.refreshQuestionUsage = refreshQuestionUsage;
 window.commPreviewImg = commPreviewImg;
 window.commAdminPost = commAdminPost;
 window.commCreateQuest = commCreateQuest;
