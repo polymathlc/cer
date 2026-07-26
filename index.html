@@ -9437,7 +9437,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.157.0';
+const APP_VERSION = 'v1.158.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -20509,20 +20509,23 @@ function _wsCoverDecoSvg() {
     <polygon points="124,288 131,290 126,296" fill="#bdebe6" opacity="0.7"/>
   </svg>`;
 }
-function _wsCoverHtml(title) {
+// The Polymath cover sheet. `sub` is the line under the big title and `foot`
+// the letter-spaced line at the foot of the page; both default to the
+// worksheet wording, and past-paper prints pass their own (see _ppCoverHtml).
+function _wsCoverHtml(title, sub, foot) {
   return `<div class="print-front-page print-cover-page">
     ${_wsCoverDecoSvg()}
     <div class="print-cover-head">Polymath Learning Centre</div>
     <div class="print-cover-center">
       <img class="print-cover-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre logo" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2252%22 height=%2252%22 viewBox=%220 0 52 52%22%3E%3Crect width=%2252%22 height=%2252%22 rx=%2210%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2226%22 y=%2237%22 font-family=%22DM Sans,sans-serif%22 font-size=%2232%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
       <h1 class="print-cover-title">${escapeHtml(title)}</h1>
-      <div class="print-cover-sub">Worksheet</div>
+      <div class="print-cover-sub">${escapeHtml(sub == null ? 'Worksheet' : sub)}</div>
       <div class="print-cover-fields">
         <div><div class="print-cover-field-label">Name</div><div class="print-cover-field-line"></div></div>
         <div><div class="print-cover-field-label">Date</div><div class="print-cover-field-line"></div></div>
       </div>
     </div>
-    <div class="print-cover-foot">Primary Science</div>
+    <div class="print-cover-foot">${escapeHtml(foot == null ? 'Primary Science' : foot)}</div>
   </div>`;
 }
 // Front matter (optional cover page) per the student's checkbox.
@@ -20543,7 +20546,17 @@ async function printStudentWorksheet() {
 }
 
 // Worksheet title banner + name/date/class strip printed at the top of page 1.
-function _wsHeaderHtml(worksheetTitle) {
+// With a cover sheet in front, the banner would just repeat the logo and title
+// the reader has already seen, so only the name/date/class strip is kept — and
+// the strip carries Class, which the cover has no field for.
+function _wsHeaderHtml(worksheetTitle, hasCover) {
+  if (hasCover) {
+    return `<div class="print-student-info">
+        <span>Name: ___________________________</span>
+        <span>Date: _______________</span>
+        <span>Class: ___________</span>
+      </div>`;
+  }
   return `<div class="print-worksheet-header">
         <img class="print-worksheet-header-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2252%22 height=%2252%22 viewBox=%220 0 52 52%22%3E%3Crect width=%2252%22 height=%2252%22 rx=%2210%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2226%22 y=%2237%22 font-family=%22DM Sans,sans-serif%22 font-size=%2232%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
         <div class="print-worksheet-header-text">
@@ -20576,14 +20589,18 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // packer can key a forced page break on it (data-qid "__lo__<qid>") — used by
   // the syllabus-grouped PDF.
   const sectionById = (opts && opts.sectionHtmlById) || null;
-  let allHtml = (opts && opts.frontHtml) ? opts.frontHtml : '';
+  const frontHtml = (opts && opts.frontHtml) ? opts.frontHtml : '';
+  // A cover sheet already carries the logo, the title and the name/date
+  // fields, so page 1's banner drops to just the student strip.
+  const hasCover = frontHtml.indexOf('print-cover-page') >= 0;
+  let allHtml = frontHtml;
   const answerKeyData = [];
 
   selected.forEach((q, qIndex) => {
     const secHtml = sectionById ? (sectionById[q.id] || '') : '';
     if (secHtml) {
       allHtml += `<div class="print-question-chunk print-lo-chunk" data-qid="__lo__${escapeHtml(String(q.id || ''))}">` +
-        (qIndex === 0 ? _wsHeaderHtml(worksheetTitle) : '') + secHtml + `</div>`;
+        (qIndex === 0 ? _wsHeaderHtml(worksheetTitle, hasCover) : '') + secHtml + `</div>`;
     }
     // MCQ-style questions (no writing boxes) are flagged so the packer can
     // pair two compact ones onto a single page.
@@ -20591,7 +20608,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     let qHtml = `<div class="print-question-chunk" data-qid="${escapeHtml(String(q.id || ''))}"${isMcq ? ' data-mcq="1"' : ''}>`;
 
     if (qIndex === 0 && !secHtml) {
-      qHtml += _wsHeaderHtml(worksheetTitle);
+      qHtml += _wsHeaderHtml(worksheetTitle, hasCover);
     }
 
     qHtml += plainNums
@@ -34869,6 +34886,11 @@ function ppCollectPrintable(hitIds){
   });
   return { items: [...seen.values()], missing };
 }
+// Cover sheet for a past-paper print. `coverTitle` is the paper's own name
+// ("PSLE 2017 Science Paper"); the line under it names the subject.
+function _ppCoverHtml(coverTitle) {
+  return _wsCoverHtml(coverTitle, 'Primary Science', 'Past Year Paper');
+}
 async function ppDoPrint(items, missing, title, opts){
   if (!items.length) { showToast('Nothing to print — none of these questions have a bank question attached yet', 'error'); return; }
   const selected = items.map(it => Object.assign({}, it.bq, { title: it.refs.join(' / ') + ' — ' + (it.bq.title || 'Untitled') }));
@@ -34880,7 +34902,11 @@ async function ppDoPrint(items, missing, title, opts){
   selected.forEach(q => { if (q.answerKeyImage) urls.push(transformImageUrl(q.answerKeyImage)); (q.blocks || []).forEach(b => { if (b && b.url && (b.type === 'image' || b.type === 'answerKey')) urls.push(transformImageUrl(b.url)); }); });
   await _preloadImageUrls(urls, (done, tot) => _printProgressUpdate('Loading question images…', 0.05 + 0.7 * (done / tot), done + '/' + tot + ' images'));
   _printProgressUpdate('Laying out pages…', 0.8, 'Measuring each question at print size');
-  output.innerHTML = buildWorksheetHtml(selected, title, { answerKeyExtras: true, plainNumbers: true });
+  output.innerHTML = buildWorksheetHtml(selected, title, {
+    answerKeyExtras: true,
+    plainNumbers: true,
+    frontHtml: _ppCoverHtml((opts && opts.coverTitle) || title),
+  });
   autoscaleAndPrint(output);
   if (missing.length) {
     const list = missing.length > 6 ? missing.slice(0, 6).join(', ') + ' +' + (missing.length - 6) + ' more' : missing.join(', ');
@@ -34896,7 +34922,7 @@ function ppPrintYear(y){
   const hitIds = ppQuestions().filter(q => String(q.year) === String(y))
     .sort((a,b) => (Number(a.n)||0) - (Number(b.n)||0)).map(q => q.id);
   const { items, missing } = ppCollectPrintable(hitIds);
-  ppDoPrint(items, missing, 'PSLE Science ' + y);
+  ppDoPrint(items, missing, 'PSLE Science ' + y, { coverTitle: 'PSLE ' + y + ' Science Paper' });
 }
 function ppPrintSelected(){
   const chosen = ppRecurring().filter(c => _ppPrintSel.has(c.id));
