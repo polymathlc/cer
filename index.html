@@ -12264,6 +12264,29 @@ function extractInlineImage(result) {
   return null;
 }
 
+// ── Where these pictures come from ───────────────────────────────────────
+// Almost every diagram in the bank starts life as a photo or a scan of a
+// printed exam paper — very often a photocopy of a photocopy. Told nothing,
+// an image model reads the scanning damage as part of the artwork and
+// faithfully reproduces it: the wobbly line stays wobbly, the faded arrow-head
+// stays half-missing, the grey photocopy background survives the "clean-up".
+// So every regeneration prompt opens by stating the provenance, naming the
+// defects to expect, and drawing the line between damage (repair it) and
+// content (never invent it). It is written conditionally, so it is also safe
+// for the occasional picture that came from a clean digital source.
+const SCAN_SOURCE_PROMPT =
+  'SOURCE — READ FIRST: this picture was scanned, photocopied or photographed from a printed exam paper, so it almost certainly carries scanning damage rather than being clean artwork. Expect some of: faint, broken, patchy or grey lines where the toner was weak; lines that are meant to be straight but bow, wobble or slant because the page was curved or the scan was skewed; an arrow-head, tick, bracket, box or letter that has partly faded, dropped out or been cut off; speckle, dust and dirty-photocopy noise; JPEG mush and moire; a grey, yellowed or unevenly lit background instead of white; shadows or dark bands along the page edge; faint show-through of print from the back of the sheet; staple holes, punch holes, creases and folds; and slightly blurred or double-struck text. ' +
+  'TREAT ALL OF THAT AS DAMAGE, NOT AS PART OF THE DIAGRAM. Darken faint strokes to a solid, even line; straighten what is meant to be straight, make circles round and boxes square; close small gaps and rejoin broken strokes; complete an arrow-head, tick or letter that has obviously faded out; remove the speckle, dirt, shadows, show-through and staple or punch marks; de-skew the figure; and set it on a clean white background. ' +
+  'BUT DO NOT INVENT ANYTHING. Only restore marks that are clearly the SAME feature the paper already shows. Never add a label, number, unit, axis value, arrow or shape that is not there. Never guess at text you cannot read — reproduce the characters as they appear rather than substituting plausible ones. If an element is missing or genuinely unreadable, leave it out rather than making one up. The diagram itself — every shape, label, proportion and position — stays exactly as the paper has it.';
+
+// The reading-side counterpart, for the vision prompts that turn a page into
+// question text. Different job, so different advice: here the scan damage is
+// not to be repaired but to be seen through. Without it the usual failures are
+// a faint diagram reported as "no picture on this page", a speck of dirt read
+// as a decimal point, and a confident guess at a word the scan destroyed.
+const SCAN_READING_NOTE =
+  'ABOUT THE IMAGE: it is a scan, photocopy or phone photo of a printed exam paper, not a clean digital page. Expect faint or broken lines, a grey or unevenly lit background, speckle and dirt, show-through of print from the back of the sheet, slight skew or page curve, shadows near the spine or the edges, and blurred or double-struck text. Read THROUGH that damage: a faint or patchy figure is still a figure — do NOT skip a diagram, graph, table or picture just because it is faint or partly faded — and a speck of dirt is not punctuation, a decimal point or a tick. Where the scan has genuinely destroyed a word or a number, do NOT invent a plausible replacement: leave it out or say it is unclear.\n';
+
 // Ask an image model to produce an image; returns a data: URL.
 // `media` may be a single { mimeType, data } or an array of them.
 async function generateEnhancedImageDataUrl(prompt, media) {
@@ -12366,7 +12389,8 @@ function renderImgEnhanceBar(blockId) {
   bar.innerHTML = compare + `
     <input type="text" id="imgEnhanceRemark_${blockId}" value="${escapeHtml((st && st.remark) || '')}"
            oninput="_setEnhanceRemark('${blockId}', this.value)"
-           placeholder="Optional: instructions to guide the AI regeneration (e.g. colour the heart red, keep all labels)"
+           placeholder="Optional extra instructions (e.g. colour the heart red, keep all labels)"
+           title="The AI is already told these pictures are scans of printed exam papers, so it repairs faint or broken lines, wobble, speckle and grey photocopy background on its own. Only add a note here for something specific to this picture."
            style="width:100%;box-sizing:border-box;font-size:0.78rem;padding:6px 9px;margin-top:8px;border:1px solid var(--border);border-radius:6px;">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
       <span style="font-size:0.78rem;color:var(--text-muted);">Image:</span>
@@ -12528,9 +12552,12 @@ async function enhanceBlockImage(blockId, colour) {
   }
   try {
     const media = await _blockImageToInline(blockId);
-    let prompt = colour
-      ? 'Add colour to this diagram. Keep it the EXACT same line drawing — identical lines, shapes, labels, text, proportions and positions — and simply fill the existing shapes with flat, natural colours like a clean textbook illustration. Do NOT make it photo-realistic, do NOT add shading, gradients, 3D rendering, textures or a new style, and do NOT redraw, add, remove or move anything. Output only the image, same aspect ratio.'
-      : 'Clean up this image into a sharp BLACK-AND-WHITE line diagram: keep every line, shape, label, text, proportion and position EXACTLY the same, just make the lines crisp and the text clearly legible like a freshly printed textbook figure. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT redraw, add, remove or move anything. Output only the image, same aspect ratio.';
+    // Both prompts open with SCAN_SOURCE_PROMPT so the model repairs the scan
+    // instead of faithfully redrawing its defects. "Same diagram", not "same
+    // pixels" — the wording has to leave room for that repair.
+    let prompt = SCAN_SOURCE_PROMPT + ' ' + (colour
+      ? 'TASK: add colour to this diagram. Keep the SAME line drawing — identical shapes, labels, text, proportions and positions — repair the scanning damage described above, then fill the existing shapes with flat, natural colours like a clean textbook illustration. Do NOT make it photo-realistic, do NOT add shading, gradients, 3D rendering, textures or a new style, and do NOT restyle, rearrange, add or remove anything. Output only the image, same aspect ratio.'
+      : 'TASK: clean this up into a sharp BLACK-AND-WHITE line diagram — crisp black line-work and clearly legible black text on a clean white background, like a freshly printed textbook figure rather than a photocopy. Keep the SAME diagram: every shape, label, text, proportion and position stays where it is, with the scanning damage described above repaired. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT restyle, rearrange, add or remove anything. Output only the image, same aspect ratio.');
     if (remark) prompt += ' IMPORTANT — also follow these specific instructions from the teacher for this regeneration (apply them even where they relax the rules above, but still keep it the SAME diagram and the same aspect ratio, and output only the image): ' + remark;
     const dataUrl = await generateEnhancedImageDataUrl(prompt, [media]);
     previewImage(blockId, dataUrl); // show immediately
@@ -13116,7 +13143,12 @@ async function annotSelAiFill() {
     mx.fillStyle = '#ff00ff';
     mx.fill(_annotSelPath(sel.pts));
     const dataUrl = marked.toDataURL('image/png');
-    const prompt = 'This image has one region painted solid magenta (#FF00FF). Reproduce the ENTIRE image exactly as it is — same size, same colours, same content — but replace the magenta region with a seamless, content-aware reconstruction of the background and surrounding texture, as if whatever was there had been removed. Continue any lines, shading or patterns that pass through the region naturally. Do not change ANYTHING outside the magenta region. Do not add labels, watermarks or new objects.';
+    // Deliberately NOT SCAN_SOURCE_PROMPT: this patch has to disappear into
+    // surroundings that are still scanned, so it must copy the scan's grain
+    // and tone rather than clean it up.
+    const prompt = 'This image has one region painted solid magenta (#FF00FF). Reproduce the ENTIRE image exactly as it is — same size, same colours, same content — but replace the magenta region with a seamless, content-aware reconstruction of the background and surrounding texture, as if whatever was there had been removed. Continue any lines, shading or patterns that pass through the region naturally. ' +
+      'The picture is a scan, photocopy or photo of a printed exam paper, so the area around the region is probably speckled, greyish, unevenly lit, slightly blurred and a little skewed. MATCH that surrounding grain, tone and brightness exactly so the repair is invisible — do NOT clean it up, sharpen it, whiten it or straighten it, and do not let the patch look newer than the paper around it. ' +
+      'Do not change ANYTHING outside the magenta region. Do not add labels, watermarks or new objects.';
     const outUrl = await generateEnhancedImageDataUrl(prompt, { mimeType: 'image/png', data: dataUrl.split(',')[1] || '' });
     const img = await _loadImageEl(outUrl);
     if (!_annot || _annot.canvas !== canvas) return;   // tool was closed meanwhile
@@ -13658,6 +13690,7 @@ function _bulkPagePrompt(pageNo, pageCount) {
   const topics = currentTopics();
   const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
   return `You are importing questions from page ${pageNo} of ${pageCount} of a Singapore primary-school science paper (the attached image is that ONE page) into a question bank.\n` +
+    SCAN_READING_NOTE +
     _genPreamble() +
     `Split THIS PAGE into its separate questions (by question number or clear boundaries) and return EACH as its own entry, in page order.\n` +
     `Return ONLY JSON: {"questions":[ {"continuation":false,"title":"short title","topic":"<closest topic>","topicConfidence":"high|medium|low","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
@@ -14026,6 +14059,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount) {
   const topics = currentTopics();
   const categories = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
   return `You are helping a Singapore primary-school science teacher turn an exam question (${multi ? `spread across the ${n} attached images` : `in the attached ${isPdf ? 'PDF' : 'image'}`}) into a practice question.\n` +
+    SCAN_READING_NOTE +
     _genPreamble() +
     (multi ? `IMPORTANT: the ${n} attached images are CONSECUTIVE screenshots of ONE AND THE SAME question, already in reading order (image 1 first). Read them as one continuous question — do NOT treat them as separate questions and do NOT drop content from any of the images.\n` : '') +
     `FIRST decide the question type: "mcq" if the question gives a set of answer options to choose from (e.g. (1)(2)(3)(4) or A/B/C/D), otherwise "open".\n` +
@@ -14068,7 +14102,8 @@ function _rectangleRules() {
 }
 
 // The prompt used to clean a whole screenshot into a crisp black-and-white figure.
-const _BW_ENHANCE_PROMPT = 'Clean up this ENTIRE image into a sharp BLACK-AND-WHITE line diagram: crisp black line-work and text on a white background, like a freshly printed textbook figure rather than a photocopy or scan. Keep every diagram, detail, label, shape, proportion and all text EXACTLY the same and in the same positions. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT redraw, add, remove or move anything. Output only the image, same aspect ratio.';
+const _BW_ENHANCE_PROMPT = SCAN_SOURCE_PROMPT + ' ' +
+  'TASK: clean up this ENTIRE image into a sharp BLACK-AND-WHITE line diagram — crisp black line-work and text on a clean white background, like a freshly printed textbook figure rather than a photocopy or scan. Keep every diagram, detail, label, shape, proportion and all text the SAME and in the same positions, with the scanning damage described above repaired. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT restyle, rearrange, add or remove anything. Output only the image, same aspect ratio.';
 
 // =====================================================================
 // DUPLICATE SUSPICION — when a question is built from a screenshot / Rapid
