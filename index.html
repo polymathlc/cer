@@ -9476,7 +9476,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.169.1';
+const APP_VERSION = 'v1.170.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -36661,6 +36661,69 @@ function _ainsteinFindSimilar(concept, extra, want, excludeIds) {
   return { q: scored[0].q, fellBack: '' };
 }
 
+// ---- "let me do the one about Rosa and evaporation" ------------------------
+// Naming a question is not the same as naming a concept. "Rosa" appears in two
+// questions in the whole bank and "evaporation" in eighty, so a plain
+// term-count score buries the one they actually meant under the topic.
+//
+// This ranks by RARITY instead: each matching word is worth log(N / how many
+// questions contain it), so a name or an unusual object dominates and the
+// common topic word only breaks ties. Every word the student used has to turn
+// up (or at least two of them) — a question that merely shares the topic is not
+// "the question about Rosa".
+//
+// Unlike _ainsteinFindSimilar this deliberately does NOT skip questions they
+// have already practised. They asked for that one; that they did it last week
+// is the reason they can name it.
+function _ainsteinFindNamed(description, limit) {
+  if (!Array.isArray(questionBank) || !questionBank.length) return [];
+  const terms = _ainsteinConceptTerms(description);
+  if (!terms.length) return [];
+  const pool = [];
+  questionBank.forEach(q => {
+    if (!q || q.id == null) return;
+    if (!qInSyllabus(q) || !qWithinStudentLevel(q)) return;
+    if (q.annotation) return;                       // drawing pads need the full page
+    if (!qpHasMcq(q) && !qpHasWritten(q)) return;   // nothing to practise on
+    pool.push({ q, body: _ainsteinSearchText(q), head: ' ' + _docNorm([q.title || '', q.topic || ''].join(' ')) + ' ' });
+  });
+  if (!pool.length) return [];
+  const df = {};
+  terms.forEach(t => { df[t] = pool.reduce((n, x) => n + (x.body.includes(t) ? 1 : 0), 0); });
+  const N = pool.length;
+  const phrase = _docNorm(description);
+  // A word carried by a twentieth of the bank or fewer is identifying on its
+  // own ("rosa"); anything commoner has to be backed by a second word. So
+  // "evaporation" alone matches nothing — it describes eighty questions, not one
+  // — while "rosa" alone still surfaces both of hers.
+  const rareCut = Math.max(2, Math.round(N * 0.05));
+  const scored = [];
+  pool.forEach(x => {
+    let score = 0, hits = 0, rare = false;
+    terms.forEach(t => {
+      const inHead = x.head.includes(t), inBody = x.body.includes(t);
+      if (!inHead && !inBody) return;
+      hits++;
+      if ((df[t] || 0) <= rareCut) rare = true;
+      score += (Math.log((N + 1) / ((df[t] || 0) + 1)) + 0.4) * (inHead ? 3 : 2);
+    });
+    if (!hits || (hits < 2 && !rare)) return;
+    if (phrase.length > 6 && x.body.includes(phrase)) score += 6;   // said it almost word for word
+    scored.push({ q: x.q, score, hits });
+  });
+  scored.sort((a, b) => (b.hits - a.hits) || (b.score - a.score));
+  return scored.slice(0, Math.max(1, limit || 3)).map(s => s.q);
+}
+
+// Did they ask to DO a particular question rather than for a clue about one?
+const AINSTEIN_ASKS_OPEN = /\b(let me|i want to|can i|i'd like to|id like to|lemme)\b[^.?!]{0,24}\b(do|try|attempt|answer|practi[sc]e|open)\b|\b(open|give me|show me|bring up|find)\b[^.?!]{0,24}\bthe\b[^.?!]{0,30}\bquestion\b|\b(do|try|open) the (one|question)\b/i;
+function _ainsteinWantsOpen(parsed, studentQuestion) {
+  const o = parsed && typeof parsed.open === 'object' ? parsed.open : null;
+  if (o && o.wanted === true) return String(o.describe || studentQuestion || '').trim();
+  if (AINSTEIN_ASKS_OPEN.test(String(studentQuestion || ''))) return String(studentQuestion || '').trim();
+  return '';
+}
+
 // The format the student is working in right now, so "another one like this"
 // means another of the same kind.
 function _ainsteinCurrentFormat() {
@@ -36780,11 +36843,39 @@ function _ainsteinBuildOffer(parsed, studentQuestion) {
   } catch (e) { console.warn('ainstein offer', e); return null; }
 }
 
+// A chip that opens ONE named question, not "something on this concept". Used
+// when the student asked for a specific question and there was more than one
+// plausible match.
+function _ainsteinMakeDirectOffer(q) {
+  const token = 'ao' + (++_ainsteinOfferSeq) + '_' + Math.random().toString(36).slice(2, 8);
+  const offer = { token, direct: true, qid: String(q.id), title: q.title || 'that question',
+    topic: q.topic || '', format: qpHasMcq(q) ? 'mcq' : 'written',
+    expiresAt: Date.now() + AINSTEIN_OFFER_TTL_MS, used: false };
+  _ainsteinOffers.set(token, offer);
+  const timer = setTimeout(() => { _ainsteinOfferTimers.delete(timer); _ainsteinRender(); }, AINSTEIN_OFFER_TTL_MS + 500);
+  _ainsteinOfferTimers.add(timer);
+  return offer;
+}
 function _ainsteinOfferHtml(offer) {
   const o = _ainsteinOffers.get(offer && offer.token);
   if (!o) return '';
   const mins = Math.ceil((o.expiresAt - Date.now()) / 60000);
   const dead = o.used || mins <= 0;
+  if (o.direct) {
+    return '<div class="ainstein-offer' + (dead ? ' dead' : '') + '">' +
+      '<button type="button" class="ainstein-offer-btn"' + (dead ? ' disabled' : '') +
+        ' onclick="ainsteinTrySimilar(\'' + o.token + '\')">' +
+        '<span class="ainstein-offer-ico">📄</span>' +
+        '<span class="ainstein-offer-txt">' +
+          '<b>' + escapeHtml(_docClip(o.title, 52)) + '</b>' +
+          '<span>' + escapeHtml(o.topic || 'open it here') + '</span>' +
+        '</span>' +
+      '</button>' +
+      '<div class="ainstein-offer-meta">' + escapeHtml(o.used ? 'Already opened — ask me for it again any time.'
+        : mins <= 0 ? 'This link has expired — ask me for it again.'
+        : 'Opens right here — you won\'t lose your place.') + '</div>' +
+    '</div>';
+  }
   const kind = o.format === 'mcq' ? 'MCQ' : o.format === 'written' ? 'open-ended question' : 'question';
   const concept = _docClip(o.concept || 'this concept', 46);
   const here = ' Opens right here — you won\'t lose your place.';
@@ -36829,6 +36920,15 @@ async function ainsteinTrySimilar(token) {
   if (!o) { showToast('That practice link is no longer available — ask me for another.', 'info'); return; }
   if (o.used) { showToast('You\'ve already opened that one — ask me for another.', 'info'); return; }
   if (Date.now() > o.expiresAt) { showToast('That practice link has expired — ask me for another.', 'info'); _ainsteinRender(); return; }
+  // A chip for ONE named question opens exactly that question.
+  if (o.direct) {
+    const q = questionBank.find(x => x && String(x.id) === o.qid);
+    if (!q) { showToast('I can\'t find that question any more — ask me again.', 'info'); o.used = true; _ainsteinRender(); return; }
+    o.used = true;
+    _ainsteinRender();
+    await _ainsteinOpenQuiz(q, q.topic || '');
+    return;
+  }
   // The question is chosen NOW, from what is still unpractised — so a chip left
   // sitting for twenty minutes still opens the best available question, and the
   // ones they never tapped were never taken out of circulation.
@@ -37521,7 +37621,13 @@ function _ainsteinBuildPrompt(question, shotImages) {
   lines.push('FIRST decide if the question is ON TOPIC. On topic means: about anything on the screen above, about the question they are on or its neighbours, about the science topic they are studying, or about how to use this part of the app. A general primary-science question counts as on topic even if it is not literally printed on the screen. Asking you outright for the answer IS on topic — never penalise that, just give a clue instead. OFF topic means chit-chat, jokes, games, other subjects unrelated to what is on screen, personal questions about you, or anything that is not about their learning.');
   lines.push('');
   lines.push('Then reply with ONLY this JSON:');
-  lines.push('{"relevant": true or false, "clue": "your reply to the student", "used": "page" | "current" | "previous" | "next", "practice": {"wanted": true or false, "concept": "the science concept being tested", "keywords": ["3-6 words the app can search the question bank with"], "format": "mcq" | "written" | "any"}, "video": {"wanted": true or false, "query": "what to search YouTube for"}, "worksheet": true or false}');
+  lines.push('{"relevant": true or false, "clue": "your reply to the student", "used": "page" | "current" | "previous" | "next", "open": {"wanted": true or false, "describe": "the words that identify the question they want"}, "practice": {"wanted": true or false, "concept": "the science concept being tested", "keywords": ["3-6 words the app can search the question bank with"], "format": "mcq" | "written" | "any"}, "video": {"wanted": true or false, "query": "what to search YouTube for"}, "worksheet": true or false}');
+  lines.push('');
+  lines.push('ABOUT "open" — the app can find ONE particular question in the bank and open it for them right here in this chat.');
+  lines.push('- Set "wanted" true when they ask to DO or SEE a specific question they can describe: "let me do the question about Rosa and evaporation", "open the potato steamer one", "I want to try that question on the metal ball and ring again", "can I redo the one about the three cups".');
+  lines.push('- "describe" is the identifying words — the names, objects and idea they used ("rosa evaporation", "potato steamer"). Copy their own words; do not translate them into a topic name.');
+  lines.push('- You have NO idea which questions exist and you cannot see the bank, so NEVER tell the student to tap, click or look for a question by name, and never claim a particular question exists. Set "wanted" and let the app do the finding — it will open the question or say it could not find it. Your "clue" for this case is one short line like "Let me find that one for you." and nothing else.');
+  lines.push('- It is false when they want a NEW question on an idea (that is "practice"), or a set of them (that is "worksheet").');
   lines.push('');
   lines.push('ABOUT "practice" — the app can offer the student ONE more question on the same idea, as a button under your reply.');
   lines.push('- "wanted" is TRUE ONLY when the student has actually ASKED for another question: "give me another one", "can I try a similar question", "more practice on this", "another MCQ", "what should I practise next". Nothing else counts.');
@@ -37605,7 +37711,8 @@ function _ainsteinItemHtml(m) {
     (m.wsError ? '<div class="ainstein-vid-wait">' + escapeHtml(m.wsError) + '</div>' : '') +
     (m.videoPending ? '<div class="ainstein-vid-wait">🎥 Finding a video that explains this…</div>' : '') +
     (m.video ? _ainsteinVideoHtml(m.video) : '') +
-    (m.offer ? _ainsteinOfferHtml(m.offer) : '');
+    (m.offer ? _ainsteinOfferHtml(m.offer) : '') +
+    (m.offers || []).map(o => _ainsteinOfferHtml(o)).join('');
 }
 
 // Everything about a message that changes what it looks like. Two renders with
@@ -37619,7 +37726,17 @@ function _ainsteinItemKey(m, i) {
     m.video ? 'v' + m.video.token : (m.videoPending ? 'p' : ''),
     m.worksheet ? 'w' + m.worksheet.token : (m.wsPending ? 'wp' : (m.wsError ? 'we' : '')),
   ].filter(Boolean).join(',');
-  return [i, m.who, body, o ? 'o' + o.token + oState : ''].join('|');
+  const key = [i, m.who, body, o ? 'o' + o.token + oState : ''];
+  // Only messages that carry the extra "pick another one" chips get a 5th
+  // field, so ordinary messages keep the 4-field shape the patch path below
+  // relies on to leave a playing video alone.
+  if (m.offers && m.offers.length) {
+    key.push(m.offers.map(x => {
+      const r = _ainsteinOffers.get(x.token);
+      return x.token + (r ? (r.used ? 'u' : Date.now() > r.expiresAt ? 'x' : 'l') : '');
+    }).join(','));
+  }
+  return key.join('|');
 }
 
 function _ainsteinRender() {
@@ -37637,7 +37754,7 @@ function _ainsteinRender() {
       '<p>Stuck on something on your screen? Ask me — I can see the whole page you\'re looking at, pictures and all.</p>' +
       '<p>Type your question, or tap <b>🎤</b> and just say it out loud.</p>' +
       rule +
-      '<p>Want more practice on the same idea? Ask, and I\'ll find you another question — you answer it right here, without losing your place. Still not clicking? I\'ll find you a video to watch.</p>' +
+      '<p>Want a particular question? Say <b>“let me do the one about Rosa and evaporation”</b> and I\'ll find it and open it right here. Want more practice on the same idea? Ask, and I\'ll find you another — you answer it here without losing your place. Still not clicking? I\'ll find you a video to watch.</p>' +
       '<p>Need a whole set? Just say <b>“give me 20 hard MCQs”</b> — or name topics if you want, like <b>“20 MCQ and 20 open-ended on heat and matter”</b>. I\'ll build it, save it to My Worksheets and set it up to print.</p>' +
       '<p><button type="button" class="ainstein-preset" onclick="ainsteinAsk(\'What should I practise next?\')">What should I practise next?</button></p>' +
       '<p class="ainstein-warn">Off-topic questions cost an extra credit, so keep them about your work.</p>' +
@@ -37783,6 +37900,33 @@ async function ainsteinSend() {
     // Asked for a whole worksheet? That reply gets the worksheet instead of the
     // usual single-question chip — offering "try another one" alongside a
     // 40-question set would just be noise.
+    // "Let me do the question about Rosa and evaporation" — find it and open it,
+    // rather than telling them to tap something that isn't there. This wins over
+    // the worksheet path: they named ONE question, not a set.
+    const openAsk = relevant ? _ainsteinWantsOpen(parsed, question) : '';
+    if (openAsk) {
+      const found = _ainsteinFindNamed(openAsk, 3);
+      if (found.length) {
+        _ainsteinSpend(1);
+        const alts = found.slice(1, 3).map(q => _ainsteinMakeDirectOffer(q));
+        _ainstein.history.push({
+          who: 'ai',
+          text: 'Here it is — “' + (found[0].title || 'that question') + '”. Opening it now; have a go and I\'ll mark it.' +
+            (alts.length ? '\n\nNot the one you meant? Try one of these instead.' : ''),
+          offers: alts,
+        });
+        _ainstein.busy = false;
+        _ainsteinRender();
+        await _ainsteinOpenQuiz(found[0], found[0].topic || '');
+        return;
+      }
+      // Nothing matched — say so plainly instead of inventing something to tap.
+      _ainsteinSpend(1);
+      _ainstein.history.push({ who: 'ai', text: "I couldn't find a question like that in your bank. Tell me a bit more about it — a name, an object, or what it was testing — and I'll look again." });
+      _ainstein.busy = false;
+      _ainsteinRender();
+      return;
+    }
     const wantsWs = relevant && parsed && parsed.worksheet === true;
     // A "try another question" chip appears ONLY when the student asked for one.
     // Unprompted it is an interruption — they are in the middle of a question,
