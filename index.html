@@ -9444,7 +9444,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.164.1';
+const APP_VERSION = 'v1.165.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -36416,6 +36416,227 @@ function ainsteinVideoFullscreen(token) {
   } catch (_) { window.open('https://www.youtube.com/watch?v=' + v.id, '_blank', 'noopener'); }
 }
 
+// ---- worksheets on request -------------------------------------------------
+// "prepare a worksheet with 20 MCQ and 20 open-ended from plant reproduction,
+// heat, matter and adaptations" — said in the chat, in the student's own words.
+//
+// The model does one job: turn that sentence into a spec, mapping the topic
+// names they used onto the EXACT topics the bank actually has ("adaptions" →
+// "Adaptations"). Everything else is local: the questions are picked here from
+// the real bank, and the worksheet is saved through the same
+// users/{uid}/worksheets document the worksheet builder writes, so it appears in
+// My Worksheets and prints and practises with the existing buttons rather than a
+// parallel implementation.
+const AINSTEIN_WS_MAX = 60;             // sanity cap on one worksheet
+const _ainsteinWorksheets = new Map();  // token → { ws, picked, spec, shortfall }
+let _ainsteinWsSeq = 0;
+
+// Bank topics with how many of each format they can actually supply.
+function _ainsteinWsTopicCounts() {
+  const mcq = qpAvailableTopics('mcq');
+  const written = qpAvailableTopics('written');
+  const names = Array.from(new Set(Object.keys(mcq).concat(Object.keys(written)))).sort();
+  return names.map(t => ({ topic: t, mcq: mcq[t] || 0, written: written[t] || 0 }));
+}
+
+// Ask the model for the spec. One extra call, only when a worksheet is wanted —
+// the main prompt stays lean.
+async function _ainsteinParseWorksheetSpec(text) {
+  const counts = _ainsteinWsTopicCounts();
+  if (!counts.length) return null;
+  const lines = counts.map(c => '- "' + c.topic + '" — ' + c.mcq + ' MCQ, ' + c.written + ' open-ended').join('\n');
+  const prompt = [
+    'A Singapore primary-school student asked for a practice worksheet, in their own words:',
+    JSON.stringify(String(text)),
+    '',
+    'Topics in the question bank, with how many of each kind they hold. Use these EXACT names:',
+    lines,
+    '',
+    'Reply with ONLY this JSON:',
+    '{"title":"short worksheet name","mcq":0,"written":0,"topics":["exact topic name"],"unmatched":["anything they asked for with no matching topic"]}',
+    '- "mcq" and "written" are how many of each kind they asked for. 0 if they did not ask for that kind. If they gave one total without saying which kind, split it evenly.',
+    '- Map every topic they named onto the closest EXACT name from the list — "adaptions" is "Adaptations", "plants" may be a longer plant topic name.',
+    '- If something they asked for has no matching topic in the list, put their exact words in "unmatched" and leave it out of "topics".',
+    '- "title" names the worksheet the way a teacher would, e.g. "Heat, Matter & Adaptations Practice". No date.',
+  ].join('\n');
+  const raw = await askGemini(prompt, { maxOutputTokens: 400, temperature: 0.2, json: true });
+  const p = _parseAIJson(raw);
+  const known = counts.map(c => c.topic);
+  const topics = (Array.isArray(p && p.topics) ? p.topics : []).filter(t => known.includes(t));
+  const unmatched = (Array.isArray(p && p.unmatched) ? p.unmatched : []).filter(t => typeof t === 'string' && t.trim());
+  const clamp = n => Math.max(0, Math.min(AINSTEIN_WS_MAX, parseInt(n, 10) || 0));
+  const spec = {
+    title: String((p && p.title) || 'Practice Worksheet').slice(0, 80),
+    mcq: clamp(p && p.mcq),
+    written: clamp(p && p.written),
+    topics, unmatched,
+  };
+  if (!spec.mcq && !spec.written) spec.mcq = 10;          // asked for "a worksheet" with no numbers
+  if (!spec.topics.length && !spec.unmatched.length) return null;
+  return spec;
+}
+
+// Everything practiseable on one requested topic, for one format. An exact bank
+// topic is used as a topic; anything else ("plant reproduction" when the bank
+// files it under something broader) falls back to concept matching, so a name
+// the bank doesn't use as a topic still finds its questions.
+function _ainsteinWsPool(name, fmt, isTopic) {
+  const key = _docNorm(name);
+  const terms = isTopic ? null : _ainsteinConceptTerms(name);
+  const out = [];
+  (Array.isArray(questionBank) ? questionBank : []).forEach(q => {
+    if (!q || q.id == null) return;
+    if (!qInSyllabus(q) || !qWithinStudentLevel(q)) return;
+    if (fmt === 'mcq' ? !qpHasMcq(q) : !qpHasWritten(q)) return;
+    if (isTopic) {
+      if (!qTopicList(q).some(t => _docNorm(t) === key)) return;
+      out.push({ q, score: 1 });
+    } else {
+      if (!terms || !terms.length) return;
+      const score = _ainsteinConceptScore(q, name, terms);
+      if (score < 6) return;
+      out.push({ q, score });
+    }
+  });
+  const stats = _qAttemptStats || {};
+  // Best concept match first, then questions they've never attempted.
+  out.sort((a, b) => (b.score - a.score) || ((stats[String(a.q.id)] ? 1 : 0) - (stats[String(b.q.id)] ? 1 : 0)));
+  return out.map(x => x.q);
+}
+
+// Fill the quotas, spreading evenly across the requested topics.
+function _ainsteinPickForWorksheet(spec) {
+  const wanted = spec.topics.map(t => ({ name: t, isTopic: true }))
+    .concat(spec.unmatched.map(t => ({ name: t, isTopic: false })));
+  const used = new Set();
+  const picked = [];
+  const byTopic = {};
+  const perFormat = {};
+  ['mcq', 'written'].forEach(fmt => {
+    const quota = spec[fmt] || 0;
+    perFormat[fmt] = 0;
+    if (!quota || !wanted.length) return;
+    const pools = wanted.map(w => ({ name: w.name, list: _ainsteinWsPool(w.name, fmt, w.isTopic).filter(q => !used.has(String(q.id))) }));
+    // Round-robin so 20 questions over 4 topics is 5 each, not 20 from the first.
+    let added = 0, exhausted = false;
+    while (added < quota && !exhausted) {
+      exhausted = true;
+      for (const p of pools) {
+        if (added >= quota) break;
+        const next = p.list.shift();
+        if (!next) continue;
+        exhausted = false;
+        if (used.has(String(next.id))) continue;
+        used.add(String(next.id));
+        picked.push(next);
+        byTopic[p.name] = (byTopic[p.name] || 0) + 1;
+        added++;
+      }
+    }
+    perFormat[fmt] = added;
+  });
+  const shortfall = [];
+  if (spec.mcq && perFormat.mcq < spec.mcq) shortfall.push({ fmt: 'MCQ', got: perFormat.mcq, want: spec.mcq });
+  if (spec.written && perFormat.written < spec.written) shortfall.push({ fmt: 'open-ended', got: perFormat.written, want: spec.written });
+  return { picked, byTopic, perFormat, shortfall };
+}
+
+// Build it, save it to the student's account, and hand back a card to render.
+async function _ainsteinBuildWorksheet(msg, studentQuestion) {
+  try {
+    msg.wsPending = true;
+    _ainsteinRender();
+    const spec = await _ainsteinParseWorksheetSpec(studentQuestion);
+    if (!spec) throw new Error('no matching topics');
+    const { picked, byTopic, perFormat, shortfall } = _ainsteinPickForWorksheet(spec);
+    if (!picked.length) throw new Error('nothing in the bank matched');
+    const token = 'aw' + (++_ainsteinWsSeq);
+    const ws = {
+      id: 'ws_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      title: spec.title,
+      questionIds: picked.map(q => q.id),
+      format: 'open',
+      createdAt: new Date().toISOString(),
+      source: 'ainstein',
+      spec: { mcq: perFormat.mcq, written: perFormat.written, topics: spec.topics, asked: String(studentQuestion).slice(0, 300) },
+    };
+    // Persist first, then show it as saved — never claim a save that failed.
+    let saved = false;
+    if (currentUser) {
+      try { await setDoc(_wsRef(ws.id), ws); saved = true; } catch (e) { console.warn('ainstein worksheet save', e); }
+    }
+    if (saved) {
+      savedWorksheets.unshift(ws);                       // newest first, as the page sorts
+      if (_ainsteinPageId() === 'myworksheets') { try { renderSavedWorksheets(); } catch (_) {} }
+    }
+    _ainsteinWorksheets.set(token, { ws, byTopic, perFormat, shortfall, unmatched: spec.unmatched, saved });
+    msg.wsPending = false;
+    msg.worksheet = { token };
+    _ainsteinRender();
+  } catch (e) {
+    console.warn('ainstein worksheet', e);
+    msg.wsPending = false;
+    msg.wsError = 'I couldn\'t build that one — tell me the topics and how many of each kind you want, and I\'ll try again.';
+    _ainsteinRender();
+  }
+}
+
+function _ainsteinWsHtml(ref) {
+  const rec = _ainsteinWorksheets.get(ref && ref.token);
+  if (!rec) return '';
+  const { ws, byTopic, perFormat, shortfall, unmatched, saved } = rec;
+  const bits = [];
+  if (perFormat.mcq) bits.push(perFormat.mcq + ' MCQ');
+  if (perFormat.written) bits.push(perFormat.written + ' open-ended');
+  const chips = Object.keys(byTopic).map(t =>
+    '<span class="ainstein-ws-chip">' + escapeHtml(_docClip(t, 28)) + ' <b>' + byTopic[t] + '</b></span>').join('');
+  const notes = [];
+  shortfall.forEach(s => notes.push('You asked for ' + s.want + ' ' + s.fmt + ' but the bank only has ' + s.got + ' at your level on these topics.'));
+  (unmatched || []).forEach(u => notes.push('I matched “' + _docClip(u, 40) + '” by what the questions are about — there\'s no topic with that exact name.'));
+  notes.push(saved ? 'Saved to My Worksheets, so you can come back to it any time.'
+                   : 'I couldn\'t save this one to your account — practise or print it now while it\'s here.');
+  return '<div class="ainstein-ws">' +
+    '<div class="ainstein-ws-head"><span class="ainstein-ws-ico">📄</span>' +
+      '<span class="ainstein-ws-what"><b>' + escapeHtml(_docClip(ws.title, 60)) + '</b>' +
+      '<span>' + escapeHtml(bits.join(' · ') || (ws.questionIds.length + ' questions')) + ' · ' + ws.questionIds.length + ' in total</span></span>' +
+    '</div>' +
+    (chips ? '<div class="ainstein-ws-chips">' + chips + '</div>' : '') +
+    '<div class="ainstein-ws-row">' +
+      '<button type="button" class="ainstein-vid-btn" onclick="ainsteinWsPractice(\'' + ref.token + '\')">▶ Practise it</button>' +
+      '<button type="button" class="ainstein-vid-btn ghost" onclick="ainsteinWsPdf(\'' + ref.token + '\')">📄 Export PDF</button>' +
+      (saved ? '<button type="button" class="ainstein-vid-btn ghost" onclick="ainsteinWsOpenSaved()">🗂 My Worksheets</button>' : '') +
+    '</div>' +
+    '<div class="ainstein-ws-meta">' + notes.map(n => escapeHtml(n)).join('<br>') + '</div>' +
+  '</div>';
+}
+
+// Practise the whole set on the full Quick Practice page — 40 questions is a
+// sitting, not a side-panel detour, so this one does leave the page (and only
+// when they press the button).
+function ainsteinWsPractice(token) {
+  const rec = _ainsteinWorksheets.get(token);
+  if (!rec) return;
+  if (!savedWorksheets.some(w => w.id === rec.ws.id)) savedWorksheets.unshift(rec.ws);
+  ainsteinToggle(false);
+  practiceSavedWorksheet(rec.ws.id);
+}
+
+// Export = the app's own worksheet print path; the browser's print dialog is
+// where "Save as PDF" lives, same as the Print button in My Worksheets.
+function ainsteinWsPdf(token) {
+  const rec = _ainsteinWorksheets.get(token);
+  if (!rec) return;
+  if (!savedWorksheets.some(w => w.id === rec.ws.id)) savedWorksheets.unshift(rec.ws);
+  ainsteinToggle(false);
+  showToast('Opening the print view — choose "Save as PDF"', 'info');
+  reprintWorksheet(rec.ws.id);
+}
+
+function ainsteinWsOpenSaved() {
+  ainsteinToggle(false);
+  navigateTo('myworksheets');
+}
+
 // ---- what to practise next -------------------------------------------------
 // So Ai-nstein can answer "what should I practise?" from the student's actual
 // record rather than guessing. Compact on purpose — it rides along on every ask,
@@ -36493,7 +36714,7 @@ function _ainsteinBuildPrompt(question) {
   lines.push('FIRST decide if the question is ON TOPIC. On topic means: about anything on the screen above, about the question they are on or its neighbours, about the science topic they are studying, or about how to use this part of the app. A general primary-science question counts as on topic even if it is not literally printed on the screen. Asking you outright for the answer IS on topic — never penalise that, just give a clue instead. OFF topic means chit-chat, jokes, games, other subjects unrelated to what is on screen, personal questions about you, or anything that is not about their learning.');
   lines.push('');
   lines.push('Then reply with ONLY this JSON:');
-  lines.push('{"relevant": true or false, "clue": "your reply to the student", "used": "page" | "current" | "previous" | "next", "practice": {"concept": "the science concept being tested", "keywords": ["3-6 words the app can search the question bank with"], "format": "mcq" | "written" | "any"}, "video": {"wanted": true or false, "query": "what to search YouTube for"}}');
+  lines.push('{"relevant": true or false, "clue": "your reply to the student", "used": "page" | "current" | "previous" | "next", "practice": {"concept": "the science concept being tested", "keywords": ["3-6 words the app can search the question bank with"], "format": "mcq" | "written" | "any"}, "video": {"wanted": true or false, "query": "what to search YouTube for"}, "worksheet": true or false}');
   lines.push('');
   lines.push('ABOUT "practice" — the app uses it to find the student ONE more question on the same idea, so they can test what you just nudged them towards. Fill it in on every on-topic reply (omit it only when the ask is off topic):');
   lines.push('- "concept" — the specific idea being tested, 2-4 words, as a teacher would name it: "thermal expansion", "heat conduction", "evaporation rate", "electrical circuits", "digestive system". NOT the broad topic ("Heat") and NOT the question title.');
@@ -36509,6 +36730,9 @@ function _ainsteinBuildPrompt(question) {
   lines.push('');
   lines.push('A CLUE MAY: point at the part of the question, diagram or table that matters; name the science idea or keyword to think about; ask them a question back that makes them reason; remind them of a rule or definition they should already know; work through a DIFFERENT but similar example; or tell them which of their own ideas is worth following up.');
   lines.push('A CLUE MAY NOT: state the answer or any part of it; name, number or quote the correct option; rule options out until only one is left; give any sentence they could copy into the answer box; say whether an answer they propose is right or wrong; or spell the reasoning all the way through to the conclusion. Always stop one clear step short and hand the last step back to them.');
+  lines.push('');
+  lines.push('ABOUT "worksheet" — set it to true when they are asking you to PREPARE A SET of questions rather than asking about one: "make me a worksheet with 20 MCQ and 20 open-ended on heat and matter", "prepare a paper on plant reproduction", "give me 15 questions on adaptations to print". It is true even when they do not use the word worksheet, as long as they want a batch put together. It is false for a single question, a clue, or general chat.');
+  lines.push('- When it is true, the app builds the worksheet, saves it to their account and shows it under your reply. Your "clue" is then just ONE friendly line saying you are putting it together — do not list the questions, do not name the topics back, do not promise anything about printing, and do not ask them to confirm.');
   lines.push('');
   lines.push('IF THEY ASK WHAT TO PRACTISE ("what should I do next", "what am I weak at", "give me something to work on", "which topic should I revise"), that is on topic and you answer it properly — it is advice, not an answer to a question, so the no-answers rule does not apply:');
   lines.push('- Recommend exactly ONE thing from THEIR RECORD above, named as a specific concept, not a whole topic. Say in one short sentence why it is the one worth doing now (lowest accuracy, never tried, or a slip in their last few results).');
@@ -36550,6 +36774,9 @@ function _ainsteinBubbleHtml(text, who) {
 
 function _ainsteinItemHtml(m) {
   return _ainsteinBubbleHtml(m.text, m.who) +
+    (m.wsPending ? '<div class="ainstein-vid-wait">📄 Putting your worksheet together…</div>' : '') +
+    (m.worksheet ? _ainsteinWsHtml(m.worksheet) : '') +
+    (m.wsError ? '<div class="ainstein-vid-wait">' + escapeHtml(m.wsError) + '</div>' : '') +
     (m.videoPending ? '<div class="ainstein-vid-wait">🎥 Finding a video that explains this…</div>' : '') +
     (m.video ? _ainsteinVideoHtml(m.video) : '') +
     (m.offer ? _ainsteinOfferHtml(m.offer) : '');
@@ -36562,7 +36789,11 @@ function _ainsteinItemHtml(m) {
 function _ainsteinItemKey(m, i) {
   const o = m.offer && _ainsteinOffers.get(m.offer.token);
   const oState = o ? (o.used ? 'u' : Date.now() > o.expiresAt ? 'x' : 'l') : '';
-  return [i, m.who, m.video ? 'v' + m.video.token : (m.videoPending ? 'p' : ''), o ? 'o' + o.token + oState : ''].join('|');
+  const body = [
+    m.video ? 'v' + m.video.token : (m.videoPending ? 'p' : ''),
+    m.worksheet ? 'w' + m.worksheet.token : (m.wsPending ? 'wp' : (m.wsError ? 'we' : '')),
+  ].filter(Boolean).join(',');
+  return [i, m.who, body, o ? 'o' + o.token + oState : ''].join('|');
 }
 
 function _ainsteinRender() {
@@ -36576,6 +36807,7 @@ function _ainsteinRender() {
       '<p>Type your question, or tap <b>🎤</b> and just say it out loud.</p>' +
       '<p><b>I never give answers</b> — only nudges to help you work it out yourself. Don\'t bother asking, it won\'t work!</p>' +
       '<p>Want more practice on the same idea? Ask, and I\'ll find you another question — you answer it right here, without losing your place. Still not clicking? I\'ll find you a video to watch.</p>' +
+      '<p>Need a whole set? Just say <b>“make me a worksheet with 20 MCQ and 20 open-ended on heat and matter”</b> and I\'ll build it, save it to My Worksheets and set it up to print.</p>' +
       '<p><button type="button" class="ainstein-preset" onclick="ainsteinAsk(\'What should I practise next?\')">What should I practise next?</button></p>' +
       '<p class="ainstein-warn">Off-topic questions cost an extra credit, so keep them about your work.</p>' +
       '</div>';
@@ -36707,14 +36939,20 @@ async function ainsteinSend() {
       text += '\n\n(That one was off topic, so it cost 2 credits.' +
         (left === Infinity ? ')' : ' You have ' + left + ' left today.)');
     }
+    // Asked for a whole worksheet? That reply gets the worksheet instead of the
+    // usual single-question chip — offering "try another one" alongside a
+    // 40-question set would just be noise.
+    const wantsWs = relevant && parsed && parsed.worksheet === true;
     // On-topic replies come with a temporary link to one more question on the
     // same concept — only if the bank actually has a fresh one to offer.
-    const offer = relevant ? _ainsteinBuildOffer(parsed, question) : null;
+    const offer = (relevant && !wantsWs) ? _ainsteinBuildOffer(parsed, question) : null;
     const msg = { who: 'ai', text, offTopic: !relevant, offer: offer || null };
     _ainstein.history.push(msg);
-    // A video takes a beat longer to find (and verify), so the clue is never
-    // held up waiting for it — it lands underneath the reply when it's ready.
-    if (relevant) _ainsteinMaybeVideo(msg, parsed, question);
+    // Both of these take a beat longer than the clue (an extra call, and for a
+    // video a verification round-trip), so neither holds the reply up — they land
+    // underneath it when they're ready.
+    if (wantsWs) _ainsteinBuildWorksheet(msg, question);
+    else if (relevant) _ainsteinMaybeVideo(msg, parsed, question);
   } catch (e) {
     console.warn('ainstein ask failed', e);
     // A failed call is our problem, not the student's — no credit is taken.
@@ -36854,6 +37092,21 @@ async function ainsteinSend() {
   .ainstein-vid-search:hover { background: #eef4ef; }
   .ainstein-vid-wait { align-self: flex-start; font-size: 0.8rem; line-height: 1.5; color: var(--text-muted, #7a756d);
     padding: 10px 14px; border-radius: 13px; background: var(--bg-tertiary, #f2f1ec); }
+
+  /* A worksheet Ai-nstein put together on request. */
+  .ainstein-ws { align-self: flex-start; width: 100%; padding: 16px 17px 15px; border-radius: 16px;
+    border: 1px solid var(--primary, #4a7c59); background: var(--bg-soft, #f7f9fc); }
+  .ainstein-ws-head { display: flex; align-items: flex-start; gap: 12px; }
+  .ainstein-ws-ico { font-size: 1.25rem; line-height: 1.2; flex-shrink: 0; }
+  .ainstein-ws-what { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .ainstein-ws-what b { font-size: 0.9rem; line-height: 1.35; color: var(--text, #1a1a1a); }
+  .ainstein-ws-what span { font-size: 0.78rem; line-height: 1.45; color: var(--text-muted, #7a756d); }
+  .ainstein-ws-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+  .ainstein-ws-chip { font-size: 0.72rem; line-height: 1; padding: 7px 10px; border-radius: 999px;
+    background: var(--surface, #fff); border: 1px solid var(--border, #e2ddd5); color: var(--text-muted, #7a756d); }
+  .ainstein-ws-chip b { color: var(--primary-dark, #3d6749); }
+  .ainstein-ws-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .ainstein-ws-meta { margin-top: 12px; font-size: 0.72rem; line-height: 1.55; color: var(--text-muted, #7a756d); }
 
   /* Temporary "try another question on this concept" link under a clue. */
   .ainstein-offer { align-self: flex-start; max-width: 86%; margin: 2px 0 4px; }
@@ -36998,6 +37251,7 @@ function ainsteinOnSignIn() {
   _ainsteinOffers.clear();
   _ainsteinVideos.clear();
   _ainsteinVideoByConcept.clear();
+  _ainsteinWorksheets.clear();
   _ainsteinOpened.clear();
   _ainsteinAskedConcepts.clear();
   _ainsteinTextCache.clear();   // the bank was just (re)loaded — re-read it
@@ -37015,6 +37269,7 @@ function ainsteinOnSignOut() {
   _ainsteinOffers.clear();      // no practice link outlives the session
   _ainsteinVideos.clear();
   _ainsteinVideoByConcept.clear();
+  _ainsteinWorksheets.clear();
   _ainsteinOpened.clear();
   _ainsteinAskedConcepts.clear();
 }
@@ -37029,6 +37284,9 @@ window.voiceCancel = voiceCancel;
 window.ainsteinQuizBack = ainsteinQuizBack;
 window.ainsteinQuizResume = ainsteinQuizResume;
 window.ainsteinQuizAnother = ainsteinQuizAnother;
+window.ainsteinWsPractice = ainsteinWsPractice;
+window.ainsteinWsPdf = ainsteinWsPdf;
+window.ainsteinWsOpenSaved = ainsteinWsOpenSaved;
 window.commPreviewImg = commPreviewImg;
 window.commAdminPost = commAdminPost;
 window.commCreateQuest = commCreateQuest;
