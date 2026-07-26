@@ -6448,6 +6448,20 @@ function buildContentsHtml() {
 
 function getCoverCss() {
   return `
+/* On screen a front-matter sheet is a full 297mm page. On paper the printable
+   area is only 261mm (297 − 18 − 18 margins), so the screen height overflowed
+   by 36mm and fragmented — every cover, contents and blank-back page was
+   followed by a near-blank sheet holding the footer rule and a sliver of the
+   decoration. 260mm keeps a millimetre in hand against rounding. */
+@media print {
+  .cover-page, .contents-page, .cover-blank-print {
+    min-height: 260mm !important;
+    height: 260mm !important;
+  }
+  .cover-page, .contents-page { padding: 18mm 16mm !important; }
+  .cover-page::before, .contents-page::before { top: 12mm; }
+  .cover-page::after,  .contents-page::after  { bottom: 12mm; }
+}
 /* ── Cover page ─────────────────────────────────────────── */
 .cover-page {
   width: 100%;
@@ -6699,7 +6713,8 @@ ${contents}
     }));
   }
   window.addEventListener('load', () => {
-    waitForImages().then(() => setTimeout(() => window.print(), 200));
+    const fontsReady = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+    Promise.all([waitForImages(), fontsReady]).then(() => setTimeout(() => window.print(), 200));
   });
 ${'<\/script>'}
 </body>
@@ -6855,11 +6870,19 @@ body { background: #fff !important; padding: 0 !important; }
   break-after: page;
   page-break-inside: avoid;
   break-inside: avoid;
-  height: 261mm;
-  overflow: hidden;
+  /* 255mm, NOT the full 261mm printable height. A box sized to exactly the
+     page box spills a sub-pixel whenever the PDF backend rounds the printable
+     area down, and page-break-after then turns that spill into a blank sheet
+     after every single question. min-height rather than height, and no
+     overflow:hidden, so an over-long question flows onto a second sheet
+     instead of having its tail silently clipped out of the PDF. */
+  min-height: 255mm;
   box-sizing: border-box;
 }
 .print-question:last-child { page-break-after: auto; break-after: auto; }
+/* Whatever ends the document — a question OR a trailing instruction block —
+   must not carry a forced break, or the PDF ends on a blank sheet. */
+.print-doc > :last-child { page-break-after: auto !important; break-after: auto !important; }
 .print-question .question-card {
   box-shadow: none;
   border: 1.5px solid #1A1A1A;
@@ -6870,11 +6893,36 @@ body { background: #fff !important; padding: 0 !important; }
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
   page-break-inside: avoid;
   break-inside: avoid;
 }
 .print-question .question-card:hover { box-shadow: none; }
+/* Working space: styled in the app but missing from the export stylesheet, so
+   it used to print as an unexplained blank gap with no box around it. */
+.print-question .working-space-box,
+.print-doc .working-space-box {
+  margin-top: 8px;
+  border: 1.2px solid #1A1A1A;
+  border-radius: 8px;
+  background: #fff;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+/* A scroll container cannot be split across sheets — the printer pushes the
+   whole thing to the next page and clips the overflow. Nothing in a PDF
+   scrolls, so open these up. */
+.print-doc .open-lines-box,
+.print-doc .working-space-box,
+.print-doc .student-answer,
+.print-doc .data-table-wrap { overflow: visible !important; }
+/* Instruction banners print flat, like the question cards around them. */
+.print-instruction { page-break-inside: avoid; break-inside: avoid; }
+.print-instruction .question-card {
+  box-shadow: none;
+  border: 1.5px solid #1A1A1A;
+  border-radius: 12px;
+  padding: 16px 22px;
+}
 
 /* Keep diagrams small enough that the question + image + working space
    all fit on a single A4 page. */
@@ -6967,7 +7015,6 @@ body { background: #fff !important; padding: 0 !important; }
 
 @media print {
   body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .print-question { height: 261mm; }
 }
 `;
 }
@@ -9810,17 +9857,18 @@ html,body{ background:#ececf0; margin:0; padding:0; }
 /* ── Front matter (cover + contents) sheets ── */
 .dv-fm-sheet{ margin-bottom:26px; }
 .dv-fm-sheet.dv-off{ display:none!important; }
-.dv-fm-sheet .cover-page, .dv-fm-sheet .contents-page{ min-height:261mm; height:261mm; padding:12mm 10mm; page-break-after:auto; break-after:auto; }
-.dv-fm-sheet .cover-page::before, .dv-fm-sheet .contents-page::before{ top:6mm; left:10mm; right:10mm; }
-.dv-fm-sheet .cover-page::after, .dv-fm-sheet .contents-page::after{ bottom:6mm; left:10mm; right:10mm; }
+.dv-fm-sheet .cover-page, .dv-fm-sheet .contents-page{ min-height:260mm; height:260mm; padding:18mm 16mm; page-break-after:auto; break-after:auto; }
+.dv-fm-sheet .cover-page::before, .dv-fm-sheet .contents-page::before{ top:12mm; left:16mm; right:16mm; }
+.dv-fm-sheet .cover-page::after, .dv-fm-sheet .contents-page::after{ bottom:12mm; left:16mm; right:16mm; }
 .dv-fm-sheet [contenteditable="true"]{ outline:none; border-radius:3px; transition:background .15s; min-height:1em; }
 .dv-fm-sheet [contenteditable="true"]:hover{ background:rgba(245,222,130,.25); }
 .dv-fm-sheet [contenteditable="true"]:focus{ background:#faf6e8; }
 .dv-print-only{ display:none; }
 .page-logo{ display:none; }
-@page{ @bottom-center{ content:"\\2013\\00A0\\00A0" counter(page) "\\00A0\\00A0\\2013"; font-family:'Century Gothic',CenturyGothic,sans-serif; font-size:9pt; font-weight:700; letter-spacing:0.34em; color:#9A9A9A; } }
-/* front-matter pages print without a page number in the footer */
-@page frontmatter{ @bottom-center{ content:none; } }
+/* NOTE: no @page margin boxes here. Chrome implements none of them, so the
+   footer page-number rule this used to declare never rendered — and the named
+   'frontmatter' page that existed only to suppress it added a redundant
+   forced break next to sheets already sized to exactly one page. */
 @media print{
   html,body{ background:#fff!important; }
   .dv-bar{ display:none!important; }
@@ -9831,12 +9879,16 @@ html,body{ background:#ececf0; margin:0; padding:0; }
   .dv-tag,.dv-tools,.dv-paste{ display:none!important; }
   .dv-elem.dv-cut{ outline:none!important; opacity:1!important; }
   .dv-elem.break-after{ page-break-after:always; break-after:page; }
+  /* A break after the final block just adds an empty sheet at the end. */
+  .dv-flow > .dv-elem.break-after:last-child{ page-break-after:auto; break-after:auto; }
   .dv-elem.show-continued > .dv-continued{ display:block; }
-  .page-logo{ display:block; position:fixed; right:5mm; bottom:3mm; height:11mm; width:auto; opacity:.9; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  /* Sits in the bottom page margin — at bottom:3mm it was inside the content
+     box, printing on top of whatever block ended the page. */
+  .page-logo{ display:block; position:fixed; right:-8mm; bottom:-13mm; height:11mm; width:auto; opacity:.9; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .dv-fm-sheet{ margin:0; }
-  .dv-fm-sheet .cover-page, .dv-fm-sheet .contents-page{ height:261mm; min-height:261mm; page-break-after:always; break-after:page; page:frontmatter; }
+  .dv-fm-sheet .cover-page, .dv-fm-sheet .contents-page{ height:260mm; min-height:260mm; page-break-after:always; break-after:page; }
   .dv-print-only{ display:block; }
-  .dv-fm-sheet .cover-blank-print{ height:261mm; min-height:261mm; page-break-after:always; break-after:page; page:frontmatter; }
+  .dv-fm-sheet .cover-blank-print{ height:260mm; min-height:260mm; page-break-after:always; break-after:page; }
   .dv-fm-sheet [contenteditable="true"]{ background:transparent!important; }
 }
 `;
@@ -10017,7 +10069,7 @@ var DV_ENGINE = `
     else if(act==='toggle-cover'){ FM.cover=!FM.cover; applyFM(true); }
     else if(act==='toggle-contents'){ FM.contents=!FM.contents; applyFM(true); }
     else if(act==='reset-contents'){ var en=document.getElementById('dvContentsEntries'); if(en){ en.innerHTML=window.__DV_CONTENTS_AUTO||''; try{ parent.postMessage({ type:'dvContents', html:'' }, '*'); }catch(_){} } }
-    else if(act==='print') window.print();
+    else if(act==='print'){ cancelCut(); window.print(); }
   });
   var ps=document.getElementById('dvPageStart');
   function applyPS(){ var v=parseInt(ps.value,10); if(isNaN(v)||v<1) v=1; DV.firstPage=v; applyPageCounter(); post(); }
