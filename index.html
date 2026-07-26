@@ -9444,7 +9444,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.160.2';
+const APP_VERSION = 'v1.161.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -12443,12 +12443,26 @@ function micButtonHtml(targetId, title) {
 function micForBlockHtml(blockId, field, title) {
   return `<button type="button" class="mic-btn" data-mic-block="${blockId}" data-mic-field="${field}" title="${title || 'Voice input — click to speak, click again to stop'}">🎤</button>`;
 }
+// A mic button may name a status element with data-mic-status="<element id>";
+// we then mirror what the mic is doing into it, for surfaces (like Ai-nstein's
+// chat panel) where a toast in the far corner is easy to miss.
+let _micStatusTimer = null;
+function _micStatus(btn, msg, holdMs) {
+  const id = btn && btn.getAttribute && btn.getAttribute('data-mic-status');
+  if (!id) return;
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (_micStatusTimer) { clearTimeout(_micStatusTimer); _micStatusTimer = null; }
+  el.textContent = msg || '';
+  el.classList.toggle('show', !!msg);
+  if (msg && holdMs) _micStatusTimer = setTimeout(() => { el.textContent = ''; el.classList.remove('show'); }, holdMs);
+}
 function _setMic(btn, state) {
   if (!btn) return;
   btn.classList.remove('recording', 'busy');
-  if (state === 'recording') { btn.classList.add('recording'); btn.textContent = '⏹'; btn.title = 'Click to stop and transcribe'; }
-  else if (state === 'busy') { btn.classList.add('busy'); btn.textContent = '⏳'; btn.title = 'Transcribing…'; }
-  else { btn.textContent = '🎤'; btn.title = 'Voice input — click to speak, click again to stop'; }
+  if (state === 'recording') { btn.classList.add('recording'); btn.textContent = '⏹'; btn.title = 'Click to stop and transcribe'; _micStatus(btn, '🎙️ Listening… tap ⏹ when you\'re done'); }
+  else if (state === 'busy') { btn.classList.add('busy'); btn.textContent = '⏳'; btn.title = 'Transcribing…'; _micStatus(btn, 'Writing down what you said…'); }
+  else { btn.textContent = '🎤'; btn.title = 'Voice input — click to speak, click again to stop'; _micStatus(btn, ''); }
 }
 function _pickAudioMime() {
   const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/ogg', 'audio/mp4'];
@@ -12516,6 +12530,7 @@ async function _finishVoice() {
   const blob = new Blob(_voice.chunks, { type: mime });
   if (stream) stream.getTracks().forEach(t => t.stop());
   _voice.recorder = null; _voice.stream = null; _voice.chunks = [];
+  let note = '';
   try {
     if (!blob.size) throw new Error('no audio captured');
     const b64 = await _blobToB64(blob);
@@ -12523,10 +12538,18 @@ async function _finishVoice() {
     const prompt = 'Transcribe the spoken audio to text exactly and accurately. Return ONLY the transcription as plain text with correct spelling, capitalisation and punctuation. Do not translate, summarise, add quotes, labels or commentary. If there is no clear speech, return an empty string.';
     const text = await askGeminiVision(prompt, [{ mimeType: cleanMime, data: b64 }], { maxOutputTokens: 1024, json: false });
     const clean = (text || '').trim();
-    if (clean) { _insertTranscript(target, clean); showToast('Transcribed ✓', 'success'); }
-    else showToast('Did not catch any speech — try again', 'error');
-  } catch (e) { console.warn('transcription failed', e); showToast('Transcription failed: ' + (e && e.message ? e.message : e), 'error'); }
-  finally { _setMic(btn, 'idle'); _voice.btn = null; _voice.target = null; }
+    if (clean) { _insertTranscript(target, clean); showToast('Transcribed ✓', 'success'); note = 'Transcribed ✓ — read it through, edit if needed, then send.'; }
+    else { showToast('Did not catch any speech — try again', 'error'); note = 'I didn\'t catch any speech — tap 🎤 and try again.'; }
+  } catch (e) {
+    console.warn('transcription failed', e);
+    showToast('Transcription failed: ' + (e && e.message ? e.message : e), 'error');
+    note = 'That didn\'t come through — tap 🎤 to try again, or type it instead.';
+  }
+  finally {
+    _setMic(btn, 'idle');
+    _micStatus(btn, note, 5000);
+    _voice.btn = null; _voice.target = null;
+  }
 }
 document.addEventListener('click', function (e) {
   const mic = e.target.closest && e.target.closest('.mic-btn');
@@ -35837,6 +35860,7 @@ function _ainsteinRender() {
       '<img src="' + AINSTEIN_IMG + '" alt="" onerror="this.onerror=null;this.src=\'' + AINSTEIN_FALLBACK_IMG + '\';">' +
       '<p><b>Hi, I\'m Ai-nstein!</b></p>' +
       '<p>Stuck on something on your screen? Ask me and I\'ll give you a clue.</p>' +
+      '<p>Type your question, or tap <b>🎤</b> and just say it out loud.</p>' +
       '<p><b>I never give answers</b> — only nudges to help you work it out yourself. Don\'t bother asking, it won\'t work!</p>' +
       '<p class="ainstein-warn">Off-topic questions cost an extra credit, so keep them about your work.</p>' +
       '</div>';
@@ -35857,6 +35881,10 @@ function ainsteinToggle(force) {
     _ainsteinPaint();
     _ainsteinRender();
     setTimeout(() => _ainsteinEl('ainsteinInput')?.focus(), 60);
+  } else if (_voice.active && _voice.btn && _voice.btn.id === 'ainsteinMic') {
+    // Closing mid-recording: stop and still transcribe, so nothing the student
+    // said is lost — it will be waiting in the box next time they open up.
+    _stopVoice();
   }
 }
 
@@ -35975,6 +36003,11 @@ async function ainsteinSend() {
     width: 42px; height: 42px; border-radius: 13px; font-size: 1rem; }
   #ainsteinSend:hover { background: var(--primary-dark, #3d6749); }
   #ainsteinSend:disabled { opacity: .5; cursor: not-allowed; }
+  /* Voice input: same footprint as the send button so the row stays balanced. */
+  #ainsteinMic { width: 42px; height: 42px; min-width: 42px; border-radius: 13px; font-size: 1.05rem; }
+  #ainsteinVoiceHint { display: none; margin-top: 10px; font-size: 0.76rem; line-height: 1.5;
+    color: var(--text-muted, #7a756d); text-align: center; }
+  #ainsteinVoiceHint.show { display: block; }
   #ainsteinCredits { margin-top: 10px; font-size: 0.74rem; color: var(--text-muted, #7a756d); text-align: center; }
 
   /* The daily-quest chip lives in the same corner — lift it above the bubble. */
@@ -36005,9 +36038,12 @@ async function ainsteinSend() {
       <div id="ainsteinLog"></div>
       <div class="ainstein-foot">
         <div class="ainstein-row">
-          <textarea id="ainsteinInput" rows="1" placeholder="Ask for a clue about this page…"></textarea>
+          <textarea id="ainsteinInput" rows="1" placeholder="Ask for a clue — type it or tap 🎤"></textarea>
+          <button id="ainsteinMic" class="mic-btn" type="button" data-mic="ainsteinInput" data-mic-status="ainsteinVoiceHint"
+            title="Speak your question — tap to start, tap again to stop" aria-label="Ask by speaking">🎤</button>
           <button id="ainsteinSend" type="button" aria-label="Send">➤</button>
         </div>
+        <div id="ainsteinVoiceHint" aria-live="polite"></div>
         <div id="ainsteinCredits"></div>
       </div>
     </div>`;
@@ -36017,6 +36053,13 @@ async function ainsteinSend() {
   document.getElementById('ainsteinBubble').addEventListener('click', () => ainsteinToggle());
   document.querySelector('#ainsteinPanel .ainstein-close').addEventListener('click', () => ainsteinToggle(false));
   document.getElementById('ainsteinSend').addEventListener('click', ainsteinSend);
+  // The mic itself is driven by the shared .mic-btn handler (record → Gemini
+  // transcript → insert into the target field). Drop it on browsers that can't
+  // record at all rather than leaving a button that only ever errors.
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+    document.getElementById('ainsteinMic')?.remove();
+    document.getElementById('ainsteinInput')?.setAttribute('placeholder', 'Ask for a clue about this page…');
+  }
   const input = document.getElementById('ainsteinInput');
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ainsteinSend(); }
