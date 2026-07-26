@@ -435,7 +435,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.4.0</div>
+<div id="versionBadge">Science Strike v1.4.1</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -494,6 +494,7 @@ onAuthStateChanged(auth, async (user) => {
   };
   $('versionBadge').style.display = isAdmin() ? 'block' : 'none';
   await loadAdminUid();
+  await loadStudentLevelCap();   // before the bank loads — the cap filters it
   enterMenu();     // fully released — every signed-in user goes straight in
   loadQuestions(); // background — the run can start before it finishes
 });
@@ -504,6 +505,54 @@ async function loadAdminUid() {
     const cfg = await getDoc(doc(db, 'config', 'admin'));
     adminUid = cfg.exists() ? cfg.data().uid : null;
   } catch (e) { console.warn('config/admin read', e); }
+}
+
+/* ---------- syllabus level cap (mirrors index.html) ----------------------
+   This page loads the shared bank directly, so it has to apply the same cap
+   index.html does — otherwise a P4 pupil answering a question every 15 seconds
+   is fed P5 and P6 content all run long, which is exactly what was happening.
+   The default map matches index.html's topicLevelMap; the admin's custom
+   topics are layered on top from the same settings doc students read there. */
+const TOPIC_LEVEL_MAP = {
+  'Living and non-living things': 'P3', 'Materials': 'P3', 'Life Cycles': 'P3', 'Magnets': 'P3',
+  'Plant Systems': 'P4', 'Human Body Systems': 'P4', 'Matter and its 3 States': 'P4', 'Light': 'P4', 'Heat': 'P4',
+  'Water and its 3 States': 'P5', 'Plant Reproduction': 'P5', 'Human Reproduction': 'P5',
+  'Human and Plant Respiration': 'P5', 'Human and Plant Transport': 'P5', 'Electrical Systems': 'P5',
+  'Forces': 'P6', 'Energy in Food': 'P6', 'Energy Conversion': 'P6',
+  'Living Together': 'P6', 'Food Chains and Webs': 'P6', 'Humans and the Environment': 'P6'
+};
+let customTopicLevels = {};      // admin's custom topics → level
+let studentLevelCap = 6;         // 3–6; 6 = everything (admins, or no level known)
+
+function levelNum(l) { const n = parseInt(String(l || '').replace('P', ''), 10); return (n >= 3 && n <= 6) ? n : 0; }
+function topicLevelNum(topic) {
+  const l = customTopicLevels[topic] || TOPIC_LEVEL_MAP[topic] || 'P6';   // unknown topic = P6, as in index.html
+  return levelNum(l) || 6;
+}
+// The cap in force for this account: the teacher's assigned level and the
+// family's declared level, LOWER wins — the same rule index.html applies.
+async function loadStudentLevelCap() {
+  studentLevelCap = 6;
+  if (!currentUser || isAdmin()) return;
+  try {
+    const s = await getDoc(doc(db, 'userProfiles', currentUser.uid));
+    if (s.exists()) {
+      const d = s.data() || {};
+      const assigned = levelNum(d.level);
+      const serving = levelNum(d.servingLevel);
+      const declared = Array.isArray(d.students)
+        ? d.students.map(x => levelNum(x && x.level)).filter(Boolean) : [];
+      const candidates = [assigned, serving].concat(declared).filter(Boolean);
+      if (candidates.length) studentLevelCap = Math.min.apply(null, candidates);
+      if (d.servingName) currentUser.name = d.servingName;   // the child practising, not the parent's account
+    }
+  } catch (e) { console.warn('student level read', e); }
+  try {
+    if (adminUid) {
+      const t = await getDoc(doc(db, 'users', adminUid, 'settings', 'topics'));
+      if (t.exists() && t.data() && typeof t.data().custom === 'object') customTopicLevels = t.data().custom || {};
+    }
+  } catch (e) { console.warn('shared topics read', e); }
 }
 
 /* ---------- question bank (union across admin accounts, like index.html) ---------- */
@@ -559,6 +608,8 @@ async function loadQuestions() {
           // retired topics (e.g. Cell Systems) are past-paper-completion only —
           // mirror index.html's qInSyllabus rule so they never appear in the FPS
           if (q.notInSyllabus || /cell\s*system/i.test(q.topic || '')) return;
+          // Never above the pupil's level — index.html's qWithinStudentLevel rule.
+          if (topicLevelNum(q.topic || '') > studentLevelCap) return;
           seen.add(q.id);
           const m = extractMcq(q);
           if (m) pool.push(m);
@@ -567,7 +618,7 @@ async function loadQuestions() {
     }
     for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
     questions = pool; qCursor = 0;
-    console.log('Science Strike: loaded', pool.length, 'MCQs from the bank');
+    console.log('Science Strike: loaded', pool.length, 'MCQs from the bank (level cap P' + studentLevelCap + ')');
     // Cross-device memory: fold the student's Firestore attempt history into
     // the local rotation map, so a new device / cleared browser doesn't
     // restart the no-repeat rotation from scratch.
