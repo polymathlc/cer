@@ -9444,7 +9444,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.162.0';
+const APP_VERSION = 'v1.163.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -35610,7 +35610,7 @@ window.ppCeToggleHit = ppCeToggleHit;
 // briefly unreachable. Both are keyed by date and refill on the first ask of a
 // new day, the same shape the game-credit pool uses.
 // =====================================================================
-const AINSTEIN_DAILY_CREDITS = 20;   // questions a student may ask per day
+const AINSTEIN_DAILY_CREDITS = 50;   // questions a student may ask per day
 const AINSTEIN_OFFTOPIC_COST = 1;    // EXTRA credit removed for an off-topic ask
 const AINSTEIN_IMG = 'https://www.dropbox.com/scl/fi/4zs71zf4hn4sjgfyvj9qz/Ai-nstein2.png?rlkey=52qirwrtq8q1xvbrwh5t7ag71&raw=1';
 // Drawn if the image can't load (offline, or Dropbox blocked on a school
@@ -35625,16 +35625,29 @@ let _ainstein = { day: null, left: AINSTEIN_DAILY_CREDITS, loaded: false, busy: 
 function _ainsteinKey() { return 'ainsteinCredits:' + (currentUser ? currentUser.uid : 'anon'); }
 function _ainsteinUnlimited() { return !currentUser || currentUser.role !== 'student'; }
 
+// The allowance in force before it was raised to 50. Records written by that
+// build carry no "cap" field, so this is how we recognise them — see below.
+const AINSTEIN_LEGACY_CREDITS = 20;
+
 // Roll the pool over to today if the stored day is stale.
+//
+// It also handles the allowance going UP mid-day: a student who had used 8 of
+// the old 20 should be on 42 of 50 straight away, not stuck on 12 until
+// tomorrow. Every record now stores the cap it was written under, so the
+// difference can be handed over exactly once; records from before that carry no
+// cap at all and are treated as the old allowance.
 function _ainsteinRoll(rec) {
   const today = _todayKey();
-  if (!rec || rec.day !== today) return { day: today, left: AINSTEIN_DAILY_CREDITS };
-  return { day: today, left: Math.max(0, Math.min(AINSTEIN_DAILY_CREDITS, rec.left | 0)) };
+  if (!rec || rec.day !== today) return { day: today, left: AINSTEIN_DAILY_CREDITS, cap: AINSTEIN_DAILY_CREDITS };
+  const wasCap = Number(rec.cap) > 0 ? Number(rec.cap) : AINSTEIN_LEGACY_CREDITS;
+  const raise = Math.max(0, AINSTEIN_DAILY_CREDITS - wasCap);
+  const left = Math.max(0, Math.min(wasCap, rec.left | 0)) + raise;
+  return { day: today, left: Math.max(0, Math.min(AINSTEIN_DAILY_CREDITS, left)), cap: AINSTEIN_DAILY_CREDITS };
 }
 
 // localStorage first so the badge is right on the very first paint, then
 // reconcile with the cloud. Where both have today's record we keep the LOWER
-// balance, so clearing site data doesn't hand out a fresh 20.
+// balance, so clearing site data doesn't hand out a fresh allowance.
 async function ainsteinLoadCredits() {
   let local = null;
   try { local = JSON.parse(localStorage.getItem(_ainsteinKey()) || 'null'); } catch (_) {}
@@ -35652,7 +35665,7 @@ async function ainsteinLoadCredits() {
 }
 
 function _ainsteinPersist() {
-  const rec = { day: _ainstein.day, left: _ainstein.left, updatedAt: new Date().toISOString() };
+  const rec = { day: _ainstein.day, left: _ainstein.left, cap: AINSTEIN_DAILY_CREDITS, updatedAt: new Date().toISOString() };
   try { localStorage.setItem(_ainsteinKey(), JSON.stringify(rec)); } catch (_) {}
   if (!currentUser) return;
   setDoc(doc(db, 'users', currentUser.uid, 'settings', 'ainstein'), rec)
@@ -35981,6 +35994,16 @@ function _ainsteinOfferHtml(offer) {
 
 // Open the offered question as a one-question practice run. Same handover the
 // encounter quests use: seed the Quick Practice queue, then navigate.
+//
+// It is deliberately the REAL Quick Practice pipeline and not a side channel, so
+// a question opened from Ai-nstein scores exactly like one the student reached
+// themselves: marking calls recordCerPerformance → rpgOnMarked, which banks
+// gold/XP, advances the battle and streak, counts toward the monthly
+// questions-done tally and republishes both boards (rpgPublishLeaderboard and
+// cerLeaderboard), while the attempt itself is logged to questionAttempts +
+// noteAttemptLocally for My Report. The mode string stays 'quickpractice-open'
+// for the same reason — nothing downstream can tell it apart, so nothing
+// downstream can quietly drop it.
 async function ainsteinTrySimilar(token) {
   const o = _ainsteinOffers.get(token);
   if (!o) { showToast('That practice link is no longer available — ask me for another.', 'info'); return; }
@@ -35988,8 +36011,11 @@ async function ainsteinTrySimilar(token) {
   if (Date.now() > o.expiresAt) { showToast('That practice link has expired — ask me for another.', 'info'); _ainsteinRender(); return; }
   const q = (Array.isArray(questionBank) ? questionBank : []).find(x => x && String(x.id) === o.qid);
   if (!q) { showToast('That question isn\'t on your device yet — try again shortly.', 'error'); return; }
+  // Never tear down a live encounter-quest run to open a practice question —
+  // the quest queue and its score would be lost. The link keeps until they're
+  // done, so nothing is wasted.
+  if (_questRun) { showToast('Finish your quest run first, then tap this again 👍', 'info'); return; }
   o.used = true;
-  _questRun = null;                 // a practice link is not part of any quest
   qpQueue = [q];
   qpIndex = -1;
   qpAnswered = 0;
@@ -36000,6 +36026,215 @@ async function ainsteinTrySimilar(token) {
   showToast('🎯 Same idea, new question — have a go!', 'success');
   try { await preloadQueueImages(qpQueue); } catch (_) {}
   loadNextQpQuestion();
+}
+
+// ---- teaching videos -------------------------------------------------------
+// Some ideas only click once you've SEEN them. When a student is clearly stuck
+// on a concept — or just asks for a video — Ai-nstein puts a YouTube explainer
+// straight in the chat, playable inline and expandable to full screen.
+//
+// Where the video comes from, in order:
+//   1. The question bank. Video blocks on bank questions are teacher-chosen, so
+//      a match here is both relevant and safe, and costs no AI call.
+//   2. A model suggestion, VERIFIED before it is ever shown. The model returns
+//      candidate video ids; each is checked against YouTube's own oEmbed
+//      endpoint, and we only embed it if YouTube confirms the id resolves AND
+//      the real title it hands back is actually about the concept. A recalled id
+//      that has drifted to some unrelated video therefore never reaches a child.
+//   3. If nothing verifies, no embed at all — just a button that opens a normal
+//      YouTube search. A safe "look here" always beats a wrong video.
+const _ainsteinVideos = new Map();      // token → { id, title, source, concept }
+let _ainsteinVideoSeq = 0;
+const _ainsteinAskedConcepts = new Map();   // concept → times asked this session
+
+function _ainsteinYtId(url) {
+  const m = String(url || '').match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : (/^[a-zA-Z0-9_-]{11}$/.test(String(url || '').trim()) ? String(url).trim() : '');
+}
+
+// A teacher-attached video on a bank question about this concept.
+function _ainsteinBankVideo(concept, extra) {
+  if (!Array.isArray(questionBank)) return null;
+  const terms = _ainsteinConceptTerms(concept + ' ' + (extra || ''));
+  if (!terms.length) return null;
+  let best = null;
+  questionBank.forEach(q => {
+    if (!q || !Array.isArray(q.blocks)) return;
+    if (!qInSyllabus(q) || !qWithinStudentLevel(q)) return;
+    const vb = q.blocks.find(b => b && b.type === 'video' && _ainsteinYtId(b.url));
+    if (!vb) return;
+    const score = _ainsteinConceptScore(q, concept, terms);
+    if (score < 6) return;
+    if (!best || score > best.score) {
+      best = { score, id: _ainsteinYtId(vb.url), title: (vb.caption || q.title || 'Video explainer').trim() };
+    }
+  });
+  return best ? { id: best.id, title: best.title, source: 'bank' } : null;
+}
+
+// Ask YouTube itself whether an id is real, and what it actually is. oEmbed is
+// public, needs no key, and 404s for anything deleted, private or made up.
+async function _ainsteinYtVerify(id) {
+  const url = 'https://www.youtube.com/oembed?format=json&url=' +
+    encodeURIComponent('https://www.youtube.com/watch?v=' + id);
+  const res = await fetch(url, { method: 'GET', mode: 'cors', cache: 'no-store' });
+  if (!res.ok) throw new Error('oembed ' + res.status);
+  const data = await res.json();
+  return { title: String(data.title || ''), channel: String(data.author_name || '') };
+}
+
+// Does the title YouTube reported actually cover the concept we asked about?
+// One shared content word is enough ("Thermal expansion for kids" for "thermal
+// expansion"), but something unrelated is rejected outright.
+function _ainsteinTitleMatches(title, concept) {
+  const want = _ainsteinConceptTerms(concept);
+  const got = _ainsteinWords(title).filter(w => w.length >= 4);
+  if (!want.length || !got.length) return false;
+  // Exact word, or a shared 5-letter stem so the everyday form of the word
+  // still counts: "expansion" ↔ "expand", "conduction" ↔ "conductors".
+  return want.some(w => got.some(g => g === w ||
+    (w.length >= 6 && g.length >= 5 && (g.startsWith(w.slice(0, 5)) || w.startsWith(g.slice(0, 5))))));
+}
+
+// Model-suggested videos, filtered down to ones YouTube confirms.
+async function _ainsteinSearchYoutube(concept, extra) {
+  const prompt = [
+    'You are helping a Singapore primary-school science student (P3-P6) who is stuck on this concept: "' + concept + '"' +
+      (extra ? ' (related words: ' + extra + ')' : '') + '.',
+    'List up to 4 REAL YouTube videos that explain this concept clearly to a child of that age. Prefer well-known science-education channels that have been on YouTube for years and are safe for children.',
+    'Only list videos you are genuinely confident exist with that exact video id. Never invent an id.',
+    'Reply with ONLY this JSON: {"videos":[{"id":"the 11-character YouTube video id","title":"the video title","channel":"the channel name"}]}',
+  ].join('\n');
+  let list = [];
+  try {
+    const raw = await askGemini(prompt, { maxOutputTokens: 500, temperature: 0.2, json: true });
+    const parsed = _parseAIJson(raw);
+    list = Array.isArray(parsed && parsed.videos) ? parsed.videos : [];
+  } catch (e) { console.warn('ainstein video search', e); return null; }
+  for (const cand of list.slice(0, 4)) {
+    const id = _ainsteinYtId(cand && (cand.id || cand.url));
+    if (!id) continue;
+    try {
+      const real = await _ainsteinYtVerify(id);          // exists on YouTube?
+      if (!_ainsteinTitleMatches(real.title, concept)) continue;         // and is it the right subject?
+      return { id, title: real.title, channel: real.channel, source: 'ai' };
+    } catch (_) { /* dead id, or the check itself was blocked — try the next */ }
+  }
+  return null;
+}
+
+// A struggling student, from what we can actually observe: they have asked
+// about this concept more than once in this chat, or their best score on the
+// question in front of them is under half marks.
+function _ainsteinIsStruggling(concept) {
+  const key = _docNorm(concept);
+  if (key && (_ainsteinAskedConcepts.get(key) || 0) >= 2) return true;
+  const qid = _ainsteinCurrentQId();
+  const rec = qid && _qAttemptStats ? _qAttemptStats[qid] : null;
+  return !!(rec && typeof rec.best === 'number' && rec.best < 0.5);
+}
+
+function _ainsteinNoteConcept(concept) {
+  const key = _docNorm(concept);
+  if (!key) return;
+  _ainsteinAskedConcepts.set(key, (_ainsteinAskedConcepts.get(key) || 0) + 1);
+}
+
+// Resolve a video for a reply, or null. `why` explains the offer to the student.
+async function _ainsteinResolveVideo(concept, extra, asked) {
+  const bank = _ainsteinBankVideo(concept, extra);
+  const found = bank || await _ainsteinSearchYoutube(concept, extra);
+  const token = 'av' + (++_ainsteinVideoSeq);
+  const query = (concept + ' ' + (extra || '')).trim() + ' primary science';
+  const rec = {
+    token, concept,
+    id: found ? found.id : '',
+    title: found ? found.title : '',
+    channel: (found && found.channel) || '',
+    source: found ? found.source : 'search',
+    query,
+    why: asked ? '' : 'Looks like this one is being tricky — watch this, then come back to it.',
+  };
+  _ainsteinVideos.set(token, rec);
+  return rec;
+}
+
+function _ainsteinVideoHtml(rec) {
+  const v = _ainsteinVideos.get(rec && rec.token);
+  if (!v) return '';
+  const why = v.why ? '<div class="ainstein-vid-why">' + escapeHtml(v.why) + '</div>' : '';
+  if (!v.id) {
+    // Nothing verified — hand over a real YouTube search instead of a guess.
+    return '<div class="ainstein-vid">' + why +
+      '<a class="ainstein-vid-search" target="_blank" rel="noopener noreferrer"' +
+        ' href="https://www.youtube.com/results?search_query=' + encodeURIComponent(v.query) + '">' +
+        '▶ Search YouTube for “' + escapeHtml(_docClip(v.concept, 40)) + '”' +
+      '</a>' +
+      '<div class="ainstein-vid-meta">I couldn\'t confirm a good video for this one, so here\'s a search you can trust.</div>' +
+    '</div>';
+  }
+  const src = 'https://www.youtube.com/embed/' + v.id + '?rel=0&modestbranding=1&playsinline=1';
+  return '<div class="ainstein-vid">' + why +
+    '<div class="ainstein-vid-frame">' +
+      '<iframe id="ainsteinVid_' + v.token + '" src="' + src + '" title="' + escapeHtml(v.title || 'Video explainer') + '"' +
+        ' loading="lazy" frameborder="0" referrerpolicy="strict-origin-when-cross-origin"' +
+        ' allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"' +
+        ' allowfullscreen></iframe>' +
+    '</div>' +
+    '<div class="ainstein-vid-title">' + escapeHtml(_docClip(v.title || 'Video explainer', 90)) + '</div>' +
+    '<div class="ainstein-vid-row">' +
+      '<button type="button" class="ainstein-vid-btn" onclick="ainsteinVideoFullscreen(\'' + v.token + '\')">⛶ Full screen</button>' +
+      '<a class="ainstein-vid-btn ghost" target="_blank" rel="noopener noreferrer" href="https://www.youtube.com/watch?v=' + v.id + '">Open on YouTube ↗</a>' +
+    '</div>' +
+    (v.source === 'bank' ? '<div class="ainstein-vid-meta">Picked from your teacher\'s question bank.</div>' : '') +
+  '</div>';
+}
+
+// Decide whether this reply gets a video, and if so hang one under it. Runs
+// after the clue is already on screen; the message object is updated in place
+// and the log re-rendered when the video resolves.
+async function _ainsteinMaybeVideo(msg, parsed, studentQuestion) {
+  try {
+    const pr = (parsed && typeof parsed.practice === 'object' && parsed.practice) || {};
+    const vi = (parsed && typeof parsed.video === 'object' && parsed.video) || {};
+    const concept = String(pr.concept || '').trim() ||
+      String(vi.query || '').trim() ||
+      String((_ainsteinQuestionContext() || {}).forModel?.current?.topic || '').trim();
+    if (!concept) return;
+    _ainsteinNoteConcept(concept);
+    const asked = vi.wanted === true;
+    // The model spots "I don't get it"; the app spots the same concept coming
+    // round again, or a half-marks history on the question they're looking at.
+    if (!asked && !_ainsteinIsStruggling(concept)) return;
+    const kw = Array.isArray(pr.keywords) ? pr.keywords.filter(k => typeof k === 'string').join(' ') : '';
+    msg.videoPending = true;
+    _ainsteinRender();
+    const rec = await _ainsteinResolveVideo(concept, kw || String(vi.query || ''), asked);
+    msg.videoPending = false;
+    msg.video = rec;
+    _ainsteinRender();
+  } catch (e) {
+    console.warn('ainstein video', e);
+    msg.videoPending = false;
+    _ainsteinRender();
+  }
+}
+
+// Full screen: ask the browser to blow up the player. iOS Safari won't do it for
+// an iframe, so there we hand them the YouTube app/site instead — the button
+// always does something.
+function ainsteinVideoFullscreen(token) {
+  const v = _ainsteinVideos.get(token);
+  const el = document.getElementById('ainsteinVid_' + token);
+  if (!el || !v) return;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitEnterFullscreen || el.msRequestFullscreen;
+  if (!req) { window.open('https://www.youtube.com/watch?v=' + v.id, '_blank', 'noopener'); return; }
+  try {
+    const p = req.call(el);
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => window.open('https://www.youtube.com/watch?v=' + v.id, '_blank', 'noopener'));
+    }
+  } catch (_) { window.open('https://www.youtube.com/watch?v=' + v.id, '_blank', 'noopener'); }
 }
 
 const AINSTEIN_PAGE_NAMES = {
@@ -36032,13 +36267,18 @@ function _ainsteinBuildPrompt(question) {
   lines.push('FIRST decide if the question is ON TOPIC. On topic means: about anything on the screen above, about the question they are on or its neighbours, about the science topic they are studying, or about how to use this part of the app. A general primary-science question counts as on topic even if it is not literally printed on the screen. Asking you outright for the answer IS on topic — never penalise that, just give a clue instead. OFF topic means chit-chat, jokes, games, other subjects unrelated to what is on screen, personal questions about you, or anything that is not about their learning.');
   lines.push('');
   lines.push('Then reply with ONLY this JSON:');
-  lines.push('{"relevant": true or false, "clue": "your reply to the student", "used": "page" | "current" | "previous" | "next", "practice": {"concept": "the science concept being tested", "keywords": ["3-6 words the app can search the question bank with"], "format": "mcq" | "written" | "any"}}');
+  lines.push('{"relevant": true or false, "clue": "your reply to the student", "used": "page" | "current" | "previous" | "next", "practice": {"concept": "the science concept being tested", "keywords": ["3-6 words the app can search the question bank with"], "format": "mcq" | "written" | "any"}, "video": {"wanted": true or false, "query": "what to search YouTube for"}}');
   lines.push('');
   lines.push('ABOUT "practice" — the app uses it to find the student ONE more question on the same idea, so they can test what you just nudged them towards. Fill it in on every on-topic reply (omit it only when the ask is off topic):');
   lines.push('- "concept" — the specific idea being tested, 2-4 words, as a teacher would name it: "thermal expansion", "heat conduction", "evaporation rate", "electrical circuits", "digestive system". NOT the broad topic ("Heat") and NOT the question title.');
   lines.push('- "keywords" — plain search words for that idea, including the everyday words the question itself would use (e.g. for thermal expansion: expand, contract, heated, cooled, metal, gap).');
   lines.push('- "format" — "mcq" or "written" ONLY if the student explicitly asked for that kind ("give me an open-ended one", "another MCQ"). Otherwise "any", and the app matches whatever they are working on.');
   lines.push('- Do NOT mention the extra question, a link, or a button in your clue — the app adds it underneath your reply by itself, and only when a suitable question exists.');
+  lines.push('');
+  lines.push('ABOUT "video" — the app can put a YouTube explainer in the chat for the student to watch. Set "wanted" to true when EITHER of these is true, otherwise false:');
+  lines.push('- They asked for one: "show me a video", "is there a video", "can I watch something on this".');
+  lines.push('- They are not just stuck on this question, they do not understand the IDEA itself: "I still don\'t get it", "I don\'t understand this topic at all", "explain it from the start", or they have asked you about the same idea again after your last clue.');
+  lines.push('"query" is what you would type into YouTube for a P3-P6 child on that concept. Do not mention the video in your clue — the app decides whether one is available and adds it under your reply.');
   lines.push('');
   lines.push('A CLUE MAY: point at the part of the question, diagram or table that matters; name the science idea or keyword to think about; ask them a question back that makes them reason; remind them of a rule or definition they should already know; work through a DIFFERENT but similar example; or tell them which of their own ideas is worth following up.');
   lines.push('A CLUE MAY NOT: state the answer or any part of it; name, number or quote the correct option; rule options out until only one is left; give any sentence they could copy into the answer box; say whether an answer they propose is right or wrong; or spell the reasoning all the way through to the conclusion. Always stop one clear step short and hand the last step back to them.');
@@ -36075,6 +36315,23 @@ function _ainsteinBubbleHtml(text, who) {
   return '<div class="ainstein-msg ' + who + '">' + escapeHtml(text) + '</div>';
 }
 
+function _ainsteinItemHtml(m) {
+  return _ainsteinBubbleHtml(m.text, m.who) +
+    (m.videoPending ? '<div class="ainstein-vid-wait">🎥 Finding a video that explains this…</div>' : '') +
+    (m.video ? _ainsteinVideoHtml(m.video) : '') +
+    (m.offer ? _ainsteinOfferHtml(m.offer) : '');
+}
+
+// Everything about a message that changes what it looks like. Two renders with
+// the same key produce identical markup, so the node can be left alone — which
+// is the whole point: re-writing a message that holds a playing video would
+// reload the iframe and start it over.
+function _ainsteinItemKey(m, i) {
+  const o = m.offer && _ainsteinOffers.get(m.offer.token);
+  const oState = o ? (o.used ? 'u' : Date.now() > o.expiresAt ? 'x' : 'l') : '';
+  return [i, m.who, m.video ? 'v' + m.video.token : (m.videoPending ? 'p' : ''), o ? 'o' + o.token + oState : ''].join('|');
+}
+
 function _ainsteinRender() {
   const log = _ainsteinEl('ainsteinLog');
   if (!log) return;
@@ -36085,14 +36342,44 @@ function _ainsteinRender() {
       '<p>Stuck on something on your screen? Ask me and I\'ll give you a clue.</p>' +
       '<p>Type your question, or tap <b>🎤</b> and just say it out loud.</p>' +
       '<p><b>I never give answers</b> — only nudges to help you work it out yourself. Don\'t bother asking, it won\'t work!</p>' +
-      '<p>Want more practice on the same idea? Ask, and I\'ll find you another question on it.</p>' +
+      '<p>Want more practice on the same idea? Ask, and I\'ll find you another question on it. Still not clicking? I\'ll find you a video to watch.</p>' +
       '<p class="ainstein-warn">Off-topic questions cost an extra credit, so keep them about your work.</p>' +
       '</div>';
     return;
   }
-  log.innerHTML = _ainstein.history.map(m =>
-      _ainsteinBubbleHtml(m.text, m.who) + (m.offer ? _ainsteinOfferHtml(m.offer) : '')).join('') +
-    (_ainstein.busy ? '<div class="ainstein-msg ai ainstein-typing"><span></span><span></span><span></span></div>' : '');
+  // Reconcile message by message instead of rebuilding the log, so a video
+  // already playing keeps playing while the conversation carries on around it.
+  log.querySelector('.ainstein-empty')?.remove();
+  log.querySelector('.ainstein-typing-wrap')?.remove();
+  _ainstein.history.forEach((m, i) => {
+    const key = _ainsteinItemKey(m, i);
+    const cur = log.children[i];
+    if (cur && cur.getAttribute('data-akey') === key) return;
+    // Only the practice link changed (it lapsed, or was opened)? Swap that chip
+    // alone — rewriting the message would reload a video sitting above it.
+    if (cur && m.offer) {
+      const was = (cur.getAttribute('data-akey') || '').split('|');
+      const now = key.split('|');
+      const chip = cur.querySelector('.ainstein-offer');
+      if (chip && was.length === 4 && was.slice(0, 3).join('|') === now.slice(0, 3).join('|')) {
+        chip.outerHTML = _ainsteinOfferHtml(m.offer);
+        cur.setAttribute('data-akey', key);
+        return;
+      }
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'ainstein-item';
+    wrap.setAttribute('data-akey', key);
+    wrap.innerHTML = _ainsteinItemHtml(m);
+    if (cur) log.replaceChild(wrap, cur); else log.appendChild(wrap);
+  });
+  while (log.children.length > _ainstein.history.length) log.removeChild(log.lastElementChild);
+  if (_ainstein.busy) {
+    const t = document.createElement('div');
+    t.className = 'ainstein-item ainstein-typing-wrap';
+    t.innerHTML = '<div class="ainstein-msg ai ainstein-typing"><span></span><span></span><span></span></div>';
+    log.appendChild(t);
+  }
   log.scrollTop = log.scrollHeight;
 }
 
@@ -36164,7 +36451,11 @@ async function ainsteinSend() {
     // On-topic replies come with a temporary link to one more question on the
     // same concept — only if the bank actually has a fresh one to offer.
     const offer = relevant ? _ainsteinBuildOffer(parsed, question) : null;
-    _ainstein.history.push({ who: 'ai', text, offTopic: !relevant, offer: offer || null });
+    const msg = { who: 'ai', text, offTopic: !relevant, offer: offer || null };
+    _ainstein.history.push(msg);
+    // A video takes a beat longer to find (and verify), so the clue is never
+    // held up waiting for it — it lands underneath the reply when it's ready.
+    if (relevant) _ainsteinMaybeVideo(msg, parsed, question);
   } catch (e) {
     console.warn('ainstein ask failed', e);
     // A failed call is our problem, not the student's — no credit is taken.
@@ -36179,21 +36470,52 @@ async function ainsteinSend() {
 
 (function injectAinstein() {
   const css = `
+  /* The bubble is the way in to all of this, so it is deliberately big and it
+     moves: a slow idle bob plus a ring that pulses every few seconds catches the
+     eye of a student who has forgotten Ai-nstein is there, and hovering makes him
+     lean up and wave with a name tag. All of it is dropped for anyone who asks
+     for reduced motion. */
   #ainsteinBubble { display: none; position: fixed; bottom: 18px; right: 18px; z-index: 890;
-    width: 64px; height: 64px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
+    width: 88px; height: 88px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
     background: var(--surface, #fff); box-shadow: 0 8px 26px rgba(20,18,16,0.26);
-    transition: transform .18s ease, box-shadow .18s ease; }
-  #ainsteinBubble.show { display: block; }
-  #ainsteinBubble:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 12px 32px rgba(20,18,16,0.32); }
-  #ainsteinBubble.active { transform: scale(0.94); }
-  #ainsteinBubble img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+    transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .22s ease; }
+  #ainsteinBubble.show { display: block; animation: ainsteinBob 4.5s ease-in-out infinite; }
+  #ainsteinBubble::before {            /* the attention ring */
+    content: ''; position: absolute; inset: -4px; border-radius: 50%; pointer-events: none;
+    border: 2px solid var(--primary, #4a7c59); opacity: 0; animation: ainsteinRing 6s ease-out infinite; }
+  #ainsteinBubble:hover { transform: translateY(-6px) scale(1.08); box-shadow: 0 18px 40px rgba(20,18,16,0.34); animation: none; }
+  #ainsteinBubble:hover img { animation: ainsteinWave .9s ease-in-out infinite; }
+  #ainsteinBubble:hover::before { opacity: 0; animation: none; }
+  #ainsteinBubble:focus-visible { outline: 3px solid var(--primary, #4a7c59); outline-offset: 3px; }
+  #ainsteinBubble.active { transform: scale(0.94); animation: none; }
+  #ainsteinBubble img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;
+    transform-origin: 50% 85%; }
+  /* Name tag, so a first-time student knows what the face is for. */
+  #ainsteinBubble .ainstein-tag { position: absolute; right: calc(100% + 12px); top: 50%; transform: translateY(-50%) translateX(8px);
+    padding: 9px 14px; border-radius: 12px; background: var(--text, #1a1a1a); color: #fff;
+    font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.78rem; font-weight: 600; line-height: 1;
+    white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease;
+    box-shadow: 0 6px 18px rgba(20,18,16,0.28); }
+  #ainsteinBubble:hover .ainstein-tag { opacity: 1; transform: translateY(-50%) translateX(0); }
+  @keyframes ainsteinBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  @keyframes ainsteinRing {
+    0% { opacity: 0; transform: scale(1); }
+    8% { opacity: .85; transform: scale(1); }
+    38% { opacity: 0; transform: scale(1.28); }
+    100% { opacity: 0; transform: scale(1.28); } }
+  @keyframes ainsteinWave {
+    0%, 100% { transform: rotate(-7deg) scale(1.03); }
+    50% { transform: rotate(7deg) scale(1.03); } }
+  @media (prefers-reduced-motion: reduce) {
+    #ainsteinBubble.show, #ainsteinBubble::before, #ainsteinBubble:hover img { animation: none !important; }
+  }
   #ainsteinBadge { position: absolute; top: -4px; right: -4px; min-width: 24px; height: 24px; padding: 0 6px;
     border-radius: 999px; background: var(--primary, #4a7c59); color: #fff;
     font-family: 'Space Mono', monospace; font-size: 0.72rem; font-weight: 700;
     display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
   #ainsteinBadge.out { background: #b3261e; }
 
-  #ainsteinPanel { display: none; position: fixed; bottom: 94px; right: 18px; z-index: 895;
+  #ainsteinPanel { display: none; position: fixed; bottom: 118px; right: 18px; z-index: 895;
     width: min(400px, calc(100vw - 36px)); max-height: min(560px, calc(100vh - 130px));
     background: var(--surface, #fff); border: 1px solid var(--border, #e2ddd5); border-radius: 20px;
     box-shadow: 0 20px 60px rgba(20,18,16,0.28); overflow: hidden;
@@ -36209,6 +36531,9 @@ async function ainsteinSend() {
   .ainstein-close:hover { background: var(--bg-tertiary, #f0efeb); color: var(--text, #1a1a1a); }
 
   #ainsteinLog { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-height: 140px; }
+  /* One wrapper per message (bubble + any video + any practice link) so a
+     re-render can leave finished messages, and their players, untouched. */
+  .ainstein-item { display: flex; flex-direction: column; gap: 10px; }
   .ainstein-msg { max-width: 86%; padding: 12px 15px; border-radius: 16px; font-size: 0.88rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
   .ainstein-msg.me { align-self: flex-end; background: var(--primary, #4a7c59); color: #fff; border-bottom-right-radius: 5px; }
   .ainstein-msg.ai { align-self: flex-start; background: var(--bg-tertiary, #f2f1ec); color: var(--text, #1a1a1a); border-bottom-left-radius: 5px; }
@@ -36217,6 +36542,28 @@ async function ainsteinSend() {
   .ainstein-typing span:nth-child(2) { animation-delay: .18s; }
   .ainstein-typing span:nth-child(3) { animation-delay: .36s; }
   @keyframes ainsteinBlink { 0%, 60%, 100% { opacity: .25; } 30% { opacity: 1; } }
+  /* YouTube explainer, embedded in the conversation. */
+  .ainstein-vid { align-self: flex-start; width: 100%; max-width: 100%; }
+  .ainstein-vid-why { font-size: 0.82rem; line-height: 1.55; color: var(--text-muted, #7a756d); margin-bottom: 10px; }
+  .ainstein-vid-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
+    background: #000; border: 1px solid var(--border, #e2ddd5); }
+  .ainstein-vid-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+  .ainstein-vid-title { margin-top: 10px; font-size: 0.84rem; font-weight: 600; line-height: 1.45; color: var(--text, #1a1a1a); }
+  .ainstein-vid-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .ainstein-vid-btn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; text-decoration: none;
+    padding: 9px 14px; border-radius: 11px; border: 1px solid var(--primary, #4a7c59);
+    background: var(--primary, #4a7c59); color: #fff; font: inherit; font-size: 0.8rem; line-height: 1; }
+  .ainstein-vid-btn:hover { background: var(--primary-dark, #3d6749); border-color: var(--primary-dark, #3d6749); }
+  .ainstein-vid-btn.ghost { background: transparent; color: var(--primary-dark, #3d6749); }
+  .ainstein-vid-btn.ghost:hover { background: var(--bg-soft, #f7f9fc); }
+  .ainstein-vid-meta { margin-top: 8px; font-size: 0.72rem; line-height: 1.5; color: var(--text-muted, #7a756d); }
+  .ainstein-vid-search { display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+    padding: 12px 16px; border-radius: 14px; border: 1px solid var(--primary, #4a7c59);
+    background: var(--bg-soft, #f7f9fc); color: var(--primary-dark, #3d6749); font-size: 0.85rem; font-weight: 600; }
+  .ainstein-vid-search:hover { background: #eef4ef; }
+  .ainstein-vid-wait { align-self: flex-start; font-size: 0.8rem; line-height: 1.5; color: var(--text-muted, #7a756d);
+    padding: 10px 14px; border-radius: 13px; background: var(--bg-tertiary, #f2f1ec); }
+
   /* Temporary "try another question on this concept" link under a clue. */
   .ainstein-offer { align-self: flex-start; max-width: 86%; margin: 2px 0 4px; }
   .ainstein-offer-btn { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer;
@@ -36258,11 +36605,13 @@ async function ainsteinSend() {
   #ainsteinCredits { margin-top: 10px; font-size: 0.74rem; color: var(--text-muted, #7a756d); text-align: center; }
 
   /* The daily-quest chip lives in the same corner — lift it above the bubble. */
-  #questChip { bottom: 96px !important; }
+  #questChip { bottom: 120px !important; }
   @media (max-width: 560px) {
-    #ainsteinBubble { width: 56px; height: 56px; bottom: 14px; right: 14px; }
-    #ainsteinPanel { bottom: 78px; right: 12px; left: 12px; width: auto; max-height: calc(100vh - 110px); }
-    #questChip { bottom: 82px !important; }
+    #ainsteinBubble { width: 72px; height: 72px; bottom: 14px; right: 14px; }
+    #ainsteinPanel { bottom: 98px; right: 12px; left: 12px; width: auto; max-height: calc(100vh - 130px); }
+    #questChip { bottom: 100px !important; }
+    /* No room for the name tag next to a thumb-sized bubble. */
+    #ainsteinBubble .ainstein-tag { display: none; }
   }
   @media print { #ainsteinBubble, #ainsteinPanel { display: none !important; } }`;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
@@ -36271,6 +36620,7 @@ async function ainsteinSend() {
   host.innerHTML = `
     <button id="ainsteinBubble" type="button" title="Stuck? Ask Ai-nstein for a clue" aria-label="Ask Ai-nstein for a clue">
       <img src="${AINSTEIN_IMG}" alt="Ai-nstein" onerror="this.onerror=null;this.src='${AINSTEIN_FALLBACK_IMG}';">
+      <span class="ainstein-tag" aria-hidden="true">Stuck? Ask me!</span>
       <span id="ainsteinBadge">${AINSTEIN_DAILY_CREDITS}</span>
     </button>
     <div id="ainsteinPanel" role="dialog" aria-label="Ask Ai-nstein for a clue">
@@ -36324,6 +36674,8 @@ function ainsteinOnSignIn() {
   if (b) b.classList.add('show');
   _ainstein.history = [];
   _ainsteinOffers.clear();
+  _ainsteinVideos.clear();
+  _ainsteinAskedConcepts.clear();
   _ainsteinTextCache.clear();   // the bank was just (re)loaded — re-read it
   ainsteinLoadCredits();
 }
@@ -36333,12 +36685,15 @@ function ainsteinOnSignOut() {
   if (b) b.classList.remove('show');
   _ainstein.history = [];
   _ainsteinOffers.clear();      // no practice link outlives the session
+  _ainsteinVideos.clear();
+  _ainsteinAskedConcepts.clear();
 }
 
 window.navigateTo = navigateTo;
 window.ainsteinToggle = ainsteinToggle;
 window.ainsteinSend = ainsteinSend;
 window.ainsteinTrySimilar = ainsteinTrySimilar;
+window.ainsteinVideoFullscreen = ainsteinVideoFullscreen;
 window.commPreviewImg = commPreviewImg;
 window.commAdminPost = commAdminPost;
 window.commCreateQuest = commCreateQuest;
