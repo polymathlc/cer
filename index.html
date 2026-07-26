@@ -9476,7 +9476,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.170.0';
+const APP_VERSION = 'v1.171.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -21949,10 +21949,17 @@ function applyStudentLevelCaps() {
 // userProfiles. Both failing leaves the P6 default (no restriction).
 async function loadStudentLevel() {
   if (!currentUser || currentUser.role !== 'student') return;
-  let lvl = '';
+  let lvl = '', served = '';
   try {
     const s = await getDoc(doc(db, 'userProfiles', currentUser.uid));
-    if (s.exists() && /^P[3-6]$/.test(s.data().level || '')) lvl = s.data().level;
+    if (s.exists()) {
+      const d = s.data();
+      if (/^P[3-6]$/.test(d.level || '')) lvl = d.level;
+      // What we served last time. Used only as a stand-in until the family
+      // profile loads a few lines later and recomputes it properly — but that
+      // gap is exactly where an uncapped P6 used to slip through.
+      if (/^P[3-6]$/.test(d.servingLevel || '')) served = d.servingLevel;
+    }
   } catch (e) { console.warn('own profile level read', e); }
   if (!lvl && adminUid) {
     try {
@@ -21962,7 +21969,7 @@ async function loadStudentLevel() {
     } catch (e) { console.warn('shared level map read', e); }
   }
   currentUser.adminLevel = lvl || ''; // the teacher's assigned cap for this account
-  currentUser.level = lvl || '';
+  currentUser.level = lvl || served || '';
   applyStudentLevelCaps();
 }
 
@@ -22004,6 +22011,23 @@ function famSaveProfile() {
     activeStudent: familyProfile.activeStudent || 0
   }, { merge: true }).catch(e => console.warn('family profile save', e));
 }
+// The level the app is ACTUALLY serving at, stored where everything else can
+// see it: the Usage dashboard, the next session, and fps.html — which runs as
+// its own page and cannot see this one's memory. Kept in its own field so the
+// teacher's assigned level (userProfiles.level) stays the teacher's, and the
+// "lower of the two wins" rule below still has two separate numbers to compare.
+function _famPersistServingLevel() {
+  if (!currentUser || !db || currentUser.role !== 'student') return;
+  const lvl = /^P[3-6]$/.test(currentUser.level || '') ? currentUser.level : '';
+  const name = currentUser.name || '';
+  if (_famServingWritten === lvl + '|' + name) return;    // nothing changed
+  _famServingWritten = lvl + '|' + name;
+  setDoc(doc(db, 'userProfiles', currentUser.uid),
+    { servingLevel: lvl, servingName: name, servingLevelAt: new Date().toISOString() }, { merge: true })
+    .catch(e => console.warn('serving level save', e));
+}
+let _famServingWritten = '';
+
 // The serving cap honours BOTH sides: the teacher's assigned level (Usage
 // dashboard) and the active student's own declared level — the LOWER of the
 // two wins, so neither a typo nor an eager student can raise it.
@@ -22014,6 +22038,12 @@ function famApplyActiveStudent() {
   currentUser.level = (kid && admin)
     ? (getLevelNumber(kid) < getLevelNumber(admin) ? kid : admin)
     : (kid || admin || '');
+  // Write the level that will actually be served back to the profile. Without
+  // this it lived only in memory for the rest of the session: the teacher's
+  // Usage dashboard showed "—" for a child who had plainly declared P4, and any
+  // session or page that resolved the level before the family profile loaded
+  // fell through to the P6 default — which is no cap at all.
+  _famPersistServingLevel();
   if (s && s.name) {
     // Attempts, the leaderboard and the sidebar show the child who's
     // practising, not the parent's Google account name.
@@ -23699,6 +23729,14 @@ async function loadUsageDashboard() {
         email: p.email || '',
         name: p.displayName || p.email || 'Unknown',
         level: /^P[3-6]$/.test(p.level || '') ? p.level : '',
+        // What the app is actually serving them at. A family that declared
+        // "Aiken is P4" writes that into students[], never into level — so the
+        // assigned-level column showed "—" for a child with a perfectly clear
+        // level, and nothing on this page revealed the real cap.
+        servingLevel: /^P[3-6]$/.test(p.servingLevel || '') ? p.servingLevel : '',
+        servingName: typeof p.servingName === 'string' ? p.servingName : '',
+        declaredLevels: Array.isArray(p.students)
+          ? p.students.filter(x => x && /^P[3-6]$/.test(x.level || '')).map(x => x.level) : [],
         famStudents: Array.isArray(p.students) ? p.students.filter(x => x && x.name).map(x => `${x.name} (${x.level || '?'})`).join(', ') : '',
         famAddress: typeof p.address === 'string' ? p.address : '',
         lastLogin: p.lastLogin ? (p.lastLogin.toDate ? p.lastLogin.toDate() : new Date(p.lastLogin)) : null,
@@ -23785,11 +23823,23 @@ async function loadUsageDashboard() {
         const avgScore = s.totalBlanks > 0 ? Math.round((s.totalScore / s.totalBlanks) * 100) + '%' : '--';
         const levelOpts = ['', 'P3', 'P4', 'P5', 'P6'].map(lv =>
           `<option value="${lv}"${(s.level || '') === lv ? ' selected' : ''}>${lv || '—'}</option>`).join('');
+        // The cap actually in force = the lower of what you assigned and what
+        // the family declared. Shown under the drop-down whenever it isn't just
+        // your assignment, so "—" never again hides a real level.
+        const declared = (s.declaredLevels || []).length
+          ? 'P' + Math.min.apply(null, s.declaredLevels.map(l => parseInt(l.slice(1), 10)))
+          : '';
+        const effective = s.servingLevel || (s.level && declared
+          ? ('P' + Math.min(parseInt(s.level.slice(1), 10), parseInt(declared.slice(1), 10)))
+          : (s.level || declared));
+        const capNote = (effective && effective !== s.level)
+          ? `<div style="font-size:0.68rem;color:var(--text-muted);margin-top:3px;line-height:1.3;" title="${s.servingLevel ? 'The level this account was last served at' : 'Declared by the family when they set up their students'}">serving <b>${escapeHtml(effective)}</b>${s.servingName ? ' · ' + escapeHtml(s.servingName) : ''}</div>`
+          : (!effective ? `<div style="font-size:0.68rem;color:var(--accent-orange);margin-top:3px;line-height:1.3;" title="No level assigned and none declared — this account is served every level, up to P6">no level → P6</div>` : '');
         return `<tr class="clickable" onclick="showStudentDetail('${escapeHtml(s.uid)}')" title="Click to see every question this student attempted, with times">
           <td style="font-weight:600;">${escapeHtml(s.name)}${s.famStudents ? `<div style="font-weight:400;font-size:0.74rem;color:var(--text-muted);margin-top:2px;">👧 ${escapeHtml(s.famStudents)}</div>` : ''}${s.famAddress ? `<div style="font-weight:400;font-size:0.72rem;color:var(--text-muted);margin-top:1px;">📍 ${escapeHtml(s.famAddress)}</div>` : ''}</td>
           <td style="color:var(--text-muted);font-size:0.82rem;">${escapeHtml(s.email)}</td>
           <td style="text-align:center;" onclick="event.stopPropagation()">
-            <select onchange="setStudentLevel('${escapeHtml(s.uid)}', this.value)" title="Assigned level — the student is never served questions above this" style="padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:0.8rem;">${levelOpts}</select>
+            <select onchange="setStudentLevel('${escapeHtml(s.uid)}', this.value)" title="Assigned level — the student is never served questions above this" style="padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:0.8rem;">${levelOpts}</select>${capNote}
           </td>
           <td style="font-size:0.82rem;">${lastLoginStr}</td>
           <td style="text-align:center;"><span style="background:var(--accent-blue-light);color:var(--accent-blue);padding:2px 10px;border-radius:10px;font-family:'Space Mono',monospace;font-size:0.75rem;font-weight:600;">${s.loginCount}</span></td>
@@ -37336,16 +37386,21 @@ function _ainsteinWsPool(name, fmt, isTopic, difficulty) {
     }
   });
   const stats = _qAttemptStats || {};
+  // FRESHNESS LEADS, then the criteria they asked for. A worksheet made of
+  // questions they did last week teaches nothing, so questions this student has
+  // never attempted come first, then the ones they have done least. Within each
+  // of those bands the requested criterion decides the order — so "20 hard MCQs"
+  // is the 20 hardest of what they haven't seen, not the 20 hardest overall.
+  const doneTimes = q => { const r = stats[String(q.id)]; return (r && r.n) ? r.n : 0; };
   if (difficulty === 'hardest' || difficulty === 'easiest') {
-    // Real student usage leads (see the difficulty section): the % of marks
-    // students have actually earned, so LOW = hard. A question nobody has
-    // attempted sorts last either way — no usage is not evidence of being hard
-    // or easy.
+    // Real student usage decides hard vs easy (see the difficulty section): the
+    // % of marks students have actually earned, so LOW = hard. A question nobody
+    // has attempted sorts last either way — no usage is not evidence of being
+    // hard or easy.
     const rank = q => { const p = qUsagePct(q); return p == null ? Infinity : (difficulty === 'hardest' ? p : -p); };
-    out.sort((a, b) => (rank(a.q) - rank(b.q)) || (b.score - a.score));
+    out.sort((a, b) => (doneTimes(a.q) - doneTimes(b.q)) || (rank(a.q) - rank(b.q)) || (b.score - a.score));
   } else {
-    // Best concept match first, then questions they've never attempted.
-    out.sort((a, b) => (b.score - a.score) || ((stats[String(a.q.id)] ? 1 : 0) - (stats[String(b.q.id)] ? 1 : 0)));
+    out.sort((a, b) => (doneTimes(a.q) - doneTimes(b.q)) || (b.score - a.score));
   }
   return out.map(x => x.q);
 }
@@ -37464,6 +37519,7 @@ function _ainsteinWsHtml(ref) {
   const chips = Object.keys(byTopic).map(t =>
     '<span class="ainstein-ws-chip">' + escapeHtml(_docClip(t, 28)) + ' <b>' + byTopic[t] + '</b></span>').join('');
   const notes = [];
+  notes.push('These are questions you haven\'t done before — I only reach for ones you\'ve already tried once the new ones run out.');
   if (anyTopic) notes.push('You didn\'t name a topic, so I spread these across everything at your level.');
   (toppedUp || []).forEach(t => notes.push('The topics you named ran out, so ' + t.n + ' of the ' + t.fmt + ' came from other topics to make up your number.'));
   shortfall.forEach(s => notes.push('You asked for ' + s.want + ' ' + s.fmt + ' but the whole bank only has ' + s.got + ' at your level.'));
