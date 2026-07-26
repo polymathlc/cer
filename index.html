@@ -7958,14 +7958,26 @@ option {
       <div class="annot-tools">
         <button type="button" class="annot-tool" data-atool="erase" title="Paint white over words to erase them — Photoshop style: click a point then Shift-click another to join them with a straight line; Shift-drag locks to horizontal / vertical">🩹 Erase</button>
         <button type="button" class="annot-tool" data-atool="paint" title="Paint over with the chosen colour — Photoshop style: click a point then Shift-click another to join them with a straight line; Shift-drag locks to horizontal / vertical">🖌️ Paint</button>
-        <button type="button" class="annot-tool" data-atool="fill" title="Fill an enclosed shape or area with the chosen colour (click inside it)">🪣 Fill</button>
-        <button type="button" class="annot-tool" data-atool="clone" title="Clone stamp: click to set a source point, then drag to copy that part of the picture elsewhere. Alt+click to re-set the source.">🧬 Clone</button>
-        <button type="button" class="annot-tool" data-atool="select" title="Rectangle select: drag a box around an area, then fill it with a colour, the surrounding texture, or AI content-aware fill">⬚ Select</button>
-        <button type="button" class="annot-tool" data-atool="lasso" title="Lasso select: draw freehand around an area, then fill it with a colour, the surrounding texture, or AI content-aware fill">➰ Lasso</button>
-        <button type="button" class="annot-tool" data-atool="line" title="Drag to draw a straight label line — hold Shift to snap to 45° angles">📏 Line</button>
-        <button type="button" class="annot-tool" data-atool="text" title="Click to drop a text label">🔤 Text</button>
-        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Colour <input type="color" id="annotColor" value="#e23c3c" style="width:34px;height:28px;padding:0;border:1px solid var(--border);border-radius:6px;"></label>
-        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Brush <input type="range" id="annotSize" min="1" max="60" value="6" oninput="_annotSyncControls()" title="Brush size in image pixels — set to 1 to paint a single pixel"><span id="annotSizeVal" style="min-width:30px;font-variant-numeric:tabular-nums;">6&nbsp;px</span></label>
+        <button type="button" class="annot-tool" data-atool="fill" title="Paint bucket (G) — click inside a shape or area to flood it with the chosen colour. The strip at the bottom of the bucket is the colour that will be poured.">
+          <svg class="annot-bucket" viewBox="0 0 24 26" aria-hidden="true">
+            <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round">
+              <path d="M11.2 4.2 4.4 11a1.7 1.7 0 0 0 0 2.4l4.9 4.9a1.7 1.7 0 0 0 2.4 0l6.8-6.8z"/>
+              <path d="M8.9 6.5 6.4 4"/>
+            </g>
+            <path d="M20.6 12.6s1.9 2.5 1.9 3.8a1.9 1.9 0 1 1-3.8 0c0-1.3 1.9-3.8 1.9-3.8z" class="annot-bucket-paint"/>
+            <rect x="2" y="22.2" width="20" height="3.4" rx="1.7" class="annot-bucket-paint"/>
+          </svg> Fill</button>
+        <button type="button" class="annot-tool" data-atool="clone" title="Clone stamp (S): click to set a source point, then drag to copy that part of the picture elsewhere. Alt+click to re-set the source.">🧬 Clone</button>
+        <button type="button" class="annot-tool" data-atool="history" title="History brush (Y) — brush the ORIGINAL picture back wherever you drag, undoing your edits by hand, one stroke at a time">🕘 History</button>
+        <button type="button" class="annot-tool" data-atool="select" title="Rectangle select (M): drag a box around an area, then fill it, move it, or use AI content-aware fill">⬚ Select</button>
+        <button type="button" class="annot-tool" data-atool="lasso" title="Lasso select (L): draw freehand around an area, then fill it, move it, or use AI content-aware fill">➰ Lasso</button>
+        <button type="button" class="annot-tool" data-atool="wand" title="Magic wand (W): click a colour to select every pixel like it. Alt+click selects that colour across the WHOLE picture, not just the patch you clicked. Use the ± slider to widen or tighten what counts as the same colour.">🪄 Wand</button>
+        <button type="button" class="annot-tool" data-atool="move" title="Move (V): drag inside a selection to cut it out and drop it anywhere — hold Alt to copy instead of cut. Also drags text labels around.">✥ Move</button>
+        <button type="button" class="annot-tool" data-atool="line" title="Drag to draw a straight label line (U) — hold Shift to snap to 45° angles">📏 Line</button>
+        <button type="button" class="annot-tool" data-atool="text" title="Click to drop a text label (T)">🔤 Text</button>
+        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Colour <input type="color" id="annotColor" value="#e23c3c" oninput="_annotSyncControls()" style="width:34px;height:28px;padding:0;border:1px solid var(--border);border-radius:6px;"></label>
+        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;" title="Brush size in image pixels — set to 1 to paint a single pixel. [ and ] change it, and you can scroll your mouse wheel over the slider.">Brush <input type="range" id="annotSize" min="1" max="60" value="6" oninput="_annotSyncControls()"><span id="annotSizeVal" style="min-width:30px;font-variant-numeric:tabular-nums;">6&nbsp;px</span></label>
+        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;" title="How close a colour has to be to count as the same one — used by the magic wand and the paint bucket. Scroll your mouse wheel over the slider to change it.">Match ± <input type="range" id="annotTol" min="0" max="120" value="32" oninput="_annotSyncControls()"><span id="annotTolVal" style="min-width:26px;font-variant-numeric:tabular-nums;">32</span></label>
         <span style="width:1px;height:20px;background:var(--border);"></span>
         <button type="button" class="annot-tool" onclick="annotZoomStep(1/1.3)" title="Zoom out">➖</button>
         <span id="annotZoomVal" style="font-size:0.78rem;min-width:44px;text-align:center;font-variant-numeric:tabular-nums;">100%</span>
@@ -7978,10 +7990,12 @@ option {
         <button type="button" class="annot-tool" onclick="annotSelFillColour()" title="Fill the selected area with the chosen colour">🎨 Fill colour</button>
         <button type="button" class="annot-tool" onclick="annotSelPatchFill()" title="Fill the selected area by extending the surrounding pixels inwards (fast, no AI)">🧵 Fill from surroundings</button>
         <button type="button" class="annot-tool" onclick="annotSelAiFill()" title="AI content-aware fill: the AI removes what is selected and seamlessly reconstructs the background / surrounding texture">✨ AI content-aware fill</button>
+        <button type="button" class="annot-tool" data-atool="move" title="Move (V) — drag inside the selection to cut it out and drop it anywhere; hold Alt to copy instead">✥ Move it</button>
         <button type="button" class="annot-tool" onclick="annotSelClear()" title="Deselect (Esc)">✕ Deselect</button>
       </div>
       <div id="annotStage"><canvas id="annotCanvas"></canvas><canvas id="annotSelCanvas"></canvas></div>
-      <p class="hint" style="margin-top:10px;">Erase / Paint: drag over the image — <b>click then Shift-click</b> joins the two points with a straight line (Photoshop style), and <b>Shift-drag</b> locks the stroke to horizontal / vertical. <b>Fill</b>: click inside a shape to flood it with colour. <b>Clone</b>: click to set the source, then drag to stamp that area elsewhere (Alt+click re-sets the source). <b>Select / Lasso</b>: drag around an area, then fill it with a colour, the surrounding texture, or AI content-aware fill (Esc deselects). Line: drag from start to end. Text: click, type, then Enter.<br><b>Scroll</b> over the image to zoom (down to single pixels); <b>hold Space</b> (or the middle mouse button) and drag to pan. Set the brush to <b>1&nbsp;px</b> for pixel-perfect edits.</p>
+      <p class="hint" style="margin-top:10px;">Erase / Paint: drag over the image — <b>click then Shift-click</b> joins the two points with a straight line (Photoshop style), and <b>Shift-drag</b> locks the stroke to horizontal / vertical. <b>Fill</b>: click inside a shape to flood it with colour. <b>Clone</b>: click to set the source, then drag to stamp that area elsewhere (Alt+click re-sets the source). <b>History</b>: brush the original picture back by hand. <b>Select / Lasso / Wand</b>: mark out an area, then fill it, move it, or use AI content-aware fill (Esc deselects). <b>Move</b>: drag inside a selection to cut it out and drop it anywhere (Alt to copy), or drag a text label to reposition it. Line: drag from start to end. Text: click, type, then Enter.<br><b>Scroll</b> over the image to zoom (down to single pixels); <b>hold Space</b> (or the middle mouse button) and drag to pan; <b>scroll over either slider</b> to change it. Set the brush to <b>1&nbsp;px</b> for pixel-perfect edits.
+        <br><b>Keys:</b> <kbd>E</kbd> erase · <kbd>B</kbd> paint · <kbd>G</kbd> fill · <kbd>S</kbd> clone · <kbd>Y</kbd> history · <kbd>M</kbd> select · <kbd>L</kbd> lasso · <kbd>W</kbd> wand · <kbd>V</kbd> move · <kbd>U</kbd> line · <kbd>T</kbd> text · <kbd>[</kbd> <kbd>]</kbd> brush size · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>+</kbd> <kbd>−</kbd> zoom · <kbd>0</kbd> fit · <kbd>Esc</kbd> deselect · <kbd>Enter</kbd> apply</p>
     </div>
     <div class="overlay-foot">
       <button class="btn btn-ghost" onclick="closeAnnotTool()" type="button">Cancel</button>
@@ -9462,7 +9476,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.168.1';
+const APP_VERSION = 'v1.169.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -12814,6 +12828,13 @@ async function applyCropTool() {
   .annot-tool { padding:6px 12px; border:1.5px solid var(--border,#e2ddd5); background:#fff; border-radius:8px; cursor:pointer; font-size:0.82rem; }
   .annot-tool:hover { border-color:var(--primary,#4a7c59); }
   .annot-tool.active { border-color:var(--primary,#4a7c59); background:var(--primary-light,#e8f3ec); color:var(--primary,#4a7c59); font-weight:700; }
+  /* The paint bucket shows what it will pour: the strip along its base (and the
+     drip) are the exact colour currently chosen, updated live with the picker. */
+  .annot-bucket { width:17px; height:18px; vertical-align:-4px; margin-right:2px; overflow:visible; }
+  .annot-bucket-paint { fill:var(--annot-paint,#e23c3c); stroke:rgba(0,0,0,0.28); stroke-width:0.7; }
+  .annot-tools kbd, .hint kbd { font-family:'Space Mono',monospace; font-size:0.72em; padding:1px 5px; border:1px solid var(--border,#e2ddd5);
+    border-bottom-width:2px; border-radius:4px; background:var(--surface,#fff); white-space:nowrap; }
+  #annotStage.moving #annotCanvas { cursor:move; }
   #annotStage { position:relative; display:block; margin:0 auto; width:86vw; max-width:1080px; height:56vh; overflow:hidden; line-height:0; background:#eef0ee; border:1px solid var(--border,#e2ddd5); border-radius:6px; touch-action:none; }
   #annotCanvas { position:absolute; top:0; left:0; transform-origin:0 0; touch-action:none; cursor:crosshair; image-rendering:auto; }
   #annotSelCanvas { position:absolute; top:0; left:0; transform-origin:0 0; pointer-events:none; z-index:4; }
@@ -12821,6 +12842,9 @@ async function applyCropTool() {
   #annotStage.panning, #annotStage.panning #annotCanvas { cursor:grabbing; }
   #annotStage.canpan #annotCanvas { cursor:grab; }
   .annot-textbox { position:absolute; z-index:5; }
+  /* With the Move tool active the whole label is a drag target, not just its
+     handle — that is what "move" means, and hunting for a 6px tab is not it. */
+  .annot-textbox.movable .annot-textbox-input { cursor:move; }
   .annot-textbox-input { border:1px dashed var(--primary,#4a7c59); background:rgba(255,255,255,0.92); border-radius:4px; outline:none; font-family:'DM Sans',sans-serif; font-weight:600; padding:1px 4px; line-height:1.3; min-width:60px; color:inherit; }
   .annot-textbox-handle { position:absolute; top:-19px; left:-1px; cursor:move; user-select:none; touch-action:none; background:var(--primary,#4a7c59); color:#fff; font-size:11px; line-height:1; padding:3px 6px; border-radius:4px 4px 0 0; white-space:nowrap; }
   #annotCloneSrc { position:absolute; z-index:6; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; border:2px solid #2563eb; background:rgba(37,99,235,0.18); box-shadow:0 0 0 1px rgba(255,255,255,0.8); pointer-events:none; }
@@ -12851,12 +12875,19 @@ function openAnnotTool(blockId) {
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     const selCanvas = document.getElementById('annotSelCanvas');
     if (selCanvas) { selCanvas.width = canvas.width; selCanvas.height = canvas.height; }
-    _annot = { blockId, canvas, ctx, tool: 'erase', color: '#e23c3c', size: 6, drawing: false, history: [], start: null, snap: null,
+    // The picture exactly as it was opened, kept for the history brush to paint
+    // back from. It is never written to, so "the original" stays the original
+    // however many edits are stacked on top.
+    const orig = document.createElement('canvas');
+    orig.width = canvas.width; orig.height = canvas.height;
+    orig.getContext('2d').drawImage(canvas, 0, 0);
+    _annot = { blockId, canvas, ctx, tool: 'erase', color: '#e23c3c', size: 6, tol: 32, drawing: false, history: [], start: null, snap: null,
       zoom: 1, fit: 1, panX: 0, panY: 0, space: false, panning: false, cloneSrc: null, cloneSnap: null, cloneOff: null,
-      anchor: null, sel: null, selPts: null, selCanvas, aiFillBusy: false };
+      anchor: null, sel: null, selPts: null, selCanvas, aiFillBusy: false, origSnap: orig, float: null };
     _annotSelSyncBar();
     if (!_annotAntsRunning) _annotAntsLoop();
     _annotSyncControls();
+    _annotBindSliderWheel();
     _annotSetTool('erase');
     document.getElementById('annotOverlay').classList.add('show');
     // Fit the image after the overlay is visible so the stage has real dimensions.
@@ -12865,12 +12896,48 @@ function openAnnotTool(blockId) {
   }).catch(e => { console.warn('open annot', e); showToast('Could not open touch-up for this image', 'error'); });
 }
 function _annotSyncControls() {
-  if (!_annot) return;
-  const col = document.getElementById('annotColor'), sz = document.getElementById('annotSize');
-  if (col) _annot.color = col.value || _annot.color;
-  if (sz) _annot.size = parseInt(sz.value, 10) || _annot.size;
-  const lbl = document.getElementById('annotSizeVal');
-  if (lbl) lbl.innerHTML = _annot.size + '&nbsp;px';
+  const col = document.getElementById('annotColor'), sz = document.getElementById('annotSize'), tl = document.getElementById('annotTol');
+  if (_annot) {
+    if (col) _annot.color = col.value || _annot.color;
+    if (sz) _annot.size = parseInt(sz.value, 10) || _annot.size;
+    if (tl) { const t = parseInt(tl.value, 10); _annot.tol = isNaN(t) ? _annot.tol : t; }
+    const lbl = document.getElementById('annotSizeVal');
+    if (lbl) lbl.innerHTML = _annot.size + '&nbsp;px';
+    const tlbl = document.getElementById('annotTolVal');
+    if (tlbl) tlbl.textContent = _annot.tol;
+  }
+  // The bucket icon always shows the colour it would pour, open tool or not.
+  const bucket = document.querySelector('.annot-tool[data-atool="fill"]');
+  if (bucket && col) bucket.style.setProperty('--annot-paint', col.value || '#e23c3c');
+}
+// Nudge the brush size from a key or the mouse wheel, keeping the slider,
+// the label and _annot in step.
+function _annotStepSize(delta) {
+  const sz = document.getElementById('annotSize');
+  if (!sz) return;
+  const min = parseInt(sz.min, 10) || 1, max = parseInt(sz.max, 10) || 60;
+  sz.value = String(Math.min(max, Math.max(min, (parseInt(sz.value, 10) || 1) + delta)));
+  _annotSyncControls();
+}
+function _annotStepTol(delta) {
+  const tl = document.getElementById('annotTol');
+  if (!tl) return;
+  const min = parseInt(tl.min, 10) || 0, max = parseInt(tl.max, 10) || 120;
+  tl.value = String(Math.min(max, Math.max(min, (parseInt(tl.value, 10) || 0) + delta)));
+  _annotSyncControls();
+}
+// Scroll over either slider to change it — the wheel is the natural gesture for
+// a value you are adjusting by feel, and the page must not scroll underneath.
+function _annotBindSliderWheel() {
+  [['annotSize', _annotStepSize, 1], ['annotTol', _annotStepTol, 4]].forEach(([id, step, mult]) => {
+    const el = document.getElementById(id);
+    if (!el || el._wheelBound) return;
+    el._wheelBound = true;
+    el.addEventListener('wheel', e => {
+      e.preventDefault(); e.stopPropagation();
+      step((e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? mult * 5 : mult));
+    }, { passive: false });
+  });
 }
 // ---- Zoom & pan (Photoshop-style): the canvas is transformed inside a fixed
 // viewport; scroll zooms toward the cursor, Space/middle-drag pans. ----
@@ -12919,7 +12986,8 @@ function _annotFloodFill(sx, sy) {
   const fill = _annot.tool === 'erase' ? [255, 255, 255] : _annotHexToRgb(_annot.color);
   const fr = fill[0], fg = fill[1], fb = fill[2];
   if (Math.abs(tr - fr) < 2 && Math.abs(tg - fg) < 2 && Math.abs(tb - fb) < 2 && ta === 255) return; // already that colour
-  const TOL = 48 * 48 * 3;   // squared colour distance a pixel may differ and still count
+  const t = Math.max(1, _annot.tol || 32);
+  const TOL = t * t * 3;   // squared colour distance a pixel may differ and still count
   const match = i => { const dr = src[i] - tr, dg = src[i + 1] - tg, db = src[i + 2] - tb, da = src[i + 3] - ta; return dr * dr + dg * dg + db * db + da * da <= TOL; };
   const seen = new Uint8Array(W * H);
   const stack = [[sx, sy]];
@@ -12936,6 +13004,75 @@ function _annotFloodFill(sx, sy) {
   }
   ctx.putImageData(img, 0, 0);
 }
+// ---- MOVE: lift the selection off the picture and drop it anywhere ---------
+// Photoshop's Move tool. Dragging inside a selection cuts those pixels out onto
+// a floating layer that follows the pointer; the hole they left is painted
+// white (the same white Erase uses, which is what a scanned page wants). Hold
+// Alt to copy instead of cut, leaving the original where it was. The float is
+// only burned in on release, so nothing is committed until you let go.
+function _annotSelLift(copy) {
+  const m = _annotSelMask(); if (!m) return null;
+  const cv = _annot.canvas, ctx = _annot.ctx;
+  const layer = document.createElement('canvas');
+  layer.width = m.w; layer.height = m.h;
+  const lx = layer.getContext('2d');
+  const src = ctx.getImageData(m.x, m.y, m.w, m.h);
+  const cut = lx.createImageData(m.w, m.h);
+  for (let k = 0; k < m.mask.length; k++) {
+    if (!m.mask[k]) continue;
+    const i = k * 4;
+    cut.data[i] = src.data[i]; cut.data[i + 1] = src.data[i + 1];
+    cut.data[i + 2] = src.data[i + 2]; cut.data[i + 3] = src.data[i + 3];
+  }
+  lx.putImageData(cut, 0, 0);
+  if (!copy) {
+    for (let k = 0; k < m.mask.length; k++) {
+      if (!m.mask[k]) continue;
+      const i = k * 4;
+      src.data[i] = 255; src.data[i + 1] = 255; src.data[i + 2] = 255; src.data[i + 3] = 255;
+    }
+    ctx.putImageData(src, m.x, m.y);
+  }
+  // The picture with the hole in it, so each drag frame redraws from a clean base.
+  const base = document.createElement('canvas');
+  base.width = cv.width; base.height = cv.height;
+  base.getContext('2d').drawImage(cv, 0, 0);
+  return { layer, base, mask: m, dx: 0, dy: 0 };
+}
+function _annotFloatDraw() {
+  const f = _annot && _annot.float; if (!f) return;
+  const ctx = _annot.ctx;
+  ctx.putImageData(f.base.getContext('2d').getImageData(0, 0, f.base.width, f.base.height), 0, 0);
+  ctx.drawImage(f.layer, f.mask.x + f.dx, f.mask.y + f.dy);
+}
+// Drop it: the float becomes part of the picture and the selection travels with
+// it, so it can be moved again, filled, or nudged further.
+function _annotFloatCommit() {
+  const f = _annot && _annot.float; if (!f) return;
+  _annotFloatDraw();
+  const m = f.mask;
+  _annot.sel = { x: m.x + f.dx, y: m.y + f.dy, w: m.w, h: m.h, mask: m.mask };
+  _annot.sel.outline = _annotMaskOutline(_annot.sel);
+  _annot.float = null;
+  _annotSelSyncBar();
+}
+
+// History brush: paint the ORIGINAL picture back, one dab at a time.
+function _annotHistoryDab(x, y) {
+  if (!_annot.origSnap) return;
+  const ctx = _annot.ctx, r = Math.max(1, Math.round(_annot.size)) / 2;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+  ctx.drawImage(_annot.origSnap, 0, 0);
+  ctx.restore();
+}
+function _annotHistoryStroke(from, to) {
+  const r = Math.max(1, Math.round(_annot.size)) / 2;
+  const dx = to.x - from.x, dy = to.y - from.y, dist = Math.hypot(dx, dy);
+  const step = Math.max(1, r / 2), n = Math.max(1, Math.ceil(dist / step));
+  for (let i = 1; i <= n; i++) _annotHistoryDab(from.x + dx * (i / n), from.y + dy * (i / n));
+}
+
 // Clone stamp: copy a circular patch from the frozen source snapshot, offset so
 // the source point tracks the brush as you drag.
 function _annotCloneDab(ctx, x, y) {
@@ -13009,8 +13146,22 @@ function _annotTypingInField(e) {
   return !!(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
 }
 function _annotKeyDown(e) {
-  if (_annot && e.code === 'Space' && !_annotTypingInField(e)) { _annot.space = true; const st = document.getElementById('annotStage'); if (st) st.classList.add('canpan'); e.preventDefault(); }
-  if (_annot && e.key === 'Escape' && !_annotTypingInField(e) && (_annot.sel || _annot.selPts)) { _annot.selPts = null; _annot.drawing = false; annotSelClear(); }
+  if (!_annot) return;
+  if (e.code === 'Space' && !_annotTypingInField(e)) { _annot.space = true; const st = document.getElementById('annotStage'); if (st) st.classList.add('canpan'); e.preventDefault(); }
+  if (e.key === 'Escape' && !_annotTypingInField(e) && (_annot.sel || _annot.selPts)) { _annot.selPts = null; _annot.drawing = false; annotSelClear(); }
+  // Ctrl/Cmd+Z works even from a text label; everything else needs the canvas.
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); annotUndo(); return; }
+  if (_annotTypingInField(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key;
+  // [ and ] step the brush the way every paint program does. Shift jumps by 5.
+  if (k === '[' || k === '{') { e.preventDefault(); _annotStepSize(k === '{' ? -5 : -1); return; }
+  if (k === ']' || k === '}') { e.preventDefault(); _annotStepSize(k === '}' ? 5 : 1); return; }
+  if (k === '+' || k === '=') { e.preventDefault(); annotZoomStep(1.3); return; }
+  if (k === '-' || k === '_') { e.preventDefault(); annotZoomStep(1 / 1.3); return; }
+  if (k === '0') { e.preventDefault(); annotZoomFit(); return; }
+  if (k === 'Enter') { e.preventDefault(); applyAnnotTool(); return; }
+  const tool = ANNOT_KEYS[String(k).toLowerCase()];
+  if (tool) { e.preventDefault(); _annotSetTool(tool); }
 }
 function _annotKeyUp(e) { if (_annot && e.code === 'Space') { _annot.space = false; const st = document.getElementById('annotStage'); if (st) st.classList.remove('canpan'); } }
 function _annotBindZoomListeners() {
@@ -13025,13 +13176,18 @@ function _annotUnbindZoomListeners() {
   const st = document.getElementById('annotStage');
   if (st) st.classList.remove('canpan', 'panning');
 }
+const ANNOT_CURSORS = { text: 'text', fill: 'cell', wand: 'cell', move: 'move' };
 function _annotSetTool(t) {
   if (_annot) _annot.tool = t;
   document.querySelectorAll('.annot-tool').forEach(b => b.classList.toggle('active', b.getAttribute('data-atool') === t));
   const c = document.getElementById('annotCanvas');
-  if (c) c.style.cursor = t === 'text' ? 'text' : (t === 'fill' ? 'cell' : 'crosshair');
+  if (c) c.style.cursor = ANNOT_CURSORS[t] || 'crosshair';
+  // With Move active a whole text label is draggable, not just its little handle.
+  document.querySelectorAll('#annotStage .annot-textbox').forEach(b => b.classList.toggle('movable', t === 'move'));
   _annotUpdateCloneMarker();   // show the clone-source pin only while the Clone tool is active
 }
+// Single-key tool switching, Photoshop's letters where they exist.
+const ANNOT_KEYS = { e: 'erase', b: 'paint', g: 'fill', s: 'clone', y: 'history', m: 'select', l: 'lasso', w: 'wand', v: 'move', u: 'line', t: 'text' };
 function _annotPushHistory() {
   if (!_annot) return;
   try {
@@ -13111,6 +13267,72 @@ function annotSelClear() {
   _annot.sel = null; _annot.selPts = null;
   _annotSelSyncBar();
 }
+
+// ---- MAGIC WAND -----------------------------------------------------------
+// Click a colour and every pixel like it becomes the selection. Contiguous by
+// default (the patch you clicked); Alt+click takes that colour across the whole
+// picture, which is how you grab, say, every bit of a printed grey watermark in
+// one go. "Like it" is the ± slider: squared RGB distance, same yardstick the
+// paint bucket uses, so the two tools behave consistently.
+//
+// The result is a per-pixel MASK, not a polygon — a wand selection can be full
+// of holes and islands that no outline could describe. Every selection
+// operation below therefore works from a mask, and the polygon tools simply
+// rasterise into one.
+function _annotMagicWand(sx, sy, global) {
+  const cv = _annot.canvas, W = cv.width, H = cv.height;
+  sx = Math.floor(sx); sy = Math.floor(sy);
+  if (sx < 0 || sy < 0 || sx >= W || sy >= H) return null;
+  const d = _annot.ctx.getImageData(0, 0, W, H).data;
+  const at = (x, y) => (y * W + x) * 4;
+  const s0 = at(sx, sy);
+  const tr = d[s0], tg = d[s0 + 1], tb = d[s0 + 2];
+  const t = Math.max(1, _annot.tol || 32), TOL = t * t * 3;
+  const near = i => { const dr = d[i] - tr, dg = d[i + 1] - tg, db = d[i + 2] - tb; return dr * dr + dg * dg + db * db <= TOL; };
+  const mask = new Uint8Array(W * H);
+  if (global) {
+    for (let k = 0; k < mask.length; k++) if (near(k * 4)) mask[k] = 1;
+  } else {
+    const stack = [sy * W + sx];
+    mask[sy * W + sx] = 1;
+    while (stack.length) {
+      const k = stack.pop(), x = k % W, y = (k / W) | 0;
+      if (x > 0 && !mask[k - 1] && near(at(x - 1, y))) { mask[k - 1] = 1; stack.push(k - 1); }
+      if (x < W - 1 && !mask[k + 1] && near(at(x + 1, y))) { mask[k + 1] = 1; stack.push(k + 1); }
+      if (y > 0 && !mask[k - W] && near(at(x, y - 1))) { mask[k - W] = 1; stack.push(k - W); }
+      if (y < H - 1 && !mask[k + W] && near(at(x, y + 1))) { mask[k + W] = 1; stack.push(k + W); }
+    }
+  }
+  // Crop to the pixels actually hit so every later pass works on a small box.
+  let x0 = W, y0 = H, x1 = -1, y1 = -1, n = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!mask[y * W + x]) continue;
+    n++;
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  if (!n) return null;
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out[y * w + x] = mask[(y + y0) * W + (x + x0)];
+  return { x: x0, y: y0, w, h, mask: out, count: n };
+}
+
+// The outline of a mask, as edge segments between a selected and an unselected
+// pixel. Marching ants ride this exactly like they ride a lasso path.
+function _annotMaskOutline(m) {
+  const path = new Path2D();
+  const on = (x, y) => (x < 0 || y < 0 || x >= m.w || y >= m.h) ? 0 : m.mask[y * m.w + x];
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+    if (!on(x, y)) continue;
+    const px = m.x + x, py = m.y + y;
+    if (!on(x, y - 1)) { path.moveTo(px, py); path.lineTo(px + 1, py); }
+    if (!on(x, y + 1)) { path.moveTo(px, py + 1); path.lineTo(px + 1, py + 1); }
+    if (!on(x - 1, y)) { path.moveTo(px, py); path.lineTo(px, py + 1); }
+    if (!on(x + 1, y)) { path.moveTo(px + 1, py); path.lineTo(px + 1, py + 1); }
+  }
+  return path;
+}
 // Marching-ants animation: redraw the selection outline on the overlay canvas
 // while the tool is open. Dash length is in screen pixels regardless of zoom.
 let _annotAntsRunning = false;
@@ -13119,10 +13341,12 @@ function _annotAntsLoop() {
   _annotAntsRunning = true;
   const sc = _annot.selCanvas, sctx = sc.getContext('2d');
   sctx.clearRect(0, 0, sc.width, sc.height);
-  const pts = (_annot.drawing && _annot.selPts) ? _annot.selPts : (_annot.sel ? _annot.sel.pts : null);
-  if (pts && pts.length > 1) {
+  const pts = (_annot.drawing && _annot.selPts) ? _annot.selPts : (_annot.sel && _annot.sel.pts ? _annot.sel.pts : null);
+  let path = null;
+  if (pts && pts.length > 1) path = _annotSelPath(pts);
+  else if (_annot.sel && _annot.sel.outline) path = _annot.sel.outline;
+  if (path) {
     const s = _annotDisplayScale() || 1;
-    const path = _annotSelPath(pts);
     const phase = (performance.now() / 90) % 16;
     sctx.lineWidth = Math.max(1 / s, 0.5);
     sctx.setLineDash([6 / s, 6 / s]);
@@ -13132,8 +13356,10 @@ function _annotAntsLoop() {
   requestAnimationFrame(_annotAntsLoop);
 }
 // Rasterise the selection into a bounding box + per-pixel mask (1 = selected).
+// A wand selection already IS a mask and is handed straight back.
 function _annotSelMask() {
   const sel = _annot && _annot.sel; if (!sel) return null;
+  if (sel.mask) return sel;
   const W = _annot.canvas.width, H = _annot.canvas.height;
   let x0 = W, y0 = H, x1 = 0, y1 = 0;
   sel.pts.forEach(p => { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); });
@@ -13151,15 +13377,38 @@ function _annotSelMask() {
   for (let i = 0; i < mask.length; i++) mask[i] = md[i * 4 + 3] > 127 ? 1 : 0;
   return { x: x0, y: y0, w, h, mask };
 }
+// Apply a callback clipped to the selection, whichever kind it is: a polygon
+// gets a real canvas clip (anti-aliased edges), a wand mask is composited
+// pixel-by-pixel. One helper so every selection action supports both.
+function _annotWithSelClip(fn) {
+  const sel = _annot && _annot.sel; if (!sel) return;
+  const ctx = _annot.ctx;
+  if (sel.pts) { ctx.save(); ctx.clip(_annotSelPath(sel.pts)); fn(ctx); ctx.restore(); return; }
+  const m = sel;
+  const scratch = document.createElement('canvas');
+  scratch.width = _annot.canvas.width; scratch.height = _annot.canvas.height;
+  const sx = scratch.getContext('2d');
+  fn(sx);
+  const before = ctx.getImageData(m.x, m.y, m.w, m.h);
+  const after = sx.getImageData(m.x, m.y, m.w, m.h);
+  for (let k = 0; k < m.mask.length; k++) {
+    if (!m.mask[k] || after.data[k * 4 + 3] === 0) continue;
+    const i = k * 4;
+    before.data[i] = after.data[i]; before.data[i + 1] = after.data[i + 1];
+    before.data[i + 2] = after.data[i + 2]; before.data[i + 3] = 255;
+  }
+  ctx.putImageData(before, m.x, m.y);
+}
 function annotSelFillColour() {
   if (!_annot || !_annot.sel) return;
   _annotSyncControls();
   _annotPushHistory();
-  const ctx = _annot.ctx;
-  ctx.save();
-  ctx.fillStyle = _annot.color;
-  ctx.fill(_annotSelPath(_annot.sel.pts));
-  ctx.restore();
+  const sel = _annot.sel, colour = _annot.color;
+  _annotWithSelClip(c => {
+    c.fillStyle = colour;
+    if (sel.pts) c.fill(_annotSelPath(sel.pts));
+    else c.fillRect(sel.x, sel.y, sel.w, sel.h);
+  });
   showToast('Selection filled ✓', 'success');
 }
 // "Fill from surroundings" — onion-peel inpainting: BFS inwards from the
@@ -13228,7 +13477,17 @@ async function annotSelAiFill() {
     const mx = marked.getContext('2d');
     mx.drawImage(canvas, 0, 0);
     mx.fillStyle = '#ff00ff';
-    mx.fill(_annotSelPath(sel.pts));
+    if (sel.pts) {
+      mx.fill(_annotSelPath(sel.pts));
+    } else {
+      const md = mx.getImageData(sel.x, sel.y, sel.w, sel.h);
+      for (let k = 0; k < sel.mask.length; k++) {
+        if (!sel.mask[k]) continue;
+        const i = k * 4;
+        md.data[i] = 255; md.data[i + 1] = 0; md.data[i + 2] = 255; md.data[i + 3] = 255;
+      }
+      mx.putImageData(md, sel.x, sel.y);
+    }
     const dataUrl = marked.toDataURL('image/png');
     // Deliberately NOT SCAN_SOURCE_PROMPT: this patch has to disappear into
     // surroundings that are still scanned, so it must copy the scan's grain
@@ -13240,11 +13499,8 @@ async function annotSelAiFill() {
     const img = await _loadImageEl(outUrl);
     if (!_annot || _annot.canvas !== canvas) return;   // tool was closed meanwhile
     _annotPushHistory();
-    const ctx = _annot.ctx;
-    ctx.save();
-    ctx.clip(_annotSelPath(sel.pts));   // only the selected area may change
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    ctx.restore();
+    // Only the selected area may change — clipped for a polygon, masked for a wand.
+    _annotWithSelClip(c => c.drawImage(img, 0, 0, canvas.width, canvas.height));
     showToast('AI content-aware fill applied ✓ (Undo if it missed)', 'success');
   } catch (e) {
     console.warn('AI content-aware fill failed', e);
@@ -13258,6 +13514,32 @@ function _annotDown(e) {
   const p = _annotPt(e), ctx = _annot.ctx;
   if (_annot.tool === 'text') { _annotPlaceText(p); return; }
   if (_annot.tool === 'fill') { _annotPushHistory(); _annotFloodFill(p.x, p.y); return; }
+  if (_annot.tool === 'wand') {
+    const m = _annotMagicWand(p.x, p.y, e.altKey);
+    if (!m) { showToast('Nothing matched there — try a bigger ±', 'info'); return; }
+    m.outline = _annotMaskOutline(m);
+    _annot.sel = m;
+    _annotSelSyncBar();
+    showToast(m.count.toLocaleString() + ' pixels selected' + (e.altKey ? ' across the whole picture' : '') +
+      ' — fill it, move it, or widen the ± slider', 'info');
+    return;
+  }
+  if (_annot.tool === 'move') {
+    if (!_annot.sel) { showToast('Select an area first (⬚, ➰ or 🪄), then drag it with Move', 'info'); return; }
+    _annotPushHistory();
+    _annot.float = _annotSelLift(e.altKey);
+    if (!_annot.float) return;
+    _annot.start = p;
+    _annot.drawing = true;
+    return;
+  }
+  if (_annot.tool === 'history') {
+    _annotPushHistory();
+    _annot.drawing = true;
+    _annot.last = p;
+    _annotHistoryDab(p.x, p.y);
+    return;
+  }
   if (_annot.tool === 'select' || _annot.tool === 'lasso') {
     _annot.sel = null; _annotSelSyncBar();
     _annot.selPts = _annot.tool === 'select' ? [p, p, p, p] : [p];
@@ -13324,6 +13606,15 @@ function _annotMove(e) {
   if (!_annot || !_annot.drawing) return;
   e.preventDefault();
   const p = _annotPt(e), ctx = _annot.ctx;
+  if (_annot.tool === 'move') {
+    if (!_annot.float) return;
+    let dx = p.x - _annot.start.x, dy = p.y - _annot.start.y;
+    if (e.shiftKey) { if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0; }   // Shift = straight
+    _annot.float.dx = Math.round(dx); _annot.float.dy = Math.round(dy);
+    _annotFloatDraw();
+    return;
+  }
+  if (_annot.tool === 'history') { _annotHistoryStroke(_annot.last, p); _annot.last = p; return; }
   if (_annot.tool === 'select' || _annot.tool === 'lasso') {
     if (!_annot.selPts) return;
     if (_annot.tool === 'select') {
@@ -13378,6 +13669,11 @@ function _annotMove(e) {
 }
 function _annotUp() {
   if (!_annot) return;
+  if (_annot.float) {
+    _annotFloatCommit();
+    _annot.drawing = false; _annot.start = null; _annot.last = null;
+    return;
+  }
   if (_annot.drawing && _annot.selPts && (_annot.tool === 'select' || _annot.tool === 'lasso')) {
     // Finalise the selection: keep it only if it has real area.
     const pts = _annot.selPts;
@@ -13416,25 +13712,34 @@ function _annotPlaceText(p) {
   input.style.fontSize = Math.max(10, Math.round(fontNat / p.scale)) + 'px';
   box.appendChild(handle);
   box.appendChild(input);
+  if (_annot.tool === 'move') box.classList.add('movable');
   stage.appendChild(box);
   setTimeout(() => input.focus(), 0);
 
-  // --- drag to reposition (grab the handle) ---
+  // --- drag to reposition ---
+  // The little handle always drags. With the Move tool active the body of the
+  // label drags too, so "Move" repositions text as well as pixels.
   let drag = null;
-  handle.addEventListener('pointerdown', ev => {
+  const startDrag = (ev, el) => {
     ev.preventDefault(); ev.stopPropagation();   // keep input focus; don't draw on the canvas
     drag = { dx: ev.clientX - box.offsetLeft, dy: ev.clientY - box.offsetTop };
-    try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
-  });
-  handle.addEventListener('pointermove', ev => {
+    try { el.setPointerCapture(ev.pointerId); } catch (e) {}
+  };
+  const moveDrag = ev => {
     if (!drag) return;
     const sr = stage.getBoundingClientRect();
     let nx = ev.clientX - drag.dx, ny = ev.clientY - drag.dy;
     nx = Math.max(0, Math.min(sr.width - 10, nx));
     ny = Math.max(19, Math.min(sr.height - 6, ny));   // keep the handle on-screen
     box.style.left = nx + 'px'; box.style.top = ny + 'px';
-  });
-  handle.addEventListener('pointerup', ev => { drag = null; try { handle.releasePointerCapture(ev.pointerId); } catch (e) {} input.focus(); });
+  };
+  const endDrag = (ev, el) => { drag = null; try { el.releasePointerCapture(ev.pointerId); } catch (e) {} input.focus(); };
+  handle.addEventListener('pointerdown', ev => startDrag(ev, handle));
+  handle.addEventListener('pointermove', moveDrag);
+  handle.addEventListener('pointerup', ev => endDrag(ev, handle));
+  input.addEventListener('pointerdown', ev => { if (_annot && _annot.tool === 'move') startDrag(ev, input); });
+  input.addEventListener('pointermove', moveDrag);
+  input.addEventListener('pointerup', ev => { if (drag) endDrag(ev, input); });
 
   let done = false;
   const commit = () => {
@@ -36026,25 +36331,44 @@ function _ainsteinPageText() {
   return parts.join('\n\n— — —\n\n').slice(0, 12000);
 }
 
-// The pictures on screen, as inline image parts. Ai-nstein's own avatar and
-// chrome are skipped — they are not the lesson — as is anything too small to be
-// a diagram. Any image that can't be fetched is simply left out; the text half
-// of the snapshot still goes.
+// The raw question the student is working on, whichever surface mounted it.
+function _ainsteinCurrentQuestion() {
+  if (_ainsteinQuiz && _ainsteinQuiz.q) return _ainsteinQuiz.q;
+  const page = _ainsteinPageId();
+  if (page === 'quickpractice' && Array.isArray(qpQueue) && qpIndex >= 0 && qpQueue[qpIndex]) return qpQueue[qpIndex];
+  if (page === 'topicalpractice' && Array.isArray(tpQueue) && tpIndex >= 0 && tpQueue[tpIndex]) return tpQueue[tpIndex];
+  return _ainsteinVisibleOpenQuestion();
+}
+
+// The pictures Ai-nstein needs to see, as inline image parts. Two sources, in
+// this order:
+//
+//   1. Every image block of the question they are on. A phone screen shows a
+//      slice of a long question — the diagram is often scrolled off, or the
+//      student is looking at part (b) while the picture belongs to part (a).
+//      The question's own pictures go regardless of where the page is scrolled,
+//      because the question is the unit of meaning, not the viewport.
+//   2. Anything else rendered on screen that is big enough to be a diagram.
+//
+// Ai-nstein's own avatar and chrome are skipped — they are not the lesson. Any
+// image that can't be fetched is simply left out; the text half still goes.
 async function _ainsteinScreenImages() {
-  const roots = _ainsteinScreenRoots();
   const seen = new Set();
   const picks = [];
-  roots.forEach(root => {
+  const want = src => {
+    if (!src || seen.has(src) || picks.length >= AINSTEIN_SHOT_MAX_IMAGES) return;
+    seen.add(src); picks.push(src);
+  };
+  const q = _ainsteinCurrentQuestion();
+  ((q && q.blocks) || []).forEach(b => { if (b && b.type === 'image' && b.url) want(transformImageUrl(b.url)); });
+  _ainsteinScreenRoots().forEach(root => {
     root.querySelectorAll('img').forEach(im => {
       if (picks.length >= AINSTEIN_SHOT_MAX_IMAGES) return;
-      const src = im.currentSrc || im.src || '';
-      if (!src || seen.has(src)) return;
       if (im.closest('#ainsteinPanel .ainstein-head, #ainsteinBubble')) return;
       const r = im.getBoundingClientRect();
       if (r.width < 80 || r.height < 60) return;          // icons and avatars, not diagrams
       if (!_ainsteinOnScreen(im)) return;
-      seen.add(src);
-      picks.push(src);
+      want(im.currentSrc || im.src || '');
     });
   });
   // In parallel, and on a leash: a picture whose host hangs must not hold the
@@ -36068,15 +36392,25 @@ function _ainsteinPageId() {
   return pageEl ? pageEl.id.replace(/^page-/, '') : 'home';
 }
 
-// Compact, readable rendering of one bank question for the model.
+// Compact, readable rendering of one bank question for the model. The wording is
+// clipped generously rather than tightly: this is the WHOLE question, including
+// the parts the student has scrolled past, and it is the only thing that can
+// rescue a reply when the screen is showing a fragment.
 function _ainsteinQBrief(q) {
   if (!q) return null;
   const p = _docQParts(q);
   const out = {
-    title: _docClip(p.title, 120),
+    title: _docClip(p.title, 160),
     topic: q.topic || '',
-    question: _docClip(p.text, 900),
+    question: _docClip(p.text, 2600),
   };
+  const pics = ((q.blocks || []).filter(b => b && b.type === 'image' && b.url));
+  if (pics.length) {
+    out.pictures = pics.length + (pics.length === 1 ? ' picture is part of this question and is attached to this message'
+      : ' pictures are part of this question and are attached to this message');
+    const caps = pics.map(b => stripHtml(b.caption || '')).filter(Boolean);
+    if (caps.length) out.pictureCaptions = caps.map(c => _docClip(c, 160));
+  }
   if (p.mcq) {
     out.options = (p.mcq.options || []).map((o, i) => (i + 1) + '. ' + _docClip(stripHtml(o.text || ''), 160));
     const correct = (p.mcq.options || []).findIndex(o => o.id === p.mcq.correctId);
@@ -37124,6 +37458,10 @@ function _ainsteinBuildPrompt(question, shotImages) {
   }
   lines.push('');
   lines.push('You can therefore see the whole question, every option and every picture. Never tell the student you cannot see something that is in the snapshot above — read it again instead. Say you cannot see something only if it genuinely is not there.');
+  if (qctx) {
+    lines.push('');
+    lines.push('IMPORTANT — the snapshot is what fits on their screen, and a screen is small. They may have scrolled past the picture, the setup sentence, or the earlier parts of a multi-part question. THE QUESTION DATA BELOW IS THE COMPLETE QUESTION, every part of it, whether or not it is currently in view. Where the two disagree, or where the snapshot looks like it is missing something, trust the question data — and never say a part of the question is missing when it is there.');
+  }
   if (qctx) {
     lines.push('');
     lines.push('THE QUESTION THEY ARE ON (' + qctx.forModel.position + '), as structured data — the exact wording of every option and the answer key. ' +
