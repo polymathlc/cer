@@ -7753,6 +7753,28 @@ option {
   </div>
 </div>
 
+<!-- ==================== PAST PAPER — EDIT A WHOLE PAPER IN ONE GO ==================== -->
+<div class="confirm-overlay" id="ppPaperEditOverlay">
+  <div class="confirm-dialog pp-pe-dialog">
+    <div class="pp-pe-head">
+      <div class="pp-pe-headtext">
+        <h3 id="ppPaperEditTitle">Edit the whole paper</h3>
+        <p class="pp-pe-sub" id="ppPaperEditSub"></p>
+      </div>
+      <button type="button" class="pp-pe-x" onclick="ppClosePaperEdit()" title="Close without saving">&times;</button>
+    </div>
+    <div class="pp-pe-bulk" id="ppPaperEditBulk"></div>
+    <div class="pp-pe-body" id="ppPaperEditBody"></div>
+    <div class="pp-pe-foot">
+      <div class="pp-pe-status" id="ppPaperEditStatus"></div>
+      <div class="pp-pe-actions">
+        <button class="btn btn-outline" onclick="ppClosePaperEdit()">Cancel</button>
+        <button class="btn btn-primary" onclick="ppSavePaperEdit()">Save the whole paper</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== PAST PAPER — EDIT A RECURRING CONCEPT ==================== -->
 <div class="confirm-overlay" id="ppCEditOverlay">
   <div class="confirm-dialog" style="max-width:640px;text-align:left;max-height:90vh;display:flex;flex-direction:column;">
@@ -9601,7 +9623,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.175.1';
+const APP_VERSION = 'v1.176.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -35074,7 +35096,10 @@ function ppMergeSeedContent(){
     const q = Array.isArray(ppData.questions) ? ppData.questions : (ppData.questions = []);
     const savedYears = new Set(q.map(x => String(x.year)));
     const present = new Set(q.map(x => x.id));
-    const addQ = PP_SEED_Q.filter(s => !savedYears.has(String(s.year)));
+    // A seed question whose id is already saved is NEVER re-added, even if its
+    // year label no longer matches — otherwise re-labelling a paper's year in
+    // the whole-paper editor would resurrect the entire original paper.
+    const addQ = PP_SEED_Q.filter(s => !savedYears.has(String(s.year)) && !present.has(s.id));
     const addIds = new Set(addQ.map(s => s.id));
     const backfill = PP_SEED_Q.filter(s => PP_BACKFILL_IDS.has(s.id) && !present.has(s.id) && !addIds.has(s.id));
     // Upgrade any backfill question the admin still has only as an empty placeholder
@@ -35490,7 +35515,10 @@ function ppRenderBody(){
     const addBtn = edit ? `<button class="pp-add sm" onclick="ppAddQuestion('${y}')">+ Add question</button>` : '';
     const practiceBtn = (!edit && yAssigned) ? `<button class="pp-mini" title="Practise all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} from the ${escapeHtml(y)} paper on the system" onclick="ppPracticeYear('${escapeHtml(y)}')">▶ Practice now</button>` : '';
     const printBtn = (!edit && (admin || yAssigned)) ? `<button class="pp-mini" title="Print the whole ${escapeHtml(y)} paper — all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} in question order, answer key on the last pages" onclick="ppPrintYear('${escapeHtml(y)}')">🖨 Print year</button>` : '';
-    const yearTools = (practiceBtn || printBtn) ? `<span class="pp-tools">${practiceBtn}${printBtn}</span>` : '';
+    // Whole-paper editor: every question in this year on ONE screen, no
+    // question-by-question clicking.
+    const bulkEditBtn = admin ? `<button class="pp-mini pp-bulkedit" title="Open the whole ${escapeHtml(y)} paper in one editor — change every question's number, marks, topic, skill, difficulty, title, analysis and answer, then save once" onclick="ppOpenPaperEdit('${escapeHtml(y)}')">🗂 Edit whole paper</button>` : '';
+    const yearTools = (bulkEditBtn || practiceBtn || printBtn) ? `<span class="pp-tools">${bulkEditBtn}${practiceBtn}${printBtn}</span>` : '';
     return `<div class="pp-year">
       <div class="pp-year-head"><strong>${escapeHtml(y)}</strong> <span class="pp-year-sub">${yq.length} questions &middot; ${yAssigned}/${yq.length} attached</span> ${addBtn}${yearTools}</div>
       <div class="pp-chip-row">${chips}</div>
@@ -35551,8 +35579,8 @@ function ppRenderBody(){
   const roleLine = !admin
     ? 'Tap any highlighted question to practise it. Hover to preview. Greyed-out questions have not been added yet. Use “Practise the papers” below to do a whole year in one go — or play it inside a game, where every question counts ×2 on the leaderboards! The 🖨 buttons print a year or a concept as a worksheet, with the answer key on the last pages.'
     : (edit
-      ? 'Editing: use <strong>+ Add question</strong> to key in a new past-paper question yourself (no PDF needed) — set its year, number, booklet, marks, topic and answer — or <strong>+ Add a paper / question in a new year</strong> to start a new year. Click a question or concept to change its details, or × to remove it. Turn editing off to attach bank questions.'
-      : 'Click any question to attach one from your bank — or create a brand-new question for it on the spot — and to set its difficulty (🟢/🟡/🔴, colours the chip on this page only); students can then practise it. Hover a question to preview. Use the 🖨 buttons to print a concept or a whole year (answer key on the last pages), and the checkboxes to print several concepts together. Click “<strong>✎ Add / edit questions</strong>” to key in your own past-paper questions (or a whole new year) by hand — no PDF needed.');
+      ? 'Editing: use <strong>🗂 Edit whole paper</strong> on any year to edit every question in that paper on one screen (and change many at once) — or <strong>+ Add question</strong> to key in a single new past-paper question yourself. <strong>+ Add a paper / question in a new year</strong> starts a new year. Click a question or concept to change its details, or × to remove it. Turn editing off to attach bank questions.'
+      : 'Click any question to attach one from your bank — or create a brand-new question for it on the spot — and to set its difficulty (🟢/🟡/🔴, colours the chip on this page only); students can then practise it. Hover a question to preview. Need to fix a whole paper? <strong>🗂 Edit whole paper</strong> on any year opens all of its questions on one screen, with bulk topic / skill / difficulty / marks changes and one Save — no clicking question by question. Use the 🖨 buttons to print a concept or a whole year (answer key on the last pages), and the checkboxes to print several concepts together.');
 
   body.innerHTML = ppStyles() + `
   <div class="pp-wrap">
@@ -36361,6 +36389,305 @@ async function ppDeleteQuestion(id){
 }
 function ppDeleteQuestionFromEditor(){ const id = _ppQEditId; if (!id) return; ppCloseQEdit(); ppDeleteQuestion(id); }
 
+// =====================================================================
+// WHOLE-PAPER EDITOR — edit an entire past year paper on ONE screen
+// instead of opening each question's dialog one at a time.
+//
+// Everything is edited on a DRAFT copy of the year's questions, so Cancel
+// throws the lot away and Save writes the whole paper back in a single
+// savePaperData() call. Rows can be added, deleted, re-numbered and bulk-
+// stamped (topic / skill / difficulty / booklet / marks) across every ticked
+// question at once.
+// =====================================================================
+let _ppPeYear = null;        // the year currently open in the whole-paper editor
+let _ppPeYearDraft = '';     // the year as typed (kept in state: the bulk bar re-renders)
+let _ppPeRows = null;        // draft rows: clones of the year's questions (+ new ones)
+let _ppPeSel = new Set();    // row keys ticked for the bulk actions
+let _ppPeDeleted = [];       // ids of EXISTING questions removed in this session
+let _ppPeDirty = false;      // has anything been touched since opening?
+let _ppPeKeySeq = 0;         // draft-local row keys (a new row has no id yet)
+
+function ppPeNewKey(){ return 'k' + (++_ppPeKeySeq); }
+function ppPeFind(k){ return (_ppPeRows || []).find(r => r._k === k); }
+function ppPeMarkDirty(){ _ppPeDirty = true; ppPeRenderStatus(); }
+
+function ppOpenPaperEdit(year){
+  if (!ppIsAdmin()) { showToast('Only admins can edit the papers', 'error'); return; }
+  const y = String(year || '');
+  ppHoverHide();
+  _ppPeYear = y;
+  _ppPeYearDraft = y;
+  _ppPeSel = new Set();
+  _ppPeDeleted = [];
+  _ppPeDirty = false;
+  _ppPeRows = ppQuestions()
+    .filter(q => String(q.year) === y)
+    .sort((a,b) => (Number(a.n)||0) - (Number(b.n)||0))
+    .map(q => Object.assign(ppClone(q), { _k: ppPeNewKey() }));
+  const t = document.getElementById('ppPaperEditTitle');
+  if (t) t.textContent = `🗂 PSLE ${y} — the whole paper`;
+  ppPeRender();
+  const ov = document.getElementById('ppPaperEditOverlay'); if (ov) ov.classList.add('active');
+}
+
+function ppClosePaperEdit(){
+  if (_ppPeDirty && !confirm('Discard every change you made to this paper?')) return;
+  const ov = document.getElementById('ppPaperEditOverlay'); if (ov) ov.classList.remove('active');
+  _ppPeYear = null; _ppPeYearDraft = ''; _ppPeRows = null; _ppPeSel = new Set(); _ppPeDeleted = []; _ppPeDirty = false;
+}
+function ppPeSetYear(v){ _ppPeYearDraft = v; ppPeMarkDirty(); }
+
+// ---- draft mutations (typing never re-renders, so the caret is never lost) ----
+function ppPeSet(k, field, value){
+  const r = ppPeFind(k); if (!r) return;
+  r[field] = value;
+  ppPeMarkDirty();
+}
+function ppPeToggleSel(k, on){ if (on) _ppPeSel.add(k); else _ppPeSel.delete(k); ppPeRenderBulk(); ppPeRenderStatus(); ppPeSyncRowClasses(); }
+function ppPeSelectAll(on){
+  _ppPeSel = on ? new Set((_ppPeRows || []).map(r => r._k)) : new Set();
+  (_ppPeRows || []).forEach(r => { const cb = document.getElementById('ppPeCb_' + r._k); if (cb) cb.checked = on; });
+  ppPeRenderBulk(); ppPeRenderStatus(); ppPeSyncRowClasses();
+}
+function ppPeSyncRowClasses(){
+  (_ppPeRows || []).forEach(r => {
+    const el = document.getElementById('ppPeRow_' + r._k);
+    if (el) el.classList.toggle('sel', _ppPeSel.has(r._k));
+  });
+}
+function ppPeAddRow(){
+  if (!_ppPeRows) return;
+  const used = _ppPeRows.map(r => Number(r.n) || 0);
+  const next = used.length ? Math.max.apply(null, used) + 1 : 1;
+  _ppPeRows.push({
+    _k: ppPeNewKey(), id: null, year: _ppPeYear, n: next, bk: 'A', marks: 2,
+    topic: (currentTopics()[0] || 'Electrical Systems'), type: 'recall', title: '', detail: '', ans: ''
+  });
+  ppPeMarkDirty();
+  ppPeRender();
+  requestAnimationFrame(() => {
+    const el = document.getElementById('ppPeRow_' + _ppPeRows[_ppPeRows.length - 1]._k);
+    if (el) { try { el.scrollIntoView({ behavior:'smooth', block:'center' }); } catch(_) { el.scrollIntoView(); } }
+  });
+}
+function ppPeDeleteRow(k){
+  const r = ppPeFind(k); if (!r) return;
+  const label = `Q${r.n}`;
+  if (r.id && !confirm(`Remove ${_ppPeYear} ${label} from this paper? It is only deleted when you save.`)) return;
+  if (r.id) _ppPeDeleted.push(r.id);
+  _ppPeRows = _ppPeRows.filter(x => x._k !== k);
+  _ppPeSel.delete(k);
+  ppPeMarkDirty();
+  ppPeRender();
+}
+// Re-number every question 1..n in the order they are listed — the usual fix
+// after inserting a question the paper was missing.
+function ppPeRenumber(){
+  if (!_ppPeRows || !_ppPeRows.length) return;
+  if (!confirm('Renumber every question in this paper 1, 2, 3… in the order shown?')) return;
+  _ppPeRows.forEach((r, i) => { r.n = i + 1; });
+  ppPeMarkDirty();
+  ppPeRender();
+}
+function ppPeSort(){
+  if (!_ppPeRows) return;
+  _ppPeRows.sort((a,b) => ((a.bk || 'A') > (b.bk || 'A') ? 1 : (a.bk || 'A') < (b.bk || 'A') ? -1 : 0) || (Number(a.n)||0) - (Number(b.n)||0));
+  ppPeRender();
+}
+// Stamp one field onto every ticked row at once.
+function ppPeBulk(field, value, selEl){
+  if (selEl) selEl.value = '';
+  if (!_ppPeSel.size) { showToast('Tick the questions you want to change first', 'info'); return; }
+  if (value === '' || value == null) return;
+  let v = value;
+  if (field === 'marks') v = Math.max(1, Number(value) || 1);
+  if (field === 'diff' && v === 'none') v = '';   // "Clear difficulty"
+  _ppPeSel.forEach(k => {
+    const r = ppPeFind(k); if (!r) return;
+    if (field === 'diff' && !v) delete r.diff; else r[field] = v;
+  });
+  ppPeMarkDirty();
+  ppPeRender();
+  showToast(`Applied to ${_ppPeSel.size} question${_ppPeSel.size === 1 ? '' : 's'}`, 'success');
+}
+function ppPeBulkMarks(){
+  const el = document.getElementById('ppPeBulkMarks');
+  const v = el ? el.value : '';
+  if (!String(v).trim()) { showToast('Type the number of marks first', 'info'); return; }
+  ppPeBulk('marks', v);
+  if (el) el.value = '';
+}
+
+// ---- rendering ----
+function ppPeTopicOptions(cur){
+  const topics = currentTopics().slice();
+  if (cur && topics.indexOf(cur) < 0) topics.unshift(cur);
+  return topics.map(t => `<option ${t === cur ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('');
+}
+function ppPeSkillOptions(cur){
+  return Object.keys(PP_SKILL).map(k => `<option value="${k}" ${k === cur ? 'selected' : ''}>${escapeHtml(PP_SKILL[k])}</option>`).join('');
+}
+function ppPeDiffOptions(cur){
+  const d = (cur === 'easy' || cur === 'moderate' || cur === 'hard') ? cur : '';
+  return `<option value="" ${!d ? 'selected' : ''}>◻ No difficulty</option>
+    <option value="easy" ${d === 'easy' ? 'selected' : ''}>🟢 Easy</option>
+    <option value="moderate" ${d === 'moderate' ? 'selected' : ''}>🟡 Moderate</option>
+    <option value="hard" ${d === 'hard' ? 'selected' : ''}>🔴 Difficult</option>`;
+}
+function ppPeRender(){
+  ppPeRenderBulk();
+  const body = document.getElementById('ppPaperEditBody');
+  if (body) {
+    const rows = _ppPeRows || [];
+    body.innerHTML = rows.length
+      ? rows.map(r => ppPeRowHtml(r)).join('') + `<button type="button" class="pp-add pp-pe-addrow" onclick="ppPeAddRow()">＋ Add another question to this paper</button>`
+      : `<div class="pp-pe-empty">This paper has no questions yet.<br><button type="button" class="pp-add" style="margin-top:14px;" onclick="ppPeAddRow()">＋ Add the first question</button></div>`;
+  }
+  ppPeRenderStatus();
+}
+function ppPeRowHtml(r){
+  const k = r._k;
+  const bq = r.id ? ppBankQ(r.id) : null;
+  const sel = _ppPeSel.has(k);
+  const badges = [
+    r.id ? '' : '<span class="pp-pe-badge new">NEW</span>',
+    bq ? `<span class="pp-pe-badge ok" title="A bank question is attached — students can practise it">✓ attached</span>` : '<span class="pp-pe-badge muted" title="No bank question attached yet — students cannot practise this one">not attached</span>'
+  ].join('');
+  return `<div class="pp-pe-row${sel ? ' sel' : ''}" id="ppPeRow_${k}">
+    <div class="pp-pe-rowhead">
+      <label class="pp-pe-tick" title="Tick to include this question in the bulk actions above">
+        <input type="checkbox" id="ppPeCb_${k}" ${sel ? 'checked' : ''} onchange="ppPeToggleSel('${k}', this.checked)">
+      </label>
+      <span class="pp-pe-qno">Q${escapeHtml(String(r.n))}</span>
+      ${badges}
+      <div class="pp-pe-rowtools">
+        ${bq ? `<button type="button" class="pp-mini" title="Open the attached quiz question in the full block editor" onclick="ppPeEditBank('${k}')">✏️ Attached question</button>` : ''}
+        <button type="button" class="pp-mini del" title="Remove this question from the paper" onclick="ppPeDeleteRow('${k}')">&times; Remove</button>
+      </div>
+    </div>
+    <div class="pp-pe-grid">
+      <label class="pp-pe-f"><span>Q no.</span><input class="form-input" type="number" min="1" value="${escapeHtml(String(r.n == null ? '' : r.n))}" oninput="ppPeSet('${k}','n',this.value)"></label>
+      <label class="pp-pe-f"><span>Booklet</span><select class="form-select" onchange="ppPeSet('${k}','bk',this.value)"><option ${((r.bk||'A') === 'A') ? 'selected' : ''}>A</option><option ${((r.bk||'A') === 'B') ? 'selected' : ''}>B</option></select></label>
+      <label class="pp-pe-f"><span>Marks</span><input class="form-input" type="number" min="1" value="${escapeHtml(String(r.marks == null ? '' : r.marks))}" oninput="ppPeSet('${k}','marks',this.value)"></label>
+      <label class="pp-pe-f"><span>Topic</span><select class="form-select" onchange="ppPeSet('${k}','topic',this.value)">${ppPeTopicOptions(r.topic || '')}</select></label>
+      <label class="pp-pe-f"><span>Skill tested</span><select class="form-select" onchange="ppPeSet('${k}','type',this.value)">${ppPeSkillOptions(r.type || 'recall')}</select></label>
+      <label class="pp-pe-f"><span>Difficulty</span><select class="form-select" onchange="ppPeSet('${k}','diff',this.value)">${ppPeDiffOptions(r.diff)}</select></label>
+    </div>
+    <label class="pp-pe-f full"><span>Title</span><input class="form-input" type="text" placeholder="Short description of the question" value="${escapeHtml(String(r.title || ''))}" oninput="ppPeSet('${k}','title',this.value)"></label>
+    <div class="pp-pe-two">
+      <label class="pp-pe-f"><span>What it tests / analysis</span><textarea class="form-input" rows="2" placeholder="How the question works and what to watch for" oninput="ppPeSet('${k}','detail',this.value)">${escapeHtml(String(r.detail || ''))}</textarea></label>
+      <label class="pp-pe-f"><span>Suggested answer</span><textarea class="form-input" rows="2" placeholder="Model answer / key" oninput="ppPeSet('${k}','ans',this.value)">${escapeHtml(String(r.ans || ''))}</textarea></label>
+    </div>
+  </div>`;
+}
+// Jump from a row straight into the attached bank question's block editor.
+// Anything typed in the paper editor is saved first so it is never lost.
+async function ppPeEditBank(k){
+  const r = ppPeFind(k); if (!r || !r.id) return;
+  const bq = ppBankQ(r.id);
+  if (!bq) { showToast('No bank question is attached to this one', 'info'); return; }
+  if (_ppPeDirty) { const ok = await ppSavePaperEdit(true); if (!ok) return; }
+  ppClosePaperEdit();
+  editQuestionFromPapers(bq.id, r.id);
+}
+function ppPeRenderBulk(){
+  const el = document.getElementById('ppPaperEditBulk');
+  if (!el) return;
+  const rows = _ppPeRows || [];
+  const n = _ppPeSel.size;
+  const allOn = rows.length > 0 && n === rows.length;
+  const dis = n ? '' : 'disabled';
+  el.innerHTML = `
+    <div class="pp-pe-bulkline">
+      <label class="pp-pe-f sm"><span>Paper year</span><input class="form-input" id="ppPeYearInput" type="text" value="${escapeHtml(String(_ppPeYearDraft || ''))}" oninput="ppPeSetYear(this.value)" title="Applies to every question in this paper when you save"></label>
+      <label class="pp-pe-selall" title="Tick every question in this paper"><input type="checkbox" ${allOn ? 'checked' : ''} onchange="ppPeSelectAll(this.checked)"> Select all</label>
+      <span class="pp-pe-selcount">${n ? n + ' selected' : 'none selected'}</span>
+      <span class="pp-pe-spacer"></span>
+      <button type="button" class="pp-mini" title="Number the questions 1, 2, 3… in the order they are listed" onclick="ppPeRenumber()">1·2·3 Renumber</button>
+      <button type="button" class="pp-mini" title="Sort the list by booklet, then question number" onclick="ppPeSort()">⇅ Sort</button>
+      <button type="button" class="pp-add" onclick="ppPeAddRow()">＋ Add question</button>
+    </div>
+    <div class="pp-pe-bulkline">
+      <span class="pp-pe-bulklabel">Change all ticked questions:</span>
+      <select class="form-select sm" ${dis} onchange="ppPeBulk('topic', this.value, this)"><option value="">Set topic…</option>${ppPeTopicOptions('')}</select>
+      <select class="form-select sm" ${dis} onchange="ppPeBulk('type', this.value, this)"><option value="">Set skill…</option>${ppPeSkillOptions('')}</select>
+      <select class="form-select sm" ${dis} onchange="ppPeBulk('diff', this.value, this)"><option value="">Set difficulty…</option><option value="easy">🟢 Easy</option><option value="moderate">🟡 Moderate</option><option value="hard">🔴 Difficult</option><option value="none">◻ Clear difficulty</option></select>
+      <select class="form-select sm" ${dis} onchange="ppPeBulk('bk', this.value, this)"><option value="">Set booklet…</option><option value="A">Booklet A</option><option value="B">Booklet B</option></select>
+      <span class="pp-pe-marksbox"><input class="form-input sm" id="ppPeBulkMarks" type="number" min="1" placeholder="Marks" ${dis}><button type="button" class="pp-mini" ${dis} onclick="ppPeBulkMarks()">Set marks</button></span>
+    </div>`;
+}
+function ppPeRenderStatus(){
+  const rows = _ppPeRows || [];
+  const sub = document.getElementById('ppPaperEditSub');
+  if (sub) sub.textContent = `Edit every question in this paper on one screen — number, booklet, marks, topic, skill, difficulty, title, analysis and answer — then save the lot in one go. Tick questions to change several at once.`;
+  const st = document.getElementById('ppPaperEditStatus');
+  if (!st) return;
+  const marks = rows.reduce((s,r) => s + (Number(r.marks) || 0), 0);
+  const added = rows.filter(r => !r.id).length;
+  const bits = [`${rows.length} question${rows.length === 1 ? '' : 's'}`, `${marks} mark${marks === 1 ? '' : 's'}`];
+  if (added) bits.push(`${added} new`);
+  if (_ppPeDeleted.length) bits.push(`${_ppPeDeleted.length} to delete`);
+  st.innerHTML = `<span>${bits.join(' &middot; ')}</span>` + (_ppPeDirty ? `<span class="pp-pe-unsaved">● Unsaved changes</span>` : '');
+}
+
+// Write the whole draft back: deletions, edits and new questions in ONE save.
+// Returns true when it saved, false when validation stopped it.
+async function ppSavePaperEdit(quiet){
+  if (!ppIsAdmin()) { showToast('Only admins can edit the papers', 'error'); return false; }
+  const rows = _ppPeRows || [];
+  const yr = String(_ppPeYearDraft || '').trim();   // kept in sync by ppPeSetYear on every keystroke
+  if (!yr) { showToast('The paper needs a year', 'error'); return false; }
+  if (rows.some(r => !String(r.n == null ? '' : r.n).trim())) { showToast('Every question needs a question number', 'error'); return false; }
+  const nums = rows.map(r => (r.bk || 'A') + '-' + String(r.n).trim());
+  const dupe = nums.find((v, i) => nums.indexOf(v) !== i);
+  if (dupe && !confirm(`Two questions share the same booklet and number (${dupe.replace('-', ' Q')}). Save anyway?`)) return false;
+
+  // 1) deletions — also unlink them from concepts and from any attachment
+  if (_ppPeDeleted.length) {
+    const del = new Set(_ppPeDeleted);
+    ppData.questions = ppData.questions.filter(q => !del.has(q.id));
+    ppData.recurring.forEach(c => { if (Array.isArray(c.hits)) c.hits = c.hits.filter(h => !del.has(h)); });
+    let mapChanged = false;
+    del.forEach(id => { if (paperMap[id]) { delete paperMap[id]; mapChanged = true; } });
+    if (mapChanged) await savePaperMap();
+  }
+  // 2) edits + new questions
+  let created = 0;
+  rows.forEach(r => {
+    const rec = {
+      year: yr,
+      n: (Number(r.n) || String(r.n).trim()),
+      bk: r.bk || 'A',
+      marks: Math.max(1, Number(r.marks) || 1),
+      topic: r.topic || '',
+      type: r.type || 'recall',
+      title: String(r.title || '').trim(),
+      detail: String(r.detail || '').trim(),
+      ans: String(r.ans || '').trim()
+    };
+    const d = (r.diff === 'easy' || r.diff === 'moderate' || r.diff === 'hard') ? r.diff : '';
+    if (d) rec.diff = d;
+    const cur = r.id ? ppFindQ(r.id) : null;
+    if (cur) { if (!rec.diff) delete cur.diff; Object.assign(cur, rec); }
+    else { rec.id = r.id || ppNewId(); ppData.questions.push(rec); if (!r.id) { r.id = rec.id; created++; } }
+  });
+  await savePaperData();
+  _ppPeDeleted = [];
+  _ppPeYear = yr;
+  _ppPeYearDraft = yr;
+  _ppPeDirty = false;
+  _ppPeRows = rows.map(r => Object.assign(r, { year: yr }));
+  ppPeRender();
+  ppRenderBody();
+  const arPage = document.getElementById('page-ansreview');
+  if (arPage && arPage.classList.contains('active')) renderAnswerReview();
+  if (!quiet) {
+    showToast(`Saved the ${yr} paper — ${rows.length} question${rows.length === 1 ? '' : 's'}${created ? `, ${created} new` : ''}`, 'success');
+    ppClosePaperEdit();
+  }
+  return true;
+}
+
 // -------- concept editor --------
 function ppAddConcept(){ ppOpenCEdit({ id: null, concept: '', topic: '', note: '', hits: [] }); }
 function ppEditConcept(id){ const c = ppRecurring().find(x => x.id === id); if (c) ppOpenCEdit(c); }
@@ -36543,6 +36870,61 @@ function ppStyles(){
   .pp-match { color:var(--primary,#4a7c59); font-weight:700; }
   .pp-form-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px 12px; margin-bottom:6px; }
   .pp-form-grid .full { grid-column:1 / -1; }
+  .pp-mini.pp-bulkedit { background:var(--primary-light,#eef4f0); border-color:var(--primary,#4a7c59); color:var(--primary-dark,#2f5d3f); font-weight:600; }
+  .pp-mini.pp-bulkedit:hover { background:var(--primary,#4a7c59); color:#fff; }
+  /* ---- whole-paper editor ---- */
+  .pp-pe-dialog { max-width:1040px; width:min(1040px, 96vw); text-align:left; max-height:92vh; display:flex; flex-direction:column; padding:0; overflow:hidden; }
+  .pp-pe-head { display:flex; align-items:flex-start; gap:18px; padding:24px 28px 18px; border-bottom:1px solid var(--border); }
+  .pp-pe-headtext { flex:1; min-width:0; }
+  .pp-pe-head h3 { margin:0 0 8px; font-size:1.15rem; }
+  .pp-pe-sub { margin:0; font-size:0.86rem; color:var(--text-muted); line-height:1.6; }
+  .pp-pe-x { flex:none; border:none; background:none; font-size:1.7rem; line-height:1; color:var(--text-muted); cursor:pointer; padding:0 4px; border-radius:8px; }
+  .pp-pe-x:hover { color:var(--text); }
+  .pp-pe-bulk { padding:16px 28px; background:var(--surface-alt,#faf8f5); border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:12px; }
+  .pp-pe-bulkline { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; }
+  .pp-pe-bulklabel { font-size:0.8rem; font-weight:700; color:var(--text-muted); padding-bottom:9px; }
+  .pp-pe-spacer { flex:1; min-width:0; }
+  .pp-pe-selall { display:inline-flex; align-items:center; gap:7px; font-size:0.84rem; font-weight:600; cursor:pointer; padding-bottom:9px; }
+  .pp-pe-selall input { width:16px; height:16px; margin:0; accent-color:var(--primary,#4a7c59); cursor:pointer; }
+  .pp-pe-selcount { font-size:0.78rem; color:var(--text-muted); padding-bottom:10px; }
+  .pp-pe-bulk .form-select.sm, .pp-pe-bulk .form-input.sm { font-size:0.82rem; padding:7px 10px; width:auto; min-width:126px; margin:0; }
+  .pp-pe-bulk .form-input.sm { min-width:92px; }
+  .pp-pe-marksbox { display:inline-flex; align-items:stretch; gap:6px; }
+  .pp-pe-marksbox .pp-mini { border-radius:9px; border-left:1px solid var(--border); padding:0 12px; }
+  .pp-pe-bulk .pp-mini { padding:8px 12px; border-radius:9px; border-left:1px solid var(--border); }
+  .pp-pe-body { flex:1; overflow-y:auto; padding:22px 28px; display:flex; flex-direction:column; gap:14px; }
+  .pp-pe-row { border:1px solid var(--border); border-radius:14px; padding:15px 18px 17px; background:var(--surface); display:flex; flex-direction:column; gap:11px; }
+  .pp-pe-row.sel { border-color:var(--primary,#4a7c59); box-shadow:inset 0 0 0 1px var(--primary,#4a7c59); background:var(--primary-light,#f3f8f4); }
+  .pp-pe-rowhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .pp-pe-tick { display:inline-flex; align-items:center; cursor:pointer; }
+  .pp-pe-tick input { width:17px; height:17px; margin:0; accent-color:var(--primary,#4a7c59); cursor:pointer; }
+  .pp-pe-qno { font-size:1rem; font-weight:700; color:var(--primary-dark,#2f5d3f); }
+  .pp-pe-badge { font-size:0.68rem; font-weight:700; border-radius:999px; padding:3px 10px; border:1px solid var(--border); color:var(--text-muted); background:var(--surface-alt,#faf8f5); }
+  .pp-pe-badge.ok { color:var(--primary-dark,#2f5d3f); background:var(--primary-light,#e8f0ea); border-color:var(--primary,#4a7c59); }
+  .pp-pe-badge.new { color:#8a5a12; background:#fdf3e3; border-color:#d1892b; }
+  .pp-pe-rowtools { margin-left:auto; display:flex; gap:8px; align-items:center; }
+  .pp-pe-rowtools .pp-mini { border-radius:9px; border-left:1px solid var(--border); padding:5px 11px; }
+  /* Q no / booklet / marks / topic / skill / difficulty all on ONE line, so a
+     whole paper's rows read like a table you can scan and scroll. */
+  .pp-pe-grid { display:grid; grid-template-columns:84px 96px 84px 1fr 1fr 1fr; gap:12px 14px; }
+  .pp-pe-f { display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .pp-pe-f > span { font-size:0.74rem; font-weight:700; color:var(--text-muted); }
+  .pp-pe-f .form-input, .pp-pe-f .form-select, .pp-pe-f textarea { margin:0; width:100%; }
+  .pp-pe-f textarea { resize:vertical; }
+  .pp-pe-two { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
+  .pp-pe-addrow { align-self:flex-start; padding:10px 16px; font-size:0.86rem; }
+  .pp-pe-empty { text-align:center; color:var(--text-muted); padding:44px 20px; font-size:0.9rem; line-height:1.7; }
+  .pp-pe-foot { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:18px 28px; border-top:1px solid var(--border); background:var(--surface-alt,#faf8f5); }
+  .pp-pe-status { flex:1; min-width:150px; font-size:0.8rem; color:var(--text-muted); display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  .pp-pe-unsaved { color:#8a5a12; font-weight:700; }
+  .pp-pe-actions { display:flex; gap:10px; flex-wrap:wrap; }
+  @media (max-width:860px){
+    .pp-pe-grid { grid-template-columns:repeat(2, 1fr); }
+    .pp-pe-two { grid-template-columns:1fr; }
+    .pp-pe-head, .pp-pe-bulk, .pp-pe-body, .pp-pe-foot { padding-left:18px; padding-right:18px; }
+  }
+  /* On a phone the bulk bar would eat the screen — let it scroll on its own. */
+  @media (max-width:560px){ .pp-pe-bulk { max-height:34vh; overflow-y:auto; } .pp-pe-body { padding-top:16px; } }
   @media (max-width:560px){ .pp-card { padding:18px; } .pp-bar-name { width:130px; font-size:0.74rem; } .pp-bar-val { width:56px; } .pp-form-grid { grid-template-columns:1fr 1fr; } }
   </style>`;
 }
@@ -36603,6 +36985,21 @@ window.akPageClearImage = akPageClearImage;
 window.saveAnswerKeyFor = saveAnswerKeyFor;
 window.ppAddQuestion = ppAddQuestion;
 window.ppEditQuestion = ppEditQuestion;
+window.ppOpenPaperEdit = ppOpenPaperEdit;
+window.ppClosePaperEdit = ppClosePaperEdit;
+window.ppSavePaperEdit = ppSavePaperEdit;
+window.ppPeSet = ppPeSet;
+window.ppPeToggleSel = ppPeToggleSel;
+window.ppPeSelectAll = ppPeSelectAll;
+window.ppPeAddRow = ppPeAddRow;
+window.ppPeDeleteRow = ppPeDeleteRow;
+window.ppPeRenumber = ppPeRenumber;
+window.ppPeSort = ppPeSort;
+window.ppPeBulk = ppPeBulk;
+window.ppPeBulkMarks = ppPeBulkMarks;
+window.ppPeEditBank = ppPeEditBank;
+window.ppPeMarkDirty = ppPeMarkDirty;
+window.ppPeSetYear = ppPeSetYear;
 window.ppCloseQEdit = ppCloseQEdit;
 window.ppSaveQuestionEditor = ppSaveQuestionEditor;
 window.ppDeleteQuestion = ppDeleteQuestion;
