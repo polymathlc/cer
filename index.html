@@ -258,6 +258,65 @@ body {
   font-size: 0.72rem;
   font-family: 'Space Mono', monospace;
 }
+/* ── BOOKMARKS ───────────────────────────────────────────────────────────
+   The sidebar is long. Every item carries a star, and starred ones are
+   mirrored into a band at the very top so the three or four things a child
+   actually uses are always the first things they see. The originals stay
+   where they are — the menu never rearranges itself under them, which is
+   what makes a "moved" item hard to find again. */
+.nav-bookmarks {
+  display: none;
+  margin: 0 0 14px;
+  padding: 10px 8px 8px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, rgba(251,191,36,0.16), rgba(251,191,36,0.05));
+  border: 1px solid rgba(251,191,36,0.34);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+}
+.nav-bookmarks.show { display: block; }
+.nav-bookmarks-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #fbbf24;
+}
+.nav-bookmarks .nav-item { margin-bottom: 1px; }
+.nav-bookmarks .nav-item:hover { background: rgba(251,191,36,0.14); }
+/* The star: invisible until you go looking for it, so it never competes with
+   the item's own label — but always lit once an item is bookmarked. */
+.nav-star {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255,255,255,0.35);
+  font-size: 0.92rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s ease, color .15s ease, background .15s ease, transform .15s ease;
+}
+.nav-item:hover .nav-star, .nav-star:focus-visible { opacity: 1; }
+.nav-star:hover { background: rgba(255,255,255,0.12); color: #fbbf24; transform: scale(1.15); }
+.nav-star.on { opacity: 1; color: #fbbf24; }
+.nav-item .badge + .nav-star { margin-left: 6px; }
+/* A badge already claims margin-left:auto, so the star must not fight it. */
+.nav-item .badge ~ .nav-star { margin-left: 6px; }
+@media (hover: none) {
+  .nav-star { opacity: 0.55; }   /* touch devices have no hover to reveal it */
+}
+
 /* PSLE Papers — highlighted in gold so the real-exam material stands out */
 .nav-item.nav-psle {
   color: #ffd97a;
@@ -5304,6 +5363,11 @@ option {
       </button>
     </div>
     <nav class="sidebar-nav">
+      <!-- Bookmarks — filled in by _navBookmarksRender() from what the user has starred -->
+      <div class="nav-bookmarks" id="navBookmarks">
+        <div class="nav-bookmarks-title"><span>⭐</span> Bookmarks</div>
+        <div id="navBookmarksList"></div>
+      </div>
       <!-- Home (students) — the simple landing screen -->
       <div class="nav-item student-only" data-page="home" onclick="navigateTo('home')" style="display:none;">
         <span class="ico">🏠</span> Home
@@ -5321,6 +5385,9 @@ option {
       <div class="nav-item admin-only" data-page="worksheetcreator" onclick="navigateTo('worksheetcreator')" title="Science Worksheet Creator — build, export and load worksheets">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
         Worksheet Creator
+      </div>
+      <div class="nav-item" data-page="textbooks" onclick="navigateTo('textbooks')" title="Textbooks, the MOE syllabus, mindmaps, exam-paper walkthroughs and keyword recall — by level and topic">
+        <span class="ico">📚</span> Textbooks &amp; Syllabus
       </div>
       <div class="nav-item admin-only" data-page="myworksheets" onclick="navigateTo('myworksheets')" title="Worksheets you have saved — reprint any of them, with or without a cover page">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -6775,6 +6842,20 @@ option {
           <div id="rpgBoardBody"><div class="empty-note">Loading leaderboard…</div></div>
         </div>
       </div>
+    </div>
+
+    <div class="page page-embed" id="page-textbooks">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Textbooks &amp; Syllabus</h2>
+          </div>
+          <div class="subtitle">Textbooks, the MOE syllabus, mindmaps and exam-paper walkthroughs — with keyword recall on every learning outcome</div>
+        </div>
+        <a class="btn btn-outline" href="textbooks.html" target="_blank" rel="noopener" style="font-size:0.82rem;">Open in new tab ↗</a>
+      </div>
+      <iframe id="textbooksFrame" class="embed-frame" title="Textbooks and Syllabus"></iframe>
     </div>
 
     <div class="page page-embed" id="page-worksheetcreator">
@@ -9520,7 +9601,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.174.0';
+const APP_VERSION = 'v1.175.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -9550,10 +9631,113 @@ function configureSidebarForRole(role) {
     const homePage = document.getElementById('page-home');
     if (homePage) homePage.classList.add('active');
   }
+  // Stars go on AFTER the role has decided which items exist, so a bookmark can
+  // never resurrect an item this account isn't allowed to see.
+  try { navBookmarksInit(); } catch (e) { console.warn('bookmarks', e); }
   // Students land on their simple Home screen; admins keep Community. Also
   // start the realtime quest watch so the countdown chip works on every page.
   try { commStartGlobalWatch(); } catch (_) {}
   try { navigateTo(role === 'admin' ? 'community' : 'home'); } catch (_) {}
+}
+
+// =====================================================================
+// SIDEBAR BOOKMARKS
+//
+// The sidebar runs to forty-odd items across authoring, practice, games and
+// reports. A child uses four of them. Starring an item mirrors it into a gold
+// band pinned at the top of the menu.
+//
+// Mirrored, not moved: the original stays exactly where it was. An item that
+// jumps to the top of a menu is an item you can no longer find by memory the
+// next time you look for it in its old place.
+//
+// Stored per account, so one child's shortcuts don't turn up on a sibling's
+// login on the same device.
+// =====================================================================
+function _navBmKey() { return 'navBookmarks:' + ((currentUser && currentUser.uid) || 'anon'); }
+function _navBmLoad() {
+  try {
+    const a = JSON.parse(localStorage.getItem(_navBmKey()) || '[]');
+    return Array.isArray(a) ? a.filter(x => typeof x === 'string') : [];
+  } catch (_) { return []; }
+}
+function _navBmSave(list) {
+  try { localStorage.setItem(_navBmKey(), JSON.stringify(list)); } catch (_) {}
+}
+function navBookmarkToggle(page, ev) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }   // starring must not navigate
+  if (!page) return;
+  const list = _navBmLoad();
+  const i = list.indexOf(page);
+  if (i >= 0) list.splice(i, 1); else list.push(page);     // newest starred goes last
+  _navBmSave(list);
+  navBookmarksRender();
+  showToast(i >= 0 ? 'Removed from Bookmarks' : '⭐ Added to Bookmarks', 'info');
+}
+// One star per real nav item (never on the mirrored copies — those get their
+// own, wired to the same toggle).
+function _navBmAddStar(item, page) {
+  if (!item || item.querySelector(':scope > .nav-star')) return;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'nav-star';
+  b.setAttribute('data-star', page);
+  b.setAttribute('aria-label', 'Bookmark this');
+  b.textContent = '☆';
+  b.addEventListener('click', e => navBookmarkToggle(page, e));
+  item.appendChild(b);
+}
+function navBookmarksRender() {
+  const wrap = document.getElementById('navBookmarks');
+  const list = document.getElementById('navBookmarksList');
+  if (!wrap || !list) return;
+  const saved = _navBmLoad();
+  // An item hidden by role (or by the "hide game" toggle) must not come back
+  // through the bookmark band.
+  const sources = saved
+    .map(p => ({ page: p, el: document.querySelector('.sidebar-nav > .nav-item[data-page="' + CSS.escape(p) + '"]') }))
+    .filter(x => x.el && x.el.style.display !== 'none');
+
+  list.innerHTML = '';
+  sources.forEach(({ page, el }) => {
+    const copy = el.cloneNode(true);          // keeps the icon, the label and the onclick
+    copy.classList.remove('active');
+    copy.querySelectorAll('.badge').forEach(b => b.remove());   // counts belong to the original
+    const oldStar = copy.querySelector('.nav-star');
+    if (oldStar) oldStar.remove();
+    const star = document.createElement('button');
+    star.type = 'button';
+    star.className = 'nav-star on';
+    star.setAttribute('aria-label', 'Remove from Bookmarks');
+    star.textContent = '★';
+    star.addEventListener('click', e => navBookmarkToggle(page, e));
+    copy.appendChild(star);
+    list.appendChild(copy);
+  });
+  wrap.classList.toggle('show', sources.length > 0);
+
+  // Light up the stars on the originals.
+  document.querySelectorAll('.sidebar-nav > .nav-item > .nav-star').forEach(s => {
+    const on = saved.includes(s.getAttribute('data-star'));
+    s.classList.toggle('on', on);
+    s.textContent = on ? '★' : '☆';
+    s.setAttribute('aria-label', on ? 'Remove from Bookmarks' : 'Bookmark this');
+  });
+  _navBmSyncActive();
+}
+// Keep the mirrored copy highlighted along with its original.
+function _navBmSyncActive() {
+  const cur = document.querySelector('.sidebar-nav > .nav-item.active');
+  const page = cur ? cur.getAttribute('data-page') : '';
+  document.querySelectorAll('#navBookmarksList .nav-item').forEach(c => {
+    c.classList.toggle('active', !!page && c.getAttribute('data-page') === page);
+  });
+}
+function navBookmarksInit() {
+  document.querySelectorAll('.sidebar-nav > .nav-item[data-page]').forEach(item => {
+    _navBmAddStar(item, item.getAttribute('data-page'));
+  });
+  navBookmarksRender();
 }
 
 // Every admin account's uid, primary admin (config/admin) first. Approved
@@ -9785,6 +9969,7 @@ function navigateTo(page) {
   const navItem = document.querySelector(`.nav-item[data-page="${page}"]`) ||
     (['defenders', 'raiders', 'spire', 'legends', 'slayers'].includes(page) ? document.querySelector('.nav-item[data-page="arcade"]') : null);
   if (navItem) navItem.classList.add('active');
+  try { _navBmSyncActive(); } catch (_) {}   // the mirrored copy lights up too
   // Close sidebar on mobile after navigation
   const sidebar = document.getElementById('sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
@@ -9863,6 +10048,10 @@ function navigateTo(page) {
   if (page === 'worksheetcreator') {
     const f = document.getElementById('scienceWorksheetFrame');
     if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-worksheet.html');
+  }
+  if (page === 'textbooks') {
+    const f = document.getElementById('textbooksFrame');
+    if (f && !f.getAttribute('src')) f.setAttribute('src', 'textbooks.html');   // load once, on first visit
   }
   if (page === 'defenders') {
     const f = document.getElementById('defendersFrame');
@@ -38649,6 +38838,7 @@ function ainsteinOnSignOut() {
 
 window.navigateTo = navigateTo;
 window.ainsteinToggle = ainsteinToggle;
+window.navBookmarkToggle = navBookmarkToggle;
 window.ainsteinSend = ainsteinSend;
 window.ainsteinTrySimilar = ainsteinTrySimilar;
 window.ainsteinVideoFullscreen = ainsteinVideoFullscreen;
