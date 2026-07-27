@@ -37061,6 +37061,7 @@ async function _ainsteinOpenQuiz(q, concept) {
   _ainsteinEl('ainsteinQuizNote').textContent = 'Answer it right here — your page is still open behind me, exactly where you left it.';
   body.innerHTML = '<div class="ainstein-quiz-wait">Getting it ready…</div>';
   panel.classList.add('open', 'quiz');
+  _ainsteinPlacePanel();       // the question view is wider and taller
   _ainsteinEl('ainsteinBubble')?.classList.add('active');
   try { await preloadQueueImages([q]); } catch (_) {}
   // Still the question we opened? (They may have gone back to chat meanwhile.)
@@ -37092,6 +37093,7 @@ function _ainsteinQuizMarked(res) {
 function ainsteinQuizBack() {
   const panel = _ainsteinEl('ainsteinPanel');
   if (panel) panel.classList.remove('quiz');
+  _ainsteinPlacePanel();       // back to the narrow chat size
   if (_ainsteinQuiz && _ainsteinQuiz.done) _ainsteinQuiz = null;   // finished — no resume chip
   _ainsteinRender();
   setTimeout(() => _ainsteinEl('ainsteinInput')?.focus(), 60);
@@ -37798,11 +37800,8 @@ function _ainsteinPaint() {
   // explain the answer outright.
   const mode = _ainsteinEl('ainsteinMode');
   if (mode) {
-    const panel = _ainsteinEl('ainsteinPanel');
     const isStudent = !!(currentUser && currentUser.role === 'student');
-    mode.textContent = (panel && panel.classList.contains('unread')) ? 'New reply waiting'
-      : _ainsteinMinimised() ? 'Tap to open me back up'
-      : !isStudent ? 'Full answers — teacher mode'
+    mode.textContent = !isStudent ? 'Full answers — teacher mode'
       : _ainsteinAnswerRevealed() ? 'Already marked — full answers'
       : 'Clues, never answers';
   }
@@ -37854,12 +37853,6 @@ function _ainsteinItemKey(m, i) {
 function _ainsteinRender() {
   const log = _ainsteinEl('ainsteinLog');
   if (!log) return;
-  // A reply that arrives while minimised marks the bar instead of forcing the
-  // panel back open over whatever they are reading.
-  if (_ainsteinMinimised()) {
-    const last = _ainstein.history[_ainstein.history.length - 1];
-    if (last && last.who === 'ai') _ainsteinEl('ainsteinPanel')?.classList.add('unread');
-  }
   _ainsteinPaint();          // the mode line depends on what is on screen right now
   if (!_ainstein.history.length) {
     const student = !!(currentUser && currentUser.role === 'student');
@@ -37931,16 +37924,11 @@ function _ainsteinRender() {
 function ainsteinToggle(force) {
   const panel = _ainsteinEl('ainsteinPanel');
   if (!panel) return;
-  // Tapping the bubble while minimised means "bring it back", not "close it".
-  if (force == null && panel.classList.contains('open') && panel.classList.contains('min')) {
-    ainsteinMinimise(false);
-    return;
-  }
   const open = force == null ? !panel.classList.contains('open') : !!force;
   panel.classList.toggle('open', open);
-  if (!open) panel.classList.remove('min', 'unread');   // never reopen into a collapsed bar
   _ainsteinEl('ainsteinBubble')?.classList.toggle('active', open);
   if (open) {
+    _ainsteinPlacePanel();     // only measurable now that it is displayed
     _ainsteinPaint();
     _ainsteinRender();
     // Warm the attempt log and the performance record: the first lets a practice
@@ -37958,32 +37946,132 @@ function ainsteinToggle(force) {
   }
 }
 
-// Minimise: shrink the panel to its own header bar, leaving everything mounted.
-// Different from Close on purpose — a student mid-question wants to read the
-// page behind without their half-typed answer and the question they are on
-// disappearing, and wants to get back to it in one click rather than reopening
-// and finding their way back.
-function ainsteinMinimise(force) {
-  const panel = _ainsteinEl('ainsteinPanel');
-  if (!panel || !panel.classList.contains('open')) return;
-  const min = force == null ? !panel.classList.contains('min') : !!force;
-  panel.classList.toggle('min', min);
-  if (!min) panel.classList.remove('unread');
-  const btn = _ainsteinEl('ainsteinMinBtn');
-  if (btn) {
-    btn.setAttribute('aria-expanded', min ? 'false' : 'true');
-    btn.setAttribute('aria-label', min ? 'Restore' : 'Minimise');
-    btn.title = min ? 'Open me back up — your question and our chat are just as you left them'
-                    : 'Minimise — shrink me to this bar so you can read the page. Everything stays exactly as it is.';
-  }
-  // Recording keeps running while minimised (the student may be mid-sentence),
-  // but the keyboard should follow what they can actually see.
-  if (min) _ainsteinEl('ainsteinBubble')?.focus();
-  else setTimeout(() => _ainsteinEl('ainsteinInput')?.focus(), 60);
+// ---- Dragging Ai-nstein out of the way -------------------------------------
+// He is parked bottom-right, which is exactly where a long question, a table or
+// the last option of an MCQ often ends up. Rather than making the student close
+// him to read their own work, the bubble can be picked up and dropped anywhere,
+// and the panel opens against whichever corner he now sits in.
+//
+// The position is remembered per account, and re-clamped on resize and rotation
+// so a spot chosen on a wide screen can never strand him off a narrow one.
+const AINSTEIN_DRAG_SLOP = 5;    // px of movement before a tap becomes a drag
+const AINSTEIN_EDGE = 12;        // keep this much of the viewport around him
+let _ainsteinPos = null;         // { x, y } of his top-left, or null = default corner
+let _ainsteinDrag = null;
+
+function _ainsteinPosKey() { return 'ainsteinPos:' + ((currentUser && currentUser.uid) || 'anon'); }
+function _ainsteinLoadPos() {
+  try {
+    const p = JSON.parse(localStorage.getItem(_ainsteinPosKey()) || 'null');
+    _ainsteinPos = (p && typeof p.x === 'number' && typeof p.y === 'number') ? p : null;
+  } catch (_) { _ainsteinPos = null; }
+  _ainsteinApplyPos();
 }
-function _ainsteinMinimised() {
-  const panel = _ainsteinEl('ainsteinPanel');
-  return !!(panel && panel.classList.contains('min'));
+function _ainsteinSavePos() {
+  try {
+    if (_ainsteinPos) localStorage.setItem(_ainsteinPosKey(), JSON.stringify(_ainsteinPos));
+    else localStorage.removeItem(_ainsteinPosKey());
+  } catch (_) {}
+}
+function _ainsteinClamp(x, y, w, h) {
+  return {
+    x: Math.max(AINSTEIN_EDGE, Math.min(window.innerWidth - w - AINSTEIN_EDGE, x)),
+    y: Math.max(AINSTEIN_EDGE, Math.min(window.innerHeight - h - AINSTEIN_EDGE, y)),
+  };
+}
+// Put the bubble where it belongs, then sit the panel against the same corner.
+function _ainsteinApplyPos() {
+  const b = _ainsteinEl('ainsteinBubble');
+  if (!b) return;
+  if (!_ainsteinPos) {
+    // Back to the stylesheet's corner — clear the inline overrides entirely.
+    b.style.left = b.style.top = b.style.right = b.style.bottom = '';
+    _ainsteinPlacePanel();
+    return;
+  }
+  const w = b.offsetWidth || 88, h = b.offsetHeight || 88;
+  const p = _ainsteinClamp(_ainsteinPos.x, _ainsteinPos.y, w, h);
+  _ainsteinPos = p;
+  b.style.left = p.x + 'px';
+  b.style.top = p.y + 'px';
+  b.style.right = 'auto';
+  b.style.bottom = 'auto';
+  _ainsteinPlacePanel();
+}
+// The panel opens on whichever side of the bubble has room — above by default,
+// below when he has been parked near the top, and horizontally aligned to his
+// nearer edge so it never hangs off the screen.
+function _ainsteinPlacePanel() {
+  const panel = _ainsteinEl('ainsteinPanel'), b = _ainsteinEl('ainsteinBubble');
+  if (!panel || !b) return;
+  if (!_ainsteinPos) { panel.style.left = panel.style.top = panel.style.right = panel.style.bottom = ''; return; }
+  // Narrow screens keep the stylesheet's full-width sheet — there is no "beside
+  // the bubble" to speak of on a phone.
+  if (window.innerWidth <= 560) { panel.style.left = panel.style.top = panel.style.right = panel.style.bottom = ''; return; }
+  const br = b.getBoundingClientRect();
+  const pw = panel.offsetWidth || 400, ph = panel.offsetHeight || 420;
+  const gap = 14;
+  let top = br.top - ph - gap;                                  // above him
+  if (top < AINSTEIN_EDGE) top = Math.min(br.bottom + gap, window.innerHeight - ph - AINSTEIN_EDGE);
+  top = Math.max(AINSTEIN_EDGE, top);
+  // Align to his nearer side, then clamp.
+  const rightAligned = (br.left + br.width / 2) > window.innerWidth / 2;
+  let left = rightAligned ? br.right - pw : br.left;
+  left = Math.max(AINSTEIN_EDGE, Math.min(window.innerWidth - pw - AINSTEIN_EDGE, left));
+  panel.style.left = left + 'px';
+  panel.style.top = top + 'px';
+  panel.style.right = 'auto';
+  panel.style.bottom = 'auto';
+}
+function _ainsteinBindDrag() {
+  const b = _ainsteinEl('ainsteinBubble');
+  if (!b || b._dragBound) return;
+  b._dragBound = true;
+  b.addEventListener('pointerdown', e => {
+    if (e.button != null && e.button !== 0) return;
+    // A fresh press is a fresh intention: whatever the last gesture left behind
+    // is cleared here rather than on a timer, so the swallow below can never
+    // outlive the drag that asked for it and eat a real tap.
+    b._eatClick = false;
+    const r = b.getBoundingClientRect();
+    _ainsteinDrag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top,
+                      w: r.width, h: r.height, moved: false, x0: e.clientX, y0: e.clientY };
+    try { b.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  b.addEventListener('pointermove', e => {
+    const d = _ainsteinDrag;
+    if (!d || d.id !== e.pointerId) return;
+    if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < AINSTEIN_DRAG_SLOP) return;
+    if (!d.moved) { d.moved = true; b.classList.add('dragging'); }
+    e.preventDefault();
+    _ainsteinPos = _ainsteinClamp(e.clientX - d.dx, e.clientY - d.dy, d.w, d.h);
+    _ainsteinApplyPos();
+  });
+  const end = e => {
+    const d = _ainsteinDrag;
+    if (!d || d.id !== e.pointerId) return;
+    _ainsteinDrag = null;
+    try { b.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (d.moved) {
+      b.classList.remove('dragging');
+      _ainsteinSavePos();
+      // Swallow the click the browser fires after the drag, or he'd open the
+      // moment he is put down. Cleared by the next pointerdown, not a timer.
+      b._eatClick = true;
+    }
+  };
+  b.addEventListener('pointerup', end);
+  b.addEventListener('pointercancel', end);
+  // A drag is a deliberate move; put him back in his corner with a double-click.
+  b.addEventListener('dblclick', e => {
+    if (!_ainsteinPos) return;
+    e.preventDefault(); e.stopPropagation();
+    _ainsteinPos = null;
+    _ainsteinSavePos();
+    _ainsteinApplyPos();
+    showToast('Ai-nstein is back in his corner', 'info');
+  });
+  window.addEventListener('resize', () => _ainsteinApplyPos());
 }
 
 // Ask on the student's behalf — used by the suggestion chips in the empty state.
@@ -38112,9 +38200,16 @@ async function ainsteinSend() {
      lean up and wave with a name tag. All of it is dropped for anyone who asks
      for reduced motion. */
   #ainsteinBubble { display: none; position: fixed; bottom: 18px; right: 18px; z-index: 890;
-    width: 88px; height: 88px; padding: 0; border: none; border-radius: 50%; cursor: pointer;
+    width: 88px; height: 88px; padding: 0; border: none; border-radius: 50%; cursor: grab;
     background: var(--surface, #fff); box-shadow: 0 8px 26px rgba(20,18,16,0.26);
+    touch-action: none;   /* the drag owns the gesture; the page must not scroll under it */
     transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .22s ease; }
+  /* While being carried: lifted, still, and out from under the cursor. The idle
+     bob and the hover lean are dropped so he tracks the finger exactly. */
+  #ainsteinBubble.dragging { cursor: grabbing; animation: none !important;
+    transform: scale(1.06); box-shadow: 0 22px 46px rgba(20,18,16,0.34); transition: none; }
+  #ainsteinBubble.dragging img { animation: none !important; }
+  #ainsteinBubble.dragging .ainstein-tag, #ainsteinBubble.dragging::before { opacity: 0 !important; animation: none !important; }
   #ainsteinBubble.show { display: block; animation: ainsteinBob 4.5s ease-in-out infinite; }
   #ainsteinBubble::before {            /* the attention ring */
     content: ''; position: absolute; inset: -4px; border-radius: 50%; pointer-events: none;
@@ -38194,33 +38289,9 @@ async function ainsteinSend() {
   .ainstein-head img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
   .ainstein-head .ainstein-name { font-weight: 700; font-size: 1rem; line-height: 1.3; }
   .ainstein-head .ainstein-sub { font-size: 0.76rem; color: var(--text-muted, #7a756d); margin-top: 3px; line-height: 1.4; }
-  .ainstein-min { margin-left: auto; align-self: flex-start; background: none; border: none; cursor: pointer;
-    font-size: 1.35rem; line-height: 1; color: var(--text-muted, #7a756d); width: 32px; height: 32px; border-radius: 9px;
-    display: flex; align-items: center; justify-content: center; padding-bottom: 4px; }
-  .ainstein-min:hover { background: var(--bg-tertiary, #f0efeb); color: var(--text, #1a1a1a); }
-  .ainstein-close { align-self: flex-start; background: none; border: none; cursor: pointer;
+  .ainstein-close { margin-left: auto; align-self: flex-start; background: none; border: none; cursor: pointer;
     font-size: 1.2rem; line-height: 1; color: var(--text-muted, #7a756d); width: 32px; height: 32px; border-radius: 9px; }
   .ainstein-close:hover { background: var(--bg-tertiary, #f0efeb); color: var(--text, #1a1a1a); }
-  /* MINIMISED — the panel shrinks to its own header bar and nothing else moves.
-     Everything below is only hidden, never unmounted: a half-answered question
-     mounted in the panel, a playing video and the whole conversation are all
-     exactly where they were when it opens back up. Deliberately not the same as
-     Close, which hands the keyboard back and puts the bubble in charge. */
-  #ainsteinPanel.min { max-height: none; width: min(340px, calc(100vw - 36px)); }
-  #ainsteinPanel.min .ainstein-head { cursor: pointer; border-bottom: none; }
-  #ainsteinPanel.min .ainstein-head:hover { background: var(--bg-tertiary, #f0efeb); }
-  #ainsteinPanel.min > *:not(.ainstein-head) { display: none !important; }
-  #ainsteinPanel.min .ainstein-min { transform: rotate(180deg); padding-bottom: 0; }
-  /* A reply that lands while minimised: the bar pulses so it is noticed without
-     the panel throwing itself back over the page the student is reading. */
-  #ainsteinPanel.min.unread .ainstein-head { background: var(--primary-light, #e8f3ec); }
-  #ainsteinPanel.min.unread .ainstein-sub { color: var(--primary, #4a7c59); font-weight: 700; }
-  @media (prefers-reduced-motion: no-preference) {
-    #ainsteinPanel.min.unread { animation: ainsteinNudge 1.6s ease-in-out 3; }
-  }
-  @keyframes ainsteinNudge {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-4px); } }
 
   #ainsteinLog { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-height: 140px; }
   /* One wrapper per message (bubble + any video + any practice link) so a
@@ -38329,20 +38400,18 @@ async function ainsteinSend() {
 
   const host = document.createElement('div');
   host.innerHTML = `
-    <button id="ainsteinBubble" type="button" title="Stuck? Ask Ai-nstein for a clue" aria-label="Ask Ai-nstein for a clue">
+    <button id="ainsteinBubble" type="button" title="Stuck? Ask Ai-nstein for a clue — or drag me somewhere else if I'm in the way (double-click to send me back to the corner)" aria-label="Ask Ai-nstein for a clue. Drag to move him out of the way.">
       <img src="${AINSTEIN_IMG}" alt="Ai-nstein" onerror="this.onerror=null;this.src='${AINSTEIN_FALLBACK_IMG}';">
       <span class="ainstein-tag" aria-hidden="true">Stuck? Ask me!</span>
       <span id="ainsteinBadge">${AINSTEIN_DAILY_CREDITS}</span>
     </button>
     <div id="ainsteinPanel" role="dialog" aria-label="Ask Ai-nstein for a clue">
-      <div class="ainstein-head" id="ainsteinHead">
+      <div class="ainstein-head">
         <img src="${AINSTEIN_IMG}" alt="" onerror="this.onerror=null;this.src='${AINSTEIN_FALLBACK_IMG}';">
         <div>
           <div class="ainstein-name">Ai-nstein</div>
           <div class="ainstein-sub" id="ainsteinMode">Clues, never answers</div>
         </div>
-        <button class="ainstein-min" id="ainsteinMinBtn" type="button" aria-label="Minimise" aria-expanded="true"
-          title="Minimise — shrink me to this bar so you can read the page. Everything stays exactly as it is.">–</button>
         <button class="ainstein-close" type="button" aria-label="Close">✕</button>
       </div>
       <div id="ainsteinLog" role="log" aria-live="polite" aria-label="Chat with Ai-nstein"></div>
@@ -38376,15 +38445,13 @@ async function ainsteinSend() {
   const mount = document.body || document.documentElement;
   while (host.firstElementChild) mount.appendChild(host.firstElementChild);
 
-  document.getElementById('ainsteinBubble').addEventListener('click', () => ainsteinToggle());
-  document.querySelector('#ainsteinPanel .ainstein-close').addEventListener('click', () => ainsteinToggle(false));
-  document.getElementById('ainsteinMinBtn').addEventListener('click', e => { e.stopPropagation(); ainsteinMinimise(); });
-  // Once minimised the whole bar is the way back in — a 32px button is a small
-  // target for a child, and the bar is doing nothing else at that point.
-  document.getElementById('ainsteinHead').addEventListener('click', e => {
-    if (e.target.closest('.ainstein-close, .ainstein-min')) return;
-    if (_ainsteinMinimised()) ainsteinMinimise(false);
+  document.getElementById('ainsteinBubble').addEventListener('click', function () {
+    if (this._eatClick) return;    // that click was the end of a drag
+    ainsteinToggle();
   });
+  _ainsteinBindDrag();
+  _ainsteinLoadPos();
+  document.querySelector('#ainsteinPanel .ainstein-close').addEventListener('click', () => ainsteinToggle(false));
   document.getElementById('ainsteinSend').addEventListener('click', ainsteinSend);
   // The mic itself is driven by the shared .mic-btn handler (record → Gemini
   // transcript → insert into the target field). Drop it on browsers that can't
@@ -38428,6 +38495,7 @@ function ainsteinOnSignIn() {
   _ainsteinAskedConcepts.clear();
   _ainsteinTextCache.clear();   // the bank was just (re)loaded — re-read it
   ainsteinLoadCredits();
+  _ainsteinLoadPos();          // the spot he was dragged to, for THIS account
 }
 function ainsteinOnSignOut() {
   ainsteinToggle(false);
@@ -38448,7 +38516,6 @@ function ainsteinOnSignOut() {
 
 window.navigateTo = navigateTo;
 window.ainsteinToggle = ainsteinToggle;
-window.ainsteinMinimise = ainsteinMinimise;
 window.ainsteinSend = ainsteinSend;
 window.ainsteinTrySimilar = ainsteinTrySimilar;
 window.ainsteinVideoFullscreen = ainsteinVideoFullscreen;
