@@ -5322,6 +5322,10 @@ option {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
         Worksheet Creator
       </div>
+      <div class="nav-item admin-only" data-page="myworksheets" onclick="navigateTo('myworksheets')" title="Worksheets you have saved — reprint any of them, with or without a cover page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Saved Worksheets
+      </div>
       <div class="nav-item admin-only" data-page="worksheet" onclick="navigateTo('worksheet')" title="Custom worksheet from the question bank — filter by topic / concept / MCQ / open-ended, add questions, then practise or print / export PDF">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         Custom Worksheet
@@ -6169,6 +6173,11 @@ option {
         </div>
       </div>
       <div class="page-body" style="max-width:780px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.88rem;font-weight:500;max-width:420px;margin:0 auto 20px;padding:14px 20px;border:1.5px solid var(--border);border-radius:12px;background:var(--surface);"
+               title="Print an elegant Polymath cover page (with a blank sheet behind it) in front of the questions">
+          <input type="checkbox" id="mwIncludeCover" style="width:16px;height:16px;accent-color:var(--primary);">
+          📄 Cover page when reprinting
+        </label>
         <div class="ws-saved-grid" id="savedWsGrid"></div>
       </div>
     </div>
@@ -9432,6 +9441,10 @@ async function enterApp(user) {
     loadGenSettings();
     loadTeachingNotes(); // grounds AI generation & marking on the uploaded notes
     loadSampleData();
+    // Saved worksheets were only ever loaded on the student branch, so an admin
+    // who pressed "Save Worksheet" could never find it again — the page was
+    // simply never populated for them.
+    loadSavedWorksheets().then(renderSavedWorksheets).catch(e => console.warn('saved worksheets', e));
     renderBlocks();
     populatePracticeStudentSelect();
     // Load scheduled questions and auto-release any due ones
@@ -9507,7 +9520,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.173.0';
+const APP_VERSION = 'v1.174.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -21143,10 +21156,10 @@ async function confirmSaveWorksheet() {
     format: 'open',
     createdAt: new Date().toISOString()
   };
-  savedWorksheets.push(ws);
+  savedWorksheets.unshift(ws);   // newest first, the order the list is sorted in
   renderSavedWorksheets();
   closeSaveWsDialog();
-  showToast('Worksheet saved!', 'success');
+  showToast('Worksheet saved — find it under Saved Worksheets', 'success');
   // Persist to Firestore
   if (currentUser) {
     setDoc(_wsRef(ws.id), ws).catch(err => console.error('Failed to save worksheet:', err));
@@ -21217,12 +21230,17 @@ function deleteWorksheet(id) {
 function reprintWorksheet(id) {
   const ws = savedWorksheets.find(w => w.id === id);
   if (!ws) return;
-  const selected = questionBank.filter(q => ws.questionIds.includes(q.id));
+  // Saved worksheets keep their question ORDER — the ids are stored in the
+  // order they were chosen, so "Question 1" is the same question every reprint.
+  // (filter() would have returned them in bank order instead.)
+  const byId = new Map(questionBank.map(q => [String(q.id), q]));
+  const selected = (ws.questionIds || []).map(qid => byId.get(String(qid))).filter(Boolean);
   if (selected.length === 0) {
     showToast('Questions no longer available', 'error');
     return;
   }
-  doPrintStudentWorksheet(selected, ws.title);
+  const wantCover = !!document.getElementById('mwIncludeCover')?.checked;
+  doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title) : '');
 }
 
 // ---- Practice worksheet questions ----
@@ -21502,7 +21520,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
 
 function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml) {
   const output = document.getElementById('printOutput');
-  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '' });
+  // plainNumbers: a worksheet is numbered "Question 1, 2, 3…" for the student.
+  // The bank's own title and its category/topic line are internal filing —
+  // useful in the admin's bank, meaningless (and a giveaway) on a printed sheet.
+  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true });
   autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
 }
 
@@ -21821,7 +21842,7 @@ async function generateSyllabusPdf() {
   _printProgressUpdate('Laying out pages…', 0.85, 'Building your syllabus worksheet');
   const frontHtml = await _wsFrontHtml(selected, title);
   const output = document.getElementById('printOutput');
-  output.innerHTML = buildWorksheetHtml(orderedQs, title, { frontHtml, sectionHtmlById });
+  output.innerHTML = buildWorksheetHtml(orderedQs, title, { frontHtml, sectionHtmlById, plainNumbers: true });
   autoscaleAndPrint(output, { forcedBreakIds: forced });
 }
 
@@ -21908,7 +21929,7 @@ async function renderWsPreview() {
   const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
   const frontHtml = await _wsFrontHtml(selected, title);
-  const html = buildWorksheetHtml(selected, title, { frontHtml });
+  const html = buildWorksheetHtml(selected, title, { frontHtml, plainNumbers: true });   // exactly what will print
   const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"],link[rel="preconnect"]')).map(l => l.outerHTML).join('');
   const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
   if (!doc) return;
