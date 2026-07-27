@@ -1452,7 +1452,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.179.0';
+const APP_VERSION = 'v1.180.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -13482,209 +13482,371 @@ function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml) {
 // objective and all of its questions under it. Classification is done by the
 // AI in one batched call, with a topic + keyword fallback if AI is offline.
 // =====================================================================
+// One entry per LEARNING OUTCOME in the MOE Primary Science Syllabus 2023
+// (P3–P6 Standard), Section 5. Each objective is ATOMIC — one outcome, one
+// objective — so "Identify sources of heat" is its own thing to practise
+// rather than being buried in a five-part sentence. Core Ideas and the
+// examinable Practices from the syllabus tables both appear here.
 const SYLLABUS_LO_TOPICS = [
   // ---------- DIVERSITY ----------
   { topic: 'Diversity of Living and Non-Living Things', level: 'P3', theme: 'Diversity', los: [
     { id: 'div-living', title: 'Characteristics of living things',
-      intro: 'Living things need air, food and water to survive, and they grow, respond to changes around them and reproduce. These characteristics help us tell living things apart from non-living things.',
-      obj: 'Describe the characteristics of living things (need water, food and air to survive; grow, respond and reproduce) and infer differences between living and non-living things.',
-      kw: ['living thing', 'non-living', 'survive', 'respond', 'reproduce', 'characteristic'] },
-    { id: 'div-groups', title: 'Classifying living things into broad groups',
-      intro: 'We classify the great variety of living things into broad groups — plants (flowering, non-flowering), animals (amphibians, birds, fish, insects, mammals, reptiles), fungi and bacteria — based on their similarities and differences.',
-      obj: 'Recognise broad groups of living things (flowering/non-flowering plants; amphibians, birds, fish, insects, mammals, reptiles; fungi such as mould, mushroom, yeast; bacteria) and classify them based on common observable characteristics.',
-      kw: ['classify', 'flowering', 'mammal', 'reptile', 'amphibian', 'insect', 'fungi', 'fungus', 'bacteria', 'mould', 'mushroom', 'yeast', 'group'] },
+      intro: 'Living things need air, food and water to survive, and they grow, respond to changes around them and reproduce.',
+      obj: 'Describe the characteristics of living things: they need water, food and air to survive, and they grow, respond and reproduce.',
+      kw: ['living thing', 'non-living', 'survive', 'grow', 'respond', 'reproduce', 'characteristic'] },
+    { id: 'div-infer', title: 'Telling living from non-living things',
+      intro: 'By observing carefully we can work out which things around us are alive and which are not.',
+      obj: 'Observe a variety of living and non-living things and infer the differences between them.',
+      kw: ['living', 'non-living', 'infer', 'difference', 'observe', 'alive'] },
+    { id: 'div-groups', title: 'Broad groups of living things',
+      intro: 'The great variety of living things is sorted into broad groups: plants, animals, fungi and bacteria.',
+      obj: 'Recognise broad groups of living things based on similarities and differences: plants (flowering, non-flowering); animals (amphibians, birds, fish, insects, mammals, reptiles); fungi (mould, mushroom, yeast); and bacteria.',
+      kw: ['flowering', 'non-flowering', 'mammal', 'reptile', 'amphibian', 'insect', 'bird', 'fish', 'fungi', 'fungus', 'bacteria', 'mould', 'mushroom', 'yeast'] },
+    { id: 'div-classify', title: 'Classifying living things',
+      intro: 'We put living things into groups by looking for characteristics they share and characteristics that set them apart.',
+      obj: 'Classify living things into broad groups based on similarities and differences in common observable characteristics.',
+      kw: ['classify', 'group', 'observable', 'characteristic', 'similarity', 'difference', 'sort'] },
   ] },
   { topic: 'Diversity of Materials', level: 'P3', theme: 'Diversity', los: [
-    { id: 'div-materials', title: 'Properties and uses of materials',
-      intro: 'Different materials — wood, metal, ceramic, rubber, glass, plastic and fabric — have different physical properties such as strength, flexibility, the ability to float or sink, being waterproof and transparency. We choose a material for a use because of its properties.',
-      obj: 'Relate the use of materials (wood, metal, ceramic, rubber, glass, plastic, fabric) to their physical properties, and compare strength, flexibility, ability to float/sink in water, waterproof-ness and transparency.',
-      kw: ['material', 'waterproof', 'flexib', 'transparen', 'float', 'sink', 'strength', 'rubber', 'fabric', 'ceramic'] },
+    { id: 'mat-uses', title: 'Materials and their uses',
+      intro: 'We choose a material for a job because of the properties it has.',
+      obj: 'Relate the use of various types of materials (wood, metal, ceramic, rubber, glass, plastic, fabric) to their physical properties.',
+      kw: ['material', 'wood', 'metal', 'ceramic', 'rubber', 'glass', 'plastic', 'fabric', 'property', 'used to make'] },
+    { id: 'mat-props', title: 'Comparing physical properties',
+      intro: 'Materials can be compared by how strong, flexible, waterproof or transparent they are, and by whether they float.',
+      obj: 'Compare the physical properties of materials: strength, flexibility, ability to float or sink in water, waterproofness and transparency.',
+      kw: ['strength', 'strong', 'flexibility', 'flexible', 'float', 'sink', 'waterproof', 'transparency', 'transparent', 'compare'] },
   ] },
   // ---------- CYCLES ----------
   { topic: 'Cycles in Plants and Animals (Life Cycles)', level: 'P3', theme: 'Cycles', los: [
-    { id: 'cyc-lifecycles', title: 'Life cycles of plants and animals',
-      intro: 'Different living things have different life cycles. A plant grows from a seed into a young plant and then an adult plant, while animals such as the chicken, frog, grasshopper, beetle, butterfly and mosquito go through their own repeated stages of change.',
-      obj: 'Show an understanding that different living things have different life cycles; observe and compare the life cycles of plants grown from seeds and of animals (chicken, cockroach, frog, grasshopper, beetle, butterfly, mosquito).',
-      kw: ['life cycle', 'egg', 'larva', 'pupa', 'nymph', 'caterpillar', 'tadpole', 'young plant', 'adult', 'stage'] },
+    { id: 'lc-different', title: 'Different living things have different life cycles',
+      intro: 'Every living thing goes through a set of stages from young to adult, and those stages are not the same for every living thing.',
+      obj: 'Show an understanding that different living things have different life cycles.',
+      kw: ['life cycle', 'stage', 'adult', 'young', 'differ'] },
+    { id: 'lc-plants', title: 'Life cycles of plants grown from seeds',
+      intro: 'A seed germinates, grows into a seedling and then into an adult plant that makes seeds of its own.',
+      obj: 'Observe and compare the life cycles of plants grown from seeds over a period of time.',
+      kw: ['seed', 'germinate', 'germination', 'seedling', 'life cycle', 'plant', 'shoot'] },
+    { id: 'lc-animals', title: 'Life cycles of animals',
+      intro: 'Some animals change completely as they grow (butterfly, mosquito, frog); others simply get bigger.',
+      obj: 'Observe and compare the life cycles of animals over a period of time (chicken, cockroach, frog, grasshopper, beetle, butterfly, mosquito).',
+      kw: ['chicken', 'cockroach', 'frog', 'grasshopper', 'beetle', 'butterfly', 'mosquito', 'larva', 'pupa', 'nymph', 'tadpole', 'life cycle'] },
   ] },
   { topic: 'Cycles in Plants and Animals (Reproduction)', level: 'P5', theme: 'Cycles', los: [
-    { id: 'rep-cell', title: 'The cell — basic unit of life',
-      intro: 'A cell is the basic unit of life. All living things are made of cells, and the parts of a cell work together to keep it alive.',
-      obj: 'Recognise that a cell is a basic unit of life.',
-      kw: ['cell', 'nucleus', 'cell wall', 'chloroplast', 'cell membrane', 'cytoplasm'] },
-    { id: 'rep-heredity', title: 'Reproduction and passing on characteristics',
-      intro: 'Living things reproduce to ensure the continuity of their kind. Many characteristics of an organism are passed on from parents to their offspring, which is why offspring resemble their parents.',
-      obj: 'Show an understanding that living things reproduce to ensure continuity of their kind and that many characteristics of an organism are passed on from parents to offspring.',
-      kw: ['offspring', 'parent', 'inherit', 'continuity', 'passed on', 'resemble'] },
-    { id: 'rep-plants', title: 'Sexual reproduction in flowering plants',
-      intro: 'Flowering plants reproduce sexually through pollination, fertilisation (seed production), seed dispersal and germination. Fertilisation happens when a male reproductive cell fuses with a female reproductive cell. Some plants reproduce from spores instead of seeds.',
-      obj: 'Describe processes in the sexual reproduction of flowering plants — pollination, fertilisation (seed production), seed dispersal and germination; investigate the ways plants reproduce (spores, seeds).',
-      kw: ['pollinat', 'fertilis', 'dispers', 'germinat', 'seed', 'spore', 'pollen', 'stigma', 'anther', 'ovary', 'fruit', 'petal', 'flower'] },
-    { id: 'rep-human', title: 'Human reproduction',
-      intro: 'In humans, fertilisation occurs when a sperm fuses with an egg, and the fertilised egg develops in the womb. The ovaries produce eggs and the testes produce sperms — the same idea of fertilisation as in flowering plants.',
-      obj: 'Recognise the process of fertilisation in the sexual reproduction of humans (sperm fuses with egg; fertilised egg develops in the womb; ovaries produce eggs, testes produce sperms) and the similarity with fertilisation in flowering plants.',
-      kw: ['sperm', 'egg cell', 'womb', 'ovary', 'ovaries', 'testes', 'fertilised egg', 'human reproduction'] },
+    { id: 'rep-cell', title: 'The cell — the basic unit of life',
+      intro: 'Every living thing is made of cells. Plant and animal cells share some parts and differ in others.',
+      obj: 'Recognise that a cell is the basic unit of life.',
+      kw: ['cell', 'nucleus', 'cell membrane', 'cytoplasm', 'chloroplast', 'cell wall', 'basic unit'] },
+    { id: 'rep-continuity', title: 'Reproduction and passing on characteristics',
+      intro: 'Living things reproduce so their kind continues, and offspring inherit many characteristics from their parents.',
+      obj: 'Show an understanding that living things reproduce to ensure the continuity of their kind, and that many characteristics of an organism are passed on from parents to offspring.',
+      kw: ['reproduce', 'reproduction', 'continuity', 'inherit', 'characteristic', 'parent', 'offspring', 'trait'] },
+    { id: 'rep-plant', title: 'Sexual reproduction in flowering plants',
+      intro: 'Pollen reaches the stigma, fertilisation happens in the ovary, seeds form, and the seeds are then dispersed.',
+      obj: 'Describe the processes in the sexual reproduction of flowering plants: pollination, fertilisation (seed production) and seed dispersal.',
+      kw: ['pollination', 'pollen', 'stigma', 'anther', 'ovary', 'ovule', 'fertilisation', 'seed dispersal', 'flower'] },
+    { id: 'rep-human', title: 'Fertilisation in humans',
+      intro: 'In humans a sperm nucleus fuses with an egg nucleus, and the fertilised egg develops in the womb.',
+      obj: 'Recognise the process of fertilisation in the sexual reproduction of humans.',
+      kw: ['sperm', 'egg', 'fertilisation', 'womb', 'uterus', 'embryo', 'foetus', 'human reproduction'] },
+    { id: 'rep-similar', title: 'What plant and human reproduction share',
+      intro: 'In both flowering plants and humans, fertilisation is the fusing of a male nucleus with a female nucleus.',
+      obj: 'Recognise the similarity, in terms of fertilisation, between the sexual reproduction of flowering plants and of humans.',
+      kw: ['fertilisation', 'similarity', 'sexual reproduction', 'fuse', 'nucleus', 'male', 'female'] },
+    { id: 'rep-ways', title: 'How plants reproduce',
+      intro: 'Not every plant makes seeds — some, such as ferns and moulds, reproduce by spores.',
+      obj: 'Investigate the ways in which plants reproduce — by spores and by seeds.',
+      kw: ['spore', 'seed', 'fern', 'mould', 'reproduce', 'plant'] },
   ] },
   { topic: 'Cycles in Matter and Water (Matter)', level: 'P4', theme: 'Cycles', los: [
-    { id: 'mat-states', title: 'Matter and its three states',
-      intro: 'Matter is anything that has mass and occupies space. It exists as solid, liquid or gas — the three states differ in whether they have a definite shape and a definite volume.',
-      obj: 'State that matter is anything that has mass and occupies space; differentiate among the three states of matter (solid, liquid, gas) in terms of shape and volume; measure mass and volume.',
-      kw: ['matter', 'mass', 'volume', 'occupies space', 'definite shape', 'solid', 'liquid', 'gas'] },
+    { id: 'matt-def', title: 'What matter is',
+      intro: 'Everything around us that has mass and takes up space is matter — including air, which we cannot see.',
+      obj: 'State that matter is anything that has mass and occupies space.',
+      kw: ['matter', 'mass', 'occupies space', 'volume', 'takes up space'] },
+    { id: 'matt-states', title: 'The three states of matter',
+      intro: 'Solids keep their shape and volume, liquids keep volume but not shape, and gases keep neither.',
+      obj: 'Differentiate among the three states of matter (solid, liquid and gas) in terms of shape and volume.',
+      kw: ['solid', 'liquid', 'gas', 'state of matter', 'shape', 'volume', 'definite'] },
+    { id: 'matt-measure', title: 'Measuring mass and volume',
+      intro: 'Mass is measured with a balance and the volume of a liquid with a measuring cylinder.',
+      obj: 'Measure mass and volume using appropriate apparatus.',
+      kw: ['mass', 'volume', 'measuring cylinder', 'beaker', 'balance', 'measure', 'apparatus'] },
   ] },
   { topic: 'Cycles in Matter and Water (Water)', level: 'P5', theme: 'Cycles', los: [
-    { id: 'wat-states', title: 'Water and its changes of state',
-      intro: 'Water exists in three interchangeable states. It changes state by melting, freezing, boiling, evaporation and condensation — ice melts at 0 °C (the melting point) and water boils at 100 °C (the boiling point) — as it gains or loses heat.',
-      obj: 'Recognise that water can exist in three interchangeable states; show an understanding of melting, freezing, boiling/evaporation and condensation, the melting point of ice and boiling point of water; investigate the effect of heat gain or loss on the temperature and state of water.',
-      kw: ['melt', 'freez', 'boil', 'condens', 'steam', 'ice', 'water vapour', 'change of state', '0 °c', '100 °c', '0°c', '100°c'] },
-    { id: 'wat-evap', title: 'Evaporation and its rate',
-      intro: 'Evaporation happens when a liquid changes to a gas below its boiling point. The rate of evaporation is affected by wind, temperature and the exposed surface area of the liquid.',
-      obj: 'Investigate the factors which affect the rate of evaporation — wind, temperature and exposed surface area.',
-      kw: ['evaporat', 'rate of evaporation', 'wind', 'exposed surface', 'surface area', 'dry', 'dries'] },
-    { id: 'wat-cycle', title: 'The water cycle and keeping water clean',
-      intro: 'Evaporation and condensation drive the water cycle, which returns water to the Earth and makes it a self-sustaining system. Water is essential to life processes but is a limited natural resource, so we must conserve it and prevent water pollution.',
-      obj: 'Show an understanding of the roles of evaporation and condensation in the water cycle; recognise the importance of the water cycle and of water to life processes; describe the impact of water pollution on Earth’s water resources.',
-      kw: ['water cycle', 'cloud', 'rain', 'water pollution', 'conserve water', 'reservoir', 'limited natural resource'] },
+    { id: 'wat-three', title: 'Water in its three states',
+      intro: 'Water can be ice, liquid water or water vapour, and it can change back and forth between them.',
+      obj: 'Recognise that water can exist in three interchangeable states of matter.',
+      kw: ['water', 'ice', 'steam', 'water vapour', 'state', 'interchangeable'] },
+    { id: 'wat-change', title: 'How water changes state',
+      intro: 'Melting, freezing, boiling, evaporation and condensation are the changes water goes through as it gains or loses heat.',
+      obj: 'Show an understanding of how water changes from one state to another: melting, freezing, boiling, evaporation and condensation.',
+      kw: ['melting', 'freezing', 'boiling', 'evaporation', 'condensation', 'change of state'] },
+    { id: 'wat-points', title: 'Melting point and boiling point',
+      intro: 'Ice melts at 0°C and water boils at 100°C — the temperatures stay fixed while the change of state happens.',
+      obj: 'Show an understanding of the terms melting point of ice (or freezing point of water) and boiling point of water.',
+      kw: ['melting point', 'freezing point', 'boiling point', 'thermometer', 'remains constant'] },
+    { id: 'wat-heat', title: 'Heat gain and loss changing water',
+      intro: 'Adding heat melts ice and boils water; removing heat condenses vapour and freezes water.',
+      obj: 'Investigate the effect of heat gain or loss on the temperature and state of water.',
+      kw: ['heat gain', 'heat loss', 'temperature', 'ice', 'melt', 'boil', 'state', 'graph'] },
+    { id: 'wat-evap', title: 'What affects the rate of evaporation',
+      intro: 'Water evaporates faster when it is warmer, windier, or spread over a larger exposed surface.',
+      obj: 'Investigate the factors which affect the rate of evaporation: wind, temperature and exposed surface area.',
+      kw: ['evaporation', 'rate of evaporation', 'wind', 'temperature', 'exposed surface area', 'dry faster'] },
+    { id: 'wat-cycle', title: 'Evaporation and condensation in the water cycle',
+      intro: 'Water evaporates from the sea, condenses into clouds and falls again as rain.',
+      obj: 'Show an understanding of the roles of evaporation and condensation in the water cycle.',
+      kw: ['water cycle', 'evaporation', 'condensation', 'cloud', 'rain', 'precipitation'] },
+    { id: 'wat-import', title: 'Why the water cycle matters',
+      intro: 'The water cycle is what keeps returning fresh water to the land.',
+      obj: 'Recognise the importance of the water cycle.',
+      kw: ['water cycle', 'importance', 'fresh water', 'supply', 'rain'] },
+    { id: 'wat-life', title: 'Water and life processes',
+      intro: 'Living things need water for digestion, for transporting substances and for many other life processes.',
+      obj: 'Recognise the importance of water to life processes.',
+      kw: ['water', 'life process', 'digestion', 'transport', 'survive', 'importance'] },
+    { id: 'wat-poll', title: 'Water pollution',
+      intro: 'Polluting our water sources reduces the clean water available to living things.',
+      obj: "Describe the impact of water pollution on Earth's water resources.",
+      kw: ['water pollution', 'pollutant', 'contaminate', 'water resource', 'clean water'] },
   ] },
   // ---------- SYSTEMS ----------
-  { topic: 'Human System (Digestive System)', level: 'P4', theme: 'Systems', topics: ['Human Body Systems'], los: [
+  { topic: 'Human System (Digestive System)', level: 'P4', theme: 'Systems', los: [
+    { id: 'hum-systems', title: 'The systems of the human body',
+      intro: 'The body is made of systems — digestive, respiratory, circulatory, skeletal and muscular — each with its own job.',
+      obj: 'Identify the human systems in the body and state their functions (digestive, respiratory, circulatory, skeletal and muscular).',
+      kw: ['digestive', 'respiratory', 'circulatory', 'skeletal', 'muscular', 'system', 'function'] },
     { id: 'hum-digest', title: 'The digestive system',
-      intro: 'The digestive system breaks food down so it can be absorbed by the body. Food passes through the mouth, gullet, stomach, small intestine and large intestine, and each part has its own function.',
-      obj: 'Identify the human systems in the body and their functions (digestive, respiratory, circulatory, skeletal, muscular); identify the parts of the human digestive system (mouth, gullet, stomach, small intestine, large intestine) and describe their functions.',
-      kw: ['digest', 'stomach', 'gullet', 'small intestine', 'large intestine', 'mouth', 'saliva', 'absorb', 'food is broken'] },
+      intro: 'Food travels from the mouth through the gullet, stomach and intestines, being broken down and absorbed along the way.',
+      obj: 'Identify the parts in the human digestive system (mouth, gullet, stomach, small intestine and large intestine) and describe their functions.',
+      kw: ['mouth', 'gullet', 'oesophagus', 'stomach', 'small intestine', 'large intestine', 'digestion', 'digestive juice', 'absorb'] },
   ] },
-  { topic: 'Human System (Respiratory and Circulatory Systems)', level: 'P5', theme: 'Systems', topics: ['Human and Plant Respiration', 'Human Body Systems'], los: [
-    { id: 'hum-air', title: 'Air and the gases in it',
-      intro: 'Air is made up of gases such as nitrogen, carbon dioxide, oxygen and water vapour. We use oxygen from the air to release energy from food.',
+  { topic: 'Human System (Respiratory and Circulatory Systems)', level: 'P5', theme: 'Systems', los: [
+    { id: 'air-gases', title: 'The gases in air',
+      intro: 'Air is a mixture — mostly nitrogen, with oxygen, carbon dioxide and water vapour.',
       obj: 'Recognise that air is made up of gases such as nitrogen, carbon dioxide, oxygen and water vapour.',
-      kw: ['nitrogen', 'oxygen', 'carbon dioxide', 'water vapour', 'gases in air', 'composition of air'] },
-    { id: 'hum-respcirc', title: 'The respiratory and circulatory systems',
-      intro: 'The respiratory system (nose, windpipe, lungs) takes in oxygen and removes carbon dioxide, while the circulatory system (heart, blood, blood vessels) transports these substances around the body. Each part has its own function.',
-      obj: 'Identify the parts of the human respiratory (nose, windpipe, lungs) and circulatory systems (heart, blood, blood vessels) and describe their functions.',
-      kw: ['respiratory', 'circulatory', 'lungs', 'windpipe', 'nose', 'heart', 'blood vessel', 'breathe', 'breathing', 'inhale', 'exhale', 'pulse'] },
-    { id: 'hum-integration', title: 'Systems working together and gas exchange',
-      intro: 'The digestive, respiratory and circulatory systems work together to carry out life processes. Plants, fish and humans all take in oxygen and give out carbon dioxide, but in different ways.',
-      obj: 'Recognise the integration of the digestive, respiratory and circulatory systems in carrying out life processes; compare how plants, fish and humans take in oxygen and give out carbon dioxide.',
-      kw: ['work together', 'integration', 'gas exchange', 'gills', 'fish take in', 'oxygen and give out', 'life processes'] },
+      kw: ['air', 'nitrogen', 'oxygen', 'carbon dioxide', 'water vapour', 'gas'] },
+    { id: 'resp-parts', title: 'The respiratory and circulatory systems',
+      intro: 'Air travels through the nose and windpipe to the lungs, and the heart pumps blood through blood vessels to the whole body.',
+      obj: 'Identify the parts of the human respiratory system (nose, windpipe, lungs) and circulatory system (heart, blood, blood vessels) and describe their functions.',
+      kw: ['nose', 'windpipe', 'lungs', 'heart', 'blood', 'blood vessel', 'respiratory', 'circulatory', 'breathe'] },
+    { id: 'sys-integrate', title: 'Systems working together',
+      intro: 'The digestive, respiratory and circulatory systems work as one to get oxygen and digested food to every cell.',
+      obj: 'Recognise the integration of the different systems (digestive, respiratory and circulatory) in carrying out life processes.',
+      kw: ['integration', 'work together', 'digestive', 'respiratory', 'circulatory', 'life process', 'oxygen', 'digested food'] },
+    { id: 'gas-exchange', title: 'How plants, fish and humans exchange gases',
+      intro: 'Humans use lungs, fish use gills and plants use tiny openings in their leaves — but all take in oxygen and give out carbon dioxide.',
+      obj: 'Compare how plants, fish and humans take in oxygen and give out carbon dioxide.',
+      kw: ['oxygen', 'carbon dioxide', 'gills', 'stomata', 'tiny openings', 'lungs', 'gaseous exchange', 'fish'] },
   ] },
-  { topic: 'Transport in Humans and Plants', level: 'P5', theme: 'Systems', topics: ['Human and Plant Transport'], los: [
-    { id: 'trans-human', title: 'Transport of substances in humans',
-      intro: 'In humans, blood vessels transport digested food, oxygen and carbon dioxide around the body. Blood carries what cells need to them and takes waste gases away.',
-      obj: 'Compare the ways in which substances are transported within plants and humans — in humans, blood vessels transport digested food, oxygen and carbon dioxide.',
-      kw: ['blood', 'blood vessel', 'transport', 'digested food', 'carries oxygen', 'oxygen-rich', 'oxygen-poor'] },
-    { id: 'trans-plant', title: 'The plant transport system',
-      intro: 'Plants have tubes that transport food and water. Water-carrying tubes move water and mineral salts, while food-carrying tubes move the food (sugar) made in the leaves to the rest of the plant.',
-      obj: 'Identify the parts of the plant transport system and describe their functions; investigate how food and water are transported in the plant; compare transport in plants and humans.',
-      kw: ['water-carrying', 'food-carrying', 'tubes', 'transport in plant', 'red dye', 'stem', 'mineral salts', 'transpiration'] },
+  { topic: 'Transport in Humans and Plants', level: 'P5', theme: 'Systems', los: [
+    { id: 'trans-plant-parts', title: 'The plant transport system',
+      intro: 'Plants have two sets of tubes: one carries water and mineral salts up, the other carries food made in the leaves.',
+      obj: 'Identify the parts of the plant transport system and describe their functions.',
+      kw: ['water-carrying tube', 'food-carrying tube', 'tube', 'stem', 'root', 'transport', 'mineral salts'] },
+    { id: 'trans-plant-inv', title: 'How food and water move through a plant',
+      intro: 'Putting a stem in coloured water shows the path the water takes up the plant.',
+      obj: 'Investigate how food and water are transported in the plant.',
+      kw: ['transport', 'water', 'food', 'dye', 'coloured water', 'stem', 'tube', 'stained'] },
+    { id: 'trans-compare', title: 'Transport in plants compared with humans',
+      intro: 'Both plants and humans move substances around inside tubes — blood vessels in us, transport tubes in plants.',
+      obj: 'Compare the ways in which substances are transported within plants and within humans.',
+      kw: ['transport', 'blood vessel', 'tube', 'substance', 'compare', 'plant', 'human'] },
   ] },
-  { topic: 'Plant System (Plant Parts and Functions)', level: 'P4', theme: 'Systems', topics: ['Plant Systems'], los: [
-    { id: 'plt-parts', title: 'Parts of a plant and their functions',
-      intro: 'A plant has different parts — the leaf, stem and root — and each part has its own function that helps the plant to live and grow.',
-      obj: 'Identify the different parts of plants (leaf, stem, root) and state their functions.',
-      kw: ['leaf', 'stem', 'root', 'plant part', 'function of the leaf', 'function of the root', 'anchor'] },
+  { topic: 'Plant System (Plant Parts and Functions)', level: 'P4', theme: 'Systems', los: [
+    { id: 'plant-parts', title: 'Parts of a plant and their functions',
+      intro: 'Roots anchor the plant and take in water, the stem holds it up and carries substances, and the leaf makes food.',
+      obj: 'Identify the different parts of plants and state their functions: leaf, stem and root.',
+      kw: ['leaf', 'stem', 'root', 'function', 'plant part', 'anchor', 'support', 'absorb'] },
   ] },
-  { topic: 'Electrical System', level: 'P5', theme: 'Systems', topics: ['Electrical Systems'], los: [
-    { id: 'elec-circuit', title: 'Electric circuits and how current flows',
-      intro: 'An electric circuit with an energy source (battery) and other components (wire, bulb, switch) forms an electrical system. A closed circuit allows current to flow so the bulb lights up; an open circuit does not.',
-      obj: 'Recognise that an electric circuit forms an electrical system; show an understanding that a closed circuit allows current to flow; construct simple circuits from circuit diagrams.',
-      kw: ['circuit', 'battery', 'bulb', 'switch', 'closed circuit', 'open circuit', 'current', 'wire', 'circuit diagram'] },
-    { id: 'elec-conductors', title: 'Electrical conductors and insulators',
-      intro: 'Some materials let electric current pass through them (conductors) while others do not (insulators). This is why wires are made of metal but covered in plastic.',
+  { topic: 'Electrical System', level: 'P5', theme: 'Systems', los: [
+    { id: 'elec-circuit', title: 'What makes an electric circuit',
+      intro: 'A circuit needs an energy source and components — battery, wires, bulb and switch — joined into a system.',
+      obj: 'Recognise that an electric circuit, consisting of an energy source (battery) and other circuit components (wire, bulb, switch), forms an electrical system.',
+      kw: ['circuit', 'battery', 'wire', 'bulb', 'switch', 'electrical system', 'component'] },
+    { id: 'elec-closed', title: 'Closed circuits and current flow',
+      intro: 'Current only flows when the circuit is complete — one gap anywhere and everything stops.',
+      obj: 'Show an understanding that a closed circuit allows current to flow.',
+      kw: ['closed circuit', 'open circuit', 'current', 'flow', 'light up', 'complete', 'gap'] },
+    { id: 'elec-cond', title: 'Electrical conductors and insulators',
+      intro: 'Conductors let current through, insulators do not — which is why wires are metal inside and plastic outside.',
       obj: 'Identify electrical conductors and insulators.',
-      kw: ['conductor', 'insulator', 'conduct electricity', 'metal wire', 'plastic cover'] },
-    { id: 'elec-variables', title: 'What affects the current in a circuit',
-      intro: 'Changing the number of batteries or bulbs, and whether bulbs are arranged in series or in parallel, changes the current and how brightly the bulbs light up.',
-      obj: 'Investigate the effect of some variables on the current in a circuit — number of batteries (in series) and number of bulbs (in series and parallel).',
-      kw: ['series', 'parallel', 'brighter', 'brightness', 'dimmer', 'number of batteries', 'number of bulbs', 'blew', 'lit up'] },
+      kw: ['conductor', 'insulator', 'electricity', 'metal', 'plastic', 'rubber', 'conduct'] },
+    { id: 'elec-diagram', title: 'Circuit diagrams',
+      intro: 'A circuit diagram uses agreed symbols so any circuit can be drawn and read quickly.',
+      obj: 'Construct circuit diagrams.',
+      kw: ['circuit diagram', 'symbol', 'draw', 'construct', 'redraw'] },
+    { id: 'elec-arrange', title: 'How batteries and bulbs affect the current',
+      intro: 'More batteries make a bigger current; bulbs in series and in parallel behave differently.',
+      obj: 'Investigate how the number and arrangement of batteries and bulbs (in series and in parallel) affect the current in a circuit.',
+      kw: ['series', 'parallel', 'number of batteries', 'number of bulbs', 'brighter', 'dimmer', 'current', 'arrangement'] },
   ] },
   // ---------- INTERACTIONS ----------
-  { topic: 'Interaction of Forces (Magnets)', level: 'P3', theme: 'Interactions', topics: ['Magnets'], los: [
-    { id: 'mag-magnets', title: 'Magnets and their characteristics',
-      intro: 'A magnet can exert a push or a pull. Magnets have two poles, unlike poles attract and like poles repel, and magnets attract magnetic materials such as iron and steel.',
-      obj: 'Recognise that a magnet can exert a push or a pull; identify the characteristics of magnets (two poles, north-south, attract/repel, attract magnetic materials); compare magnetic and non-magnetic materials; make a magnet.',
-      kw: ['magnet', 'pole', 'attract', 'repel', 'north', 'south', 'magnetic material', 'iron', 'steel', 'stroke method'] },
+  { topic: 'Interaction of Forces (Magnets)', level: 'P3', theme: 'Interactions', los: [
+    { id: 'mag-push', title: 'A magnet can push or pull',
+      intro: 'A magnet exerts a force without touching — it can attract or repel.',
+      obj: 'Recognise that a magnet can exert a push or a pull.',
+      kw: ['magnet', 'push', 'pull', 'attract', 'repel', 'force'] },
+    { id: 'mag-char', title: 'Characteristics of magnets',
+      intro: 'Magnets have two poles, point north–south when freely suspended, and like poles repel while unlike poles attract.',
+      obj: 'Identify the characteristics of magnets: they can be made of iron or steel; they have two poles; a freely suspended magnet points in the north–south direction; and like poles repel while unlike poles attract.',
+      kw: ['pole', 'north', 'south', 'attract', 'repel', 'iron', 'steel', 'freely suspended', 'like poles'] },
+    { id: 'mag-uses', title: 'Uses of magnets',
+      intro: 'Magnets are used in everyday objects from fridge doors to compasses.',
+      obj: 'Recognise uses of magnets in everyday objects.',
+      kw: ['magnet', 'use', 'everyday', 'fridge', 'compass', 'door catch'] },
+    { id: 'mag-materials', title: 'Magnetic and non-magnetic materials',
+      intro: 'Only some materials are attracted to magnets — a magnetic material is not the same thing as a magnet.',
+      obj: 'Compare magnets, magnetic materials and non-magnetic materials.',
+      kw: ['magnetic material', 'non-magnetic', 'iron', 'steel', 'nickel', 'cobalt', 'attracted'] },
+    { id: 'mag-make', title: 'Making a magnet',
+      intro: 'A magnet can be made by stroking a magnetic material with a magnet, or by using electricity.',
+      obj: 'Make a magnet by the stroke method and by the electrical method.',
+      kw: ['stroke method', 'electrical method', 'make a magnet', 'magnetise', 'electromagnet', 'coil'] },
   ] },
-  { topic: 'Interaction of Forces (Frictional, Gravitational, Elastic Spring Force)', level: 'P6', theme: 'Interactions', topics: ['Forces'], los: [
-    { id: 'for-effects', title: 'What a force is and what it does',
-      intro: 'A force is a push or a pull. A force can move a stationary object, speed it up, slow it down, change its direction, stop a moving object, or change its shape.',
-      obj: 'Identify a force as a push or a pull; show an understanding of the effects of a force (move, speed up, slow down, change direction, stop, change shape).',
-      kw: ['push', 'pull', 'force', 'move', 'speed up', 'slow down', 'change direction', 'change the shape', 'stationary'] },
-    { id: 'for-types', title: 'Types of forces',
-      intro: 'There are different types of forces — magnetic force, gravitational force, elastic spring force and frictional force — each acting in its own way.',
-      obj: 'Recognise and give examples of the different types of forces — magnetic, gravitational, elastic spring and frictional force.',
-      kw: ['types of force', 'magnetic force', 'gravitational force', 'elastic spring force', 'frictional force', 'give examples of force'] },
-    { id: 'for-friction', title: 'Frictional force',
-      intro: 'Friction is a force that acts against the motion of objects moving over a surface. It can slow objects down and depends on the surfaces in contact.',
-      obj: 'Investigate the effect of frictional force on the motion of objects.',
-      kw: ['friction', 'frictional force', 'rough surface', 'smooth surface', 'slows down', 'rubbing', 'grip'] },
-    { id: 'for-elastic', title: 'Elastic spring force',
-      intro: 'A stretched or compressed spring produces an elastic spring force. The more a spring is stretched or compressed, the larger the force it exerts.',
-      obj: 'Investigate the effects of elastic spring force.',
-      kw: ['spring', 'elastic', 'stretch', 'compress', 'extension', 'rubber band', 'force-extension'] },
-    { id: 'for-gravity', title: 'Gravitational force and weight',
-      intro: 'Objects have weight because of the gravitational force acting on them. Gravity is a pull towards the Earth.',
+  { topic: 'Interaction of Forces (Frictional, Gravitational and Elastic Spring Force)', level: 'P6', theme: 'Interactions', los: [
+    { id: 'force-what', title: 'A force is a push or a pull',
+      intro: 'Every force is either a push or a pull acting on an object.',
+      obj: 'Identify a force as a push or a pull.',
+      kw: ['force', 'push', 'pull'] },
+    { id: 'force-effects', title: 'What a force can do',
+      intro: 'A force can start motion, speed it up, slow it down, change its direction, stop it, or change an object’s shape.',
+      obj: 'Show an understanding of the effects of a force: it can move a stationary object, speed up, slow down or change the direction of a moving object, stop a moving object, and change the shape of an object.',
+      kw: ['stationary', 'speed up', 'slow down', 'change direction', 'stop', 'change shape', 'effect of a force'] },
+    { id: 'force-types', title: 'Types of forces',
+      intro: 'The forces in the syllabus are magnetic, gravitational, elastic spring and frictional force.',
+      obj: 'Recognise and give examples of the different types of forces: magnetic force, gravitational force, elastic spring force and frictional force.',
+      kw: ['magnetic force', 'gravitational force', 'elastic spring force', 'frictional force', 'type of force'] },
+    { id: 'force-weight', title: 'Weight and gravitational force',
+      intro: 'Weight is the pull of gravity on an object, which is why it is measured in newtons and not in grams.',
       obj: 'Recognise that objects have weight because of the gravitational force acting on the object.',
-      kw: ['gravity', 'gravitational', 'weight', 'weigh', 'falls', 'pull of the earth', 'newton'] },
+      kw: ['weight', 'gravity', 'gravitational force', 'newton', 'mass', 'pull of the earth'] },
+    { id: 'force-friction', title: 'Frictional force and motion',
+      intro: 'Friction acts against motion — rougher surfaces produce more of it, so objects travel less far.',
+      obj: 'Investigate the effect of frictional force on the motion of objects.',
+      kw: ['friction', 'frictional force', 'rough', 'smooth', 'surface', 'slow down', 'distance moved'] },
+    { id: 'force-spring', title: 'Elastic spring force',
+      intro: 'A stretched or compressed spring pulls or pushes back, and stretches further as the load increases.',
+      obj: 'Investigate the effects of elastic spring force.',
+      kw: ['elastic spring force', 'spring', 'stretch', 'compress', 'rubber band', 'extension', 'load', 'elastic'] },
   ] },
-  { topic: 'Interactions within the Environment', level: 'P6', theme: 'Interactions', topics: ['Living Together', 'Food Chains and Webs', 'Humans and the Environment'], los: [
+  { topic: 'Interactions within the Environment', level: 'P6', theme: 'Interactions', los: [
     { id: 'env-survival', title: 'Factors affecting survival',
-      intro: 'The survival of an organism depends on physical factors of the environment (temperature, light, water), the availability of food, and the other organisms present. When the environment becomes unfavourable, organisms adapt and survive, move away, or die.',
-      obj: 'Identify the factors that affect the survival of an organism (physical characteristics, availability of food, types of other organisms); show an understanding of the effect on organisms when the environment becomes unfavourable.',
-      kw: ['survival', 'survive', 'unfavourable', 'temperature', 'availability of food', 'environment', 'move to other places', 'die'] },
+      intro: 'Whether an organism survives depends on its surroundings and on the other living things around it.',
+      obj: 'Identify the factors that affect the survival of an organism: the physical characteristics of the environment (temperature, light, water) and its interactions with other living things (competition, predation, symbiosis).',
+      kw: ['survival', 'temperature', 'light', 'water', 'competition', 'predator', 'prey', 'symbiosis', 'factor'] },
+    { id: 'env-unfavourable', title: 'When the environment turns unfavourable',
+      intro: 'When conditions get worse, organisms either adapt, move away, or die.',
+      obj: 'Show an understanding of the effect on organisms when the environment becomes unfavourable — organisms adapt and survive, move to other places, or die.',
+      kw: ['unfavourable', 'adapt', 'move away', 'die', 'environment', 'change', 'survive'] },
     { id: 'env-food', title: 'Food chains and food webs',
-      intro: 'Energy passes from the Sun through living things. In a food chain and food web, producers, consumers, predators and prey each have a role, and decomposers return nutrients to the environment.',
-      obj: 'Show an understanding of the energy pathway from the Sun through living things and identify the roles of organisms (producers, consumers, predators, prey) in a food chain and food web.',
-      kw: ['food chain', 'food web', 'producer', 'consumer', 'predator', 'prey', 'decomposer', 'energy pathway', 'arrow'] },
-    { id: 'env-community', title: 'Organisms, populations and communities',
-      intro: 'An organism is a living thing, a population is a group of organisms of the same kind living together, and a community is made up of many populations. Different habitats support different communities.',
-      obj: 'Differentiate among organism, population and community; show an understanding that different habitats (garden, field, pond, seashore, tree, mangrove swamp) support different communities.',
-      kw: ['population', 'community', 'organism', 'habitat', 'pond', 'seashore', 'mangrove', 'garden', 'field'] },
+      intro: 'Energy passes from the Sun to producers and then along the chain to consumers.',
+      obj: 'Show an understanding of the energy pathway from the Sun through living things, and identify the roles of organisms as producers, consumers, predators and prey in food chains and food webs.',
+      kw: ['food chain', 'food web', 'producer', 'consumer', 'predator', 'prey', 'energy', 'sun', 'arrow'] },
+    { id: 'env-levels', title: 'Organism, population and community',
+      intro: 'One living thing is an organism; a group of the same kind is a population; all the populations together are a community.',
+      obj: 'Differentiate among organism, population and community.',
+      kw: ['organism', 'population', 'community', 'habitat', 'same kind', 'group'] },
+    { id: 'env-habitat', title: 'Different habitats, different communities',
+      intro: 'A pond, a mangrove swamp and a seashore each support a different set of living things.',
+      obj: 'Show an understanding that different habitats support different communities (garden, field, pond, seashore, tree, mangrove swamp).',
+      kw: ['habitat', 'community', 'pond', 'seashore', 'mangrove', 'field', 'garden', 'tree'] },
     { id: 'env-adapt', title: 'Adaptations for survival',
-      intro: 'Adaptations are structural or behavioural features that enhance survival — helping organisms cope with physical factors, obtain food, escape predators, or reproduce by attracting mates or dispersing seeds and fruits.',
-      obj: 'Show an understanding that adaptations serve to enhance survival and can be structural or behavioural (cope with physical factors, obtain food, escape predators, reproduce).',
-      kw: ['adapt', 'adaptation', 'structural', 'behavioural', 'camouflage', 'escape predator', 'suited to', 'survive better'] },
-    { id: 'env-manimpact', title: "Man's impact on the environment",
-      intro: 'People affect the environment in positive ways (conservation, reforestation) and negative ways (depleting resources, deforestation, pollution and global warming). Our choices matter for the survival of living things.',
-      obj: "Give examples of man's positive and negative impact on the environment (conservation, reforestation; depleting natural resources, deforestation, pollution, global warming).",
-      kw: ['pollution', 'deforestation', 'conservation', 'reforestation', 'global warming', 'human impact', 'man’s impact', 'environment', 'recycle'] },
+      intro: 'Adaptations can be structural (a body part) or behavioural (something the animal does).',
+      obj: 'Show an understanding that adaptations serve to enhance survival and can be structural or behavioural.',
+      kw: ['adaptation', 'structural', 'behavioural', 'camouflage', 'beak', 'adapted', 'survive'] },
+    { id: 'env-man', title: "Man's impact on the environment",
+      intro: 'Human activity can damage the environment, and can also help to protect it.',
+      obj: "Give examples of man's impact, both positive and negative, on the environment.",
+      kw: ['deforestation', 'pollution', 'conservation', 'recycle', 'impact', 'human activity', 'global warming'] },
   ] },
   // ---------- ENERGY ----------
-  { topic: 'Energy Forms and Uses (Light)', level: 'P4', theme: 'Energy', topics: ['Light'], los: [
-    { id: 'lgt-light', title: 'Light, reflection and shadows',
-      intro: 'An object can be seen when it gives out light or reflects light. Light travels in straight lines, so a shadow forms when an object blocks the light. The shadow changes with the shape, size and position of the object and the distances involved.',
-      obj: 'Recognise that an object can be seen when it reflects light or is a source of light; recognise that light travels in straight lines and shadows form when light is blocked; investigate the variables that affect shadows.',
-      kw: ['light', 'reflect', 'shadow', 'source of light', 'straight line', 'blocked', 'screen', 'shape of shadow'] },
+  { topic: 'Energy Forms and Uses (Light)', level: 'P4', theme: 'Energy', los: [
+    { id: 'light-see', title: 'How we see objects',
+      intro: 'We see an object either because it gives out light or because it reflects light into our eyes.',
+      obj: 'Recognise that an object can be seen when it reflects light or when it is a source of light.',
+      kw: ['light', 'reflect', 'source of light', 'see', 'eye', 'shine'] },
+    { id: 'light-straight', title: 'Light travels in straight lines, and shadows',
+      intro: 'Because light travels in straight lines, an object that blocks it casts a shadow.',
+      obj: 'Recognise that light travels in straight lines and that a shadow is formed when light is completely or partially blocked by an object.',
+      kw: ['straight line', 'shadow', 'block', 'blocked', 'light', 'opaque'] },
+    { id: 'light-shadow-vars', title: 'What changes a shadow',
+      intro: 'A shadow changes with the shape, size and position of the object and with the distances between light, object and screen.',
+      obj: 'Investigate the variables that affect the shadows formed: the shape, size and position of the object, and the distance between the light source and object, and between the object and screen.',
+      kw: ['shadow', 'size', 'shape', 'position', 'distance', 'screen', 'light source', 'bigger', 'smaller'] },
   ] },
-  { topic: 'Energy Forms and Uses (Heat)', level: 'P4', theme: 'Energy', topics: ['Heat'], los: [
-    { id: 'heat-basics', title: 'Heat, temperature and heat flow',
-      intro: 'Heat is a form of energy and temperature is a measure of how hot something is. Heat flows from a hotter to a colder object until both reach the same temperature, and gaining or losing heat changes an object’s temperature.',
-      obj: 'Identify sources of heat; state that heat is a form of energy and temperature measures degree of hotness; differentiate heat and temperature; show that heat flows from hotter to colder until temperatures are equal; relate temperature change to heat gain or loss.',
-      kw: ['heat', 'temperature', 'hotter', 'colder', 'heat flows', 'thermometer', 'degree of hotness', 'same temperature', 'source of heat'] },
-    { id: 'heat-effects', title: 'Effects of heat gain or loss (expansion and conduction)',
-      intro: 'Gaining or losing heat has everyday effects: objects expand when heated and contract when cooled, and matter changes state. Some materials are good conductors of heat (metals) and others are poor conductors (wood, plastic, air, rubber).',
-      obj: 'List effects of heat gain/loss in everyday life (contraction/expansion of solids, liquids and gases; change in state of matter); identify good and poor conductors of heat.',
-      kw: ['expand', 'expansion', 'contract', 'contraction', 'conductor of heat', 'poor conductor', 'good conductor', 'insulator', 'change in state', 'metal', 'gap', 'fit'] },
+  { topic: 'Energy Forms and Uses (Heat)', level: 'P4', theme: 'Energy', los: [
+    { id: 'heat-sources', title: 'Sources of heat',
+      intro: 'The Sun, fire, a stove, a heater and even friction and electricity all give out heat.',
+      obj: 'Identify some common sources of heat.',
+      kw: ['source of heat', 'sun', 'fire', 'stove', 'heater', 'friction', 'electricity'] },
+    { id: 'heat-temp', title: 'Temperature measures how hot something is',
+      intro: 'Temperature tells us the degree of hotness of an object, and is measured with a thermometer.',
+      obj: 'State that the temperature of an object is a measurement of its degree of hotness.',
+      kw: ['temperature', 'degree of hotness', 'thermometer', 'hot', 'cold', 'measure'] },
+    { id: 'heat-energy', title: 'Heat is a form of energy',
+      intro: 'Heat is one of the forms energy takes, and it can move from one object to another.',
+      obj: 'State that heat is a form of energy.',
+      kw: ['heat', 'form of energy', 'energy'] },
+    { id: 'heat-vs-temp', title: 'Telling heat and temperature apart',
+      intro: 'Heat is the energy that flows; temperature is the measure of how hot something is. They are not the same thing.',
+      obj: 'Differentiate between heat and temperature.',
+      kw: ['heat', 'temperature', 'differentiate', 'difference', 'amount of heat'] },
+    { id: 'heat-flow', title: 'Heat flows from hotter to colder',
+      intro: 'Heat always moves from the hotter object to the colder one, until both reach the same temperature.',
+      obj: 'Show an understanding that heat flows from a hotter to a colder object, region or place until both reach the same temperature.',
+      kw: ['heat flow', 'hotter', 'colder', 'same temperature', 'gain heat', 'lose heat', 'until both'] },
+    { id: 'heat-change', title: 'Temperature change from heat gain or loss',
+      intro: 'An object warms up when it gains heat and cools down when it loses heat.',
+      obj: 'Relate the change in temperature of an object to the gain or loss of heat by the object.',
+      kw: ['temperature change', 'gain heat', 'lose heat', 'rise', 'fall', 'warmer', 'cooler'] },
+    { id: 'heat-effects', title: 'Effects of heat gain and loss',
+      intro: 'Gaining or losing heat makes things expand or contract, and can change their state.',
+      obj: 'List some effects of heat gain or loss in everyday life: the expansion and contraction of solids, liquids and gases, and the change in state of matter.',
+      kw: ['expand', 'expansion', 'contract', 'contraction', 'change of state', 'melt', 'boil', 'gap', 'crack'] },
+    { id: 'heat-cond', title: 'Good and poor conductors of heat',
+      intro: 'Metals conduct heat well; wood, plastic, air and rubber do not, which is why they are used as handles.',
+      obj: 'Identify good and poor conductors of heat — good conductors such as metals, and poor conductors such as wood, plastic, air and rubber.',
+      kw: ['conductor', 'insulator', 'metal', 'wood', 'plastic', 'air', 'rubber', 'conduct heat', 'handle'] },
+    { id: 'heat-measure', title: 'Measuring temperature',
+      intro: 'A thermometer or a datalogger with a temperature sensor gives a reading of how hot something is.',
+      obj: 'Measure temperature using a thermometer and a datalogger with temperature or heat sensors.',
+      kw: ['thermometer', 'datalogger', 'sensor', 'measure', 'temperature', 'reading', 'scale'] },
   ] },
-  { topic: 'Energy Forms and Uses (Photosynthesis)', level: 'P6', theme: 'Energy', topics: ['Energy in Food'], los: [
-    { id: 'photo-energy', title: 'How living things obtain energy',
-      intro: 'Living things need energy from respiration to carry out life processes, and the Sun is our primary source of energy. Plants make their own food while animals get energy by eating other living things.',
-      obj: 'Recognise that living things need energy from respiration; recognise the Sun as the primary source of energy; differentiate between the ways plants and animals obtain energy.',
-      kw: ['respiration', 'release of energy', 'primary source', 'the sun', 'obtain energy', 'make food', 'animals obtain'] },
-    { id: 'photo-photosynthesis', title: 'Photosynthesis',
-      intro: 'Plants make food by photosynthesis, which needs water, light energy and carbon dioxide and produces sugar and oxygen.',
-      obj: 'Investigate the requirements (water, light energy and carbon dioxide) for photosynthesis (production of sugar and oxygen).',
-      kw: ['photosynthesis', 'sugar', 'oxygen', 'carbon dioxide', 'light energy', 'chlorophyll', 'leaf makes food', 'green plant'] },
+  { topic: 'Energy Forms and Uses (Photosynthesis)', level: 'P6', theme: 'Energy', los: [
+    { id: 'photo-resp', title: 'Living things need energy from respiration',
+      intro: 'Respiration releases the energy stored in food so that life processes can happen.',
+      obj: 'Recognise that living things need energy from respiration to carry out life processes.',
+      kw: ['respiration', 'energy', 'life process', 'release energy', 'oxygen', 'food'] },
+    { id: 'photo-sun', title: 'The Sun as our primary source of energy',
+      intro: 'Almost all the energy we use can be traced back to the Sun.',
+      obj: 'Recognise that the Sun is our primary source of energy, providing light and heat.',
+      kw: ['sun', 'primary source', 'energy', 'light', 'heat'] },
+    { id: 'photo-obtain', title: 'How plants and animals obtain energy',
+      intro: 'Plants make their own food; animals must eat other living things to get theirs.',
+      obj: 'Differentiate between the ways in which plants and animals obtain energy.',
+      kw: ['plant', 'animal', 'obtain energy', 'make food', 'photosynthesis', 'eat', 'producer'] },
+    { id: 'photo-req', title: 'The requirements for photosynthesis',
+      intro: 'A plant needs water, light energy and carbon dioxide to make sugar and oxygen in its leaves.',
+      obj: 'Investigate the requirements — water, light energy and carbon dioxide — for photosynthesis, which produces sugar and oxygen.',
+      kw: ['photosynthesis', 'water', 'light', 'carbon dioxide', 'sugar', 'oxygen', 'chlorophyll', 'leaf'] },
   ] },
-  { topic: 'Energy Conversion', level: 'P6', theme: 'Energy', topics: ['Energy Conversion'], los: [
+  { topic: 'Energy Conversion', level: 'P6', theme: 'Energy', los: [
+    { id: 'econv-sun', title: 'Energy resources come from the Sun',
+      intro: 'Trace almost any energy resource back far enough and you arrive at the Sun.',
+      obj: 'Recognise that the energy from most of our energy resources is derived in some way from the Sun.',
+      kw: ['energy resource', 'sun', 'derived', 'fossil fuel', 'solar'] },
     { id: 'econv-forms', title: 'Forms of energy',
-      intro: 'Energy comes in various forms — kinetic, potential, light, electrical, sound and heat energy. Most of our energy is derived in some way from the Sun.',
-      obj: 'Recognise that energy from most energy resources is derived from the Sun; recognise and give examples of forms of energy (kinetic, potential, light, electrical, sound, heat).',
-      kw: ['kinetic energy', 'potential energy', 'light energy', 'electrical energy', 'sound energy', 'heat energy', 'form of energy', 'stored energy'] },
-    { id: 'econv-conversion', title: 'Energy conversion',
-      intro: 'Energy can be converted from one form to another. For example, a stretched rubber band or wound spring converts stored (potential) energy into kinetic energy, sound and heat.',
+      intro: 'Energy comes in several forms: kinetic, potential, light, electrical, sound and heat.',
+      obj: 'Recognise and give examples of the various forms of energy: kinetic energy, potential energy, light energy, electrical energy, sound energy and heat energy.',
+      kw: ['kinetic energy', 'potential energy', 'light energy', 'electrical energy', 'sound energy', 'heat energy', 'form of energy'] },
+    { id: 'econv-conversion', title: 'Converting energy from one form to another',
+      intro: 'A stretched rubber band or a wound spring turns stored energy into movement, sound and heat.',
       obj: 'Investigate energy conversion from one form to another.',
-      kw: ['energy conversion', 'converted', 'convert', 'change from', 'into kinetic', 'into sound', 'into heat', 'rubber band', 'spring', 'toy car'] },
+      kw: ['energy conversion', 'converted', 'convert', 'into kinetic', 'into sound', 'into heat', 'rubber band', 'spring'] },
   ] },
 ];
+
 
 // Flat list of learning objectives in syllabus order, each carrying its parent
 // topic/level/theme and the app topic names it maps to (for the fallback).
@@ -27454,7 +27616,7 @@ function _ppHoverOpen(html, ev){
 function ppHoverShow(ev, id){ _ppHoverOpen(ppHoverHtml(id), ev); }
 // Same hover preview for a BANK question — used in the "attach a question"
 // picker so the teacher can read the full question before selecting it.
-function ppBankHoverHtml(qid){
+function ppBankHoverHtml(qid, note){
   const bq = questionBank.find(q => q.id === qid);
   if (!bq) return '';
   const cat = bq.category ? ' &middot; ' + escapeHtml(normalizeCategoryValue(bq.category)) : '';
@@ -27463,9 +27625,12 @@ function ppBankHoverHtml(qid){
   return `<div class="pp-hv-head"><strong>${escapeHtml(bq.title || 'Untitled')}</strong></div>
     <div class="pp-hv-topic"><span class="pp-dot" style="background:${ppThemeColor(bq.topic)}"></span>${escapeHtml(bq.topic || '')}${cat}</div>${_ppNisBadge(bq)}
     <div class="pp-hv-preview">${renderQuestionPreviewHtml(bq.id)}</div>${accLine}
-    <div class="pp-hv-note">Click to attach this question.</div>`;
+    <div class="pp-hv-note">${escapeHtml(note || 'Click to attach this question.')}</div>`;
 }
-function ppHoverShowBank(ev, qid){ _ppHoverOpen(ppBankHoverHtml(qid), ev); }
+// `note` lets a caller say what clicking actually does here — the same preview
+// is used to attach a question (Past Papers), tick one (Learning Objectives)
+// and practise one, and a wrong instruction is worse than none.
+function ppHoverShowBank(ev, qid, note){ _ppHoverOpen(ppBankHoverHtml(qid, note), ev); }
 function ppHoverMove(ev){
   const el = _ppHoverEl; if (!el || el.style.display !== 'block') return;
   _ppHoverLast = { x: ev.clientX, y: ev.clientY };
@@ -28550,28 +28715,6 @@ function ppStyles(){
   .pp-topic-year + .pp-topic-year { border-top:1px solid var(--border); }
   .pp-topic-yhead { font-size:0.74rem; font-weight:700; color:var(--text-muted); margin-bottom:7px; }
   .pp-bar-val { width:74px; flex:none; text-align:right; font-size:0.76rem; color:var(--text-muted); }
-  #ppHover { position:fixed; z-index:4000; display:none; pointer-events:none; max-width:360px; max-height:340px; overflow:hidden; background:var(--surface,#fff); border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.16); padding:12px 14px; font-size:0.82rem; transform:translateY(0); will-change:max-height,transform; transition:max-height .55s cubic-bezier(.16,1,.3,1), box-shadow .5s ease, transform .5s cubic-bezier(.16,1,.3,1), border-color .5s ease; }
-  /* After ~4s of hovering, the partial preview blooms into a full one, then
-     locks in place: it becomes interactive and scrollable so the cursor can
-     move into it and read the whole question. */
-  #ppHover.pp-hv-expanded { max-width:460px; max-height:86vh; overflow-y:auto; overflow-x:hidden; pointer-events:auto; box-shadow:0 22px 60px rgba(0,0,0,0.26); transform:translateY(-3px); border-color:var(--primary,#4a7c59); overscroll-behavior:contain; transition:max-height .55s cubic-bezier(.16,1,.3,1), max-width .55s cubic-bezier(.16,1,.3,1), box-shadow .5s ease, transform .5s cubic-bezier(.16,1,.3,1), border-color .5s ease, top .5s cubic-bezier(.16,1,.3,1), left .5s cubic-bezier(.16,1,.3,1); }
-  /* The whole card scrolls as one — let the preview grow to its full height. */
-  #ppHover.pp-hv-expanded .pp-hv-preview { max-height:none; overflow:visible; -webkit-mask-image:none; mask-image:none; }
-  #ppHover.pp-hv-expanded::-webkit-scrollbar { width:9px; }
-  #ppHover.pp-hv-expanded::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.22); border-radius:6px; border:2px solid var(--surface,#fff); }
-  #ppHover .pp-hv-scrollhint { display:none; }
-  #ppHover.pp-hv-expanded .pp-hv-scrollhint { display:block; position:sticky; bottom:-12px; margin:8px -14px -12px; padding:5px 14px; font-size:0.7rem; text-align:center; color:var(--text-muted); background:linear-gradient(transparent, var(--surface,#fff) 55%); pointer-events:none; }
-  #ppHover .pp-hv-head { font-size:0.82rem; }
-  #ppHover .pp-hv-topic { font-size:0.74rem; color:var(--text-muted); margin:3px 0 6px; display:flex; align-items:center; gap:5px; }
-  #ppHover .pp-hv-title { font-weight:600; margin-bottom:3px; }
-  #ppHover .pp-hv-detail { color:var(--text-muted); font-size:0.79rem; }
-  #ppHover .pp-hv-assigned { font-weight:600; color:var(--primary,#4a7c59); margin-bottom:6px; }
-  #ppHover .pp-hv-preview { max-height:200px; overflow:hidden; -webkit-mask-image:linear-gradient(#000 78%, transparent); mask-image:linear-gradient(#000 78%, transparent); font-size:0.8rem; transition:max-height .55s cubic-bezier(.16,1,.3,1); }
-  #ppHover .pp-hv-note { font-size:0.73rem; color:var(--text-muted); margin-top:7px; font-style:italic; }
-  #ppHover .pp-hv-actions { margin-top:10px; }
-  #ppHover .pp-hv-edit { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; font-size:0.8rem; font-weight:700; color:#fff; background:var(--primary,#4a7c59); border:none; border-radius:9px; cursor:pointer; box-shadow:0 2px 6px rgba(49,99,66,0.22); transition:background .15s, transform .1s; }
-  #ppHover .pp-hv-edit:hover { background:var(--primary-dark,#3a6349); }
-  #ppHover .pp-hv-edit:active { transform:translateY(1px); }
   .pp-arow { display:flex; gap:10px; align-items:flex-start; padding:11px 12px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; cursor:pointer; }
   .pp-arow:hover { border-color:var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); }
   .pp-arow.sel { border-color:var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); }
@@ -31471,6 +31614,28 @@ async function loDeleteObjective(id) {
 }
 function loDeleteFromEditor() { const id = _loEditId; if (!id) return; loCloseEdit(); loDeleteObjective(id); }
 
+// Pull the syllabus list back in. Needed whenever the objectives shipped in
+// code change (they were split from 40 compound outcomes into 79 atomic ones),
+// because a saved list deliberately replaces the seed and would otherwise never
+// see the new wording. Questions stay attached wherever the objective id still
+// exists, so a reset costs at most the objectives you wrote yourself.
+async function loResetToSyllabus() {
+  if (!loIsAdmin()) return;
+  const mine = loList().filter(o => String(o.id || '').startsWith('lo_')).length;
+  const msg = 'Replace your objective list with the current MOE syllabus list?\n\n'
+    + 'Questions you have attached stay attached wherever the objective still exists.'
+    + (mine ? '\n\n' + mine + ' objective' + (mine === 1 ? '' : 's') + ' you created yourself will be removed.' : '');
+  if (!confirm(msg)) return;
+  const fresh = loDefaults();
+  const keep = {};
+  const ids = new Set(fresh.objectives.map(o => o.id));
+  Object.keys(loData.map || {}).forEach(k => { if (ids.has(k)) keep[k] = loData.map[k]; });
+  loData = { objectives: fresh.objectives, map: keep };
+  await saveLOData();
+  loRenderBody();
+  showToast('Reset to the syllabus list — ' + fresh.objectives.length + ' objectives', 'success');
+}
+
 // ---------- practise / print ----------
 function loPractise(id) {
   const qs = loQuestions(id);
@@ -31510,7 +31675,7 @@ function loOpenPicker(id) {
   loRenderPicker();
   const ov = document.getElementById('loPickOverlay'); if (ov) ov.classList.add('active');
 }
-function loClosePicker() { const ov = document.getElementById('loPickOverlay'); if (ov) ov.classList.remove('active'); _loPickId = null; }
+function loClosePicker() { ppHoverHide(); const ov = document.getElementById('loPickOverlay'); if (ov) ov.classList.remove('active'); _loPickId = null; }
 // Bank questions not already in this objective, best matches first, so the
 // admin usually finds what they want without typing anything.
 function _loCandidates(lo, limit) {
@@ -31557,7 +31722,9 @@ function loRenderPicker() {
   listEl.innerHTML = rows.length ? rows.map(r => {
     const q = r.q;
     const on = _loPickSel.has(q.id);
-    return `<label class="lo-pick-row${on ? ' sel' : ''}" data-qid="${escapeHtml(q.id)}">
+    return `<label class="lo-pick-row${on ? ' sel' : ''}" data-qid="${escapeHtml(q.id)}"
+      onmouseenter="ppHoverShowBank(event,'${escapeHtml(q.id)}','Click the row to tick it, then press Add.')"
+      onmousemove="ppHoverMove(event)" onmouseleave="ppHoverChipLeave()">
       <input type="checkbox" ${on ? 'checked' : ''} onchange="loPickToggle('${escapeHtml(q.id)}', this.checked)">
       <span class="lo-pick-main">
         <span class="lo-pick-title">${escapeHtml(stripHtmlToText(q.title || 'Untitled'))}</span>
@@ -31639,7 +31806,7 @@ function loOpenAi(lo, busyMsg) {
   const btn = document.getElementById('loAiAttachBtn'); if (btn) { btn.style.display = 'none'; }
   const ov = document.getElementById('loAiOverlay'); if (ov) ov.classList.add('active');
 }
-function loCloseAi() { const ov = document.getElementById('loAiOverlay'); if (ov) ov.classList.remove('active'); _loAiId = null; _loAiRows = []; }
+function loCloseAi() { ppHoverHide(); const ov = document.getElementById('loAiOverlay'); if (ov) ov.classList.remove('active'); _loAiId = null; _loAiRows = []; }
 function loRenderAi() {
   const body = document.getElementById('loAiBody');
   const btn = document.getElementById('loAiAttachBtn');
@@ -31653,7 +31820,9 @@ function loRenderAi() {
     _loAiRows.map((r, i) => {
       const q = questionBank.find(x => x.id === r.qid);
       if (!q) return '';
-      return `<label class="lo-pick-row${r.on ? ' sel' : ''}" data-airow="${i}">
+      return `<label class="lo-pick-row${r.on ? ' sel' : ''}" data-airow="${i}"
+        onmouseenter="ppHoverShowBank(event,'${escapeHtml(r.qid)}','Untick anything that does not belong.')"
+        onmousemove="ppHoverMove(event)" onmouseleave="ppHoverChipLeave()">
         <input type="checkbox" ${r.on ? 'checked' : ''} onchange="loAiToggle(${i}, this.checked)">
         <span class="lo-pick-main">
           <span class="lo-pick-title">${escapeHtml(stripHtmlToText(q.title || 'Untitled'))}</span>
@@ -31756,7 +31925,8 @@ function loRenderBody() {
       <div class="lo-chiprow">${themeChips}</div>
       <div class="lo-filter-tail">
         <input class="lo-search" type="search" placeholder="Search objectives…" value="${escapeHtml(_loSearchTerm)}" oninput="loSetSearch(this.value)">
-        ${admin ? `<button type="button" class="lo-btn primary" onclick="loAddObjective()">＋ New objective</button>` : ''}
+        ${admin ? `<button type="button" class="lo-btn primary" onclick="loAddObjective()">＋ New objective</button>
+        <button type="button" class="lo-btn" title="Replace the list with the current MOE syllabus objectives. Attached questions are kept wherever the objective still exists." onclick="loResetToSyllabus()">↻ Reset to syllabus</button>` : ''}
       </div>
     </div>
 
@@ -31770,7 +31940,9 @@ function loCardHtml(o, admin) {
     const pct = (typeof questionPercent === 'function') ? questionPercent(q.id) : null;
     const acc = (!admin && pct != null) ? `<span class="lo-q-acc">${pct}%</span>` : '';
     const t = stripHtmlToText(q.title || 'Untitled');
-    return `<span class="lo-q" title="${escapeHtml(t)}">
+    return `<span class="lo-q" title="${escapeHtml(t)}"
+      onmouseenter="ppHoverShowBank(event,'${escapeHtml(q.id)}','Click to practise this question.')"
+      onmousemove="ppHoverMove(event)" onmouseleave="ppHoverChipLeave()">
       <span class="lo-q-t" onclick="loPractiseOne('${escapeHtml(q.id)}')">${escapeHtml(t.length > 44 ? t.slice(0, 44) + '…' : t)}</span>${acc}
       ${admin ? `<button type="button" class="lo-q-x" title="Remove from this objective" onclick="loDetachQuestion('${escapeHtml(o.id)}','${escapeHtml(q.id)}')">&times;</button>` : ''}
     </span>`;
@@ -31876,6 +32048,7 @@ window.loSetLevel = loSetLevel;
 window.loSetTheme = loSetTheme;
 window.loSetSearch = loSetSearch;
 window.loAddObjective = loAddObjective;
+window.loResetToSyllabus = loResetToSyllabus;
 window.loEditObjective = loEditObjective;
 window.loCloseEdit = loCloseEdit;
 window.loSaveEditor = loSaveEditor;
