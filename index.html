@@ -2829,6 +2829,37 @@ option {
   .print-page-tall .print-page-footer {
     margin-top: 18pt;
   }
+
+  /* ── Page numbers ─────────────────────────────────────────────────────
+     Centred under the copyright line, in the classic "– 1 –" form. Front
+     matter (the cover, the cheat sheet) and the blank sheet behind the cover
+     carry none; counting starts at the first sheet of real content.
+     Numbers are written in by _printApplyPageNumbers once pagination is
+     settled — CSS page counters (@bottom-center) are a paged-media feature
+     Chrome has never implemented, so they cannot do this job. */
+  .print-page-number {
+    margin-top: 5pt;
+    text-align: center;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 8pt;
+    letter-spacing: 0.14em;
+    color: #777;
+    break-before: avoid;
+    page-break-before: avoid;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* The blank back of the cover, so the first content sheet lands on a
+     fresh right-hand page when the set is printed double-sided. */
+  .print-blank-sheet {
+    height: var(--print-page-h);
+    break-after: page;
+    page-break-after: always;
+  }
+  .print-blank-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
   .print-page-footer img {
     width: 22pt;
     height: 22pt;
@@ -9476,7 +9507,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.172.1';
+const APP_VERSION = 'v1.173.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -17543,6 +17574,59 @@ function _createPrintPageFooter() {
   return footer;
 }
 
+// ── Page numbers ────────────────────────────────────────────────────────────
+// Stamped onto the assembled document, after pagination has settled and before
+// it is handed to the printer, because by then every sheet is a real element we
+// can count. (CSS @page counters would be the natural tool; Chrome has never
+// implemented them, and every export from this app goes through Chrome's print
+// dialog.)
+//
+// The sequence the teacher asked for: the cover carries no number, the blank
+// sheet behind it carries none, any other front matter carries none, and the
+// first sheet of real content is 1.
+//
+// A "tall" page is one element that FLOWS across several sheets. Its number
+// lands on the last of them, and the counter is advanced by however many sheets
+// it really consumed — so a tall question in the middle never leaves the rest of
+// the document numbered wrongly.
+function _printApplyPageNumbers(output) {
+  if (!output) return;
+  // The blank verso only makes sense behind an actual cover.
+  const cover = output.querySelector('.print-cover-page');
+  if (cover) {
+    const coverPage = cover.closest('.print-front-page') || cover;
+    if (coverPage.parentNode === output && !coverPage.nextElementSibling?.classList.contains('print-blank-sheet')) {
+      const blank = document.createElement('div');
+      blank.className = 'print-blank-sheet';
+      blank.setAttribute('aria-hidden', 'true');
+      output.insertBefore(blank, coverPage.nextSibling);
+    }
+  }
+  // One sheet's height in the units this off-screen copy is laid out in.
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;visibility:hidden;height:258mm;width:1px;';
+  output.appendChild(probe);
+  const sheetH = probe.getBoundingClientRect().height || 975;
+  probe.remove();
+
+  let n = 1;
+  Array.from(output.children).forEach(page => {
+    if (!page.classList) return;
+    if (page.classList.contains('print-front-page') || page.classList.contains('print-blank-sheet')) return;
+    if (page.querySelector(':scope > .print-page-number')) return;   // never stamp twice
+    const label = document.createElement('div');
+    label.className = 'print-page-number';
+    label.textContent = '– ' + n + ' –';
+    page.appendChild(label);
+    let sheets = 1;
+    if (page.classList.contains('print-page-tall')) {
+      const h = page.getBoundingClientRect().height;
+      sheets = Math.max(1, Math.ceil((h / sheetH) - 0.02));   // tolerate sub-pixel overshoot
+    }
+    n += sheets;
+  });
+}
+
 // Greedily group chunk indices into A4 pages (filling each page as full as it
 // fits so questions aren't left alone with big gaps). A new page starts before
 // chunk i when forcedFlags[i] is set (manual break) OR it would overflow maxH —
@@ -17637,11 +17721,19 @@ const A4_CONTENT_PX = (297 - 18 - 20) * 96 / 25.4;             // ≈ 978.9
 // the PDF backend can never push the box onto a second sheet.
 const PRINT_PAGE_PX = 258 * 96 / 25.4;                         // ≈ 975.1
 
-// Height of the per-page footer, measured inside a print-CSS context (the
-// image box is fixed by CSS at 22pt, so this is stable even before it loads).
+// Height of everything that sits at the foot of every sheet — the copyright
+// row AND the page number — measured inside a print-CSS context (the image box
+// is fixed by CSS at 22pt, so this is stable even before it loads).
+//
+// The number is stamped on AFTER planning, so its line has to be reserved HERE
+// or each page would end up that much taller than the budget said it could be.
+// On a page packed right to the limit that is exactly how Chrome is made to
+// fragment a sheet and spill a near-blank one — the failure this whole
+// measure-first design exists to prevent.
 function _printFooterHeightIn(doc, container) {
   const holder = doc.createElement('div');
-  holder.innerHTML = _createPrintPageFooter().outerHTML;
+  holder.innerHTML = _createPrintPageFooter().outerHTML +
+    '<div class="print-page-number">– 1 –</div>';
   container.appendChild(holder);
   const h = holder.getBoundingClientRect().height;
   holder.remove();
@@ -17862,6 +17954,7 @@ function _printFlowFallback(output) {
     output.appendChild(ak);
   });
   fronts.slice().reverse().forEach(f => output.insertBefore(f, output.firstChild));
+  _printApplyPageNumbers(output);   // while it is still laid out and measurable
   output.style.cssText = 'display:none;';
   _printProgressHide();
   _printAndRestore(output);
@@ -17920,6 +18013,7 @@ function doScaleAndPrint(output, opts) {
       // Front matter goes back in FIRST (cover, then cheat sheet), before Q1.
       fronts.slice().reverse().forEach(f => output.insertBefore(f, output.firstChild));
 
+      _printApplyPageNumbers(output);   // while it is still laid out and measurable
       output.style.cssText = 'display:none;';
       _printProgressHide();
       _printAndRestore(output);
