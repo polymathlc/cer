@@ -1452,7 +1452,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.177.0';
+const APP_VERSION = 'v1.178.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -1896,10 +1896,6 @@ function navigateTo(page) {
   if (page === 'leaderboard') rpgRenderLeaderboard();
   if (page === 'adventure') rpgRenderAdventure();
   if (page === 'practice' || page === 'quickpractice' || page === 'topicalpractice') rpgRenderBattle();
-  if (page === 'worksheetcreator') {
-    const f = document.getElementById('scienceWorksheetFrame');
-    if (f && !f.getAttribute('src')) f.setAttribute('src', 'science-worksheet.html');
-  }
   if (page === 'textbooks') {
     const f = document.getElementById('textbooksFrame');
     if (f && !f.getAttribute('src')) f.setAttribute('src', 'textbooks.html');   // load once, on first visit
@@ -3471,9 +3467,12 @@ function makeBlockInsertBar(index) {
 }
 
 // =====================================================================
-// WORKSHEET-CREATOR BLOCK TYPES — editor, handlers, student rendering
-// These give the CER app native support for every element type produced
-// by the Science Worksheet Creator (science-worksheet.html).
+// EXTENDED BLOCK TYPES — editor, handlers, student rendering
+// These block types originally came from the Science Worksheet Creator,
+// which has since been removed from the portal. KEEP THEM: questions
+// imported from it while it existed are still in the bank and still use
+// these types, so the editor and the student renderer must understand
+// them or those questions break.
 // =====================================================================
 
 // Generic field setter for non-contenteditable inputs on a block.
@@ -3933,124 +3932,6 @@ function markMcqChoice(input) {
   lab.style.background = 'var(--accent-blue-light)';
   lab.style.borderColor = 'var(--accent-blue)';
 }
-
-// =====================================================================
-// IMPORT: Worksheet-creator questions → CER question-bank format
-// =====================================================================
-
-function worksheetElementToBlock(el) {
-  if (!el || !el.type) return null;
-  const id = generateBlockId();
-  switch (el.type) {
-    case 'text':         return { id, type: 'text', content: el.text || '' };
-    case 'part':         return { id, type: 'part', label: el.label || '', content: el.text || '' };
-    case 'mcq': {
-      const opts = (el.options || []).map(o => ({ id: generateBlockId(), text: o.text || '', _ws: o.id }));
-      let correctId = null;
-      opts.forEach(o => { if (o._ws === el.correctId) correctId = o.id; delete o._ws; });
-      return { id, type: 'mcq', options: opts, correctId };
-    }
-    // A worksheet "answer" carries a known correct answer. Map it to a native
-    // answer block: the model answer the AI marks against in practice, and a
-    // writing box on printed worksheets.
-    case 'answer':       return { id, type: 'plainanswer', content: el.answer || '' };
-    case 'answerKey':    return { id, type: 'answerKey', text: el.text || '', url: el.dataUrl || '' };
-    case 'openLines':    return { id, type: 'openLines', lines: Number(el.lines) || 4 };
-    case 'workingSpace': return { id, type: 'workingSpace', lines: Number(el.lines) || 6, annotate: !!el.annotate, answerKey: el.answerKey || '' };
-    case 'video':        return { id, type: 'video', url: el.url || '', caption: el.caption || '' };
-    case 'image':        return { id, type: 'image', url: el.dataUrl || '', caption: el.caption || '', scale: Number(el.scale) || 0.6 };
-    case 'commonMistake':return { id, type: 'commonMistake', title: el.title || 'Common Mistake', text: el.text || '', color: el.color || 'teal' };
-    case 'studentAnswer':return { id, type: 'studentAnswer', label: el.label || "Student's Answer", answer: el.answer || '', whyLines: Number(el.whyLines) || 2, corrected: !!el.corrected, correctedLines: Number(el.correctedLines) || 2 };
-    case 'pageBreak':    return { id, type: 'pageBreak' };
-    case 'table': {
-      const rows = Array.isArray(el.rows) ? el.rows : [];
-      const nrows = Math.max(1, rows.length);
-      let ncols = 1;
-      rows.forEach(r => { if (Array.isArray(r)) ncols = Math.max(ncols, r.length); });
-      const data = [];
-      const cellStyles = {};
-      for (let r = 0; r < nrows; r++) {
-        data[r] = [];
-        for (let c = 0; c < ncols; c++) {
-          const cell = (rows[r] || [])[c] || {};
-          data[r][c] = cell.t || '';
-          const s = {};
-          if (cell.bg) s.backgroundColor = cell.bg;
-          if (cell.align) s.textAlign = cell.align;
-          if (el.headerRow && r === 0) s.fontWeight = 'bold';
-          if (Object.keys(s).length) cellStyles[r + '_' + c] = s;
-        }
-      }
-      return { id, type: 'table', rows: nrows, cols: ncols, data, merges: [], cellStyles, cellPadding: {}, colWidths: Array(ncols).fill(null), rowHeights: {} };
-    }
-    default: return null;
-  }
-}
-
-function worksheetQuestionToCer(wq, index, worksheetTitle) {
-  const els = (wq && Array.isArray(wq.elements)) ? wq.elements : [];
-  const blocksOut = [];
-  if (wq && wq.kind === 'instruction') {
-    const t = els.find(e => e.type === 'text');
-    blocksOut.push({ id: generateBlockId(), type: 'text', content: t ? (t.text || '') : '' });
-  } else {
-    els.forEach(el => { const b = worksheetElementToBlock(el); if (b) blocksOut.push(b); });
-  }
-  const topic = (wq && Array.isArray(wq.topics) && wq.topics[0]) || '';
-  let title = ((wq && wq.source) || '').trim();
-  if (!title) {
-    const t = els.find(e => e.type === 'text' && e.text);
-    if (t) title = stripHtmlToText(t.text).slice(0, 60).trim();
-  }
-  if (!title) title = 'Imported question' + (index != null ? ' ' + (index + 1) : '');
-  return {
-    id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-    title: title,
-    category: 'CER',
-    topic: topic,
-    markingGuide: '',
-    blocks: blocksOut,
-    blanks: {},
-    createdAt: new Date().toISOString(),
-    createdBy: 'Worksheet Creator',
-    source: (wq && wq.source) || '',
-    // Remember which worksheet this question came from, so it can be found
-    // again later via the Source filter. A question copied to the draft from
-    // another worksheet keeps its own tag; otherwise use the sending sheet's title.
-    sourceWorksheet: ((wq && wq.sourceWorksheet) || worksheetTitle || '').trim(),
-    concepts: (wq && Array.isArray(wq.concepts)) ? wq.concepts.slice() : []
-  };
-}
-
-function importWorksheetQuestions(wqList, worksheetTitle) {
-  if (!Array.isArray(wqList) || !wqList.length) return 0;
-  let added = 0;
-  wqList.forEach((wq, i) => {
-    const q = worksheetQuestionToCer(wq, i, worksheetTitle);
-    if (!q.blocks.length) return;
-    questionBank.push(q);
-    saveQuestion(q); // async; no-op (in-memory only) if not signed in
-    added++;
-  });
-  if (added) { updateCounts(); populateTopicFilter(); populateWsTopicFilter(); renderQuestionBank(); }
-  return added;
-}
-
-// Receive questions sent from the embedded Science Worksheet Creator iframe.
-window.addEventListener('message', function (e) {
-  const d = e.data;
-  if (!d || d.type !== 'cer:addQuestions') return;
-  const frame = document.getElementById('scienceWorksheetFrame');
-  if (frame && frame.contentWindow && e.source !== frame.contentWindow) return; // only trust our own iframe
-  const added = importWorksheetQuestions(d.questions || [], d.worksheetTitle || '');
-  if (added) {
-    const note = currentUser ? '' : ' (sign in to save permanently)';
-    showToast(`${added} question${added === 1 ? '' : 's'} added to the bank ✓${note}`, 'success');
-  } else {
-    showToast('Nothing to import from the worksheet', 'error');
-  }
-  try { if (e.source) e.source.postMessage({ type: 'cer:addQuestions:done', count: added }, '*'); } catch (_) {}
-});
 
 // =====================================================================
 // RICH TEXT COMMANDS
