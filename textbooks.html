@@ -1,0 +1,2634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polymath Learning Centre - Textbooks &amp; Syllabus</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+
+    <style>
+        /* --- Base Styles --- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Default font */
+        }
+
+        :root {
+            --primary: #a0d2eb;
+            --secondary: #e5eaf5;
+            --accent1: #d0bdf4;
+            --accent2: #8458B3;
+            --accent3: #a28089; /* Used for TYS card */
+            --light-pink: #ffd1dc; /* Textbook */
+            --light-green: #b5ead7; /* MCQ */
+            --light-yellow: #fff2b2; /* Mindmap */
+            --light-blue: #c7f0db; /* Platform (Used for Exam Papers Link) */
+            --light-purple: #e0c3fc; /* Flashcards */
+            --orange: #ffccbc; /* TYS */
+            --sidebar-width: 280px;
+            --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --transition: all 0.3s ease;
+        }
+
+        body {
+            background-color: var(--secondary);
+            overflow-x: hidden;
+            font-family: var(--main-font, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+        }
+
+        .container {
+            display: flex;
+        }
+
+        /* --- Sidebar Styles --- */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: white;
+            height: 100vh;
+            position: fixed;
+            box-shadow: var(--box-shadow);
+            padding: 1.5rem;
+            overflow-y: auto;
+            z-index: 10;
+            transition: var(--transition);
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo-img {
+            max-width: 120px;
+            height: auto;
+            display: block;
+            margin: 0 auto 1rem;
+        }
+
+        .logo h1 {
+            font-size: 1.3rem;
+            color: var(--accent2);
+            margin-bottom: 0.3rem;
+        }
+
+        .logo p {
+            font-size: 0.85rem;
+            color: var(--accent3);
+        }
+
+        .nav-title {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .sidebar hr {
+            border: none;
+            height: 1px;
+            background-color: #eee;
+            margin: 1rem 0;
+        }
+
+        .nav-menu {
+            list-style-type: none;
+            margin-bottom: 2rem;
+        }
+
+        .nav-btn {
+            width: 100%;
+            text-align: left;
+            padding: 0.8rem 1rem;
+            margin-bottom: 0.5rem;
+            border: none;
+            border-radius: 8px;
+            background-color: transparent;
+            font-size: 0.95rem;
+            color: #333;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            line-height: 1.3;
+        }
+
+        .nav-btn:hover {
+            background-color: var(--secondary);
+            transform: translateX(5px);
+        }
+
+        .nav-btn.active {
+            background-color: var(--primary);
+            color: white;
+            box-shadow: 0 2px 8px rgba(160, 210, 235, 0.5);
+        }
+
+        .nav-icon {
+            margin-right: 10px;
+            opacity: 0.7;
+            min-width: 20px;
+        }
+
+        /* --- Main Content Styles --- */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+
+        .topic-section {
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .topic-section.active {
+            display: block;
+        }
+
+        .topic-header {
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 3px solid var(--primary);
+        }
+
+        .topic-title {
+            font-size: 1.8rem;
+            color: var(--accent2);
+            margin-bottom: 0.5rem;
+        }
+
+        .topic-description {
+            color: #666;
+            line-height: 1.6;
+            font-style: italic;
+        }
+
+        .resource-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .resource-card {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: var(--box-shadow);
+            overflow: hidden;
+            transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+        }
+
+         .resource-card:hover {
+             transform: translateY(-5px);
+             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+         }
+
+        /* Card Type Backgrounds */
+        .resource-card[data-type="textbook"] .card-header { background-color: var(--light-pink); }
+        .resource-card[data-type="mcq"] .card-header { background-color: var(--light-green); }
+        .resource-card[data-type="mindmap"] .card-header { background-color: var(--light-yellow); }
+        .resource-card[data-type="flashcards"] .card-header { background-color: var(--light-purple); }
+        .resource-card[data-type="tys"] .card-header { background-color: var(--orange); }
+        .resource-card[data-type="exam-link"] .card-header { background-color: var(--light-blue); }
+
+        .card-header {
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .card-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .card-body {
+            padding: 1.25rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+        }
+
+        .card-description {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 1.25rem;
+            line-height: 1.5;
+            flex-grow: 1;
+        }
+
+        .card-btn {
+            display: inline-block;
+            padding: 0.6rem 1.5rem;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: var(--transition);
+            text-decoration: none;
+            margin-top: auto;
+        }
+
+         .card-btn:hover:not(.disabled) {
+             background-color: var(--accent2);
+             transform: scale(1.05);
+         }
+
+        .card-btn.disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        /* Content Panel for Learning Outcomes */
+        .content-panel {
+            background-color: white;
+            border-radius: 12px;
+            box-shadow: var(--box-shadow);
+            padding: 2rem;
+            margin-top: 2rem;
+            min-height: 150px;
+        }
+        .content-panel h3 {
+            color: var(--accent2);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--secondary);
+        }
+        .content-panel ul {
+            list-style-position: outside;
+            padding-left: 20px;
+            margin-bottom: 1.5rem;
+        }
+        .content-panel li {
+            margin-bottom: 0.75rem;
+            line-height: 1.6;
+            color: #555;
+            padding-right: 30px;
+            position: relative;
+        }
+        .content-panel li ul {
+             margin-top: 0.5rem;
+             margin-bottom: 0.5rem;
+             list-style-type: circle;
+         }
+        /* --- Keyword Recall Styles --- */
+        .keyword-recall {
+            display: inline-block;
+            margin: 0 2px;
+            vertical-align: baseline;
+        }
+        .keyword-input {
+            padding: 2px 4px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: inherit;
+            margin: 0 3px;
+            vertical-align: baseline;
+        }
+        .feedback-icon {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            margin-left: 4px;
+            vertical-align: middle;
+            position: relative;
+            transition: transform 0.3s ease;
+        }
+        .feedback-icon.correct {
+            background-color: #c4f0c5;
+            transform: scale(1.1);
+        }
+        .feedback-icon.correct::before {
+            content: "✓";
+            color: #000;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+            line-height: 1;
+        }
+        .feedback-icon.incorrect {
+            background-color: #ffdada;
+            transform: scale(1.1);
+        }
+        .feedback-icon.incorrect::before {
+            content: "✗";
+            color: #000;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+            line-height: 1;
+        }
+        .show-answer-btn {
+            background-color: #aee3e1;
+            border-radius: 6px;
+            border: none;
+            color: #333;
+            cursor: pointer;
+            padding: 2px 8px;
+            margin-left: 5px;
+            font-size: 0.8em;
+            vertical-align: middle;
+            transition: background-color 0.2s ease;
+        }
+        .show-answer-btn:hover {
+            background-color: #93d3d1;
+        }
+        .keyword-input:disabled {
+            background-color: #eee;
+            cursor: not-allowed;
+        }
+
+        /* --- Video/Question Link Icon Styles --- */
+        .link-icon {
+            display: inline-block;
+            margin-left: 8px;
+            vertical-align: middle;
+            line-height: 1;
+            text-decoration: none;
+        }
+         .link-icon img {
+             width: 20px;
+             height: 20px;
+             vertical-align: middle;
+             opacity: 0.7;
+             transition: opacity 0.2s ease;
+         }
+         .link-icon:hover img {
+             opacity: 1;
+         }
+
+        /* Exam Papers Section Styles */
+        .exam-papers-section {
+            background-color: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .exam-papers-section .topic-title {
+             color: #333;
+             text-align: center;
+             margin-bottom: 1.5rem;
+         }
+
+        /* PDF Viewer Styles */
+        .pdf-container-new {
+            width: 100%;
+            margin-top: 2rem;
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: var(--box-shadow);
+            padding: 2rem;
+        }
+
+        .pdf-controls-new {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 15px;
+            padding: 15px;
+            background-color: var(--secondary);
+            border-radius: 8px;
+            flex-wrap: wrap;
+        }
+
+        .download-btn, .toggle-btn {
+            padding: 12px 20px;
+            font-size: 1rem;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .download-btn:hover, .toggle-btn:hover {
+            background-color: var(--accent2);
+            transform: translateY(-1px);
+        }
+
+        .pdf-viewer-container {
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .pdf-iframe {
+            border-radius: 8px;
+            min-height: 600px;
+        }
+
+        .fallback-message {
+            padding: 2rem;
+            text-align: center;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+
+        .fallback-message ul {
+            list-style: none;
+            padding: 0;
+            margin-top: 1rem;
+        }
+
+        .fallback-message li {
+            margin: 10px 0;
+        }
+
+        .fallback-message a {
+            color: var(--accent2);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .fallback-message a:hover {
+            text-decoration: underline;
+        }
+
+        /* Search Panel Styles */
+        .search-panel {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid #e0e0e0;
+        }
+
+        .search-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 15px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .search-btn, .clear-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .search-btn {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .search-btn:hover {
+            background-color: var(--accent2);
+        }
+
+        .clear-btn {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .clear-btn:hover {
+            background-color: #5a6268;
+        }
+
+        .search-results {
+            margin-bottom: 1rem;
+        }
+
+        .search-status {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+
+        .search-matches {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background-color: white;
+        }
+
+        .match-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .match-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .match-item.active {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .match-item:last-child {
+            border-bottom: none;
+        }
+
+        .match-page {
+            font-weight: 600;
+            color: var(--accent2);
+            font-size: 0.9rem;
+        }
+
+        .match-item.active .match-page {
+            color: white;
+        }
+
+        .match-text {
+            margin-top: 5px;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .highlight {
+            background-color: yellow;
+            font-weight: 600;
+            padding: 1px 2px;
+            border-radius: 2px;
+        }
+
+        .search-navigation {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            padding: 10px;
+            background-color: white;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .search-navigation .nav-btn {
+            padding: 8px 16px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.3s ease;
+        }
+
+        .search-navigation .nav-btn:hover:not(:disabled) {
+            background-color: var(--accent2);
+        }
+
+        .search-navigation .nav-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                width: 250px;
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-content {
+                margin-left: 0;
+                padding: 1rem;
+            }
+            .menu-toggle {
+                display: block;
+                position: fixed;
+                top: 1rem;
+                left: 1rem;
+                z-index: 100;
+                background-color: var(--primary);
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 0.5rem;
+                cursor: pointer;
+                box-shadow: var(--box-shadow);
+            }
+             .resource-grid {
+                 grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                 gap: 1rem;
+             }
+             .topic-title { font-size: 1.5rem; }
+             .topic-description { font-size: 0.9rem; }
+             .card-title { font-size: 1rem; }
+             .card-description { font-size: 0.85rem; }
+             .card-btn { padding: 0.5rem 1rem; font-size: 0.9rem; }
+             .content-panel { padding: 1rem; }
+             .content-panel h3 { font-size: 1.1rem; }
+             .content-panel li { font-size: 0.9rem; }
+             .exam-papers-section .resource-grid {
+                 grid-template-columns: 1fr;
+             }
+             .keyword-input {
+                 padding: 1px 3px;
+                 font-size: 0.9em;
+             }
+             .show-answer-btn {
+                 padding: 1px 5px;
+                 font-size: 0.7em;
+             }
+             .feedback-icon {
+                 width: 16px;
+                 height: 16px;
+             }
+             .feedback-icon::before {
+                 font-size: 10px;
+             }
+             .link-icon img {
+                 width: 18px;
+                 height: 18px;
+             }
+             .pdf-container-new {
+                 padding: 1rem;
+             }
+
+             .pdf-controls-new {
+                 flex-direction: column;
+                 gap: 10px;
+                 padding: 15px;
+             }
+
+             .download-btn, .toggle-btn {
+                 width: 100%;
+                 justify-content: center;
+             }
+
+             .pdf-iframe {
+                 height: 600px;
+                 min-height: 400px;
+             }
+
+             .search-controls {
+                 flex-direction: column;
+                 align-items: stretch;
+             }
+
+             .search-input {
+                 min-width: auto;
+                 width: 100%;
+                 margin-bottom: 10px;
+             }
+
+             .search-btn, .clear-btn {
+                 width: 100%;
+                 margin-bottom: 5px;
+             }
+
+             .search-navigation {
+                 flex-direction: column;
+                 gap: 10px;
+             }
+
+             .search-navigation .nav-btn {
+                 width: 100%;
+             }
+        }
+
+        /* --- PRINT-SPECIFIC STYLES --- */
+        @media print {
+            .sidebar, .pdf-controls-new, .search-panel, .menu-toggle, .resource-grid {
+                display: none !important;
+            }
+
+            body {
+                background-color: white;
+                overflow: visible;
+            }
+
+            .main-content {
+                margin-left: 0 !important;
+                padding: 1cm !important;
+                width: 100% !important;
+                box-shadow: none !important;
+                border: none !important;
+            }
+
+            .container {
+                display: block;
+            }
+
+            .topic-section {
+                display: none !important;
+            }
+            .topic-section.active {
+                display: block !important;
+                animation: none !important;
+            }
+
+            .content-panel, .pdf-container-new, .exam-papers-section {
+                box-shadow: none !important;
+                border: none !important;
+                padding: 0 !important;
+                margin-top: 1rem !important;
+            }
+
+            .topic-header {
+                border-bottom: 2px solid #000;
+            }
+
+            .pdf-iframe {
+                display: none;
+            }
+
+            .pdf-viewer-container::after {
+                content: 'For best results, please use the "Download PDF" button on the webpage and print the downloaded file directly.';
+                display: block;
+                padding: 2rem;
+                font-size: 1.2rem;
+                font-weight: bold;
+                text-align: center;
+                border: 2px dashed #999;
+                background-color: #f8f8f8;
+                color: #333;
+            }
+
+            a {
+                text-decoration: underline !important;
+                color: #000 !important;
+            }
+
+            .card-btn {
+                display: none;
+            }
+
+            .keyword-recall {
+                display: inline;
+            }
+            .keyword-input, .feedback-icon, .show-answer-btn {
+                display: none;
+            }
+            .keyword-recall::after {
+                content: attr(data-answer);
+                font-weight: bold;
+                border-bottom: 1px dotted #000;
+                padding: 0 2px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <audio id="correct-sound" src="https://www.dropbox.com/scl/fi/vj7uttnapcbdvyqreey1u/correct-choice-43861.mp3?dl=1" preload="auto"></audio>
+    <audio id="wrong-sound" src="" preload="none"></audio>
+
+    <div id="app-content">
+        <div class="container">
+            <div class="sidebar">
+                <div class="logo">
+                    <img src="https://www.dropbox.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj&dl=1" alt="Polymath Learning Centre Logo" class="logo-img">
+                    <h1>Polymath Learning Centre</h1>
+                    <p>Primary School Learning Portal</p>
+                </div>
+
+                <nav class="nav-menu">
+                    <p class="nav-title">Additional Material</p>
+                    <button class="nav-btn active" data-target="exam-papers">
+                        <span class="nav-icon">🏆</span> Exam Papers
+                    </button>
+                    <button class="nav-btn" data-target="moe-syllabus">
+                        <span class="nav-icon">📚</span> MOE Syllabus
+                    </button>
+                    <button class="nav-btn" data-target="psle-revision-mindmap">
+                        <span class="nav-icon">🧠</span> PSLE Revision Mind Map
+                    </button>
+                    <button class="nav-btn" data-target="science-game">
+                        <span class="nav-icon">🎮</span> Science Game
+                    </button>
+                    <button class="nav-btn" data-target="esa-mindmap">
+                        <span class="nav-icon">🗺️</span> Exposed Surface Area
+                    </button>
+                    <hr>
+
+                    <p class="nav-title">Primary 3</p>
+                    <button class="nav-btn" data-target="diversityLivingNonLiving">
+                        <span class="nav-icon">🌿</span> Diversity (Living/Non-Living)
+                    </button>
+                    <button class="nav-btn" data-target="diversityOfMaterials">
+                        <span class="nav-icon">🧱</span> Diversity of Materials
+                    </button>
+                    <button class="nav-btn" data-target="lifeCycles">
+                        <span class="nav-icon">🦋</span> Cycles (Life Cycles)
+                    </button>
+                    <button class="nav-btn" data-target="magnets">
+                        <span class="nav-icon">🧲</span> Interaction (Magnets)
+                    </button>
+                    <hr>
+
+                    <p class="nav-title">Primary 4</p>
+                    <button class="nav-btn" data-target="digestiveSystem">
+                        <span class="nav-icon">😋</span> Human System (Digestive)
+                    </button>
+                    <button class="nav-btn" data-target="energyFormsHeat">
+                        <span class="nav-icon">🔥</span> Energy (Heat)
+                    </button>
+                    <button class="nav-btn" data-target="energyFormsLight">
+                        <span class="nav-icon">💡</span> Energy (Light)
+                    </button>
+                     <button class="nav-btn" data-target="matter">
+                        <span class="nav-icon">💧</span> Cycles (Matter)
+                    </button>
+                    <button class="nav-btn" data-target="plantSystem">
+                        <span class="nav-icon">🌱</span> Plant System (Parts/Functions)
+                    </button>
+                    <hr>
+
+                    <p class="nav-title">Primary 5</p>
+                    <button class="nav-btn" data-target="electrical">
+                        <span class="nav-icon">⚡</span> Electrical System
+                    </button>
+                    <button class="nav-btn" data-target="humanSystem">
+                        <span class="nav-icon">🫁</span> Human System (Resp/Circ)
+                    </button>
+                    <button class="nav-btn" data-target="plantReproduction">
+                        <span class="nav-icon">🌻</span> Cycles (Reproduction)
+                    </button>
+                    <button class="nav-btn" data-target="water">
+                        <span class="nav-icon">🌊</span> Cycles (Water)
+                    </button>
+                    <hr>
+
+                    <p class="nav-title">Primary 6</p>
+                    <button class="nav-btn" data-target="energyConversion">
+                        <span class="nav-icon">🔄</span> Energy Conversion
+                    </button>
+                    <button class="nav-btn" data-target="environment">
+                        <span class="nav-icon">🏞️</span> Interactions (Environment)
+                    </button>
+                    <button class="nav-btn" data-target="forces">
+                        <span class="nav-icon">💪</span> Interaction of Forces
+                    </button>
+                    <button class="nav-btn" data-target="photosynthesis">
+                        <span class="nav-icon">☀️</span> Energy in Food (Photosyn.)
+                    </button>
+                </nav>
+            </div>
+
+            <main class="main-content">
+
+                <section id="exam-papers" class="topic-section active exam-papers-section">
+                    <h2 class="topic-title">Exam Papers Walkthrough</h2>
+                    <div class="resource-grid">
+                        <div class="resource-card" data-type="exam-link">
+                            <div class="card-header">
+                                <div class="card-icon">P3</div>
+                                <h3 class="card-title">Primary 3</h3>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-description">2024 Nanyang P3 Science WA1 Walkthrough</p>
+                                <a href="https://polymathlc.com.sg/nanyangp3sci" target="_blank" rel="noopener noreferrer" class="card-btn">View P3 Paper</a>
+                            </div>
+                        </div>
+                        <div class="resource-card" data-type="exam-link">
+                            <div class="card-header">
+                                <div class="card-icon">P4</div>
+                                <h3 class="card-title">Primary 4</h3>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-description">2024 Raffles Girls P4 Science WA1 Walkthrough</p>
+                                <a href="https://www.polymathlc.com.sg/p4wa1" target="_blank" rel="noopener noreferrer" class="card-btn">View P4 Paper</a>
+                            </div>
+                        </div>
+                        <div class="resource-card" data-type="exam-link">
+                            <div class="card-header">
+                                <div class="card-icon">P5</div>
+                                <h3 class="card-title">Primary 5</h3>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-description">Exam Paper Walkthroughs (Catholic High 2024, Henry Park 2025)</p>
+                                <a href="https://www.polymathlc.com.sg/p5wa1" target="_blank" rel="noopener noreferrer" class="card-btn" style="margin-bottom: 10px;">View CHS Paper</a>
+                                <a href="https://www.polymathlc.com.sg/hpp5sci.html" target="_blank" rel="noopener noreferrer" class="card-btn">View HP Paper</a>
+                            </div>
+                        </div>
+                        <div class="resource-card" data-type="exam-link">
+                            <div class="card-header">
+                                <div class="card-icon">P6</div>
+                                <h3 class="card-title">Primary 6</h3>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-description">2024 MGS Science WA1 Walkthrough</p>
+                                <a href="https://www.polymathlc.com.sg/p6wa1" target="_blank" rel="noopener noreferrer" class="card-btn">View P6 Paper</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="content-panel" style="margin-top: 2rem;">
+                        <h3>Common OEQ Mistakes</h3>
+                        <ul>
+                            <li>Answer is not specific</li>
+                            <li>Answer does not have comparison</li>
+                            <li>Using superlative and comparative words wrongly</li>
+                            <li>Answer lacks keywords / Wrong keywords used</li>
+                            <li>Gap(s) in explanation</li>
+                        </ul>
+                        <h3>OEQ Question Types</h3>
+                        <ul>
+                            <li>Reliability</li>
+                            <li>Accuracy</li>
+                            <li>Fairness</li>
+                            <li>Constant Variable</li>
+                            <li>Explanation</li>
+                            <li>Explanation with Results</li>
+                            <li>Aim</li>
+                            <li>Conclusion</li>
+                            <li>Hypothesis</li>
+                            <li>1 Relationship</li>
+                            <li>2 Relationships</li>
+                            <li>Control</li>
+                            <li>Definition</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section id="moe-syllabus" class="topic-section">
+                    <div class="topic-header">
+                        <h2 class="topic-title">MOE Primary Science Syllabus</h2>
+                        <p class="topic-description">Official syllabus document for Primary Science.</p>
+                    </div>
+                    <div class="pdf-container-new">
+                        <div class="pdf-controls-new">
+                            <a href="https://drive.google.com/uc?export=download&id=1_B5jA6N_XTUzXDRash9rF9DDVy3-2e78"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="download-btn">
+                                📥 Download PDF
+                            </a>
+                            <button id="toggleViewer" class="toggle-btn">
+                                🔄 Switch Viewer
+                            </button>
+                            <button id="toggleSearch" class="toggle-btn">
+                                🔍 Toggle Search
+                            </button>
+                        </div>
+
+                        <div id="searchPanel" class="search-panel" style="display: none;">
+                            <div class="search-controls">
+                                <input type="text" id="pdfSearchInput" placeholder="Search in PDF..." class="search-input">
+                                <button id="searchButton" class="search-btn">Search</button>
+                                <button id="clearSearch" class="clear-btn">Clear</button>
+                            </div>
+                            <div id="searchResults" class="search-results">
+                                <div id="searchStatus" class="search-status">Enter a keyword to search</div>
+                                <div id="searchMatches" class="search-matches"></div>
+                            </div>
+                            <div id="searchNavigation" class="search-navigation" style="display: none;">
+                                <button id="prevMatch" class="nav-btn">← Previous</button>
+                                <span id="matchCounter" class="match-counter"></span>
+                                <button id="nextMatch" class="nav-btn">Next →</button>
+                            </div>
+                        </div>
+
+                        <div class="pdf-viewer-container">
+                            <iframe id="pdfIframe"
+                                    src="https://drive.google.com/file/d/1_B5jA6N_XTUzXDRash9rF9DDVy3-2e78/preview"
+                                    width="100%"
+                                    height="800px"
+                                    frameborder="0"
+                                    class="pdf-iframe">
+                            </iframe>
+                            <div id="fallbackMessage" class="fallback-message" style="display: none;">
+                                <p>PDF viewer not loading? Try one of these options:</p>
+                                <ul>
+                                    <li><a href="https://drive.google.com/uc?export=download&id=1_B5jA6N_XTUzXDRash9rF9DDVy3-2e78" target="_blank">Download PDF directly</a></li>
+                                    <li><a href="https://drive.google.com/file/d/1_B5jA6N_XTUzXDRash9rF9DDVy3-2e78/view" target="_blank">View in Google Drive</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="psle-revision-mindmap" class="topic-section">
+                    <div class="topic-header">
+                        <h2 class="topic-title">PSLE Revision Mind Map</h2>
+                        <p class="topic-description">Overall PSLE Science Revision</p>
+                    </div>
+                    <div class="resource-grid">
+                         <div class="resource-card" data-type="mindmap">
+                            <div class="card-header">
+                                <div class="card-icon">🧠</div>
+                                <h3 class="card-title">PSLE Revision</h3>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-description">Comprehensive mindmap covering PSLE Science topics.</p>
+                                <a href="https://www.mindomo.com/mindmap/07996947984d4d45b02f95995f6b9083" target="_blank" rel="noopener noreferrer" class="card-btn">View Mindmap</a>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="science-game" class="topic-section">
+                    <div class="topic-header">
+                        <h2 class="topic-title">PokéSci - The Science Game</h2>
+                        <p class="topic-description">Battle your way through science questions in this fun, Pokémon-inspired game!</p>
+                    </div>
+                    <div class="resource-grid">
+                         <div class="resource-card" data-type="mcq">
+                            <div class="card-header">
+                                <div class="card-icon">🎮</div>
+                                <h3 class="card-title">Launch PokéSci</h3>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-description">Ready to test your knowledge and become a Science Master? Click below to start playing!</p>
+                                <a href="https://pokesci.netlify.app" target="_blank" rel="noopener noreferrer" class="card-btn">Play Game</a>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                 <section id="esa-mindmap" class="topic-section">
+                    <div class="topic-header">
+                        <h2 class="topic-title">Exposed Surface Area</h2>
+                        <p class="topic-description">Resources for understanding Exposed Surface Area concepts</p>
+                    </div>
+                    <div class="resource-grid">
+                         <div class="resource-card" data-type="mindmap">
+                            <div class="card-header">
+                                <div class="card-icon">🗺️</div>
+                                <h3 class="card-title">Mind Map</h3>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-description">Mindmap detailing factors affecting exposed surface area.</p>
+                                <a href="#" target="_blank" rel="noopener noreferrer" class="card-btn disabled">Coming Soon</a>
+                             </div>
+                        </div>
+                        <div class="resource-card" data-type="textbook">
+                            <div class="card-header">
+                                <div class="card-icon">📋</div>
+                                <h3 class="card-title">Surface Area Cheatsheet</h3>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-description">Quick reference guide for surface area factors and concepts.</p>
+                                <a href="https://drive.google.com/uc?export=download&id=1dYHG3ejWVLkKDET6eOsyxDZqwSnjP8Pp" target="_blank" rel="noopener noreferrer" class="card-btn">Download Cheatsheet</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pdf-container-new">
+                        <div class="pdf-controls-new">
+                            <a href="https://drive.google.com/uc?export=download&id=1dYHG3ejWVLkKDET6eOsyxDZqwSnjP8Pp"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="download-btn">
+                                📥 Download Surface Area Cheatsheet
+                            </a>
+                        </div>
+
+                        <div class="pdf-viewer-container">
+                            <iframe src="https://drive.google.com/file/d/1dYHG3ejWVLkKDET6eOsyxDZqwSnjP8Pp/preview"
+                                    width="100%"
+                                    height="600px"
+                                    frameborder="0"
+                                    class="pdf-iframe">
+                            </iframe>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="diversityLivingNonLiving" class="topic-section">
+                    <div class="topic-header">
+                        <h2 class="topic-title">Diversity of Living and Non-Living Things</h2>
+                        <p class="topic-description">P3 Standard - General characteristics and classification</p>
+                    </div>
+                    <div class="resource-grid">
+                        <div class="resource-card" data-type="mindmap">
+                            <div class="card-header">
+                                <div class="card-icon">🧠</div>
+                                <h3 class="card-title">Mindmap</h3>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-description">Mindmap for Living & Non-Living Things.</p>
+                                <a href="https://www.mindomo.com/mindmap/a30149cbadd1425da53800d186d72e97" target="_blank" rel="noopener noreferrer" class="card-btn">View Mindmap</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pdf-container-new">
+                        <div class="pdf-controls-new">
+                            <a href="https://drive.google.com/uc?export=download&id=1XOVqLmrWIZfLoY7xvtTdBWshgQw4C-ww"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="download-btn">
+                                📖 Download Textbook PDF
+                            </a>
+                        </div>
+                        <div class="pdf-viewer-container">
+                            <iframe src="https://drive.google.com/file/d/1XOVqLmrWIZfLoY7xvtTdBWshgQw4C-ww/preview"
+                                    width="100%"
+                                    height="600px"
+                                    frameborder="0"
+                                    class="pdf-iframe">
+                            </iframe>
+                        </div>
+                    </div>
+                    <div class="content-panel">
+                          <h3>Core Ideas</h3>
+                          <ul>
+                              <li data-outcome-text="Describe the <strong>characteristics</strong> of living things:">Describe the <strong>characteristics</strong> of living things:</li>
+                                <ul>
+                                  <li>Need <strong>water</strong>, food, and <strong>air</strong></li>
+                                  <li>Grow, respond, reproduce</li>
+                                </ul>
+                              <li>Recognise some broad groups of living things based on similarities/differences:
+                                <ul>
+                                  <li data-outcome-text="- Plants (flowering, non-flowering)">- Plants (flowering, non-flowering)</li>
+                                  <li>- Animals (<strong>Amphibian</strong>, birds, <strong>fish</strong>, insects, <strong>mammals</strong>, reptiles)</li>
+                                  <li data-outcome-text="- Fungi (<strong>mould</strong>, mushroom, yeast)">- Fungi (<strong>mould</strong>, mushroom, yeast)</li>
+                                  <li data-outcome-text="- <strong>Bacteria</strong>">- <strong>Bacteria</strong></li>
+                                </ul>
+                              </li>
+                          </ul>
+                          <h3>Practices</h3>
+                          <ul>
+                              <li>Observe living vs. non-living, note differences.</li>
+                              <li>Classify living things into broad plant/animal groups by characteristics.</li>
+                          </ul>
+                          <h3>Values</h3>
+                          <ul>
+                              <li>Question and explore living vs. non-living around us.</li>
+                              <li>Show care by respecting living things.</li>
+                          </ul>
+                          <h3>Notes</h3>
+                            <ul><li>Recall of specific living things (e.g. guppy) or details (birth to young alive) not required.</li></ul>
+                      </div>
+                 </section>
+
+                 <section id="diversityOfMaterials" class="topic-section">
+                       <div class="topic-header">
+                            <h2 class="topic-title">Diversity of Materials</h2>
+                            <p class="topic-description">P3 Standard</p>
+                          </div>
+                          <div class="pdf-container-new">
+                              <div class="pdf-controls-new">
+                                  <a href="https://drive.google.com/uc?export=download&id=1XmWdvmdgjwYzRxrBMlH6g8YH1__853BZ"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="download-btn">
+                                      📖 Download Textbook PDF
+                                  </a>
+                              </div>
+                              <div class="pdf-viewer-container">
+                                  <iframe src="https://drive.google.com/file/d/1XmWdvmdgjwYzRxrBMlH6g8YH1__853BZ/preview"
+                                          width="100%"
+                                          height="600px"
+                                          frameborder="0"
+                                          class="pdf-iframe">
+                                  </iframe>
+                              </div>
+                          </div>
+                          <div class="content-panel">
+                                <h3>Core Ideas</h3>
+                                <ul><li>Relate how different materials (wood, metal, ceramic, rubber, glass, plastic, fabric) are used based on physical properties.</li></ul>
+                                <h3>Practices</h3>
+                                <ul><li>Compare properties: <strong>Strength</strong>, <strong>Flexibility</strong>, float/sink, <strong>Waterproof</strong>, <strong>Transparency</strong></li></ul>
+                                <h3>Values</h3>
+                                <ul><li>Use data to validate observations about materials' properties and uses.</li></ul>
+                                <h3>Notes</h3>
+                                 <ul>
+                                     <li>Focus on how properties match uses.</li>
+                                     <li>'<strong>strength</strong>' => ability to withstand loads.</li>
+                                     <li>'<strong>flexibility</strong>' => ability to bend without breaking.</li>
+                                     <li>'float on water' => object stays near surface (density concept not needed).</li>
+                                     <li>'<strong>waterproof</strong>' => does not <strong>absorb</strong> water.</li>
+                                 </ul>
+                          </div>
+                 </section>
+
+                 <section id="lifeCycles" class="topic-section">
+                       <div class="topic-header">
+                            <h2 class="topic-title">Cycles in Plants and Animals (Life Cycles)</h2>
+                            <p class="topic-description">P3 Standard</p>
+                          </div>
+                          <div class="pdf-container-new">
+                              <div class="pdf-controls-new">
+                                  <a href="https://drive.google.com/uc?export=download&id=1K0NlQbKdK5iov1yL0vrjBDtC8q9S0j1I"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="download-btn">
+                                      📖 Download Textbook PDF
+                                  </a>
+                              </div>
+                              <div class="pdf-viewer-container">
+                                  <iframe src="https://drive.google.com/file/d/1K0NlQbKdK5iov1yL0vrjBDtC8q9S0j1I/preview"
+                                          width="100%"
+                                          height="600px"
+                                          frameborder="0"
+                                          class="pdf-iframe">
+                                  </iframe>
+                              </div>
+                          </div>
+                          <div class="content-panel">
+                                <h3>Core Ideas</h3>
+                                <ul>
+                                    <li>Show an understanding that different living things have different life <strong>cycles</strong>.
+                                        <ul>
+                                            <li><strong>Plants</strong></li>
+                                            <li><strong>Animals</strong></li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                                <h3>Practices</h3>
+                                <ul>
+                                    <li>Observe and compare the life cycles of <strong>plants</strong> grown from <strong>seeds</strong> over a period of time.</li>
+                                    <li>Note:
+                                        <ul><li>The focus is on the <strong>stages</strong> (seed, young plant, adult plant) of <strong>flowering</strong> plants.</li></ul>
+                                    </li>
+                                    <li>Observe and compare the life cycles of animals over a period of time (chicken, cockroach, <strong>frog</strong>, grasshopper, beetle, butterfly, <strong>mosquito</strong>).</li>
+                                </ul>
+                                <h3>Values</h3>
+                                <ul>
+                                    <li>Show curiosity by questioning and exploring the surrounding plants and animals.</li>
+                                    <li>Show care and concern by being responsible towards plants and animals.</li>
+                                </ul>
+                          </div>
+                  </section>
+
+                 <section id="magnets" class="topic-section">
+                       <div class="topic-header">
+                            <h2 class="topic-title">Interaction of Forces (Magnets)</h2>
+                            <p class="topic-description">P3 Standard</p>
+                          </div>
+                          <div class="resource-grid">
+                                <div class="resource-card" data-type="tys">
+                                    <div class="card-header"><div class="card-icon">🔟</div><h3 class="card-title">Ten-Year Series</h3></div>
+                                    <div class="card-body">
+                                        <p class="card-description">Practice questions related to Magnets.</p>
+                                        <a href="https://www.polymathlc.com.sg/magnettys" target="_blank" rel="noopener noreferrer" class="card-btn">View TYS</a>
+                                    </div>
+                                </div>
+                                 <div class="resource-card" data-type="mindmap">
+                                     <div class="card-header">
+                                         <div class="card-icon">🧠</div>
+                                         <h3 class="card-title">Mindmap</h3>
+                                     </div>
+                                     <div class="card-body">
+                                         <p class="card-description">Mindmap for Magnets.</p>
+                                         <a href="https://www.mindomo.com/mindmap/ccef00462f6549078c1fefa3f90606bb" target="_blank" rel="noopener noreferrer" class="card-btn">View Mindmap</a>
+                                     </div>
+                                 </div>
+                          </div>
+                          <div class="pdf-container-new">
+                              <div class="pdf-controls-new">
+                                  <a href="https://drive.google.com/uc?export=download&id=16s5JRaDR8tPetBG1c2OsWf7KzXE3Bjvg"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="download-btn">
+                                      📖 Download Textbook PDF
+                                  </a>
+                              </div>
+                              <div class="pdf-viewer-container">
+                                  <iframe src="https://drive.google.com/file/d/16s5JRaDR8tPetBG1c2OsWf7KzXE3Bjvg/preview"
+                                          width="100%"
+                                          height="600px"
+                                          frameborder="0"
+                                          class="pdf-iframe">
+                                  </iframe>
+                              </div>
+                          </div>
+                          <div class="content-panel">
+                                <h3>Core Ideas</h3>
+                                <ul>
+                                    <li>Recognise that a magnet can exert a <strong>push</strong> or a <strong>pull</strong>.</li>
+                                    <li>Identify the characteristics of magnets.
+                                        <ul>
+                                            <li>Magnets can be made of <strong>iron</strong> or <strong>steel</strong>.</li>
+                                            <li>Magnets have <strong>two</strong> poles. A <strong>freely</strong> suspended bar magnet comes to rest pointing in a <strong>North</strong>-South direction.</li>
+                                            <li><strong>Unlike</strong> poles attract and <strong>like</strong> poles repel.</li>
+                                            <li>Magnets attract <strong>magnetic</strong> materials.</li>
+                                            <li>Note:
+                                                <ul>
+                                                    <li>Recall of magnetic materials like nickel/cobalt is not required.</li>
+                                                    <li>Magnetic shielding and magnetic induction not required.</li>
+                                                </ul>
+                                            </li>
+                                        </ul>
+                                    </li>
+                                    <li>Recognise <strong>uses</strong> of magnets in everyday objects.</li>
+                                </ul>
+                                <h3>Practices</h3>
+                                <ul>
+                                    <li>Compare <strong>magnets</strong>, <strong>non-magnetic</strong> materials, and magnetic materials.</li>
+                                    <li>Make a magnet by the <strong>stroke</strong> method and the <strong>electrical</strong> method.</li>
+                                </ul>
+                                <h3>Values</h3>
+                                <ul><li>Show curiosity in exploring the uses of magnets in everyday life.</li></ul>
+                          </div>
+                  </section>
+
+                 <section id="digestiveSystem" class="topic-section">
+                       <div class="topic-header">
+                            <h2 class="topic-title">Human System (Digestive System)</h2>
+                            <p class="topic-description">P4 Standard</p>
+                          </div>
+                          <div class="pdf-container-new">
+                              <div class="pdf-controls-new">
+                                  <a href="https://drive.google.com/uc?export=download&id=1avyXJIZXvigngG7wUZ1pvHyBwI-85NK8"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="download-btn">
+                                      📖 Download Textbook PDF
+                                  </a>
+                              </div>
+                              <div class="pdf-viewer-container">
+                                  <iframe src="https://drive.google.com/file/d/1avyXJIZXvigngG7wUZ1pvHyBwI-85NK8/preview"
+                                          width="100%"
+                                          height="600px"
+                                          frameborder="0"
+                                          class="pdf-iframe">
+                                  </iframe>
+                              </div>
+                          </div>
+                          <div class="content-panel">
+                                <h3>Core Ideas</h3>
+                                <ul>
+                                    <li>Identify the human systems in the body and state their <strong>functions</strong> (<strong>digestive</strong>, respiratory, <strong>circulatory</strong>, skeletal, and <strong>muscular</strong>).</li>
+                                    <li>Note:
+                                        <ul><li>- This learning outcome introduces students to an overview of human systems in the body. Detailed knowledge of the muscular and skeletal systems (such as names of the bones/muscles in the body and descriptions of how they work) are not required.</li></ul>
+                                    </li>
+                                    <li>Identify the parts in the human digestive system (<strong>mouth</strong>, gullet, <strong>stomach</strong>, <strong>small intestine</strong>, and large intestine) and describe their <strong>functions</strong>.</li>
+                                </ul>
+                                <h3>Values</h3>
+                                <ul><li>Show curiosity in questioning about the structures or functions of the body.</li></ul>
+                          </div>
+                  </section>
+
+                 <section id="matter" class="topic-section">
+                       <div class="topic-header">
+                            <h2 class="topic-title">Cycles in Matter and Water (Matter)</h2>
+                            <p class="topic-description">P4 Standard</p>
+                          </div>
+                          <div class="resource-grid">
+                                <div class="resource-card" data-type="flashcards">
+                                    <div class="card-header"><div class="card-icon">🃏</div><h3 class="card-title">Flashcards</h3></div>
+                                    <div class="card-body">
+                                        <p class="card-description">Quizlet flashcards for understanding Matter.</p>
+                                        <a href="https://quizlet.com/sg/986922570/understanding-matter-states-mass-and-volume-flash-cards/?i=8o0r1&x=1jqt" target="_blank" rel="noopener noreferrer" class="card-btn">View Flashcards</a>
+                                    </div>
+                                </div>
+                                <div class="resource-card" data-type="mindmap">
+                                    <div class="card-header"><div class="card-icon">🧠</div><h3 class="card-title">Mindmap</h3></div>
+                                    <div class="card-body">
+                                        <p class="card-description">Mindmap summarizing key concepts of Matter.</p>
+                                        <a href="https://www.mindomo.com/mindmap/8b66d18338284ed69011cf736f22a5b2" target="_blank" rel="noopener noreferrer" class="card-btn">View Mindmap</a>
+                                    </div>
+                                </div>
+                          </div>
+                          <div class="pdf-container-new">
+                              <div class="pdf-controls-new">
+                                  <a href="https://drive.google.com/uc?export=download&id=1qjKqjLgjHL2o1qgCs2ofxslWibXpxh2V"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="download-btn">
+                                      📖 Download Textbook PDF
+                                  </a>
+                              </div>
+                              <div class="pdf-viewer-container">
+                                  <iframe src="https://drive.google.com/file/d/1qjKqjLgjHL2o1qgCs2ofxslWibXpxh2V/preview"
+                                          width="100%"
+                                          height="600px"
+                                          frameborder="0"
+                                          class="pdf-iframe">
+                                  </iframe>
+                              </div>
+                          </div>
+                          <div class="content-panel">
+                                <h3>Core Ideas</h3>
+                                <ul>
+                                    <li>State that matter is anything that has <strong>mass</strong> and occupies <strong>space</strong>.</li>
+                                    <li>Differentiate among the three states of matter (<strong>solid</strong>, <strong>liquid</strong>, <strong>gas</strong>) in terms of <strong>shape</strong> and <strong>volume</strong>.</li>
+                                </ul>
+                                <h3>Practices</h3>
+                                <ul><li>Measure <strong>mass</strong> and <strong>volume</strong> using appropriate apparatus.</li></ul>
+                                <h3>Values</h3>
+                                <ul><li>Show curiosity in exploring matter in the surroundings and question what they find.</li></ul>
+                                <h3>Textbook Summary</h3>
+                                 <ul>
+                                     <li>A hypothesis is a <strong>prediction</strong> of what you believe will happen based on the information that is already known.</li>
+                                     <li>Solids and liquids have <strong>definite</strong> volume; hence, they cannot be <strong>compressed</strong>. (Since the textbook mentions 'definite volume' whenever it mentions being compressed, always mention 'definite volume' before mentioning being compressed.)</li>
+                                     <li>Gases have no definite <strong>volume</strong>; hence, they can be <strong>compressed</strong>.</li>
+                                     <li>Definition of mass: The measurement of the amount of <strong>matter</strong> an object contains.</li>
+                                     <li>Definition of volume: The measurement of the amount of <strong>space</strong> that an object <strong>occupies</strong>.</li>
+                                     <li>Instead of the word <strong>displace</strong>, use 'occupy the space <strong>previously</strong> <strong>occupied</strong>'.</li>
+                                 </ul>
+                          </div>
+                  </section>
+
+                 <section id="plantSystem" class="topic-section">
+                       <div class="topic-header">
+                            <h2 class="topic-title">Plant System (Plant parts and functions)</h2>
+                            <p class="topic-description">P4 Standard</p>
+                          </div>
+                          <div class="resource-grid">
+                                <div class="resource-card" data-type="mcq">
+                                    <div class="card-header"><div class="card-icon">✅</div><h3 class="card-title">Quiz</h3></div>
+                                    <div class="card-body">
+                                        <p class="card-description">Test your knowledge on Plant Systems.</p>
+                                        <a href="https://www.classmarker.com/online-test/start/?quiz=nvx677cad2001995" target="_blank" rel="noopener noreferrer" class="card-btn">Start Quiz</a>
+                                    </div>
+                                 </div>
+                           </div>
+                          <div class="pdf-container-new">
+                              <div class="pdf-controls-new">
+                                  <a href="https://drive.google.com/uc?export=download&id=1w0bdIFdNzQGYJja7J8Mb7pwedRpyFqkb"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="download-btn">
+                                      📖 Download Textbook PDF
+                                  </a>
+                              </div>
+                              <div class="pdf-viewer-container">
+                                  <iframe src="https://drive.google.com/file/d/1w0bdIFdNzQGYJja7J8Mb7pwedRpyFqkb/preview"
+                                          width="100%"
+                                          height="600px"
+                                          frameborder="0"
+                                          class="pdf-iframe">
+                                  </iframe>
+                              </div>
+                          </div>
+                           <div class="content-panel">
+                                <h3>Core Ideas</h3>
+                                <ul>
+                                    <li>Identify different plant parts and their functions:
+                                        <ul>
+                                            <li><strong>Leaf</strong></li>
+                                            <li><strong>Stem</strong></li>
+                                            <li><strong>Root</strong></li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                                <h3>Practices</h3>
+                                <ul><li>Observe plant parts.</li></ul>
+                                <h3>Values</h3>
+                                <ul>
+                                    <li>Show curiosity about surrounding plants.</li>
+                                    <li>Show care and concern by being responsible towards plants.</li>
+                                </ul>
+                          </div>
+                      </section>
+
+                 <section id="energyFormsHeat" class="topic-section">
+                       <div class="topic-header">
+                            <h2 class="topic-title">Energy Forms and Uses (Heat)</h2>
+                            <p class="topic-description">P4 Standard</p>
+                          </div>
+                          <div class="resource-grid">
+                               <div class="resource-card" data-type="mindmap">
+                                   <div class="card-header">
+                                       <div class="card-icon">🧠</div>
+                                       <h3 class="card-title">Mindmap</h3>
+                                   </div>
+                                   <div class="card-body">
+                                       <p class="card-description">Mindmap for Heat Energy.</p>
+                                       <a href="https://www.mindomo.com/mindmap/ad4e31b7a9b24f9e98386b08d60c55e5" target="_blank" rel="noopener noreferrer" class="card-btn">View Mindmap</a>
+                                   </div>
+                               </div>
+                           </div>
+                          <div class="pdf-container-new">
+                              <div class="pdf-controls-new">
+                                  <a href="https://drive.google.com/uc?export=download&id=1Ukp1fwq_q3-DaDv4fcCuTOYliLpQnBlV"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="download-btn">
+                                      📖 Download Textbook PDF
+                                  </a>
+                              </div>
+                              <div class="pdf-viewer-container">
+                                  <iframe src="https://drive.google.com/file/d/1Ukp1fwq_q3-DaDv4fcCuTOYliLpQnBlV/preview"
+                                          width="100%"
+                                          height="600px"
+                                          frameborder="0"
+                                          class="pdf-iframe">
+                                  </iframe>
+                              </div>
+                          </div>
+                           <div class="content-panel">
+                                <h3>Core Ideas</h3>
+                                <ul>
+                                    <li>Identify some common <strong>sources</strong> of heat.</li>
+                                    <li>State that the <strong>temperature</strong> of an object is a measurement of its degree of <strong>hotness</strong>.</li>
+                                    <li>State that heat is a form of <strong>energy</strong>.</li>
+                                    <li>Differentiate between <strong>heat</strong> and <strong>temperature</strong>.</li>
+                                    <li>Show an understanding that heat flows from a <strong>hotter</strong> to a colder region until both share the same <strong>temperature</strong>.</li>
+                                    <li>Relate change in an object's temperature to <strong>gain</strong>/<strong>loss</strong> of <strong>heat</strong>.</li>
+                                    <li>List some <strong>effects</strong> of <strong>heat</strong> gain/loss in daily life.
+                                        <ul><li>- <strong>Contraction</strong>/<strong>expansion</strong>, change in <strong>state</strong></li></ul>
+                                    </li>
+                                    <li>Identify <strong>good</strong> & poor <strong>conductors</strong> of heat (e.g. <strong>metals</strong>, <strong>wood</strong>, <strong>air</strong>).</li>
+                                </ul>
+                                <h3>Practices</h3>
+                                <ul><li>Measure temperature using a thermometer and a datalogger with temperature/heat sensors.</li></ul>
+                                <h3>Values</h3>
+                                <ul><li>Show objectivity by seeking data and information to validate observations and explanations about heat.</li></ul>
+                          </div>
+                      </section>
+
+                 <section id="energyFormsLight" class="topic-section">
+                       <div class="topic-header">
+                            <h2 class="topic-title">Energy Forms and Uses (Light)</h2>
+                            <p class="topic-description">P4 Standard</p>
+                          </div>
+                          <div class="pdf-container-new">
+                              <div class="pdf-controls-new">
+                                  <a href="https://drive.google.com/uc?export=download&id=1f2lF0P--3nI9_msJVEBqE5g3xdk2iixr"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="download-btn">
+                                      📖 Download Textbook PDF
+                                  </a>
+                              </div>
+                              <div class="pdf-viewer-container">
+                                  <iframe src="https://drive.google.com/file/d/1f2lF0P--3nI9_msJVEBqE5g3xdk2iixr/preview"
+                                          width="100%"
+                                          height="600px"
+                                          frameborder="0"
+                                          class="pdf-iframe">
+                                  </iframe>
+                              </div>
+                          </div>
+                          <div class="content-panel">
+                                <h3>Core Ideas</h3>
+                                <ul>
+                                    <li>Recognise that an object is visible when it <strong>reflects</strong> <strong>light</strong> or is a <strong>source</strong> of light.</li>
+                                    <li>Recognise that light <strong>travels</strong> in <strong>straight</strong> lines & a <strong>shadow</strong> forms when light is <strong>completely</strong>/<strong>partially</strong> blocked.</li>
+                                </ul>
+                                <h3>Practices</h3>
+                                <ul><li>Investigate the <strong>variables</strong> that affect shadows: shape, <strong>size</strong>, <strong>positions</strong>, <strong>distance</strong> to screen.</li></ul>
+                                <h3>Values</h3>
+                                <ul><li>Show objectivity by using data and information to validate observations and explanations about light.</li></ul>
+                          </div>
+                  </section>
+
+                 <section id="electrical" class="topic-section">
+                       <div class="topic-header">
+                            <h2 class="topic-title">Electrical System</h2>
+                            <p class="topic-description">P5 Standard</p>
+                          </div>
+                          <div class="pdf-container-new">
+                              <div class="pdf-controls-new">
+                                  <a href="https://drive.google.com/uc?export=download&id=1lYsG36PGtNmJzQZw46W-fUBR0rmF54AO"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="download-btn">
+                                      📖 Download Textbook PDF
+                                  </a>
+                              </div>
+                              <div class="pdf-viewer-container">
+                                  <iframe src="https://drive.google.com/file/d/1lYsG36PGtNmJzQZw46W-fUBR0rmF54AO/preview"
+                                          width="100%"
+                                          height="600px"
+                                          frameborder="0"
+                                          class="pdf-iframe">
+                                  </iframe>
+                              </div>
+                          </div>
+                          <div class="content-panel">
+                                <h3>Core Ideas</h3>
+                                <ul>
+                                    <li>Recognise that an electric circuit consisting of an <strong>energy</strong> source (battery) and other circuit components (wire, bulb, switch) forms an electrical system.</li>
+                                    <li>Show an understanding that a <strong>closed</strong> circuit allows <strong>current</strong> to flow.</li>
+                                    <li data-outcome-text="Identify electrical <strong>conductors</strong> and insulators.">Identify electrical <strong>conductors</strong> and insulators.</li>
+                                    <li>Therefore you should not use poor and good conductors of electricity.</li>
+                                </ul>
+                                <h3>Practices</h3>
+                                <ul>
+                                    <li data-outcome-text="Construct simple circuits from circuit diagrams.">Construct simple circuits from circuit diagrams.</li>
+                                    <li>Investigate the effect of some variables on the current in a circuit.</li>
+                                    <li data-outcome-text="- Number of <strong>batteries</strong> (arranged in series)">- Number of <strong>batteries</strong> (arranged in series)</li>
+                                    <li data-outcome-text="- Number of <strong>bulbs</strong> (arranged in <strong>series</strong> and <strong>parallel</strong>)">- Number of <strong>bulbs</strong> (arranged in <strong>series</strong> and <strong>parallel</strong>)</li>
+                                </ul>
+                                <h3>Values</h3>
+                                <ul><li>Show concern for the need to conserve and to have proper use and handling of electricity.</li></ul>
+                          </div>
+                  </section>
+
+                 <section id="humanSystem" class="topic-section">
+                       <div class="topic-header">
+                            <h2 class="topic-title">Human System (Respiratory and Circulatory Systems)</h2>
+                            <p class="topic-description">P5 Standard</p>
+                          </div>
+                          <div class="pdf-container-new">
+                              <div class="pdf-controls-new">
+                                  <a href="https://drive.google.com/uc?export=download&id=16InU8N4YpxLWfUPowRJOYsak1XFqyNJ2"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="download-btn">
+                                      📖 Download Textbook PDF
+                                  </a>
+                              </div>
+                              <div class="pdf-viewer-container">
+                                  <iframe src="https://drive.google.com/file/d/16InU8N4YpxLWfUPowRJOYsak1XFqyNJ2/preview"
+                                          width="100%"
+                                          height="600px"
+                                          frameborder="0"
+                                          class="pdf-iframe">
+                                  </iframe>
+                              </div>
+                          </div>
+                          <div class="content-panel">
+                                <h3>Core Ideas</h3>
+                                <ul>
+                                    <li>Recognise that air is made up of gases such as <strong>nitrogen</strong>, <strong>carbon dioxide</strong>, <strong>oxygen</strong>, and <strong>water vapour</strong>.</li>
+                                    <li>Identify the parts of the human respiratory (<strong>nose</strong>, windpipe, <strong>lungs</strong>) and circulatory systems (<strong>heart</strong>, <strong>blood</strong>, blood vessels) and describe their functions.</li>
+                                    <li>Note:
+                                        <ul><li>- Detailed knowledge of respiratory system (e.g., alveoli) and circulatory system (e.g., heart chambers and valves) is not required.</li></ul>
+                                    </li>
+                                    <li>Recognise the integration of the different systems (digestive, respiratory and circulatory) in carrying out life processes.</li>
+                                </ul>
+                                <h3>Practices</h3>
+                                <ul>
+                                    <li>Compare how <strong>plants</strong>, <strong>fish</strong>, and humans take in <strong>oxygen</strong> and give out <strong>carbon dioxide</strong>.</li>
+                                    <li>Compare the ways in which substances are <strong>transported</strong> within plants and humans.
+                                        <ul>
+                                            <li>- Plants: Tubes that transport <strong>food</strong> and <strong>water</strong></li>
+                                            <li>- Humans: Blood vessels that transport digested food, <strong>oxygen</strong> and <strong>carbon dioxide</strong>.</li>
+                                        </ul>
+                                    </li>
+                                    <li>Note:
+                                        <ul><li>- The use of specific terms (xylem, phloem, stomata, artery, vein, capillary) is not required.</li></ul>
+                                    </li>
+                                </ul>
+                                <h3>Values</h3>
+                                <ul><li>Show objectivity by seeking data and information to validate observations and explanations about the human body.</li></ul>
+                          </div>
+                  </section>
+
+                 <section id="plantReproduction" class="topic-section">
+                       <div class="topic-header">
+                            <h2 class="topic-title">Cycles in Plants and Animals (Reproduction)</h2>
+                            <p class="topic-description">P5 Standard</p>
+                          </div>
+                          <div class="resource-grid">
+                                <div class="resource-card" data-type="mcq">
+                                    <div class="card-header"><div class="card-icon">✅</div><h3 class="card-title">Quiz</h3></div>
+                                    <div class="card-body">
+                                        <p class="card-description">Test your knowledge on Reproduction.</p>
+                                        <a href="https://www.classmarker.com/online-test/start/?quiz=hxf67888f4d647fd" target="_blank" rel="noopener noreferrer" class="card-btn">Start Quiz</a>
+                                    </div>
+                                </div>
+                           </div>
+                          <div class="pdf-container-new">
+                              <div class="pdf-controls-new">
+                                  <a href="https://drive.google.com/uc?export=download&id=1DcPcyRBEQKOU46y0tiYIc6N8s3yoQuse"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="download-btn">
+                                      📖 Download Textbook PDF
+                                  </a>
+                              </div>
+                              <div class="pdf-viewer-container">
+                                  <iframe src="https://drive.google.com/file/d/1DcPcyRBEQKOU46y0tiYIc6N8s3yoQuse/preview"
+                                          width="100%"
+                                          height="600px"
+                                          frameborder="0"
+                                          class="pdf-iframe">
+                                  </iframe>
+                              </div>
+                          </div>
+                          <div class="content-panel">
+                                <h3>Core Ideas</h3>
+                                <ul>
+                                    <li data-outcome-text="Recognise that a cell is a <strong>basic</strong> unit of life.">Recognise that a cell is a <strong>basic</strong> unit of life.</li>
+                                    <li>Show an understanding that living things reproduce to ensure <strong>continuity</strong> of their kind and that many characteristics of an organism are passed on from parents to offspring.</li>
+                                    <li>Describe processes in the sexual reproduction of flowering plants:</li>
+                                    <li data-outcome-text="- <strong>Pollination</strong>">- <strong>Pollination</strong></li>
+                                    <li data-outcome-text="- <strong>Fertilisation</strong> (seed production)">- <strong>Fertilisation</strong> (seed production)</li>
+                                    <li data-outcome-text="- <strong>Seed dispersal</strong>">- <strong>Seed dispersal</strong></li>
+                                    <li data-outcome-text="- <strong>Germination</strong>">- <strong>Germination</strong></li>
+                                    <li>Note: Fertilisation occurs when a male reproductive cell fuses with a female reproductive cell.</li>
+                                </ul>
+                                <h3>Practices</h3>
+                                <ul>
+                                    <li>Investigate the ways in which plants reproduce:</li>
+                                    <li>- <strong>Spores</strong></li>
+                                    <li>- Seeds</li>
+                                    <li>Note: Vegetative propagation (e.g., stem cutting) not required.</li>
+                                </ul>
+                                <h3>Values</h3>
+                                <ul>
+                                    <li>Show curiosity by questioning and exploring the surrounding plants and animals.</li>
+                                    <li>Show care and concern by being responsible towards plants and animals.</li>
+                                </ul>
+                                <h3>Textbook Summary</h3>
+                                 <ul>
+                                     <li>Definition of <strong>Pollination</strong>: the process in which pollen grains are transferred from the <strong>anther</strong> to the <strong>stigma</strong>.</li>
+                                     <li>How to describe animal pollination:</li>
+                                     <li>Pollen grains from the anther attach to bodies of animals that visit the flowers. As the animals move to another flower, the pollen grains get transferred onto the stigma.</li>
+                                     <li>Characteristics of Animal-pollinated flowers:</li>
+                                     <li>- <strong>Brightly</strong> <strong>coloured</strong> petals to attract animals.</li>
+                                     <li>- Flowers contain <strong>nectar</strong> and have a <strong>scent</strong>.</li>
+                                     <li>Characteristics of Wind-pollinated flowers:</li>
+                                     <li>- Anthers <strong>hanging</strong> out of the flowers to increase chances of pollen being carried away by the <strong>wind</strong>.</li>
+                                     <li>- Have <strong>large</strong> and <strong>feathery</strong> <strong>stigmas</strong> to increase surface area for pollen capture.</li>
+                                     <li>Definition of <strong>Fertilisation</strong>: The process in which the <strong>male</strong> reproductive cell fuses with the <strong>female</strong> reproductive cell.</li>
+                                     <li>Process of Fertilisation in Flowering Plants</li>
+                                     <li>1) A pollen grain lands on the <strong>stigma</strong> and produces a pollen <strong>tube</strong>.</li>
+                                     <li>2) The pollen tube, containing a <strong>male</strong> <strong>reproductive</strong> cell, grows towards the <strong>ovule</strong>.</li>
+                                     <li>3) The male reproductive cell <strong>fuses</strong> with the <strong>female</strong> reproductive cell in the ovule.</li>
+                                     <li>4) The <strong>ovary</strong> becomes the <strong>fruit</strong>, and the <strong>ovule</strong> becomes the <strong>seed</strong>. (One <strong>ovule</strong> grows into one <strong>seed</strong>. If a fruit has multiple <strong>seeds</strong>, its flower had multiple <strong>ovules</strong>.)</li>
+                                     <li>Definition of <strong>Seed Dispersal</strong>: The <strong>scattering</strong> of seeds away from the parent to reduce <strong>overcrowding</strong> & <strong>competition</strong>.</li>
+                                     <li>Dispersal by <strong>Animals</strong></li>
+                                     <li>- Some seeds have <strong>hooks</strong> to <strong>cling</strong> onto <strong>fur</strong>. Then moving animals scatter them.</li>
+                                     <li>- <strong>Indigestible</strong> seeds found in juicy fruits. Animals may <strong>spit</strong> <strong>out</strong> or pass in <strong>droppings</strong>.</li>
+                                     <li>Dispersal by <strong>Wind</strong></li>
+                                     <li>- They are <strong>small</strong> & <strong>light</strong>. Some have <strong>wing</strong>-<strong>like</strong>/<strong>hair</strong>-<strong>like</strong> structures.</li>
+                                     <li>Dispersal by <strong>Explosive</strong> Action/<strong>splitting</strong></li>
+                                     <li>- <strong>split</strong> open when <strong>dry</strong>. Pod-like structures.</li>
+                                     <li>Definition of <strong>Germination</strong>: Seeds grow into <strong>seedlings</strong> w/ sufficient <strong>water</strong>, <strong>oxygen</strong>, <strong>temperature</strong>.</li>
+                                     <li>Non-flowering plants reproduce by <strong>spores</strong>.</li>
+                                     <li>Sexual reproduction in flowering plants vs humans?</li>
+                                     <li>Similar: both have <strong>fertilisation</strong> => <strong>male</strong> + <strong>female</strong> cell fusion.</li>
+                                     <li>Difference: Humans do not do <strong>pollination</strong> but flowering plants do.</li>
+                                 </ul>
+                                </div>
+                          </section>
+
+                            <section id="water" class="topic-section">
+                                  <div class="topic-header">
+                                       <h2 class="topic-title">Cycles in Matter and Water (Water and Water Pollution)</h2>
+                                       <p class="topic-description">P5 Standard</p>
+                                  </div>
+                                  <div class="resource-grid">
+                                       <div class="resource-card" data-type="flashcards">
+                                           <div class="card-header"><div class="card-icon">🃏</div><h3 class="card-title">Flashcards</h3></div>
+                                           <div class="card-body">
+                                               <p class="card-description">Quizlet flashcards for Water and its states.</p>
+                                               <a href="https://quizlet.com/sg/906381001/water-and-its-3-states-flash-cards/?i=8o0r1&x=1jqt" target="_blank" rel="noopener noreferrer" class="card-btn">View Flashcards</a>
+                                           </div>
+                                       </div>
+                                       <div class="resource-card" data-type="mindmap">
+                                           <div class="card-header">
+                                               <div class="card-icon">🧠</div>
+                                               <h3 class="card-title">Mindmap</h3>
+                                           </div>
+                                           <div class="card-body">
+                                               <p class="card-description">Mindmap for Water & its 3 States.</p>
+                                               <a href="https://www.mindomo.com/mindmap/df0db8a5c02f42af80f9434a6d02b783" target="_blank" rel="noopener noreferrer" class="card-btn">View Mindmap</a>
+                                           </div>
+                                       </div>
+                                   </div>
+                                  <div class="pdf-container-new">
+                                      <div class="pdf-controls-new">
+                                          <a href="https://drive.google.com/uc?export=download&id=1vs0t3ageeely0J8qyo4w8TFs0HNoeklM"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="download-btn">
+                                              📖 Download Textbook PDF
+                                          </a>
+                                      </div>
+                                      <div class="pdf-viewer-container">
+                                          <iframe src="https://drive.google.com/file/d/1vs0t3ageeely0J8qyo4w8TFs0HNoeklM/preview"
+                                                  width="100%"
+                                                  height="600px"
+                                                  frameborder="0"
+                                                  class="pdf-iframe">
+                                          </iframe>
+                                      </div>
+                                  </div>
+                                  <div class="content-panel">
+                                       <h3>Core Ideas</h3>
+                                       <ul>
+                                           <li>Recognise water exists in 3 interchangeable <strong>states</strong>.</li>
+                                           <li>Understand how water changes among states:</li>
+                                           <li>- <strong>Melting</strong>, <strong>Freezing</strong>, Boiling/<strong>Evaporation</strong>, <strong>Condensation</strong></li>
+                                           <li>Understand <strong>melting point</strong>/<strong>freezing point</strong>, boiling point of water.</li>
+                                           <li>Roles of <strong>evaporation</strong>/<strong>condensation</strong> in water cycle, plus <strong>importance</strong>.</li>
+                                           <li>Impact of water <strong>pollution</strong> on Earth's water <strong>resources</strong>.</li>
+                                       </ul>
+                                       <h3>Practices</h3>
+                                       <ul>
+                                           <li>Compare water in 3 states.</li>
+                                           <li>Investigate heat <strong>gain</strong>/<strong>loss</strong> on water's temperature/state.</li>
+                                           <li>Factors affecting evaporation rate: <strong>Wind</strong>, <strong>Temperature</strong>, <strong>Exposed surface area</strong></li>
+                                       </ul>
+                                       <h3>Values</h3>
+                                       <ul><li>Concern for limited water & responsibility to conserve.</li></ul>
+                                       <h3>Textbook Summary</h3>
+                                         <ul>
+                                             <li>What are the states of matter that <strong>water</strong> can exist in?</li>
+                                             <li>Matter can exist in different states, such as <strong>solid</strong>, <strong>liquid</strong>, and <strong>gas</strong>. One example of matter that is readily available to us in all three states is <strong>water</strong>. We can find water in the <strong>solid</strong>, <strong>liquid</strong>, and <strong>gaseous</strong> states around us.</li>
+                                             <li><strong>water</strong> in the <strong>solid</strong> state is known as <strong>ice</strong>.</li>
+                                             <li><strong>water</strong> in the <strong>liquid</strong> state is often referred to as <strong>water</strong>.</li>
+                                             <li><strong>water</strong> in the <strong>gaseous</strong> state is called <strong>water vapour</strong>.</li>
+                                             <li>- <strong>water vapour</strong> is colourless and <strong>invisible</strong>.</li>
+                                             <li>- <strong>steam</strong> (<strong>water vapour</strong>) forms when <strong>water</strong> boils.</li>
+                                             <li>How does <strong>water</strong> change from one state to another?</li>
+                                             <li><strong>water</strong> changes states when it gains or loses <strong>heat</strong>.</li>
+                                             <li>Examples from daily life:</li>
+                                             <li>1. Melting: <strong>ice</strong> → <strong>water</strong> (e.g., ice left on a table melts).</li>
+                                             <li>2. Freezing: <strong>water</strong> → <strong>ice</strong> (e.g., water in an ice tray placed in a freezer).</li>
+                                             <li>3. Boiling: <strong>water</strong> → <strong>steam</strong> (e.g., boiling water in a pot).</li>
+                                             <li>4. Condensation: <strong>steam</strong> → <strong>water</strong> (e.g., water droplets on a pot cover).</li>
+                                             <li>Processes of State Changes:</li>
+                                             <li>- Melting: <strong>solid</strong> (<strong>ice</strong>) → <strong>liquid</strong> (<strong>water</strong>) at 0°C.</li>
+                                             <li>- Freezing: <strong>liquid</strong> → <strong>solid</strong> at 0°C.</li>
+                                             <li>- Boiling: <strong>liquid</strong> → <strong>gas</strong> at 100°C.</li>
+                                             <li>- Condensation: <strong>gas</strong> → <strong>liquid</strong> when heat is lost.</li>
+                                             <li>Boiling Point of <strong>water</strong>:</li>
+                                             <li>- <strong>water</strong> boils at 100°C (temperature remains constant during boiling).</li>
+                                             <li>- <strong>steam</strong> forms bubbles and condenses into droplets on cooler surfaces.</li>
+                                             <li>Condensation:</li>
+                                             <li>- Occurs when <strong>water vapour</strong> loses <strong>heat</strong> (e.g., droplets on a cold drink can).</li>
+                                             <li>Evaporation:</li>
+                                             <li>- <strong>liquid</strong> → <strong>gas</strong> at any temperature (differs from boiling).</li>
+                                             <li>- Factors affecting evaporation rate:</li>
+                                             <li>  1. Wind: Faster evaporation on windy days.</li>
+                                             <li>  2. Temperature: Faster evaporation on hotter days.</li>
+                                             <li>  3. Exposed Surface Area: Faster evaporation when spread out.</li>
+                                             <li>Water Cycle:</li>
+                                             <li>1. Evaporation: Water bodies → <strong>water vapour</strong>.</li>
+                                             <li>2. Condensation: <strong>water vapour</strong> → Clouds (<strong>water droplets</strong>).</li>
+                                             <li>3. Precipitation: Rain returns water to Earth.</li>
+                                             <li>4. Ensures continuous freshwater supply.</li>
+                                         </ul>
+                                       </div>
+                                  </section>
+
+                                    <section id="environment" class="topic-section">
+                                          <div class="topic-header">
+                                              <h2 class="topic-title">Interactions within the Environment</h2>
+                                              <p class="topic-description">P6 Standard</p>
+                                          </div>
+                                          <div class="pdf-container-new">
+                                              <div class="pdf-controls-new">
+                                                  <a href="https://drive.google.com/uc?export=download&id=1_oM2OvV0-Jy_gXXEUMl2WOywa0IO1SoI"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="download-btn">
+                                                      📖 Download Textbook PDF
+                                                  </a>
+                                              </div>
+                                              <div class="pdf-viewer-container">
+                                                  <iframe src="https://drive.google.com/file/d/1_oM2OvV0-Jy_gXXEUMl2WOywa0IO1SoI/preview"
+                                                          width="100%"
+                                                          height="600px"
+                                                          frameborder="0"
+                                                          class="pdf-iframe">
+                                                  </iframe>
+                                              </div>
+                                          </div>
+                                          <div class="content-panel">
+                                               <h3>Core Ideas</h3>
+                                               <ul>
+                                                   <li>Identify the factors that affect the survival of an organism: - Physical characteristics of the environment (<strong>temperature</strong>, <strong>light</strong>, <strong>water</strong>). - Availability of <strong>food</strong>. - Types of other organisms present (<strong>producers</strong>, <strong>consumers</strong>, <strong>decomposers</strong>).</li>
+                                                   <li>Show an understanding of the effect on organisms when the environment becomes unfavourable (organisms <strong>adapt</strong> and <strong>survive</strong>; move to other places or <strong>die</strong>).</li>
+                                                   <li>Show an understanding of the energy pathway from the <strong>Sun</strong> through living things and identify the roles of various organisms (producers, consumers, <strong>predators</strong>, <strong>prey</strong>) in a food chain and a food web.</li>
+                                                   <li>Differentiate among <strong>organism</strong>, <strong>population</strong> and <strong>community</strong>.</li>
+                                                   <li>- An <strong>organism</strong> is a <strong>living</strong> thing.</li>
+                                                   <li>- A <strong>population</strong> is a <strong>group</strong> of organisms of the same kind, living and <strong>reproducing</strong> at a given place and time.</li>
+                                                   <li>- A <strong>community</strong> consists of many <strong>populations</strong> living together in a particular place.</li>
+                                                   <li>Show an understanding that different habitats support different <strong>communities</strong> (garden, field, pond, seashore, tree, mangrove swamp).</li>
+                                                   <li>Show an understanding that adaptations serve to enhance survival and can be structural or behavioural.</li>
+                                                   <li>- Cope with physical <strong>factors</strong></li>
+                                                   <li>- Obtain <strong>food</strong></li>
+                                                   <li>- Escape <strong>predators</strong></li>
+                                                   <li>- Reproduce by finding and <strong>attracting</strong> mates or <strong>dispersing</strong> seeds/fruits</li>
+                                                   <li>Give examples of man's impact (both <strong>positive</strong> and <strong>negative</strong>) on the environment</li>
+                                               </ul>
+                                               <h3>Practices</h3>
+                                               <ul><li>Observe, collect and record information regarding the interacting factors within an environment.</li></ul>
+                                               <h3>Values</h3>
+                                               <ul><li>Show care and concern for Man's impact on the environment by being respectful and responsible towards the environment.</li></ul>
+                                          </div>
+                                      </section>
+
+                                      <section id="forces" class="topic-section">
+                                            <div class="topic-header">
+                                                <h2 class="topic-title">Interaction of Forces</h2>
+                                                <p class="topic-description">P6 Standard</p>
+                                            </div>
+                                            <div class="resource-grid">
+                                                <div class="resource-card" data-type="tys">
+                                                    <div class="card-header"><div class="card-icon">🔟</div><h3 class="card-title">Ten-Year Series</h3></div>
+                                                    <div class="card-body">
+                                                        <p class="card-description">Practice questions related to Forces.</p>
+                                                        <a href="https://www.polymathlc.com.sg/forces" target="_blank" rel="noopener noreferrer" class="card-btn">View TYS</a>
+                                                    </div>
+                                                </div>
+                                                 <div class="resource-card" data-type="mindmap">
+                                                      <div class="card-header">
+                                                          <div class="card-icon">🧠</div>
+                                                          <h3 class="card-title">Mindmap</h3>
+                                                      </div>
+                                                      <div class="card-body">
+                                                          <p class="card-description">Mindmap for Forces.</p>
+                                                          <a href="https://www.mindomo.com/mindmap/bd5d9d34c7d84cbe938347e7016daee4" target="_blank" rel="noopener noreferrer" class="card-btn">View Mindmap</a>
+                                                      </div>
+                                                  </div>
+                                             </div>
+                                            <div class="pdf-container-new">
+                                                <div class="pdf-controls-new">
+                                                    <a href="https://drive.google.com/uc?export=download&id=1NumEzKj4yqPnVm_o2DqcH2DtfohR5-jD"
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      class="download-btn">
+                                                        📖 Download Textbook PDF
+                                                    </a>
+                                                </div>
+                                                <div class="pdf-viewer-container">
+                                                    <iframe src="https://drive.google.com/file/d/1NumEzKj4yqPnVm_o2DqcH2DtfohR5-jD/preview"
+                                                            width="100%"
+                                                            height="600px"
+                                                            frameborder="0"
+                                                            class="pdf-iframe">
+                                                    </iframe>
+                                                </div>
+                                            </div>
+                                            <div class="content-panel">
+                                                 <h3>Core Ideas</h3>
+                                                 <ul>
+                                                     <li>Identify a force as a <strong>push</strong> or a <strong>pull</strong>.</li>
+                                                     <li>Show an understanding of the effects of a force.
+                                                         <ul>
+                                                             <li>- A force can <strong>move</strong> a stationary object.</li>
+                                                             <li>- A force can <strong>speed</strong> up, slow down or <strong>change</strong> the direction of motion.</li>
+                                                             <li>- A force can <strong>stop</strong> a moving object.</li>
+                                                             <li>- A force may change the <strong>shape</strong> of an object.</li>
+                                                         </ul>
+                                                     </li>
+                                                     <li>Recognise and give examples of the different types of forces.
+                                                         <ul>
+                                                             <li>- <strong>Magnetic</strong> force</li>
+                                                             <li>- <strong>Gravitational</strong> force</li>
+                                                             <li>- <strong>Elastic spring</strong> force</li>
+                                                             <li>- <strong>Frictional</strong> force</li>
+                                                         </ul>
+                                                     </li>
+                                                     <li>Note:
+                                                         <ul>
+                                                             <li>- Direction of frictional force for 'rolling objects' is not required.</li>
+                                                             <li>- The use of specific terms such as 'air resistance' and 'water resistance' is not required.</li>
+                                                         </ul>
+                                                     </li>
+                                                     <li>Recognise that objects have weight because of the gravitational force acting on the object.</li>
+                                                 </ul>
+                                                 <h3>Practices</h3>
+                                                 <ul>
+                                                     <li>Investigate the effect of <strong>frictional</strong> force on the <strong>motion</strong> of objects.</li>
+                                                     <li>Investigate the effects of <strong>elastic spring</strong> force.</li>
+                                                 </ul>
+                                                 <h3>Values</h3>
+                                                 <ul><li>Show objectivity by using data and information to validate observations and explanations about forces.</li></ul>
+
+                                                 <h3>Textbook Summary</h3>
+                                                  <ul>
+                                                      <li>Definition of Frictional Force: Frictional force is the force that <strong>opposes</strong> <strong>motion</strong> when two <strong>surfaces</strong> are in contact.</li>
+                                                      <li>There is <strong>greater</strong> frictional force between an object and a <strong>rough</strong> surface than between the same object and a <strong>smooth</strong> surface.</li>
+                                                      <li>The amount of frictional force acting on an object does not depend on the <strong>surface area</strong> in contact.</li>
+                                                      <li>How frictional force can be useful:</li>
+                                                      <li>1) Frictional force helps us to <strong>slow down</strong> or <strong>stop</strong> moving objects.</li>
+                                                      <li>2) Frictional force between the soles of our shoes and the ground <strong>prevents</strong> us from <strong>slipping</strong> when we walk.</li>
+                                                      <li>3) Frictional force <strong>between</strong> the matchstick and the matchbox causes the matchstick to light up.</li>
+                                                      <li>4) Frictional force <strong>between</strong> the bicycle brakes and wheels allows a moving bicycle to slow down or stop.</li>
+                                                      <li>How frictional force can be a <strong>problem</strong>:</li>
+                                                      <li>1) Frictional force between the boat and the water surface <strong>slows</strong> the boat down.</li>
+                                                      <li>2) Frictional force between the moving parts of the machine produces <strong>heat</strong>. This can cause the parts to overheat.</li>
+                                                      <li>Ways to reduce frictional force:</li>
+                                                      <li>1) Apply a <strong>lubricant</strong> such as <strong>oil</strong> or grease.</li>
+                                                      <li>2) Use <strong>rollers</strong> and <strong>wheels</strong>.</li>
+                                                  </ul>
+                                               </div>
+                                        </section>
+
+                                        <section id="photosynthesis" class="topic-section">
+                                              <div class="topic-header">
+                                                  <h2 class="topic-title">Energy in Food (Photosynthesis)</h2>
+                                                  <p class="topic-description">P6 Standard</p>
+                                              </div>
+                                              <div class="resource-grid">
+                                                  <div class="resource-card" data-type="tys">
+                                                      <div class="card-header"><div class="card-icon">🔟</div><h3 class="card-title">Ten-Year Series</h3></div>
+                                                      <div class="card-body">
+                                                          <p class="card-description">Practice questions related to Energy in Food.</p>
+                                                          <a href="https://www.polymathlc.com.sg/eif" target="_blank" rel="noopener noreferrer" class="card-btn">View TYS</a>
+                                                      </div>
+                                                  </div>
+                                              </div>
+                                              <div class="content-panel">
+                                                   <h3>Core Ideas</h3>
+                                                   <ul>
+                                                       <li>Recognise that living things need <strong>energy</strong> from <strong>respiration</strong> to carry out life <strong>processes</strong>.</li>
+                                                       <li>The focus of <strong>respiration</strong> is on the release of <strong>energy</strong> from food.</li>
+                                                       <li>Recognise that the Sun is our primary <strong>source</strong> of <strong>energy</strong> (light and heat).</li>
+                                                       <li>Differentiate between the ways in which <strong>plants</strong> and <strong>animals</strong> obtain <strong>energy</strong>.</li>
+                                                   </ul>
+                                                   <h3>Practices</h3>
+                                                   <ul><li>Investigate the requirements (<strong>water</strong>, <strong>light energy</strong>, and <strong>carbon dioxide</strong>) for photosynthesis (production of <strong>sugar</strong> and <strong>oxygen</strong>).</li></ul>
+                                                   <h3>Values</h3>
+                                                   <ul><li>Show objectivity by using data and information to validate observations and explanations about <strong>photosynthesis</strong>.</li></ul>
+                                              </div>
+                                          </section>
+
+                                          <section id="energyConversion" class="topic-section">
+                                                <div class="topic-header">
+                                                    <h2 class="topic-title">Energy Conversion</h2>
+                                                    <p class="topic-description">P6 Standard</p>
+                                                </div>
+                                                <div class="pdf-container-new">
+                                                    <div class="pdf-controls-new">
+                                                        <a href="https://drive.google.com/uc?export=download&id=1uRZCpIslazt_kg3f13kMZuTCPQ49PP9K"
+                                                          target="_blank"
+                                                          rel="noopener noreferrer"
+                                                          class="download-btn">
+                                                            📖 Download Textbook PDF
+                                                        </a>
+                                                    </div>
+                                                    <div class="pdf-viewer-container">
+                                                        <iframe src="https://drive.google.com/file/d/1uRZCpIslazt_kg3f13kMZuTCPQ49PP9K/preview"
+                                                                width="100%"
+                                                                height="600px"
+                                                                frameborder="0"
+                                                                class="pdf-iframe">
+                                                        </iframe>
+                                                    </div>
+                                                </div>
+                                                <div class="content-panel">
+                                                     <h3>Core Ideas</h3>
+                                                     <ul>
+                                                         <li>Recognise that energy from many resources is derived from the Sun.</li>
+                                                         <li>Give examples of various energy forms:</li>
+                                                         <li>- <strong>Kinetic</strong>, <strong>Potential</strong>, <strong>Light</strong>, <strong>Electrical</strong>, <strong>Sound</strong>, <strong>Heat</strong></li>
+                                                     </ul>
+                                                     <h3>Practices</h3>
+                                                     <ul><li>Investigate energy <strong>conversion</strong> from one form to another.</li></ul>
+                                                     <h3>Values</h3>
+                                                     <ul><li>Show care and concern by responsibly conserving energy.</li></ul>
+                                                     <h3>Notes</h3>
+                                                      <ul>
+                                                          <li>Potential energy is affected by <strong>mass</strong> and <strong>height</strong> above ground.</li>
+                                                          <li>As a pendulum swings upward, <strong>kinetic</strong> energy is converted to <strong>potential</strong> energy. As a pendulum swings downwards, <strong>potential</strong> energy is converted to <strong>kinetic</strong> energy.</li>
+                                                      </ul>
+                                                   </div>
+                                            </section>
+
+            </main>
+        </div>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+
+            // This portal runs INSIDE the Keywords Learning Portal (index.html), which
+            // already requires a signed-in account. The old standalone password gate is
+            // therefore gone: asking a child for a second password after they have
+            // already signed in protects nothing and just blocks the page.
+            initializePortalFeatures();
+
+            // --- Portal Features Initialization ---
+            function initializePortalFeatures() {
+
+                // --- Navigation functionality ---
+                const navButtons = document.querySelectorAll('.nav-btn');
+                const topicSections = document.querySelectorAll('.topic-section');
+
+                function activateSection(targetId) {
+                    navButtons.forEach(btn => btn.classList.remove('active'));
+                    topicSections.forEach(section => section.classList.remove('active'));
+                    const activeButton = document.querySelector(`.nav-btn[data-target="${targetId}"]`);
+                    if (activeButton) {
+                        activeButton.classList.add('active');
+                    }
+                    const targetSection = document.getElementById(targetId);
+                    if (targetSection) {
+                         targetSection.classList.add('active');
+                       }
+                       // Close sidebar on mobile after selection
+                       if (window.innerWidth <= 768) {
+                           const sidebar = document.querySelector('.sidebar');
+                           sidebar.classList.remove('active');
+                           const menuToggle = document.querySelector('.menu-toggle');
+                           if (menuToggle) {
+                               menuToggle.innerHTML = '☰';
+                           }
+                       }
+                   }
+
+                   navButtons.forEach(button => {
+                       button.addEventListener('click', function() {
+                           const targetId = this.getAttribute('data-target');
+                           activateSection(targetId);
+                       });
+                   });
+
+                   // Activate initial section (check hash first, default to exam-papers)
+                   const initialTargetId = window.location.hash ? window.location.hash.substring(1) : 'exam-papers';
+                   const initialTargetElement = document.getElementById(initialTargetId);
+                   if (initialTargetElement && initialTargetElement.classList.contains('topic-section')) {
+                       activateSection(initialTargetId);
+                   } else {
+                       activateSection('exam-papers'); // Default section
+                   }
+
+
+                   // --- Mobile menu toggle ---
+                   const sidebar = document.querySelector('.sidebar');
+                   const mainContent = document.querySelector('.main-content');
+                   let menuToggle;
+
+                   function setupMobileMenu() {
+                       const existingToggle = document.querySelector('.menu-toggle');
+                       if (existingToggle) {
+                           existingToggle.remove();
+                       }
+
+                       if (window.innerWidth <= 768) {
+                           menuToggle = document.createElement('button');
+                           menuToggle.classList.add('menu-toggle');
+                           menuToggle.innerHTML = '☰';
+                           document.body.appendChild(menuToggle);
+
+                           menuToggle.addEventListener('click', function(event) {
+                               event.stopPropagation();
+                               sidebar.classList.toggle('active');
+                               menuToggle.innerHTML = sidebar.classList.contains('active') ? '✕' : '☰';
+                           });
+
+                           mainContent.addEventListener('click', function() {
+                               if (sidebar.classList.contains('active')) {
+                                   setTimeout(() => {
+                                       sidebar.classList.remove('active');
+                                       if (menuToggle) menuToggle.innerHTML = '☰';
+                                   }, 50);
+                               }
+                           });
+                           mainContent.style.marginLeft = '0';
+
+                       } else {
+                           sidebar.classList.remove('active');
+                           const toggleToRemove = document.querySelector('.menu-toggle');
+                           if (toggleToRemove) {
+                               toggleToRemove.remove();
+                               menuToggle = null;
+                           }
+                           mainContent.style.marginLeft = 'var(--sidebar-width)';
+                       }
+                   }
+                   setupMobileMenu();
+                   window.addEventListener('resize', setupMobileMenu);
+
+
+                   // --- Keyword Recall & Link Functionality ---
+                   const correctSound = document.getElementById('correct-sound');
+                   const wrongSound = document.getElementById('wrong-sound');
+
+                   // Data mapping for outcome text to links
+                   const outcomeLinks = {
+                       "Describe the <strong>characteristics</strong> of living things:": { videoUrl: "https://www.youtube.com/watch?v=za5z6WRz29I", questionUrl: "https://www.classmarker.com/online-test/start/?quiz=eac675f26279a514" },
+                       "- Plants (flowering, non-flowering)": { videoUrl: "https://www.youtube.com/watch?v=SIbFuiCfkr8&t=179s" },
+                       "- Fungi (<strong>mould</strong>, mushroom, yeast)": { videoUrl: "https://www.youtube.com/watch?v=5PWcEpAHjGE" },
+                       "- <strong>Bacteria</strong>": { videoUrl: "https://www.youtube.com/watch?v=JZjzQhFG6Ec" },
+                       "Identify electrical <strong>conductors</strong> and insulators.": { videoUrl: "https://www.youtube.com/watch?v=oiKwivoR4dY" },
+                       "Construct simple circuits from circuit diagrams.": { videoUrl: "https://www.youtube.com/watch?v=p_T7aDxtA90" },
+                       "- Number of <strong>batteries</strong> (arranged in series)": { videoUrl: "https://www.youtube.com/watch?v=jJkfbivQDps" },
+                       "- Number of <strong>bulbs</strong> (arranged in <strong>series</strong> and <strong>parallel</strong>)": { videoUrl: "https://www.youtube.com/watch?v=XSukRnxGy5c" },
+                       "Recognise that a cell is a <strong>basic</strong> unit of life.": { videoUrl: "https://www.youtube.com/watch?v=8vo59AKzU4Q" },
+                       "- <strong>Pollination</strong>": { videoUrl: "https://www.youtube.com/watch?v=W-daJxfe4As" },
+                       "- <strong>Fertilisation</strong> (seed production)": { videoUrl: "https://www.youtube.com/watch?v=FHPou1egDKA" },
+                       "- <strong>Seed dispersal</strong>": { videoUrl: "https://www.youtube.com/watch?v=3CCOWHa-qfc" },
+                       "- <strong>Germination</strong>": { videoUrl: "https://www.youtube.com/watch?v=JSe_VUMymjo" },
+                   };
+
+                   // Function to create the keyword recall element
+                   function createKeywordRecallElement(keyword) {
+                       const wrapper = document.createElement('span');
+                       wrapper.className = 'keyword-recall';
+                       wrapper.dataset.answer = keyword;
+
+                       const input = document.createElement('input');
+                       input.type = 'text';
+                       input.className = 'keyword-input';
+                       input.size = Math.max(keyword.length, 5);
+
+                       const feedbackIcon = document.createElement('span');
+                       feedbackIcon.className = 'feedback-icon';
+
+                       const showButton = document.createElement('button');
+                       showButton.className = 'show-answer-btn';
+                       showButton.textContent = 'Show';
+
+                       wrapper.appendChild(input);
+                       wrapper.appendChild(feedbackIcon);
+                       wrapper.appendChild(showButton);
+
+                       input.addEventListener('blur', () => {
+                           const userAnswer = input.value.trim().toLowerCase();
+                           const correctAnswer = wrapper.dataset.answer.toLowerCase();
+                           feedbackIcon.classList.remove('correct', 'incorrect');
+                           if (input.value.trim() === '') return;
+
+                           if (userAnswer === correctAnswer) {
+                               feedbackIcon.classList.add('correct');
+                               correctSound.play().catch(e => console.log("Audio play failed:", e));
+                           } else {
+                               feedbackIcon.classList.add('incorrect');
+                               if (wrongSound.getAttribute('src')) {
+                                   wrongSound.play().catch(e => console.log("Audio play failed:", e));
+                               }
+                           }
+                       });
+
+                       showButton.addEventListener('click', () => {
+                           input.value = wrapper.dataset.answer;
+                           feedbackIcon.classList.remove('incorrect');
+                           feedbackIcon.classList.add('correct');
+                           input.disabled = true;
+                           showButton.disabled = true;
+                       });
+
+                       return wrapper;
+                   }
+
+                   // Function to create link icons
+                   function createLinkIcon(url, type) {
+                       const link = document.createElement('a');
+                       link.href = url;
+                       link.target = '_blank';
+                       link.rel = 'noopener noreferrer';
+                       link.className = 'link-icon';
+
+                       const img = document.createElement('img');
+                       if (type === 'video') {
+                           img.src = 'https://img.icons8.com/ios-filled/50/000000/play-button-circled.png';
+                           img.alt = 'Play Video';
+                           img.title = 'Watch related video';
+                       } else if (type === 'question') {
+                           img.src = 'https://img.icons8.com/ios-glyphs/30/000000/question-mark.png';
+                           img.alt = 'Sample Question';
+                           img.title = 'View related questions';
+                       }
+                       link.appendChild(img);
+                       return link;
+                   }
+
+                   // Find all content panels and process list items
+                   const contentPanels = document.querySelectorAll('.content-panel');
+                   contentPanels.forEach(panel => {
+                       const listItems = panel.querySelectorAll('li');
+                       listItems.forEach(li => {
+                           // --- Process Keywords ---
+                           const strongElements = Array.from(li.querySelectorAll('strong'));
+
+                           strongElements.forEach(strongTag => {
+                               const keyword = strongTag.textContent.trim();
+                               if (keyword) {
+                                   const recallElement = createKeywordRecallElement(keyword);
+                                   strongTag.parentNode.replaceChild(recallElement, strongTag);
+                               }
+                           });
+
+                           // --- Append Links based on data-outcome-text ---
+                           const lookupKey = li.dataset.outcomeText;
+                           if (lookupKey) {
+                               const links = outcomeLinks[lookupKey];
+                               if (links) {
+                                   if (links.videoUrl) {
+                                       li.appendChild(createLinkIcon(links.videoUrl, 'video'));
+                                   }
+                                   if (links.questionUrl) {
+                                       li.appendChild(createLinkIcon(links.questionUrl, 'question'));
+                                   }
+                               }
+                           }
+                       });
+                   });
+
+
+                   // --- MOE Syllabus PDF Viewer with Search ---
+                   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.worker.min.js';
+
+                   const pdfIframe = document.getElementById('pdfIframe');
+                   const toggleButton = document.getElementById('toggleViewer');
+                   const toggleSearchButton = document.getElementById('toggleSearch');
+                   const searchPanel = document.getElementById('searchPanel');
+                   const fallbackMessage = document.getElementById('fallbackMessage');
+
+                   let currentViewer = 'google'; // 'google' or 'direct'
+                   let pdfDoc = null;
+                   let pdfText = [];
+                   let searchResults = [];
+                   let currentMatchIndex = -1;
+                   let isTextExtracted = false;
+
+                   const pdfUrl = 'https://drive.google.com/uc?export=download&id=1_B5jA6N_XTUzXDRash9rF9DDVy3-2e78';
+
+                   const viewers = {
+                       google: `https://drive.google.com/file/d/1_B5jA6N_XTUzXDRash9rF9DDVy3-2e78/preview`,
+                       direct: pdfUrl
+                   };
+
+                   async function initializeSearch() {
+                       if (pdfDoc || isTextExtracted) return;
+
+                       const searchStatus = document.getElementById('searchStatus');
+                       if (searchStatus) {
+                           searchStatus.textContent = 'Loading PDF for search...';
+                       }
+
+                       try {
+                           pdfDoc = await pdfjsLib.getDocument(pdfUrl).promise;
+                           await extractAllText();
+                           isTextExtracted = true;
+                           if (searchStatus) {
+                               searchStatus.textContent = 'PDF loaded. Enter a keyword to search.';
+                           }
+                       } catch (error) {
+                           console.error('Error loading PDF for search:', error);
+                           if (searchStatus) {
+                               searchStatus.textContent = 'Error loading PDF for search. You can still view the document above.';
+                           }
+                       }
+                   }
+
+                   async function extractAllText() {
+                       pdfText = [];
+                       for (let i = 1; i <= pdfDoc.numPages; i++) {
+                           const page = await pdfDoc.getPage(i);
+                           const textContent = await page.getTextContent();
+                           const pageText = textContent.items.map(item => item.str).join(' ');
+                           pdfText.push(pageText);
+                       }
+                   }
+
+                   function performSearch(query) {
+                       if (!query.trim()) {
+                           clearSearchResults();
+                           return;
+                       }
+
+                       const searchStatus = document.getElementById('searchStatus');
+
+                       if (!isTextExtracted) {
+                           if (searchStatus) {
+                               searchStatus.textContent = 'PDF not loaded yet. Please wait...';
+                           }
+                           initializeSearch();
+                           return;
+                       }
+
+                       searchResults = [];
+                       const queryLower = query.toLowerCase();
+
+                       pdfText.forEach((pageText, pageIndex) => {
+                           const pageTextLower = pageText.toLowerCase();
+                           let index = 0;
+
+                           while (index < pageTextLower.length) {
+                               const foundIndex = pageTextLower.indexOf(queryLower, index);
+                               if (foundIndex === -1) break;
+
+                               const start = Math.max(0, foundIndex - 50);
+                               const end = Math.min(pageText.length, foundIndex + query.length + 50);
+                               const context = pageText.substring(start, end);
+
+                               searchResults.push({
+                                   pageNumber: pageIndex + 1,
+                                   context: context,
+                                   matchIndex: foundIndex,
+                                   query: query
+                               });
+
+                               index = foundIndex + 1;
+                           }
+                       });
+
+                       displaySearchResults();
+                   }
+
+                   function displaySearchResults() {
+                       const searchStatus = document.getElementById('searchStatus');
+                       const searchMatches = document.getElementById('searchMatches');
+                       const searchNavigation = document.getElementById('searchNavigation');
+
+                       if (searchResults.length === 0) {
+                           if (searchStatus) {
+                               searchStatus.textContent = 'No matches found.';
+                           }
+                           if (searchMatches) {
+                               searchMatches.innerHTML = '';
+                           }
+                           if (searchNavigation) {
+                               searchNavigation.style.display = 'none';
+                           }
+                           return;
+                       }
+
+                       if (searchStatus) {
+                           searchStatus.textContent = `Found ${searchResults.length} match${searchResults.length > 1 ? 'es' : ''} across ${new Set(searchResults.map(r => r.pageNumber)).size} page${new Set(searchResults.map(r => r.pageNumber)).size > 1 ? 's' : ''}.`;
+                       }
+
+                       if (searchMatches) {
+                           searchMatches.innerHTML = '';
+                           searchResults.forEach((result, index) => {
+                               const matchItem = document.createElement('div');
+                               matchItem.className = 'match-item';
+                               matchItem.dataset.index = index;
+
+                               const highlightedContext = result.context.replace(
+                                   new RegExp(`(${escapeRegExp(result.query)})`, 'gi'),
+                                   '<span class="highlight">$1</span>'
+                               );
+
+                               matchItem.innerHTML = `
+                                   <div class="match-page">Page ${result.pageNumber}</div>
+                                   <div class="match-text">...${highlightedContext}...</div>
+                               `;
+
+                               matchItem.addEventListener('click', () => {
+                                   currentMatchIndex = index;
+                                   updateMatchSelection();
+                               });
+
+                               searchMatches.appendChild(matchItem);
+                           });
+                       }
+
+                       if (searchNavigation) {
+                           searchNavigation.style.display = 'flex';
+                           currentMatchIndex = 0;
+                           updateMatchSelection();
+                       }
+                   }
+
+                   function updateMatchSelection() {
+                       const matchItems = document.querySelectorAll('.match-item');
+                       const matchCounter = document.getElementById('matchCounter');
+                       const prevBtn = document.getElementById('prevMatch');
+                       const nextBtn = document.getElementById('nextMatch');
+
+                       matchItems.forEach((item, index) => {
+                           item.classList.toggle('active', index === currentMatchIndex);
+                       });
+
+                       if (matchCounter) {
+                           matchCounter.textContent = `${currentMatchIndex + 1} of ${searchResults.length}`;
+                       }
+
+                       if (prevBtn) prevBtn.disabled = currentMatchIndex <= 0;
+                       if (nextBtn) nextBtn.disabled = currentMatchIndex >= searchResults.length - 1;
+
+                       if (matchItems[currentMatchIndex]) {
+                           matchItems[currentMatchIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                       }
+                   }
+
+                   function clearSearchResults() {
+                       const searchStatus = document.getElementById('searchStatus');
+                       const searchMatches = document.getElementById('searchMatches');
+                       const searchNavigation = document.getElementById('searchNavigation');
+                       const searchInput = document.getElementById('pdfSearchInput');
+
+                       if (searchStatus) {
+                           searchStatus.textContent = isTextExtracted ? 'Enter a keyword to search' : 'PDF loading...';
+                       }
+                       if (searchMatches) {
+                           searchMatches.innerHTML = '';
+                       }
+                       if (searchNavigation) {
+                           searchNavigation.style.display = 'none';
+                       }
+                       if (searchInput) {
+                           searchInput.value = '';
+                       }
+
+                       searchResults = [];
+                       currentMatchIndex = -1;
+                   }
+
+                   function escapeRegExp(string) {
+                       return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                   }
+
+                   // Event listeners
+                   if (toggleButton) {
+                       toggleButton.addEventListener('click', function() {
+                           currentViewer = currentViewer === 'google' ? 'direct' : 'google';
+
+                           if (pdfIframe) {
+                               pdfIframe.src = viewers[currentViewer];
+                               toggleButton.textContent = currentViewer === 'google' ? '🔄 Switch to Direct View' : '🔄 Switch to Google Viewer';
+                           }
+                       });
+                   }
+
+                   if (toggleSearchButton) {
+                       toggleSearchButton.addEventListener('click', function() {
+                           if (searchPanel) {
+                               const isVisible = searchPanel.style.display !== 'none';
+                               searchPanel.style.display = isVisible ? 'none' : 'block';
+                               toggleSearchButton.textContent = isVisible ? '🔍 Show Search' : '🔍 Hide Search';
+
+                               if (!isVisible && !isTextExtracted) {
+                                   initializeSearch();
+                               }
+                           }
+                       });
+                   }
+
+                   const searchInput = document.getElementById('pdfSearchInput');
+                   const searchButton = document.getElementById('searchButton');
+                   const clearButton = document.getElementById('clearSearch');
+
+                   if (searchButton) {
+                       searchButton.addEventListener('click', () => {
+                           const query = searchInput ? searchInput.value : '';
+                           performSearch(query);
+                       });
+                   }
+
+                   if (searchInput) {
+                       searchInput.addEventListener('keydown', (e) => {
+                           if (e.key === 'Enter') {
+                               performSearch(searchInput.value);
+                           }
+                       });
+                   }
+
+                   if (clearButton) {
+                       clearButton.addEventListener('click', clearSearchResults);
+                   }
+
+                   const prevMatch = document.getElementById('prevMatch');
+                   const nextMatch = document.getElementById('nextMatch');
+
+                   if (prevMatch) {
+                       prevMatch.addEventListener('click', () => {
+                           if (currentMatchIndex > 0) {
+                               currentMatchIndex--;
+                               updateMatchSelection();
+                           }
+                       });
+                   }
+
+                   if (nextMatch) {
+                       nextMatch.addEventListener('click', () => {
+                           if (currentMatchIndex < searchResults.length - 1) {
+                               currentMatchIndex++;
+                               updateMatchSelection();
+                           }
+                       });
+                   }
+
+                   // Show fallback after timeout if iframe doesn't load
+                   if (pdfIframe) {
+                       let loadTimeout = setTimeout(() => {
+                           if (fallbackMessage) {
+                               fallbackMessage.style.display = 'block';
+                           }
+                       }, 15000);
+
+                       pdfIframe.addEventListener('load', () => {
+                           clearTimeout(loadTimeout);
+                           if (fallbackMessage) {
+                               fallbackMessage.style.display = 'none';
+                           }
+                       });
+                   }
+
+            } // End initializePortalFeatures
+
+        });
+    </script>
+ </body>
+ </html>
