@@ -524,7 +524,7 @@ function notesRenderBody() {
     .tn-upload .tn-sub { margin:0 0 16px; font-size:0.88rem; color:var(--text-muted); line-height:1.55; }
     .tn-upload textarea { width:100%; }
     .tn-upbtns { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:12px; }
-    #notesStatus { font-size:0.86rem; color:var(--primary-dark,#2f5d3f); margin-top:12px; line-height:1.5; }
+    #notesStatus { font-size:0.86rem; color:var(--primary-dark,#064834); margin-top:12px; line-height:1.5; }
     .tn-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px 24px; margin-bottom:16px; }
     .tn-head { display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap; margin-bottom:12px; }
     .tn-head > div:first-child { flex:1; min-width:200px; }
@@ -534,9 +534,9 @@ function notesRenderBody() {
     .tn-row { display:flex; gap:12px; align-items:flex-start; padding:7px 0; }
     .tn-label { flex:none; width:132px; font-size:0.76rem; font-weight:700; color:var(--text-muted); padding-top:3px; }
     .tn-chips { display:flex; flex-wrap:wrap; gap:6px; flex:1; }
-    .tn-chip { font-size:0.76rem; font-weight:600; padding:3px 10px; border-radius:999px; border:1px solid var(--border); background:var(--surface-alt,#faf8f5); }
-    .tn-chip.tn-topic { background:var(--primary-light,#eef4f0); border-color:var(--primary,#4a7c59); color:var(--primary-dark,#2f5d3f); }
-    .tn-chip.tn-kw { background:#fdf3e3; border-color:#d1892b; color:#8a5a12; }
+    .tn-chip { font-size:0.76rem; font-weight:600; padding:3px 10px; border-radius:999px; border:1px solid var(--border); background:var(--surface-alt,#fafbfa); }
+    .tn-chip.tn-topic { background:var(--primary-light,#eaf3ef); border-color:var(--primary,#0b6b4f); color:var(--primary-dark,#064834); }
+    .tn-chip.tn-kw { background:#fdf4e3; border-color:#c08a2e; color:#7a5410; }
     .tn-text { flex:1; font-size:0.85rem; line-height:1.55; color:var(--text); }
     .tn-comment { font-style:italic; color:var(--text-muted); }
     .tn-none { font-size:0.8rem; color:var(--text-muted); }
@@ -1452,7 +1452,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.181.0';
+const APP_VERSION = 'v1.182.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -3688,10 +3688,10 @@ document.addEventListener('click', function (e) {
 (function injectEditorToolStyles() {
   const css = `
   .mcq-correct-radio { appearance:none; -webkit-appearance:none; width:20px; height:20px; flex-shrink:0; margin:0; border:2px solid #9aa0a6; border-radius:50%; background:#fff; cursor:pointer; transition:border-color .15s, background .15s; }
-  .mcq-correct-radio:hover { border-color:var(--primary,#4a7c59); }
-  .mcq-correct-radio:checked { border-color:var(--primary,#4a7c59); background:var(--primary,#4a7c59); box-shadow:inset 0 0 0 3px #fff; }
-  .improve-btn { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border:1px solid var(--border,#e2ddd5); background:#fff; border-radius:8px; cursor:pointer; font-size:0.72rem; font-weight:600; color:var(--primary,#4a7c59); vertical-align:middle; }
-  .improve-btn:hover { border-color:var(--primary,#4a7c59); background:var(--primary-light,#e8f3ec); }
+  .mcq-correct-radio:hover { border-color:var(--primary,#0b6b4f); }
+  .mcq-correct-radio:checked { border-color:var(--primary,#0b6b4f); background:var(--primary,#0b6b4f); box-shadow:inset 0 0 0 3px #fff; }
+  .improve-btn { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border:1px solid var(--border,#e3e6e4); background:#fff; border-radius:8px; cursor:pointer; font-size:0.72rem; font-weight:600; color:var(--primary,#0b6b4f); vertical-align:middle; }
+  .improve-btn:hover { border-color:var(--primary,#0b6b4f); background:var(--primary-light,#e8f3ec); }
   .improve-btn:disabled { opacity:.6; cursor:default; }`;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
 })();
@@ -3730,7 +3730,7 @@ document.addEventListener('click', async function (e) {
   finally { btn.disabled = false; btn.innerHTML = orig; }
 });
 
-const COMMON_MISTAKE_COLORS = { teal: '#0d9488', orange: '#ea580c', red: '#dc2626', purple: '#7c3aed', blue: '#2563eb' };
+const COMMON_MISTAKE_COLORS = { teal: '#0d9488', orange: '#ea580c', red: '#dc2626', purple: '#7c3aed', blue: '#2d6ca8' };
 
 // Editor body markup for the worksheet-creator block types.
 function renderImportedBlockEditorBody(block) {
@@ -3788,7 +3788,7 @@ function renderImportedBlockEditorBody(block) {
                      value="${n}" oninput="saveBlockNum('${id}','lines',this.value,1,40)"></label>
             <span style="font-size:0.8rem;color:var(--text-muted);">Students get a typing box in practice (marked by AI) and ruled lines on printed worksheets.</span>
           </div>
-          <div style="border:1px dashed var(--border);border-radius:8px;padding:10px 12px;background:var(--surface-alt,#faf8f5);">
+          <div style="border:1px dashed var(--border);border-radius:8px;padding:10px 12px;background:var(--surface-alt,#fafbfa);">
             <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;">Answer space preview:</div>
             ${Array.from({ length: Math.min(n, 6) }).map(() => '<div style="border-bottom:1.5px solid #cfcfcf;height:22px;"></div>').join('')}
             ${n > 6 ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">…and ${n - 6} more line${n - 6 === 1 ? '' : 's'}</div>` : ''}
@@ -4430,11 +4430,11 @@ const _voice = { active: false, recorder: null, chunks: [], stream: null, btn: n
                  endsAt: 0, hardStop: null, tick: null, cancelled: false, hitLimit: false };
 (function injectMicStyles() {
   const css = `
-  .mic-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;min-width:30px;border:1px solid var(--border,#e2ddd5);background:#fff;border-radius:8px;cursor:pointer;font-size:0.95rem;line-height:1;padding:0;vertical-align:middle;}
-  .mic-btn:hover{border-color:var(--primary,#4a7c59);}
+  .mic-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;min-width:30px;border:1px solid var(--border,#e3e6e4);background:#fff;border-radius:8px;cursor:pointer;font-size:0.95rem;line-height:1;padding:0;vertical-align:middle;}
+  .mic-btn:hover{border-color:var(--primary,#0b6b4f);}
   .mic-btn.recording{background:#fee2e2;border-color:#dc2626;animation:micpulse 1s ease-in-out infinite;}
   .mic-btn.busy{opacity:.6;cursor:default;}
-  .mic-cancel{cursor:pointer;font:inherit;font-size:0.72rem;line-height:1;padding:5px 10px;margin-left:6px;border-radius:8px;border:1px solid var(--border,#e2ddd5);background:#fff;color:var(--text-muted,#7a756d);}
+  .mic-cancel{cursor:pointer;font:inherit;font-size:0.72rem;line-height:1;padding:5px 10px;margin-left:6px;border-radius:8px;border:1px solid var(--border,#e3e6e4);background:#fff;color:var(--text-muted,#666c71);}
   .mic-cancel:hover{border-color:#dc2626;color:#b3261e;}
   @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5);}50%{box-shadow:0 0 0 5px rgba(220,38,38,0);}}`;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
@@ -4667,8 +4667,8 @@ function useOriginalImage(blockId) {
   const css = `
   #cropStage { position:relative; display:inline-block; max-width:100%; line-height:0; touch-action:none; user-select:none; -webkit-user-select:none; overflow:hidden; }
   #cropImg { display:block; max-width:82vw; max-height:60vh; }
-  #cropBox { position:absolute; box-sizing:border-box; border:2px solid var(--primary,#4a7c59); box-shadow:0 0 0 9999px rgba(0,0,0,0.5); cursor:move; }
-  .crop-h { position:absolute; width:16px; height:16px; background:#fff; border:2px solid var(--primary,#4a7c59); border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+  #cropBox { position:absolute; box-sizing:border-box; border:2px solid var(--primary,#0b6b4f); box-shadow:0 0 0 9999px rgba(0,0,0,0.5); cursor:move; }
+  .crop-h { position:absolute; width:16px; height:16px; background:#fff; border:2px solid var(--primary,#0b6b4f); border-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,.4); }
   .crop-h[data-h="nw"]{left:-9px;top:-9px;cursor:nwse-resize;} .crop-h[data-h="ne"]{right:-9px;top:-9px;cursor:nesw-resize;}
   .crop-h[data-h="sw"]{left:-9px;bottom:-9px;cursor:nesw-resize;} .crop-h[data-h="se"]{right:-9px;bottom:-9px;cursor:nwse-resize;}
   .crop-h[data-h="n"]{left:calc(50% - 8px);top:-9px;cursor:ns-resize;} .crop-h[data-h="s"]{left:calc(50% - 8px);bottom:-9px;cursor:ns-resize;}
@@ -4791,17 +4791,17 @@ async function applyCropTool() {
 (function injectAnnotStyles() {
   const css = `
   .annot-tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:center; margin-bottom:12px; }
-  .annot-tool { padding:6px 12px; border:1.5px solid var(--border,#e2ddd5); background:#fff; border-radius:8px; cursor:pointer; font-size:0.82rem; }
-  .annot-tool:hover { border-color:var(--primary,#4a7c59); }
-  .annot-tool.active { border-color:var(--primary,#4a7c59); background:var(--primary-light,#e8f3ec); color:var(--primary,#4a7c59); font-weight:700; }
+  .annot-tool { padding:6px 12px; border:1.5px solid var(--border,#e3e6e4); background:#fff; border-radius:8px; cursor:pointer; font-size:0.82rem; }
+  .annot-tool:hover { border-color:var(--primary,#0b6b4f); }
+  .annot-tool.active { border-color:var(--primary,#0b6b4f); background:var(--primary-light,#e8f3ec); color:var(--primary,#0b6b4f); font-weight:700; }
   /* The paint bucket shows what it will pour: the strip along its base (and the
      drip) are the exact colour currently chosen, updated live with the picker. */
   .annot-bucket { width:17px; height:18px; vertical-align:-4px; margin-right:2px; overflow:visible; }
   .annot-bucket-paint { fill:var(--annot-paint,#e23c3c); stroke:rgba(0,0,0,0.28); stroke-width:0.7; }
-  .annot-tools kbd, .hint kbd { font-family:'Space Mono',monospace; font-size:0.72em; padding:1px 5px; border:1px solid var(--border,#e2ddd5);
+  .annot-tools kbd, .hint kbd { font-family:'Space Mono',monospace; font-size:0.72em; padding:1px 5px; border:1px solid var(--border,#e3e6e4);
     border-bottom-width:2px; border-radius:4px; background:var(--surface,#fff); white-space:nowrap; }
   #annotStage.moving #annotCanvas { cursor:move; }
-  #annotStage { position:relative; display:block; margin:0 auto; width:86vw; max-width:1080px; height:56vh; overflow:hidden; line-height:0; background:#eef0ee; border:1px solid var(--border,#e2ddd5); border-radius:6px; touch-action:none; }
+  #annotStage { position:relative; display:block; margin:0 auto; width:86vw; max-width:1080px; height:56vh; overflow:hidden; line-height:0; background:#eef0ee; border:1px solid var(--border,#e3e6e4); border-radius:6px; touch-action:none; }
   #annotCanvas { position:absolute; top:0; left:0; transform-origin:0 0; touch-action:none; cursor:crosshair; image-rendering:auto; }
   #annotSelCanvas { position:absolute; top:0; left:0; transform-origin:0 0; pointer-events:none; z-index:4; }
   #annotCanvas.pixelated { image-rendering:pixelated; image-rendering:crisp-edges; }
@@ -4811,10 +4811,10 @@ async function applyCropTool() {
   /* With the Move tool active the whole label is a drag target, not just its
      handle — that is what "move" means, and hunting for a 6px tab is not it. */
   .annot-textbox.movable .annot-textbox-input { cursor:move; }
-  .annot-textbox-input { border:1px dashed var(--primary,#4a7c59); background:rgba(255,255,255,0.92); border-radius:4px; outline:none; font-family:'DM Sans',sans-serif; font-weight:600; padding:1px 4px; line-height:1.3; min-width:60px; color:inherit; }
-  .annot-textbox-handle { position:absolute; top:-19px; left:-1px; cursor:move; user-select:none; touch-action:none; background:var(--primary,#4a7c59); color:#fff; font-size:11px; line-height:1; padding:3px 6px; border-radius:4px 4px 0 0; white-space:nowrap; }
-  #annotCloneSrc { position:absolute; z-index:6; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; border:2px solid #2563eb; background:rgba(37,99,235,0.18); box-shadow:0 0 0 1px rgba(255,255,255,0.8); pointer-events:none; }
-  #annotCloneSrc::before, #annotCloneSrc::after { content:''; position:absolute; background:#2563eb; }
+  .annot-textbox-input { border:1px dashed var(--primary,#0b6b4f); background:rgba(255,255,255,0.92); border-radius:4px; outline:none; font-family:'DM Sans',sans-serif; font-weight:600; padding:1px 4px; line-height:1.3; min-width:60px; color:inherit; }
+  .annot-textbox-handle { position:absolute; top:-19px; left:-1px; cursor:move; user-select:none; touch-action:none; background:var(--primary,#0b6b4f); color:#fff; font-size:11px; line-height:1; padding:3px 6px; border-radius:4px 4px 0 0; white-space:nowrap; }
+  #annotCloneSrc { position:absolute; z-index:6; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; border:2px solid #2d6ca8; background:rgba(37,99,235,0.18); box-shadow:0 0 0 1px rgba(255,255,255,0.8); pointer-events:none; }
+  #annotCloneSrc::before, #annotCloneSrc::after { content:''; position:absolute; background:#2d6ca8; }
   #annotCloneSrc::before { left:6px; top:1px; width:2px; height:12px; }
   #annotCloneSrc::after { top:6px; left:1px; height:2px; width:12px; }`;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
@@ -6517,10 +6517,10 @@ function checkEditorDuplicate() {
   banner.innerHTML =
     `<span style="font-size:1.3rem;line-height:1;">🟡</span>
      <div style="flex:1;min-width:220px;">
-       <div style="font-weight:700;color:#92400e;margin-bottom:2px;">Possible duplicate (${dup.pct}% match)</div>
-       <div style="font-size:0.84rem;color:#92400e;line-height:1.5;">This looks a lot like <strong>“${escapeHtml(dup.title)}”</strong> already in your bank. Review before saving.</div>
+       <div style="font-weight:700;color:#7a5410;margin-bottom:2px;">Possible duplicate (${dup.pct}% match)</div>
+       <div style="font-size:0.84rem;color:#7a5410;line-height:1.5;">This looks a lot like <strong>“${escapeHtml(dup.title)}”</strong> already in your bank. Review before saving.</div>
      </div>
-     ${_dupSeeOriginalBtn(dup, 'white-space:nowrap;border-color:#fcd34d;color:#92400e;')}`;
+     ${_dupSeeOriginalBtn(dup, 'white-space:nowrap;border-color:#e0b768;color:#7a5410;')}`;
 }
 function _hideDupBanner() { const b = document.getElementById('dupWarnBanner'); if (b) { b.style.display = 'none'; b.innerHTML = ''; } }
 
@@ -8171,7 +8171,7 @@ function usageCardAttrs(q) {
 
 (function injectUsageStyles() {
   const css = `
-  .qb-tag.usage-none { background: var(--bg-tertiary, #f2f1ec); color: var(--text-muted, #7a756d); }
+  .qb-tag.usage-none { background: var(--bg-tertiary, #f2f1ec); color: var(--text-muted, #666c71); }
   .qb-card.has-usage {
     background: var(--u-tint);
     border-color: var(--u-edge);
@@ -8263,7 +8263,7 @@ function renderQuestionBank() {
               ${qSecondaryTagsHtml(q)}
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
               ${usageBadgeHtml(q)}
-              ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="Hidden from practice; still shown in PSLE Papers">🚫 Not in syllabus</span>` : ''}
+              ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fdf4e3;color:#7a5410;border:1px solid #e0b768;" title="Hidden from practice; still shown in PSLE Papers">🚫 Not in syllabus</span>` : ''}
               ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
             </div>
           </div>
@@ -8641,9 +8641,9 @@ function renderVettingList() {
             <div class="qb-card-meta">
               <span class="qb-tag category">${escapeHtml(q.category)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
-              ${dup ? `<span class="qb-tag" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;" title="Looks ${dup.pct}% similar to “${escapeHtml(dup.title)}” already in the bank">🟡 Possible duplicate</span>` : ''}
+              ${dup ? `<span class="qb-tag" style="background:#fdf4e3;color:#7a5410;border:1px solid #e0b768;" title="Looks ${dup.pct}% similar to “${escapeHtml(dup.title)}” already in the bank">🟡 Possible duplicate</span>` : ''}
               ${isNew ? '<span class="qb-tag" style="background:var(--accent-orange-light);color:var(--accent-orange);" title="Just added by Rapid add — review and approve">⚡ Just added</span>' : ''}
-              ${q.topicConfidence === 'low' ? '<span class="qb-tag" style="background:#fee2e2;color:#dc2626;" title="AI was unsure of this topic — please check it">⚠ check topic</span>' : q.topicConfidence === 'medium' ? '<span class="qb-tag" style="background:#fef3c7;color:#b45309;" title="AI was fairly sure of this topic — worth a glance">~ topic?</span>' : ''}
+              ${q.topicConfidence === 'low' ? '<span class="qb-tag" style="background:#fee2e2;color:#dc2626;" title="AI was unsure of this topic — please check it">⚠ check topic</span>' : q.topicConfidence === 'medium' ? '<span class="qb-tag" style="background:#fdf4e3;color:#b45309;" title="AI was fairly sure of this topic — worth a glance">~ topic?</span>' : ''}
               <span class="vetting-badge ${statusClass}">${statusClass.charAt(0).toUpperCase() + statusClass.slice(1)}</span>
               ${_vetTimeLabel(q)}
             </div>
@@ -8661,7 +8661,7 @@ function renderVettingList() {
           </div>
         </div>
         <div class="qb-card-preview">${escapeHtml(preview)}</div>
-        ${dup ? `<div class="vetting-flag-note" style="background:#fffbeb;border-color:#fcd34d;color:#92400e;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">🟡 <b>Possible duplicate</b> of “${escapeHtml(dup.title)}” (${dup.pct}% match). ${_dupSeeOriginalBtn(dup, 'font-size:0.76rem;padding:4px 10px;border-color:#fcd34d;color:#92400e;')}</div>` : ''}
+        ${dup ? `<div class="vetting-flag-note" style="background:#fffbeb;border-color:#e0b768;color:#7a5410;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">🟡 <b>Possible duplicate</b> of “${escapeHtml(dup.title)}” (${dup.pct}% match). ${_dupSeeOriginalBtn(dup, 'font-size:0.76rem;padding:4px 10px;border-color:#e0b768;color:#7a5410;')}</div>` : ''}
         ${q.status === 'flagged' && q._flag ? `<div class="vetting-flag-note">🚩 <b>Flagged by ${escapeHtml(q._flag.by || 'a student')}</b>${q._flag.when ? ' · ' + escapeHtml(q._flag.when) : ''}${q._flag.comment ? `<div class="vfn-comment">“${escapeHtml(q._flag.comment)}”</div>` : ''}</div>` : ''}
         ${isNew ? `<div style="margin-top:10px;"><button class="btn btn-outline" style="font-size:0.78rem;padding:5px 12px;" onclick="editQuestion('${q.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;vertical-align:-2px;margin-right:4px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Open in editor</button></div>` : ''}
       </div>`;
@@ -8687,7 +8687,7 @@ function _vetFocusScroll() {
     }
     const prevShadow = el.style.boxShadow;   // keep the duplicate-warning outline, if any
     el.style.transition = 'box-shadow .3s ease';
-    el.style.boxShadow = '0 0 0 3px var(--primary, #4a7c59)';
+    el.style.boxShadow = '0 0 0 3px var(--primary, #0b6b4f)';
     setTimeout(() => { el.style.boxShadow = prevShadow; }, 2200);
   });
 }
@@ -9412,12 +9412,12 @@ function doPrintWorksheetOpen() {
   #printProgress{ position:fixed; inset:0; z-index:6000; display:none; align-items:center; justify-content:center; background:rgba(20,22,20,0.55); backdrop-filter:blur(2px); }
   #printProgress.show{ display:flex; }
   #printProgress .pp-card{ background:#fff; border-radius:16px; padding:26px 30px; max-width:340px; width:calc(100% - 48px); text-align:center; box-shadow:0 18px 50px rgba(0,0,0,0.28); }
-  #printProgress .pp-spin{ width:38px; height:38px; margin:2px auto 14px; border:4px solid var(--primary-light,#e8f3ec); border-top-color:var(--primary,#4a7c59); border-radius:50%; animation:ppspin 0.8s linear infinite; }
+  #printProgress .pp-spin{ width:38px; height:38px; margin:2px auto 14px; border:4px solid var(--primary-light,#e8f3ec); border-top-color:var(--primary,#0b6b4f); border-radius:50%; animation:ppspin 0.8s linear infinite; }
   @keyframes ppspin{ to{ transform:rotate(360deg); } }
   #printProgress .pp-msg{ font-size:0.95rem; font-weight:600; color:var(--text,#1a1a1a); line-height:1.45; }
-  #printProgress .pp-sub{ font-size:0.8rem; color:var(--text-muted,#7a756d); margin-top:6px; }
+  #printProgress .pp-sub{ font-size:0.8rem; color:var(--text-muted,#666c71); margin-top:6px; }
   #printProgress .pp-bar{ height:7px; border-radius:6px; background:var(--primary-light,#e8f3ec); margin-top:14px; overflow:hidden; }
-  #printProgress .pp-bar-fill{ height:100%; width:0%; background:var(--primary,#4a7c59); border-radius:6px; transition:width 0.25s ease; }
+  #printProgress .pp-bar-fill{ height:100%; width:0%; background:var(--primary,#0b6b4f); border-radius:6px; transition:width 0.25s ease; }
   @media print{ #printProgress{ display:none !important; } }`;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
   const el = document.createElement('div'); el.id = 'printProgress';
@@ -10810,7 +10810,7 @@ function _openSection(items, label, modelAnswer, bg, fg, containerSel, source) {
       ${labelHtml}
       <div style="display:flex;gap:6px;align-items:flex-start;">
         <textarea class="open-answer" data-oidx="${oidx}" rows="3" placeholder="Type or speak your answer..."
-          style="flex:1;min-width:0;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.95rem;line-height:1.5;resize:vertical;background:#fff;color:var(--on-surface,#1c1c19);"></textarea>
+          style="flex:1;min-width:0;padding:10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.95rem;line-height:1.5;resize:vertical;background:#fff;color:var(--on-surface,#14161a);"></textarea>
         ${micButtonHtml('', 'Speak your answer')}
       </div>
       ${_partActionsHtml(containerSel, 'open', oidx)}
@@ -10829,9 +10829,9 @@ function _isAdmin() { return !!(currentUser && currentUser.role === 'admin'); }
 function _adminAnswerToolHtml(containerSel, oidx, model) {
   if (!_isAdmin()) return '';
   const has = (model || '').trim();
-  return `<div class="admin-ans-tool" data-aatool="${containerSel}" data-aoidx="${oidx}" style="margin-top:6px;padding:8px 10px;border:1px dashed var(--accent-blue,#2563eb);border-radius:8px;background:rgba(37,99,235,0.05);font-size:0.82rem;">
+  return `<div class="admin-ans-tool" data-aatool="${containerSel}" data-aoidx="${oidx}" style="margin-top:6px;padding:8px 10px;border:1px dashed var(--accent-blue,#2d6ca8);border-radius:8px;background:rgba(37,99,235,0.05);font-size:0.82rem;">
       <div class="admin-ans-view" style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
-        <span style="color:var(--accent-blue,#2563eb);font-weight:600;white-space:nowrap;">🛠️ Model answer</span>
+        <span style="color:var(--accent-blue,#2d6ca8);font-weight:600;white-space:nowrap;">🛠️ Model answer</span>
         <span class="admin-ans-current" style="flex:1;min-width:140px;color:var(--text-muted);line-height:1.5;">${has ? escapeHtml(model) : '<em>— none set —</em>'}</span>
         <span style="display:flex;gap:6px;flex-wrap:wrap;">
           <button type="button" class="btn btn-outline" style="padding:3px 9px;font-size:0.78rem;" data-aedit>✎ Edit</button>
@@ -10839,7 +10839,7 @@ function _adminAnswerToolHtml(containerSel, oidx, model) {
         </span>
       </div>
       <div class="admin-ans-edit" style="display:none;margin-top:6px;">
-        <textarea class="admin-ans-input" rows="3" placeholder="Type the correct model answer for this part..." style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.85rem;line-height:1.5;resize:vertical;background:#fff;color:var(--on-surface,#1c1c19);"></textarea>
+        <textarea class="admin-ans-input" rows="3" placeholder="Type the correct model answer for this part..." style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:0.85rem;line-height:1.5;resize:vertical;background:#fff;color:var(--on-surface,#14161a);"></textarea>
         <div style="display:flex;gap:6px;margin-top:6px;align-items:center;">
           <span class="admin-ans-status" style="margin-right:auto;color:var(--text-muted);font-size:0.78rem;"></span>
           <button type="button" class="btn btn-outline" style="padding:3px 10px;font-size:0.78rem;" data-acancel>Cancel</button>
@@ -11113,7 +11113,7 @@ function annotationPadHtml(block, q, containerSel) {
         <button type="button" class="dgn-tool" data-dgn-tool="${pid}" data-tool="text" title="Add a text label — then click on the diagram">🔤 Label</button>
         <button type="button" class="dgn-tool" data-dgn-tool="${pid}" data-tool="erase" title="Erase pen strokes">🩹 Erase</button>
         <span class="dgn-divider"></span>
-        ${swatch('#e11d48', 'Red')}${swatch('#2563eb', 'Blue')}${swatch('#16a34a', 'Green')}${swatch('#111827', 'Black')}
+        ${swatch('#e11d48', 'Red')}${swatch('#2d6ca8', 'Blue')}${swatch('#16a34a', 'Green')}${swatch('#111827', 'Black')}
         <span class="dgn-divider"></span>
         <button type="button" class="dgn-tool" data-dgn-undo="${pid}" title="Undo the last mark">↶ Undo</button>
         <button type="button" class="dgn-tool" data-dgn-clear="${pid}" title="Clear all annotations">🗑 Clear</button>
@@ -11748,7 +11748,7 @@ const _openPhoto = {}; // containerSel -> { dataUrl, mimeType, data, name }
 function _openPhotoKey(containerSel) { return String(containerSel || '').replace(/[^a-z0-9_]/gi, ''); }
 function openPhotoBarHtml(containerSel) {
   const key = _openPhotoKey(containerSel);
-  return `<div class="open-photo-bar" style="margin:6px 0 14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#faf8f5);">
+  return `<div class="open-photo-bar" style="margin:6px 0 14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#fafbfa);">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <span style="font-size:0.85rem;color:var(--text-muted);">📸 Prefer writing on paper? Submit one photo of your whole page of answers and the AI will read and mark every part at once:</span>
         <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:0.82rem;" data-openphoto-take="${containerSel}">📷 Take photo</button>
@@ -12682,7 +12682,7 @@ function snapRenderReport() {
       <div class="practice-card-body" style="padding:22px 24px;">
         <h3 style="margin:0 0 6px;">📋 Overall report</h3>
         <p style="color:var(--text-muted);font-size:0.86rem;margin:0 0 14px;line-height:1.6;">${present.length} photo${present.length === 1 ? '' : 's'} checked · ${marked.length} question${marked.length === 1 ? '' : 's'} marked${sum.t ? ` · combined score <strong style="color:${pct >= 80 ? 'var(--primary)' : 'var(--accent-orange)'};">${sum.s}/${sum.t} (${pct}%)</strong>` : ''}</p>
-        <div id="snapReportSummary" style="padding:14px 16px;border-radius:10px;background:var(--surface-alt,#faf8f5);border:1px solid var(--border);font-size:0.9rem;line-height:1.65;margin-bottom:6px;">${marked.length ? '⏳ Writing your summary…' : 'No questions could be marked this run — try clearer photos of the full question and your answer.'}</div>
+        <div id="snapReportSummary" style="padding:14px 16px;border-radius:10px;background:var(--surface-alt,#fafbfa);border:1px solid var(--border);font-size:0.9rem;line-height:1.65;margin-bottom:6px;">${marked.length ? '⏳ Writing your summary…' : 'No questions could be marked this run — try clearer photos of the full question and your answer.'}</div>
         <div style="margin-top:12px;">${rows}</div>
       </div>
     </div>`;
@@ -12951,10 +12951,10 @@ function renderQuestionPreviewHtml(qId) {
       case 'openLines':
       case 'workingSpace':
         if (block.type === 'workingSpace' && block.annotate) {
-          html += `<div style="margin:8px 0;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--surface-alt,#faf8f5);font-size:0.82rem;color:var(--text-muted);">✍️ Annotation working area — students draw &amp; label here; the AI marks it${stripHtml(block.answerKey || '').trim() ? ' against the attached answer key' : ''}</div>`;
+          html += `<div style="margin:8px 0;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--surface-alt,#fafbfa);font-size:0.82rem;color:var(--text-muted);">✍️ Annotation working area — students draw &amp; label here; the AI marks it${stripHtml(block.answerKey || '').trim() ? ' against the attached answer key' : ''}</div>`;
           break;
         }
-        html += `<div style="margin:8px 0;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--surface-alt,#faf8f5);font-size:0.82rem;color:var(--text-muted);">✍️ Open-ended answer space (${Number(block.lines) || (block.type === 'openLines' ? 4 : 6)} lines)</div>`;
+        html += `<div style="margin:8px 0;padding:8px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--surface-alt,#fafbfa);font-size:0.82rem;color:var(--text-muted);">✍️ Open-ended answer space (${Number(block.lines) || (block.type === 'openLines' ? 4 : 6)} lines)</div>`;
         break;
       case 'explanation':
         break;
@@ -13967,10 +13967,10 @@ async function generateSyllabusPdf() {
   const css = `
   .wspv-overlay{ display:none; position:fixed; inset:0; z-index:400; background:#525659; flex-direction:column; }
   .wspv-overlay.show{ display:flex; }
-  .wspv-bar{ display:flex; align-items:center; gap:14px; padding:10px 16px; background:var(--surface,#fff); border-bottom:1px solid var(--border,#e2ddd5); flex-wrap:wrap; }
+  .wspv-bar{ display:flex; align-items:center; gap:14px; padding:10px 16px; background:var(--surface,#fff); border-bottom:1px solid var(--border,#e3e6e4); flex-wrap:wrap; }
   .wspv-bar .wspv-title{ font-weight:700; }
-  .wspv-bar .wspv-count{ font-weight:500; color:var(--text-muted,#7a756d); font-size:0.85rem; }
-  .wspv-bar .wspv-hint{ flex:1; min-width:120px; font-size:0.8rem; color:var(--text-muted,#7a756d); }
+  .wspv-bar .wspv-count{ font-weight:500; color:var(--text-muted,#666c71); font-size:0.85rem; }
+  .wspv-bar .wspv-hint{ flex:1; min-width:120px; font-size:0.8rem; color:var(--text-muted,#666c71); }
   .wspv-stage{ flex:1; overflow:hidden; }
   #wsPreviewFrame{ width:100%; height:100%; border:0; display:block; background:#525659; }
   @media print { .wspv-overlay{ display:none !important; } }`;
@@ -13987,9 +13987,9 @@ const WS_PREVIEW_CSS = `
   .wspv-pageno{ position:absolute; left:0; right:0; bottom:7mm; text-align:center; font-size:8pt; color:#b3b3b3; }
   .print-question-chunk{ position:relative; }
   .wspv-brk{ position:absolute; top:5px; right:6px; z-index:9; font:600 11px 'DM Sans',sans-serif; border:1px solid #cfcfcf; background:#fff; color:#555; border-radius:6px; padding:2px 9px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.2); }
-  .wspv-brk.on{ background:#4a7c59; color:#fff; border-color:#4a7c59; }
-  .wspv-brk.up{ color:#2563eb; border-color:#9bb8f0; }
-  .wspv-brk.up:hover{ background:#2563eb; color:#fff; }`;
+  .wspv-brk.on{ background:#0b6b4f; color:#fff; border-color:#0b6b4f; }
+  .wspv-brk.up{ color:#2d6ca8; border-color:#9bb8f0; }
+  .wspv-brk.up:hover{ background:#2d6ca8; color:#fff; }`;
 
 // Copy the app stylesheet but unwrap the `@media print { … }` block (balanced
 // braces) so its rules apply on the iframe's screen — single source of truth,
@@ -14696,7 +14696,7 @@ async function qpAiRecommend() {
       banner.innerHTML = `
         <div style="display:flex;gap:10px;align-items:center;padding:12px 14px;border:1.5px solid var(--primary);background:var(--primary-light,#e8f5e9);border-radius:var(--radius-md);">
           <span style="font-size:1.2rem;">✨</span>
-          <div style="flex:1;min-width:0;font-size:0.88rem;color:var(--on-surface,#1c1c19);">
+          <div style="flex:1;min-width:0;font-size:0.88rem;color:var(--on-surface,#14161a);">
             <strong>AI suggestion:</strong> ${escapeHtml(pick.reason)}
             <span style="color:var(--text-muted);"> (${escapeHtml(pick.topic)} · ${escapeHtml(pick.level)})</span>
           </div>
@@ -14871,7 +14871,7 @@ function renderPracticeReport(containerSel, results, actionsHtml) {
   const R = 52, C = 2 * Math.PI * R, dash = C * (pct / 100);
   const ring = `
     <svg viewBox="0 0 120 120" style="width:130px;height:130px;transform:rotate(-90deg);">
-      <circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--surface-container-high,#ebe8e3)" stroke-width="11"/>
+      <circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--surface-container-high,#f2f4f3)" stroke-width="11"/>
       <circle cx="60" cy="60" r="${R}" fill="none" stroke="${color}" stroke-width="11" stroke-linecap="round"
               stroke-dasharray="${dash.toFixed(1)} ${(C - dash).toFixed(1)}" style="transition:stroke-dasharray .6s ease;"/>
     </svg>`;
@@ -14881,9 +14881,9 @@ function renderPracticeReport(containerSel, results, actionsHtml) {
     const part = r.correct > 0 && !full;
     const badge = full ? '✓' : part ? '◑' : '✗';
     const bcol = full ? 'var(--primary)' : part ? 'var(--accent-orange)' : 'var(--accent-red)';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:var(--surface-container-low,#f6f3ee);margin-bottom:6px;">
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:var(--surface-container-low,#f7f9f8);margin-bottom:6px;">
         <span style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:${bcol};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:700;">${badge}</span>
-        <span style="flex:1;font-size:0.86rem;color:var(--on-surface,#1c1c19);min-width:0;">${i + 1}. ${escapeHtml(r.title || r.topic || 'Question')}</span>
+        <span style="flex:1;font-size:0.86rem;color:var(--on-surface,#14161a);min-width:0;">${i + 1}. ${escapeHtml(r.title || r.topic || 'Question')}</span>
         <span style="font-weight:700;font-size:0.86rem;color:${bcol};white-space:nowrap;">${_fmtScore(r.correct)}/${r.total}</span>
       </div>`;
   }).join('');
@@ -14957,16 +14957,16 @@ async function generatePracticeFeedback(boxId, results, totalCorrect, totalBlank
      </li>`).join('');
 
   box.innerHTML = `
-    <div style="background:var(--surface-container-low,#f6f3ee);border-radius:14px;padding:16px 18px;">
-      ${fb.summary ? `<p style="font-size:0.92rem;line-height:1.55;margin:0 0 14px;color:var(--on-surface,#1c1c19);">${escapeHtml(fb.summary)}</p>` : ''}
+    <div style="background:var(--surface-container-low,#f7f9f8);border-radius:14px;padding:16px 18px;">
+      ${fb.summary ? `<p style="font-size:0.92rem;line-height:1.55;margin:0 0 14px;color:var(--on-surface,#14161a);">${escapeHtml(fb.summary)}</p>` : ''}
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;">
         <div style="background:var(--primary-light,#e8f5e9);border:1px solid var(--primary);border-radius:12px;padding:13px 15px;">
           <div style="font-weight:800;font-size:0.82rem;color:var(--primary);margin-bottom:9px;">💪 Strengths</div>
-          <ul style="list-style:none;padding:0;margin:0;color:var(--on-surface,#1c1c19);">${items(fb.strengths, 'var(--primary)', '✓')}</ul>
+          <ul style="list-style:none;padding:0;margin:0;color:var(--on-surface,#14161a);">${items(fb.strengths, 'var(--primary)', '✓')}</ul>
         </div>
         <div style="background:var(--accent-orange-light,#fff3e0);border:1px solid var(--accent-orange);border-radius:12px;padding:13px 15px;">
           <div style="font-weight:800;font-size:0.82rem;color:var(--accent-orange);margin-bottom:9px;">🎯 Areas to improve</div>
-          <ul style="list-style:none;padding:0;margin:0;color:var(--on-surface,#1c1c19);">${items(fb.weaknesses, 'var(--accent-orange)', '→')}</ul>
+          <ul style="list-style:none;padding:0;margin:0;color:var(--on-surface,#14161a);">${items(fb.weaknesses, 'var(--accent-orange)', '→')}</ul>
         </div>
       </div>
     </div>`;
@@ -15603,21 +15603,21 @@ function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
   // A.I. Explanation card on top — the feedback specific to the student's answer.
   if (aiText2) {
     cards +=
-      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
+      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#eaf1f8);border-radius:10px;">
         <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">🤖 A.I. Explanation</div><div style="line-height:1.7;">${escapeHtml(aiText2)}</div></div>`;
   } else if (blockHtml) {
     // The question's authored explanation is generic (written at authoring time),
     // so it's only shown as a fallback when there's no answer-specific A.I.
     // explanation — e.g. the MCQ / fill-blank paths that don't generate one.
     cards +=
-      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#edf2f9);border-radius:10px;">
+      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#eaf1f8);border-radius:10px;">
         <div style="font-weight:700;color:var(--accent-blue);margin-bottom:6px;">💡 Explanation</div>${blockHtml}</div>`;
   }
   // Model answer card below the explanation, full width and aligned with it.
   const model = (modelAnswer && String(modelAnswer).trim()) ? String(modelAnswer).trim() : _deriveModelAnswer(q);
   if (model) {
     cards +=
-      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--primary);background:var(--primary-light,#e8f0ea);border-radius:10px;">
+      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--primary);background:var(--primary-light,#e4f1ec);border-radius:10px;">
         <div style="font-weight:700;color:var(--primary);margin-bottom:6px;">✅ Model answer</div><div style="line-height:1.7;white-space:pre-wrap;">${escapeHtml(model)}</div></div>`;
   }
   if (!cards) return;
@@ -17602,15 +17602,15 @@ function svgIceStaff(shaft) {
 }
 function svgLeafStaff(shaft) {
   return svgStaffBase(shaft) +
-    `<path d="M0 -76 Q13 -66 0 -50 Q-13 -66 0 -76 Z" fill="${rpgGrad("#3a9e5f")}" ${RPG_O_THIN}/>` +
+    `<path d="M0 -76 Q13 -66 0 -50 Q-13 -66 0 -76 Z" fill="${rpgGrad("#0f7a5a")}" ${RPG_O_THIN}/>` +
     `<line x1="0" y1="-72" x2="0" y2="-54" stroke="#1c8a4a" stroke-width="1.6"/>` +
     `<path d="M0 -68 L-4 -64 M0 -62 L4 -58" stroke="#1c8a4a" stroke-width="1.1"/>` +
-    `<circle cx="7" cy="-50" r="2.6" fill="${rpgGrad("#d94f4f", "r")}" ${RPG_O_THIN}/>`;
+    `<circle cx="7" cy="-50" r="2.6" fill="${rpgGrad("#b23b36", "r")}" ${RPG_O_THIN}/>`;
 }
 function svgVoidStaff(shaft) {
   return svgStaffBase(shaft) +
     `<circle cx="0" cy="-63" r="8" fill="${rpgGrad("#1a1430", "r")}" ${RPG_O_THIN}/>` +
-    `<circle cx="0" cy="-63" r="12.5" fill="none" stroke="#7b5ea7" stroke-width="2.2" opacity="0.8">${svgPulse(0.35, 0.9)}</circle>` +
+    `<circle cx="0" cy="-63" r="12.5" fill="none" stroke="#6b4fa0" stroke-width="2.2" opacity="0.8">${svgPulse(0.35, 0.9)}</circle>` +
     `<circle cx="3" cy="-66" r="1.6" fill="#b79ae0"/>` +
     `<g>${svgStar(-10, -72, 2, 0.9, "#b79ae0")}${svgTwinkle(2.3)}</g>`;
 }
@@ -17866,7 +17866,7 @@ function svgCrown() {
   return `<polygon points="78,58 78,38 88,49 100,34 112,49 122,38 122,58" fill="${rpgGrad("#e8b41f")}" stroke="#b8860b" stroke-width="1.6"/>` +
     `<polygon points="78,58 78,38 88,49 100,34 112,49 122,38 122,58" fill="none" ${RPG_O_THIN}/>` +
     `<rect x="77" y="54" width="46" height="9" rx="3" fill="${rpgGrad("#e8b41f")}" stroke="#b8860b" stroke-width="1.6"/>` +
-    `<circle cx="88" cy="58" r="2.2" fill="${rpgGrad("#d94f4f", "r")}"/><circle cx="100" cy="58" r="2.2" fill="${rpgGrad("#4a6fa5", "r")}"/><circle cx="112" cy="58" r="2.2" fill="${rpgGrad("#3a9e5f", "r")}"/>` +
+    `<circle cx="88" cy="58" r="2.2" fill="${rpgGrad("#b23b36", "r")}"/><circle cx="100" cy="58" r="2.2" fill="${rpgGrad("#2d6ca8", "r")}"/><circle cx="112" cy="58" r="2.2" fill="${rpgGrad("#0f7a5a", "r")}"/>` +
     `<g><circle cx="100" cy="34" r="1.6" fill="#fff"/>${svgTwinkle(2)}</g>`;
 }
 function svgHalo() {
@@ -17883,7 +17883,7 @@ function svgCape(c1, c2, flame) {
     `<path d="M78 121 Q100 112 122 121 L131 134 Q100 126 69 134 Z" fill="${rpgGrad(c2)}" ${RPG_O_THIN}/>`;
 }
 function svgElvenCloak() {
-  return svgCape("#4a7c59", "#aab4bf") +
+  return svgCape("#0b6b4f", "#aab4bf") +
     `<path d="M96 124 Q100 116 104 124 Q100 130 96 124 Z" fill="${rpgGrad("#dbe3ea")}" stroke="#8d99a6" stroke-width="1.2"/>` +
     `<path d="M86 150 Q94 142 92 132" fill="none" stroke="#2f5a3e" stroke-width="1.6" opacity="0.75"/>` +
     `<path d="M112 168 Q120 160 118 150" fill="none" stroke="#2f5a3e" stroke-width="1.6" opacity="0.75"/>`;
@@ -17909,7 +17909,7 @@ function svgAmulet(chain, gem) {
 }
 function svgRubyPendant() {
   return `<path d="M86 114 Q100 128 114 114" stroke="#caa53d" stroke-width="2.4" fill="none"/>` +
-    `<polygon points="100,124 106,130 100,139 94,130" fill="${rpgGrad("#d94f4f", "r")}" stroke="#caa53d" stroke-width="1.6"/>` +
+    `<polygon points="100,124 106,130 100,139 94,130" fill="${rpgGrad("#b23b36", "r")}" stroke="#caa53d" stroke-width="1.6"/>` +
     `<polygon points="100,126 103,130 100,135 97,130" fill="rgba(255,255,255,0.35)"/>`;
 }
 function svgFangCharm() {
@@ -17953,7 +17953,7 @@ function svgOwlFamiliar() {
     `<ellipse rx="11" ry="13" fill="${rpgGrad("#8a6b46")}" ${RPG_O_THIN}/>` +
     `<ellipse cy="4" rx="7" ry="8" fill="${rpgGrad("#d8c39a")}"/>` +
     `<circle cx="-4.5" cy="-4" r="4.4" fill="#fff"/><circle cx="4.5" cy="-4" r="4.4" fill="#fff"/>` +
-    `<circle cx="-4.5" cy="-4" r="2" fill="#2c2a27"/><circle cx="4.5" cy="-4" r="2" fill="#2c2a27"/>` +
+    `<circle cx="-4.5" cy="-4" r="2" fill="#14161a"/><circle cx="4.5" cy="-4" r="2" fill="#14161a"/>` +
     `<polygon points="0,-1 -2.4,2.5 2.4,2.5" fill="#e8943a"/>` +
     `<path d="M-11 0 Q-15 6 -10 10" fill="none" stroke="#6f4f28" stroke-width="2.4"/></g>`;
 }
@@ -17977,21 +17977,21 @@ const RPG_ITEMS = [
   { id: "iron_sword", name: "Iron Sword", slot: "weapon", rarity: "common", atk: 5, price: 60, levelReq: 1, art: () => svgSword("#b9c2cc", "#7a8694", "#5b4632") },
   { id: "steel_sword", name: "Steel Sword", slot: "weapon", rarity: "uncommon", atk: 8, price: 150, levelReq: 2, art: () => svgSword("#dbe3ea", "#8d99a6", "#3f4a56") },
   { id: "silver_rapier", name: "Silver Rapier", slot: "weapon", rarity: "uncommon", atk: 7, crit: 6, price: 170, levelReq: 2, art: () => svgRapier("#e8eef4", "#aab4bf", "#27406b") },
-  { id: "shadow_dagger", name: "Shadow Dagger", slot: "weapon", rarity: "rare", atk: 9, crit: 14, price: 330, levelReq: 3, art: () => svgDagger("#4b4a5e", "#2c2a3a", "#1d1c28", "#7b5ea7") },
+  { id: "shadow_dagger", name: "Shadow Dagger", slot: "weapon", rarity: "rare", atk: 9, crit: 14, price: 330, levelReq: 3, art: () => svgDagger("#4b4a5e", "#2c2a3a", "#1d1c28", "#6b4fa0") },
   { id: "knight_sword", name: "Knight's Blade", slot: "weapon", rarity: "rare", atk: 12, crit: 3, price: 340, levelReq: 4, art: () => svgSword("#e8eef4", "#caa53d", "#27406b") },
   { id: "corsair_cutlass", name: "Corsair's Cutlass", slot: "weapon", rarity: "rare", atk: 11, crit: 7, price: 350, levelReq: 4, art: () => svgCutlass("#dbe3ea", "#caa53d", "#5b4632") },
   { id: "frost_brand", name: "Frostbrand", slot: "weapon", rarity: "epic", atk: 15, crit: 8, price: 700, levelReq: 5, art: () => svgSword("#bfe9f7", "#6fb3d9", "#27406b", "#8fd4ee") },
-  { id: "elven_blade", name: "Elven Blade", slot: "weapon", rarity: "epic", atk: 16, crit: 9, price: 730, levelReq: 6, art: () => svgKatana("#eef6ee", "#3a9e5f", "#2f5a3e", "#7be0a2") },
+  { id: "elven_blade", name: "Elven Blade", slot: "weapon", rarity: "epic", atk: 16, crit: 9, price: 730, levelReq: 6, art: () => svgKatana("#eef6ee", "#0f7a5a", "#2f5a3e", "#7be0a2") },
   { id: "flame_sword", name: "Flameblade", slot: "weapon", rarity: "epic", atk: 17, crit: 6, price: 720, levelReq: 6, art: () => svgSword("#ffb35c", "#9c2c2c", "#5b1f1f", "#ff6b35") },
-  { id: "dragon_blade", name: "Dragonfang", slot: "weapon", rarity: "legendary", atk: 24, crit: 10, price: 1500, levelReq: 9, art: () => svgSword("#ff7b7b", "#e8b41f", "#7e1f1f", "#d94f4f") },
-  { id: "obsidian_greatsword", name: "Obsidian Greatsword", slot: "weapon", rarity: "legendary", atk: 23, crit: 12, price: 1600, levelReq: 9, art: () => svgGreatsword("#3a3548", "#7b5ea7", "#2c1f4a", "#b79ae0") },
+  { id: "dragon_blade", name: "Dragonfang", slot: "weapon", rarity: "legendary", atk: 24, crit: 10, price: 1500, levelReq: 9, art: () => svgSword("#ff7b7b", "#e8b41f", "#7e1f1f", "#b23b36") },
+  { id: "obsidian_greatsword", name: "Obsidian Greatsword", slot: "weapon", rarity: "legendary", atk: 23, crit: 12, price: 1600, levelReq: 9, art: () => svgGreatsword("#3a3548", "#6b4fa0", "#2c1f4a", "#b79ae0") },
   { id: "excalibur", name: "Excalibur", slot: "weapon", rarity: "legendary", atk: 26, crit: 8, price: 1700, levelReq: 10, art: () => svgExcalibur() },
   // Weapons — staffs
   { id: "apprentice_staff", name: "Apprentice Staff", slot: "weapon", rarity: "common", atk: 4, crit: 2, price: 50, levelReq: 1, art: () => svgStaff("#8a6b46", "#9bb8e8", "#9bb8e8") },
-  { id: "oak_staff", name: "Oak Staff", slot: "weapon", rarity: "uncommon", atk: 6, crit: 5, price: 140, levelReq: 2, art: () => svgStaff("#6f4f28", "#3a9e5f", "#7be0a2") },
+  { id: "oak_staff", name: "Oak Staff", slot: "weapon", rarity: "uncommon", atk: 6, crit: 5, price: 140, levelReq: 2, art: () => svgStaff("#6f4f28", "#0f7a5a", "#7be0a2") },
   { id: "ember_staff", name: "Ember Staff", slot: "weapon", rarity: "uncommon", atk: 7, crit: 4, price: 160, levelReq: 2, art: () => svgFlameStaff("#5b4632") },
   { id: "sprout_staff", name: "Sprout Staff", slot: "weapon", rarity: "uncommon", atk: 6, crit: 5, hp: 5, price: 170, levelReq: 2, art: () => svgLeafStaff("#6f4f28") },
-  { id: "arcane_staff", name: "Arcane Staff", slot: "weapon", rarity: "rare", atk: 10, crit: 8, price: 330, levelReq: 4, art: () => svgStaff("#4b3a63", "#7b5ea7", "#b79ae0") },
+  { id: "arcane_staff", name: "Arcane Staff", slot: "weapon", rarity: "rare", atk: 10, crit: 8, price: 330, levelReq: 4, art: () => svgStaff("#4b3a63", "#6b4fa0", "#b79ae0") },
   { id: "glacier_staff", name: "Glacier Staff", slot: "weapon", rarity: "rare", atk: 10, crit: 9, price: 340, levelReq: 4, art: () => svgIceStaff("#7a8694") },
   { id: "rune_staff", name: "Runewood Staff", slot: "weapon", rarity: "epic", atk: 13, crit: 15, price: 760, levelReq: 6, art: () => svgRuneStaff("#6f4f28") },
   { id: "crystal_staff", name: "Crystal Staff", slot: "weapon", rarity: "epic", atk: 14, crit: 12, price: 700, levelReq: 6, art: () => svgStaff("#7a8694", "#6fd3e8", "#aef0fc") },
@@ -18012,13 +18012,13 @@ const RPG_ITEMS = [
   // Weapons — bows (ranged) & elemental blades
   { id: "shortbow", name: "Hunter's Shortbow", slot: "weapon", rarity: "common", atk: 4, crit: 3, price: 65, levelReq: 1, art: () => svgBow("#8a6b46", "#d8c39a") },
   { id: "longbow", name: "Longbow", slot: "weapon", rarity: "uncommon", atk: 7, crit: 5, price: 165, levelReq: 2, art: () => svgBow("#6f4f28", "#d8c39a") },
-  { id: "elven_bow", name: "Elven Warbow", slot: "weapon", rarity: "rare", atk: 11, crit: 8, price: 350, levelReq: 4, art: () => svgBow("#3a9e5f", "#e8f6ec") },
+  { id: "elven_bow", name: "Elven Warbow", slot: "weapon", rarity: "rare", atk: 11, crit: 8, price: 350, levelReq: 4, art: () => svgBow("#0f7a5a", "#e8f6ec") },
   { id: "shadow_bow", name: "Nightwhisper Bow", slot: "weapon", rarity: "rare", atk: 10, crit: 12, price: 360, levelReq: 4, art: () => svgBow("#2c2a3a", "#9b7fd4") },
   { id: "frostfang_bow", name: "Frostfang Bow", slot: "weapon", rarity: "epic", atk: 15, crit: 10, price: 740, levelReq: 6, art: () => svgBow("#6fb3d9", "#e8f6fc", "#8fd4ee") },
   { id: "stormpiercer", name: "Stormpiercer", slot: "weapon", rarity: "legendary", atk: 22, crit: 14, price: 1600, levelReq: 9, art: () => svgBow("#caa53d", "#ffd76a", "#ffe9a3") },
   { id: "ember_dagger", name: "Ember Dagger", slot: "weapon", rarity: "rare", atk: 10, crit: 12, price: 340, levelReq: 3, art: () => svgDagger("#ff8c42", "#9c2c2c", "#5b1f1f", "#ff6b35") },
   { id: "glacier_spear", name: "Glacier Spear", slot: "weapon", rarity: "uncommon", atk: 7, price: 175, levelReq: 2, art: () => svgSpear("#7a8694", "#bfe9f7") },
-  { id: "elven_rapier", name: "Elven Rapier", slot: "weapon", rarity: "rare", atk: 9, crit: 9, price: 330, levelReq: 3, art: () => svgRapier("#eef6ee", "#3a9e5f", "#2f5a3e") },
+  { id: "elven_rapier", name: "Elven Rapier", slot: "weapon", rarity: "rare", atk: 9, crit: 9, price: 330, levelReq: 3, art: () => svgRapier("#eef6ee", "#0f7a5a", "#2f5a3e") },
   { id: "sunblade", name: "Sunblade", slot: "weapon", rarity: "epic", atk: 16, crit: 8, price: 730, levelReq: 6, art: () => svgSword("#fff6db", "#e8b41f", "#b8860b", "#ffe9a3") },
   { id: "obsidian_axe", name: "Obsidian Axe", slot: "weapon", rarity: "epic", atk: 17, price: 740, levelReq: 6, art: () => svgAxe("#1d1c28", "#4b4a5e") },
   { id: "starfall_katana", name: "Starfall Katana", slot: "weapon", rarity: "rare", atk: 11, crit: 9, price: 350, levelReq: 4, art: () => svgKatana("#e8e2f4", "#caa53d", "#4b3a63", "#ffd76a") },
@@ -18026,12 +18026,12 @@ const RPG_ITEMS = [
   { id: "wooden_shield", name: "Wooden Shield", slot: "shield", rarity: "common", def: 2, price: 45, levelReq: 1, art: () => svgShieldArt("#b07b3f", "#7a4f23") },
   { id: "swift_buckler", name: "Swift Buckler", slot: "shield", rarity: "common", def: 2, crit: 3, price: 60, levelReq: 1, art: () => svgBuckler("#aab4bf", "#69737e") },
   { id: "iron_shield", name: "Iron Shield", slot: "shield", rarity: "uncommon", def: 4, price: 130, levelReq: 2, art: () => svgShieldArt("#aab4bf", "#69737e") },
-  { id: "kite_shield", name: "Kite Shield", slot: "shield", rarity: "uncommon", def: 5, price: 150, levelReq: 3, art: () => svgKiteShield("#4a7c59", "#2f5a3e") },
+  { id: "kite_shield", name: "Kite Shield", slot: "shield", rarity: "uncommon", def: 5, price: 150, levelReq: 3, art: () => svgKiteShield("#0b6b4f", "#2f5a3e") },
   { id: "knight_shield", name: "Knight's Shield", slot: "shield", rarity: "rare", def: 7, price: 300, levelReq: 4, art: () => svgShieldArt("#27406b", "#caa53d") },
-  { id: "grimoire", name: "Grimoire of Shadows", slot: "shield", rarity: "rare", def: 4, crit: 10, price: 350, levelReq: 4, art: () => svgTomeShield("#2c1f4a", "#e8e2f4", svgStar(2, 0, 8, 3.4, "#7b5ea7")) },
+  { id: "grimoire", name: "Grimoire of Shadows", slot: "shield", rarity: "rare", def: 4, crit: 10, price: 350, levelReq: 4, art: () => svgTomeShield("#2c1f4a", "#e8e2f4", svgStar(2, 0, 8, 3.4, "#6b4fa0")) },
   { id: "tower_shield", name: "Tower Shield", slot: "shield", rarity: "rare", def: 9, hp: 5, price: 380, levelReq: 5, art: () => svgTowerShield("#69737e", "#3f4a56") },
   { id: "mirror_shield", name: "Mirror Shield", slot: "shield", rarity: "epic", def: 9, crit: 6, price: 690, levelReq: 6, art: () => svgMirrorShield() },
-  { id: "aegis_shield", name: "Aegis of Wisdom", slot: "shield", rarity: "epic", def: 10, hp: 10, price: 680, levelReq: 6, art: () => svgShieldArt("#7b5ea7", "#ffd76a", svgStar(0, 1, 8, 3.4, "#ffd76a")) },
+  { id: "aegis_shield", name: "Aegis of Wisdom", slot: "shield", rarity: "epic", def: 10, hp: 10, price: 680, levelReq: 6, art: () => svgShieldArt("#6b4fa0", "#ffd76a", svgStar(0, 1, 8, 3.4, "#ffd76a")) },
   { id: "royal_bulwark", name: "Royal Bulwark", slot: "shield", rarity: "epic", def: 8, crit: 8, hp: 5, price: 740, levelReq: 7, art: () => svgRoyalBulwark() },
   { id: "dragonscale_ward", name: "Dragonscale Ward", slot: "shield", rarity: "legendary", def: 12, hp: 15, price: 1450, levelReq: 9, art: () => svgDragonScaleShield() },
   { id: "fallen_star_aegis", name: "Aegis of the Fallen Star", slot: "shield", rarity: "legendary", def: 11, crit: 10, hp: 10, price: 1600, levelReq: 10, art: () => svgFallenStarShield() },
@@ -18040,9 +18040,9 @@ const RPG_ITEMS = [
   { id: "leather_armor", name: "Leather Armour", slot: "armor", rarity: "common", def: 3, price: 70, levelReq: 1, art: () => svgArmorLeather("#8a6b46", "#5b4632") },
   { id: "travelers_garb", name: "Traveller's Garb", slot: "armor", rarity: "common", def: 2, hp: 5, price: 75, levelReq: 1, art: () => svgArmorLeather("#6e8a55", "#4f6539") },
   { id: "chainmail", name: "Chainmail", slot: "armor", rarity: "uncommon", def: 5, hp: 5, price: 170, levelReq: 2, art: () => svgArmorChain("#8d99a6", "#dbe3ea") },
-  { id: "mage_robe", name: "Apprentice Robe", slot: "armor", rarity: "uncommon", def: 3, crit: 6, price: 180, levelReq: 2, art: () => svgRobe("#4a6fa5", "#27406b") },
+  { id: "mage_robe", name: "Apprentice Robe", slot: "armor", rarity: "uncommon", def: 3, crit: 6, price: 180, levelReq: 2, art: () => svgRobe("#2d6ca8", "#27406b") },
   { id: "bronze_plate", name: "Bronze Plate", slot: "armor", rarity: "uncommon", def: 6, price: 190, levelReq: 3, art: () => svgArmorPlate("#c9853a", "#8c5a22") },
-  { id: "ninja_garb", name: "Ninja Garb", slot: "armor", rarity: "rare", def: 5, crit: 10, price: 360, levelReq: 4, art: () => svgArmorLeather("#3a3f4a", "#d94f4f") },
+  { id: "ninja_garb", name: "Ninja Garb", slot: "armor", rarity: "rare", def: 5, crit: 10, price: 360, levelReq: 4, art: () => svgArmorLeather("#3a3f4a", "#b23b36") },
   { id: "knight_plate", name: "Knight's Plate", slot: "armor", rarity: "rare", def: 8, hp: 10, price: 380, levelReq: 4, art: () => svgArmorPlate("#aab4bf", "#69737e") },
   { id: "emerald_scale", name: "Emerald Scale Mail", slot: "armor", rarity: "rare", def: 7, crit: 6, price: 390, levelReq: 5, art: () => svgScaleMail("#2f5a3e", "#7be0a2", "#1c8a4a") },
   { id: "frost_plate", name: "Glacier Plate", slot: "armor", rarity: "epic", def: 10, hp: 12, price: 720, levelReq: 6, art: () => svgArmorSpiked("#bfe9f7", "#6fb3d9", "#e8f6fc") },
@@ -18053,21 +18053,21 @@ const RPG_ITEMS = [
   // Helmets
   { id: "leather_cap", name: "Leather Cap", slot: "helmet", rarity: "common", def: 1, price: 35, levelReq: 1, art: () => svgHelmCap("#8a6b46", "#5b4632") },
   { id: "adventurers_hood", name: "Adventurer's Hood", slot: "helmet", rarity: "common", def: 1, crit: 2, price: 45, levelReq: 1, art: () => svgHood("#6e8a55", "#4f6539") },
-  { id: "warrior_headband", name: "Warrior's Headband", slot: "helmet", rarity: "common", crit: 4, price: 50, levelReq: 1, art: () => svgHeadband("#d94f4f", "#b3473f") },
+  { id: "warrior_headband", name: "Warrior's Headband", slot: "helmet", rarity: "common", crit: 4, price: 50, levelReq: 1, art: () => svgHeadband("#b23b36", "#b3473f") },
   { id: "iron_helm", name: "Iron Helm", slot: "helmet", rarity: "uncommon", def: 3, price: 120, levelReq: 2, art: () => svgHelmDome("#aab4bf", "#69737e") },
   { id: "shadow_hood", name: "Shadow Hood", slot: "helmet", rarity: "uncommon", def: 2, crit: 6, price: 160, levelReq: 2, art: () => svgHood("#3a3f4a", "#23252e") },
-  { id: "wizard_hat", name: "Wizard's Hat", slot: "helmet", rarity: "rare", def: 2, crit: 8, price: 290, levelReq: 3, art: () => svgWizardHat("#4b3a63", "#7b5ea7", "#ffd76a") },
-  { id: "knight_helm", name: "Knight's Helm", slot: "helmet", rarity: "rare", def: 5, hp: 5, price: 290, levelReq: 4, art: () => svgHelmKnight("#aab4bf", "#69737e", "#d94f4f") },
+  { id: "wizard_hat", name: "Wizard's Hat", slot: "helmet", rarity: "rare", def: 2, crit: 8, price: 290, levelReq: 3, art: () => svgWizardHat("#4b3a63", "#6b4fa0", "#ffd76a") },
+  { id: "knight_helm", name: "Knight's Helm", slot: "helmet", rarity: "rare", def: 5, hp: 5, price: 290, levelReq: 4, art: () => svgHelmKnight("#aab4bf", "#69737e", "#b23b36") },
   { id: "berserker_horns", name: "Berserker Horns", slot: "helmet", rarity: "rare", def: 4, crit: 5, price: 310, levelReq: 4, box: "42 18 116 74", art: () => svgHornedHelm("#8a6b46", "#5b4632", "#e8e0d0") },
   { id: "glacier_helm", name: "Glacier Helm", slot: "helmet", rarity: "epic", def: 6, hp: 8, price: 690, levelReq: 6, art: () => svgHelmDome("#bfe9f7", "#6fb3d9") + `<polygon points="100,22 105,40 95,40" fill="#e8f6fc"/>` },
   { id: "gilded_helm", name: "Gilded Helm", slot: "helmet", rarity: "epic", def: 7, hp: 5, price: 710, levelReq: 6, art: () => svgHelmDome("#e8b41f", "#b8860b") },
-  { id: "seer_circlet", name: "Circlet of the Seer", slot: "helmet", rarity: "epic", def: 3, crit: 14, price: 740, levelReq: 7, box: "60 48 80 32", art: () => svgCirclet("#dbe3ea", "#7b5ea7") },
+  { id: "seer_circlet", name: "Circlet of the Seer", slot: "helmet", rarity: "epic", def: 3, crit: 14, price: 740, levelReq: 7, box: "60 48 80 32", art: () => svgCirclet("#dbe3ea", "#6b4fa0") },
   { id: "crown_wisdom", name: "Crown of Wisdom", slot: "helmet", rarity: "legendary", def: 4, crit: 10, hp: 15, price: 1200, levelReq: 8, art: () => svgCrown() },
   { id: "dragonfang_helm", name: "Dragonfang Helm", slot: "helmet", rarity: "legendary", def: 8, hp: 15, price: 1450, levelReq: 9, box: "42 18 116 74", art: () => svgHornedHelm("#7e1f1f", "#5b1f1f", "#e8b41f") },
   { id: "seraph_halo", name: "Seraph's Halo", slot: "helmet", rarity: "legendary", def: 5, crit: 15, hp: 10, price: 1500, levelReq: 10, box: "64 12 72 36", art: () => svgHalo() },
   // Accessories — capes & wings (behind the hero)
   { id: "scholar_cape", name: "Squire's Cape", slot: "accessory", layer: "back", rarity: "common", hp: 5, price: 55, levelReq: 1, art: () => svgCape("#b3473f", "#8e352f") },
-  { id: "forest_cloak", name: "Forest Cloak", slot: "accessory", layer: "back", rarity: "uncommon", hp: 8, def: 1, price: 160, levelReq: 2, art: () => svgCape("#4a7c59", "#2f5a3e") },
+  { id: "forest_cloak", name: "Forest Cloak", slot: "accessory", layer: "back", rarity: "uncommon", hp: 8, def: 1, price: 160, levelReq: 2, art: () => svgCape("#0b6b4f", "#2f5a3e") },
   { id: "hero_cape", name: "Hero's Cape", slot: "accessory", layer: "back", rarity: "rare", hp: 15, def: 2, price: 320, levelReq: 3, art: () => svgCape("#27406b", "#1c2f50") },
   { id: "elven_cloak", name: "Elven Cloak", slot: "accessory", layer: "back", rarity: "rare", hp: 12, crit: 6, price: 340, levelReq: 4, art: () => svgElvenCloak() },
   { id: "phoenix_cape", name: "Phoenix Cape", slot: "accessory", layer: "back", rarity: "epic", hp: 25, crit: 5, price: 700, levelReq: 6, art: () => svgCape("#e06a2b", "#9c2c2c", true) },
@@ -18075,11 +18075,11 @@ const RPG_ITEMS = [
   { id: "starfall_cape", name: "Starfall Cape", slot: "accessory", layer: "back", rarity: "legendary", hp: 25, crit: 10, def: 3, price: 1550, levelReq: 9, art: () => svgGalaxyCape() },
   { id: "angel_wings", name: "Wings of Light", slot: "accessory", layer: "back", rarity: "legendary", hp: 30, def: 4, price: 1600, levelReq: 10, box: "20 34 160 100", art: () => svgWings("#f6f3ec", "#d9d2c4") },
   // Accessories — amulets, specs & familiars (in front)
-  { id: "lucky_amulet", name: "Lucky Amulet", slot: "accessory", layer: "front", rarity: "uncommon", crit: 6, price: 150, levelReq: 1, box: "78 104 44 38", art: () => svgAmulet("#caa53d", "#3a9e5f") },
+  { id: "lucky_amulet", name: "Lucky Amulet", slot: "accessory", layer: "front", rarity: "uncommon", crit: 6, price: 150, levelReq: 1, box: "78 104 44 38", art: () => svgAmulet("#caa53d", "#0f7a5a") },
   { id: "ruby_pendant", name: "Ruby Pendant", slot: "accessory", layer: "front", rarity: "uncommon", hp: 10, price: 155, levelReq: 2, box: "78 104 44 38", art: () => svgRubyPendant() },
   { id: "hawk_feather", name: "Hawk Feather Charm", slot: "accessory", layer: "front", rarity: "uncommon", crit: 7, price: 170, levelReq: 2, box: "78 104 44 42", art: () => svgFeatherCharm() },
   { id: "wolf_fang", name: "Wolf Fang Charm", slot: "accessory", layer: "front", rarity: "rare", crit: 9, price: 330, levelReq: 3, box: "78 104 44 38", art: () => svgFangCharm() },
-  { id: "sage_amulet", name: "Sage's Amulet", slot: "accessory", layer: "front", rarity: "epic", crit: 10, hp: 10, price: 660, levelReq: 5, box: "78 104 44 38", art: () => svgAmulet("#caa53d", "#7b5ea7") },
+  { id: "sage_amulet", name: "Sage's Amulet", slot: "accessory", layer: "front", rarity: "epic", crit: 10, hp: 10, price: 660, levelReq: 5, box: "78 104 44 38", art: () => svgAmulet("#caa53d", "#6b4fa0") },
   { id: "royal_medallion", name: "Royal Medallion", slot: "accessory", layer: "front", rarity: "epic", crit: 13, price: 720, levelReq: 6, box: "78 104 44 42", art: () => svgMedallion() },
   { id: "phoenix_amulet", name: "Amulet of the Phoenix", slot: "accessory", layer: "front", rarity: "legendary", crit: 12, hp: 20, price: 1500, levelReq: 9, box: "78 104 44 42", art: () => svgPhoenixAmulet() },
   // Pets — fight beside you in Adventure mode with their own abilities
@@ -18095,7 +18095,7 @@ const RPG_ITEMS = [
   { id: "pocket_dragon", name: "Dragon Whelp", slot: "pet", rarity: "legendary", atk: 5, crit: 8, hp: 10, price: 1650, levelReq: 10, box: "142 80 44 44", art: () => svgPocketDragon() },
   { id: "warlords_banner", name: "Warlord's Banner", slot: "accessory", layer: "back", rarity: "epic", def: 3, hp: 10, price: 720, levelReq: 6, classBonus: { clazz: "warrior", def: 4, hp: 15 }, art: () => svgCape("#9c2c2c", "#e8b41f") },
   { id: "thieves_dice", name: "Thieves' Dice", slot: "accessory", layer: "front", rarity: "epic", crit: 6, price: 720, levelReq: 6, box: "78 104 44 38", classBonus: { clazz: "rogue", crit: 8, atk: 3 }, art: () => svgAmulet("#69737e", "#2c2a3a") },
-  { id: "archmage_orb", name: "Archmage's Orb", slot: "accessory", layer: "front", rarity: "epic", crit: 5, hp: 5, price: 720, levelReq: 6, box: "78 104 44 38", classBonus: { clazz: "mage", crit: 6, hp: 10 }, art: () => svgAmulet("#caa53d", "#4a6fa5") },
+  { id: "archmage_orb", name: "Archmage's Orb", slot: "accessory", layer: "front", rarity: "epic", crit: 5, hp: 5, price: 720, levelReq: 6, box: "78 104 44 38", classBonus: { clazz: "mage", crit: 6, hp: 10 }, art: () => svgAmulet("#caa53d", "#2d6ca8") },
   // Mythics — only from booster packs, never sold or dropped
   { id: "worldender", name: "Worldender", slot: "weapon", rarity: "mythic", atk: 40, crit: 15, price: 3000, levelReq: 1, packOnly: true, art: () => svgGreatsword("#3a2740", "#e84393", "#1d1c28", "#ff7ab8", `<line x1="0" y1="-58" x2="0" y2="-22" stroke="#ff7ab8" stroke-width="1.8" stroke-dasharray="5 4" opacity="0.95"/>`) },
   { id: "staff_of_creation", name: "Staff of Creation", slot: "weapon", rarity: "mythic", atk: 30, crit: 25, price: 3000, levelReq: 1, packOnly: true, art: () => svgStaff("#e8c8dc", "#e84393", "#ff9ad1") + `<g>${svgStar(10, -76, 3, 1.3, "#ffd76a")}${svgTwinkle(1.6)}</g>` },
@@ -18180,7 +18180,7 @@ const RPG_ELITE_AFFIXES = {
   juggernaut: { badge: "💪", apply: f => { f.juggernaut = true; } }
 };
 const RPG_RANGED_ENEMIES = new Set(["witch", "cursed_genie", "wyvern", "restless_ghost", "storm_talon", "web_spinner", "angry_shroom", "lich_lord", "deep_kraken"]);
-function rpgElColor(el) { return { fire: "#ff6b35", ice: "#8fd4ee", nature: "#3a9e5f", shadow: "#9b7fd4", holy: "#ffd76a", arcane: "#b79ae0" }[el] || "#cfd8e3"; }
+function rpgElColor(el) { return { fire: "#ff6b35", ice: "#8fd4ee", nature: "#0f7a5a", shadow: "#9b7fd4", holy: "#ffd76a", arcane: "#b79ae0" }[el] || "#cfd8e3"; }
 
 // ---- State & storage ----
 let rpgState = null;
@@ -18853,25 +18853,25 @@ function rpgAvatarSvg(equipment, gender) {
     ${capeArt}
     <rect x="84" y="180" width="11" height="30" rx="5" fill="${rpgGrad("#4b4339", "h")}" ${RPG_O_THIN}/>
     <rect x="105" y="180" width="11" height="30" rx="5" fill="${rpgGrad("#4b4339", "h")}" ${RPG_O_THIN}/>
-    <ellipse cx="88" cy="212" rx="11" ry="6" fill="${rpgGrad("#2c2a27")}" ${RPG_O_THIN}/>
-    <ellipse cx="112" cy="212" rx="11" ry="6" fill="${rpgGrad("#2c2a27")}" ${RPG_O_THIN}/>
-    <path d="M77 118 Q100 110 123 118 L129 178 Q100 188 71 178 Z" fill="${rpgGrad("#4a7c59")}" ${RPG_O}/>
+    <ellipse cx="88" cy="212" rx="11" ry="6" fill="${rpgGrad("#14161a")}" ${RPG_O_THIN}/>
+    <ellipse cx="112" cy="212" rx="11" ry="6" fill="${rpgGrad("#14161a")}" ${RPG_O_THIN}/>
+    <path d="M77 118 Q100 110 123 118 L129 178 Q100 188 71 178 Z" fill="${rpgGrad("#0b6b4f")}" ${RPG_O}/>
     <path d="M77 118 Q100 110 123 118 L121 130 Q100 124 79 130 Z" fill="rgba(0,0,0,0.12)"/>
     <rect x="73" y="166" width="54" height="8" rx="4" fill="${rpgGrad("#5b4632")}" ${RPG_O_THIN}/>
     <rect x="95" y="166" width="10" height="8" rx="2" fill="${rpgGrad("#d4b106")}" ${RPG_O_THIN}/>
     ${rpgItemArt("armor", eq)}
     <path d="M80 124 Q66 134 60 152" stroke="${RPG_OUT}" stroke-width="14" fill="none" stroke-linecap="round" opacity="0.85"/>
     <path d="M120 124 Q134 134 140 152" stroke="${RPG_OUT}" stroke-width="14" fill="none" stroke-linecap="round" opacity="0.85"/>
-    <path d="M80 124 Q66 134 60 152" stroke="#4a7c59" stroke-width="10.5" fill="none" stroke-linecap="round"/>
-    <path d="M120 124 Q134 134 140 152" stroke="#4a7c59" stroke-width="10.5" fill="none" stroke-linecap="round"/>
+    <path d="M80 124 Q66 134 60 152" stroke="#0b6b4f" stroke-width="10.5" fill="none" stroke-linecap="round"/>
+    <path d="M120 124 Q134 134 140 152" stroke="#0b6b4f" stroke-width="10.5" fill="none" stroke-linecap="round"/>
     <circle cx="58" cy="158" r="7" fill="${rpgGrad("#f5cfa8", "r")}" ${RPG_O_THIN}/>
     <circle cx="142" cy="158" r="7" fill="${rpgGrad("#f5cfa8", "r")}" ${RPG_O_THIN}/>
     <rect x="93" y="104" width="14" height="12" rx="5" fill="#f5cfa8"/>
     <circle cx="100" cy="78" r="34" fill="${rpgGrad("#f5cfa8", "r")}" ${RPG_O}/>
     <path d="M64 76 Q66 40 100 40 Q134 40 136 76 Q120 58 100 60 Q80 58 64 76 Z" fill="${rpgGrad("#5b4632")}" ${RPG_O_THIN}/>
-    <circle cx="88" cy="84" r="3.4" fill="#2c2a27"/>
-    <circle cx="112" cy="84" r="3.4" fill="#2c2a27"/>
-    <path d="M91 95 Q100 102 109 95" stroke="#2c2a27" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+    <circle cx="88" cy="84" r="3.4" fill="#14161a"/>
+    <circle cx="112" cy="84" r="3.4" fill="#14161a"/>
+    <path d="M91 95 Q100 102 109 95" stroke="#14161a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
     <circle cx="80" cy="92" r="4" fill="#f3a683" opacity="0.45"/>
     <circle cx="120" cy="92" r="4" fill="#f3a683" opacity="0.45"/>
     ${rpgItemArt("helmet", eq)}
@@ -18931,7 +18931,7 @@ const RPG_TITLES = [
 function rpgEarnedTitles() { return rpgState ? RPG_TITLES.filter(t => { try { return t.test(); } catch (_) { return false; } }) : []; }
 const RPG_HOUSES = [
   { id: "dragons", name: "Dragons", icon: "🐉", color: "#9c2c2c" },
-  { id: "phoenix", name: "Phoenix", icon: "🔥", color: "#d4882a" },
+  { id: "phoenix", name: "Phoenix", icon: "🔥", color: "#b7791f" },
   { id: "griffins", name: "Griffins", icon: "🦅", color: "#27406b" },
   { id: "krakens", name: "Krakens", icon: "🐙", color: "#4b3a63" }
 ];
@@ -21582,7 +21582,7 @@ function rpgWeaponFx(itemId) {
   let color = "#dbe3ea", emoji = "✨";
   if (/flame|ember|dragon|phoenix/.test(id)) { color = "#ff6b35"; emoji = "🔥"; }
   else if (/frost|glacier|penguin/.test(id)) { color = "#8fd4ee"; emoji = "❄️"; }
-  else if (/oak|sprout|rune|elven|emerald/.test(id)) { color = "#3a9e5f"; emoji = "🍃"; }
+  else if (/oak|sprout|rune|elven|emerald/.test(id)) { color = "#0f7a5a"; emoji = "🍃"; }
   else if (/void|shadow|obsidian/.test(id)) { color = "#9b7fd4"; emoji = "🌀"; }
   else if (/star|comet|storm/.test(id)) { color = "#ffd76a"; emoji = "⭐"; }
   else if (/sun|excalibur|golden|gilded|crown|royal/.test(id)) { color = "#ffd76a"; emoji = "✨"; }
@@ -22132,7 +22132,7 @@ function advAutoAttack() {
     const dealtB = advHurtFoe(fi, dmg, { crit, fx, element: rpgWeaponElement(rpgState.equipment.weapon) });
     const totalLeech = (adv ? adv.mods.leech : 0) + (adv ? (adv.stats.leechPct || 0) : 0);
     if (adv && totalLeech && dealtB) advHeal(dealtB * totalLeech, "🩸");
-    if (adv && adv.stats.poisonOnHit) advAddDot(fi, "poison", Math.max(1, Math.round(adv.stats.atk * 0.12 * adv.stats.poisonOnHit)), 3, "#3a9e5f");
+    if (adv && adv.stats.poisonOnHit) advAddDot(fi, "poison", Math.max(1, Math.round(adv.stats.atk * 0.12 * adv.stats.poisonOnHit)), 3, "#0f7a5a");
   });
 }
 function advHurtFoe(i, dmg, opts = {}) {
@@ -22371,7 +22371,7 @@ function advAddDot(i, type, dmg, ticks, color) {
 }
 function advCastRiders(d, i, dealt) {
   const atk = adv.stats.atk;
-  if (d.poison) advAddDot(i, "poison", Math.round(atk * 0.35), 4, "#3a9e5f");
+  if (d.poison) advAddDot(i, "poison", Math.round(atk * 0.35), 4, "#0f7a5a");
   if (d.burn) advAddDot(i, "burn", Math.round(atk * 0.45), 3, "#ff6b35");
   if (d.chill) { const f = adv.foes[i]; if (f && !f.dead && !f.juggernaut) { f.chillUntil = Date.now() + 4000; advParticles(advFoeEl(i), "❄️", 3); } }
   if (d.stun) { const f = adv.foes[i]; if (f && !f.dead && !f.juggernaut) { f.stunned = Date.now() + 2200; advFloat(advFoeEl(i), "💫", "dmg"); } }
@@ -24924,7 +24924,7 @@ function tcgCloseReveal() {
   tcgRenderBody();
 }
 function tcgConfetti(n) {
-  const colors = ['#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6', '#22c55e', '#ef4444', '#fde047'];
+  const colors = ['#f59e0b', '#ec4899', '#8b5cf6', '#2d6ca8', '#22c55e', '#ef4444', '#fde047'];
   for (let i = 0; i < n; i++) {
     const c = document.createElement('div');
     c.className = 'tcg-confetti';
@@ -26857,7 +26857,7 @@ const PP_THEME = {
   'Magnets':'interactions','Forces':'interactions','Living Together':'interactions','Food Chains and Webs':'interactions','Humans and the Environment':'interactions',
   'Light':'energy','Heat':'energy','Energy in Food':'energy','Energy Conversion':'energy'
 };
-const PP_THEME_C = { diversity:'#3b82c4', cycles:'#3a9d78', systems:'#c98a2b', interactions:'#7a5cc0', energy:'#d0743a' };
+const PP_THEME_C = { diversity:'#2d6ca8', cycles:'#0f7a5a', systems:'#a8762c', interactions:'#6b4fa0', energy:'#b55a2b' };
 const PP_THEME_NAME = { diversity:'Diversity', cycles:'Cycles', systems:'Systems', interactions:'Interactions', energy:'Energy' };
 
 let ppData = null;            // { questions:[], recurring:[] } — loaded or seeded
@@ -27336,7 +27336,7 @@ function _ppFocusScroll(){
     try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) { el.scrollIntoView(); }
     const chip = el.classList.contains('pp-chip') ? el : (el.querySelector('.pp-chip') || el);
     chip.style.transition = 'box-shadow .3s ease';
-    chip.style.boxShadow = '0 0 0 3px var(--primary,#4a7c59)';
+    chip.style.boxShadow = '0 0 0 3px var(--primary,#0b6b4f)';
     setTimeout(() => { chip.style.boxShadow = ''; }, 2200);
   });
 }
@@ -27477,7 +27477,7 @@ function ppRenderBody(){
 
     <div class="pp-card">
       <h3 class="pp-h">Question map — every question, every year ${addYear}
-        <span class="pp-diff-legend"><span><span class="pp-lg-box" style="background:#2ea069;"></span>Easy</span><span><span class="pp-lg-box" style="background:#d69e2e;"></span>Moderate</span><span><span class="pp-lg-box" style="background:#cf4f4f;"></span>Difficult</span></span>
+        <span class="pp-diff-legend"><span><span class="pp-lg-box" style="background:#0f7a5a;"></span>Easy</span><span><span class="pp-lg-box" style="background:#b7791f;"></span>Moderate</span><span><span class="pp-lg-box" style="background:#b23b36;"></span>Difficult</span></span>
       </h3>
       <p class="pp-sub">All ${total} questions, classified into your portal's topics. Chips are colour-coded by difficulty (green / yellow / red). ${edit ? 'Click a question to edit it, use the drop-down to set its difficulty, or × to remove it.' : (admin ? 'A &#10003; marks questions with a bank question attached. ' : 'Highlighted questions are available to practise, with your success rate shown.')}</p>
       ${yearGroups}
@@ -27563,7 +27563,7 @@ function ppHoverEl(){
 // attached question shows here but never appears in practice.
 function _ppNisBadge(bq){
   if (!bq || !bq.notInSyllabus) return '';
-  return `<div style="margin:6px 0;padding:5px 9px;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;font-size:0.74rem;font-weight:600;">🚫 Not in syllabus — kept here for reference; it is not served in any practice mode.</div>`;
+  return `<div style="margin:6px 0;padding:5px 9px;border-radius:8px;background:#fdf4e3;border:1px solid #e0b768;color:#7a5410;font-size:0.74rem;font-weight:600;">🚫 Not in syllabus — kept here for reference; it is not served in any practice mode.</div>`;
 }
 function ppHoverHtml(id){
   const q = ppFindQ(id);
@@ -27578,7 +27578,7 @@ function ppHoverHtml(id){
   if (bq) {
     // Student's live success rate on the attached question (all platforms).
     const st = questionStats(bq.id);
-    const accLine = (st.percent != null) ? `<div class="pp-hv-note" style="color:var(--primary,#4a7c59);font-style:normal;">Your success rate: <strong>${st.percent}%</strong> (${st.correct}/${st.attempts} correct)</div>` : '';
+    const accLine = (st.percent != null) ? `<div class="pp-hv-note" style="color:var(--primary,#0b6b4f);font-style:normal;">Your success rate: <strong>${st.percent}%</strong> (${st.correct}/${st.attempts} correct)</div>` : '';
     // Admins get a direct "Edit question" button in the locked preview — it opens
     // the block editor and, when they finish, brings them back to Past Papers
     // scrolled to this very question, so they don't lose their place.
@@ -27621,7 +27621,7 @@ function ppBankHoverHtml(qid, note){
   if (!bq) return '';
   const cat = bq.category ? ' &middot; ' + escapeHtml(normalizeCategoryValue(bq.category)) : '';
   const st = questionStats(bq.id);
-  const accLine = (st && st.percent != null) ? `<div class="pp-hv-note" style="color:var(--primary,#4a7c59);font-style:normal;">Your success rate: <strong>${st.percent}%</strong> (${st.correct}/${st.attempts} correct)</div>` : '';
+  const accLine = (st && st.percent != null) ? `<div class="pp-hv-note" style="color:var(--primary,#0b6b4f);font-style:normal;">Your success rate: <strong>${st.percent}%</strong> (${st.correct}/${st.attempts} correct)</div>` : '';
   return `<div class="pp-hv-head"><strong>${escapeHtml(bq.title || 'Untitled')}</strong></div>
     <div class="pp-hv-topic"><span class="pp-dot" style="background:${ppThemeColor(bq.topic)}"></span>${escapeHtml(bq.topic || '')}${cat}</div>${_ppNisBadge(bq)}
     <div class="pp-hv-preview">${renderQuestionPreviewHtml(bq.id)}</div>${accLine}
@@ -28139,7 +28139,7 @@ function _ppGameBannerSync(){
       if (!b) {
         b = document.createElement('div');
         b.className = 'pp-game-banner';
-        b.style.cssText = 'display:flex;align-items:center;gap:14px;flex-wrap:wrap;max-width:880px;margin:10px auto;padding:12px 18px;border:1px solid var(--primary,#4a7c59);background:var(--primary-light,#eef4f0);color:var(--primary-dark,#2f5d3f);border-radius:12px;font-size:0.86rem;line-height:1.5;';
+        b.style.cssText = 'display:flex;align-items:center;gap:14px;flex-wrap:wrap;max-width:880px;margin:10px auto;padding:12px 18px;border:1px solid var(--primary,#0b6b4f);background:var(--primary-light,#eaf3ef);color:var(--primary-dark,#064834);border-radius:12px;font-size:0.86rem;line-height:1.5;';
         const hdr = page.querySelector('.page-header');
         if (hdr) hdr.insertAdjacentElement('afterend', b); else page.prepend(b);
       }
@@ -28166,9 +28166,9 @@ function ppGameMenuOpen(ev, year){
   el.innerHTML = `
     <div style="padding:6px 10px 10px;">
       <div style="font-weight:700;font-size:0.9rem;">Choose a game — ${escapeHtml(ppYearLabel(year))}</div>
-      <div style="font-size:0.76rem;color:var(--text-muted);margin-top:5px;line-height:1.5;">Only these ${n} past-paper question${n === 1 ? '' : 's'} will appear (MCQ + open-ended). Every question answered in the game counts <b style="color:var(--primary-dark,#2f5d3f);">×2 on the leaderboards</b>.</div>
+      <div style="font-size:0.76rem;color:var(--text-muted);margin-top:5px;line-height:1.5;">Only these ${n} past-paper question${n === 1 ? '' : 's'} will appear (MCQ + open-ended). Every question answered in the game counts <b style="color:var(--primary-dark,#064834);">×2 on the leaderboards</b>.</div>
     </div>` + PP_GAMES.map(g => `
-    <button type="button" style="display:flex;align-items:center;gap:11px;width:100%;padding:9px 10px;border:none;background:none;border-radius:10px;cursor:pointer;font:inherit;text-align:left;" onmouseover="this.style.background='var(--primary-light,#eef4f0)'" onmouseout="this.style.background='none'" onclick="ppGameLaunch('${escapeHtml(String(year || ''))}','${g.mode}')">
+    <button type="button" style="display:flex;align-items:center;gap:11px;width:100%;padding:9px 10px;border:none;background:none;border-radius:10px;cursor:pointer;font:inherit;text-align:left;" onmouseover="this.style.background='var(--primary-light,#eaf3ef)'" onmouseout="this.style.background='none'" onclick="ppGameLaunch('${escapeHtml(String(year || ''))}','${g.mode}')">
       <span style="font-size:1.25rem;flex:none;">${g.icon}</span>
       <span><span style="display:block;font-weight:600;font-size:0.87rem;">${g.name}</span><span style="display:block;font-size:0.73rem;color:var(--text-muted);margin-top:1px;">${g.sub}</span></span>
     </button>`).join('');
@@ -28636,47 +28636,47 @@ function ppStyles(){
   .pp-tile-h { font-size:0.75rem; color:var(--text-muted); margin-top:4px; }
   .pp-editbtn { border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:10px; padding:10px 16px; font:inherit; font-weight:600; cursor:pointer; white-space:nowrap; }
   .pp-editbtn.on { background:var(--primary); border-color:var(--primary); color:#fff; }
-  .pp-note { font-size:0.9rem; color:var(--text-muted); background:var(--surface-alt,#faf8f5); border:1px solid var(--border); border-radius:12px; padding:12px 16px; margin-bottom:18px; }
+  .pp-note { font-size:0.9rem; color:var(--text-muted); background:var(--surface-alt,#fafbfa); border:1px solid var(--border); border-radius:12px; padding:12px 16px; margin-bottom:18px; }
   .pp-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:22px 24px; margin-bottom:20px; }
   .pp-h { margin:0 0 4px; font-size:1.05rem; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .pp-sub { margin:0 0 16px; font-size:0.88rem; color:var(--text-muted); }
-  .pp-add { border:1px dashed var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); color:var(--primary-dark,#2f5d3f); border-radius:9px; padding:6px 12px; font:inherit; font-size:0.82rem; font-weight:600; cursor:pointer; }
+  .pp-add { border:1px dashed var(--primary,#0b6b4f); background:var(--primary-light,#eaf3ef); color:var(--primary-dark,#064834); border-radius:9px; padding:6px 12px; font:inherit; font-size:0.82rem; font-weight:600; cursor:pointer; }
   .pp-add.sm { padding:4px 10px; font-size:0.76rem; margin-left:6px; }
   .pp-add:hover { filter:brightness(0.97); }
   .pp-chip-row { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
-  .pp-chip { display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:600; padding:5px 10px; border-radius:9px; border:1px solid var(--border); background:var(--surface-alt,#faf8f5); color:var(--text,#333); cursor:default; user-select:none; }
+  .pp-chip { display:inline-flex; align-items:center; gap:5px; font-size:0.8rem; font-weight:600; padding:5px 10px; border-radius:9px; border:1px solid var(--border); background:var(--surface-alt,#fafbfa); color:var(--text,#333); cursor:default; user-select:none; }
   .pp-chip .pp-chip-yr { font-size:0.64rem; color:var(--text-muted); font-weight:600; }
-  .pp-chip.assigned { background:var(--primary-light,#e8f0ea); border-color:var(--primary,#4a7c59); color:var(--primary-dark,#2f5d3f); cursor:pointer; }
+  .pp-chip.assigned { background:var(--primary-light,#e4f1ec); border-color:var(--primary,#0b6b4f); color:var(--primary-dark,#064834); cursor:pointer; }
   .pp-chip.open { border-style:dashed; cursor:pointer; }
   .pp-chip.open:hover, .pp-chip.assigned:hover { filter:brightness(0.97); box-shadow:0 1px 4px rgba(0,0,0,0.08); }
   .pp-chip.muted { opacity:0.55; }
   /* Difficulty colour-coding (admin-set, past-paper only). Placed after the
      assigned/open/muted rules so it wins for the same specificity. */
-  .pp-chip.pp-diff-easy { background:#e4f4ec; border-color:#2ea069; color:#1f6b4e; }
-  .pp-chip.pp-diff-moderate { background:#fbf1da; border-color:#cf9526; color:#8a6212; }
-  .pp-chip.pp-diff-hard { background:#fbe4e4; border-color:#cf4f4f; color:#9e2b2b; }
+  .pp-chip.pp-diff-easy { background:#e4f1ec; border-color:#0f7a5a; color:#0b5b43; }
+  .pp-chip.pp-diff-moderate { background:#fdf4e3; border-color:#b7791f; color:#7a5410; }
+  .pp-chip.pp-diff-hard { background:#fbeceb; border-color:#b23b36; color:#8f2f2b; }
   .pp-chip.pp-diff-easy, .pp-chip.pp-diff-moderate, .pp-chip.pp-diff-hard { border-style:solid; }
   .pp-chip.pp-diff-easy .pp-chip-yr, .pp-chip.pp-diff-moderate .pp-chip-yr, .pp-chip.pp-diff-hard .pp-chip-yr { color:inherit; opacity:0.7; }
   .pp-diff-legend { display:inline-flex; gap:12px; flex-wrap:wrap; margin-left:auto; font-size:0.76rem; color:var(--text-muted); align-items:center; }
   .pp-diff-legend .pp-lg-box { display:inline-block; width:12px; height:12px; border-radius:4px; margin-right:5px; vertical-align:-1px; border:1px solid rgba(0,0,0,0.12); }
   .pp-diff-sel { font:inherit; font-size:0.72rem; border:1px solid var(--border); border-left:none; border-radius:0; background:var(--surface); color:var(--text); padding:0 4px; cursor:pointer; }
   .pp-diffpick { font:inherit; font-size:0.78rem; font-weight:600; border:1px solid var(--border); background:var(--surface); color:var(--text-muted); border-radius:999px; padding:5px 12px; cursor:pointer; }
-  .pp-diffpick:hover { border-color:var(--primary,#4a7c59); color:var(--text); }
-  .pp-diffpick.on { border-color:var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); color:var(--primary-dark,#2f5d3f); box-shadow:inset 0 0 0 1px var(--primary,#4a7c59); }
-  .pp-diffpick.on.pp-diff-easy { background:#e4f4ec; border-color:#2ea069; color:#1f6b4e; box-shadow:inset 0 0 0 1px #2ea069; }
-  .pp-diffpick.on.pp-diff-moderate { background:#fbf1da; border-color:#cf9526; color:#8a6212; box-shadow:inset 0 0 0 1px #cf9526; }
-  .pp-diffpick.on.pp-diff-hard { background:#fbe4e4; border-color:#cf4f4f; color:#9e2b2b; box-shadow:inset 0 0 0 1px #cf4f4f; }
+  .pp-diffpick:hover { border-color:var(--primary,#0b6b4f); color:var(--text); }
+  .pp-diffpick.on { border-color:var(--primary,#0b6b4f); background:var(--primary-light,#eaf3ef); color:var(--primary-dark,#064834); box-shadow:inset 0 0 0 1px var(--primary,#0b6b4f); }
+  .pp-diffpick.on.pp-diff-easy { background:#e4f1ec; border-color:#0f7a5a; color:#0b5b43; box-shadow:inset 0 0 0 1px #0f7a5a; }
+  .pp-diffpick.on.pp-diff-moderate { background:#fdf4e3; border-color:#b7791f; color:#7a5410; box-shadow:inset 0 0 0 1px #b7791f; }
+  .pp-diffpick.on.pp-diff-hard { background:#fbeceb; border-color:#b23b36; color:#8f2f2b; box-shadow:inset 0 0 0 1px #b23b36; }
   .pp-chip-acc { font-size:0.6rem; font-weight:700; padding:1px 5px; border-radius:6px; background:rgba(0,0,0,0.06); color:var(--text-muted); }
   .pp-chip-edit { display:inline-flex; align-items:stretch; border-radius:9px; }
   .pp-chip-edit .pp-chip { border-top-right-radius:0; border-bottom-right-radius:0; }
   .pp-mini { border:1px solid var(--border); background:var(--surface); color:var(--text-muted); font:inherit; font-size:0.78rem; cursor:pointer; padding:0 8px; border-radius:0 9px 9px 0; border-left:none; }
   .pp-mini:hover { color:var(--text); }
-  .pp-mini.del:hover { color:#fff; background:var(--accent-red,#d94f4f); border-color:var(--accent-red,#d94f4f); }
+  .pp-mini.del:hover { color:#fff; background:var(--accent-red,#b23b36); border-color:var(--accent-red,#b23b36); }
   .pp-tools { margin-left:auto; display:flex; gap:6px; align-items:center; }
   .pp-tools .pp-mini { border-radius:8px; border-left:1px solid var(--border); padding:3px 9px; }
   .pp-print-check { display:inline-flex; align-items:center; justify-content:center; padding:3px 6px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer; }
-  .pp-print-check:hover { border-color:var(--primary,#4a7c59); }
-  .pp-print-check input { width:15px; height:15px; margin:0; accent-color:var(--primary,#4a7c59); cursor:pointer; }
+  .pp-print-check:hover { border-color:var(--primary,#0b6b4f); }
+  .pp-print-check input { width:15px; height:15px; margin:0; accent-color:var(--primary,#0b6b4f); cursor:pointer; }
   .pp-add:disabled { opacity:0.5; cursor:not-allowed; }
   .pp-pr-row { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:13px 2px; }
   .pp-pr-row + .pp-pr-row { border-top:1px solid var(--border); }
@@ -28685,7 +28685,7 @@ function ppStyles(){
   .pp-pr-sub { font-size:0.76rem; color:var(--text-muted); margin-top:3px; }
   .pp-pr-btns { display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
   .pp-pr-btns .pp-add { padding:8px 14px; }
-  .pp-gamebtn { border-style:solid; background:#fdf3e3; border-color:#d1892b; color:#8a5a12; }
+  .pp-gamebtn { border-style:solid; background:#fdf4e3; border-color:#c08a2e; color:#7a5410; }
   .pp-year-head .pp-tools { margin-left:auto; }
   .pp-year { padding:12px 0; }
   .pp-year + .pp-year { border-top:1px solid var(--border); }
@@ -28693,7 +28693,7 @@ function ppStyles(){
   .pp-year-sub { font-size:0.78rem; color:var(--text-muted); font-weight:500; }
   .pp-rec { border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
   .pp-rec-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
-  .pp-rec-count { font-size:0.72rem; font-weight:700; color:#fff; background:var(--primary,#4a7c59); border-radius:999px; padding:2px 9px; }
+  .pp-rec-count { font-size:0.72rem; font-weight:700; color:#fff; background:var(--primary,#0b6b4f); border-radius:999px; padding:2px 9px; }
   .pp-rec-title { font-size:0.98rem; font-weight:700; }
   .pp-rec-topic { font-size:0.76rem; color:var(--text-muted); margin:4px 0 8px; }
   .pp-rec-note { font-size:0.84rem; color:var(--text-muted); margin-top:9px; }
@@ -28703,29 +28703,29 @@ function ppStyles(){
   .pp-bar-row { display:flex; align-items:center; gap:12px; padding:5px 0; }
   .pp-bar-name { width:210px; flex:none; font-size:0.82rem; display:flex; align-items:center; gap:7px; }
   .pp-bar-name .pp-lv { font-size:0.66rem; color:var(--text-muted); font-weight:600; }
-  .pp-bar-track { flex:1; height:18px; border-radius:5px; background:var(--surface-alt,#f0ede8); overflow:hidden; display:flex; }
+  .pp-bar-track { flex:1; height:18px; border-radius:5px; background:var(--surface-alt,#eef1ef); overflow:hidden; display:flex; }
   .pp-bar-seg { height:100%; min-width:4px; cursor:pointer; display:flex; align-items:center; justify-content:center; overflow:hidden; border-right:2px solid var(--surface,#fff); transition:filter 0.15s; }
   .pp-bar-seg:last-child { border-right:none; }
   .pp-bar-seg:hover { filter:brightness(1.1) saturate(1.15); }
   .pp-seg-lb { font-size:0.6rem; font-weight:700; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,0.4); white-space:nowrap; pointer-events:none; }
   .pp-topic-link { cursor:pointer; }
-  .pp-topic-link:hover { color:var(--primary,#4a7c59); text-decoration:underline; text-underline-offset:3px; }
-  .pp-topic-yrtag { font-size:0.68rem; font-weight:700; color:var(--primary-dark,#2f5d3f); background:var(--primary-light,#eef4f0); border:1px solid var(--primary,#4a7c59); border-radius:999px; padding:2px 10px; }
+  .pp-topic-link:hover { color:var(--primary,#0b6b4f); text-decoration:underline; text-underline-offset:3px; }
+  .pp-topic-yrtag { font-size:0.68rem; font-weight:700; color:var(--primary-dark,#064834); background:var(--primary-light,#eaf3ef); border:1px solid var(--primary,#0b6b4f); border-radius:999px; padding:2px 10px; }
   .pp-topic-year { padding:11px 0; }
   .pp-topic-year + .pp-topic-year { border-top:1px solid var(--border); }
   .pp-topic-yhead { font-size:0.74rem; font-weight:700; color:var(--text-muted); margin-bottom:7px; }
   .pp-bar-val { width:74px; flex:none; text-align:right; font-size:0.76rem; color:var(--text-muted); }
   .pp-arow { display:flex; gap:10px; align-items:flex-start; padding:11px 12px; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; cursor:pointer; }
-  .pp-arow:hover { border-color:var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); }
-  .pp-arow.sel { border-color:var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); }
+  .pp-arow:hover { border-color:var(--primary,#0b6b4f); background:var(--primary-light,#eaf3ef); }
+  .pp-arow.sel { border-color:var(--primary,#0b6b4f); background:var(--primary-light,#eaf3ef); }
   .pp-arow-title { font-size:0.9rem; font-weight:600; }
   .pp-arow-sub { font-size:0.76rem; color:var(--text-muted); margin:2px 0; }
   .pp-arow-prev { font-size:0.78rem; color:var(--text-muted); overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
-  .pp-match { color:var(--primary,#4a7c59); font-weight:700; }
+  .pp-match { color:var(--primary,#0b6b4f); font-weight:700; }
   .pp-form-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px 12px; margin-bottom:6px; }
   .pp-form-grid .full { grid-column:1 / -1; }
-  .pp-mini.pp-bulkedit { background:var(--primary-light,#eef4f0); border-color:var(--primary,#4a7c59); color:var(--primary-dark,#2f5d3f); font-weight:600; }
-  .pp-mini.pp-bulkedit:hover { background:var(--primary,#4a7c59); color:#fff; }
+  .pp-mini.pp-bulkedit { background:var(--primary-light,#eaf3ef); border-color:var(--primary,#0b6b4f); color:var(--primary-dark,#064834); font-weight:600; }
+  .pp-mini.pp-bulkedit:hover { background:var(--primary,#0b6b4f); color:#fff; }
   /* ---- whole-paper editor ---- */
   .pp-pe-dialog { max-width:1040px; width:min(1040px, 96vw); text-align:left; max-height:92vh; display:flex; flex-direction:column; padding:0; overflow:hidden; }
   .pp-pe-head { display:flex; align-items:flex-start; gap:18px; padding:24px 28px 18px; border-bottom:1px solid var(--border); }
@@ -28734,12 +28734,12 @@ function ppStyles(){
   .pp-pe-sub { margin:0; font-size:0.86rem; color:var(--text-muted); line-height:1.6; }
   .pp-pe-x { flex:none; border:none; background:none; font-size:1.7rem; line-height:1; color:var(--text-muted); cursor:pointer; padding:0 4px; border-radius:8px; }
   .pp-pe-x:hover { color:var(--text); }
-  .pp-pe-bulk { padding:16px 28px; background:var(--surface-alt,#faf8f5); border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:12px; }
+  .pp-pe-bulk { padding:16px 28px; background:var(--surface-alt,#fafbfa); border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:12px; }
   .pp-pe-bulkline { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; }
   .pp-pe-bulklabel { font-size:0.8rem; font-weight:700; color:var(--text-muted); padding-bottom:9px; }
   .pp-pe-spacer { flex:1; min-width:0; }
   .pp-pe-selall { display:inline-flex; align-items:center; gap:7px; font-size:0.84rem; font-weight:600; cursor:pointer; padding-bottom:9px; }
-  .pp-pe-selall input { width:16px; height:16px; margin:0; accent-color:var(--primary,#4a7c59); cursor:pointer; }
+  .pp-pe-selall input { width:16px; height:16px; margin:0; accent-color:var(--primary,#0b6b4f); cursor:pointer; }
   .pp-pe-selcount { font-size:0.78rem; color:var(--text-muted); padding-bottom:10px; }
   .pp-pe-bulk .form-select.sm, .pp-pe-bulk .form-input.sm { font-size:0.82rem; padding:7px 10px; width:auto; min-width:126px; margin:0; }
   .pp-pe-bulk .form-input.sm { min-width:92px; }
@@ -28748,14 +28748,14 @@ function ppStyles(){
   .pp-pe-bulk .pp-mini { padding:8px 12px; border-radius:9px; border-left:1px solid var(--border); }
   .pp-pe-body { flex:1; overflow-y:auto; padding:22px 28px; display:flex; flex-direction:column; gap:14px; }
   .pp-pe-row { border:1px solid var(--border); border-radius:14px; padding:15px 18px 17px; background:var(--surface); display:flex; flex-direction:column; gap:11px; }
-  .pp-pe-row.sel { border-color:var(--primary,#4a7c59); box-shadow:inset 0 0 0 1px var(--primary,#4a7c59); background:var(--primary-light,#f3f8f4); }
+  .pp-pe-row.sel { border-color:var(--primary,#0b6b4f); box-shadow:inset 0 0 0 1px var(--primary,#0b6b4f); background:var(--primary-light,#eff6f3); }
   .pp-pe-rowhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .pp-pe-tick { display:inline-flex; align-items:center; cursor:pointer; }
-  .pp-pe-tick input { width:17px; height:17px; margin:0; accent-color:var(--primary,#4a7c59); cursor:pointer; }
-  .pp-pe-qno { font-size:1rem; font-weight:700; color:var(--primary-dark,#2f5d3f); }
-  .pp-pe-badge { font-size:0.68rem; font-weight:700; border-radius:999px; padding:3px 10px; border:1px solid var(--border); color:var(--text-muted); background:var(--surface-alt,#faf8f5); }
-  .pp-pe-badge.ok { color:var(--primary-dark,#2f5d3f); background:var(--primary-light,#e8f0ea); border-color:var(--primary,#4a7c59); }
-  .pp-pe-badge.new { color:#8a5a12; background:#fdf3e3; border-color:#d1892b; }
+  .pp-pe-tick input { width:17px; height:17px; margin:0; accent-color:var(--primary,#0b6b4f); cursor:pointer; }
+  .pp-pe-qno { font-size:1rem; font-weight:700; color:var(--primary-dark,#064834); }
+  .pp-pe-badge { font-size:0.68rem; font-weight:700; border-radius:999px; padding:3px 10px; border:1px solid var(--border); color:var(--text-muted); background:var(--surface-alt,#fafbfa); }
+  .pp-pe-badge.ok { color:var(--primary-dark,#064834); background:var(--primary-light,#e4f1ec); border-color:var(--primary,#0b6b4f); }
+  .pp-pe-badge.new { color:#7a5410; background:#fdf4e3; border-color:#c08a2e; }
   .pp-pe-rowtools { margin-left:auto; display:flex; gap:8px; align-items:center; }
   .pp-pe-rowtools .pp-mini { border-radius:9px; border-left:1px solid var(--border); padding:5px 11px; }
   /* Q no / booklet / marks / topic / skill / difficulty all on ONE line, so a
@@ -28768,9 +28768,9 @@ function ppStyles(){
   .pp-pe-two { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
   .pp-pe-addrow { align-self:flex-start; padding:10px 16px; font-size:0.86rem; }
   .pp-pe-empty { text-align:center; color:var(--text-muted); padding:44px 20px; font-size:0.9rem; line-height:1.7; }
-  .pp-pe-foot { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:18px 28px; border-top:1px solid var(--border); background:var(--surface-alt,#faf8f5); }
+  .pp-pe-foot { display:flex; align-items:center; gap:16px; flex-wrap:wrap; padding:18px 28px; border-top:1px solid var(--border); background:var(--surface-alt,#fafbfa); }
   .pp-pe-status { flex:1; min-width:150px; font-size:0.8rem; color:var(--text-muted); display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
-  .pp-pe-unsaved { color:#8a5a12; font-weight:700; }
+  .pp-pe-unsaved { color:#7a5410; font-weight:700; }
   .pp-pe-actions { display:flex; gap:10px; flex-wrap:wrap; }
   @media (max-width:860px){
     .pp-pe-grid { grid-template-columns:repeat(2, 1fr); }
@@ -28892,9 +28892,9 @@ const AINSTEIN_IMG = 'https://www.dropbox.com/scl/fi/4zs71zf4hn4sjgfyvj9qz/Ai-ns
 // Drawn if the image can't load (offline, or Dropbox blocked on a school
 // network) so the bubble is never an empty box.
 const AINSTEIN_FALLBACK_IMG = 'data:image/svg+xml,' + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#4a7c59"/>' +
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="#0b6b4f"/>' +
   '<circle cx="32" cy="26" r="11" fill="#fff"/><path d="M12 58a20 20 0 0 1 40 0z" fill="#fff"/>' +
-  '<text x="32" y="31" font-family="DM Sans,sans-serif" font-size="12" font-weight="700" fill="#4a7c59" text-anchor="middle">Ai</text></svg>');
+  '<text x="32" y="31" font-family="DM Sans,sans-serif" font-size="12" font-weight="700" fill="#0b6b4f" text-anchor="middle">Ai</text></svg>');
 
 let _ainstein = { day: null, left: AINSTEIN_DAILY_CREDITS, loaded: false, busy: false, history: [] };
 
@@ -30812,11 +30812,11 @@ async function ainsteinSend() {
   #ainsteinBubble.show { display: block; animation: ainsteinBob 4.5s ease-in-out infinite; }
   #ainsteinBubble::before {            /* the attention ring */
     content: ''; position: absolute; inset: -4px; border-radius: 50%; pointer-events: none;
-    border: 2px solid var(--primary, #4a7c59); opacity: 0; animation: ainsteinRing 6s ease-out infinite; }
+    border: 2px solid var(--primary, #0b6b4f); opacity: 0; animation: ainsteinRing 6s ease-out infinite; }
   #ainsteinBubble:hover { transform: translateY(-6px) scale(1.08); box-shadow: 0 18px 40px rgba(20,18,16,0.34); animation: none; }
   #ainsteinBubble:hover img { animation: ainsteinWave .9s ease-in-out infinite; }
   #ainsteinBubble:hover::before { opacity: 0; animation: none; }
-  #ainsteinBubble:focus-visible { outline: 3px solid var(--primary, #4a7c59); outline-offset: 3px; }
+  #ainsteinBubble:focus-visible { outline: 3px solid var(--primary, #0b6b4f); outline-offset: 3px; }
   #ainsteinBubble.active { transform: scale(0.94); animation: none; }
   #ainsteinBubble img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;
     transform-origin: 50% 85%; }
@@ -30840,14 +30840,14 @@ async function ainsteinSend() {
     #ainsteinBubble.show, #ainsteinBubble::before, #ainsteinBubble:hover img { animation: none !important; }
   }
   #ainsteinBadge { position: absolute; top: -4px; right: -4px; min-width: 24px; height: 24px; padding: 0 6px;
-    border-radius: 999px; background: var(--primary, #4a7c59); color: #fff;
+    border-radius: 999px; background: var(--primary, #0b6b4f); color: #fff;
     font-family: 'Space Mono', monospace; font-size: 0.72rem; font-weight: 700;
     display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
   #ainsteinBadge.out { background: #b3261e; }
 
   #ainsteinPanel { display: none; position: fixed; bottom: 118px; right: 18px; z-index: 895;
     width: min(400px, calc(100vw - 36px)); max-height: min(560px, calc(100vh - 130px));
-    background: var(--surface, #fff); border: 1px solid var(--border, #e2ddd5); border-radius: 20px;
+    background: var(--surface, #fff); border: 1px solid var(--border, #e3e6e4); border-radius: 20px;
     box-shadow: 0 20px 60px rgba(20,18,16,0.28); overflow: hidden;
     flex-direction: column; font-family: 'DM Sans', system-ui, sans-serif; }
   #ainsteinPanel.open { display: flex; }
@@ -30859,23 +30859,23 @@ async function ainsteinSend() {
   #ainsteinQuiz { display: none; flex-direction: column; flex: 1; min-height: 0; }
   #ainsteinPanel.quiz #ainsteinQuiz { display: flex; }
   .ainstein-quiz-bar { display: flex; align-items: center; gap: 12px; padding: 14px 20px;
-    border-bottom: 1px solid var(--border, #e2ddd5); background: var(--bg-soft, #f7f9fc); }
-  .ainstein-quiz-back { flex-shrink: 0; cursor: pointer; border: 1px solid var(--border, #e2ddd5);
+    border-bottom: 1px solid var(--border, #e3e6e4); background: var(--bg-soft, #f7f9fc); }
+  .ainstein-quiz-back { flex-shrink: 0; cursor: pointer; border: 1px solid var(--border, #e3e6e4);
     background: var(--surface, #fff); color: var(--text, #1a1a1a); font: inherit; font-size: 0.8rem;
     padding: 9px 14px; border-radius: 11px; }
-  .ainstein-quiz-back:hover { border-color: var(--primary, #4a7c59); }
+  .ainstein-quiz-back:hover { border-color: var(--primary, #0b6b4f); }
   .ainstein-quiz-what { min-width: 0; }
   .ainstein-quiz-what b { display: block; font-size: 0.9rem; line-height: 1.35; }
-  .ainstein-quiz-what span { display: block; font-size: 0.75rem; line-height: 1.45; color: var(--text-muted, #7a756d); margin-top: 3px; }
-  #ainsteinQuizScore { margin-left: auto; flex-shrink: 0; font-size: 0.8rem; font-weight: 700; color: var(--text-muted, #7a756d); }
+  .ainstein-quiz-what span { display: block; font-size: 0.75rem; line-height: 1.45; color: var(--text-muted, #666c71); margin-top: 3px; }
+  #ainsteinQuizScore { margin-left: auto; flex-shrink: 0; font-size: 0.8rem; font-weight: 700; color: var(--text-muted, #666c71); }
   #ainsteinQuizBody { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 22px 24px; }
-  .ainstein-quiz-wait { padding: 28px 12px; text-align: center; color: var(--text-muted, #7a756d); font-size: 0.88rem; }
+  .ainstein-quiz-wait { padding: 28px 12px; text-align: center; color: var(--text-muted, #666c71); font-size: 0.88rem; }
   .ainstein-quiz-foot { display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
-    padding: 14px 20px 16px; border-top: 1px solid var(--border, #e2ddd5); background: var(--surface, #fff); }
-  .ainstein-quiz-foot .ainstein-quiz-note { font-size: 0.74rem; line-height: 1.5; color: var(--text-muted, #7a756d); flex: 1; min-width: 140px; }
+    padding: 14px 20px 16px; border-top: 1px solid var(--border, #e3e6e4); background: var(--surface, #fff); }
+  .ainstein-quiz-foot .ainstein-quiz-note { font-size: 0.74rem; line-height: 1.5; color: var(--text-muted, #666c71); flex: 1; min-width: 140px; }
   /* Chip in the chat view offering the way back into a question left open. */
   .ainstein-resume { display: flex; align-items: center; gap: 10px; width: 100%; cursor: pointer; text-align: left;
-    padding: 12px 15px; border: 1px dashed var(--primary, #4a7c59); border-radius: 14px;
+    padding: 12px 15px; border: 1px dashed var(--primary, #0b6b4f); border-radius: 14px;
     background: var(--bg-soft, #f7f9fc); color: var(--primary-dark, #3d6749); font: inherit; font-size: 0.82rem; font-weight: 600; }
   .ainstein-resume:hover { background: #eef4ef; }
   @media (max-width: 560px) {
@@ -30884,12 +30884,12 @@ async function ainsteinSend() {
   }
 
   .ainstein-head { display: flex; align-items: center; gap: 14px; padding: 18px 20px;
-    border-bottom: 1px solid var(--border, #e2ddd5); background: var(--bg-soft, #f7f9fc); }
+    border-bottom: 1px solid var(--border, #e3e6e4); background: var(--bg-soft, #f7f9fc); }
   .ainstein-head img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
   .ainstein-head .ainstein-name { font-weight: 700; font-size: 1rem; line-height: 1.3; }
-  .ainstein-head .ainstein-sub { font-size: 0.76rem; color: var(--text-muted, #7a756d); margin-top: 3px; line-height: 1.4; }
+  .ainstein-head .ainstein-sub { font-size: 0.76rem; color: var(--text-muted, #666c71); margin-top: 3px; line-height: 1.4; }
   .ainstein-close { margin-left: auto; align-self: flex-start; background: none; border: none; cursor: pointer;
-    font-size: 1.2rem; line-height: 1; color: var(--text-muted, #7a756d); width: 32px; height: 32px; border-radius: 9px; }
+    font-size: 1.2rem; line-height: 1; color: var(--text-muted, #666c71); width: 32px; height: 32px; border-radius: 9px; }
   .ainstein-close:hover { background: var(--bg-tertiary, #f0efeb); color: var(--text, #1a1a1a); }
 
   #ainsteinLog { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-height: 140px; }
@@ -30897,7 +30897,7 @@ async function ainsteinSend() {
      re-render can leave finished messages, and their players, untouched. */
   .ainstein-item { display: flex; flex-direction: column; gap: 10px; }
   .ainstein-msg { max-width: 86%; padding: 12px 15px; border-radius: 16px; font-size: 0.88rem; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
-  .ainstein-msg.me { align-self: flex-end; background: var(--primary, #4a7c59); color: #fff; border-bottom-right-radius: 5px; }
+  .ainstein-msg.me { align-self: flex-end; background: var(--primary, #0b6b4f); color: #fff; border-bottom-right-radius: 5px; }
   .ainstein-msg.ai { align-self: flex-start; background: var(--bg-tertiary, #f2f1ec); color: var(--text, #1a1a1a); border-bottom-left-radius: 5px; }
   .ainstein-typing { display: flex; gap: 5px; align-items: center; padding: 14px 16px; }
   .ainstein-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted, #9a958d); animation: ainsteinBlink 1.2s infinite; }
@@ -30906,84 +30906,84 @@ async function ainsteinSend() {
   @keyframes ainsteinBlink { 0%, 60%, 100% { opacity: .25; } 30% { opacity: 1; } }
   /* YouTube explainer, embedded in the conversation. */
   .ainstein-vid { align-self: flex-start; width: 100%; max-width: 100%; }
-  .ainstein-vid-why { font-size: 0.82rem; line-height: 1.55; color: var(--text-muted, #7a756d); margin-bottom: 10px; }
+  .ainstein-vid-why { font-size: 0.82rem; line-height: 1.55; color: var(--text-muted, #666c71); margin-bottom: 10px; }
   .ainstein-vid-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
-    background: #000; border: 1px solid var(--border, #e2ddd5); }
+    background: #000; border: 1px solid var(--border, #e3e6e4); }
   .ainstein-vid-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
   .ainstein-vid-title { margin-top: 10px; font-size: 0.84rem; font-weight: 600; line-height: 1.45; color: var(--text, #1a1a1a); }
   .ainstein-vid-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .ainstein-vid-btn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; text-decoration: none;
-    padding: 9px 14px; border-radius: 11px; border: 1px solid var(--primary, #4a7c59);
-    background: var(--primary, #4a7c59); color: #fff; font: inherit; font-size: 0.8rem; line-height: 1; }
+    padding: 9px 14px; border-radius: 11px; border: 1px solid var(--primary, #0b6b4f);
+    background: var(--primary, #0b6b4f); color: #fff; font: inherit; font-size: 0.8rem; line-height: 1; }
   .ainstein-vid-btn:hover { background: var(--primary-dark, #3d6749); border-color: var(--primary-dark, #3d6749); }
   .ainstein-vid-btn.ghost { background: transparent; color: var(--primary-dark, #3d6749); }
   .ainstein-vid-btn.ghost:hover { background: var(--bg-soft, #f7f9fc); }
-  .ainstein-vid-meta { margin-top: 8px; font-size: 0.72rem; line-height: 1.5; color: var(--text-muted, #7a756d); }
+  .ainstein-vid-meta { margin-top: 8px; font-size: 0.72rem; line-height: 1.5; color: var(--text-muted, #666c71); }
   .ainstein-vid-search { display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
-    padding: 12px 16px; border-radius: 14px; border: 1px solid var(--primary, #4a7c59);
+    padding: 12px 16px; border-radius: 14px; border: 1px solid var(--primary, #0b6b4f);
     background: var(--bg-soft, #f7f9fc); color: var(--primary-dark, #3d6749); font-size: 0.85rem; font-weight: 600; }
   .ainstein-vid-search:hover { background: #eef4ef; }
-  .ainstein-vid-wait { align-self: flex-start; font-size: 0.8rem; line-height: 1.5; color: var(--text-muted, #7a756d);
+  .ainstein-vid-wait { align-self: flex-start; font-size: 0.8rem; line-height: 1.5; color: var(--text-muted, #666c71);
     padding: 10px 14px; border-radius: 13px; background: var(--bg-tertiary, #f2f1ec); }
 
   /* A worksheet Ai-nstein put together on request. */
   .ainstein-ws { align-self: flex-start; width: 100%; padding: 16px 17px 15px; border-radius: 16px;
-    border: 1px solid var(--primary, #4a7c59); background: var(--bg-soft, #f7f9fc); }
+    border: 1px solid var(--primary, #0b6b4f); background: var(--bg-soft, #f7f9fc); }
   .ainstein-ws-head { display: flex; align-items: flex-start; gap: 12px; }
   .ainstein-ws-ico { font-size: 1.25rem; line-height: 1.2; flex-shrink: 0; }
   .ainstein-ws-what { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .ainstein-ws-what b { font-size: 0.9rem; line-height: 1.35; color: var(--text, #1a1a1a); }
-  .ainstein-ws-what span { font-size: 0.78rem; line-height: 1.45; color: var(--text-muted, #7a756d); }
+  .ainstein-ws-what span { font-size: 0.78rem; line-height: 1.45; color: var(--text-muted, #666c71); }
   .ainstein-ws-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
   .ainstein-ws-chip { font-size: 0.72rem; line-height: 1; padding: 7px 10px; border-radius: 999px;
-    background: var(--surface, #fff); border: 1px solid var(--border, #e2ddd5); color: var(--text-muted, #7a756d); }
+    background: var(--surface, #fff); border: 1px solid var(--border, #e3e6e4); color: var(--text-muted, #666c71); }
   .ainstein-ws-chip b { color: var(--primary-dark, #3d6749); }
   .ainstein-ws-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-  .ainstein-ws-meta { margin-top: 12px; font-size: 0.72rem; line-height: 1.55; color: var(--text-muted, #7a756d); }
+  .ainstein-ws-meta { margin-top: 12px; font-size: 0.72rem; line-height: 1.55; color: var(--text-muted, #666c71); }
 
   /* Temporary "try another question on this concept" link under a clue. */
   .ainstein-offer { align-self: flex-start; max-width: 86%; margin: 2px 0 4px; }
   .ainstein-offer-btn { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer;
-    padding: 13px 15px; border: 1px solid var(--primary, #4a7c59); border-radius: 16px;
+    padding: 13px 15px; border: 1px solid var(--primary, #0b6b4f); border-radius: 16px;
     background: var(--bg-soft, #f7f9fc); color: var(--text, #1a1a1a); font: inherit;
     transition: background .16s ease, transform .16s ease; }
   .ainstein-offer-btn:hover { background: #eef4ef; transform: translateY(-1px); }
   .ainstein-offer-ico { font-size: 1.15rem; line-height: 1; flex-shrink: 0; }
   .ainstein-offer-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
   .ainstein-offer-txt b { font-size: 0.86rem; line-height: 1.35; color: var(--primary-dark, #3d6749); }
-  .ainstein-offer-txt span { font-size: 0.8rem; line-height: 1.45; color: var(--text-muted, #7a756d); }
-  .ainstein-offer-meta { margin: 7px 4px 0; font-size: 0.72rem; line-height: 1.5; color: var(--text-muted, #7a756d); }
-  .ainstein-offer.dead .ainstein-offer-btn { border-color: var(--border, #e2ddd5); background: var(--bg-tertiary, #f2f1ec);
+  .ainstein-offer-txt span { font-size: 0.8rem; line-height: 1.45; color: var(--text-muted, #666c71); }
+  .ainstein-offer-meta { margin: 7px 4px 0; font-size: 0.72rem; line-height: 1.5; color: var(--text-muted, #666c71); }
+  .ainstein-offer.dead .ainstein-offer-btn { border-color: var(--border, #e3e6e4); background: var(--bg-tertiary, #f2f1ec);
     cursor: not-allowed; opacity: .6; transform: none; }
-  .ainstein-offer.dead .ainstein-offer-txt b { color: var(--text-muted, #7a756d); }
+  .ainstein-offer.dead .ainstein-offer-txt b { color: var(--text-muted, #666c71); }
 
-  .ainstein-empty { text-align: center; color: var(--text-muted, #7a756d); font-size: 0.86rem; line-height: 1.65; padding: 12px 6px; }
+  .ainstein-empty { text-align: center; color: var(--text-muted, #666c71); font-size: 0.86rem; line-height: 1.65; padding: 12px 6px; }
   .ainstein-empty img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; margin-bottom: 14px; }
   .ainstein-empty p { margin: 0 0 10px; }
   .ainstein-empty p:last-child { margin-bottom: 0; }
   .ainstein-empty b { color: var(--text, #1a1a1a); }
   .ainstein-warn { font-size: 0.78rem; color: #a8620f; }
   .ainstein-preset { cursor: pointer; font: inherit; font-size: 0.82rem; font-weight: 600;
-    padding: 10px 16px; border-radius: 12px; border: 1px solid var(--primary, #4a7c59);
+    padding: 10px 16px; border-radius: 12px; border: 1px solid var(--primary, #0b6b4f);
     background: var(--surface, #fff); color: var(--primary-dark, #3d6749); }
   .ainstein-preset:hover { background: var(--bg-soft, #f7f9fc); }
 
-  .ainstein-foot { border-top: 1px solid var(--border, #e2ddd5); padding: 14px 16px 16px; background: var(--surface, #fff); }
+  .ainstein-foot { border-top: 1px solid var(--border, #e3e6e4); padding: 14px 16px 16px; background: var(--surface, #fff); }
   .ainstein-row { display: flex; gap: 10px; align-items: flex-end; }
   #ainsteinInput { flex: 1; min-width: 0; resize: none; font-family: inherit; font-size: 0.88rem; line-height: 1.5;
-    padding: 11px 14px; border: 1px solid var(--border, #e2ddd5); border-radius: 13px; background: var(--surface, #fff);
+    padding: 11px 14px; border: 1px solid var(--border, #e3e6e4); border-radius: 13px; background: var(--surface, #fff);
     color: var(--text, #1a1a1a); max-height: 110px; }
-  #ainsteinInput:focus { outline: none; border-color: var(--primary, #4a7c59); box-shadow: 0 0 0 3px rgba(74,124,89,0.14); }
-  #ainsteinSend { flex-shrink: 0; border: none; cursor: pointer; background: var(--primary, #4a7c59); color: #fff;
+  #ainsteinInput:focus { outline: none; border-color: var(--primary, #0b6b4f); box-shadow: 0 0 0 3px rgba(74,124,89,0.14); }
+  #ainsteinSend { flex-shrink: 0; border: none; cursor: pointer; background: var(--primary, #0b6b4f); color: #fff;
     width: 42px; height: 42px; border-radius: 13px; font-size: 1rem; }
   #ainsteinSend:hover { background: var(--primary-dark, #3d6749); }
   #ainsteinSend:disabled { opacity: .5; cursor: not-allowed; }
   /* Voice input: same footprint as the send button so the row stays balanced. */
   #ainsteinMic { width: 42px; height: 42px; min-width: 42px; border-radius: 13px; font-size: 1.05rem; }
   #ainsteinVoiceHint { display: none; margin-top: 10px; font-size: 0.76rem; line-height: 1.5;
-    color: var(--text-muted, #7a756d); text-align: center; }
+    color: var(--text-muted, #666c71); text-align: center; }
   #ainsteinVoiceHint.show { display: block; }
-  #ainsteinCredits { margin-top: 10px; font-size: 0.74rem; color: var(--text-muted, #7a756d); text-align: center; }
+  #ainsteinCredits { margin-top: 10px; font-size: 0.74rem; color: var(--text-muted, #666c71); text-align: center; }
 
   /* The daily-quest chip lives in the same corner — lift it above the bubble. */
   #questChip { bottom: 120px !important; }
@@ -31493,7 +31493,7 @@ function loQIds(id) { const a = (loData && loData.map) ? loData.map[id] : null; 
 // Attached questions that still exist in the bank. A question deleted from the
 // bank simply stops appearing here rather than breaking the objective.
 function loQuestions(id) { return loQIds(id).map(qid => questionBank.find(q => q.id === qid)).filter(Boolean); }
-function loThemeColor(theme) { return PP_THEME_C[String(theme || '').toLowerCase()] || PP_THEME_C[({ Diversity:'diversity', Cycles:'cycles', Systems:'systems', Interactions:'interactions', Energy:'energy' })[theme]] || '#4a7c59'; }
+function loThemeColor(theme) { return PP_THEME_C[String(theme || '').toLowerCase()] || PP_THEME_C[({ Diversity:'diversity', Cycles:'cycles', Systems:'systems', Interactions:'interactions', Energy:'energy' })[theme]] || '#0b6b4f'; }
 
 // Build the starting list from the syllabus data already in this file.
 function loDefaults() {
@@ -31985,57 +31985,57 @@ function loStyles() {
   .lo-tile-l { font-size:0.8rem; color:var(--text-muted); margin-bottom:6px; }
   .lo-tile-v { font-size:1.9rem; font-weight:700; line-height:1.1; color:var(--primary); }
   .lo-tile-h { font-size:0.75rem; color:var(--text-muted); margin-top:5px; }
-  .lo-note { font-size:0.9rem; line-height:1.65; color:var(--text-muted); background:var(--surface-alt,#faf8f5); border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin-bottom:20px; }
+  .lo-note { font-size:0.9rem; line-height:1.65; color:var(--text-muted); background:var(--surface-alt,#fafbfa); border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin-bottom:20px; }
   .lo-filters { display:flex; flex-direction:column; gap:12px; margin-bottom:24px; }
   .lo-chiprow { display:flex; flex-wrap:wrap; gap:8px; }
   .lo-chip { font:inherit; font-size:0.8rem; font-weight:600; padding:7px 15px; border-radius:999px; border:1px solid var(--border); background:var(--surface); color:var(--text-muted); cursor:pointer; }
-  .lo-chip:hover { border-color:var(--primary,#4a7c59); color:var(--text); }
-  .lo-chip.on { background:var(--primary,#4a7c59); border-color:var(--primary,#4a7c59); color:#fff; }
+  .lo-chip:hover { border-color:var(--primary,#0b6b4f); color:var(--text); }
+  .lo-chip.on { background:var(--primary,#0b6b4f); border-color:var(--primary,#0b6b4f); color:#fff; }
   .lo-filter-tail { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .lo-search { flex:1; min-width:200px; font:inherit; font-size:0.88rem; padding:10px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); }
   .lo-group { margin-bottom:30px; }
   .lo-group-head { font-size:1rem; font-weight:700; color:var(--text); margin-bottom:14px; display:flex; align-items:center; gap:10px; }
   .lo-group-sub { font-size:0.78rem; font-weight:500; color:var(--text-muted); }
-  .lo-card { background:var(--surface); border:1px solid var(--border); border-left:4px solid var(--lo-accent,#4a7c59); border-radius:14px; padding:22px 24px; margin-bottom:16px; }
+  .lo-card { background:var(--surface); border:1px solid var(--border); border-left:4px solid var(--lo-accent,#0b6b4f); border-radius:14px; padding:22px 24px; margin-bottom:16px; }
   .lo-card-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:10px; }
-  .lo-badge { font-size:0.7rem; font-weight:700; border-radius:999px; padding:3px 11px; border:1px solid var(--border); color:var(--text-muted); background:var(--surface-alt,#faf8f5); display:inline-flex; align-items:center; gap:6px; }
-  .lo-badge.lv { color:var(--primary-dark,#2f5d3f); background:var(--primary-light,#e8f0ea); border-color:var(--primary,#4a7c59); }
+  .lo-badge { font-size:0.7rem; font-weight:700; border-radius:999px; padding:3px 11px; border:1px solid var(--border); color:var(--text-muted); background:var(--surface-alt,#fafbfa); display:inline-flex; align-items:center; gap:6px; }
+  .lo-badge.lv { color:var(--primary-dark,#064834); background:var(--primary-light,#e4f1ec); border-color:var(--primary,#0b6b4f); }
   .lo-dot { width:8px; height:8px; border-radius:3px; display:inline-block; }
   .lo-topic { font-size:0.76rem; color:var(--text-muted); }
   .lo-card-tools { margin-left:auto; display:flex; gap:7px; }
   .lo-mini { font:inherit; font-size:0.76rem; border:1px solid var(--border); background:var(--surface); color:var(--text-muted); border-radius:8px; padding:4px 10px; cursor:pointer; }
-  .lo-mini:hover { color:var(--text); border-color:var(--primary,#4a7c59); }
-  .lo-mini.del:hover { background:var(--accent-red,#d94f4f); border-color:var(--accent-red,#d94f4f); color:#fff; }
+  .lo-mini:hover { color:var(--text); border-color:var(--primary,#0b6b4f); }
+  .lo-mini.del:hover { background:var(--accent-red,#b23b36); border-color:var(--accent-red,#b23b36); color:#fff; }
   .lo-card-title { margin:0 0 8px; font-size:1.06rem; line-height:1.4; }
   .lo-obj { margin:0 0 10px; font-size:0.88rem; line-height:1.65; color:var(--text); }
   .lo-intro { margin:0 0 14px; font-size:0.83rem; line-height:1.7; color:var(--text-muted); }
   .lo-qrow { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
-  .lo-q { display:inline-flex; align-items:stretch; border:1px solid var(--border); border-radius:9px; background:var(--surface-alt,#faf8f5); overflow:hidden; font-size:0.79rem; }
+  .lo-q { display:inline-flex; align-items:stretch; border:1px solid var(--border); border-radius:9px; background:var(--surface-alt,#fafbfa); overflow:hidden; font-size:0.79rem; }
   .lo-q-t { padding:6px 11px; cursor:pointer; font-weight:500; }
-  .lo-q-t:hover { background:var(--primary-light,#eef4f0); color:var(--primary-dark,#2f5d3f); }
+  .lo-q-t:hover { background:var(--primary-light,#eaf3ef); color:var(--primary-dark,#064834); }
   .lo-q-acc { padding:6px 8px; font-size:0.68rem; font-weight:700; color:var(--text-muted); background:rgba(0,0,0,0.04); }
   .lo-q-x { border:none; border-left:1px solid var(--border); background:none; color:var(--text-muted); cursor:pointer; padding:0 9px; font-size:0.95rem; }
-  .lo-q-x:hover { background:var(--accent-red,#d94f4f); color:#fff; }
+  .lo-q-x:hover { background:var(--accent-red,#b23b36); color:#fff; }
   .lo-none { font-size:0.82rem; color:var(--text-muted); font-style:italic; }
   .lo-actions { display:flex; flex-wrap:wrap; gap:9px; }
   .lo-btn { font:inherit; font-size:0.82rem; font-weight:600; padding:9px 16px; border-radius:9px; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; }
-  .lo-btn:hover:not(:disabled) { border-color:var(--primary,#4a7c59); }
-  .lo-btn.primary { background:var(--primary,#4a7c59); border-color:var(--primary,#4a7c59); color:#fff; }
+  .lo-btn:hover:not(:disabled) { border-color:var(--primary,#0b6b4f); }
+  .lo-btn.primary { background:var(--primary,#0b6b4f); border-color:var(--primary,#0b6b4f); color:#fff; }
   .lo-btn.primary:hover:not(:disabled) { filter:brightness(1.06); }
-  .lo-btn.ai { background:#fdf3e3; border-color:#d1892b; color:#8a5a12; }
+  .lo-btn.ai { background:#fdf4e3; border-color:#c08a2e; color:#7a5410; }
   .lo-btn:disabled { opacity:0.45; cursor:not-allowed; }
   .lo-empty { text-align:center; color:var(--text-muted); padding:40px 20px; font-size:0.9rem; line-height:1.7; }
   .lo-pick-row { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; margin-bottom:9px; cursor:pointer; }
-  .lo-pick-row:hover { border-color:var(--primary,#4a7c59); }
-  .lo-pick-row.sel { border-color:var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); }
-  .lo-pick-row input { width:17px; height:17px; margin:2px 0 0; accent-color:var(--primary,#4a7c59); cursor:pointer; flex:none; }
+  .lo-pick-row:hover { border-color:var(--primary,#0b6b4f); }
+  .lo-pick-row.sel { border-color:var(--primary,#0b6b4f); background:var(--primary-light,#eaf3ef); }
+  .lo-pick-row input { width:17px; height:17px; margin:2px 0 0; accent-color:var(--primary,#0b6b4f); cursor:pointer; flex:none; }
   .lo-pick-main { display:flex; flex-direction:column; gap:3px; min-width:0; }
   .lo-pick-title { font-size:0.88rem; font-weight:600; }
   .lo-pick-sub { font-size:0.76rem; color:var(--text-muted); }
   .lo-ai-lead { font-size:0.86rem; line-height:1.6; color:var(--text-muted); margin:0 0 14px; }
   .lo-ai-busy { text-align:center; padding:40px 20px; color:var(--text-muted); font-size:0.9rem; }
   .lo-ai-hint { font-size:0.78rem; margin-top:8px; }
-  .lo-spinner { width:26px; height:26px; margin:0 auto 14px; border:3px solid var(--border); border-top-color:var(--primary,#4a7c59); border-radius:50%; animation:lo-spin 0.8s linear infinite; }
+  .lo-spinner { width:26px; height:26px; margin:0 auto 14px; border:3px solid var(--border); border-top-color:var(--primary,#0b6b4f); border-radius:50%; animation:lo-spin 0.8s linear infinite; }
   @keyframes lo-spin { to { transform:rotate(360deg); } }
   .lo-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; margin-bottom:12px; }
   @media (max-width:560px){ .lo-card { padding:18px; } .lo-form-grid { grid-template-columns:1fr; } }
