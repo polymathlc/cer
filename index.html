@@ -9601,7 +9601,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.175.0';
+const APP_VERSION = 'v1.175.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -21346,13 +21346,34 @@ async function confirmSaveWorksheet() {
     createdAt: new Date().toISOString()
   };
   savedWorksheets.unshift(ws);   // newest first, the order the list is sorted in
-  renderSavedWorksheets();
+  // Close, confirm and PERSIST before drawing anything. Redrawing a list is the
+  // least important thing happening here, and it must never be able to swallow
+  // the save — that is exactly how the button came to look like it did nothing.
   closeSaveWsDialog();
-  showToast('Worksheet saved — find it under Saved Worksheets', 'success');
-  // Persist to Firestore
   if (currentUser) {
     setDoc(_wsRef(ws.id), ws).catch(err => console.error('Failed to save worksheet:', err));
   }
+  showToast('Worksheet saved — find it under Saved Worksheets', 'success');
+  try { renderSavedWorksheets(); } catch (e) { console.warn('saved worksheets render', e); }
+}
+
+// One stored worksheet, made safe to render. A doc written by an older build —
+// or one whose write dropped a field — used to reach the renderer with no
+// questionIds at all, and `ws.questionIds.length` then threw. That single bad
+// row took out the WHOLE page (the grid was left untouched, so it looked empty)
+// and, because the save flow re-renders before it closes the dialog, it also
+// made the Save button look completely dead. Normalising here means nothing
+// downstream ever has to wonder.
+function _wsNormalise(ws, id) {
+  if (!ws || typeof ws !== 'object') return null;
+  const wsId = ws.id || id;
+  if (!wsId) return null;
+  return Object.assign({}, ws, {
+    id: String(wsId),
+    title: typeof ws.title === 'string' && ws.title.trim() ? ws.title : 'Untitled worksheet',
+    questionIds: Array.isArray(ws.questionIds) ? ws.questionIds.filter(x => x != null).map(String) : [],
+    createdAt: typeof ws.createdAt === 'string' ? ws.createdAt : '',
+  });
 }
 
 async function loadSavedWorksheets() {
@@ -21361,8 +21382,8 @@ async function loadSavedWorksheets() {
     const snap = await getDocs(_wsCol());
     savedWorksheets = [];
     snap.forEach(d => {
-      const ws = d.data();
-      if (ws && ws.id) savedWorksheets.push(ws);
+      const ws = _wsNormalise(d.data(), d.id);
+      if (ws) savedWorksheets.push(ws);
     });
     savedWorksheets.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   } catch (err) {
@@ -21382,11 +21403,15 @@ function renderSavedWorksheets() {
     return;
   }
   grid.innerHTML = savedWorksheets.map(ws => {
+    // Belt and braces on top of _wsNormalise: a row that somehow still cannot be
+    // drawn is skipped, never allowed to blank the whole page.
+    if (!ws || !ws.id) return '';
+    const ids = Array.isArray(ws.questionIds) ? ws.questionIds : [];
     const date = ws.createdAt ? new Date(ws.createdAt).toLocaleDateString() : '';
     return `<div class="ws-saved-card">
       <div class="ws-saved-info">
-        <h4>${escapeHtml(ws.title)}</h4>
-        <p>${ws.questionIds.length} question${ws.questionIds.length !== 1 ? 's' : ''} &middot; ${date}</p>
+        <h4>${escapeHtml(ws.title || 'Untitled worksheet')}</h4>
+        <p>${ids.length} question${ids.length !== 1 ? 's' : ''}${date ? ' &middot; ' + date : ''}</p>
       </div>
       <div class="ws-saved-actions">
         <button class="btn btn-outline" onclick="reprintWorksheet('${ws.id}')" title="Print">
@@ -21449,7 +21474,8 @@ function practiceCurrentWorksheet() {
 function practiceSavedWorksheet(id) {
   const ws = savedWorksheets.find(w => w.id === id);
   if (!ws) return;
-  const selected = questionBank.filter(q => ws.questionIds.includes(q.id));
+  const ids = Array.isArray(ws.questionIds) ? ws.questionIds.map(String) : [];
+  const selected = questionBank.filter(q => ids.includes(String(q.id)));
   if (selected.length === 0) {
     showToast('Questions no longer available', 'error');
     return;
