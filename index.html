@@ -9476,7 +9476,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.171.1';
+const APP_VERSION = 'v1.172.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -37798,8 +37798,11 @@ function _ainsteinPaint() {
   // explain the answer outright.
   const mode = _ainsteinEl('ainsteinMode');
   if (mode) {
+    const panel = _ainsteinEl('ainsteinPanel');
     const isStudent = !!(currentUser && currentUser.role === 'student');
-    mode.textContent = !isStudent ? 'Full answers — teacher mode'
+    mode.textContent = (panel && panel.classList.contains('unread')) ? 'New reply waiting'
+      : _ainsteinMinimised() ? 'Tap to open me back up'
+      : !isStudent ? 'Full answers — teacher mode'
       : _ainsteinAnswerRevealed() ? 'Already marked — full answers'
       : 'Clues, never answers';
   }
@@ -37851,6 +37854,12 @@ function _ainsteinItemKey(m, i) {
 function _ainsteinRender() {
   const log = _ainsteinEl('ainsteinLog');
   if (!log) return;
+  // A reply that arrives while minimised marks the bar instead of forcing the
+  // panel back open over whatever they are reading.
+  if (_ainsteinMinimised()) {
+    const last = _ainstein.history[_ainstein.history.length - 1];
+    if (last && last.who === 'ai') _ainsteinEl('ainsteinPanel')?.classList.add('unread');
+  }
   _ainsteinPaint();          // the mode line depends on what is on screen right now
   if (!_ainstein.history.length) {
     const student = !!(currentUser && currentUser.role === 'student');
@@ -37922,8 +37931,14 @@ function _ainsteinRender() {
 function ainsteinToggle(force) {
   const panel = _ainsteinEl('ainsteinPanel');
   if (!panel) return;
+  // Tapping the bubble while minimised means "bring it back", not "close it".
+  if (force == null && panel.classList.contains('open') && panel.classList.contains('min')) {
+    ainsteinMinimise(false);
+    return;
+  }
   const open = force == null ? !panel.classList.contains('open') : !!force;
   panel.classList.toggle('open', open);
+  if (!open) panel.classList.remove('min', 'unread');   // never reopen into a collapsed bar
   _ainsteinEl('ainsteinBubble')?.classList.toggle('active', open);
   if (open) {
     _ainsteinPaint();
@@ -37941,6 +37956,34 @@ function ainsteinToggle(force) {
     // Hand the keyboard back to the thing they clicked to get here.
     _ainsteinEl('ainsteinBubble')?.focus();
   }
+}
+
+// Minimise: shrink the panel to its own header bar, leaving everything mounted.
+// Different from Close on purpose — a student mid-question wants to read the
+// page behind without their half-typed answer and the question they are on
+// disappearing, and wants to get back to it in one click rather than reopening
+// and finding their way back.
+function ainsteinMinimise(force) {
+  const panel = _ainsteinEl('ainsteinPanel');
+  if (!panel || !panel.classList.contains('open')) return;
+  const min = force == null ? !panel.classList.contains('min') : !!force;
+  panel.classList.toggle('min', min);
+  if (!min) panel.classList.remove('unread');
+  const btn = _ainsteinEl('ainsteinMinBtn');
+  if (btn) {
+    btn.setAttribute('aria-expanded', min ? 'false' : 'true');
+    btn.setAttribute('aria-label', min ? 'Restore' : 'Minimise');
+    btn.title = min ? 'Open me back up — your question and our chat are just as you left them'
+                    : 'Minimise — shrink me to this bar so you can read the page. Everything stays exactly as it is.';
+  }
+  // Recording keeps running while minimised (the student may be mid-sentence),
+  // but the keyboard should follow what they can actually see.
+  if (min) _ainsteinEl('ainsteinBubble')?.focus();
+  else setTimeout(() => _ainsteinEl('ainsteinInput')?.focus(), 60);
+}
+function _ainsteinMinimised() {
+  const panel = _ainsteinEl('ainsteinPanel');
+  return !!(panel && panel.classList.contains('min'));
 }
 
 // Ask on the student's behalf — used by the suggestion chips in the empty state.
@@ -38151,9 +38194,33 @@ async function ainsteinSend() {
   .ainstein-head img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
   .ainstein-head .ainstein-name { font-weight: 700; font-size: 1rem; line-height: 1.3; }
   .ainstein-head .ainstein-sub { font-size: 0.76rem; color: var(--text-muted, #7a756d); margin-top: 3px; line-height: 1.4; }
-  .ainstein-close { margin-left: auto; align-self: flex-start; background: none; border: none; cursor: pointer;
+  .ainstein-min { margin-left: auto; align-self: flex-start; background: none; border: none; cursor: pointer;
+    font-size: 1.35rem; line-height: 1; color: var(--text-muted, #7a756d); width: 32px; height: 32px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center; padding-bottom: 4px; }
+  .ainstein-min:hover { background: var(--bg-tertiary, #f0efeb); color: var(--text, #1a1a1a); }
+  .ainstein-close { align-self: flex-start; background: none; border: none; cursor: pointer;
     font-size: 1.2rem; line-height: 1; color: var(--text-muted, #7a756d); width: 32px; height: 32px; border-radius: 9px; }
   .ainstein-close:hover { background: var(--bg-tertiary, #f0efeb); color: var(--text, #1a1a1a); }
+  /* MINIMISED — the panel shrinks to its own header bar and nothing else moves.
+     Everything below is only hidden, never unmounted: a half-answered question
+     mounted in the panel, a playing video and the whole conversation are all
+     exactly where they were when it opens back up. Deliberately not the same as
+     Close, which hands the keyboard back and puts the bubble in charge. */
+  #ainsteinPanel.min { max-height: none; width: min(340px, calc(100vw - 36px)); }
+  #ainsteinPanel.min .ainstein-head { cursor: pointer; border-bottom: none; }
+  #ainsteinPanel.min .ainstein-head:hover { background: var(--bg-tertiary, #f0efeb); }
+  #ainsteinPanel.min > *:not(.ainstein-head) { display: none !important; }
+  #ainsteinPanel.min .ainstein-min { transform: rotate(180deg); padding-bottom: 0; }
+  /* A reply that lands while minimised: the bar pulses so it is noticed without
+     the panel throwing itself back over the page the student is reading. */
+  #ainsteinPanel.min.unread .ainstein-head { background: var(--primary-light, #e8f3ec); }
+  #ainsteinPanel.min.unread .ainstein-sub { color: var(--primary, #4a7c59); font-weight: 700; }
+  @media (prefers-reduced-motion: no-preference) {
+    #ainsteinPanel.min.unread { animation: ainsteinNudge 1.6s ease-in-out 3; }
+  }
+  @keyframes ainsteinNudge {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); } }
 
   #ainsteinLog { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-height: 140px; }
   /* One wrapper per message (bubble + any video + any practice link) so a
@@ -38268,12 +38335,14 @@ async function ainsteinSend() {
       <span id="ainsteinBadge">${AINSTEIN_DAILY_CREDITS}</span>
     </button>
     <div id="ainsteinPanel" role="dialog" aria-label="Ask Ai-nstein for a clue">
-      <div class="ainstein-head">
+      <div class="ainstein-head" id="ainsteinHead">
         <img src="${AINSTEIN_IMG}" alt="" onerror="this.onerror=null;this.src='${AINSTEIN_FALLBACK_IMG}';">
         <div>
           <div class="ainstein-name">Ai-nstein</div>
           <div class="ainstein-sub" id="ainsteinMode">Clues, never answers</div>
         </div>
+        <button class="ainstein-min" id="ainsteinMinBtn" type="button" aria-label="Minimise" aria-expanded="true"
+          title="Minimise — shrink me to this bar so you can read the page. Everything stays exactly as it is.">–</button>
         <button class="ainstein-close" type="button" aria-label="Close">✕</button>
       </div>
       <div id="ainsteinLog" role="log" aria-live="polite" aria-label="Chat with Ai-nstein"></div>
@@ -38309,6 +38378,13 @@ async function ainsteinSend() {
 
   document.getElementById('ainsteinBubble').addEventListener('click', () => ainsteinToggle());
   document.querySelector('#ainsteinPanel .ainstein-close').addEventListener('click', () => ainsteinToggle(false));
+  document.getElementById('ainsteinMinBtn').addEventListener('click', e => { e.stopPropagation(); ainsteinMinimise(); });
+  // Once minimised the whole bar is the way back in — a 32px button is a small
+  // target for a child, and the bar is doing nothing else at that point.
+  document.getElementById('ainsteinHead').addEventListener('click', e => {
+    if (e.target.closest('.ainstein-close, .ainstein-min')) return;
+    if (_ainsteinMinimised()) ainsteinMinimise(false);
+  });
   document.getElementById('ainsteinSend').addEventListener('click', ainsteinSend);
   // The mic itself is driven by the shared .mic-btn handler (record → Gemini
   // transcript → insert into the target field). Drop it on browsers that can't
@@ -38372,6 +38448,7 @@ function ainsteinOnSignOut() {
 
 window.navigateTo = navigateTo;
 window.ainsteinToggle = ainsteinToggle;
+window.ainsteinMinimise = ainsteinMinimise;
 window.ainsteinSend = ainsteinSend;
 window.ainsteinTrySimilar = ainsteinTrySimilar;
 window.ainsteinVideoFullscreen = ainsteinVideoFullscreen;
