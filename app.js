@@ -1452,7 +1452,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.178.0';
+const APP_VERSION = 'v1.179.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -1896,6 +1896,7 @@ function navigateTo(page) {
   if (page === 'leaderboard') rpgRenderLeaderboard();
   if (page === 'adventure') rpgRenderAdventure();
   if (page === 'practice' || page === 'quickpractice' || page === 'topicalpractice') rpgRenderBattle();
+  if (page === 'objectives') renderObjectivesPage();
   if (page === 'textbooks') {
     const f = document.getElementById('textbooksFrame');
     if (f && !f.getAttribute('src')) f.setAttribute('src', 'textbooks.html');   // load once, on first visit
@@ -31307,3 +31308,589 @@ window.useOriginalImage = useOriginalImage;
     setTimeout(function() { retryLogos(0); }, RETRY_DELAYS[0]);
   });
 })();
+
+// =====================================================================
+// LEARNING OBJECTIVES — practice organised by the MOE syllabus
+//
+// The Syllabus-grouped PDF above classifies questions into learning
+// objectives on the fly, for one print, and throws the result away. This is
+// the durable version: a browsable list of objectives, each holding a set of
+// bank questions that a student can practise.
+//
+// The objective list SEEDS from SYLLABUS_LO_TOPICS (the Learning Outcomes of
+// the MOE Primary Science Syllabus 2023, P3-P6 Standard) but is fully owned by
+// the admin from then on: add, edit, delete. Once anything is saved, the saved
+// list replaces the seed entirely, so a deleted objective stays deleted.
+//
+// Stored at users/{adminUid}/settings/learningObjectives as
+//   { objectives: [ {id,title,level,theme,topic,intro,obj,kw[]} ], map: { loId: [questionId] } }
+// Students read the admin's copy, exactly like the past-paper data does.
+// =====================================================================
+let loData = null;              // { objectives:[], map:{} } — seeded or loaded
+let _loLoaded = false;
+let _loFilterLevel = '';        // '' = every level
+let _loFilterTheme = '';        // '' = every theme
+let _loSearchTerm = '';
+let _loEditId = null;           // objective open in the editor (null = new)
+let _loPickId = null;           // objective the question picker is attaching to
+let _loAiId = null;             // objective the AI review panel belongs to
+let _loAiRows = [];             // [{ qid, why, on }] awaiting the admin's tick
+let _loAiBusy = false;
+let _loPickSel = new Set();   // question ids ticked in the picker
+
+const LO_LEVELS = ['P3', 'P4', 'P5', 'P6'];
+const LO_THEMES = ['Diversity', 'Cycles', 'Systems', 'Interactions', 'Energy'];
+
+function loIsAdmin() { return !!(currentUser && currentUser.role === 'admin'); }
+function loOwnerUid() { return loIsAdmin() ? (currentUser && currentUser.uid) : adminUid; }
+function loList() { return (loData && Array.isArray(loData.objectives)) ? loData.objectives : []; }
+function loFind(id) { return loList().find(o => o && o.id === id); }
+function loNewId() { return 'lo_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function loQIds(id) { const a = (loData && loData.map) ? loData.map[id] : null; return Array.isArray(a) ? a : []; }
+// Attached questions that still exist in the bank. A question deleted from the
+// bank simply stops appearing here rather than breaking the objective.
+function loQuestions(id) { return loQIds(id).map(qid => questionBank.find(q => q.id === qid)).filter(Boolean); }
+function loThemeColor(theme) { return PP_THEME_C[String(theme || '').toLowerCase()] || PP_THEME_C[({ Diversity:'diversity', Cycles:'cycles', Systems:'systems', Interactions:'interactions', Energy:'energy' })[theme]] || '#4a7c59'; }
+
+// Build the starting list from the syllabus data already in this file.
+function loDefaults() {
+  return {
+    objectives: _flatSyllabusLOs().map(lo => ({
+      id: lo.id, title: lo.title, level: lo.level, theme: lo.theme, topic: lo.topic,
+      intro: lo.intro || '', obj: lo.obj || '', kw: Array.isArray(lo.kw) ? lo.kw.slice() : []
+    })),
+    map: {}
+  };
+}
+
+async function loadLOData(force) {
+  if (_loLoaded && !force) return;
+  loData = loDefaults();
+  try {
+    const uid = loOwnerUid();
+    if (uid && db) {
+      const snap = await getDoc(doc(db, 'users', uid, 'settings', 'learningObjectives'));
+      if (snap.exists() && snap.data()) {
+        const d = snap.data();
+        // A saved list REPLACES the seed — otherwise a deleted objective would
+        // reappear on the next load.
+        if (Array.isArray(d.objectives)) loData.objectives = d.objectives.filter(o => o && o.id);
+        if (d.map && typeof d.map === 'object') loData.map = d.map;
+      }
+    }
+  } catch (e) { console.warn('learningObjectives load', e); }
+  _loLoaded = true;
+}
+async function saveLOData() {
+  if (!loIsAdmin() || !db) { return; }
+  try {
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'learningObjectives'),
+      { objectives: loData.objectives, map: loData.map, updatedAt: new Date().toISOString() }, { merge: false });
+  } catch (e) { console.warn('learningObjectives save', e); showToast('Could not save — check your connection', 'error'); }
+}
+
+// ---------- attach / detach ----------
+async function loAttachQuestions(loId, qids) {
+  if (!loIsAdmin()) { showToast('Only admins can change objectives', 'error'); return 0; }
+  const lo = loFind(loId); if (!lo) return 0;
+  if (!loData.map) loData.map = {};
+  const cur = loQIds(loId).slice();
+  const have = new Set(cur);
+  let added = 0;
+  (qids || []).forEach(qid => { if (qid && !have.has(qid)) { cur.push(qid); have.add(qid); added++; } });
+  if (!added) return 0;
+  loData.map[loId] = cur;
+  await saveLOData();
+  return added;
+}
+async function loDetachQuestion(loId, qid) {
+  if (!loIsAdmin()) return;
+  if (!loData.map) loData.map = {};
+  loData.map[loId] = loQIds(loId).filter(x => x !== qid);
+  await saveLOData();
+  loRenderBody();
+}
+
+// ---------- objective CRUD ----------
+function loAddObjective() {
+  loOpenEdit({ id: null, title: '', level: 'P3', theme: 'Diversity', topic: '', intro: '', obj: '', kw: [] });
+}
+function loEditObjective(id) { const o = loFind(id); if (o) loOpenEdit(o); }
+function loOpenEdit(o) {
+  if (!loIsAdmin()) { showToast('Only admins can change objectives', 'error'); return; }
+  _loEditId = o.id;
+  const set = (el, v) => { const e = document.getElementById(el); if (e) e.value = v; };
+  const t = document.getElementById('loEditTitle');
+  if (t) t.textContent = o.id ? 'Edit learning objective' : 'New learning objective';
+  set('loEdName', o.title || '');
+  set('loEdTopic', o.topic || '');
+  set('loEdIntro', o.intro || '');
+  set('loEdObj', o.obj || '');
+  set('loEdKw', (o.kw || []).join(', '));
+  const lv = document.getElementById('loEdLevel');
+  if (lv) lv.innerHTML = LO_LEVELS.map(l => `<option ${l === o.level ? 'selected' : ''}>${l}</option>`).join('');
+  const th = document.getElementById('loEdTheme');
+  if (th) th.innerHTML = LO_THEMES.map(l => `<option ${l === o.theme ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('');
+  const del = document.getElementById('loEdDeleteBtn'); if (del) del.style.display = o.id ? '' : 'none';
+  const ov = document.getElementById('loEditOverlay'); if (ov) ov.classList.add('active');
+}
+function loCloseEdit() { const ov = document.getElementById('loEditOverlay'); if (ov) ov.classList.remove('active'); _loEditId = null; }
+async function loSaveEditor() {
+  const val = id => (document.getElementById(id)?.value || '').trim();
+  const title = val('loEdName');
+  if (!title) { showToast('Give the objective a name', 'error'); return; }
+  const rec = {
+    title: title,
+    level: document.getElementById('loEdLevel')?.value || 'P3',
+    theme: document.getElementById('loEdTheme')?.value || 'Diversity',
+    topic: val('loEdTopic'),
+    intro: val('loEdIntro'),
+    obj: val('loEdObj'),
+    kw: val('loEdKw').split(',').map(s => s.trim()).filter(Boolean)
+  };
+  if (_loEditId) {
+    const o = loFind(_loEditId); if (o) Object.assign(o, rec);
+  } else {
+    rec.id = loNewId();
+    loData.objectives.push(rec);
+  }
+  await saveLOData();
+  loCloseEdit();
+  loRenderBody();
+  showToast('Saved', 'success');
+}
+async function loDeleteObjective(id) {
+  const o = loFind(id); if (!o) return;
+  const n = loQIds(id).length;
+  if (!confirm(`Delete "${o.title}"?` + (n ? `\n\nIts ${n} attached question${n === 1 ? '' : 's'} stay in your question bank — only the grouping is removed.` : ''))) return;
+  loData.objectives = loList().filter(x => x.id !== id);
+  if (loData.map) delete loData.map[id];
+  await saveLOData();
+  loRenderBody();
+  showToast('Objective deleted', 'info');
+}
+function loDeleteFromEditor() { const id = _loEditId; if (!id) return; loCloseEdit(); loDeleteObjective(id); }
+
+// ---------- practise / print ----------
+function loPractise(id) {
+  const qs = loQuestions(id);
+  if (!qs.length) { showToast('No questions in this objective yet', 'error'); return; }
+  launchWorksheetPractice(qs);
+}
+async function loPrint(id) {
+  const lo = loFind(id); if (!lo) return;
+  const qs = loQuestions(id);
+  if (!qs.length) { showToast('No questions in this objective yet', 'error'); return; }
+  const output = document.getElementById('printOutput');
+  if (!output) return;
+  _printProgressShow('Preparing worksheet…', 'Starting…');
+  const urls = [];
+  qs.forEach(q => {
+    if (q.answerKeyImage) urls.push(transformImageUrl(q.answerKeyImage));
+    (q.blocks || []).forEach(b => { if (b && b.url && (b.type === 'image' || b.type === 'answerKey')) urls.push(transformImageUrl(b.url)); });
+  });
+  await _preloadImageUrls(urls, (done, tot) => _printProgressUpdate('Loading question images…', 0.05 + 0.7 * (done / tot), done + '/' + tot + ' images'));
+  _printProgressUpdate('Laying out pages…', 0.8, 'Measuring each question at print size');
+  output.innerHTML = buildWorksheetHtml(qs, lo.title, {
+    answerKeyExtras: true,
+    plainNumbers: true,
+    frontHtml: _wsCoverHtml(lo.title, 'Primary Science', lo.level + ' · ' + lo.theme)
+  });
+  autoscaleAndPrint(output);
+}
+
+// ---------- attach questions by hand ----------
+function loOpenPicker(id) {
+  if (!loIsAdmin()) return;
+  const lo = loFind(id); if (!lo) return;
+  _loPickId = id;
+  const t = document.getElementById('loPickTitle');
+  if (t) t.textContent = 'Add questions — ' + lo.title;
+  const s = document.getElementById('loPickSearch'); if (s) s.value = '';
+  loRenderPicker();
+  const ov = document.getElementById('loPickOverlay'); if (ov) ov.classList.add('active');
+}
+function loClosePicker() { const ov = document.getElementById('loPickOverlay'); if (ov) ov.classList.remove('active'); _loPickId = null; }
+// Bank questions not already in this objective, best matches first, so the
+// admin usually finds what they want without typing anything.
+function _loCandidates(lo, limit) {
+  const already = new Set(loQIds(lo.id));
+  const scored = [];
+  questionBank.forEach(q => {
+    if (already.has(q.id)) return;
+    scored.push({ q, score: _loScore(lo, q) });
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return (limit ? scored.slice(0, limit) : scored);
+}
+// Same idea as _classifyLOByKeyword, but scoring ONE question against ONE
+// objective: keyword hits are worth most, a matching topic adds a little.
+function _loScore(lo, q) {
+  let text = '';
+  try { text = extractQuestionSearchText(q); } catch (_) { text = String(q.title || '').toLowerCase(); }
+  let score = 0;
+  (lo.kw || []).forEach(k => { const kk = String(k || '').toLowerCase(); if (kk && text.includes(kk)) score += 2; });
+  const qt = String(q.topic || '').toLowerCase();
+  const lt = String(lo.topic || '').toLowerCase();
+  if (qt && lt && (lt.includes(qt) || qt.includes(lt))) score += 3;
+  const words = String(lo.title || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
+  words.forEach(w => { if (text.includes(w)) score += 1; });
+  return score;
+}
+function loRenderPicker() {
+  const lo = loFind(_loPickId); if (!lo) return;
+  const listEl = document.getElementById('loPickList');
+  const cntEl = document.getElementById('loPickCount');
+  if (!listEl) return;
+  const term = (document.getElementById('loPickSearch')?.value || '').toLowerCase().trim();
+  let rows = _loCandidates(lo, term ? 0 : 40);
+  if (term) {
+    rows = rows.filter(r => {
+      let t = '';
+      try { t = extractQuestionSearchText(r.q); } catch (_) { t = ''; }
+      return (String(r.q.title || '') + ' ' + String(r.q.topic || '') + ' ' + t).toLowerCase().includes(term);
+    }).slice(0, 80);
+  }
+  if (cntEl) cntEl.textContent = term
+    ? `${rows.length} matching question${rows.length === 1 ? '' : 's'}`
+    : `Showing the ${rows.length} closest match${rows.length === 1 ? '' : 'es'} in your bank — search to find any other question.`;
+  listEl.innerHTML = rows.length ? rows.map(r => {
+    const q = r.q;
+    const on = _loPickSel.has(q.id);
+    return `<label class="lo-pick-row${on ? ' sel' : ''}" data-qid="${escapeHtml(q.id)}">
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="loPickToggle('${escapeHtml(q.id)}', this.checked)">
+      <span class="lo-pick-main">
+        <span class="lo-pick-title">${escapeHtml(stripHtmlToText(q.title || 'Untitled'))}</span>
+        <span class="lo-pick-sub">${escapeHtml(q.topic || '—')}${r.score > 0 ? ' · looks relevant' : ''}</span>
+      </span>
+    </label>`;
+  }).join('') : '<div class="lo-empty">No questions found. Try a different search.</div>';
+  const btn = document.getElementById('loPickAttachBtn');
+  if (btn) { btn.disabled = !_loPickSel.size; btn.textContent = _loPickSel.size ? `Add ${_loPickSel.size} question${_loPickSel.size === 1 ? '' : 's'}` : 'Add questions'; }
+}
+function loPickToggle(qid, on) {
+  if (on) _loPickSel.add(qid); else _loPickSel.delete(qid);
+  const row = document.querySelector(`#loPickList .lo-pick-row[data-qid="${window.CSS && CSS.escape ? CSS.escape(qid) : qid}"]`);
+  if (row) row.classList.toggle('sel', on);
+  const btn = document.getElementById('loPickAttachBtn');
+  if (btn) { btn.disabled = !_loPickSel.size; btn.textContent = _loPickSel.size ? `Add ${_loPickSel.size} question${_loPickSel.size === 1 ? '' : 's'}` : 'Add questions'; }
+}
+async function loPickAttach() {
+  const id = _loPickId; if (!id || !_loPickSel.size) return;
+  const n = await loAttachQuestions(id, [..._loPickSel]);
+  _loPickSel = new Set();
+  loClosePicker();
+  loRenderBody();
+  showToast(`Added ${n} question${n === 1 ? '' : 's'}`, 'success');
+}
+
+// ---------- AI: suggest questions for ONE objective ----------
+// Opt-in per objective. The AI only ever SUGGESTS — nothing is attached until
+// the admin ticks it and presses Add, so a wrong guess costs one glance.
+async function loAiFind(id) {
+  if (!loIsAdmin()) return;
+  if (_loAiBusy) { showToast('Still working on the last one…', 'info'); return; }
+  const lo = loFind(id); if (!lo) return;
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not configured — add questions by hand instead', 'error'); return; }
+  const cands = _loCandidates(lo, 60);
+  if (!cands.length) { showToast('Every question in your bank is already in this objective', 'info'); return; }
+  _loAiId = id; _loAiRows = []; _loAiBusy = true;
+  loOpenAi(lo, 'Reading your question bank…');
+  try {
+    const qList = cands.map((r, i) => {
+      let t = '';
+      try { t = extractQuestionSearchText(r.q).slice(0, 260); } catch (_) { t = ''; }
+      return `${i + 1}. [topic: ${r.q.topic || '?'}] ${stripHtmlToText(r.q.title || '')} :: ${t}`;
+    }).join('\n');
+    const prompt =
+      `You are helping a Singapore primary-science teacher fill ONE syllabus learning objective with practice questions.\n\n` +
+      `LEARNING OBJECTIVE\n` +
+      `Level: ${lo.level}\nTheme: ${lo.theme}\nTopic: ${lo.topic || '—'}\nTitle: ${lo.title}\n` +
+      `Outcome: ${lo.obj || lo.title}\n\n` +
+      `CANDIDATE QUESTIONS FROM THE BANK:\n${qList}\n\n` +
+      `Pick ONLY the questions that genuinely test THIS objective's science content — a question that merely mentions a related word does NOT count. ` +
+      `It is much better to return a few good matches than many loose ones. If none fit, return an empty array.\n` +
+      `Return ONLY a JSON array like [{"n":3,"why":"tests how a shadow changes with distance"}] — "n" is the question number above and "why" is at most 12 words.`;
+    const raw = await askGemini(prompt, { maxOutputTokens: Math.min(4000, 300 + cands.length * 30), temperature: 0, json: true });
+    const arr = _parseAIJson(raw);
+    const rows = [];
+    (Array.isArray(arr) ? arr : []).forEach(e => {
+      const n = parseInt(e && e.n, 10);
+      if (!(n >= 1 && n <= cands.length)) return;
+      const q = cands[n - 1].q;
+      if (rows.some(r => r.qid === q.id)) return;
+      rows.push({ qid: q.id, why: String((e && e.why) || '').slice(0, 90), on: true });
+    });
+    _loAiRows = rows;
+  } catch (e) {
+    console.warn('LO ai suggest', e);
+    _loAiRows = [];
+    showToast('The AI could not finish — you can still add questions by hand', 'error');
+  } finally {
+    _loAiBusy = false;
+    loRenderAi();
+  }
+}
+function loOpenAi(lo, busyMsg) {
+  const t = document.getElementById('loAiTitle');
+  if (t) t.textContent = '🤖 Suggested questions — ' + lo.title;
+  const body = document.getElementById('loAiBody');
+  if (body) body.innerHTML = `<div class="lo-ai-busy"><div class="lo-spinner"></div><div>${escapeHtml(busyMsg || 'Thinking…')}</div><div class="lo-ai-hint">Nothing is added until you choose.</div></div>`;
+  const btn = document.getElementById('loAiAttachBtn'); if (btn) { btn.style.display = 'none'; }
+  const ov = document.getElementById('loAiOverlay'); if (ov) ov.classList.add('active');
+}
+function loCloseAi() { const ov = document.getElementById('loAiOverlay'); if (ov) ov.classList.remove('active'); _loAiId = null; _loAiRows = []; }
+function loRenderAi() {
+  const body = document.getElementById('loAiBody');
+  const btn = document.getElementById('loAiAttachBtn');
+  if (!body) return;
+  if (!_loAiRows.length) {
+    body.innerHTML = `<div class="lo-empty">The AI did not find a good match for this objective in your bank.<br><span style="font-size:0.85rem;">Try adding questions by hand, or write questions for this objective first.</span></div>`;
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+  body.innerHTML = `<p class="lo-ai-lead">The AI thinks these ${_loAiRows.length} question${_loAiRows.length === 1 ? '' : 's'} test this objective. Untick anything you disagree with.</p>` +
+    _loAiRows.map((r, i) => {
+      const q = questionBank.find(x => x.id === r.qid);
+      if (!q) return '';
+      return `<label class="lo-pick-row${r.on ? ' sel' : ''}" data-airow="${i}">
+        <input type="checkbox" ${r.on ? 'checked' : ''} onchange="loAiToggle(${i}, this.checked)">
+        <span class="lo-pick-main">
+          <span class="lo-pick-title">${escapeHtml(stripHtmlToText(q.title || 'Untitled'))}</span>
+          <span class="lo-pick-sub">${escapeHtml(q.topic || '—')}${r.why ? ' · ' + escapeHtml(r.why) : ''}</span>
+        </span>
+      </label>`;
+    }).join('');
+  if (btn) { btn.style.display = ''; loAiSyncBtn(); }
+}
+function loAiToggle(i, on) {
+  if (_loAiRows[i]) _loAiRows[i].on = on;
+  const row = document.querySelector(`#loAiBody .lo-pick-row[data-airow="${i}"]`);
+  if (row) row.classList.toggle('sel', on);
+  loAiSyncBtn();
+}
+function loAiSyncBtn() {
+  const btn = document.getElementById('loAiAttachBtn');
+  if (!btn) return;
+  const n = _loAiRows.filter(r => r.on).length;
+  btn.disabled = !n;
+  btn.textContent = n ? `Add ${n} question${n === 1 ? '' : 's'}` : 'Nothing ticked';
+}
+async function loAiAttach() {
+  const id = _loAiId; if (!id) return;
+  const ids = _loAiRows.filter(r => r.on).map(r => r.qid);
+  if (!ids.length) return;
+  const n = await loAttachQuestions(id, ids);
+  loCloseAi();
+  loRenderBody();
+  showToast(`Added ${n} question${n === 1 ? '' : 's'}`, 'success');
+}
+
+// ---------- page ----------
+async function renderObjectivesPage() {
+  const body = document.getElementById('loBody');
+  if (!body) return;
+  body.innerHTML = '<div style="padding:48px;text-align:center;color:var(--text-muted);">Loading learning objectives…</div>';
+  await Promise.all([
+    loadLOData(true),
+    (typeof loadAttemptStats === 'function' ? loadAttemptStats().catch(() => {}) : Promise.resolve())
+  ]);
+  loRenderBody();
+}
+function loSetLevel(v) { _loFilterLevel = v; loRenderBody(); }
+function loSetTheme(v) { _loFilterTheme = v; loRenderBody(); }
+function loSetSearch(v) { _loSearchTerm = String(v || '').toLowerCase().trim(); loRenderBody(); }
+
+function loVisible() {
+  return loList().filter(o => {
+    if (_loFilterLevel && o.level !== _loFilterLevel) return false;
+    if (_loFilterTheme && o.theme !== _loFilterTheme) return false;
+    if (_loSearchTerm) {
+      const hay = (o.title + ' ' + (o.topic || '') + ' ' + (o.obj || '') + ' ' + (o.kw || []).join(' ')).toLowerCase();
+      if (!hay.includes(_loSearchTerm)) return false;
+    }
+    return true;
+  });
+}
+function loRenderBody() {
+  const body = document.getElementById('loBody');
+  if (!body) return;
+  const admin = loIsAdmin();
+  const all = loList();
+  const shown = loVisible();
+  const totalQ = all.reduce((s, o) => s + loQuestions(o.id).length, 0);
+  const empty = all.filter(o => !loQuestions(o.id).length).length;
+
+  const chip = (label, on, fn) => `<button type="button" class="lo-chip${on ? ' on' : ''}" onclick="${fn}">${escapeHtml(label)}</button>`;
+  const levelChips = [chip('All levels', !_loFilterLevel, `loSetLevel('')`)]
+    .concat(LO_LEVELS.map(l => chip(l, _loFilterLevel === l, `loSetLevel('${l}')`))).join('');
+  const themeChips = [chip('All themes', !_loFilterTheme, `loSetTheme('')`)]
+    .concat(LO_THEMES.map(t => chip(t, _loFilterTheme === t, `loSetTheme('${t}')`))).join('');
+
+  // Group what's visible by level, in syllabus order.
+  const byLevel = {};
+  shown.forEach(o => { (byLevel[o.level] || (byLevel[o.level] = [])).push(o); });
+  const levelOrder = LO_LEVELS.filter(l => byLevel[l]).concat(Object.keys(byLevel).filter(l => LO_LEVELS.indexOf(l) < 0));
+  const groups = levelOrder.map(lv => `
+    <div class="lo-group">
+      <div class="lo-group-head">${escapeHtml(lv)} <span class="lo-group-sub">${byLevel[lv].length} objective${byLevel[lv].length === 1 ? '' : 's'}</span></div>
+      ${byLevel[lv].map(o => loCardHtml(o, admin)).join('')}
+    </div>`).join('') || `<div class="lo-empty">No objectives match this filter.${admin ? ' Change the filter, or add a new objective.' : ''}</div>`;
+
+  const note = admin
+    ? 'Every objective below comes from the MOE Primary Science Syllabus (P3–P6 Standard) — but they are yours now: edit the wording, add objectives of your own, or delete any you do not teach. Attach questions from your bank to an objective and your students can practise that objective on its own. <strong>🤖 AI find</strong> reads your bank and suggests questions for one objective — it only ever suggests, nothing is added until you tick it.'
+    : 'Practise by syllabus learning objective. Pick the objective you want to work on and press <strong>▶ Practise</strong> — you will get just the questions that test it.';
+
+  body.innerHTML = loStyles() + `
+  <div class="lo-wrap">
+    <div class="lo-tiles">
+      <div class="lo-tile"><div class="lo-tile-l">Objectives</div><div class="lo-tile-v">${all.length}</div><div class="lo-tile-h">across P3–P6</div></div>
+      <div class="lo-tile"><div class="lo-tile-l">Questions organised</div><div class="lo-tile-v">${totalQ}</div><div class="lo-tile-h">attached to an objective</div></div>
+      ${admin ? `<div class="lo-tile"><div class="lo-tile-l">Still empty</div><div class="lo-tile-v">${empty}</div><div class="lo-tile-h">objectives with no questions yet</div></div>` : ''}
+    </div>
+
+    <div class="lo-note">${note}</div>
+
+    <div class="lo-filters">
+      <div class="lo-chiprow">${levelChips}</div>
+      <div class="lo-chiprow">${themeChips}</div>
+      <div class="lo-filter-tail">
+        <input class="lo-search" type="search" placeholder="Search objectives…" value="${escapeHtml(_loSearchTerm)}" oninput="loSetSearch(this.value)">
+        ${admin ? `<button type="button" class="lo-btn primary" onclick="loAddObjective()">＋ New objective</button>` : ''}
+      </div>
+    </div>
+
+    ${groups}
+  </div>`;
+}
+function loCardHtml(o, admin) {
+  const qs = loQuestions(o.id);
+  const colour = loThemeColor(o.theme);
+  const chips = qs.map(q => {
+    const pct = (typeof questionPercent === 'function') ? questionPercent(q.id) : null;
+    const acc = (!admin && pct != null) ? `<span class="lo-q-acc">${pct}%</span>` : '';
+    const t = stripHtmlToText(q.title || 'Untitled');
+    return `<span class="lo-q" title="${escapeHtml(t)}">
+      <span class="lo-q-t" onclick="loPractiseOne('${escapeHtml(q.id)}')">${escapeHtml(t.length > 44 ? t.slice(0, 44) + '…' : t)}</span>${acc}
+      ${admin ? `<button type="button" class="lo-q-x" title="Remove from this objective" onclick="loDetachQuestion('${escapeHtml(o.id)}','${escapeHtml(q.id)}')">&times;</button>` : ''}
+    </span>`;
+  }).join('');
+  const tools = admin ? `<span class="lo-card-tools">
+      <button type="button" class="lo-mini" title="Edit this objective" onclick="loEditObjective('${escapeHtml(o.id)}')">&#9998; Edit</button>
+      <button type="button" class="lo-mini del" title="Delete this objective" onclick="loDeleteObjective('${escapeHtml(o.id)}')">&times;</button>
+    </span>` : '';
+  const actions = [
+    `<button type="button" class="lo-btn primary" ${qs.length ? '' : 'disabled'} onclick="loPractise('${escapeHtml(o.id)}')">▶ Practise${qs.length ? ' (' + qs.length + ')' : ''}</button>`,
+    admin ? `<button type="button" class="lo-btn" onclick="loOpenPicker('${escapeHtml(o.id)}')">＋ Add questions</button>` : '',
+    admin ? `<button type="button" class="lo-btn ai" title="Let the AI read your question bank and suggest questions for this objective. Nothing is added until you approve it." onclick="loAiFind('${escapeHtml(o.id)}')">🤖 AI find</button>` : '',
+    (admin || qs.length) ? `<button type="button" class="lo-btn" ${qs.length ? '' : 'disabled'} onclick="loPrint('${escapeHtml(o.id)}')">🖨 Print</button>` : ''
+  ].filter(Boolean).join('');
+  return `<div class="lo-card" style="--lo-accent:${colour};">
+    <div class="lo-card-head">
+      <span class="lo-badge lv">${escapeHtml(o.level || '')}</span>
+      <span class="lo-badge theme"><span class="lo-dot" style="background:${colour}"></span>${escapeHtml(o.theme || '')}</span>
+      ${o.topic ? `<span class="lo-topic">${escapeHtml(o.topic)}</span>` : ''}
+      ${tools}
+    </div>
+    <h3 class="lo-card-title">${escapeHtml(o.title || 'Untitled objective')}</h3>
+    ${o.obj ? `<p class="lo-obj">${escapeHtml(o.obj)}</p>` : ''}
+    ${o.intro ? `<p class="lo-intro">${escapeHtml(o.intro)}</p>` : ''}
+    <div class="lo-qrow">${chips || `<span class="lo-none">No questions yet${admin ? ' — add some below.' : '.'}</span>`}</div>
+    <div class="lo-actions">${actions}</div>
+  </div>`;
+}
+function loPractiseOne(qid) {
+  const q = questionBank.find(x => x.id === qid);
+  if (!q) { showToast('That question is no longer in the bank', 'error'); return; }
+  launchWorksheetPractice([q]);
+}
+
+function loStyles() {
+  return `<style>
+  .lo-wrap { max-width:960px; margin:0 auto; }
+  .lo-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:16px; margin-bottom:20px; }
+  .lo-tile { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; }
+  .lo-tile-l { font-size:0.8rem; color:var(--text-muted); margin-bottom:6px; }
+  .lo-tile-v { font-size:1.9rem; font-weight:700; line-height:1.1; color:var(--primary); }
+  .lo-tile-h { font-size:0.75rem; color:var(--text-muted); margin-top:5px; }
+  .lo-note { font-size:0.9rem; line-height:1.65; color:var(--text-muted); background:var(--surface-alt,#faf8f5); border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin-bottom:20px; }
+  .lo-filters { display:flex; flex-direction:column; gap:12px; margin-bottom:24px; }
+  .lo-chiprow { display:flex; flex-wrap:wrap; gap:8px; }
+  .lo-chip { font:inherit; font-size:0.8rem; font-weight:600; padding:7px 15px; border-radius:999px; border:1px solid var(--border); background:var(--surface); color:var(--text-muted); cursor:pointer; }
+  .lo-chip:hover { border-color:var(--primary,#4a7c59); color:var(--text); }
+  .lo-chip.on { background:var(--primary,#4a7c59); border-color:var(--primary,#4a7c59); color:#fff; }
+  .lo-filter-tail { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .lo-search { flex:1; min-width:200px; font:inherit; font-size:0.88rem; padding:10px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); }
+  .lo-group { margin-bottom:30px; }
+  .lo-group-head { font-size:1rem; font-weight:700; color:var(--text); margin-bottom:14px; display:flex; align-items:center; gap:10px; }
+  .lo-group-sub { font-size:0.78rem; font-weight:500; color:var(--text-muted); }
+  .lo-card { background:var(--surface); border:1px solid var(--border); border-left:4px solid var(--lo-accent,#4a7c59); border-radius:14px; padding:22px 24px; margin-bottom:16px; }
+  .lo-card-head { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:10px; }
+  .lo-badge { font-size:0.7rem; font-weight:700; border-radius:999px; padding:3px 11px; border:1px solid var(--border); color:var(--text-muted); background:var(--surface-alt,#faf8f5); display:inline-flex; align-items:center; gap:6px; }
+  .lo-badge.lv { color:var(--primary-dark,#2f5d3f); background:var(--primary-light,#e8f0ea); border-color:var(--primary,#4a7c59); }
+  .lo-dot { width:8px; height:8px; border-radius:3px; display:inline-block; }
+  .lo-topic { font-size:0.76rem; color:var(--text-muted); }
+  .lo-card-tools { margin-left:auto; display:flex; gap:7px; }
+  .lo-mini { font:inherit; font-size:0.76rem; border:1px solid var(--border); background:var(--surface); color:var(--text-muted); border-radius:8px; padding:4px 10px; cursor:pointer; }
+  .lo-mini:hover { color:var(--text); border-color:var(--primary,#4a7c59); }
+  .lo-mini.del:hover { background:var(--accent-red,#d94f4f); border-color:var(--accent-red,#d94f4f); color:#fff; }
+  .lo-card-title { margin:0 0 8px; font-size:1.06rem; line-height:1.4; }
+  .lo-obj { margin:0 0 10px; font-size:0.88rem; line-height:1.65; color:var(--text); }
+  .lo-intro { margin:0 0 14px; font-size:0.83rem; line-height:1.7; color:var(--text-muted); }
+  .lo-qrow { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+  .lo-q { display:inline-flex; align-items:stretch; border:1px solid var(--border); border-radius:9px; background:var(--surface-alt,#faf8f5); overflow:hidden; font-size:0.79rem; }
+  .lo-q-t { padding:6px 11px; cursor:pointer; font-weight:500; }
+  .lo-q-t:hover { background:var(--primary-light,#eef4f0); color:var(--primary-dark,#2f5d3f); }
+  .lo-q-acc { padding:6px 8px; font-size:0.68rem; font-weight:700; color:var(--text-muted); background:rgba(0,0,0,0.04); }
+  .lo-q-x { border:none; border-left:1px solid var(--border); background:none; color:var(--text-muted); cursor:pointer; padding:0 9px; font-size:0.95rem; }
+  .lo-q-x:hover { background:var(--accent-red,#d94f4f); color:#fff; }
+  .lo-none { font-size:0.82rem; color:var(--text-muted); font-style:italic; }
+  .lo-actions { display:flex; flex-wrap:wrap; gap:9px; }
+  .lo-btn { font:inherit; font-size:0.82rem; font-weight:600; padding:9px 16px; border-radius:9px; border:1px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; }
+  .lo-btn:hover:not(:disabled) { border-color:var(--primary,#4a7c59); }
+  .lo-btn.primary { background:var(--primary,#4a7c59); border-color:var(--primary,#4a7c59); color:#fff; }
+  .lo-btn.primary:hover:not(:disabled) { filter:brightness(1.06); }
+  .lo-btn.ai { background:#fdf3e3; border-color:#d1892b; color:#8a5a12; }
+  .lo-btn:disabled { opacity:0.45; cursor:not-allowed; }
+  .lo-empty { text-align:center; color:var(--text-muted); padding:40px 20px; font-size:0.9rem; line-height:1.7; }
+  .lo-pick-row { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; margin-bottom:9px; cursor:pointer; }
+  .lo-pick-row:hover { border-color:var(--primary,#4a7c59); }
+  .lo-pick-row.sel { border-color:var(--primary,#4a7c59); background:var(--primary-light,#eef4f0); }
+  .lo-pick-row input { width:17px; height:17px; margin:2px 0 0; accent-color:var(--primary,#4a7c59); cursor:pointer; flex:none; }
+  .lo-pick-main { display:flex; flex-direction:column; gap:3px; min-width:0; }
+  .lo-pick-title { font-size:0.88rem; font-weight:600; }
+  .lo-pick-sub { font-size:0.76rem; color:var(--text-muted); }
+  .lo-ai-lead { font-size:0.86rem; line-height:1.6; color:var(--text-muted); margin:0 0 14px; }
+  .lo-ai-busy { text-align:center; padding:40px 20px; color:var(--text-muted); font-size:0.9rem; }
+  .lo-ai-hint { font-size:0.78rem; margin-top:8px; }
+  .lo-spinner { width:26px; height:26px; margin:0 auto 14px; border:3px solid var(--border); border-top-color:var(--primary,#4a7c59); border-radius:50%; animation:lo-spin 0.8s linear infinite; }
+  @keyframes lo-spin { to { transform:rotate(360deg); } }
+  .lo-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; margin-bottom:12px; }
+  @media (max-width:560px){ .lo-card { padding:18px; } .lo-form-grid { grid-template-columns:1fr; } }
+  </style>`;
+}
+
+// ---- inline-handler exports (the module has its own scope) ----
+window.renderObjectivesPage = renderObjectivesPage;
+window.loSetLevel = loSetLevel;
+window.loSetTheme = loSetTheme;
+window.loSetSearch = loSetSearch;
+window.loAddObjective = loAddObjective;
+window.loEditObjective = loEditObjective;
+window.loCloseEdit = loCloseEdit;
+window.loSaveEditor = loSaveEditor;
+window.loDeleteObjective = loDeleteObjective;
+window.loDeleteFromEditor = loDeleteFromEditor;
+window.loOpenPicker = loOpenPicker;
+window.loClosePicker = loClosePicker;
+window.loRenderPicker = loRenderPicker;
+window.loPickToggle = loPickToggle;
+window.loPickAttach = loPickAttach;
+window.loDetachQuestion = loDetachQuestion;
+window.loPractise = loPractise;
+window.loPractiseOne = loPractiseOne;
+window.loPrint = loPrint;
+window.loAiFind = loAiFind;
+window.loCloseAi = loCloseAi;
+window.loAiToggle = loAiToggle;
+window.loAiAttach = loAiAttach;

@@ -5361,6 +5361,9 @@ option {
       <div class="nav-item" data-page="textbooks" onclick="navigateTo('textbooks')" title="Textbooks, the MOE syllabus, mindmaps, exam-paper walkthroughs and keyword recall — by level and topic">
         <span class="ico">📚</span> Textbooks &amp; Syllabus
       </div>
+      <div class="nav-item" data-page="objectives" onclick="navigateTo('objectives')" title="Practice organised by the MOE syllabus learning objectives — attach questions to each objective and practise them on their own">
+        <span class="ico">🎯</span> Learning Objectives
+      </div>
       <div class="nav-item admin-only" data-page="myworksheets" onclick="navigateTo('myworksheets')" title="Worksheets you have saved — reprint any of them, with or without a cover page">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         Saved Worksheets
@@ -5994,6 +5997,22 @@ option {
         <div id="notesBody"></div>
       </div>
       <input type="file" id="notesFileInput" accept="application/pdf,image/*" multiple style="display:none" onchange="const fs=[...this.files]; this.value=''; if(fs.length) notesHandleFiles(fs);">
+    </div>
+
+    <!-- ===== PAGE: LEARNING OBJECTIVES (syllabus-organised practice) ===== -->
+    <div class="page" id="page-objectives">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>🎯 Learning Objectives</h2>
+          </div>
+          <div class="subtitle">Practice organised by the MOE Primary Science syllabus, objective by objective</div>
+        </div>
+      </div>
+      <div class="page-body">
+        <div id="loBody"></div>
+      </div>
     </div>
 
     <!-- ===== PAGE: STUDENT VIEW ===== -->
@@ -7707,6 +7726,60 @@ option {
         <button class="btn btn-outline" onclick="ppCloseQEdit()">Cancel</button>
         <button class="btn btn-primary" onclick="ppSaveQuestionEditor()">Save</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== LEARNING OBJECTIVE — EDIT / ADD ==================== -->
+<div class="confirm-overlay" id="loEditOverlay">
+  <div class="confirm-dialog" style="max-width:620px;text-align:left;max-height:90vh;overflow-y:auto;">
+    <h3 id="loEditTitle" style="margin-bottom:16px;">Edit learning objective</h3>
+    <label class="form-label">Name</label>
+    <input id="loEdName" class="form-input" type="text" placeholder="e.g. Heat, temperature and heat flow" style="margin-bottom:12px;">
+    <div class="lo-form-grid">
+      <div><label class="form-label">Level</label><select id="loEdLevel" class="form-select"></select></div>
+      <div><label class="form-label">Theme</label><select id="loEdTheme" class="form-select"></select></div>
+    </div>
+    <label class="form-label">Syllabus topic</label>
+    <input id="loEdTopic" class="form-input" type="text" placeholder="e.g. Energy Forms and Uses (Heat)" style="margin-bottom:12px;">
+    <label class="form-label">Learning outcome</label>
+    <textarea id="loEdObj" class="form-input" rows="3" placeholder="What the student should be able to do — the wording from the syllabus" style="margin-bottom:12px;resize:vertical;"></textarea>
+    <label class="form-label">Student-facing introduction (optional)</label>
+    <textarea id="loEdIntro" class="form-input" rows="3" placeholder="A short, plain-English explanation shown above this objective" style="margin-bottom:12px;resize:vertical;"></textarea>
+    <label class="form-label">Keywords <span style="font-weight:400;color:var(--text-muted);">— comma separated; used to find matching questions</span></label>
+    <input id="loEdKw" class="form-input" type="text" placeholder="heat, temperature, conductor, insulator" style="margin-bottom:6px;">
+    <div class="btn-group" style="justify-content:space-between;margin-top:20px;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-outline" id="loEdDeleteBtn" onclick="loDeleteFromEditor()" style="display:none;color:var(--accent-red,#d94f4f);">Delete</button>
+      <div style="display:flex;gap:8px;margin-left:auto;">
+        <button class="btn btn-outline" onclick="loCloseEdit()">Cancel</button>
+        <button class="btn btn-primary" onclick="loSaveEditor()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== LEARNING OBJECTIVE — ATTACH QUESTIONS ==================== -->
+<div class="confirm-overlay" id="loPickOverlay">
+  <div class="confirm-dialog" style="max-width:660px;text-align:left;max-height:88vh;display:flex;flex-direction:column;">
+    <h3 id="loPickTitle" style="margin-bottom:14px;">Add questions</h3>
+    <input id="loPickSearch" class="form-input" type="text" placeholder="Search your question bank…" oninput="loRenderPicker()" style="margin-bottom:8px;">
+    <div id="loPickCount" style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px;"></div>
+    <div id="loPickList" style="flex:1;overflow-y:auto;min-height:140px;"></div>
+    <div class="btn-group" style="justify-content:flex-end;margin-top:18px;gap:8px;">
+      <button class="btn btn-outline" onclick="loClosePicker()">Cancel</button>
+      <button class="btn btn-primary" id="loPickAttachBtn" disabled onclick="loPickAttach()">Add questions</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== LEARNING OBJECTIVE — AI SUGGESTIONS ==================== -->
+<div class="confirm-overlay" id="loAiOverlay">
+  <div class="confirm-dialog" style="max-width:660px;text-align:left;max-height:88vh;display:flex;flex-direction:column;">
+    <h3 id="loAiTitle" style="margin-bottom:14px;">🤖 Suggested questions</h3>
+    <div id="loAiBody" style="flex:1;overflow-y:auto;min-height:140px;"></div>
+    <div class="btn-group" style="justify-content:flex-end;margin-top:18px;gap:8px;">
+      <button class="btn btn-outline" onclick="loCloseAi()">Close</button>
+      <button class="btn btn-primary" id="loAiAttachBtn" style="display:none;" onclick="loAiAttach()">Add questions</button>
     </div>
   </div>
 </div>
