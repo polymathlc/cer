@@ -9476,7 +9476,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.172.0';
+const APP_VERSION = 'v1.172.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -38027,6 +38027,9 @@ function _ainsteinBindDrag() {
   const b = _ainsteinEl('ainsteinBubble');
   if (!b || b._dragBound) return;
   b._dragBound = true;
+  // Belt and braces alongside the CSS: if anything inside him ever does try to
+  // start a native drag, it dies here rather than stealing the gesture.
+  b.addEventListener('dragstart', e => e.preventDefault());
   b.addEventListener('pointerdown', e => {
     if (e.button != null && e.button !== 0) return;
     // A fresh press is a fresh intention: whatever the last gesture left behind
@@ -38204,6 +38207,21 @@ async function ainsteinSend() {
     background: var(--surface, #fff); box-shadow: 0 8px 26px rgba(20,18,16,0.26);
     touch-action: none;   /* the drag owns the gesture; the page must not scroll under it */
     transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .22s ease; }
+  /* THE WHOLE BUBBLE IS THE HANDLE. Without this the picture of Ai-nstein — the
+     obvious thing to grab, and nearly all of the target — starts the browser's
+     own image drag instead: it swallows the pointer stream, so our drag never
+     begins and only the little credit badge (a plain span, with no native drag
+     of its own) actually worked. Nothing here is grabbable by the browser, and
+     nothing is selectable, so every pixel of him behaves the same way. */
+  #ainsteinBubble, #ainsteinBubble * {
+    -webkit-user-select: none; user-select: none;
+    -webkit-user-drag: none; -khtml-user-drag: none; -moz-user-drag: none; user-drag: none; }
+  /* The picture is transparent to the pointer, so a press anywhere over it is
+     the BUTTON's press. The credit badge deliberately is NOT: it overhangs the
+     circle, and those pixels look like part of him, so they must stay grabbable
+     — its events bubble up to the button like any other child. (The name tag
+     already opts out above; it sits outside the circle and only shows on hover.) */
+  #ainsteinBubble img { -webkit-touch-callout: none; pointer-events: none; }
   /* While being carried: lifted, still, and out from under the cursor. The idle
      bob and the hover lean are dropped so he tracks the finger exactly. */
   #ainsteinBubble.dragging { cursor: grabbing; animation: none !important;
@@ -38401,7 +38419,7 @@ async function ainsteinSend() {
   const host = document.createElement('div');
   host.innerHTML = `
     <button id="ainsteinBubble" type="button" title="Stuck? Ask Ai-nstein for a clue — or drag me somewhere else if I'm in the way (double-click to send me back to the corner)" aria-label="Ask Ai-nstein for a clue. Drag to move him out of the way.">
-      <img src="${AINSTEIN_IMG}" alt="Ai-nstein" onerror="this.onerror=null;this.src='${AINSTEIN_FALLBACK_IMG}';">
+      <img src="${AINSTEIN_IMG}" alt="Ai-nstein" draggable="false" onerror="this.onerror=null;this.src='${AINSTEIN_FALLBACK_IMG}';">
       <span class="ainstein-tag" aria-hidden="true">Stuck? Ask me!</span>
       <span id="ainsteinBadge">${AINSTEIN_DAILY_CREDITS}</span>
     </button>
