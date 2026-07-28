@@ -109,7 +109,7 @@ const imageAiReady = () => geminiImageModels.length > 0;
 // localStorage on this device only — same pattern as bar-model.html. When
 // active, askGemini/askGeminiVision route through OpenAI first and fall back
 // to Gemini on any failure, so students without a key are never affected.
-const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model' };
+const AI_ENGINE_STORE = { engine: 'sq_ai_engine', key: 'sq_openai_key', model: 'sq_openai_model', imageModel: 'sq_openai_image_model' };
 const OPENAI_DEFAULT_MODEL = 'gpt-5.6-sol';
 function getAiEngine() { try { return localStorage.getItem(AI_ENGINE_STORE.engine) || 'gemini'; } catch (e) { return 'gemini'; } }
 function getOpenAiKey() { try { return (localStorage.getItem(AI_ENGINE_STORE.key) || '').trim(); } catch (e) { return ''; } }
@@ -141,6 +141,81 @@ async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, js
   const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
   if (typeof text !== 'string' || !text) throw new Error('OpenAI returned an unexpected response shape.');
   return text.trim();
+}
+
+// ── ChatGPT image generation (Monster Cards → Card Art) ──────────────
+// Same key/device-local settings as the text engine, but a separate image
+// model (the chat model cannot draw). Two modes:
+//   • text only            → the trading-card art
+//   • with a reference PNG → the battle avatar, redrawn FROM the card art so
+//                            both pictures are unmistakably the same creature.
+const OPENAI_IMAGE_DEFAULT_MODEL = 'gpt-image-1';
+function getOpenAiImageModel() { try { return localStorage.getItem(AI_ENGINE_STORE.imageModel) || OPENAI_IMAGE_DEFAULT_MODEL; } catch (e) { return OPENAI_IMAGE_DEFAULT_MODEL; } }
+
+function _dataUrlToBlob(dataUrl) {
+  const parsed = _parseImageDataUrl(dataUrl);
+  if (!parsed) throw new Error('reference image is not an image');
+  return new Blob([parsed.bytes], { type: parsed.mime });
+}
+
+async function _openAiImageRequest(path, body, isForm) {
+  const res = await fetch('https://api.openai.com/v1/images/' + path, {
+    method: 'POST',
+    headers: Object.assign({ 'Authorization': 'Bearer ' + getOpenAiKey() }, isForm ? {} : { 'Content-Type': 'application/json' }),
+    body: isForm ? body : JSON.stringify(body)
+  });
+  if (!res.ok) {
+    let detail = '';
+    try { const ej = await res.json(); detail = ej && ej.error ? ej.error.message : ''; } catch (e) { /* non-JSON error body */ }
+    const err = new Error('OpenAI image API error ' + res.status + (detail ? ': ' + detail : ''));
+    err.status = res.status; err.detail = detail;
+    throw err;
+  }
+  const data = await res.json();
+  const item = data && data.data && data.data[0];
+  if (item && item.b64_json) return 'data:image/png;base64,' + item.b64_json;
+  if (item && item.url) return await _urlToDataUrlRobust(item.url);
+  throw new Error('OpenAI did not return an image');
+}
+
+// Older image models (and some accounts) reject the newer extras — transparent
+// background, output_format, quality — with a 400. Retry once with the bare
+// minimum rather than failing the whole batch.
+function _isUnsupportedImageParam(e) {
+  return !!e && e.status === 400 && /unknown parameter|unsupported|not supported|invalid value|additional properties/i.test(e.detail || e.message || '');
+}
+
+async function openAiGenerateImageDataUrl(prompt, { size = '1024x1024', transparent = false, refDataUrl = null, quality = 'high' } = {}) {
+  if (!getOpenAiKey()) throw new Error('No OpenAI API key saved on this device');
+  const model = getOpenAiImageModel();
+  if (refDataUrl) {
+    const buildForm = (extras) => {
+      const fd = new FormData();
+      fd.append('model', model);
+      fd.append('prompt', prompt);
+      fd.append('size', size);
+      fd.append('n', '1');
+      fd.append('image', _dataUrlToBlob(refDataUrl), 'reference.png');
+      if (extras) {
+        fd.append('output_format', 'png');
+        fd.append('quality', quality);
+        if (transparent) fd.append('background', 'transparent');
+      }
+      return fd;
+    };
+    try { return await _openAiImageRequest('edits', buildForm(true), true); }
+    catch (e) {
+      if (!_isUnsupportedImageParam(e)) throw e;
+      return await _openAiImageRequest('edits', buildForm(false), true);
+    }
+  }
+  const base = { model, prompt, size, n: 1 };
+  const full = Object.assign({}, base, { output_format: 'png', quality }, transparent ? { background: 'transparent' } : {});
+  try { return await _openAiImageRequest('generations', full, false); }
+  catch (e) {
+    if (!_isUnsupportedImageParam(e)) throw e;
+    return await _openAiImageRequest('generations', base, false);
+  }
 }
 
 // Single swap-point for all model calls. Returns trimmed text.
@@ -272,6 +347,8 @@ function openAiEngineSettings() {
   const modelSel = document.getElementById('aiEngineModel');
   modelSel.value = getOpenAiModel();
   if (!modelSel.value) modelSel.value = OPENAI_DEFAULT_MODEL;   // stored model no longer offered
+  const imgSel = document.getElementById('aiEngineImageModel');
+  if (imgSel) { imgSel.value = getOpenAiImageModel(); if (!imgSel.value) imgSel.value = OPENAI_IMAGE_DEFAULT_MODEL; }
   document.getElementById('aiEngineKey').value = getOpenAiKey();
   document.getElementById('aiEngineOverlay').classList.add('active');
 }
@@ -286,9 +363,12 @@ function saveAiEngineSettings() {
   const key = (document.getElementById('aiEngineKey').value || '').trim();
   const model = document.getElementById('aiEngineModel').value || OPENAI_DEFAULT_MODEL;
   if (eng === 'openai' && !key) { showToast('Paste your OpenAI API key to use ChatGPT', 'error'); return; }
+  const imgSelEl = document.getElementById('aiEngineImageModel');
+  const imageModel = (imgSelEl && imgSelEl.value) || OPENAI_IMAGE_DEFAULT_MODEL;
   try {
     localStorage.setItem(AI_ENGINE_STORE.engine, eng);
     localStorage.setItem(AI_ENGINE_STORE.model, model);
+    localStorage.setItem(AI_ENGINE_STORE.imageModel, imageModel);
     if (key) localStorage.setItem(AI_ENGINE_STORE.key, key);
     else localStorage.removeItem(AI_ENGINE_STORE.key);
   } catch (e) { showToast('Could not save: ' + (e && e.message ? e.message : e), 'error'); return; }
@@ -1452,7 +1532,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.182.0';
+const APP_VERSION = 'v1.183.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -4307,6 +4387,29 @@ async function generateEnhancedImageDataUrl(prompt, media) {
     } catch (e) { lastError = e; console.warn('image enhancement model failed', e); }
   }
   throw lastError || new Error('AI image enhancement failed');
+}
+
+// Free-form image generation through the same Gemini image models: text-only
+// (draw something new) or text + a reference data URL (redraw from it). Used
+// as the fallback whenever the ChatGPT image engine is off or fails.
+async function generateImageDataUrlGemini(prompt, refDataUrl) {
+  if (!imageAiReady()) throw new Error('no Gemini image model is available in this project');
+  const parts = [prompt];
+  if (refDataUrl) {
+    const parsed = _parseImageDataUrl(refDataUrl);
+    if (parsed) parts.push({ inlineData: { mimeType: parsed.mime, data: refDataUrl.split(',')[1] || '' } });
+  }
+  let lastError = null;
+  for (const model of geminiImageModels) {
+    try {
+      const result = await model.generateContent(parts);
+      const img = extractInlineImage(result);
+      if (img) return 'data:' + (img.mimeType || 'image/png') + ';base64,' + img.data;
+      const text = result?.response?.text ? result.response.text() : '';
+      throw new Error(text || 'the AI did not return an image');
+    } catch (e) { lastError = e; console.warn('image generation model failed', e); }
+  }
+  throw lastError || new Error('AI image generation failed');
 }
 
 async function _urlToDataUrl(url) {
@@ -24320,15 +24423,21 @@ function tcgArtRefresh() {
   try { if (document.querySelector('#page-tcg.active')) tcgRenderBody(); } catch (e) {}
   try { if (document.querySelector('#page-gameassets.active')) loadGameAssets(); } catch (e) {}
 }
+// Scale → upload → save one slot. Throws on failure; repaints nothing and
+// says nothing, so the batch generator can call it 300 times in a row.
+async function _tcgArtStore(id, dataUrl) {
+  if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
+  // Battle avatars are small stage sprites; card art gets more resolution.
+  const scaled = await _scaleDownDataUrl(dataUrl, id.endsWith(':av') ? 256 : 512);
+  const url = await uploadImageDataUrl(scaled);
+  const uid = _tcgOwnerUid(); if (!uid) throw new Error('Not signed in');
+  await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: { [id]: url } }, { merge: true });
+  (_tcgArt = _tcgArt || {})[id] = url;
+  return url;
+}
 async function _tcgArtApply(id, dataUrl) {
   try {
-    if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
-    // Battle avatars are small stage sprites; card art gets more resolution.
-    const scaled = await _scaleDownDataUrl(dataUrl, id.endsWith(':av') ? 256 : 512);
-    const url = await uploadImageDataUrl(scaled);
-    const uid = _tcgOwnerUid(); if (!uid) throw new Error('Not signed in');
-    await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: { [id]: url } }, { merge: true });
-    (_tcgArt = _tcgArt || {})[id] = url;
+    await _tcgArtStore(id, dataUrl);
     tcgArtRefresh();
     showToast(id.endsWith(':av') ? 'Battle avatar updated' : 'Card art updated', 'success');
   } catch (e) { console.error('tcg art update', e); showToast('Update failed: ' + (e && e.message ? e.message : e), 'error'); }
@@ -24349,11 +24458,150 @@ async function resetTcgArt(id) {
     showToast('Reset to default', 'success');
   } catch (e) { console.error('tcg art reset', e); showToast('Reset failed', 'error'); }
 }
-// Card Art tab (admin) — every monster has TWO paste slots: the trading-card
-// art (card face) and the battle avatar (arena sprite). Grouped by star tier.
-function tcgArtAdminHtml() {
-  const slotCard = (slotId, label, icon, thumb, name) =>
-    '<div class="ga-card">'
+// =====================================================================
+// AI ART GENERATOR (admin, Card Art tab)
+// =====================================================================
+// Every monster gets its 🃏 trading-card art drawn FIRST, then its ⚔️ battle
+// avatar drawn FROM that card art (the card picture is passed back to the
+// image model as the reference), so the two graphics are unmistakably the
+// same creature. That order holds everywhere: the per-slot buttons, and the
+// one "generate all remaining" button that walks the whole dex.
+// Engine: the ChatGPT image model when the ChatGPT engine is switched on
+// (sidebar → AI Engine), otherwise the Gemini image model.
+
+// The emoji in each monster row is the only clue the data carries about what
+// the creature actually IS — and image models read emoji poorly, so spell it out.
+const TCG_EM_WORD = {
+  '🐹': 'hamster', '💧': 'living water droplet', '🐭': 'mouse', '🪨': 'living boulder', '🌱': 'sprouting seedling',
+  '🦟': 'mosquito', '🟢': 'green slime blob', '🦋': 'butterfly', '🐞': 'ladybug', '🐾': 'padded beast with huge paws',
+  '⚙️': 'clockwork gear construct', '🌟': 'star spirit', '🐟': 'fish', '🐤': 'chick', '🪱': 'worm',
+  '🍄': 'mushroom creature', '🐝': 'bee', '🐌': 'snail', '🐁': 'field mouse', '💦': 'water-spray spirit',
+  '🐈': 'cat', '🐶': 'puppy', '✨': 'sparkling light spirit', '🦇': 'bat', '🤖': 'robot',
+  '🪰': 'fly', '🦎': 'lizard', '🦉': 'owl', '🐀': 'rat', '🌋': 'volcano beast',
+  '🐕': 'dog', '🐠': 'tropical fish', '🐇': 'rabbit', '🐢': 'turtle', '🌿': 'leafy plant creature',
+  '🦊': 'fox', '🐸': 'frog', '🐥': 'chick', '🐈‍⬛': 'black cat', '🪲': 'beetle',
+  '🐡': 'pufferfish', '👺': 'oni goblin', '🪼': 'jellyfish', '🪸': 'coral creature', '🦀': 'crab',
+  '🦔': 'hedgehog', '🦌': 'antlered stag', '🌫️': 'mist wraith', '👻': 'ghost', '🐦': 'bird',
+  '🦫': 'beaver', '☄️': 'comet spirit', '🐺': 'wolf', '🦦': 'otter', '🐱': 'cat',
+  '🗿': 'stone golem', '🦭': 'seal', '🦂': 'scorpion', '🐑': 'sheep', '🌈': 'rainbow spirit',
+  '🦝': 'raccoon', '🐏': 'horned ram', '🧱': 'brick golem', '🐍': 'serpent', '🌞': 'sun spirit',
+  '🫎': 'moose', '🐆': 'leopard', '🐒': 'monkey', '🐬': 'dolphin', '🐗': 'wild boar',
+  '🍃': 'wind-borne leaf sprite', '❄️': 'snowflake spirit', '🦬': 'bison', '🦑': 'squid', '🦅': 'eagle',
+  '🦗': 'cricket', '🧊': 'ice golem', '🐊': 'crocodile', '🌙': 'moon spirit', '🐴': 'horse',
+  '🐦‍⬛': 'raven', '🌀': 'whirlpool spirit', '🐅': 'tiger', '🐻‍❄️': 'polar bear', '🐛': 'caterpillar',
+  '🧠': 'psychic brain creature', '🦄': 'unicorn', '🦏': 'rhinoceros', '🌠': 'shooting-star spirit', '🐲': 'eastern dragon',
+  '🌺': 'blossom creature', '🦁': 'lion', '🐦‍🔥': 'phoenix', '💀': 'skeletal revenant', '🐉': 'dragon',
+  '🐋': 'whale', '⛈️': 'storm-cloud elemental', '🌸': 'cherry-blossom spirit', '🌌': 'galaxy spirit', '🐳': 'great whale',
+  '🌳': 'ancient walking tree', '🦖': 'tyrannosaur', '🐙': 'octopus', '🦣': 'mammoth', '🦾': 'armoured mechanical titan',
+  '👼': 'winged angel', '☀️': 'radiant sun deity', '🌑': 'eclipse being'
+};
+// Element → the palette and effects the artwork should carry.
+const TCG_ART_PALETTE = {
+  flame:   'molten orange, scarlet and gold, drifting embers and licking fire',
+  aqua:    'deep ocean blue and turquoise, curling water and spray',
+  spark:   'electric yellow and white-blue, crackling lightning arcs',
+  terra:   'earthy browns, sandstone and moss, cracked rock and dust',
+  flora:   'lush greens and petal pinks, vines, leaves and pollen motes',
+  frost:   'pale ice blue and white, frost crystals and swirling snow',
+  venom:   'sickly purple and acid green, dripping toxin and spores',
+  psychic: 'violet and magenta, glowing runes and warped psychic energy',
+  light:   'warm gold and radiant white, holy beams and lens flare',
+  shadow:  'inky black and deep purple, curling darkness and violet embers',
+  metal:   'polished steel, gunmetal and bronze, sparks and rivets',
+  cosmic:  'midnight indigo and starfield violet, nebulae and drifting stars'
+};
+function _tcgTierMood(stars) {
+  return ['', 'small, cute and just starting out', 'small but scrappy and eager',
+    'a confident mid-tier fighter', 'a battle-hardened veteran', 'a powerful elite boss',
+    'an awe-inspiring legendary titan', 'a mythic, world-shaping god-tier being'][stars] || 'a fighter';
+}
+function tcgCardArtPrompt(c) {
+  const el = TCG_ELEMENTS[c.element] || { name: 'Elemental' };
+  const creature = TCG_EM_WORD[c.em] || 'mythical beast';
+  return 'Original fantasy monster artwork for a children\'s collectible trading-card game.\n'
+    + 'MONSTER: "' + c.name + '" — a ' + el.name.toLowerCase() + '-element creature whose base form is a ' + creature + ', reimagined as ' + _tcgTierMood(c.stars) + ' (' + c.stars + ' of 7 stars).\n'
+    + 'ELEMENT LOOK: ' + (TCG_ART_PALETTE[c.element] || 'vivid fantasy colours') + '.\n'
+    + (c.skillName ? 'SIGNATURE MOVE: "' + c.skillName + '" — let the pose and the effects hint at it.\n' : '')
+    + 'COMPOSITION: square, full-bleed illustration; the whole creature is inside the frame, centred and filling most of it, in a heroic three-quarter view; an atmospheric background scene that matches the element.\n'
+    + 'STYLE: polished painterly digital illustration, rich saturated colour, dramatic rim lighting, glowing elemental effects.\n'
+    + 'HARD RULES: absolutely no text, letters, numbers, signatures or watermarks anywhere; no card frame, border, banner or interface; exactly one creature; friendly for primary-school children — no blood, no gore, nothing frightening or gruesome.';
+}
+function tcgAvatarPrompt(c) {
+  return 'Turn the reference picture into a GAME BATTLE AVATAR sprite of the very same monster, "' + c.name + '".\n'
+    + 'KEEP IDENTICAL: species, silhouette, body plan, colour scheme, markings, horns, wings, limbs and elemental effects — this must read as the exact same character as the reference.\n'
+    + 'CHANGE: remove the background scenery completely and leave it fully transparent — no ground, no shadow, no glow plate, no frame, no scenery of any kind. Show the complete creature from head to toe, centred, facing the viewer in a battle-ready three-quarter stance, with a small empty margin on every side.\n'
+    + 'STYLE: clean crisp game-asset sprite with bold shapes that still read clearly at 128 pixels.\n'
+    + 'HARD RULES: no text, letters, numbers or watermarks; exactly one creature; nothing frightening or gruesome.';
+}
+// One call, whichever engine is on: ChatGPT image model first when the
+// ChatGPT engine is active, Gemini image model otherwise (and as the fallback).
+const _tcgSleep = ms => new Promise(r => setTimeout(r, ms));
+// A rate-limit or a hiccup halfway through 150 monsters shouldn't cost the
+// whole batch — back off and try that one picture again.
+function _tcgTransientError(e) {
+  const msg = (e && (e.detail || e.message) || '') + '';
+  return (e && (e.status === 429 || e.status >= 500)) || /rate limit|429|timeout|timed out|temporarily|overloaded|failed to fetch|network|503|500/i.test(msg);
+}
+async function _tcgGenOnce(prompt, refDataUrl, transparent) {
+  let openAiErr = null;
+  if (openAiActive()) {
+    try { return await openAiGenerateImageDataUrl(prompt, { refDataUrl: refDataUrl || null, transparent: !!transparent }); }
+    catch (e) { openAiErr = e; console.warn('ChatGPT image generation failed, falling back to Gemini:', e); }
+  }
+  try { return await generateImageDataUrlGemini(prompt, refDataUrl || null); }
+  catch (ge) {
+    if (!openAiErr) throw ge;
+    const err = new Error('ChatGPT: ' + openAiErr.message + ' · Gemini fallback: ' + ge.message);
+    err.status = openAiErr.status;
+    throw err;
+  }
+}
+async function tcgGenArtImage(prompt, refDataUrl, transparent) {
+  let lastErr = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await _tcgSleep(attempt * 6000);
+    try { return await _tcgGenOnce(prompt, refDataUrl, transparent); }
+    catch (e) { lastErr = e; if (!_tcgTransientError(e) || _tcgGenStop) break; console.warn('image generation retry ' + (attempt + 1), e); }
+  }
+  throw lastErr || new Error('AI image generation failed');
+}
+
+let _tcgGenBusy = false;   // a generation (single slot or batch) is running
+let _tcgGenStop = false;   // batch cancel flag
+
+function _tcgSlotKey(slotId) { return slotId.replace(':', '-'); }
+function _tcgArtEngineLabel() { return openAiActive() ? 'ChatGPT · ' + getOpenAiImageModel() : 'Gemini image model'; }
+// Re-download the saved card art so it can be handed to the model as the
+// avatar's reference.
+async function _tcgCardArtDataUrl(card) {
+  const url = _tcgArt && _tcgArt[card.id];
+  if (!url) return null;
+  try { return await _urlToDataUrlRobust(transformImageUrl(url)); }
+  catch (e) { console.warn('could not reload card art for ' + card.name, e); return null; }
+}
+async function _tcgGenCardArt(card) {
+  const dataUrl = await tcgGenArtImage(tcgCardArtPrompt(card), null, false);
+  await _tcgArtStore(card.id, dataUrl);
+  return dataUrl;
+}
+// The avatar is ALWAYS drawn from the card art — if there isn't one yet, the
+// card art gets drawn first.
+async function _tcgGenAvatar(card, cardDataUrl) {
+  let ref = cardDataUrl || await _tcgCardArtDataUrl(card);
+  if (!ref) ref = await _tcgGenCardArt(card);
+  const dataUrl = await tcgGenArtImage(tcgAvatarPrompt(card), ref, true);
+  await _tcgArtStore(card.id + ':av', dataUrl);
+  return dataUrl;
+}
+
+// ---- Card Art tab (admin) ----
+// Every monster has TWO slots — the trading-card art (card face) and the
+// battle avatar (arena sprite) — each with paste / drop / upload / ✨ AI.
+function _tcgArtSlotHtml(slotId, label, icon, thumb) {
+  const has = !!(_tcgArt && _tcgArt[slotId]);
+  const isAv = slotId.endsWith(':av');
+  const key = _tcgSlotKey(slotId);
+  return '<div class="ga-card" id="tcgslot-' + key + '">'
     + '<div class="ga-prev">' + thumb + '</div>'
     + '<div class="ga-name">' + icon + ' ' + label + '</div>'
     + '<div class="ga-zone" tabindex="0"'
@@ -24363,28 +24611,199 @@ function tcgArtAdminHtml() {
     +   ' ondrop="onTcgArtDrop(\'' + slotId + '\', event)"'
     +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
     + '<div class="ga-actions">'
+    +   '<button type="button" class="btn btn-primary ga-mini" onclick="tcgAiGenSlot(\'' + slotId + '\')">✨ AI ' + (isAv ? 'avatar' : 'card art') + '</button>'
     +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onTcgArtPick(\'' + slotId + '\', event)"></label>'
-    +   (_tcgArt && _tcgArt[slotId] ? '<button class="btn btn-ghost ga-mini" onclick="resetTcgArt(\'' + slotId + '\')">Reset</button>' : '')
+    +   (has ? '<button type="button" class="btn btn-ghost ga-mini" onclick="resetTcgArt(\'' + slotId + '\')">Reset</button>' : '')
     + '</div>'
-    + '<div class="ga-status ' + (_tcgArt && _tcgArt[slotId] ? 'custom' : '') + '">' + (_tcgArt && _tcgArt[slotId] ? '● Custom' : 'Default') + '</div>'
+    + '<div class="ga-status ' + (has ? 'custom' : '') + '" id="tcgstatus-' + key + '">' + (has ? '● Custom' : 'Default') + '</div>'
     + '</div>';
-  let html = '<div class="tcg-section-note">Every monster carries <b>two graphics</b>: the <b>🃏 trading-card art</b> shown on the card face, and the <b>⚔️ battle avatar</b> that fights on the arena stage. Paste a PNG into either slot — until both are set, one image stands in for the other. Square images look best.</div>';
+}
+function tcgArtRowInnerHtml(c) {
+  const cardOv = _tcgArt && _tcgArt[c.id];
+  const avOv = _tcgArt && _tcgArt[c.id + ':av'];
+  const em = '<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + c.em + '</div>';
+  const cardThumb = cardOv ? '<img src="' + cardOv + '" alt="' + escapeHtml(c.name) + '">' : em;
+  const avThumb = avOv ? '<img src="' + avOv + '" alt="' + escapeHtml(c.name) + ' avatar">' : (cardOv ? '<img src="' + cardOv + '" alt="" style="opacity:.45;">' : em);
+  return '<div style="font-weight:600;margin:6px 0;">#' + String(c.num).padStart(3, '0') + ' ' + escapeHtml(c.name) + '</div>'
+    + '<div class="ga-cards">'
+    + _tcgArtSlotHtml(c.id, 'Trading card art', '🃏', cardThumb)
+    + _tcgArtSlotHtml(c.id + ':av', 'Battle avatar', '⚔️', avThumb)
+    + '</div>';
+}
+// Repaint one monster's two tiles without touching the rest of the page (the
+// batch generator's progress panel must survive).
+function _tcgRowRefresh(card) {
+  const row = document.getElementById('tcgrow-' + card.id);
+  if (row) row.innerHTML = tcgArtRowInnerHtml(card);
+}
+function _tcgSlotStatus(slotId, text) {
+  const el = document.getElementById('tcgstatus-' + _tcgSlotKey(slotId));
+  if (el) { el.textContent = text; el.classList.remove('custom'); }
+}
+function _tcgArtMissing() {
+  let pics = 0, monsters = 0;
+  TCG_CARDS.forEach(c => {
+    const needCard = !(_tcgArt && _tcgArt[c.id]), needAv = !(_tcgArt && _tcgArt[c.id + ':av']);
+    if (needCard) pics++;
+    if (needAv) pics++;
+    if (needCard || needAv) monsters++;
+  });
+  return { pics, monsters };
+}
+function tcgArtGenPanelHtml() {
+  const m = _tcgArtMissing();
+  return '<div class="tcg-gen-panel">'
+    + '<h4>✨ AI art generator</h4>'
+    + '<p>Draws each monster\'s <b>🃏 trading-card art</b> first, then its <b>⚔️ battle avatar</b> <i>from that same picture</i>, so the two always show the same creature. Engine: <b>' + escapeHtml(_tcgArtEngineLabel()) + '</b> — change it in the sidebar under <b>AI Engine</b>.</p>'
+    + '<div class="tcg-gen-actions">'
+    +   '<button type="button" class="btn btn-primary" id="tcgGenAllBtn" onclick="tcgGenerateAllArt(\'missing\')"'
+    +     (m.pics ? '' : ' disabled') + '>✨ Generate all remaining'
+    +     (m.pics ? ' · ' + m.pics + ' picture' + (m.pics === 1 ? '' : 's') + ' for ' + m.monsters + ' monster' + (m.monsters === 1 ? '' : 's') : ' · all done 🎉') + '</button>'
+    +   '<button type="button" class="btn btn-outline" id="tcgGenRedoBtn" onclick="tcgGenerateAllArt(\'all\')">↻ Redraw every monster</button>'
+    +   '<button type="button" class="btn btn-outline tcg-gen-stop" id="tcgGenStopBtn" onclick="tcgStopArtGen()" style="display:none;">⏹ Stop</button>'
+    + '</div>'
+    + '<div class="tcg-gen-track" id="tcgGenTrack" style="display:none;"><i id="tcgGenFill" style="width:0%;"></i></div>'
+    + '<div class="tcg-gen-status" id="tcgGenStatus"></div>'
+    + '</div>';
+}
+function tcgArtAdminHtml() {
+  let html = '<div class="tcg-art-admin">'
+    + '<div class="tcg-section-note">Every monster carries <b>two graphics</b>: the <b>🃏 trading-card art</b> shown on the card face, and the <b>⚔️ battle avatar</b> that fights on the arena stage. Paste a PNG into either slot, upload one, or let the AI draw them — until both are set, one image stands in for the other. Square images look best.</div>'
+    + tcgArtGenPanelHtml();
   [1, 2, 3, 4, 5, 6, 7].forEach(stars => {
     const tier = TCG_CARDS.filter(c => c.stars === stars);
     html += '<h3 class="ga-cat">' + '★'.repeat(stars) + ' ' + stars + '-star monsters (' + tier.length + ')</h3>';
     tier.forEach(c => {
-      const cardOv = _tcgArt && _tcgArt[c.id];
-      const avOv = _tcgArt && _tcgArt[c.id + ':av'];
-      const em = '<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + c.em + '</div>';
-      const cardThumb = cardOv ? '<img src="' + cardOv + '" alt="' + escapeHtml(c.name) + '">' : em;
-      const avThumb = avOv ? '<img src="' + avOv + '" alt="' + escapeHtml(c.name) + ' avatar">' : (cardOv ? '<img src="' + cardOv + '" alt="" style="opacity:.45;">' : em);
-      html += '<div class="ga-objrow"><div style="font-weight:600;margin:6px 0;">#' + String(c.num).padStart(3, '0') + ' ' + escapeHtml(c.name) + '</div><div class="ga-cards">'
-        + slotCard(c.id, 'Trading card art', '🃏', cardThumb, c.name)
-        + slotCard(c.id + ':av', 'Battle avatar', '⚔️', avThumb, c.name)
-        + '</div></div>';
+      html += '<div class="ga-objrow" id="tcgrow-' + c.id + '">' + tcgArtRowInnerHtml(c) + '</div>';
     });
   });
-  return html;
+  return html + '</div>';
+}
+
+// ---- One slot, one click ----
+async function tcgAiGenSlot(slotId) {
+  if (!_isAdmin()) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let that one finish first', 'error'); return; }
+  const isAv = slotId.endsWith(':av');
+  const card = TCG_BY_ID[isAv ? slotId.slice(0, -3) : slotId];
+  if (!card) return;
+  _tcgGenBusy = true;
+  _tcgSlotStatus(slotId, isAv ? '⏳ Drawing avatar…' : '⏳ Drawing card art…');
+  try {
+    if (isAv) await _tcgGenAvatar(card, null);
+    else await _tcgGenCardArt(card);
+    showToast((isAv ? '⚔️ Battle avatar' : '🃏 Card art') + ' drawn for ' + card.name, 'success');
+  } catch (e) {
+    console.error('tcg art generation failed', e);
+    _tcgSlotStatus(slotId, '⚠️ Failed');
+    showToast('Could not draw it: ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    _tcgGenBusy = false;
+    _tcgRowRefresh(card);
+    _tcgGenRefreshPanelCount();
+  }
+}
+
+// ---- The whole dex, one click ----
+function tcgStopArtGen() {
+  if (!_tcgGenBusy) return;
+  _tcgGenStop = true;
+  const s = document.getElementById('tcgGenStatus');
+  if (s) s.innerHTML = '<b>Stopping…</b> finishing the picture that is already in flight.';
+}
+function _tcgGenSetRunning(on) {
+  const all = document.getElementById('tcgGenAllBtn'), redo = document.getElementById('tcgGenRedoBtn'), stop = document.getElementById('tcgGenStopBtn'), track = document.getElementById('tcgGenTrack');
+  if (all) all.disabled = on || !_tcgArtMissing().pics;
+  if (redo) redo.disabled = on;
+  if (stop) stop.style.display = on ? '' : 'none';
+  if (track) track.style.display = on ? '' : 'none';
+}
+function _tcgGenRefreshPanelCount() {
+  const m = _tcgArtMissing();
+  const btn = document.getElementById('tcgGenAllBtn');
+  if (!btn) return;
+  btn.disabled = !m.pics;
+  btn.textContent = '✨ Generate all remaining' + (m.pics
+    ? ' · ' + m.pics + ' picture' + (m.pics === 1 ? '' : 's') + ' for ' + m.monsters + ' monster' + (m.monsters === 1 ? '' : 's')
+    : ' · all done 🎉');
+}
+function _tcgGenProgress(doneP, totalP, line) {
+  const fill = document.getElementById('tcgGenFill');
+  if (fill) fill.style.width = Math.round(doneP / Math.max(1, totalP) * 100) + '%';
+  const s = document.getElementById('tcgGenStatus');
+  if (s) s.innerHTML = line;
+}
+async function tcgGenerateAllArt(mode) {
+  if (!_isAdmin()) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let it finish or press Stop', 'error'); return; }
+  const all = mode === 'all';
+  const jobs = [];
+  TCG_CARDS.forEach(c => {
+    const needCard = all || !(_tcgArt && _tcgArt[c.id]);
+    const needAv = all || !(_tcgArt && _tcgArt[c.id + ':av']);
+    if (needCard || needAv) jobs.push({ card: c, needCard, needAv });
+  });
+  if (!jobs.length) { showToast('Every monster already has both pictures 🎉', 'success'); return; }
+  const totalPics = jobs.reduce((n, j) => n + (j.needCard ? 1 : 0) + (j.needAv ? 1 : 0), 0);
+  if (!confirm('Draw ' + totalPics + ' picture' + (totalPics === 1 ? '' : 's') + ' for ' + jobs.length + ' monster' + (jobs.length === 1 ? '' : 's') + ' with ' + _tcgArtEngineLabel() + '?\n\n'
+    + 'For each monster the trading-card art is drawn first, then the battle avatar is drawn from that card art.\n\n'
+    + 'This runs one picture at a time and can take a long while — keep this tab open and the screen awake. Every finished picture is saved as it lands, and you can press Stop at any point.')) return;
+
+  _tcgGenBusy = true; _tcgGenStop = false;
+  _tcgGenSetRunning(true);
+  const started = Date.now();
+  let donePics = 0, failPics = 0;
+  const failures = [];
+  const eta = () => {
+    if (!donePics) return '';
+    const per = (Date.now() - started) / donePics;
+    const left = Math.round(per * (totalPics - donePics - failPics) / 1000);
+    if (left <= 0) return '';
+    return left > 90 ? ' · about ' + Math.round(left / 60) + ' min left' : ' · about ' + left + 's left';
+  };
+  const say = (card, what) => _tcgGenProgress(donePics + failPics, totalPics,
+    '<b>' + escapeHtml(card.name) + '</b> — drawing the ' + what + '…<br><span class="tcg-gen-sub">' + (donePics + failPics) + ' of ' + totalPics + ' pictures'
+    + (failPics ? ' · ' + failPics + ' failed' : '') + eta() + '</span>');
+
+  for (const job of jobs) {
+    if (_tcgGenStop) break;
+    const { card, needCard, needAv } = job;
+    let cardDataUrl = null;
+    try {
+      if (needCard) {
+        say(card, '🃏 trading-card art');
+        _tcgSlotStatus(card.id, '⏳ Drawing…');
+        cardDataUrl = await _tcgGenCardArt(card);
+        donePics++;
+      }
+      if (needAv && !_tcgGenStop) {
+        say(card, '⚔️ battle avatar (from the card art)');
+        _tcgSlotStatus(card.id + ':av', '⏳ Drawing…');
+        await _tcgGenAvatar(card, cardDataUrl);
+        donePics++;
+      }
+    } catch (e) {
+      failPics++;
+      failures.push(card.name + ' — ' + (e && e.message ? e.message : e));
+      console.error('art generation failed for ' + card.name, e);
+    }
+    _tcgRowRefresh(card);
+    if (!_tcgGenStop) await _tcgSleep(500);   // stay well inside the image API's burst limits
+  }
+
+  const stopped = _tcgGenStop;
+  _tcgGenBusy = false; _tcgGenStop = false;
+  _tcgGenSetRunning(false);
+  _tcgGenRefreshPanelCount();
+  const mins = Math.round((Date.now() - started) / 60000);
+  _tcgGenProgress(totalPics, totalPics,
+    '<b>' + (stopped ? 'Stopped' : 'Finished') + '</b> — ' + donePics + ' picture' + (donePics === 1 ? '' : 's') + ' drawn and saved'
+    + (failPics ? ' · <span class="tcg-gen-fail">' + failPics + ' monster' + (failPics === 1 ? '' : 's') + ' failed</span>' : '')
+    + (mins ? ' · took about ' + mins + ' min' : '')
+    + (failures.length ? '<br><span class="tcg-gen-sub">' + escapeHtml(failures.slice(0, 5).join(' | ')) + (failures.length > 5 ? ' …' : '') + '</span>' : '')
+    + (failPics ? '<br><span class="tcg-gen-sub">Press “Generate all remaining” again to retry just the ones that are still missing.</span>' : ''));
+  showToast((stopped ? 'Stopped — ' : 'Done — ') + donePics + ' picture' + (donePics === 1 ? '' : 's') + ' saved'
+    + (failPics ? ', ' + failPics + ' failed' : ''), failPics ? 'error' : 'success');
 }
 
 // ---- Card face renderer (collection, packs, team, arena) ----
@@ -25624,6 +26043,9 @@ window.onTcgArtPaste = onTcgArtPaste;
 window.onTcgArtDrop = onTcgArtDrop;
 window.onTcgArtPick = onTcgArtPick;
 window.resetTcgArt = resetTcgArt;
+window.tcgAiGenSlot = tcgAiGenSlot;
+window.tcgGenerateAllArt = tcgGenerateAllArt;
+window.tcgStopArtGen = tcgStopArtGen;
 
 async function _scaleDownDataUrl(dataUrl, maxSide){
   const img = await _loadImageEl(dataUrl);
