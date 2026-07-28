@@ -1532,7 +1532,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.187.0';
+const APP_VERSION = 'v1.188.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -24500,7 +24500,11 @@ function tcgArtRefresh() {
 async function _tcgArtStore(id, dataUrl) {
   if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
   // Battle avatars are small stage sprites; card art gets more resolution.
-  const scaled = await _scaleDownDataUrl(dataUrl, (id.endsWith(':av') || id.indexOf('fx:') === 0) ? 256 : 512);
+  // Blast frames are stretched over a 3×3 block of panels, so they get more
+  // pixels than the small sprites (avatars, charge/flight/impact frames).
+  const maxSide = id.indexOf('fx:') === 0 ? (id.indexOf(':blast') > 0 ? 384 : 256)
+    : id.endsWith(':av') ? 256 : 512;
+  const scaled = await _scaleDownDataUrl(dataUrl, maxSide);
   const url = await uploadImageDataUrl(scaled);
   const uid = _tcgOwnerUid(); if (!uid) throw new Error('Not signed in');
   await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: { [id]: url } }, { merge: true });
@@ -24669,7 +24673,7 @@ async function _tcgGenAvatar(card, cardDataUrl) {
 // ---- Card Art tab (admin) ----
 // Every monster has TWO slots — the trading-card art (card face) and the
 // battle avatar (arena sprite) — each with paste / drop / upload / ✨ AI.
-function _tcgArtSlotHtml(slotId, label, icon, thumb, aiLabel) {
+function _tcgArtSlotHtml(slotId, label, icon, thumb, aiLabel, hint) {
   const has = !!(_tcgArt && _tcgArt[slotId]);
   const isAv = slotId.endsWith(':av');
   const aiText = aiLabel || (isAv ? 'avatar' : 'card art');
@@ -24677,6 +24681,7 @@ function _tcgArtSlotHtml(slotId, label, icon, thumb, aiLabel) {
   return '<div class="ga-card" id="tcgslot-' + key + '">'
     + '<div class="ga-prev">' + thumb + '</div>'
     + '<div class="ga-name">' + icon + ' ' + label + '</div>'
+    + (hint ? '<div class="ga-hint">' + escapeHtml(hint) + '</div>' : '')
     + '<div class="ga-zone" tabindex="0"'
     +   ' onpaste="onTcgArtPaste(\'' + slotId + '\', event)"'
     +   ' ondragover="event.preventDefault(); this.classList.add(\'drag\')"'
@@ -24740,46 +24745,112 @@ function tcgArtGenPanelHtml() {
     + '</div>';
 }
 // ---- Element projectile animations (Ember Siege) --------------------
-// Five slots per element. Frame 1 is the element gathering into a small ball
-// and each later frame is BIGGER — and is drawn FROM the frame before it, so
-// the five stay recognisably the same ball. Same rule as card art → avatar.
-const TCG_FX_STEPS = [
-  { size: 'about 15% of the frame', note: 'the very first spark — the energy is only just gathering into a tiny, tight ball, with a few faint wisps spiralling inward toward it' },
-  { size: 'about 32% of the frame', note: 'the ball has grown and steadied, still drawing in wisps of energy from around it' },
-  { size: 'about 50% of the frame', note: 'a bright, dense sphere with clear swirling motion inside and a soft outer glow' },
-  { size: 'about 68% of the frame', note: 'unstable and crackling now, the energy straining outward, the core noticeably brighter' },
-  { size: 'about 85% of the frame', note: 'fully charged and about to be launched — maximum size, blazing core, energy streaming off it' }
+// A shot has four phases on screen, and each element gets its own slots for
+// every one of them. Every slot carries the instruction for what that
+// picture has to show, and every frame is drawn FROM the frame before it —
+// the same chaining rule as card art → battle avatar — so a phase stays one
+// continuous animation instead of five unrelated pictures.
+//   🔅 Charge   5 frames — the element gathering into a ball, growing
+//   🚀 Flight   3 frames — a seamless loop while the shot crosses the lane
+//   💢 Impact   3 frames — the moment it strikes one enemy
+//   💥 Blast    4 frames — the big explosion (6★ 2×2 and 7★ 3×3 splash)
+const TCG_FX_PHASES = [
+  {
+    key: 'charge', prefix: '', frames: 5, icon: '🔅', name: 'Charge-up',
+    blurb: 'Plays as the shot leaves the monster. Frame 1 is the smallest, frame 5 the biggest.',
+    steps: [
+      { t: 'Tiny gathering spark', d: 'the very first spark — energy only just gathering into a tiny, tight ball (about 15% of the frame), with faint wisps spiralling inward' },
+      { t: 'Small steady ball', d: 'the ball has grown and steadied (about 32% of the frame), still drawing in wisps of energy' },
+      { t: 'Bright dense sphere', d: 'a bright, dense sphere (about 50% of the frame) with clear swirling motion inside and a soft outer glow' },
+      { t: 'Straining, crackling', d: 'unstable and crackling (about 68% of the frame), energy straining outward, the core noticeably brighter' },
+      { t: 'Fully charged', d: 'fully charged and about to launch (about 85% of the frame) — maximum size, blazing core, energy streaming off it' }
+    ]
+  },
+  {
+    key: 'fly', prefix: 'fly', frames: 3, icon: '🚀', name: 'In flight',
+    blurb: 'Loops over and over while the shot crosses the lane. Keep all three the same size so the loop does not jump.',
+    steps: [
+      { t: 'Flight loop 1', d: 'the charged ball travelling through the air, seen from the side, flying to the RIGHT, with a motion trail streaming out behind it to the left. Same size in all three flight frames' },
+      { t: 'Flight loop 2', d: 'the same ball in flight a moment later — the core swirl rotated and the trail flickering differently, but the SAME size and position. This is the middle frame of a seamless 3-frame loop' },
+      { t: 'Flight loop 3', d: 'the same ball in flight again, the swirl rotated further and the trail wisping differently, still the SAME size and position, and it must lead naturally back into frame 1 so the loop is seamless' }
+    ]
+  },
+  {
+    key: 'hit', prefix: 'hit', frames: 3, icon: '💢', name: 'Impact',
+    blurb: 'Plays where the shot strikes a single enemy — a quick three-frame hit.',
+    steps: [
+      { t: 'First contact', d: 'the instant of contact — the ball flattening and cracking against an invisible surface, energy beginning to spray sideways' },
+      { t: 'Burst peak', d: 'the impact at its peak — a bright starburst of the element with shards and sparks thrown outward in all directions, largest and brightest of the three' },
+      { t: 'Fading sparks', d: 'the hit dying away — only scattered fading sparks, thin smoke or drifting motes left, mostly transparent' }
+    ]
+  },
+  {
+    key: 'blast', prefix: 'blast', frames: 4, icon: '💥', name: 'Explosion (splash)',
+    blurb: 'The big one — stretched over the 2×2 (6★) and 3×3 (7★) block of panels a splash monster covers.',
+    steps: [
+      { t: 'Ignition core', d: 'the very start of a large explosion — a small, blinding core igniting at the centre with the first ring of energy forming around it' },
+      { t: 'Shockwave peak', d: 'the explosion at full power — a huge blazing ball with an expanding shockwave ring, filling almost the whole frame. The brightest frame of the four' },
+      { t: 'Rolling outward', d: 'the blast rolling outward and thinning — the ring now wide and open with a hollow, darker centre, energy tumbling away from the middle' },
+      { t: 'Dissipating', d: 'the aftermath — faint drifting embers, motes and thin smoke spreading out, mostly transparent' }
+    ]
+  }
 ];
-function tcgFxPrompt(element, n) {
+const TCG_FX_BY_KEY = {};
+TCG_FX_PHASES.forEach(p => { TCG_FX_BY_KEY[p.key] = p; });
+const TCG_FX_TOTAL = TCG_FX_PHASES.reduce((n, p) => n + p.frames, 0);   // 15 per element
+function tcgFxSlotId(element, prefix, n) { return 'fx:' + element + ':' + (prefix || '') + n; }
+function tcgFxPrompt(element, phase, n) {
   const fx = TCG_ELEM_FX[element] || TCG_ELEM_FX.flame;
   const el = TCG_ELEMENTS[element] || { name: 'Elemental' };
-  const step = TCG_FX_STEPS[n - 1] || TCG_FX_STEPS[0];
-  const base = 'Game VFX sprite: ONE frame from a 5-frame projectile charge-up animation for a ' + el.name + '-element spell in a fantasy card game.\n'
+  const step = phase.steps[n - 1] || phase.steps[0];
+  const wide = phase.key === 'blast';
+  return 'Game VFX sprite: ONE frame from the ' + phase.frames + '-frame "' + phase.name + '" animation of a ' + el.name
+      + '-element projectile in a fantasy card game.\n'
     + 'ELEMENT LOOK: ' + fx.words + '.\n'
-    + 'FRAME ' + n + ' OF 5: ' + step.note + '. The ball fills ' + step.size + '.\n'
-    + 'COMPOSITION: perfectly centred on a FULLY TRANSPARENT background, square. Nothing else in the frame at all — no character, no hand, no ground, no scenery, no border, no text, no watermark. Only the ball of energy and its own glow.\n'
-    + 'STYLE: crisp bright game effect art, still readable at 64 pixels, consistent lighting, friendly for primary-school children.';
-  return n === 1 ? base
-    : base + '\nCONSISTENCY: the reference picture is frame ' + (n - 1) + ' of this exact animation. Keep the same colours, shape language, style and camera — this frame is only the next step of the SAME ball growing.';
+    + 'FRAME ' + n + ' OF ' + phase.frames + ' — ' + step.t + ': ' + step.d + '.\n'
+    + 'COMPOSITION: perfectly centred on a FULLY TRANSPARENT background, square'
+      + (wide ? ', the effect filling the frame edge to edge' : '')
+      + '. Nothing else in the frame at all — no character, no monster, no hand, no ground, no scenery, no border, no text, no watermark. Only the effect and its own glow.\n'
+    + 'STYLE: crisp bright game effect art, still readable at 64 pixels, consistent lighting, friendly for primary-school children.\n'
+    + (n > 1
+        ? 'CONSISTENCY: the reference picture is frame ' + (n - 1) + ' of this same animation. Keep the same colours, shape language, style and camera — this is only the next moment of the SAME effect.'
+        : phase.key === 'charge'
+          ? 'This is the opening frame of the whole effect.'
+          : 'CONSISTENCY: the reference picture is the fully-charged ball for this element. Keep its colours, shape language and style — this phase is what happens to THAT ball next.');
 }
-function tcgFxSlotId(element, n) { return 'fx:' + element + ':' + n; }
+function tcgFxHas(element, prefix, n) { return !!(_tcgArt && _tcgArt[tcgFxSlotId(element, prefix, n)]); }
+function tcgFxPhaseDone(element, phase) {
+  for (let i = 1; i <= phase.frames; i++) if (!tcgFxHas(element, phase.prefix, i)) return false;
+  return true;
+}
 function tcgFxMissing() {
   let n = 0;
   Object.keys(TCG_ELEMENTS).forEach(el => {
-    for (let i = 1; i <= TCG_FX_FRAMES; i++) if (!(_tcgArt && _tcgArt[tcgFxSlotId(el, i)])) n++;
+    TCG_FX_PHASES.forEach(p => { for (let i = 1; i <= p.frames; i++) if (!tcgFxHas(el, p.prefix, i)) n++; });
   });
   return n;
 }
-// One frame. Frames before it are drawn first if they don't exist yet.
-async function _tcgGenFxFrame(element, n) {
-  let ref = null;
-  if (n > 1) {
-    const prev = _tcgArt && _tcgArt[tcgFxSlotId(element, n - 1)];
-    if (prev) { try { ref = await _urlToDataUrlRobust(transformImageUrl(prev)); } catch (e) { console.warn('fx ref reload', e); } }
-    if (!ref) ref = await _tcgGenFxFrame(element, n - 1);
+// The reference a frame is drawn from: the frame before it, or — for the
+// first frame of a later phase — the fully-charged ball, so every phase of an
+// element looks like the same magic.
+async function _tcgFxRef(element, phase, n) {
+  const want = n > 1
+    ? tcgFxSlotId(element, phase.prefix, n - 1)
+    : (phase.key === 'charge' ? null : tcgFxSlotId(element, '', TCG_FX_BY_KEY.charge.frames));
+  if (!want) return null;
+  const url = _tcgArt && _tcgArt[want];
+  if (url) {
+    try { return await _urlToDataUrlRobust(transformImageUrl(url)); }
+    catch (e) { console.warn('fx ref reload', e); }
   }
-  const url = await tcgGenArtImage(tcgFxPrompt(element, n), ref, true);
-  await _tcgArtStore(tcgFxSlotId(element, n), url);
+  // Nothing to build on yet — draw what it should follow first.
+  if (n > 1) return await _tcgGenFxFrame(element, phase, n - 1);
+  return await _tcgGenFxFrame(element, TCG_FX_BY_KEY.charge, TCG_FX_BY_KEY.charge.frames);
+}
+async function _tcgGenFxFrame(element, phase, n) {
+  const ref = await _tcgFxRef(element, phase, n);
+  const url = await tcgGenArtImage(tcgFxPrompt(element, phase, n), ref, true);
+  await _tcgArtStore(tcgFxSlotId(element, phase.prefix, n), url);
   return url;
 }
 function _tcgFxRowRefresh(element) {
@@ -24789,28 +24860,41 @@ function _tcgFxRowRefresh(element) {
 function tcgFxRowInnerHtml(element) {
   const el = TCG_ELEMENTS[element] || { icon: '✨', name: element };
   const fx = TCG_ELEM_FX[element] || TCG_ELEM_FX.flame;
-  const done = [];
-  for (let i = 1; i <= TCG_FX_FRAMES; i++) if (_tcgArt && _tcgArt[tcgFxSlotId(element, i)]) done.push(i);
-  const complete = done.length === TCG_FX_FRAMES;
-  let slots = '';
-  for (let i = 1; i <= TCG_FX_FRAMES; i++) {
-    const id = tcgFxSlotId(element, i);
-    const url = _tcgArt && _tcgArt[id];
-    const ph = '<div class="ems-shot-orb fx-ph" style="width:' + (14 + i * 9) + 'px;height:' + (14 + i * 9) + 'px;background:radial-gradient(circle at 35% 35%, ' + fx.a + ', ' + fx.b + ' 68%);box-shadow:0 0 8px 2px ' + fx.glow + ';"></div>';
-    const thumb = url ? '<img src="' + url + '" alt="frame ' + i + '">' : ph;
-    slots += _tcgArtSlotHtml(id, 'Frame ' + i + ' / ' + TCG_FX_FRAMES, i === 1 ? '①' : i === 2 ? '②' : i === 3 ? '③' : i === 4 ? '④' : '⑤', thumb, 'frame ' + i);
-  }
-  return '<div class="tcg-fx-head">'
+  let have = 0;
+  TCG_FX_PHASES.forEach(p => { for (let i = 1; i <= p.frames; i++) if (tcgFxHas(element, p.prefix, i)) have++; });
+  let html = '<div class="tcg-fx-head">'
     + '<b>' + el.icon + ' ' + escapeHtml(el.name) + '</b>'
-    + '<span class="tcg-fx-state ' + (complete ? 'on' : '') + '">' + (complete ? '● Animated in-game' : done.length + ' / ' + TCG_FX_FRAMES + ' frames — falls back to a plain orb') + '</span>'
-    + '<button type="button" class="btn btn-primary ga-mini" onclick="tcgGenFxElement(\'' + element + '\')">✨ Generate all 5 frames</button>'
-    + '</div>'
-    + '<div class="ga-cards">' + slots + '</div>';
+    + '<span class="tcg-fx-state ' + (have === TCG_FX_TOTAL ? 'on' : '') + '">' + have + ' / ' + TCG_FX_TOTAL + ' frames'
+      + (have === TCG_FX_TOTAL ? ' — fully animated in-game' : ' — missing phases fall back to the plain orb') + '</span>'
+    + '<button type="button" class="btn btn-primary ga-mini" onclick="tcgGenFxElement(\'' + element + '\')">✨ Generate all ' + TCG_FX_TOTAL + ' frames</button>'
+    + '</div>';
+  TCG_FX_PHASES.forEach(phase => {
+    let slots = '';
+    for (let i = 1; i <= phase.frames; i++) {
+      const id = tcgFxSlotId(element, phase.prefix, i);
+      const url = _tcgArt && _tcgArt[id];
+      const step = phase.steps[i - 1];
+      const size = phase.key === 'charge' ? 14 + i * 9 : phase.key === 'blast' ? 46 : 34;
+      const ph = '<div class="ems-shot-orb fx-ph" style="width:' + size + 'px;height:' + size + 'px;background:radial-gradient(circle at 35% 35%, ' + fx.a + ', ' + fx.b + ' 68%);box-shadow:0 0 8px 2px ' + fx.glow + ';"></div>';
+      const thumb = url ? '<img src="' + url + '" alt="' + escapeHtml(step.t) + '">' : ph;
+      slots += _tcgArtSlotHtml(id, 'Frame ' + i + ' / ' + phase.frames + ' · ' + step.t, phase.icon, thumb,
+        'frame ' + i, step.d.charAt(0).toUpperCase() + step.d.slice(1) + '.');
+    }
+    html += '<div class="tcg-fx-phase">'
+      + '<div class="tcg-fx-phase-head">'
+      +   '<b>' + phase.icon + ' ' + phase.name + '</b>'
+      +   '<span>' + escapeHtml(phase.blurb) + '</span>'
+      +   '<button type="button" class="btn btn-outline ga-mini" onclick="tcgGenFxPhase(\'' + element + '\',\'' + phase.key + '\')">✨ Generate these ' + phase.frames + '</button>'
+      + '</div>'
+      + '<div class="ga-cards">' + slots + '</div>'
+      + '</div>';
+  });
+  return html;
 }
 function tcgFxAdminHtml() {
   const miss = tcgFxMissing();
   let html = '<h3 class="ga-cat">🎇 Element projectile animations — Ember Siege</h3>'
-    + '<div class="tcg-section-note">Every monster fires its own element in <b>Ember Siege</b>. Give an element <b>all five frames</b> and its shots play them as they fly: frame 1 is the energy gathering into a small ball, each frame after that is bigger, frame 5 is fully charged. Frames are drawn <b>in order, each one from the one before</b>, so all five stay the same ball. Until a set is complete that element falls back to a plain coloured orb.</div>'
+    + '<div class="tcg-section-note">Every monster fires its own element in <b>Ember Siege</b>, and a shot has <b>four phases</b>: it <b>🔅 charges</b> at the monster, <b>🚀 flies</b> down the lane, <b>💢 hits</b> what it lands on, and — for 6★ and 7★ splash monsters — <b>💥 explodes</b> across the 2×2 or 3×3 block of panels it covers. Each slot below says exactly what its picture has to show, and every frame is drawn <b>from the one before it</b> so a phase stays one continuous animation. Any phase you leave empty simply falls back to the plain coloured orb, so you can do them a phase at a time.</div>'
     + '<div class="tcg-gen-actions" style="margin-bottom:20px;">'
     +   '<button type="button" class="btn btn-primary" id="tcgFxAllBtn" onclick="tcgGenAllFx()"' + (miss ? '' : ' disabled') + '>✨ Generate every element animation'
     +     (miss ? ' · ' + miss + ' frame' + (miss === 1 ? '' : 's') + ' missing' : ' · all done 🎉') + '</button>'
@@ -24820,21 +24904,58 @@ function tcgFxAdminHtml() {
   });
   return html;
 }
+// Draw a run of frames in order, each from the one before. Shared by the
+// per-phase, per-element and everything buttons.
+async function _tcgFxRunPhases(element, phases, onProgress) {
+  let made = 0;
+  for (const phase of phases) {
+    // The first frame of a later phase follows the charged ball, so make sure
+    // that exists before the chain starts.
+    let ref = null;
+    if (phase.key !== 'charge') {
+      const anchor = _tcgArt && _tcgArt[tcgFxSlotId(element, '', TCG_FX_BY_KEY.charge.frames)];
+      if (anchor) { try { ref = await _urlToDataUrlRobust(transformImageUrl(anchor)); } catch (e) { ref = null; } }
+    }
+    for (let n = 1; n <= phase.frames; n++) {
+      if (_tcgGenStop) return made;
+      if (onProgress) onProgress(phase, n);
+      _tcgSlotStatus(tcgFxSlotId(element, phase.prefix, n), '⏳ Drawing…');
+      const url = await tcgGenArtImage(tcgFxPrompt(element, phase, n), ref, true);
+      await _tcgArtStore(tcgFxSlotId(element, phase.prefix, n), url);
+      ref = url;                    // the next frame grows out of this one
+      made++;
+      _tcgFxRowRefresh(element);
+      await _tcgSleep(300);
+    }
+  }
+  return made;
+}
+async function tcgGenFxPhase(element, phaseKey) {
+  const phase = TCG_FX_BY_KEY[phaseKey];
+  if (!_isAdmin() || !phase) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let it finish first', 'error'); return; }
+  _tcgGenBusy = true; _tcgGenStop = false;
+  let made = 0;
+  try {
+    made = await _tcgFxRunPhases(element, [phase]);
+    showToast('🎇 ' + ((TCG_ELEMENTS[element] || {}).name || element) + ' · ' + phase.name + ' — ' + made + ' frames drawn', 'success');
+  } catch (e) {
+    console.error('fx phase generation failed', e);
+    showToast('Stopped after ' + made + ' frame' + (made === 1 ? '' : 's') + ': ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    _tcgGenBusy = false;
+    _tcgFxRowRefresh(element);
+    _tcgGenRefreshFxCount();
+  }
+}
 async function tcgGenFxElement(element) {
   if (!_isAdmin()) return;
   if (_tcgGenBusy) { showToast('Already drawing — let it finish first', 'error'); return; }
-  _tcgGenBusy = true;
-  let ref = null, made = 0;
+  _tcgGenBusy = true; _tcgGenStop = false;
+  let made = 0;
   try {
-    for (let n = 1; n <= TCG_FX_FRAMES; n++) {
-      _tcgSlotStatus(tcgFxSlotId(element, n), '⏳ Drawing…');
-      const url = await tcgGenArtImage(tcgFxPrompt(element, n), ref, true);
-      await _tcgArtStore(tcgFxSlotId(element, n), url);
-      ref = url;                        // the next frame grows out of this one
-      made++;
-      _tcgFxRowRefresh(element);
-    }
-    showToast('🎇 ' + (TCG_ELEMENTS[element] || {}).name + ' animation drawn — ' + made + ' frames', 'success');
+    made = await _tcgFxRunPhases(element, TCG_FX_PHASES);
+    showToast('🎇 ' + ((TCG_ELEMENTS[element] || {}).name || element) + ' animation drawn — ' + made + ' frames', 'success');
   } catch (e) {
     console.error('fx generation failed', e);
     showToast('Stopped after ' + made + ' frame' + (made === 1 ? '' : 's') + ': ' + (e && e.message ? e.message : e), 'error');
@@ -24854,37 +24975,26 @@ function _tcgGenRefreshFxCount() {
 async function tcgGenAllFx() {
   if (!_isAdmin()) return;
   if (_tcgGenBusy) { showToast('Already drawing — let it finish or press Stop', 'error'); return; }
-  const els = Object.keys(TCG_ELEMENTS).filter(el => {
-    for (let i = 1; i <= TCG_FX_FRAMES; i++) if (!(_tcgArt && _tcgArt[tcgFxSlotId(el, i)])) return true;
-    return false;
-  });
-  if (!els.length) { showToast('Every element already has all five frames 🎉', 'success'); return; }
-  const total = els.length * TCG_FX_FRAMES;
+  const els = Object.keys(TCG_ELEMENTS).filter(el => TCG_FX_PHASES.some(p => !tcgFxPhaseDone(el, p)));
+  if (!els.length) { showToast('Every element already has all ' + TCG_FX_TOTAL + ' frames 🎉', 'success'); return; }
+  const total = els.length * TCG_FX_TOTAL;
   if (!confirm('Draw ' + total + ' animation frames for ' + els.length + ' element' + (els.length === 1 ? '' : 's') + ' with ' + _tcgArtEngineLabel() + '?\n\n'
-    + 'Each element is drawn frame 1 → 5, every frame based on the one before it. Any element with a partial set is redrawn from frame 1 so the five match.\n\n'
-    + 'Frames are saved as they land, and you can press Stop at any point.')) return;
+    + 'Each element gets all four phases — charge-up, flight loop, impact and explosion — drawn in order, every frame based on the one before it. Elements with a partial set are redrawn so the frames match.\n\n'
+    + 'This is a long run: frames are saved as they land, and you can press Stop at any point.')) return;
   _tcgGenBusy = true; _tcgGenStop = false;
   _tcgGenSetRunning(true);
   const started = Date.now();
   let done = 0, failed = 0;
   for (const el of els) {
     if (_tcgGenStop) break;
-    let ref = null;
-    for (let n = 1; n <= TCG_FX_FRAMES; n++) {
-      if (_tcgGenStop) break;
-      _tcgGenProgress(done + failed, total, '<b>' + escapeHtml((TCG_ELEMENTS[el] || {}).name || el) + '</b> — drawing frame ' + n + ' of ' + TCG_FX_FRAMES + '…'
-        + '<br><span class="tcg-gen-sub">' + (done + failed) + ' of ' + total + ' frames' + (failed ? ' · ' + failed + ' failed' : '') + '</span>');
-      try {
-        const url = await tcgGenArtImage(tcgFxPrompt(el, n), ref, true);
-        await _tcgArtStore(tcgFxSlotId(el, n), url);
-        ref = url;
-        done++;
-      } catch (e) {
-        failed++;
-        console.error('fx frame failed', el, n, e);
-        break;                     // no frame N+1 without frame N — move to the next element
-      }
-      await _tcgSleep(400);
+    try {
+      done += await _tcgFxRunPhases(el, TCG_FX_PHASES, (phase, n) => {
+        _tcgGenProgress(done + failed, total, '<b>' + escapeHtml((TCG_ELEMENTS[el] || {}).name || el) + '</b> — ' + phase.icon + ' ' + phase.name.toLowerCase() + ', frame ' + n + ' of ' + phase.frames + '…'
+          + '<br><span class="tcg-gen-sub">' + (done + failed) + ' of ' + total + ' frames' + (failed ? ' · ' + failed + ' failed' : '') + '</span>');
+      });
+    } catch (e) {
+      failed++;
+      console.error('fx element failed', el, e);
     }
     _tcgFxRowRefresh(el);
   }
@@ -25866,7 +25976,7 @@ const TCG_ELEM_FX = {
   metal:   { a: '#f2f6fb', b: '#5d6f82', glow: 'rgba(200,220,240,.7)',  words: 'polished steel and gunmetal with sparks and metal shards' },
   cosmic:  { a: '#3d5bd6', b: '#05060f', glow: 'rgba(60,90,220,.8)',    words: 'deep midnight blue fading into pure black, with starlight specks and a violet nebula edge' }
 };
-const TCG_FX_FRAMES = 5;   // frames per element animation
+// Frames per phase live on TCG_FX_PHASES (charge 5 · flight 3 · impact 3 · blast 4).
 
 // Mana cost of a card: purely its star tier, so the whole collection is
 // summonable and the legends are the ones you have to work for.
@@ -26185,6 +26295,7 @@ function emsFire(d) {
 // One enemy takes one hit, with the element triangle and whatever the
 // attacker's skill leaves behind.
 function emsHit(e, dmg, card, mode) {
+  if (mode !== 'splash') emsImpact(e.lane, e.x, card.element);   // the splash draws its own explosion
   const mult = tcgElemMult(card, e.card);
   const vuln = (e.curse || 0) > 0 ? 1.4 : 1;
   e.hp -= Math.max(1, Math.round(dmg * mult * vuln));
@@ -26343,49 +26454,93 @@ function emsRender() {
       host.appendChild(s.node);
     }
     emsPositionUnit(s.node, s.lane, s.x);
-    // Frame 1 is the element gathering into a small ball; by frame 5 it is at
-    // full size — so the shot visibly forms as it leaves the muzzle.
-    const frames = tcgFxFrames(s.el);
-    if (frames) {
-      const idx = Math.min(frames.length - 1, Math.floor(s.t / EMS_FRAME_MS));
-      if (s.frame !== idx) {
-        s.frame = idx;
-        const img = s.node.querySelector('img');
-        if (img) img.src = frames[idx];
-      }
-    }
+    const img = s.node.querySelector('img');
+    if (!img) return;
+    // A shot plays its charge-up once as it leaves the muzzle (small ball →
+    // fully charged), then loops the flight frames the whole way down the lane.
+    const charge = tcgFxSet(s.el, ''), fly = tcgFxSet(s.el, 'fly');
+    const chargeFor = charge ? charge.length * EMS_CHARGE_MS : 0;
+    let src;
+    if (charge && s.t < chargeFor) src = charge[Math.min(charge.length - 1, Math.floor(s.t / EMS_CHARGE_MS))];
+    else if (fly) src = fly[Math.floor(((s.t - chargeFor) / EMS_FLY_MS) % fly.length)];
+    else if (charge) src = charge[charge.length - 1];
+    if (src && s.src !== src) { s.src = src; img.src = src; }
   });
 }
-const EMS_FRAME_MS = 0.06;   // seconds per generated animation frame
-// Every generated frame for an element, or null when the set is incomplete.
-function tcgFxFrames(element) {
+const EMS_CHARGE_MS = 0.06;   // seconds per charge-up frame
+const EMS_FLY_MS = 0.1;       // seconds per flight-loop frame
+const EMS_HIT_MS = 80;        // ms per impact frame
+const EMS_BLAST_MS = 115;     // ms per explosion frame
+// Every generated frame of one phase for an element, or null if that phase
+// is incomplete — an unfinished phase simply falls back to the plain orb.
+function tcgFxSet(element, prefix) {
   if (!_tcgArt) return null;
+  const phase = TCG_FX_PHASES.find(p => p.prefix === (prefix || ''));
+  if (!phase) return null;
   const out = [];
-  for (let i = 1; i <= TCG_FX_FRAMES; i++) {
-    const u = _tcgArt['fx:' + element + ':' + i];
+  for (let i = 1; i <= phase.frames; i++) {
+    const u = _tcgArt[tcgFxSlotId(element, phase.prefix, i)];
     if (!u) return null;
     out.push(u);
   }
   return out;
 }
 function emsShotInnerHtml(s) {
-  const frames = tcgFxFrames(s.el);
-  if (frames) return '<img class="ems-shot-img" src="' + escapeHtml(frames[0]) + '" alt="">';
+  const charge = tcgFxSet(s.el, ''), fly = tcgFxSet(s.el, 'fly');
+  const first = (charge && charge[0]) || (fly && fly[0]);
+  if (first) return '<img class="ems-shot-img" src="' + escapeHtml(first) + '" alt="">';
   const fx = TCG_ELEM_FX[s.el] || TCG_ELEM_FX.flame;
   return '<span class="ems-shot-orb" style="background:radial-gradient(circle at 35% 35%, ' + fx.a + ', ' + fx.b + ' 68%);box-shadow:0 0 10px 2px ' + fx.glow + ';"></span>';
 }
 function emsDropNode(node) { if (node && node.isConnected) node.remove(); }
+// Play a generated frame sequence inside a node, then take it away.
+function _emsPlayFrames(node, frames, msPer) {
+  const img = node.querySelector('img');
+  let i = 0;
+  const tick = setInterval(() => {
+    i++;
+    if (i >= frames.length || !node.isConnected) { clearInterval(tick); return; }
+    if (img) img.src = frames[i];
+  }, msPer);
+  setTimeout(() => { clearInterval(tick); node.remove(); }, msPer * frames.length + 40);
+}
+// The hit itself, where the shot lands on one enemy.
+function emsImpact(lane, x, element) {
+  const host = document.getElementById('emsUnits');
+  if (!host) return;
+  const frames = tcgFxSet(element, 'hit');
+  const fx = TCG_ELEM_FX[element] || TCG_ELEM_FX.flame;
+  const d = document.createElement('div');
+  d.className = 'ems-impact';
+  emsPositionUnit(d, lane, x);
+  if (frames) {
+    d.innerHTML = '<img src="' + escapeHtml(frames[0]) + '" alt="">';
+    host.appendChild(d);
+    _emsPlayFrames(d, frames, EMS_HIT_MS);
+  } else {
+    d.innerHTML = '<span class="ems-impact-pop" style="background:radial-gradient(circle, ' + fx.a + ' 0%, ' + fx.b + ' 55%, transparent 74%);"></span>';
+    host.appendChild(d);
+    setTimeout(() => d.remove(), 300);
+  }
+}
 // The 2×2 / 3×3 blast, drawn over the panels it actually covers.
 function emsBurst(lane, x, sp, element) {
   const host = document.getElementById('emsUnits');
   if (!host) return;
+  const frames = tcgFxSet(element, 'blast');
   const fx = TCG_ELEM_FX[element] || TCG_ELEM_FX.flame;
   const d = document.createElement('div');
-  d.className = 'ems-burst';
+  d.className = 'ems-burst' + (frames ? ' framed' : '');
   d.style.width = (sp.cols / EMS_COLS * 100) + '%';
   d.style.height = (sp.lanes / EMS_LANES * 100) + '%';
   d.style.left = ((x - sp.cols / 2) / EMS_COLS * 100) + '%';
   d.style.top = ((lane + 0.5 - sp.lanes / 2) / EMS_LANES * 100) + '%';
+  if (frames) {
+    d.innerHTML = '<img src="' + escapeHtml(frames[0]) + '" alt="">';
+    host.appendChild(d);
+    _emsPlayFrames(d, frames, EMS_BLAST_MS);
+    return;
+  }
   d.style.background = 'radial-gradient(circle, ' + fx.a + ' 0%, ' + fx.b + ' 55%, transparent 72%)';
   host.appendChild(d);
   setTimeout(() => d.remove(), 460);
@@ -27110,6 +27265,7 @@ window.emsCloseQuiz = emsCloseQuiz;
 window.emsAnswer = emsAnswer;
 window.tcgAiGenSlot = tcgAiGenSlot;
 window.tcgGenFxElement = tcgGenFxElement;
+window.tcgGenFxPhase = tcgGenFxPhase;
 window.tcgGenAllFx = tcgGenAllFx;
 window.tcgGenerateAllArt = tcgGenerateAllArt;
 window.tcgStopArtGen = tcgStopArtGen;
