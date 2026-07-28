@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.191.3';
+const APP_VERSION = 'v1.192.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -11041,14 +11041,112 @@ let _openSurfaceCfg = {};        // containerSel -> { scoreElId, scorePrefix, mo
 let _openPartResults = {};       // containerSel -> { 'open:<oidx>'|'mcq:<blockId>': { verdict, pts, expected, student } }
 let _openFinalized = {};         // containerSel -> true once the attempt has been recorded
 
-// Hint + Check answer buttons for ONE part of a question (an answer box or an MCQ),
-// plus the box the hint is written into.
+// Hint + Shorten + Check answer buttons for ONE part of a question (an answer box
+// or an MCQ), plus the box the hint is written into. Shorten only makes sense for
+// something the student wrote, so MCQ parts don't get it.
 function _partActionsHtml(containerSel, kind, pid) {
+  const shorten = kind === 'open'
+    ? `<button type="button" class="btn btn-outline part-ai-btn part-shorten-btn" style="padding:5px 12px;font-size:0.8rem;" data-part-shorten="${containerSel}" data-pid="${pid}" title="${SHORTEN_TITLE}">✂️ Shorten</button>`
+    : '';
   return `<div class="part-actions" style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
       <button type="button" class="btn btn-outline part-ai-btn" style="padding:5px 12px;font-size:0.8rem;" data-part-hint="${containerSel}" data-kind="${kind}" data-pid="${pid}" title="Get a hint for this part — it won't give away the answer">💡 Hint</button>
+      ${shorten}
       <button type="button" class="btn btn-check part-ai-btn" style="padding:5px 12px;font-size:0.8rem;" data-part-mark="${containerSel}" data-kind="${kind}" data-pid="${pid}" title="Check this part — the AI marks it and tells you how you did">✓ Check answer</button>
     </div>
     <div class="part-hint-box" data-hint-for="${kind}:${pid}" style="display:none;margin-top:6px;padding:8px 12px;border:1px solid var(--accent-orange);background:var(--accent-orange-light,#fff3e0);border-radius:8px;font-size:0.85rem;line-height:1.55;"></div>`;
+}
+
+// =====================================================================
+// SHORTEN — tighten what the student wrote in ONE answer box: same meaning,
+// same science keywords, same cause-and-effect order, fewer words. The AI is
+// told to shorten by GRAMMAR only (merge repeated sentences, cut restated
+// facts, join with "as"/"so"/"because") and is forbidden from adding or
+// dropping a fact, so no marking point is lost. The original is stashed on the
+// textarea, so the same button becomes Undo and puts it straight back.
+// =====================================================================
+const SHORTEN_TITLE = 'Shorten what you wrote — same meaning and keywords, fewer words';
+const SHORTEN_UNDO_TITLE = 'Put back exactly what you originally wrote';
+// A worked example anchors the style: two repetitive sentences collapse into one
+// causal chain with every keyword still present.
+const SHORTEN_EXAMPLE =
+  'Worked example — before: "Food cannot be transported to the roots, the roots died. The plant cannot take in water because the roots died." ' +
+  'After: "The plant died as its dead roots cannot take in water as food cannot be transported to the roots."';
+
+function _wordCount(s) { return (String(s || '').trim().match(/\S+/g) || []).length; }
+
+function _shortenSetBtn(btn, mode) {
+  if (!btn) return;
+  const undo = mode === 'undo';
+  btn.innerHTML = undo ? '↩️ Undo' : '✂️ Shorten';
+  btn.title = undo ? SHORTEN_UNDO_TITLE : SHORTEN_TITLE;
+}
+
+// Editing the box by hand means the shortened text is no longer what we wrote,
+// so drop the stashed original and put the button back to Shorten. Programmatic
+// writes (ours, the mic's) are not trusted events and are ignored here.
+document.addEventListener('input', function (e) {
+  const area = e.target;
+  if (!e.isTrusted || !area || !area.classList || !area.classList.contains('open-answer')) return;
+  if (area.dataset.shortened !== '1') return;
+  delete area.dataset.shortened;
+  delete area.dataset.shortenOrig;
+  const sec = area.closest('.open-answer-section');
+  _shortenSetBtn(sec && sec.querySelector('.part-shorten-btn'), 'shorten');
+});
+
+async function shortenAnswerPart(containerSel, pid, btn) {
+  const area = document.querySelector(containerSel + ' .open-answer[data-oidx="' + pid + '"]');
+  if (!area) return;
+
+  // Second tap on an already-shortened box = undo.
+  if (area.dataset.shortened === '1') {
+    area.value = area.dataset.shortenOrig || '';
+    delete area.dataset.shortened;
+    delete area.dataset.shortenOrig;
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+    _shortenSetBtn(btn, 'shorten');
+    showToast('Put your original answer back', 'info');
+    area.focus();
+    return;
+  }
+
+  const text = (area.value || '').trim();
+  if (!text) { showToast('Write your answer first, then tap Shorten', 'info'); return; }
+  const wIn = _wordCount(text);
+  if (wIn < 8) { showToast("That answer is already short — there's nothing to trim", 'info'); return; }
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '✂️ …'; }
+  try {
+    const prompt =
+      'A Singapore primary-school science student wrote the open-ended answer below. Rewrite it so it is SHORTER while saying exactly the same thing.\n\n' +
+      'Rules:\n' +
+      '- Keep EVERY science keyword and marking point, worded the way the student worded it (e.g. "cannot take in water", "the roots died"). Losing a keyword loses a mark.\n' +
+      '- Keep every cause-and-effect link, in the same logical order.\n' +
+      '- Shorten by GRAMMAR only: merge repeated sentences into one, cut repeated subjects and facts that are stated twice, join ideas with "as", "so" or "because", and drop filler words.\n' +
+      '- Do NOT add any new fact, reason or example, and do NOT drop a fact just to make it shorter.\n' +
+      '- Do NOT correct the science, do not answer the question yourself, and do not comment on the answer.\n' +
+      '- Write one flowing, grammatical answer in the words a Primary 5–6 student would use. No bullet points, no headings, no quotation marks, no labels.\n\n' +
+      SHORTEN_EXAMPLE + '\n\n' +
+      'Return ONLY the shortened answer.\n\nAnswer:\n' + text;
+    const out = (await askGemini(prompt, { maxOutputTokens: 400, temperature: 0.2 }) || '')
+      .trim().replace(/^["']+|["']+$/g, '').trim();
+    const wOut = _wordCount(out);
+    if (!out) showToast('AI returned nothing — try again', 'error');
+    else if (wOut >= wIn) showToast("That's already about as short as it can get ✓", 'info');
+    else {
+      area.dataset.shortenOrig = area.value;
+      area.dataset.shortened = '1';
+      area.value = out;
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+      showToast(`Shortened ${wIn} → ${wOut} words — read it once to check it still says what you mean ✓`, 'success');
+    }
+  } catch (err) {
+    console.error('shorten failed', err);
+    showToast('Shorten failed: ' + (err && err.message ? err.message : err), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; _shortenSetBtn(btn, area.dataset.shortened === '1' ? 'undo' : 'shorten'); }
+  }
 }
 
 function _openSection(items, label, modelAnswer, bg, fg, containerSel, source) {
@@ -12047,7 +12145,9 @@ document.addEventListener('click', function (e) {
   const mk = e.target.closest && e.target.closest('[data-part-mark]');
   if (mk) { e.preventDefault(); markQuestionPart(mk.getAttribute('data-part-mark'), mk.getAttribute('data-kind'), mk.getAttribute('data-pid'), mk); return; }
   const ht = e.target.closest && e.target.closest('[data-part-hint]');
-  if (ht) { e.preventDefault(); hintQuestionPart(ht.getAttribute('data-part-hint'), ht.getAttribute('data-kind'), ht.getAttribute('data-pid'), ht); }
+  if (ht) { e.preventDefault(); hintQuestionPart(ht.getAttribute('data-part-hint'), ht.getAttribute('data-kind'), ht.getAttribute('data-pid'), ht); return; }
+  const sh = e.target.closest && e.target.closest('[data-part-shorten]');
+  if (sh) { e.preventDefault(); shortenAnswerPart(sh.getAttribute('data-part-shorten'), sh.getAttribute('data-pid'), sh); }
 });
 document.addEventListener('change', function (e) {
   const t = e.target;
