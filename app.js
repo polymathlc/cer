@@ -1532,7 +1532,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.184.0';
+const APP_VERSION = 'v1.185.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -24267,8 +24267,11 @@ function tcgHydrateState(saved) {
   // Infinite dungeon: every account starts at Floor 1. level = next floor to
   // fight (the floor you have "reached"); cleared = total floors beaten.
   const dg = (s.dungeon && typeof s.dungeon === 'object') ? s.dungeon : {};
+  // Ember Siege (Game Modes): furthest wave reached and how many runs.
+  const sg = (s.siege && typeof s.siege === 'object') ? s.siege : {};
   return {
     dungeon: { level: Math.max(1, dg.level | 0), cleared: Math.max(0, dg.cleared | 0) },
+    siege: { best: Math.max(0, sg.best | 0), runs: Math.max(0, sg.runs | 0) },
     cards,
     team: Array.isArray(s.team) ? s.team.filter(id => TCG_BY_ID[id] && cards[id]).slice(0, 5) : [],
     packs: s.packs | 0,
@@ -25029,6 +25032,7 @@ function tcgRenderBody() {
   else if (tcgTab === 'packs') host.innerHTML = tcgPacksHtml(s);
   else if (tcgTab === 'team') host.innerHTML = tcgTeamHtml(s);
   else if (tcgTab === 'dungeon') host.innerHTML = tcgDungeonHtml(s);
+  else if (tcgTab === 'modes') host.innerHTML = tcgModesHtml(s);
   else if (tcgTab === 'board') { host.innerHTML = '<div class="ga-loading" style="text-align:center;color:#94a3b8;padding:30px;">Loading rankings…</div>'; tcgRenderBoard(); }
   else if (tcgTab === 'art') host.innerHTML = _isAdmin() ? tcgArtAdminHtml() : tcgDexHtml(s);
   else host.innerHTML = tcgArenaHtml(s);
@@ -25600,6 +25604,584 @@ function tcgDungeonHtml(s) {
     + '</div>'
     + '<div class="tcg-section-note" style="margin-top:18px;">🏆 Your floor is your rank on the <b>Leaderboard</b> tab — the top 5 trainers each win a <b>$10 voucher</b>!</div>';
 }
+// =====================================================================
+// GAME MODES TAB — the hub for every way to play with your collection
+// =====================================================================
+function tcgModesHtml(s) {
+  const owned = Object.keys(s.cards).length;
+  const siege = s.siege || { best: 0, runs: 0 };
+  const dg = s.dungeon || { level: 1 };
+  const mode = (icon, name, tag, desc, meta, btn) =>
+    '<div class="tcg-mode-card">'
+    + '<div class="tcg-mode-icon">' + icon + '</div>'
+    + '<div class="tcg-mode-main">'
+    +   '<h4>' + name + ' <span class="tcg-mode-tag">' + tag + '</span></h4>'
+    +   '<p>' + desc + '</p>'
+    +   '<div class="tcg-mode-meta">' + meta + '</div>'
+    + '</div>'
+    + '<div class="tcg-mode-go">' + btn + '</div>'
+    + '</div>';
+  return '<div class="tcg-section-note">Three ways to play with the monsters you have collected. Every mode uses your own cards — the more of the dex you own and the higher you train it, the further you get.</div>'
+    + '<div class="tcg-modes">'
+    + mode('🌋', 'Ember Siege', 'NEW · lane defence',
+        'Wave after wave of corrupted monsters marches on your Ember Gate. Place your cards on the field to summon them as defenders — and answer science questions in the middle of the fight to generate the mana that pays for them. <b>Speed and accuracy both matter:</b> the faster you answer, the more mana you get.',
+        '🃏 ' + owned + ' monster' + (owned === 1 ? '' : 's') + ' summonable · 🏅 best: wave <b>' + (siege.best | 0) + '</b> · ⚔️ ' + (siege.runs | 0) + ' run' + ((siege.runs | 0) === 1 ? '' : 's'),
+        owned
+          ? '<button class="btn btn-primary" type="button" onclick="emsOpen()">▶ Play</button>'
+          : '<button class="btn btn-outline" type="button" onclick="tcgSetTab(\'packs\')">🎁 Get cards first</button>')
+    + mode('⚔️', 'Battle Arena', 'team of 5',
+        'Pick your five best monsters, set an attack and healing strategy, and auto-battle another trainer\'s team. Elements, skills and levels decide it.',
+        '🛡️ team: <b>' + s.team.length + ' / 5</b> · 🏆 record: <b>' + (s.wins | 0) + 'W – ' + (s.losses | 0) + 'L</b>',
+        '<button class="btn btn-outline" type="button" onclick="tcgSetTab(\'arena\')">Go to Arena</button>')
+    + mode('🏰', 'Infinite Dungeon', 'endless',
+        'Endless floors, each with a stronger keeper. Win easily and you leap several floors at once. Your floor is your rank on the leaderboard.',
+        '🏰 your floor: <b>' + Math.max(1, dg.level | 0) + '</b> · ✅ beaten: <b>' + ((s.dungeon && s.dungeon.cleared) | 0) + '</b>',
+        '<button class="btn btn-outline" type="button" onclick="tcgSetTab(\'dungeon\')">Enter Dungeon</button>')
+    + '</div>';
+}
+
+// =====================================================================
+// 🌋 EMBER SIEGE — lane defence, powered by science questions
+// =====================================================================
+// Five lanes, waves of corrupted monsters walking on your Ember Gate. The
+// student summons ANY monster from their collection onto the field; the only
+// currency is mana, and the only way to make mana is to answer MCQs from the
+// bank in a small window that floats over the battlefield — the fight keeps
+// running behind it, so a slow answer costs ground. Correct + fast = most
+// mana; a wrong answer still trickles a little so nobody dead-ends.
+const EMS_LANES = 5;
+const EMS_COLS = 8;
+const EMS_GATE_HP = 100;
+const EMS_START_MANA = 70;
+const EMS_MANA_CAP = 400;
+const EMS_FAST_MS = 12000;          // answer inside this for the full speed bonus
+const EMS_MANA_BASE = 20;           // correct answer, however slow
+const EMS_MANA_SPEED = 22;          // extra, scaled by how fast it came in
+const EMS_MANA_WRONG = 5;           // consolation so a stuck student can still build
+let emsRun = null;
+
+// Mana cost of a card: purely its star tier, so the whole collection is
+// summonable and the legends are the ones you have to work for.
+function emsCost(card) { return 15 + card.stars * 15; }   // 1★ 30 … 7★ 120
+function emsCardCooldown(card) { return 3 + card.stars; } // seconds before that card can be placed again
+function emsRole(card) {
+  const kind = (TCG_SKILLS[card.skillId] || {}).kind || 'strike';
+  if (kind === 'heal' || kind === 'healall') return 'healer';
+  if (kind === 'shield') return 'wall';
+  if (kind === 'blast' || kind === 'stun' || kind === 'poison') return 'splash';
+  return 'striker';
+}
+const EMS_ROLE_LABEL = { healer: '💚 Healer', wall: '🛡️ Wall', splash: '💥 Splash', striker: '⚔️ Striker' };
+// A defender's fighting profile, straight off the card's real stats + level.
+function emsDefProfile(card) {
+  const st = tcgStats(card, tcgLevel(card.id));
+  const role = emsRole(card);
+  return {
+    role,
+    hp: Math.round(st.hp * (role === 'wall' ? 1.7 : role === 'healer' ? 1.1 : 1)),
+    atk: Math.round(st.atk * (role === 'splash' ? 0.55 : role === 'healer' ? 0.30 : 0.80)),
+    heal: Math.round(st.heal * 1.4),
+    rate: Math.max(0.4, 1.5 - st.spd / 200),                       // seconds between actions
+    range: role === 'wall' ? 1.3 : role === 'splash' ? 3.4 : 4.6   // in columns
+  };
+}
+function emsArtHtml(card, cls) {
+  const url = tcgAvatarUrl(card.id);
+  return url
+    ? '<img class="' + cls + '" src="' + escapeHtml(url) + '" alt="' + escapeHtml(tcgShortName(card)) + '">'
+    : '<span class="' + cls + ' em">' + card.em + '</span>';
+}
+
+// ---- Run lifecycle ----
+function emsOpen() {
+  const s = tcgState();
+  if (!s) { showToast('Answer a question anywhere in the app to wake your hero first', 'error'); return; }
+  if (!Object.keys(s.cards).length) { showToast('Open a booster pack first — you need at least one monster', 'error'); return; }
+  const old = document.getElementById('emsOverlay'); if (old) old.remove();
+  const o = document.createElement('div');
+  o.className = 'ems-overlay'; o.id = 'emsOverlay';
+  o.innerHTML = '<div class="ems-shell">'
+    + '<div class="ems-topbar">'
+    +   '<div class="ems-title">🌋 Ember Siege</div>'
+    +   '<div class="ems-stat" id="emsWave">Wave 1</div>'
+    +   '<div class="ems-stat" id="emsGate">🏰 100%</div>'
+    +   '<div class="ems-mana"><span class="ems-mana-orb">⚡</span><b id="emsMana">0</b><span class="ems-mana-cap">/ ' + EMS_MANA_CAP + '</span></div>'
+    +   '<button type="button" class="btn btn-primary ems-manabtn" id="emsManaBtn" onclick="emsOpenQuiz()">⚡ Generate mana</button>'
+    +   '<button type="button" class="ems-icon-btn" id="emsPauseBtn" onclick="emsTogglePause()" title="Pause">⏸</button>'
+    +   '<button type="button" class="ems-icon-btn" onclick="emsClose()" title="Quit">✕</button>'
+    + '</div>'
+    + '<div class="ems-banner" id="emsBanner"></div>'
+    + '<div class="ems-field" id="emsField">'
+    +   '<div class="ems-gatewall" id="emsGateWall"><span>🏰</span></div>'
+    +   '<div class="ems-grid" id="emsGrid"></div>'
+    +   '<div class="ems-units" id="emsUnits"></div>'
+    + '</div>'
+    + '<div class="ems-trayline">Tap a monster, then tap a square in a lane to summon it. Answer questions to keep the mana coming.</div>'
+    + '<div class="ems-tray" id="emsTray"></div>'
+    + '</div>';
+  document.body.appendChild(o);
+  emsStart();
+}
+function emsStart() {
+  emsRun = {
+    t: 0, last: 0, raf: 0, over: false, paused: false, cleared: 0, uiT: 0,
+    mana: EMS_START_MANA, gate: EMS_GATE_HP,
+    wave: 0, waveEnemiesLeft: 0, spawnQueue: [], spawnTimer: 0, breather: 2.5,
+    defenders: [], enemies: [], nextId: 1,
+    sel: null, cooldowns: {},
+    gold: 0, answered: 0, correct: 0, streak: 0, bestStreak: 0,
+    quiz: null, pool: null
+  };
+  // Least-recently-served first, same rotation the trainer uses, so the siege
+  // doesn't re-serve questions the student has just done elsewhere.
+  const pool = _tcgQuizPool();
+  const served = _tcgServedLoad();
+  emsRun.pool = _tcgShuffle(pool).sort((a, b) => (served[a.id] || 0) - (served[b.id] || 0));
+  emsRun.poolI = 0;
+  const grid = document.getElementById('emsGrid');
+  if (grid) {
+    let cells = '';
+    for (let lane = 0; lane < EMS_LANES; lane++)
+      for (let col = 0; col < EMS_COLS; col++)
+        cells += '<div class="ems-cell" data-lane="' + lane + '" data-col="' + col + '" onclick="emsPlace(' + lane + ',' + col + ')"></div>';
+    grid.innerHTML = cells;
+  }
+  emsRenderTray();
+  emsBanner('Wave 1 incoming — tap ⚡ Generate mana!', 2400);
+  emsRun.last = performance.now();
+  emsRun.raf = requestAnimationFrame(emsFrame);
+}
+function emsClose() {
+  if (emsRun && emsRun.raf) cancelAnimationFrame(emsRun.raf);
+  if (emsRun && !emsRun.over) emsBank();
+  emsRun = null;
+  const o = document.getElementById('emsOverlay'); if (o) o.remove();
+  try { tcgUpdateGoldChip(); tcgRenderBody(); } catch (_) {}
+}
+function emsTogglePause() {
+  if (!emsRun || emsRun.over) return;
+  emsRun.paused = !emsRun.paused;
+  const b = document.getElementById('emsPauseBtn');
+  if (b) { b.textContent = emsRun.paused ? '▶' : '⏸'; b.title = emsRun.paused ? 'Resume' : 'Pause'; }
+  emsBanner(emsRun.paused ? '⏸ Paused' : '▶ Go!', 1200);
+}
+// Bank the points earned so far. Called once, whether the run ended or the
+// student quit — everything earned is already theirs.
+function emsBank() {
+  if (!emsRun || emsRun.banked) return;
+  emsRun.banked = true;
+  const s = tcgState();
+  if (s) {
+    s.siege = s.siege || { best: 0, runs: 0 };
+    s.siege.best = Math.max(s.siege.best | 0, emsRun.cleared | 0);
+    s.siege.runs = (s.siege.runs | 0) + 1;
+  }
+  if (rpgState && emsRun.gold > 0) rpgState.gold = (rpgState.gold | 0) + emsRun.gold;
+  try { rpgSave(); } catch (_) {}
+}
+function emsBanner(text, ms) {
+  const el = document.getElementById('emsBanner');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(emsRun && emsRun.bannerT);
+  if (emsRun) emsRun.bannerT = setTimeout(() => { const e = document.getElementById('emsBanner'); if (e) e.classList.remove('show'); }, ms || 1800);
+}
+
+// ---- Waves ----
+function emsStartWave() {
+  const r = emsRun; if (!r) return;
+  r.wave++;
+  const count = 3 + Math.round(r.wave * 1.25);
+  const boss = r.wave % 5 === 0;
+  r.spawnQueue = [];
+  for (let i = 0; i < count; i++) r.spawnQueue.push({ boss: boss && i === 0 });
+  r.waveEnemiesLeft = count;
+  r.spawnTimer = 0;
+  r.spawnGap = Math.max(0.75, 2.4 - r.wave * 0.07);
+  emsBanner((boss ? '💀 BOSS WAVE ' : '🌊 Wave ') + r.wave + ' — ' + count + ' incoming!', 2200);
+  emsSyncHud();
+}
+function emsSpawnEnemy(spec) {
+  const r = emsRun; if (!r) return;
+  const maxStars = Math.min(7, 1 + Math.floor(r.wave / 3));
+  const minStars = Math.max(1, maxStars - 2);
+  const pool = TCG_CARDS.filter(c => c.stars <= maxStars && c.stars >= minStars);
+  const card = pool[Math.floor(Math.random() * pool.length)] || TCG_CARDS[0];
+  const k = 1 + (r.wave - 1) * 0.2;
+  const st = tcgStats(card, Math.min(TCG_LVL_MAX, 1 + r.wave * 2));
+  const hp = Math.round(st.hp * 0.5 * k * (spec.boss ? 4.5 : 1));
+  r.enemies.push({
+    id: r.nextId++, card: card, boss: !!spec.boss,
+    lane: Math.floor(Math.random() * EMS_LANES),
+    x: EMS_COLS + 0.6,
+    hp: hp, maxHp: hp,
+    atk: Math.round(st.atk * 0.3 * k * (spec.boss ? 1.7 : 1)),
+    spd: spec.boss ? 0.26 : 0.4 + Math.random() * 0.18,
+    cool: 0, el: null
+  });
+}
+
+// ---- Simulation ----
+function emsFrame(ts) {
+  const r = emsRun;
+  if (!r || !document.getElementById('emsOverlay')) return;
+  const dt = Math.min(0.05, Math.max(0, (ts - r.last) / 1000));   // clamp so a backgrounded tab can't teleport a wave through
+  r.last = ts;
+  if (!r.paused && !r.over) { r.t += dt; emsUpdate(dt); }
+  emsRender();
+  r.raf = requestAnimationFrame(emsFrame);
+}
+function emsUpdate(dt) {
+  const r = emsRun;
+  // card cooldowns
+  Object.keys(r.cooldowns).forEach(id => { r.cooldowns[id] -= dt; if (r.cooldowns[id] <= 0) delete r.cooldowns[id]; });
+  r.uiT = (r.uiT || 0) + dt;
+  if (r.uiT >= 0.25) { r.uiT = 0; emsRefreshTrayState(); }
+  // wave pacing
+  if (r.breather > 0) {
+    r.breather -= dt;
+    if (r.breather <= 0) emsStartWave();
+  } else if (r.spawnQueue.length) {
+    r.spawnTimer -= dt;
+    if (r.spawnTimer <= 0) { emsSpawnEnemy(r.spawnQueue.shift()); r.spawnTimer = r.spawnGap; }
+  } else if (!r.enemies.length) {
+    const reward = Math.round(10 + r.wave * 5);
+    r.gold += reward;
+    r.cleared = r.wave;                 // waves fully survived — the score that counts
+    emsBanner('✅ Wave ' + r.wave + ' cleared — 🪙 +' + reward + ' points!', 2200);
+    r.breather = 5;
+    emsSyncHud();
+  }
+  // defenders act
+  r.defenders.forEach(d => {
+    d.cool -= dt;
+    if (d.cool > 0) return;
+    if (d.p.role === 'healer') {
+      const hurt = r.defenders.filter(o => o !== d && o.hp < o.maxHp && Math.abs(o.lane - d.lane) <= 1 && Math.abs(o.col - d.col) <= 2.5)
+        .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+      if (hurt) { hurt.hp = Math.min(hurt.maxHp, hurt.hp + d.p.heal); hurt.flash = 0.25; d.cool = d.p.rate; }
+      return;
+    }
+    const inLane = r.enemies.filter(e => e.lane === d.lane && e.x > d.col - 0.2 && e.x - d.col <= d.p.range);
+    if (!inLane.length) return;
+    inLane.sort((a, b) => a.x - b.x);
+    const targets = d.p.role === 'splash' ? inLane.slice(0, 3) : [inLane[0]];
+    targets.forEach((e, i) => {
+      const mult = tcgElemMult(d.card, e.card);
+      const dmg = Math.max(1, Math.round(d.p.atk * mult * (d.p.role === 'splash' && i > 0 ? 0.6 : 1)));
+      e.hp -= dmg; e.flash = 0.18;
+      if (mult >= 2) e.crit = 0.4;
+    });
+    d.cool = d.p.rate;
+    d.fire = 0.16;
+  });
+  // enemies walk / fight
+  r.enemies.forEach(e => {
+    e.flash = Math.max(0, (e.flash || 0) - dt);
+    e.crit = Math.max(0, (e.crit || 0) - dt);
+    const blocker = r.defenders.find(d => d.lane === e.lane && Math.abs(d.col + 0.55 - e.x) < 0.55 && d.hp > 0);
+    if (blocker) {
+      e.cool -= dt;
+      if (e.cool <= 0) {
+        const mult = tcgElemMult(e.card, blocker.card);
+        blocker.hp -= Math.max(1, Math.round(e.atk * mult));
+        blocker.flash = 0.2;
+        e.cool = 1;
+      }
+      return;
+    }
+    e.x -= e.spd * dt;
+    if (e.x <= 0.35) {
+      r.gate = Math.max(0, r.gate - (e.boss ? 25 : 10));
+      e.hp = 0;
+      emsShake();
+      emsSyncHud();
+    }
+  });
+  // clear the dead
+  r.defenders = r.defenders.filter(d => { d.flash = Math.max(0, (d.flash || 0) - dt); d.fire = Math.max(0, (d.fire || 0) - dt); if (d.hp > 0) return true; emsPoof(d.el); return false; });
+  r.enemies = r.enemies.filter(e => { if (e.hp > 0) return true; emsPoof(e.el); return false; });
+  if (r.gate <= 0) emsGameOver();
+}
+function emsGameOver() {
+  const r = emsRun; if (!r || r.over) return;
+  r.over = true;
+  emsBank();
+  const acc = r.answered ? Math.round(r.correct / r.answered * 100) : 0;
+  const s = tcgState();
+  const best = (s && s.siege && s.siege.best) | 0;
+  const o = document.getElementById('emsOverlay');
+  if (!o) return;
+  const box = document.createElement('div');
+  box.className = 'ems-result';
+  box.innerHTML = '<div class="ems-result-card">'
+    + '<h3>🏰 The gate has fallen</h3>'
+    + '<div class="ems-result-wave">You cleared <b>' + (r.cleared | 0) + ' wave' + ((r.cleared | 0) === 1 ? '' : 's') + '</b> and fell on wave <b>' + r.wave + '</b></div>'
+    + '<div class="ems-result-grid">'
+    +   '<div><b>' + r.correct + ' / ' + r.answered + '</b><span>questions right</span></div>'
+    +   '<div><b>' + acc + '%</b><span>accuracy</span></div>'
+    +   '<div><b>' + r.bestStreak + '</b><span>best streak</span></div>'
+    +   '<div><b>🪙 ' + r.gold + '</b><span>points earned</span></div>'
+    + '</div>'
+    + '<div class="ems-result-best">🏅 Your best siege: wave <b>' + best + '</b></div>'
+    + '<div class="ems-result-actions">'
+    +   '<button type="button" class="btn btn-primary" onclick="emsRestart()">↻ Play again</button>'
+    +   '<button type="button" class="btn btn-outline" onclick="emsClose()">Done</button>'
+    + '</div>'
+    + '</div>';
+  o.appendChild(box);
+}
+function emsRestart() {
+  const o = document.getElementById('emsOverlay');
+  const res = o && o.querySelector('.ems-result'); if (res) res.remove();
+  emsCloseQuiz();
+  if (emsRun && emsRun.raf) cancelAnimationFrame(emsRun.raf);
+  const units = document.getElementById('emsUnits'); if (units) units.innerHTML = '';
+  emsStart();
+}
+
+// ---- Placing cards ----
+function emsRenderTray() {
+  const host = document.getElementById('emsTray');
+  const s = tcgState();
+  if (!host || !s || !emsRun) return;
+  const owned = Object.keys(s.cards).map(id => TCG_BY_ID[id]).filter(Boolean)
+    .sort((a, b) => emsCost(a) - emsCost(b) || a.num - b.num);
+  host.innerHTML = owned.map(c => {
+    const cost = emsCost(c);
+    const cd = emsRun.cooldowns[c.id] || 0;
+    const poor = emsRun.mana < cost;
+    return '<button type="button" class="ems-card' + (emsRun.sel === c.id ? ' sel' : '') + (poor || cd > 0 ? ' off' : '') + '" data-ems-card="' + c.id + '" onclick="emsSelect(\'' + c.id + '\')" title="' + escapeHtml(c.name) + ' · ' + EMS_ROLE_LABEL[emsRole(c)] + '">'
+      + '<span class="ems-card-art">' + emsArtHtml(c, 'ems-art') + '</span>'
+      + '<span class="ems-card-name">' + escapeHtml(tcgShortName(c)) + '</span>'
+      + '<span class="ems-card-cost">⚡ ' + cost + '</span>'
+      + '<span class="ems-card-cd" data-cd="' + c.id + '"' + (cd > 0 ? '' : ' style="display:none;"') + '></span>'
+      + '</button>';
+  }).join('');
+}
+function emsSelect(id) {
+  if (!emsRun || emsRun.over) return;
+  const c = TCG_BY_ID[id]; if (!c) return;
+  if ((emsRun.cooldowns[id] || 0) > 0) { emsBanner(tcgShortName(c) + ' is recharging…', 1200); return; }
+  if (emsRun.mana < emsCost(c)) { emsBanner('Not enough mana — answer a question! ⚡', 1500); return; }
+  emsRun.sel = emsRun.sel === id ? null : id;
+  emsRenderTray();
+}
+function emsPlace(lane, col) {
+  const r = emsRun;
+  if (!r || r.over) return;
+  if (!r.sel) { emsBanner('Pick a monster from the tray first', 1400); return; }
+  const c = TCG_BY_ID[r.sel]; if (!c) return;
+  const cost = emsCost(c);
+  if (r.mana < cost) { emsBanner('Not enough mana — answer a question! ⚡', 1500); return; }
+  if (r.defenders.some(d => d.lane === lane && d.col === col)) { emsBanner('That square is taken', 1200); return; }
+  const p = emsDefProfile(c);
+  r.mana -= cost;
+  r.cooldowns[c.id] = emsCardCooldown(c);
+  r.defenders.push({ id: r.nextId++, card: c, p: p, lane: lane, col: col, hp: p.hp, maxHp: p.hp, cool: p.rate * 0.5, el: null });
+  r.sel = null;
+  emsRenderTray();
+  emsSyncHud();
+}
+
+// ---- Rendering ----
+function emsUnitHtml(u, kind) {
+  const c = u.card;
+  return '<div class="ems-unit-art">' + emsArtHtml(c, 'ems-art') + '</div>'
+    + '<div class="ems-unit-hp"><i></i></div>'
+    + (kind === 'enemy' && u.boss ? '<div class="ems-boss-tag">BOSS</div>' : '');
+}
+function emsPositionUnit(el, lane, x) {
+  el.style.left = ((x - 0.5) / EMS_COLS * 100) + '%';
+  el.style.top = (lane / EMS_LANES * 100) + '%';
+}
+function emsRender() {
+  const r = emsRun, host = document.getElementById('emsUnits');
+  if (!r || !host) return;
+  const seen = {};
+  const paint = (u, kind, x) => {
+    seen[u.id] = 1;
+    if (!u.el || !u.el.isConnected) {
+      u.el = document.createElement('div');
+      u.el.className = 'ems-unit ems-' + kind + (u.boss ? ' boss' : '') + ' r-' + (kind === 'def' ? u.p.role : 'foe');
+      u.el.innerHTML = emsUnitHtml(u, kind);
+      host.appendChild(u.el);
+    }
+    emsPositionUnit(u.el, u.lane, x);
+    const bar = u.el.querySelector('.ems-unit-hp i');
+    if (bar) bar.style.width = Math.max(0, Math.round(u.hp / u.maxHp * 100)) + '%';
+    u.el.classList.toggle('hit', (u.flash || 0) > 0);
+    u.el.classList.toggle('fire', (u.fire || 0) > 0);
+    u.el.classList.toggle('crit', (u.crit || 0) > 0);
+  };
+  r.defenders.forEach(d => paint(d, 'def', d.col + 0.5));
+  r.enemies.forEach(e => paint(e, 'enemy', e.x));
+}
+// Cooldown veils and "can I afford this?" dimming. Deliberately NOT part of
+// the frame loop — a collection can run to 151 cards, and touching every tray
+// button 60 times a second is the one thing that would make this stutter on a
+// school phone. Four times a second is plenty for a seconds countdown.
+function emsRefreshTrayState() {
+  const r = emsRun; if (!r) return;
+  document.querySelectorAll('.ems-card').forEach(btn => {
+    const id = btn.getAttribute('data-ems-card');
+    const c = TCG_BY_ID[id]; if (!c) return;
+    const cd = r.cooldowns[id] || 0;
+    btn.classList.toggle('off', r.mana < emsCost(c) || cd > 0);
+    const veil = btn.querySelector('.ems-card-cd');
+    if (veil) {
+      veil.style.display = cd > 0 ? '' : 'none';
+      if (cd > 0) veil.textContent = Math.ceil(cd) + 's';
+    }
+  });
+}
+function emsSyncHud() {
+  const r = emsRun; if (!r) return;
+  const m = document.getElementById('emsMana'); if (m) m.textContent = Math.floor(r.mana);
+  const w = document.getElementById('emsWave'); if (w) w.textContent = r.breather > 0 && r.wave ? 'Wave ' + r.wave + ' cleared' : 'Wave ' + Math.max(1, r.wave);
+  const g = document.getElementById('emsGate');
+  if (g) { g.textContent = '🏰 ' + Math.round(r.gate) + '%'; g.classList.toggle('low', r.gate <= 35); }
+  const wall = document.getElementById('emsGateWall');
+  if (wall) wall.style.opacity = String(0.35 + 0.65 * (r.gate / EMS_GATE_HP));
+}
+function emsShake() {
+  const f = document.getElementById('emsField'); if (!f) return;
+  f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake');
+}
+function emsPoof(el) {
+  if (!el || !el.isConnected) return;
+  el.classList.add('poof');
+  setTimeout(() => el.remove(), 320);
+}
+
+// ---- The mana question window (the fight keeps running behind it) ----
+function emsOpenQuiz() {
+  const r = emsRun;
+  if (!r || r.over) return;
+  if (r.quiz) { const box = document.getElementById('emsQuiz'); if (box) box.classList.add('bump'); return; }
+  if (!r.pool || !r.pool.length) { showToast('No practice questions available yet', 'error'); return; }
+  const o = document.getElementById('emsOverlay'); if (!o) return;
+  const box = document.createElement('div');
+  box.className = 'ems-quiz'; box.id = 'emsQuiz';
+  box.innerHTML = '<div class="ems-quiz-head">'
+    + '<span class="ems-quiz-title">⚡ Generate mana</span>'
+    + '<span class="ems-quiz-streak" id="emsQuizStreak"></span>'
+    + '<button type="button" class="ems-icon-btn" onclick="emsCloseQuiz()" title="Back to the battle">✕</button>'
+    + '</div>'
+    + '<div class="ems-quiz-speed"><i id="emsQuizSpeed"></i></div>'
+    + '<div class="ems-quiz-body" id="emsQuizBody"></div>';
+  o.appendChild(box);
+  emsNextQuestion();
+}
+function emsCloseQuiz() {
+  if (emsRun) emsRun.quiz = null;
+  const box = document.getElementById('emsQuiz'); if (box) box.remove();
+}
+function emsNextQuestion() {
+  const r = emsRun; if (!r) return;
+  const q = r.pool[r.poolI % r.pool.length];
+  r.poolI++;
+  r.quiz = { q: q, at: performance.now(), answered: false };
+  if (q && q.id) _tcgServedMark(q.id);
+  const body = document.getElementById('emsQuizBody');
+  if (!body) return;
+  body.innerHTML = '<div class="ems-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
+    + '<div class="ems-quiz-opts">'
+    + q.opts.map((o, i) => '<button type="button" class="ems-quiz-opt" data-i="' + i + '" onclick="emsAnswer(' + i + ')">'
+        + '<span class="ems-quiz-let">' + (i + 1) + '</span>' + escapeHtml(o) + '</button>').join('')
+    + '</div>'
+    + '<div class="ems-quiz-fb" id="emsQuizFb">Answer fast — the speed bar above is your mana bonus.</div>';
+  emsQuizStreakHud();
+  emsQuizSpeedTick();
+}
+// The speed bar drains over EMS_FAST_MS; whatever is left when the answer
+// lands is the bonus mana, so hesitating literally costs you.
+function emsQuizSpeedTick() {
+  const r = emsRun;
+  const bar = document.getElementById('emsQuizSpeed');
+  if (!r || !r.quiz || !bar) return;
+  const left = Math.max(0, 1 - (performance.now() - r.quiz.at) / EMS_FAST_MS);
+  bar.style.width = Math.round(left * 100) + '%';
+  bar.className = left > 0.5 ? 'hot' : left > 0.2 ? 'warm' : 'cold';
+  if (!r.quiz.answered) requestAnimationFrame(emsQuizSpeedTick);
+}
+function emsQuizStreakHud() {
+  const r = emsRun;
+  const el = document.getElementById('emsQuizStreak');
+  if (!el || !r) return;
+  const mult = emsStreakMult(r.streak);
+  el.innerHTML = r.streak >= 2
+    ? '🔥 ' + r.streak + ' in a row · <b>×' + mult + '</b> mana'
+    : '<span class="dim">Get 3 in a row for ×1.25 mana</span>';
+}
+function emsStreakMult(streak) { return streak >= 5 ? 1.5 : streak >= 3 ? 1.25 : 1; }
+function emsAnswer(i) {
+  const r = emsRun;
+  if (!r || !r.quiz || r.quiz.answered) return;
+  r.quiz.answered = true;
+  const q = r.quiz.q;
+  const correct = i === q.a;
+  const ms = performance.now() - r.quiz.at;
+  r.answered++;
+  let gain;
+  if (correct) {
+    r.correct++;
+    r.streak++;
+    r.bestStreak = Math.max(r.bestStreak, r.streak);
+    const speed = Math.max(0, 1 - ms / EMS_FAST_MS);
+    gain = Math.round((EMS_MANA_BASE + EMS_MANA_SPEED * speed) * emsStreakMult(r.streak));
+  } else {
+    r.streak = 0;
+    gain = EMS_MANA_WRONG;
+  }
+  r.mana = Math.min(EMS_MANA_CAP, r.mana + gain);
+  emsSyncHud();
+  emsRenderTray();
+  emsManaPop(gain);
+  _emsLogAttempt(q, correct);
+  const body = document.getElementById('emsQuizBody');
+  const btns = body ? body.querySelectorAll('.ems-quiz-opt') : [];
+  btns.forEach(b => { b.disabled = true; const bi = +b.dataset.i; if (bi === q.a) b.classList.add('right'); else if (bi === i) b.classList.add('wrong'); });
+  const fb = document.getElementById('emsQuizFb');
+  if (fb) fb.innerHTML = correct
+    ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + (ms < 4000 ? ' · ⚡ lightning fast!' : '') + '</span>'
+    : '<span class="no">❌ The answer was <b>(' + (q.a + 1) + ')</b> — only ⚡ +' + gain + ' mana. Streak reset.</span>';
+  emsQuizStreakHud();
+  setTimeout(() => { if (emsRun && emsRun.quiz && emsRun.quiz.answered && document.getElementById('emsQuiz')) emsNextQuestion(); }, correct ? 900 : 1900);
+}
+// Siege answers count like every other attempt in the app: same shared
+// rotation, same teacher-visible attempt log.
+function _emsLogAttempt(q, correct) {
+  if (!q || !q.db || !q.id) return;
+  try { _gqMark(q.id); } catch (e) {}
+  if (!(currentUser && currentUser.role === 'student')) return;
+  try { noteAttemptLocally(q.id, correct ? 1 : 0, 1); } catch (e) {}
+  try {
+    addDoc(collection(db, 'questionAttempts'), {
+      uid: currentUser.uid, email: currentUser.email, displayName: currentUser.name,
+      questionId: q.id, questionTitle: '', score: correct ? 1 : 0, totalBlanks: 1,
+      answerHash: '', ms: 0, timestamp: Timestamp.now(), mode: 'tcg-siege'
+    }).catch(err => console.warn('siege attempt log failed', err));
+  } catch (e) {}
+}
+function emsManaPop(gain) {
+  const host = document.querySelector('.ems-mana');
+  if (!host) return;
+  const d = document.createElement('div');
+  d.className = 'ems-mana-pop' + (gain >= EMS_MANA_BASE ? '' : ' weak');
+  d.textContent = '+' + gain;
+  host.appendChild(d);
+  setTimeout(() => d.remove(), 900);
+}
+// 1–4 answer the open question; Esc closes it. Speed is the point.
+document.addEventListener('keydown', e => {
+  if (!emsRun || !emsRun.quiz || !document.getElementById('emsQuiz')) return;
+  if (e.key === 'Escape') { emsCloseQuiz(); return; }
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= 9) { const q = emsRun.quiz.q; if (q && n <= q.opts.length) emsAnswer(n - 1); }
+});
+
 // -- Leaderboard tab: ranked by dungeon floor reached; top 5 win a $10 voucher.
 async function tcgRenderBoard() {
   let rows = null;
@@ -26113,6 +26695,15 @@ window.onTcgArtDrop = onTcgArtDrop;
 window.onTcgArtPick = onTcgArtPick;
 window.resetTcgArt = resetTcgArt;
 window.tcgOpenFromAnnounce = tcgOpenFromAnnounce;
+window.emsOpen = emsOpen;
+window.emsClose = emsClose;
+window.emsRestart = emsRestart;
+window.emsTogglePause = emsTogglePause;
+window.emsSelect = emsSelect;
+window.emsPlace = emsPlace;
+window.emsOpenQuiz = emsOpenQuiz;
+window.emsCloseQuiz = emsCloseQuiz;
+window.emsAnswer = emsAnswer;
 window.tcgAiGenSlot = tcgAiGenSlot;
 window.tcgGenerateAllArt = tcgGenerateAllArt;
 window.tcgStopArtGen = tcgStopArtGen;
