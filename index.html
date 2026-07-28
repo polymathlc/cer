@@ -4777,6 +4777,115 @@ option {
 .tcg-tab:hover { border-color: #8E24AA; color: #8E24AA; }
 .tcg-tab.active { background: linear-gradient(135deg,#8E24AA,#7B1FA2); border-color: transparent; color: #fff; box-shadow: 0 4px 12px rgba(142,36,170,0.3); }
 .tcg-section-note { text-align: center; color: var(--text-muted); font-size: 0.88rem; margin: 0 auto 20px; max-width: 620px; line-height: 1.55; }
+/* ---- Game Modes tab: the hub of ways to play ---- */
+.tcg-modes { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.tcg-mode-card { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; padding: 24px 26px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 16px rgba(15,23,42,0.05); }
+.tcg-mode-icon { font-size: 2.2rem; line-height: 1; flex: 0 0 auto; }
+.tcg-mode-main { flex: 1 1 320px; min-width: 240px; }
+.tcg-mode-main h4 { margin: 0 0 8px; font-size: 1.05rem; font-weight: 800; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tcg-mode-tag { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8E24AA; background: rgba(142,36,170,0.1); border-radius: 999px; padding: 4px 10px; }
+.tcg-mode-main p { margin: 0 0 12px; font-size: 0.86rem; line-height: 1.65; color: var(--text-muted); }
+.tcg-mode-meta { font-size: 0.78rem; color: var(--text-muted); line-height: 1.6; }
+.tcg-mode-go { flex: 0 0 auto; }
+
+/* ---- 🌋 Ember Siege: lane defence over the whole screen ---- */
+.ems-overlay { position: fixed; inset: 0; z-index: 1400; background: radial-gradient(120% 90% at 50% 0%, #2a1608 0%, #120b06 60%, #080505 100%); display: flex; align-items: center; justify-content: center; padding: 14px; font-family: 'DM Sans', system-ui, sans-serif; }
+.ems-shell { width: min(1080px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 12px; color: #f6ecdc; }
+.ems-topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border: 1px solid #6b4517; border-radius: 14px; background: rgba(30,18,8,0.85); }
+.ems-title { font-weight: 800; font-size: 1rem; margin-right: 4px; }
+.ems-stat { font-size: 0.85rem; font-weight: 700; color: #d6c3a6; background: rgba(0,0,0,0.28); border-radius: 999px; padding: 6px 14px; }
+.ems-stat.low { color: #ff9a8a; background: rgba(180,40,20,0.28); }
+.ems-mana { position: relative; display: flex; align-items: baseline; gap: 6px; font-size: 1.1rem; font-weight: 800; color: #ffd76a; margin-left: auto; }
+.ems-mana-orb { font-size: 1rem; }
+.ems-mana-cap { font-size: 0.72rem; font-weight: 600; color: #b79b74; }
+.ems-mana-pop { position: absolute; right: -6px; top: -14px; font-size: 0.9rem; font-weight: 800; color: #6fe09a; animation: emsPop 0.9s ease-out forwards; pointer-events: none; }
+.ems-mana-pop.weak { color: #b79b74; }
+@keyframes emsPop { 0% { opacity: 0; transform: translateY(6px); } 25% { opacity: 1; } 100% { opacity: 0; transform: translateY(-22px); } }
+.ems-manabtn { font-size: 0.85rem; padding: 9px 18px; }
+.ems-icon-btn { background: transparent; border: 1px solid #5a3f1c; color: #d6c3a6; border-radius: 10px; width: 36px; height: 36px; font-size: 0.95rem; cursor: pointer; }
+.ems-icon-btn:hover { border-color: #b07a2e; color: #ffd76a; }
+.ems-banner { min-height: 0; height: 0; overflow: hidden; text-align: center; font-weight: 800; font-size: 0.95rem; color: #ffd76a; opacity: 0; transition: opacity 0.25s, height 0.25s; }
+.ems-banner.show { height: 26px; opacity: 1; }
+.ems-field { position: relative; width: 100%; aspect-ratio: 8 / 5; max-height: 58vh; border-radius: 16px; overflow: hidden; border: 1px solid #6b4517; background:
+  repeating-linear-gradient(to bottom, rgba(255,255,255,0.045) 0 calc(100% / 5), rgba(0,0,0,0.06) calc(100% / 5) calc(200% / 5)),
+  linear-gradient(90deg, #3a2410 0%, #22160b 45%, #180f07 100%); }
+.ems-field.shake { animation: emsShake 0.32s ease; }
+@keyframes emsShake { 25% { transform: translateX(-6px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-3px); } }
+.ems-gatewall { position: absolute; left: 0; top: 0; bottom: 0; width: 4.5%; background: linear-gradient(90deg, #f0b542, rgba(240,181,66,0.15)); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; z-index: 3; }
+.ems-grid { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(5, 1fr); z-index: 2; }
+.ems-cell { border-right: 1px dashed rgba(255,255,255,0.05); cursor: pointer; }
+.ems-cell:hover { background: rgba(240,181,66,0.12); }
+.ems-units { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.ems-unit { position: absolute; width: 12.5%; height: 20%; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: left 0.08s linear; }
+.ems-unit-art { width: 76%; height: 66%; display: flex; align-items: center; justify-content: center; }
+.ems-art { max-width: 100%; max-height: 100%; object-fit: contain; }
+.ems-art.em { font-size: clamp(18px, 3.4vw, 34px); line-height: 1; }
+.ems-enemy .ems-unit-art { filter: hue-rotate(-25deg) saturate(1.3) brightness(0.85) drop-shadow(0 0 6px rgba(190,60,220,0.6)); transform: scaleX(-1); }
+.ems-def .ems-unit-art { filter: drop-shadow(0 0 6px rgba(240,181,66,0.45)); }
+.ems-unit.r-wall .ems-unit-art { filter: drop-shadow(0 0 7px rgba(110,170,255,0.7)); }
+.ems-unit.r-healer .ems-unit-art { filter: drop-shadow(0 0 7px rgba(110,220,150,0.7)); }
+.ems-unit.hit .ems-unit-art { filter: brightness(2.4) saturate(0.3); }
+.ems-unit.fire .ems-unit-art { transform: translateX(4px) scale(1.08); }
+.ems-enemy.fire .ems-unit-art { transform: scaleX(-1) translateX(4px) scale(1.08); }
+.ems-unit.crit::after { content: '×2'; position: absolute; top: -2px; right: 6px; font-size: 0.6rem; font-weight: 800; color: #ffd76a; }
+.ems-unit.boss { width: 16%; height: 26%; }
+.ems-unit-hp { width: 68%; height: 4px; border-radius: 999px; background: rgba(0,0,0,0.55); overflow: hidden; margin-top: 2px; }
+.ems-unit-hp i { display: block; height: 100%; background: linear-gradient(90deg,#6fe09a,#3fbf75); }
+.ems-enemy .ems-unit-hp i { background: linear-gradient(90deg,#ff8a70,#d0402a); }
+.ems-boss-tag { font-size: 0.55rem; font-weight: 800; letter-spacing: 0.08em; color: #ff9a8a; }
+.ems-unit.poof { animation: emsPoof 0.3s ease-in forwards; }
+@keyframes emsPoof { to { opacity: 0; transform: scale(0.4) rotate(12deg); } }
+.ems-trayline { text-align: center; font-size: 0.76rem; color: #b79b74; }
+.ems-tray { display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 10px; }
+.ems-card { flex: 0 0 auto; width: 86px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 12px; border: 1px solid #5a3f1c; background: rgba(30,18,8,0.9); color: #f6ecdc; cursor: pointer; position: relative; }
+.ems-card:hover { border-color: #b07a2e; }
+.ems-card.sel { border-color: #ffd76a; box-shadow: 0 0 0 2px rgba(255,215,106,0.35); }
+.ems-card.off { opacity: 0.4; }
+.ems-card-art { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+.ems-card-name { font-size: 0.66rem; font-weight: 700; text-align: center; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ems-card-cost { font-size: 0.68rem; font-weight: 800; color: #ffd76a; }
+.ems-card-cd { position: absolute; inset: 0; border-radius: 12px; background: rgba(0,0,0,0.6); color: #ffd76a; font-size: 0.8rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+/* The question window floats over the battlefield — deliberately small, and
+   deliberately NOT a blocking backdrop: the siege carries on behind it. */
+.ems-quiz { position: fixed; right: 18px; bottom: 18px; width: min(440px, calc(100vw - 36px)); max-height: min(70vh, 620px); overflow-y: auto; z-index: 1500; border: 1px solid #8a5a1e; border-radius: 16px; background: linear-gradient(135deg,#241505,#140c05); box-shadow: 0 20px 50px rgba(0,0,0,0.6); padding: 18px 20px 20px; color: #f6ecdc; }
+.ems-quiz.bump { animation: emsBump 0.3s ease; }
+@keyframes emsBump { 50% { transform: scale(1.03); } }
+.ems-quiz-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.ems-quiz-title { font-weight: 800; font-size: 0.92rem; }
+.ems-quiz-streak { margin-left: auto; font-size: 0.72rem; color: #ffd76a; }
+.ems-quiz-streak .dim { color: #8d7758; }
+.ems-quiz-speed { height: 6px; border-radius: 999px; background: rgba(0,0,0,0.5); overflow: hidden; margin-bottom: 14px; }
+.ems-quiz-speed i { display: block; height: 100%; width: 100%; background: #6fe09a; transition: width 0.1s linear; }
+.ems-quiz-speed i.warm { background: #f0b542; }
+.ems-quiz-speed i.cold { background: #d0402a; }
+.ems-quiz-q { font-size: 0.88rem; line-height: 1.6; margin-bottom: 14px; }
+.ems-quiz-q img { max-width: 100%; border-radius: 8px; background: #fff; }
+.ems-quiz-opts { display: flex; flex-direction: column; gap: 8px; }
+.ems-quiz-opt { display: flex; align-items: center; gap: 10px; text-align: left; padding: 11px 14px; border-radius: 10px; border: 1px solid #5a3f1c; background: rgba(255,255,255,0.03); color: #f6ecdc; font-size: 0.85rem; cursor: pointer; }
+.ems-quiz-opt:hover:not(:disabled) { border-color: #ffd76a; }
+.ems-quiz-opt:disabled { cursor: default; }
+.ems-quiz-let { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 6px; background: rgba(255,215,106,0.15); color: #ffd76a; font-size: 0.72rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.ems-quiz-opt.right { border-color: #3fbf75; background: rgba(63,191,117,0.16); }
+.ems-quiz-opt.wrong { border-color: #d0402a; background: rgba(208,64,42,0.16); }
+.ems-quiz-fb { margin-top: 14px; font-size: 0.8rem; line-height: 1.6; color: #b79b74; min-height: 20px; }
+.ems-quiz-fb .ok { color: #6fe09a; }
+.ems-quiz-fb .no { color: #ff9a8a; }
+.ems-result { position: absolute; inset: 0; z-index: 1600; display: flex; align-items: center; justify-content: center; background: rgba(8,5,5,0.82); padding: 16px; }
+.ems-result-card { width: min(520px, 100%); text-align: center; padding: 32px 30px; border: 1px solid #8a5a1e; border-radius: 18px; background: linear-gradient(135deg,#2a1608,#160d06); color: #f6ecdc; }
+.ems-result-card h3 { margin: 0 0 10px; font-size: 1.2rem; font-weight: 800; }
+.ems-result-wave { font-size: 0.95rem; color: #d6c3a6; margin-bottom: 22px; }
+.ems-result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.ems-result-grid div { padding: 12px 8px; border-radius: 12px; background: rgba(0,0,0,0.3); }
+.ems-result-grid b { display: block; font-size: 1.05rem; color: #ffd76a; margin-bottom: 4px; }
+.ems-result-grid span { font-size: 0.7rem; color: #b79b74; }
+.ems-result-best { font-size: 0.85rem; color: #d6c3a6; margin-bottom: 22px; }
+.ems-result-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .ems-quiz { right: 8px; left: 8px; bottom: 8px; width: auto; max-height: 62vh; }
+  .ems-field { max-height: 42vh; }
+  .ems-title { font-size: 0.9rem; }
+}
+
 /* Card Art tab — AI art generator panel + the two-slot tiles */
 .tcg-gen-panel { max-width: 720px; margin: 0 auto 28px; padding: 24px 26px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 16px rgba(15,23,42,0.05); text-align: center; }
 .tcg-gen-panel h4 { margin: 0 0 10px; font-size: 1.02rem; font-weight: 800; }
@@ -7058,6 +7167,7 @@ option {
           <button class="tcg-tab" data-tcgtab="team" onclick="tcgSetTab('team')" type="button">🛡️ My Team</button>
           <button class="tcg-tab" data-tcgtab="arena" onclick="tcgSetTab('arena')" type="button">⚔️ Battle Arena</button>
           <button class="tcg-tab" data-tcgtab="dungeon" onclick="tcgSetTab('dungeon')" type="button">🏰 Dungeon</button>
+          <button class="tcg-tab" data-tcgtab="modes" onclick="tcgSetTab('modes')" type="button">🎮 Game Modes</button>
           <button class="tcg-tab" data-tcgtab="board" onclick="tcgSetTab('board')" type="button">🏆 Leaderboard</button>
           <button class="tcg-tab admin-only" data-tcgtab="art" onclick="tcgSetTab('art')" type="button">🎨 Card Art</button>
         </div>
