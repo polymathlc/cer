@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.191.2';
+const APP_VERSION = 'v1.191.3';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -24757,7 +24757,10 @@ function tcgCardArtPrompt(c) {
 function tcgAvatarPrompt(c) {
   return 'Turn the reference picture into a GAME BATTLE AVATAR sprite of the very same monster, "' + c.name + '".\n'
     + 'KEEP IDENTICAL: species, silhouette, body plan, colour scheme, markings, horns, wings, limbs and elemental effects — this must read as the exact same character as the reference.\n'
-    + 'CHANGE: remove the background scenery completely and leave it fully transparent — no ground, no shadow, no glow plate, no frame, no scenery of any kind. Show the complete creature from head to toe, centred, facing the viewer in a battle-ready three-quarter stance, with a small empty margin on every side.\n'
+    + 'CHANGE: remove the background scenery completely and leave the area around the creature COMPLETELY EMPTY — no ground, no shadow, no glow plate, no frame, no scenery of any kind. Show the complete creature from head to toe, centred, facing the viewer in a battle-ready three-quarter stance, with a small empty margin on every side.\n'
+    // Same trap as the projectile frames: say "transparent" and the model
+    // paints the chequered pattern that stands for it.
+    + 'BACKGROUND — CRITICAL: do NOT draw a chequerboard, a grid of alternating light-grey and white squares, or any pattern, texture or plate to stand in for emptiness. That chequered pattern must not appear anywhere in the picture.\n'
     + 'STYLE: clean crisp game-asset sprite with bold shapes that still read clearly at 128 pixels.\n'
     + 'HARD RULES: no text, letters, numbers or watermarks; exactly one creature; nothing frightening or gruesome.';
 }
@@ -24970,9 +24973,13 @@ function tcgFxPrompt(element, phase, n) {
       + '-element projectile in a fantasy card game.\n'
     + 'ELEMENT LOOK: ' + fx.words + '.\n'
     + 'FRAME ' + n + ' OF ' + phase.frames + ' — ' + step.t + ': ' + step.d + '.\n'
-    + 'COMPOSITION: perfectly centred on a FULLY TRANSPARENT background, square'
+    + 'COMPOSITION: perfectly centred on a COMPLETELY EMPTY background, square'
       + (wide ? ', the effect filling the frame edge to edge' : '')
       + '. Nothing else in the frame at all — no character, no monster, no hand, no ground, no scenery, no border, no text, no watermark. Only the effect and its own glow.\n'
+    // Told to draw a "transparent background", image models paint the chequered
+    // pattern an editor uses to SHOW transparency, and it arrives as real
+    // pixels. So: never use that word, and rule the pattern out by name.
+    + 'BACKGROUND — CRITICAL: the area around the effect must be genuinely empty. Do NOT draw a chequerboard, do NOT draw a grid of alternating light-grey and white squares, do NOT draw any pattern, texture, gradient or plate to stand in for emptiness. That chequered pattern must not appear anywhere in the picture.\n'
     + 'STYLE: crisp bright game effect art, still readable at 64 pixels, consistent lighting, friendly for primary-school children.\n'
     + (n > 1
         ? 'CONSISTENCY: the reference picture is frame ' + (n - 1) + ' of this same animation. Keep the same colours, shape language, style and camera — this is only the next moment of the SAME effect.'
@@ -24984,6 +24991,69 @@ function tcgFxPrompt(element, phase, n) {
                 : phase.key === 'hit'
                   ? 'It is that same ball at the instant it strikes something, so its material and colours must be unmistakably the same — only its shape is now breaking apart on impact.'
                   : 'It is that same ball detonating, so the fireball and shockwave must be made of the same colours and material as the reference, only vastly bigger.'));
+}
+// ---- Repairing art that was stored before the knockout could catch it ----
+// The knockout only ever ran at upload time, so every frame drawn before it
+// learned about checkerboards still has one baked into the PNG in Storage.
+// This re-reads each stored sprite, and any that still carries a painted
+// checkerboard is cleaned and written back — no image model, no re-drawing,
+// and frames that are already clean are left exactly as they are.
+function _loadImageCors(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';   // needed or the canvas is tainted and unreadable
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('could not read the image'));
+    img.src = src;
+  });
+}
+async function _recleanStoredArt(url) {
+  const img = await _loadImageCors(url);
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  if (!w || !h) return null;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const id = ctx.getImageData(0, 0, w, h);   // throws if the fetch was not CORS-readable
+  const pair = _detectCheckerPair(id.data, w, h);
+  if (!pair) return null;
+  if (!_cutCheckerboard(id.data, w, h, pair)) return null;
+  ctx.putImageData(id, 0, 0);
+  return cv.toDataURL('image/png');
+}
+async function tcgRepairArtBackgrounds() {
+  const uid = _tcgOwnerUid();
+  if (!uid) { showToast('Sign in first', 'error'); return; }
+  await tcgLoadArt();
+  // Only the sprites that stand on the battlefield with nothing behind them.
+  const ids = Object.keys(_tcgArt || {}).filter(id => id.indexOf('fx:') === 0 || id.endsWith(':av'));
+  const btn = document.getElementById('tcgFxRepairBtn');
+  if (!ids.length) { showToast('No generated frames or avatars to check yet', 'error'); return; }
+  if (btn) btn.disabled = true;
+  let fixed = 0, unreadable = 0, done = 0;
+  for (const id of ids) {
+    done++;
+    if (btn) btn.textContent = '🧽 Checking ' + done + ' / ' + ids.length + '…';
+    try {
+      const cleaned = await _recleanStoredArt(_tcgArt[id]);
+      if (!cleaned) continue;
+      const url = await uploadImageDataUrl(cleaned);
+      await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: { [id]: url } }, { merge: true });
+      _tcgArt[id] = url;
+      fixed++;
+    } catch (e) {
+      unreadable++;
+      console.warn('checkerboard repair skipped', id, e);
+    }
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🧽 Clean chequered backgrounds'; }
+  tcgArtRefresh();
+  showToast(fixed
+    ? '🧽 Cleaned ' + fixed + ' sprite' + (fixed === 1 ? '' : 's') + (unreadable ? ' · ' + unreadable + ' could not be read' : '')
+    : unreadable
+      ? 'Could not read ' + unreadable + ' image' + (unreadable === 1 ? '' : 's') + ' — check the Storage CORS settings'
+      : 'No chequered backgrounds found — every sprite is already clean',
+    fixed || !unreadable ? 'success' : 'error');
 }
 function tcgFxHas(element, prefix, n) { return !!(_tcgArt && _tcgArt[tcgFxSlotId(element, prefix, n)]); }
 function tcgFxPhaseDone(element, phase) {
@@ -25084,7 +25154,9 @@ function tcgFxAdminHtml() {
     + '<div class="tcg-gen-actions" style="margin-bottom:20px;">'
     +   '<button type="button" class="btn btn-primary" id="tcgFxAllBtn" onclick="tcgGenAllFx()"' + (miss ? '' : ' disabled') + '>✨ Generate every element animation'
     +     (miss ? ' · ' + miss + ' frame' + (miss === 1 ? '' : 's') + ' missing' : ' · all done 🎉') + '</button>'
-    + '</div>';
+    +   '<button type="button" class="btn btn-outline" id="tcgFxRepairBtn" onclick="tcgRepairArtBackgrounds()">🧽 Clean chequered backgrounds</button>'
+    + '</div>'
+    + '<div class="tcg-section-note">Frames drawn before the background knockout landed can still have the <b>chequered grey-and-white pattern</b> baked in — the one image editors use to <i>show</i> transparency, which the model painted as real pixels. It shows up as squares behind a shot as it starts and fades. <b>🧽 Clean chequered backgrounds</b> re-reads every stored frame and battle avatar, strips the pattern out of any that still has one, and leaves clean ones untouched. It costs nothing and redraws nothing — run it once.</div>';
   Object.keys(TCG_ELEMENTS).forEach(el => {
     html += '<div class="ga-objrow tcg-fx-row" id="tcgfxrow-' + el + '">' + tcgFxRowInnerHtml(el) + '</div>';
   });
@@ -27606,6 +27678,7 @@ window.emsCloseQuiz = emsCloseQuiz;
 window.emsAnswer = emsAnswer;
 window.tcgAiGenSlot = tcgAiGenSlot;
 window.tcgGenFxElement = tcgGenFxElement;
+window.tcgRepairArtBackgrounds = tcgRepairArtBackgrounds;
 window.tcgGenFxPhase = tcgGenFxPhase;
 window.tcgGenAllFx = tcgGenAllFx;
 window.tcgGenerateAllArt = tcgGenerateAllArt;
@@ -27628,6 +27701,131 @@ window.tcgStopArtGen = tcgStopArtGen;
 // eating the artwork.
 const _BG_TOL = 30;        // colour distance still counted as "the background"
 const _BG_EDGE_TOL = 52;   // looser band used only to feather the cut edge
+const _CHECK_TOL = 26;     // colour distance still counted as "a checker square"
+
+// Asked for a transparent background, image models very often PAINT the
+// chequered grey-and-white pattern that image editors use to *display*
+// transparency — so the checkerboard arrives as real opaque pixels. The
+// border-connected flood fill below cannot be trusted to clear it: any square
+// walled in by the artwork (the hollow centre of a shockwave ring, the gaps
+// between drifting embers on a fading frame) is not joined to the edge and
+// survives, which is the chequered fringe you see as a shot starts and ends.
+//
+// A checkerboard is unmistakable though — two near-neutral greys, in a regular
+// alternating grid, over most of the picture — so when one is recognised BOTH
+// shades are cleared everywhere, connected or not.
+function _detectCheckerPair(px, w, h) {
+  const step = Math.max(1, Math.floor(Math.min(w, h) / 96));
+  const levels = new Map();          // quantised grey → { sum, n }
+  let sampled = 0;
+  for (let y = 0; y < h; y += step) {
+    for (let x = 0; x < w; x += step) {
+      const o = (y * w + x) * 4;
+      sampled++;
+      if (px[o + 3] < 200) continue;
+      const r = px[o], g = px[o + 1], b = px[o + 2];
+      if (Math.abs(r - g) > 10 || Math.abs(g - b) > 10 || Math.abs(r - b) > 10) continue;   // not neutral
+      const key = r >> 3;
+      const e = levels.get(key) || { sum: 0, n: 0 };
+      e.sum += r; e.n++; levels.set(key, e);
+    }
+  }
+  const top = [...levels.values()].sort((a, b) => b.n - a.n).slice(0, 2);
+  if (top.length < 2 || !sampled) return null;
+  const cover = (top[0].n + top[1].n) / sampled;
+  if (cover < 0.45) return null;                     // not most of the picture
+  const a = top[0].sum / top[0].n, b = top[1].sum / top[1].n;
+  const gap = Math.abs(a - b);
+  if (gap < 8 || gap > 110) return null;             // one flat plate, or two unrelated colours
+  // Pale checkerboards sit close together (#f2f2f2 against #d9d9d9 is only 25
+  // apart), so the band around each shade has to shrink with the gap or the
+  // two merge into one and the alternation below becomes invisible.
+  const tol = Math.min(_CHECK_TOL, Math.max(9, gap * 0.6));
+
+  // Confirm the alternation: scan lines across the picture and count how often
+  // it flips between the two shades. Flat art does not flip; a checkerboard
+  // flips over and over at a steady period. Each pixel goes to the NEARER
+  // shade — never the first one that happens to be within range.
+  const runs = [];
+  const flips = line => {
+    let last = 0, n = 0, run = 0;
+    for (let i = 0; i < line.length; i++) {
+      const v = line[i];
+      const da = Math.abs(v - a), db = Math.abs(v - b);
+      if (Math.min(da, db) > tol) { if (run) runs.push(run); last = 0; run = 0; continue; }
+      const which = da <= db ? 1 : 2;
+      if (last && which !== last) { n++; runs.push(run); run = 0; }
+      last = which; run++;
+    }
+    return n;
+  };
+  let good = 0;
+  for (let k = 1; k <= 8; k++) {
+    const y = Math.floor(h * k / 9), x = Math.floor(w * k / 9);
+    const row = [], col = [];
+    for (let i = 0; i < w; i++) { const o = (y * w + i) * 4; row.push(px[o + 3] < 200 ? -999 : px[o]); }
+    for (let i = 0; i < h; i++) { const o = (i * w + x) * 4; col.push(px[o + 3] < 200 ? -999 : px[o]); }
+    if (flips(row) >= 3) good++;
+    if (flips(col) >= 3) good++;
+  }
+  if (good < 5) return null;
+  // The square size, so the cut can check that a pixel really does alternate
+  // with its neighbours instead of trusting its colour alone.
+  runs.sort((p, q) => p - q);
+  const sq = Math.max(2, Math.min(Math.floor(Math.min(w, h) / 3), runs[runs.length >> 1] || 8));
+  return { a: a, b: b, tol: tol, sq: sq };
+}
+// Clear both checker shades everywhere and feather what is left. Returns the
+// number of pixels taken out.
+function _cutCheckerboard(px, w, h, pair) {
+  const n = w * h;
+  const tol = pair.tol || _CHECK_TOL, sq = pair.sq || 8;
+  // 0 = not a checker shade, 1 = the lighter square, 2 = the darker one.
+  const shade = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const o = i * 4;
+    if (px[o + 3] < 24) { shade[i] = 3; continue; }        // already empty
+    const r = px[o], g = px[o + 1], b = px[o + 2];
+    if (Math.abs(r - g) > 26 || Math.abs(g - b) > 26 || Math.abs(r - b) > 26) continue;
+    const v = (r + g + b) / 3;
+    const da = Math.abs(v - pair.a), db = Math.abs(v - pair.b);
+    if (Math.min(da, db) > tol) continue;
+    shade[i] = da <= db ? 1 : 2;
+  }
+  // A pixel is only cut if it ALTERNATES — one square along, the pattern must
+  // flip to the other shade. Grey artwork (a steel shot, a white-hot core) is
+  // flat over that distance, so it keeps its own colour and survives.
+  const cut = new Uint8Array(n);
+  let removed = 0;
+  for (let i = 0; i < n; i++) {
+    const s = shade[i];
+    if (s === 3) { cut[i] = 1; continue; }                  // transparent already
+    if (!s) continue;
+    const x = i % w, y = (i - x) / w;
+    let opposite = 0, same = 0;
+    const look = (nx, ny) => {
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) return;
+      const t = shade[ny * w + nx];
+      if (t === 1 || t === 2) { if (t === s) same++; else opposite++; }
+    };
+    look(x - sq, y); look(x + sq, y); look(x, y - sq); look(x, y + sq);
+    // No checker neighbour either way — an isolated speck. Bias to cutting it:
+    // a leftover square is the visible bug, a lost grey speck is not.
+    if (opposite > 0 || (!same && !opposite)) { cut[i] = 1; removed++; }
+  }
+  for (let i = 0; i < n; i++) if (cut[i]) px[i * 4 + 3] = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (cut[i]) continue;
+      const o = i * 4;
+      if (px[o + 3] === 0) continue;
+      const edge = (x > 0 && cut[i - 1]) || (x < w - 1 && cut[i + 1]) || (y > 0 && cut[i - w]) || (y < h - 1 && cut[i + w]);
+      if (edge) px[o + 3] = Math.min(px[o + 3], 150);
+    }
+  }
+  return removed;
+}
 async function _stripImageBackground(dataUrl) {
   try {
     const img = await _loadImageEl(dataUrl);
@@ -27638,6 +27836,19 @@ async function _stripImageBackground(dataUrl) {
     ctx.drawImage(img, 0, 0);
     const id = ctx.getImageData(0, 0, w, h);
     const px = id.data, n = w * h;
+
+    // A painted transparency checkerboard is dealt with first and on its own
+    // terms — every square goes, wherever it sits, and none of the guards
+    // below apply (a fading frame that is 98% checkerboard SHOULD come back
+    // 98% empty).
+    const pair = _detectCheckerPair(px, w, h);
+    if (pair) {
+      if (_cutCheckerboard(px, w, h, pair) > 0) {
+        ctx.putImageData(id, 0, 0);
+        return cv.toDataURL('image/png');
+      }
+      return dataUrl;
+    }
 
     // Already transparent? The model did as it was asked — leave it alone.
     let clear = 0;
