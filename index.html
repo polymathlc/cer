@@ -4858,8 +4858,18 @@ option {
 .ems-quiz-speed i { display: block; height: 100%; width: 100%; background: #6fe09a; transition: width 0.1s linear; }
 .ems-quiz-speed i.warm { background: #f0b542; }
 .ems-quiz-speed i.cold { background: #d0402a; }
-.ems-quiz-q { font-size: 0.88rem; line-height: 1.6; margin-bottom: 14px; }
-.ems-quiz-q img { max-width: 100%; border-radius: 8px; background: #fff; }
+.ems-quiz-q { font-size: 0.9rem; line-height: 1.65; margin-bottom: 14px; }
+/* Question stems come out of the bank carrying the app's own (dark-on-white)
+   markup and inline colours — on this dark panel that renders invisible, so
+   force everything inside the stem to the panel's own ink. */
+.ems-quiz-q, .ems-quiz-q * { color: #f6ecdc !important; background-color: transparent !important; }
+.ems-quiz-q .qp-qtext { margin-bottom: 10px; }
+.ems-quiz-q .qp-qtext:last-child { margin-bottom: 0; }
+.ems-quiz-q .tcg-quiz-img { text-align: center; margin: 12px 0; }
+.ems-quiz-q img { max-width: 100%; height: auto; border-radius: 10px; background: #fff !important; padding: 6px; }
+.ems-quiz-q table { border-collapse: collapse; margin: 8px auto; }
+.ems-quiz-q td, .ems-quiz-q th { border: 1px solid rgba(246,236,220,0.35) !important; padding: 5px 9px; }
+.ems-quiz-q b, .ems-quiz-q strong { color: #ffd76a !important; }
 .ems-quiz-opts { display: flex; flex-direction: column; gap: 8px; }
 .ems-quiz-opt { display: flex; align-items: center; gap: 10px; text-align: left; padding: 11px 14px; border-radius: 10px; border: 1px solid #5a3f1c; background: rgba(255,255,255,0.03); color: #f6ecdc; font-size: 0.85rem; cursor: pointer; }
 .ems-quiz-opt:hover:not(:disabled) { border-color: #ffd76a; }
