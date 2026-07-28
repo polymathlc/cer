@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.191.1';
+const APP_VERSION = 'v1.191.2';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -26272,9 +26272,84 @@ function emsOpen() {
     + '<div class="ems-legend">' + Object.keys(EMS_SKILL_FX).map(k => '<span title="' + escapeHtml(EMS_SKILL_FX[k].desc) + '">' + EMS_SKILL_FX[k].label + '</span>').join('') + '</div>'
     + '</div>';
   document.body.appendChild(o);
-  emsStart();
+  emsPreloadFx().then(emsStart);
+}
+
+// ---- Projectile frames are preloaded in one go before the run starts ----
+// Every generated frame lives in Storage as its own PNG (12 elements × 15
+// frames). Setting img.src at play time meant the FIRST shot of each element
+// was fetching over the school wi-fi while it was supposed to be animating, so
+// the animation looked broken until every frame had been shown once. They are
+// now all pulled down (and decoded) behind a loading veil before the field
+// goes live, and the Image objects are held for the tab's lifetime so the
+// browser can never evict them mid-run — a second run starts instantly.
+const _emsFxCache = new Map();
+function emsFxFrameUrls() {
+  const out = [];
+  if (!_tcgArt) return out;
+  Object.keys(TCG_ELEM_FX).forEach(el => {
+    TCG_FX_PHASES.forEach(p => {
+      for (let i = 1; i <= p.frames; i++) {
+        const u = _tcgArt[tcgFxSlotId(el, p.prefix, i)];
+        if (u && !_emsFxCache.has(u) && out.indexOf(u) < 0) out.push(u);
+      }
+    });
+  });
+  return out;
+}
+function emsLoadingVeil(text) {
+  const field = document.getElementById('emsField');
+  if (!field) return null;
+  let veil = document.getElementById('emsLoading');
+  if (!veil) {
+    veil = document.createElement('div');
+    veil.className = 'ems-loading'; veil.id = 'emsLoading';
+    veil.innerHTML = '<div class="ems-loading-card"><div class="ems-loading-orb"></div>'
+      + '<div class="ems-loading-title">Warming up spell effects</div>'
+      + '<div class="ems-loading-sub" id="emsLoadingSub"></div></div>';
+    field.appendChild(veil);
+  }
+  const sub = document.getElementById('emsLoadingSub');
+  if (sub) sub.textContent = text || '';
+  return veil;
+}
+async function emsPreloadFx() {
+  // The art map itself may still be in flight if the student went straight to
+  // the siege — no point preloading frames we cannot see yet.
+  emsLoadingVeil('Loading…');
+  try { await tcgLoadArt(); } catch (_) {}
+  const urls = emsFxFrameUrls();
+  if (!urls.length) { emsDropLoadingVeil(); return; }
+  let done = 0;
+  emsLoadingVeil('0 / ' + urls.length + ' frames');
+  const one = url => new Promise(res => {
+    const img = new Image();
+    img.decoding = 'async';
+    const finish = ok => {
+      if (ok) _emsFxCache.set(url, img);      // held on purpose: keeps it decoded
+      done++;
+      const sub = document.getElementById('emsLoadingSub');
+      if (sub) sub.textContent = done + ' / ' + urls.length + ' frames';
+      res();
+    };
+    img.onload = () => { (img.decode ? img.decode().catch(() => {}) : Promise.resolve()).then(() => finish(true)); };
+    img.onerror = () => finish(false);
+    img.src = url;
+  });
+  // A dead URL or a stalled network must never keep a student off the field.
+  await Promise.race([
+    Promise.all(urls.map(one)),
+    new Promise(res => setTimeout(res, 15000))
+  ]);
+  emsDropLoadingVeil();
+}
+function emsDropLoadingVeil() {
+  const veil = document.getElementById('emsLoading');
+  if (veil) veil.remove();
 }
 function emsStart() {
+  // The preload is awaited, so the student may have quit while it ran.
+  if (!document.getElementById('emsOverlay')) return;
   emsRun = {
     t: 0, last: 0, raf: 0, over: false, paused: false, qPause: false, cleared: 0, uiT: 0,
     mana: EMS_START_MANA, gate: EMS_GATE_HP,
@@ -26683,7 +26758,7 @@ function emsRender() {
     if (!img) return;
     // A shot plays its charge-up once as it leaves the muzzle (small ball →
     // fully charged), then loops the flight frames the whole way down the lane.
-    const charge = tcgFxSet(s.el, ''), fly = tcgFxSet(s.el, 'fly');
+    const charge = emsFxSet(s.el, ''), fly = emsFxSet(s.el, 'fly');
     const chargeFor = charge ? charge.length * EMS_CHARGE_MS : 0;
     let src;
     if (charge && s.t < chargeFor) src = charge[Math.min(charge.length - 1, Math.floor(s.t / EMS_CHARGE_MS))];
@@ -26710,8 +26785,19 @@ function tcgFxSet(element, prefix) {
   }
   return out;
 }
+// tcgFxSet() walks and rebuilds the frame list every call; the frame loop asks
+// for it once per shot per frame, and the art cannot change mid-run, so the
+// answer is memoised on the run.
+function emsFxSet(element, prefix) {
+  const r = emsRun;
+  if (!r) return tcgFxSet(element, prefix);
+  const key = element + '|' + (prefix || '');
+  if (!r.fxSets) r.fxSets = {};
+  if (!(key in r.fxSets)) r.fxSets[key] = tcgFxSet(element, prefix);
+  return r.fxSets[key];
+}
 function emsShotInnerHtml(s) {
-  const charge = tcgFxSet(s.el, ''), fly = tcgFxSet(s.el, 'fly');
+  const charge = emsFxSet(s.el, ''), fly = emsFxSet(s.el, 'fly');
   const first = (charge && charge[0]) || (fly && fly[0]);
   if (first) return '<img class="ems-shot-img" src="' + escapeHtml(first) + '" alt="">';
   const fx = TCG_ELEM_FX[s.el] || TCG_ELEM_FX.flame;
@@ -26733,7 +26819,7 @@ function _emsPlayFrames(node, frames, msPer) {
 function emsImpact(lane, x, element) {
   const host = document.getElementById('emsUnits');
   if (!host) return;
-  const frames = tcgFxSet(element, 'hit');
+  const frames = emsFxSet(element, 'hit');
   const fx = TCG_ELEM_FX[element] || TCG_ELEM_FX.flame;
   const d = document.createElement('div');
   d.className = 'ems-impact';
@@ -26752,7 +26838,7 @@ function emsImpact(lane, x, element) {
 function emsBurst(lane, x, sp, element) {
   const host = document.getElementById('emsUnits');
   if (!host) return;
-  const frames = tcgFxSet(element, 'blast');
+  const frames = emsFxSet(element, 'blast');
   const fx = TCG_ELEM_FX[element] || TCG_ELEM_FX.flame;
   const d = document.createElement('div');
   d.className = 'ems-burst' + (frames ? ' framed' : '');
