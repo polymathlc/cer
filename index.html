@@ -4777,6 +4777,21 @@ option {
 .tcg-tab:hover { border-color: #8E24AA; color: #8E24AA; }
 .tcg-tab.active { background: linear-gradient(135deg,#8E24AA,#7B1FA2); border-color: transparent; color: #fff; box-shadow: 0 4px 12px rgba(142,36,170,0.3); }
 .tcg-section-note { text-align: center; color: var(--text-muted); font-size: 0.88rem; margin: 0 auto 20px; max-width: 620px; line-height: 1.55; }
+/* Card Art tab — AI art generator panel + the two-slot tiles */
+.tcg-gen-panel { max-width: 720px; margin: 0 auto 28px; padding: 24px 26px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 16px rgba(15,23,42,0.05); text-align: center; }
+.tcg-gen-panel h4 { margin: 0 0 10px; font-size: 1.02rem; font-weight: 800; }
+.tcg-gen-panel p { margin: 0 0 20px; font-size: 0.86rem; color: var(--text-muted); line-height: 1.6; }
+.tcg-gen-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.tcg-gen-actions .btn { font-size: 0.85rem; }
+.tcg-gen-track { height: 8px; border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--border); overflow: hidden; margin: 20px auto 0; max-width: 460px; }
+.tcg-gen-track i { display: block; height: 100%; background: linear-gradient(90deg,#8E24AA,#7B1FA2); transition: width 0.3s ease; }
+.tcg-gen-status { margin-top: 14px; font-size: 0.85rem; line-height: 1.6; color: var(--text); min-height: 1px; }
+.tcg-gen-status:empty { margin-top: 0; }
+.tcg-gen-sub { font-size: 0.78rem; color: var(--text-muted); }
+.tcg-gen-fail { color: #dc2626; font-weight: 600; }
+.tcg-art-admin .ga-cards { grid-template-columns: repeat(auto-fill, minmax(216px, 1fr)); }
+.tcg-art-admin .ga-actions { flex-wrap: wrap; justify-content: center; }
+.tcg-art-admin .ga-objrow { margin-bottom: 16px; }
 .tcg-dex-progress { max-width: 520px; margin: 0 auto 24px; text-align: center; }
 .tcg-dex-progress .tcg-dex-nums { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1.05rem; margin-bottom: 8px; }
 .tcg-dex-bar { height: 10px; border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--border); overflow: hidden; }
@@ -7347,6 +7362,15 @@ option {
         <option value="gpt-4o">gpt-4o</option>
         <option value="gpt-4.1">gpt-4.1</option>
       </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">ChatGPT image model</label>
+      <select id="aiEngineImageModel" class="form-input">
+        <option value="gpt-image-1" selected>gpt-image-1 &mdash; best quality (recommended)</option>
+        <option value="gpt-image-1-mini">gpt-image-1-mini &mdash; cheaper &amp; faster</option>
+      </select>
+      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;">Used only by the <strong>✨ AI art generator</strong> on Monster Cards &rarr; Card Art (the chat model above cannot draw). If ChatGPT image generation fails, the app falls back to the Gemini image model.</p>
     </div>
 
     <div class="form-group">
