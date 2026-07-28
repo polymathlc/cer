@@ -4761,7 +4761,7 @@ option {
   .rpg-stat-chips { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* ==================== MONSTER CARDS TCG (beta) ==================== */
+/* ==================== REALM OF EMBERS TCG (beta) ==================== */
 .nav-beta { font-size: 0.55rem; font-weight: 800; letter-spacing: 0.06em; vertical-align: middle; background: linear-gradient(135deg,#8E24AA,#7B1FA2); color: #fff; border-radius: 999px; padding: 2px 7px; margin-left: 6px; }
 .tcg-gold-chip { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 0.9rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px; white-space: nowrap; }
 .tcg-admin-banner { max-width: 720px; margin: 0 auto 20px; border: 1px solid var(--border); border-radius: var(--radius-lg, 16px); padding: 20px 24px; background: linear-gradient(135deg, #faf5ff, #f5f3ff); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
@@ -5123,6 +5123,19 @@ option {
   <div style="display:flex;gap:10px;flex-wrap:wrap;">
     <button onclick="openFpsGame()" style="background:#5b8cff;color:#fff;border:none;border-radius:10px;padding:11px 22px;font-weight:700;font-size:0.92rem;cursor:pointer;">🔫 Play Science Strike</button>
     <button id="fpsAnnounceLater" style="background:transparent;color:#93a0b8;border:1px solid #2a3550;border-radius:10px;padding:11px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">Later</button>
+  </div>
+</div>
+
+<!-- ==================== NEW GAME ANNOUNCEMENT (Realm of Embers TCG release) ====================
+     Shown to every signed-in student the moment the admin presses "Release to students",
+     and on every login after that until they dismiss it. Re-releasing announces it again. -->
+<div id="tcgAnnounce" style="display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1200;width:min(660px,calc(100vw - 28px));background:linear-gradient(135deg,#2a1608,#160d06);border:1px solid #8a5a1e;border-radius:16px;padding:24px 26px;box-shadow:0 18px 48px rgba(0,0,0,0.45);color:#f6ecdc;font-family:'DM Sans',system-ui,sans-serif;">
+  <button id="tcgAnnounceClose" title="Dismiss" style="position:absolute;top:10px;right:12px;background:none;border:none;color:#b79b74;font-size:1.1rem;cursor:pointer;padding:4px;">✕</button>
+  <div style="font-weight:800;font-size:1.05rem;letter-spacing:0.01em;margin-bottom:10px;">🃏 NEW GAME RELEASED — Realm of Embers TCG!</div>
+  <div style="color:#d6c3a6;font-size:0.9rem;line-height:1.65;margin-bottom:18px;">Collect all <b>151 legendary monsters</b>. Spend the points you earn answering questions on <b>booster packs</b>, level your monsters up, build a team of 5 and battle other trainers in the <b>Arena</b> — then take on the infinite <b style="color:#f0b542;">Dungeon</b>. Find it in your sidebar under <b>🃏 Realm of Embers TCG</b>.</div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <button id="tcgAnnounceOpen" style="background:linear-gradient(135deg,#e08a2b,#c2691a);color:#fff;border:none;border-radius:10px;padding:12px 22px;font-weight:700;font-size:0.92rem;cursor:pointer;">🃏 Open my first pack</button>
+    <button id="tcgAnnounceLater" style="background:transparent;color:#b79b74;border:1px solid #5a3f1c;border-radius:10px;padding:12px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">Later</button>
   </div>
 </div>
 
@@ -5578,15 +5591,15 @@ option {
       <div class="nav-item rpg-el" data-page="arcade" onclick="navigateTo('arcade')" style="display:none;" title="Arcade — Science Defenders, Raiders, Spire, Legends and Slayers, all in one place. Each play costs 1 game credit.">
         <span class="ico">🕹️</span> Arcade
       </div>
-      <!-- Monster Cards TCG (beta) — admins always; students only once the admin presses Release -->
-      <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Monster Cards — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
-        <span class="ico">🃏</span> Monster Cards <span class="nav-beta">BETA</span>
+      <!-- Realm of Embers TCG (beta) — admins always; students only once the admin presses Release -->
+      <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Realm of Embers TCG — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
+        <span class="ico">🃏</span> Realm of Embers TCG <span class="nav-beta tcg-beta-badge">BETA</span>
       </div>
       <!-- Science Strike FPS (fps.html) — fully released: everyone signed in sees it -->
       <div class="nav-item" id="navFps" onclick="openFpsGame()" style="display:none;" title="Science Strike — roguelite first-person dungeon shooter with Borderlands-style loot. Answer a science question every 15 seconds to boost your loot luck.">
         <span class="ico">🔫</span> Science Strike
       </div>
-      <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire. Monster Cards art lives on the Monster Cards page's Card Art tab.">
+      <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire. Realm of Embers TCG art lives on that page's Card Art tab.">
         <span class="ico">🎨</span> Game Objects
       </div>
       <div class="nav-item" id="rpgHideToggle" style="display:none;"><span class="ico">🙈</span> Hide game</div>
@@ -7025,13 +7038,13 @@ option {
       </div>
     </div>
 
-    <!-- ===== PAGE: MONSTER CARDS TCG (beta — admin first, released to students with one click) ===== -->
+    <!-- ===== PAGE: REALM OF EMBERS TCG (beta — admin first, released to students with one click) ===== -->
     <div class="page" id="page-tcg">
       <div class="page-header">
         <div>
           <div style="display:flex;align-items:center;gap:10px;">
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
-            <h2>🃏 Monster Cards <span class="nav-beta" style="font-size:0.6rem;padding:3px 9px;">BETA</span></h2>
+            <h2>🃏 Realm of Embers TCG <span class="nav-beta tcg-beta-badge" style="font-size:0.6rem;padding:3px 9px;">BETA</span></h2>
           </div>
           <div class="subtitle">Collect all 151 legendary monsters! Open booster packs with the points you earn answering questions, build a team of 5, battle other trainers and climb the infinite Dungeon.</div>
         </div>
@@ -7370,7 +7383,7 @@ option {
         <option value="gpt-image-1" selected>gpt-image-1 &mdash; best quality (recommended)</option>
         <option value="gpt-image-1-mini">gpt-image-1-mini &mdash; cheaper &amp; faster</option>
       </select>
-      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;">Used only by the <strong>✨ AI art generator</strong> on Monster Cards &rarr; Card Art (the chat model above cannot draw). If ChatGPT image generation fails, the app falls back to the Gemini image model.</p>
+      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;">Used only by the <strong>✨ AI art generator</strong> on Realm of Embers TCG &rarr; Card Art (the chat model above cannot draw). If ChatGPT image generation fails, the app falls back to the Gemini image model.</p>
     </div>
 
     <div class="form-group">
