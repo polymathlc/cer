@@ -1532,7 +1532,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.188.0';
+const APP_VERSION = 'v1.188.1';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -24816,7 +24816,12 @@ function tcgFxPrompt(element, phase, n) {
         ? 'CONSISTENCY: the reference picture is frame ' + (n - 1) + ' of this same animation. Keep the same colours, shape language, style and camera — this is only the next moment of the SAME effect.'
         : phase.key === 'charge'
           ? 'This is the opening frame of the whole effect.'
-          : 'CONSISTENCY: the reference picture is the fully-charged ball for this element. Keep its colours, shape language and style — this phase is what happens to THAT ball next.');
+          : 'CONSISTENCY — READ CAREFULLY: the reference picture is the LAST frame of this element\'s charge-up, i.e. the finished, fully-charged ball as it leaves the monster. This frame must show THAT EXACT BALL, continuing straight on from it: same colours, same core, same internal pattern, same swirl direction, same outer glow, same art style and the same camera. '
+            + (phase.key === 'fly'
+                ? 'Keep it the SAME SIZE as the reference too — it is the identical ball, now travelling through the air with a trail behind it. Do not redesign it and do not resize it.'
+                : phase.key === 'hit'
+                  ? 'It is that same ball at the instant it strikes something, so its material and colours must be unmistakably the same — only its shape is now breaking apart on impact.'
+                  : 'It is that same ball detonating, so the fireball and shockwave must be made of the same colours and material as the reference, only vastly bigger.'));
 }
 function tcgFxHas(element, prefix, n) { return !!(_tcgArt && _tcgArt[tcgFxSlotId(element, prefix, n)]); }
 function tcgFxPhaseDone(element, phase) {
@@ -24833,19 +24838,29 @@ function tcgFxMissing() {
 // The reference a frame is drawn from: the frame before it, or — for the
 // first frame of a later phase — the fully-charged ball, so every phase of an
 // element looks like the same magic.
-async function _tcgFxRef(element, phase, n) {
-  const want = n > 1
-    ? tcgFxSlotId(element, phase.prefix, n - 1)
-    : (phase.key === 'charge' ? null : tcgFxSlotId(element, '', TCG_FX_BY_KEY.charge.frames));
-  if (!want) return null;
-  const url = _tcgArt && _tcgArt[want];
+// THE ANCHOR: the last charge-up frame — the fully-charged ball. Flight,
+// impact and blast all open from it, so every phase of an element shows the
+// same magic. Never returns null for want of one: if the charge-up hasn't
+// been drawn yet, it is drawn first (which chains back through frames 1-4).
+async function _tcgFxAnchor(element) {
+  const charge = TCG_FX_BY_KEY.charge;
+  const url = _tcgArt && _tcgArt[tcgFxSlotId(element, charge.prefix, charge.frames)];
   if (url) {
     try { return await _urlToDataUrlRobust(transformImageUrl(url)); }
+    catch (e) { console.warn('charge anchor reload failed — redrawing it', e); }
+  }
+  return await _tcgGenFxFrame(element, charge, charge.frames);
+}
+async function _tcgFxRef(element, phase, n) {
+  // Frame 1 of flight / impact / blast follows the fully-charged ball…
+  if (n === 1) return phase.key === 'charge' ? null : await _tcgFxAnchor(element);
+  // …every other frame follows the frame before it.
+  const prev = _tcgArt && _tcgArt[tcgFxSlotId(element, phase.prefix, n - 1)];
+  if (prev) {
+    try { return await _urlToDataUrlRobust(transformImageUrl(prev)); }
     catch (e) { console.warn('fx ref reload', e); }
   }
-  // Nothing to build on yet — draw what it should follow first.
-  if (n > 1) return await _tcgGenFxFrame(element, phase, n - 1);
-  return await _tcgGenFxFrame(element, TCG_FX_BY_KEY.charge, TCG_FX_BY_KEY.charge.frames);
+  return await _tcgGenFxFrame(element, phase, n - 1);
 }
 async function _tcgGenFxFrame(element, phase, n) {
   const ref = await _tcgFxRef(element, phase, n);
@@ -24877,12 +24892,16 @@ function tcgFxRowInnerHtml(element) {
       const size = phase.key === 'charge' ? 14 + i * 9 : phase.key === 'blast' ? 46 : 34;
       const ph = '<div class="ems-shot-orb fx-ph" style="width:' + size + 'px;height:' + size + 'px;background:radial-gradient(circle at 35% 35%, ' + fx.a + ', ' + fx.b + ' 68%);box-shadow:0 0 8px 2px ' + fx.glow + ';"></div>';
       const thumb = url ? '<img src="' + url + '" alt="' + escapeHtml(step.t) + '">' : ph;
+      const follows = phase.key === 'charge'
+        ? (i > 1 ? ' Drawn from frame ' + (i - 1) + '.' : '')
+        : (i > 1 ? ' Drawn from frame ' + (i - 1) + '.' : ' Drawn from the fully-charged ball (🔅 charge frame ' + TCG_FX_BY_KEY.charge.frames + ') — same ball, same colours.');
       slots += _tcgArtSlotHtml(id, 'Frame ' + i + ' / ' + phase.frames + ' · ' + step.t, phase.icon, thumb,
-        'frame ' + i, step.d.charAt(0).toUpperCase() + step.d.slice(1) + '.');
+        'frame ' + i, step.d.charAt(0).toUpperCase() + step.d.slice(1) + '.' + follows);
     }
     html += '<div class="tcg-fx-phase">'
       + '<div class="tcg-fx-phase-head">'
       +   '<b>' + phase.icon + ' ' + phase.name + '</b>'
+      +   (phase.key === 'charge' ? '' : '<span class="tcg-fx-anchor">frame 1 follows 🔅 charge frame ' + TCG_FX_BY_KEY.charge.frames + '</span>')
       +   '<span>' + escapeHtml(phase.blurb) + '</span>'
       +   '<button type="button" class="btn btn-outline ga-mini" onclick="tcgGenFxPhase(\'' + element + '\',\'' + phase.key + '\')">✨ Generate these ' + phase.frames + '</button>'
       + '</div>'
@@ -24908,13 +24927,16 @@ function tcgFxAdminHtml() {
 // per-phase, per-element and everything buttons.
 async function _tcgFxRunPhases(element, phases, onProgress) {
   let made = 0;
+  let anchor = null;   // the fully-charged ball, kept in memory across phases
   for (const phase of phases) {
-    // The first frame of a later phase follows the charged ball, so make sure
-    // that exists before the chain starts.
     let ref = null;
     if (phase.key !== 'charge') {
-      const anchor = _tcgArt && _tcgArt[tcgFxSlotId(element, '', TCG_FX_BY_KEY.charge.frames)];
-      if (anchor) { try { ref = await _urlToDataUrlRobust(transformImageUrl(anchor)); } catch (e) { ref = null; } }
+      // Flight / impact / blast open FROM the fully-charged ball. If this run
+      // just drew it we already hold it; otherwise fetch it, and draw the
+      // charge-up first if the element hasn't got one yet.
+      ref = anchor || await _tcgFxAnchor(element);
+      anchor = anchor || ref;
+      _tcgFxRowRefresh(element);
     }
     for (let n = 1; n <= phase.frames; n++) {
       if (_tcgGenStop) return made;
@@ -24922,6 +24944,8 @@ async function _tcgFxRunPhases(element, phases, onProgress) {
       _tcgSlotStatus(tcgFxSlotId(element, phase.prefix, n), '⏳ Drawing…');
       const url = await tcgGenArtImage(tcgFxPrompt(element, phase, n), ref, true);
       await _tcgArtStore(tcgFxSlotId(element, phase.prefix, n), url);
+      // The last charge-up frame becomes the anchor the later phases open from.
+      if (phase.key === 'charge' && n === phase.frames) anchor = url;
       ref = url;                    // the next frame grows out of this one
       made++;
       _tcgFxRowRefresh(element);
