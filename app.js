@@ -1532,7 +1532,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.185.0';
+const APP_VERSION = 'v1.186.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -25624,7 +25624,7 @@ function tcgModesHtml(s) {
   return '<div class="tcg-section-note">Three ways to play with the monsters you have collected. Every mode uses your own cards — the more of the dex you own and the higher you train it, the further you get.</div>'
     + '<div class="tcg-modes">'
     + mode('🌋', 'Ember Siege', 'NEW · lane defence',
-        'Wave after wave of corrupted monsters marches on your Ember Gate. Place your cards on the field to summon them as defenders — and answer science questions in the middle of the fight to generate the mana that pays for them. <b>Speed and accuracy both matter:</b> the faster you answer, the more mana you get.',
+        'Wave after wave of corrupted monsters marches on your Ember Gate. Place your cards on the field to summon them as defenders — and answer science questions in the middle of the fight to generate the mana that pays for them. Mana trickles in slowly on its own, but answering is worth far more, and <b>every wave you clear opens a ' + EMS_ROUND_SIZE + '-question mana round</b>. <b>Speed and accuracy both matter:</b> the faster you answer, the more mana you get.',
         '🃏 ' + owned + ' monster' + (owned === 1 ? '' : 's') + ' summonable · 🏅 best: wave <b>' + (siege.best | 0) + '</b> · ⚔️ ' + (siege.runs | 0) + ' run' + ((siege.runs | 0) === 1 ? '' : 's'),
         owned
           ? '<button class="btn btn-primary" type="button" onclick="emsOpen()">▶ Play</button>'
@@ -25658,6 +25658,12 @@ const EMS_FAST_MS = 12000;          // answer inside this for the full speed bon
 const EMS_MANA_BASE = 20;           // correct answer, however slow
 const EMS_MANA_SPEED = 22;          // extra, scaled by how fast it came in
 const EMS_MANA_WRONG = 5;           // consolation so a stuck student can still build
+// A slow trickle so the field is never completely frozen between questions —
+// deliberately far below what answering pays (a fast correct answer is worth
+// roughly 30 seconds of trickle), so questions stay the real economy.
+const EMS_PASSIVE_MANA = 1.4;       // mana per second, always on
+const EMS_ROUND_SIZE = 5;           // questions served back-to-back after each wave
+const EMS_ROUND_BONUS = 20;         // finishing the whole set pays a little extra
 let emsRun = null;
 
 // Mana cost of a card: purely its star tier, so the whole collection is
@@ -25716,7 +25722,7 @@ function emsOpen() {
     +   '<div class="ems-grid" id="emsGrid"></div>'
     +   '<div class="ems-units" id="emsUnits"></div>'
     + '</div>'
-    + '<div class="ems-trayline">Tap a monster, then tap a square in a lane to summon it. Answer questions to keep the mana coming.</div>'
+    + '<div class="ems-trayline">Tap a monster, then tap a square in a lane to summon it. Mana trickles in slowly on its own — answering questions is far faster, and every cleared wave opens a ' + EMS_ROUND_SIZE + '-question mana round.</div>'
     + '<div class="ems-tray" id="emsTray"></div>'
     + '</div>';
   document.body.appendChild(o);
@@ -25836,8 +25842,10 @@ function emsUpdate(dt) {
   const r = emsRun;
   // card cooldowns
   Object.keys(r.cooldowns).forEach(id => { r.cooldowns[id] -= dt; if (r.cooldowns[id] <= 0) delete r.cooldowns[id]; });
+  // Passive trickle — small, always on, so a lull is slow rather than dead.
+  r.mana = Math.min(EMS_MANA_CAP, r.mana + EMS_PASSIVE_MANA * dt);
   r.uiT = (r.uiT || 0) + dt;
-  if (r.uiT >= 0.25) { r.uiT = 0; emsRefreshTrayState(); }
+  if (r.uiT >= 0.25) { r.uiT = 0; emsRefreshTrayState(); emsSyncHud(); }
   // wave pacing
   if (r.breather > 0) {
     r.breather -= dt;
@@ -25852,6 +25860,9 @@ function emsUpdate(dt) {
     emsBanner('✅ Wave ' + r.wave + ' cleared — 🪙 +' + reward + ' points!', 2200);
     r.breather = 5;
     emsSyncHud();
+    // Breather = study break: five questions back-to-back to stock up on mana
+    // before the next wave walks in.
+    emsOpenQuiz(EMS_ROUND_SIZE);
   }
   // defenders act
   r.defenders.forEach(d => {
@@ -26056,26 +26067,44 @@ function emsPoof(el) {
 }
 
 // ---- The mana question window (the fight keeps running behind it) ----
-function emsOpenQuiz() {
+// count > 0 runs a fixed set of questions back-to-back (the after-wave mana
+// round) and closes itself at the end; no count = open-ended, the student
+// keeps answering until they close it.
+function emsOpenQuiz(count) {
   const r = emsRun;
   if (!r || r.over) return;
-  if (r.quiz) { const box = document.getElementById('emsQuiz'); if (box) box.classList.add('bump'); return; }
+  const setOf = (count | 0) > 0 ? (count | 0) : 0;
+  if (r.quiz) {
+    // Already open — a wave round just tops up whatever is left to answer.
+    if (setOf) { r.roundTotal = setOf; r.roundDone = 0; emsQuizHeadHud(); emsBanner('🧪 Mana round — ' + setOf + ' questions!', 1800); }
+    const box = document.getElementById('emsQuiz'); if (box) box.classList.add('bump');
+    return;
+  }
   if (!r.pool || !r.pool.length) { showToast('No practice questions available yet', 'error'); return; }
   const o = document.getElementById('emsOverlay'); if (!o) return;
+  r.roundTotal = setOf; r.roundDone = 0;
   const box = document.createElement('div');
   box.className = 'ems-quiz'; box.id = 'emsQuiz';
   box.innerHTML = '<div class="ems-quiz-head">'
-    + '<span class="ems-quiz-title">⚡ Generate mana</span>'
+    + '<span class="ems-quiz-title" id="emsQuizTitle">⚡ Generate mana</span>'
     + '<span class="ems-quiz-streak" id="emsQuizStreak"></span>'
     + '<button type="button" class="ems-icon-btn" onclick="emsCloseQuiz()" title="Back to the battle">✕</button>'
     + '</div>'
     + '<div class="ems-quiz-speed"><i id="emsQuizSpeed"></i></div>'
     + '<div class="ems-quiz-body" id="emsQuizBody"></div>';
   o.appendChild(box);
+  if (setOf) emsBanner('🧪 Mana round — ' + setOf + ' questions!', 1800);
   emsNextQuestion();
 }
+function emsQuizHeadHud() {
+  const r = emsRun, el = document.getElementById('emsQuizTitle');
+  if (!r || !el) return;
+  el.textContent = r.roundTotal
+    ? '⚡ Mana round · question ' + Math.min(r.roundTotal, r.roundDone + 1) + ' of ' + r.roundTotal
+    : '⚡ Generate mana';
+}
 function emsCloseQuiz() {
-  if (emsRun) emsRun.quiz = null;
+  if (emsRun) { emsRun.quiz = null; emsRun.roundTotal = 0; emsRun.roundDone = 0; }
   const box = document.getElementById('emsQuiz'); if (box) box.remove();
 }
 function emsNextQuestion() {
@@ -26093,6 +26122,7 @@ function emsNextQuestion() {
     + '</div>'
     + '<div class="ems-quiz-fb" id="emsQuizFb">Answer fast — the speed bar above is your mana bonus.</div>';
   emsQuizStreakHud();
+  emsQuizHeadHud();
   emsQuizSpeedTick();
 }
 // The speed bar drains over EMS_FAST_MS; whatever is left when the answer
@@ -26148,6 +26178,19 @@ function emsAnswer(i) {
     ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + (ms < 4000 ? ' · ⚡ lightning fast!' : '') + '</span>'
     : '<span class="no">❌ The answer was <b>(' + (q.a + 1) + ')</b> — only ⚡ +' + gain + ' mana. Streak reset.</span>';
   emsQuizStreakHud();
+  // A fixed round ends itself (with a small bonus for finishing all five);
+  // the open-ended panel just rolls on to the next question.
+  if (r.roundTotal) {
+    r.roundDone++;
+    if (r.roundDone >= r.roundTotal) {
+      r.mana = Math.min(EMS_MANA_CAP, r.mana + EMS_ROUND_BONUS);
+      emsSyncHud(); emsManaPop(EMS_ROUND_BONUS); emsRefreshTrayState();
+      const done = document.getElementById('emsQuizFb');
+      if (done) done.innerHTML += '<div class="ok" style="margin-top:8px;">🧪 Mana round complete — <b>⚡ +' + EMS_ROUND_BONUS + ' bonus</b>. Back to the battle!</div>';
+      setTimeout(() => { if (emsRun && emsRun.roundTotal && emsRun.roundDone >= emsRun.roundTotal) emsCloseQuiz(); }, 1800);
+      return;
+    }
+  }
   setTimeout(() => { if (emsRun && emsRun.quiz && emsRun.quiz.answered && document.getElementById('emsQuiz')) emsNextQuestion(); }, correct ? 900 : 1900);
 }
 // Siege answers count like every other attempt in the app: same shared
