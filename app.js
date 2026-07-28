@@ -1532,7 +1532,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.188.1';
+const APP_VERSION = 'v1.188.2';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -24799,6 +24799,16 @@ const TCG_FX_BY_KEY = {};
 TCG_FX_PHASES.forEach(p => { TCG_FX_BY_KEY[p.key] = p; });
 const TCG_FX_TOTAL = TCG_FX_PHASES.reduce((n, p) => n + p.frames, 0);   // 15 per element
 function tcgFxSlotId(element, prefix, n) { return 'fx:' + element + ':' + (prefix || '') + n; }
+// 'fx:cosmic:fly2' → { element:'cosmic', phase:<flight>, n:2 }. Charge frames
+// carry no prefix ('fx:cosmic:4'), so the prefix group can be empty.
+function tcgFxParseSlot(slotId) {
+  const m = /^fx:([a-z]+):([a-z]*)(\d+)$/.exec(String(slotId || ''));
+  if (!m) return null;
+  const phase = TCG_FX_PHASES.find(p => p.prefix === m[2]);
+  const n = +m[3];
+  if (!phase || !TCG_ELEMENTS[m[1]] || n < 1 || n > phase.frames) return null;
+  return { element: m[1], phase: phase, n: n };
+}
 function tcgFxPrompt(element, phase, n) {
   const fx = TCG_ELEM_FX[element] || TCG_ELEM_FX.flame;
   const el = TCG_ELEMENTS[element] || { name: 'Elemental' };
@@ -24863,6 +24873,11 @@ async function _tcgFxRef(element, phase, n) {
   return await _tcgGenFxFrame(element, phase, n - 1);
 }
 async function _tcgGenFxFrame(element, phase, n) {
+  // Guard the recursion: without this, a bad call (or a NaN frame number)
+  // walks _tcgFxRef → _tcgGenFxFrame → _tcgFxRef forever and blows the stack.
+  if (!phase || !phase.steps || !(n >= 1) || n > phase.frames) {
+    throw new Error('bad animation frame request (' + element + ' ' + ((phase && phase.key) || phase) + ' ' + n + ')');
+  }
   const ref = await _tcgFxRef(element, phase, n);
   const url = await tcgGenArtImage(tcgFxPrompt(element, phase, n), ref, true);
   await _tcgArtStore(tcgFxSlotId(element, phase.prefix, n), url);
@@ -25055,12 +25070,14 @@ async function tcgAiGenSlot(slotId) {
   // Element animation frame: frame N is drawn from frame N-1, which is drawn
   // first if it isn't there yet.
   if (slotId.indexOf('fx:') === 0) {
-    const bits = slotId.split(':'), element = bits[1], n = +bits[2];
+    const parsed = tcgFxParseSlot(slotId);
+    if (!parsed) { showToast('That animation slot id is not one I recognise', 'error'); return; }
+    const element = parsed.element, phase = parsed.phase, n = parsed.n;
     _tcgGenBusy = true;
     _tcgSlotStatus(slotId, '⏳ Drawing…');
     try {
-      await _tcgGenFxFrame(element, n);
-      showToast('🎇 ' + ((TCG_ELEMENTS[element] || {}).name || element) + ' frame ' + n + ' drawn', 'success');
+      await _tcgGenFxFrame(element, phase, n);
+      showToast('🎇 ' + ((TCG_ELEMENTS[element] || {}).name || element) + ' · ' + phase.name + ' frame ' + n + ' drawn', 'success');
     } catch (e) {
       console.error('fx frame generation failed', e);
       _tcgSlotStatus(slotId, '⚠️ Failed');
