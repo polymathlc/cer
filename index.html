@@ -4807,7 +4807,12 @@ body.practising-as .page-body { padding-bottom: 96px; }
 
 /* ---- 🌋 Ember Siege: lane defence over the whole screen ---- */
 .ems-overlay { position: fixed; inset: 0; z-index: 1400; background: radial-gradient(120% 90% at 50% 0%, #2a1608 0%, #120b06 60%, #080505 100%); display: flex; align-items: center; justify-content: center; padding: 14px; font-family: 'DM Sans', system-ui, sans-serif; }
-.ems-shell { width: min(1080px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 12px; color: #f6ecdc; }
+/* Two columns: the deck of monsters stands down the LEFT as a proper shelved
+   library, and the battlefield takes everything to its right. A strip of
+   cards along the bottom could not show a 150-monster collection — you saw
+   about eight of them and had to scroll sideways mid-wave. */
+.ems-shell { width: min(1340px, 100%); max-height: 100%; display: flex; align-items: stretch; gap: 16px; color: #f6ecdc; }
+.ems-main { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
 .ems-topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border: 1px solid #6b4517; border-radius: 14px; background: rgba(30,18,8,0.85); }
 .ems-title { font-weight: 800; font-size: 1rem; margin-right: 4px; }
 .ems-stat { font-size: 0.85rem; font-weight: 700; color: #d6c3a6; background: rgba(0,0,0,0.28); border-radius: 999px; padding: 6px 14px; }
@@ -4915,16 +4920,31 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .ems-unit.mend .ems-unit-art { filter: brightness(1.5) drop-shadow(0 0 9px rgba(110,220,150,0.95)); }
 .ems-legend { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding-bottom: 4px; }
 .ems-legend span { font-size: 0.66rem; color: #b79b74; border: 1px solid #4a3316; border-radius: 999px; padding: 3px 9px; cursor: help; }
-.ems-trayline { text-align: center; font-size: 0.76rem; color: #b79b74; }
-.ems-tray { display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 10px; }
-.ems-card { flex: 0 0 auto; width: 86px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 12px; border: 1px solid #5a3f1c; background: rgba(30,18,8,0.9); color: #f6ecdc; cursor: pointer; position: relative; }
+.ems-fieldnote { text-align: center; font-size: 0.76rem; line-height: 1.65; color: #b79b74; }
+/* ---- The deck column ---------------------------------------------------
+   Shelved by role, so "I need a healer" is a glance rather than a hunt. The
+   column itself never scrolls the page — only the shelves inside it do. */
+.ems-deck-col { flex: 0 0 292px; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px 8px 16px 18px; border: 1px solid #6b4517; border-radius: 16px; background: rgba(30,18,8,0.85); }
+.ems-deck-head { padding-right: 10px; display: flex; flex-direction: column; gap: 6px; }
+.ems-deck-head b { font-size: 0.92rem; font-weight: 800; }
+.ems-deck-head span { font-size: 0.7rem; line-height: 1.6; color: #b79b74; }
+.ems-deck { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 10px; display: flex; flex-direction: column; gap: 20px; }
+.ems-deck::-webkit-scrollbar { width: 8px; }
+.ems-deck::-webkit-scrollbar-track { background: transparent; }
+.ems-deck::-webkit-scrollbar-thumb { background: #5a3f1c; border-radius: 999px; }
+.ems-role-head { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 0.78rem; font-weight: 800; }
+.ems-role-count { margin-left: auto; font-size: 0.62rem; font-weight: 700; color: #b79b74; background: rgba(0,0,0,0.32); border-radius: 999px; padding: 3px 9px; }
+.ems-role-note { font-size: 0.64rem; line-height: 1.6; color: #8d7758; margin: 0 0 10px; }
+.ems-role-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 8px; }
+.ems-card { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px 7px; border-radius: 10px; border: 1px solid #5a3f1c; background: rgba(30,18,8,0.9); color: #f6ecdc; cursor: pointer; position: relative; }
 .ems-card:hover { border-color: #b07a2e; }
 .ems-card.sel { border-color: #ffd76a; box-shadow: 0 0 0 2px rgba(255,215,106,0.35); }
 .ems-card.off { opacity: 0.4; }
-.ems-card-art { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
-.ems-card-name { font-size: 0.66rem; font-weight: 700; text-align: center; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.ems-card-cost { font-size: 0.68rem; font-weight: 800; color: #ffd76a; }
-.ems-card-cd { position: absolute; inset: 0; border-radius: 12px; background: rgba(0,0,0,0.6); color: #ffd76a; font-size: 0.8rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.ems-card-art { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; }
+.ems-card-art .ems-art.em { font-size: 22px; }
+.ems-card-name { font-size: 0.55rem; font-weight: 700; text-align: center; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ems-card-cost { font-size: 0.58rem; font-weight: 800; color: #ffd76a; }
+.ems-card-cd { position: absolute; inset: 0; border-radius: 10px; background: rgba(0,0,0,0.6); color: #ffd76a; font-size: 0.68rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
 /* The question window floats over the battlefield — deliberately small, and
    deliberately NOT a blocking backdrop: the siege carries on behind it. */
 .ems-quiz { position: fixed; right: 18px; bottom: 18px; width: min(440px, calc(100vw - 36px)); max-height: min(70vh, 620px); overflow-y: auto; z-index: 1500; border: 1px solid #8a5a1e; border-radius: 16px; background: linear-gradient(135deg,#241505,#140c05); box-shadow: 0 20px 50px rgba(0,0,0,0.6); padding: 18px 20px 20px; color: #f6ecdc; }
@@ -4970,10 +4990,21 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .ems-result-grid span { font-size: 0.7rem; color: #b79b74; }
 .ems-result-best { font-size: 0.85rem; color: #d6c3a6; margin-bottom: 22px; }
 .ems-result-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+/* Narrow screens have no room for a side column, so the shelves drop under
+   the battlefield — still grouped by role, just scrolling as one block.
+   column-REVERSE, so the battlefield keeps the top of the screen and the deck
+   sits under it where a thumb can reach it. */
+@media (max-width: 980px) {
+  .ems-shell { flex-direction: column-reverse; overflow-y: auto; }
+  .ems-deck-col { flex: 0 1 auto; max-height: 34vh; padding: 14px 8px 14px 16px; }
+  .ems-deck { gap: 16px; }
+}
 @media (max-width: 640px) {
   .ems-quiz { right: 8px; left: 8px; bottom: 8px; width: auto; max-height: 62vh; }
   .ems-field { max-height: 42vh; }
   .ems-title { font-size: 0.9rem; }
+  .ems-deck-col { max-height: 30vh; }
+  .ems-role-grid { grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); }
 }
 
 /* Card Art tab — AI art generator panel + the two-slot tiles */

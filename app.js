@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.192.0';
+const APP_VERSION = 'v1.193.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -26310,6 +26310,26 @@ function emsBehaviour(card) {
   const kind = (TCG_SKILLS[card && card.skillId] || {}).kind || 'strike';
   return EMS_SKILL_FX[kind] || EMS_SKILL_FX.strike;
 }
+// ---- Roles: the shelves the deck is sorted onto ----------------------
+// A collection runs past 150 monsters, and one long strip of them said
+// nothing about what any of them DOES — you scrolled sideways mid-wave
+// hunting for a healer. Every skill mode above belongs to exactly one role,
+// and the deck stacks its shelves in the order you actually think in during
+// a lane battle: who shoots, who splashes, who reaches, who weakens, who
+// heals, who holds the line. Every mode must appear here — emsRole() falls
+// back to Attackers, so a new mode simply lands on the wrong shelf rather
+// than vanishing from the deck.
+const EMS_ROLES = [
+  { key: 'attack',  icon: '⚔️', name: 'Attackers', blurb: 'Straight damage down their own lane.',                 modes: ['bolt', 'rage', 'drain'] },
+  { key: 'splash',  icon: '💥', name: 'Splash',    blurb: 'Shots burst and catch a whole block of panels.',       modes: ['splash'] },
+  { key: 'pierce',  icon: '🏹', name: 'Piercing',  blurb: 'Shots fly on through every enemy in the lane.',        modes: ['pierce', 'chrono'] },
+  { key: 'control', icon: '❄️', name: 'Control',   blurb: 'Snare, poison and curse — they weaken, not burst.',    modes: ['slow', 'poison', 'curse'] },
+  { key: 'healer',  icon: '💚', name: 'Healers',   blurb: 'Mend your defenders so the front line holds.',         modes: ['heal', 'healall', 'dawn'] },
+  { key: 'tank',    icon: '🛡️', name: 'Tanks',     blurb: 'Huge health — park one up front to block the lane.',   modes: ['wall'] }
+];
+const EMS_ROLE_BY_MODE = {};
+EMS_ROLES.forEach(r => r.modes.forEach(m => { EMS_ROLE_BY_MODE[m] = r; }));
+function emsRole(card) { return EMS_ROLE_BY_MODE[emsBehaviour(card).mode] || EMS_ROLES[0]; }
 // 6★ and 7★ splash monsters throw the big ordnance: their burst covers a
 // 2×2 and a 3×3 block of panels. Everyone else gets a single-panel pop.
 function emsSplashSize(card) {
@@ -26354,6 +26374,14 @@ function emsOpen() {
   const o = document.createElement('div');
   o.className = 'ems-overlay'; o.id = 'emsOverlay';
   o.innerHTML = '<div class="ems-shell">'
+    + '<aside class="ems-deck-col">'
+    +   '<div class="ems-deck-head">'
+    +     '<b>🎴 Your monsters</b>'
+    +     '<span>Tap one, then tap a square in a lane to summon it. They are shelved by what they do on the battlefield.</span>'
+    +   '</div>'
+    +   '<div class="ems-deck" id="emsDeck"></div>'
+    + '</aside>'
+    + '<div class="ems-main">'
     + '<div class="ems-topbar">'
     +   '<div class="ems-title">🌋 Ember Siege</div>'
     +   '<div class="ems-stat" id="emsWave">Wave 1</div>'
@@ -26369,9 +26397,9 @@ function emsOpen() {
     +   '<div class="ems-grid" id="emsGrid"></div>'
     +   '<div class="ems-units" id="emsUnits"></div>'
     + '</div>'
-    + '<div class="ems-trayline">Tap a monster, then tap a square in a lane to summon it. Mana trickles in slowly on its own — answering questions is far faster, and every cleared wave opens a ' + EMS_ROUND_SIZE + '-question mana round with the battle paused and no timer.</div>'
-    + '<div class="ems-tray" id="emsTray"></div>'
+    + '<div class="ems-fieldnote">Mana trickles in slowly on its own — answering questions is far faster, and every cleared wave opens a ' + EMS_ROUND_SIZE + '-question mana round with the battle paused and no timer.</div>'
     + '<div class="ems-legend">' + Object.keys(EMS_SKILL_FX).map(k => '<span title="' + escapeHtml(EMS_SKILL_FX[k].desc) + '">' + EMS_SKILL_FX[k].label + '</span>').join('') + '</div>'
+    + '</div>'
     + '</div>';
   document.body.appendChild(o);
   emsPreloadFx().then(emsStart);
@@ -26475,7 +26503,7 @@ function emsStart() {
         cells += '<div class="ems-cell" data-lane="' + lane + '" data-col="' + col + '" onclick="emsPlace(' + lane + ',' + col + ')"></div>';
     grid.innerHTML = cells;
   }
-  emsRenderTray();
+  emsRenderDeck();
   emsBanner('Wave 1 incoming — tap ⚡ Generate mana!', 2400);
   emsRun.last = performance.now();
   emsRun.raf = requestAnimationFrame(emsFrame);
@@ -26570,7 +26598,7 @@ function emsUpdate(dt) {
   // Passive trickle — small, always on, so a lull is slow rather than dead.
   r.mana = Math.min(EMS_MANA_CAP, r.mana + EMS_PASSIVE_MANA * dt);
   r.uiT = (r.uiT || 0) + dt;
-  if (r.uiT >= 0.25) { r.uiT = 0; emsRefreshTrayState(); emsSyncHud(); }
+  if (r.uiT >= 0.25) { r.uiT = 0; emsRefreshDeckState(); emsSyncHud(); }
   // wave pacing
   if (r.breather > 0) {
     r.breather -= dt;
@@ -26750,22 +26778,37 @@ function emsRestart() {
 }
 
 // ---- Placing cards ----
-function emsRenderTray() {
-  const host = document.getElementById('emsTray');
+// One tile in the deck column. Deliberately small — the avatar is 30px, so a
+// shelf shows four across instead of one card taking 86px of a sideways
+// strip. The full name and what the monster does live in the tooltip.
+function emsDeckCardHtml(c) {
+  const cost = emsCost(c);
+  const cd = emsRun.cooldowns[c.id] || 0;
+  const poor = emsRun.mana < cost;
+  return '<button type="button" class="ems-card' + (emsRun.sel === c.id ? ' sel' : '') + (poor || cd > 0 ? ' off' : '') + '" data-ems-card="' + c.id + '" onclick="emsSelect(\'' + c.id + '\')" title="' + escapeHtml(c.name + ' · ⚡' + cost + ' · ' + emsSkillLine(c)) + '">'
+    + '<span class="ems-card-art">' + emsArtHtml(c, 'ems-art') + '</span>'
+    + '<span class="ems-card-name">' + escapeHtml(tcgShortName(c)) + '</span>'
+    + '<span class="ems-card-cost">⚡' + cost + '</span>'
+    + '<span class="ems-card-cd" data-cd="' + c.id + '"' + (cd > 0 ? '' : ' style="display:none;"') + '></span>'
+    + '</button>';
+}
+function emsRenderDeck() {
+  const host = document.getElementById('emsDeck');
   const s = tcgState();
   if (!host || !s || !emsRun) return;
-  const owned = Object.keys(s.cards).map(id => TCG_BY_ID[id]).filter(Boolean)
-    .sort((a, b) => emsCost(a) - emsCost(b) || a.num - b.num);
-  host.innerHTML = owned.map(c => {
-    const cost = emsCost(c);
-    const cd = emsRun.cooldowns[c.id] || 0;
-    const poor = emsRun.mana < cost;
-    return '<button type="button" class="ems-card' + (emsRun.sel === c.id ? ' sel' : '') + (poor || cd > 0 ? ' off' : '') + '" data-ems-card="' + c.id + '" onclick="emsSelect(\'' + c.id + '\')" title="' + escapeHtml(c.name) + ' · ' + escapeHtml(emsSkillLine(c)) + '">'
-      + '<span class="ems-card-art">' + emsArtHtml(c, 'ems-art') + '</span>'
-      + '<span class="ems-card-name">' + escapeHtml(tcgShortName(c)) + '</span>'
-      + '<span class="ems-card-cost">⚡ ' + cost + '</span>'
-      + '<span class="ems-card-cd" data-cd="' + c.id + '"' + (cd > 0 ? '' : ' style="display:none;"') + '></span>'
-      + '</button>';
+  const owned = Object.keys(s.cards).map(id => TCG_BY_ID[id]).filter(Boolean);
+  const shelves = {};
+  owned.forEach(c => { const r = emsRole(c); (shelves[r.key] = shelves[r.key] || []).push(c); });
+  // An empty shelf is left out entirely rather than shown as a gap — a new
+  // player with three monsters gets three tidy headings, not six.
+  host.innerHTML = EMS_ROLES.filter(r => shelves[r.key] && shelves[r.key].length).map(role => {
+    const cards = shelves[role.key].sort((a, b) => emsCost(a) - emsCost(b) || a.num - b.num);
+    return '<section class="ems-role">'
+      + '<h4 class="ems-role-head"><span>' + role.icon + '</span><span>' + role.name + '</span>'
+      +   '<span class="ems-role-count">' + cards.length + '</span></h4>'
+      + '<div class="ems-role-note">' + escapeHtml(role.blurb) + '</div>'
+      + '<div class="ems-role-grid">' + cards.map(emsDeckCardHtml).join('') + '</div>'
+      + '</section>';
   }).join('');
 }
 function emsSelect(id) {
@@ -26774,12 +26817,12 @@ function emsSelect(id) {
   if ((emsRun.cooldowns[id] || 0) > 0) { emsBanner(tcgShortName(c) + ' is recharging…', 1200); return; }
   if (emsRun.mana < emsCost(c)) { emsBanner('Not enough mana — answer a question! ⚡', 1500); return; }
   emsRun.sel = emsRun.sel === id ? null : id;
-  emsRenderTray();
+  emsRenderDeck();
 }
 function emsPlace(lane, col) {
   const r = emsRun;
   if (!r || r.over) return;
-  if (!r.sel) { emsBanner('Pick a monster from the tray first', 1400); return; }
+  if (!r.sel) { emsBanner('Pick a monster from the deck first', 1400); return; }
   const c = TCG_BY_ID[r.sel]; if (!c) return;
   const cost = emsCost(c);
   if (r.mana < cost) { emsBanner('Not enough mana — answer a question! ⚡', 1500); return; }
@@ -26789,7 +26832,7 @@ function emsPlace(lane, col) {
   r.cooldowns[c.id] = emsCardCooldown(c);
   r.defenders.push({ id: r.nextId++, card: c, p: p, lane: lane, col: col, hp: p.hp, maxHp: p.hp, cool: p.rate * 0.5, el: null });
   r.sel = null;
-  emsRenderTray();
+  emsRenderDeck();
   emsSyncHud();
 }
 
@@ -26959,10 +27002,10 @@ function emsBurst(lane, x, sp, element) {
   setTimeout(() => d.remove(), 460);
 }
 // Cooldown veils and "can I afford this?" dimming. Deliberately NOT part of
-// the frame loop — a collection can run to 151 cards, and touching every tray
-// button 60 times a second is the one thing that would make this stutter on a
+// the frame loop — a collection can run to 151 cards, and touching every deck
+// tile 60 times a second is the one thing that would make this stutter on a
 // school phone. Four times a second is plenty for a seconds countdown.
-function emsRefreshTrayState() {
+function emsRefreshDeckState() {
   const r = emsRun; if (!r) return;
   document.querySelectorAll('.ems-card').forEach(btn => {
     const id = btn.getAttribute('data-ems-card');
@@ -27121,7 +27164,7 @@ function emsAnswer(i) {
   }
   r.mana = Math.min(EMS_MANA_CAP, r.mana + gain);
   emsSyncHud();
-  emsRenderTray();
+  emsRenderDeck();
   emsManaPop(gain);
   _emsLogAttempt(q, correct);
   const body = document.getElementById('emsQuizBody');
@@ -27138,7 +27181,7 @@ function emsAnswer(i) {
     r.roundDone++;
     if (r.roundDone >= r.roundTotal) {
       r.mana = Math.min(EMS_MANA_CAP, r.mana + EMS_ROUND_BONUS);
-      emsSyncHud(); emsManaPop(EMS_ROUND_BONUS); emsRefreshTrayState();
+      emsSyncHud(); emsManaPop(EMS_ROUND_BONUS); emsRefreshDeckState();
       const done = document.getElementById('emsQuizFb');
       if (done) done.innerHTML += '<div class="ok" style="margin-top:8px;">🧪 Mana round complete — <b>⚡ +' + EMS_ROUND_BONUS + ' bonus</b>. Back to the battle!</div>';
       setTimeout(() => { if (emsRun && emsRun.roundTotal && emsRun.roundDone >= emsRun.roundTotal) emsCloseQuiz(); }, 1800);
