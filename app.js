@@ -143,7 +143,7 @@ async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, js
   return text.trim();
 }
 
-// ── ChatGPT image generation (Monster Cards → Card Art) ──────────────
+// ── ChatGPT image generation (Realm of Embers TCG → Card Art) ──────────────
 // Same key/device-local settings as the text engine, but a separate image
 // model (the chat model cannot draw). Two modes:
 //   • text only            → the trading-card art
@@ -1499,7 +1499,7 @@ async function enterApp(user) {
     if (document.querySelector('#page-home.active')) renderHomePage();
   }).catch(e => console.warn('rpg init', e));
 
-  // Monster Cards TCG: load the release flag + card art so the nav item and
+  // Realm of Embers TCG: load the release flag + card art so the nav item and
   // cards render correctly (admins always see it; students only when released).
   tcgInit().catch(e => console.warn('tcg init', e));
 
@@ -1532,7 +1532,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.183.0';
+const APP_VERSION = 'v1.184.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -1883,7 +1883,7 @@ function navigateTo(page) {
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
   if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'arcade' || page === 'defenders' || page === 'raiders' || page === 'spire' || page === 'legends' || page === 'slayers' || page === 'tcg') && rpgGameHidden()) page = rpgHomePage();
-  // Monster Cards is admin-only until the admin presses Release.
+  // Realm of Embers TCG is admin-only until the admin presses Release.
   if (page === 'tcg' && !_isAdmin() && !tcgReleased()) page = rpgHomePage();
   if (page !== 'adventure') advAbandon();
   // Snap & Mark keeps marking in the background — reassure the student on leave.
@@ -18340,7 +18340,7 @@ function rpgHydrate(saved) {
   st.star = Object.assign({ gold: 0, learn: 0, raids: 0, nova: false }, (saved && saved.star) || {});
   st.kills = Object.assign({}, (saved && saved.kills) || {});
   st.seenQ = Object.assign({}, (saved && saved.seenQ) || {});
-  st.tcg = tcgHydrateState(saved && saved.tcg); // Monster Cards TCG collection/team/record
+  st.tcg = tcgHydrateState(saved && saved.tcg); // Realm of Embers TCG collection/team/record
   if (!Number.isFinite(st.xpBaseline)) st.xpBaseline = 0;
   if ((saved && saved.v || 1) < 2) { st.skills = {}; st.paths = {}; st.v = 2; } // tree rework: full free refund
   Object.keys(st.skills).forEach(id => {
@@ -19296,7 +19296,8 @@ function rpgApplyVisibility() {
   const active = !!rpgState;
   const show = active && !rpgState.hidden;
   document.querySelectorAll(".rpg-el").forEach(el => { el.style.display = show ? "" : "none"; });
-  try { tcgApplyNavVisibility(); } catch (_) {} // Monster Cards nav follows its own admin/release rules
+  try { tcgApplyNavVisibility(); } catch (_) {} // Realm of Embers TCG nav follows its own admin/release rules
+  try { tcgShowAnnounce(); } catch (_) {}       // …and so does its release announcement (hidden game = no banner)
   try { fpsApplyNavVisibility(); } catch (_) {} // Science Strike nav (released to everyone, still respects Hide game)
   const toggle = $("rpgHideToggle");
   if (!toggle) return;
@@ -20316,7 +20317,7 @@ function rpgPublishLeaderboard() {
       td: rpgGameBoardData("defenders"),
       raid: rpgGameBoardData("raiders"),
       spire: rpgGameBoardData("spire"),
-      // Monster Cards TCG: a complete team of 5 is published so other students
+      // Realm of Embers TCG: a complete team of 5 is published so other students
       // can be matched against it in the Battle Arena (null until then).
       tcg: (rpgState.tcg && Array.isArray(rpgState.tcg.team) && rpgState.tcg.team.length === 5) ? {
         team: rpgState.tcg.team.slice(0, 5),
@@ -21539,6 +21540,21 @@ function _commFpsAnnouncePost() {
     createdAt: ''
   };
 }
+// The same release news as the banner, pinned to the top of the feed for as
+// long as the game is live (nothing to dismiss — it just sits there).
+function _commTcgAnnouncePost() {
+  if (!tcgReleased()) return null;
+  return {
+    _id: '__tcgAnnounce', _builtin: true,
+    type: 'news', pinned: true, status: 'approved',
+    title: '🃏 NEW GAME RELEASED — Realm of Embers TCG!',
+    text: 'Collect all 151 legendary monsters! Spend the points you earn answering questions on booster packs, level your monsters up, build a team of 5 and battle other trainers in the Arena — then take on the infinite Dungeon. Every monster has a star rating from 1★ to 7★, and only three 7★ legends exist in the whole set. Find it in your sidebar under 🃏 Realm of Embers TCG.',
+    _ctaHtml: '<div class="comm-actions"><button class="btn btn-primary" onclick="tcgOpenFromAnnounce()">🃏 Open my first pack</button></div>',
+    authorUid: '', authorName: COMM_ADMIN_NAME, authorRole: 'admin',
+    authorAvatar: COMM_ADMIN_AVATAR, authorStatus: COMM_ADMIN_STATUS,
+    createdAt: (_tcgConfig && _tcgConfig.releasedAt) || ''
+  };
+}
 function _commPostHtml(p, moderate) {
   const admin = _isAdmin();
   const isStaff = p.authorRole === 'admin';
@@ -21569,6 +21585,8 @@ function _renderCommFeed() {
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   const fpsPost = _commFpsAnnouncePost();
   if (fpsPost) posts.unshift(fpsPost);
+  const tcgPost = _commTcgAnnouncePost();   // newest release sits above the Strike one
+  if (tcgPost) posts.unshift(tcgPost);
   if (!posts.length) { feed.innerHTML = '<div class="empty-note">No posts yet. ' + (_isAdmin() ? 'Share the first update above!' : 'Check back soon!') + '</div>'; return; }
   feed.innerHTML = posts.map(p => _commPostHtml(p, false)).join('');
 }
@@ -23758,7 +23776,7 @@ async function resetRpgArt(id){
 }
 
 // =====================================================================
-// MONSTER CARDS TCG (beta) — 151 collectible science monsters.
+// REALM OF EMBERS TCG (beta) — 151 collectible science monsters.
 // Cards come ONLY from booster packs bought with the hero's gold (the
 // points students earn answering questions). Students build a team of 3
 // and auto-battle other trainers' published teams, Final-Fantasy style.
@@ -24344,14 +24362,21 @@ function tcgReleased() { return !!(_tcgConfig && _tcgConfig.released); }
 async function tcgSetReleased(v) {
   if (!_isAdmin()) return;
   const on = (v === true || v === 'true');
-  if (on && !confirm('Release Monster Cards to all students? They will see it in their Game menu immediately.')) return;
-  if (!on && !confirm('Take Monster Cards back into beta? Students will no longer see it.')) return;
+  if (on && !confirm('Release Realm of Embers TCG to all students?\n\nIt appears in their sidebar straight away, and every student is greeted with a release announcement the next time they log in — plus a pinned post in the community feed.')) return;
+  if (!on && !confirm('Take Realm of Embers TCG back into beta? Students will no longer see it, and the release announcement stops showing.')) return;
   try {
-    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'tcgConfig'), { released: on, updatedAt: new Date().toISOString() }, { merge: true });
-    _tcgConfig = Object.assign({}, _tcgConfig, { released: on });
+    const now = new Date().toISOString();
+    // releasedAt stamps THIS release. The announcement banner is dismissed
+    // against that stamp, so taking the game back into beta and releasing it
+    // again later announces it to everyone all over again.
+    const patch = on ? { released: true, releasedAt: now, updatedAt: now } : { released: false, updatedAt: now };
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'tcgConfig'), patch, { merge: true });
+    _tcgConfig = Object.assign({}, _tcgConfig, patch);
     tcgApplyNavVisibility();
     tcgRenderAdminBanner();
-    showToast(on ? '🚀 Monster Cards released to students!' : 'Monster Cards is back in beta (admins only)', 'success');
+    tcgShowAnnounce();                              // preview exactly what the students get
+    try { _renderCommFeed(); } catch (_) {}         // the community feed carries the same announcement
+    showToast(on ? '🚀 Realm of Embers TCG released to students — they will see the announcement when they log in!' : 'Realm of Embers TCG is back in beta (admins only)', 'success');
   } catch (e) { console.error('tcg release', e); showToast('Could not update — check your connection', 'error'); }
 }
 function tcgAccessAllowed() { return _isAdmin() || tcgReleased(); }
@@ -24360,7 +24385,47 @@ function tcgApplyNavVisibility() {
   if (!nav) return;
   const show = !!currentUser && (_isAdmin() || (tcgReleased() && rpgState && !rpgState.hidden));
   nav.style.display = show ? '' : 'none';
+  // Once it is live for students it is no longer a beta — drop the badges.
+  const live = tcgReleased();
+  document.querySelectorAll('.tcg-beta-badge').forEach(b => { b.style.display = live ? 'none' : ''; });
 }
+
+// ---- Release announcement ------------------------------------------
+// The admin presses "Release to students" once; every student then meets the
+// news the next time they log in — a banner over the app, plus a pinned post
+// in the community feed — until they dismiss it.
+function _tcgAnnounceKey() { return 'tcgAnnounceDismissed_v1:' + ((_tcgConfig && _tcgConfig.releasedAt) || 'v1'); }
+function tcgAnnounceVisible() {
+  if (!currentUser || !tcgReleased()) return false;
+  if (!_isAdmin() && rpgGameHidden()) return false;   // students with the game hidden are left alone
+  try { return localStorage.getItem(_tcgAnnounceKey()) !== '1'; } catch (e) { return true; }
+}
+function tcgShowAnnounce() {
+  const el = document.getElementById('tcgAnnounce');
+  if (!el) return;
+  el.style.display = tcgAnnounceVisible() ? 'block' : 'none';
+  // Both release banners live in the same slot at the top of the screen —
+  // the newer one wins, the Strike one comes back once this is dismissed.
+  try { fpsShowAnnounce(); } catch (_) {}
+}
+function tcgDismissAnnounce() {
+  try { localStorage.setItem(_tcgAnnounceKey(), '1'); } catch (e) {}
+  const el = document.getElementById('tcgAnnounce');
+  if (el) el.style.display = 'none';
+  try { fpsShowAnnounce(); } catch (_) {}
+}
+function tcgOpenFromAnnounce() {
+  tcgDismissAnnounce();
+  try { navigateTo('tcg'); tcgSetTab('packs'); } catch (e) {}
+}
+(function _tcgWireAnnounce() {
+  const close = document.getElementById('tcgAnnounceClose');
+  const later = document.getElementById('tcgAnnounceLater');
+  const open = document.getElementById('tcgAnnounceOpen');
+  if (close) close.addEventListener('click', tcgDismissAnnounce);
+  if (later) later.addEventListener('click', tcgDismissAnnounce);
+  if (open) open.addEventListener('click', tcgOpenFromAnnounce);
+})();
 // ---- Science Strike FPS (fps.html) — FULLY RELEASED (out of beta).
 // The game lives on its own page; index.html only shows/hides the nav entry.
 // No release flag any more: every signed-in user sees it (students still lose
@@ -24385,7 +24450,9 @@ function fpsShowAnnounce() {
   const el = document.getElementById('fpsAnnounce');
   if (!el) return;
   const dismissed = (() => { try { return localStorage.getItem(FPS_ANNOUNCE_KEY) === '1'; } catch (e) { return false; } })();
-  el.style.display = (currentUser && !dismissed) ? 'block' : 'none';
+  // The newer Realm of Embers release announcement gets the slot first.
+  const tcgUp = (() => { try { return tcgAnnounceVisible(); } catch (e) { return false; } })();
+  el.style.display = (currentUser && !dismissed && !tcgUp) ? 'block' : 'none';
 }
 function fpsDismissAnnounce() {
   try { localStorage.setItem(FPS_ANNOUNCE_KEY, '1'); } catch (e) {}
@@ -24398,7 +24465,9 @@ document.getElementById('fpsAnnounceLater').addEventListener('click', fpsDismiss
 async function tcgInit() {
   await tcgLoadConfig(true);
   tcgApplyNavVisibility();
+  tcgShowAnnounce();          // "released while you were away" — greets students at login
   tcgLoadArt().catch(() => {});
+  try { _renderCommFeed(); } catch (_) {}
 }
 
 // ---- Card art overrides (admin pastes a PNG per monster on Game Objects) ----
@@ -24924,10 +24993,10 @@ function tcgRenderAdminBanner() {
   host.innerHTML = '<div class="tcg-admin-banner">'
     + '<div class="tcg-ab-main">'
     +   '<span class="tcg-status-pill ' + (live ? 'live' : 'locked') + '">' + (live ? '🟢 RELEASED TO STUDENTS' : '🔒 BETA — ADMINS ONLY') + '</span>'
-    +   '<h4>' + (live ? 'Monster Cards is live' : 'You are play-testing Monster Cards') + '</h4>'
+    +   '<h4>' + (live ? 'Realm of Embers TCG is live' : 'You are play-testing Realm of Embers TCG') + '</h4>'
     +   '<p>' + (live
-          ? 'Students can see the game in their Game menu, buy packs with their points and battle each other. You can take it back into beta at any time.'
-          : 'Students cannot see this game yet. Open packs, set a team and run battles to try everything — then press Release when you are happy. Each monster\'s trading-card art and battle avatar live on the 🎨 Card Art tab.')
+          ? 'Students see it in their sidebar, are greeted with the release announcement when they log in, and can buy packs with their points and battle each other. You can take it back into beta at any time.'
+          : 'Students cannot see this game yet. Open packs, set a team and run battles to try everything — then press Release when you are happy, and every student meets the announcement at their next login. Each monster\'s trading-card art and battle avatar live on the 🎨 Card Art tab, where the ✨ AI art generator can draw them all for you.')
     +   '</p>'
     + '</div>'
     + '<div class="tcg-ab-actions">'
@@ -25089,7 +25158,7 @@ function _tcgBankQuestions() {
   try {
     (typeof questionBank !== 'undefined' && Array.isArray(questionBank) ? questionBank : []).forEach(q => {
       if (!q || (q.status && q.status !== 'approved') || !Array.isArray(q.blocks)) return;
-      if (!qInSyllabus(q)) return;   // retired topics never reach the Monster Cards quiz
+      if (!qInSyllabus(q)) return;   // retired topics never reach the Realm of Embers TCG quiz
       const mcq = q.blocks.find(b => b && b.type === 'mcq' && b.correctId && Array.isArray(b.options) && b.options.length >= 2);
       if (!mcq) return;
       const ai = mcq.options.findIndex(o => o.id === mcq.correctId);
@@ -26043,6 +26112,7 @@ window.onTcgArtPaste = onTcgArtPaste;
 window.onTcgArtDrop = onTcgArtDrop;
 window.onTcgArtPick = onTcgArtPick;
 window.resetTcgArt = resetTcgArt;
+window.tcgOpenFromAnnounce = tcgOpenFromAnnounce;
 window.tcgAiGenSlot = tcgAiGenSlot;
 window.tcgGenerateAllArt = tcgGenerateAllArt;
 window.tcgStopArtGen = tcgStopArtGen;
