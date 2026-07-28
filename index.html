@@ -4842,8 +4842,16 @@ option {
 .ems-shot-img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .ems-shot-orb { display: block; width: 58%; aspect-ratio: 1; border-radius: 50%; animation: emsOrb 0.45s ease-out; }
 @keyframes emsOrb { from { transform: scale(0.35); opacity: 0.6; } to { transform: scale(1); opacity: 1; } }
+.ems-shot::after { content: ''; position: absolute; right: 62%; top: 50%; width: 90%; height: 22%; transform: translateY(-50%); border-radius: 999px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22)); filter: blur(2px); pointer-events: none; }
 .ems-burst { position: absolute; border-radius: 14px; pointer-events: none; z-index: 6; animation: emsBurstAnim 0.46s ease-out forwards; mix-blend-mode: screen; }
+.ems-burst.framed { animation: none; mix-blend-mode: normal; display: flex; align-items: center; justify-content: center; }
+.ems-burst.framed img { width: 100%; height: 100%; object-fit: contain; }
 @keyframes emsBurstAnim { 0% { opacity: 0; transform: scale(0.5); } 30% { opacity: 0.95; transform: scale(1.06); } 100% { opacity: 0; transform: scale(1.15); } }
+/* Impact — the moment a shot lands on one enemy. */
+.ems-impact { position: absolute; width: 12.5%; height: 20%; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 6; }
+.ems-impact img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.ems-impact-pop { display: block; width: 74%; aspect-ratio: 1; border-radius: 50%; mix-blend-mode: screen; animation: emsImpactPop 0.3s ease-out forwards; }
+@keyframes emsImpactPop { 0% { opacity: 0.2; transform: scale(0.35); } 40% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.25); } }
 /* Status effects read at a glance on the enemy sprite. */
 .ems-unit.slowed .ems-unit-art { filter: saturate(0.5) brightness(0.85) drop-shadow(0 0 7px rgba(150,220,255,0.9)); }
 .ems-unit.poisoned .ems-unit-art { filter: hue-rotate(55deg) saturate(1.6) drop-shadow(0 0 7px rgba(150,220,90,0.9)); }
@@ -4934,6 +4942,12 @@ option {
 .tcg-fx-state { font-size: 0.74rem; color: #94a3b8; }
 .tcg-fx-state.on { color: #16a34a; font-weight: 600; }
 .tcg-fx-head .ga-mini { margin-left: auto; }
+.tcg-fx-phase { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border); }
+.tcg-fx-phase:first-of-type { border-top: none; padding-top: 0; }
+.tcg-fx-phase-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.tcg-fx-phase-head b { font-size: 0.86rem; }
+.tcg-fx-phase-head span { font-size: 0.75rem; color: var(--text-muted); flex: 1 1 240px; line-height: 1.55; }
+.ga-hint { font-size: 0.66rem; line-height: 1.5; color: var(--text-muted); text-align: center; }
 .ems-shot-orb.fx-ph { position: static; animation: none; opacity: 0.85; }
 /* "In Ember Siege" line on the card preview */
 .tcg-siege-line { max-width: 420px; text-align: center; font-size: 0.8rem; line-height: 1.6; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
