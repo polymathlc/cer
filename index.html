@@ -4777,6 +4777,23 @@ option {
 .tcg-tab:hover { border-color: #8E24AA; color: #8E24AA; }
 .tcg-tab.active { background: linear-gradient(135deg,#8E24AA,#7B1FA2); border-color: transparent; color: #fff; box-shadow: 0 4px 12px rgba(142,36,170,0.3); }
 .tcg-section-note { text-align: center; color: var(--text-muted); font-size: 0.88rem; margin: 0 auto 20px; max-width: 620px; line-height: 1.55; }
+/* ---- Practise as Student (centre computers) ---- */
+#practiceAsBar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 1700; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center; max-width: min(760px, calc(100vw - 24px)); padding: 12px 18px; border-radius: 999px; background: linear-gradient(135deg, #14532d, #0d3a20); border: 1px solid #2f7d4f; box-shadow: 0 12px 32px rgba(0,0,0,0.28); color: #e8f5ec; font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.84rem; line-height: 1.5; }
+#practiceAsBar .pa-dot { font-size: 1rem; }
+#practiceAsBar .pa-text b { color: #86efac; }
+#practiceAsBar .pa-real { font-size: 0.72rem; color: #a7c8b4; }
+#practiceAsBar .pa-exit { background: #86efac; color: #14532d; border: none; border-radius: 999px; padding: 9px 18px; font-weight: 700; font-size: 0.8rem; cursor: pointer; font-family: inherit; }
+#practiceAsBar .pa-exit:hover { background: #bbf7d0; }
+body.practising-as .page-body { padding-bottom: 96px; }
+.practice-as-rows { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.practice-as-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.practice-as-who { flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.practice-as-who b { font-size: 0.9rem; }
+.practice-as-who span { font-size: 0.76rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.practice-as-who span.dim { font-size: 0.7rem; opacity: 0.75; }
+.practice-as-row .btn { flex: 0 0 auto; font-size: 0.8rem; }
+@media (max-width: 640px) { #practiceAsBar { border-radius: 16px; font-size: 0.78rem; } }
+
 /* ---- Game Modes tab: the hub of ways to play ---- */
 .tcg-modes { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
 .tcg-mode-card { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; padding: 24px 26px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 16px rgba(15,23,42,0.05); }
@@ -5299,6 +5316,16 @@ option {
   </div>
 </div>
 
+<!-- ==================== PRACTICE-AS-STUDENT SESSION BAR ====================
+     Visible on every page for the whole session so centre staff can never be
+     in any doubt about whose account is being played. -->
+<div id="practiceAsBar" style="display:none;">
+  <span class="pa-dot">👤</span>
+  <span class="pa-text">Practising as <b id="practiceAsWho"></b> — every point, XP, monster and prize is saved to <b>their</b> account</span>
+  <span class="pa-real">signed in as <span id="practiceAsReal"></span></span>
+  <button type="button" class="pa-exit" onclick="exitPracticeAs()">End session</button>
+</div>
+
 <!-- ==================== IMAGE PRELOAD OVERLAY ==================== -->
 <div class="preload-overlay" id="preloadOverlay" style="display:none;">
   <img class="preload-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Loading" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2280%22 height=%2280%22 viewBox=%220 0 80 80%22%3E%3Crect width=%2280%22 height=%2280%22 rx=%2216%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2240%22 y=%2256%22 font-family=%22DM Sans,sans-serif%22 font-size=%2248%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
@@ -5669,6 +5696,10 @@ option {
       <div class="nav-item admin-only" data-page="usage" onclick="navigateTo('usage')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Student Usage
+      </div>
+      <div class="nav-item admin-only" onclick="openPracticeAsPicker()" title="Practise as Student — for the centre's computers. Hand the computer to a visiting student and this tab becomes their account, so every point, XP, monster and prize they earn is saved to it.">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>
+        Practise as Student
       </div>
       <div class="nav-item admin-only" onclick="openMarkingSettings()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>

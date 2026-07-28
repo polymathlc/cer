@@ -901,6 +901,7 @@ async function handleChangePassword() {
   if (next.length < 6) return showErr('New password must be at least 6 characters');
   const user = auth.currentUser;
   if (!user || !user.email) return showErr('You need to be signed in to change your password');
+  if (_practiceAs) return showErr('End the practice session first — this would change YOUR password, not ' + (_practiceAs.name || 'the student') + '\'s');
 
   const loadingEl = document.getElementById('cpLoading');
   loadingEl.classList.add('active');
@@ -992,6 +993,8 @@ async function handleGoogleSignIn() {
 // =====================================================================
 async function handleLogout() {
   try {
+    _practiceAsClear();          // never hand a practice session to the next person
+    _practiceAs = null;
     await signOut(auth);
     try { ainsteinOnSignOut(); } catch (e) {}
     showPage('landingPage');
@@ -1408,9 +1411,41 @@ async function recordLogin(user) {
   }
 }
 
+// =====================================================================
+// PRACTICE AS STUDENT — for the centre's own computers
+// =====================================================================
+// A student visiting the centre practises on a centre computer while the
+// admin stays signed in underneath. For the whole session the app simply IS
+// that student: every attempt, point, XP, card, level and prize is written to
+// their own account exactly as if they had signed in at home, and the student
+// sees the ordinary student app (no admin pages).
+//
+// The switch happens in enterApp() before anything loads, so no admin state is
+// ever mixed into the student's session. The choice lives in sessionStorage:
+// closing the tab, signing out or pressing "End session" ends it, and only an
+// admin account can start one.
+const PRACTICE_AS_KEY = 'sq_practice_as';
+let _practiceAs = null;   // { uid, email, name } while acting as a student
+let _realUser = null;     // the admin actually signed in, while acting
+function _practiceAsLoad() {
+  try {
+    const j = JSON.parse(sessionStorage.getItem(PRACTICE_AS_KEY) || 'null');
+    return (j && j.uid && j.email) ? j : null;
+  } catch (e) { return null; }
+}
+function _practiceAsClear() { try { sessionStorage.removeItem(PRACTICE_AS_KEY); } catch (e) {} }
+
 async function enterApp(user) {
   const displayName = user.displayName || user.email.split('@')[0];
   const isAdmin = ADMIN_EMAILS.includes(user.email);
+  // Acting as a student? Only an admin may, and the flag is per-tab.
+  const wanted = _practiceAsLoad();
+  if (wanted && !isAdmin) _practiceAsClear();
+  _practiceAs = (wanted && isAdmin) ? wanted : null;
+  _realUser = { uid: user.uid, email: user.email, name: displayName, role: isAdmin ? 'admin' : 'student' };
+  // While acting, run the STUDENT branch below — the visiting student must get
+  // their own app, not the admin's.
+  const asAdmin = isAdmin && !_practiceAs;
   // A retired sign-in (its password was reset by the admin) must not fork the
   // student's progress — bounce it back to the login page.
   if (!isAdmin) {
@@ -1426,20 +1461,23 @@ async function enterApp(user) {
   }
   // "Change password" only makes sense for email/password sign-ins (not Google).
   const cpBtn = document.getElementById('changePassBtn');
-  if (cpBtn) cpBtn.style.display = (user.providerData || []).some(p => p && p.providerId === 'password') ? '' : 'none';
-  currentUser = {
-    uid: user.uid,
-    email: user.email,
-    name: displayName,
-    role: isAdmin ? 'admin' : 'student'
-  };
+  // Hidden while acting as a student: it changes the password of the account
+  // actually signed in (the admin's), which is never what anyone wants here.
+  if (cpBtn) cpBtn.style.display = (!_practiceAs && (user.providerData || []).some(p => p && p.providerId === 'password')) ? '' : 'none';
+  currentUser = _practiceAs
+    ? { uid: _practiceAs.uid, email: _practiceAs.email, name: _practiceAs.name, role: 'student' }
+    : { uid: user.uid, email: user.email, name: displayName, role: isAdmin ? 'admin' : 'student' };
   showPage('appWrapper');
-  // Record login event for usage tracking
+  // Record login event for usage tracking. This logs the REAL sign-in (the
+  // admin) — a practice session is not a login by the student, and the
+  // attendance record should not pretend otherwise.
   recordLogin(user);
-  document.querySelector('.avatar').textContent = displayName[0].toUpperCase();
-  document.querySelector('.sidebar-footer div div:first-child').textContent = displayName;
+  const shownName = currentUser.name;
+  document.querySelector('.avatar').textContent = shownName[0].toUpperCase();
+  document.querySelector('.sidebar-footer div div:first-child').textContent = shownName;
+  practiceAsRenderBar();
 
-  if (isAdmin) {
+  if (asAdmin) {
     // Admin: save UID to config doc so students can find it
     setDoc(doc(db, 'config', 'admin'), { uid: user.uid, email: user.email }).catch(err =>
       console.warn('Could not save admin config:', err)
@@ -1532,7 +1570,117 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.188.2';
+const APP_VERSION = 'v1.189.0';
+// ---- The always-visible session bar ----
+// Staff must never be in any doubt about whose account is being played, so
+// this sits above everything until the session ends.
+function practiceAsRenderBar() {
+  const bar = document.getElementById('practiceAsBar');
+  if (!bar) return;
+  if (!_practiceAs) { bar.style.display = 'none'; document.body.classList.remove('practising-as'); return; }
+  const who = document.getElementById('practiceAsWho');
+  const real = document.getElementById('practiceAsReal');
+  if (who) who.textContent = _practiceAs.name || _practiceAs.email;
+  if (real) real.textContent = (_realUser && _realUser.email) || '';
+  bar.style.display = '';
+  document.body.classList.add('practising-as');
+}
+function exitPracticeAs() {
+  if (!_practiceAs) return;
+  const name = _practiceAs.name || _practiceAs.email;
+  if (!confirm('End the practice session for ' + name + '?\n\nEverything they earned is already saved to their account. You will go back to your own admin account.')) return;
+  _practiceAsClear();
+  _practiceAs = null;
+  location.reload();
+}
+
+// ---- Choosing the account (admin only) ----
+let _practiceAsList = null;
+async function openPracticeAsPicker() {
+  if (!_isAdmin()) { showToast('Only an admin can start a practice session', 'error'); return; }
+  const old = document.getElementById('practiceAsOverlay'); if (old) old.remove();
+  const o = document.createElement('div');
+  o.className = 'confirm-overlay active'; o.id = 'practiceAsOverlay';
+  o.addEventListener('click', e => { if (e.target === o) closePracticeAsPicker(); });
+  o.innerHTML = '<div class="confirm-dialog" style="max-width:620px;text-align:left;max-height:88vh;display:flex;flex-direction:column;">'
+    + '<h3 style="margin-bottom:6px;">🎓 Practise as a student</h3>'
+    + '<p style="color:var(--text-muted);font-size:0.85rem;line-height:1.6;margin-bottom:18px;">For the centre\'s computers. Pick the student sitting down to practise and this browser tab becomes <b>their</b> account: every question, <b>point, XP, monster and prize is earned on their own account</b>, just as if they had signed in at home. They see the normal student app — none of your admin pages. Your own account is untouched, and the session ends when you press <b>End session</b>, sign out, or close the tab.</p>'
+    + '<input type="text" id="practiceAsSearch" class="form-input" placeholder="Search by name or email…" autocomplete="off" spellcheck="false" oninput="practiceAsFilter()" style="margin-bottom:14px;">'
+    + '<div id="practiceAsRows" class="practice-as-rows"><div class="ga-loading" style="text-align:center;padding:24px;">Loading student accounts…</div></div>'
+    + '<div class="btn-group" style="justify-content:flex-end;margin-top:18px;">'
+    +   '<button class="btn btn-outline" onclick="closePracticeAsPicker()">Cancel</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(o);
+  try {
+    const snap = await getDocs(collection(db, 'userProfiles'));
+    const rows = [];
+    snap.forEach(d => {
+      const p = d.data() || {};
+      if (!p.uid || !p.email) return;
+      if (ADMIN_EMAILS.includes(p.email)) return;        // never act as another admin
+      if (p.supersededBy) return;                        // retired sign-ins
+      rows.push({
+        uid: p.uid, email: p.email,
+        name: p.displayName || p.email.split('@')[0],
+        last: p.lastLogin && p.lastLogin.toDate ? p.lastLogin.toDate() : null
+      });
+    });
+    rows.sort((a, b) => (b.last ? b.last.getTime() : 0) - (a.last ? a.last.getTime() : 0) || a.name.localeCompare(b.name));
+    _practiceAsList = rows;
+  } catch (e) {
+    console.error('practice-as list', e);
+    _practiceAsList = [];
+    const host = document.getElementById('practiceAsRows');
+    if (host) host.innerHTML = '<div class="empty-note">Could not load the student accounts — check your connection and try again.</div>';
+    return;
+  }
+  practiceAsFilter();
+}
+function closePracticeAsPicker() { const o = document.getElementById('practiceAsOverlay'); if (o) o.remove(); }
+function practiceAsFilter() {
+  const host = document.getElementById('practiceAsRows');
+  if (!host || !_practiceAsList) return;
+  const q = ((document.getElementById('practiceAsSearch') || {}).value || '').trim().toLowerCase();
+  const list = q ? _practiceAsList.filter(r => (r.name + ' ' + r.email).toLowerCase().includes(q)) : _practiceAsList;
+  if (!list.length) { host.innerHTML = '<div class="empty-note">' + (q ? 'No account matches “' + escapeHtml(q) + '”.' : 'No student accounts yet.') + '</div>'; return; }
+  host.innerHTML = list.slice(0, 200).map(r =>
+    '<div class="practice-as-row">'
+    + '<div class="practice-as-who">'
+    +   '<b>' + escapeHtml(r.name) + '</b>'
+    +   '<span>' + escapeHtml(r.email) + '</span>'
+    +   '<span class="dim">' + (r.last ? 'last signed in ' + r.last.toLocaleDateString() : 'never signed in') + '</span>'
+    + '</div>'
+    + '<button type="button" class="btn btn-primary" onclick="startPracticeAs(\'' + r.uid + '\')">Practise as this account</button>'
+    + '</div>').join('')
+    + (list.length > 200 ? '<div class="empty-note">Showing the 200 most recent — search to narrow it down.</div>' : '');
+}
+async function startPracticeAs(uid) {
+  if (!_isAdmin()) return;
+  const p = (_practiceAsList || []).find(x => x.uid === uid);
+  if (!p) return;
+  if (!confirm('Practise as ' + p.name + ' (' + p.email + ')?\n\n'
+    + 'Everything done from now on — questions answered, points, XP, monsters, prizes — is saved to THEIR account.\n\n'
+    + 'Press "End session" on the bar at the bottom when they are finished.')) return;
+  // Make sure this admin account can actually write to the student's data
+  // before handing the computer over. Without this check a rules failure would
+  // only show up later as progress quietly saving nowhere.
+  const probe = doc(db, 'users', p.uid, 'settings', 'practiceProbe');
+  try {
+    await setDoc(probe, { at: new Date().toISOString(), by: (currentUser && currentUser.email) || '' }, { merge: true });
+    try { await deleteDoc(probe); } catch (e) { /* leaving the tiny probe doc behind is harmless */ }
+  } catch (e) {
+    console.error('practice-as write probe failed', e);
+    alert('Cannot start the session: your account is not allowed to write to ' + p.name + '\'s data, so nothing they earned would be saved.\n\n'
+      + 'Ask for the Firestore rules to allow admin writes to users/{uid}, then try again.\n\n(' + ((e && e.message) || e) + ')');
+    return;
+  }
+  try { sessionStorage.setItem(PRACTICE_AS_KEY, JSON.stringify({ uid: p.uid, email: p.email, name: p.name })); }
+  catch (e) { alert('This browser will not let me remember the practice session (private mode?).'); return; }
+  closePracticeAsPicker();
+  location.reload();      // reload so the whole app starts up as that student
+}
+
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -27294,6 +27442,11 @@ window.onTcgArtPaste = onTcgArtPaste;
 window.onTcgArtDrop = onTcgArtDrop;
 window.onTcgArtPick = onTcgArtPick;
 window.resetTcgArt = resetTcgArt;
+window.openPracticeAsPicker = openPracticeAsPicker;
+window.closePracticeAsPicker = closePracticeAsPicker;
+window.practiceAsFilter = practiceAsFilter;
+window.startPracticeAs = startPracticeAs;
+window.exitPracticeAs = exitPracticeAs;
 window.tcgOpenFromAnnounce = tcgOpenFromAnnounce;
 window.emsOpen = emsOpen;
 window.emsClose = emsClose;
