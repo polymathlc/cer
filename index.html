@@ -4835,6 +4835,22 @@ option {
 .ems-boss-tag { font-size: 0.55rem; font-weight: 800; letter-spacing: 0.08em; color: #ff9a8a; }
 .ems-unit.poof { animation: emsPoof 0.3s ease-in forwards; }
 @keyframes emsPoof { to { opacity: 0; transform: scale(0.4) rotate(12deg); } }
+/* Projectiles: the generated 5-frame element animation when one exists, a
+   CSS orb in the element's colours until then. */
+.ems-shot { position: absolute; width: 8%; height: 16%; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
+.ems-shot.big { width: 11%; height: 22%; }
+.ems-shot-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.ems-shot-orb { display: block; width: 58%; aspect-ratio: 1; border-radius: 50%; animation: emsOrb 0.45s ease-out; }
+@keyframes emsOrb { from { transform: scale(0.35); opacity: 0.6; } to { transform: scale(1); opacity: 1; } }
+.ems-burst { position: absolute; border-radius: 14px; pointer-events: none; z-index: 6; animation: emsBurstAnim 0.46s ease-out forwards; mix-blend-mode: screen; }
+@keyframes emsBurstAnim { 0% { opacity: 0; transform: scale(0.5); } 30% { opacity: 0.95; transform: scale(1.06); } 100% { opacity: 0; transform: scale(1.15); } }
+/* Status effects read at a glance on the enemy sprite. */
+.ems-unit.slowed .ems-unit-art { filter: saturate(0.5) brightness(0.85) drop-shadow(0 0 7px rgba(150,220,255,0.9)); }
+.ems-unit.poisoned .ems-unit-art { filter: hue-rotate(55deg) saturate(1.6) drop-shadow(0 0 7px rgba(150,220,90,0.9)); }
+.ems-unit.cursed::before { content: '💀'; position: absolute; top: -4px; left: 4px; font-size: 0.62rem; }
+.ems-unit.mend .ems-unit-art { filter: brightness(1.5) drop-shadow(0 0 9px rgba(110,220,150,0.95)); }
+.ems-legend { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding-bottom: 4px; }
+.ems-legend span { font-size: 0.66rem; color: #b79b74; border: 1px solid #4a3316; border-radius: 999px; padding: 3px 9px; cursor: help; }
 .ems-trayline { text-align: center; font-size: 0.76rem; color: #b79b74; }
 .ems-tray { display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 10px; }
 .ems-card { flex: 0 0 auto; width: 86px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 6px; border-radius: 12px; border: 1px solid #5a3f1c; background: rgba(30,18,8,0.9); color: #f6ecdc; cursor: pointer; position: relative; }
@@ -4911,6 +4927,16 @@ option {
 .tcg-art-admin .ga-cards { grid-template-columns: repeat(auto-fill, minmax(216px, 1fr)); }
 .tcg-art-admin .ga-actions { flex-wrap: wrap; justify-content: center; }
 .tcg-art-admin .ga-objrow { margin-bottom: 16px; }
+/* Element projectile animation rows (5 chained frames each) */
+.tcg-fx-row { padding: 16px 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); margin-bottom: 18px; }
+.tcg-fx-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.tcg-fx-head b { font-size: 0.95rem; }
+.tcg-fx-state { font-size: 0.74rem; color: #94a3b8; }
+.tcg-fx-state.on { color: #16a34a; font-weight: 600; }
+.tcg-fx-head .ga-mini { margin-left: auto; }
+.ems-shot-orb.fx-ph { position: static; animation: none; opacity: 0.85; }
+/* "In Ember Siege" line on the card preview */
+.tcg-siege-line { max-width: 420px; text-align: center; font-size: 0.8rem; line-height: 1.6; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
 .tcg-dex-progress { max-width: 520px; margin: 0 auto 24px; text-align: center; }
 .tcg-dex-progress .tcg-dex-nums { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 1.05rem; margin-bottom: 8px; }
 .tcg-dex-bar { height: 10px; border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--border); overflow: hidden; }

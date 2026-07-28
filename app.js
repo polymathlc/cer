@@ -1532,7 +1532,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.186.0';
+const APP_VERSION = 'v1.187.0';
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
@@ -24500,7 +24500,7 @@ function tcgArtRefresh() {
 async function _tcgArtStore(id, dataUrl) {
   if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
   // Battle avatars are small stage sprites; card art gets more resolution.
-  const scaled = await _scaleDownDataUrl(dataUrl, id.endsWith(':av') ? 256 : 512);
+  const scaled = await _scaleDownDataUrl(dataUrl, (id.endsWith(':av') || id.indexOf('fx:') === 0) ? 256 : 512);
   const url = await uploadImageDataUrl(scaled);
   const uid = _tcgOwnerUid(); if (!uid) throw new Error('Not signed in');
   await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: { [id]: url } }, { merge: true });
@@ -24641,7 +24641,7 @@ async function tcgGenArtImage(prompt, refDataUrl, transparent) {
 let _tcgGenBusy = false;   // a generation (single slot or batch) is running
 let _tcgGenStop = false;   // batch cancel flag
 
-function _tcgSlotKey(slotId) { return slotId.replace(':', '-'); }
+function _tcgSlotKey(slotId) { return slotId.replace(/:/g, '-'); }   // 'c001:av' / 'fx:cosmic:3' → safe element ids
 function _tcgArtEngineLabel() { return openAiActive() ? 'ChatGPT · ' + getOpenAiImageModel() : 'Gemini image model'; }
 // Re-download the saved card art so it can be handed to the model as the
 // avatar's reference.
@@ -24669,9 +24669,10 @@ async function _tcgGenAvatar(card, cardDataUrl) {
 // ---- Card Art tab (admin) ----
 // Every monster has TWO slots — the trading-card art (card face) and the
 // battle avatar (arena sprite) — each with paste / drop / upload / ✨ AI.
-function _tcgArtSlotHtml(slotId, label, icon, thumb) {
+function _tcgArtSlotHtml(slotId, label, icon, thumb, aiLabel) {
   const has = !!(_tcgArt && _tcgArt[slotId]);
   const isAv = slotId.endsWith(':av');
+  const aiText = aiLabel || (isAv ? 'avatar' : 'card art');
   const key = _tcgSlotKey(slotId);
   return '<div class="ga-card" id="tcgslot-' + key + '">'
     + '<div class="ga-prev">' + thumb + '</div>'
@@ -24683,7 +24684,7 @@ function _tcgArtSlotHtml(slotId, label, icon, thumb) {
     +   ' ondrop="onTcgArtDrop(\'' + slotId + '\', event)"'
     +   ' onclick="this.focus()">Click, then paste a PNG — or drop one here</div>'
     + '<div class="ga-actions">'
-    +   '<button type="button" class="btn btn-primary ga-mini" onclick="tcgAiGenSlot(\'' + slotId + '\')">✨ AI ' + (isAv ? 'avatar' : 'card art') + '</button>'
+    +   '<button type="button" class="btn btn-primary ga-mini" onclick="tcgAiGenSlot(\'' + slotId + '\')">✨ AI ' + aiText + '</button>'
     +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onTcgArtPick(\'' + slotId + '\', event)"></label>'
     +   (has ? '<button type="button" class="btn btn-ghost ga-mini" onclick="resetTcgArt(\'' + slotId + '\')">Reset</button>' : '')
     + '</div>'
@@ -24738,10 +24739,171 @@ function tcgArtGenPanelHtml() {
     + '<div class="tcg-gen-status" id="tcgGenStatus"></div>'
     + '</div>';
 }
+// ---- Element projectile animations (Ember Siege) --------------------
+// Five slots per element. Frame 1 is the element gathering into a small ball
+// and each later frame is BIGGER — and is drawn FROM the frame before it, so
+// the five stay recognisably the same ball. Same rule as card art → avatar.
+const TCG_FX_STEPS = [
+  { size: 'about 15% of the frame', note: 'the very first spark — the energy is only just gathering into a tiny, tight ball, with a few faint wisps spiralling inward toward it' },
+  { size: 'about 32% of the frame', note: 'the ball has grown and steadied, still drawing in wisps of energy from around it' },
+  { size: 'about 50% of the frame', note: 'a bright, dense sphere with clear swirling motion inside and a soft outer glow' },
+  { size: 'about 68% of the frame', note: 'unstable and crackling now, the energy straining outward, the core noticeably brighter' },
+  { size: 'about 85% of the frame', note: 'fully charged and about to be launched — maximum size, blazing core, energy streaming off it' }
+];
+function tcgFxPrompt(element, n) {
+  const fx = TCG_ELEM_FX[element] || TCG_ELEM_FX.flame;
+  const el = TCG_ELEMENTS[element] || { name: 'Elemental' };
+  const step = TCG_FX_STEPS[n - 1] || TCG_FX_STEPS[0];
+  const base = 'Game VFX sprite: ONE frame from a 5-frame projectile charge-up animation for a ' + el.name + '-element spell in a fantasy card game.\n'
+    + 'ELEMENT LOOK: ' + fx.words + '.\n'
+    + 'FRAME ' + n + ' OF 5: ' + step.note + '. The ball fills ' + step.size + '.\n'
+    + 'COMPOSITION: perfectly centred on a FULLY TRANSPARENT background, square. Nothing else in the frame at all — no character, no hand, no ground, no scenery, no border, no text, no watermark. Only the ball of energy and its own glow.\n'
+    + 'STYLE: crisp bright game effect art, still readable at 64 pixels, consistent lighting, friendly for primary-school children.';
+  return n === 1 ? base
+    : base + '\nCONSISTENCY: the reference picture is frame ' + (n - 1) + ' of this exact animation. Keep the same colours, shape language, style and camera — this frame is only the next step of the SAME ball growing.';
+}
+function tcgFxSlotId(element, n) { return 'fx:' + element + ':' + n; }
+function tcgFxMissing() {
+  let n = 0;
+  Object.keys(TCG_ELEMENTS).forEach(el => {
+    for (let i = 1; i <= TCG_FX_FRAMES; i++) if (!(_tcgArt && _tcgArt[tcgFxSlotId(el, i)])) n++;
+  });
+  return n;
+}
+// One frame. Frames before it are drawn first if they don't exist yet.
+async function _tcgGenFxFrame(element, n) {
+  let ref = null;
+  if (n > 1) {
+    const prev = _tcgArt && _tcgArt[tcgFxSlotId(element, n - 1)];
+    if (prev) { try { ref = await _urlToDataUrlRobust(transformImageUrl(prev)); } catch (e) { console.warn('fx ref reload', e); } }
+    if (!ref) ref = await _tcgGenFxFrame(element, n - 1);
+  }
+  const url = await tcgGenArtImage(tcgFxPrompt(element, n), ref, true);
+  await _tcgArtStore(tcgFxSlotId(element, n), url);
+  return url;
+}
+function _tcgFxRowRefresh(element) {
+  const row = document.getElementById('tcgfxrow-' + element);
+  if (row) row.innerHTML = tcgFxRowInnerHtml(element);
+}
+function tcgFxRowInnerHtml(element) {
+  const el = TCG_ELEMENTS[element] || { icon: '✨', name: element };
+  const fx = TCG_ELEM_FX[element] || TCG_ELEM_FX.flame;
+  const done = [];
+  for (let i = 1; i <= TCG_FX_FRAMES; i++) if (_tcgArt && _tcgArt[tcgFxSlotId(element, i)]) done.push(i);
+  const complete = done.length === TCG_FX_FRAMES;
+  let slots = '';
+  for (let i = 1; i <= TCG_FX_FRAMES; i++) {
+    const id = tcgFxSlotId(element, i);
+    const url = _tcgArt && _tcgArt[id];
+    const ph = '<div class="ems-shot-orb fx-ph" style="width:' + (14 + i * 9) + 'px;height:' + (14 + i * 9) + 'px;background:radial-gradient(circle at 35% 35%, ' + fx.a + ', ' + fx.b + ' 68%);box-shadow:0 0 8px 2px ' + fx.glow + ';"></div>';
+    const thumb = url ? '<img src="' + url + '" alt="frame ' + i + '">' : ph;
+    slots += _tcgArtSlotHtml(id, 'Frame ' + i + ' / ' + TCG_FX_FRAMES, i === 1 ? '①' : i === 2 ? '②' : i === 3 ? '③' : i === 4 ? '④' : '⑤', thumb, 'frame ' + i);
+  }
+  return '<div class="tcg-fx-head">'
+    + '<b>' + el.icon + ' ' + escapeHtml(el.name) + '</b>'
+    + '<span class="tcg-fx-state ' + (complete ? 'on' : '') + '">' + (complete ? '● Animated in-game' : done.length + ' / ' + TCG_FX_FRAMES + ' frames — falls back to a plain orb') + '</span>'
+    + '<button type="button" class="btn btn-primary ga-mini" onclick="tcgGenFxElement(\'' + element + '\')">✨ Generate all 5 frames</button>'
+    + '</div>'
+    + '<div class="ga-cards">' + slots + '</div>';
+}
+function tcgFxAdminHtml() {
+  const miss = tcgFxMissing();
+  let html = '<h3 class="ga-cat">🎇 Element projectile animations — Ember Siege</h3>'
+    + '<div class="tcg-section-note">Every monster fires its own element in <b>Ember Siege</b>. Give an element <b>all five frames</b> and its shots play them as they fly: frame 1 is the energy gathering into a small ball, each frame after that is bigger, frame 5 is fully charged. Frames are drawn <b>in order, each one from the one before</b>, so all five stay the same ball. Until a set is complete that element falls back to a plain coloured orb.</div>'
+    + '<div class="tcg-gen-actions" style="margin-bottom:20px;">'
+    +   '<button type="button" class="btn btn-primary" id="tcgFxAllBtn" onclick="tcgGenAllFx()"' + (miss ? '' : ' disabled') + '>✨ Generate every element animation'
+    +     (miss ? ' · ' + miss + ' frame' + (miss === 1 ? '' : 's') + ' missing' : ' · all done 🎉') + '</button>'
+    + '</div>';
+  Object.keys(TCG_ELEMENTS).forEach(el => {
+    html += '<div class="ga-objrow tcg-fx-row" id="tcgfxrow-' + el + '">' + tcgFxRowInnerHtml(el) + '</div>';
+  });
+  return html;
+}
+async function tcgGenFxElement(element) {
+  if (!_isAdmin()) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let it finish first', 'error'); return; }
+  _tcgGenBusy = true;
+  let ref = null, made = 0;
+  try {
+    for (let n = 1; n <= TCG_FX_FRAMES; n++) {
+      _tcgSlotStatus(tcgFxSlotId(element, n), '⏳ Drawing…');
+      const url = await tcgGenArtImage(tcgFxPrompt(element, n), ref, true);
+      await _tcgArtStore(tcgFxSlotId(element, n), url);
+      ref = url;                        // the next frame grows out of this one
+      made++;
+      _tcgFxRowRefresh(element);
+    }
+    showToast('🎇 ' + (TCG_ELEMENTS[element] || {}).name + ' animation drawn — ' + made + ' frames', 'success');
+  } catch (e) {
+    console.error('fx generation failed', e);
+    showToast('Stopped after ' + made + ' frame' + (made === 1 ? '' : 's') + ': ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    _tcgGenBusy = false;
+    _tcgFxRowRefresh(element);
+    _tcgGenRefreshFxCount();
+  }
+}
+function _tcgGenRefreshFxCount() {
+  const btn = document.getElementById('tcgFxAllBtn');
+  if (!btn) return;
+  const miss = tcgFxMissing();
+  btn.disabled = !miss;
+  btn.textContent = '✨ Generate every element animation' + (miss ? ' · ' + miss + ' frame' + (miss === 1 ? '' : 's') + ' missing' : ' · all done 🎉');
+}
+async function tcgGenAllFx() {
+  if (!_isAdmin()) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let it finish or press Stop', 'error'); return; }
+  const els = Object.keys(TCG_ELEMENTS).filter(el => {
+    for (let i = 1; i <= TCG_FX_FRAMES; i++) if (!(_tcgArt && _tcgArt[tcgFxSlotId(el, i)])) return true;
+    return false;
+  });
+  if (!els.length) { showToast('Every element already has all five frames 🎉', 'success'); return; }
+  const total = els.length * TCG_FX_FRAMES;
+  if (!confirm('Draw ' + total + ' animation frames for ' + els.length + ' element' + (els.length === 1 ? '' : 's') + ' with ' + _tcgArtEngineLabel() + '?\n\n'
+    + 'Each element is drawn frame 1 → 5, every frame based on the one before it. Any element with a partial set is redrawn from frame 1 so the five match.\n\n'
+    + 'Frames are saved as they land, and you can press Stop at any point.')) return;
+  _tcgGenBusy = true; _tcgGenStop = false;
+  _tcgGenSetRunning(true);
+  const started = Date.now();
+  let done = 0, failed = 0;
+  for (const el of els) {
+    if (_tcgGenStop) break;
+    let ref = null;
+    for (let n = 1; n <= TCG_FX_FRAMES; n++) {
+      if (_tcgGenStop) break;
+      _tcgGenProgress(done + failed, total, '<b>' + escapeHtml((TCG_ELEMENTS[el] || {}).name || el) + '</b> — drawing frame ' + n + ' of ' + TCG_FX_FRAMES + '…'
+        + '<br><span class="tcg-gen-sub">' + (done + failed) + ' of ' + total + ' frames' + (failed ? ' · ' + failed + ' failed' : '') + '</span>');
+      try {
+        const url = await tcgGenArtImage(tcgFxPrompt(el, n), ref, true);
+        await _tcgArtStore(tcgFxSlotId(el, n), url);
+        ref = url;
+        done++;
+      } catch (e) {
+        failed++;
+        console.error('fx frame failed', el, n, e);
+        break;                     // no frame N+1 without frame N — move to the next element
+      }
+      await _tcgSleep(400);
+    }
+    _tcgFxRowRefresh(el);
+  }
+  const stopped = _tcgGenStop;
+  _tcgGenBusy = false; _tcgGenStop = false;
+  _tcgGenSetRunning(false);
+  _tcgGenRefreshFxCount();
+  const mins = Math.round((Date.now() - started) / 60000);
+  _tcgGenProgress(total, total, '<b>' + (stopped ? 'Stopped' : 'Finished') + '</b> — ' + done + ' frame' + (done === 1 ? '' : 's') + ' drawn'
+    + (failed ? ' · <span class="tcg-gen-fail">' + failed + ' element' + (failed === 1 ? '' : 's') + ' failed</span>' : '')
+    + (mins ? ' · took about ' + mins + ' min' : ''));
+  showToast((stopped ? 'Stopped — ' : 'Done — ') + done + ' frames drawn' + (failed ? ', ' + failed + ' failed' : ''), failed ? 'error' : 'success');
+}
+
 function tcgArtAdminHtml() {
   let html = '<div class="tcg-art-admin">'
     + '<div class="tcg-section-note">Every monster carries <b>two graphics</b>: the <b>🃏 trading-card art</b> shown on the card face, and the <b>⚔️ battle avatar</b> that fights on the arena stage. Paste a PNG into either slot, upload one, or let the AI draw them — until both are set, one image stands in for the other. Square images look best.</div>'
-    + tcgArtGenPanelHtml();
+    + tcgArtGenPanelHtml()
+    + tcgFxAdminHtml();
   [1, 2, 3, 4, 5, 6, 7].forEach(stars => {
     const tier = TCG_CARDS.filter(c => c.stars === stars);
     html += '<h3 class="ga-cat">' + '★'.repeat(stars) + ' ' + stars + '-star monsters (' + tier.length + ')</h3>';
@@ -24756,6 +24918,26 @@ function tcgArtAdminHtml() {
 async function tcgAiGenSlot(slotId) {
   if (!_isAdmin()) return;
   if (_tcgGenBusy) { showToast('Already drawing — let that one finish first', 'error'); return; }
+  // Element animation frame: frame N is drawn from frame N-1, which is drawn
+  // first if it isn't there yet.
+  if (slotId.indexOf('fx:') === 0) {
+    const bits = slotId.split(':'), element = bits[1], n = +bits[2];
+    _tcgGenBusy = true;
+    _tcgSlotStatus(slotId, '⏳ Drawing…');
+    try {
+      await _tcgGenFxFrame(element, n);
+      showToast('🎇 ' + ((TCG_ELEMENTS[element] || {}).name || element) + ' frame ' + n + ' drawn', 'success');
+    } catch (e) {
+      console.error('fx frame generation failed', e);
+      _tcgSlotStatus(slotId, '⚠️ Failed');
+      showToast('Could not draw it: ' + (e && e.message ? e.message : e), 'error');
+    } finally {
+      _tcgGenBusy = false;
+      _tcgFxRowRefresh(element);
+      _tcgGenRefreshFxCount();
+    }
+    return;
+  }
   const isAv = slotId.endsWith(':av');
   const card = TCG_BY_ID[isAv ? slotId.slice(0, -3) : slotId];
   if (!card) return;
@@ -25079,6 +25261,7 @@ function tcgPreviewCard(id) {
     + '<div class="tcg-zoom">' + tcgCardHtml(c, {
         owned: owned, count: s ? (s.cards[c.id] | 0) : 0, inTeam: !!(s && s.team.includes(c.id))
       }) + '</div>'
+    + '<div class="tcg-siege-line">🌋 <b>In Ember Siege:</b> ' + escapeHtml(emsSkillLine(c)) + '</div>'
     + (owned ? tcgTrainPanelHtml(c.id) : '')
     + '<button class="btn btn-primary" type="button" onclick="tcgClosePreview()">Close</button>'
     + '</div>';
@@ -25666,29 +25849,78 @@ const EMS_ROUND_SIZE = 5;           // questions served back-to-back after each 
 const EMS_ROUND_BONUS = 20;         // finishing the whole set pays a little extra
 let emsRun = null;
 
+// How each element's magic looks when it flies. Two gradient stops and a
+// glow: this is the CSS-drawn projectile used until the admin generates the
+// 5-frame animation for that element, and the tint behind the generated one.
+const TCG_ELEM_FX = {
+  flame:   { a: '#ffd08a', b: '#c2270a', glow: 'rgba(255,120,40,.75)',  words: 'molten orange and scarlet fire with white-hot core and drifting embers' },
+  aqua:    { a: '#bfefff', b: '#0b5bd3', glow: 'rgba(70,160,255,.75)',  words: 'clear turquoise and deep ocean blue water with spray and droplets' },
+  spark:   { a: '#fffbc4', b: '#f0a92b', glow: 'rgba(255,220,90,.8)',   words: 'blinding white-yellow lightning with branching electric arcs' },
+  terra:   { a: '#e8c48f', b: '#6b4517', glow: 'rgba(190,140,70,.7)',   words: 'sandstone and earth brown rock shards with dust' },
+  flora:   { a: '#d6ffb0', b: '#1f7a34', glow: 'rgba(110,220,120,.7)',  words: 'fresh leaf green with spinning petals, leaves and pollen motes' },
+  frost:   { a: '#ffffff', b: '#3aa8e0', glow: 'rgba(150,220,255,.8)',  words: 'pale ice-blue and white with sharp frost crystals and snow' },
+  venom:   { a: '#e2b6ff', b: '#3f8f1f', glow: 'rgba(150,220,90,.7)',   words: 'acid green and sickly purple toxin with dripping bubbles' },
+  psychic: { a: '#ffd4f7', b: '#7b1fa2', glow: 'rgba(220,120,240,.75)', words: 'magenta and violet psychic energy with glowing runes' },
+  light:   { a: '#fffbe8', b: '#f0b542', glow: 'rgba(255,220,140,.85)', words: 'radiant white-gold holy light with lens flare and rays' },
+  shadow:  { a: '#b58ae0', b: '#150a20', glow: 'rgba(120,60,180,.75)',  words: 'inky black and deep violet darkness with curling smoke tendrils' },
+  metal:   { a: '#f2f6fb', b: '#5d6f82', glow: 'rgba(200,220,240,.7)',  words: 'polished steel and gunmetal with sparks and metal shards' },
+  cosmic:  { a: '#3d5bd6', b: '#05060f', glow: 'rgba(60,90,220,.8)',    words: 'deep midnight blue fading into pure black, with starlight specks and a violet nebula edge' }
+};
+const TCG_FX_FRAMES = 5;   // frames per element animation
+
 // Mana cost of a card: purely its star tier, so the whole collection is
 // summonable and the legends are the ones you have to work for.
 function emsCost(card) { return 15 + card.stars * 15; }   // 1★ 30 … 7★ 120
 function emsCardCooldown(card) { return 3 + card.stars; } // seconds before that card can be placed again
-function emsRole(card) {
-  const kind = (TCG_SKILLS[card.skillId] || {}).kind || 'strike';
-  if (kind === 'heal' || kind === 'healall') return 'healer';
-  if (kind === 'shield') return 'wall';
-  if (kind === 'blast' || kind === 'stun' || kind === 'poison') return 'splash';
-  return 'striker';
+// ---- Skills, rewritten for the siege --------------------------------
+// Every skill KIND in the dex now means something specific on the lane
+// battlefield, so the card you trained for the Arena plays differently here
+// too. `atk`/`rate`/`range` are multipliers on the card's real stats.
+const EMS_SKILL_FX = {
+  strike:  { mode: 'bolt',    label: '⚔️ Bolt',        atk: 0.95, rate: 1.00, range: 4.6, desc: 'Fires a single bolt at the closest enemy in its lane.' },
+  blast:   { mode: 'splash',  label: '💥 Splash',      atk: 0.70, rate: 1.15, range: 4.2, desc: 'The shot bursts on impact, hitting everything caught in the blast panel.' },
+  pierce:  { mode: 'pierce',  label: '🏹 Piercing',    atk: 0.75, rate: 0.95, range: 6.0, desc: 'The shot flies on through every enemy in the lane instead of stopping at the first.' },
+  drain:   { mode: 'drain',   label: '🩸 Drain',       atk: 0.85, rate: 1.05, range: 4.2, desc: 'Steals life — every hit repairs your Ember Gate a little.' },
+  heal:    { mode: 'heal',    label: '💚 Healer',      atk: 0.30, rate: 0.95, range: 2.5, desc: 'Mends the most hurt defender nearby instead of attacking.' },
+  healall: { mode: 'healall', label: '💚 Field medic', atk: 0.28, rate: 1.25, range: 2.5, desc: 'Mends every nearby defender at once.' },
+  shield:  { mode: 'wall',    label: '🛡️ Wall',        atk: 0.60, rate: 1.10, range: 1.3, desc: 'Huge health. Blocks the lane and strikes what walks into it.' },
+  rage:    { mode: 'rage',    label: '🔥 Rage',        atk: 0.80, rate: 1.05, range: 4.4, desc: 'Fires faster the longer it survives, up to double speed.' },
+  stun:    { mode: 'slow',    label: '❄️ Snare',       atk: 0.75, rate: 0.95, range: 4.6, desc: 'Its hits snare the target, slowing it to a crawl for a moment.' },
+  poison:  { mode: 'poison',  label: '☠️ Poison',      atk: 0.68, rate: 0.95, range: 4.6, desc: 'Hits leave poison that keeps eating away at the target.' },
+  dawn:    { mode: 'dawn',    label: '🌅 Dawnfire',    atk: 0.85, rate: 1.05, range: 4.8, desc: 'Strikes a foe and mends the nearest hurt defender with the same light.' },
+  curse:   { mode: 'curse',   label: '💀 Curse',       atk: 0.82, rate: 1.00, range: 4.8, desc: 'Marks what it hits — the cursed take 40% more damage from everything.' },
+  chrono:  { mode: 'chrono',  label: '⏳ Time fracture', atk: 0.90, rate: 1.00, range: 6.0, desc: 'Bends time around the lane: pierces every enemy and slows them all.' }
+};
+function emsBehaviour(card) {
+  const kind = (TCG_SKILLS[card && card.skillId] || {}).kind || 'strike';
+  return EMS_SKILL_FX[kind] || EMS_SKILL_FX.strike;
 }
-const EMS_ROLE_LABEL = { healer: '💚 Healer', wall: '🛡️ Wall', splash: '💥 Splash', striker: '⚔️ Striker' };
+// 6★ and 7★ splash monsters throw the big ordnance: their burst covers a
+// 2×2 and a 3×3 block of panels. Everyone else gets a single-panel pop.
+function emsSplashSize(card) {
+  const b = emsBehaviour(card);
+  if (b.mode !== 'splash') return null;
+  if (card.stars >= 7) return { lanes: 3, cols: 3 };
+  if (card.stars === 6) return { lanes: 2, cols: 2 };
+  return { lanes: 1, cols: 2 };   // everyone else: a short burst along their own lane
+}
+function emsSkillLine(card) {
+  const b = emsBehaviour(card);
+  const sp = emsSplashSize(card);
+  return b.label + (sp && sp.lanes > 1 ? ' ' + sp.lanes + '×' + sp.cols : '') + ' — ' + b.desc;
+}
 // A defender's fighting profile, straight off the card's real stats + level.
 function emsDefProfile(card) {
   const st = tcgStats(card, tcgLevel(card.id));
-  const role = emsRole(card);
+  const b = emsBehaviour(card);
+  const tanky = b.mode === 'wall' ? 1.7 : (b.mode === 'heal' || b.mode === 'healall') ? 1.1 : 1;
   return {
-    role,
-    hp: Math.round(st.hp * (role === 'wall' ? 1.7 : role === 'healer' ? 1.1 : 1)),
-    atk: Math.round(st.atk * (role === 'splash' ? 0.55 : role === 'healer' ? 0.30 : 0.80)),
+    b: b, mode: b.mode, splash: emsSplashSize(card),
+    hp: Math.round(st.hp * tanky),
+    atk: Math.round(st.atk * b.atk),
     heal: Math.round(st.heal * 1.4),
-    rate: Math.max(0.4, 1.5 - st.spd / 200),                       // seconds between actions
-    range: role === 'wall' ? 1.3 : role === 'splash' ? 3.4 : 4.6   // in columns
+    rate: Math.max(0.4, (1.5 - st.spd / 200) * b.rate),   // seconds between actions
+    range: b.range                                        // in columns
   };
 }
 function emsArtHtml(card, cls) {
@@ -25724,6 +25956,7 @@ function emsOpen() {
     + '</div>'
     + '<div class="ems-trayline">Tap a monster, then tap a square in a lane to summon it. Mana trickles in slowly on its own — answering questions is far faster, and every cleared wave opens a ' + EMS_ROUND_SIZE + '-question mana round.</div>'
     + '<div class="ems-tray" id="emsTray"></div>'
+    + '<div class="ems-legend">' + Object.keys(EMS_SKILL_FX).map(k => '<span title="' + escapeHtml(EMS_SKILL_FX[k].desc) + '">' + EMS_SKILL_FX[k].label + '</span>').join('') + '</div>'
     + '</div>';
   document.body.appendChild(o);
   emsStart();
@@ -25733,7 +25966,7 @@ function emsStart() {
     t: 0, last: 0, raf: 0, over: false, paused: false, cleared: 0, uiT: 0,
     mana: EMS_START_MANA, gate: EMS_GATE_HP,
     wave: 0, waveEnemiesLeft: 0, spawnQueue: [], spawnTimer: 0, breather: 2.5,
-    defenders: [], enemies: [], nextId: 1,
+    defenders: [], enemies: [], shots: [], nextId: 1,
     sel: null, cooldowns: {},
     gold: 0, answered: 0, correct: 0, streak: 0, bestStreak: 0,
     quiz: null, pool: null
@@ -25867,30 +26100,54 @@ function emsUpdate(dt) {
   // defenders act
   r.defenders.forEach(d => {
     d.cool -= dt;
+    d.alive = (d.alive || 0) + dt;
     if (d.cool > 0) return;
-    if (d.p.role === 'healer') {
-      const hurt = r.defenders.filter(o => o !== d && o.hp < o.maxHp && Math.abs(o.lane - d.lane) <= 1 && Math.abs(o.col - d.col) <= 2.5)
-        .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
-      if (hurt) { hurt.hp = Math.min(hurt.maxHp, hurt.hp + d.p.heal); hurt.flash = 0.25; d.cool = d.p.rate; }
+    const m = d.p.mode;
+    if (m === 'heal' || m === 'healall') {
+      const near = r.defenders.filter(o => o !== d && o.hp < o.maxHp && Math.abs(o.lane - d.lane) <= 1 && Math.abs(o.col - d.col) <= d.p.range);
+      if (!near.length) return;
+      const targets = m === 'healall' ? near : [near.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]];
+      targets.forEach(o => { o.hp = Math.min(o.maxHp, o.hp + d.p.heal); o.mend = 0.35; });
+      d.cool = d.p.rate; d.fire = 0.16;
       return;
     }
     const inLane = r.enemies.filter(e => e.lane === d.lane && e.x > d.col - 0.2 && e.x - d.col <= d.p.range);
     if (!inLane.length) return;
-    inLane.sort((a, b) => a.x - b.x);
-    const targets = d.p.role === 'splash' ? inLane.slice(0, 3) : [inLane[0]];
-    targets.forEach((e, i) => {
-      const mult = tcgElemMult(d.card, e.card);
-      const dmg = Math.max(1, Math.round(d.p.atk * mult * (d.p.role === 'splash' && i > 0 ? 0.6 : 1)));
-      e.hp -= dmg; e.flash = 0.18;
-      if (mult >= 2) e.crit = 0.4;
-    });
-    d.cool = d.p.rate;
+    if (m === 'wall') {   // walls have no reach — they hit whatever walked into them
+      const e = inLane.sort((a, b) => a.x - b.x)[0];
+      emsHit(e, Math.round(d.p.atk), d.card, null);
+      d.cool = d.p.rate; d.fire = 0.16;
+      return;
+    }
+    // Rage builds up: down to half the interval after ~40 seconds alive.
+    const rageK = m === 'rage' ? Math.max(0.5, 1 - d.alive / 80) : 1;
+    emsFire(d);
+    d.cool = d.p.rate * rageK;
     d.fire = 0.16;
   });
+  // projectiles fly, hit, and (for pierce) carry on
+  r.shots.forEach(s => {
+    s.t += dt;
+    s.x += s.vx * dt;
+    if (s.x > EMS_COLS + 1.2) { s.dead = true; return; }
+    const hits = r.enemies.filter(e => e.lane === s.lane && !s.hit[e.id] && Math.abs(e.x - s.x) < 0.5);
+    if (!hits.length) return;
+    if (s.splash) { emsSplashHit(s, hits[0]); s.dead = true; return; }
+    const e = hits.sort((a, b) => a.x - b.x)[0];
+    s.hit[e.id] = 1;
+    emsHit(e, s.dmg, s.card, s.mode);
+    if (s.mode !== 'pierce' && s.mode !== 'chrono') s.dead = true;
+  });
+  r.shots = r.shots.filter(s => { if (!s.dead) return true; emsDropNode(s.node); return false; });
   // enemies walk / fight
   r.enemies.forEach(e => {
     e.flash = Math.max(0, (e.flash || 0) - dt);
     e.crit = Math.max(0, (e.crit || 0) - dt);
+    e.curse = Math.max(0, (e.curse || 0) - dt);
+    // poison keeps burning after the shot that left it
+    if ((e.poisonT || 0) > 0) { e.poisonT -= dt; e.hp -= (e.poison || 0) * dt; if (e.poisonT <= 0) e.poison = 0; }
+    // snare wears off
+    if ((e.slowT || 0) > 0) { e.slowT -= dt; if (e.slowT <= 0) e.slow = 0; }
     const blocker = r.defenders.find(d => d.lane === e.lane && Math.abs(d.col + 0.55 - e.x) < 0.55 && d.hp > 0);
     if (blocker) {
       e.cool -= dt;
@@ -25902,7 +26159,7 @@ function emsUpdate(dt) {
       }
       return;
     }
-    e.x -= e.spd * dt;
+    e.x -= e.spd * (1 - (e.slow || 0)) * dt;
     if (e.x <= 0.35) {
       r.gate = Math.max(0, r.gate - (e.boss ? 25 : 10));
       e.hp = 0;
@@ -25911,9 +26168,53 @@ function emsUpdate(dt) {
     }
   });
   // clear the dead
-  r.defenders = r.defenders.filter(d => { d.flash = Math.max(0, (d.flash || 0) - dt); d.fire = Math.max(0, (d.fire || 0) - dt); if (d.hp > 0) return true; emsPoof(d.el); return false; });
+  r.defenders = r.defenders.filter(d => { d.flash = Math.max(0, (d.flash || 0) - dt); d.fire = Math.max(0, (d.fire || 0) - dt); d.mend = Math.max(0, (d.mend || 0) - dt); if (d.hp > 0) return true; emsPoof(d.el); return false; });
   r.enemies = r.enemies.filter(e => { if (e.hp > 0) return true; emsPoof(e.el); return false; });
   if (r.gate <= 0) emsGameOver();
+}
+// ---- Shots, hits and status effects ----
+const EMS_SHOT_SPEED = 7.5;   // columns per second — fast enough to feel instant
+function emsFire(d) {
+  const r = emsRun; if (!r) return;
+  r.shots.push({
+    id: r.nextId++, lane: d.lane, x: d.col + 0.55, vx: EMS_SHOT_SPEED,
+    card: d.card, el: d.card.element, dmg: d.p.atk, mode: d.p.mode,
+    splash: d.p.splash, hit: {}, t: 0, node: null, dead: false
+  });
+}
+// One enemy takes one hit, with the element triangle and whatever the
+// attacker's skill leaves behind.
+function emsHit(e, dmg, card, mode) {
+  const mult = tcgElemMult(card, e.card);
+  const vuln = (e.curse || 0) > 0 ? 1.4 : 1;
+  e.hp -= Math.max(1, Math.round(dmg * mult * vuln));
+  e.flash = 0.18;
+  if (mult >= 2) e.crit = 0.4;
+  if (mode === 'poison') { e.poison = Math.max(e.poison || 0, Math.round(dmg * 0.25)); e.poisonT = 4; }
+  if (mode === 'slow') { e.slow = 0.35; e.slowT = 2.2; }
+  if (mode === 'chrono') { e.slow = 0.5; e.slowT = 1.6; }
+  if (mode === 'curse') { e.curse = 4; }
+  if (mode === 'drain' && emsRun) { emsRun.gate = Math.min(EMS_GATE_HP, emsRun.gate + 0.5); emsSyncHud(); }
+  if (mode === 'dawn' && emsRun) {
+    const hurt = emsRun.defenders.filter(o => o.hp < o.maxHp).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+    if (hurt) { hurt.hp = Math.min(hurt.maxHp, hurt.hp + Math.round(dmg * 0.5)); hurt.mend = 0.35; }
+  }
+}
+// Splash: everything standing in the panel block around the impact takes it,
+// the centre panel in full and the rest at 70%. 6★ covers 2×2, 7★ covers 3×3.
+function emsSplashHit(s, at) {
+  const r = emsRun; if (!r) return;
+  const sp = s.splash || { lanes: 1, cols: 1 };
+  const laneSpread = (sp.lanes - 1) / 2;
+  const colSpread = sp.cols / 2;
+  const cx = at ? at.x : s.x;
+  r.enemies.forEach(e => {
+    if (Math.abs(e.lane - s.lane) > laneSpread + 0.01) return;
+    if (Math.abs(e.x - cx) > colSpread) return;
+    const centre = e.lane === s.lane && Math.abs(e.x - cx) < 0.6;
+    emsHit(e, Math.round(s.dmg * (centre ? 1 : 0.7)), s.card, 'splash');
+  });
+  emsBurst(s.lane, cx, sp, s.el);
 }
 function emsGameOver() {
   const r = emsRun; if (!r || r.over) return;
@@ -25963,7 +26264,7 @@ function emsRenderTray() {
     const cost = emsCost(c);
     const cd = emsRun.cooldowns[c.id] || 0;
     const poor = emsRun.mana < cost;
-    return '<button type="button" class="ems-card' + (emsRun.sel === c.id ? ' sel' : '') + (poor || cd > 0 ? ' off' : '') + '" data-ems-card="' + c.id + '" onclick="emsSelect(\'' + c.id + '\')" title="' + escapeHtml(c.name) + ' · ' + EMS_ROLE_LABEL[emsRole(c)] + '">'
+    return '<button type="button" class="ems-card' + (emsRun.sel === c.id ? ' sel' : '') + (poor || cd > 0 ? ' off' : '') + '" data-ems-card="' + c.id + '" onclick="emsSelect(\'' + c.id + '\')" title="' + escapeHtml(c.name) + ' · ' + escapeHtml(emsSkillLine(c)) + '">'
       + '<span class="ems-card-art">' + emsArtHtml(c, 'ems-art') + '</span>'
       + '<span class="ems-card-name">' + escapeHtml(tcgShortName(c)) + '</span>'
       + '<span class="ems-card-cost">⚡ ' + cost + '</span>'
@@ -26015,7 +26316,7 @@ function emsRender() {
     seen[u.id] = 1;
     if (!u.el || !u.el.isConnected) {
       u.el = document.createElement('div');
-      u.el.className = 'ems-unit ems-' + kind + (u.boss ? ' boss' : '') + ' r-' + (kind === 'def' ? u.p.role : 'foe');
+      u.el.className = 'ems-unit ems-' + kind + (u.boss ? ' boss' : '') + ' r-' + (kind === 'def' ? u.p.mode : 'foe');
       u.el.innerHTML = emsUnitHtml(u, kind);
       host.appendChild(u.el);
     }
@@ -26025,9 +26326,69 @@ function emsRender() {
     u.el.classList.toggle('hit', (u.flash || 0) > 0);
     u.el.classList.toggle('fire', (u.fire || 0) > 0);
     u.el.classList.toggle('crit', (u.crit || 0) > 0);
+    u.el.classList.toggle('mend', (u.mend || 0) > 0);
+    u.el.classList.toggle('slowed', (u.slowT || 0) > 0);
+    u.el.classList.toggle('cursed', (u.curse || 0) > 0);
+    u.el.classList.toggle('poisoned', (u.poisonT || 0) > 0);
   };
   r.defenders.forEach(d => paint(d, 'def', d.col + 0.5));
   r.enemies.forEach(e => paint(e, 'enemy', e.x));
+  // projectiles — the generated element animation if the admin has made one,
+  // a CSS orb in the element's colours otherwise
+  r.shots.forEach(s => {
+    if (!s.node || !s.node.isConnected) {
+      s.node = document.createElement('div');
+      s.node.className = 'ems-shot' + (s.splash && s.splash.lanes > 1 ? ' big' : '');
+      s.node.innerHTML = emsShotInnerHtml(s);
+      host.appendChild(s.node);
+    }
+    emsPositionUnit(s.node, s.lane, s.x);
+    // Frame 1 is the element gathering into a small ball; by frame 5 it is at
+    // full size — so the shot visibly forms as it leaves the muzzle.
+    const frames = tcgFxFrames(s.el);
+    if (frames) {
+      const idx = Math.min(frames.length - 1, Math.floor(s.t / EMS_FRAME_MS));
+      if (s.frame !== idx) {
+        s.frame = idx;
+        const img = s.node.querySelector('img');
+        if (img) img.src = frames[idx];
+      }
+    }
+  });
+}
+const EMS_FRAME_MS = 0.06;   // seconds per generated animation frame
+// Every generated frame for an element, or null when the set is incomplete.
+function tcgFxFrames(element) {
+  if (!_tcgArt) return null;
+  const out = [];
+  for (let i = 1; i <= TCG_FX_FRAMES; i++) {
+    const u = _tcgArt['fx:' + element + ':' + i];
+    if (!u) return null;
+    out.push(u);
+  }
+  return out;
+}
+function emsShotInnerHtml(s) {
+  const frames = tcgFxFrames(s.el);
+  if (frames) return '<img class="ems-shot-img" src="' + escapeHtml(frames[0]) + '" alt="">';
+  const fx = TCG_ELEM_FX[s.el] || TCG_ELEM_FX.flame;
+  return '<span class="ems-shot-orb" style="background:radial-gradient(circle at 35% 35%, ' + fx.a + ', ' + fx.b + ' 68%);box-shadow:0 0 10px 2px ' + fx.glow + ';"></span>';
+}
+function emsDropNode(node) { if (node && node.isConnected) node.remove(); }
+// The 2×2 / 3×3 blast, drawn over the panels it actually covers.
+function emsBurst(lane, x, sp, element) {
+  const host = document.getElementById('emsUnits');
+  if (!host) return;
+  const fx = TCG_ELEM_FX[element] || TCG_ELEM_FX.flame;
+  const d = document.createElement('div');
+  d.className = 'ems-burst';
+  d.style.width = (sp.cols / EMS_COLS * 100) + '%';
+  d.style.height = (sp.lanes / EMS_LANES * 100) + '%';
+  d.style.left = ((x - sp.cols / 2) / EMS_COLS * 100) + '%';
+  d.style.top = ((lane + 0.5 - sp.lanes / 2) / EMS_LANES * 100) + '%';
+  d.style.background = 'radial-gradient(circle, ' + fx.a + ' 0%, ' + fx.b + ' 55%, transparent 72%)';
+  host.appendChild(d);
+  setTimeout(() => d.remove(), 460);
 }
 // Cooldown veils and "can I afford this?" dimming. Deliberately NOT part of
 // the frame loop — a collection can run to 151 cards, and touching every tray
@@ -26748,6 +27109,8 @@ window.emsOpenQuiz = emsOpenQuiz;
 window.emsCloseQuiz = emsCloseQuiz;
 window.emsAnswer = emsAnswer;
 window.tcgAiGenSlot = tcgAiGenSlot;
+window.tcgGenFxElement = tcgGenFxElement;
+window.tcgGenAllFx = tcgGenAllFx;
 window.tcgGenerateAllArt = tcgGenerateAllArt;
 window.tcgStopArtGen = tcgStopArtGen;
 
