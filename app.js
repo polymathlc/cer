@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.191.0';
+const APP_VERSION = 'v1.191.1';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -26457,6 +26457,7 @@ function emsUpdate(dt) {
   // enemies walk / fight
   r.enemies.forEach(e => {
     e.flash = Math.max(0, (e.flash || 0) - dt);
+    e.fire = Math.max(0, (e.fire || 0) - dt);
     e.crit = Math.max(0, (e.crit || 0) - dt);
     e.curse = Math.max(0, (e.curse || 0) - dt);
     // poison keeps burning after the shot that left it
@@ -26464,12 +26465,14 @@ function emsUpdate(dt) {
     // snare wears off
     if ((e.slowT || 0) > 0) { e.slowT -= dt; if (e.slowT <= 0) e.slow = 0; }
     const blocker = r.defenders.find(d => d.lane === e.lane && Math.abs(d.col + 0.55 - e.x) < 0.55 && d.hp > 0);
+    e.blocked = !!blocker;      // drives the walk cycle in emsRender
     if (blocker) {
       e.cool -= dt;
       if (e.cool <= 0) {
         const mult = tcgElemMult(e.card, blocker.card);
         blocker.hp -= Math.max(1, Math.round(e.atk * mult));
         blocker.flash = 0.2;
+        e.fire = 0.16;          // the lunge, so a blocked enemy is visibly fighting
         e.cool = 1;
       }
       return;
@@ -26620,13 +26623,28 @@ function emsUnitHtml(u, kind) {
     + '<div class="ems-unit-hp"><i></i></div>'
     + (kind === 'enemy' && u.boss ? '<div class="ems-boss-tag">BOSS</div>' : '');
 }
-function emsPositionUnit(el, lane, x) {
-  el.style.left = ((x - 0.5) / EMS_COLS * 100) + '%';
-  el.style.top = (lane / EMS_LANES * 100) + '%';
+// Positions are written as a compositor transform (see the --tx/--ty note in
+// the CSS), which needs the field in pixels. Measured once per frame, BEFORE
+// anything is written, so it never costs a forced re-layout mid-frame.
+let _emsMetrics = { w: 0, h: 0 };
+function emsMeasureField(host) {
+  const el = host || document.getElementById('emsUnits');
+  if (el && el.clientWidth) _emsMetrics = { w: el.clientWidth, h: el.clientHeight };
+  return _emsMetrics;
+}
+function emsPositionUnit(el, lane, x, m) {
+  const mm = m || _emsMetrics;
+  el.style.setProperty('--tx', ((x - 0.5) / EMS_COLS * mm.w).toFixed(2) + 'px');
+  el.style.setProperty('--ty', (lane / EMS_LANES * mm.h).toFixed(2) + 'px');
 }
 function emsRender() {
   const r = emsRun, host = document.getElementById('emsUnits');
   if (!r || !host) return;
+  const m = emsMeasureField(host);
+  // Freeze the walk cycles and grey the field whenever the sim is stopped, so a
+  // paused battle reads as paused instead of looking like a stall.
+  const field = document.getElementById('emsField');
+  if (field) field.classList.toggle('frozen', !!(r.paused || r.qPause) && !r.over);
   const seen = {};
   const paint = (u, kind, x) => {
     seen[u.id] = 1;
@@ -26636,9 +26654,11 @@ function emsRender() {
       u.el.innerHTML = emsUnitHtml(u, kind);
       host.appendChild(u.el);
     }
-    emsPositionUnit(u.el, u.lane, x);
+    emsPositionUnit(u.el, u.lane, x, m);
     const bar = u.el.querySelector('.ems-unit-hp i');
     if (bar) bar.style.width = Math.max(0, Math.round(u.hp / u.maxHp * 100)) + '%';
+    // Enemies play the walk cycle only while they are actually advancing.
+    if (kind === 'enemy') u.el.classList.toggle('walking', !u.blocked);
     u.el.classList.toggle('hit', (u.flash || 0) > 0);
     u.el.classList.toggle('fire', (u.fire || 0) > 0);
     u.el.classList.toggle('crit', (u.crit || 0) > 0);
@@ -26658,7 +26678,7 @@ function emsRender() {
       s.node.innerHTML = emsShotInnerHtml(s);
       host.appendChild(s.node);
     }
-    emsPositionUnit(s.node, s.lane, s.x);
+    emsPositionUnit(s.node, s.lane, s.x, m);
     const img = s.node.querySelector('img');
     if (!img) return;
     // A shot plays its charge-up once as it leaves the muzzle (small ball →
