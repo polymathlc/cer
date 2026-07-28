@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.189.0';
+const APP_VERSION = 'v1.190.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -24647,6 +24647,10 @@ function tcgArtRefresh() {
 // says nothing, so the batch generator can call it 300 times in a row.
 async function _tcgArtStore(id, dataUrl) {
   if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
+  // Battle avatars and projectile frames stand on the battlefield with nothing
+  // behind them, so any background the model left in is knocked out first —
+  // pasted and uploaded pictures included. Card art keeps its scene.
+  if (id.endsWith(':av') || id.indexOf('fx:') === 0) dataUrl = await _stripImageBackground(dataUrl);
   // Battle avatars are small stage sprites; card art gets more resolution.
   // Blast frames are stretched over a 3×3 block of panels, so they get more
   // pixels than the small sprites (avatars, charge/flight/impact frames).
@@ -27463,6 +27467,113 @@ window.tcgGenFxPhase = tcgGenFxPhase;
 window.tcgGenAllFx = tcgGenAllFx;
 window.tcgGenerateAllArt = tcgGenerateAllArt;
 window.tcgStopArtGen = tcgStopArtGen;
+
+// =====================================================================
+// BACKGROUND KNOCK-OUT — for art that has to sit on the battlefield
+// =====================================================================
+// Battle avatars and projectile frames are ASKED for a transparent
+// background (gpt-image-1 accepts background:'transparent' and every prompt
+// spells it out), but asking is not the same as getting: the Gemini fallback
+// and some accounts hand back a solid white/grey plate — or a checkerboard
+// standing in for one — which then shows up as a box behind every monster and
+// every shot. So it is knocked out here, on the device, before upload.
+//
+// Deliberately cautious. It only removes a flat background that is CONNECTED
+// to the border, and if anything looks off — the picture is already
+// transparent, the border is busy because the art runs to the edge, or almost
+// the whole image would go — it returns the original untouched rather than
+// eating the artwork.
+const _BG_TOL = 30;        // colour distance still counted as "the background"
+const _BG_EDGE_TOL = 52;   // looser band used only to feather the cut edge
+async function _stripImageBackground(dataUrl) {
+  try {
+    const img = await _loadImageEl(dataUrl);
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    if (!w || !h) return dataUrl;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const id = ctx.getImageData(0, 0, w, h);
+    const px = id.data, n = w * h;
+
+    // Already transparent? The model did as it was asked — leave it alone.
+    let clear = 0;
+    for (let i = 3; i < px.length; i += 4) if (px[i] < 16) clear++;
+    if (clear > n * 0.06) return dataUrl;
+
+    // What colour is the border? Group near-identical shades: a plate has one,
+    // a transparency checkerboard has two.
+    const groups = [];
+    const sample = (x, y) => {
+      const o = (y * w + x) * 4;
+      if (px[o + 3] < 200) return;
+      const r = px[o], g = px[o + 1], b = px[o + 2];
+      for (const gr of groups) {
+        if (Math.abs(gr.r - r) < 22 && Math.abs(gr.g - g) < 22 && Math.abs(gr.b - b) < 22) { gr.count++; return; }
+      }
+      groups.push({ r: r, g: g, b: b, count: 1 });
+    };
+    for (let x = 0; x < w; x++) { sample(x, 0); sample(x, h - 1); }
+    for (let y = 0; y < h; y++) { sample(0, y); sample(w - 1, y); }
+    const borderPx = 2 * (w + h);
+    groups.sort((a, b) => b.count - a.count);
+    const bg = groups.slice(0, 2).filter(g => g.count > borderPx * 0.12);
+    const covered = bg.reduce((s, g) => s + g.count, 0);
+    // A busy border means the artwork itself reaches the edge — don't risk it.
+    if (!bg.length || covered < borderPx * 0.8) return dataUrl;
+
+    const isBg = (o, tol) => {
+      if (px[o + 3] < 24) return true;
+      const t2 = tol * tol;
+      for (const g of bg) {
+        const dr = px[o] - g.r, dg = px[o + 1] - g.g, db = px[o + 2] - g.b;
+        if (dr * dr + dg * dg + db * db <= t2) return true;
+      }
+      return false;
+    };
+
+    // Flood-fill inwards from the border with an explicit stack — never
+    // recursion, so a big picture cannot blow the call stack. Only background
+    // JOINED to the edge goes, so the black heart of a cosmic blast survives.
+    const seen = new Uint8Array(n);
+    const stack = [];
+    const push = (x, y) => { const i = y * w + x; if (!seen[i]) { seen[i] = 1; stack.push(i); } };
+    for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+    for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+    const cut = new Uint8Array(n);
+    let removed = 0;
+    while (stack.length) {
+      const i = stack.pop();
+      if (!isBg(i * 4, _BG_TOL)) continue;
+      cut[i] = 1; removed++;
+      const x = i % w, y = (i - x) / w;
+      if (x > 0) push(x - 1, y);
+      if (x < w - 1) push(x + 1, y);
+      if (y > 0) push(x, y - 1);
+      if (y < h - 1) push(x, y + 1);
+    }
+    if (removed < n * 0.02) return dataUrl;   // nothing worth doing
+    if (removed > n * 0.97) return dataUrl;   // that cannot be right — keep the art
+
+    for (let i = 0; i < n; i++) if (cut[i]) px[i * 4 + 3] = 0;
+    // Soften the 1px fringe so edges don't look sawn off.
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (cut[i]) continue;
+        const o = i * 4;
+        if (px[o + 3] === 0) continue;
+        const edge = (x > 0 && cut[i - 1]) || (x < w - 1 && cut[i + 1]) || (y > 0 && cut[i - w]) || (y < h - 1 && cut[i + w]);
+        if (edge && isBg(o, _BG_EDGE_TOL)) px[o + 3] = 110;
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv.toDataURL('image/png');
+  } catch (e) {
+    console.warn('background removal skipped', e);
+    return dataUrl;   // never lose the picture over this
+  }
+}
 
 async function _scaleDownDataUrl(dataUrl, maxSide){
   const img = await _loadImageEl(dataUrl);
