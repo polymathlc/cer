@@ -4833,7 +4833,12 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .ems-cell { border-right: 1px dashed rgba(255,255,255,0.05); cursor: pointer; }
 .ems-cell:hover { background: rgba(240,181,66,0.12); }
 .ems-units { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
-.ems-unit { position: absolute; width: 12.5%; height: 20%; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: left 0.08s linear; }
+/* Units are moved with a compositor transform, never with `left`. At the slow
+   march speed a unit advances a third of a pixel per frame: animating `left`
+   re-ran layout AND re-rasterised the drop-shadow filter below on every one of
+   those frames, which is what made the walk stutter. --tx/--ty are written by
+   emsPositionUnit(). */
+.ems-unit { position: absolute; left: 0; top: 0; width: 12.5%; height: 20%; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: translate3d(var(--tx,0px), var(--ty,0px), 0); }
 .ems-unit-art { width: 76%; height: 66%; display: flex; align-items: center; justify-content: center; }
 .ems-art { max-width: 100%; max-height: 100%; object-fit: contain; }
 .ems-art.em { font-size: clamp(18px, 3.4vw, 34px); line-height: 1; }
@@ -4851,10 +4856,36 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .ems-enemy .ems-unit-hp i { background: linear-gradient(90deg,#ff8a70,#d0402a); }
 .ems-boss-tag { font-size: 0.55rem; font-weight: 800; letter-spacing: 0.08em; color: #ff9a8a; }
 .ems-unit.poof { animation: emsPoof 0.3s ease-in forwards; }
-@keyframes emsPoof { to { opacity: 0; transform: scale(0.4) rotate(12deg); } }
+/* Keeps the unit where it died — the keyframes carry the position transform. */
+@keyframes emsPoof {
+  from { opacity: 1; transform: translate3d(var(--tx,0px), var(--ty,0px), 0) scale(1); }
+  to { opacity: 0; transform: translate3d(var(--tx,0px), var(--ty,0px), 0) scale(0.4) rotate(12deg); }
+}
+/* The march is slow on purpose, so it has to LOOK like walking: a step bob and
+   a shoulder roll on the sprite itself, independent of the position transform.
+   Snared enemies visibly trudge; a blocked enemy stops walking and lunges. */
+@keyframes emsWalk {
+  0%   { transform: translateY(0) rotate(0deg); }
+  25%  { transform: translateY(-7%) rotate(-3deg); }
+  50%  { transform: translateY(0) rotate(0deg); }
+  75%  { transform: translateY(-4%) rotate(3deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+@keyframes emsIdle {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3%) scale(1.03); }
+}
+.ems-enemy.walking .ems-art { animation: emsWalk 1.15s ease-in-out infinite; }
+.ems-enemy.walking.boss .ems-art { animation-duration: 1.8s; }
+.ems-enemy.walking.slowed .ems-art { animation-duration: 2.3s; }
+.ems-def .ems-art { animation: emsIdle 2.8s ease-in-out infinite; }
+/* Paused (the between-wave mana round, or the pause button): everything stops
+   dead and the field desaturates, so "paused" is unmistakable. */
+.ems-field.frozen .ems-art, .ems-field.frozen .ems-shot-orb { animation-play-state: paused; }
+.ems-field.frozen { filter: saturate(0.55) brightness(0.72); }
 /* Projectiles: the generated 5-frame element animation when one exists, a
    CSS orb in the element's colours until then. */
-.ems-shot { position: absolute; width: 8%; height: 16%; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
+.ems-shot { position: absolute; left: 0; top: 0; width: 8%; height: 16%; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; transform: translate3d(var(--tx,0px), var(--ty,0px), 0); }
 .ems-shot.big { width: 11%; height: 22%; }
 .ems-shot-img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .ems-shot-orb { display: block; width: 58%; aspect-ratio: 1; border-radius: 50%; animation: emsOrb 0.45s ease-out; }
@@ -4865,7 +4896,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .ems-burst.framed img { width: 100%; height: 100%; object-fit: contain; }
 @keyframes emsBurstAnim { 0% { opacity: 0; transform: scale(0.5); } 30% { opacity: 0.95; transform: scale(1.06); } 100% { opacity: 0; transform: scale(1.15); } }
 /* Impact — the moment a shot lands on one enemy. */
-.ems-impact { position: absolute; width: 12.5%; height: 20%; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 6; }
+.ems-impact { position: absolute; left: 0; top: 0; width: 12.5%; height: 20%; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 6; transform: translate3d(var(--tx,0px), var(--ty,0px), 0); }
 .ems-impact img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .ems-impact-pop { display: block; width: 74%; aspect-ratio: 1; border-radius: 50%; mix-blend-mode: screen; animation: emsImpactPop 0.3s ease-out forwards; }
 @keyframes emsImpactPop { 0% { opacity: 0.2; transform: scale(0.35); } 40% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.25); } }

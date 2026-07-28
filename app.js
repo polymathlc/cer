@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.190.0';
+const APP_VERSION = 'v1.191.1';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -26110,7 +26110,7 @@ function tcgModesHtml(s) {
   return '<div class="tcg-section-note">Three ways to play with the monsters you have collected. Every mode uses your own cards — the more of the dex you own and the higher you train it, the further you get.</div>'
     + '<div class="tcg-modes">'
     + mode('🌋', 'Ember Siege', 'NEW · lane defence',
-        'Wave after wave of corrupted monsters marches on your Ember Gate. Place your cards on the field to summon them as defenders — and answer science questions in the middle of the fight to generate the mana that pays for them. Mana trickles in slowly on its own, but answering is worth far more, and <b>every wave you clear opens a ' + EMS_ROUND_SIZE + '-question mana round</b>. <b>Speed and accuracy both matter:</b> the faster you answer, the more mana you get.',
+        'Wave after wave of corrupted monsters marches on your Ember Gate — <b>slowly</b>: a monster takes about ' + EMS_WALK_SECONDS + ' seconds to cross the whole field, so there is always time to think. Place your cards on the field to summon them as defenders — and answer science questions to generate the mana that pays for them. Mana trickles in slowly on its own, but answering is worth far more, and <b>every wave you clear opens a ' + EMS_ROUND_SIZE + '-question mana round with the battle paused and no timer</b>. Answering in the middle of a fight is still clocked — the faster you answer there, the more mana you get.',
         '🃏 ' + owned + ' monster' + (owned === 1 ? '' : 's') + ' summonable · 🏅 best: wave <b>' + (siege.best | 0) + '</b> · ⚔️ ' + (siege.runs | 0) + ' run' + ((siege.runs | 0) === 1 ? '' : 's'),
         owned
           ? '<button class="btn btn-primary" type="button" onclick="emsOpen()">▶ Play</button>'
@@ -26148,8 +26148,18 @@ const EMS_MANA_WRONG = 5;           // consolation so a stuck student can still 
 // deliberately far below what answering pays (a fast correct answer is worth
 // roughly 30 seconds of trickle), so questions stay the real economy.
 const EMS_PASSIVE_MANA = 1.4;       // mana per second, always on
-const EMS_ROUND_SIZE = 5;           // questions served back-to-back after each wave
+const EMS_ROUND_SIZE = 3;           // questions served back-to-back after each wave
 const EMS_ROUND_BONUS = 20;         // finishing the whole set pays a little extra
+// The march is deliberately a slow crawl: a monster needs three quarters of a
+// minute to cross the whole field, so there is always time to read the board,
+// answer a question and place a defender before anything reaches the gate.
+const EMS_SPAWN_X = EMS_COLS + 0.6;      // just off the right edge
+const EMS_GATE_X = 0.35;                 // the gate line on the left
+const EMS_WALK_SECONDS = 45;             // spawn → gate, for a normal enemy
+const EMS_BOSS_WALK_SECONDS = 70;        // bosses lumber even slower
+function emsWalkSpeed(boss) {
+  return (EMS_SPAWN_X - EMS_GATE_X) / (boss ? EMS_BOSS_WALK_SECONDS : EMS_WALK_SECONDS);
+}
 let emsRun = null;
 
 // How each element's magic looks when it flies. Two gradient stops and a
@@ -26257,7 +26267,7 @@ function emsOpen() {
     +   '<div class="ems-grid" id="emsGrid"></div>'
     +   '<div class="ems-units" id="emsUnits"></div>'
     + '</div>'
-    + '<div class="ems-trayline">Tap a monster, then tap a square in a lane to summon it. Mana trickles in slowly on its own — answering questions is far faster, and every cleared wave opens a ' + EMS_ROUND_SIZE + '-question mana round.</div>'
+    + '<div class="ems-trayline">Tap a monster, then tap a square in a lane to summon it. Mana trickles in slowly on its own — answering questions is far faster, and every cleared wave opens a ' + EMS_ROUND_SIZE + '-question mana round with the battle paused and no timer.</div>'
     + '<div class="ems-tray" id="emsTray"></div>'
     + '<div class="ems-legend">' + Object.keys(EMS_SKILL_FX).map(k => '<span title="' + escapeHtml(EMS_SKILL_FX[k].desc) + '">' + EMS_SKILL_FX[k].label + '</span>').join('') + '</div>'
     + '</div>';
@@ -26266,7 +26276,7 @@ function emsOpen() {
 }
 function emsStart() {
   emsRun = {
-    t: 0, last: 0, raf: 0, over: false, paused: false, cleared: 0, uiT: 0,
+    t: 0, last: 0, raf: 0, over: false, paused: false, qPause: false, cleared: 0, uiT: 0,
     mana: EMS_START_MANA, gate: EMS_GATE_HP,
     wave: 0, waveEnemiesLeft: 0, spawnQueue: [], spawnTimer: 0, breather: 2.5,
     defenders: [], enemies: [], shots: [], nextId: 1,
@@ -26356,10 +26366,10 @@ function emsSpawnEnemy(spec) {
   r.enemies.push({
     id: r.nextId++, card: card, boss: !!spec.boss,
     lane: Math.floor(Math.random() * EMS_LANES),
-    x: EMS_COLS + 0.6,
+    x: EMS_SPAWN_X,
     hp: hp, maxHp: hp,
     atk: Math.round(st.atk * 0.3 * k * (spec.boss ? 1.7 : 1)),
-    spd: spec.boss ? 0.26 : 0.4 + Math.random() * 0.18,
+    spd: emsWalkSpeed(spec.boss),
     cool: 0, el: null
   });
 }
@@ -26370,7 +26380,9 @@ function emsFrame(ts) {
   if (!r || !document.getElementById('emsOverlay')) return;
   const dt = Math.min(0.05, Math.max(0, (ts - r.last) / 1000));   // clamp so a backgrounded tab can't teleport a wave through
   r.last = ts;
-  if (!r.paused && !r.over) { r.t += dt; emsUpdate(dt); }
+  // r.qPause freezes the field for the between-wave mana round: those questions
+  // are a study break, not a race, so nothing moves while one is on screen.
+  if (!r.paused && !r.qPause && !r.over) { r.t += dt; emsUpdate(dt); }
   emsRender();
   r.raf = requestAnimationFrame(emsFrame);
 }
@@ -26445,6 +26457,7 @@ function emsUpdate(dt) {
   // enemies walk / fight
   r.enemies.forEach(e => {
     e.flash = Math.max(0, (e.flash || 0) - dt);
+    e.fire = Math.max(0, (e.fire || 0) - dt);
     e.crit = Math.max(0, (e.crit || 0) - dt);
     e.curse = Math.max(0, (e.curse || 0) - dt);
     // poison keeps burning after the shot that left it
@@ -26452,18 +26465,20 @@ function emsUpdate(dt) {
     // snare wears off
     if ((e.slowT || 0) > 0) { e.slowT -= dt; if (e.slowT <= 0) e.slow = 0; }
     const blocker = r.defenders.find(d => d.lane === e.lane && Math.abs(d.col + 0.55 - e.x) < 0.55 && d.hp > 0);
+    e.blocked = !!blocker;      // drives the walk cycle in emsRender
     if (blocker) {
       e.cool -= dt;
       if (e.cool <= 0) {
         const mult = tcgElemMult(e.card, blocker.card);
         blocker.hp -= Math.max(1, Math.round(e.atk * mult));
         blocker.flash = 0.2;
+        e.fire = 0.16;          // the lunge, so a blocked enemy is visibly fighting
         e.cool = 1;
       }
       return;
     }
     e.x -= e.spd * (1 - (e.slow || 0)) * dt;
-    if (e.x <= 0.35) {
+    if (e.x <= EMS_GATE_X) {
       r.gate = Math.max(0, r.gate - (e.boss ? 25 : 10));
       e.hp = 0;
       emsShake();
@@ -26608,13 +26623,28 @@ function emsUnitHtml(u, kind) {
     + '<div class="ems-unit-hp"><i></i></div>'
     + (kind === 'enemy' && u.boss ? '<div class="ems-boss-tag">BOSS</div>' : '');
 }
-function emsPositionUnit(el, lane, x) {
-  el.style.left = ((x - 0.5) / EMS_COLS * 100) + '%';
-  el.style.top = (lane / EMS_LANES * 100) + '%';
+// Positions are written as a compositor transform (see the --tx/--ty note in
+// the CSS), which needs the field in pixels. Measured once per frame, BEFORE
+// anything is written, so it never costs a forced re-layout mid-frame.
+let _emsMetrics = { w: 0, h: 0 };
+function emsMeasureField(host) {
+  const el = host || document.getElementById('emsUnits');
+  if (el && el.clientWidth) _emsMetrics = { w: el.clientWidth, h: el.clientHeight };
+  return _emsMetrics;
+}
+function emsPositionUnit(el, lane, x, m) {
+  const mm = m || _emsMetrics;
+  el.style.setProperty('--tx', ((x - 0.5) / EMS_COLS * mm.w).toFixed(2) + 'px');
+  el.style.setProperty('--ty', (lane / EMS_LANES * mm.h).toFixed(2) + 'px');
 }
 function emsRender() {
   const r = emsRun, host = document.getElementById('emsUnits');
   if (!r || !host) return;
+  const m = emsMeasureField(host);
+  // Freeze the walk cycles and grey the field whenever the sim is stopped, so a
+  // paused battle reads as paused instead of looking like a stall.
+  const field = document.getElementById('emsField');
+  if (field) field.classList.toggle('frozen', !!(r.paused || r.qPause) && !r.over);
   const seen = {};
   const paint = (u, kind, x) => {
     seen[u.id] = 1;
@@ -26624,9 +26654,11 @@ function emsRender() {
       u.el.innerHTML = emsUnitHtml(u, kind);
       host.appendChild(u.el);
     }
-    emsPositionUnit(u.el, u.lane, x);
+    emsPositionUnit(u.el, u.lane, x, m);
     const bar = u.el.querySelector('.ems-unit-hp i');
     if (bar) bar.style.width = Math.max(0, Math.round(u.hp / u.maxHp * 100)) + '%';
+    // Enemies play the walk cycle only while they are actually advancing.
+    if (kind === 'enemy') u.el.classList.toggle('walking', !u.blocked);
     u.el.classList.toggle('hit', (u.flash || 0) > 0);
     u.el.classList.toggle('fire', (u.fire || 0) > 0);
     u.el.classList.toggle('crit', (u.crit || 0) > 0);
@@ -26646,7 +26678,7 @@ function emsRender() {
       s.node.innerHTML = emsShotInnerHtml(s);
       host.appendChild(s.node);
     }
-    emsPositionUnit(s.node, s.lane, s.x);
+    emsPositionUnit(s.node, s.lane, s.x, m);
     const img = s.node.querySelector('img');
     if (!img) return;
     // A shot plays its charge-up once as it leaves the muzzle (small ball →
@@ -26775,23 +26807,33 @@ function emsPoof(el) {
   setTimeout(() => el.remove(), 320);
 }
 
-// ---- The mana question window (the fight keeps running behind it) ----
+// ---- The mana question window ----
 // count > 0 runs a fixed set of questions back-to-back (the after-wave mana
 // round) and closes itself at the end; no count = open-ended, the student
 // keeps answering until they close it.
+// The two behave differently on purpose:
+//   • wave round  — the battle is PAUSED and there is NO timer, so the student
+//                   can read a long stem properly and still earn full mana.
+//   • open-ended  — the fight keeps running behind it and the speed bar drains,
+//                   so answering mid-battle is the fast, risky way to make mana.
 function emsOpenQuiz(count) {
   const r = emsRun;
   if (!r || r.over) return;
   const setOf = (count | 0) > 0 ? (count | 0) : 0;
   if (r.quiz) {
     // Already open — a wave round just tops up whatever is left to answer.
-    if (setOf) { r.roundTotal = setOf; r.roundDone = 0; emsQuizHeadHud(); emsBanner('🧪 Mana round — ' + setOf + ' questions!', 1800); }
+    if (setOf) {
+      r.roundTotal = setOf; r.roundDone = 0; r.qPause = true;
+      emsQuizHeadHud(); emsHideSpeedBar(true);
+      emsBanner('⏸ Battle paused · ' + setOf + '-question mana round — take your time!', 2400);
+    }
     const box = document.getElementById('emsQuiz'); if (box) box.classList.add('bump');
     return;
   }
   if (!r.pool || !r.pool.length) { showToast('No practice questions available yet', 'error'); return; }
   const o = document.getElementById('emsOverlay'); if (!o) return;
   r.roundTotal = setOf; r.roundDone = 0;
+  r.qPause = !!setOf;   // the wave round freezes the field; the open panel does not
   const box = document.createElement('div');
   box.className = 'ems-quiz'; box.id = 'emsQuiz';
   box.innerHTML = '<div class="ems-quiz-head">'
@@ -26799,11 +26841,17 @@ function emsOpenQuiz(count) {
     + '<span class="ems-quiz-streak" id="emsQuizStreak"></span>'
     + '<button type="button" class="ems-icon-btn" onclick="emsCloseQuiz()" title="Back to the battle">✕</button>'
     + '</div>'
-    + '<div class="ems-quiz-speed"><i id="emsQuizSpeed"></i></div>'
+    + '<div class="ems-quiz-speed" id="emsQuizSpeedWrap"><i id="emsQuizSpeed"></i></div>'
     + '<div class="ems-quiz-body" id="emsQuizBody"></div>';
   o.appendChild(box);
-  if (setOf) emsBanner('🧪 Mana round — ' + setOf + ' questions!', 1800);
+  emsHideSpeedBar(!!setOf);
+  if (setOf) emsBanner('⏸ Battle paused · ' + setOf + '-question mana round — take your time!', 2400);
   emsNextQuestion();
+}
+// No timer on the wave round, so the draining bar is hidden outright there.
+function emsHideSpeedBar(hide) {
+  const wrap = document.getElementById('emsQuizSpeedWrap');
+  if (wrap) wrap.style.display = hide ? 'none' : '';
 }
 function emsQuizHeadHud() {
   const r = emsRun, el = document.getElementById('emsQuizTitle');
@@ -26813,8 +26861,12 @@ function emsQuizHeadHud() {
     : '⚡ Generate mana';
 }
 function emsCloseQuiz() {
-  if (emsRun) { emsRun.quiz = null; emsRun.roundTotal = 0; emsRun.roundDone = 0; }
+  const wasRound = !!(emsRun && emsRun.qPause);
+  if (emsRun) { emsRun.quiz = null; emsRun.roundTotal = 0; emsRun.roundDone = 0; emsRun.qPause = false; }
   const box = document.getElementById('emsQuiz'); if (box) box.remove();
+  // Closing the round un-freezes the battlefield — say so, unless the student
+  // has the game manually paused anyway.
+  if (wasRound && emsRun && !emsRun.paused && !emsRun.over) emsBanner('▶ Battle resumed!', 1400);
 }
 function emsNextQuestion() {
   const r = emsRun; if (!r) return;
@@ -26829,10 +26881,13 @@ function emsNextQuestion() {
     + q.opts.map((o, i) => '<button type="button" class="ems-quiz-opt" data-i="' + i + '" onclick="emsAnswer(' + i + ')">'
         + '<span class="ems-quiz-let">' + (i + 1) + '</span>' + escapeHtml(o) + '</button>').join('')
     + '</div>'
-    + '<div class="ems-quiz-fb" id="emsQuizFb">Answer fast — the speed bar above is your mana bonus.</div>';
+    + '<div class="ems-quiz-fb" id="emsQuizFb">' + (r.roundTotal
+        ? '⏸ The battle is paused and there is no timer — read carefully, every correct answer pays full mana.'
+        : 'Answer fast — the speed bar above is your mana bonus.') + '</div>';
   emsQuizStreakHud();
   emsQuizHeadHud();
-  emsQuizSpeedTick();
+  emsHideSpeedBar(!!r.roundTotal);
+  if (!r.roundTotal) emsQuizSpeedTick();
 }
 // The speed bar drains over EMS_FAST_MS; whatever is left when the answer
 // lands is the bonus mana, so hesitating literally costs you.
@@ -26868,7 +26923,9 @@ function emsAnswer(i) {
     r.correct++;
     r.streak++;
     r.bestStreak = Math.max(r.bestStreak, r.streak);
-    const speed = Math.max(0, 1 - ms / EMS_FAST_MS);
+    // Wave round = no timer, so it always pays the full speed bonus; only the
+    // open-ended mid-battle panel is clocked.
+    const speed = r.roundTotal ? 1 : Math.max(0, 1 - ms / EMS_FAST_MS);
     gain = Math.round((EMS_MANA_BASE + EMS_MANA_SPEED * speed) * emsStreakMult(r.streak));
   } else {
     r.streak = 0;
@@ -26884,7 +26941,7 @@ function emsAnswer(i) {
   btns.forEach(b => { b.disabled = true; const bi = +b.dataset.i; if (bi === q.a) b.classList.add('right'); else if (bi === i) b.classList.add('wrong'); });
   const fb = document.getElementById('emsQuizFb');
   if (fb) fb.innerHTML = correct
-    ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + (ms < 4000 ? ' · ⚡ lightning fast!' : '') + '</span>'
+    ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + (!r.roundTotal && ms < 4000 ? ' · ⚡ lightning fast!' : '') + '</span>'
     : '<span class="no">❌ The answer was <b>(' + (q.a + 1) + ')</b> — only ⚡ +' + gain + ' mana. Streak reset.</span>';
   emsQuizStreakHud();
   // A fixed round ends itself (with a small bonus for finishing all five);
