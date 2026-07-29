@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.197.0';
+const APP_VERSION = 'v1.198.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -8549,6 +8549,9 @@ function _qThumbUrl(q) {
 
 function renderQuestionBank() {
   const container = document.getElementById('questionBankGrid');
+  // A preview left open would be pointing at a tile that is about to be replaced.
+  qbTileHoverLeave();
+  ppHoverHide();
   const filtered = _bankFilteredQuestions();
   ensureQuestionUsage();   // first admin visit: colour the grid without being asked
   _syncBankViewChrome();
@@ -8627,7 +8630,8 @@ function bankTileHtml(q) {
   return `
     <div class="qb-tile${picked ? ' picked' : ''}${u ? ' has-usage' : ''}"${tint} data-qid="${escapeHtml(String(q.id))}"
          onclick="toggleBankPick('${q.id}', event)" ondblclick="editQuestion('${q.id}')"
-         title="Click to add this question to your worksheet selection · double-click to edit">
+         onmouseenter="qbTileHoverEnter(event,'${q.id}')" onmousemove="qbTileHoverMove(event)" onmouseleave="qbTileHoverLeave()"
+         title="Click to add this question to your worksheet selection · double-click to edit · rest on it to read it">
       <div class="qb-tile-thumb">
         ${thumb
           ? `<img src="${escapeHtml(transformImageUrl(thumb))}" alt="" loading="lazy" decoding="async" onerror="this.closest('.qb-tile-thumb').classList.add('no-img')">`
@@ -8647,6 +8651,49 @@ function bankTileHtml(q) {
         </div>
       </div>
     </div>`;
+}
+
+// ── Rest on a tile to read the question ─────────────────────────────────────
+// A thumbnail tells you which question it is; it doesn't tell you what the
+// question ASKS. Resting on one opens the full preview card — the same card
+// Past Papers uses — so a sheet can be chosen without opening anything.
+//
+// The delay is what makes it usable: sweeping the cursor across a screenful of
+// tiles on the way to somewhere else must not strobe previews open. 2.5s is
+// long enough to be deliberate, short enough not to feel broken.
+const BANK_HOVER_MS = 2500;
+let _bankHoverTimer = null;
+let _bankHoverId = null;    // the tile the pending preview belongs to
+let _bankHoverPt = null;    // latest cursor position, so the card opens where the cursor IS
+
+function qbTileHoverEnter(ev, qid) {
+  // Touch devices synthesise a mouseenter on tap — there is no "resting" there,
+  // and a card that opens under the finger just gets in the way.
+  if (window.matchMedia && !window.matchMedia('(hover: hover)').matches) return;
+  clearTimeout(_bankHoverTimer);
+  _bankHoverId = qid;
+  _bankHoverPt = { clientX: ev.clientX, clientY: ev.clientY };
+  _bankHoverTimer = setTimeout(() => {
+    if (_bankHoverId !== qid) return;
+    ppHoverShowBank(_bankHoverPt || { clientX: 0, clientY: 0 }, qid,
+      'Click the tile to add this question to your worksheet selection.');
+    ppHoverExpand();   // the wait was deliberate — open it read-to-the-end, not a teaser
+    // The diagram inside is still loading when we first measure, so the card
+    // grows after it is placed. Anchor it again once it has its real height,
+    // or it hangs off the bottom of the screen.
+    _bankHoverTimer = setTimeout(ppHoverExpand, 420);
+  }, BANK_HOVER_MS);
+}
+
+function qbTileHoverMove(ev) {
+  _bankHoverPt = { clientX: ev.clientX, clientY: ev.clientY };
+  ppHoverMove(ev);   // no-op until the card is up
+}
+
+function qbTileHoverLeave() {
+  clearTimeout(_bankHoverTimer);
+  _bankHoverId = null;
+  ppHoverChipLeave();   // keeps the card open long enough to move into it
 }
 
 // Clicking a tile adds the question to (or takes it out of) the SAME selection
@@ -34191,6 +34238,9 @@ window.renderQuestionBank = renderQuestionBank;
 window.setBankView = setBankView;
 window.setBankSort = setBankSort;
 window.toggleBankPick = toggleBankPick;
+window.qbTileHoverEnter = qbTileHoverEnter;
+window.qbTileHoverMove = qbTileHoverMove;
+window.qbTileHoverLeave = qbTileHoverLeave;
 window.clearBankPicks = clearBankPicks;
 window.pickAllBankVisible = pickAllBankVisible;
 window.bankPicksToWorksheet = bankPicksToWorksheet;
