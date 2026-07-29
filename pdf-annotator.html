@@ -207,48 +207,6 @@
   #kwInput.good { border-color: var(--ok); box-shadow: 0 0 0 3px rgba(67, 160, 71, 0.18); }
   #kwProgress { font-size: 0.8rem; color: var(--ink-soft); margin-top: 10px; font-variant-numeric: tabular-nums; }
   #kwProgress .done { color: var(--ok); font-weight: bold; }
-  #kwProgress .kwEarnable { display: block; margin-top: 6px; font-size: 0.76rem; color: var(--accent-deep); font-weight: bold; }
-
-  /* ---------- Reward system panel ---------- */
-  #rewardCard[hidden] { display: none; }
-  .rwStudent { font-size: 0.9rem; font-weight: bold; line-height: 1.4; }
-  .rwClass { font-size: 0.74rem; color: var(--ink-faint); margin-top: 3px; }
-  .rwBalanceRow {
-    display: flex;
-    align-items: baseline;
-    gap: 7px;
-    margin: 14px 0 4px;
-  }
-  .rwBalance { font-size: 1.6rem; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1; }
-  .rwBalanceLabel { font-size: 0.76rem; color: var(--ink-faint); }
-  .rwEarned {
-    font-size: 0.78rem;
-    color: var(--ok);
-    font-weight: bold;
-    min-height: 1.2em;
-    margin-bottom: 12px;
-  }
-  .rwHint {
-    font-size: 0.76rem;
-    color: var(--ink-faint);
-    line-height: 1.6;
-    padding-top: 12px;
-    border-top: 1px solid var(--line);
-  }
-  .rwLink {
-    display: inline-block;
-    margin-top: 12px;
-    font-size: 0.78rem;
-    font-weight: bold;
-    color: var(--ink);
-    text-decoration: none;
-    background: var(--accent);
-    border: 1px solid var(--accent-strong);
-    border-radius: 999px;
-    padding: 8px 16px;
-    transition: box-shadow 0.2s ease, transform 0.2s ease;
-  }
-  .rwLink:hover { box-shadow: var(--shadow-btn-hover); transform: translateY(-1px); }
   @keyframes shakeX {
     0%, 100% { transform: translateX(0); }
     25% { transform: translateX(-5px); }
@@ -409,6 +367,92 @@
   .docRowMeta { font-size: 0.75rem; color: var(--ink-faint); margin-top: 3px; }
   .docRow .btn { padding: 7px 13px; font-size: 0.78rem; }
   .docsEmpty { text-align: center; color: var(--ink-faint); padding: 30px 0 16px; font-size: 0.9rem; }
+
+  /* ---------- Reward window (admin only) ---------- */
+  /* .btn sets display:inline-flex, which would otherwise beat [hidden]. */
+  .btn[hidden] { display: none; }
+  .modalCard.wide { max-width: 640px; }
+  .rwControls { padding-bottom: 20px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  .rwField { margin-bottom: 16px; }
+  .rwField label { display: block; font-size: 0.78rem; font-weight: bold; color: var(--ink-soft); margin-bottom: 6px; }
+  .rwField select, .rwField input {
+    width: 100%;
+    font-family: var(--font);
+    font-size: 0.92rem;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .rwField select:focus, .rwField input:focus {
+    border-color: var(--accent-strong);
+    box-shadow: 0 0 0 3px rgba(255, 224, 178, 0.5);
+  }
+  /* The reward window keeps its controls fixed and scrolls the class list, so
+     a long register never pushes the amount buttons out of reach. */
+  .modalCard.wide { max-height: 84vh; }
+  .modalCard.wide .modalBody { display: flex; flex-direction: column; overflow: hidden; }
+  .rwControls, .rwSlotNote { flex: 0 0 auto; }
+  #rewardList { flex: 1 1 auto; overflow-y: auto; min-height: 90px; }
+  .rwAmountRow { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .rwAmount {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-family: var(--font);
+    font-size: 0.86rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .rwAmount:hover { box-shadow: var(--shadow-btn); }
+  .rwAmount.active { background: var(--accent); border-color: var(--accent-deep); }
+  /* Beats the width:100% on .rwField input, so it sits inline with the chips. */
+  .rwField input.rwAmountCustom { width: 96px; flex: 0 0 auto; }
+  .rwAmountRow .rwBulkSpacer { flex: 1 1 auto; }
+  .rwSlotNote {
+    font-size: 0.76rem;
+    color: var(--ink-faint);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+  .rwRow {
+    display: flex; align-items: center; gap: 14px;
+    padding: 13px 12px;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s ease;
+  }
+  .rwRow + .rwRow { border-top: 1px solid var(--line); }
+  .rwRow:hover { background: #F8F7F5; }
+  .rwRowInfo { flex: 1; min-width: 0; }
+  .rwRowName { font-weight: bold; font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rwRowMeta { font-size: 0.75rem; color: var(--ink-faint); margin-top: 3px; }
+  .rwRowMarks {
+    font-size: 1.05rem;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+    min-width: 46px;
+    text-align: right;
+  }
+  .rwRowJust { font-size: 0.72rem; color: var(--ok); font-weight: bold; min-width: 34px; }
+  .rwStep {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 50%;
+    width: 34px; height: 34px;
+    font-family: var(--font);
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    color: var(--ink);
+    transition: box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .rwStep:hover:not(:disabled) { box-shadow: var(--shadow-btn); background: #F8F7F5; }
+  .rwStep:disabled { opacity: 0.4; cursor: default; }
+  .rwStep.plus { background: var(--accent); border-color: var(--accent-strong); }
 
   /* ---------- Toast ---------- */
   #toast {
@@ -574,6 +618,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
       <span class="btnLabel">Save</span>
     </button>
+    <button class="btn" id="rewardBtn" title="Award marks to this class" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><polyline points="8.5 12.5 7 22 12 19 17 22 15.5 12.5"/></svg>
+      <span class="btnLabel">Reward</span>
+    </button>
     <button class="btn" id="docsBtn" title="Open a previously saved PDF">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
       <span class="btnLabel">My PDFs</span>
@@ -598,18 +646,6 @@
     </label>
     <input type="text" id="kwInput" placeholder="Type a keyword + Enter" autocomplete="off" disabled>
     <div id="kwProgress"></div>
-  </div>
-  <div class="sideCard" id="rewardCard" hidden>
-    <h4>Marks &amp; rewards</h4>
-    <div class="rwStudent" id="rwStudent">—</div>
-    <div class="rwClass" id="rwClass"></div>
-    <div class="rwBalanceRow" id="rwBalanceRow">
-      <span class="rwBalance" id="rwBalance">0</span>
-      <span class="rwBalanceLabel">marks in the bank</span>
-    </div>
-    <div class="rwEarned" id="rwEarned"></div>
-    <div class="rwHint" id="rwHint"></div>
-    <a class="rwLink" id="rwLink" href="#" target="_blank" rel="noopener">Open the reward system →</a>
   </div>
   <div class="sideCard">
     <div class="sideHint">Timestamps beside each annotation show when it was written —
@@ -651,6 +687,11 @@
         <input type="date" id="saveDateInput">
         <div id="saveDayPreview"></div>
       </div>
+      <div class="fieldRow">
+        <label for="saveSlotInput">Class — picked for you in the Reward window</label>
+        <input type="text" id="saveSlotInput" list="slotOptions" placeholder="e.g. P5 Science — Wednesday 5pm–6.45pm" autocomplete="off">
+        <datalist id="slotOptions"></datalist>
+      </div>
       <div class="modalActions">
         <button class="btn" id="saveCancelBtn">Cancel</button>
         <button class="btn btnPrimary" id="saveConfirmBtn">Save to cloud</button>
@@ -669,6 +710,33 @@
   </div>
 </div>
 
+<div class="modalBack" id="rewardModal">
+  <div class="modalCard wide">
+    <div class="modalHead">
+      <h2>Award marks</h2>
+      <button class="modalClose" id="rewardCloseBtn" title="Close">✕</button>
+    </div>
+    <div class="modalBody">
+      <div class="rwControls">
+        <div class="rwField">
+          <label for="rewardSlotSelect">Class</label>
+          <select id="rewardSlotSelect"></select>
+        </div>
+        <div class="rwField">
+          <label for="rewardReason">Reason — shown in the student's marks history</label>
+          <input type="text" id="rewardReason" placeholder="e.g. Wednesday worksheet" autocomplete="off">
+        </div>
+        <div class="rwField" style="margin-bottom:0">
+          <label>Marks per tap</label>
+          <div class="rwAmountRow" id="rewardAmounts"></div>
+        </div>
+      </div>
+      <div class="rwSlotNote" id="rewardNote"></div>
+      <div id="rewardList"></div>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 <input type="file" id="fileInput" accept="application/pdf,.pdf" hidden>
 
@@ -683,31 +751,26 @@
 'use strict';
 
 /* ================= Constants ================= */
-var APP_VERSION = 'v1.2.0';
+var APP_VERSION = 'v1.3.0';
 var ADMIN_EMAIL = 'chungzhikai@gmail.com';
 var COLLECTION = 'pdfAnnotator';
 var STORAGE_DIR = 'pdf-annotator';
 var SVG_NS = 'http://www.w3.org/2000/svg';
 
 /* ---- Link to the reward system (polymathlc/rewards) ----------------------
-   Both apps live on the same Firebase project, so revising a worksheet here
-   pays straight into the student's marks over there. The contract, mirrored
-   in the rewards app:
+   ADMIN ONLY. The Reward button opens the class this worksheet belongs to and
+   hands out marks on the spot. It writes straight into the reward system's
+   collections on this same Firebase project:
 
-     students/{id}           — marks balance, linked to a Google account by uid
-     awards/{id}             — append-only ledger, source: "annotator"
-     annotatorRuns/{uid__docId} — one doc per student per saved worksheet,
-                               holds the keywords already paid for so marks
-                               are never awarded twice
-     config/links            — { annotatorUrl, rewardsUrl }, edited by the
-                               admin in the rewards app
+     students/{id}  — the marks balance shown in the rewards app
+     awards/{id}    — the append-only ledger, source: "annotator"
+     bosses/{id}    — marks earned damage the active boss, exactly as they do
+                      when a student uploads a test paper in the rewards app
 
-   Keep KEYWORD_MARKS / COMPLETE_BONUS in step with the rewards app's
-   ANNOTATOR_KEYWORD_MARKS / ANNOTATOR_COMPLETE_BONUS. */
-var RUNS_COLLECTION = 'annotatorRuns';
-var KEYWORD_MARKS = 2;      // per keyword found for the first time on a worksheet
-var COMPLETE_BONUS = 5;     // one-off, when every keyword on the worksheet is found
-var REWARDS_URL_FALLBACK = 'https://polymathlc.github.io/rewards/';
+   Students never see any of this: the button, the window and the award calls
+   are all behind isAdmin(). */
+var QUICK_AMOUNTS = [1, 2, 5, 10];   // one-tap award sizes in the Reward window
+var DEFAULT_AMOUNT = 2;
 
 document.getElementById('versionTag').textContent = APP_VERSION;
 
@@ -749,18 +812,13 @@ var annIdCounter = 1;
 var showTimestamps = true;
 var reviseMode = false;
 var revealedKw = {};        // normalised keyword -> true, revealed during revise mode
-var wsMeta = { level: '', date: '' };  // worksheet level + ISO date (name lives in docName)
+var wsMeta = { level: '', date: '', slot: '' };  // worksheet level, ISO date + class (name lives in docName)
 
-/* Reward-system state */
-var myStudent = null;       // linked students/{id} doc, or null if this user has none
-var unsubStudent = null;    // live listener on the balance
-var runPaid = {};           // normalised keyword -> true, already paid on this worksheet
-var runMarks = 0;           // marks earned so far on this worksheet
-var runComplete = false;    // completion bonus already paid for this worksheet
-var runKeywordSet = null;   // keywords in the SAVED worksheet — only these pay out
-var runKeywordTotal = 0;    // distinct keywords in runKeywordSet
-var awardingKw = false;     // guards against double-award while a write is in flight
-var rewardsUrl = REWARDS_URL_FALLBACK;
+/* Reward-window state (admin only) */
+var allStudents = [];       // every students/{id} doc, loaded when the window opens
+var rewardSlot = '';        // the time slot currently being shown
+var rewardAmount = DEFAULT_AMOUNT;
+var awardingFor = {};       // student id -> true while a write is in flight
 
 /* Drawing-in-progress state */
 var drawing = null;         // { ann, svgNode, page }
@@ -855,11 +913,9 @@ async function loadPdf(bytes, name) {
   redoStack = [];
   selectedId = null;
   editingId = null;
-  wsMeta = { level: '', date: '' };
+  wsMeta = { level: '', date: '', slot: '' };
   reviseMode = false;
   revealedKw = {};
-  resetRunState();
-  clearRunKeywords();
   $('reviseToggle').checked = false;
   setDirty(false);
 
@@ -1120,7 +1176,6 @@ function toggleKeyword(annId, wordIndex) {
 
 function updateKwPanel() {
   var words = allKeywordWords();
-  renderRewardCard();
   var countEl = $('kwCount');
   var input = $('kwInput');
   var progress = $('kwProgress');
@@ -1134,12 +1189,9 @@ function updateKwPanel() {
   input.disabled = !reviseMode;
   if (reviseMode) {
     var found = words.filter(function (w) { return revealedKw[w.norm]; }).length;
-    var unpaid = myStudent && currentDocId ? unpaidKeywordCount() : 0;
-    var earnable = unpaid ? unpaid * KEYWORD_MARKS + (runComplete ? 0 : COMPLETE_BONUS) : 0;
     progress.innerHTML = '<span class="' + (found === words.length ? 'done' : '') + '">' +
       found + ' / ' + words.length + ' found' +
-      (found === words.length ? ' — well done! 🎉' : '') + '</span>' +
-      (earnable ? '<span class="kwEarnable">' + earnable + ' marks still up for grabs</span>' : '');
+      (found === words.length ? ' — well done! 🎉' : '') + '</span>';
   } else {
     progress.textContent = '';
   }
@@ -1172,7 +1224,6 @@ function tryKeyword(guess) {
     setTimeout(function () { input.classList.remove('good'); }, 800);
     renderAllOverlays();
     updateKwPanel();
-    awardKeyword(norm);
   } else {
     input.classList.remove('shake');
     void input.offsetWidth; // restart the animation
@@ -1180,173 +1231,316 @@ function tryKeyword(guess) {
   }
 }
 
-/* ================= Reward system link =================
-   Finding a keyword in revise mode pays marks into the student's account in
-   the rewards app. Every award is idempotent: annotatorRuns/{uid__docId}
-   remembers which keywords have already been paid for on this worksheet, and
-   the transaction re-checks that list, so a second browser tab (or a second
-   revise run) can never double-pay. */
+/* ================= Reward window (admin only) =================
+   Hands marks out to one class without leaving the worksheet. Everything here
+   writes into the reward system's collections on this same Firebase project,
+   in exactly the shape the rewards app uses, so awards show up in the
+   student's marks history and can be undone there. */
 function withId(doc) {
   var out = { id: doc.id };
   var data = doc.data() || {};
   for (var k in data) out[k] = data[k];
   return out;
 }
-// A student can attend multiple slots — older records stored a single string.
+// A student can attend several classes — older records stored a single string.
 function studentSlots(s) {
   if (!s) return [];
   if (Array.isArray(s.slots)) return s.slots.filter(Boolean);
   return s.slot ? [s.slot] : [];
 }
-function studentClassText(s) {
-  return [s && s.level, studentSlots(s).join(', ')].filter(Boolean).join(' · ');
+// Slots are free-form ("P5 Science — Wednesday 5pm–6.45pm"), so the day and
+// start time are parsed best-effort, purely to sort the dropdown and to guess
+// which class a worksheet belongs to.
+var DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+function slotDayIndex(slot) {
+  var m = (slot || '').toLowerCase().match(/\b(mon|tue|wed|thu|fri|sat|sun)/);
+  return m ? DAY_KEYS.indexOf(m[1]) : -1;
 }
-function runId() {
-  return currentUser && currentDocId ? currentUser.uid + '__' + currentDocId : null;
-}
-function resetRunState() {
-  runPaid = {};
-  runMarks = 0;
-  runComplete = false;
-}
-// Snapshot of the keywords in the worksheet as it is stored in the cloud.
-// Marks are only ever paid for words in this set, so a student cannot drop in
-// their own text box, mark it full of keywords and farm marks off annotations
-// the teacher never saved.
-function captureRunKeywords() {
-  runKeywordSet = {};
-  allKeywordWords().forEach(function (w) { runKeywordSet[w.norm] = true; });
-  runKeywordTotal = Object.keys(runKeywordSet).length;
-}
-function clearRunKeywords() {
-  runKeywordSet = null;
-  runKeywordTotal = 0;
-}
-// Distinct saved keywords this student has not been paid for yet.
-function unpaidKeywordCount() {
-  if (!runKeywordSet) return 0;
-  return Object.keys(runKeywordSet).filter(function (w) { return !runPaid[w]; }).length;
+function slotStartMinutes(slot) {
+  var text = (slot || '').toLowerCase();
+  // Prefer an explicit clock time, so a level such as "P5" in the slot name is
+  // never mistaken for a 5 o'clock start.
+  var m = text.match(/(\d{1,2})(?:[:.](\d{2}))?(?:\s*[-–]\s*\d{1,2}(?:[:.]\d{2})?)?\s*(am|pm)/) ||
+    text.match(/(\d{1,2})[:.](\d{2})/);
+  if (!m) return Infinity;
+  var h = parseInt(m[1], 10);
+  var mins = parseInt(m[2] || '', 10) || 0;
+  if (m[3] === 'pm' && h < 12) h += 12;
+  if (m[3] === 'am' && h === 12) h = 0;
+  return h > 23 ? Infinity : h * 60 + mins;
 }
 
-// The admin sets both app URLs in the rewards app; fall back to the built-in one.
-async function loadSharedLinks() {
-  try {
-    var snap = await db.collection('config').doc('links').get();
-    if (snap.exists && snap.data().rewardsUrl) rewardsUrl = snap.data().rewardsUrl;
-  } catch (e) { /* keep the fallback */ }
-  renderRewardCard();
+function applyAdminVisibility() {
+  $('rewardBtn').hidden = !isAdmin(currentUser);
+  if (!isAdmin(currentUser)) {
+    $('rewardModal').classList.remove('open');
+    allStudents = [];
+  }
 }
 
-async function loadMyStudent() {
-  if (unsubStudent) { try { unsubStudent(); } catch (e) { /* already gone */ } unsubStudent = null; }
-  myStudent = null;
-  if (!currentUser) { resetRunState(); renderRewardCard(); return; }
-  try {
-    var q = await db.collection('students').where('uid', '==', currentUser.uid).limit(1).get();
-    if (!q.empty) {
-      myStudent = withId(q.docs[0]);
-      unsubStudent = db.collection('students').doc(myStudent.id).onSnapshot(function (doc) {
-        if (!doc.exists) return;
-        myStudent = withId(doc);
-        renderRewardCard();
-      }, function () { /* ignore */ });
-    }
-  } catch (e) { /* no access to the student list — treat as unlinked */ }
-  renderRewardCard();
-  await loadRunForDoc();
+async function loadStudents(force) {
+  if (allStudents.length && !force) return;
+  var snap = await db.collection('students').orderBy('name').get();
+  allStudents = [];
+  snap.forEach(function (d) { allStudents.push(withId(d)); });
 }
 
-// Called whenever the open worksheet changes, so the panel shows what has
-// already been earned on this particular worksheet.
-async function loadRunForDoc() {
-  resetRunState();
-  var id = runId();
-  if (!myStudent || !id) { renderRewardCard(); updateKwPanel(); return; }
-  try {
-    var snap = await db.collection(RUNS_COLLECTION).doc(id).get();
-    if (snap.exists) {
-      var d = snap.data();
-      (d.foundWords || []).forEach(function (w) { runPaid[w] = true; });
-      runMarks = d.marksAwarded || 0;
-      runComplete = !!d.completed;
-    }
-  } catch (e) { /* best effort — the panel just shows zero */ }
-  renderRewardCard();
-  updateKwPanel();
-}
-
-async function awardKeyword(norm) {
-  var id = runId();
-  if (!myStudent || !id || awardingKw || runPaid[norm]) return;
-  // Only keywords that were in the saved worksheet pay out.
-  if (!runKeywordSet || !runKeywordSet[norm]) return;
-  var total = runKeywordTotal;
-  awardingKw = true;
-  try {
-    var result = await db.runTransaction(async function (tx) {
-      var sRef = db.collection('students').doc(myStudent.id);
-      var rRef = db.collection(RUNS_COLLECTION).doc(id);
-      var sSnap = await tx.get(sRef);
-      var rSnap = await tx.get(rRef);
-      if (!sSnap.exists) throw new Error('Student record missing');
-      var s = sSnap.data();
-      var prev = rSnap.exists ? rSnap.data() : null;
-      var paid = (prev && prev.foundWords) || [];
-      // Already paid for — another tab or an earlier revise run got there first.
-      if (paid.indexOf(norm) !== -1) return { delta: 0, completed: !!(prev && prev.completed) };
-      var nextPaid = paid.concat([norm]);
-      var wasComplete = !!(prev && prev.completed);
-      var completedNow = !wasComplete && total > 0 && nextPaid.length >= total;
-      var delta = KEYWORD_MARKS + (completedNow ? COMPLETE_BONUS : 0);
-      var payload = {
-        uid: currentUser.uid,
-        studentId: myStudent.id,
-        studentName: s.name || '',
-        studentClass: studentClassText(s),
-        docId: currentDocId,
-        docName: docName || 'Untitled',
-        level: wsMeta.level || '',
-        wsDate: wsMeta.date || '',
-        wsDay: dayFromISO(wsMeta.date),
-        foundWords: nextPaid,
-        keywordsFound: nextPaid.length,
-        keywordTotal: total,
-        completed: wasComplete || completedNow,
-        marksAwarded: ((prev && prev.marksAwarded) || 0) + delta,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      };
-      if (!prev) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      tx.update(sRef, { marks: (s.marks || 0) + delta });
-      tx.set(rRef, payload, { merge: true });
-      tx.set(db.collection('awards').doc(), {
-        studentId: myStudent.id,
-        studentName: s.name || '',
-        delta: delta,
-        reason: 'Keyword revision — ' + (docName || 'Untitled') +
-          (completedNow ? ' (all ' + total + ' keywords found)' : ''),
-        source: 'annotator',
-        by: currentUser.email || 'system',
-        undone: false,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      return { delta: delta, completed: payload.completed, completedNow: completedNow };
+function allSlots() {
+  var seen = {};
+  allStudents.forEach(function (s) {
+    studentSlots(s).forEach(function (slot) { seen[slot] = (seen[slot] || 0) + 1; });
+  });
+  return Object.keys(seen)
+    .map(function (slot) { return { slot: slot, count: seen[slot] }; })
+    .sort(function (a, b) {
+      var da = slotDayIndex(a.slot), dbb = slotDayIndex(b.slot);
+      if (da !== dbb) return (da === -1 ? 99 : da) - (dbb === -1 ? 99 : dbb);
+      var ta = slotStartMinutes(a.slot), tb = slotStartMinutes(b.slot);
+      if (ta !== tb) return ta - tb;
+      return a.slot.localeCompare(b.slot);
     });
-    runPaid[norm] = true;
-    runComplete = result.completed;
-    if (result.delta > 0) {
-      runMarks += result.delta;
-      toast(result.completedNow
-        ? '+' + result.delta + ' marks — every keyword found! 🎉'
-        : '+' + result.delta + ' marks banked.');
-      damageBosses(result.delta);
+}
+
+// Which class does the open worksheet belong to? The slot saved with the
+// worksheet wins. Otherwise fall back to the one class at this level whose day
+// matches the worksheet's date — and if that is ambiguous, ask.
+function guessSlot() {
+  if (wsMeta.slot) return wsMeta.slot;
+  var day = dayFromISO(wsMeta.date).toLowerCase().slice(0, 3);
+  var dayIdx = day ? DAY_KEYS.indexOf(day) : -1;
+  var level = (wsMeta.level || '').toLowerCase();
+  var candidates = allSlots().filter(function (o) {
+    if (dayIdx !== -1 && slotDayIndex(o.slot) !== dayIdx) return false;
+    if (!level) return true;
+    // Either the slot names the level, or someone at that level attends it.
+    if (o.slot.toLowerCase().indexOf(level) !== -1) return true;
+    return allStudents.some(function (s) {
+      return (s.level || '').toLowerCase() === level && studentSlots(s).indexOf(o.slot) !== -1;
+    });
+  });
+  return candidates.length === 1 ? candidates[0].slot : '';
+}
+
+function studentsInSlot(slot) {
+  if (!slot) return [];
+  return allStudents.filter(function (s) { return studentSlots(s).indexOf(slot) !== -1; });
+}
+
+async function openRewardModal() {
+  if (!isAdmin(currentUser)) return;
+  var list = $('rewardList');
+  $('rewardModal').classList.add('open');
+  list.innerHTML = '<div class="docsEmpty">Loading class…</div>';
+  try {
+    await loadStudents(true);
+  } catch (e) {
+    list.innerHTML = '<div class="docsEmpty">Could not load students: ' + (e.message || e) + '</div>';
+    return;
+  }
+  var slots = allSlots();
+  var sel = $('rewardSlotSelect');
+  sel.innerHTML = '<option value="">— choose a class —</option>' +
+    slots.map(function (o) {
+      return '<option value="' + o.slot.replace(/"/g, '&quot;') + '">' +
+        o.slot + ' (' + o.count + ')</option>';
+    }).join('');
+  rewardSlot = guessSlot();
+  sel.value = rewardSlot;
+  if (sel.value !== rewardSlot) rewardSlot = '';   // saved slot no longer exists
+  $('rewardReason').value = docName && pdfDoc ? docName : '';
+  rewardAmount = DEFAULT_AMOUNT;
+  renderRewardAmounts();
+  renderRewardList();
+}
+
+function renderRewardAmounts() {
+  var row = $('rewardAmounts');
+  row.innerHTML = '';
+  QUICK_AMOUNTS.forEach(function (n) {
+    var b = document.createElement('button');
+    b.className = 'rwAmount' + (n === rewardAmount ? ' active' : '');
+    b.textContent = '+' + n;
+    b.addEventListener('click', function () {
+      rewardAmount = n;
+      $('rewardCustom').value = '';
+      renderRewardAmounts();
+    });
+    row.appendChild(b);
+  });
+  var custom = document.createElement('input');
+  custom.type = 'number';
+  custom.id = 'rewardCustom';
+  custom.className = 'rwAmountCustom';
+  custom.min = '1';
+  custom.placeholder = 'Other';
+  if (QUICK_AMOUNTS.indexOf(rewardAmount) === -1) custom.value = rewardAmount;
+  custom.addEventListener('input', function () {
+    var v = parseInt(custom.value, 10);
+    if (v > 0) {
+      rewardAmount = v;
+      Array.prototype.forEach.call(row.querySelectorAll('.rwAmount'), function (b) {
+        b.classList.remove('active');
+      });
     }
-    renderRewardCard();
-    updateKwPanel();
+  });
+  row.appendChild(custom);
+
+  var spacer = document.createElement('div');
+  spacer.className = 'rwBulkSpacer';
+  row.appendChild(spacer);
+
+  var all = document.createElement('button');
+  all.className = 'btn';
+  all.id = 'rewardAllBtn';
+  all.textContent = 'Award everyone';
+  all.addEventListener('click', awardEveryone);
+  row.appendChild(all);
+}
+
+function renderRewardList() {
+  var list = $('rewardList');
+  var note = $('rewardNote');
+  list.innerHTML = '';
+  if (!rewardSlot) {
+    note.textContent = wsMeta.slot
+      ? 'This worksheet is saved for “' + wsMeta.slot + '”, but no student is in that class any more. Pick a class above.'
+      : 'Pick the class you are teaching. Save a worksheet with its class filled in and it will be chosen for you next time.';
+    list.innerHTML = '<div class="docsEmpty">No class selected.</div>';
+    if ($('rewardAllBtn')) $('rewardAllBtn').disabled = true;
+    return;
+  }
+  var students = studentsInSlot(rewardSlot);
+  note.textContent = students.length
+    ? students.length + ' student' + (students.length === 1 ? '' : 's') + ' in ' + rewardSlot +
+      '. Each tap awards the amount above and is logged in their marks history.'
+    : 'Nobody is in ' + rewardSlot + ' yet.';
+  if ($('rewardAllBtn')) $('rewardAllBtn').disabled = !students.length;
+  if (!students.length) {
+    list.innerHTML = '<div class="docsEmpty">No students in this class.</div>';
+    return;
+  }
+  students.forEach(function (s) {
+    var row = document.createElement('div');
+    row.className = 'rwRow';
+
+    var info = document.createElement('div');
+    info.className = 'rwRowInfo';
+    var nm = document.createElement('div');
+    nm.className = 'rwRowName';
+    nm.textContent = s.name || '(no name)';
+    var meta = document.createElement('div');
+    meta.className = 'rwRowMeta';
+    meta.textContent = [s.level, studentSlots(s).join(', ')].filter(Boolean).join(' · ');
+    info.appendChild(nm);
+    info.appendChild(meta);
+    row.appendChild(info);
+
+    var just = document.createElement('div');
+    just.className = 'rwRowJust';
+    just.textContent = s._just ? '+' + s._just : '';
+    row.appendChild(just);
+
+    var marks = document.createElement('div');
+    marks.className = 'rwRowMarks';
+    marks.textContent = s.marks || 0;
+    row.appendChild(marks);
+
+    var minus = document.createElement('button');
+    minus.className = 'rwStep';
+    minus.textContent = '−';
+    minus.title = 'Take marks back';
+    minus.disabled = !!awardingFor[s.id];
+    minus.addEventListener('click', function () { awardMarks(s, -rewardAmount); });
+    row.appendChild(minus);
+
+    var plus = document.createElement('button');
+    plus.className = 'rwStep plus';
+    plus.textContent = '+';
+    plus.title = 'Award marks';
+    plus.disabled = !!awardingFor[s.id];
+    plus.addEventListener('click', function () { awardMarks(s, rewardAmount); });
+    row.appendChild(plus);
+
+    list.appendChild(row);
+  });
+}
+
+function rewardReason() {
+  var typed = $('rewardReason').value.trim();
+  return typed || (docName ? 'Worksheet: ' + docName : 'Awarded in the PDF annotator');
+}
+
+function awardEntry(student, delta, reason) {
+  return {
+    studentId: student.id,
+    studentName: student.name || '',
+    delta: delta,
+    reason: reason,
+    source: 'annotator',
+    by: (currentUser && currentUser.email) || 'system',
+    undone: false,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+}
+
+async function awardMarks(student, delta) {
+  delta = Math.round(Number(delta) || 0);
+  if (!delta || !isAdmin(currentUser) || awardingFor[student.id]) return;
+  awardingFor[student.id] = true;
+  renderRewardList();
+  var reason = rewardReason();
+  try {
+    var marks = await db.runTransaction(async function (tx) {
+      var sRef = db.collection('students').doc(student.id);
+      var sSnap = await tx.get(sRef);
+      if (!sSnap.exists) throw new Error('Student record missing');
+      var next = (sSnap.data().marks || 0) + delta;
+      tx.update(sRef, { marks: next });
+      tx.set(db.collection('awards').doc(), awardEntry(student, delta, reason));
+      return next;
+    });
+    student.marks = marks;
+    student._just = (student._just || 0) + delta;
+    toast((delta > 0 ? '+' : '') + delta + ' to ' + (student.name || 'student') + ' — now ' + marks + '.');
+    if (delta > 0) damageBosses(delta);
   } catch (e) {
     console.error(e);
     toast('Could not award marks: ' + (e.message || e));
   } finally {
-    awardingKw = false;
+    delete awardingFor[student.id];
+    renderRewardList();
+  }
+}
+
+async function awardEveryone() {
+  if (!isAdmin(currentUser)) return;
+  var delta = Math.round(Number(rewardAmount) || 0);
+  var students = studentsInSlot(rewardSlot);
+  if (!delta || !students.length) return;
+  if (!window.confirm('Give ' + delta + ' mark' + (delta === 1 ? '' : 's') + ' to all ' +
+      students.length + ' student' + (students.length === 1 ? '' : 's') + ' in ' + rewardSlot + '?')) return;
+  var btn = $('rewardAllBtn');
+  if (btn) btn.disabled = true;
+  var reason = rewardReason();
+  try {
+    var batch = db.batch();
+    students.forEach(function (s) {
+      batch.update(db.collection('students').doc(s.id), { marks: (s.marks || 0) + delta });
+      batch.set(db.collection('awards').doc(), awardEntry(s, delta, reason));
+    });
+    await batch.commit();
+    students.forEach(function (s) {
+      s.marks = (s.marks || 0) + delta;
+      s._just = (s._just || 0) + delta;
+    });
+    toast('+' + delta + ' to ' + students.length + ' student' + (students.length === 1 ? '' : 's') + '.');
+    damageBosses(delta * students.length);
+  } catch (e) {
+    console.error(e);
+    toast('Could not award the class: ' + (e.message || e));
+  } finally {
+    if (btn) btn.disabled = false;
+    renderRewardList();
   }
 }
 
@@ -1381,50 +1575,6 @@ async function damageBosses(points) {
     var b = snap.docs[i].data();
     if (b.defeated || (b.hp || 0) <= 0) continue;
     await damageBoss(snap.docs[i].ref, points);
-  }
-}
-
-function renderRewardCard() {
-  var card = $('rewardCard');
-  if (!card) return;
-  var link = $('rwLink');
-  link.href = rewardsUrl;
-  if (!currentUser) { card.hidden = true; return; }
-  card.hidden = false;
-
-  if (!myStudent) {
-    $('rwStudent').textContent = 'Not linked yet';
-    $('rwClass').textContent = currentUser.email || '';
-    $('rwBalanceRow').hidden = true;
-    $('rwEarned').textContent = '';
-    $('rwHint').textContent = isAdmin(currentUser)
-      ? 'Admin accounts have no student record, so revising here earns nothing. Students see their marks in this panel.'
-      : 'Open the reward system and pick your name once — after that, every keyword you find here is worth +' +
-        KEYWORD_MARKS + ' marks.';
-    link.textContent = 'Link my account →';
-    return;
-  }
-
-  $('rwStudent').textContent = myStudent.name || currentUser.email;
-  $('rwClass').textContent = studentClassText(myStudent);
-  $('rwBalanceRow').hidden = false;
-  $('rwBalance').textContent = myStudent.marks || 0;
-  $('rwEarned').textContent = runMarks
-    ? '+' + runMarks + ' from this worksheet' + (runComplete ? ' — fully revised ✓' : '')
-    : '';
-  link.textContent = 'Open the reward system →';
-
-  if (!currentDocId) {
-    $('rwHint').textContent = 'Marks are only awarded on saved worksheets. Open one from “My PDFs”, ' +
-      'then switch on Revise mode.';
-  } else if (!runKeywordTotal) {
-    $('rwHint').textContent = 'This worksheet has no keywords marked on it yet, so there is nothing to earn here.';
-  } else if (runComplete) {
-    $('rwHint').textContent = 'You have found all ' + runKeywordTotal + ' keywords on this worksheet — ' +
-      'everything it was worth is already in the bank.';
-  } else {
-    $('rwHint').textContent = '+' + KEYWORD_MARKS + ' marks per new keyword, plus a +' + COMPLETE_BONUS +
-      ' bonus when you find them all. ' + unpaidKeywordCount() + ' still to find.';
   }
 }
 
@@ -1742,8 +1892,7 @@ function renderAuthArea() {
 auth.onAuthStateChanged(function (user) {
   currentUser = user;
   renderAuthArea();
-  if (user) loadSharedLinks();
-  loadMyStudent();
+  applyAdminVisibility();
 });
 
 /* ================= Cloud save / load ================= */
@@ -1758,14 +1907,27 @@ async function saveDoc() {
     toast('Only ' + ADMIN_EMAIL + ' can save to the cloud.');
     return;
   }
-  // Every save runs through the worksheet-details dialog so the name,
-  // level and date can be adjusted each time.
+  // Every save runs through the worksheet-details dialog so the name, level,
+  // date and class can be adjusted each time.
   $('saveNameInput').value = docName || '';
   $('saveLevelInput').value = wsMeta.level || '';
   $('saveDateInput').value = wsMeta.date || new Date().toISOString().slice(0, 10);
+  $('saveSlotInput').value = wsMeta.slot || '';
   updateSaveDayPreview();
+  fillSlotSuggestions();
   $('saveModal').classList.add('open');
   setTimeout(function () { $('saveNameInput').focus(); }, 50);
+}
+
+// Suggest the classes that actually exist, so the saved slot matches the one
+// the Reward window filters on.
+async function fillSlotSuggestions() {
+  try {
+    await loadStudents();
+  } catch (e) { return; }
+  $('slotOptions').innerHTML = allSlots().map(function (o) {
+    return '<option value="' + o.slot.replace(/"/g, '&quot;') + '"></option>';
+  }).join('');
 }
 
 function updateSaveDayPreview() {
@@ -1779,6 +1941,7 @@ async function performSave() {
   docName = $('saveNameInput').value.trim() || docName || 'Untitled';
   wsMeta.level = $('saveLevelInput').value.trim();
   wsMeta.date = $('saveDateInput').value;
+  wsMeta.slot = $('saveSlotInput').value.trim();
   $('saveModal').classList.remove('open');
   renderSidebar();
   btn.disabled = true;
@@ -1794,6 +1957,7 @@ async function performSave() {
       name: docName,
       level: wsMeta.level,
       wsDate: wsMeta.date,
+      slot: wsMeta.slot,
       wsDay: dayFromISO(wsMeta.date),
       ownerUid: currentUser.uid,
       ownerEmail: currentUser.email,
@@ -1808,8 +1972,6 @@ async function performSave() {
     btn.classList.add('btnSaved');
     if (label) label.textContent = '✓ Saved';
     toast('Saved “' + docName + '” to the cloud.');
-    captureRunKeywords();
-    loadRunForDoc();
   } catch (e) {
     console.error(e);
     toast('Save failed: ' + (e.message || e));
@@ -1887,11 +2049,10 @@ async function openSavedDoc(id, data) {
     currentDocId = id;
     wsMeta.level = data.level || '';
     wsMeta.date = data.wsDate || '';
+    wsMeta.slot = data.slot || '';
     setDirty(false);
-    captureRunKeywords();
     renderAllOverlays();
     renderSidebar();
-    loadRunForDoc();
   } catch (e) {
     console.error(e);
     toast('Could not open: ' + (e.message || e));
@@ -1904,7 +2065,7 @@ async function deleteSavedDoc(id, data, rowEl) {
     await db.collection(COLLECTION).doc(id).delete();
     try { await storage.ref(data.storagePath).delete(); } catch (e) { /* file may be gone */ }
     if (rowEl) rowEl.remove();
-    if (currentDocId === id) { currentDocId = null; resetRunState(); clearRunKeywords(); renderRewardCard(); }
+    if (currentDocId === id) currentDocId = null;
     toast('Deleted.');
   } catch (e) {
     toast('Delete failed: ' + (e.message || e));
@@ -2061,6 +2222,16 @@ $('sideToggleBtn').addEventListener('click', function () {
 $('reviseToggle').addEventListener('change', function (e) { setReviseMode(e.target.checked); });
 $('kwInput').addEventListener('keydown', function (e) {
   if (e.key === 'Enter') { e.preventDefault(); tryKeyword(e.target.value); }
+});
+
+$('rewardBtn').addEventListener('click', openRewardModal);
+$('rewardCloseBtn').addEventListener('click', function () { $('rewardModal').classList.remove('open'); });
+$('rewardModal').addEventListener('click', function (e) {
+  if (e.target === $('rewardModal')) $('rewardModal').classList.remove('open');
+});
+$('rewardSlotSelect').addEventListener('change', function (e) {
+  rewardSlot = e.target.value;
+  renderRewardList();
 });
 
 $('docsBtn').addEventListener('click', openDocsModal);
