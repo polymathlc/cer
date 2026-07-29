@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.195.0';
+const APP_VERSION = 'v1.196.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -8455,6 +8455,40 @@ function usageCardAttrs(q) {
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
 })();
 
+// ── Bank view mode & sort ────────────────────────────────────────────────────
+// "list" is the original stacked-row bank. "grid" lays the same questions out as
+// picture tiles across the full width, so a diagram can be recognised at a
+// glance and clicked straight into a worksheet selection. Both remember what
+// they were left on.
+const BANK_VIEW_KEY = 'cerBankView';
+const BANK_SORT_KEY = 'cerBankSort';
+let bankView = (() => { try { return localStorage.getItem(BANK_VIEW_KEY) === 'grid' ? 'grid' : 'list'; } catch (_) { return 'list'; } })();
+let bankSort = (() => { try { return localStorage.getItem(BANK_SORT_KEY) || 'newest'; } catch (_) { return 'newest'; } })();
+
+function setBankView(mode) {
+  bankView = mode === 'grid' ? 'grid' : 'list';
+  try { localStorage.setItem(BANK_VIEW_KEY, bankView); } catch (_) {}
+  _syncBankViewChrome();
+  renderQuestionBank();
+}
+
+function setBankSort(value) {
+  bankSort = value || 'newest';
+  try { localStorage.setItem(BANK_SORT_KEY, bankSort); } catch (_) {}
+  renderQuestionBank();
+}
+
+// The toggle buttons' pressed state, and the wide page body the tiles need.
+function _syncBankViewChrome() {
+  document.querySelectorAll('#bankViewToggle [data-bank-view]').forEach(b => {
+    b.classList.toggle('active', b.dataset.bankView === bankView);
+  });
+  const body = document.querySelector('#page-bank .page-body');
+  if (body) body.classList.toggle('bank-wide', bankView === 'grid');
+  const sortSel = document.getElementById('bankSortBy');
+  if (sortSel && sortSel.value !== bankSort) sortSel.value = bankSort;
+}
+
 // Exactly what the bank is showing right now — search, every filter, and the AI
 // search ranking. The grid and the "measure difficulty" button read the same
 // function so the button can never act on a different set than the eye sees.
@@ -8485,20 +8519,41 @@ function _bankFilteredQuestions() {
     return true;
   });
 
+  // AI relevance always wins — you asked it a question, its ranking IS the
+  // answer. Otherwise the chosen sort applies; "bank" keeps the old behaviour
+  // (load order, or hardest-first while a difficulty filter is on).
   if (bankAiRanking) {
     filtered = filtered
       .filter(q => bankAiRanking.has(q.id))
       .sort((a, b) => bankAiRanking.get(b.id) - bankAiRanking.get(a.id));
+  } else if (bankSort === 'newest') {
+    filtered.sort((a, b) => _questionRecency(b) - _questionRecency(a));
+  } else if (bankSort === 'oldest') {
+    filtered.sort((a, b) => _questionRecency(a) - _questionRecency(b));
+  } else if (bankSort === 'title') {
+    filtered.sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
   } else if (diffFilter) {
     filtered.sort((a, b) => (qUsagePct(a) ?? 999) - (qUsagePct(b) ?? 999));   // hardest first
   }
   return filtered;
 }
 
+// The picture a question is recognised by: its first image block, else the
+// answer-key picture. Questions with neither get a text tile instead.
+function _qThumbUrl(q) {
+  const b = ((q && q.blocks) || []).find(x => x && x.type === 'image' && x.url);
+  if (b) return b.url;
+  const ak = (q && typeof q.answerKeyImage === 'string') ? q.answerKeyImage.trim() : '';
+  return ak || '';
+}
+
 function renderQuestionBank() {
   const container = document.getElementById('questionBankGrid');
   const filtered = _bankFilteredQuestions();
   ensureQuestionUsage();   // first admin visit: colour the grid without being asked
+  _syncBankViewChrome();
+  _renderBankPickBar(filtered);
+  container.classList.toggle('as-tiles', bankView === 'grid');
 
   if (filtered.length === 0) {
     container.innerHTML = bankAiRanking ? `
@@ -8514,7 +8569,9 @@ function renderQuestionBank() {
       </div>`;
     return;
   }
-  
+
+  if (bankView === 'grid') { container.innerHTML = filtered.map(bankTileHtml).join(''); return; }
+
   container.innerHTML = filtered.map(q => {
     const preview = getQuestionPreview(q);
     const qLevel = getTopicLevel(q.topic || '');
@@ -8552,6 +8609,99 @@ function renderQuestionBank() {
         <div class="qb-card-preview">${escapeHtml(preview)}</div>
       </div>`;
   }).join('');
+}
+
+// ── Grid view: one question as a picture tile ────────────────────────────────
+// A portrait card you can scan a screenful of at a time: the question's diagram
+// (or its opening words when it has none) above the title and its tags. Click
+// picks it for a worksheet; the pencil edits it; double-click still edits, same
+// as the list rows.
+function bankTileHtml(q) {
+  const picked = wsSelectedIds.has(q.id);
+  const thumb = _qThumbUrl(q);
+  const preview = getQuestionPreview(q);
+  const qLevel = getTopicLevel(q.topic || '');
+  const qCategory = normalizeCategoryValue(q.category);
+  const u = qUsage(q);
+  const tint = u ? ` style="--u-ink:${usageColor(u.pct)};"` : '';
+  return `
+    <div class="qb-tile${picked ? ' picked' : ''}${u ? ' has-usage' : ''}"${tint} data-qid="${escapeHtml(String(q.id))}"
+         onclick="toggleBankPick('${q.id}', event)" ondblclick="editQuestion('${q.id}')"
+         title="Click to add this question to your worksheet selection · double-click to edit">
+      <div class="qb-tile-thumb">
+        ${thumb
+          ? `<img src="${escapeHtml(transformImageUrl(thumb))}" alt="" loading="lazy" decoding="async" onerror="this.closest('.qb-tile-thumb').classList.add('no-img')">`
+          : `<div class="qb-tile-text">${escapeHtml(preview)}</div>`}
+        <span class="qb-tile-check" aria-hidden="true">✓</span>
+        <button class="qb-tile-edit" title="Edit this question" onclick="event.stopPropagation();editQuestion('${q.id}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+      </div>
+      <div class="qb-tile-body">
+        <div class="qb-tile-title">${escapeHtml(q.title)}</div>
+        <div class="qb-tile-meta">
+          <span class="qb-tag category">${escapeHtml(qCategory)}</span>
+          <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
+          <span class="qb-tag">${escapeHtml(qLevel)}</span>
+          ${usageBadgeHtml(q)}
+        </div>
+      </div>
+    </div>`;
+}
+
+// Clicking a tile adds the question to (or takes it out of) the SAME selection
+// the worksheet builder uses, so a pick made here is already waiting there.
+function toggleBankPick(id, event) {
+  if (event && event.target && event.target.closest && event.target.closest('.qb-tile-edit')) return;
+  if (wsSelectedIds.has(id)) wsSelectedIds.delete(id); else wsSelectedIds.add(id);
+  const tile = document.querySelector(`.qb-tile[data-qid="${CSS.escape(String(id))}"]`);
+  if (tile) tile.classList.toggle('picked', wsSelectedIds.has(id));
+  _renderBankPickBar();
+  updateWsCount();
+}
+
+function clearBankPicks() {
+  wsSelectedIds.clear();
+  updateWsCount();
+  renderQuestionBank();
+}
+
+// Take everything currently on screen, so a filtered search can be picked whole.
+function pickAllBankVisible() {
+  _bankFilteredQuestions().forEach(q => wsSelectedIds.add(q.id));
+  updateWsCount();
+  renderQuestionBank();
+}
+
+function bankPicksToWorksheet() {
+  if (!wsSelectedIds.size) { showToast('Pick some questions first', 'error'); return; }
+  navigateTo('worksheet');
+}
+
+function bankPicksToPractice() {
+  const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
+  if (!selected.length) { showToast('Pick some questions first', 'error'); return; }
+  launchWorksheetPractice(selected);
+}
+
+// The bar that says what you have picked and what you can do with it. Shown
+// whenever a selection exists, in either view — switching to the list must not
+// make a selection you cannot see feel lost.
+function _renderBankPickBar(filtered) {
+  const bar = document.getElementById('bankPickBar');
+  if (!bar) return;
+  const n = wsSelectedIds.size;
+  if (!n) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  const shown = filtered || _bankFilteredQuestions();
+  const allPicked = shown.length > 0 && shown.every(q => wsSelectedIds.has(q.id));
+  bar.style.display = '';
+  bar.innerHTML = `
+    <span class="bank-pick-count">${n} question${n === 1 ? '' : 's'} picked</span>
+    ${allPicked ? '' : `<button class="btn btn-outline btn-sm" onclick="pickAllBankVisible()">Pick all ${shown.length} shown</button>`}
+    <button class="btn btn-outline btn-sm" onclick="clearBankPicks()">Clear</button>
+    <span style="flex:1;"></span>
+    <button class="btn btn-outline btn-sm" onclick="bankPicksToPractice()">✏️ Practice these</button>
+    <button class="btn btn-primary btn-sm" onclick="bankPicksToWorksheet()">📄 Build worksheet</button>`;
 }
 
 function getQuestionPreview(q) {
@@ -33913,6 +34063,13 @@ window.showConfirm = showConfirm;
 window.closeConfirm = closeConfirm;
 window.renderBlocks = renderBlocks;
 window.renderQuestionBank = renderQuestionBank;
+window.setBankView = setBankView;
+window.setBankSort = setBankSort;
+window.toggleBankPick = toggleBankPick;
+window.clearBankPicks = clearBankPicks;
+window.pickAllBankVisible = pickAllBankVisible;
+window.bankPicksToWorksheet = bankPicksToWorksheet;
+window.bankPicksToPractice = bankPicksToPractice;
 window.renderVettingList = renderVettingList;
 window.runBankAiSearch = runBankAiSearch;
 window.clearBankAiSearch = clearBankAiSearch;
