@@ -207,6 +207,48 @@
   #kwInput.good { border-color: var(--ok); box-shadow: 0 0 0 3px rgba(67, 160, 71, 0.18); }
   #kwProgress { font-size: 0.8rem; color: var(--ink-soft); margin-top: 10px; font-variant-numeric: tabular-nums; }
   #kwProgress .done { color: var(--ok); font-weight: bold; }
+  #kwProgress .kwEarnable { display: block; margin-top: 6px; font-size: 0.76rem; color: var(--accent-deep); font-weight: bold; }
+
+  /* ---------- Reward system panel ---------- */
+  #rewardCard[hidden] { display: none; }
+  .rwStudent { font-size: 0.9rem; font-weight: bold; line-height: 1.4; }
+  .rwClass { font-size: 0.74rem; color: var(--ink-faint); margin-top: 3px; }
+  .rwBalanceRow {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin: 14px 0 4px;
+  }
+  .rwBalance { font-size: 1.6rem; font-weight: bold; font-variant-numeric: tabular-nums; line-height: 1; }
+  .rwBalanceLabel { font-size: 0.76rem; color: var(--ink-faint); }
+  .rwEarned {
+    font-size: 0.78rem;
+    color: var(--ok);
+    font-weight: bold;
+    min-height: 1.2em;
+    margin-bottom: 12px;
+  }
+  .rwHint {
+    font-size: 0.76rem;
+    color: var(--ink-faint);
+    line-height: 1.6;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .rwLink {
+    display: inline-block;
+    margin-top: 12px;
+    font-size: 0.78rem;
+    font-weight: bold;
+    color: var(--ink);
+    text-decoration: none;
+    background: var(--accent);
+    border: 1px solid var(--accent-strong);
+    border-radius: 999px;
+    padding: 8px 16px;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .rwLink:hover { box-shadow: var(--shadow-btn-hover); transform: translateY(-1px); }
   @keyframes shakeX {
     0%, 100% { transform: translateX(0); }
     25% { transform: translateX(-5px); }
@@ -557,6 +599,18 @@
     <input type="text" id="kwInput" placeholder="Type a keyword + Enter" autocomplete="off" disabled>
     <div id="kwProgress"></div>
   </div>
+  <div class="sideCard" id="rewardCard" hidden>
+    <h4>Marks &amp; rewards</h4>
+    <div class="rwStudent" id="rwStudent">—</div>
+    <div class="rwClass" id="rwClass"></div>
+    <div class="rwBalanceRow" id="rwBalanceRow">
+      <span class="rwBalance" id="rwBalance">0</span>
+      <span class="rwBalanceLabel">marks in the bank</span>
+    </div>
+    <div class="rwEarned" id="rwEarned"></div>
+    <div class="rwHint" id="rwHint"></div>
+    <a class="rwLink" id="rwLink" href="#" target="_blank" rel="noopener">Open the reward system →</a>
+  </div>
   <div class="sideCard">
     <div class="sideHint">Timestamps beside each annotation show when it was written —
       match them against the lesson recording to find the explanation for that part.</div>
@@ -629,11 +683,31 @@
 'use strict';
 
 /* ================= Constants ================= */
-var APP_VERSION = 'v1.1.0';
+var APP_VERSION = 'v1.2.0';
 var ADMIN_EMAIL = 'chungzhikai@gmail.com';
 var COLLECTION = 'pdfAnnotator';
 var STORAGE_DIR = 'pdf-annotator';
 var SVG_NS = 'http://www.w3.org/2000/svg';
+
+/* ---- Link to the reward system (polymathlc/rewards) ----------------------
+   Both apps live on the same Firebase project, so revising a worksheet here
+   pays straight into the student's marks over there. The contract, mirrored
+   in the rewards app:
+
+     students/{id}           — marks balance, linked to a Google account by uid
+     awards/{id}             — append-only ledger, source: "annotator"
+     annotatorRuns/{uid__docId} — one doc per student per saved worksheet,
+                               holds the keywords already paid for so marks
+                               are never awarded twice
+     config/links            — { annotatorUrl, rewardsUrl }, edited by the
+                               admin in the rewards app
+
+   Keep KEYWORD_MARKS / COMPLETE_BONUS in step with the rewards app's
+   ANNOTATOR_KEYWORD_MARKS / ANNOTATOR_COMPLETE_BONUS. */
+var RUNS_COLLECTION = 'annotatorRuns';
+var KEYWORD_MARKS = 2;      // per keyword found for the first time on a worksheet
+var COMPLETE_BONUS = 5;     // one-off, when every keyword on the worksheet is found
+var REWARDS_URL_FALLBACK = 'https://polymathlc.github.io/rewards/';
 
 document.getElementById('versionTag').textContent = APP_VERSION;
 
@@ -676,6 +750,17 @@ var showTimestamps = true;
 var reviseMode = false;
 var revealedKw = {};        // normalised keyword -> true, revealed during revise mode
 var wsMeta = { level: '', date: '' };  // worksheet level + ISO date (name lives in docName)
+
+/* Reward-system state */
+var myStudent = null;       // linked students/{id} doc, or null if this user has none
+var unsubStudent = null;    // live listener on the balance
+var runPaid = {};           // normalised keyword -> true, already paid on this worksheet
+var runMarks = 0;           // marks earned so far on this worksheet
+var runComplete = false;    // completion bonus already paid for this worksheet
+var runKeywordSet = null;   // keywords in the SAVED worksheet — only these pay out
+var runKeywordTotal = 0;    // distinct keywords in runKeywordSet
+var awardingKw = false;     // guards against double-award while a write is in flight
+var rewardsUrl = REWARDS_URL_FALLBACK;
 
 /* Drawing-in-progress state */
 var drawing = null;         // { ann, svgNode, page }
@@ -773,6 +858,8 @@ async function loadPdf(bytes, name) {
   wsMeta = { level: '', date: '' };
   reviseMode = false;
   revealedKw = {};
+  resetRunState();
+  clearRunKeywords();
   $('reviseToggle').checked = false;
   setDirty(false);
 
@@ -1033,6 +1120,7 @@ function toggleKeyword(annId, wordIndex) {
 
 function updateKwPanel() {
   var words = allKeywordWords();
+  renderRewardCard();
   var countEl = $('kwCount');
   var input = $('kwInput');
   var progress = $('kwProgress');
@@ -1046,9 +1134,12 @@ function updateKwPanel() {
   input.disabled = !reviseMode;
   if (reviseMode) {
     var found = words.filter(function (w) { return revealedKw[w.norm]; }).length;
+    var unpaid = myStudent && currentDocId ? unpaidKeywordCount() : 0;
+    var earnable = unpaid ? unpaid * KEYWORD_MARKS + (runComplete ? 0 : COMPLETE_BONUS) : 0;
     progress.innerHTML = '<span class="' + (found === words.length ? 'done' : '') + '">' +
       found + ' / ' + words.length + ' found' +
-      (found === words.length ? ' — well done! 🎉' : '') + '</span>';
+      (found === words.length ? ' — well done! 🎉' : '') + '</span>' +
+      (earnable ? '<span class="kwEarnable">' + earnable + ' marks still up for grabs</span>' : '');
   } else {
     progress.textContent = '';
   }
@@ -1081,10 +1172,259 @@ function tryKeyword(guess) {
     setTimeout(function () { input.classList.remove('good'); }, 800);
     renderAllOverlays();
     updateKwPanel();
+    awardKeyword(norm);
   } else {
     input.classList.remove('shake');
     void input.offsetWidth; // restart the animation
     input.classList.add('shake');
+  }
+}
+
+/* ================= Reward system link =================
+   Finding a keyword in revise mode pays marks into the student's account in
+   the rewards app. Every award is idempotent: annotatorRuns/{uid__docId}
+   remembers which keywords have already been paid for on this worksheet, and
+   the transaction re-checks that list, so a second browser tab (or a second
+   revise run) can never double-pay. */
+function withId(doc) {
+  var out = { id: doc.id };
+  var data = doc.data() || {};
+  for (var k in data) out[k] = data[k];
+  return out;
+}
+// A student can attend multiple slots — older records stored a single string.
+function studentSlots(s) {
+  if (!s) return [];
+  if (Array.isArray(s.slots)) return s.slots.filter(Boolean);
+  return s.slot ? [s.slot] : [];
+}
+function studentClassText(s) {
+  return [s && s.level, studentSlots(s).join(', ')].filter(Boolean).join(' · ');
+}
+function runId() {
+  return currentUser && currentDocId ? currentUser.uid + '__' + currentDocId : null;
+}
+function resetRunState() {
+  runPaid = {};
+  runMarks = 0;
+  runComplete = false;
+}
+// Snapshot of the keywords in the worksheet as it is stored in the cloud.
+// Marks are only ever paid for words in this set, so a student cannot drop in
+// their own text box, mark it full of keywords and farm marks off annotations
+// the teacher never saved.
+function captureRunKeywords() {
+  runKeywordSet = {};
+  allKeywordWords().forEach(function (w) { runKeywordSet[w.norm] = true; });
+  runKeywordTotal = Object.keys(runKeywordSet).length;
+}
+function clearRunKeywords() {
+  runKeywordSet = null;
+  runKeywordTotal = 0;
+}
+// Distinct saved keywords this student has not been paid for yet.
+function unpaidKeywordCount() {
+  if (!runKeywordSet) return 0;
+  return Object.keys(runKeywordSet).filter(function (w) { return !runPaid[w]; }).length;
+}
+
+// The admin sets both app URLs in the rewards app; fall back to the built-in one.
+async function loadSharedLinks() {
+  try {
+    var snap = await db.collection('config').doc('links').get();
+    if (snap.exists && snap.data().rewardsUrl) rewardsUrl = snap.data().rewardsUrl;
+  } catch (e) { /* keep the fallback */ }
+  renderRewardCard();
+}
+
+async function loadMyStudent() {
+  if (unsubStudent) { try { unsubStudent(); } catch (e) { /* already gone */ } unsubStudent = null; }
+  myStudent = null;
+  if (!currentUser) { resetRunState(); renderRewardCard(); return; }
+  try {
+    var q = await db.collection('students').where('uid', '==', currentUser.uid).limit(1).get();
+    if (!q.empty) {
+      myStudent = withId(q.docs[0]);
+      unsubStudent = db.collection('students').doc(myStudent.id).onSnapshot(function (doc) {
+        if (!doc.exists) return;
+        myStudent = withId(doc);
+        renderRewardCard();
+      }, function () { /* ignore */ });
+    }
+  } catch (e) { /* no access to the student list — treat as unlinked */ }
+  renderRewardCard();
+  await loadRunForDoc();
+}
+
+// Called whenever the open worksheet changes, so the panel shows what has
+// already been earned on this particular worksheet.
+async function loadRunForDoc() {
+  resetRunState();
+  var id = runId();
+  if (!myStudent || !id) { renderRewardCard(); updateKwPanel(); return; }
+  try {
+    var snap = await db.collection(RUNS_COLLECTION).doc(id).get();
+    if (snap.exists) {
+      var d = snap.data();
+      (d.foundWords || []).forEach(function (w) { runPaid[w] = true; });
+      runMarks = d.marksAwarded || 0;
+      runComplete = !!d.completed;
+    }
+  } catch (e) { /* best effort — the panel just shows zero */ }
+  renderRewardCard();
+  updateKwPanel();
+}
+
+async function awardKeyword(norm) {
+  var id = runId();
+  if (!myStudent || !id || awardingKw || runPaid[norm]) return;
+  // Only keywords that were in the saved worksheet pay out.
+  if (!runKeywordSet || !runKeywordSet[norm]) return;
+  var total = runKeywordTotal;
+  awardingKw = true;
+  try {
+    var result = await db.runTransaction(async function (tx) {
+      var sRef = db.collection('students').doc(myStudent.id);
+      var rRef = db.collection(RUNS_COLLECTION).doc(id);
+      var sSnap = await tx.get(sRef);
+      var rSnap = await tx.get(rRef);
+      if (!sSnap.exists) throw new Error('Student record missing');
+      var s = sSnap.data();
+      var prev = rSnap.exists ? rSnap.data() : null;
+      var paid = (prev && prev.foundWords) || [];
+      // Already paid for — another tab or an earlier revise run got there first.
+      if (paid.indexOf(norm) !== -1) return { delta: 0, completed: !!(prev && prev.completed) };
+      var nextPaid = paid.concat([norm]);
+      var wasComplete = !!(prev && prev.completed);
+      var completedNow = !wasComplete && total > 0 && nextPaid.length >= total;
+      var delta = KEYWORD_MARKS + (completedNow ? COMPLETE_BONUS : 0);
+      var payload = {
+        uid: currentUser.uid,
+        studentId: myStudent.id,
+        studentName: s.name || '',
+        studentClass: studentClassText(s),
+        docId: currentDocId,
+        docName: docName || 'Untitled',
+        level: wsMeta.level || '',
+        wsDate: wsMeta.date || '',
+        wsDay: dayFromISO(wsMeta.date),
+        foundWords: nextPaid,
+        keywordsFound: nextPaid.length,
+        keywordTotal: total,
+        completed: wasComplete || completedNow,
+        marksAwarded: ((prev && prev.marksAwarded) || 0) + delta,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      if (!prev) payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      tx.update(sRef, { marks: (s.marks || 0) + delta });
+      tx.set(rRef, payload, { merge: true });
+      tx.set(db.collection('awards').doc(), {
+        studentId: myStudent.id,
+        studentName: s.name || '',
+        delta: delta,
+        reason: 'Keyword revision — ' + (docName || 'Untitled') +
+          (completedNow ? ' (all ' + total + ' keywords found)' : ''),
+        source: 'annotator',
+        by: currentUser.email || 'system',
+        undone: false,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      return { delta: delta, completed: payload.completed, completedNow: completedNow };
+    });
+    runPaid[norm] = true;
+    runComplete = result.completed;
+    if (result.delta > 0) {
+      runMarks += result.delta;
+      toast(result.completedNow
+        ? '+' + result.delta + ' marks — every keyword found! 🎉'
+        : '+' + result.delta + ' marks banked.');
+      damageBosses(result.delta);
+    }
+    renderRewardCard();
+    updateKwPanel();
+  } catch (e) {
+    console.error(e);
+    toast('Could not award marks: ' + (e.message || e));
+  } finally {
+    awardingKw = false;
+  }
+}
+
+// Marks earned anywhere in the system damage the school-wide boss. Payout on
+// defeat is handled by the admin's session in the rewards app.
+async function damageBoss(ref, points) {
+  try {
+    await db.runTransaction(async function (tx) {
+      var s = await tx.get(ref);
+      if (!s.exists) return;
+      var cur = s.data();
+      if (cur.defeated || (cur.hp || 0) <= 0) return;
+      var newHp = Math.max(0, (cur.hp || 0) - points);
+      var upd = { hp: newHp };
+      if (newHp === 0) {
+        upd.defeated = true;
+        upd.defeatedAt = firebase.firestore.FieldValue.serverTimestamp();
+      }
+      tx.update(ref, upd);
+    });
+  } catch (e) { /* best effort */ }
+}
+
+async function damageBosses(points) {
+  points = Math.floor(Number(points) || 0);
+  if (points <= 0) return;
+  var snap;
+  try {
+    snap = await db.collection('bosses').where('active', '==', true).get();
+  } catch (e) { return; }
+  for (var i = 0; i < snap.docs.length; i++) {
+    var b = snap.docs[i].data();
+    if (b.defeated || (b.hp || 0) <= 0) continue;
+    await damageBoss(snap.docs[i].ref, points);
+  }
+}
+
+function renderRewardCard() {
+  var card = $('rewardCard');
+  if (!card) return;
+  var link = $('rwLink');
+  link.href = rewardsUrl;
+  if (!currentUser) { card.hidden = true; return; }
+  card.hidden = false;
+
+  if (!myStudent) {
+    $('rwStudent').textContent = 'Not linked yet';
+    $('rwClass').textContent = currentUser.email || '';
+    $('rwBalanceRow').hidden = true;
+    $('rwEarned').textContent = '';
+    $('rwHint').textContent = isAdmin(currentUser)
+      ? 'Admin accounts have no student record, so revising here earns nothing. Students see their marks in this panel.'
+      : 'Open the reward system and pick your name once — after that, every keyword you find here is worth +' +
+        KEYWORD_MARKS + ' marks.';
+    link.textContent = 'Link my account →';
+    return;
+  }
+
+  $('rwStudent').textContent = myStudent.name || currentUser.email;
+  $('rwClass').textContent = studentClassText(myStudent);
+  $('rwBalanceRow').hidden = false;
+  $('rwBalance').textContent = myStudent.marks || 0;
+  $('rwEarned').textContent = runMarks
+    ? '+' + runMarks + ' from this worksheet' + (runComplete ? ' — fully revised ✓' : '')
+    : '';
+  link.textContent = 'Open the reward system →';
+
+  if (!currentDocId) {
+    $('rwHint').textContent = 'Marks are only awarded on saved worksheets. Open one from “My PDFs”, ' +
+      'then switch on Revise mode.';
+  } else if (!runKeywordTotal) {
+    $('rwHint').textContent = 'This worksheet has no keywords marked on it yet, so there is nothing to earn here.';
+  } else if (runComplete) {
+    $('rwHint').textContent = 'You have found all ' + runKeywordTotal + ' keywords on this worksheet — ' +
+      'everything it was worth is already in the bank.';
+  } else {
+    $('rwHint').textContent = '+' + KEYWORD_MARKS + ' marks per new keyword, plus a +' + COMPLETE_BONUS +
+      ' bonus when you find them all. ' + unpaidKeywordCount() + ' still to find.';
   }
 }
 
@@ -1402,6 +1742,8 @@ function renderAuthArea() {
 auth.onAuthStateChanged(function (user) {
   currentUser = user;
   renderAuthArea();
+  if (user) loadSharedLinks();
+  loadMyStudent();
 });
 
 /* ================= Cloud save / load ================= */
@@ -1466,6 +1808,8 @@ async function performSave() {
     btn.classList.add('btnSaved');
     if (label) label.textContent = '✓ Saved';
     toast('Saved “' + docName + '” to the cloud.');
+    captureRunKeywords();
+    loadRunForDoc();
   } catch (e) {
     console.error(e);
     toast('Save failed: ' + (e.message || e));
@@ -1544,8 +1888,10 @@ async function openSavedDoc(id, data) {
     wsMeta.level = data.level || '';
     wsMeta.date = data.wsDate || '';
     setDirty(false);
+    captureRunKeywords();
     renderAllOverlays();
     renderSidebar();
+    loadRunForDoc();
   } catch (e) {
     console.error(e);
     toast('Could not open: ' + (e.message || e));
@@ -1558,7 +1904,7 @@ async function deleteSavedDoc(id, data, rowEl) {
     await db.collection(COLLECTION).doc(id).delete();
     try { await storage.ref(data.storagePath).delete(); } catch (e) { /* file may be gone */ }
     if (rowEl) rowEl.remove();
-    if (currentDocId === id) currentDocId = null;
+    if (currentDocId === id) { currentDocId = null; resetRunState(); clearRunKeywords(); renderRewardCard(); }
     toast('Deleted.');
   } catch (e) {
     toast('Delete failed: ' + (e.message || e));
