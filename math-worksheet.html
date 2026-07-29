@@ -2833,6 +2833,9 @@
         <label class="cover-toggle" style="margin-top:6px;">
           <input type="checkbox" id="contentsEnabledToggle" /> Include contents page in exports
         </label>
+        <label class="cover-toggle" style="margin-top:6px;" title="Uncheck to export a clean worksheet with no blank Name / Class / Date lines — on the cover page, or in the page header when there's no cover.">
+          <input type="checkbox" id="coverFieldsToggle" /> Include Name / Date fields in exports
+        </label>
       </div>
       <div class="toolbar-row">
         <button class="btn btn-primary admin-only" id="addQuestionBtn">+ Add Question</button>
@@ -3023,7 +3026,11 @@ function defaultCover() {
     enabled: false,
     header: 'Polymath Learning Centre',
     subheader: 'Worksheet',
-    footer: ''
+    footer: '',
+    // Print the blank Name / Class / Date lines (on the cover when it's on,
+    // in the page header when it's off). Off = a clean worksheet with no
+    // student fields at all.
+    fields: true
   };
 }
 // Older saved worksheets have no cover field. Reads through this helper so
@@ -3031,6 +3038,12 @@ function defaultCover() {
 function getCover() {
   if (!state.cover) state.cover = defaultCover();
   return state.cover;
+}
+// Saved worksheets from before the toggle existed have no `fields` key —
+// treat anything but an explicit false as "show them", so old worksheets
+// keep printing exactly as they did.
+function coverFieldsOn() {
+  return getCover().fields !== false;
 }
 
 /* The contents page: a "Contents" listing of the worksheet's sections /
@@ -6387,7 +6400,7 @@ function buildCoverHtml() {
     <img class="cover-logo" src="https://www.dropbox.com/scl/fi/2wc1ulpjuiaqlxk5qhc07/polymath-logo-sticker-copy.png?rlkey=jhutxqmdbwe0jgoqcwdxzwt55&raw=1" alt="" />
     <h1 class="cover-title">${title}</h1>
     ${sub ? `<div class="cover-subtitle">${escapeHtml(sub)}</div>` : ''}
-    <div class="cover-fields-grid">
+    ${coverFieldsOn() ? `<div class="cover-fields-grid">
       <div class="cover-field">
         <div class="cover-field-label">Name</div>
         <div class="cover-field-line"></div>
@@ -6396,7 +6409,7 @@ function buildCoverHtml() {
         <div class="cover-field-label">Date</div>
         <div class="cover-field-line"></div>
       </div>
-    </div>
+    </div>` : ''}
   </div>
   <div class="cover-footer">${ftr ? escapeHtml(ftr) : ''}</div>
 </section>`;
@@ -6679,11 +6692,11 @@ function buildPrintableHtml() {
   <header class="print-header">
     <h2>${escapeHtml(state.title)}</h2>
     ${state.subtitle ? `<p>${escapeHtml(state.subtitle)}</p>` : ''}
-    <div class="student-row">
+    ${coverFieldsOn() ? `<div class="student-row">
       <span>Name: <span class="student-line"></span></span>
       <span>Class: <span class="student-line short"></span></span>
       <span>Date: <span class="student-line short"></span></span>
-    </div>
+    </div>` : ''}
   </header>`;
   return `<!DOCTYPE html>
 <html lang="en">
@@ -7419,6 +7432,7 @@ function syncCoverInputs() {
   document.getElementById('coverSubheaderInput').value = c.subheader || '';
   document.getElementById('coverFooterInput').value = c.footer || '';
   document.getElementById('contentsEnabledToggle').checked = !!getContents().enabled;
+  document.getElementById('coverFieldsToggle').checked = coverFieldsOn();
   applyCoverEnabledClass();
   ensureCoverPreview();
   ensureContentsPreview();
@@ -7433,6 +7447,11 @@ document.getElementById('coverEnabledToggle').addEventListener('change', (e) => 
 document.getElementById('contentsEnabledToggle').addEventListener('change', (e) => {
   getContents().enabled = e.target.checked;
   ensureContentsPreview();
+  scheduleAutoSave();
+});
+document.getElementById('coverFieldsToggle').addEventListener('change', (e) => {
+  getCover().fields = e.target.checked;
+  ensureCoverPreview();
   scheduleAutoSave();
 });
 document.getElementById('coverHeaderInput').addEventListener('input', (e) => {
@@ -7559,6 +7578,8 @@ function ensureCoverPreview() {
   // Mirror state into the editable fields, but never clobber a field the
   // user is actively typing into.
   ['header', 'title', 'subheader', 'footer'].forEach(refreshCoverPreviewField);
+  const grid = wrap.querySelector('.cover-fields-grid');
+  if (grid) grid.style.display = coverFieldsOn() ? '' : 'none';
 }
 
 // ── In-preview contents page (read-only — edit it in the Design view) ──
@@ -9857,6 +9878,11 @@ html,body{ background:#ececf0; margin:0; padding:0; }
 /* ── Front matter (cover + contents) sheets ── */
 .dv-fm-sheet{ margin-bottom:26px; }
 .dv-fm-sheet.dv-off{ display:none!important; }
+/* "Name / Date fields" toggled off in the design view toolbar. The blocks stay
+   in the DOM so the toggle works without rebuilding the iframe — hiding them
+   here also keeps them out of the design view's own PDF export. */
+body.dv-fields-off .cover-fields-grid,
+body.dv-fields-off .dv-student-row{ display:none!important; }
 .dv-fm-sheet .cover-page, .dv-fm-sheet .contents-page{ min-height:260mm; height:260mm; padding:18mm 16mm; page-break-after:auto; break-after:auto; }
 .dv-fm-sheet .cover-page::before, .dv-fm-sheet .contents-page::before{ top:12mm; left:16mm; right:16mm; }
 .dv-fm-sheet .cover-page::after, .dv-fm-sheet .contents-page::after{ bottom:12mm; left:16mm; right:16mm; }
@@ -10011,18 +10037,20 @@ var DV_ENGINE = `
     else if((e.key||'').toLowerCase()==='b'){ e.preventDefault(); toggleBreak(hoverEid); }
   });
   /* ── Front matter: cover & contents pages ── */
-  var FM = window.__DV_FM || { cover:false, contents:false };
+  var FM = window.__DV_FM || { cover:false, contents:false, fields:true };
   // The cover prints with a blank back side, so it consumes 2 physical pages.
   function fmCount(){ return (FM.cover?2:0)+(FM.contents?1:0); }
   // "First page #" refers to the first QUESTION page; subtract the front
   // matter so its pages don't shift the question numbering.
   function applyPageCounter(){ var v=DV.firstPage||1; document.body.style.counterReset='page '+(v-1-fmCount()); }
-  function postFM(){ try{ parent.postMessage({ type:'dvFrontMatter', cover:!!FM.cover, contents:!!FM.contents }, '*'); }catch(e){} }
+  function postFM(){ try{ parent.postMessage({ type:'dvFrontMatter', cover:!!FM.cover, contents:!!FM.contents, fields:!!FM.fields }, '*'); }catch(e){} }
   function applyFM(notify){
     var cs=document.getElementById('dvCoverSheet'); if(cs) cs.classList.toggle('dv-off', !FM.cover);
     var ts=document.getElementById('dvContentsSheet'); if(ts) ts.classList.toggle('dv-off', !FM.contents);
+    document.body.classList.toggle('dv-fields-off', !FM.fields);
     var cl=document.getElementById('dvCoverLbl'); if(cl) cl.textContent=FM.cover?'✓ Cover page':'+ Cover page';
     var tl=document.getElementById('dvContentsLbl'); if(tl) tl.textContent=FM.contents?'✓ Contents page':'+ Contents page';
+    var fl=document.getElementById('dvFieldsLbl'); if(fl) fl.textContent=FM.fields?'✓ Name / Date fields':'+ Name / Date fields';
     var rb=document.getElementById('dvContentsResetBtn'); if(rb) rb.style.display=FM.contents?'':'none';
     applyPageCounter();
     if(notify) postFM();
@@ -10068,6 +10096,9 @@ var DV_ENGINE = `
     else if(act==='toggle-guides'){ guidesVisible=!guidesVisible; document.body.classList.toggle('guides-hidden', !guidesVisible); var l=document.getElementById('dvGuidesLbl'); if(l) l.textContent=guidesVisible?'Hide page guides':'Show page guides'; if(guidesVisible) scheduleGuides(); }
     else if(act==='toggle-cover'){ FM.cover=!FM.cover; applyFM(true); }
     else if(act==='toggle-contents'){ FM.contents=!FM.contents; applyFM(true); }
+    // Dropping the Name / Date row shortens the header block, so the page
+    // guides have to be recomputed against the new heights.
+    else if(act==='toggle-fields'){ FM.fields=!FM.fields; applyFM(true); scheduleGuides(); }
     else if(act==='reset-contents'){ var en=document.getElementById('dvContentsEntries'); if(en){ en.innerHTML=window.__DV_CONTENTS_AUTO||''; try{ parent.postMessage({ type:'dvContents', html:'' }, '*'); }catch(_){} } }
     else if(act==='print'){ cancelCut(); window.print(); }
   });
@@ -10124,12 +10155,13 @@ function dvBuildDoc() {
   var css = getEmbeddedPreviewCss() + getPrintCss() + getCoverCss() + DV_CHROME_CSS;
   var coverOn = !!getCover().enabled;
   var contentsOn = !!getContents().enabled;
+  var fieldsOn = coverFieldsOn();
   // Embed strings inside the iframe's script tag safely: escape "<" so a
   // closing script tag or comment marker inside JSON-encoded HTML can't
   // break out of the tag.
   var jsStr = function (v) { return JSON.stringify(v).replace(/</g, '\\u003c'); };
   var inject = 'window.__DV=' + jsStr({ scales: L.scales, breaks: L.breaks, gaps: L.gaps, firstPage: L.firstPage }) + ';'
-    + 'window.__DV_FM=' + jsStr({ cover: coverOn, contents: contentsOn }) + ';'
+    + 'window.__DV_FM=' + jsStr({ cover: coverOn, contents: contentsOn, fields: fieldsOn }) + ';'
     + 'window.__DV_CONTENTS_AUTO=' + jsStr(buildContentsListHtml()) + ';';
   var logo = 'https://www.dropbox.com/scl/fi/2wc1ulpjuiaqlxk5qhc07/polymath-logo-sticker-copy.png?rlkey=jhutxqmdbwe0jgoqcwdxzwt55&raw=1';
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
@@ -10140,6 +10172,7 @@ function dvBuildDoc() {
       + '<button class="dv-btn" data-act="toggle-guides"><span id="dvGuidesLbl">Hide page guides</span></button>'
       + '<button class="dv-btn" data-act="toggle-cover" title="Add or remove the worksheet cover page"><span id="dvCoverLbl"></span></button>'
       + '<button class="dv-btn" data-act="toggle-contents" title="Add or remove an editable Contents page"><span id="dvContentsLbl"></span></button>'
+      + '<button class="dv-btn" data-act="toggle-fields" title="Add or remove the blank Name / Class / Date lines"><span id="dvFieldsLbl"></span></button>'
       + '<button class="dv-btn" id="dvContentsResetBtn" data-act="reset-contents" title="Throw away your edits and regenerate the contents list from the questions">↻ Auto-fill contents</button>'
       + '<span class="dv-spacer"></span>'
       + '<button class="dv-btn dv-btn-primary" data-act="print">\u{1F5A8} Export PDF</button>'
@@ -10197,13 +10230,18 @@ window.addEventListener('message', function (e) {
     // Element cut & dropped at a "Move here" target in the design view.
     dvMoveElemToOp(d.eid, d.afterEid == null ? null : d.afterEid);
   } else if (d.type === 'dvFrontMatter') {
-    // Cover / contents toggled from the design view toolbar.
-    var changed = (!!getCover().enabled !== !!d.cover) || (!!getContents().enabled !== !!d.contents);
+    // Cover / contents / Name-Date fields toggled from the design view toolbar.
+    var wantFields = d.fields === undefined ? coverFieldsOn() : !!d.fields;
+    var changed = (!!getCover().enabled !== !!d.cover)
+      || (!!getContents().enabled !== !!d.contents)
+      || (coverFieldsOn() !== wantFields);
     if (!changed) return;
     getCover().enabled = !!d.cover;
     getContents().enabled = !!d.contents;
+    getCover().fields = wantFields;
     syncCoverInputs();
     renderPreview();
+    scheduleAutoSave();
   } else if (d.type === 'dvCoverField') {
     // A cover text field edited inline on the design view's cover page.
     if (d.field === 'title') {
