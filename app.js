@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.194.0';
+const APP_VERSION = 'v1.195.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -1934,7 +1934,16 @@ let _ppReturnFocus = null;
 let _vetReturnScroll = 0;
 let _vetReturnFocus = null;
 function editQuestionFromPapers(bankId, ppItemId) { editQuestion(bankId); _editReturnPage = 'papers'; _ppReturnFocus = ppItemId || null; _syncBackToPapersBtn(); }
-function _afterEditNavigate() { const dest = _editReturnPage || 'bank'; _editReturnPage = null; navigateTo(dest); if (dest === 'vetting') _vetFocusScroll(); }
+function _afterEditNavigate() {
+  const dest = _editReturnPage || 'bank';
+  _editReturnPage = null;
+  navigateTo(dest);
+  if (dest === 'vetting') _vetFocusScroll();
+  // An edit launched from a worksheet preview reopens that preview, so the
+  // teacher lands back on the sheet they were checking rather than a page list.
+  if (dest === 'myworksheets') _wsQeReopenPreview();
+  else if (dest === 'worksheet' && wsSelectedIds.size) openWorksheetPreview();
+}
 function _syncBackToPapersBtn() {
   const b = document.getElementById('backToPapersBtn');
   if (!b) return;
@@ -1946,6 +1955,10 @@ function _syncBackToPapersBtn() {
     b.style.display = '';
     b.innerHTML = '&larr; Back to Vetting List';
     b.title = 'Return to the Vetting List, right where you left off';
+  } else if (_editReturnPage === 'myworksheets' || _editReturnPage === 'worksheet') {
+    b.style.display = '';
+    b.innerHTML = '&larr; Back to the worksheet';
+    b.title = 'Return to the worksheet preview you were checking';
   } else {
     b.style.display = 'none';
   }
@@ -4180,11 +4193,14 @@ function imgScale(block) {
   const s = Number(block && block.scale);
   return (s && s > 0) ? Math.max(0.3, Math.min(1.0, s)) : 0.6;   // default 60%
 }
-// Inline style for a rendered image at the block's chosen scale. 100% keeps the
-// original behaviour (natural size, capped to the container width).
+// Inline style for a rendered image at the block's chosen scale. The scale is a
+// percentage of the COLUMN width all the way up, so 100% fills the column.
+// 100% used to mean "natural size, capped to the column" instead, which made the
+// control non-monotonic: 90% of a wide column was often BIGGER than the natural
+// size 100% gave you. Teachers pushing the + button to its limit to enlarge a
+// small scanned diagram got the smallest setting of all.
 function imgSizeStyle(block) {
   const pct = Math.round(imgScale(block) * 100);
-  if (pct >= 100) return 'max-width:100%';
   return `width:${pct}%;height:auto;max-width:100%`;
 }
 // + / - handler for the image size control in the question editor.
@@ -7993,7 +8009,10 @@ function saveEditToBank() {
 }
 
 function cancelEdit() {
-  const backDest = _editReturnPage === 'papers' ? 'PSLE Papers' : _editReturnPage === 'vetting' ? 'the vetting list' : 'the question bank';
+  const backDest = _editReturnPage === 'papers' ? 'PSLE Papers'
+    : _editReturnPage === 'vetting' ? 'the vetting list'
+    : (_editReturnPage === 'myworksheets' || _editReturnPage === 'worksheet') ? 'the worksheet preview'
+    : 'the question bank';
   showConfirm('Cancel Edit', `Discard changes and go back to ${backDest}?`, () => {
     currentEditingQuestion = null;
     setEditMode(false);
@@ -13398,6 +13417,10 @@ function renderSavedWorksheets() {
         <p>${ids.length} question${ids.length !== 1 ? 's' : ''}${date ? ' &middot; ' + date : ''}</p>
       </div>
       <div class="ws-saved-actions">
+        <button class="btn btn-outline" onclick="previewSavedWorksheet('${ws.id}')" title="Preview the printed pages — and edit any question from there">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          Preview
+        </button>
         <button class="btn btn-outline" onclick="reprintWorksheet('${ws.id}')" title="Print">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           Print
@@ -13428,17 +13451,24 @@ function deleteWorksheet(id) {
 function reprintWorksheet(id) {
   const ws = savedWorksheets.find(w => w.id === id);
   if (!ws) return;
-  // Saved worksheets keep their question ORDER — the ids are stored in the
-  // order they were chosen, so "Question 1" is the same question every reprint.
-  // (filter() would have returned them in bank order instead.)
-  const byId = new Map(questionBank.map(q => [String(q.id), q]));
-  const selected = (ws.questionIds || []).map(qid => byId.get(String(qid))).filter(Boolean);
+  const selected = _wsSavedQuestions(ws);
   if (selected.length === 0) {
     showToast('Questions no longer available', 'error');
     return;
   }
+  const noFields = !_wsStudentFieldsOn('saved');
   const wantCover = !!document.getElementById('mwIncludeCover')?.checked;
-  doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title) : '');
+  doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields);
+}
+
+// The questions of a saved worksheet, in the order they were chosen — the ids
+// are stored in that order, so "Question 1" is the same question every reprint.
+// (questionBank.filter() would have returned them in bank order instead.)
+// Shared by reprint, preview and practice so all three show the same sheet.
+function _wsSavedQuestions(ws) {
+  const byId = new Map(questionBank.map(q => [String(q.id), q]));
+  return (ws && Array.isArray(ws.questionIds) ? ws.questionIds : [])
+    .map(qid => byId.get(String(qid))).filter(Boolean);
 }
 
 // ---- Practice worksheet questions ----
@@ -13532,7 +13562,7 @@ function _wsCoverDecoSvg() {
 // The Polymath cover sheet. `sub` is the line under the big title and `foot`
 // the letter-spaced line at the foot of the page; both default to the
 // worksheet wording, and past-paper prints pass their own (see _ppCoverHtml).
-function _wsCoverHtml(title, sub, foot) {
+function _wsCoverHtml(title, sub, foot, noFields) {
   return `<div class="print-front-page print-cover-page">
     ${_wsCoverDecoSvg()}
     <div class="print-cover-head">Polymath Learning Centre</div>
@@ -13540,18 +13570,29 @@ function _wsCoverHtml(title, sub, foot) {
       <img class="print-cover-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath Learning Centre logo" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2252%22 height=%2252%22 viewBox=%220 0 52 52%22%3E%3Crect width=%2252%22 height=%2252%22 rx=%2210%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2226%22 y=%2237%22 font-family=%22DM Sans,sans-serif%22 font-size=%2232%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
       <h1 class="print-cover-title">${escapeHtml(title)}</h1>
       <div class="print-cover-sub">${escapeHtml(sub == null ? 'Worksheet' : sub)}</div>
-      <div class="print-cover-fields">
+      ${noFields ? '' : `<div class="print-cover-fields">
         <div><div class="print-cover-field-label">Name</div><div class="print-cover-field-line"></div></div>
         <div><div class="print-cover-field-label">Date</div><div class="print-cover-field-line"></div></div>
-      </div>
+      </div>`}
     </div>
     <div class="print-cover-foot">${escapeHtml(foot == null ? 'Primary Science' : foot)}</div>
   </div>`;
 }
+
+// Blank Name / Date / Class lines print unless the teacher turns them off. Two
+// pages carry the switch — the worksheet builder and My Worksheets — so the
+// caller says which one it is rather than us guessing from what's on screen.
+// A page without the checkbox (a print path that never had one, such as the
+// PSLE papers) keeps the fields, so nothing loses them by accident.
+function _wsStudentFieldsOn(where) {
+  const el = document.getElementById(where === 'saved' ? 'mwIncludeFields' : 'wsIncludeFields');
+  return el ? !!el.checked : true;
+}
+
 // Front matter (optional cover page) per the student's checkbox.
 async function _wsFrontHtml(selected, title) {
   const wantCover = !!document.getElementById('wsIncludeCover')?.checked;
-  return wantCover ? _wsCoverHtml(title) : '';
+  return wantCover ? _wsCoverHtml(title, undefined, undefined, !_wsStudentFieldsOn('builder')) : '';
 }
 
 async function printStudentWorksheet() {
@@ -13562,21 +13603,22 @@ async function printStudentWorksheet() {
   const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
   const frontHtml = await _wsFrontHtml(selected, title);
-  doPrintStudentWorksheet(selected, title, frontHtml);
+  doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'));
 }
 
 // Worksheet title banner + name/date/class strip printed at the top of page 1.
 // With a cover sheet in front, the banner would just repeat the logo and title
 // the reader has already seen, so only the name/date/class strip is kept — and
 // the strip carries Class, which the cover has no field for.
-function _wsHeaderHtml(worksheetTitle, hasCover) {
-  if (hasCover) {
-    return `<div class="print-student-info">
+// `noFields` drops the strip entirely — with a cover in front there is then
+// nothing left to print, so page 1 starts straight in on question 1.
+function _wsHeaderHtml(worksheetTitle, hasCover, noFields) {
+  const strip = noFields ? '' : `<div class="print-student-info">
         <span>Name: ___________________________</span>
         <span>Date: _______________</span>
         <span>Class: ___________</span>
       </div>`;
-  }
+  if (hasCover) return strip;
   return `<div class="print-worksheet-header">
         <img class="print-worksheet-header-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Polymath" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2252%22 height=%2252%22 viewBox=%220 0 52 52%22%3E%3Crect width=%2252%22 height=%2252%22 rx=%2210%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2226%22 y=%2237%22 font-family=%22DM Sans,sans-serif%22 font-size=%2232%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
         <div class="print-worksheet-header-text">
@@ -13584,11 +13626,7 @@ function _wsHeaderHtml(worksheetTitle, hasCover) {
           <p>Polymath Learning Centre</p>
         </div>
       </div>
-      <div class="print-student-info">
-        <span>Name: ___________________________</span>
-        <span>Date: _______________</span>
-        <span>Class: ___________</span>
-      </div>`;
+      ${strip}`;
 }
 
 // Build the worksheet print HTML (question chunks + answer key). Shared by the
@@ -13610,6 +13648,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // the syllabus-grouped PDF.
   const sectionById = (opts && opts.sectionHtmlById) || null;
   const frontHtml = (opts && opts.frontHtml) ? opts.frontHtml : '';
+  // noStudentFields: print no blank Name / Date / Class lines at all — for a
+  // worksheet that is going straight into a file, or one the class writes on
+  // separate paper for.
+  const noFields = !!(opts && opts.noStudentFields);
   // A cover sheet already carries the logo, the title and the name/date
   // fields, so page 1's banner drops to just the student strip.
   const hasCover = frontHtml.indexOf('print-cover-page') >= 0;
@@ -13620,7 +13662,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     const secHtml = sectionById ? (sectionById[q.id] || '') : '';
     if (secHtml) {
       allHtml += `<div class="print-question-chunk print-lo-chunk" data-qid="__lo__${escapeHtml(String(q.id || ''))}">` +
-        (qIndex === 0 ? _wsHeaderHtml(worksheetTitle, hasCover) : '') + secHtml + `</div>`;
+        (qIndex === 0 ? _wsHeaderHtml(worksheetTitle, hasCover, noFields) : '') + secHtml + `</div>`;
     }
     // MCQ-style questions (no writing boxes) are flagged so the packer can
     // pair two compact ones onto a single page.
@@ -13628,7 +13670,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     let qHtml = `<div class="print-question-chunk" data-qid="${escapeHtml(String(q.id || ''))}"${isMcq ? ' data-mcq="1"' : ''}>`;
 
     if (qIndex === 0 && !secHtml) {
-      qHtml += _wsHeaderHtml(worksheetTitle, hasCover);
+      qHtml += _wsHeaderHtml(worksheetTitle, hasCover, noFields);
     }
 
     qHtml += plainNums
@@ -13717,12 +13759,12 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   return allHtml;
 }
 
-function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml) {
+function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields) {
   const output = document.getElementById('printOutput');
   // plainNumbers: a worksheet is numbered "Question 1, 2, 3…" for the student.
   // The bank's own title and its category/topic line are internal filing —
   // useful in the admin's bank, meaningless (and a giveaway) on a printed sheet.
-  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true });
+  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields });
   autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
 }
 
@@ -14237,10 +14279,13 @@ const WS_PREVIEW_CSS = `
   .wspv-content{ position:relative; }
   .wspv-pageno{ position:absolute; left:0; right:0; bottom:7mm; text-align:center; font-size:8pt; color:#b3b3b3; }
   .print-question-chunk{ position:relative; }
-  .wspv-brk{ position:absolute; top:5px; right:6px; z-index:9; font:600 11px 'DM Sans',sans-serif; border:1px solid #cfcfcf; background:#fff; color:#555; border-radius:6px; padding:2px 9px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+  .wspv-tools{ position:absolute; top:5px; right:6px; z-index:9; display:flex; gap:6px; }
+  .wspv-brk{ font:600 11px 'DM Sans',sans-serif; border:1px solid #cfcfcf; background:#fff; color:#555; border-radius:6px; padding:2px 9px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.2); }
   .wspv-brk.on{ background:#0b6b4f; color:#fff; border-color:#0b6b4f; }
   .wspv-brk.up{ color:#2d6ca8; border-color:#9bb8f0; }
-  .wspv-brk.up:hover{ background:#2d6ca8; color:#fff; }`;
+  .wspv-brk.up:hover{ background:#2d6ca8; color:#fff; }
+  .wspv-brk.edit{ color:#8a5a00; border-color:#e6c489; }
+  .wspv-brk.edit:hover{ background:#8a5a00; color:#fff; }`;
 
 // Copy the app stylesheet but unwrap the `@media print { … }` block (balanced
 // braces) so its rules apply on the iframe's screen — single source of truth,
@@ -14260,15 +14305,62 @@ function _wsAppCssForPreview() {
   return css;
 }
 
+// The preview normally shows what the worksheet BUILDER has selected. A saved
+// worksheet reprint has no builder selection behind it, so it sets this instead
+// and every read below goes through _wsPreviewCtx() — one renderer, two sources.
+let _wsPreviewSaved = null;   // { id, title } of the saved worksheet on show
+
+function _wsPreviewCtx() {
+  if (_wsPreviewSaved) {
+    const ws = savedWorksheets.find(w => w.id === _wsPreviewSaved.id);
+    return {
+      saved: true,
+      selected: ws ? _wsSavedQuestions(ws) : [],
+      title: (ws && ws.title) || _wsPreviewSaved.title || 'CER Worksheet',
+      cover: !!document.getElementById('mwIncludeCover')?.checked,
+      noFields: !_wsStudentFieldsOn('saved')
+    };
+  }
+  return {
+    saved: false,
+    selected: questionBank.filter(q => wsSelectedIds.has(q.id)),
+    title: (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet',
+    cover: !!document.getElementById('wsIncludeCover')?.checked,
+    noFields: !_wsStudentFieldsOn('builder')
+  };
+}
+
 function openWorksheetPreview() {
   if (!wsSelectedIds.size) { showToast('Select at least one question first', 'error'); return; }
+  _wsPreviewSaved = null;
+  _wsShowPreviewOverlay();
+}
+
+// Preview a SAVED worksheet — the same A4 preview the builder uses, opened from
+// the My Worksheets card, so a sheet can be checked (and its questions fixed)
+// before it goes to the printer.
+function previewSavedWorksheet(id) {
+  const ws = savedWorksheets.find(w => w.id === id);
+  if (!ws) return;
+  if (_wsSavedQuestions(ws).length === 0) {
+    showToast('Questions no longer available', 'error');
+    return;
+  }
+  _wsPreviewSaved = { id: ws.id, title: ws.title };
+  _wsShowPreviewOverlay();
+}
+
+function _wsShowPreviewOverlay() {
   const ov = document.getElementById('wsPreviewOverlay');
   if (ov) ov.classList.add('show');
   renderWsPreview();
 }
+
 function closeWorksheetPreview() {
   const ov = document.getElementById('wsPreviewOverlay');
   if (ov) ov.classList.remove('show');
+  closeWsQuickEdit();
+  _wsPreviewSaved = null;
 }
 function wsBreakBefore(qid) { // push this question onto a new page
   if (!qid) return;
@@ -14282,15 +14374,19 @@ function wsPullUp(qid) { // pull this question onto the previous page
   wsMergeUp.add(qid);
   renderWsPreview();
 }
-function printFromPreview() { printStudentWorksheet(); }
+function printFromPreview() {
+  if (_wsPreviewSaved) { reprintWorksheet(_wsPreviewSaved.id); return; }
+  printStudentWorksheet();
+}
 
 async function renderWsPreview() {
   const frame = document.getElementById('wsPreviewFrame');
   if (!frame) return;
-  const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
-  const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
-  const frontHtml = await _wsFrontHtml(selected, title);
-  const html = buildWorksheetHtml(selected, title, { frontHtml, plainNumbers: true });   // exactly what will print
+  const ctx = _wsPreviewCtx();
+  const selected = ctx.selected;
+  const title = ctx.title;
+  const frontHtml = ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields) : '';
+  const html = buildWorksheetHtml(selected, title, { frontHtml, plainNumbers: true, noStudentFields: ctx.noFields });   // exactly what will print
   const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"],link[rel="preconnect"]')).map(l => l.outerHTML).join('');
   const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
   if (!doc) return;
@@ -14382,8 +14478,10 @@ function _wsPreviewPack(doc) {
     group.forEach((idx, pos) => {
       if (pos > 0) { const sep = doc.createElement('div'); sep.className = 'print-question-separator'; content.appendChild(sep); }
       const chunk = chunks[idx];
+      const qid = chunk.dataset.qid;
+      const tools = doc.createElement('div');
+      tools.className = 'wspv-tools';
       if (idx !== 0) { // nothing precedes the very first question
-        const qid = chunk.dataset.qid;
         const btn = doc.createElement('button');
         btn.type = 'button';
         if (pos === 0) { // this question starts a page — offer to pull it onto the previous one
@@ -14397,14 +14495,189 @@ function _wsPreviewPack(doc) {
           btn.title = 'Push this question onto a new page';
           btn.setAttribute('onclick', "parent.wsBreakBefore('" + qid + "')");
         }
-        chunk.appendChild(btn);
+        tools.appendChild(btn);
       }
+      // Edit the question where it is — the whole point of previewing a sheet is
+      // spotting the diagram that printed too small, and the fix used to mean
+      // leaving the page for the bank and finding your way back. Admins only:
+      // this writes to the shared question bank.
+      if (qid && qid.indexOf('__lo__') !== 0 && _isAdmin()) {
+        const eb = doc.createElement('button');
+        eb.type = 'button';
+        eb.className = 'wspv-brk edit';
+        eb.textContent = '✏️ edit question';
+        eb.title = 'Edit this question — text and diagram size — without leaving the preview';
+        eb.setAttribute('onclick', "parent.wsQuickEdit('" + qid + "')");
+        tools.appendChild(eb);
+      }
+      if (tools.children.length) chunk.appendChild(tools);
       content.appendChild(chunk);
     });
   }, plan.pageZoom[gi]));
   answerKeys.forEach((ak, ai) => addSheet(akSpans[ai], content => content.appendChild(ak), (plan.akPlans[ai] || {}).zoom));
   const cnt = document.getElementById('wsPreviewPageCount');
   if (cnt) cnt.textContent = '· ' + totalPages + ' page' + (totalPages === 1 ? '' : 's');
+}
+
+// =====================================================================
+// WORKSHEET QUICK EDIT — edit a question at its SOURCE from the preview.
+// Writes to the question bank (the same doc the full editor writes), so the
+// change sticks for every worksheet, quest and game that uses the question.
+// Covers the two things a printed sheet makes you want to change — the wording
+// and how big a diagram comes out — and hands anything structural to the full
+// editor, which now returns you to where you started.
+// =====================================================================
+let _wsQeQid = null;      // id of the question in the drawer
+let _wsQeDraft = null;    // working copy; discarded unless Save is pressed
+let _wsQeReturn = null;   // preview to reopen after a trip to the full editor
+
+function wsQuickEdit(qid) {
+  if (!_isAdmin()) return;
+  const q = questionBank.find(x => String(x.id) === String(qid));
+  if (!q) { showToast('That question is no longer in the bank', 'error'); return; }
+  _wsQeQid = String(q.id);
+  _wsQeDraft = JSON.parse(JSON.stringify({ title: q.title || '', blocks: q.blocks || [] }));
+  const sub = document.getElementById('wsQuickEditSub');
+  if (sub) sub.textContent = [q.category, q.topic].filter(Boolean).join(' · ');
+  _wsQeRender();
+  const ov = document.getElementById('wsQuickEditOverlay');
+  if (ov) ov.classList.add('show');
+}
+
+function closeWsQuickEdit() {
+  const ov = document.getElementById('wsQuickEditOverlay');
+  if (ov) ov.classList.remove('show');
+  _wsQeQid = null;
+  _wsQeDraft = null;
+}
+
+// A short, honest label for a block we cannot edit here.
+function _wsQeBlockSummary(b) {
+  switch (b.type) {
+    case 'mcq': return (b.options || []).length + ' answer option' + ((b.options || []).length === 1 ? '' : 's');
+    case 'table': return 'Table';
+    case 'answer': return 'Claim / Evidence / Reasoning boxes';
+    case 'plainanswer': return 'Answer lines';
+    case 'openLines': return (Number(b.lines) || 4) + ' blank lines';
+    case 'workingSpace': return 'Working space';
+    case 'answerLine': return 'Answer line';
+    case 'fillblank': return 'Fill in the blanks';
+    case 'explanation': return 'Explanation (answer key)';
+    case 'answerKey': return 'Answer key';
+    case 'commonMistake': return 'Common mistake note';
+    case 'studentAnswer': return "Student's answer";
+    case 'part': return 'Question part';
+    case 'pageBreak': return 'Page break';
+    default: return b.type;
+  }
+}
+
+function _wsQeRender() {
+  const body = document.getElementById('wsQuickEditBody');
+  if (!body || !_wsQeDraft) return;
+  const rows = (_wsQeDraft.blocks || []).map(b => {
+    const bid = escapeHtml(String(b.id || ''));
+    if (b.type === 'image') {
+      const pct = Math.round(imgScale(b) * 100);
+      return `<div class="wsqe-block">
+        <div class="wsqe-block-label">🖼 Diagram</div>
+        ${b.url
+          ? `<div class="wsqe-shot"><img id="wsqeImg_${bid}" src="${escapeHtml(transformImageUrl(b.url))}" alt="" style="width:${pct}%;"></div>`
+          : `<div class="wsqe-shot wsqe-shot-empty">No image on this block yet</div>`}
+        <div class="wsqe-size">
+          <button type="button" class="wsqe-step" onclick="wsQeImgSize('${bid}',-1)" title="Smaller">−</button>
+          <span class="wsqe-size-val" id="wsqeSize_${bid}">${pct}%</span>
+          <button type="button" class="wsqe-step" onclick="wsQeImgSize('${bid}',1)" title="Bigger">+</button>
+          <span class="wsqe-hint">of the page width — 100% fills the column</span>
+        </div>
+        <label class="wsqe-label" for="wsqeUrl_${bid}">Image link</label>
+        <input class="wsqe-input" id="wsqeUrl_${bid}" type="text" value="${escapeHtml(b.url || '')}"
+               placeholder="https://…" oninput="wsQeImgUrl('${bid}', this.value)">
+      </div>`;
+    }
+    if (b.type === 'text') {
+      return `<div class="wsqe-block">
+        <div class="wsqe-block-label">✍️ Text</div>
+        <div class="wsqe-rich" contenteditable="true" data-wsqe-rich="${bid}">${b.content || ''}</div>
+      </div>`;
+    }
+    return `<div class="wsqe-block wsqe-block-locked">
+      <div class="wsqe-block-label">${escapeHtml(_wsQeBlockSummary(b))}</div>
+      <div class="wsqe-hint">Change this one in the full editor.</div>
+    </div>`;
+  }).join('');
+  body.innerHTML = `<label class="wsqe-label" for="wsqeTitle">Question title</label>
+    <input class="wsqe-input" id="wsqeTitle" type="text" value="${escapeHtml(_wsQeDraft.title || '')}">
+    ${rows || '<div class="wsqe-hint">This question has no blocks.</div>'}`;
+}
+
+function _wsQeBlock(bid) {
+  return (_wsQeDraft && _wsQeDraft.blocks || []).find(b => String(b.id) === String(bid));
+}
+
+// 10% steps, same range as the editor's own control.
+function wsQeImgSize(bid, dir) {
+  const b = _wsQeBlock(bid);
+  if (!b) return;
+  const next = Math.max(30, Math.min(100, Math.round(imgScale(b) * 100) + dir * 10));
+  b.scale = next / 100;
+  const lbl = document.getElementById('wsqeSize_' + bid);
+  if (lbl) lbl.textContent = next + '%';
+  const img = document.getElementById('wsqeImg_' + bid);
+  if (img) img.style.width = next + '%';
+}
+
+function wsQeImgUrl(bid, url) {
+  const b = _wsQeBlock(bid);
+  if (!b) return;
+  b.url = (url || '').trim();
+  const img = document.getElementById('wsqeImg_' + bid);
+  if (img && b.url) img.src = transformImageUrl(b.url);
+}
+
+async function saveWsQuickEdit() {
+  if (!_wsQeDraft) return;
+  const q = questionBank.find(x => String(x.id) === String(_wsQeQid));
+  if (!q) { showToast('That question is no longer in the bank', 'error'); closeWsQuickEdit(); return; }
+  // Rich text lives in the DOM until now — read it back before saving.
+  document.querySelectorAll('#wsQuickEditBody [data-wsqe-rich]').forEach(el => {
+    const b = _wsQeBlock(el.dataset.wsqeRich);
+    if (b) b.content = el.innerHTML;
+  });
+  const titleEl = document.getElementById('wsqeTitle');
+  const title = titleEl ? titleEl.value.trim() : '';
+  q.title = title || q.title;
+  q.blocks = JSON.parse(JSON.stringify(_wsQeDraft.blocks || []));
+  closeWsQuickEdit();
+  renderWsPreview();                       // the sheet redraws with the change
+  try { renderQuestionBank(); } catch (e) { /* bank not on screen — fine */ }
+  const ok = await saveQuestion(q);
+  if (ok) showToast('Question updated ✓', 'success');
+}
+
+// Escape hatch for anything the drawer cannot change. Remembers the preview so
+// the full editor drops you back here — sheet open, same place — when it closes.
+function wsQuickEditOpenFull() {
+  const qid = _wsQeQid;
+  if (!qid) return;
+  const back = _wsPreviewSaved ? Object.assign({}, _wsPreviewSaved) : null;
+  closeWsQuickEdit();
+  closeWorksheetPreview();
+  editQuestion(qid);
+  // editQuestion() resets the return page, so set ours after it and refresh the
+  // "← Back" affordance — otherwise it keeps whatever the last edit left there.
+  _editReturnPage = back ? 'myworksheets' : 'worksheet';
+  _wsQeReturn = back;
+  _syncBackToPapersBtn();
+}
+
+// Called after the full editor closes (save or cancel) — reopens the preview
+// the edit was launched from.
+function _wsQeReopenPreview() {
+  const back = _wsQeReturn;
+  _wsQeReturn = null;
+  if (!back) return;
+  setTimeout(() => { if (savedWorksheets.some(w => w.id === back.id)) previewSavedWorksheet(back.id); }, 60);
 }
 
 // =====================================================================
@@ -33750,6 +34023,13 @@ window.closeWorksheetPreview = closeWorksheetPreview;
 window.wsBreakBefore = wsBreakBefore;
 window.wsPullUp = wsPullUp;
 window.printFromPreview = printFromPreview;
+window.previewSavedWorksheet = previewSavedWorksheet;
+window.wsQuickEdit = wsQuickEdit;
+window.closeWsQuickEdit = closeWsQuickEdit;
+window.saveWsQuickEdit = saveWsQuickEdit;
+window.wsQuickEditOpenFull = wsQuickEditOpenFull;
+window.wsQeImgSize = wsQeImgSize;
+window.wsQeImgUrl = wsQeImgUrl;
 window.renderSavedWorksheets = renderSavedWorksheets;
 window.deleteWorksheet = deleteWorksheet;
 window.reprintWorksheet = reprintWorksheet;
