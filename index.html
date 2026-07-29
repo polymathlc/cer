@@ -3667,6 +3667,149 @@ option {
   gap: 6px;
 }
 
+/* What goes on the printed sheet — set once, applies to every reprint below. */
+.mw-print-options {
+  max-width: 460px;
+  margin: 0 auto 24px;
+  padding: 20px 24px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.mw-print-options-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+.mw-print-options label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 500;
+  line-height: 1.5;
+  padding: 5px 0;
+}
+
+/* ── Worksheet quick edit — a drawer over the live preview ───────────────── */
+.wsqe-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 410;                 /* above the preview overlay (400) */
+  background: rgba(20, 24, 22, 0.45);
+  justify-content: flex-end;
+}
+.wsqe-overlay.show { display: flex; }
+.wsqe-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(480px, 100%);
+  background: var(--bg);
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.22);
+}
+.wsqe-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.wsqe-head h3 { font-size: 1.02rem; font-weight: 700; }
+.wsqe-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 5px; }
+.wsqe-body { flex: 1; overflow-y: auto; padding: 22px 26px 8px; }
+.wsqe-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 26px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.wsqe-block {
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.wsqe-block-locked { opacity: 0.72; }
+.wsqe-block-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.wsqe-label {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 14px 0 6px;
+}
+.wsqe-body > .wsqe-label:first-child { margin-top: 0; }
+.wsqe-input {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-family: inherit;
+  font-size: 0.86rem;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+.wsqe-input:focus { outline: none; border-color: var(--primary); }
+.wsqe-block .wsqe-input { margin-bottom: 0; }
+.wsqe-rich {
+  min-height: 76px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.88rem;
+  line-height: 1.65;
+}
+.wsqe-rich:focus { outline: none; border-color: var(--primary); }
+/* The frame stands in for the printed column, so the % reads true. */
+.wsqe-shot {
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  text-align: center;
+}
+.wsqe-shot img { height: auto; max-width: 100%; }
+.wsqe-shot-empty { font-size: 0.8rem; color: var(--text-muted); padding: 22px 12px; }
+.wsqe-size {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.wsqe-step {
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+}
+.wsqe-step:hover { border-color: var(--primary); color: var(--primary); }
+.wsqe-size-val { min-width: 44px; text-align: center; font-size: 0.86rem; font-weight: 700; }
+.wsqe-hint { font-size: 0.76rem; color: var(--text-muted); line-height: 1.5; }
+@media print { .wsqe-overlay { display: none !important; } }
+
 /* Print blanks-first-letter style */
 .print-blank-first-letter {
   display: inline-block;
@@ -5705,7 +5848,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
       <div class="nav-item" data-page="objectives" onclick="navigateTo('objectives')" title="Practice organised by the MOE syllabus learning objectives — attach questions to each objective and practise them on their own">
         <span class="ico">🎯</span> Learning Objectives
       </div>
-      <div class="nav-item admin-only" data-page="myworksheets" onclick="navigateTo('myworksheets')" title="Worksheets you have saved — reprint any of them, with or without a cover page">
+      <div class="nav-item admin-only" data-page="myworksheets" onclick="navigateTo('myworksheets')" title="Worksheets you have saved — preview the printed pages, edit any question from there, then reprint with or without a cover page and the name / date fields">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         Saved Worksheets
       </div>
@@ -6535,6 +6678,10 @@ body.practising-as .page-body { padding-bottom: 96px; }
             <input type="checkbox" id="wsIncludeCover" style="width:16px;height:16px;accent-color:var(--primary);">
             📄 Cover page
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print the blank Name / Date / Class lines. Turn it off for a clean sheet with no student fields at all.">
+            <input type="checkbox" id="wsIncludeFields" checked style="width:16px;height:16px;accent-color:var(--primary);">
+            ✍️ Name / Date / Class fields
+          </label>
         </div>
 
         <div class="ws-actions-bar">
@@ -6576,11 +6723,17 @@ body.practising-as .page-body { padding-bottom: 96px; }
         </div>
       </div>
       <div class="page-body" style="max-width:780px;">
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.88rem;font-weight:500;max-width:420px;margin:0 auto 20px;padding:14px 20px;border:1.5px solid var(--border);border-radius:12px;background:var(--surface);"
-               title="Print an elegant Polymath cover page (with a blank sheet behind it) in front of the questions">
-          <input type="checkbox" id="mwIncludeCover" style="width:16px;height:16px;accent-color:var(--primary);">
-          📄 Cover page when reprinting
-        </label>
+        <div class="mw-print-options">
+          <div class="mw-print-options-title">Printing options</div>
+          <label title="Print an elegant Polymath cover page (with a blank sheet behind it) in front of the questions">
+            <input type="checkbox" id="mwIncludeCover" style="width:16px;height:16px;accent-color:var(--primary);">
+            📄 Cover page when reprinting
+          </label>
+          <label title="Print the blank Name / Date / Class lines at the top of the sheet. Turn it off for a clean copy with no student fields.">
+            <input type="checkbox" id="mwIncludeFields" checked style="width:16px;height:16px;accent-color:var(--primary);">
+            ✍️ Name / Date / Class fields
+          </label>
+        </div>
         <div class="ws-saved-grid" id="savedWsGrid"></div>
       </div>
     </div>
@@ -7944,10 +8097,32 @@ body.practising-as .page-body { padding-bottom: 96px; }
   <div class="wspv-bar">
     <button class="btn btn-outline" type="button" onclick="closeWorksheetPreview()">← Back</button>
     <span class="wspv-title">Worksheet preview <span class="wspv-count" id="wsPreviewPageCount"></span></span>
-    <span class="wspv-hint">⬆ pulls a question onto the previous page (fit 2+ per page) · ⤓ pushes it onto a new page · updates live.</span>
+    <span class="wspv-hint">⬆ pulls a question onto the previous page (fit 2+ per page) · ⤓ pushes it onto a new page · ✏️ edits the question itself · updates live.</span>
     <button class="btn btn-primary" type="button" onclick="printFromPreview()">🖨️ Print / Save PDF</button>
   </div>
   <div class="wspv-stage"><iframe id="wsPreviewFrame" title="Worksheet preview"></iframe></div>
+</div>
+
+<!-- ==================== WORKSHEET QUICK EDIT (opens over the preview) ==================== -->
+<div class="wsqe-overlay" id="wsQuickEditOverlay">
+  <div class="wsqe-panel" role="dialog" aria-label="Quick edit question">
+    <div class="wsqe-head">
+      <div>
+        <h3>Edit this question</h3>
+        <div class="wsqe-sub" id="wsQuickEditSub"></div>
+      </div>
+      <button class="preview-close" type="button" onclick="closeWsQuickEdit()" title="Close without saving">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="wsqe-body" id="wsQuickEditBody"></div>
+    <div class="wsqe-foot">
+      <button class="btn btn-outline" type="button" onclick="wsQuickEditOpenFull()" title="Open the full question editor — it will bring you back to this worksheet afterwards">Full editor</button>
+      <span style="flex:1;"></span>
+      <button class="btn btn-outline" type="button" onclick="closeWsQuickEdit()">Cancel</button>
+      <button class="btn btn-primary" type="button" onclick="saveWsQuickEdit()">Save to bank</button>
+    </div>
+  </div>
 </div>
 
 <div id="printOutput" style="display:none;"></div>
