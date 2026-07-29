@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.198.0';
+const APP_VERSION = 'v1.199.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -8495,14 +8495,14 @@ function _syncBankViewChrome() {
 function _bankFilteredQuestions() {
   const searchRaw = (document.getElementById('bankSearch')?.value || '').trim();
   const searchTokens = parseSearchTokens(searchRaw);
-  const topicFilter = document.getElementById('bankFilterTopic')?.value || '';
+  const topicSel = bankTopicSel;   // empty = every topic
   const catFilter = document.getElementById('bankFilterCategory')?.value || '';
   const levelFilter = document.getElementById('bankFilterLevel')?.value || '';
   const sourceFilter = document.getElementById('bankFilterSource')?.value || '';
   const diffFilter = document.getElementById('bankFilterDifficulty')?.value || '';
 
   let filtered = questionBank.filter(q => {
-    if (topicFilter && !qMatchesTopic(q, topicFilter)) return false;
+    if (topicSel.size && !qTopicList(q).some(t => topicSel.has(t))) return false;
     if (catFilter && !qMatchesCategory(q, catFilter)) return false;
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
     const qLevel = getTopicLevel(q.topic || '');
@@ -10774,19 +10774,136 @@ function updateCounts() {
   document.getElementById('vettingCount').textContent = vettingList.length;
 }
 
+// ── Topic filter: a tick list, grouped by the level each topic is taught at ──
+// One topic at a time was the wrong shape for the job — "show me Heat AND
+// Light" is the normal question, and a <select> cannot answer it. Empty means
+// no filter at all, which keeps "All Topics" as the resting state.
+let bankTopicSel = new Set();
+
 function populateTopicFilter() {
-  const sel = document.getElementById('bankFilterTopic');
-  if (!sel) return;
-  const topics = [...new Set(questionBank.flatMap(q => qTopicList(q)))];
-  sel.innerHTML = '<option value="">All Topics</option>';
-  topics.forEach(t => {
-    const opt = document.createElement('option');
-    opt.value = t;
-    opt.textContent = t;
-    sel.appendChild(opt);
+  const list = document.getElementById('bankTopicList');
+  if (!list) { populateSourceFilters(); return; }
+  // Only topics that actually have questions behind them — a filter that
+  // returns nothing is just a way to waste a click.
+  const counts = new Map();
+  questionBank.forEach(q => qTopicList(q).forEach(t => {
+    const s = String(t || '').trim();
+    if (s) counts.set(s, (counts.get(s) || 0) + 1);
+  }));
+  // A ticked topic whose last question was deleted or retagged stops existing.
+  Array.from(bankTopicSel).forEach(t => { if (!counts.has(t)) bankTopicSel.delete(t); });
+
+  const byLevel = { P3: [], P4: [], P5: [], P6: [] };
+  Array.from(counts.keys()).sort((a, b) => a.localeCompare(b))
+    .forEach(t => { const lv = getTopicLevel(t); (byLevel[lv] || byLevel.P6).push(t); });
+
+  let html = '';
+  TOPIC_LEVELS.forEach(lv => {
+    const topics = byLevel[lv];
+    if (!topics.length) return;
+    html += `<div class="ms-level" data-level="${lv}">
+      <div class="ms-group" onclick="toggleBankTopicLevel('${lv}', event)">
+        <span>Primary ${lv.slice(1)}</span>
+        <input type="checkbox" onclick="toggleBankTopicLevel('${lv}', event)" aria-label="All ${lv} topics">
+      </div>`;
+    topics.forEach(t => {
+      html += `<label class="ms-item">
+        <span>${escapeHtml(t)} <span class="ms-item-n">${counts.get(t)}</span></span>
+        <input type="checkbox" value="${escapeHtml(t)}" onchange="toggleBankTopic(this.value, this.checked)">
+      </label>`;
+    });
+    html += `</div>`;
   });
+  // Rebuilding drops the reader's place in a long list, so keep the scroll.
+  const scroll = list.scrollTop;
+  list.innerHTML = html || '<div class="ms-empty">No topics yet — they appear here as you add questions.</div>';
+  list.scrollTop = scroll;
+  _syncBankTopicTicks();
   populateSourceFilters();
 }
+
+// Ticks follow the state without the list being rebuilt around them — a rebuilt
+// list swaps the very checkbox under the cursor for a new node mid-click.
+function _syncBankTopicTicks() {
+  const list = document.getElementById('bankTopicList');
+  if (list) {
+    list.querySelectorAll('.ms-item').forEach(item => {
+      const cb = item.querySelector('input[type="checkbox"]');
+      if (!cb) return;
+      const on = bankTopicSel.has(cb.value);
+      cb.checked = on;
+      item.classList.toggle('on', on);
+    });
+    list.querySelectorAll('.ms-level').forEach(level => {
+      const head = level.querySelector(':scope > .ms-group input[type="checkbox"]');
+      if (!head) return;
+      const boxes = Array.from(level.querySelectorAll('.ms-item input[type="checkbox"]'));
+      const on = boxes.filter(c => c.checked).length;
+      head.checked = boxes.length > 0 && on === boxes.length;
+      head.indeterminate = on > 0 && on < boxes.length;   // half a year ticked reads as neither
+    });
+  }
+  _syncBankTopicChrome();
+}
+
+// The button's own label: what is actually being filtered, at a glance.
+function _syncBankTopicChrome() {
+  const wrap = document.getElementById('bankTopicFilter');
+  const label = document.getElementById('bankTopicLabel');
+  const count = document.getElementById('bankTopicCount');
+  const n = bankTopicSel.size;
+  if (label) label.textContent = n === 0 ? 'All Topics' : n === 1 ? Array.from(bankTopicSel)[0] : n + ' topics';
+  if (count) count.textContent = n === 0 ? 'No topics ticked' : n + ' ticked';
+  if (wrap) wrap.classList.toggle('has-selection', n > 0);
+}
+
+function toggleBankTopic(topic, on) {
+  if (on) bankTopicSel.add(topic); else bankTopicSel.delete(topic);
+  _syncBankTopicTicks();
+  renderQuestionBank();
+}
+
+// Tick a whole year at once — off again if it is already fully ticked.
+function toggleBankTopicLevel(level, ev) {
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  const list = document.getElementById('bankTopicList');
+  const wrap = list && list.querySelector(`.ms-level[data-level="${level}"]`);
+  const topics = wrap
+    ? Array.from(wrap.querySelectorAll('.ms-item input[type="checkbox"]')).map(c => c.value)
+    : Array.from(new Set(questionBank.flatMap(q => qTopicList(q)))).filter(t => t && getTopicLevel(t) === level);
+  if (!topics.length) return;
+  const allOn = topics.every(t => bankTopicSel.has(t));
+  topics.forEach(t => { if (allOn) bankTopicSel.delete(t); else bankTopicSel.add(t); });
+  _syncBankTopicTicks();
+  renderQuestionBank();
+}
+
+function clearBankTopics() {
+  if (!bankTopicSel.size) return;
+  bankTopicSel.clear();
+  _syncBankTopicTicks();
+  renderQuestionBank();
+}
+
+function toggleBankTopicMenu(ev) {
+  if (ev) ev.stopPropagation();
+  const wrap = document.getElementById('bankTopicFilter');
+  if (!wrap) return;
+  const opening = !wrap.classList.contains('open');
+  wrap.classList.toggle('open', opening);
+  if (opening) populateTopicFilter();
+}
+
+// Click anywhere else, or press Escape, and the tick list puts itself away.
+document.addEventListener('pointerdown', (e) => {
+  const wrap = document.getElementById('bankTopicFilter');
+  if (wrap && wrap.classList.contains('open') && !wrap.contains(e.target)) wrap.classList.remove('open');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const wrap = document.getElementById('bankTopicFilter');
+  if (wrap) wrap.classList.remove('open');
+});
 
 // The worksheet a question was imported from (preferred), or its citation.
 function questionSource(q) {
@@ -34236,6 +34353,10 @@ window.closeConfirm = closeConfirm;
 window.renderBlocks = renderBlocks;
 window.renderQuestionBank = renderQuestionBank;
 window.setBankView = setBankView;
+window.toggleBankTopicMenu = toggleBankTopicMenu;
+window.toggleBankTopic = toggleBankTopic;
+window.toggleBankTopicLevel = toggleBankTopicLevel;
+window.clearBankTopics = clearBankTopics;
 window.setBankSort = setBankSort;
 window.toggleBankPick = toggleBankPick;
 window.qbTileHoverEnter = qbTileHoverEnter;
