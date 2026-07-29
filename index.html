@@ -3842,6 +3842,147 @@ option {
   gap: 6px;
 }
 
+/* ── Tick-list filter (topics) ───────────────────────────────────────────────
+   A dropdown that filters by MANY values at once, so it cannot be a <select>.
+   It wears the same clothes as the filter bar's selects, down to the chevron. */
+.ms-filter { position: relative; }
+.ms-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 170px;
+  max-width: 280px;
+  padding: 9px 32px 9px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: var(--text);
+  text-align: left;
+  background: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%237a756d' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6l3.5 4 3.5-4z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  cursor: pointer;
+  outline: none;
+}
+.ms-toggle span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-filter.open .ms-toggle,
+.ms-toggle:focus-visible { border-color: var(--primary); }
+.ms-filter.has-selection .ms-toggle { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+.ms-menu {
+  display: none;
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 320px;
+  max-width: 88vw;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.16);
+  overflow: hidden;
+}
+.ms-filter.open .ms-menu { display: block; }
+.ms-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg);
+}
+.ms-clear {
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+}
+.ms-clear:hover { text-decoration: underline; }
+.ms-menu-list { max-height: 340px; overflow-y: auto; padding: 6px 0 10px; }
+
+/* P3 … P6 — the level a topic is taught at, as a sticky subheader. Its own
+   tick box takes the whole level in one go. */
+.ms-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  padding: 9px 16px 7px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ms-group + .ms-item { margin-top: 2px; }
+.ms-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 16px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.ms-item:hover, .ms-group:hover { background: var(--bg); }
+.ms-item.on { color: var(--primary); font-weight: 600; }
+.ms-item-n { font-size: 0.74rem; color: var(--text-muted); font-weight: 400; }
+/* Drawn rather than left to the browser: the Tailwind preflight in this page
+   strips the border off appearance:none checkboxes, which left an unticked box
+   as an invisible white square. These have to READ as tick boxes at a glance —
+   that is the whole point of the control. */
+.ms-item input[type="checkbox"],
+.ms-group input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1.5px solid #b0b7b3;
+  border-radius: 5px;
+  background-color: #fff;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 13px 13px;
+  cursor: pointer;
+  transition: border-color var(--transition), background-color var(--transition);
+}
+.ms-item:hover input[type="checkbox"],
+.ms-group:hover input[type="checkbox"] { border-color: var(--primary); }
+.ms-item input[type="checkbox"]:checked,
+.ms-group input[type="checkbox"]:checked,
+.ms-group input[type="checkbox"]:indeterminate {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+.ms-item input[type="checkbox"]:checked,
+.ms-group input[type="checkbox"]:checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.2 3.2L13 5'/%3E%3C/svg%3E");
+}
+/* Some of a year ticked, but not all of it. */
+.ms-group input[type="checkbox"]:indeterminate {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
+}
+.ms-empty { padding: 20px 16px; font-size: 0.82rem; color: var(--text-muted); text-align: center; }
+
 /* What goes on the printed sheet — set once, applies to every reprint below. */
 .mw-print-options {
   max-width: 460px;
@@ -6497,9 +6638,19 @@ body.practising-as .page-body { padding-bottom: 96px; }
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input id="bankSearch" placeholder="Search words or \"phrases\" in title/content..." oninput="renderQuestionBank()">
           </div>
-          <select id="bankFilterTopic" onchange="renderQuestionBank()">
-            <option value="">All Topics</option>
-          </select>
+          <div class="ms-filter" id="bankTopicFilter">
+            <button type="button" class="ms-toggle" id="bankTopicToggle" onclick="toggleBankTopicMenu(event)"
+                    title="Filter by topic — tick as many as you like">
+              <span id="bankTopicLabel">All Topics</span>
+            </button>
+            <div class="ms-menu" id="bankTopicMenu">
+              <div class="ms-menu-head">
+                <span id="bankTopicCount">No topics ticked</span>
+                <button type="button" class="ms-clear" onclick="clearBankTopics()">Clear</button>
+              </div>
+              <div class="ms-menu-list" id="bankTopicList"></div>
+            </div>
+          </div>
           <select id="bankFilterCategory" onchange="renderQuestionBank()">
             <option value="">All Categories</option>
             <optgroup label="── Skills ──">
