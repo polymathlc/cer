@@ -453,6 +453,41 @@
   .rwStep:hover:not(:disabled) { box-shadow: var(--shadow-btn); background: #F8F7F5; }
   .rwStep:disabled { opacity: 0.4; cursor: default; }
   .rwStep.plus { background: var(--accent); border-color: var(--accent-strong); }
+  .rwRemove {
+    border: none; background: none; cursor: pointer;
+    font-size: 1.05rem; line-height: 1;
+    color: var(--ink-faint);
+    padding: 6px 4px 6px 8px;
+    border-radius: 8px;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .rwRemove:hover { color: var(--danger); background: #F1F0EE; }
+  .rwConfirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .rwConfirm .btn { padding: 7px 12px; font-size: 0.76rem; }
+  .rwConfirm .btnDanger { color: var(--danger); border-color: #F2C7C6; }
+  .rwAddRow {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 18px;
+    margin-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+  .rwAddRow input {
+    font-family: var(--font);
+    font-size: 0.88rem;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    outline: none;
+    flex: 1 1 auto;
+    min-width: 0;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .rwAddRow input:focus { border-color: var(--accent-strong); box-shadow: 0 0 0 3px rgba(255, 224, 178, 0.5); }
+  .rwAddRow .rwLevelInput { flex: 0 0 92px; }
+  .rwAddRow .btn { flex: 0 0 auto; }
 
   /* ---------- Toast ---------- */
   #toast {
@@ -733,6 +768,11 @@
       </div>
       <div class="rwSlotNote" id="rewardNote"></div>
       <div id="rewardList"></div>
+      <div class="rwAddRow" id="rewardAddRow">
+        <input type="text" id="rewardNewName" placeholder="Add a name to this class" autocomplete="off">
+        <input type="text" id="rewardNewLevel" class="rwLevelInput" placeholder="Level" autocomplete="off">
+        <button class="btn" id="rewardAddBtn">Add</button>
+      </div>
     </div>
   </div>
 </div>
@@ -751,7 +791,7 @@
 'use strict';
 
 /* ================= Constants ================= */
-var APP_VERSION = 'v1.3.0';
+var APP_VERSION = 'v1.4.0';
 var ADMIN_EMAIL = 'chungzhikai@gmail.com';
 var COLLECTION = 'pdfAnnotator';
 var STORAGE_DIR = 'pdf-annotator';
@@ -819,6 +859,7 @@ var allStudents = [];       // every students/{id} doc, loaded when the window o
 var rewardSlot = '';        // the time slot currently being shown
 var rewardAmount = DEFAULT_AMOUNT;
 var awardingFor = {};       // student id -> true while a write is in flight
+var removingId = null;      // student id whose row is asking "take out or delete?"
 
 /* Drawing-in-progress state */
 var drawing = null;         // { ann, svgNode, page }
@@ -1348,6 +1389,9 @@ async function openRewardModal() {
   sel.value = rewardSlot;
   if (sel.value !== rewardSlot) rewardSlot = '';   // saved slot no longer exists
   $('rewardReason').value = docName && pdfDoc ? docName : '';
+  $('rewardNewName').value = '';
+  $('rewardNewLevel').value = '';
+  removingId = null;
   rewardAmount = DEFAULT_AMOUNT;
   renderRewardAmounts();
   renderRewardList();
@@ -1397,10 +1441,24 @@ function renderRewardAmounts() {
   row.appendChild(all);
 }
 
+// What level is a new name in this class likely to be? The worksheet's level
+// wins; otherwise the level most of the class is already at.
+function suggestedLevel() {
+  if (wsMeta.level) return wsMeta.level;
+  var tally = {};
+  studentsInSlot(rewardSlot).forEach(function (s) {
+    if (s.level) tally[s.level] = (tally[s.level] || 0) + 1;
+  });
+  return Object.keys(tally).sort(function (a, b) { return tally[b] - tally[a]; })[0] || '';
+}
+
 function renderRewardList() {
   var list = $('rewardList');
   var note = $('rewardNote');
+  var addRow = $('rewardAddRow');
   list.innerHTML = '';
+  addRow.hidden = !rewardSlot;
+  if (rewardSlot && !$('rewardNewLevel').value) $('rewardNewLevel').value = suggestedLevel();
   if (!rewardSlot) {
     note.textContent = wsMeta.slot
       ? 'This worksheet is saved for “' + wsMeta.slot + '”, but no student is in that class any more. Pick a class above.'
@@ -1435,6 +1493,37 @@ function renderRewardList() {
     info.appendChild(meta);
     row.appendChild(info);
 
+    // Taking a name out is a two-tap action: the × swaps the row's controls
+    // for the two things it could mean, spelled out.
+    if (removingId === s.id) {
+      var confirmBox = document.createElement('div');
+      confirmBox.className = 'rwConfirm';
+
+      var offClass = document.createElement('button');
+      offClass.className = 'btn';
+      offClass.textContent = 'Take out of class';
+      offClass.title = 'Keep the record and the marks, just not in this class';
+      offClass.addEventListener('click', function () { removeFromClass(s); });
+      confirmBox.appendChild(offClass);
+
+      var del = document.createElement('button');
+      del.className = 'btn btnDanger';
+      del.textContent = 'Delete entirely';
+      del.title = 'Remove from the reward system altogether';
+      del.addEventListener('click', function () { deleteStudent(s); });
+      confirmBox.appendChild(del);
+
+      var cancel = document.createElement('button');
+      cancel.className = 'btn';
+      cancel.textContent = 'Cancel';
+      cancel.addEventListener('click', function () { removingId = null; renderRewardList(); });
+      confirmBox.appendChild(cancel);
+
+      row.appendChild(confirmBox);
+      list.appendChild(row);
+      return;
+    }
+
     var just = document.createElement('div');
     just.className = 'rwRowJust';
     just.textContent = s._just ? '+' + s._just : '';
@@ -1461,8 +1550,94 @@ function renderRewardList() {
     plus.addEventListener('click', function () { awardMarks(s, rewardAmount); });
     row.appendChild(plus);
 
+    var rm = document.createElement('button');
+    rm.className = 'rwRemove';
+    rm.textContent = '✕';
+    rm.title = 'Take ' + (s.name || 'this student') + ' off the list';
+    rm.addEventListener('click', function () { removingId = s.id; renderRewardList(); });
+    row.appendChild(rm);
+
     list.appendChild(row);
   });
+}
+
+/* ---- Managing who is in the class ---- */
+async function addStudentToClass() {
+  if (!isAdmin(currentUser)) return;
+  var nameEl = $('rewardNewName');
+  var levelEl = $('rewardNewLevel');
+  var name = nameEl.value.trim();
+  var level = levelEl.value.trim();
+  if (!rewardSlot) { toast('Pick a class first.'); return; }
+  if (!name) { toast('Type a name to add.'); nameEl.focus(); return; }
+  var clash = studentsInSlot(rewardSlot).some(function (s) {
+    return (s.name || '').toLowerCase() === name.toLowerCase();
+  });
+  if (clash && !window.confirm(name + ' is already in this class. Add a second record anyway?')) return;
+  var btn = $('rewardAddBtn');
+  btn.disabled = true;
+  try {
+    var payload = {
+      name: name,
+      level: level,
+      slots: [rewardSlot],
+      marks: 0,
+      uid: null,
+      email: null,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    var ref = await db.collection('students').add(payload);
+    allStudents.push({
+      id: ref.id, name: name, level: level, slots: [rewardSlot],
+      marks: 0, uid: null, email: null
+    });
+    nameEl.value = '';
+    toast('Added ' + name + ' to ' + rewardSlot + '.');
+    renderRewardList();
+    nameEl.focus();
+  } catch (e) {
+    console.error(e);
+    toast('Could not add: ' + (e.message || e));
+  }
+  btn.disabled = false;
+}
+
+// Drops just this class from the student. The record, its marks and its
+// history all stay — they simply stop showing up in this class.
+async function removeFromClass(student) {
+  if (!isAdmin(currentUser)) return;
+  var next = studentSlots(student).filter(function (slot) { return slot !== rewardSlot; });
+  removingId = null;
+  try {
+    // Older records kept a single `slot` string; null it so `slots` is the
+    // only source of truth from here on.
+    await db.collection('students').doc(student.id).update({ slots: next, slot: null });
+    student.slots = next;
+    student.slot = null;
+    toast(next.length
+      ? (student.name || 'Student') + ' taken out of ' + rewardSlot + '.'
+      : (student.name || 'Student') + ' taken out of ' + rewardSlot + ' — no class left, but the record is kept.');
+  } catch (e) {
+    console.error(e);
+    toast('Could not take them out: ' + (e.message || e));
+  }
+  renderRewardList();
+}
+
+async function deleteStudent(student) {
+  if (!isAdmin(currentUser)) return;
+  if (!window.confirm('Delete ' + (student.name || 'this student') +
+    ' from the reward system? Their marks balance goes with them. This cannot be undone.')) return;
+  removingId = null;
+  try {
+    await db.collection('students').doc(student.id).delete();
+    allStudents = allStudents.filter(function (s) { return s.id !== student.id; });
+    toast((student.name || 'Student') + ' deleted from the reward system.');
+  } catch (e) {
+    console.error(e);
+    toast('Could not delete: ' + (e.message || e));
+  }
+  renderRewardList();
 }
 
 function rewardReason() {
@@ -2231,7 +2406,16 @@ $('rewardModal').addEventListener('click', function (e) {
 });
 $('rewardSlotSelect').addEventListener('change', function (e) {
   rewardSlot = e.target.value;
+  removingId = null;
+  $('rewardNewLevel').value = '';
   renderRewardList();
+});
+$('rewardAddBtn').addEventListener('click', addStudentToClass);
+$('rewardNewName').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); addStudentToClass(); }
+});
+$('rewardNewLevel').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); addStudentToClass(); }
 });
 
 $('docsBtn').addEventListener('click', openDocsModal);
