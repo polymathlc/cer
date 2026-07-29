@@ -2660,6 +2660,13 @@ option {
   .print-question-page > * {
     flex-shrink: 0;
   }
+  /* The questions themselves, wrapped so fit-to-page scaling can be applied to
+     them WITHOUT zooming the page box. Zooming the box made Chrome paginate it
+     at its pre-zoom height, which pushed the footer and page number off the
+     foot of the sheet — see _printApplyZoom. */
+  .print-page-content {
+    flex-shrink: 0;
+  }
   .print-question-page img {
     max-width: 100%;
     max-height: 180pt;
@@ -3079,6 +3086,14 @@ option {
      would collapse to 0 there and jam the footer against the last answer box. */
   .print-page-tall .print-page-footer {
     margin-top: 18pt;
+  }
+  /* Written in by _printPadTallPage: the empty run of space that carries a tall
+     page down to the next sheet boundary, so its footer and page number sit on
+     the foot of the sheet instead of wherever the question stopped. */
+  .print-page-pad {
+    flex-shrink: 0;
+    break-inside: auto;
+    page-break-inside: auto;
   }
 
   /* ── Page numbers ─────────────────────────────────────────────────────

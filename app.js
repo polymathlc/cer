@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.196.0';
+const APP_VERSION = 'v1.197.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -9974,12 +9974,66 @@ function _printApplyPageNumbers(output) {
     label.textContent = '– ' + n + ' –';
     page.appendChild(label);
     let sheets = 1;
-    if (page.classList.contains('print-page-tall')) {
-      const h = page.getBoundingClientRect().height;
-      sheets = Math.max(1, Math.ceil((h / sheetH) - 0.02));   // tolerate sub-pixel overshoot
-    }
+    if (page.classList.contains('print-page-tall')) sheets = _printPadTallPage(page, sheetH);
     n += sheets;
   });
+}
+
+// A normal page is a fixed-height flex column, so `margin-top:auto` drops its
+// footer and page number onto the foot of the sheet no matter how much question
+// sits above them. A TALL page cannot be that — it has to be a plain block so
+// its content can fragment across sheets — so it grew to its content and the
+// footer and number came to rest wherever the question happened to end: halfway
+// up the sheet for a short one, at the foot for a long one. The number moved
+// with the question, which is exactly what it must not do.
+//
+// So pad the page out to a whole number of sheets, with the spacer ABOVE the
+// footer: the block now ends on a sheet boundary and the footer and number ride
+// down to the bottom edge with it. Returns the sheets the page consumes, which
+// is what the caller advances the counter by.
+function _printPadTallPage(page, sheetH) {
+  const old = page.querySelector(':scope > .print-page-pad');
+  if (old) old.remove();
+  // The planner measured this page with the print stylesheet live, which the
+  // main document does not have — so its number is the one that describes the
+  // printed sheet. Fall back to measuring here only when there is no plan (the
+  // flow fallback), where an approximate bottom still beats no bottom at all.
+  const planned = parseFloat(page.dataset.planH || '');
+  const usePlan = isFinite(planned) && planned > 0;
+  const z = usePlan ? 1 : (parseFloat(page.style.zoom) || 1);
+  const sheet = usePlan ? PRINT_PAGE_PX : sheetH / z;
+  const h = usePlan ? planned : page.getBoundingClientRect().height / z;
+  const sheets = Math.max(1, Math.ceil((h / sheet) - 0.02));   // tolerate sub-pixel overshoot
+  // Only pad a page that fits WITHIN one sheet. That is the case this is for:
+  // a question flagged tall but short enough that its footer used to come to
+  // rest wherever the question ended, halfway up the paper. A page that really
+  // does flow across sheets fragments at boundaries no measurement can predict
+  // (a writing box that won't split jumps whole to the next sheet), so padding
+  // it by a computed amount is as likely to push the footer onto an extra sheet
+  // as to seat it — leave those alone.
+  if (sheets > 1 || h > sheet * 0.9) return sheets;
+  // Stop 3px short of the boundary: landing exactly on it risks the rounding
+  // that makes a break-inside:avoid footer jump to the next sheet on its own.
+  const gap = sheets * sheet - h - 3;
+  if (gap > 1) {
+    const pad = document.createElement('div');
+    pad.className = 'print-page-pad';
+    pad.setAttribute('aria-hidden', 'true');
+    pad.style.height = gap + 'px';
+    const anchor = page.querySelector(':scope > .print-page-footer')
+      || page.querySelector(':scope > .print-page-number');
+    page.insertBefore(pad, anchor);
+  }
+  return sheets;
+}
+
+// Remember what the planner said this page will measure once printed, so the
+// bottom-of-sheet padding is computed from print reality rather than from the
+// unstyled screen layout the numbering pass runs in. `h` excludes the page
+// number, which is stamped on afterwards — add it here.
+function _printStampPlanHeight(page, h, numH) {
+  if (!isFinite(h) || h <= 0) return;
+  page.dataset.planH = String(h + (numH || 0));
 }
 
 // Greedily group chunk indices into A4 pages (filling each page as full as it
@@ -10095,6 +10149,19 @@ function _printFooterHeightIn(doc, container) {
   return h;
 }
 
+// Height the "– 1 –" label really occupies, measured in the same print-CSS
+// context. The page heights the planner reports are measured before the number
+// is stamped on, so padding a page down to a sheet boundary has to add this
+// back. The 1px spacers stop the label's top margin collapsing out.
+function _printNumberHeightIn(doc, container) {
+  const holder = doc.createElement('div');
+  holder.innerHTML = '<div style="height:1px;"></div><div class="print-page-number">– 1 –</div>';
+  container.appendChild(holder);
+  const h = Math.max(0, holder.getBoundingClientRect().height - 1);
+  holder.remove();
+  return h;
+}
+
 // Height one .print-question-separator really occupies (border + margins),
 // measured in the same print-CSS context — replaces a hard-coded guess that
 // let page estimates drift near the sheet boundary. The 1px spacer divs stop
@@ -10130,10 +10197,19 @@ function _printPlanIn(doc, root, opts) {
   stage.style.cssText = 'position:absolute;left:0;top:0;width:178mm;visibility:hidden;';
   (root.parentNode || doc.body).appendChild(stage);
 
-  const footerH = _printFooterHeightIn(doc, root);
+  const footerH = _printFooterHeightIn(doc, root);      // footer + page number
+  const numH = _printNumberHeightIn(doc, root);
+  const footerOnlyH = Math.max(0, footerH - numH);
   const sepH = _printSeparatorHeightIn(doc, root);
   const budget = PRINT_PAGE_PX - footerH - PRINT_PAGE_RESERVE;
   const usable = PRINT_PAGE_PX - PRINT_FIT_SAFETY;
+  // Fit-to-page scales the QUESTIONS only — the footer and page number are page
+  // chrome and print at full size, on the same baseline as every other sheet.
+  // So the ratio is measured against the room left once the chrome is taken
+  // out, not against the whole sheet: scaling by usable/h would leave
+  // content*z + footer taller than the page and push the footer off the sheet.
+  const contentSpace = usable - footerH;
+  const zoomFor = (h) => contentSpace / Math.max(1, h - footerOnlyH);
   const heights = chunks.map(c => c.getBoundingClientRect().height);
 
   const forced = (opts && opts.forcedBreakIds) || null;
@@ -10154,13 +10230,18 @@ function _printPlanIn(doc, root, opts) {
   const measurePage = (group, tall) => {
     const page = doc.createElement('div');
     page.className = 'print-question-page pm-fit' + (tall ? ' print-page-tall' : '');
+    // Same shape the printer builds, so the height measured here is the height
+    // that page will really have.
+    const content = doc.createElement('div');
+    content.className = 'print-page-content';
+    page.appendChild(content);
     group.forEach((idx, pos) => {
       if (pos > 0) {
         const sep = doc.createElement('div');
         sep.className = 'print-question-separator';
-        page.appendChild(sep);
+        content.appendChild(sep);
       }
-      page.appendChild(chunks[idx]);
+      content.appendChild(chunks[idx]);
     });
     page.appendChild(footerNode());
     stage.appendChild(page);
@@ -10178,7 +10259,7 @@ function _printPlanIn(doc, root, opts) {
     // Over the sheet, more than one question on it, and a shrink wouldn't be
     // invisible → push the last question to the next sheet and re-measure.
     while (!tall && h > usable && groups[gi].length > 1 &&
-           (usable / h) < PRINT_GENTLE_ZOOM && guard++ < 500) {
+           zoomFor(h) < PRINT_GENTLE_ZOOM && guard++ < 500) {
       const last = groups[gi][groups[gi].length - 1];
       if (mergeFlags[last]) break;              // teacher pinned it to this page
       groups[gi].pop();
@@ -10188,7 +10269,7 @@ function _printPlanIn(doc, root, opts) {
       h = measurePage(groups[gi], tall);
     }
     if (!tall && h > usable) {
-      const z = usable / h;
+      const z = zoomFor(h);
       if (z >= PRINT_ZOOM_FLOOR) pageZoom[gi] = z;
       else { tall = true; h = measurePage(groups[gi], true); }  // too big to shrink readably — let it flow
     }
@@ -10200,6 +10281,7 @@ function _printPlanIn(doc, root, opts) {
   const akPlans = answerKeys.map(ak => {
     const footer = footerNode();
     ak.classList.add('pm-fit');
+    _printWrapPageContent(ak, doc);
     ak.appendChild(footer);
     stage.appendChild(ak);
     const h = ak.getBoundingClientRect().height;
@@ -10207,13 +10289,13 @@ function _printPlanIn(doc, root, opts) {
     ak.classList.remove('pm-fit');
     root.appendChild(ak);
     if (h <= usable) return { zoom: 0, tall: false, h };
-    const z = usable / h;
+    const z = zoomFor(h);
     return (z >= PRINT_ZOOM_FLOOR) ? { zoom: z, tall: false, h } : { zoom: 0, tall: true, h };
   });
 
   const frontSpans = fronts.map(f => Math.max(1, Math.ceil((f.getBoundingClientRect().height || 1) / PRINT_PAGE_PX)));
   stage.remove();
-  return { groups, pageHs, pageTall, pageZoom, akPlans, frontSpans, tallFlags: cls.tallFlags, heights, footerH, sepH };
+  return { groups, pageHs, pageTall, pageZoom, akPlans, frontSpans, tallFlags: cls.tallFlags, heights, footerH, sepH, numH };
 }
 
 // Renders the print HTML in a hidden same-origin iframe with the app's
@@ -10253,15 +10335,38 @@ function _printPlanPages(html, opts, cb) {
   } catch (e) { console.warn('print plan', e); finish(null); }
 }
 
-// Shrink a page to fit, keeping the BOX exactly one sheet tall so its footer
-// still lands on the same baseline as every other page (zoom scales the box
-// too, so the declared height has to be divided back out).
+// Shrink a page to fit by scaling its CONTENT, never the page box itself.
+//
+// This used to zoom the whole .print-question-page and divide the declared
+// height back out (258/z), which laid out correctly — the box measured exactly
+// one sheet — but paginated wrongly: Chrome fragmented the zoomed box as if it
+// were the pre-zoom 356mm, so the sheet filled up early and the footer and page
+// number were pushed onto the next sheet, or left floating well above the foot
+// of the paper. Scaling an inner wrapper instead leaves the page box a plain,
+// unzoomed 258mm — exactly like the pages that always printed correctly — so
+// `margin-top:auto` drops the footer onto the same baseline every time. It is
+// also what the live preview already does (.wspv-content), so the two agree.
 function _printApplyZoom(page, z) {
   page.style.zoom = '';
   page.style.height = '';
-  if (!z || z >= 0.999) return;
-  page.style.zoom = z;
-  if (!page.classList.contains('print-page-tall')) page.style.height = (258 / z) + 'mm';
+  const content = page.querySelector(':scope > .print-page-content');
+  if (content) content.style.zoom = '';
+  if (!z || z >= 0.999 || !content) return;
+  content.style.zoom = z;
+}
+
+// Move everything that isn't chrome (footer / page number / padding) into the
+// wrapper that carries the fit-to-page scaling.
+function _printWrapPageContent(page, doc) {
+  if (page.querySelector(':scope > .print-page-content')) return page.querySelector(':scope > .print-page-content');
+  const content = (doc || document).createElement('div');
+  content.className = 'print-page-content';
+  Array.from(page.childNodes).forEach(n => {
+    if (n.nodeType === 1 && (n.classList.contains('print-page-footer') || n.classList.contains('print-page-number') || n.classList.contains('print-page-pad'))) return;
+    content.appendChild(n);
+  });
+  page.insertBefore(content, page.firstChild);
+  return content;
 }
 
 // Print, then undo the inline zoom/height once the dialog is done with them.
@@ -10278,6 +10383,7 @@ function _printAndRestore(output) {
       p.style.zoom = '';
       p.style.height = '';
     });
+    Array.from(output.querySelectorAll('.print-page-content')).forEach(c => { c.style.zoom = ''; });
   };
   window.addEventListener('afterprint', restore);
   setTimeout(restore, 60000); // in case afterprint never fires
@@ -10300,11 +10406,13 @@ function _printFlowFallback(output) {
     const page = document.createElement('div');
     page.className = 'print-question-page print-page-tall';
     page.innerHTML = body;
+    _printWrapPageContent(page);
     page.appendChild(_createPrintPageFooter());
     output.appendChild(page);
   }
   answerKeys.forEach(ak => {
     ak.classList.add('print-page-tall');
+    _printWrapPageContent(ak);
     ak.appendChild(_createPrintPageFooter());
     output.appendChild(ak);
   });
@@ -10343,25 +10451,31 @@ function doScaleAndPrint(output, opts) {
         const page = document.createElement('div');
         page.className = 'print-question-page';
         if (plan.pageTall[gi]) page.classList.add('print-page-tall');
+        const content = document.createElement('div');
+        content.className = 'print-page-content';
+        page.appendChild(content);
         group.forEach((chunkIdx, posInGroup) => {
           if (posInGroup > 0) {
             const sep = document.createElement('div');
             sep.className = 'print-question-separator';
-            page.appendChild(sep);
+            content.appendChild(sep);
           }
           chunks[chunkIdx].classList.toggle('print-chunk-tall', !!plan.tallFlags[chunkIdx]);
-          page.appendChild(chunks[chunkIdx]);
+          content.appendChild(chunks[chunkIdx]);
         });
         page.appendChild(_createPrintPageFooter());
         _printApplyZoom(page, plan.pageZoom[gi]);
+        _printStampPlanHeight(page, plan.pageHs[gi], plan.numH);
         output.appendChild(page);
       });
 
       answerKeys.forEach((ak, ai) => {
         const p = plan.akPlans[ai] || {};
         if (p.tall) ak.classList.add('print-page-tall');
+        _printWrapPageContent(ak);
         ak.appendChild(_createPrintPageFooter());
         _printApplyZoom(ak, p.zoom);
+        _printStampPlanHeight(ak, p.h, plan.numH);
         output.appendChild(ak);
       });
 
@@ -14441,16 +14555,27 @@ const WS_PREVIEW_CSS = `
 // braces) so its rules apply on the iframe's screen — single source of truth,
 // no duplication, and the host page's real print is untouched.
 function _wsAppCssForPreview() {
-  const styleEl = document.querySelector('style');
-  let css = (styleEl && styleEl.textContent) || '';
-  const i = css.indexOf('@media print');
-  if (i >= 0) {
+  // EVERY stylesheet, not the first one. The first <style> in the document is
+  // the prebuilt Tailwind reset; the app's own rules — including the whole
+  // @media print block that gives a printed page its type sizes, writing-box
+  // heights and page geometry — live in a later one. Taking only the first
+  // meant the planner measured pages that had none of the print styling on
+  // them, so every height it reported was wrong: pages were shrunk by the wrong
+  // factor and footers and page numbers came to rest well short of the foot of
+  // the sheet, or were pushed onto the next one.
+  let css = Array.from(document.querySelectorAll('style')).map(s => s.textContent || '').join('\n');
+  // Unwrap every `@media print { … }` (balanced braces) so its rules apply on
+  // the iframe's screen — single source of truth, and the host page's own print
+  // is untouched.
+  for (let guard = 0; guard < 50; guard++) {
+    const i = css.indexOf('@media print');
+    if (i < 0) break;
     const open = css.indexOf('{', i);
-    if (open >= 0) {
-      let depth = 0, j = open;
-      for (; j < css.length; j++) { const ch = css[j]; if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth === 0) break; } }
-      if (depth === 0) css = css.slice(0, i) + css.slice(open + 1, j) + css.slice(j + 1);
-    }
+    if (open < 0) break;
+    let depth = 0, j = open;
+    for (; j < css.length; j++) { const ch = css[j]; if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth === 0) break; } }
+    if (depth !== 0) break;
+    css = css.slice(0, i) + css.slice(open + 1, j) + css.slice(j + 1);
   }
   return css;
 }
