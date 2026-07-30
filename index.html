@@ -677,7 +677,7 @@ option {
   border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1px solid var(--border);
-  max-height: 300px;
+  max-height: 460px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -685,7 +685,7 @@ option {
 }
 .image-preview img {
   max-width: 100%;
-  max-height: 300px;
+  max-height: 460px;
   object-fit: contain;
 }
 .image-error {
@@ -2667,9 +2667,15 @@ option {
   .print-page-content {
     flex-shrink: 0;
   }
+  /* The ceiling on how tall a picture may print. It was 180pt (63mm) — barely a
+     quarter of the sheet — so a four-option figure or a graph asked for the full
+     column width, got its height cut to 63mm, and `contain` then shrank the
+     WIDTH to match: a diagram set to fill the page came out at half size. 170mm
+     still leaves room for the question header, its stem and the page footer, and
+     only a genuinely enormous picture now meets the cap at all. */
   .print-question-page img {
     max-width: 100%;
-    max-height: 180pt;
+    max-height: 170mm;
     object-fit: contain;
   }
   .print-text-block img {
@@ -2802,7 +2808,7 @@ option {
   }
   .print-text-block img {
     max-width: 100%;
-    max-height: 180pt;
+    max-height: 170mm;
   }
 
   /* Blank lines */
@@ -4122,6 +4128,8 @@ option {
   cursor: pointer;
 }
 .wsqe-step:hover { border-color: var(--primary); color: var(--primary); }
+/* "Auto" needs words, not a 30px square. */
+.wsqe-step.wsqe-step-auto { width: auto; padding: 0 11px; font-size: 0.76rem; font-weight: 600; }
 .wsqe-size-val { min-width: 44px; text-align: center; font-size: 0.86rem; font-weight: 700; }
 .wsqe-hint { font-size: 0.76rem; color: var(--text-muted); line-height: 1.5; }
 @media print { .wsqe-overlay { display: none !important; } }

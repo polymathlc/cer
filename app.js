@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.199.0';
+const APP_VERSION = 'v1.200.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -3510,9 +3510,10 @@ function renderBlocks() {
             </div>
             <div class="img-size-bar" id="imgSizeBar_${block.id}" style="display:${block.url ? 'flex' : 'none'};align-items:center;gap:8px;margin-top:8px;">
               <span style="font-size:0.8rem;color:var(--text-muted);">Size</span>
-              <button type="button" class="btn btn-outline" style="padding:2px 12px;font-weight:700;" onclick="adjustImgScale('${block.id}',-1)" title="Smaller (min 30%)">−</button>
-              <span id="imgSizeLabel_${block.id}" style="font-family:'Space Mono',monospace;font-size:0.8rem;min-width:46px;text-align:center;">${Math.round(imgScale(block) * 100)}%</span>
-              <button type="button" class="btn btn-outline" style="padding:2px 12px;font-weight:700;" onclick="adjustImgScale('${block.id}',1)" title="Larger (max 100%)">+</button>
+              <button type="button" class="btn btn-outline" style="padding:2px 12px;font-weight:700;" onclick="adjustImgScale('${block.id}',-1)" title="Smaller — 5% at a time, down to ${IMG_SCALE_MIN}% of the page width">−</button>
+              <span id="imgSizeLabel_${block.id}" style="font-family:'Space Mono',monospace;font-size:0.8rem;min-width:52px;text-align:center;">${imgSizeLabelText(block)}</span>
+              <button type="button" class="btn btn-outline" style="padding:2px 12px;font-weight:700;" onclick="adjustImgScale('${block.id}',1)" title="Larger — 5% at a time, up to ${IMG_SCALE_MAX}% (the full page width)">+</button>
+              <button type="button" class="btn btn-outline" style="padding:2px 10px;font-size:0.76rem;" onclick="resetImgScale('${block.id}')" title="Auto: fill the page width, without stretching the picture past its own resolution">Auto</button>
             </div>
             <div class="img-enhance-bar" id="imgEnhance_${block.id}"></div>
             <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:0.8rem;color:var(--text-muted);cursor:pointer;">
@@ -4189,29 +4190,67 @@ function execCmdVal(cmd, val) {
 // IMAGE PREVIEW
 // =====================================================================
 // ── Image sizing (teacher-adjustable, 30%–100% via +/- buttons; default 60%) ──
+const IMG_SCALE_MIN = 20;    // % of the column
+const IMG_SCALE_MAX = 100;   // the column itself — a picture cannot print wider
+const IMG_SCALE_STEP = 5;    // 5% nudges; 10% was too coarse to place a diagram
+// Has a size been chosen for this picture, or is it still on Auto?
+function imgHasScale(block) { return Number(block && block.scale) > 0; }
 function imgScale(block) {
   const s = Number(block && block.scale);
-  return (s && s > 0) ? Math.max(0.3, Math.min(1.0, s)) : 0.6;   // default 60%
+  if (!(s > 0)) return 1;    // Auto — only used as a stepping base, see imgSizeStyle
+  return Math.max(IMG_SCALE_MIN / 100, Math.min(IMG_SCALE_MAX / 100, s));
 }
-// Inline style for a rendered image at the block's chosen scale. The scale is a
-// percentage of the COLUMN width all the way up, so 100% fills the column.
-// 100% used to mean "natural size, capped to the column" instead, which made the
-// control non-monotonic: 90% of a wide column was often BIGGER than the natural
-// size 100% gave you. Teachers pushing the + button to its limit to enlarge a
-// small scanned diagram got the smallest setting of all.
+// Inline style for a rendered picture.
+//
+// Auto (no size chosen): as wide as the column allows, but never stretched past
+// its own resolution. A big scan — a four-option figure, a graph — fills the
+// column, which is what such a picture is FOR; a small inset stays small rather
+// than being blown up into a blur. The flat 60% this replaces is why every
+// large diagram came out at little more than half the size it wanted.
+//
+// Chosen: a straight percentage of the COLUMN width, 20%–100%, so the control
+// is monotonic — every press of + is bigger than the last, up to the full
+// column. (100% once meant "natural size" here, which made pressing + to the
+// limit the SMALLEST setting a small picture could have.)
 function imgSizeStyle(block) {
+  if (!imgHasScale(block)) return 'height:auto;max-width:100%';
   const pct = Math.round(imgScale(block) * 100);
   return `width:${pct}%;height:auto;max-width:100%`;
+}
+// What fraction of the column a picture is filling on screen right now. Stepping
+// away from Auto starts HERE, so the first press of − or + moves from the size
+// on screen instead of jumping to some notional default.
+function _imgRenderedPct(containerId, fallback) {
+  const wrap = document.getElementById(containerId);
+  const img = wrap && wrap.querySelector('img');
+  const room = wrap ? wrap.clientWidth : 0;
+  if (!img || !room || !img.offsetWidth) return fallback;
+  const pct = Math.round((img.offsetWidth / room) * 100 / IMG_SCALE_STEP) * IMG_SCALE_STEP;
+  return Math.max(IMG_SCALE_MIN, Math.min(IMG_SCALE_MAX, pct));
+}
+function imgSizeLabelText(block) {
+  return imgHasScale(block) ? Math.round(imgScale(block) * 100) + '%' : 'Auto';
 }
 // + / - handler for the image size control in the question editor.
 function adjustImgScale(blockId, dir) {
   const block = blocks.find(b => b.id === blockId);
   if (!block) return;
-  let next = Math.round(imgScale(block) * 100) + dir * 10; // 10% steps
-  next = Math.max(30, Math.min(100, next));
+  const base = imgHasScale(block) ? Math.round(imgScale(block) * 100)
+                                  : _imgRenderedPct('imgPreview_' + blockId, IMG_SCALE_MAX);
+  const next = Math.max(IMG_SCALE_MIN, Math.min(IMG_SCALE_MAX, base + dir * IMG_SCALE_STEP));
   block.scale = next / 100;
   const label = document.getElementById('imgSizeLabel_' + blockId);
   if (label) label.textContent = next + '%';
+  const img = document.querySelector('#imgPreview_' + blockId + ' img');
+  if (img) img.setAttribute('style', imgSizeStyle(block));
+}
+// Back to Auto: the picture sizes itself to the column again.
+function resetImgScale(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  delete block.scale;
+  const label = document.getElementById('imgSizeLabel_' + blockId);
+  if (label) label.textContent = 'Auto';
   const img = document.querySelector('#imgPreview_' + blockId + ' img');
   if (img) img.setAttribute('style', imgSizeStyle(block));
 }
@@ -15017,17 +15056,17 @@ function _wsQeRender() {
   const rows = (_wsQeDraft.blocks || []).map(b => {
     const bid = escapeHtml(String(b.id || ''));
     if (b.type === 'image') {
-      const pct = Math.round(imgScale(b) * 100);
       return `<div class="wsqe-block">
         <div class="wsqe-block-label">🖼 Diagram</div>
         ${b.url
-          ? `<div class="wsqe-shot"><img id="wsqeImg_${bid}" src="${escapeHtml(transformImageUrl(b.url))}" alt="" style="width:${pct}%;"></div>`
+          ? `<div class="wsqe-shot" id="wsqeShot_${bid}"><img id="wsqeImg_${bid}" src="${escapeHtml(transformImageUrl(b.url))}" alt="" style="${imgSizeStyle(b)}"></div>`
           : `<div class="wsqe-shot wsqe-shot-empty">No image on this block yet</div>`}
         <div class="wsqe-size">
-          <button type="button" class="wsqe-step" onclick="wsQeImgSize('${bid}',-1)" title="Smaller">−</button>
-          <span class="wsqe-size-val" id="wsqeSize_${bid}">${pct}%</span>
-          <button type="button" class="wsqe-step" onclick="wsQeImgSize('${bid}',1)" title="Bigger">+</button>
-          <span class="wsqe-hint">of the page width — 100% fills the column</span>
+          <button type="button" class="wsqe-step" onclick="wsQeImgSize('${bid}',-1)" title="Smaller — ${IMG_SCALE_STEP}% at a time, down to ${IMG_SCALE_MIN}%">−</button>
+          <span class="wsqe-size-val" id="wsqeSize_${bid}">${imgSizeLabelText(b)}</span>
+          <button type="button" class="wsqe-step" onclick="wsQeImgSize('${bid}',1)" title="Larger — ${IMG_SCALE_STEP}% at a time, up to the full page width">+</button>
+          <button type="button" class="wsqe-step wsqe-step-auto" onclick="wsQeImgSize('${bid}',0)" title="Auto: fill the page width without stretching the picture past its own resolution">Auto</button>
+          <span class="wsqe-hint">of the page width — ${IMG_SCALE_MAX}% fills the column</span>
         </div>
         <label class="wsqe-label" for="wsqeUrl_${bid}">Image link</label>
         <input class="wsqe-input" id="wsqeUrl_${bid}" type="text" value="${escapeHtml(b.url || '')}"
@@ -15054,16 +15093,20 @@ function _wsQeBlock(bid) {
   return (_wsQeDraft && _wsQeDraft.blocks || []).find(b => String(b.id) === String(bid));
 }
 
-// 10% steps, same range as the editor's own control.
+// Same range and steps as the editor's own control. dir 0 means "back to Auto".
 function wsQeImgSize(bid, dir) {
   const b = _wsQeBlock(bid);
   if (!b) return;
-  const next = Math.max(30, Math.min(100, Math.round(imgScale(b) * 100) + dir * 10));
-  b.scale = next / 100;
+  if (!dir) delete b.scale;
+  else {
+    const base = imgHasScale(b) ? Math.round(imgScale(b) * 100)
+                                : _imgRenderedPct('wsqeShot_' + bid, IMG_SCALE_MAX);
+    b.scale = Math.max(IMG_SCALE_MIN, Math.min(IMG_SCALE_MAX, base + dir * IMG_SCALE_STEP)) / 100;
+  }
   const lbl = document.getElementById('wsqeSize_' + bid);
-  if (lbl) lbl.textContent = next + '%';
+  if (lbl) lbl.textContent = imgSizeLabelText(b);
   const img = document.getElementById('wsqeImg_' + bid);
-  if (img) img.style.width = next + '%';
+  if (img) img.setAttribute('style', imgSizeStyle(b));
 }
 
 function wsQeImgUrl(bid, url) {
@@ -34376,6 +34419,7 @@ window.execCmd = execCmd;
 window.execCmdVal = execCmdVal;
 window.previewImage = previewImage;
 window.adjustImgScale = adjustImgScale;
+window.resetImgScale = resetImgScale;
 window.handleImagePaste = handleImagePaste;
 window.handleImageDrop = handleImageDrop;
 window.handleRichImagePaste = handleRichImagePaste;
