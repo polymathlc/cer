@@ -1711,6 +1711,32 @@ option {
   color: var(--text-muted); }
 .qtag-pick:hover b { color: #8a6212; }
 .qtag-pick.more { border-style: dashed; color: var(--text-muted); }
+
+/* ---- Bulk tagging dialog -------------------------------------------------- */
+.bt-scopes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.bt-scope { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left;
+  cursor: pointer; font: inherit; padding: 14px 16px; border: 1.5px solid var(--border);
+  border-radius: 13px; background: var(--surface); color: var(--text); }
+.bt-scope:hover:not(:disabled) { border-color: var(--primary); }
+.bt-scope.on { border-color: var(--primary); background: var(--primary-light); }
+.bt-scope:disabled { opacity: 0.5; cursor: not-allowed; }
+.bt-scope b { font-size: 0.95rem; }
+.bt-scope span { font-size: 0.79rem; line-height: 1.5; color: var(--text-muted); }
+.bt-scope-note { font-size: 0.73rem !important; font-style: italic; }
+.bt-target { font-size: 0.85rem; line-height: 1.65; color: var(--text-muted); margin-top: 16px; }
+.bt-section { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--border); }
+.bt-h { font-weight: 700; font-size: 0.93rem; }
+.bt-p { font-size: 0.82rem; line-height: 1.7; color: var(--text-muted); margin: 7px 0 14px; }
+.bt-check { display: flex; align-items: flex-start; gap: 10px; font-size: 0.84rem; line-height: 1.6;
+  cursor: pointer; margin-top: 4px; }
+.bt-check input { width: 17px; height: 17px; flex: 0 0 auto; margin-top: 2px; cursor: pointer; }
+.bt-check span { color: var(--text-muted); }
+.bt-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.bt-run { padding: 10px 0 4px; }
+.bt-run-title { font-weight: 700; font-size: 0.98rem; }
+.bt-run-line { font-size: 0.85rem; line-height: 1.6; margin-top: 12px; font-family: 'Space Mono', monospace; }
+.bt-run-note { font-size: 0.78rem; line-height: 1.6; color: var(--text-muted); margin-top: 8px; }
+@media (max-width: 560px) { .bt-scopes { grid-template-columns: 1fr; } }
 .qb-card-preview {
   font-size: 0.85rem;
   color: var(--text-muted);
@@ -6529,7 +6555,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
              bank's Tag filter and search, the worksheet/quest Concept filters, and
              Ai-nstein's retrieval — an exact tag match outranks every other kind. -->
         <div class="form-group">
-          <label class="form-label">🏷 Tags <span style="font-weight:400;color:var(--text-muted);">(optional — comma-separated, e.g. <em>elastic spring force, extension of spring</em>)</span> <button type="button" class="mic-btn" data-mic="questionTags" title="Dictate the tags" style="width:26px;height:26px;font-size:0.85rem;vertical-align:middle;">🎤</button></label>
+          <label class="form-label">🏷 Tags <span style="font-weight:400;color:var(--text-muted);">(optional — comma-separated, e.g. <em>elastic spring force, extension of spring</em>)</span> <button type="button" class="mic-btn" data-mic="questionTags" title="Dictate the tags" style="width:26px;height:26px;font-size:0.85rem;vertical-align:middle;">🎤</button> <button type="button" class="improve-btn" onclick="suggestTagsForEditor(this)" title="Read this question and suggest tags — reusing the tags already in your bank wherever they fit. Suggestions are added to the box, never replacing what you typed.">✨ Suggest tags</button></label>
           <input id="questionTags" class="form-input" type="text" autocomplete="off" spellcheck="false" placeholder="elastic spring force, extension of spring" oninput="onQuestionTagsInput()">
           <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.5;">Name the exact idea being tested, the way you'd say it out loud. A student can then ask Ai-nstein for “an elastic spring force question” and get <em>this</em> one, and you can filter the bank by tag to see every question on a concept at once. Spelling and capitals don't have to match — <em>Elastic Spring Force</em> and <em>elastic spring force</em> count as the same tag.</div>
           <div id="questionTagsPreview" class="qtag-row" style="display:none;"></div>
@@ -6763,6 +6789,11 @@ body.practising-as .page-body { padding-bottom: 96px; }
           </select>
           <button class="btn btn-outline" id="bankUsageBtn" onclick="refreshQuestionUsage()"
             title="Re-read every student attempt ever logged and update each question's difficulty">🔄 Refresh difficulty</button>
+          <!-- Bulk tagging works on a SET: the questions picked in the grid, or
+               everything the current filters show. Filter to Untagged first and the
+               whole backlog can be done in one go. -->
+          <button class="btn btn-outline admin-only" onclick="openBulkTags()"
+            title="Tag many questions at once — add or remove the same tags across everything shown, or have the AI tag each one from the vocabulary you've already built">🏷 Bulk tag</button>
           <div class="view-toggle" id="bankViewToggle" role="group" aria-label="Question bank view">
             <button type="button" data-bank-view="list" onclick="setBankView('list')" title="List view — full titles, tags and actions">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -8229,6 +8260,20 @@ body.practising-as .page-body { padding-bottom: 96px; }
     <div class="btn-group" style="justify-content:flex-end;">
       <button class="btn btn-outline" onclick="closeAiEngineSettings()">Cancel</button>
       <button class="btn btn-primary" onclick="saveAiEngineSettings()">Save AI Engine</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== BULK TAGGING (Admin) ====================
+     Works on a set — the questions picked in the grid, or everything the current
+     filters show. Body is rendered by renderBulkTags(). -->
+<div class="confirm-overlay" id="bulkTagOverlay">
+  <div class="confirm-dialog" style="max-width:660px;text-align:left;max-height:90vh;overflow-y:auto;">
+    <h3 style="margin-bottom:4px;">🏷 Bulk tag questions</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.65;margin-bottom:20px;">Tag a whole set at once. Tags are what Ai-nstein searches when a student asks for “an elastic spring force question”, what the bank's Tag filter groups by, and what revision flashcards name a gap after — so a well-tagged bank is worth the ten minutes.</p>
+    <div id="bulkTagBody"></div>
+    <div class="btn-group" style="justify-content:flex-end;margin-top:22px;">
+      <button class="btn btn-outline" onclick="closeBulkTags()">Done</button>
     </div>
   </div>
 </div>

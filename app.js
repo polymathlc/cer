@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.203.0';
+const APP_VERSION = 'v1.204.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -2159,6 +2159,139 @@ function setQuestionTagsField(q) {
   renderQuestionTagsUi();
 }
 
+// ---- letting the AI propose tags -------------------------------------------
+// The value of a tag is that every question about one idea carries the SAME
+// string. So the model is not asked to invent a vocabulary — it is handed the one
+// the admin has already built and told to reuse it, and anything it returns is
+// snapped back onto an existing tag where the two are the same words in a
+// different order or a different case ("spring elastic force" → "elastic spring
+// force"). New tags are still allowed, because a genuinely new idea needs one; they
+// just have to earn it.
+function _tagWordKey(s) {
+  return _docNorm(s).split(' ').filter(Boolean).sort().join(' ');
+}
+// Snap a whole list against the bank's current vocabulary. Applied wherever tags
+// are STORED — the editor's save, bulk add, and the AI paths — never while someone
+// is typing. So the box shows exactly what they wrote, and what lands on the
+// question is the spelling the bank already uses. Without this, one admin typing
+// "Heat Conduction" quietly forks every count away from "heat conduction".
+function _snapTagsToBank(tags) {
+  const known = allBankTags().map(r => r.tag);
+  const out = [];
+  (tags || []).forEach(t => {
+    const s = _snapToKnownTag(t, known);
+    if (s && !out.some(x => x.toLowerCase() === s.toLowerCase())) out.push(s);
+  });
+  return out;
+}
+// Fold a proposed tag onto an existing one where they are the same words. Returns
+// the house spelling, or the proposal untouched when it is genuinely new.
+function _snapToKnownTag(tag, known) {
+  const t = String(tag || '').trim();
+  if (!t) return '';
+  const lower = t.toLowerCase();
+  for (const k of known) if (k.toLowerCase() === lower) return k;      // same string
+  const wk = _tagWordKey(t);
+  if (!wk) return t;
+  for (const k of known) if (_tagWordKey(k) === wk) return k;          // same words
+  return t;
+}
+
+// Ask the model for tags for ONE question. Returns an array — possibly empty. The
+// caller decides what to do with them; nothing is applied here.
+async function aiSuggestTags(q) {
+  if (!window.__aiReady || !window.__aiReady()) throw new Error('the AI is not ready yet');
+  if (!q) return [];
+  const known = allBankTags().map(r => r.tag);
+  const p = _docQParts(q);
+  const facts = {
+    title: _fcClip(q.title || ''),
+    topic: q.topic || '',
+    secondTopic: qSecondaryTopic(q),
+    category: normalizeCategoryValue(q.category),
+    question: _fcClip(p.text || ''),
+  };
+  if (p.mcq) {
+    const opts = (p.mcq.options || []).map(o => stripHtml(o.text || '')).filter(Boolean);
+    if (opts.length) facts.options = opts.map(o => _fcClip(o));
+  }
+  const model = _deriveModelAnswer(q);
+  if (model) facts.modelAnswer = _fcClip(model);
+  const expl = ((q.blocks || []).find(b => b && b.type === 'explanation' && stripHtml(b.content || '').trim()));
+  if (expl) facts.explanation = _fcClip(expl.content);
+  const already = qTagList(q);
+  if (already.length) facts.tagsItAlreadyHas = already;
+
+  const prompt = [
+    'You are tagging one question in a Singapore primary-school science question bank (P3-P6).',
+    '',
+    'A tag names the exact idea the question TESTS, the way a teacher says it out loud: "elastic spring force", "water displacement", "shadow size", "heat conduction", "air resistance". It is finer-grained than the syllabus topic and it is not the question title.',
+    '',
+    'THE QUESTION:',
+    JSON.stringify(facts, null, 1),
+    '',
+    known.length
+      ? 'TAGS ALREADY IN USE IN THIS BANK. Reuse one of these, spelled EXACTLY as written here, whenever it fits the question — even loosely. Every question about one idea must carry the same string, or the tag counts split and the tag stops being useful:\n' + known.join('; ')
+      : 'This bank has no tags yet, so you are setting the vocabulary. Keep the wording plain and reusable.',
+    '',
+    'Reply with ONLY this JSON: {"tags":["...","..."]}',
+    '- Give 2 to 4 tags. Fewer is better than padding with something vague.',
+    '- Prefer an existing tag over a new one every time it fits. Only invent a tag when no existing tag covers the idea, and then keep it short, lower case and plain.',
+    '- Do not repeat a tag the question already has (listed as "tagsItAlreadyHas" if present) — return only tags you would ADD.',
+    '- Never use the topic name on its own as a tag, never use a question number, and never use words like "PSLE", "MCQ", "open-ended", "hard" or "revision". Those describe the paper, not the science.',
+    '- No punctuation, no capital letters unless it is a proper noun, no quotes inside the tag.',
+  ].join('\n');
+
+  const raw = await askGemini(prompt, { maxOutputTokens: 220, temperature: 0.15, json: true });
+  const parsed = _parseAIJson(raw) || {};
+  const proposed = Array.isArray(parsed.tags) ? parsed.tags
+    : (typeof parsed.tags === 'string' ? parsed.tags.split(/[,\n;]+/) : []);
+  const haveKeys = new Set(already.map(t => t.toLowerCase()));
+  const out = [];
+  qTagList({ tags: proposed }).forEach(t => {
+    const snapped = _snapToKnownTag(t, known);
+    const k = snapped.toLowerCase();
+    if (haveKeys.has(k) || out.some(x => x.toLowerCase() === k)) return;   // already on, or already proposed
+    out.push(snapped);
+  });
+  return out.slice(0, 4);
+}
+
+// ---- the editor's "suggest tags" button -------------------------------------
+// Suggestions are APPENDED to whatever is in the box, never a replacement: the
+// admin's own words are the ones that matter, and a tool that wipes them is a tool
+// nobody presses twice.
+async function suggestTagsForEditor(btn) {
+  const input = document.getElementById('questionTags');
+  if (!input) return;
+  if (!blocks || !blocks.length) { showToast('Add the question first — I tag what the question says', 'info'); return; }
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Reading…'; }
+  try {
+    // The question as it stands in the editor, not as it was last saved.
+    const draft = {
+      title: (document.getElementById('questionTitle')?.value || '').trim(),
+      topic: document.getElementById('topicSelect')?.value || '',
+      topic2: document.getElementById('topicSelect2')?.value || '',
+      category: document.getElementById('categorySelect')?.value || '',
+      blocks: JSON.parse(JSON.stringify(blocks)),
+      tags: parseTagInput(input.value),
+    };
+    const add = await aiSuggestTags(draft);
+    if (!add.length) { showToast('Nothing to add — the tags on it already cover this one', 'info'); return; }
+    const merged = parseTagInput(input.value);
+    add.forEach(t => { if (!merged.some(x => x.toLowerCase() === t.toLowerCase())) merged.push(t); });
+    input.value = merged.join(', ');
+    renderQuestionTagsUi();
+    showToast('🏷 Added ' + add.length + ' tag' + (add.length === 1 ? '' : 's') + ' — edit or delete any you don\'t want', 'success');
+  } catch (e) {
+    console.warn('ai tag suggest', e);
+    showToast('Couldn\'t suggest tags — ' + ((e && e.message) || 'try again in a moment'), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = label; }
+  }
+}
+
 // ---- tags in the question bank ---------------------------------------------
 // Chips on a bank card, each one a link to "every question with this tag". That
 // click is the whole feature from the admin's side: from "this question is about
@@ -2191,6 +2324,280 @@ function bankFilterByTag(tag) {
   renderQuestionBank();
   showToast('🏷 Showing questions tagged “' + tag + '”', 'info');
 }
+
+// ---- bulk tagging ----------------------------------------------------------
+// Tagging a bank one question at a time is a job nobody finishes. This works on a
+// SET: either the questions picked in the grid, or everything the current filters
+// are showing — so the real workflow is "filter to Untagged + P5 Heat, then tag all
+// forty in one go".
+//
+// Three things can be done to that set: add tags, remove tags, or hand each
+// question to the AI. Saves are per-question (the bank has no batch write) and
+// sequential, with a running count and a stop button, because forty AI calls is a
+// minute of someone's life and they should be able to change their mind.
+const BULK_TAG_MAX = 200;          // a set larger than this is almost certainly a mis-click
+const BULK_AI_CONCURRENCY = 3;     // polite to the quota, still 3× faster than serial
+let _bulkTagRun = null;            // { total, done, tagged, skipped, failed, stop } while running
+let _bulkTagScope = 'picked';      // 'picked' | 'shown'
+let _bulkAiOnlyUntagged = true;
+
+// Only ever write to questions THIS account owns. The bank is a union across every
+// admin account for the super admin, and another admin's documents are not ours to
+// write — Firestore rejects it, and one rejection per question is how a bulk pass
+// turns into a wall of failures. They are counted and reported, not silently
+// dropped, so a set that is mostly someone else's does not look like a bug.
+function _bulkTagOwned(list) {
+  const mine = [], foreign = [];
+  (list || []).forEach(q => {
+    if (!q || q.id == null) return;
+    (_qOwner(q.id) === (currentUser && currentUser.uid) ? mine : foreign).push(q);
+  });
+  return { mine, foreign };
+}
+function _bulkTagSets() {
+  const picked = _bulkTagOwned((Array.isArray(questionBank) ? questionBank : []).filter(q => q && wsSelectedIds.has(q.id)));
+  const shown = _bulkTagOwned(_bankFilteredQuestions());
+  return { picked: picked.mine, shown: shown.mine,
+           foreign: (_bulkTagScope === 'shown' ? shown : picked).foreign.length };
+}
+function _bulkTagTarget() {
+  const { picked, shown } = _bulkTagSets();
+  const list = _bulkTagScope === 'shown' ? shown : picked;
+  return list.slice(0, BULK_TAG_MAX);
+}
+
+function openBulkTags(scope) {
+  if (!_isAdmin()) { showToast('Only admins can edit tags', 'error'); return; }
+  const { picked, shown } = _bulkTagSets();
+  // Default to whichever set the admin actually has: their picks if they made any.
+  _bulkTagScope = scope || (picked.length ? 'picked' : 'shown');
+  if (!picked.length && !shown.length) { showToast('Nothing to tag — the bank is empty', 'info'); return; }
+  _bulkTagRun = null;
+  const ov = document.getElementById('bulkTagOverlay');
+  if (ov) ov.classList.add('active');
+  const add = document.getElementById('bulkTagAdd'); if (add) add.value = '';
+  // "Only the untagged ones" is the right default when there IS a backlog — that is
+  // the job. With nothing untagged it would offer to tag zero questions, so start
+  // from the other end instead.
+  _bulkAiOnlyUntagged = _bulkTagTarget().some(q => !qTagList(q).length);
+  renderBulkTags();
+}
+function closeBulkTags() {
+  // Mid-run, Done means "stop" — closing the dialog under a running pass would
+  // leave it writing invisibly. Press it again once stopped to close.
+  if (_bulkTagRun && !_bulkTagRun.stop) { bulkTagStop(); return; }
+  const ov = document.getElementById('bulkTagOverlay');
+  if (ov) ov.classList.remove('active');
+  _bulkTagRun = null;
+  renderQuestionBank();
+}
+// How many the AI would actually be given: the untagged ones when that box is
+// ticked AND there are any, otherwise the whole set.
+function _fcAiTargetCount(n, untagged) { return (_bulkAiOnlyUntagged && untagged) ? untagged : n; }
+function bulkTagScope(scope) {
+  _bulkTagScope = scope === 'shown' ? 'shown' : 'picked';
+  _bulkAiOnlyUntagged = _bulkTagTarget().some(q => !qTagList(q).length);   // the new set may have no backlog
+  renderBulkTags();
+}
+function bulkTagAiScope(onlyUntagged) { _bulkAiOnlyUntagged = !!onlyUntagged; renderBulkTags(); }
+
+function renderBulkTags() {
+  const body = document.getElementById('bulkTagBody');
+  if (!body) return;
+  const { picked, shown, foreign } = _bulkTagSets();
+  const target = _bulkTagTarget();
+  const n = target.length;
+  const untagged = target.filter(q => !qTagList(q).length).length;
+  const run = _bulkTagRun;
+
+  // Tags present across the target set — the only ones worth offering to remove.
+  const onSet = allBankTags(target);
+  const reuse = allBankTags().filter(r => r.n > 0).slice(0, 18);
+
+  const scopeBtn = (key, label, count, note) => `
+    <button type="button" class="bt-scope${_bulkTagScope === key ? ' on' : ''}" ${count ? '' : 'disabled'} onclick="bulkTagScope('${key}')">
+      <b>${count} question${count === 1 ? '' : 's'}</b>
+      <span>${escapeHtml(label)}</span>
+      ${note ? `<span class="bt-scope-note">${escapeHtml(note)}</span>` : ''}
+    </button>`;
+
+  if (run) {
+    const pct = run.total ? Math.round(100 * run.done / run.total) : 0;
+    body.innerHTML = `
+      <div class="bt-run">
+        <div class="bt-run-title">${run.stop ? 'Stopping…' : (run.kind === 'ai' ? '✨ Tagging with AI' : 'Applying your tags')}</div>
+        <div class="fc-bar" style="margin-top:14px;"><div class="fc-bar-fill" style="width:${pct}%;"></div></div>
+        <div class="bt-run-line">${run.done} of ${run.total} done · ${run.tagged} changed${run.skipped ? ' · ' + run.skipped + ' left alone' : ''}${run.failed ? ' · ' + run.failed + ' failed' : ''}</div>
+        <div class="bt-run-note">Every question is saved as it finishes, so stopping keeps everything done so far.</div>
+        <div class="bt-actions">
+          <button class="btn btn-outline" onclick="bulkTagStop()" ${run.stop ? 'disabled' : ''}>${run.stop ? 'Stopping…' : 'Stop'}</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  body.innerHTML = `
+    <div class="bt-scopes">
+      ${scopeBtn('picked', 'you picked in the grid', picked.length, picked.length ? '' : 'Click tiles in grid view to pick')}
+      ${scopeBtn('shown', 'shown by your filters', shown.length, shown.length > BULK_TAG_MAX ? 'Capped at ' + BULK_TAG_MAX : '')}
+    </div>
+    <div class="bt-target">Working on <b>${n}</b> question${n === 1 ? '' : 's'}${untagged ? ` · ${untagged} of them have no tags yet` : (n ? ' · all of them already have tags' : '')}.${
+      foreign ? ` <span style="color:var(--accent-orange);">${foreign} more belong to another teacher's account, so they're left out.</span>` : ''}</div>
+
+    <div class="bt-section">
+      <div class="bt-h">✨ Let the AI tag them</div>
+      <p class="bt-p">Each question is read on its own and tagged from the vocabulary you've already built — an existing tag is reused wherever it fits, and a new one only invented when nothing covers the idea. Suggestions are <b>added</b>; nothing you've written is removed.</p>
+      ${untagged ? `<label class="bt-check"><input type="checkbox" ${_bulkAiOnlyUntagged ? 'checked' : ''} onchange="bulkTagAiScope(this.checked)"> Only the ${untagged} question${untagged === 1 ? '' : 's'} with no tags yet <span>— untick to top up ones that already have some</span></label>`
+        : `<div class="bt-p" style="margin:0;">Everything in this set already has tags, so the AI will look for ones to <b>add</b> to each.</div>`}
+      <div class="bt-actions">
+        <button class="btn btn-primary" onclick="bulkTagAiRun()" ${_fcAiTargetCount(n, untagged) ? '' : 'disabled'}>
+          ✨ Tag ${_fcAiTargetCount(n, untagged)} question${_fcAiTargetCount(n, untagged) === 1 ? '' : 's'} with AI
+        </button>
+      </div>
+    </div>
+
+    <div class="bt-section">
+      <div class="bt-h">🏷 Add the same tags to all of them</div>
+      <p class="bt-p">Comma-separated. Anything a question already has is left alone, so this is safe to run twice. If you spell a tag differently from one the bank already uses, it's filed under the existing spelling — that's what keeps the counts together.</p>
+      <input id="bulkTagAdd" class="form-input" type="text" autocomplete="off" spellcheck="false" placeholder="elastic spring force, extension of spring" oninput="renderBulkTagsPreview()">
+      <div id="bulkTagAddPreview" class="qtag-row" style="display:none;"></div>
+      ${reuse.length ? `<div class="qtag-reuse" style="margin-top:13px;">
+        <div class="qtag-reuse-label">Tags in use — tap to add</div>
+        <div class="qtag-row">${reuse.map(r => `<button type="button" class="qtag-pick" onclick="bulkTagAddPick(${JSON.stringify(r.tag).replace(/"/g, '&quot;')})">${escapeHtml(r.tag)}<b>${r.n}</b></button>`).join('')}</div>
+      </div>` : ''}
+      <div class="bt-actions">
+        <button class="btn btn-primary" onclick="bulkTagApply('add')">Add to all ${n}</button>
+      </div>
+    </div>
+
+    ${onSet.length ? `
+    <div class="bt-section">
+      <div class="bt-h">🧹 Take a tag off all of them</div>
+      <p class="bt-p">Only tags that actually appear in this set are listed, with how many of them carry it.</p>
+      <div class="qtag-row">
+        ${onSet.map(r => `<button type="button" class="qtag-pick" onclick="bulkTagRemove(${JSON.stringify(r.tag).replace(/"/g, '&quot;')})" title="Remove “${escapeHtml(r.tag)}” from the ${r.n} question${r.n === 1 ? '' : 's'} in this set that have it">✕ ${escapeHtml(r.tag)}<b>${r.n}</b></button>`).join('')}
+      </div>
+    </div>` : ''}`;
+  renderBulkTagsPreview();
+}
+
+function renderBulkTagsPreview() {
+  const input = document.getElementById('bulkTagAdd');
+  const prev = document.getElementById('bulkTagAddPreview');
+  if (!input || !prev) return;
+  const tags = parseTagInput(input.value);
+  if (!tags.length) { prev.style.display = 'none'; prev.innerHTML = ''; return; }
+  const counts = new Map(allBankTags().map(r => [r.key, r.n]));
+  prev.style.display = 'flex';
+  prev.innerHTML = tags.map(t => {
+    const c = counts.get(t.toLowerCase()) || 0;
+    return `<span class="qtag-chip${c ? '' : ' fresh'}" title="${escapeHtml(c ? c + ' question(s) in the bank already carry this tag' : 'A new tag — nothing else uses it yet')}">${escapeHtml(t)}<b>${c || 'new'}</b></span>`;
+  }).join('');
+}
+function bulkTagAddPick(tag) {
+  const input = document.getElementById('bulkTagAdd');
+  if (!input) return;
+  const list = parseTagInput(input.value);
+  if (!list.some(t => t.toLowerCase() === String(tag).toLowerCase())) list.push(tag);
+  input.value = list.join(', ');
+  renderBulkTagsPreview();
+  input.focus();
+}
+
+// Write one question's tags and keep every in-memory copy in step.
+async function _bulkTagWrite(q, tags) {
+  q.tags = tags;
+  const ok = await saveQuestion(q, { quiet: true });
+  return ok;
+}
+
+// Add or remove a fixed set of tags across the target. Sequential and per-question
+// so a permission failure on one row cannot roll back the rest.
+async function bulkTagApply(action, oneTag) {
+  const target = _bulkTagTarget();
+  if (!target.length) { showToast('Nothing selected', 'info'); return; }
+  // Removal matches case-insensitively, so it must NOT be snapped — snapping
+  // "Heat Conduction" to "heat conduction" would be a no-op there anyway, but on a
+  // set where only the odd spelling exists it would quietly miss.
+  const tags = action === 'remove'
+    ? parseTagInput(oneTag || '')
+    : _snapTagsToBank(parseTagInput((document.getElementById('bulkTagAdd')?.value) || ''));
+  if (!tags.length) { showToast(action === 'remove' ? 'Nothing to remove' : 'Type a tag first', 'info'); return; }
+  const keys = new Set(tags.map(t => t.toLowerCase()));
+  if (action === 'remove' && !confirm('Remove ' + tags.map(t => '“' + t + '”').join(', ') + ' from every question in this set that has it?\n\nThis cannot be undone.')) return;
+
+  _bulkTagRun = { kind: 'manual', total: target.length, done: 0, tagged: 0, skipped: 0, failed: 0, stop: false };
+  renderBulkTags();
+  for (const q of target) {
+    if (_bulkTagRun.stop) break;
+    const before = qTagList(q);
+    let after;
+    if (action === 'remove') after = before.filter(t => !keys.has(t.toLowerCase()));
+    else {
+      after = before.slice();
+      tags.forEach(t => { if (!after.some(x => x.toLowerCase() === t.toLowerCase())) after.push(t); });
+    }
+    if (after.length === before.length && after.every((t, i) => t === before[i])) _bulkTagRun.skipped++;
+    else if (await _bulkTagWrite(q, after)) _bulkTagRun.tagged++;
+    else _bulkTagRun.failed++;
+    _bulkTagRun.done++;
+    renderBulkTags();
+  }
+  _bulkTagFinish(action === 'remove' ? 'removed from' : 'added to');
+}
+
+// One AI call per question, a few in flight at a time.
+async function bulkTagAiRun() {
+  let target = _bulkTagTarget();
+  const untagged = target.filter(q => !qTagList(q).length);
+  if (_bulkAiOnlyUntagged && untagged.length) target = untagged;
+  if (!target.length) { showToast('Nothing to tag in this set', 'info'); return; }
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'info'); return; }
+  if (!confirm('Tag ' + target.length + ' question' + (target.length === 1 ? '' : 's') + ' with AI?\n\n'
+    + 'That is ' + target.length + ' AI call' + (target.length === 1 ? '' : 's') + '. Tags are ADDED, never removed, and you can stop at any point — everything done so far is kept.')) return;
+
+  _bulkTagRun = { kind: 'ai', total: target.length, done: 0, tagged: 0, skipped: 0, failed: 0, stop: false };
+  renderBulkTags();
+  let next = 0;
+  const worker = async () => {
+    while (!_bulkTagRun.stop && next < target.length) {
+      const q = target[next++];
+      try {
+        const add = await aiSuggestTags(q);
+        if (!add.length) _bulkTagRun.skipped++;
+        else {
+          const merged = qTagList(q);
+          add.forEach(t => { if (!merged.some(x => x.toLowerCase() === t.toLowerCase())) merged.push(t); });
+          if (await _bulkTagWrite(q, merged)) _bulkTagRun.tagged++; else _bulkTagRun.failed++;
+        }
+      } catch (e) {
+        console.warn('bulk ai tag', (q && q.id), e);
+        _bulkTagRun.failed++;
+      }
+      _bulkTagRun.done++;
+      renderBulkTags();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(BULK_AI_CONCURRENCY, target.length) }, worker));
+  _bulkTagFinish('tagged');
+}
+
+function bulkTagStop() { if (_bulkTagRun) { _bulkTagRun.stop = true; renderBulkTags(); } }
+
+function _bulkTagFinish(verb) {
+  const r = _bulkTagRun || { tagged: 0, skipped: 0, failed: 0, stop: false };
+  _bulkTagRun = null;
+  _ainsteinTextCache.clear();          // tags feed Ai-nstein's retrieval
+  populateTagFilter();
+  renderQuestionBank();
+  renderBulkTags();
+  const bits = [r.tagged + ' question' + (r.tagged === 1 ? '' : 's') + ' ' + verb];
+  if (r.skipped) bits.push(r.skipped + ' left alone');
+  if (r.failed) bits.push(r.failed + ' failed');
+  showToast((r.stop ? 'Stopped — ' : '🏷 ') + bits.join(' · '), r.failed ? 'error' : 'success');
+}
+
+function bulkTagRemove(tag) { bulkTagApply('remove', tag); }
 
 // Rebuilt on every bank render, so a tag added a moment ago is selectable now.
 // "Untagged" is a real filter, not an oversight: it is the list an admin works
@@ -8126,7 +8533,7 @@ function collectQuestionData() {
     answerKeyImage: (document.getElementById('questionAnswerKeyImage')?.value || '').trim(),
     annotation: !!(document.getElementById('questionAnnotation') && document.getElementById('questionAnnotation').checked),
     notInSyllabus: !!(document.getElementById('questionNotInSyllabus') && document.getElementById('questionNotInSyllabus').checked),
-    tags: parseTagInput(document.getElementById('questionTags')?.value || ''),
+    tags: _snapTagsToBank(parseTagInput(document.getElementById('questionTags')?.value || '')),
     blocks: blocksClone,
     blanks: JSON.parse(JSON.stringify(selectedBlanks)),
     createdAt: new Date().toISOString(),
@@ -9024,6 +9431,7 @@ function _renderBankPickBar(filtered) {
     ${allPicked ? '' : `<button class="btn btn-outline btn-sm" onclick="pickAllBankVisible()">Pick all ${shown.length} shown</button>`}
     <button class="btn btn-outline btn-sm" onclick="clearBankPicks()">Clear</button>
     <span style="flex:1;"></span>
+    ${_isAdmin() ? `<button class="btn btn-outline btn-sm" onclick="openBulkTags('picked')" title="Add or remove tags on all ${n} at once, or have the AI tag each one">🏷 Tag these</button>` : ''}
     <button class="btn btn-outline btn-sm" onclick="bankPicksToPractice()">✏️ Practice these</button>
     <button class="btn btn-primary btn-sm" onclick="bankPicksToWorksheet()">📄 Build worksheet</button>`;
 }
@@ -35814,6 +36222,17 @@ window.questionTagAdd = questionTagAdd;
 window.questionTagsShowAll = questionTagsShowAll;
 window.questionTagsShowFewer = questionTagsShowFewer;
 window.bankFilterByTag = bankFilterByTag;
+window.suggestTagsForEditor = suggestTagsForEditor;
+window.openBulkTags = openBulkTags;
+window.closeBulkTags = closeBulkTags;
+window.bulkTagScope = bulkTagScope;
+window.bulkTagAiScope = bulkTagAiScope;
+window.bulkTagApply = bulkTagApply;
+window.bulkTagAiRun = bulkTagAiRun;
+window.bulkTagStop = bulkTagStop;
+window.bulkTagRemove = bulkTagRemove;
+window.bulkTagAddPick = bulkTagAddPick;
+window.renderBulkTagsPreview = renderBulkTagsPreview;
 window.renderFlashcardsPage = renderFlashcardsPage;
 window.fcToggleGap = fcToggleGap;
 window.fcClearGaps = fcClearGaps;
