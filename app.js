@@ -1565,12 +1565,18 @@ async function enterApp(user) {
   // Ai-nstein rides along on every page from here on.
   try { ainsteinOnSignIn(); } catch (e) { console.warn('ainstein init', e); }
 
+  // Revision decks, so the sidebar can say how many cards are waiting without the
+  // student having to go and look.
+  if (currentUser && currentUser.role === 'student') {
+    loadFlashcardDecks().then(fcPaintDueBadge).catch(e => console.warn('flashcards init', e));
+  }
+
   showToast('Welcome, ' + displayName + '!', 'success');
 }
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.202.0';
+const APP_VERSION = 'v1.203.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -1899,6 +1905,14 @@ onAuthStateChanged(auth, (user) => {
     rpgOnSignOut();
     students = [];
     studentSetupSeen = false;
+    // A revision deck and a mistake log belong to one account — never let a
+    // sibling signing in on the same device see them.
+    fcDecks = [];
+    fcRun = null;
+    mistakeLog = [];
+    _mistakeLogAt = 0;
+    try { _fcGapSel.clear(); } catch (_) {}
+    try { fcPaintDueBadge(); } catch (_) {}
     showPage('landingPage');
   }
 });
@@ -2307,6 +2321,7 @@ function navigateTo(page) {
   if (page === 'community') renderCommunity();
   if (page === 'usage') loadUsageDashboard();
   if (page === 'myreport') loadMyReport();
+  if (page === 'flashcards') renderFlashcardsPage();
   if (page === 'familysettings') famRenderSettings();
   if (page === 'scheduled') loadScheduledQuestions();
   if (page === 'flagged') loadFlaggedQuestions();
@@ -13185,6 +13200,14 @@ function _checkAllPartsMarked(containerSel) {
       mode: cfg.mode || 'practice-open'
     }).catch(err => console.warn('Could not record attempt:', err));
     noteAttemptLocally(q.id, finalScore, finalTotal);
+    // Keep the REASONS, not just the score — this is what revision flashcards are
+    // built from. Taken from `results` rather than the flattened `mistakes` above,
+    // because the key is the only thing that says whether a part was an MCQ.
+    fcNoteMistakes(q, Object.entries(results)
+      .filter(([, r]) => r && r.verdict !== 'correct')
+      .map(([key, r]) => ({ kind: String(key).startsWith('mcq:') ? 'mcq' : 'open',
+                            verdict: r.verdict, expected: r.expected, student: r.student })),
+      cfg.mode || 'practice-open');
   }
   recordCerPerformance(q, finalScore, finalTotal, cfg.mode || 'practice-open', answerText);
   if (typeof cfg.onAllMarked === 'function') cfg.onAllMarked({ score: finalScore, total: finalTotal, mistakes });
@@ -13768,6 +13791,12 @@ async function snapMarkQuestion(q, photoIdx) {
     score: res ? res.score : 0, total: res ? res.total : 0,
     mistakes: res && Array.isArray(res.mistakes) ? res.mistakes.slice(0, 4) : []
   });
+  // Work marked from a photo is still work they got wrong — it feeds the same
+  // revision deck. markOpenAnswersIn's mistakes carry no part kind, so they are
+  // logged as written answers, which is what a photographed worksheet is.
+  if (res && Array.isArray(res.mistakes)) {
+    fcNoteMistakes(q, res.mistakes.map(m => ({ kind: 'open', verdict: 'incorrect', expected: m.expected, student: m.student })), 'snapmark-open');
+  }
   const note = document.getElementById('snapMatchNote_' + i);
   if (note) note.innerHTML = "✓ Matched from your photo. Here's your feedback — review each part below.";
 }
@@ -16646,6 +16675,22 @@ async function renderHomePage() {
   }).join('');
 
   const pctToday = Math.min(100, Math.round((todayQ / goal) * 100));
+  // Revision cards, but only when there is something to do with them — a card
+  // that always says "nothing waiting" is a card nobody reads.
+  let fcDue = 0, fcTopGap = null;
+  try { fcDue = fcDecks.reduce((s, d) => s + fcDueCards(d).length, 0); } catch (_) {}
+  try { if (!fcDue) fcTopGap = fcGaps(1)[0] || null; } catch (_) {}
+  const fcCardHtml = (fcDue || fcTopGap) ? `
+      <div class="home-card">
+        <h3>🃏 Revision cards</h3>
+        ${fcDue ? `
+        <div class="home-big">${fcDue}<span style="font-size:1.05rem;color:var(--text-muted);font-weight:600;"> card${fcDue === 1 ? '' : 's'} due</span></div>
+        <div class="home-sub">Written from your own mistakes. Five minutes here beats half an hour of reading.</div>
+        <button class="btn btn-blue" onclick="navigateTo('flashcards')">Revise now</button>` : `
+        <div class="home-big" style="font-size:1.35rem;">${escapeHtml(fcTopGap.label)}</div>
+        <div class="home-sub">This is what's costing you the most marks. I can turn it into flashcards in one tap.</div>
+        <button class="btn btn-blue" onclick="navigateTo('flashcards')">Make my cards</button>`}
+      </div>` : '';
   c.innerHTML = `
     <div class="home-grid">
       <div class="home-card wide">
@@ -16672,6 +16717,7 @@ async function renderHomePage() {
         <button class="btn btn-blue" onclick="homePractiseWeakest()">Practise this topic</button>` : `
         <div class="home-sub">Answer a few questions and your weakest topic will show up here with a one-tap practice button.</div>`}
       </div>
+      ${fcCardHtml}
       <div class="home-card wide">
         <h3>🧭 Not sure what to do?</h3>
         <div class="home-sub">The menu is long and you only need a few of it. Ask Ai-nstein and he'll lay out the next step as buttons — nothing to hunt for, and these three cost you nothing.</div>
@@ -16755,6 +16801,660 @@ function renderArcadePage() {
         </button>
       </div>`).join('')}
     </div>`;
+}
+
+// =====================================================================
+// REVISION FLASHCARDS — built from the mistakes this student actually made
+//
+// The point of a flashcard here is NOT to cover the syllabus. It is to cover the
+// gap: the ideas this student has got wrong, weighted so that a mistake made
+// yesterday matters more than the same mistake a month ago, and one made four
+// times matters more than one made once.
+//
+// A "gap" is named by the question's TAGS where it has them — a teacher writing
+// down the exact idea a question tests is the best label we will ever get — and by
+// its topic where it has none. So a student who keeps losing marks on questions
+// tagged "elastic spring force" gets a deck about elastic spring force, not a deck
+// about Forces.
+// =====================================================================
+const FC_HALFLIFE_DAYS = 14;    // a mistake this old counts half as much
+const FC_MAX_GAPS = 8;          // gaps offered on the page
+const FC_Q_PER_GAP = 4;         // wrong questions shown to the model per gap
+const FC_CARDS_PER_GAP = 4;     // cards asked for per gap
+
+// ---- the durable mistake log ------------------------------------------------
+// Until now nothing about WHY an answer was wrong outlived the page. The model
+// answer for the part they failed, what they actually wrote, which option they
+// picked — all of it was computed at marking time, shown once and dropped on the
+// floor. Scores persisted; reasons did not.
+//
+// That is the difference between a card that says "revise Forces" and one that
+// says "you wrote 'it gets heavier' — the mark is for 'the spring stretches
+// more'". The second one is the gap. So one small document per wrong part now
+// survives, in users/{uid}/mistakes.
+//
+// Text is clipped and the log is pruned to the newest FC_LOG_KEEP, so it stays
+// bounded no matter how much a student practises. Writes are fire-and-forget: a
+// failed write costs a future flashcard, never the marking in front of them.
+const FC_LOG_KEEP = 300;
+const FC_TEXT_MAX = 320;
+const FC_PARTS_PER_ATTEMPT = 6;
+let mistakeLog = [];            // newest first
+let _mistakeLogAt = 0;
+
+function _mkCol() { return collection(db, 'users', currentUser.uid, 'mistakes'); }
+function _mkRef(id) { return doc(db, 'users', currentUser.uid, 'mistakes', id); }
+function _fcClip(s) {
+  return stripHtmlToText(String(s == null ? '' : s)).replace(/\s+/g, ' ').trim().slice(0, FC_TEXT_MAX);
+}
+
+// Record the parts of one just-marked question the student did NOT get right.
+// `parts` elements are { kind:'open'|'mcq', verdict, expected, student }.
+function fcNoteMistakes(q, parts, mode) {
+  try {
+    if (!currentUser || currentUser.role !== 'student' || !q || !db) return;
+    const list = (Array.isArray(parts) ? parts : [])
+      .filter(p => p && (_fcClip(p.expected) || _fcClip(p.student)));
+    if (!list.length) return;
+    const at = new Date().toISOString();
+    const tags = qTagList(q);
+    list.slice(0, FC_PARTS_PER_ATTEMPT).forEach((p, i) => {
+      const rec = {
+        id: 'mk_' + Date.now().toString(36) + i + Math.random().toString(36).slice(2, 6),
+        qId: String(q.id || ''),
+        qTitle: String(q.title || '').slice(0, 120),
+        topic: String(q.topic || ''),
+        tags,
+        kind: p.kind === 'mcq' ? 'mcq' : 'open',
+        verdict: p.verdict === 'partial' ? 'partial' : 'incorrect',
+        expected: _fcClip(p.expected),
+        student: _fcClip(p.student) || '(left blank)',
+        mode: String(mode || ''),
+        at,
+      };
+      mistakeLog.unshift(rec);
+      setDoc(_mkRef(rec.id), rec).catch(e => console.warn('mistake log write', e));
+    });
+    if (mistakeLog.length > FC_LOG_KEEP) _fcPruneLog();
+  } catch (e) { console.warn('fcNoteMistakes', e); }
+}
+
+// Local list first so the app is immediately correct; the deletes are best-effort.
+function _fcPruneLog() {
+  const drop = mistakeLog.slice(FC_LOG_KEEP);
+  mistakeLog = mistakeLog.slice(0, FC_LOG_KEEP);
+  drop.forEach(r => { if (r && r.id) deleteDoc(_mkRef(r.id)).catch(() => {}); });
+}
+
+async function loadMistakeLog(force) {
+  if (!currentUser || !db) return mistakeLog;
+  if (mistakeLog.length && !force && (Date.now() - _mistakeLogAt) < 5 * 60 * 1000) return mistakeLog;
+  try {
+    const snap = await getDocs(_mkCol());
+    const out = [];
+    snap.forEach(d => { const r = d.data(); if (r && r.qId != null) out.push(Object.assign({}, r, { id: d.id })); });
+    out.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+    mistakeLog = out;
+    _mistakeLogAt = Date.now();
+  } catch (e) { console.warn('mistake log load', e); }
+  return mistakeLog;
+}
+
+// How much a mistake still counts, by how long ago it was. Exponential decay, so
+// "recently" is a slope rather than a cut-off — nothing drops off a cliff the
+// moment it turns fifteen days old.
+function _fcRecencyWeight(ms) {
+  if (!ms) return 0.35;         // undated (pre-timestamp attempt): counts, but least
+  const days = Math.max(0, (Date.now() - ms) / 86400000);
+  return Math.pow(0.5, days / FC_HALFLIFE_DAYS);
+}
+
+// Every question this student has attempted and not fully cracked, with how badly
+// and how recently. This is the raw material for every gap below.
+function _fcWrongPool() {
+  const stats = _qAttemptStats || {};
+  const out = [];
+  (Array.isArray(questionBank) ? questionBank : []).forEach(q => {
+    if (!q || q.id == null) return;
+    if (!qInSyllabus(q) || !qWithinStudentLevel(q)) return;
+    const r = stats[String(q.id)];
+    if (!r || !r.n) return;
+    const wrong = Math.max(0, (r.n || 0) - (r.correct || 0));   // attempts that were not full marks
+    const best = r.best || 0;
+    if (!wrong && best >= 1) return;                            // got it, every time — not a gap
+    out.push({ q, n: r.n || 0, wrong: wrong || 1, best, last: r.last || 0 });
+  });
+  return out;
+}
+
+// Group the wrong questions into named gaps and rank them. Both halves of the
+// brief are in the score: `wrong` is how COMMON the mistake is, the recency weight
+// is how RECENT. A near-miss counts for less than a blank, because half marks on a
+// question is a different kind of gap from no marks at all.
+function fcGaps(limit) {
+  const byKey = new Map();
+  _fcWrongPool().forEach(x => {
+    const tags = qTagList(x.q);
+    const names = tags.length ? tags : [x.q.topic || 'General'];
+    const w = _fcRecencyWeight(x.last);
+    names.forEach(name => {
+      const key = name.toLowerCase();
+      const g = byKey.get(key) || {
+        label: name, key, tagged: !!tags.length,
+        score: 0, wrong: 0, attempts: 0, worst: 1, last: 0, questions: [],
+      };
+      g.score += x.wrong * w * (1 - x.best * 0.5);
+      g.wrong += x.wrong;
+      g.attempts += x.n;
+      g.worst = Math.min(g.worst, x.best);
+      g.last = Math.max(g.last, x.last);
+      g.questions.push(x);
+      byKey.set(key, g);
+    });
+  });
+  const gaps = Array.from(byKey.values());
+  // Within a gap, the question they did worst on leads — that is the one a card
+  // most needs to be built from.
+  gaps.forEach(g => g.questions.sort((a, b) => (a.best - b.best) || (b.last - a.last)));
+  gaps.sort((a, b) => (b.score - a.score) || (b.wrong - a.wrong) || (b.last - a.last));
+  return gaps.slice(0, Math.max(1, limit || FC_MAX_GAPS));
+}
+
+// A phrase for how fresh a gap is, for the card meta line.
+function _fcWhenLabel(ms) {
+  if (!ms) return 'a while ago';
+  const days = Math.floor((Date.now() - ms) / 86400000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return days + ' days ago';
+  if (days < 14) return 'last week';
+  if (days < 60) return Math.round(days / 7) + ' weeks ago';
+  return Math.round(days / 30) + ' months ago';
+}
+
+// ---- turning a gap into cards ----------------------------------------------
+// The model writes the cards, but it is not asked to remember any science: every
+// fact it needs is handed to it — the model answer and the teacher's explanation
+// from the questions this student failed, plus, where the log has them, the exact
+// words the student wrote instead. Its job is to turn that into recall questions.
+//
+// This is the difference between a revision card and a fact card. "What is a
+// force?" tests nothing about this child. "A spring is loaded with a heavier mass.
+// What happens to its extension, and why?" — written because they answered that
+// wrong on Tuesday — tests the gap.
+
+// Everything about one failed question that a card could be built from.
+function _fcQuestionBrief(x) {
+  const q = x.q;
+  const p = _docQParts(q);
+  const brief = {
+    title: _fcClip(q.title || ''),
+    topic: q.topic || '',
+    tags: qTagList(q),
+    question: _fcClip(p.text || ''),
+    theirBestScore: Math.round((x.best || 0) * 100) + '%',
+    timesWrong: x.wrong,
+    lastTried: _fcWhenLabel(x.last),
+  };
+  const model = _deriveModelAnswer(q);
+  if (model) brief.modelAnswer = _fcClip(model);
+  if (p.mcq) {
+    const opts = (p.mcq.options || []).map(o => stripHtml(o.text || '')).filter(Boolean);
+    if (opts.length) brief.options = opts.map(o => _fcClip(o));
+    const correct = (p.mcq.options || []).find(o => o.id === p.mcq.correctId);
+    if (correct) brief.correctOption = _fcClip(stripHtml(correct.text || ''));
+  }
+  const expl = ((q.blocks || []).find(b => b && b.type === 'explanation' && stripHtml(b.content || '').trim()));
+  if (expl) brief.teacherExplanation = _fcClip(expl.content);
+  const cm = ((q.blocks || []).find(b => b && b.type === 'commonMistake' && stripHtml(b.text || '').trim()));
+  if (cm) brief.commonMistakeNote = _fcClip(cm.text);
+  return brief;
+}
+
+// The student's own wrong answers on this gap's questions, newest first.
+function _fcGapEvidence(gap, limit) {
+  const ids = new Set(gap.questions.map(x => String(x.q.id)));
+  return mistakeLog
+    .filter(r => r && ids.has(String(r.qId)))
+    .slice(0, limit || 6)
+    .map(r => ({
+      onQuestion: _fcClip(r.qTitle),
+      theyWrote: _fcClip(r.student),
+      markIsFor: _fcClip(r.expected),
+      kind: r.kind === 'mcq' ? 'multiple-choice' : 'written',
+      when: _fcWhenLabel(Date.parse(r.at) || 0),
+    }));
+}
+
+function _fcDeckPrompt(gaps) {
+  const payload = gaps.map(g => ({
+    gap: g.label,
+    howOften: g.wrong + ' wrong attempt' + (g.wrong === 1 ? '' : 's') + ' out of ' + g.attempts,
+    mostRecently: _fcWhenLabel(g.last),
+    bestScoreSoFar: Math.round((g.worst || 0) * 100) + '%',
+    questionsTheyGotWrong: g.questions.slice(0, FC_Q_PER_GAP).map(_fcQuestionBrief),
+    whatTheyActuallyWrote: _fcGapEvidence(g, 5),
+  }));
+  return [
+    'You are making revision flashcards for one Singapore primary-school science student (P3-P6).',
+    '',
+    'These are the gaps in THEIR knowledge, worked out from the questions they have actually got wrong — how often, and how recently. For each gap you are given the questions they failed, the model answer, the teacher\'s explanation, and where we have it, the exact words the student wrote instead.',
+    '',
+    JSON.stringify(payload, null, 1),
+    '',
+    'Write ' + FC_CARDS_PER_GAP + ' flashcards for EACH gap. Reply with ONLY this JSON:',
+    '{"title":"a short name for the whole deck","cards":[{"gap":"the exact gap string this card is for","front":"the question on the front","back":"the answer on the back","hint":"one short nudge, or \\"\\""}]}',
+    '',
+    'THE RULES THAT MAKE THESE REVISION CARDS RATHER THAN FACT CARDS:',
+    '- Every card must target the specific thing THIS student got wrong. Where you are told what they wrote, aim the card straight at that error — if they said a heavier mass makes a spring "heavier" instead of "stretch more", the card asks what happens to the extension and why.',
+    '- Use ONLY the science in the data above: the model answers, the correct options and the teacher explanations are your source of truth. Do not add facts from your own knowledge, and never contradict a model answer even if you would have phrased it differently.',
+    '- "front" is a question, never a topic heading. "What happens to the spring\'s extension when the mass is doubled?" — not "Elastic spring force".',
+    '- "back" is the full mark-worthy answer in one or two short sentences, in the plain wording a P3-P6 child would be expected to write. Include the BECAUSE — the reasoning is where the marks are.',
+    '- Never write a card whose answer is just "yes" or "no". Ask for the reason instead.',
+    '- Do not copy a question from the data word for word. Change the numbers, the object or the situation so they have to think rather than remember the page.',
+    '- Vary what you ask for across a gap\'s cards: a definition, a cause-and-effect, a "why is the wrong answer wrong", a real-life example.',
+    '- "hint" is a nudge that does NOT give the answer away, or an empty string. Never put the answer in the hint.',
+    '- Plain text only. No markdown, no bullet symbols, no headings, no bold.',
+    '- "gap" must be copied EXACTLY as it appears above, so the app can file the card.',
+  ].join('\n');
+}
+
+// Build a deck for the given gaps, save it, and return it.
+async function fcBuildDeck(gaps) {
+  if (!Array.isArray(gaps) || !gaps.length) throw new Error('there are no gaps to build from yet');
+  if (!window.__aiReady || !window.__aiReady()) throw new Error('the AI is not ready — try again in a moment');
+  const raw = await askGemini(_fcDeckPrompt(gaps), {
+    maxOutputTokens: 300 + gaps.length * FC_CARDS_PER_GAP * 130, temperature: 0.5, json: true,
+  });
+  const parsed = _parseAIJson(raw) || {};
+  const labels = new Map(gaps.map(g => [g.label.toLowerCase(), g.label]));
+  const qIdsByGap = new Map(gaps.map(g => [g.label.toLowerCase(), g.questions.slice(0, FC_Q_PER_GAP).map(x => String(x.q.id))]));
+  const seen = new Set();
+  const cards = (Array.isArray(parsed.cards) ? parsed.cards : []).map((c, i) => {
+    const front = _fcClip(c && c.front), back = _fcClip(c && c.back);
+    if (!front || !back) return null;
+    const key = front.toLowerCase();
+    if (seen.has(key)) return null;                 // the model does sometimes repeat itself
+    seen.add(key);
+    // An unrecognised gap string is filed under the strongest gap rather than
+    // dropped — the card is still about this student's work.
+    const gk = String((c && c.gap) || '').trim().toLowerCase();
+    const gap = labels.get(gk) || gaps[0].label;
+    return {
+      id: 'fc' + i + '_' + Math.random().toString(36).slice(2, 7),
+      front, back, hint: _fcClip(c && c.hint), gap,
+      qIds: qIdsByGap.get(gap.toLowerCase()) || [],
+      box: 0, due: 0, seen: 0, right: 0, wrong: 0,
+    };
+  }).filter(Boolean);
+  if (!cards.length) throw new Error('the AI did not return any usable cards');
+  const deck = {
+    id: 'fd_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6),
+    title: _fcClip(parsed.title) || (gaps.length === 1 ? gaps[0].label : 'My weak spots') ,
+    gaps: gaps.map(g => g.label),
+    source: 'mistakes',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    cards,
+  };
+  deck.title = deck.title.slice(0, 90);
+  fcDecks.unshift(deck);
+  await fcSaveDeck(deck);
+  return deck;
+}
+
+// ---- decks: storage + when each card comes back -----------------------------
+// Leitner boxes. "Still shaky" always sends a card back to box 0, so a card they
+// keep missing keeps coming back today; "Got it" moves it up one and the gap
+// between sightings widens. Five boxes is enough for revision measured in weeks,
+// and a child can see the whole ladder.
+const FC_INTERVAL_DAYS = [0, 1, 3, 7, 16];
+let fcDecks = [];
+let fcRun = null;      // { deckId, queue:[cardId], i, flipped, right, wrong } while reviewing
+
+function _fcCol() { return collection(db, 'users', currentUser.uid, 'flashcards'); }
+function _fcRef(id) { return doc(db, 'users', currentUser.uid, 'flashcards', id); }
+
+// Anything loaded from Firestore is put through this, so a half-written or
+// hand-edited document can never break the review screen.
+function _fcNormalise(raw, id) {
+  if (!raw || typeof raw !== 'object') return null;
+  const cards = (Array.isArray(raw.cards) ? raw.cards : []).map((c, i) => {
+    if (!c || typeof c !== 'object') return null;
+    const front = String(c.front || '').trim();
+    const back = String(c.back || '').trim();
+    if (!front || !back) return null;
+    return {
+      id: String(c.id || ('c' + i)),
+      front, back,
+      hint: String(c.hint || '').trim(),
+      gap: String(c.gap || '').trim(),
+      qIds: (Array.isArray(c.qIds) ? c.qIds : []).map(String).slice(0, 6),
+      box: Math.max(0, Math.min(FC_INTERVAL_DAYS.length - 1, parseInt(c.box, 10) || 0)),
+      due: Number(c.due) || 0,
+      seen: Math.max(0, parseInt(c.seen, 10) || 0),
+      right: Math.max(0, parseInt(c.right, 10) || 0),
+      wrong: Math.max(0, parseInt(c.wrong, 10) || 0),
+    };
+  }).filter(Boolean);
+  if (!cards.length) return null;
+  return {
+    id: String(raw.id || id || ''),
+    title: String(raw.title || 'Revision deck').slice(0, 90),
+    gaps: (Array.isArray(raw.gaps) ? raw.gaps : []).map(g => String(g)).slice(0, 12),
+    source: String(raw.source || 'mistakes'),
+    createdAt: String(raw.createdAt || ''),
+    updatedAt: String(raw.updatedAt || ''),
+    cards,
+  };
+}
+
+async function loadFlashcardDecks() {
+  if (!currentUser || !db) return;
+  try {
+    const snap = await getDocs(_fcCol());
+    const out = [];
+    snap.forEach(d => { const deck = _fcNormalise(d.data(), d.id); if (deck && deck.id) out.push(deck); });
+    out.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    fcDecks = out;
+  } catch (e) { console.warn('flashcard decks load', e); }
+}
+
+async function fcSaveDeck(deck) {
+  if (!currentUser || !db || !deck || !deck.id) return false;
+  deck.updatedAt = new Date().toISOString();
+  fcPaintDueBadge();
+  try { await setDoc(_fcRef(deck.id), deck); return true; }
+  catch (e) { console.warn('flashcard deck save', e); return false; }
+}
+
+// Cards waiting, on the sidebar item. Silent when there is nothing to do — a
+// badge that is always lit stops being information.
+function fcPaintDueBadge() {
+  const el = document.getElementById('fcDueBadge');
+  if (!el) return;
+  const n = fcDecks.reduce((s, d) => s + fcDueCards(d).length, 0);
+  el.textContent = String(n);
+  el.style.display = n ? '' : 'none';
+}
+
+function fcCardDue(card, now) {
+  return (Number(card && card.due) || 0) <= (now || Date.now());
+}
+function fcDueCards(deck, now) {
+  return ((deck && deck.cards) || []).filter(c => fcCardDue(c, now));
+}
+// How much of a deck is "learned": cards that have climbed past the first two
+// boxes. A percentage of cards SEEN would flatter a student who pressed "Got it"
+// on everything once; this only moves when a card survives being asked again.
+function fcDeckMastery(deck) {
+  const cards = (deck && deck.cards) || [];
+  if (!cards.length) return 0;
+  return Math.round(100 * cards.filter(c => (c.box || 0) >= 2).length / cards.length);
+}
+// Grade one card. `ok` false always resets to box 0 — the whole point of the deck
+// is that a gap keeps coming back until it closes.
+function fcGrade(card, ok) {
+  if (!card) return;
+  card.seen = (card.seen || 0) + 1;
+  if (ok) {
+    card.right = (card.right || 0) + 1;
+    card.box = Math.min(FC_INTERVAL_DAYS.length - 1, (card.box || 0) + 1);
+  } else {
+    card.wrong = (card.wrong || 0) + 1;
+    card.box = 0;
+  }
+  const days = FC_INTERVAL_DAYS[card.box] || 0;
+  // Box 0 is due immediately, so a missed card can be re-tried in this same sitting.
+  card.due = days ? Date.now() + days * 86400000 : Date.now();
+}
+
+// ---- the page ---------------------------------------------------------------
+let _fcBusy = false;
+let _fcGapSel = new Set();      // gap keys ticked for the next build
+
+async function renderFlashcardsPage() {
+  const c = document.getElementById('flashcardsContainer');
+  if (!c) return;
+  if (fcRun) { _fcRenderRun(); return; }
+  c.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);">Looking at what you\'ve been getting wrong…</div>';
+  try { await loadAttemptStats(); } catch (_) {}
+  try { if (!fcDecks.length) await loadFlashcardDecks(); } catch (_) {}
+  try { await loadMistakeLog(); } catch (_) {}
+  _fcRenderHome();
+}
+
+function _fcRenderHome() {
+  const c = document.getElementById('flashcardsContainer');
+  if (!c) return;
+  const gaps = fcGaps();
+  // Drop ticks for gaps that have since closed, so a stale selection can't build
+  // a deck about something they have now got right.
+  Array.from(_fcGapSel).forEach(k => { if (!gaps.some(g => g.key === k)) _fcGapSel.delete(k); });
+  const now = Date.now();
+
+  // Severity is shown as a word, relative to their own worst gap. The raw score is
+  // a made-up number on a made-up scale — "2.9" tells a child nothing, and printing
+  // it would only invite them to try to make it go down.
+  const topScore = gaps.length ? gaps[0].score : 0;
+  const severity = g => {
+    const r = topScore ? g.score / topScore : 0;
+    if (r >= 0.75) return { label: 'biggest gap', cls: 'hot' };
+    if (r >= 0.35) return { label: 'needs work', cls: 'warm' };
+    return { label: 'minor', cls: 'cool' };
+  };
+  const gapRows = gaps.map(g => {
+    const on = _fcGapSel.has(g.key);
+    const sev = severity(g);
+    const detail = g.wrong + '× wrong of ' + g.attempts + ' ' + (g.attempts === 1 ? 'try' : 'tries') +
+      ' · last slipped ' + _fcWhenLabel(g.last) +
+      (g.worst < 1 ? ' · best so far ' + Math.round(g.worst * 100) + '%' : '');
+    return `<button type="button" class="fc-gap${on ? ' on' : ''}" onclick="fcToggleGap(${JSON.stringify(g.key).replace(/"/g, '&quot;')})">
+      <span class="fc-gap-tick" aria-hidden="true">${on ? '✓' : ''}</span>
+      <span class="fc-gap-txt">
+        <b>${escapeHtml(g.label)}</b>
+        <span>${escapeHtml(detail)}</span>
+      </span>
+      <span class="fc-gap-n ${sev.cls}" title="How much this is costing you compared with your other gaps">${sev.label}</span>
+    </button>`;
+  }).join('');
+
+  const nSel = _fcGapSel.size;
+  const buildCard = gaps.length ? `
+    <div class="card card-pad fc-build">
+      <h3 style="margin:0;">🎯 Your gaps right now</h3>
+      <p class="fc-lede">Worked out from the questions you've actually got wrong — the ones you miss <b>often</b> and <b>recently</b> come first. Pick the ones to revise, or just press the button and I'll take the top three.</p>
+      <div class="fc-gaps">${gapRows}</div>
+      <div class="fc-build-row">
+        <button class="btn btn-primary btn-lg" onclick="fcBuildFromGaps()" ${_fcBusy ? 'disabled' : ''}>
+          ${_fcBusy ? '⏳ Writing your cards…' : '✨ Make my revision cards' + (nSel ? ' (' + nSel + ' gap' + (nSel === 1 ? '' : 's') + ')' : '')}
+        </button>
+        ${nSel ? `<button class="btn btn-outline" onclick="fcClearGaps()" ${_fcBusy ? 'disabled' : ''}>Clear</button>` : ''}
+      </div>
+      <div class="fc-note">${mistakeLog.length
+        ? 'Your cards are written from the marks you lost — the model answer you needed, and what you wrote instead.'
+        : 'Cards are written from the questions you got wrong. Keep practising and they get sharper, because I start remembering exactly which part you lost the mark on.'}</div>
+    </div>` : `
+    <div class="card card-pad fc-build">
+      <h3 style="margin:0;">🎯 Nothing to revise yet</h3>
+      <p class="fc-lede">Flashcards here are built from your own mistakes, so there's nothing to make until you've got a few questions wrong. Do some practice first and come back — this fills itself in.</p>
+      <div class="fc-build-row">
+        <button class="btn btn-primary btn-lg" onclick="navigateTo('quickpractice');startQuickPractice();">Start practising</button>
+      </div>
+    </div>`;
+
+  const deckRows = fcDecks.map(d => {
+    const due = fcDueCards(d, now).length;
+    const mastery = fcDeckMastery(d);
+    return `<div class="fc-deck">
+      <div class="fc-deck-head">
+        <div class="fc-deck-what">
+          <b>${escapeHtml(d.title)}</b>
+          <span>${d.cards.length} card${d.cards.length === 1 ? '' : 's'} · ${escapeHtml((d.gaps || []).slice(0, 3).join(', ') || 'mixed')}${(d.gaps || []).length > 3 ? ' +' + ((d.gaps || []).length - 3) : ''}</span>
+        </div>
+        <span class="fc-deck-due${due ? ' on' : ''}">${due ? due + ' due' : 'all caught up'}</span>
+      </div>
+      <div class="fc-bar" title="${mastery}% of the cards have survived being asked more than once"><div class="fc-bar-fill" style="width:${mastery}%;"></div></div>
+      <div class="fc-deck-row">
+        <button class="btn btn-primary" onclick="fcStartReview('${d.id}')">${due ? '▶ Revise ' + due : '🔁 Revise all ' + d.cards.length}</button>
+        <button class="btn btn-outline" onclick="fcDeleteDeck('${d.id}')" style="color:var(--accent-red);">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  c.innerHTML = buildCard + (fcDecks.length ? `
+    <div class="card card-pad" style="margin-top:18px;">
+      <h3 style="margin:0 0 4px;">🗂 My decks</h3>
+      <p class="fc-lede">A card you get right comes back later; one you miss comes straight back. The bar is how many have stuck.</p>
+      <div class="fc-decks">${deckRows}</div>
+    </div>` : '');
+}
+
+function fcToggleGap(key) {
+  if (_fcGapSel.has(key)) _fcGapSel.delete(key); else _fcGapSel.add(key);
+  _fcRenderHome();
+}
+function fcClearGaps() { _fcGapSel.clear(); _fcRenderHome(); }
+
+// No selection means "you decide" — the top three gaps, which is what a student
+// who just wants to revise actually wants.
+async function fcBuildFromGaps() {
+  if (_fcBusy) return;
+  const all = fcGaps();
+  const chosen = _fcGapSel.size ? all.filter(g => _fcGapSel.has(g.key)) : all.slice(0, 3);
+  if (!chosen.length) { showToast('Nothing to build from yet — do some practice first', 'info'); return; }
+  _fcBusy = true;
+  _fcRenderHome();
+  try {
+    const deck = await fcBuildDeck(chosen);
+    _fcGapSel.clear();
+    _fcBusy = false;
+    _fcRenderHome();
+    showToast('✨ ' + deck.cards.length + ' cards ready — on your weakest spots', 'success');
+  } catch (e) {
+    console.warn('flashcard build', e);
+    _fcBusy = false;
+    _fcRenderHome();
+    showToast('Couldn\'t make the cards — ' + ((e && e.message) || 'try again in a moment'), 'error');
+  }
+}
+
+async function fcDeleteDeck(id) {
+  const deck = fcDecks.find(d => d.id === id);
+  if (!deck) return;
+  if (!confirm('Delete “' + deck.title + '”?\n\nThe ' + deck.cards.length + ' cards in it go too. Your gaps stay, so you can always make a fresh deck.')) return;
+  fcDecks = fcDecks.filter(d => d.id !== id);
+  if (fcRun && fcRun.deckId === id) fcRun = null;
+  _fcRenderHome();
+  try { await deleteDoc(_fcRef(id)); } catch (e) { console.warn('deck delete', e); }
+  showToast('Deck deleted', 'info');
+}
+
+// ---- reviewing --------------------------------------------------------------
+// Due cards first; if nothing is due the whole deck is offered, because a student
+// who came here to revise should never be told to come back tomorrow.
+function fcStartReview(deckId) {
+  const deck = fcDecks.find(d => d.id === deckId);
+  if (!deck || !deck.cards.length) return;
+  const now = Date.now();
+  let pool = fcDueCards(deck, now);
+  if (!pool.length) pool = deck.cards.slice();
+  // Weakest first: most-missed, then least-seen.
+  pool.sort((a, b) => ((b.wrong || 0) - (a.wrong || 0)) || ((a.seen || 0) - (b.seen || 0)));
+  fcRun = { deckId, queue: pool.map(c => c.id), i: 0, flipped: false, right: 0, wrong: 0, done: 0 };
+  _fcRenderRun();
+}
+
+function _fcRunDeck() { return fcRun ? fcDecks.find(d => d.id === fcRun.deckId) : null; }
+function _fcRunCard() {
+  const deck = _fcRunDeck();
+  if (!deck || !fcRun) return null;
+  const id = fcRun.queue[fcRun.i];
+  return deck.cards.find(c => c.id === id) || null;
+}
+
+function _fcRenderRun() {
+  const c = document.getElementById('flashcardsContainer');
+  const deck = _fcRunDeck();
+  if (!c || !deck || !fcRun) { fcRun = null; _fcRenderHome(); return; }
+  if (fcRun.i >= fcRun.queue.length) { _fcRenderRunDone(); return; }
+  const card = _fcRunCard();
+  if (!card) { fcRun.i++; _fcRenderRun(); return; }
+  const total = fcRun.queue.length;
+  const pct = Math.round((fcRun.i / total) * 100);
+  const boxLabel = 'Box ' + ((card.box || 0) + 1) + ' of ' + FC_INTERVAL_DAYS.length;
+  c.innerHTML = `
+    <div class="fc-run">
+      <div class="fc-run-top">
+        <button class="btn btn-outline" onclick="fcEndReview()" style="font-size:0.82rem;">← Done for now</button>
+        <div class="fc-run-count">Card ${fcRun.i + 1} of ${total}</div>
+      </div>
+      <div class="fc-bar"><div class="fc-bar-fill" style="width:${pct}%;"></div></div>
+      <div class="fc-card${fcRun.flipped ? ' flipped' : ''}" onclick="${fcRun.flipped ? '' : 'fcFlip()'}" role="button" tabindex="0"
+        aria-label="${fcRun.flipped ? 'Answer' : 'Question — tap to see the answer'}">
+        <div class="fc-card-gap">🏷 ${escapeHtml(card.gap || deck.title)}</div>
+        <div class="fc-card-front">${escapeHtml(card.front)}</div>
+        ${fcRun.flipped
+          ? `<div class="fc-card-back"><div class="fc-card-back-label">Answer</div>${escapeHtml(card.back)}</div>`
+          : (card.hint ? `<div class="fc-card-hint">💡 ${escapeHtml(card.hint)}</div>` : '')}
+        ${fcRun.flipped ? '' : '<div class="fc-card-tap">Tap the card when you\'ve had a go</div>'}
+      </div>
+      ${fcRun.flipped ? `
+      <div class="fc-run-actions">
+        <button class="btn btn-outline fc-again" onclick="fcAnswer(false)">Still shaky — ask me again</button>
+        <button class="btn btn-primary" onclick="fcAnswer(true)">I got it ✓</button>
+      </div>
+      <div class="fc-run-meta">${escapeHtml(boxLabel)} · answer honestly, it only decides how soon this comes back</div>`
+      : `<div class="fc-run-meta">Say the answer out loud first — that's the bit that makes it stick.</div>`}
+    </div>`;
+}
+
+function fcFlip() { if (fcRun) { fcRun.flipped = true; _fcRenderRun(); } }
+
+function fcAnswer(ok) {
+  const deck = _fcRunDeck(), card = _fcRunCard();
+  if (!deck || !card || !fcRun) return;
+  fcGrade(card, !!ok);
+  if (ok) fcRun.right++; else fcRun.wrong++;
+  fcRun.done++;
+  fcRun.i++;
+  fcRun.flipped = false;
+  // A missed card goes to the back of THIS sitting as well as back to box 0 — the
+  // point is to close the gap now, not to be told about it again next week.
+  if (!ok && fcRun.queue.length < 60) fcRun.queue.push(card.id);
+  fcSaveDeck(deck);
+  _fcRenderRun();
+}
+
+function _fcRenderRunDone() {
+  const c = document.getElementById('flashcardsContainer');
+  const deck = _fcRunDeck();
+  if (!c || !deck) { fcRun = null; _fcRenderHome(); return; }
+  const right = fcRun.right, wrong = fcRun.wrong;
+  const mastery = fcDeckMastery(deck);
+  const stillDue = fcDueCards(deck).length;
+  fcRun = null;
+  c.innerHTML = `
+    <div class="card card-pad" style="text-align:center;">
+      <div style="font-size:2.6rem;line-height:1;">${wrong === 0 ? '🎉' : right >= wrong ? '👏' : '💪'}</div>
+      <h3 style="margin:12px 0 6px;justify-content:center;">${wrong === 0 ? 'Every card, first time' : right >= wrong ? 'Good session' : 'That\'s the work paying off'}</h3>
+      <p class="fc-lede" style="max-width:440px;margin:0 auto 6px;">
+        ${right} got right, ${wrong} to come back to.
+        ${mastery ? mastery + '% of this deck has stuck.' : 'A card counts as stuck once you\'ve got it right twice, so that number starts moving next time.'}
+        ${wrong ? 'The shaky ones are queued up — they\'ll keep coming back until they aren\'t.' : 'Nothing else is due for a while, so you\'re free.'}
+      </p>
+      <div class="fc-build-row" style="justify-content:center;">
+        ${stillDue ? `<button class="btn btn-primary" onclick="fcStartReview('${deck.id}')">Keep going (${stillDue})</button>` : ''}
+        <button class="btn btn-outline" onclick="fcEndReview()">Back to my decks</button>
+      </div>
+    </div>`;
+}
+
+function fcEndReview() {
+  const deck = _fcRunDeck();
+  if (deck) fcSaveDeck(deck);
+  fcRun = null;
+  _fcRenderHome();
 }
 
 async function loadMyReport() {
@@ -33846,6 +34546,7 @@ function _ainsteinTourGuide() {
     intro: 'Everything else in the menu is a bonus. Start at the top and work down.',
     steps,
     notes: [
+      'Revision Cards turns the questions you get wrong into flashcards, so you revise your own gaps instead of everything.',
       'Answered on paper? Snap & Mark takes a photo of your work and marks it.',
       'Textbooks & Syllabus has the notes, mindmaps and keyword drills for every topic.',
       'And I\'m always down here. Ask me for a clue on anything on your screen, or say “give me 20 hard MCQs” and I\'ll build you a worksheet.',
@@ -33933,6 +34634,29 @@ async function _ainsteinLostGuide() {
         : (weak.count === 1 ? 'There\'s 1 question' : 'There are ' + weak.count + ' questions') + ' on it at your level, and it\'s a good place to begin.',
       run: () => { navigateTo('topicalpractice'); tpStartTopic(weak.topic); },
     });
+  }
+  // Cards already waiting beat making new ones, and both beat wandering.
+  let dueCards = 0;
+  try { dueCards = fcDecks.reduce((s, d) => s + fcDueCards(d).length, 0); } catch (_) { dueCards = 0; }
+  if (dueCards) {
+    steps.push({
+      ico: '🃏', cta: 'Revise',
+      title: dueCards + ' revision card' + (dueCards === 1 ? '' : 's') + ' waiting for you',
+      desc: 'These are the ones written from your own mistakes. Five minutes on them is worth half an hour of anything else.',
+      run: () => { navigateTo('flashcards'); },
+    });
+  } else {
+    let gaps = [];
+    try { gaps = fcGaps(3); } catch (_) { gaps = []; }
+    if (gaps.length) {
+      steps.push({
+        ico: '🃏', cta: 'Make them',
+        title: 'Make revision cards on ' + gaps[0].label,
+        desc: 'I can turn what you keep getting wrong into flashcards — ' + gaps[0].label +
+          ' is costing you the most right now' + (gaps.length > 1 ? ', and ' + (gaps.length - 1) + ' more after that' : '') + '.',
+        run: () => { navigateTo('flashcards'); },
+      });
+    }
   }
   let review = [];
   try { review = _homeReviewPool(); } catch (_) { review = []; }
@@ -35090,6 +35814,15 @@ window.questionTagAdd = questionTagAdd;
 window.questionTagsShowAll = questionTagsShowAll;
 window.questionTagsShowFewer = questionTagsShowFewer;
 window.bankFilterByTag = bankFilterByTag;
+window.renderFlashcardsPage = renderFlashcardsPage;
+window.fcToggleGap = fcToggleGap;
+window.fcClearGaps = fcClearGaps;
+window.fcBuildFromGaps = fcBuildFromGaps;
+window.fcStartReview = fcStartReview;
+window.fcDeleteDeck = fcDeleteDeck;
+window.fcFlip = fcFlip;
+window.fcAnswer = fcAnswer;
+window.fcEndReview = fcEndReview;
 window.refreshQuestionUsage = refreshQuestionUsage;
 window.commPreviewImg = commPreviewImg;
 window.commAdminPost = commAdminPost;
