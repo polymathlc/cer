@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.200.0';
+const APP_VERSION = 'v1.201.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -16409,6 +16409,15 @@ async function renderHomePage() {
         <div class="home-sub">${weakest.acc}% correct over ${weakest.n} attempt${weakest.n === 1 ? '' : 's'} — a little focus goes a long way.</div>
         <button class="btn btn-blue" onclick="homePractiseWeakest()">Practise this topic</button>` : `
         <div class="home-sub">Answer a few questions and your weakest topic will show up here with a one-tap practice button.</div>`}
+      </div>
+      <div class="home-card wide">
+        <h3>🧭 Not sure what to do?</h3>
+        <div class="home-sub">The menu is long and you only need a few of it. Ask Ai-nstein and he'll lay out the next step as buttons — nothing to hunt for, and these three cost you nothing.</div>
+        <div class="home-guide-row">
+          <button class="btn btn-outline" onclick="ainsteinGuideLocal('tour')">🧭 How do I use this?</button>
+          <button class="btn btn-outline" onclick="ainsteinGuideLocal('lost')">🤷 I'm lost — what now?</button>
+          <button class="btn btn-outline" onclick="ainsteinGuideLocal('psle')">📄 Suggest a PSLE paper</button>
+        </div>
       </div>
       <div class="home-card wide">
         <h3>📈 Recent progress</h3>
@@ -33411,6 +33420,384 @@ function ainsteinWsOpenSaved() {
   navigateTo('myworksheets');
 }
 
+// ---- showing them around the app -------------------------------------------
+// The sidebar runs to forty-odd items and a child needs four of them. A student
+// who doesn't know where to start is never going to read a manual, so Ai-nstein
+// gives the three answers a teacher gives at the door — as BUTTONS, not prose:
+//
+//   "tour" — the handful of things that actually matter, in order
+//   "psle" — one specific past-year paper, chosen from what is attached to the
+//            system and what this student hasn't done yet
+//   "lost" — two to four concrete next moves read off their own record
+//
+// Every button is built HERE, from the real question bank and the real paper
+// data, and calls the same function the page itself calls. The model only decides
+// WHICH of the three a sentence is asking for — it never names a page, a paper or
+// a topic — so Ai-nstein can't send a child somewhere that isn't there. The
+// preset chips in the greeting skip the model altogether: a lost student gets
+// help even with no credits left and no AI reachable.
+const _ainsteinGuides = new Map();     // token → { kind, title, intro, steps, notes }
+let _ainsteinGuideSeq = 0;
+
+// What the preset chips put in the chat as the student's own words.
+const AINSTEIN_GUIDE_ASKS = {
+  tour: 'How do I use this app?',
+  psle: 'Suggest a PSLE past-year paper for me.',
+  lost: "I'm lost — what should I do now?",
+};
+
+// Topics this student can actually practise right now, with how many questions
+// each holds — the same test Topical Practice counts with.
+function _ainsteinTopicCounts() {
+  const counts = {};
+  (Array.isArray(questionBank) ? questionBank : []).forEach(q => {
+    if (!q || !questionHasMarkableAnswer(q) || !qInSyllabus(q) || !qWithinStudentLevel(q)) return;
+    qTopicList(q).forEach(t => { if (t) counts[t] = (counts[t] || 0) + 1; });
+  });
+  return counts;
+}
+
+// The one topic worth pointing at: lowest accuracy with enough attempts to mean
+// something, else whatever they've done worst at, else — with no record at all —
+// the topic holding the most questions, which is the safest place to begin.
+function _ainsteinWeakestTopic() {
+  const counts = _ainsteinTopicCounts();
+  const p = (typeof cerPerf !== 'undefined' && cerPerf) || null;
+  if (p && p.attempts) {
+    const ranked = _topicAccuracy(p).filter(x => counts[x.topic]).sort((a, b) => (a.acc - b.acc) || (b.n - a.n));
+    const weak = ranked.find(x => x.n >= 2) || ranked[0];
+    if (weak) return { topic: weak.topic, acc: weak.acc, n: weak.n, count: counts[weak.topic] };
+  }
+  const names = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  return names.length ? { topic: names[0], acc: null, n: 0, count: counts[names[0]] } : null;
+}
+
+// Which past-year paper to put in front of them. Every year that has questions
+// attached is a candidate; the one with the most they've never attempted wins,
+// and the newest paper breaks a tie because it's the closest to the exam they
+// will actually sit. Counts are ppAttachedBankQs — exactly what the ▶ button
+// will run — so the number on the card is the number they get.
+async function _ainsteinPaperPick() {
+  try {
+    await Promise.all([
+      loadPaperData(), loadPaperMap(),
+      (typeof loadAttemptStats === 'function' ? loadAttemptStats().catch(() => {}) : Promise.resolve()),
+    ]);
+  } catch (e) { console.warn('ainstein paper data', e); }
+  const stats = _qAttemptStats || {};
+  const rows = ppYears().map(y => {
+    const qs = ppAttachedBankQs(y);
+    return { year: y, total: qs.length, fresh: qs.filter(q => q && !stats[String(q.id)]).length };
+  }).filter(r => r.total > 0);
+  if (!rows.length) return null;
+  const byYear = rows.slice().sort((a, b) => Number(b.year) - Number(a.year));
+  rows.sort((a, b) => (b.fresh - a.fresh) || (Number(b.year) - Number(a.year)));
+  return { pick: rows[0], years: byYear, allTotal: ppAttachedBankQs('').length };
+}
+
+// ---- the three guides ------------------------------------------------------
+
+function _ainsteinTourGuide() {
+  const weak = _ainsteinWeakestTopic();
+  const counts = _ainsteinTopicCounts();
+  const nTopics = Object.keys(counts).length;
+  const steps = [
+    {
+      ico: '⚡', cta: 'Start now',
+      title: 'Quick Practice — your ten a day',
+      desc: 'Mixed questions at your level, chosen for you, marked the moment you finish. Ten a day is the one habit that moves your score.',
+      run: () => { navigateTo('quickpractice'); startQuickPractice(); },
+    },
+    {
+      ico: '🎯', cta: 'Pick a topic',
+      title: 'Topical Practice — one topic at a time',
+      desc: weak && weak.n >= 2
+        ? 'Drill a single topic until it clicks. Yours to look at right now is ' + weak.topic + '.'
+        : (nTopics ? 'Drill a single topic until it clicks — there are ' + nTopics + ' to choose from at your level.'
+                   : 'Drill a single topic until it clicks.'),
+      run: () => { navigateTo('topicalpractice'); },
+    },
+    {
+      ico: '📄', cta: 'Open the papers',
+      title: 'PSLE Papers — the real thing',
+      desc: 'Actual past-year papers, question by question, with the concepts that keep coming back. Practise a whole year in one sitting, or print it.',
+      run: () => { navigateTo('papers'); },
+    },
+    {
+      ico: '📈', cta: 'See my report',
+      title: 'My Report — where you actually stand',
+      desc: 'Your score out of 100, your strongest topics and the ones to work on, updated every time something is marked.',
+      run: () => { navigateTo('myreport'); },
+    },
+  ];
+  return {
+    kind: 'tour',
+    title: 'The four things that matter most',
+    intro: 'Everything else in the menu is a bonus. Start at the top and work down.',
+    steps,
+    notes: [
+      'Answered on paper? Snap & Mark takes a photo of your work and marks it.',
+      'Textbooks & Syllabus has the notes, mindmaps and keyword drills for every topic.',
+      'And I\'m always down here. Ask me for a clue on anything on your screen, or say “give me 20 hard MCQs” and I\'ll build you a worksheet.',
+    ],
+  };
+}
+
+async function _ainsteinPaperGuide() {
+  const p = await _ainsteinPaperPick();
+  if (!p) {
+    return {
+      kind: 'psle',
+      title: 'No past-year papers ready yet',
+      intro: 'Nothing is attached to the papers on this system yet, so there\'s nothing for me to set you.',
+      steps: [{
+        ico: '📄', cta: 'Have a look', title: 'PSLE Papers',
+        desc: 'The analysis is still worth reading — every question of every paper, sorted into topics, with the concepts that keep coming back.',
+        run: () => { navigateTo('papers'); },
+      }],
+      notes: ['In the meantime, Quick Practice and Topical Practice both have plenty for you. Ask me and I\'ll start one.'],
+    };
+  }
+  const pick = p.pick;
+  const steps = [{
+    ico: '📄', cta: 'Practise it',
+    title: 'PSLE ' + pick.year + ' — ' + pick.total + ' question' + (pick.total === 1 ? '' : 's'),
+    desc: pick.fresh === pick.total
+      ? 'You haven\'t touched this one yet, so every question is new. MCQ and open-ended, marked as you go.'
+      : pick.fresh
+        ? pick.fresh + ' of them you\'ve never attempted — that\'s why this is the paper I\'d start with.'
+        : 'You\'ve seen all of these before, so this one is a proper test of what stuck.',
+    run: () => { ppPracticeYear(pick.year); },
+  }];
+  if (p.allTotal > pick.total) {
+    steps.push({
+      ico: '📚', cta: 'Practise all',
+      title: 'Every paper at once — ' + p.allTotal + ' questions',
+      desc: 'All the attached past-paper questions from every year, in one long run. Save this for when you\'ve done a few single papers.',
+      run: () => { ppPracticeYear(''); },
+    });
+  }
+  steps.push({
+    ico: '🗂', cta: 'Open the page',
+    title: 'Browse the papers yourself',
+    desc: 'Pick any year, see the marks by topic, print a paper with its answer key, or load one into a game — questions answered in a game count double.',
+    run: () => { navigateTo('papers'); },
+  });
+  const others = p.years.filter(r => r.year !== pick.year).slice(0, 6).map(r => r.year);
+  return {
+    kind: 'psle',
+    title: 'Start with the PSLE ' + pick.year + ' paper',
+    intro: 'These are the real papers, and the questions your teacher has attached can be marked here like any other.',
+    steps,
+    notes: others.length
+      ? ['Also on the system: ' + others.join(', ') + '. Do one whole paper in a sitting rather than a few questions from each — that\'s how you find out where you actually are.']
+      : ['Do the whole paper in one sitting rather than a few questions at a time — that\'s how you find out where you actually are.'],
+  };
+}
+
+async function _ainsteinLostGuide() {
+  try { if (!_qAttemptStats) await loadAttemptStats(); } catch (_) {}
+  try { if (typeof cerPerf === 'undefined' || !cerPerf) await loadCerPerf(); } catch (_) {}
+  const steps = [];
+  const s = (typeof rpgState !== 'undefined' && rpgState && rpgState.streak) || {};
+  const todayQ = (s.dayKey === advToday()) ? (s.dayMarks || 0) : 0;
+  const goal = 10;
+  const left = Math.max(0, goal - todayQ);
+  steps.push({
+    ico: '⚡', cta: 'Start',
+    title: left
+      ? 'Answer ' + left + ' question' + (left === 1 ? '' : 's') + ' — that finishes today'
+      : 'A few more questions, just for the fun of it',
+    desc: left
+      ? 'Quick Practice picks them for you, at your level, ones you haven\'t seen first. Nothing to choose.'
+      : 'You\'ve already done your ten today, so anything more is bonus. Quick Practice will keep going as long as you do.',
+    run: () => { navigateTo('quickpractice'); startQuickPractice(); },
+  });
+  const weak = _ainsteinWeakestTopic();
+  if (weak) {
+    steps.push({
+      ico: '🎯', cta: 'Practise it',
+      title: 'Sharpen up ' + weak.topic,
+      desc: weak.n >= 2
+        ? 'This is the one your marks say to look at next, and there ' + (weak.count === 1 ? 'is 1 question' : 'are ' + weak.count + ' questions') + ' waiting on it.'
+        : (weak.count === 1 ? 'There\'s 1 question' : 'There are ' + weak.count + ' questions') + ' on it at your level, and it\'s a good place to begin.',
+      run: () => { navigateTo('topicalpractice'); tpStartTopic(weak.topic); },
+    });
+  }
+  let review = [];
+  try { review = _homeReviewPool(); } catch (_) { review = []; }
+  if (review.length >= 3) {
+    steps.push({
+      ico: '🔁', cta: 'Review',
+      title: 'Another go at ' + Math.min(review.length, 10) + ' you never cracked',
+      desc: 'Questions you\'ve tried but never got full marks on. Same questions, better score — that\'s the quickest win there is.',
+      run: () => { homeStartReview(); },
+    });
+  }
+  let paper = null;
+  try { paper = await _ainsteinPaperPick(); } catch (_) { paper = null; }
+  if (paper) {
+    steps.push({
+      ico: '📄', cta: 'Sit it',
+      title: 'Sit the PSLE ' + paper.pick.year + ' paper',
+      desc: paper.pick.total + ' real past-year question' + (paper.pick.total === 1 ? '' : 's') + ', marked as you go. Set aside a proper block of time for this one.',
+      run: () => { ppPracticeYear(paper.pick.year); },
+    });
+  }
+  return {
+    kind: 'lost',
+    title: 'Here\'s what I\'d do next',
+    intro: 'You don\'t have to decide anything. Tap the first one.',
+    steps: steps.slice(0, 4),
+    notes: ['Do the top one and stop worrying about the rest — that\'s the whole trick.'],
+  };
+}
+
+// Build the card for a reply, in place, and re-render when it's ready. Reading
+// the paper data can take a moment, so it never holds the reply up.
+async function _ainsteinAttachGuide(msg, kind) {
+  try {
+    msg.guidePending = true;
+    _ainsteinRender();
+    const rec = kind === 'psle' ? await _ainsteinPaperGuide()
+      : kind === 'lost' ? await _ainsteinLostGuide()
+      : _ainsteinTourGuide();
+    const token = 'ag' + (++_ainsteinGuideSeq);
+    _ainsteinGuides.set(token, rec);
+    msg.guidePending = false;
+    msg.guide = { token };
+  } catch (e) {
+    console.warn('ainstein guide', e);
+    msg.guidePending = false;
+    msg.guideError = 'I couldn\'t put that list together just now. Quick Practice and Topical Practice are both in the menu on the left, and either one is a good place to start.';
+  }
+  _ainsteinRender();
+}
+
+function _ainsteinGuideHtml(ref) {
+  const rec = _ainsteinGuides.get(ref && ref.token);
+  if (!rec || !(rec.steps || []).length) return '';
+  const steps = rec.steps.map((st, i) =>
+    '<button type="button" class="ainstein-guide-step" onclick="ainsteinGo(\'' + ref.token + '\',' + i + ')">' +
+      '<span class="ainstein-guide-ico">' + escapeHtml(st.ico || '▸') + '</span>' +
+      '<span class="ainstein-guide-txt">' +
+        '<b>' + escapeHtml(st.title || '') + '</b>' +
+        '<span>' + escapeHtml(st.desc || '') + '</span>' +
+      '</span>' +
+      '<span class="ainstein-guide-cta">' + escapeHtml(st.cta || 'Open') + ' ›</span>' +
+    '</button>').join('');
+  return '<div class="ainstein-guide">' +
+    '<div class="ainstein-guide-head">' +
+      '<span class="ainstein-guide-badge">🧭</span>' +
+      '<span class="ainstein-guide-what">' +
+        '<b>' + escapeHtml(rec.title || 'Where to start') + '</b>' +
+        (rec.intro ? '<span>' + escapeHtml(rec.intro) + '</span>' : '') +
+      '</span>' +
+    '</div>' +
+    '<div class="ainstein-guide-steps">' + steps + '</div>' +
+    ((rec.notes || []).length ? '<div class="ainstein-guide-meta">' + rec.notes.map(n => escapeHtml(n)).join('<br>') + '</div>' : '') +
+  '</div>';
+}
+
+// Tapping a step: close up and run the real thing. The step holds a function, not
+// a page name, so nothing has to be parsed back out of the markup.
+function ainsteinGo(token, i) {
+  const rec = _ainsteinGuides.get(token);
+  const step = rec && rec.steps && rec.steps[i];
+  if (!step || typeof step.run !== 'function') {
+    showToast('That shortcut has gone stale — ask me again and I\'ll make you a new one.', 'info');
+    return;
+  }
+  ainsteinToggle(false);
+  try { step.run(); }
+  catch (e) {
+    console.warn('ainstein route', e);
+    showToast('I couldn\'t open that one — try the menu on the left.', 'error');
+  }
+}
+
+// Straight to a guide with no AI call and no credit spent — what the greeting's
+// preset chips use. A child who is lost is exactly the child who shouldn't have
+// to hope the network is up.
+async function ainsteinGuideLocal(kind) {
+  if (_ainstein.busy) return;
+  const k = ['tour', 'psle', 'lost'].includes(kind) ? kind : 'tour';
+  ainsteinToggle(true);        // also the way in from the Home page, where he is shut
+  // Land in the conversation, not on a question left mounted from earlier. An
+  // unfinished one keeps its "back to your question" chip in the log.
+  _ainsteinEl('ainsteinPanel')?.classList.remove('quiz');
+  _ainsteinPlacePanel();
+  const opening = k === 'psle' ? 'Right — let me look at what\'s on the system and pick you one.'
+    : k === 'lost' ? 'No problem at all. Here\'s what I\'d do, in order.'
+    : 'Happily. There are really only four things you need in here.';
+  _ainstein.history.push({ who: 'me', text: AINSTEIN_GUIDE_ASKS[k] });
+  const msg = { who: 'ai', text: opening };
+  _ainstein.history.push(msg);
+  _ainsteinRender();
+  await _ainsteinAttachGuide(msg, k);
+}
+
+// Did they ask to be shown around, for a past-year paper, or for a way out of
+// being lost? The model's own flag leads; these are the safety nets for when it
+// forgets, so they are deliberately narrow. "How do I do this question" must
+// never read as "how do I use this app", and "heat is lost to the surroundings"
+// must never read as "I am lost" — hence the required subject in each.
+// Each pattern names the app itself, because the near-miss is always a real
+// science question: "how do I use this DIAGRAM", "where do I find the MASS",
+// "what are the most important THINGS ABOUT PHOTOSYNTHESIS". None of those may
+// turn into a menu card, so a bare "how do I use this" is not enough — the
+// sentence has to be about the app, the site or the system.
+const AINSTEIN_ASKS_TOUR = new RegExp([
+  'how (do i|to) use (this|the) (app|site|website|system|portal|thing|program|programme)',
+  'how does (this|the) (app|system|portal|site|website) work',
+  'what can (this|the) (app|system|portal|site|website) do',
+  'what (is|does) this (app|site|portal|system|website)',
+  'show me (around|how to use)',
+  "i(?:'|’)?m new (here|to this)",
+  'first time (here|using)',
+  'which (page|button|tab) (do|should)',
+  'what should i (click|press)',
+  '(give me|i want) a tour',
+  'tour of the (app|site|system)',
+  '(most )?important[^.?!]{0,40}\\b(app|system|portal|website|site)\\b',
+  'teach me how to use (this|the) (app|site|system|portal)',
+].map(s => '(?:' + s + ')').join('|'), 'i');
+// "past paper" and "past year" are unambiguous on their own; "PSLE" on its own is
+// not — it turns up inside ordinary questions — so it needs an intent word near it.
+const AINSTEIN_ASKS_PSLE = new RegExp([
+  '\\b(past[- ]?year|past paper)\\b',
+  '\\bpsle\\b[^.?!]{0,40}\\b(paper|practi[sc]e|sit|suggest|recommend|which|attempt|revise)\\b',
+  '\\b(suggest|recommend|give me|set me|which|what)\\b[^.?!]{0,30}\\b(psle|past paper|exam paper)\\b',
+].join('|'), 'i');
+// Deliberately no bare "confused" and no bare "lost": "I'm confused about this
+// question" wants a clue, and "heat is lost to the surroundings" wants nothing at
+// all. Only phrasings that are about the student, not the science.
+const AINSTEIN_ASKS_LOST = new RegExp([
+  "i(?:'|’)?m (lost|so lost|totally lost|completely lost)",
+  'i am (lost|completely lost)',
+  'feeling lost',
+  "i don'?t know (what|where) to (do|start|begin|study|practi[sc]e|revise)",
+  'i have no idea (what|where) to (do|start|study)',
+  'where (do|should) i (start|begin)',
+  'what (do|should) i do (now|next|today)',
+  'what now',
+].map(s => '(?:\\b' + s + '\\b)').join('|'), 'i');
+
+function _ainsteinGuideKind(parsed, studentQuestion) {
+  const g = (parsed && typeof parsed.guide === 'object' && parsed.guide) || null;
+  const kind = g && typeof g.kind === 'string' ? g.kind.trim().toLowerCase() : '';
+  if (g && g.wanted === true && ['tour', 'psle', 'lost'].includes(kind)) return kind;
+  // Safety nets, for when the model forgets to set the flag.
+  const t = String(studentQuestion || '');
+  if (AINSTEIN_ASKS_PSLE.test(t)) return 'psle';
+  if (AINSTEIN_ASKS_TOUR.test(t)) return 'tour';
+  // "I'm lost" with a question open in front of them means lost in the question,
+  // not lost in the app — that student wants a clue, and only the model may
+  // override this. Without a question on screen it means exactly what it says.
+  if (AINSTEIN_ASKS_LOST.test(t) && !_ainsteinQuestionContext()) return 'lost';
+  return '';
+}
+
 // ---- what to practise next -------------------------------------------------
 // So Ai-nstein can answer "what should I practise?" from the student's actual
 // record rather than guessing. Compact on purpose — it rides along on every ask,
@@ -33513,7 +33900,7 @@ function _ainsteinBuildPrompt(question, shotImages) {
   lines.push('FIRST decide if the question is ON TOPIC. On topic means: about anything on the screen above, about the question they are on or its neighbours, about the science topic they are studying, or about how to use this part of the app. A general primary-science question counts as on topic even if it is not literally printed on the screen. Asking you outright for the answer IS on topic — never penalise that, just give a clue instead. OFF topic means chit-chat, jokes, games, other subjects unrelated to what is on screen, personal questions about you, or anything that is not about their learning.');
   lines.push('');
   lines.push('Then reply with ONLY this JSON:');
-  lines.push('{"relevant": true or false, "clue": "your reply to the student", "used": "page" | "current" | "previous" | "next", "open": {"wanted": true or false, "describe": "the words that identify the question they want"}, "practice": {"wanted": true or false, "concept": "the science concept being tested", "keywords": ["3-6 words the app can search the question bank with"], "format": "mcq" | "written" | "any"}, "video": {"wanted": true or false, "query": "what to search YouTube for"}, "worksheet": true or false}');
+  lines.push('{"relevant": true or false, "clue": "your reply to the student", "used": "page" | "current" | "previous" | "next", "open": {"wanted": true or false, "describe": "the words that identify the question they want"}, "practice": {"wanted": true or false, "concept": "the science concept being tested", "keywords": ["3-6 words the app can search the question bank with"], "format": "mcq" | "written" | "any"}, "video": {"wanted": true or false, "query": "what to search YouTube for"}, "worksheet": true or false, "guide": {"wanted": true or false, "kind": "tour" | "psle" | "lost"}}');
   lines.push('');
   lines.push('ABOUT "open" — the app can find ONE particular question in the bank and open it for them right here in this chat.');
   lines.push('- Set "wanted" true when they ask to DO or SEE a specific question they can describe: "let me do the question about Rosa and evaporation", "open the potato steamer one", "I want to try that question on the metal ball and ring again", "can I redo the one about the three cups".');
@@ -33536,6 +33923,13 @@ function _ainsteinBuildPrompt(question, shotImages) {
   lines.push('- They are not just stuck on this question, they do not understand the IDEA itself: "I still don\'t get it", "I don\'t understand this topic at all", "explain it from the start", or they have asked you about the same idea again after your last clue.');
   lines.push('"query" is what you would type into YouTube for a P3-P6 child on that concept. Do not mention the video in your clue — the app decides whether one is available and adds it under your reply.');
   lines.push('');
+  lines.push('ABOUT "guide" — this app has a big menu and plenty of students have no idea what most of it is for. The app can put a short card of REAL, tappable buttons under your reply that take them straight to the right place. There are exactly three kinds:');
+  lines.push('- "tour" — they are asking how to USE the app or the system: "how do I use this", "what can this app do", "I\'m new here", "what are the most important things in here", "what should I click", "where do I find X", "show me around". Also use this when they are plainly confused about the app itself rather than about any science.');
+  lines.push('- "psle" — anything about the PSLE past-year papers: "which PSLE paper should I do", "give me a past year paper", "I want to practise a real exam paper", "suggest a past paper".');
+  lines.push('- "lost" — they don\'t know what to do with themselves: "I\'m lost", "I don\'t know what to study", "where do I start", "what do I do now", "I\'m confused about everything". This is the one that offers them quick practice, their weakest topic, a review set and a past paper, all as buttons.');
+  lines.push('- Everything else is false. A clue about a question is not a guide, and neither is "what should I practise next?" — that one you answer yourself from THEIR RECORD (see below) and the app offers a single question on it.');
+  lines.push('- You do NOT know what pages, papers or topics exist, so NEVER name a page, a paper year, a topic or a button in your clue for these. Set "guide" and let the app build the card from the real system. Your "clue" is then ONE short warm line — "Of course, here\'s where I\'d start" — and nothing more. No lists, no numbered steps, no "click the sidebar".');
+  lines.push('');
   if (mayAnswer) {
     lines.push('YOUR REPLY MAY: name the correct option and say why it is correct; go through a wrong option and show exactly which part of it fails; quote the question, the diagram or the model answer; and finish the reasoning all the way to the conclusion. Answer the question they actually asked, first, before adding anything else.');
   } else {
@@ -33552,6 +33946,7 @@ function _ainsteinBuildPrompt(question, shotImages) {
   lines.push('- If they have no record yet, pick something fundamental from the topics listed and say everyone starts there.');
   lines.push('- Never quote the percentages back at them or make them feel bad about a weak topic. "Let\'s sharpen up X" beats "you are bad at X".');
   lines.push('- Do not list several options or write a study timetable. One thing, one reason, then the app offers them a question on it.');
+  lines.push('- The exception is a student who is lost rather than choosing: "I don\'t know what to study", "where do I start", "what do I do now". That is "guide" with kind "lost" — say one warm line and let the app lay out their options as buttons.');
   lines.push('');
   lines.push(mayAnswer
     ? 'Style: warm, plain English, and as long as it needs to be to actually explain it — usually 3-6 short sentences. No markdown, no headings, no bullet symbols.'
@@ -33598,6 +33993,9 @@ function _ainsteinBubbleHtml(text, who) {
 
 function _ainsteinItemHtml(m) {
   return _ainsteinBubbleHtml(m.text, m.who) +
+    (m.guidePending ? '<div class="ainstein-vid-wait">🧭 Working out where you should start…</div>' : '') +
+    (m.guide ? _ainsteinGuideHtml(m.guide) : '') +
+    (m.guideError ? '<div class="ainstein-vid-wait">' + escapeHtml(m.guideError) + '</div>' : '') +
     (m.wsPending ? '<div class="ainstein-vid-wait">📄 Putting your worksheet together…</div>' : '') +
     (m.worksheet ? _ainsteinWsHtml(m.worksheet) : '') +
     (m.wsError ? '<div class="ainstein-vid-wait">' + escapeHtml(m.wsError) + '</div>' : '') +
@@ -33617,6 +34015,7 @@ function _ainsteinItemKey(m, i) {
   const body = [
     m.video ? 'v' + m.video.token : (m.videoPending ? 'p' : ''),
     m.worksheet ? 'w' + m.worksheet.token : (m.wsPending ? 'wp' : (m.wsError ? 'we' : '')),
+    m.guide ? 'g' + m.guide.token : (m.guidePending ? 'gp' : (m.guideError ? 'ge' : '')),
   ].filter(Boolean).join(',');
   const key = [i, m.who, body, o ? 'o' + o.token + oState : ''];
   // Only messages that carry the extra "pick another one" chips get a 5th
@@ -33648,7 +34047,13 @@ function _ainsteinRender() {
       rule +
       '<p>Want a particular question? Say <b>“let me do the one about Rosa and evaporation”</b> and I\'ll find it and open it right here. Want more practice on the same idea? Ask, and I\'ll find you another — you answer it here without losing your place. Still not clicking? I\'ll find you a video to watch.</p>' +
       '<p>Need a whole set? Just say <b>“give me 20 hard MCQs”</b> — or name topics if you want, like <b>“20 MCQ and 20 open-ended on heat and matter”</b>. I\'ll build it, save it to My Worksheets and set it up to print.</p>' +
-      '<p><button type="button" class="ainstein-preset" onclick="ainsteinAsk(\'What should I practise next?\')">What should I practise next?</button></p>' +
+      '<p>New here, or not sure what to do? Tap one of these — they\'re free and they don\'t use a credit.</p>' +
+      '<div class="ainstein-presets">' +
+        '<button type="button" class="ainstein-preset" onclick="ainsteinGuideLocal(\'tour\')">🧭 How do I use this app?</button>' +
+        '<button type="button" class="ainstein-preset" onclick="ainsteinGuideLocal(\'lost\')">🤷 I\'m lost — what now?</button>' +
+        '<button type="button" class="ainstein-preset" onclick="ainsteinGuideLocal(\'psle\')">📄 Suggest a PSLE paper</button>' +
+        '<button type="button" class="ainstein-preset" onclick="ainsteinAsk(\'What should I practise next?\')">🎯 What should I practise next?</button>' +
+      '</div>' +
       '<p class="ainstein-warn">Off-topic questions cost an extra credit, so keep them about your work.</p>' +
       '</div>';
     return;
@@ -33952,17 +34357,24 @@ async function ainsteinSend() {
       return;
     }
     const wantsWs = relevant && parsed && parsed.worksheet === true;
+    // "Show me around", "which PSLE paper should I do", "I'm lost" — a card of
+    // real buttons instead of a paragraph telling them to look in a menu they
+    // already couldn't find. A batch request wins over this: asking for 20 MCQs
+    // is not asking to be shown around.
+    const guideKind = (relevant && !wantsWs) ? _ainsteinGuideKind(parsed, question) : '';
     // A "try another question" chip appears ONLY when the student asked for one.
     // Unprompted it is an interruption — they are in the middle of a question,
-    // not shopping for the next one.
-    const offer = (relevant && !wantsWs && _ainsteinWantsPractice(parsed, question))
+    // not shopping for the next one. A guide card already carries its own
+    // practice buttons, so it never gets a chip on top.
+    const offer = (relevant && !wantsWs && !guideKind && _ainsteinWantsPractice(parsed, question))
       ? _ainsteinBuildOffer(parsed, question) : null;
     const msg = { who: 'ai', text, offTopic: !relevant, offer: offer || null };
     _ainstein.history.push(msg);
-    // Both of these take a beat longer than the clue (an extra call, and for a
-    // video a verification round-trip), so neither holds the reply up — they land
-    // underneath it when they're ready.
-    if (wantsWs) _ainsteinBuildWorksheet(msg, question);
+    // All of these take a beat longer than the clue (an extra call, a paper-data
+    // read, and for a video a verification round-trip), so none of them holds the
+    // reply up — they land underneath it when they're ready.
+    if (guideKind) _ainsteinAttachGuide(msg, guideKind);
+    else if (wantsWs) _ainsteinBuildWorksheet(msg, question);
     else if (relevant) _ainsteinMaybeVideo(msg, parsed, question);
   } catch (e) {
     console.warn('ainstein ask failed', e);
@@ -34163,10 +34575,41 @@ async function ainsteinSend() {
   .ainstein-empty p:last-child { margin-bottom: 0; }
   .ainstein-empty b { color: var(--text, #1a1a1a); }
   .ainstein-warn { font-size: 0.78rem; color: #a8620f; }
+  .ainstein-presets { display: flex; flex-direction: column; gap: 9px; margin: 0 0 14px; }
   .ainstein-preset { cursor: pointer; font: inherit; font-size: 0.82rem; font-weight: 600;
     padding: 10px 16px; border-radius: 12px; border: 1px solid var(--primary, #0b6b4f);
     background: var(--surface, #fff); color: var(--primary-dark, #3d6749); }
   .ainstein-preset:hover { background: var(--bg-soft, #f7f9fc); }
+
+  /* "Where do I start?" — a short card of real routes into the app. Each row is
+     a whole button, so a child who can't find the sidebar never has to. */
+  .ainstein-guide { align-self: flex-start; width: 100%; padding: 17px 17px 15px; border-radius: 16px;
+    border: 1px solid var(--primary, #0b6b4f); background: var(--bg-soft, #f7f9fc); }
+  .ainstein-guide-head { display: flex; align-items: flex-start; gap: 12px; }
+  .ainstein-guide-badge { font-size: 1.25rem; line-height: 1.2; flex-shrink: 0; }
+  .ainstein-guide-what { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .ainstein-guide-what b { font-size: 0.92rem; line-height: 1.4; color: var(--text, #1a1a1a); }
+  .ainstein-guide-what span { font-size: 0.79rem; line-height: 1.55; color: var(--text-muted, #666c71); }
+  .ainstein-guide-steps { display: flex; flex-direction: column; gap: 11px; margin-top: 16px; }
+  /* Two rows, not two columns: the panel is ~400px wide even on a desktop, so a
+     call-to-action sitting BESIDE the text squeezes the description into a
+     four-word ribbon. Icon and words on top, the action on its own line under
+     them, and the whole tile is the button. */
+  .ainstein-guide-step { display: grid; grid-template-columns: auto 1fr; gap: 8px 13px; width: 100%;
+    text-align: left; cursor: pointer; padding: 15px 16px 14px;
+    border: 1px solid var(--border, #e3e6e4); border-radius: 14px;
+    background: var(--surface, #fff); color: var(--text, #1a1a1a); font: inherit;
+    transition: border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
+  .ainstein-guide-step:hover { border-color: var(--primary, #0b6b4f); transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(20,18,16,0.08); }
+  .ainstein-guide-ico { grid-column: 1; grid-row: 1; font-size: 1.1rem; line-height: 1.45; }
+  .ainstein-guide-txt { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .ainstein-guide-txt b { font-size: 0.87rem; line-height: 1.45; color: var(--text, #1a1a1a); }
+  .ainstein-guide-txt span { font-size: 0.79rem; line-height: 1.65; color: var(--text-muted, #666c71); }
+  .ainstein-guide-cta { grid-column: 2; grid-row: 2; justify-self: start; margin-top: 2px;
+    font-size: 0.78rem; font-weight: 700; color: var(--primary-dark, #3d6749); white-space: nowrap; }
+  .ainstein-guide-step:hover .ainstein-guide-cta { color: var(--primary, #0b6b4f); }
+  .ainstein-guide-meta { margin-top: 15px; font-size: 0.74rem; line-height: 1.7; color: var(--text-muted, #666c71); }
 
   .ainstein-foot { border-top: 1px solid var(--border, #e3e6e4); padding: 14px 16px 16px; background: var(--surface, #fff); }
   .ainstein-row { display: flex; gap: 10px; align-items: flex-end; }
@@ -34290,6 +34733,7 @@ function ainsteinOnSignIn() {
   _ainsteinVideos.clear();
   _ainsteinVideoByConcept.clear();
   _ainsteinWorksheets.clear();
+  _ainsteinGuides.clear();
   _ainsteinOpened.clear();
   _ainsteinAskedConcepts.clear();
   _ainsteinTextCache.clear();   // the bank was just (re)loaded — re-read it
@@ -34309,6 +34753,7 @@ function ainsteinOnSignOut() {
   _ainsteinVideos.clear();
   _ainsteinVideoByConcept.clear();
   _ainsteinWorksheets.clear();
+  _ainsteinGuides.clear();      // a route card is only good for the session that built it
   _ainsteinOpened.clear();
   _ainsteinAskedConcepts.clear();
 }
@@ -34327,6 +34772,8 @@ window.ainsteinQuizAnother = ainsteinQuizAnother;
 window.ainsteinWsPractice = ainsteinWsPractice;
 window.ainsteinWsPdf = ainsteinWsPdf;
 window.ainsteinWsOpenSaved = ainsteinWsOpenSaved;
+window.ainsteinGo = ainsteinGo;
+window.ainsteinGuideLocal = ainsteinGuideLocal;
 window.refreshQuestionUsage = refreshQuestionUsage;
 window.commPreviewImg = commPreviewImg;
 window.commAdminPost = commAdminPost;
