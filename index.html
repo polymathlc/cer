@@ -1682,6 +1682,35 @@ option {
 .qb-tag.alt::before { content: "+ "; opacity: 0.7; }
 .qb-tag.blanks { background: var(--yellow-highlight); color: #8a7a10; border: 1px solid var(--yellow-border); }
 .qb-tag.source { background: #f3e8ff; color: #7c3aed; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A tag chip on a bank card. Brass, because it is the one label a human wrote by
+   hand rather than picked from a list — and clickable, straight to "every question
+   with this tag". */
+.qb-tag.tagged { background: var(--accent-light); color: #8a6212; border: 1px solid #e3c98a; cursor: pointer; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qb-tag.tagged:hover { background: #f8ebcd; border-color: var(--accent); color: #6f4d0c; }
+
+/* ---- The editor's tag box ------------------------------------------------- */
+.qtag-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+/* How the typing PARSED, with how many questions already carry each tag. That
+   number is the point: a tag spelled two ways is two tags. */
+.qtag-chip { display: inline-flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 600;
+  padding: 6px 10px 6px 12px; border-radius: 999px; background: var(--accent-light); color: #8a6212;
+  border: 1px solid #e3c98a; }
+.qtag-chip b { font-family: 'Space Mono', monospace; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
+  padding: 2px 7px; border-radius: 999px; background: rgba(138,98,18,0.14); }
+.qtag-chip.fresh { background: var(--primary-light); color: var(--primary-dark); border-color: #a8cfbf; }
+.qtag-chip.fresh b { background: rgba(11,107,79,0.14); }
+/* The tags already in use, one tap each. */
+.qtag-reuse { margin-top: 14px; padding-top: 13px; border-top: 1px dashed var(--border); }
+.qtag-reuse-label { font-size: 0.76rem; font-weight: 600; color: var(--text-muted); }
+.qtag-pick { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font: inherit;
+  font-size: 0.78rem; font-weight: 600; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  transition: border-color var(--transition), background var(--transition); }
+.qtag-pick:hover { border-color: var(--accent); background: var(--accent-light); color: #6f4d0c; }
+.qtag-pick b { font-family: 'Space Mono', monospace; font-size: 0.66rem; font-weight: 700;
+  color: var(--text-muted); }
+.qtag-pick:hover b { color: #8a6212; }
+.qtag-pick.more { border-style: dashed; color: var(--text-muted); }
 .qb-card-preview {
   font-size: 0.85rem;
   color: var(--text-muted);
@@ -6491,6 +6520,18 @@ body.practising-as .page-body { padding-bottom: 96px; }
           <textarea id="questionMarkingGuide" class="form-input" rows="2" placeholder="e.g. Accept 'gains heat' or 'absorbs heat'. Reasoning must link cause to effect." style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
         </div>
 
+        <!-- Tags: the free-text labels for what this question ACTUALLY tests. Topic
+             is the syllabus bucket; a tag is as specific as you like. They drive the
+             bank's Tag filter and search, the worksheet/quest Concept filters, and
+             Ai-nstein's retrieval — an exact tag match outranks every other kind. -->
+        <div class="form-group">
+          <label class="form-label">🏷 Tags <span style="font-weight:400;color:var(--text-muted);">(optional — comma-separated, e.g. <em>elastic spring force, extension of spring</em>)</span> <button type="button" class="mic-btn" data-mic="questionTags" title="Dictate the tags" style="width:26px;height:26px;font-size:0.85rem;vertical-align:middle;">🎤</button></label>
+          <input id="questionTags" class="form-input" type="text" autocomplete="off" spellcheck="false" placeholder="elastic spring force, extension of spring" oninput="onQuestionTagsInput()">
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-top:6px;line-height:1.5;">Name the exact idea being tested, the way you'd say it out loud. A student can then ask Ai-nstein for “an elastic spring force question” and get <em>this</em> one, and you can filter the bank by tag to see every question on a concept at once. Spelling and capitals don't have to match — <em>Elastic Spring Force</em> and <em>elastic spring force</em> count as the same tag.</div>
+          <div id="questionTagsPreview" class="qtag-row" style="display:none;"></div>
+          <div id="questionTagsReuse" class="qtag-reuse" style="display:none;"></div>
+        </div>
+
         <div class="form-group">
           <label class="form-label" style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600;">
             <input type="checkbox" id="questionAnnotation" style="width:18px;height:18px;flex:0 0 auto;cursor:pointer;">
@@ -6696,6 +6737,10 @@ body.practising-as .page-body { padding-bottom: 96px; }
           </select>
           <select id="bankFilterSource" onchange="renderQuestionBank()">
             <option value="">All Sources</option>
+          </select>
+          <!-- Populated by populateTagFilter() from the tags actually in use, most-used first. -->
+          <select id="bankFilterTag" onchange="renderQuestionBank()" title="Show only questions carrying one tag — every question on a concept, in one list">
+            <option value="">All tags</option>
           </select>
           <select id="bankFilterDifficulty" onchange="renderQuestionBank()" title="Difficulty measured from real student usage — the % of marks students have actually earned on the question">
             <option value="">Any difficulty</option>

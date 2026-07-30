@@ -1570,7 +1570,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.201.0';
+const APP_VERSION = 'v1.202.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -2015,6 +2015,183 @@ function qCategoryList(q) {
 }
 function qMatchesTopic(q, t) { return !t ? true : qTopicList(q).includes(t); }
 function qMatchesCategory(q, c) { return !c ? true : qCategoryList(q).includes(c); }
+
+// ── Tags ─────────────────────────────────────────────────────────────────────
+// Free-text labels the admin puts on a question for the thing it ACTUALLY tests:
+// "elastic spring force", "water displacement", "shadow size". Topic is the
+// syllabus bucket and there are twenty-one of them; a tag is as fine-grained as
+// the teacher wants, and there is no fixed list.
+//
+// They earn their keep in three places: the bank's search and its tag filter,
+// Ai-nstein's question retrieval (an exact tag match beats every other kind of
+// match — it is a human saying "this question is about this"), and any counting
+// or sorting done from the outside, because the field is a plain array of strings
+// on the question document.
+//
+// Stored as `tags: string[]`. Kept case-as-typed for display but compared
+// case-insensitively, so "Elastic Spring Force" and "elastic spring force" are
+// one tag and the admin never has to remember which they used last.
+const TAG_MAX_LEN = 48;     // one tag
+const TAG_MAX_COUNT = 24;   // tags on one question
+function qTagList(q) {
+  const raw = (q && Array.isArray(q.tags)) ? q.tags : [];
+  const out = [], seen = new Set();
+  raw.forEach(t => {
+    const s = String(t == null ? '' : t).replace(/\s+/g, ' ').trim().slice(0, TAG_MAX_LEN);
+    if (!s) return;
+    if (/^\d+$/.test(s)) return;   // a question number is not a concept — the AI does offer these
+    const k = s.toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(s);
+  });
+  return out.slice(0, TAG_MAX_COUNT);
+}
+// Parse the editor's comma-separated box (newlines count as commas too, so a
+// pasted list works) into the stored array.
+function parseTagInput(text) {
+  return qTagList({ tags: String(text == null ? '' : text).split(/[,\n;]+/) });
+}
+function tagsToInput(q) { return qTagList(q).join(', '); }
+function qMatchesTag(q, t) {
+  if (!t) return true;
+  const k = String(t).trim().toLowerCase();
+  return qTagList(q).some(x => x.toLowerCase() === k);
+}
+// Every tag in use, with how many questions carry it. Case-insensitively merged;
+// the spelling shown is the one used most often, so the autocomplete offers the
+// house spelling rather than whichever variant happens to sort first.
+function allBankTags(pool) {
+  const list = Array.isArray(pool) ? pool : (Array.isArray(questionBank) ? questionBank : []);
+  const byKey = new Map();
+  list.forEach(q => qTagList(q).forEach(t => {
+    const k = t.toLowerCase();
+    const rec = byKey.get(k) || { key: k, n: 0, spellings: new Map() };
+    rec.n++;
+    rec.spellings.set(t, (rec.spellings.get(t) || 0) + 1);
+    byKey.set(k, rec);
+  }));
+  return Array.from(byKey.values()).map(r => {
+    let best = '', bestN = -1;
+    r.spellings.forEach((n, s) => { if (n > bestN) { bestN = n; best = s; } });
+    return { tag: best, key: r.key, n: r.n };
+  }).sort((a, b) => (b.n - a.n) || a.key.localeCompare(b.key));
+}
+
+// ---- the editor's tag box --------------------------------------------------
+// Two rows under the input. The first shows how the typing actually PARSED, with
+// how many questions already carry each tag — that number is the whole point,
+// because a tag spelled two ways is two tags and splits the very count it exists
+// to produce. The second offers the tags already in use, one tap each: no
+// datalist, because picking from one replaces the entire comma-separated value.
+const TAG_REUSE_SHOWN = 16;
+let _tagReuseAll = false;
+
+function renderQuestionTagsUi() {
+  const input = document.getElementById('questionTags');
+  const prev = document.getElementById('questionTagsPreview');
+  const reuse = document.getElementById('questionTagsReuse');
+  if (!input || !prev || !reuse) return;
+  const chosen = parseTagInput(input.value);
+  const chosenKeys = new Set(chosen.map(t => t.toLowerCase()));
+  const all = allBankTags();
+  const counts = new Map(all.map(r => [r.key, r.n]));
+
+  if (!chosen.length) { prev.style.display = 'none'; prev.innerHTML = ''; }
+  else {
+    prev.style.display = 'flex';
+    prev.innerHTML = chosen.map(t => {
+      const n = counts.get(t.toLowerCase()) || 0;
+      const note = n ? n + ' question' + (n === 1 ? '' : 's') + ' in the bank already carry this tag'
+                     : 'A new tag — nothing else uses it yet';
+      return '<span class="qtag-chip' + (n ? '' : ' fresh') + '" title="' + escapeHtml(note) + '">' +
+        escapeHtml(t) + '<b>' + (n || 'new') + '</b></span>';
+    }).join('');
+  }
+
+  // Offer the ones already in use, most-used first, minus what is already on.
+  const pool = all.filter(r => !chosenKeys.has(r.key));
+  if (!pool.length) { reuse.style.display = 'none'; reuse.innerHTML = ''; return; }
+  const shown = _tagReuseAll ? pool : pool.slice(0, TAG_REUSE_SHOWN);
+  const more = pool.length - shown.length;
+  reuse.style.display = 'block';
+  reuse.innerHTML = '<div class="qtag-reuse-label">Tags you\'ve used before — tap to add</div>' +
+    '<div class="qtag-row">' +
+      shown.map(r => '<button type="button" class="qtag-pick" onclick="questionTagAdd(' + JSON.stringify(r.tag).replace(/"/g, '&quot;') + ')" title="' +
+        escapeHtml(r.n + ' question' + (r.n === 1 ? '' : 's') + ' tagged this') + '">' +
+        escapeHtml(r.tag) + '<b>' + r.n + '</b></button>').join('') +
+      (more > 0 ? '<button type="button" class="qtag-pick more" onclick="questionTagsShowAll()">+' + more + ' more…</button>' : '') +
+      (_tagReuseAll && pool.length > TAG_REUSE_SHOWN ? '<button type="button" class="qtag-pick more" onclick="questionTagsShowFewer()">Show fewer</button>' : '') +
+    '</div>';
+}
+function onQuestionTagsInput() { renderQuestionTagsUi(); }
+function questionTagAdd(tag) {
+  const input = document.getElementById('questionTags');
+  if (!input) return;
+  const list = parseTagInput(input.value);
+  if (!list.some(t => t.toLowerCase() === String(tag).toLowerCase())) list.push(tag);
+  input.value = list.join(', ');
+  renderQuestionTagsUi();
+  input.focus();
+}
+function questionTagsShowAll() { _tagReuseAll = true; renderQuestionTagsUi(); }
+function questionTagsShowFewer() { _tagReuseAll = false; renderQuestionTagsUi(); }
+// Every place the editor is (re)filled goes through this, so there is one way to
+// set the box and the two rows can never fall out of step with it.
+function setQuestionTagsField(q) {
+  const input = document.getElementById('questionTags');
+  if (input) input.value = q ? tagsToInput(q) : '';
+  _tagReuseAll = false;
+  renderQuestionTagsUi();
+}
+
+// ---- tags in the question bank ---------------------------------------------
+// Chips on a bank card, each one a link to "every question with this tag". That
+// click is the whole feature from the admin's side: from "this question is about
+// elastic spring force" to the complete list of them, in one tap.
+function qTagChipsHtml(q, opts) {
+  const tags = qTagList(q);
+  if (!tags.length) return '';
+  const plain = !!(opts && opts.plain);
+  const max = (opts && opts.max) || 4;
+  const shown = tags.slice(0, max);
+  const extra = tags.length - shown.length;
+  const arg = t => JSON.stringify(t).replace(/"/g, '&quot;');
+  let html = shown.map(t => plain
+    ? '<span class="qb-tag tagged">🏷 ' + escapeHtml(t) + '</span>'
+    : '<span class="qb-tag tagged" title="' + escapeHtml('Tagged “' + t + '” — click to list every question with this tag') +
+      '" onclick="event.stopPropagation();bankFilterByTag(' + arg(t) + ')">🏷 ' + escapeHtml(t) + '</span>').join('');
+  if (extra > 0) html += '<span class="qb-tag tagged" title="' + escapeHtml(tags.join(', ')) + '">+' + extra + '</span>';
+  return html;
+}
+
+function bankFilterByTag(tag) {
+  const sel = document.getElementById('bankFilterTag');
+  if (!sel) return;
+  const key = String(tag).toLowerCase();
+  let opt = Array.from(sel.options).find(o => o.value.toLowerCase() === key);
+  // The dropdown only lists tags in use, so a chip's tag is always there — but add
+  // it rather than silently doing nothing if the list is mid-rebuild.
+  if (!opt) { opt = document.createElement('option'); opt.value = tag; opt.textContent = '🏷 ' + tag; sel.appendChild(opt); }
+  sel.value = opt.value;
+  renderQuestionBank();
+  showToast('🏷 Showing questions tagged “' + tag + '”', 'info');
+}
+
+// Rebuilt on every bank render, so a tag added a moment ago is selectable now.
+// "Untagged" is a real filter, not an oversight: it is the list an admin works
+// through when they decide to start tagging.
+function populateTagFilter() {
+  const sel = document.getElementById('bankFilterTag');
+  if (!sel) return;
+  const prev = sel.value;
+  const rows = allBankTags();
+  const untagged = (Array.isArray(questionBank) ? questionBank : []).filter(q => !qTagList(q).length).length;
+  sel.innerHTML = '<option value="">All tags</option>' +
+    rows.map(r => '<option value="' + escapeHtml(r.tag) + '">🏷 ' + escapeHtml(r.tag) + ' (' + r.n + ')</option>').join('') +
+    (untagged ? '<option value="__none__">— Untagged (' + untagged + ') —</option>' : '');
+  sel.value = Array.from(sel.options).some(o => o.value === prev) ? prev : '';
+}
 // Extra tag(s) for a question's 2nd category / 2nd topic — empty string when none.
 function qSecondaryTagsHtml(q) {
   const c2 = qSecondaryCategory(q);
@@ -2089,6 +2266,7 @@ function navigateTo(page) {
       if (annEl) annEl.checked = false;
       const nisEl = document.getElementById('questionNotInSyllabus');
       if (nisEl) nisEl.checked = false;
+      if (typeof setQuestionTagsField === 'function') setQuestionTagsField(null);
       renderBlocks();
       setEditMode(false);
       if (window.ppCancelPendingAttach) window.ppCancelPendingAttach();
@@ -6183,6 +6361,18 @@ function _separateOptionLines(text) {
   return s.replace(splitRe, '<br>');
 }
 
+// The "tags" instruction shared by the single-screenshot and bulk-import prompts.
+// The tags already in the bank are handed over so the model reuses a spelling we
+// have rather than minting "spring elastic force" beside "elastic spring force" —
+// two spellings are two tags, and that splits the count the field exists to give.
+function _aiTagsPromptLine() {
+  const known = allBankTags().slice(0, 60).map(r => r.tag);
+  return `- "tags": an array of 2-4 short lower-case labels naming the exact idea this question tests, the way a teacher says it out loud — e.g. "elastic spring force", "water displacement", "shadow size", "heat conduction". NOT the broad topic, NOT the title, no punctuation, no "PSLE" or "MCQ".\n` +
+    (known.length
+      ? `  These tags are already in use. Whenever one of them fits, reuse it EXACTLY as spelled here instead of inventing a new wording: ${known.join('; ')}.\n`
+      : '');
+}
+
 function buildBlocksFromAi(data) {
   const blocks = [];
   const selectedBlanks = {};
@@ -6244,6 +6434,22 @@ function buildBlocksFromAi(data) {
 }
 
 // Build a full pending question object from one AI question (used by bulk import).
+// Tags the model proposed for a built question. A suggestion, not a decision —
+// they land in the box (and, for a bulk import, on the pending question) where the
+// admin edits or deletes them like anything else the AI filled in. Reusing an
+// existing bank tag is preferred over minting a near-duplicate, so a spelling
+// already in the bank wins over the model's wording for the same idea.
+function _aiSuggestedTags(data) {
+  const raw = (data && (Array.isArray(data.tags) ? data.tags : (typeof data.tags === 'string' ? data.tags.split(/[,\n;]+/) : []))) || [];
+  const known = new Map(allBankTags().map(r => [r.key, r.tag]));
+  const out = [];
+  qTagList({ tags: raw }).forEach(t => {
+    const hit = known.get(t.toLowerCase());
+    out.push(hit || t);       // the house spelling if we already have one
+  });
+  return out.slice(0, 6);     // a suggestion, not a keyword-stuffing exercise
+}
+
 function buildQuestionFromAi(data) {
   const built = buildBlocksFromAi(data || {});
   return applyMcqCategory({
@@ -6252,6 +6458,7 @@ function buildQuestionFromAi(data) {
     category: normalizeCategoryValue(data && data.category),
     topic: (data && data.topic) || 'Heat',
     markingGuide: '',
+    tags: parseTagInput(_aiSuggestedTags(data).join(', ')),
     blocks: built.blocks,
     blanks: built.selectedBlanks,
     status: 'pending',
@@ -6277,6 +6484,7 @@ function _populateEditorFromAi(data) {
   if (typeof _setAnswerKeyFields === 'function') _setAnswerKeyFields('', '');
   const mgEl = document.getElementById('questionMarkingGuide');
   if (mgEl) mgEl.value = '';
+  setQuestionTagsField({ tags: _aiSuggestedTags(data) });
 
   currentEditingQuestion = null;
   if (typeof setEditMode === 'function') setEditMode(false);
@@ -6357,7 +6565,7 @@ function _bulkPagePrompt(pageNo, pageCount) {
     SCAN_READING_NOTE +
     _genPreamble() +
     `Split THIS PAGE into its separate questions (by question number or clear boundaries) and return EACH as its own entry, in page order.\n` +
-    `Return ONLY JSON: {"questions":[ {"continuation":false,"title":"short title","topic":"<closest topic>","topicConfidence":"high|medium|low","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
+    `Return ONLY JSON: {"questions":[ {"continuation":false,"title":"short title","topic":"<closest topic>","topicConfidence":"high|medium|low","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
     `Each item in "blocks" is ONE of:\n` +
     `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
     `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — box_2d is the rectangle you draw around it on the page)\n` +
@@ -6375,6 +6583,7 @@ function _bulkPagePrompt(pageNo, pageCount) {
     `- EVERY question (mcq AND open) must FINISH with ONE "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct. Write it yourself — papers almost never print one, so do NOT skip it just because it is not shown.\n` +
     `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
     `- "topicConfidence": how sure you are the chosen topic is right — "high" (clearly this topic), "medium" (likely), "low" (a guess).\n` +
+    _aiTagsPromptLine() +
     `- topic from EXACTLY: ${topics.join('; ')}.\n` +
     `- category from EXACTLY: ${categories.join('; ')}.\n` +
     `- If this page has NO actual questions (cover page, instructions, blank page, or an answer key without question text), return {"questions":[]}.\n` +
@@ -6728,7 +6937,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount) {
     (multi ? `IMPORTANT: the ${n} attached images are CONSECUTIVE screenshots of ONE AND THE SAME question, already in reading order (image 1 first). Read them as one continuous question — do NOT treat them as separate questions and do NOT drop content from any of the images.\n` : '') +
     `FIRST decide the question type: "mcq" if the question gives a set of answer options to choose from (e.g. (1)(2)(3)(4) or A/B/C/D), otherwise "open".\n` +
     `Then return ONLY JSON with this exact shape:\n` +
-    `{"title":"short title","topic":"<closest topic>","category":"<closest category>","questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
+    `{"title":"short title","topic":"<closest topic>","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}\n` +
     `Each item in "blocks" is ONE of these objects:\n` +
     (multi
       ? `  {"type":"image","page":<which attached image, 1-based>,"box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — "page" says which attached image it is on, and box_2d is the rectangle you draw around it on THAT image)\n`
@@ -6746,6 +6955,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount) {
     `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
     `- If questionType is "open": include ONE answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer. In these answer fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
     `- ALWAYS finish with ONE "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct — write it yourself if the source shows none.\n` +
+    _aiTagsPromptLine() +
     `- Choose topic from EXACTLY this list: ${topics.join('; ')}.\n` +
     `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
     `- Use plain text only, no markdown.`;
@@ -7901,6 +8111,7 @@ function collectQuestionData() {
     answerKeyImage: (document.getElementById('questionAnswerKeyImage')?.value || '').trim(),
     annotation: !!(document.getElementById('questionAnnotation') && document.getElementById('questionAnnotation').checked),
     notInSyllabus: !!(document.getElementById('questionNotInSyllabus') && document.getElementById('questionNotInSyllabus').checked),
+    tags: parseTagInput(document.getElementById('questionTags')?.value || ''),
     blocks: blocksClone,
     blanks: JSON.parse(JSON.stringify(selectedBlanks)),
     createdAt: new Date().toISOString(),
@@ -7954,9 +8165,12 @@ function addToBank() {
 // Everything collectQuestionData() builds from the editor form. Anything else
 // on a stored question (provenance, measured difficulty, flags, future fields)
 // has no field in the editor, so a save would silently drop it.
+// 'tags' MUST be in here: without it, carryOverQuestionMeta below would restore
+// the old tags every time an admin cleared the box, and a tag could never be
+// removed.
 const EDITOR_OWNED_QUESTION_FIELDS = new Set([
   'id', 'title', 'category', 'category2', 'topic', 'topic2', 'markingGuide',
-  'answerKeyNote', 'answerKeyImage', 'annotation', 'notInSyllabus',
+  'answerKeyNote', 'answerKeyImage', 'annotation', 'notInSyllabus', 'tags',
   'blocks', 'blanks', 'createdAt', 'createdBy',
 ]);
 
@@ -8101,6 +8315,7 @@ function clearForm() {
     _setAnswerKeyFields('', '');
     const nisEl = document.getElementById('questionNotInSyllabus');
     if (nisEl) nisEl.checked = false;
+    setQuestionTagsField(null);
     _hideDupBanner();
     renderBlocks();
     setEditMode(false);
@@ -8122,6 +8337,7 @@ function stripHtmlToText(html) {
 
 function extractQuestionSearchText(q) {
   const parts = [q.title || '', q.topic || '', qSecondaryTopic(q), q.category || '', qSecondaryCategory(q), getTopicLevel(q.topic || ''), questionSource(q)];
+  parts.push(qTagList(q).join(' '));   // searching "elastic spring" finds everything tagged with it
   (q.blocks || []).forEach(block => {
     if (!block || !block.type) return;
     if (block.type === 'text') parts.push(stripHtmlToText(block.content));
@@ -8539,9 +8755,12 @@ function _bankFilteredQuestions() {
   const levelFilter = document.getElementById('bankFilterLevel')?.value || '';
   const sourceFilter = document.getElementById('bankFilterSource')?.value || '';
   const diffFilter = document.getElementById('bankFilterDifficulty')?.value || '';
+  const tagFilter = document.getElementById('bankFilterTag')?.value || '';
 
   let filtered = questionBank.filter(q => {
     if (topicSel.size && !qTopicList(q).some(t => topicSel.has(t))) return false;
+    if (tagFilter === '__none__') { if (qTagList(q).length) return false; }
+    else if (tagFilter && !qMatchesTag(q, tagFilter)) return false;
     if (catFilter && !qMatchesCategory(q, catFilter)) return false;
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
     const qLevel = getTopicLevel(q.topic || '');
@@ -8591,6 +8810,9 @@ function renderQuestionBank() {
   // A preview left open would be pointing at a tile that is about to be replaced.
   qbTileHoverLeave();
   ppHoverHide();
+  // Keep the tag list current — a tag typed a moment ago should be selectable now.
+  // Not while it has focus: rebuilding the options under an open dropdown closes it.
+  if (document.activeElement !== document.getElementById('bankFilterTag')) populateTagFilter();
   const filtered = _bankFilteredQuestions();
   ensureQuestionUsage();   // first admin visit: colour the grid without being asked
   _syncBankViewChrome();
@@ -8634,6 +8856,7 @@ function renderQuestionBank() {
               ${usageBadgeHtml(q)}
               ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fdf4e3;color:#7a5410;border:1px solid #e0b768;" title="Hidden from practice; still shown in PSLE Papers">🚫 Not in syllabus</span>` : ''}
               ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
+              ${qTagChipsHtml(q)}
             </div>
           </div>
           <div class="qb-card-actions">
@@ -8852,6 +9075,7 @@ function editQuestion(id) {
   _setAnswerKeyFields(q.answerKeyNote || '', q.answerKeyImage || '');
   const nisEl = document.getElementById('questionNotInSyllabus');
   if (nisEl) nisEl.checked = !!q.notInSyllabus;
+  setQuestionTagsField(q);
 
   // Try to set topic, handle custom topics
   const topicSelect = document.getElementById('topicSelect');
@@ -9039,6 +9263,11 @@ async function confirmRegenerate() {
       topic: orig.topic,
       topic2: qSecondaryTopic(orig),
       markingGuide: orig.markingGuide || '',
+      // A regenerated copy tests the same idea as the original, so it inherits the
+      // original's tags rather than starting untagged.
+      tags: qTagList(orig),
+      annotation: !!orig.annotation,
+      notInSyllabus: !!orig.notInSyllabus,
       blocks: newBlocks,
       blanks: built.selectedBlanks,
       status: (origInBank && origInBank.status) || 'approved',
@@ -9152,6 +9381,7 @@ function renderVettingList() {
               ${q.topicConfidence === 'low' ? '<span class="qb-tag" style="background:#fee2e2;color:#dc2626;" title="AI was unsure of this topic — please check it">⚠ check topic</span>' : q.topicConfidence === 'medium' ? '<span class="qb-tag" style="background:#fdf4e3;color:#b45309;" title="AI was fairly sure of this topic — worth a glance">~ topic?</span>' : ''}
               <span class="vetting-badge ${statusClass}">${statusClass.charAt(0).toUpperCase() + statusClass.slice(1)}</span>
               ${_vetTimeLabel(q)}
+              ${qTagChipsHtml(q, { plain: true })}
             </div>
           </div>
           <div class="qb-card-actions">
@@ -10621,6 +10851,10 @@ function _setSaveStatus(state) {
 // log, never a popup in the admin's face.
 async function saveQuestion(q, opts) {
   if (!currentUser) return false;
+  // Ai-nstein caches a searchable string per question (tags, title, topic, body).
+  // An edit here — a tag added or removed above all — must not leave him matching
+  // against the old one for the rest of the session.
+  try { if (q && q.id != null && typeof _ainsteinTextCache !== 'undefined') _ainsteinTextCache.delete(String(q.id)); } catch (_) {}
   const quiet = !!(opts && opts.quiet);
   const tries = quiet ? 1 : 3;
   if (!quiet) { _inflightOps++; _setSaveStatus('saving'); }
@@ -13561,17 +13795,45 @@ function populateWsTopicFilter() {
   populateWsConceptFilter();
 }
 
-// Fill the worksheet "Concept" filter from the concepts tagged on questions.
+// Every label a question can be filtered by here: its tags, plus the legacy
+// `concepts` array. This dropdown and the quest picker's twin were both wired to
+// `concepts` alone — a field nothing in the app ever wrote, so both had sat empty
+// since the day they were added. Tags are the field that now carries this, so
+// they feed it; `concepts` stays in the union in case anything ever set it.
+function qConceptLabels(q) {
+  const out = [], seen = new Set();
+  qTagList(q).concat(Array.isArray(q && q.concepts) ? q.concepts : []).forEach(c => {
+    const s = String(c == null ? '' : c).replace(/\s+/g, ' ').trim();
+    if (!s) return;
+    const k = s.toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(s);
+  });
+  return out;
+}
+function qMatchesConceptLabel(q, lower) {
+  return !lower ? true : qConceptLabels(q).some(c => c.toLowerCase() === lower);
+}
+// Fill the worksheet "Concept" filter from the tags on questions.
 function populateWsConceptFilter() {
   const sel = document.getElementById('wsFilterConcept');
   if (!sel) return;
-  const set = new Set();
-  questionBank.forEach(q => (q.concepts || []).forEach(c => { const s = String(c || '').trim(); if (s) set.add(s); }));
-  const concepts = [...set].sort((a, b) => a.localeCompare(b));
+  const counts = new Map();
+  questionBank.forEach(q => qConceptLabels(q).forEach(c => {
+    const k = c.toLowerCase();
+    const rec = counts.get(k) || { label: c, n: 0 };
+    rec.n++; counts.set(k, rec);
+  }));
+  const concepts = [...counts.values()].sort((a, b) => a.label.localeCompare(b.label));
   const cur = sel.value;
   sel.innerHTML = '<option value="">All Concepts</option>';
-  concepts.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
-  if (cur && concepts.includes(cur)) sel.value = cur;
+  concepts.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.label; o.textContent = '🏷 ' + c.label + ' (' + c.n + ')';
+    sel.appendChild(o);
+  });
+  if (cur && concepts.some(c => c.label === cur)) sel.value = cur;
 }
 
 function renderWsQuestions() {
@@ -13591,7 +13853,7 @@ function renderWsQuestions() {
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
     if (formatFilter === 'mcq' && !qpHasMcq(q)) return false;
     if (formatFilter === 'written' && !qpHasWritten(q)) return false;
-    if (conceptFilter && !((q.concepts || []).some(c => String(c || '').toLowerCase() === conceptFilter))) return false;
+    if (!qMatchesConceptLabel(q, conceptFilter)) return false;
     const qLevel = getTopicLevel(q.topic || '');
     if (levelFilter && qLevel !== levelFilter) return false;
     if (searchRaw) {
@@ -21822,12 +22084,20 @@ function commPopulateQuestFilters() {
   const conSel = document.getElementById('cqFilterConcept');
   if (conSel) {
     const prev = conSel.value;
-    const set = new Set();
-    (questionBank || []).forEach(q => (q.concepts || []).forEach(c => { const s = String(c || '').trim(); if (s) set.add(s); }));
-    const concepts = [...set].sort((a, b) => a.localeCompare(b));
+    const counts = new Map();
+    (questionBank || []).forEach(q => qConceptLabels(q).forEach(c => {
+      const k = c.toLowerCase();
+      const rec = counts.get(k) || { label: c, n: 0 };
+      rec.n++; counts.set(k, rec);
+    }));
+    const concepts = [...counts.values()].sort((a, b) => a.label.localeCompare(b.label));
     conSel.innerHTML = '<option value="">All Concepts</option>';
-    concepts.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; conSel.appendChild(o); });
-    if (prev && concepts.includes(prev)) conSel.value = prev;
+    concepts.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.label; o.textContent = '🏷 ' + c.label + ' (' + c.n + ')';
+      conSel.appendChild(o);
+    });
+    if (prev && concepts.some(c => c.label === prev)) conSel.value = prev;
   }
 }
 // Full question-bank picker — same filtering, cards and expandable preview as
@@ -21849,7 +22119,7 @@ function commRenderQuestPicker() {
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
     if (formatFilter === 'mcq' && !qpHasMcq(q)) return false;
     if (formatFilter === 'written' && !qpHasWritten(q)) return false;
-    if (conceptFilter && !((q.concepts || []).some(c => String(c || '').toLowerCase() === conceptFilter))) return false;
+    if (!qMatchesConceptLabel(q, conceptFilter)) return false;
     if (levelFilter && getTopicLevel(q.topic || '') !== levelFilter) return false;
     if (searchRaw) { if (!extractQuestionSearchText(q).includes(searchRaw)) return false; }
     return true;
@@ -31042,6 +31312,9 @@ function ppCreateForAssign(){
   if (annEl) annEl.checked = false;
   const nisEl = document.getElementById('questionNotInSyllabus');
   if (nisEl) nisEl.checked = false;
+  // The past-paper record's own topic/skill make a sensible starting tag, so the
+  // admin has something to edit rather than an empty box.
+  setQuestionTagsField(q.topic ? { tags: [q.topic] } : null);
   renderBlocks();
 
   _ppPendingAttach = id;
@@ -32480,34 +32753,64 @@ function _ainsteinConceptTerms(s) {
   return out;
 }
 
-// Everything about a question that describes its concept: title, topics,
-// category, the question text and the MCQ option wording. Cached per question —
-// scoring runs over the whole bank on every ask.
+// Everything about a question that describes its concept: its tags, title,
+// topics, category, the question text and the MCQ option wording. Cached per
+// question — scoring runs over the whole bank on every ask.
 function _ainsteinSearchText(q) {
   const key = String(q && q.id);
   if (_ainsteinTextCache.has(key)) return _ainsteinTextCache.get(key);
   const p = _docQParts(q);
-  let txt = [q.title || '', q.topic || '', qSecondaryTopic(q), q.category || '', p.text].join(' ');
+  let txt = [qTagList(q).join(' '), q.title || '', q.topic || '', qSecondaryTopic(q), q.category || '', p.text].join(' ');
   if (p.mcq) txt += ' ' + (p.mcq.options || []).map(o => stripHtml(o.text || '')).join(' ');
   const norm = ' ' + _docNorm(txt).slice(0, 2000) + ' ';
   _ainsteinTextCache.set(key, norm);
   return norm;
 }
 
-// How well one question matches a concept. The concept phrase appearing whole
-// ("thermal expansion") is worth far more than its words turning up apart, and a
-// hit in the title/topic beats one buried in the body.
+// The tags of a question, normalised, as their own searchable strip. Separate from
+// the body text so a tag hit can be scored as a tag hit rather than as "these
+// words appear somewhere in the question".
+function _ainsteinTagText(q) {
+  return ' ' + qTagList(q).map(t => _docNorm(t)).filter(Boolean).join(' | ') + ' ';
+}
+
+// Does a tag on this question say, in as many words, what the concept is?
+//   exact   — a whole tag IS the phrase ("elastic spring force")
+//   partial — a tag CONTAINS the phrase, or the phrase contains a whole tag
+//             ("elastic spring force questions" ⊃ "elastic spring force")
+function _ainsteinTagHit(q, phrase) {
+  const ph = _docNorm(phrase);
+  if (!ph) return '';
+  const tags = qTagList(q).map(t => _docNorm(t)).filter(Boolean);
+  if (!tags.length) return '';
+  if (tags.some(t => t === ph)) return 'exact';
+  if (tags.some(t => (t.length >= 4 && ph.includes(t)) || (ph.length >= 4 && t.includes(ph)))) return 'partial';
+  return '';
+}
+
+// How well one question matches a concept. A TAG beats everything else: a topic
+// is a syllabus bucket and a title is a label for one question, but a tag is a
+// teacher deliberately writing down what this question tests, so an exact tag
+// match is treated as certainty and clears any threshold on its own. After that
+// the concept phrase appearing whole ("thermal expansion") is worth far more than
+// its words turning up apart, and a hit in the title/topic beats one buried in
+// the body.
 function _ainsteinConceptScore(q, phrase, terms) {
   const body = _ainsteinSearchText(q);
+  const tagTxt = _ainsteinTagText(q);
   const head = ' ' + _docNorm([q.title || '', q.topic || '', qSecondaryTopic(q)].join(' ')) + ' ';
   let score = 0;
+  const hit = _ainsteinTagHit(q, phrase);
+  if (hit === 'exact') score += 60;
+  else if (hit === 'partial') score += 30;
   const ph = _docNorm(phrase);
   if (ph && ph.indexOf(' ') > 0) {                       // multi-word concept
     if (head.includes(' ' + ph + ' ') || head.includes(ph)) score += 14;
     else if (body.includes(ph)) score += 10;
   }
   terms.forEach(t => {
-    if (head.includes(' ' + t)) score += 4;
+    if (tagTxt.includes(' ' + t) || tagTxt.includes('| ' + t)) score += 8;   // a word of a tag
+    else if (head.includes(' ' + t)) score += 4;
     else if (body.includes(' ' + t)) score += 2;
   });
   return score;
@@ -32578,7 +32881,9 @@ function _ainsteinFindNamed(description, limit) {
     if (!qInSyllabus(q) || !qWithinStudentLevel(q)) return;
     if (q.annotation) return;                       // drawing pads need the full page
     if (!qpHasMcq(q) && !qpHasWritten(q)) return;   // nothing to practise on
-    pool.push({ q, body: _ainsteinSearchText(q), head: ' ' + _docNorm([q.title || '', q.topic || ''].join(' ')) + ' ' });
+    // Tags sit in the "head" beside the title: a teacher-written label for what the
+    // question is about identifies it at least as well as its title does.
+    pool.push({ q, body: _ainsteinSearchText(q), head: ' ' + _docNorm([qTagList(q).join(' '), q.title || '', q.topic || ''].join(' ')) + ' ' });
   });
   if (!pool.length) return [];
   const df = {};
@@ -32700,7 +33005,12 @@ function _ainsteinLiveOfferFor(concept, want) {
 // the pattern is a safety net for when it forgets to set it, since "give me
 // another one" is unmistakable and must never be missed. Everything else gets
 // no chip — a clue is not an invitation to leave the question they are on.
-const AINSTEIN_ASKS_PRACTICE = /\b(another|similar|more|extra|next|other)\b[^.?!]{0,30}\b(question|one|mcq|problem|practice|practise|example)\b|\b(practi[sc]e|try)\b[^.?!]{0,30}\b(another|more|similar|something else)\b|\bwhat should i (do|practi[sc]e|revise|work on)\b|\bgive me (a|an|another|one more)\b/i;
+// The last two alternatives are the "named concept" ask — "show me some elastic
+// spring force questions", "any questions on shadow size". These reach the tag
+// lookup, where a teacher-written tag on a question outranks every other kind of
+// match. "show me the answer to this question" deliberately does NOT match: the
+// determiner after "me" has to be a/an/some/any/more, never "the" or "this".
+const AINSTEIN_ASKS_PRACTICE = /\b(another|similar|more|extra|next|other)\b[^.?!]{0,30}\b(question|one|mcq|problem|practice|practise|example)\b|\b(practi[sc]e|try)\b[^.?!]{0,30}\b(another|more|similar|something else)\b|\bwhat should i (do|practi[sc]e|revise|work on)\b|\bgive me (a|an|another|one more)\b|\bquestions?\s+(on|about)\s+\w|\b(show|give|find|get)\s+me\s+(a|an|some|any|more)\b[^.?!]{0,44}\b(question|questions|mcq|mcqs)\b/i;
 function _ainsteinWantsPractice(parsed, studentQuestion) {
   const pr = parsed && typeof parsed.practice === 'object' ? parsed.practice : null;
   if (pr && pr.wanted === true) return true;
@@ -33913,6 +34223,7 @@ function _ainsteinBuildPrompt(question, shotImages) {
   lines.push('- "wanted" is FALSE for every other reply, including when you have just explained something well and it feels like a natural moment to offer more. It is not your call to make — an unasked-for question is an interruption. When in doubt, false.');
   lines.push('- Fill in "concept", "keywords" and "format" only when "wanted" is true.');
   lines.push('- "concept" — the specific idea being tested, 2-4 words, as a teacher would name it: "thermal expansion", "heat conduction", "evaporation rate", "electrical circuits", "digestive system". NOT the broad topic ("Heat") and NOT the question title.');
+  lines.push('- If the student NAMED the concept themselves ("show me some elastic spring force questions", "any questions on shadow size"), put THEIR words in "concept", as they said them. Their teacher labels each question with the idea it tests, in the same everyday wording, and the app matches those labels — so their phrasing finds the right questions and rewriting it into your own words only makes the match worse.');
   lines.push('- If they asked WHAT TO PRACTISE (see below), set "concept" to the thing you recommended, so the question they get matches your advice.');
   lines.push('- "keywords" — plain search words for that idea, including the everyday words the question itself would use (e.g. for thermal expansion: expand, contract, heated, cooled, metal, gap).');
   lines.push('- "format" — "mcq" or "written" ONLY if the student explicitly asked for that kind ("give me an open-ended one", "another MCQ"). Otherwise "any", and the app matches whatever they are working on.');
@@ -34774,6 +35085,11 @@ window.ainsteinWsPdf = ainsteinWsPdf;
 window.ainsteinWsOpenSaved = ainsteinWsOpenSaved;
 window.ainsteinGo = ainsteinGo;
 window.ainsteinGuideLocal = ainsteinGuideLocal;
+window.onQuestionTagsInput = onQuestionTagsInput;
+window.questionTagAdd = questionTagAdd;
+window.questionTagsShowAll = questionTagsShowAll;
+window.questionTagsShowFewer = questionTagsShowFewer;
+window.bankFilterByTag = bankFilterByTag;
 window.refreshQuestionUsage = refreshQuestionUsage;
 window.commPreviewImg = commPreviewImg;
 window.commAdminPost = commAdminPost;
