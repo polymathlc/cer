@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.209.0';
+const APP_VERSION = 'v1.210.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -23141,9 +23141,21 @@ async function rpgFetchLeaderboard(force) {
 // "lastmonth" rank by UNIQUE QUESTIONS DONE; "alltime" ranks by XP; "fps"
 // (Science Strike) ranks by all-time correct answers from fps.html's `fps` field.
 function rpgIsGameTab() { return rpgBoardTab === "td" || rpgBoardTab === "raid" || rpgBoardTab === "spire"; }
+// Months a board runs WITHOUT a prize. The board still ranks exactly as usual;
+// only the badge, the row highlight and the month-end claim prompt are
+// suppressed for the months listed here. Keyed by board tab
+// ("td" = Science Defenders, "spire" = Science Spire, "raid" = Science Raiders).
+const RPG_NO_PRIZE_MONTHS = { td: ["2026-08"], spire: ["2026-08"] };
+function rpgPrizeOffFor(tab, monthKey) {
+  const months = RPG_NO_PRIZE_MONTHS[tab];
+  return !!(months && months.indexOf(monthKey) >= 0);
+}
 function rpgBoardMetric(r) {
   if (rpgBoardTab === "alltime") return r.xp || 0;
   if (rpgBoardTab === "fps") return (r.fps && r.fps.correct) | 0;
+  // Realm of Embers TCG: ranked by the Infinite Dungeon floor reached, the same
+  // metric the board inside the TCG page uses.
+  if (rpgBoardTab === "tcg") return r.tcg ? Math.max(1, r.tcg.floor | 0) : 0;
   if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey() ? (r.monthQ || 0) : 0;
   if (rpgBoardTab === "papers") return r.monthKey === rpgMonthKey() ? (r.papersQ || 0) : 0;
   if (rpgIsGameTab()) {
@@ -23156,13 +23168,17 @@ function rpgBoardMetric(r) {
   if (r.lastMonthKey === prev) return r.lastMonthQ || 0;  // rolled over
   return 0;
 }
-function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : rpgBoardTab === "fps" ? "correct" : rpgIsGameTab() ? "pts" : "questions"; }
+function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : rpgBoardTab === "fps" ? "correct" : rpgBoardTab === "tcg" ? "floor" : rpgIsGameTab() ? "pts" : "questions"; }
 // Pretty value for a row: game tabs show the run's label (e.g. "Floor 7 · 142 kills").
 function rpgBoardValueHtml(r) {
   const sub = (rpgBoardTab === "month" || rpgBoardTab === "papers") ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : rpgIsGameTab() ? "best this month" : "all-time";
   if (rpgBoardTab === "fps") {
     const f = r.fps || {};
     return `${r.shownVal} correct<span>🌊 wave ${f.bestWave | 0} · 👾 ${f.kills | 0} kills</span>`;
+  }
+  if (rpgBoardTab === "tcg") {
+    const t = r.tcg || {};
+    return `Floor ${r.shownVal}<span>🏰 ${t.clears | 0} beaten · 🃏 ${t.dex | 0} dex · ⚔️ power ${(t.power | 0).toLocaleString()}</span>`;
   }
   if (rpgIsGameTab()) {
     const g = r[rpgBoardTab] || {};
@@ -23174,7 +23190,11 @@ function rpgBoardValueHtml(r) {
 function rpgPrizeBadge(rank) {
   if (rpgBoardTab === "papers") return "";   // ranking board only — no prize attached
   if (rpgBoardTab === "fps") return rank <= 3 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
-  if (rpgIsGameTab()) return rank <= 3 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
+  if (rpgBoardTab === "tcg") return rank <= 6 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
+  if (rpgIsGameTab()) {
+    if (rpgPrizeOffFor(rpgBoardTab, rpgMonthKey())) return "";  // month runs without a prize
+    return rank <= 3 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
+  }
   if (rpgBoardTab !== "alltime") return rank <= 5 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rank === 1) return `<span class="rpg-board-prize">🏆 $200 voucher</span>`;
   if (rank === 2) return `<span class="rpg-board-prize">🥈 $100 voucher</span>`;
@@ -23184,9 +23204,25 @@ function rpgPrizeBadge(rank) {
 function rpgRowClass(rank) {
   if (rpgBoardTab === "papers") return "";
   if (rpgBoardTab === "fps") return rank <= 3 ? `prize-${rank}` : "";
-  if (rpgIsGameTab()) return rank <= 3 ? `prize-${rank}` : "";
+  if (rpgBoardTab === "tcg") return rank <= 3 ? `prize-${rank}` : rank <= 6 ? "prize-month" : "";
+  if (rpgIsGameTab()) {
+    if (rpgPrizeOffFor(rpgBoardTab, rpgMonthKey())) return "";
+    return rank <= 3 ? `prize-${rank}` : "";
+  }
   if (rpgBoardTab !== "alltime") return rank <= 5 ? "prize-month" : "";
   return rank <= 3 ? `prize-${rank}` : "";
+}
+// One calm line above the rows: what this tab pays out, or that the month is
+// running without a prize.
+function rpgBoardNote() {
+  if (rpgBoardTab === "tcg")
+    return `<div class="rpg-board-note">🔥 <b>Realm of Embers:</b> the <b>top 6 trainers</b> by Infinite Dungeon floor each win a <b>$10 Popular voucher</b>.</div>`;
+  if (rpgIsGameTab() && rpgPrizeOffFor(rpgBoardTab, rpgMonthKey())) {
+    const game = rpgBoardTab === "td" ? "Science Defenders" : rpgBoardTab === "spire" ? "Science Spire" : "Science Raiders";
+    const month = new Date().toLocaleString("en-SG", { month: "long" });
+    return `<div class="rpg-board-note muted">🚫 <b>No prize in ${month}</b> — ${game} is a ranking board this month. Climb it anyway: your score still counts.</div>`;
+  }
+  return "";
 }
 async function rpgRenderLeaderboard(force = false) {
   const body = $("rpgBoardBody");
@@ -23232,8 +23268,9 @@ async function rpgRenderLeaderboard(force = false) {
       : rpgBoardTab === "raid" ? "No Science Raiders runs this month yet — dive in to top the board!"
       : rpgBoardTab === "spire" ? "No Science Spire climbs this month yet — build a deck and claim the top!"
       : rpgBoardTab === "fps" ? "No Science Strike answers yet — jump into a run and answer questions to claim the board!"
+      : rpgBoardTab === "tcg" ? "No trainers on the board yet — build a team of 5 in Realm of Embers and clear a dungeon floor to claim your rank!"
       : "No heroes on the board yet — solve questions to earn XP!";
-    body.innerHTML = `<div class="empty-note">${why}</div>`;
+    body.innerHTML = rpgBoardNote() + `<div class="empty-note">${why}</div>`;
     return;
   }
   const myUid = currentUser && currentUser.uid;
@@ -23246,7 +23283,7 @@ async function rpgRenderLeaderboard(force = false) {
     houseBar = `<div class="rpg-houses">` + RPG_HOUSES.map(h =>
       `<div class="rpg-house-row"><span>${h.icon} ${h.name}</span><div class="rpg-house-bar"><div style="width:${Math.round((tot[h.id] || 0) / maxT * 100)}%;background:${h.color};"></div></div><b>${tot[h.id] || 0}</b></div>`).join("") + `</div>`;
   }
-  body.innerHTML = houseBar + list.slice(0, 50).map((r, i) => {
+  body.innerHTML = rpgBoardNote() + houseBar + list.slice(0, 50).map((r, i) => {
     const rank = i + 1;
     const me = r.uid === myUid;
     const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : rank;
@@ -23299,11 +23336,12 @@ async function rpgCheckPrizeClaim() {
     const cats = [
       { key: prev,          topN: 5, noun: "questions done", game: "the leaderboard",
         rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthQ(r) })) },
-      { key: prev + "_td",  topN: 3, noun: "in Science Defenders", game: "Science Defenders",
+      { key: prev + "_td",  topN: 3, noun: "in Science Defenders", game: "Science Defenders", tab: "td",
         rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthGame(r, "td"),   detail: rpgLastMonthGameLabel(r, "td") })) },
-      { key: prev + "_raid",topN: 3, noun: "in Science Raiders", game: "Science Raiders",
+      { key: prev + "_raid",topN: 3, noun: "in Science Raiders", game: "Science Raiders", tab: "raid",
         rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthGame(r, "raid"), detail: rpgLastMonthGameLabel(r, "raid") })) }
-    ];
+      // Science Spire has no month-end claim of its own (see RPG_NO_PRIZE_MONTHS).
+    ].filter(c => !rpgPrizeOffFor(c.tab, prev));   // months listed as prize-free never prompt
     for (const c of cats) {
       if (rpgState.prizeAck[c.key]) continue;
       const ranked = c.rank.filter(r => r.v > 0).sort((a, b) => b.v - a.v);
@@ -28993,7 +29031,7 @@ function tcgDungeonHtml(s) {
       ? '<button class="btn btn-primary" style="font-size:1rem;padding:12px 30px;" onclick="tcgEnterDungeon()">🏰 Challenge Floor ' + L + '</button>'
       : '<div class="tcg-section-note">Pick 5 monsters on the <b>My Team</b> tab first.</div>')
     + '</div>'
-    + '<div class="tcg-section-note" style="margin-top:18px;">🏆 Your floor is your rank on the <b>Leaderboard</b> tab — the top 5 trainers each win a <b>$10 voucher</b>!</div>';
+    + '<div class="tcg-section-note" style="margin-top:18px;">🏆 Your floor is your rank on the <b>Leaderboard</b> tab — the top 6 trainers each win a <b>$10 voucher</b>!</div>';
 }
 // =====================================================================
 // GAME MODES TAB — the hub for every way to play with your collection
@@ -30098,7 +30136,8 @@ document.addEventListener('keydown', e => {
   if (n >= 1 && n <= 9) { const q = emsRun.quiz.q; if (q && n <= q.opts.length) emsAnswer(n - 1); }
 });
 
-// -- Leaderboard tab: ranked by dungeon floor reached; top 5 win a $10 voucher.
+// -- Leaderboard tab: ranked by dungeon floor reached; top 6 win a $10 voucher.
+//    The same ranking also appears on the portal's Leaderboard page (🔥 Embers).
 async function tcgRenderBoard() {
   let rows = null;
   try { rows = await rpgFetchLeaderboard(true); } catch (e) {}
@@ -30115,14 +30154,14 @@ async function tcgRenderBoard() {
   list.sort((a, b) => b.floor - a.floor || b.clears - a.clears || b.power - a.power || a.name.localeCompare(b.name));
   const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
   host.innerHTML = '<div class="tcg-board">'
-    + '<div class="tcg-board-prize">🎟️ <b>Top 5 trainers each win a $10 voucher!</b><br><span>Climb the Infinite Dungeon — your rank is the floor you have reached.</span></div>'
+    + '<div class="tcg-board-prize">🎟️ <b>Top 6 trainers each win a $10 voucher!</b><br><span>Climb the Infinite Dungeon — your rank is the floor you have reached.</span></div>'
     + (list.length
       ? '<div class="tcg-board-rows">' + list.map((r, i) =>
-          '<div class="tcg-board-row' + (i < 5 ? ' top5' : '') + (r.uid === meUid ? ' me' : '') + '">'
+          '<div class="tcg-board-row' + (i < 6 ? ' top5' : '') + (r.uid === meUid ? ' me' : '') + '">'
           + '<div class="tcg-board-rank">' + medal(i) + '</div>'
           + '<div class="tcg-board-who"><b>' + escapeHtml(r.name) + (r.uid === meUid ? ' (you)' : '') + '</b>'
           +   '<span>' + (r.clears | 0) + ' floors beaten · ' + r.dex + '/' + TCG_CARDS.length + ' dex · power ' + r.power.toLocaleString() + '</span></div>'
-          + '<div class="tcg-board-floor"><b>Floor ' + r.floor + '</b>' + (i < 5 ? '<span class="tcg-board-voucher">🎟️ $10</span>' : '') + '</div>'
+          + '<div class="tcg-board-floor"><b>Floor ' + r.floor + '</b>' + (i < 6 ? '<span class="tcg-board-voucher">🎟️ $10</span>' : '') + '</div>'
           + '</div>').join('') + '</div>'
       : '<div class="tcg-section-note">No trainers on the board yet — publish a team of 5 and clear dungeon floors to claim your rank!</div>')
     + '</div>';
