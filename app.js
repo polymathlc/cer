@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.208.0';
+const APP_VERSION = 'v1.209.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -26966,7 +26966,10 @@ function tcgLeveledSkill(card, level) {
 }
 // Record one correct answer toward a card's next level. Returns a summary of
 // what happened (level-up / skill upgrade / already maxed) and persists.
-function tcgAddLevelProgress(id) {
+// `defer` skips the save so a caller levelling a whole squad at once (Ember
+// Siege trains every defender on the field per answer) writes once, not once
+// per monster — it MUST call rpgSave() itself afterwards.
+function tcgAddLevelProgress(id, defer) {
   const s = tcgState();
   if (!s || !s.cards || !s.cards[id]) return null;
   s.levels = s.levels || {}; s.lvlp = s.lvlp || {};
@@ -26984,7 +26987,7 @@ function tcgAddLevelProgress(id) {
     res.maxed = lvl >= TCG_LVL_MAX;
   }
   s.lvlp[id] = p;
-  rpgSave();
+  if (!defer) rpgSave();
   return res;
 }
 // =====================================================================
@@ -28429,7 +28432,7 @@ function tcgTrainPanelHtml(id) {
     + (maxed
         ? '<div class="tcg-train-note">This monster is fully trained — every stat and skill is maxed out! 🌟</div>'
         : '<div class="tcg-xpbar"><i style="width:' + Math.round(prog / TCG_LVL_STEP * 100) + '%;"></i></div>'
-          + '<div class="tcg-train-note">' + prog + ' / ' + TCG_LVL_STEP + ' correct answers to reach Level ' + (level + 1) + (milestone ? ' · ' + milestone : '') + '<br><span style="opacity:.75;">Use the <b>🎓 Train</b> button under this card to answer questions.</span></div>')
+          + '<div class="tcg-train-note">' + prog + ' / ' + TCG_LVL_STEP + ' correct answers to reach Level ' + (level + 1) + (milestone ? ' · ' + milestone : '') + '<br><span style="opacity:.75;">Use the <b>🎓 Train</b> button under this card to answer questions — or summon it in <b>🌋 Ember Siege</b>, where every correct answer trains whoever is on the field.</span></div>')
     + '</div>';
 }
 // The second, separate track: merge levels, earned only from repeat copies.
@@ -29012,7 +29015,7 @@ function tcgModesHtml(s) {
   return '<div class="tcg-section-note">Three ways to play with the monsters you have collected. Every mode uses your own cards and <b>your real card stats</b> — so both progression tracks count everywhere: <b>🎓 training levels</b> from answering science questions, and <b>⟡ merge levels</b> from repeat copies merging in by themselves.</div>'
     + '<div class="tcg-modes">'
     + mode('🌋', 'Ember Siege', 'NEW · lane defence',
-        'Wave after wave of corrupted monsters marches on your Ember Gate — <b>slowly</b>: a monster takes about ' + EMS_WALK_SECONDS + ' seconds to cross the whole field, so there is always time to think. Place your cards on the field to summon them as defenders — and answer science questions to generate the mana that pays for them. Mana trickles in slowly on its own, but answering is worth far more, and <b>every wave you clear opens a ' + EMS_ROUND_SIZE + '-question mana round with the battle paused and no timer</b>. Answering in the middle of a fight is still clocked — the faster you answer there, the more mana you get.',
+        'Wave after wave of corrupted monsters marches on your Ember Gate — <b>slowly</b>: a monster takes about ' + EMS_WALK_SECONDS + ' seconds to cross the whole field, so there is always time to think. Place your cards on the field to summon them as defenders — and answer science questions to generate the mana that pays for them. Mana trickles in slowly on its own, but answering is worth far more, and <b>every wave you clear opens a ' + EMS_ROUND_SIZE + '-question mana round with the battle paused and no timer</b>. Answering in the middle of a fight is still clocked — the faster you answer there, the more mana you get. Every correct answer also <b>🎓 trains the monsters you have on the field</b>, so the levels you earn here are kept for good and carry into the Arena and the Dungeon.',
         '🃏 ' + owned + ' monster' + (owned === 1 ? '' : 's') + ' summonable · 🏅 best: wave <b>' + (siege.best | 0) + '</b> · ⚔️ ' + (siege.runs | 0) + ' run' + ((siege.runs | 0) === 1 ? '' : 's'),
         owned
           ? '<button class="btn btn-primary" type="button" onclick="emsOpen()">▶ Play</button>'
@@ -29162,6 +29165,45 @@ function emsDefProfile(card) {
     range: b.range                                        // in columns
   };
 }
+// Every correct answer in the siege TRAINS the monsters holding the line —
+// the same 🎓 track the trainer feeds, at the same rate (5 correct = +1 level),
+// so levels are earned wherever science questions are answered, not only in
+// the trainer. Only the defenders actually standing on the field learn, one
+// tick each per answer however many copies of them are out, which keeps the
+// reward tied to playing rather than to spamming the quiz panel.
+function emsTrainField() {
+  const r = emsRun; if (!r) return [];
+  const seen = {}, ups = [];
+  let trained = 0;
+  r.defenders.forEach(d => {
+    const id = d.card.id;
+    if (d.hp <= 0 || seen[id]) return;
+    seen[id] = 1;
+    const res = tcgAddLevelProgress(id, true);   // deferred — one save below
+    if (!res || res.max) return;
+    trained++;
+    if (res.leveledUp) ups.push({ card: d.card, level: res.level, skillUp: !!res.skillUp, maxed: !!res.maxed });
+  });
+  if (trained) { try { rpgSave(); } catch (_) {} }
+  // A level-up has to be felt by the monster that earned it, mid-wave — so
+  // every defender already on the field is rebuilt off its new stats.
+  if (ups.length) emsRefreshProfiles();
+  return ups;
+}
+// Re-read every standing defender's stats from the card (both tracks, through
+// tcgOwnStats) and keep its damage proportional, so a level-up is an instant
+// buff on the battlefield rather than something you only see next summon.
+function emsRefreshProfiles() {
+  const r = emsRun; if (!r) return;
+  r.defenders.forEach(d => {
+    const frac = d.maxHp > 0 ? Math.max(0, Math.min(1, d.hp / d.maxHp)) : 1;
+    const p = emsDefProfile(d.card);
+    d.p = p;
+    d.maxHp = p.hp;
+    d.hp = Math.max(1, Math.round(p.hp * frac));
+    d.cool = Math.min(d.cool, p.rate);
+  });
+}
 function emsArtHtml(card, cls) {
   const url = tcgAvatarUrl(card.id);
   return url
@@ -29181,7 +29223,7 @@ function emsOpen() {
     + '<aside class="ems-deck-col">'
     +   '<div class="ems-deck-head">'
     +     '<b>🎴 Your monsters</b>'
-    +     '<span>Tap one, then tap a square in a lane to summon it. They are shelved by what they do on the battlefield.</span>'
+    +     '<span>Tap one, then tap a square in a lane to summon it. They are shelved by what they do on the battlefield. Every correct answer 🎓 trains whoever is standing on the field — levels are yours to keep.</span>'
     +   '</div>'
     +   '<div class="ems-deck" id="emsDeck"></div>'
     + '</aside>'
@@ -29567,6 +29609,9 @@ function emsGameOver() {
     +   '<div><b>🪙 ' + (r.gold + (r.qPoints | 0)) + '</b><span>points earned</span></div>'
     + '</div>'
     + '<div class="ems-result-pts">🪙 <b>' + (r.qPoints | 0) + '</b> of those came from the questions you answered — already in your wallet, ready for booster packs.</div>'
+    + ((r.levelUps | 0)
+      ? '<div class="ems-result-pts">🎓 <b>' + (r.levelUps | 0) + ' level-up' + ((r.levelUps | 0) === 1 ? '' : 's') + '</b> for the monsters you fielded — kept for good, and felt in the Arena and the Dungeon too.</div>'
+      : '')
     + '<div class="ems-result-best">🏅 Your best siege: wave <b>' + best + '</b></div>'
     + '<div class="ems-result-actions">'
     +   '<button type="button" class="btn btn-primary" onclick="emsRestart()">↻ Play again</button>'
@@ -29597,7 +29642,7 @@ function emsDeckCardHtml(c) {
   const lv = tcgLevel(c.id), mg = tcgMergeLevel(c.id);
   const p = emsDefProfile(c);
   const tip = c.name + ' · ⚡' + cost + ' · Lv ' + lv + ' · ⟡ M' + mg
-    + '\n' + p.hp + ' HP · ' + p.atk + ' ATK · every level and every merge makes this summon stronger.'
+    + '\n' + p.hp + ' HP · ' + p.atk + ' ATK · every level and every merge makes this summon stronger, and it levels up right here while it holds the line.'
     + '\n' + emsSkillLine(c);
   return '<button type="button" class="ems-card' + (emsRun.sel === c.id ? ' sel' : '') + (poor || cd > 0 ? ' off' : '') + '" data-ems-card="' + c.id + '" onclick="emsSelect(\'' + c.id + '\')" title="' + escapeHtml(tip) + '">'
     + '<span class="ems-card-art">' + emsArtHtml(c, 'ems-art') + '</span>'
@@ -29982,6 +30027,14 @@ function emsAnswer(i) {
   // booster packs, exactly as in every other game mode.
   const pts = rpgAwardGameQuestion(q && q.id, correct, ms);
   r.qPoints = (r.qPoints | 0) + pts;
+  // …and the monsters on the field level up off the same answer, permanently.
+  const ups = correct ? emsTrainField() : [];
+  if (ups.length) {
+    r.levelUps = (r.levelUps | 0) + ups.length;
+    const first = ups[0];
+    emsBanner('🎓 ' + tcgShortName(first.card) + ' reached Lv ' + first.level
+      + (first.skillUp ? ' — skill upgraded!' : '') + (ups.length > 1 ? ' · +' + (ups.length - 1) + ' more levelled' : ''), 2400);
+  }
   emsSyncHud();
   emsRenderDeck();
   emsManaPop(gain);
@@ -29991,8 +30044,11 @@ function emsAnswer(i) {
   btns.forEach(b => { b.disabled = true; const bi = +b.dataset.i; if (bi === q.a) b.classList.add('right'); else if (bi === i) b.classList.add('wrong'); });
   const fb = document.getElementById('emsQuizFb');
   const ptsBit = pts ? ' · <b>🪙 +' + pts + ' points</b>' : '';
+  const trainBit = ups.length
+    ? ' · <b>🎓 ' + ups.map(u => tcgShortName(u.card) + ' → Lv ' + u.level).join(', ') + '</b>'
+    : (correct && r.defenders.length ? ' · 🎓 your defenders trained' : '');
   if (fb) fb.innerHTML = correct
-    ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + ptsBit + (!r.roundTotal && ms < 4000 ? ' · ⚡ lightning fast!' : '') + '</span>'
+    ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + ptsBit + trainBit + (!r.roundTotal && ms < 4000 ? ' · ⚡ lightning fast!' : '') + '</span>'
     : '<span class="no">❌ The answer was <b>(' + (q.a + 1) + ')</b> — only ⚡ +' + gain + ' mana' + ptsBit + '. Streak reset.</span>';
   emsQuizStreakHud();
   // A fixed round ends itself (with a small bonus for finishing all five);
