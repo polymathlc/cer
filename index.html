@@ -9212,6 +9212,8 @@ body.practising-as .page-body { padding-bottom: 96px; }
         <button type="button" class="annot-tool" data-atool="lasso" title="Lasso select (L): draw freehand around an area, then fill it, move it, or use AI content-aware fill">➰ Lasso</button>
         <button type="button" class="annot-tool" data-atool="wand" title="Magic wand (W): click a colour to select every pixel like it. Alt+click selects that colour across the WHOLE picture, not just the patch you clicked. Use the ± slider to widen or tighten what counts as the same colour.">🪄 Wand</button>
         <button type="button" class="annot-tool" data-atool="move" title="Move (V): drag inside a selection to cut it out and drop it anywhere — hold Alt to copy instead of cut. Also drags text labels around.">✥ Move</button>
+        <button type="button" class="annot-tool" data-atool="rotate" title="Rotate (R): drag on the image to turn it — hold Shift to snap to 15°. With an area selected it turns just that object; with nothing selected it straightens the whole picture. Use 📐 Straighten to trace a crooked edge and level it automatically.">🔄 Rotate</button>
+        <button type="button" class="annot-tool" data-atool="skew" title="Skew (K): drag sideways to slant sideways, up/down to slant up/down — for objects photographed at an angle. Works on the selected area, or the whole picture if nothing is selected.">▱ Skew</button>
         <button type="button" class="annot-tool" data-atool="line" title="Drag to draw a straight label line (U) — hold Shift to snap to 45° angles">📏 Line</button>
         <button type="button" class="annot-tool" data-atool="text" title="Click to drop a text label (T)">🔤 Text</button>
         <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:5px;">Colour <input type="color" id="annotColor" value="#e23c3c" oninput="_annotSyncControls()" style="width:34px;height:28px;padding:0;border:1px solid var(--border);border-radius:6px;"></label>
@@ -9230,11 +9232,43 @@ body.practising-as .page-body { padding-bottom: 96px; }
         <button type="button" class="annot-tool" onclick="annotSelPatchFill()" title="Fill the selected area by extending the surrounding pixels inwards (fast, no AI)">🧵 Fill from surroundings</button>
         <button type="button" class="annot-tool" onclick="annotSelAiFill()" title="AI content-aware fill: the AI removes what is selected and seamlessly reconstructs the background / surrounding texture">✨ AI content-aware fill</button>
         <button type="button" class="annot-tool" data-atool="move" title="Move (V) — drag inside the selection to cut it out and drop it anywhere; hold Alt to copy instead">✥ Move it</button>
+        <button type="button" class="annot-tool" data-atool="rotate" title="Rotate (R) — lift this object out and turn it; drag on the image or use the sliders">🔄 Turn it</button>
+        <button type="button" class="annot-tool" data-atool="skew" title="Skew (K) — lift this object out and slant it, for something photographed at an angle">▱ Slant it</button>
         <button type="button" class="annot-tool" onclick="annotSelClear()" title="Deselect (Esc)">✕ Deselect</button>
       </div>
+
+      <!-- Rotate / skew panel: appears while a transform is open, disappears on Apply or Cancel. -->
+      <div id="annotXformBar" style="display:none;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:center;margin:0 auto 12px;padding:12px 18px;border:1.5px solid #b45309;background:#fdf4e3;border-radius:12px;max-width:880px;">
+        <span style="font-size:0.8rem;font-weight:700;color:#92400e;">Turning <span id="annotXformScope">the whole picture</span>:</span>
+        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:6px;" title="Turn the object. Drag on the image for the same thing — hold Shift there to snap to 15°. Scroll your mouse wheel over the slider for fine steps.">Turn
+          <input type="range" id="annotXformAngle" min="-180" max="180" step="0.5" value="0" oninput="annotXformSet('angle', this.value)" style="width:150px;">
+          <input type="number" id="annotXformAngleNum" min="-180" max="180" step="0.1" value="0" onchange="annotXformSet('angle', this.value)" style="width:66px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-size:0.78rem;font-variant-numeric:tabular-nums;">°
+        </label>
+        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:6px;" title="Slant sideways — the top leans one way, the bottom the other. This is what fixes a diagram photographed from the side.">Slant&nbsp;↔
+          <input type="range" id="annotXformSkewX" min="-60" max="60" step="0.5" value="0" oninput="annotXformSet('skewX', this.value)" style="width:110px;">
+          <span id="annotXformSkewXVal" style="min-width:34px;font-variant-numeric:tabular-nums;">0°</span>
+        </label>
+        <label style="font-size:0.8rem;display:inline-flex;align-items:center;gap:6px;" title="Slant up and down — the left edge leans one way, the right edge the other.">Slant&nbsp;↕
+          <input type="range" id="annotXformSkewY" min="-60" max="60" step="0.5" value="0" oninput="annotXformSet('skewY', this.value)" style="width:110px;">
+          <span id="annotXformSkewYVal" style="min-width:34px;font-variant-numeric:tabular-nums;">0°</span>
+        </label>
+        <span style="width:1px;height:20px;background:#e0c9a0;"></span>
+        <button type="button" class="annot-tool" onclick="annotXformNudge(-90)" title="Turn a quarter turn anticlockwise">↺ 90°</button>
+        <button type="button" class="annot-tool" onclick="annotXformNudge(90)" title="Turn a quarter turn clockwise">↻ 90°</button>
+        <button type="button" class="annot-tool" id="annotXformStraightenBtn" onclick="annotXformStraightenStart()" title="Straighten: click this, then drag a line along an edge that should be level (a table rule, the base of a diagram, a line of print) — the picture turns to make it so.">📐 Straighten…</button>
+        <label id="annotXformGrowWrap" style="font-size:0.8rem;display:inline-flex;align-items:center;gap:6px;" title="On: the canvas grows so a turned page keeps all four corners, with white filling the gaps. Off: the picture stays exactly the same size and the corners are cut off.">
+          <input type="checkbox" id="annotXformGrow" checked onchange="annotXformSetGrow(this.checked)" style="width:15px;height:15px;cursor:pointer;"> Grow to fit
+        </label>
+        <span style="width:1px;height:20px;background:#e0c9a0;"></span>
+        <span style="display:inline-flex;align-items:center;gap:8px;">
+          <button type="button" class="annot-tool" onclick="annotXformReset()" title="Back to 0° — nothing turned, nothing slanted">⟲ Reset</button>
+          <button type="button" class="btn btn-primary" style="padding:5px 14px;font-size:0.8rem;" onclick="annotXformApply()" title="Burn the turn into the picture (Enter)">✓ Apply turn</button>
+          <button type="button" class="btn btn-ghost" style="padding:5px 12px;font-size:0.8rem;" onclick="annotXformCancel()" title="Put the picture back as it was (Esc)">✕ Cancel</button>
+        </span>
+      </div>
       <div id="annotStage"><canvas id="annotCanvas"></canvas><canvas id="annotSelCanvas"></canvas></div>
-      <p class="hint" style="margin-top:10px;">Erase / Paint: drag over the image — <b>click then Shift-click</b> joins the two points with a straight line (Photoshop style), and <b>Shift-drag</b> locks the stroke to horizontal / vertical. <b>Fill</b>: click inside a shape to flood it with colour. <b>Clone</b>: click to set the source, then drag to stamp that area elsewhere (Alt+click re-sets the source). <b>History</b>: brush the original picture back by hand. <b>Select / Lasso / Wand</b>: mark out an area, then fill it, move it, or use AI content-aware fill (Esc deselects). <b>Move</b>: drag inside a selection to cut it out and drop it anywhere (Alt to copy), or drag a text label to reposition it. Line: drag from start to end. Text: click, type, then Enter.<br><b>Scroll</b> over the image to zoom (down to single pixels); <b>hold Space</b> (or the middle mouse button) and drag to pan; <b>scroll over either slider</b> to change it. Set the brush to <b>1&nbsp;px</b> for pixel-perfect edits.
-        <br><b>Keys:</b> <kbd>E</kbd> erase · <kbd>B</kbd> paint · <kbd>G</kbd> fill · <kbd>S</kbd> clone · <kbd>Y</kbd> history · <kbd>M</kbd> select · <kbd>L</kbd> lasso · <kbd>W</kbd> wand · <kbd>V</kbd> move · <kbd>U</kbd> line · <kbd>T</kbd> text · <kbd>[</kbd> <kbd>]</kbd> brush size · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>+</kbd> <kbd>−</kbd> zoom · <kbd>0</kbd> fit · <kbd>Esc</kbd> deselect · <kbd>Enter</kbd> apply</p>
+      <p class="hint" style="margin-top:10px;">Erase / Paint: drag over the image — <b>click then Shift-click</b> joins the two points with a straight line (Photoshop style), and <b>Shift-drag</b> locks the stroke to horizontal / vertical. <b>Fill</b>: click inside a shape to flood it with colour. <b>Clone</b>: click to set the source, then drag to stamp that area elsewhere (Alt+click re-sets the source). <b>History</b>: brush the original picture back by hand. <b>Select / Lasso / Wand</b>: mark out an area, then fill it, move it, or use AI content-aware fill (Esc deselects). <b>Move</b>: drag inside a selection to cut it out and drop it anywhere (Alt to copy), or drag a text label to reposition it. <b>Rotate / Skew</b>: turn or slant the selected object — or, with nothing selected, the whole picture, which is how you straighten a page that went into the scanner crooked. Drag on the image (Shift snaps to 15°) or use the sliders, and <b>📐 Straighten</b> lets you trace a line along a crooked edge to level it in one go. Enter applies the turn, Esc cancels it. Line: drag from start to end. Text: click, type, then Enter.<br><b>Scroll</b> over the image to zoom (down to single pixels); <b>hold Space</b> (or the middle mouse button) and drag to pan; <b>scroll over either slider</b> to change it. Set the brush to <b>1&nbsp;px</b> for pixel-perfect edits.
+        <br><b>Keys:</b> <kbd>E</kbd> erase · <kbd>B</kbd> paint · <kbd>G</kbd> fill · <kbd>S</kbd> clone · <kbd>Y</kbd> history · <kbd>M</kbd> select · <kbd>L</kbd> lasso · <kbd>W</kbd> wand · <kbd>V</kbd> move · <kbd>R</kbd> rotate · <kbd>K</kbd> skew · <kbd>U</kbd> line · <kbd>T</kbd> text · <kbd>[</kbd> <kbd>]</kbd> brush size · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>+</kbd> <kbd>−</kbd> zoom · <kbd>0</kbd> fit · <kbd>Esc</kbd> deselect / cancel turn · <kbd>Enter</kbd> apply</p>
     </div>
     <div class="overlay-foot">
       <button class="btn btn-ghost" onclick="closeAnnotTool()" type="button">Cancel</button>
