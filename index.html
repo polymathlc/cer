@@ -2722,17 +2722,24 @@ option {
   .print-page-content {
     flex-shrink: 0;
   }
-  /* The ceiling on how tall a picture may print. It was 180pt (63mm) — barely a
-     quarter of the sheet — so a four-option figure or a graph asked for the full
-     column width, got its height cut to 63mm, and `contain` then shrank the
-     WIDTH to match: a diagram set to fill the page came out at half size. 170mm
-     still leaves room for the question header, its stem and the page footer, and
-     only a genuinely enormous picture now meets the cap at all. */
+  /* The ceiling on how tall a picture may print.
+     One flat cap of 170mm (two thirds of the sheet) applied to every picture,
+     so a question carrying a labelled diagram AND a chart could not fit a page
+     at all — it overflowed its fixed-height page box and painted over the next
+     question. Ordinary pictures now print at a standard 92mm, which is plenty
+     for a labelled diagram, and the ones that genuinely need the room — a
+     graph, a data table, a figure that carries the answer options — are marked
+     Large or Full page (per picture, in the image block's Print size control;
+     a question whose single picture holds its options is upgraded
+     automatically). See imgPrintClass / imgQuestionNeedsBig. */
   .print-question-page img {
     max-width: 100%;
-    max-height: 170mm;
+    max-height: 92mm;
     object-fit: contain;
   }
+  .print-question-page img.print-img-sm   { max-height: 60mm; }
+  .print-question-page img.print-img-lg   { max-height: 140mm; }
+  .print-question-page img.print-img-full { max-height: 170mm; }
   .print-text-block img {
     display: block;
     margin: 6pt 0;
