@@ -5375,15 +5375,26 @@ body.practising-as .page-body { padding-bottom: 96px; }
   border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 0 60px rgba(0,0,0,0.6); }
 .elg-units { position: absolute; inset: 0; }
 .elg-unit { position: absolute; left: 0; top: 0; will-change: transform; }
-.elg-unit .elg-sprite { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; font-size: 26px; border-radius: 50%; overflow: hidden; background: rgba(0,0,0,0.35); border: 2px solid rgba(255,255,255,0.35); }
-.elg-unit .elg-sprite img { width: 100%; height: 100%; object-fit: cover; }
-.elg-unit.hero .elg-sprite { width: 52px; height: 52px; border-color: #ffd98a; box-shadow: 0 0 18px rgba(255,200,90,0.55); }
-.elg-unit.hero.shielded .elg-sprite { border-color: #7dd3fc; box-shadow: 0 0 24px rgba(125,211,252,0.8); }
-.elg-unit.foe .elg-sprite { width: 40px; height: 40px; border-color: rgba(255,120,120,0.6); }
-.elg-unit.boss .elg-sprite { width: 54px; height: 54px; border-color: #fb923c; }
-.elg-unit.king .elg-sprite { width: 70px; height: 70px; border-color: #f0b542; box-shadow: 0 0 22px rgba(240,181,66,0.7); }
-.elg-unit.cursed .elg-sprite { border-color: #a855f7; box-shadow: 0 0 14px rgba(168,85,247,0.8); }
+/* Sprites are the card art itself — background-keyed cut-outs standing free
+   on the arena, no circular frame over the character. Status reads as a
+   coloured glow on the art (drop-shadow follows the cut-out's silhouette).
+   .boxed is the fallback when an image cannot be keyed (CORS taint): only
+   then does the old rounded crop return, so a baked backdrop never shows. */
+.elg-unit .elg-sprite { display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; font-size: 30px; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.6)); }
+.elg-unit .elg-sprite img { width: 100%; height: 100%; object-fit: contain; }
+/* Status glows sit on the SPAN, not the img: drop-shadow follows the
+   composite silhouette, so a keyed cut-out and an emoji-fallback sprite both
+   light up. Later rules win where classes stack (cursed over boss, stun over
+   everything). */
+.elg-unit.hero .elg-sprite { width: 58px; height: 58px; filter: drop-shadow(0 0 9px rgba(255,200,90,0.6)) drop-shadow(0 3px 5px rgba(0,0,0,0.6)); }
+.elg-unit.hero.shielded .elg-sprite { filter: drop-shadow(0 0 13px rgba(125,211,252,0.95)) drop-shadow(0 3px 5px rgba(0,0,0,0.6)); }
+.elg-unit.foe .elg-sprite { width: 44px; height: 44px; }
+.elg-unit.boss .elg-sprite { width: 60px; height: 60px; font-size: 40px; filter: drop-shadow(0 0 8px rgba(251,146,60,0.7)) drop-shadow(0 3px 5px rgba(0,0,0,0.6)); }
+.elg-unit.king .elg-sprite { width: 78px; height: 78px; font-size: 54px; filter: drop-shadow(0 0 13px rgba(240,181,66,0.85)) drop-shadow(0 3px 6px rgba(0,0,0,0.6)); }
+.elg-unit.cursed .elg-sprite { filter: drop-shadow(0 0 10px rgba(168,85,247,0.95)) drop-shadow(0 3px 5px rgba(0,0,0,0.6)); }
 .elg-unit.stunned .elg-sprite { filter: grayscale(0.6) brightness(1.3); }
+.elg-sprite.boxed { border-radius: 14px; overflow: hidden; background: rgba(0,0,0,0.35); border: 2px solid rgba(255,255,255,0.3); }
+.elg-sprite.boxed img { object-fit: cover; filter: none; }
 .elg-ehp { display: block; width: 34px; height: 4px; margin: 3px auto 0; border-radius: 999px; background: rgba(0,0,0,0.5); overflow: hidden; }
 .elg-ehp > b { display: block; height: 100%; width: 100%; background: #ef4444; }
 /* Projectiles are drawn, never blitted. The generated FX frames carry a
@@ -5394,6 +5405,12 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .elg-orb { display: block; width: 100%; height: 100%; border-radius: 50%; animation: elgOrb 0.9s ease-out infinite alternate; }
 .elg-shot::after { content: ''; position: absolute; left: 50%; top: 50%; width: 34px; height: 7px; transform: translate(-96%, -50%) rotate(var(--a, 0rad)); transform-origin: 100% 50%; border-radius: 999px; background: linear-gradient(90deg, transparent, var(--trail, rgba(255,200,120,0.5))); filter: blur(2px); }
 @keyframes elgOrb { from { transform: scale(0.86); } to { transform: scale(1.06); } }
+/* A shot carrying the keyed Card Art flight frames — rotated along its own
+   flight path, glowing in the element's colour, nothing behind it. */
+.elg-shot.framed { width: 36px; height: 36px; margin: -18px 0 0 -18px; mix-blend-mode: normal; }
+.elg-shot.framed img { width: 100%; height: 100%; object-fit: contain; transform: rotate(var(--a, 0rad)); filter: drop-shadow(0 0 8px var(--trail, rgba(255,200,120,0.6))); }
+.elg-hitfx { position: absolute; left: 0; top: 0; width: 42px; height: 42px; pointer-events: none; z-index: 6; }
+.elg-hitfx img { width: 100%; height: 100%; object-fit: contain; }
 .elg-orbit { position: absolute; left: 0; top: 0; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; pointer-events: none; box-shadow: 0 0 12px rgba(255,190,90,0.8); mix-blend-mode: screen; }
 .elg-pet { position: absolute; left: 0; top: 0; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; pointer-events: none; box-shadow: 0 0 16px rgba(255,220,150,0.7); mix-blend-mode: screen; }
 .elg-aura { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: none; opacity: 0.5; mix-blend-mode: screen; }
@@ -5410,6 +5427,8 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .elg-skillbar { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .elg-skill { display: flex; align-items: center; gap: 9px; padding: 9px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); color: #e9e0f5; cursor: pointer; font-family: inherit; }
 .elg-skill.ready { border-color: #ffd98a; background: rgba(240,181,66,0.16); color: #fff; }
+.elg-skill-key { display: flex; align-items: center; justify-content: center; width: 19px; height: 19px; border-radius: 5px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.3); font-size: 0.68rem; font-weight: 800; flex: 0 0 auto; }
+.elg-skill.ready .elg-skill-key { background: rgba(240,181,66,0.3); border-color: #ffd98a; }
 .elg-skill-ico { font-size: 1.1rem; }
 .elg-skill-name { font-weight: 700; font-size: 0.84rem; }
 .elg-skill-cd { font-size: 0.74rem; opacity: 0.75; } .elg-skill-cd.ok { color: #86efac; opacity: 1; }
@@ -5442,14 +5461,17 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .elg-tree-lead { color: rgba(255,255,255,0.6); font-size: 0.84rem; line-height: 1.7; margin-bottom: 16px; }
 .elg-legend-box { border: 1px solid #f0b542; background: rgba(240,181,66,0.12); border-radius: 12px; padding: 14px 16px; font-size: 0.85rem; line-height: 1.65; margin-bottom: 18px; }
 .elg-legend-box span { display: block; margin-top: 6px; font-size: 0.72rem; color: rgba(255,255,255,0.55); }
-.elg-tier { margin-bottom: 18px; }
-.elg-tier.locked { opacity: 0.45; }
+.elg-tree-map { position: relative; }
+.elg-tree-links { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+.elg-tier { position: relative; z-index: 1; margin-bottom: 26px; }
 .elg-tier-lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.5); margin-bottom: 9px; }
 .elg-tier-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .elg-node { flex: 1 1 200px; min-width: 190px; text-align: left; padding: 13px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.04); color: #f3e9ff; font-family: inherit; display: flex; flex-direction: column; gap: 5px; cursor: default; }
 .elg-node.can { cursor: pointer; border-color: #ffd98a; }
 .elg-node.can:hover { background: rgba(240,181,66,0.16); }
 .elg-node.owned { border-color: #4ade80; background: rgba(74,222,128,0.12); }
+.elg-node.poor { border-color: rgba(240,181,66,0.45); }
+.elg-node.faroff { opacity: 0.45; }
 .elg-node-ico { font-size: 1.1rem; }
 .elg-node b { font-size: 0.85rem; }
 .elg-node-desc { font-size: 0.76rem; color: rgba(255,255,255,0.62); line-height: 1.55; }
