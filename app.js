@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.216.0';
+const APP_VERSION = 'v1.217.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -29520,7 +29520,7 @@ function tcgGuideHtml() {
         ['Playing', 'Drag (or use WASD / the arrow keys) to move. Your monster attacks the nearest enemy by itself — your job is where to stand and when to fire a skill.'],
         ['✦ Skill points', 'A science question arrives every ' + ELG_Q_EVERY + ' seconds and freezes the battle while it is up: a correct answer is <b>+' + ELG_SP_CORRECT + ' point</b>, and clearing a wave is <b>+' + ELG_SP_WAVE + '</b>. Points are spent in the skill tree, which you can open mid-fight.'],
         ['The four trees', ELG_ROLE_ORDER.map(r => ELG_ROLES[r].icon + ' <b>' + ELG_ROLES[r].name + '</b> — ' + escapeHtml(ELG_ROLES[r].blurb)).join('<br>')
-          + '<br><span class="tcg-guide-dim">Your monster\'s battle skill decides its role, and every monster of that role shares the same tree — so swapping hero never means learning a new game. Each tree runs 4 tiers deep; a tier opens once you own enough of the one below it.</span>'],
+          + '<br><span class="tcg-guide-dim">Your monster\'s battle skill decides its role, and every monster of that role shares the same tree — so swapping hero never means learning a new game. Each tree holds <b>' + (ELG_TREES.striker || []).length + ' skills over ' + ELG_TIERS.length + ' tiers</b>, ending in two capstones you choose between; a tier opens once you own enough of the one below it. Roughly a third of every tree is an <b>active skill</b> with its own button and cooldown — lances, dashes, orbiting blades, chain lightning, auras, summons, buffs and arena-wide storms.</span>'],
         ['The horde', 'Enemies are drawn from the other cards, and the further you get the rarer they are. <b>Every fifth wave</b> is led by a boss card with several times the health.'],
         ['7★ passives', 'A 7★ hero fights with a run-changing rule of its own:<br>'
           + Object.keys(ELG_LEGEND_PASSIVES).map(k => ELG_LEGEND_PASSIVES[k].icon + ' <b>' + escapeHtml(ELG_LEGEND_PASSIVES[k].name) + '</b> — ' + escapeHtml(ELG_LEGEND_PASSIVES[k].desc)).join('<br>')],
@@ -30675,52 +30675,98 @@ function elgRole(card) { return ELG_ROLES[elgRoleId(card)]; }
 // rather than a shopping list.
 const ELG_TREES = {
   striker: [
-    { id: 'st_edge',  tier: 1, name: 'Ember Edge',    icon: '🗡️', desc: '+18% attack damage.', fx: { dmg: 0.18 } },
-    { id: 'st_step',  tier: 1, name: 'Quickstep',     icon: '👟', desc: '+18% move speed.', fx: { speed: 0.18 } },
-    { id: 'st_keen',  tier: 1, name: 'Keen Eye',      icon: '🎯', desc: '+12% critical chance (crits hit for double).', fx: { crit: 0.12 } },
-    { id: 'st_lance', tier: 2, name: 'Cinder Lance',  icon: '🔥', desc: 'ACTIVE — spear a searing lance through every enemy in a line.', act: { kind: 'beam', cd: 7, dmg: 2.4 } },
-    { id: 'st_twin',  tier: 2, name: 'Twin Fangs',    icon: '⚔️', desc: 'Every attack fires an extra shot.', fx: { shots: 1 } },
-    { id: 'st_leech', tier: 2, name: 'Emberdrink',    icon: '🩸', desc: 'Heal for 12% of all the damage you deal.', fx: { lifesteal: 0.12 } },
-    { id: 'st_cyc',   tier: 3, name: 'Blade Cyclone', icon: '🌀', desc: 'ACTIVE — spin, striking every enemy around you.', act: { kind: 'nova', cd: 9, dmg: 2.8, radius: 150 } },
-    { id: 'st_fury',  tier: 3, name: 'Rising Fury',   icon: '⚡', desc: '+25% attack speed.', fx: { aspd: 0.25 } },
-    { id: 'st_apex',  tier: 4, name: 'Apex Predator', icon: '👑', desc: '+40% damage to any enemy below half health.', fx: { execute: 0.40 } },
-    { id: 'st_storm', tier: 4, name: 'Emberstorm',    icon: '☄️', desc: 'ACTIVE — call embers down on the whole arena.', act: { kind: 'storm', cd: 22, dmg: 3.6 } }
+    // T1 — the basics
+    { id: 'st_edge',  tier: 1, name: 'Ember Edge',     icon: '🗡️', desc: '+18% attack damage.', fx: { dmg: 0.18 } },
+    { id: 'st_step',  tier: 1, name: 'Quickstep',      icon: '👟', desc: '+18% move speed.', fx: { speed: 0.18 } },
+    { id: 'st_keen',  tier: 1, name: 'Keen Eye',       icon: '🎯', desc: '+12% critical chance. Criticals hit for double.', fx: { crit: 0.12 } },
+    { id: 'st_grip',  tier: 1, name: 'Sure Grip',      icon: '🤜', desc: '+15% attack speed.', fx: { aspd: 0.15 } },
+    // T2 — your first skills
+    { id: 'st_lance', tier: 2, name: 'Cinder Lance',   icon: '🔥', desc: 'ACTIVE — spear a searing lance through every enemy in a line.', act: { kind: 'beam', cd: 7, dmg: 2.4 } },
+    { id: 'st_dash',  tier: 2, name: 'Emberdash',      icon: '💨', desc: 'ACTIVE — blink through the horde, cutting everything on the way.', act: { kind: 'dash', cd: 6, dmg: 1.9, dist: 230 } },
+    { id: 'st_twin',  tier: 2, name: 'Twin Fangs',     icon: '⚔️', desc: 'Every attack fires an extra shot.', fx: { shots: 1 } },
+    { id: 'st_leech', tier: 2, name: 'Emberdrink',     icon: '🩸', desc: 'Heal for 12% of all the damage you deal.', fx: { lifesteal: 0.12 } },
+    // T3 — the toolkit widens
+    { id: 'st_cyc',   tier: 3, name: 'Blade Cyclone',  icon: '🌀', desc: 'ACTIVE — spin, striking every enemy around you.', act: { kind: 'nova', cd: 9, dmg: 2.8, radius: 155 } },
+    { id: 'st_volley',tier: 3, name: 'Fang Volley',    icon: '🪃', desc: 'ACTIVE — hurl a fan of five shots at whatever is in front of you.', act: { kind: 'volley', cd: 5, dmg: 1.3, count: 5, spread: 0.9 } },
+    { id: 'st_fury',  tier: 3, name: 'Rising Fury',    icon: '⚡', desc: 'A further +25% attack speed.', fx: { aspd: 0.25 } },
+    { id: 'st_hunt',  tier: 3, name: 'Hunter’s Mark',  icon: '🏹', desc: '+20% attack range and your shots pass through one extra enemy.', fx: { range: 0.20, pierce: 1 } },
+    // T4 — commitment
+    { id: 'st_rage',  tier: 4, name: 'Bloodrush',      icon: '😤', desc: 'ACTIVE — 5 seconds of +60% damage and +40% attack speed.', act: { kind: 'buff', cd: 18, dur: 5, dmg: 0.60, aspd: 0.40 } },
+    { id: 'st_orbit', tier: 4, name: 'Ember Wheel',    icon: '🔆', desc: 'ACTIVE — three burning blades orbit you for 8 seconds, cutting all they touch.', act: { kind: 'orbit', cd: 14, dmg: 1.1, count: 3, dur: 8 } },
+    { id: 'st_apex',  tier: 4, name: 'Apex Predator',  icon: '👑', desc: '+40% damage to any enemy below half health.', fx: { execute: 0.40 } },
+    { id: 'st_deep',  tier: 4, name: 'Deep Cuts',      icon: '🔪', desc: 'A further +25% attack damage.', fx: { dmg: 0.25 } },
+    // T5 — the heavy hitters
+    { id: 'st_storm', tier: 5, name: 'Emberstorm',     icon: '☄️', desc: 'ACTIVE — call embers down on the whole arena.', act: { kind: 'storm', cd: 22, dmg: 3.6 } },
+    { id: 'st_shade', tier: 5, name: 'Shadowstep',     icon: '🌑', desc: 'Every kill briefly quickens you — +8% attack speed, stacking up to +40%.', fx: { killHaste: 0.08 } },
+    // T6 — capstones
+    { id: 'st_cap1',  tier: 6, name: 'Avatar of the Blade', icon: '🗡️', desc: 'CAPSTONE — every fifth attack becomes a cyclone that strikes everything around you.', fx: { capCyclone: 1 } },
+    { id: 'st_cap2',  tier: 6, name: 'Undying Fury',   icon: '💀', desc: 'CAPSTONE — cheat death once per run: rise at half health and blast the horde away.', fx: { revive: 1, reviveBlast: 1 } }
   ],
   arcanist: [
     { id: 'ar_flow',  tier: 1, name: 'Elemental Flow', icon: '🌊', desc: '+15% attack damage.', fx: { dmg: 0.15 } },
     { id: 'ar_reach', tier: 1, name: 'Far Sight',      icon: '🔭', desc: '+25% attack range.', fx: { range: 0.25 } },
     { id: 'ar_pierce',tier: 1, name: 'Piercing Motes', icon: '➰', desc: 'Your shots pass through one extra enemy.', fx: { pierce: 1 } },
-    { id: 'ar_nova',  tier: 2, name: 'Elemental Nova', icon: '💥', desc: 'ACTIVE — a burst of your element throws back everything near you.', act: { kind: 'nova', cd: 8, dmg: 2.2, radius: 190 } },
+    { id: 'ar_focus', tier: 1, name: 'Focus',          icon: '🧿', desc: '+12% attack speed.', fx: { aspd: 0.12 } },
+    { id: 'ar_nova',  tier: 2, name: 'Elemental Nova', icon: '💥', desc: 'ACTIVE — a burst of your element tears through everything near you.', act: { kind: 'nova', cd: 8, dmg: 2.2, radius: 195 } },
+    { id: 'ar_chain', tier: 2, name: 'Chain Surge',    icon: '⚡', desc: 'ACTIVE — energy leaps from enemy to enemy, up to five of them.', act: { kind: 'chain', cd: 7, dmg: 1.8, jumps: 5, range: 240 } },
     { id: 'ar_echo',  tier: 2, name: 'Resonance',      icon: '🔁', desc: 'All your skills recharge 25% faster.', fx: { cdr: 0.25 } },
     { id: 'ar_split', tier: 2, name: 'Split Cast',     icon: '✳️', desc: 'Every attack fires an extra shot.', fx: { shots: 1 } },
     { id: 'ar_frost', tier: 3, name: 'Glacial Field',  icon: '❄️', desc: 'ACTIVE — the whole arena slows to a crawl for 5 seconds.', act: { kind: 'frost', cd: 16, dur: 5 } },
+    { id: 'ar_zone',  tier: 3, name: 'Elemental Well', icon: '🌋', desc: 'ACTIVE — leave a pool of raw element that burns everything standing in it.', act: { kind: 'zone', cd: 12, dmg: 1.1, dur: 6, radius: 150 } },
     { id: 'ar_amp',   tier: 3, name: 'Amplify',        icon: '📈', desc: '+30% skill damage.', fx: { skillDmg: 0.30 } },
-    { id: 'ar_chain', tier: 4, name: 'Chain Reaction', icon: '🔗', desc: 'Every enemy you kill bursts, damaging whatever stands near it.', fx: { deathBlast: 1 } },
-    { id: 'ar_cata',  tier: 4, name: 'Cataclysm',      icon: '🌋', desc: 'ACTIVE — the arena erupts. Enormous damage to everything.', act: { kind: 'storm', cd: 24, dmg: 4.2 } }
+    { id: 'ar_drift', tier: 3, name: 'Mote Drift',     icon: '🕊️', desc: '+15% move speed and +10% skill damage.', fx: { speed: 0.15, skillDmg: 0.10 } },
+    { id: 'ar_aura',  tier: 4, name: 'Elemental Aura', icon: '🌪️', desc: 'ACTIVE — the element rages around you for 8 seconds, burning everything close.', act: { kind: 'aura', cd: 15, dmg: 0.9, dur: 8, radius: 145 } },
+    { id: 'ar_wisp',  tier: 4, name: 'Summon Wisp',    icon: '🔮', desc: 'ACTIVE — call a wisp of your element to fight beside you for 20 seconds.', act: { kind: 'summon', cd: 18, dmg: 0.8, dur: 20 } },
+    { id: 'ar_chainr',tier: 4, name: 'Chain Reaction', icon: '🔗', desc: 'Every enemy you kill bursts, damaging whatever stands near it.', fx: { deathBlast: 1 } },
+    { id: 'ar_deep',  tier: 4, name: 'Deep Well',      icon: '💠', desc: 'A further +25% skill damage.', fx: { skillDmg: 0.25 } },
+    { id: 'ar_cata',  tier: 5, name: 'Cataclysm',      icon: '🌠', desc: 'ACTIVE — the arena erupts. Enormous damage to everything on it.', act: { kind: 'storm', cd: 24, dmg: 4.2 } },
+    { id: 'ar_still', tier: 5, name: 'Stillness',      icon: '🧘', desc: 'Standing still for a moment charges your next shot to triple damage.', fx: { charged: 1 } },
+    { id: 'ar_cap1',  tier: 6, name: 'Archmage',       icon: '🧙', desc: 'CAPSTONE — every skill you cast fires a free Elemental Nova as well.', fx: { capNova: 1 } },
+    { id: 'ar_cap2',  tier: 6, name: 'Time Echo',      icon: '⏳', desc: 'CAPSTONE — one in four casts costs no cooldown at all.', fx: { capEcho: 1 } }
   ],
   mender: [
-    { id: 'me_vital', tier: 1, name: 'Vitality',       icon: '❤️', desc: '+20% maximum health.', fx: { hp: 0.20 } },
-    { id: 'me_regen', tier: 1, name: 'Verdant Renewal',icon: '🌿', desc: 'Regrow 1.2% of your health every second.', fx: { regen: 0.012 } },
-    { id: 'me_grace', tier: 1, name: 'Grace',          icon: '🕊️', desc: '+15% move speed.', fx: { speed: 0.15 } },
-    { id: 'me_bloom', tier: 2, name: 'Bloomlight',     icon: '🌸', desc: 'ACTIVE — restore 30% of your health at once.', act: { kind: 'heal', cd: 12, pct: 0.30 } },
-    { id: 'me_ward',  tier: 2, name: 'Warding Light',  icon: '🔆', desc: '+15% damage reduction.', fx: { armor: 0.15 } },
-    { id: 'me_leech', tier: 2, name: 'Lifebind',       icon: '🩸', desc: 'Heal for 10% of all the damage you deal.', fx: { lifesteal: 0.10 } },
-    { id: 'me_sanct', tier: 3, name: 'Sanctuary',      icon: '⛲', desc: 'ACTIVE — a ring of light that heals you and burns everything inside it.', act: { kind: 'zone', cd: 15, dmg: 1.2, dur: 6, radius: 165, heal: 0.02 } },
-    { id: 'me_amp',   tier: 3, name: 'Greater Mending',icon: '💗', desc: 'All your healing is 40% stronger.', fx: { healAmp: 0.40 } },
-    { id: 'me_dawn',  tier: 4, name: 'Second Dawn',    icon: '🌅', desc: 'The first time you fall in a run, rise again at half health.', fx: { revive: 1 } },
-    { id: 'me_pulse', tier: 4, name: 'Lifepulse',      icon: '💞', desc: 'Every 8 seconds a pulse heals you and sears nearby enemies.', fx: { pulse: 1 } }
+    { id: 'me_vital', tier: 1, name: 'Vitality',        icon: '❤️', desc: '+20% maximum health.', fx: { hp: 0.20 } },
+    { id: 'me_regen', tier: 1, name: 'Verdant Renewal', icon: '🌿', desc: 'Regrow 1.2% of your health every second.', fx: { regen: 0.012 } },
+    { id: 'me_grace', tier: 1, name: 'Grace',           icon: '🕊️', desc: '+15% move speed.', fx: { speed: 0.15 } },
+    { id: 'me_light', tier: 1, name: 'Kindled Light',   icon: '🕯️', desc: '+12% attack damage.', fx: { dmg: 0.12 } },
+    { id: 'me_bloom', tier: 2, name: 'Bloomlight',      icon: '🌸', desc: 'ACTIVE — restore 30% of your health at once.', act: { kind: 'heal', cd: 12, pct: 0.30 } },
+    { id: 'me_ward',  tier: 2, name: 'Warding Light',   icon: '🔆', desc: '+15% damage reduction.', fx: { armor: 0.15 } },
+    { id: 'me_leech', tier: 2, name: 'Lifebind',        icon: '🩸', desc: 'Heal for 10% of all the damage you deal.', fx: { lifesteal: 0.10 } },
+    { id: 'me_push',  tier: 2, name: 'Radiant Push',    icon: '💫', desc: 'ACTIVE — a ring of light throws the horde back and stuns it.', act: { kind: 'nova', cd: 10, dmg: 1.4, radius: 185, stun: 1.4 } },
+    { id: 'me_sanct', tier: 3, name: 'Sanctuary',       icon: '⛲', desc: 'ACTIVE — a ring of light that heals you and burns everything inside it.', act: { kind: 'zone', cd: 15, dmg: 1.2, dur: 6, radius: 165, heal: 0.02 } },
+    { id: 'me_spirit',tier: 3, name: 'Spirit Companion',icon: '👻', desc: 'ACTIVE — a healing spirit fights beside you for 20 seconds.', act: { kind: 'summon', cd: 18, dmg: 0.6, dur: 20, heal: 0.012 } },
+    { id: 'me_amp',   tier: 3, name: 'Greater Mending', icon: '💗', desc: 'All your healing is 40% stronger.', fx: { healAmp: 0.40 } },
+    { id: 'me_tough', tier: 3, name: 'Enduring Faith',  icon: '🛐', desc: 'A further +20% maximum health.', fx: { hp: 0.20 } },
+    { id: 'me_aura',  tier: 4, name: 'Halo',            icon: '😇', desc: 'ACTIVE — a searing halo surrounds you for 8 seconds.', act: { kind: 'aura', cd: 15, dmg: 0.8, dur: 8, radius: 140 } },
+    { id: 'me_shield',tier: 4, name: 'Blessing',        icon: '🔰', desc: 'ACTIVE — a barrier that soaks the next big hits.', act: { kind: 'shield', cd: 13, pct: 0.35, dur: 8 } },
+    { id: 'me_pulse', tier: 4, name: 'Lifepulse',       icon: '💞', desc: 'Every 8 seconds a pulse heals you and sears nearby enemies.', fx: { pulse: 1 } },
+    { id: 'me_calm',  tier: 4, name: 'Calm Mind',       icon: '🧠', desc: 'All your skills recharge 25% faster.', fx: { cdr: 0.25 } },
+    { id: 'me_dawn',  tier: 5, name: 'Second Dawn',     icon: '🌅', desc: 'The first time you fall in a run, rise again at half health.', fx: { revive: 1 } },
+    { id: 'me_thorn', tier: 5, name: 'Bramble Grace',   icon: '🌵', desc: 'Attackers take 30% of the damage they deal back.', fx: { thorns: 0.30 } },
+    { id: 'me_cap1',  tier: 6, name: 'Everbloom',       icon: '🌷', desc: 'CAPSTONE — while you are above 80% health you deal 45% more damage.', fx: { capBloom: 0.45 } },
+    { id: 'me_cap2',  tier: 6, name: 'Font of Life',    icon: '⛲', desc: 'CAPSTONE — every enemy you kill heals you for 2% of your health.', fx: { capFont: 0.02 } }
   ],
   warden: [
-    { id: 'wa_stone', tier: 1, name: 'Stoneskin',      icon: '🪨', desc: '+25% maximum health.', fx: { hp: 0.25 } },
-    { id: 'wa_plate', tier: 1, name: 'Emberplate',     icon: '🛡️', desc: '+15% damage reduction.', fx: { armor: 0.15 } },
-    { id: 'wa_thorn', tier: 1, name: 'Thornmail',      icon: '🌵', desc: 'Attackers take 25% of the damage they deal back.', fx: { thorns: 0.25 } },
-    { id: 'wa_aegis', tier: 2, name: 'Aegis',          icon: '🔰', desc: 'ACTIVE — a barrier that soaks the next big hits.', act: { kind: 'shield', cd: 13, pct: 0.35, dur: 8 } },
-    { id: 'wa_might', tier: 2, name: 'Bulwark Might',  icon: '💪', desc: '+15% attack damage.', fx: { dmg: 0.15 } },
-    { id: 'wa_hold',  tier: 2, name: 'Steady Hold',    icon: '⚓', desc: 'Regrow 1% of your health every second.', fx: { regen: 0.010 } },
-    { id: 'wa_quake', tier: 3, name: 'Ground Shatter', icon: '💢', desc: 'ACTIVE — shatter the ground: heavy damage and a stun all around you.', act: { kind: 'nova', cd: 10, dmg: 2.4, radius: 175, stun: 1.6 } },
-    { id: 'wa_rage',  tier: 3, name: 'Last Stand',     icon: '😤', desc: 'Below half health you deal 35% more damage.', fx: { desperate: 0.35 } },
-    { id: 'wa_immov', tier: 4, name: 'Immovable',      icon: '🗿', desc: 'A further 20% damage reduction.', fx: { armor: 0.20 } },
-    { id: 'wa_roar',  tier: 4, name: 'Emberquake Roar',icon: '📣', desc: 'ACTIVE — a roar that shakes the whole arena and stuns the horde.', act: { kind: 'storm', cd: 20, dmg: 2.4, stun: 2 } }
+    { id: 'wa_stone', tier: 1, name: 'Stoneskin',       icon: '🪨', desc: '+25% maximum health.', fx: { hp: 0.25 } },
+    { id: 'wa_plate', tier: 1, name: 'Emberplate',      icon: '🛡️', desc: '+15% damage reduction.', fx: { armor: 0.15 } },
+    { id: 'wa_thorn', tier: 1, name: 'Thornmail',       icon: '🌵', desc: 'Attackers take 25% of the damage they deal back.', fx: { thorns: 0.25 } },
+    { id: 'wa_heft',  tier: 1, name: 'Heavy Swing',     icon: '🔨', desc: '+15% attack damage.', fx: { dmg: 0.15 } },
+    { id: 'wa_aegis', tier: 2, name: 'Aegis',           icon: '🔰', desc: 'ACTIVE — a barrier that soaks the next big hits.', act: { kind: 'shield', cd: 13, pct: 0.35, dur: 8 } },
+    { id: 'wa_charge',tier: 2, name: 'Bulwark Charge',  icon: '💨', desc: 'ACTIVE — shoulder-charge forward, smashing everything in the way.', act: { kind: 'dash', cd: 7, dmg: 2.1, dist: 210, stun: 1.2 } },
+    { id: 'wa_might', tier: 2, name: 'Bulwark Might',   icon: '💪', desc: 'A further +15% attack damage.', fx: { dmg: 0.15 } },
+    { id: 'wa_hold',  tier: 2, name: 'Steady Hold',     icon: '⚓', desc: 'Regrow 1% of your health every second.', fx: { regen: 0.010 } },
+    { id: 'wa_quake', tier: 3, name: 'Ground Shatter',  icon: '💢', desc: 'ACTIVE — shatter the ground: heavy damage and a stun all around you.', act: { kind: 'nova', cd: 10, dmg: 2.4, radius: 180, stun: 1.6 } },
+    { id: 'wa_orbit', tier: 3, name: 'Guard Stones',    icon: '🪬', desc: 'ACTIVE — four warding stones orbit you for 8 seconds, crushing what they touch.', act: { kind: 'orbit', cd: 14, dmg: 1.0, count: 4, dur: 8 } },
+    { id: 'wa_rage',  tier: 3, name: 'Last Stand',      icon: '😤', desc: 'Below half health you deal 35% more damage.', fx: { desperate: 0.35 } },
+    { id: 'wa_wall',  tier: 3, name: 'Living Wall',     icon: '🧱', desc: 'A further +25% maximum health.', fx: { hp: 0.25 } },
+    { id: 'wa_roar',  tier: 4, name: 'Emberquake Roar', icon: '📣', desc: 'ACTIVE — a roar that shakes the whole arena and stuns the horde.', act: { kind: 'storm', cd: 20, dmg: 2.4, stun: 2 } },
+    { id: 'wa_aura',  tier: 4, name: 'Molten Skin',     icon: '🌋', desc: 'ACTIVE — you burn everything that stands near you for 8 seconds.', act: { kind: 'aura', cd: 15, dmg: 0.9, dur: 8, radius: 135 } },
+    { id: 'wa_immov', tier: 4, name: 'Immovable',       icon: '🗿', desc: 'A further 20% damage reduction.', fx: { armor: 0.20 } },
+    { id: 'wa_grit',  tier: 4, name: 'Grit',            icon: '🦾', desc: 'Heal for 10% of all the damage you deal.', fx: { lifesteal: 0.10 } },
+    { id: 'wa_fort',  tier: 5, name: 'Fortress',        icon: '🏰', desc: 'ACTIVE — 6 seconds of +50% damage reduction and +40% damage.', act: { kind: 'buff', cd: 20, dur: 6, armor: 0.50, dmg: 0.40 } },
+    { id: 'wa_spike', tier: 5, name: 'Spiked Plate',    icon: '🔩', desc: 'A further 30% of damage taken is reflected.', fx: { thorns: 0.30 } },
+    { id: 'wa_cap1',  tier: 6, name: 'The Unbroken',    icon: '🗿', desc: 'CAPSTONE — cheat death once per run: rise at half health and blast the horde away.', fx: { revive: 1, reviveBlast: 1 } },
+    { id: 'wa_cap2',  tier: 6, name: 'Retribution',     icon: '⚖️', desc: 'CAPSTONE — every hit you take sends a shockwave through everything around you.', fx: { capRetri: 1 } }
   ]
 };
 const ELG_NODE_BY_ID = {};
@@ -30784,7 +30830,9 @@ function elgHeroStats(card) {
 function elgPassives(r) {
   const p = { dmg: 0, hp: 0, speed: 0, aspd: 0, crit: 0, armor: 0, thorns: 0, regen: 0,
               lifesteal: 0, shots: 0, pierce: 0, range: 0, cdr: 0, skillDmg: 0, healAmp: 0,
-              execute: 0, desperate: 0, revive: 0, pulse: 0, deathBlast: 0 };
+              execute: 0, desperate: 0, revive: 0, reviveBlast: 0, pulse: 0, deathBlast: 0,
+              killHaste: 0, charged: 0, capCyclone: 0, capNova: 0, capEcho: 0,
+              capBloom: 0, capFont: 0, capRetri: 0 };
   Object.keys(r.tree || {}).forEach(id => {
     const n = ELG_NODE_BY_ID[id];
     if (!n || !n.fx) return;
@@ -30792,10 +30840,14 @@ function elgPassives(r) {
   });
   return p;
 }
+// A tier opens once you own enough of the tier below it, so the tree is a
+// route through the class rather than a shopping list.
+const ELG_TIER_GATE = { 2: 1, 3: 2, 4: 2, 5: 2, 6: 2 };
+const ELG_TIERS = [1, 2, 3, 4, 5, 6];
 function elgTierUnlocked(r, tier) {
   if (tier <= 1) return true;
   const owned = Object.keys(r.tree || {}).filter(id => (ELG_NODE_BY_ID[id] || {}).tier === tier - 1).length;
-  return owned >= (tier === 2 ? 1 : 2);
+  return owned >= (ELG_TIER_GATE[tier] || 2);
 }
 
 // ---- Opening: pick the monster you will BE -------------------------------
@@ -30879,6 +30931,9 @@ function elgStart(cardId) {
     t: 0, last: 0, raf: 0, over: false, paused: false, qPause: false,
     qT: 0, answered: 0, correct: 0, streak: 0, bestStreak: 0, qPoints: 0, levelUps: 0,
     frostT: 0, pulseT: 0, legendT: 0, revived: false, quiz: null,
+    buffT: 0, buffDmg: 0, buffAspd: 0, buffArmor: 0,
+    orbits: [], pets: [], auras: [], bolts: [],
+    hasteN: 0, hasteT: 0, stillT: 0, atkN: 0, charged: false,
     pool: null, poolI: 0
   };
   const pool = _tcgQuizPool();
@@ -31057,13 +31112,71 @@ function elgUpdate(dt) {
     if (r.legendT >= 10) { r.legendT = 0; elgHeal(r.maxHp * 0.12); elgAreaHit(r.x, r.y, 9999, r.base.dmg * 1.1, 'dawn'); elgBanner('🌅 Dawn breaks!', 1200); }
   }
 
+  // Standing still charges the Arcanist's next shot.
+  const moved = Math.hypot(r.x - (r.lastX || r.x), r.y - (r.lastY || r.y));
+  r.lastX = r.x; r.lastY = r.y;
+  if (p.charged) {
+    if (moved < 0.6) { r.stillT += dt; if (r.stillT >= 1.2) { r.charged = true; r.stillT = 1.2; } }
+    else { r.stillT = 0; }
+  }
+  // Kill-fed haste decays if you stop killing.
+  if (r.hasteT > 0) { r.hasteT -= dt; if (r.hasteT <= 0) r.hasteN = 0; }
+  // Timed buffs (Bloodrush / Fortress).
+  if (r.buffT > 0) { r.buffT -= dt; if (r.buffT <= 0) { r.buffDmg = 0; r.buffAspd = 0; r.buffArmor = 0; } }
+
+  // Orbiting blades / stones
+  r.orbits = r.orbits.filter(o => {
+    o.t -= dt; o.a += dt * 2.6; o.tick -= dt;
+    if (o.tick <= 0) {
+      o.tick = 0.28;
+      for (let i = 0; i < o.count; i++) {
+        const a = o.a + (Math.PI * 2 * i) / o.count;
+        elgAreaHit(r.x + Math.cos(a) * o.radius, r.y + Math.sin(a) * o.radius, 26, o.dmg, 'orbit');
+      }
+    }
+    if (o.t <= 0) { (o.nodes || []).forEach(n => n.remove()); o.nodes = null; return false; }
+    return true;
+  });
+  // Damage auras centred on you
+  r.auras = r.auras.filter(a => {
+    a.t -= dt; a.tick -= dt;
+    if (a.tick <= 0) { a.tick = 0.4; elgAreaHit(r.x, r.y, a.radius, a.dmg, 'aura'); }
+    if (a.t <= 0) { elgDropNode(a); return false; }
+    return true;
+  });
+  // Summoned companions
+  r.pets = r.pets.filter(pet => {
+    pet.t -= dt;
+    const ax = r.x + Math.cos(r.t * 1.1 + pet.seed) * 62 - pet.x;
+    const ay = r.y + Math.sin(r.t * 1.1 + pet.seed) * 62 - pet.y;
+    const l = Math.hypot(ax, ay) || 1;
+    if (l > 6) { pet.x += ax / l * 190 * dt; pet.y += ay / l * 190 * dt; }
+    pet.fire -= dt;
+    if (pet.fire <= 0) {
+      pet.fire = 1.1;
+      const t = elgNearest(pet.x, pet.y, 320);
+      if (t) {
+        const ang = Math.atan2(t.y - pet.y, t.x - pet.x);
+        r.shots.push({ id: r.nextId++, x: pet.x, y: pet.y, vx: Math.cos(ang) * ELG_SHOT_SPEED, vy: Math.sin(ang) * ELG_SHOT_SPEED,
+                       dmg: pet.dmg, pierce: 0, hit: {}, t: 0, node: null });
+      }
+      if (pet.heal) elgHeal(r.maxHp * pet.heal, true);
+    }
+    if (pet.t <= 0) { elgDropNode(pet); return false; }
+    return true;
+  });
+  // Chain-lightning flashes fade on their own
+  r.bolts = r.bolts.filter(b => { b.t -= dt; if (b.t <= 0) { elgDropNode(b); return false; } return true; });
+
   // Auto attack
   r.atkT = (r.atkT || 0) + dt;
-  const rate = 1 / Math.max(0.15, r.base.aspd * (1 + p.aspd));
+  const rate = 1 / Math.max(0.15, r.base.aspd * (1 + p.aspd + (r.buffAspd || 0) + Math.min(0.4, r.hasteN * (p.killHaste || 0))));
   if (r.atkT >= rate) {
     const target = elgNearest(r.x, r.y, r.base.range * (1 + p.range));
     if (target) {
       r.atkT = 0;
+      r.atkN = (r.atkN | 0) + 1;
+      if (p.capCyclone && r.atkN % 5 === 0) elgAreaHit(r.x, r.y, 150, r.base.dmg * 2.4 * (1 + p.dmg), 'nova');
       const shots = 1 + (p.shots | 0);
       for (let i = 0; i < shots; i++) {
         const ang = Math.atan2(target.y - r.y, target.x - r.x) + (i ? (Math.random() - 0.5) * 0.35 : 0);
@@ -31130,8 +31243,10 @@ function elgUpdate(dt) {
 }
 function elgHitDamage(p) {
   const r = elgRun;
-  let d = r.base.dmg * (1 + p.dmg);
+  let d = r.base.dmg * (1 + p.dmg + (r.buffDmg || 0));
   if (p.desperate && r.hp < r.maxHp / 2) d *= 1 + p.desperate;
+  if (p.capBloom && r.hp > r.maxHp * 0.8) d *= 1 + p.capBloom;   // Everbloom
+  if (r.charged && p.charged) { d *= 3; r.charged = false; }      // Stillness
   if (Math.random() < (0.05 + p.crit)) d *= 2;
   return d;
 }
@@ -31154,6 +31269,8 @@ function elgDamage(e, dmg) {
     r.kills++;
     r.waveLeft = Math.max(0, r.waveLeft - 1);
     if (p.deathBlast) elgAreaHit(e.x, e.y, 110, r.base.dmg * 1.2, 'blast', e.id);
+    if (p.capFont) elgHeal(r.maxHp * p.capFont, true);          // Font of Life
+    if (p.killHaste) { r.hasteN = Math.min(5, (r.hasteN | 0) + 1); r.hasteT = 4; }  // Shadowstep
     elgDropNode(e);
   }
 }
@@ -31176,7 +31293,7 @@ function elgHeal(amount, quiet) {
 function elgHurt(dmg, from) {
   const r = elgRun; if (!r || r.over) return;
   const p = elgPassives(r);
-  let d = dmg * (1 - Math.min(0.75, r.base.armor + p.armor));
+  let d = dmg * (1 - Math.min(0.80, r.base.armor + p.armor + (r.buffArmor || 0)));
   if (r.shield > 0) {
     const absorbed = Math.min(r.shield, d);
     r.shield -= absorbed; d -= absorbed;
@@ -31186,10 +31303,12 @@ function elgHurt(dmg, from) {
   r.hp -= d;
   if (d > 0) elgPop(r.x, r.y, '-' + d, 'hurt');
   if (p.thorns && from) elgDamage(from, dmg * p.thorns);
+  if (p.capRetri && d > 0) elgAreaHit(r.x, r.y, 165, r.base.dmg * 1.1 * (1 + p.dmg), 'nova');  // Retribution
   if (r.hp <= 0) {
     if (p.revive && !r.revived) {
       r.revived = true; r.hp = r.maxHp / 2;
-      elgAreaHit(r.x, r.y, 220, r.base.dmg * 2.5, 'dawn');
+      elgAreaHit(r.x, r.y, p.reviveBlast ? 9999 : 220, r.base.dmg * (p.reviveBlast ? 4 : 2.5), 'dawn');
+      r.enemies.forEach(e => { if (p.reviveBlast) e.stun = 2; });
       elgBanner('🌅 Second Dawn — you rise again!', 2200);
       return;
     }
@@ -31233,8 +31352,60 @@ function elgCast(id) {
   } else if (a.kind === 'zone') {
     r.zones.push({ id: r.nextId++, x: r.x, y: r.y, radius: a.radius, dmg: power * a.dmg,
                    heal: a.heal || 0, t: a.dur, tick: 0, node: null });
+  } else if (a.kind === 'volley') {
+    // A fan of shots at whatever you are facing.
+    const t = elgNearest(r.x, r.y, 9999);
+    const base = t ? Math.atan2(t.y - r.y, t.x - r.x) : 0;
+    for (let i = 0; i < a.count; i++) {
+      const ang = base + ((i - (a.count - 1) / 2) / Math.max(1, a.count - 1)) * a.spread;
+      r.shots.push({ id: r.nextId++, x: r.x, y: r.y, vx: Math.cos(ang) * ELG_SHOT_SPEED, vy: Math.sin(ang) * ELG_SHOT_SPEED,
+                     dmg: power * a.dmg, pierce: 1 + (p.pierce | 0), hit: {}, t: 0, node: null });
+    }
+  } else if (a.kind === 'dash') {
+    // Blink through the horde, cutting everything on the way.
+    const t = elgNearest(r.x, r.y, 9999);
+    const ang = t ? Math.atan2(t.y - r.y, t.x - r.x) : 0;
+    const steps = 8;
+    for (let i = 1; i <= steps; i++) {
+      const px = r.x + Math.cos(ang) * (a.dist * i / steps), py = r.y + Math.sin(ang) * (a.dist * i / steps);
+      elgAreaHit(px, py, 42, power * a.dmg / steps * 2, 'beam');
+      if (a.stun) r.enemies.forEach(e => { if (Math.hypot(e.x - px, e.y - py) <= 46 + e.r) e.stun = a.stun; });
+    }
+    r.x = Math.max(ELG_HERO_R, Math.min(r.fw - ELG_HERO_R, r.x + Math.cos(ang) * a.dist));
+    r.y = Math.max(ELG_HERO_R, Math.min(r.fh - ELG_HERO_R, r.y + Math.sin(ang) * a.dist));
+  } else if (a.kind === 'buff') {
+    r.buffT = a.dur; r.buffDmg = a.dmg || 0; r.buffAspd = a.aspd || 0; r.buffArmor = a.armor || 0;
+    elgBanner(n.icon + ' ' + n.name + '!', 1400);
+  } else if (a.kind === 'orbit') {
+    r.orbits.push({ id: r.nextId++, a: 0, count: a.count, radius: 74, dmg: power * a.dmg, t: a.dur, tick: 0, nodes: null });
+  } else if (a.kind === 'aura') {
+    r.auras.push({ id: r.nextId++, radius: a.radius, dmg: power * a.dmg, t: a.dur, tick: 0, node: null });
+  } else if (a.kind === 'summon') {
+    r.pets.push({ id: r.nextId++, x: r.x, y: r.y, dmg: power * a.dmg, heal: a.heal || 0,
+                  t: a.dur, fire: 0.4, seed: Math.random() * 6.28, node: null });
+  } else if (a.kind === 'chain') {
+    let from = { x: r.x, y: r.y };
+    const struck = {};
+    for (let i = 0; i < a.jumps; i++) {
+      let best = null, bd = a.range;
+      r.enemies.forEach(e => { if (struck[e.id] || e.hp <= 0) return; const d = Math.hypot(e.x - from.x, e.y - from.y); if (d < bd) { bd = d; best = e; } });
+      if (!best) break;
+      struck[best.id] = 1;
+      elgBolt(from.x, from.y, best.x, best.y);
+      elgDamage(best, power * a.dmg);
+      from = { x: best.x, y: best.y };
+    }
   }
+  // Archmage: every cast throws a free nova as well.
+  if (p.capNova && a.kind !== 'nova') elgAreaHit(r.x, r.y, 175, power * 1.4, 'nova');
+  // Time Echo: one cast in four costs nothing.
+  if (p.capEcho && Math.random() < 0.25) { r.cds[id] = 0; elgBanner('⏳ Time Echo — free cast!', 1100); }
   elgRenderSkills();
+}
+// A single lightning segment between two points, drawn for a fifth of a second.
+function elgBolt(x1, y1, x2, y2) {
+  const r = elgRun; if (!r) return;
+  r.bolts.push({ id: r.nextId++, x1, y1, x2, y2, t: 0.22, node: null });
 }
 function elgRenderSkills() {
   const host = document.getElementById('elgSkills');
@@ -31285,10 +31456,10 @@ function elgRenderTree() {
   if (!r || !host) return;
   const role = ELG_ROLES[r.role];
   const nodes = ELG_TREES[r.role] || [];
-  const tiers = [1, 2, 3, 4].map(t => {
+  const tiers = ELG_TIERS.map(t => {
     const open = elgTierUnlocked(r, t);
     return '<div class="elg-tier' + (open ? '' : ' locked') + '">'
-      + '<div class="elg-tier-lbl">Tier ' + t + (open ? '' : ' 🔒 needs ' + (t === 2 ? 1 : 2) + ' from tier ' + (t - 1)) + '</div>'
+      + '<div class="elg-tier-lbl">' + (t === 6 ? 'Capstone' : 'Tier ' + t) + (open ? '' : ' 🔒 needs ' + (ELG_TIER_GATE[t] || 2) + ' from tier ' + (t - 1)) + '</div>'
       + '<div class="elg-tier-row">' + nodes.filter(n => n.tier === t).map(n => {
           const owned = !!r.tree[n.id];
           const can = !owned && open && r.sp > 0;
@@ -31308,7 +31479,7 @@ function elgRenderTree() {
     +   '<span class="elg-tree-sp">✦ ' + r.sp + ' skill point' + (r.sp === 1 ? '' : 's') + '</span>'
     +   '<button type="button" class="elg-x" onclick="elgCloseTree()">✕</button>'
     + '</div>'
-    + '<p class="elg-tree-lead">Every ' + role.name + ' shares this tree, whichever monster you brought. Answer a science question or clear a wave to earn another point.</p>'
+    + '<p class="elg-tree-lead">' + nodes.length + ' skills over ' + ELG_TIERS.length + ' tiers — every ' + role.name + ' shares this tree, whichever monster you brought. Answer a science question or clear a wave to earn another point.</p>'
     + (leg ? '<div class="elg-legend-box">' + leg.icon + ' <b>' + escapeHtml(leg.name) + '</b> — ' + escapeHtml(leg.desc) + '<span>7★ passive · always on</span></div>' : '')
     + tiers
     + '<div class="elg-tree-foot"><button type="button" class="btn btn-primary" onclick="elgCloseTree()">▶ Back to the fight</button></div>'
@@ -31419,22 +31590,73 @@ function elgRender() {
     e.node.classList.toggle('cursed', e.cursed > 0);
     e.node.classList.toggle('stunned', e.stun > 0);
   });
-  // Shots — the projectile animation is the element FX from the Card Art page.
+  // Shots — a CSS orb in the hero's element colours. Drawn, not blitted: the
+  // generated FX frames come with a chequerboard behind them, and the arena
+  // wants a projectile with no background at all.
+  const fx = TCG_ELEM_FX[r.card.element] || TCG_ELEM_FX.flame;
   r.shots.forEach(s => {
     if (!s.node) {
       const d = document.createElement('div');
       d.className = 'elg-shot';
-      const frames = tcgFxSet(r.card.element, 'fly') || tcgFxSet(r.card.element, '');
-      d.innerHTML = frames ? '<img alt="">' : '<i class="elg-orb" style="background:' + ((TCG_ELEM_FX[r.card.element] || {}).glow || '#fb923c') + ';"></i>';
-      s.frames = frames;
+      d.style.setProperty('--trail', fx.glow);
+      d.innerHTML = '<i class="elg-orb" style="background:radial-gradient(circle at 38% 36%, #fff 0%, ' + fx.a + ' 34%, ' + fx.b + ' 78%, transparent 100%);box-shadow:0 0 14px ' + fx.glow + ';"></i>';
+      d.style.setProperty('--a', Math.atan2(s.vy, s.vx).toFixed(3) + 'rad');
       host.appendChild(d);
       s.node = d;
     }
     s.node.style.transform = 'translate(' + Math.round(s.x) + 'px,' + Math.round(s.y) + 'px) translate(-50%,-50%)';
-    if (s.frames) {
-      const src = s.frames[Math.floor((s.t / 0.1) % s.frames.length)];
-      const img = s.node.querySelector('img');
-      if (img && s.src !== src) { s.src = src; img.src = src; }
+  });
+  // Orbiting blades / stones
+  r.orbits.forEach(o => {
+    if (!o.nodes) {
+      o.nodes = [];
+      for (let i = 0; i < o.count; i++) {
+        const d = document.createElement('div');
+        d.className = 'elg-orbit';
+        d.style.background = 'radial-gradient(circle, #fff 0%, ' + ((TCG_ELEM_FX[r.card.element] || {}).a || '#ffd08a') + ' 45%, ' + ((TCG_ELEM_FX[r.card.element] || {}).b || '#c2270a') + ' 100%)';
+        host.appendChild(d);
+        o.nodes.push(d);
+      }
+    }
+    o.nodes.forEach((d, i) => {
+      const a = o.a + (Math.PI * 2 * i) / o.count;
+      d.style.transform = 'translate(' + Math.round(r.x + Math.cos(a) * o.radius) + 'px,' + Math.round(r.y + Math.sin(a) * o.radius) + 'px) translate(-50%,-50%)';
+    });
+  });
+  // Companions
+  r.pets.forEach(pet => {
+    if (!pet.node) {
+      const d = document.createElement('div');
+      d.className = 'elg-pet';
+      d.style.background = 'radial-gradient(circle at 40% 35%, #fff 0%, ' + ((TCG_ELEM_FX[r.card.element] || {}).a || '#ffd08a') + ' 40%, ' + ((TCG_ELEM_FX[r.card.element] || {}).b || '#c2270a') + ' 100%)';
+      host.appendChild(d);
+      pet.node = d;
+    }
+    pet.node.style.transform = 'translate(' + Math.round(pet.x) + 'px,' + Math.round(pet.y) + 'px) translate(-50%,-50%)';
+  });
+  // The aura that follows you
+  r.auras.forEach(a => {
+    if (!a.node) {
+      const d = document.createElement('div');
+      d.className = 'elg-aura';
+      d.style.width = d.style.height = (a.radius * 2) + 'px';
+      d.style.background = 'radial-gradient(circle, ' + ((TCG_ELEM_FX[r.card.element] || {}).glow || 'rgba(255,150,60,.5)') + ' 0%, transparent 68%)';
+      host.appendChild(d);
+      a.node = d;
+    }
+    a.node.style.transform = 'translate(' + Math.round(r.x) + 'px,' + Math.round(r.y) + 'px) translate(-50%,-50%)';
+  });
+  // Chain-lightning segments
+  r.bolts.forEach(b => {
+    if (!b.node) {
+      const d = document.createElement('div');
+      d.className = 'elg-bolt';
+      const len = Math.hypot(b.x2 - b.x1, b.y2 - b.y1);
+      d.style.width = Math.round(len) + 'px';
+      d.style.transform = 'translate(' + Math.round(b.x1) + 'px,' + Math.round(b.y1) + 'px) rotate(' + Math.atan2(b.y2 - b.y1, b.x2 - b.x1).toFixed(3) + 'rad)';
+      d.style.background = 'linear-gradient(90deg, transparent, ' + ((TCG_ELEM_FX[r.card.element] || {}).a || '#fff') + ', transparent)';
+      host.appendChild(d);
+      b.node = d;
     }
   });
   // Zones
