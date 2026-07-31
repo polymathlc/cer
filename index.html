@@ -5465,8 +5465,12 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .elg-pick-meta { font-size: 0.72rem; color: rgba(255,255,255,0.6); }
 .elg-pick-leg { font-size: 0.68rem; color: #ffd98a; }
 .elg-empty { text-align: center; color: rgba(255,255,255,0.6); padding: 30px; }
-.elg-tree, .elg-quiz, .elg-result { position: fixed; inset: 0; z-index: 1460; background: rgba(8,5,14,0.86); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
-.elg-tree-card, .elg-quiz-card, .elg-result-card { width: 100%; max-width: 780px; background: #17101f; border: 1px solid rgba(255,255,255,0.14); border-radius: 18px; padding: 26px 28px; color: #f3e9ff; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+/* NOT align-items:center — centring a child taller than the viewport pushes
+   its top above the scroll origin, where no scrolling can reach it. The
+   card's own margin:auto centres it when it fits and collapses to 0 when it
+   overflows, so a tall skill tree scrolls from its very top. */
+.elg-tree, .elg-quiz, .elg-result { position: fixed; inset: 0; z-index: 1460; background: rgba(8,5,14,0.86); display: flex; align-items: flex-start; justify-content: center; padding: 16px; overflow-y: auto; }
+.elg-tree-card, .elg-quiz-card, .elg-result-card { margin: auto; width: 100%; max-width: 780px; background: #17101f; border: 1px solid rgba(255,255,255,0.14); border-radius: 18px; padding: 26px 28px; color: #f3e9ff; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
 .elg-quiz-card, .elg-result-card { max-width: 620px; text-align: center; }
 .elg-tree-head { position: relative; display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
 .elg-tree-head h3 { font-size: 1.1rem; font-weight: 800; }
