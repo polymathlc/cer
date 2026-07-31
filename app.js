@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.214.0';
+const APP_VERSION = 'v1.215.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -22238,7 +22238,7 @@ function isPastPaperQuestion(q) {
 function rpgEnsureGameScores() {
   if (!rpgState) return null;
   if (!rpgState.gameScores) rpgState.gameScores = {};
-  ["defenders", "raiders", "spire"].forEach(k => {
+  ["defenders", "raiders", "spire", "legend"].forEach(k => {
     if (!rpgState.gameScores[k]) rpgState.gameScores[k] = { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null };
   });
   rpgRolloverGameScores(rpgMonthKey());
@@ -22247,7 +22247,7 @@ function rpgEnsureGameScores() {
 // Roll each mini-game's month-best into "last month" when the calendar month turns.
 function rpgRolloverGameScores(key) {
   if (!rpgState || !rpgState.gameScores) return;
-  ["defenders", "raiders", "spire"].forEach(k => {
+  ["defenders", "raiders", "spire", "legend"].forEach(k => {
     const g = rpgState.gameScores[k]; if (!g) return;
     if (g.monthKey && g.monthKey !== key) {
       g.lastBest = g.monthBest || 0; g.lastLabel = g.monthLabel || ""; g.lastKey = g.monthKey;
@@ -23193,6 +23193,7 @@ function rpgPublishLeaderboard() {
       td: rpgGameBoardData("defenders"),
       raid: rpgGameBoardData("raiders"),
       spire: rpgGameBoardData("spire"),
+      legend: rpgGameBoardData("legend"),   // Ember Legends — best wave reached
       // Realm of Embers TCG: a complete team of 5 is published so other students
       // can be matched against it in the Battle Arena (null until then).
       tcg: (rpgState.tcg && Array.isArray(rpgState.tcg.team) && rpgState.tcg.team.length === 5) ? {
@@ -23287,7 +23288,10 @@ async function rpgFetchLeaderboard(force) {
 // The "td" / "raid" tabs rank by this month's best mini-game score; "month" /
 // "lastmonth" rank by UNIQUE QUESTIONS DONE; "alltime" ranks by XP; "fps"
 // (Science Strike) ranks by all-time correct answers from fps.html's `fps` field.
-function rpgIsGameTab() { return rpgBoardTab === "td" || rpgBoardTab === "raid" || rpgBoardTab === "spire"; }
+function rpgIsGameTab() { return rpgBoardTab === "td" || rpgBoardTab === "raid" || rpgBoardTab === "spire" || rpgBoardTab === "legend"; }
+// How many winners a game board pays. Ember Legends pays the top 5; the older
+// arcade boards pay the top 3.
+function rpgGameTopN(tab) { return tab === "legend" ? 5 : 3; }
 // Months a board runs WITHOUT a prize. The board still ranks exactly as usual;
 // only the badge, the row highlight and the month-end claim prompt are
 // suppressed for the months listed here. Keyed by board tab
@@ -23340,7 +23344,7 @@ function rpgPrizeBadge(rank) {
   if (rpgBoardTab === "tcg") return rank <= 6 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rpgIsGameTab()) {
     if (rpgPrizeOffFor(rpgBoardTab, rpgMonthKey())) return "";  // month runs without a prize
-    return rank <= 3 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
+    return rank <= rpgGameTopN(rpgBoardTab) ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   }
   if (rpgBoardTab !== "alltime") return rank <= 5 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rank === 1) return `<span class="rpg-board-prize">🏆 $200 voucher</span>`;
@@ -23354,7 +23358,7 @@ function rpgRowClass(rank) {
   if (rpgBoardTab === "tcg") return rank <= 3 ? `prize-${rank}` : rank <= 6 ? "prize-month" : "";
   if (rpgIsGameTab()) {
     if (rpgPrizeOffFor(rpgBoardTab, rpgMonthKey())) return "";
-    return rank <= 3 ? `prize-${rank}` : "";
+    return rank <= 3 ? `prize-${rank}` : rank <= rpgGameTopN(rpgBoardTab) ? "prize-month" : "";
   }
   if (rpgBoardTab !== "alltime") return rank <= 5 ? "prize-month" : "";
   return rank <= 3 ? `prize-${rank}` : "";
@@ -23364,8 +23368,11 @@ function rpgRowClass(rank) {
 function rpgBoardNote() {
   if (rpgBoardTab === "tcg")
     return `<div class="rpg-board-note">🔥 <b>Realm of Embers:</b> the <b>top 6 trainers</b> by <b>total team power</b> each win a <b>$10 Popular voucher</b>. Level your team of 5, merge duplicates and pull stronger monsters to climb.</div>`;
+  if (rpgBoardTab === "legend" && !rpgPrizeOffFor("legend", rpgMonthKey()))
+    return `<div class="rpg-board-note">⚔️ <b>Ember Legends:</b> the <b>top 5</b> by best wave reached this month each win a <b>$10 Popular voucher</b>.</div>`;
   if (rpgIsGameTab() && rpgPrizeOffFor(rpgBoardTab, rpgMonthKey())) {
-    const game = rpgBoardTab === "td" ? "Science Defenders" : rpgBoardTab === "spire" ? "Science Spire" : "Science Raiders";
+    const game = rpgBoardTab === "td" ? "Science Defenders" : rpgBoardTab === "spire" ? "Science Spire"
+      : rpgBoardTab === "legend" ? "Ember Legends" : "Science Raiders";
     const month = new Date().toLocaleString("en-SG", { month: "long" });
     return `<div class="rpg-board-note muted">🚫 <b>No prize in ${month}</b> — ${game} is a ranking board this month. Climb it anyway: your score still counts.</div>`;
   }
@@ -23375,6 +23382,14 @@ async function rpgRenderLeaderboard(force = false) {
   const body = $("rpgBoardBody");
   if (!body) return;
   document.querySelectorAll("[data-rpgboard]").forEach(b => b.classList.toggle("active", b.dataset.rpgboard === rpgBoardTab));
+  // Ember Legends is beta-gated, so its board and its prize line stay hidden
+  // until the admin releases it — no advertising a prize nobody can play for.
+  const legendOn = elgAccessAllowed();
+  const legendTab = document.querySelector('[data-rpgboard="legend"]');
+  if (legendTab) legendTab.style.display = legendOn ? "" : "none";
+  const legendLine = document.getElementById("prizeLineLegends");
+  if (legendLine) legendLine.style.display = legendOn ? "" : "none";
+  if (!legendOn && rpgBoardTab === "legend") rpgBoardTab = "month";
   if (!rpgBoardRows) body.innerHTML = `<div class="empty-note">Loading leaderboard…</div>`;
   rpgRaidHtml().then(h => { const el = $("rpgRaidSlot"); if (el) el.innerHTML = h; });
   const fetched = await rpgFetchLeaderboard(force);
@@ -23396,7 +23411,7 @@ async function rpgRenderLeaderboard(force = false) {
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0, rebirths: rpgState.rebirths || 0,
       house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null,
       equipment: rpgState.equipment,
-      td: rpgGameBoardData("defenders"), raid: rpgGameBoardData("raiders"), spire: rpgGameBoardData("spire"),
+      td: rpgGameBoardData("defenders"), raid: rpgGameBoardData("raiders"), spire: rpgGameBoardData("spire"), legend: rpgGameBoardData("legend"),
       updatedAt: new Date().toISOString()
     };
     const i = rows.findIndex(r => r.uid === currentUser.uid);
@@ -23414,6 +23429,7 @@ async function rpgRenderLeaderboard(force = false) {
       : rpgBoardTab === "td" ? "No Science Defenders runs this month yet — play to claim the top spot!"
       : rpgBoardTab === "raid" ? "No Science Raiders runs this month yet — dive in to top the board!"
       : rpgBoardTab === "spire" ? "No Science Spire climbs this month yet — build a deck and claim the top!"
+      : rpgBoardTab === "legend" ? "No Ember Legends runs this month yet — take a monster into the arena and set the first wave!"
       : rpgBoardTab === "fps" ? "No Science Strike answers yet — jump into a run and answer questions to claim the board!"
       : rpgBoardTab === "tcg" ? "No trainers on the board yet — build a team of 5 in Realm of Embers to put your team power on the board!"
       : "No heroes on the board yet — solve questions to earn XP!";
@@ -23459,6 +23475,17 @@ async function rpgRenderLeaderboard(force = false) {
 // own prizeClaims doc (uid_<key>) so a student can win more than one.
 let _prizePromptShown = false;
 let _prizeClaimCtx = null;
+// Which prize a claim doc belongs to, from its ack key — the admin's claims
+// list groups by this, so a new game needs its own name here.
+function _prizeCategoryOf(ctx) {
+  const k = String((ctx && ctx.ackKey) || "");
+  if (k === (ctx && ctx.monthKey)) return "questions";
+  if (k.endsWith("_td")) return "defenders";
+  if (k.endsWith("_raid")) return "raiders";
+  if (k.endsWith("_legend")) return "legends";
+  if (k.endsWith("_spire")) return "spire";
+  return "questions";
+}
 function rpgLastMonthGame(r, key) { // key: "td" | "raid"
   const g = r[key]; if (!g) return 0;
   const prev = rpgPrevMonthKey();
@@ -23487,6 +23514,8 @@ async function rpgCheckPrizeClaim() {
         rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthGame(r, "td"),   detail: rpgLastMonthGameLabel(r, "td") })) },
       { key: prev + "_raid",topN: 3, noun: "in Science Raiders", game: "Science Raiders", tab: "raid",
         rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthGame(r, "raid"), detail: rpgLastMonthGameLabel(r, "raid") })) }
+      ,{ key: prev + "_legend", topN: 5, noun: "in Ember Legends", game: "Ember Legends", tab: "legend",
+        rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthGame(r, "legend"), detail: rpgLastMonthGameLabel(r, "legend") })) }
       // Science Spire has no month-end claim of its own (see RPG_NO_PRIZE_MONTHS).
     ].filter(c => !rpgPrizeOffFor(c.tab, prev));   // months listed as prize-free never prompt
     for (const c of cats) {
@@ -23542,7 +23571,7 @@ function _showPrizeClaim(cat, rank, entry) {
   const el = id => document.getElementById(id);
   const what = cat.key === rpgPrevMonthKey()
     ? `with <b>${entry.v}</b> question${entry.v === 1 ? "" : "s"} done — the <b>top 5</b>!`
-    : `in <b>${escapeHtml(cat.game)}</b>${entry.detail ? ` (<b>${escapeHtml(entry.detail)}</b>)` : ""} — the <b>top 3</b>!`;
+    : `in <b>${escapeHtml(cat.game)}</b>${entry.detail ? ` (<b>${escapeHtml(entry.detail)}</b>)` : ""} — the <b>top ${cat.topN}</b>!`;
   if (el("prizeClaimMsg")) el("prizeClaimMsg").innerHTML =
     `You finished <b>${ord}</b> last month ${what} Enter your details and we'll send your <b>$10 Popular voucher</b>.`;
   if (el("prizePhone")) el("prizePhone").value = "";
@@ -23566,7 +23595,7 @@ async function submitPrizeClaim() {
       name: currentUser.name || "",
       email: currentUser.email || "",
       monthKey: ctx.monthKey,
-      category: ctx.category || (ctx.ackKey === ctx.monthKey ? "questions" : (ctx.ackKey.endsWith("_td") ? "defenders" : "raiders")),
+      category: ctx.category || _prizeCategoryOf(ctx),
       rank: ctx.rank,
       questions: ctx.ackKey === ctx.monthKey ? ctx.value : 0,
       score: ctx.value,
@@ -23597,7 +23626,7 @@ async function claimPhysical() {
       name: currentUser.name || "",
       email: currentUser.email || "",
       monthKey: ctx.monthKey,
-      category: ctx.category || (ctx.ackKey === ctx.monthKey ? "questions" : (ctx.ackKey.endsWith("_td") ? "defenders" : "raiders")),
+      category: ctx.category || _prizeCategoryOf(ctx),
       rank: ctx.rank,
       questions: ctx.ackKey === ctx.monthKey ? ctx.value : 0,
       score: ctx.value,
@@ -25974,17 +26003,45 @@ function _noteAnswerSpeed(ms) { _fastStreak = ms < ANSWER_BOT_MS ? _fastStreak +
 // game-credit pool, so this cannot be farmed all evening.
 const GAME_Q_POINTS = 8;          // correct, first time this question is seen
 const GAME_Q_POINTS_REPEAT = 3;   // correct, but answered before — still worth something
-const GAME_Q_POINTS_WRONG = 2;    // effort, so a struggling student still builds a balance
+const GAME_Q_POINTS_WRONG = 1;    // effort, so a struggling student still builds a balance
+const GAME_Q_POINTS_RUSHED = 1;   // right, but answered too fast to have read the question
+const GAME_Q_WRONG_RUN_STOP = 3;  // wrong this many times in a row and wrong answers stop paying
 let _gameRunPts = 0;              // points earned in the game run on screen
 // Pay for one question answered in a game. `ms` is how long the student took
-// (0 when the mode does not clock it). Anything faster than the shared
-// anti-bot floor pays nothing — the same gate the monthly question count uses.
+// (0 when the mode does not clock it).
+//
+// Two guards keep the points honest without ever locking a struggling student
+// out: an answer that came in faster than the shared anti-bot floor pays the
+// rushed rate (nothing at all if it was also wrong), and a run of
+// GAME_Q_WRONG_RUN_STOP wrong answers in a row stops wrong answers paying
+// until the next correct one. Guessing four options at random therefore dries
+// up within three taps, while genuinely reading and getting it wrong still pays.
 // Returns the points actually awarded.
 function rpgAwardGameQuestion(questionId, correct, ms) {
   if (!rpgState) return 0;
   const qid = String(questionId || '');
   ms = Math.max(0, Math.round(Number(ms) || 0));
-  if (ms > 0 && ms < _fairMinAnswerMs(qid, !!correct)) return 0;
+  const rushed = ms > 0 && ms < _fairMinAnswerMs(qid, !!correct);
+  // The wrong-answer run lives on the hero state so it survives a page change,
+  // and is reset by any correct answer.
+  const run = correct ? 0 : ((rpgState.gameWrongRun | 0) + 1);
+  rpgState.gameWrongRun = run;
+  if (!correct) {
+    const pts = run >= GAME_Q_WRONG_RUN_STOP ? 0 : GAME_Q_POINTS_WRONG;
+    if (pts > 0) { rpgApplyRewards(pts, 0); _gamePtsBump(pts); }
+    rpgSave();
+    try { rpgPublishLeaderboard(); } catch (e) {}
+    try { tcgUpdateGoldChip(); } catch (e) {}
+    return pts;
+  }
+  if (rushed) {
+    rpgApplyRewards(GAME_Q_POINTS_RUSHED, 0);
+    rpgSave();
+    try { rpgPublishLeaderboard(); } catch (e) {}
+    try { tcgUpdateGoldChip(); } catch (e) {}
+    _gamePtsBump(GAME_Q_POINTS_RUSHED);
+    return GAME_Q_POINTS_RUSHED;
+  }
   // Repeats pay the reduced rate, tracked on a DAY-SCOPED map of its own.
   // Deliberately not rpgState.seenQ: that is practice's ledger, and folding
   // game answers into it would quietly cut what the practice page pays.
@@ -25998,7 +26055,7 @@ function rpgAwardGameQuestion(questionId, correct, ms) {
     repeat = !!c.ptsSeen[qid];
     c.ptsSeen[qid] = 1;
   }
-  let pts = correct ? (repeat ? GAME_Q_POINTS_REPEAT : GAME_Q_POINTS) : GAME_Q_POINTS_WRONG;
+  let pts = repeat ? GAME_Q_POINTS_REPEAT : GAME_Q_POINTS;
   const surge = rpgSurgeBonus('gold');
   if (pts > 0 && surge) pts = Math.round(pts * (1 + surge));
   // Points only — no XP. Game MCQs must not inflate the monthly XP the
@@ -29199,7 +29256,7 @@ function tcgModesHtml(s) {
     + '<div class="tcg-mode-go">' + btn + '</div>'
     + '</div>';
   return '<div class="tcg-section-note">New here? The <b>📘 How to Play</b> tab explains every mechanic in the game.</div>'
-    + '<div class="tcg-section-note">Three ways to play with the monsters you have collected. Every mode uses your own cards and <b>your real card stats</b> — so both progression tracks count everywhere: <b>🎓 training levels</b> from answering science questions, and <b>⟡ merge levels</b> from repeat copies merging in by themselves.</div>'
+    + '<div class="tcg-section-note">Four ways to play with the monsters you have collected. Every mode uses your own cards and <b>your real card stats</b> — so both progression tracks count everywhere: <b>🎓 training levels</b> from answering science questions, and <b>⟡ merge levels</b> from repeat copies merging in by themselves.</div>'
     + '<div class="tcg-modes">'
     + mode('🌋', 'Ember Siege', 'NEW · lane defence',
         'Wave after wave of corrupted monsters marches on your Ember Gate — <b>slowly</b>: a monster takes about ' + EMS_WALK_SECONDS + ' seconds to cross the whole field, so there is always time to think. Place your cards on the field to summon them as defenders — and answer science questions to generate the mana that pays for them. Mana trickles in slowly on its own, but answering is worth far more, and <b>every wave you clear opens a ' + EMS_ROUND_SIZE + '-question mana round with the battle paused and no timer</b>. Answering in the middle of a fight is still clocked — the faster you answer there, the more mana you get. Every correct answer also <b>🎓 trains the monsters you have on the field</b>, so the levels you earn here are kept for good and carry into the Arena and the Dungeon.',
@@ -29207,6 +29264,18 @@ function tcgModesHtml(s) {
         owned
           ? '<button class="btn btn-primary" type="button" onclick="emsOpen()">▶ Play</button>'
           : '<button class="btn btn-outline" type="button" onclick="tcgSetTab(\'packs\')">🎁 Get cards first</button>')
+    + (elgAccessAllowed() ? mode('⚔️', 'Ember Legends', (elgReleased() ? 'NEW · arena survival' : 'BETA · arena survival'),
+        'You <b>become</b> one of your monsters and fight the rest of the collection. The horde closes in from every side, you move and your monster attacks by itself, and a science question every ' + ELG_Q_EVERY + ' seconds pays the <b>✦ skill points</b> you spend in your role\'s skill tree — Striker, Arcanist, Mender or Warden. Every fifth wave is led by a legend, and a <b>7★ hero brings a run-changing passive</b> of its own. The <b>top 5 each month win a $10 voucher</b>.'
+        + (_isAdmin() ? '<br><span style="color:var(--text-muted);font-size:0.8rem;">' + (elgReleased() ? 'Released to students.' : 'Beta — only you can see this card.') + '</span>' : ''),
+        '🏅 best: wave <b>' + ((s.legends && s.legends.best) | 0) + '</b> · ⚔️ ' + ((s.legends && s.legends.runs) | 0) + ' run' + (((s.legends && s.legends.runs) | 0) === 1 ? '' : 's') + ' · ☠️ ' + ((s.legends && s.legends.kills) | 0) + ' felled',
+        (owned
+          ? '<button class="btn btn-primary" type="button" onclick="elgOpen()">▶ Play</button>'
+          : '<button class="btn btn-outline" type="button" onclick="tcgSetTab(\'packs\')">🎁 Get cards first</button>')
+        + (_isAdmin()
+          ? (elgReleased()
+              ? '<button class="btn btn-outline" type="button" style="margin-top:8px;" onclick="elgSetReleased(false)">⏸ Back to beta</button>'
+              : '<button class="btn btn-outline" type="button" style="margin-top:8px;" onclick="elgSetReleased(true)">🚀 Release</button>')
+          : '')) : '')
     + mode('⚔️', 'Battle Arena', 'team of 5',
         'Pick your five best monsters, set an attack and healing strategy, and auto-battle another trainer\'s team. Elements, skills and levels decide it.',
         '🛡️ team: <b>' + s.team.length + ' / 5</b> · 🏆 record: <b>' + (s.wins | 0) + 'W – ' + (s.losses | 0) + 'L</b>',
@@ -29317,8 +29386,9 @@ function tcgGuideHtml() {
       _tcgGuideRows([
         ['First time you answer a question correctly', '<b>+' + GAME_Q_POINTS + ' points</b>'],
         ['Correct, but you have answered that question before today', '+' + GAME_Q_POINTS_REPEAT + ' points'],
-        ['Wrong answer', '+' + GAME_Q_POINTS_WRONG + ' points — effort still pays, so a hard topic never leaves you stuck'],
-        ['Answering far too fast to have read the question', 'nothing — the anti-spam check pays 0']
+        ['Wrong answer', '+' + GAME_Q_POINTS_WRONG + ' point — effort still pays, so a hard topic never leaves you stuck'],
+        ['<b>' + GAME_Q_WRONG_RUN_STOP + ' wrong in a row</b>', 'wrong answers stop paying until your next correct one — guessing gets you nowhere'],
+        ['Correct, but answered too fast to have read the question', '+' + GAME_Q_POINTS_RUSHED + ' point only']
       ])
       + '<p class="tcg-guide-note">Your balance is the 🪙 chip at the top of this page, and it is the same wallet the rest of the portal shop uses.</p>')
 
@@ -29379,7 +29449,21 @@ function tcgGuideHtml() {
       _tcgGuideTable(['Mechanic', 'What it does', 'Power range'], skillRows)
       + '<p class="tcg-guide-note">The three 7★ legends carry one-of-a-kind signature skills — ' + escapeHtml(TCG_SKILLS.sunrise.name) + ', ' + escapeHtml(TCG_SKILLS.doom.name) + ' and ' + escapeHtml(TCG_SKILLS.chrono.name) + ' — and all three hit the entire enemy team.</p>')
 
-  + _tcgGuideSection('🎮', 'The three ways to play',
+  + _tcgGuideSection('⚔️', 'Ember Legends — become your monster',
+      'The arena mode. You pick ONE monster from your collection and play <i>as</i> it: its stars, training level and merge level are your stats, and the rest of the 151 are the horde coming for you.',
+      _tcgGuideRows([
+        ['Playing', 'Drag (or use WASD / the arrow keys) to move. Your monster attacks the nearest enemy by itself — your job is where to stand and when to fire a skill.'],
+        ['✦ Skill points', 'A science question arrives every ' + ELG_Q_EVERY + ' seconds and freezes the battle while it is up: a correct answer is <b>+' + ELG_SP_CORRECT + ' point</b>, and clearing a wave is <b>+' + ELG_SP_WAVE + '</b>. Points are spent in the skill tree, which you can open mid-fight.'],
+        ['The four trees', ELG_ROLE_ORDER.map(r => ELG_ROLES[r].icon + ' <b>' + ELG_ROLES[r].name + '</b> — ' + escapeHtml(ELG_ROLES[r].blurb)).join('<br>')
+          + '<br><span class="tcg-guide-dim">Your monster\'s battle skill decides its role, and every monster of that role shares the same tree — so swapping hero never means learning a new game. Each tree runs 4 tiers deep; a tier opens once you own enough of the one below it.</span>'],
+        ['The horde', 'Enemies are drawn from the other cards, and the further you get the rarer they are. <b>Every fifth wave</b> is led by a boss card with several times the health.'],
+        ['7★ passives', 'A 7★ hero fights with a run-changing rule of its own:<br>'
+          + Object.keys(ELG_LEGEND_PASSIVES).map(k => ELG_LEGEND_PASSIVES[k].icon + ' <b>' + escapeHtml(ELG_LEGEND_PASSIVES[k].name) + '</b> — ' + escapeHtml(ELG_LEGEND_PASSIVES[k].desc)).join('<br>')],
+        ['Training', 'Every correct answer trains the monster you are playing as, exactly like the Siege — those levels are kept for good.'],
+        ['The prize', 'Ranked by the <b>best wave you reach in a month</b>. The <b>top 5 each month win a $10 Popular voucher</b>.']
+      ]))
+
+  + _tcgGuideSection('🎮', 'The other three ways to play',
       '',
       _tcgGuideRows([
         ['🌋 <b>Ember Siege</b> — lane defence',
@@ -30479,6 +30563,913 @@ document.addEventListener('keydown', e => {
   if (n >= 1 && n <= 9) { const q = emsRun.quiz.q; if (q && n <= q.opts.length) emsAnswer(n - 1); }
 });
 
+// =====================================================================
+// ⚔️ EMBER LEGENDS (beta) — arena survival fought with your own monsters
+// =====================================================================
+// The third game under Realm of Embers, and the one that plays like Science
+// Legends: you take ONE monster from your collection into an arena, the horde
+// closes in from every side, and you buy skills as you survive.
+//
+// Everything comes from the collection the student already has:
+//   • the hero IS a card — its Lv/⟡M stats decide how hard it hits
+//   • the enemies are the other 150 cards, drawn with their own art
+//   • the projectile animation is the element FX drawn on the Card Art page
+//   • the skill tree belongs to the hero's ROLE, not to the individual card,
+//     so every Striker shares one tree and swapping hero keeps it familiar
+//   • a 7★ hero brings a run-defining passive of its own
+// Beta-gated exactly like the TCG itself: admins play it until the admin
+// presses Release (tcgConfig.legendsReleased).
+const ELG_ROLES = {
+  striker:  { id: 'striker',  name: 'Striker',  icon: '🗡️', tag: 'damage dealer',
+              blurb: 'Fast, deadly, fragile. Kills things before they reach you.' },
+  arcanist: { id: 'arcanist', name: 'Arcanist', icon: '🌀', tag: 'area & control',
+              blurb: 'Crowds are the point. Slows, bursts and hits everything at once.' },
+  mender:   { id: 'mender',   name: 'Mender',   icon: '✚',  tag: 'healer',
+              blurb: 'Outlasts the horde. Heals, regrows and refuses to die.' },
+  warden:   { id: 'warden',   name: 'Warden',   icon: '🛡️', tag: 'guardian',
+              blurb: 'A wall with a weapon. Soaks hits and punishes whoever lands them.' }
+};
+const ELG_ROLE_ORDER = ['striker', 'arcanist', 'mender', 'warden'];
+// A monster's battle skill decides which tree it plays with.
+const ELG_ROLE_BY_KIND = {
+  strike: 'striker', pierce: 'striker', drain: 'striker',
+  blast: 'arcanist', poison: 'arcanist', stun: 'arcanist', chrono: 'arcanist', curse: 'arcanist',
+  heal: 'mender', healall: 'mender', dawn: 'mender',
+  shield: 'warden', rage: 'warden'
+};
+function elgRoleId(card) {
+  const sk = card && TCG_SKILLS[card.skillId];
+  return ELG_ROLE_BY_KIND[sk && sk.kind] || 'striker';
+}
+function elgRole(card) { return ELG_ROLES[elgRoleId(card)]; }
+
+// ---- The four skill trees -------------------------------------------------
+// Named for the elements and the roles, never for a class from another game.
+// `fx` is a permanent passive, `act` is a button on the bar. Tier N unlocks
+// once you own N-1 nodes from the tier below, so a tree is a real choice
+// rather than a shopping list.
+const ELG_TREES = {
+  striker: [
+    { id: 'st_edge',  tier: 1, name: 'Ember Edge',    icon: '🗡️', desc: '+18% attack damage.', fx: { dmg: 0.18 } },
+    { id: 'st_step',  tier: 1, name: 'Quickstep',     icon: '👟', desc: '+18% move speed.', fx: { speed: 0.18 } },
+    { id: 'st_keen',  tier: 1, name: 'Keen Eye',      icon: '🎯', desc: '+12% critical chance (crits hit for double).', fx: { crit: 0.12 } },
+    { id: 'st_lance', tier: 2, name: 'Cinder Lance',  icon: '🔥', desc: 'ACTIVE — spear a searing lance through every enemy in a line.', act: { kind: 'beam', cd: 7, dmg: 2.4 } },
+    { id: 'st_twin',  tier: 2, name: 'Twin Fangs',    icon: '⚔️', desc: 'Every attack fires an extra shot.', fx: { shots: 1 } },
+    { id: 'st_leech', tier: 2, name: 'Emberdrink',    icon: '🩸', desc: 'Heal for 12% of all the damage you deal.', fx: { lifesteal: 0.12 } },
+    { id: 'st_cyc',   tier: 3, name: 'Blade Cyclone', icon: '🌀', desc: 'ACTIVE — spin, striking every enemy around you.', act: { kind: 'nova', cd: 9, dmg: 2.8, radius: 150 } },
+    { id: 'st_fury',  tier: 3, name: 'Rising Fury',   icon: '⚡', desc: '+25% attack speed.', fx: { aspd: 0.25 } },
+    { id: 'st_apex',  tier: 4, name: 'Apex Predator', icon: '👑', desc: '+40% damage to any enemy below half health.', fx: { execute: 0.40 } },
+    { id: 'st_storm', tier: 4, name: 'Emberstorm',    icon: '☄️', desc: 'ACTIVE — call embers down on the whole arena.', act: { kind: 'storm', cd: 22, dmg: 3.6 } }
+  ],
+  arcanist: [
+    { id: 'ar_flow',  tier: 1, name: 'Elemental Flow', icon: '🌊', desc: '+15% attack damage.', fx: { dmg: 0.15 } },
+    { id: 'ar_reach', tier: 1, name: 'Far Sight',      icon: '🔭', desc: '+25% attack range.', fx: { range: 0.25 } },
+    { id: 'ar_pierce',tier: 1, name: 'Piercing Motes', icon: '➰', desc: 'Your shots pass through one extra enemy.', fx: { pierce: 1 } },
+    { id: 'ar_nova',  tier: 2, name: 'Elemental Nova', icon: '💥', desc: 'ACTIVE — a burst of your element throws back everything near you.', act: { kind: 'nova', cd: 8, dmg: 2.2, radius: 190 } },
+    { id: 'ar_echo',  tier: 2, name: 'Resonance',      icon: '🔁', desc: 'All your skills recharge 25% faster.', fx: { cdr: 0.25 } },
+    { id: 'ar_split', tier: 2, name: 'Split Cast',     icon: '✳️', desc: 'Every attack fires an extra shot.', fx: { shots: 1 } },
+    { id: 'ar_frost', tier: 3, name: 'Glacial Field',  icon: '❄️', desc: 'ACTIVE — the whole arena slows to a crawl for 5 seconds.', act: { kind: 'frost', cd: 16, dur: 5 } },
+    { id: 'ar_amp',   tier: 3, name: 'Amplify',        icon: '📈', desc: '+30% skill damage.', fx: { skillDmg: 0.30 } },
+    { id: 'ar_chain', tier: 4, name: 'Chain Reaction', icon: '🔗', desc: 'Every enemy you kill bursts, damaging whatever stands near it.', fx: { deathBlast: 1 } },
+    { id: 'ar_cata',  tier: 4, name: 'Cataclysm',      icon: '🌋', desc: 'ACTIVE — the arena erupts. Enormous damage to everything.', act: { kind: 'storm', cd: 24, dmg: 4.2 } }
+  ],
+  mender: [
+    { id: 'me_vital', tier: 1, name: 'Vitality',       icon: '❤️', desc: '+20% maximum health.', fx: { hp: 0.20 } },
+    { id: 'me_regen', tier: 1, name: 'Verdant Renewal',icon: '🌿', desc: 'Regrow 1.2% of your health every second.', fx: { regen: 0.012 } },
+    { id: 'me_grace', tier: 1, name: 'Grace',          icon: '🕊️', desc: '+15% move speed.', fx: { speed: 0.15 } },
+    { id: 'me_bloom', tier: 2, name: 'Bloomlight',     icon: '🌸', desc: 'ACTIVE — restore 30% of your health at once.', act: { kind: 'heal', cd: 12, pct: 0.30 } },
+    { id: 'me_ward',  tier: 2, name: 'Warding Light',  icon: '🔆', desc: '+15% damage reduction.', fx: { armor: 0.15 } },
+    { id: 'me_leech', tier: 2, name: 'Lifebind',       icon: '🩸', desc: 'Heal for 10% of all the damage you deal.', fx: { lifesteal: 0.10 } },
+    { id: 'me_sanct', tier: 3, name: 'Sanctuary',      icon: '⛲', desc: 'ACTIVE — a ring of light that heals you and burns everything inside it.', act: { kind: 'zone', cd: 15, dmg: 1.2, dur: 6, radius: 165, heal: 0.02 } },
+    { id: 'me_amp',   tier: 3, name: 'Greater Mending',icon: '💗', desc: 'All your healing is 40% stronger.', fx: { healAmp: 0.40 } },
+    { id: 'me_dawn',  tier: 4, name: 'Second Dawn',    icon: '🌅', desc: 'The first time you fall in a run, rise again at half health.', fx: { revive: 1 } },
+    { id: 'me_pulse', tier: 4, name: 'Lifepulse',      icon: '💞', desc: 'Every 8 seconds a pulse heals you and sears nearby enemies.', fx: { pulse: 1 } }
+  ],
+  warden: [
+    { id: 'wa_stone', tier: 1, name: 'Stoneskin',      icon: '🪨', desc: '+25% maximum health.', fx: { hp: 0.25 } },
+    { id: 'wa_plate', tier: 1, name: 'Emberplate',     icon: '🛡️', desc: '+15% damage reduction.', fx: { armor: 0.15 } },
+    { id: 'wa_thorn', tier: 1, name: 'Thornmail',      icon: '🌵', desc: 'Attackers take 25% of the damage they deal back.', fx: { thorns: 0.25 } },
+    { id: 'wa_aegis', tier: 2, name: 'Aegis',          icon: '🔰', desc: 'ACTIVE — a barrier that soaks the next big hits.', act: { kind: 'shield', cd: 13, pct: 0.35, dur: 8 } },
+    { id: 'wa_might', tier: 2, name: 'Bulwark Might',  icon: '💪', desc: '+15% attack damage.', fx: { dmg: 0.15 } },
+    { id: 'wa_hold',  tier: 2, name: 'Steady Hold',    icon: '⚓', desc: 'Regrow 1% of your health every second.', fx: { regen: 0.010 } },
+    { id: 'wa_quake', tier: 3, name: 'Ground Shatter', icon: '💢', desc: 'ACTIVE — shatter the ground: heavy damage and a stun all around you.', act: { kind: 'nova', cd: 10, dmg: 2.4, radius: 175, stun: 1.6 } },
+    { id: 'wa_rage',  tier: 3, name: 'Last Stand',     icon: '😤', desc: 'Below half health you deal 35% more damage.', fx: { desperate: 0.35 } },
+    { id: 'wa_immov', tier: 4, name: 'Immovable',      icon: '🗿', desc: 'A further 20% damage reduction.', fx: { armor: 0.20 } },
+    { id: 'wa_roar',  tier: 4, name: 'Emberquake Roar',icon: '📣', desc: 'ACTIVE — a roar that shakes the whole arena and stuns the horde.', act: { kind: 'storm', cd: 20, dmg: 2.4, stun: 2 } }
+  ]
+};
+const ELG_NODE_BY_ID = {};
+Object.keys(ELG_TREES).forEach(r => ELG_TREES[r].forEach(n => { ELG_NODE_BY_ID[n.id] = Object.assign({ role: r }, n); }));
+
+// ---- 7★ passives: one run-defining rule each, for the three legends -------
+const ELG_LEGEND_PASSIVES = {
+  sunrise: { name: 'Dawnfather’s Vigil', icon: '🌅',
+             desc: 'Every 10 seconds dawn breaks: you are healed for 12% of your health and every enemy in the arena is seared.' },
+  doom:    { name: 'Worldsend Aura', icon: '🕯️',
+             desc: 'Everything that comes near you is cursed — cursed enemies take 30% more damage from everything.' },
+  chrono:  { name: 'Time Dilation', icon: '⌛',
+             desc: 'Time runs slow around you: the entire horde moves and attacks 30% slower, all run long.' }
+};
+function elgLegendPassive(card) {
+  return (card && card.stars >= 7) ? ELG_LEGEND_PASSIVES[card.skillId] : null;
+}
+
+// ---- Tuning ---------------------------------------------------------------
+const ELG_Q_EVERY = 22;          // seconds between science questions
+const ELG_SP_CORRECT = 1;        // skill points for a correct answer
+const ELG_SP_WAVE = 1;           // …and for clearing a wave
+const ELG_HERO_R = 22;           // hero radius in px
+const ELG_SHOT_SPEED = 430;      // px/second
+const ELG_CONTACT = 34;          // how close an enemy gets before it swings
+let elgRun = null;
+
+function elgReleased() { return !!(_tcgConfig && _tcgConfig.legendsReleased); }
+function elgAccessAllowed() { return _isAdmin() || elgReleased(); }
+async function elgSetReleased(v) {
+  if (!_isAdmin()) return;
+  const on = (v === true || v === 'true');
+  if (on && !confirm('Release Ember Legends to all students?\n\nIt appears on the Game Modes tab of Realm of Embers straight away, and its leaderboard starts paying the monthly $10 vouchers.')) return;
+  if (!on && !confirm('Take Ember Legends back into beta? Students will no longer see it.')) return;
+  try {
+    const patch = { legendsReleased: on, updatedAt: new Date().toISOString() };
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'tcgConfig'), patch, { merge: true });
+    _tcgConfig = Object.assign({}, _tcgConfig, patch);
+    tcgRenderBody();
+    showToast(on ? '🚀 Ember Legends released to students!' : 'Ember Legends is back in beta (admins only)', 'success');
+  } catch (e) { console.error('legends release', e); showToast('Could not update — check your connection', 'error'); }
+}
+
+// ---- Hero stats: the card's REAL stats, both progression tracks included --
+function elgHeroStats(card) {
+  const st = tcgOwnStats(card);
+  const role = elgRoleId(card);
+  const roleMod = { striker: { hp: 0.85, dmg: 1.15 }, arcanist: { hp: 0.80, dmg: 1.10 },
+                    mender: { hp: 1.05, dmg: 0.85 }, warden: { hp: 1.30, dmg: 0.85 } }[role];
+  return {
+    maxHp: Math.max(120, Math.round(st.hp * 1.1 * roleMod.hp)),
+    dmg: Math.max(6, Math.round(st.atk * 0.42 * roleMod.dmg)),
+    armor: Math.min(0.45, st.def / (st.def + 260)),   // flat damage reduction from DEF
+    speed: 120 + st.spd * 0.9,                        // px/second
+    aspd: 0.85 + st.spd / 260,                        // attacks a second
+    range: role === 'striker' ? 250 : role === 'arcanist' ? 330 : 280
+  };
+}
+
+// Sum every unlocked passive into one bag the engine can read cheaply.
+function elgPassives(r) {
+  const p = { dmg: 0, hp: 0, speed: 0, aspd: 0, crit: 0, armor: 0, thorns: 0, regen: 0,
+              lifesteal: 0, shots: 0, pierce: 0, range: 0, cdr: 0, skillDmg: 0, healAmp: 0,
+              execute: 0, desperate: 0, revive: 0, pulse: 0, deathBlast: 0 };
+  Object.keys(r.tree || {}).forEach(id => {
+    const n = ELG_NODE_BY_ID[id];
+    if (!n || !n.fx) return;
+    Object.keys(n.fx).forEach(k => { p[k] = (p[k] || 0) + n.fx[k]; });
+  });
+  return p;
+}
+function elgTierUnlocked(r, tier) {
+  if (tier <= 1) return true;
+  const owned = Object.keys(r.tree || {}).filter(id => (ELG_NODE_BY_ID[id] || {}).tier === tier - 1).length;
+  return owned >= (tier === 2 ? 1 : 2);
+}
+
+// ---- Opening: pick the monster you will BE -------------------------------
+function elgOpen() {
+  const s = tcgState();
+  if (!s) { showToast('Answer a question anywhere in the app to wake your hero first', 'error'); return; }
+  const owned = Object.keys(s.cards || {});
+  if (!owned.length) { showToast('Open a booster pack first — you need at least one monster', 'error'); return; }
+  if (!elgAccessAllowed()) { showToast('Ember Legends is still in beta', 'error'); return; }
+  const old = document.getElementById('elgOverlay'); if (old) old.remove();
+  const o = document.createElement('div');
+  o.className = 'elg-overlay'; o.id = 'elgOverlay';
+  o.innerHTML = '<div class="elg-pick" id="elgPick"></div>';
+  document.body.appendChild(o);
+  elgRenderPick();
+}
+function elgRenderPick() {
+  const host = document.getElementById('elgPick');
+  const s = tcgState();
+  if (!host || !s) return;
+  const owned = Object.keys(s.cards || {}).map(id => TCG_BY_ID[id]).filter(Boolean)
+    .sort((a, b) => b.stars - a.stars || a.num - b.num);
+  const groups = ELG_ROLE_ORDER.map(rid => {
+    const list = owned.filter(c => elgRoleId(c) === rid);
+    if (!list.length) return '';
+    const role = ELG_ROLES[rid];
+    return '<div class="elg-pick-group">'
+      + '<h4>' + role.icon + ' ' + role.name + ' <span>' + escapeHtml(role.tag) + ' · ' + escapeHtml(role.blurb) + '</span></h4>'
+      + '<div class="elg-pick-row">' + list.map(c => {
+          const url = tcgAvatarUrl(c.id);
+          const leg = elgLegendPassive(c);
+          return '<button type="button" class="elg-pick-card' + (leg ? ' legend' : '') + '" onclick="elgStart(\'' + c.id + '\')" title="'
+            + escapeHtml(c.name + ' · Lv ' + tcgLevel(c.id) + ' · ⟡M' + tcgMergeLevel(c.id) + (leg ? ' · ' + leg.name : '')) + '">'
+            + '<span class="elg-pick-av">' + (url ? '<img src="' + escapeHtml(url) + '" alt="">' : c.em) + '</span>'
+            + '<b>' + escapeHtml(tcgShortName(c)) + '</b>'
+            + '<span class="elg-pick-meta">' + '★'.repeat(c.stars) + ' · Lv ' + tcgLevel(c.id) + '</span>'
+            + (leg ? '<span class="elg-pick-leg">' + leg.icon + ' ' + escapeHtml(leg.name) + '</span>' : '')
+            + '</button>';
+        }).join('') + '</div>'
+      + '</div>';
+  }).join('');
+  host.innerHTML = '<div class="elg-pick-head">'
+    + '<h3>⚔️ Ember Legends</h3>'
+    + '<p>Choose the monster you will fight AS. Its stars, training level and merge level are your stats — and its role decides which skill tree you spend your points in. The rest of the collection is the horde.</p>'
+    + '<button type="button" class="elg-x" onclick="elgClose()" title="Back">✕</button>'
+    + '</div>' + (groups || '<div class="elg-empty">No monsters yet — open a booster pack first.</div>');
+}
+
+// ---- The run --------------------------------------------------------------
+function elgStart(cardId) {
+  const card = TCG_BY_ID[cardId];
+  const o = document.getElementById('elgOverlay');
+  if (!card || !o) return;
+  const st = elgHeroStats(card);
+  o.innerHTML = '<div class="elg-shell">'
+    + '<div class="elg-topbar">'
+    +   '<div class="elg-title">⚔️ Ember Legends</div>'
+    +   '<div class="elg-stat" id="elgWave">Wave 1</div>'
+    +   '<div class="elg-stat" id="elgKills">☠️ 0</div>'
+    +   '<div class="elg-sp" id="elgSp">✦ 0 skill points</div>'
+    +   '<button type="button" class="btn btn-primary elg-treebtn" onclick="elgOpenTree()">🌳 Skill tree</button>'
+    +   '<button type="button" class="elg-icon-btn" onclick="elgTogglePause()" id="elgPauseBtn" title="Pause">⏸</button>'
+    +   '<button type="button" class="elg-icon-btn" onclick="elgClose()" title="Quit">✕</button>'
+    + '</div>'
+    + '<div class="elg-hpwrap"><div class="elg-hpbar"><i id="elgHp"></i></div><span id="elgHpTxt"></span></div>'
+    + '<div class="elg-banner" id="elgBanner"></div>'
+    + '<div class="elg-field" id="elgField"><div class="elg-units" id="elgUnits"></div></div>'
+    + '<div class="elg-skillbar" id="elgSkills"></div>'
+    + '<div class="elg-note">Drag (or use the arrow keys / WASD) to move — you attack the nearest enemy by yourself. A science question arrives every ' + ELG_Q_EVERY + ' seconds: every correct answer is a skill point.</div>'
+    + '</div>';
+  const field = document.getElementById('elgField');
+  const box = field ? field.getBoundingClientRect() : { width: 900, height: 500 };
+  elgRun = {
+    card, role: elgRoleId(card), base: st, legend: elgLegendPassive(card),
+    fw: box.width || 900, fh: box.height || 500,
+    x: (box.width || 900) / 2, y: (box.height || 500) / 2, tx: null, ty: null,
+    hp: st.maxHp, maxHp: st.maxHp, shield: 0, shieldT: 0,
+    enemies: [], shots: [], zones: [], nextId: 1,
+    wave: 0, waveLeft: 0, spawnQ: [], spawnT: 0, breather: 2.2,
+    kills: 0, sp: 1, tree: {}, cds: {}, keys: {},
+    t: 0, last: 0, raf: 0, over: false, paused: false, qPause: false,
+    qT: 0, answered: 0, correct: 0, streak: 0, bestStreak: 0, qPoints: 0, levelUps: 0,
+    frostT: 0, pulseT: 0, legendT: 0, revived: false, quiz: null,
+    pool: null, poolI: 0
+  };
+  const pool = _tcgQuizPool();
+  const served = _tcgServedLoad();
+  elgRun.pool = _tcgShuffle(pool).sort((a, b) => (served[a.id] || 0) - (served[b.id] || 0));
+  elgBindInput();
+  elgRenderSkills();
+  elgBanner('Wave 1 — survive!', 2000);
+  elgRun.last = performance.now();
+  elgRun.raf = requestAnimationFrame(elgFrame);
+}
+function elgClose() {
+  if (elgRun) { elgBank(); if (elgRun.raf) cancelAnimationFrame(elgRun.raf); }
+  elgRun = null;
+  const o = document.getElementById('elgOverlay'); if (o) o.remove();
+  try { tcgRenderBody(); } catch (_) {}
+}
+function elgTogglePause() {
+  const r = elgRun; if (!r || r.over) return;
+  r.paused = !r.paused;
+  const b = document.getElementById('elgPauseBtn');
+  if (b) b.textContent = r.paused ? '▶' : '⏸';
+  elgBanner(r.paused ? '⏸ Paused' : '▶ Go!', 1200);
+}
+function elgBanner(text, ms) {
+  const el = document.getElementById('elgBanner');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), ms || 1800);
+}
+function elgBindInput() {
+  const field = document.getElementById('elgField');
+  if (!field) return;
+  const move = e => {
+    const r = elgRun; if (!r) return;
+    const b = field.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    r.tx = p.clientX - b.left; r.ty = p.clientY - b.top;
+  };
+  field.addEventListener('pointerdown', e => { field.setPointerCapture && field.setPointerCapture(e.pointerId); move(e); });
+  field.addEventListener('pointermove', e => { if (e.buttons || e.pointerType === 'touch') move(e); });
+  field.addEventListener('pointerup', () => { if (elgRun) { elgRun.tx = null; elgRun.ty = null; } });
+  if (!elgBindInput._keys) {
+    elgBindInput._keys = true;
+    document.addEventListener('keydown', e => {
+      const r = elgRun; if (!r) return;
+      if (e.key === 'Escape') { elgCloseQuiz(); return; }
+      const n = parseInt(e.key, 10);
+      if (r.quiz && n >= 1 && n <= 9) { const q = r.quiz.q; if (q && n <= q.opts.length) { elgAnswer(n - 1); return; } }
+      if (e.key) r.keys[String(e.key).toLowerCase()] = true;
+    });
+    document.addEventListener('keyup', e => { if (elgRun && e.key) elgRun.keys[String(e.key).toLowerCase()] = false; });
+  }
+}
+
+// ---- Waves ----------------------------------------------------------------
+// The horde is the rest of the collection: the further you get, the rarer the
+// cards that come for you, and every fifth wave sends a legend as a boss.
+function elgWavePool(wave, boss) {
+  const maxStars = Math.min(7, 1 + Math.floor(wave / 3));
+  const minStars = boss ? Math.max(4, maxStars - 1) : 1;
+  const pool = TCG_CARDS.filter(c => c.stars <= maxStars && c.stars >= minStars && c.id !== elgRun.card.id);
+  return pool.length ? pool : TCG_CARDS;
+}
+function elgStartWave() {
+  const r = elgRun; if (!r) return;
+  r.wave++;
+  const boss = r.wave % 5 === 0;
+  const count = boss ? 2 + Math.floor(r.wave / 5) : 4 + Math.round(r.wave * 1.4);
+  const pool = elgWavePool(r.wave, boss);
+  r.spawnQ = [];
+  for (let i = 0; i < count; i++) r.spawnQ.push({ card: pool[Math.floor(Math.random() * pool.length)], boss });
+  if (boss) {
+    const bp = elgWavePool(r.wave, true);
+    r.spawnQ.push({ card: bp[Math.floor(Math.random() * bp.length)], boss: true, king: true });
+  }
+  r.waveLeft = r.spawnQ.length;
+  r.spawnT = 0;
+  elgBanner(boss ? '👑 Wave ' + r.wave + ' — a legend leads them!' : 'Wave ' + r.wave, 1800);
+  const el = document.getElementById('elgWave'); if (el) el.textContent = 'Wave ' + r.wave;
+}
+function elgSpawn(spec) {
+  const r = elgRun; if (!r) return;
+  const c = spec.card;
+  const wv = r.wave;
+  const king = !!spec.king;
+  const hp = Math.round((46 + c.stars * 34 + wv * 16) * (king ? 7 : spec.boss ? 2.2 : 1));
+  const edge = Math.floor(Math.random() * 4);
+  const m = 26;
+  const pos = edge === 0 ? { x: Math.random() * r.fw, y: -m }
+            : edge === 1 ? { x: r.fw + m, y: Math.random() * r.fh }
+            : edge === 2 ? { x: Math.random() * r.fw, y: r.fh + m }
+            : { x: -m, y: Math.random() * r.fh };
+  const e = {
+    id: r.nextId++, card: c, king, boss: !!spec.boss,
+    x: pos.x, y: pos.y, hp, maxHp: hp,
+    dmg: Math.round((4 + c.stars * 1.8 + wv * 0.9) * (king ? 2.4 : spec.boss ? 1.4 : 1)),
+    speed: (king ? 40 : spec.boss ? 52 : 62) + Math.min(38, wv * 1.1) + c.stars * 2,
+    r: king ? 34 : spec.boss ? 26 : 20,
+    swing: 0, stun: 0, cursed: 0, node: null
+  };
+  r.enemies.push(e);
+}
+
+// ---- Loop -----------------------------------------------------------------
+function elgFrame(ts) {
+  const r = elgRun; if (!r) return;
+  const dt = Math.min(0.05, (ts - r.last) / 1000);
+  r.last = ts;
+  if (!r.paused && !r.qPause && !r.over) elgUpdate(dt);
+  elgRender();
+  r.raf = requestAnimationFrame(elgFrame);
+}
+function elgUpdate(dt) {
+  const r = elgRun;
+  r.t += dt;
+  const p = elgPassives(r);
+  const field = document.getElementById('elgField');
+  if (field) { const b = field.getBoundingClientRect(); if (b.width) { r.fw = b.width; r.fh = b.height; } }
+
+  // Question timer — the battle freezes while it is up, so nobody is punished
+  // for reading properly.
+  r.qT += dt;
+  if (r.qT >= ELG_Q_EVERY && !r.quiz) { r.qT = 0; elgOpenQuiz(); }
+
+  // Waves
+  if (!r.enemies.length && !r.spawnQ.length) {
+    r.breather -= dt;
+    if (r.breather <= 0) {
+      if (r.wave > 0) { r.sp += ELG_SP_WAVE; elgBanner('✦ Wave cleared — +' + ELG_SP_WAVE + ' skill point', 1800); }
+      r.breather = 2.2;
+      elgStartWave();
+    }
+  }
+  if (r.spawnQ.length) {
+    r.spawnT -= dt;
+    if (r.spawnT <= 0) { elgSpawn(r.spawnQ.shift()); r.spawnT = 0.45; }
+  }
+
+  // Hero movement — pointer target first, keys second.
+  const speed = r.base.speed * (1 + p.speed);
+  let dx = 0, dy = 0;
+  if (r.keys['a'] || r.keys['arrowleft']) dx -= 1;
+  if (r.keys['d'] || r.keys['arrowright']) dx += 1;
+  if (r.keys['w'] || r.keys['arrowup']) dy -= 1;
+  if (r.keys['s'] || r.keys['arrowdown']) dy += 1;
+  if (dx || dy) {
+    const l = Math.hypot(dx, dy) || 1;
+    r.x += dx / l * speed * dt; r.y += dy / l * speed * dt;
+  } else if (r.tx != null) {
+    const ax = r.tx - r.x, ay = r.ty - r.y, l = Math.hypot(ax, ay);
+    if (l > 4) { r.x += ax / l * speed * dt; r.y += ay / l * speed * dt; }
+  }
+  r.x = Math.max(ELG_HERO_R, Math.min(r.fw - ELG_HERO_R, r.x));
+  r.y = Math.max(ELG_HERO_R, Math.min(r.fh - ELG_HERO_R, r.y));
+
+  // Regeneration and shields
+  if (p.regen) elgHeal(r.maxHp * p.regen * dt, true);
+  if (r.shieldT > 0) { r.shieldT -= dt; if (r.shieldT <= 0) r.shield = 0; }
+  if (r.frostT > 0) r.frostT -= dt;
+
+  // Mender's Lifepulse
+  if (p.pulse) {
+    r.pulseT += dt;
+    if (r.pulseT >= 8) {
+      r.pulseT = 0;
+      elgHeal(r.maxHp * 0.08);
+      elgAreaHit(r.x, r.y, 150, r.base.dmg * 1.2 * (1 + p.skillDmg), 'pulse');
+    }
+  }
+  // 7★ Dawnfather's Vigil
+  if (r.legend && r.card.skillId === 'sunrise') {
+    r.legendT += dt;
+    if (r.legendT >= 10) { r.legendT = 0; elgHeal(r.maxHp * 0.12); elgAreaHit(r.x, r.y, 9999, r.base.dmg * 1.1, 'dawn'); elgBanner('🌅 Dawn breaks!', 1200); }
+  }
+
+  // Auto attack
+  r.atkT = (r.atkT || 0) + dt;
+  const rate = 1 / Math.max(0.15, r.base.aspd * (1 + p.aspd));
+  if (r.atkT >= rate) {
+    const target = elgNearest(r.x, r.y, r.base.range * (1 + p.range));
+    if (target) {
+      r.atkT = 0;
+      const shots = 1 + (p.shots | 0);
+      for (let i = 0; i < shots; i++) {
+        const ang = Math.atan2(target.y - r.y, target.x - r.x) + (i ? (Math.random() - 0.5) * 0.35 : 0);
+        r.shots.push({ id: r.nextId++, x: r.x, y: r.y, vx: Math.cos(ang) * ELG_SHOT_SPEED, vy: Math.sin(ang) * ELG_SHOT_SPEED,
+                       dmg: elgHitDamage(p), pierce: p.pierce | 0, hit: {}, t: 0, node: null });
+      }
+    }
+  }
+
+  // Shots
+  r.shots = r.shots.filter(s => {
+    s.t += dt; s.x += s.vx * dt; s.y += s.vy * dt;
+    if (s.t > 2.4 || s.x < -40 || s.y < -40 || s.x > r.fw + 40 || s.y > r.fh + 40) { elgDropNode(s); return false; }
+    for (const e of r.enemies) {
+      if (s.hit[e.id] || e.hp <= 0) continue;
+      if (Math.hypot(e.x - s.x, e.y - s.y) <= e.r + 8) {
+        s.hit[e.id] = 1;
+        elgDamage(e, s.dmg);
+        if (s.pierce-- <= 0) { elgDropNode(s); return false; }
+      }
+    }
+    return true;
+  });
+
+  // Damage zones (Sanctuary)
+  r.zones = r.zones.filter(z => {
+    z.t -= dt;
+    z.tick -= dt;
+    if (z.tick <= 0) {
+      z.tick = 0.5;
+      elgAreaHit(z.x, z.y, z.radius, z.dmg, 'zone');
+      if (z.heal) elgHeal(r.maxHp * z.heal);
+    }
+    if (z.t <= 0) { elgDropNode(z); return false; }
+    return true;
+  });
+
+  // Enemies
+  const slow = (r.frostT > 0 ? 0.35 : 1) * (r.card.skillId === 'chrono' && r.legend ? 0.7 : 1);
+  r.enemies = r.enemies.filter(e => {
+    if (e.hp <= 0) return false;
+    if (e.stun > 0) { e.stun -= dt; return true; }
+    const ax = r.x - e.x, ay = r.y - e.y, l = Math.hypot(ax, ay) || 1;
+    if (l > ELG_CONTACT + e.r * 0.4) {
+      e.x += ax / l * e.speed * slow * dt;
+      e.y += ay / l * e.speed * slow * dt;
+    } else {
+      e.swing -= dt * slow;
+      if (e.swing <= 0) {
+        e.swing = 1.15;
+        elgHurt(e.dmg, e);
+      }
+    }
+    // Worldsend Aura curses whatever comes close
+    if (r.legend && r.card.skillId === 'doom' && l < 200) e.cursed = 2;
+    if (e.cursed > 0) e.cursed -= dt;
+    return true;
+  });
+
+  // Skill cooldowns
+  Object.keys(r.cds).forEach(k => { if (r.cds[k] > 0) r.cds[k] = Math.max(0, r.cds[k] - dt * (1 + p.cdr)); });
+  r.uiT = (r.uiT || 0) + dt;
+  if (r.uiT > 0.12) { r.uiT = 0; elgRenderSkills(); elgHud(); }
+}
+function elgHitDamage(p) {
+  const r = elgRun;
+  let d = r.base.dmg * (1 + p.dmg);
+  if (p.desperate && r.hp < r.maxHp / 2) d *= 1 + p.desperate;
+  if (Math.random() < (0.05 + p.crit)) d *= 2;
+  return d;
+}
+function elgNearest(x, y, range) {
+  const r = elgRun; let best = null, bd = range;
+  r.enemies.forEach(e => { const d = Math.hypot(e.x - x, e.y - y); if (d < bd) { bd = d; best = e; } });
+  return best;
+}
+function elgDamage(e, dmg) {
+  const r = elgRun; if (!r || e.hp <= 0) return;
+  const p = elgPassives(r);
+  let d = dmg;
+  if (e.cursed > 0) d *= 1.3;
+  if (p.execute && e.hp < e.maxHp / 2) d *= 1 + p.execute;
+  d = Math.max(1, Math.round(d));
+  e.hp -= d;
+  elgPop(e.x, e.y, '-' + d, 'dmg');
+  if (p.lifesteal) elgHeal(d * p.lifesteal, true);
+  if (e.hp <= 0) {
+    r.kills++;
+    r.waveLeft = Math.max(0, r.waveLeft - 1);
+    if (p.deathBlast) elgAreaHit(e.x, e.y, 110, r.base.dmg * 1.2, 'blast', e.id);
+    elgDropNode(e);
+  }
+}
+function elgAreaHit(x, y, radius, dmg, kind, skipId) {
+  const r = elgRun; if (!r) return;
+  r.enemies.slice().forEach(e => {
+    if (e.id === skipId || e.hp <= 0) return;
+    if (Math.hypot(e.x - x, e.y - y) <= radius + e.r) elgDamage(e, dmg);
+  });
+  elgFlash(x, y, radius, kind);
+}
+function elgHeal(amount, quiet) {
+  const r = elgRun; if (!r) return;
+  const p = elgPassives(r);
+  const amt = amount * (1 + p.healAmp);
+  const before = r.hp;
+  r.hp = Math.min(r.maxHp, r.hp + amt);
+  if (!quiet && r.hp - before >= 1) elgPop(r.x, r.y, '+' + Math.round(r.hp - before), 'heal');
+}
+function elgHurt(dmg, from) {
+  const r = elgRun; if (!r || r.over) return;
+  const p = elgPassives(r);
+  let d = dmg * (1 - Math.min(0.75, r.base.armor + p.armor));
+  if (r.shield > 0) {
+    const absorbed = Math.min(r.shield, d);
+    r.shield -= absorbed; d -= absorbed;
+    elgPop(r.x, r.y, '🛡️', 'shield');
+  }
+  d = Math.max(0, Math.round(d));
+  r.hp -= d;
+  if (d > 0) elgPop(r.x, r.y, '-' + d, 'hurt');
+  if (p.thorns && from) elgDamage(from, dmg * p.thorns);
+  if (r.hp <= 0) {
+    if (p.revive && !r.revived) {
+      r.revived = true; r.hp = r.maxHp / 2;
+      elgAreaHit(r.x, r.y, 220, r.base.dmg * 2.5, 'dawn');
+      elgBanner('🌅 Second Dawn — you rise again!', 2200);
+      return;
+    }
+    elgGameOver();
+  }
+}
+
+// ---- Skills ---------------------------------------------------------------
+function elgActives() {
+  const r = elgRun; if (!r) return [];
+  return Object.keys(r.tree).map(id => ELG_NODE_BY_ID[id]).filter(n => n && n.act);
+}
+function elgCast(id) {
+  const r = elgRun; if (!r || r.over || r.paused || r.qPause) return;
+  const n = ELG_NODE_BY_ID[id];
+  if (!n || !n.act || !r.tree[id]) return;
+  if ((r.cds[id] || 0) > 0) return;
+  const p = elgPassives(r);
+  const a = n.act;
+  const power = r.base.dmg * (1 + p.dmg + p.skillDmg);
+  r.cds[id] = a.cd;
+  if (a.kind === 'nova') {
+    elgAreaHit(r.x, r.y, a.radius, power * a.dmg, 'nova');
+    if (a.stun) r.enemies.forEach(e => { if (Math.hypot(e.x - r.x, e.y - r.y) <= a.radius + e.r) e.stun = a.stun; });
+  } else if (a.kind === 'beam') {
+    const t = elgNearest(r.x, r.y, 9999);
+    const ang = t ? Math.atan2(t.y - r.y, t.x - r.x) : 0;
+    for (let d = 30; d < 520; d += 34) elgAreaHit(r.x + Math.cos(ang) * d, r.y + Math.sin(ang) * d, 34, power * a.dmg / 6, 'beam');
+  } else if (a.kind === 'storm') {
+    elgAreaHit(r.x, r.y, 9999, power * a.dmg, 'storm');
+    if (a.stun) r.enemies.forEach(e => { e.stun = a.stun; });
+    elgBanner(n.icon + ' ' + n.name + '!', 1400);
+  } else if (a.kind === 'heal') {
+    elgHeal(r.maxHp * a.pct);
+  } else if (a.kind === 'shield') {
+    r.shield = r.maxHp * a.pct; r.shieldT = a.dur;
+    elgPop(r.x, r.y, '🔰', 'shield');
+  } else if (a.kind === 'frost') {
+    r.frostT = a.dur;
+    elgBanner('❄️ ' + n.name + ' — the horde crawls!', 1500);
+  } else if (a.kind === 'zone') {
+    r.zones.push({ id: r.nextId++, x: r.x, y: r.y, radius: a.radius, dmg: power * a.dmg,
+                   heal: a.heal || 0, t: a.dur, tick: 0, node: null });
+  }
+  elgRenderSkills();
+}
+function elgRenderSkills() {
+  const host = document.getElementById('elgSkills');
+  const r = elgRun; if (!host || !r) return;
+  const acts = elgActives();
+  if (!acts.length) {
+    host.innerHTML = '<div class="elg-skill-empty">No active skills yet — open the 🌳 skill tree and spend a point.</div>';
+    return;
+  }
+  host.innerHTML = acts.map(n => {
+    const cd = r.cds[n.id] || 0;
+    const ready = cd <= 0;
+    return '<button type="button" class="elg-skill' + (ready ? ' ready' : '') + '" onclick="elgCast(\'' + n.id + '\')" title="' + escapeHtml(n.name + ' — ' + n.desc) + '">'
+      + '<span class="elg-skill-ico">' + n.icon + '</span>'
+      + '<span class="elg-skill-name">' + escapeHtml(n.name) + '</span>'
+      + (ready ? '<span class="elg-skill-cd ok">READY</span>' : '<span class="elg-skill-cd">' + cd.toFixed(1) + 's</span>')
+      + '</button>';
+  }).join('');
+}
+function elgHud() {
+  const r = elgRun; if (!r) return;
+  const hp = document.getElementById('elgHp');
+  if (hp) hp.style.width = Math.max(0, Math.round(r.hp / r.maxHp * 100)) + '%';
+  const txt = document.getElementById('elgHpTxt');
+  if (txt) txt.textContent = Math.max(0, Math.round(r.hp)) + ' / ' + r.maxHp + (r.shield > 0 ? ' 🛡️' + Math.round(r.shield) : '');
+  const k = document.getElementById('elgKills'); if (k) k.textContent = '☠️ ' + r.kills;
+  const sp = document.getElementById('elgSp'); if (sp) sp.textContent = '✦ ' + r.sp + ' skill point' + (r.sp === 1 ? '' : 's');
+}
+
+// ---- Skill tree panel -----------------------------------------------------
+function elgOpenTree() {
+  const r = elgRun; if (!r || r.over) return;
+  r.qPause = true;
+  const o = document.getElementById('elgOverlay'); if (!o) return;
+  const box = document.createElement('div');
+  box.className = 'elg-tree'; box.id = 'elgTree';
+  o.appendChild(box);
+  elgRenderTree();
+}
+function elgCloseTree() {
+  const r = elgRun;
+  const b = document.getElementById('elgTree'); if (b) b.remove();
+  if (r && !r.quiz) r.qPause = false;
+  elgRenderSkills();
+}
+function elgRenderTree() {
+  const r = elgRun, host = document.getElementById('elgTree');
+  if (!r || !host) return;
+  const role = ELG_ROLES[r.role];
+  const nodes = ELG_TREES[r.role] || [];
+  const tiers = [1, 2, 3, 4].map(t => {
+    const open = elgTierUnlocked(r, t);
+    return '<div class="elg-tier' + (open ? '' : ' locked') + '">'
+      + '<div class="elg-tier-lbl">Tier ' + t + (open ? '' : ' 🔒 needs ' + (t === 2 ? 1 : 2) + ' from tier ' + (t - 1)) + '</div>'
+      + '<div class="elg-tier-row">' + nodes.filter(n => n.tier === t).map(n => {
+          const owned = !!r.tree[n.id];
+          const can = !owned && open && r.sp > 0;
+          return '<button type="button" class="elg-node' + (owned ? ' owned' : can ? ' can' : '') + '"'
+            + (can ? ' onclick="elgBuy(\'' + n.id + '\')"' : ' disabled') + '>'
+            + '<span class="elg-node-ico">' + n.icon + '</span>'
+            + '<b>' + escapeHtml(n.name) + '</b>'
+            + '<span class="elg-node-desc">' + escapeHtml(n.desc) + '</span>'
+            + '<span class="elg-node-tag">' + (owned ? '✓ learned' : n.act ? 'ACTIVE · ✦1' : '✦1') + '</span>'
+            + '</button>';
+        }).join('') + '</div></div>';
+  }).join('');
+  const leg = r.legend;
+  host.innerHTML = '<div class="elg-tree-card">'
+    + '<div class="elg-tree-head">'
+    +   '<h3>' + role.icon + ' ' + role.name + ' tree</h3>'
+    +   '<span class="elg-tree-sp">✦ ' + r.sp + ' skill point' + (r.sp === 1 ? '' : 's') + '</span>'
+    +   '<button type="button" class="elg-x" onclick="elgCloseTree()">✕</button>'
+    + '</div>'
+    + '<p class="elg-tree-lead">Every ' + role.name + ' shares this tree, whichever monster you brought. Answer a science question or clear a wave to earn another point.</p>'
+    + (leg ? '<div class="elg-legend-box">' + leg.icon + ' <b>' + escapeHtml(leg.name) + '</b> — ' + escapeHtml(leg.desc) + '<span>7★ passive · always on</span></div>' : '')
+    + tiers
+    + '<div class="elg-tree-foot"><button type="button" class="btn btn-primary" onclick="elgCloseTree()">▶ Back to the fight</button></div>'
+    + '</div>';
+}
+function elgBuy(id) {
+  const r = elgRun; if (!r || r.sp <= 0 || r.tree[id]) return;
+  const n = ELG_NODE_BY_ID[id];
+  if (!n || n.role !== r.role || !elgTierUnlocked(r, n.tier)) return;
+  r.sp--;
+  r.tree[id] = 1;
+  if (n.fx && n.fx.hp) { const add = r.base.maxHp * n.fx.hp; r.maxHp = Math.round(r.maxHp + add); r.hp += add; }
+  elgRenderTree();
+  elgRenderSkills();
+  elgHud();
+}
+
+// ---- Questions ------------------------------------------------------------
+function elgOpenQuiz() {
+  const r = elgRun; if (!r || r.over || r.quiz) return;
+  if (!r.pool || !r.pool.length) return;
+  const o = document.getElementById('elgOverlay'); if (!o) return;
+  r.qPause = true;
+  const box = document.createElement('div');
+  box.className = 'elg-quiz'; box.id = 'elgQuiz';
+  o.appendChild(box);
+  elgNextQuestion();
+}
+function elgCloseQuiz() {
+  const r = elgRun;
+  const b = document.getElementById('elgQuiz'); if (b) b.remove();
+  if (r) { r.quiz = null; if (!document.getElementById('elgTree')) r.qPause = false; }
+}
+function elgNextQuestion() {
+  const r = elgRun; if (!r) return;
+  const q = r.pool[r.poolI % r.pool.length];
+  r.poolI++;
+  r.quiz = { q, at: performance.now(), answered: false };
+  if (q && q.id) _tcgServedMark(q.id);
+  const box = document.getElementById('elgQuiz'); if (!box) return;
+  box.innerHTML = '<div class="elg-quiz-card">'
+    + '<div class="elg-quiz-head">⏸ Battle paused · answer for <b>✦ ' + ELG_SP_CORRECT + ' skill point</b></div>'
+    + '<div class="elg-quiz-q">' + (q.html || escapeHtml(q.q || '')) + '</div>'
+    + '<div class="elg-quiz-opts">' + q.opts.map((o, i) =>
+        '<button type="button" class="elg-quiz-opt" data-i="' + i + '" onclick="elgAnswer(' + i + ')"><span>' + (i + 1) + '</span>' + escapeHtml(o) + '</button>').join('')
+    + '</div>'
+    + '<div class="elg-quiz-fb" id="elgQuizFb"></div>'
+    + '</div>';
+}
+function elgAnswer(i) {
+  const r = elgRun; if (!r || !r.quiz || r.quiz.answered) return;
+  r.quiz.answered = true;
+  const q = r.quiz.q;
+  const correct = i === q.a;
+  const ms = performance.now() - r.quiz.at;
+  r.answered++;
+  const pts = rpgAwardGameQuestion(q && q.id, correct, ms);
+  r.qPoints = (r.qPoints | 0) + pts;
+  let extra = '';
+  if (correct) {
+    r.correct++; r.streak++; r.bestStreak = Math.max(r.bestStreak, r.streak);
+    r.sp += ELG_SP_CORRECT;
+    // The hero you are playing as trains off your answers, exactly as it would
+    // in the Siege — those levels are kept for good.
+    const up = tcgAddLevelProgress(r.card.id);
+    if (up && up.leveledUp) { r.levelUps = (r.levelUps | 0) + 1; extra = ' · 🎓 <b>' + escapeHtml(tcgShortName(r.card)) + ' reached Lv ' + up.level + '</b>'; }
+  } else { r.streak = 0; }
+  const btns = document.querySelectorAll('#elgQuiz .elg-quiz-opt');
+  btns.forEach(b => { b.disabled = true; const bi = +b.dataset.i; if (bi === q.a) b.classList.add('right'); else if (bi === i) b.classList.add('wrong'); });
+  const fb = document.getElementById('elgQuizFb');
+  if (fb) fb.innerHTML = (correct
+    ? '<span class="ok">✅ Correct — <b>✦ +' + ELG_SP_CORRECT + ' skill point</b>' + (pts ? ' · 🪙 +' + pts : '') + extra + '</span>'
+    : '<span class="no">❌ The answer was <b>(' + (q.a + 1) + ')</b>' + (pts ? ' · 🪙 +' + pts : '') + '</span>')
+    + (q.ex ? '<div class="elg-quiz-ex">' + escapeHtml(q.ex) + '</div>' : '')
+    + '<button type="button" class="btn btn-primary elg-quiz-go" onclick="elgCloseQuiz()">▶ Back to the fight</button>';
+  elgHud();
+}
+
+// ---- Rendering ------------------------------------------------------------
+function elgRender() {
+  const r = elgRun, host = document.getElementById('elgUnits');
+  if (!r || !host) return;
+  // Hero
+  if (!r.node) {
+    const url = tcgAvatarUrl(r.card.id);
+    const d = document.createElement('div');
+    d.className = 'elg-unit hero ' + ELG_ELEM_CLASS(r.card);
+    d.innerHTML = '<span class="elg-sprite">' + (url ? '<img src="' + escapeHtml(url) + '" alt="">' : r.card.em) + '</span>';
+    host.appendChild(d);
+    r.node = d;
+  }
+  r.node.style.transform = 'translate(' + Math.round(r.x) + 'px,' + Math.round(r.y) + 'px) translate(-50%,-50%)';
+  r.node.classList.toggle('shielded', r.shield > 0);
+  // Enemies
+  r.enemies.forEach(e => {
+    if (!e.node) {
+      const url = tcgAvatarUrl(e.card.id);
+      const d = document.createElement('div');
+      d.className = 'elg-unit foe' + (e.king ? ' king' : e.boss ? ' boss' : '');
+      d.innerHTML = '<span class="elg-sprite">' + (url ? '<img src="' + escapeHtml(url) + '" alt="">' : e.card.em) + '</span>'
+        + '<i class="elg-ehp"><b></b></i>';
+      host.appendChild(d);
+      e.node = d;
+    }
+    e.node.style.transform = 'translate(' + Math.round(e.x) + 'px,' + Math.round(e.y) + 'px) translate(-50%,-50%)';
+    const bar = e.node.querySelector('.elg-ehp > b');
+    if (bar) bar.style.width = Math.max(0, Math.round(e.hp / e.maxHp * 100)) + '%';
+    e.node.classList.toggle('cursed', e.cursed > 0);
+    e.node.classList.toggle('stunned', e.stun > 0);
+  });
+  // Shots — the projectile animation is the element FX from the Card Art page.
+  r.shots.forEach(s => {
+    if (!s.node) {
+      const d = document.createElement('div');
+      d.className = 'elg-shot';
+      const frames = tcgFxSet(r.card.element, 'fly') || tcgFxSet(r.card.element, '');
+      d.innerHTML = frames ? '<img alt="">' : '<i class="elg-orb" style="background:' + ((TCG_ELEM_FX[r.card.element] || {}).glow || '#fb923c') + ';"></i>';
+      s.frames = frames;
+      host.appendChild(d);
+      s.node = d;
+    }
+    s.node.style.transform = 'translate(' + Math.round(s.x) + 'px,' + Math.round(s.y) + 'px) translate(-50%,-50%)';
+    if (s.frames) {
+      const src = s.frames[Math.floor((s.t / 0.1) % s.frames.length)];
+      const img = s.node.querySelector('img');
+      if (img && s.src !== src) { s.src = src; img.src = src; }
+    }
+  });
+  // Zones
+  r.zones.forEach(z => {
+    if (!z.node) {
+      const d = document.createElement('div');
+      d.className = 'elg-zone';
+      d.style.width = d.style.height = (z.radius * 2) + 'px';
+      host.appendChild(d);
+      z.node = d;
+    }
+    z.node.style.transform = 'translate(' + Math.round(z.x) + 'px,' + Math.round(z.y) + 'px) translate(-50%,-50%)';
+  });
+  elgHud();
+}
+function ELG_ELEM_CLASS(card) { return 'el-' + (card && card.element || 'flame'); }
+function elgDropNode(o) { if (o && o.node) { o.node.remove(); o.node = null; } }
+function elgPop(x, y, text, cls) {
+  const host = document.getElementById('elgUnits'); if (!host) return;
+  const d = document.createElement('div');
+  d.className = 'elg-pop ' + (cls || '');
+  d.textContent = text;
+  d.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y - 18) + 'px) translate(-50%,-50%)';
+  host.appendChild(d);
+  setTimeout(() => d.remove(), 700);
+}
+function elgFlash(x, y, radius, kind) {
+  const host = document.getElementById('elgUnits'); if (!host) return;
+  const r = elgRun;
+  const rad = Math.min(radius, 460);
+  const d = document.createElement('div');
+  d.className = 'elg-flash ' + (kind || '');
+  d.style.width = d.style.height = (rad * 2) + 'px';
+  d.style.background = 'radial-gradient(circle, ' + ((TCG_ELEM_FX[r && r.card ? r.card.element : 'flame'] || {}).glow || 'rgba(255,150,60,.7)') + ' 0%, transparent 70%)';
+  d.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px) translate(-50%,-50%)';
+  host.appendChild(d);
+  setTimeout(() => d.remove(), 380);
+}
+
+// ---- End of run -----------------------------------------------------------
+function elgBank() {
+  const r = elgRun; if (!r || r.banked) return;
+  r.banked = true;
+  const s = tcgState();
+  const best = Math.max(0, r.wave | 0);   // the wave you reached — the same number the result card shows
+  if (s) {
+    s.legends = s.legends || { best: 0, runs: 0, kills: 0 };
+    s.legends.best = Math.max(s.legends.best | 0, best);
+    s.legends.runs = (s.legends.runs | 0) + 1;
+    s.legends.kills = (s.legends.kills | 0) + (r.kills | 0);
+  }
+  try { rpgSave(); } catch (_) {}
+  // Ranked on the shared board by the wave reached, with the hero named on the row.
+  if (best > 0) {
+    try {
+      rpgEnsureGameScores();
+      const g = rpgState.gameScores.legend;
+      const label = 'Wave ' + best + ' · ' + tcgShortName(r.card);
+      if (best > (g.best || 0)) { g.best = best; g.bestLabel = label; }
+      if (best > (g.monthBest || 0)) { g.monthBest = best; g.monthLabel = label; }
+      rpgSave();
+      rpgPublishLeaderboard();
+    } catch (e) { console.warn('legends score', e); }
+  }
+}
+function elgGameOver() {
+  const r = elgRun; if (!r || r.over) return;
+  r.over = true;
+  elgBank();
+  const s = tcgState();
+  const best = (s && s.legends && s.legends.best) | 0;
+  const o = document.getElementById('elgOverlay'); if (!o) return;
+  const box = document.createElement('div');
+  box.className = 'elg-result';
+  box.innerHTML = '<div class="elg-result-card">'
+    + '<h3>☠️ ' + escapeHtml(tcgShortName(r.card)) + ' has fallen</h3>'
+    + '<div class="elg-result-wave">You survived to <b>wave ' + r.wave + '</b></div>'
+    + '<div class="elg-result-grid">'
+    +   '<div><b>' + r.kills + '</b><span>enemies felled</span></div>'
+    +   '<div><b>' + r.correct + ' / ' + r.answered + '</b><span>questions right</span></div>'
+    +   '<div><b>' + r.bestStreak + '</b><span>best streak</span></div>'
+    +   '<div><b>🪙 ' + (r.qPoints | 0) + '</b><span>points earned</span></div>'
+    + '</div>'
+    + ((r.levelUps | 0) ? '<div class="elg-result-pts">🎓 <b>' + (r.levelUps | 0) + ' level-up' + ((r.levelUps | 0) === 1 ? '' : 's') + '</b> for ' + escapeHtml(tcgShortName(r.card)) + ' — kept for good.</div>' : '')
+    + '<div class="elg-result-best">🏅 Your best run: wave <b>' + best + '</b> · the top 5 each month win a <b>$10 voucher</b></div>'
+    + '<div class="elg-result-actions">'
+    +   '<button type="button" class="btn btn-primary" onclick="elgRestart()">↻ Play again</button>'
+    +   '<button type="button" class="btn btn-outline" onclick="elgClose()">Done</button>'
+    + '</div>'
+    + '</div>';
+  o.appendChild(box);
+}
+function elgRestart() {
+  const o = document.getElementById('elgOverlay'); if (!o) return;
+  if (elgRun && elgRun.raf) cancelAnimationFrame(elgRun.raf);
+  elgRun = null;
+  o.innerHTML = '<div class="elg-pick" id="elgPick"></div>';
+  elgRenderPick();
+}
+
 // -- Leaderboard tab: ranked by TOTAL TEAM POWER; top 6 win a $10 voucher.
 //    The same ranking also appears on the portal's Leaderboard page (🔥 Embers).
 async function tcgRenderBoard() {
@@ -31042,6 +32033,18 @@ window.practiceAsFilter = practiceAsFilter;
 window.startPracticeAs = startPracticeAs;
 window.exitPracticeAs = exitPracticeAs;
 window.tcgOpenFromAnnounce = tcgOpenFromAnnounce;
+window.elgOpen = elgOpen;
+window.elgStart = elgStart;
+window.elgClose = elgClose;
+window.elgRestart = elgRestart;
+window.elgTogglePause = elgTogglePause;
+window.elgOpenTree = elgOpenTree;
+window.elgCloseTree = elgCloseTree;
+window.elgBuy = elgBuy;
+window.elgCast = elgCast;
+window.elgAnswer = elgAnswer;
+window.elgCloseQuiz = elgCloseQuiz;
+window.elgSetReleased = elgSetReleased;
 window.emsOpen = emsOpen;
 window.emsClose = emsClose;
 window.emsRestart = emsRestart;

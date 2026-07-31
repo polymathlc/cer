@@ -5353,6 +5353,121 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .tcg-mode-go { flex: 0 0 auto; }
 
 /* ---- 🌋 Ember Siege: lane defence over the whole screen ---- */
+/* ==================== ⚔️ EMBER LEGENDS (arena survival) ==================== */
+.elg-overlay { position: fixed; inset: 0; z-index: 1450; background: radial-gradient(120% 90% at 50% 0%, #241033 0%, #120a1c 60%, #070509 100%); display: flex; align-items: center; justify-content: center; padding: 14px; font-family: 'DM Sans', system-ui, sans-serif; overflow: auto; }
+.elg-shell { width: 100%; max-width: 1080px; display: flex; flex-direction: column; gap: 10px; }
+.elg-topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: #f3e9ff; }
+.elg-title { font-weight: 800; font-size: 1.05rem; letter-spacing: 0.01em; }
+.elg-stat { background: rgba(255,255,255,0.08); border-radius: 999px; padding: 5px 14px; font-size: 0.85rem; }
+.elg-sp { background: rgba(240,181,66,0.18); color: #ffd98a; border-radius: 999px; padding: 5px 14px; font-size: 0.85rem; font-weight: 700; }
+.elg-treebtn { margin-left: auto; font-size: 0.82rem; padding: 7px 16px; }
+.elg-icon-btn { background: rgba(255,255,255,0.08); color: #f3e9ff; border: 0; border-radius: 10px; width: 36px; height: 34px; font-size: 0.95rem; cursor: pointer; }
+.elg-icon-btn:hover { background: rgba(255,255,255,0.18); }
+.elg-hpwrap { display: flex; align-items: center; gap: 12px; color: #f3e9ff; font-size: 0.82rem; }
+.elg-hpbar { flex: 1; height: 14px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; }
+.elg-hpbar > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #16a34a, #4ade80); transition: width 0.12s linear; }
+.elg-field { position: relative; height: min(58vh, 520px); border-radius: 18px; overflow: hidden; touch-action: none; cursor: crosshair;
+  background: radial-gradient(90% 80% at 50% 45%, #2f1b46 0%, #1a1028 60%, #100a18 100%);
+  border: 1px solid rgba(255,255,255,0.12); box-shadow: inset 0 0 60px rgba(0,0,0,0.6); }
+.elg-units { position: absolute; inset: 0; }
+.elg-unit { position: absolute; left: 0; top: 0; will-change: transform; }
+.elg-unit .elg-sprite { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; font-size: 26px; border-radius: 50%; overflow: hidden; background: rgba(0,0,0,0.35); border: 2px solid rgba(255,255,255,0.35); }
+.elg-unit .elg-sprite img { width: 100%; height: 100%; object-fit: cover; }
+.elg-unit.hero .elg-sprite { width: 52px; height: 52px; border-color: #ffd98a; box-shadow: 0 0 18px rgba(255,200,90,0.55); }
+.elg-unit.hero.shielded .elg-sprite { border-color: #7dd3fc; box-shadow: 0 0 24px rgba(125,211,252,0.8); }
+.elg-unit.foe .elg-sprite { width: 40px; height: 40px; border-color: rgba(255,120,120,0.6); }
+.elg-unit.boss .elg-sprite { width: 54px; height: 54px; border-color: #fb923c; }
+.elg-unit.king .elg-sprite { width: 70px; height: 70px; border-color: #f0b542; box-shadow: 0 0 22px rgba(240,181,66,0.7); }
+.elg-unit.cursed .elg-sprite { border-color: #a855f7; box-shadow: 0 0 14px rgba(168,85,247,0.8); }
+.elg-unit.stunned .elg-sprite { filter: grayscale(0.6) brightness(1.3); }
+.elg-ehp { display: block; width: 34px; height: 4px; margin: 3px auto 0; border-radius: 999px; background: rgba(0,0,0,0.5); overflow: hidden; }
+.elg-ehp > b { display: block; height: 100%; width: 100%; background: #ef4444; }
+.elg-shot { position: absolute; left: 0; top: 0; width: 26px; height: 26px; margin: -13px 0 0 -13px; pointer-events: none; }
+.elg-shot img { width: 100%; height: 100%; object-fit: contain; }
+.elg-orb { display: block; width: 14px; height: 14px; margin: 6px; border-radius: 50%; box-shadow: 0 0 10px currentColor; }
+.elg-zone { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, rgba(255,230,150,0.28) 0%, rgba(255,230,150,0.06) 60%, transparent 72%); border: 1px solid rgba(255,230,150,0.35); }
+.elg-flash { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: none; animation: elgFlash 0.38s ease-out forwards; }
+@keyframes elgFlash { from { opacity: 0.85; transform: translate(-50%,-50%) scale(0.5); } to { opacity: 0; transform: translate(-50%,-50%) scale(1); } }
+.elg-pop { position: absolute; left: 0; top: 0; font-weight: 800; font-size: 0.8rem; color: #fff; text-shadow: 0 1px 3px #000; pointer-events: none; animation: elgPop 0.7s ease-out forwards; }
+.elg-pop.heal { color: #4ade80; } .elg-pop.hurt { color: #fca5a5; } .elg-pop.dmg { color: #fde68a; }
+@keyframes elgPop { from { opacity: 1; } to { opacity: 0; transform: translate(-50%,-160%); } }
+.elg-banner { min-height: 22px; text-align: center; color: #ffd98a; font-weight: 700; font-size: 0.95rem; opacity: 0; transition: opacity 0.2s; }
+.elg-banner.show { opacity: 1; }
+.elg-skillbar { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.elg-skill { display: flex; align-items: center; gap: 9px; padding: 9px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); color: #e9e0f5; cursor: pointer; font-family: inherit; }
+.elg-skill.ready { border-color: #ffd98a; background: rgba(240,181,66,0.16); color: #fff; }
+.elg-skill-ico { font-size: 1.1rem; }
+.elg-skill-name { font-weight: 700; font-size: 0.84rem; }
+.elg-skill-cd { font-size: 0.74rem; opacity: 0.75; } .elg-skill-cd.ok { color: #86efac; opacity: 1; }
+.elg-skill-empty { color: rgba(255,255,255,0.55); font-size: 0.82rem; }
+.elg-note { text-align: center; color: rgba(255,255,255,0.5); font-size: 0.78rem; line-height: 1.6; max-width: 640px; margin: 0 auto; }
+.elg-pick { width: 100%; max-width: 940px; max-height: 100%; overflow-y: auto; color: #f3e9ff; padding: 6px; }
+.elg-pick-head { position: relative; text-align: center; margin-bottom: 22px; }
+.elg-pick-head h3 { font-size: 1.3rem; font-weight: 800; margin-bottom: 10px; }
+.elg-pick-head p { color: rgba(255,255,255,0.65); font-size: 0.88rem; line-height: 1.7; max-width: 620px; margin: 0 auto; }
+.elg-x { position: absolute; top: 0; right: 0; background: rgba(255,255,255,0.1); color: #fff; border: 0; border-radius: 10px; width: 34px; height: 32px; cursor: pointer; }
+.elg-pick-group { margin-bottom: 22px; }
+.elg-pick-group h4 { font-size: 0.95rem; font-weight: 800; margin-bottom: 12px; }
+.elg-pick-group h4 span { font-weight: 400; color: rgba(255,255,255,0.55); font-size: 0.8rem; }
+.elg-pick-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.elg-pick-card { width: 132px; padding: 14px 10px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #f3e9ff; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px; font-family: inherit; }
+.elg-pick-card:hover { border-color: #ffd98a; background: rgba(240,181,66,0.14); }
+.elg-pick-card.legend { border-color: #f0b542; box-shadow: 0 0 16px rgba(240,181,66,0.35); }
+.elg-pick-av { display: flex; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 50%; overflow: hidden; background: rgba(0,0,0,0.35); font-size: 28px; }
+.elg-pick-av img { width: 100%; height: 100%; object-fit: cover; }
+.elg-pick-card b { font-size: 0.82rem; }
+.elg-pick-meta { font-size: 0.72rem; color: rgba(255,255,255,0.6); }
+.elg-pick-leg { font-size: 0.68rem; color: #ffd98a; }
+.elg-empty { text-align: center; color: rgba(255,255,255,0.6); padding: 30px; }
+.elg-tree, .elg-quiz, .elg-result { position: fixed; inset: 0; z-index: 1460; background: rgba(8,5,14,0.86); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
+.elg-tree-card, .elg-quiz-card, .elg-result-card { width: 100%; max-width: 780px; background: #17101f; border: 1px solid rgba(255,255,255,0.14); border-radius: 18px; padding: 26px 28px; color: #f3e9ff; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+.elg-quiz-card, .elg-result-card { max-width: 620px; text-align: center; }
+.elg-tree-head { position: relative; display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.elg-tree-head h3 { font-size: 1.1rem; font-weight: 800; }
+.elg-tree-sp { background: rgba(240,181,66,0.18); color: #ffd98a; border-radius: 999px; padding: 5px 14px; font-size: 0.82rem; font-weight: 700; }
+.elg-tree-lead { color: rgba(255,255,255,0.6); font-size: 0.84rem; line-height: 1.7; margin-bottom: 16px; }
+.elg-legend-box { border: 1px solid #f0b542; background: rgba(240,181,66,0.12); border-radius: 12px; padding: 14px 16px; font-size: 0.85rem; line-height: 1.65; margin-bottom: 18px; }
+.elg-legend-box span { display: block; margin-top: 6px; font-size: 0.72rem; color: rgba(255,255,255,0.55); }
+.elg-tier { margin-bottom: 18px; }
+.elg-tier.locked { opacity: 0.45; }
+.elg-tier-lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.5); margin-bottom: 9px; }
+.elg-tier-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.elg-node { flex: 1 1 200px; min-width: 190px; text-align: left; padding: 13px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.04); color: #f3e9ff; font-family: inherit; display: flex; flex-direction: column; gap: 5px; cursor: default; }
+.elg-node.can { cursor: pointer; border-color: #ffd98a; }
+.elg-node.can:hover { background: rgba(240,181,66,0.16); }
+.elg-node.owned { border-color: #4ade80; background: rgba(74,222,128,0.12); }
+.elg-node-ico { font-size: 1.1rem; }
+.elg-node b { font-size: 0.85rem; }
+.elg-node-desc { font-size: 0.76rem; color: rgba(255,255,255,0.62); line-height: 1.55; }
+.elg-node-tag { font-size: 0.7rem; color: #ffd98a; }
+.elg-node.owned .elg-node-tag { color: #86efac; }
+.elg-tree-foot { text-align: center; margin-top: 8px; }
+.elg-quiz-head { font-size: 0.8rem; color: rgba(255,255,255,0.65); margin-bottom: 14px; }
+.elg-quiz-q { font-size: 1rem; line-height: 1.6; margin-bottom: 18px; }
+.elg-quiz-opts { display: flex; flex-direction: column; gap: 9px; }
+.elg-quiz-opt { display: flex; align-items: center; gap: 11px; text-align: left; padding: 12px 15px; border-radius: 11px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #f3e9ff; cursor: pointer; font-family: inherit; font-size: 0.88rem; }
+.elg-quiz-opt:hover:not(:disabled) { border-color: #ffd98a; }
+.elg-quiz-opt > span { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,0.12); font-size: 0.75rem; flex: 0 0 auto; }
+.elg-quiz-opt.right { border-color: #4ade80; background: rgba(74,222,128,0.18); }
+.elg-quiz-opt.wrong { border-color: #f87171; background: rgba(248,113,113,0.16); }
+.elg-quiz-fb { margin-top: 16px; font-size: 0.86rem; line-height: 1.6; }
+.elg-quiz-fb .ok { color: #86efac; } .elg-quiz-fb .no { color: #fca5a5; }
+.elg-quiz-ex { margin-top: 10px; font-size: 0.8rem; color: rgba(255,255,255,0.6); line-height: 1.6; }
+.elg-quiz-go { margin-top: 16px; }
+.elg-result-card h3 { font-size: 1.2rem; font-weight: 800; margin-bottom: 10px; }
+.elg-result-wave { color: rgba(255,255,255,0.7); font-size: 0.92rem; margin-bottom: 20px; }
+.elg-result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 14px; margin-bottom: 18px; }
+.elg-result-grid > div { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 14px 10px; }
+.elg-result-grid b { display: block; font-size: 1.15rem; }
+.elg-result-grid span { display: block; font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 4px; }
+.elg-result-pts, .elg-result-best { font-size: 0.82rem; color: rgba(255,255,255,0.7); line-height: 1.6; margin-bottom: 10px; }
+.elg-result-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+@media (max-width: 640px) {
+  .elg-field { height: 52vh; }
+  .elg-pick-card { width: calc(50% - 6px); }
+  .elg-tree-card, .elg-quiz-card, .elg-result-card { padding: 20px 18px; }
+}
+
 .ems-overlay { position: fixed; inset: 0; z-index: 1400; background: radial-gradient(120% 90% at 50% 0%, #2a1608 0%, #120b06 60%, #080505 100%); display: flex; align-items: center; justify-content: center; padding: 14px; font-family: 'DM Sans', system-ui, sans-serif; }
 /* Two columns: the deck of monsters stands down the LEFT as a proper shelved
    library, and the battlefield takes everything to its right. A strip of
@@ -7841,6 +7956,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
           <span class="rpg-prize-line">🎁 <b>Monthly prize:</b> the top 5 students with the most <b>questions done</b> each month win a <b>$10 Popular voucher</b> each. Questions only count once, and need a genuine answer.</span>
           <span class="rpg-prize-line">🕹️ <b>Arcade prize:</b> the top 3 each month in <b>Science Raiders</b> also win a <b>$10 Popular voucher</b> each. <b>Science Defenders</b> and <b>Science Spire</b> have <b>no prize in August</b> — those boards rank only.</span>
           <span class="rpg-prize-line">🔥 <b>Realm of Embers prize:</b> the <b>top 6 trainers</b> by <b>total team power</b> win a <b>$10 Popular voucher</b> each.</span>
+          <span class="rpg-prize-line" id="prizeLineLegends" style="display:none;">⚔️ <b>Ember Legends prize:</b> the <b>top 5</b> by the best wave reached each month win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🔫 <b>Science Strike prize:</b> the top 3 by <b>correct answers</b> in Science Strike win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🎟️ <b>Streak prize:</b> practise <b>10+ questions every day for 30 days in a row</b> and win a <b>$10 Popular voucher</b> — track your progress on the Your Hero page.</span>
           <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 all-time XP earners win <b>$200, $100 and $50 Popular vouchers</b>.</span>
@@ -7856,6 +7972,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
               <button class="rpg-tab" data-rpgboard="raid" type="button">👾 Raiders</button>
               <button class="rpg-tab" data-rpgboard="spire" type="button">🃏 Spire</button>
               <button class="rpg-tab" data-rpgboard="tcg" type="button">🔥 Embers</button>
+              <button class="rpg-tab" data-rpgboard="legend" type="button">⚔️ Legends</button>
               <button class="rpg-tab" data-rpgboard="fps" type="button">🔫 Strike</button>
             </div>
             <button class="btn btn-ghost btn-sm" id="rpgBoardRefresh" type="button">Refresh</button>
