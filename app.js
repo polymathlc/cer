@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.224.0';
+const APP_VERSION = 'v1.225.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -31300,7 +31300,7 @@ function elgBindInput() {
 // wave: the run only ends when the hero falls. Individual enemies are tuned
 // lighter than the old small-pack numbers so the threat is the CROWD, not
 // five bags of hit points.
-const ELG_WAVE_BASE = 25;      // 5× the old opening pack
+const ELG_WAVE_BASE = 50;      // a wall of them from the first wave
 const ELG_WAVE_GROWTH = 1.10;  // +10% enemies per wave, compounding
 function elgWaveCount(wave) { return Math.round(ELG_WAVE_BASE * Math.pow(ELG_WAVE_GROWTH, wave - 1)); }
 function elgWavePool(wave, boss) {
@@ -31341,7 +31341,7 @@ function elgSpawn(spec) {
   const c = spec.card;
   const wv = r.wave;
   const king = !!spec.king;
-  const hp = Math.round((22 + c.stars * 16 + wv * 7) * (king ? 12 : spec.boss ? 4 : 1));
+  const hp = Math.round((15 + c.stars * 11 + wv * 5) * (king ? 14 : spec.boss ? 4.5 : 1));
   const edge = Math.floor(Math.random() * 4);
   const m = 26;
   const pos = edge === 0 ? { x: Math.random() * r.fw, y: -m }
@@ -31351,9 +31351,9 @@ function elgSpawn(spec) {
   const e = {
     id: r.nextId++, card: c, king, boss: !!spec.boss,
     x: pos.x, y: pos.y, hp, maxHp: hp,
-    dmg: Math.round((2.5 + c.stars * 1.1 + wv * 0.5) * (king ? 3 : spec.boss ? 1.7 : 1)),
+    dmg: Math.round((2 + c.stars * 0.8 + wv * 0.38) * (king ? 3.2 : spec.boss ? 1.8 : 1)),
     speed: (king ? 40 : spec.boss ? 52 : 62) + Math.min(38, wv * 1.1) + c.stars * 2,
-    r: king ? 34 : spec.boss ? 26 : 20,
+    r: king ? 26 : spec.boss ? 19 : 14,
     swing: 0, stun: 0, cursed: 0, node: null
   };
   r.enemies.push(e);
