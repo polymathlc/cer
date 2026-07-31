@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.205.0';
+const APP_VERSION = 'v1.206.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -5853,7 +5853,7 @@ function openAnnotTool(blockId) {
     orig.getContext('2d').drawImage(canvas, 0, 0);
     _annot = { blockId, canvas, ctx, tool: 'erase', color: '#e23c3c', size: 6, tol: 32, drawing: false, history: [], start: null, snap: null,
       zoom: 1, fit: 1, panX: 0, panY: 0, space: false, panning: false, cloneSrc: null, cloneSnap: null, cloneOff: null,
-      anchor: null, sel: null, selPts: null, selCanvas, aiFillBusy: false, origSnap: orig, float: null };
+      anchor: null, sel: null, selPts: null, selCanvas, aiFillBusy: false, origSnap: orig, float: null, xform: null, xfStart: null };
     _annotSelSyncBar();
     if (!_annotAntsRunning) _annotAntsLoop();
     _annotSyncControls();
@@ -5899,7 +5899,10 @@ function _annotStepTol(delta) {
 // Scroll over either slider to change it — the wheel is the natural gesture for
 // a value you are adjusting by feel, and the page must not scroll underneath.
 function _annotBindSliderWheel() {
-  [['annotSize', _annotStepSize, 1], ['annotTol', _annotStepTol, 4]].forEach(([id, step, mult]) => {
+  const xstep = field => d => { const x = _annot && _annot.xform; if (x) annotXformSet(field, (x[field] || 0) + d); };
+  [['annotSize', _annotStepSize, 1], ['annotTol', _annotStepTol, 4],
+   ['annotXformAngle', xstep('angle'), 1], ['annotXformSkewX', xstep('skewX'), 1], ['annotXformSkewY', xstep('skewY'), 1]
+  ].forEach(([id, step, mult]) => {
     const el = document.getElementById(id);
     if (!el || el._wheelBound) return;
     el._wheelBound = true;
@@ -6027,6 +6030,231 @@ function _annotFloatCommit() {
   _annotSelSyncBar();
 }
 
+// ---- ROTATE & SKEW (free transform) ---------------------------------------
+// Turning and slanting, for the two things that actually go wrong with a
+// scanned science paper: the whole page went in crooked, or one object inside
+// it (an arrow, a label, a pasted diagram) sits at the wrong angle.
+//
+// With a selection live the selected pixels are lifted onto their own layer —
+// the hole behind them is painted white, exactly like Move does — so the object
+// turns on its own. With nothing selected the WHOLE picture is the object, and
+// the canvas grows so no corner is ever cut off.
+//
+// Nothing is committed while you drag: the preview redraws from the untouched
+// layer every frame, so turning 30° and back to 0° leaves the pixels as sharp
+// as they started. Only Apply burns it in.
+const ANNOT_XFORM_MAX_PX = 4000;   // never let "grow to fit" run away with memory
+const _annotRad = d => (d || 0) * Math.PI / 180;
+function _annotWrapDeg(d) { d = ((d + 180) % 360 + 360) % 360 - 180; return Math.abs(d) < 1e-9 ? 0 : d; }
+function _annotClampNum(v, lo, hi) { return Math.min(hi, Math.max(lo, isNaN(v) ? 0 : v)); }
+function _annotXformIsIdentity(x) { return !x || (!x.angle && !x.skewX && !x.skewY); }
+
+// Start a transform session. Snapshots history once, up front, so Cancel (and
+// Ctrl+Z afterwards) puts the picture back exactly as it was.
+function _annotXformBegin() {
+  if (!_annot || _annot.xform) return;
+  // Burn any label still being typed: a whole-picture turn resizes the canvas
+  // underneath it, and a floating label would be left pointing at nothing.
+  document.querySelectorAll('#annotStage .annot-textbox-input').forEach(i => i.blur());
+  _annotPushHistory();
+  const cv = _annot.canvas;
+  let layer, ox, oy, base, scope;
+  const prevSel = _annot.sel;
+  if (_annot.sel) {
+    const lift = _annotSelLift(false);   // cut the object out; the hole goes white
+    if (!lift) { showToast('That selection is empty — nothing to turn', 'info'); _annot.history.pop(); return; }
+    layer = lift.layer; ox = lift.mask.x; oy = lift.mask.y; base = lift.base; scope = 'sel';
+    _annot.sel = null; _annotSelSyncBar();   // the old outline no longer describes anything
+  } else {
+    layer = document.createElement('canvas');
+    layer.width = cv.width; layer.height = cv.height;
+    layer.getContext('2d').drawImage(cv, 0, 0);
+    ox = 0; oy = 0; base = null; scope = 'image';
+  }
+  _annot.xform = {
+    scope, layer, base, ox, oy,
+    cx: ox + layer.width / 2, cy: oy + layer.height / 2,
+    angle: 0, skewX: 0, skewY: 0,
+    grow: scope === 'image',
+    baseW: cv.width, baseH: cv.height,
+    straighten: false, strLine: null, prevSel
+  };
+  _annotXformSyncBar();
+  _annotXformPreview();
+}
+// Skew first, then rotate — the same order the canvas applies them below, so
+// the corner maths and the render can never drift apart.
+function _annotXformMapper(x) {
+  const a = _annotRad(x.angle), cos = Math.cos(a), sin = Math.sin(a);
+  const tx = Math.tan(_annotRad(x.skewX)), ty = Math.tan(_annotRad(x.skewY));
+  return (u, v) => {
+    const su = u + tx * v, sv = ty * u + v;
+    return { x: x.cx + su * cos - sv * sin, y: x.cy + su * sin + sv * cos };
+  };
+}
+function _annotXformCorners(x) {
+  const map = _annotXformMapper(x);
+  const u0 = x.ox - x.cx, v0 = x.oy - x.cy;
+  const u1 = u0 + x.layer.width, v1 = v0 + x.layer.height;
+  return [map(u0, v0), map(u1, v0), map(u1, v1), map(u0, v1)];
+}
+function _annotXformDrawInto(ctx, x, offX, offY) {
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  try { ctx.imageSmoothingQuality = 'high'; } catch (_) {}
+  ctx.translate(x.cx + offX, x.cy + offY);
+  ctx.rotate(_annotRad(x.angle));
+  ctx.transform(1, Math.tan(_annotRad(x.skewY)), Math.tan(_annotRad(x.skewX)), 1, 0, 0);
+  ctx.drawImage(x.layer, x.ox - x.cx, x.oy - x.cy);
+  ctx.restore();
+}
+// Redraw the canvas for the current angle/slant. Whole-picture transforms
+// recompute the canvas size each frame so you see the real result, corners and
+// all, and the view re-fits so the picture doesn't wander off the stage.
+function _annotXformPreview() {
+  const x = _annot && _annot.xform; if (!x) return;
+  const cv = _annot.canvas;
+  let W = x.baseW, H = x.baseH, offX = 0, offY = 0, refit = false;
+  if (x.scope === 'image' && x.grow) {
+    const c = _annotXformCorners(x);
+    const minX = Math.min(...c.map(p => p.x)), maxX = Math.max(...c.map(p => p.x));
+    const minY = Math.min(...c.map(p => p.y)), maxY = Math.max(...c.map(p => p.y));
+    W = _annotClampNum(Math.ceil(maxX - minX), 1, ANNOT_XFORM_MAX_PX);
+    H = _annotClampNum(Math.ceil(maxY - minY), 1, ANNOT_XFORM_MAX_PX);
+    offX = -minX; offY = -minY;
+  }
+  if (cv.width !== W || cv.height !== H) { _annotResizeCanvas(W, H); refit = true; }
+  const ctx = _annot.ctx;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  if (x.base) ctx.drawImage(x.base, offX, offY);
+  _annotXformDrawInto(ctx, x, offX, offY);
+  x.offX = offX; x.offY = offY;
+  if (refit) annotZoomFit();
+}
+// The transformed object becomes the new selection, so it can be turned again,
+// nudged with Move, or filled — the mask comes straight from its alpha.
+function _annotXformSelFromLayer() {
+  const x = _annot.xform, cv = _annot.canvas;
+  const sc = document.createElement('canvas');
+  sc.width = cv.width; sc.height = cv.height;
+  _annotXformDrawInto(sc.getContext('2d'), x, x.offX || 0, x.offY || 0);
+  const d = sc.getContext('2d').getImageData(0, 0, sc.width, sc.height).data;
+  let x0 = sc.width, y0 = sc.height, x1 = -1, y1 = -1;
+  for (let y = 0; y < sc.height; y++) for (let px = 0; px < sc.width; px++) {
+    if (d[(y * sc.width + px) * 4 + 3] < 128) continue;
+    if (px < x0) x0 = px; if (px > x1) x1 = px;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  if (x1 < 0) return null;
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  const mask = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let px = 0; px < w; px++) {
+    mask[y * w + px] = d[((y + y0) * sc.width + (px + x0)) * 4 + 3] >= 128 ? 1 : 0;
+  }
+  const sel = { x: x0, y: y0, w, h, mask };
+  sel.outline = _annotMaskOutline(sel);
+  return sel;
+}
+function _annotXformEnd() {
+  if (!_annot) return;
+  _annot.xform = null;
+  _annotXformSyncBar();
+  _annotSelSyncBar();
+}
+// Burn the transform in. An untouched session just melts away — no history
+// step is spent on a turn of 0°.
+function annotXformApply(quiet) {
+  const x = _annot && _annot.xform; if (!x) return;
+  if (_annotXformIsIdentity(x)) { annotXformCancel(true); return; }
+  _annotXformPreview();
+  const sel = x.scope === 'sel' ? _annotXformSelFromLayer() : null;
+  const what = x.scope === 'sel' ? 'Object' : 'Picture';
+  const bits = [];
+  if (x.angle) bits.push('turned ' + (Math.round(x.angle * 10) / 10) + '°');
+  if (x.skewX) bits.push('slanted ' + (Math.round(x.skewX * 10) / 10) + '° ↔');
+  if (x.skewY) bits.push('slanted ' + (Math.round(x.skewY * 10) / 10) + '° ↕');
+  _annotXformEnd();
+  if (sel) { _annot.sel = sel; _annotSelSyncBar(); }
+  if (!quiet) showToast(what + ' ' + bits.join(', ') + ' ✓ (Undo puts it back)', 'success');
+}
+// Throw the session away and restore the snapshot taken when it started. The
+// selection that was lifted comes back too, so cancelling costs nothing.
+function annotXformCancel(quiet) {
+  if (!_annot || !_annot.xform) return;
+  const prevSel = _annot.xform.prevSel || null;
+  _annotXformEnd();
+  annotUndo();
+  _annot.sel = prevSel;
+  _annotSelSyncBar();
+  if (!quiet) showToast('Turn cancelled — picture put back', 'info');
+}
+function annotXformReset() {
+  const x = _annot && _annot.xform; if (!x) return;
+  x.angle = 0; x.skewX = 0; x.skewY = 0; x.strLine = null;
+  _annotXformSyncBar(); _annotXformPreview();
+}
+function annotXformSet(field, val) {
+  const x = _annot && _annot.xform; if (!x) return;
+  const lim = field === 'angle' ? 180 : 60;
+  x[field] = _annotClampNum(parseFloat(val), -lim, lim);
+  _annotXformSyncBar(); _annotXformPreview();
+}
+function annotXformNudge(deg) {
+  const x = _annot && _annot.xform; if (!x) return;
+  x.angle = _annotWrapDeg(x.angle + deg);
+  _annotXformSyncBar(); _annotXformPreview();
+}
+function annotXformSetGrow(on) {
+  const x = _annot && _annot.xform; if (!x) return;
+  x.grow = !!on;
+  _annotXformPreview();
+}
+// Straighten: drag a line along something that ought to be level (a table rule,
+// the base of a diagram, a line of print) and the picture turns to make it so.
+function annotXformStraightenStart() {
+  const x = _annot && _annot.xform; if (!x) return;
+  x.straighten = true; x.strLine = null;
+  _annotXformSyncBar();
+  showToast('📐 Now drag a line along an edge that should be straight', 'info');
+}
+function _annotXformStraightenFinish() {
+  const x = _annot && _annot.xform; if (!x || !x.strLine) return;
+  const { from, to } = x.strLine;
+  const dx = to.x - from.x, dy = to.y - from.y;
+  x.strLine = null;
+  // A stray click leaves Straighten armed — you meant to trace, not to click.
+  if (Math.hypot(dx, dy) < 20) { showToast('Drag a longer line along the edge you want level', 'info'); _annotXformSyncBar(); return; }
+  x.straighten = false;
+  let deg = Math.atan2(dy, dx) * 180 / Math.PI;
+  if (deg > 90) deg -= 180; else if (deg < -90) deg += 180;
+  if (Math.abs(deg) > 45) deg -= Math.sign(deg) * 90;   // they traced a vertical edge
+  x.angle = _annotWrapDeg(x.angle - deg);
+  _annotXformSyncBar();
+  _annotXformPreview();
+  showToast('Straightened by ' + (Math.round(-deg * 10) / 10) + '° — fine-tune with the Turn slider', 'success');
+}
+function _annotXformSyncBar() {
+  const bar = document.getElementById('annotXformBar');
+  const x = _annot && _annot.xform;
+  if (bar) bar.style.display = x ? 'flex' : 'none';
+  if (!x) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = v; };
+  set('annotXformAngle', x.angle); set('annotXformAngleNum', Math.round(x.angle * 10) / 10);
+  set('annotXformSkewX', x.skewX); set('annotXformSkewY', x.skewY);
+  const lbl = (id, v, unit) => { const el = document.getElementById(id); if (el) el.textContent = (Math.round(v * 10) / 10) + (unit || '°'); };
+  lbl('annotXformSkewXVal', x.skewX); lbl('annotXformSkewYVal', x.skewY);
+  const scope = document.getElementById('annotXformScope');
+  if (scope) scope.textContent = x.scope === 'sel' ? 'the selected object' : 'the whole picture';
+  const growWrap = document.getElementById('annotXformGrowWrap');
+  if (growWrap) growWrap.style.display = x.scope === 'image' ? 'inline-flex' : 'none';
+  const grow = document.getElementById('annotXformGrow');
+  if (grow) grow.checked = !!x.grow;
+  const str = document.getElementById('annotXformStraightenBtn');
+  if (str) str.classList.toggle('active', !!x.straighten);
+}
+
 // History brush: paint the ORIGINAL picture back, one dab at a time.
 function _annotHistoryDab(x, y) {
   if (!_annot.origSnap) return;
@@ -6118,6 +6346,8 @@ function _annotTypingInField(e) {
 function _annotKeyDown(e) {
   if (!_annot) return;
   if (e.code === 'Space' && !_annotTypingInField(e)) { _annot.space = true; const st = document.getElementById('annotStage'); if (st) st.classList.add('canpan'); e.preventDefault(); }
+  // Escape backs out of the open transform first, then out of a selection.
+  if (e.key === 'Escape' && !_annotTypingInField(e) && _annot.xform) { e.preventDefault(); _annot.drawing = false; annotXformCancel(); return; }
   if (e.key === 'Escape' && !_annotTypingInField(e) && (_annot.sel || _annot.selPts)) { _annot.selPts = null; _annot.drawing = false; annotSelClear(); }
   // Ctrl/Cmd+Z works even from a text label; everything else needs the canvas.
   if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); annotUndo(); return; }
@@ -6129,7 +6359,8 @@ function _annotKeyDown(e) {
   if (k === '+' || k === '=') { e.preventDefault(); annotZoomStep(1.3); return; }
   if (k === '-' || k === '_') { e.preventDefault(); annotZoomStep(1 / 1.3); return; }
   if (k === '0') { e.preventDefault(); annotZoomFit(); return; }
-  if (k === 'Enter') { e.preventDefault(); applyAnnotTool(); return; }
+  // Enter commits an open transform (Photoshop's habit); otherwise it saves.
+  if (k === 'Enter') { e.preventDefault(); if (_annot.xform) annotXformApply(); else applyAnnotTool(); return; }
   const tool = ANNOT_KEYS[String(k).toLowerCase()];
   if (tool) { e.preventDefault(); _annotSetTool(tool); }
 }
@@ -6146,8 +6377,13 @@ function _annotUnbindZoomListeners() {
   const st = document.getElementById('annotStage');
   if (st) st.classList.remove('canpan', 'panning');
 }
-const ANNOT_CURSORS = { text: 'text', fill: 'cell', wand: 'cell', move: 'move' };
+const ANNOT_CURSORS = { text: 'text', fill: 'cell', wand: 'cell', move: 'move', rotate: 'grab', skew: 'ew-resize' };
 function _annotSetTool(t) {
+  // Leaving Rotate/Skew settles the open transform: a real turn is kept, an
+  // untouched one is dropped. Nothing is ever left half-applied.
+  if (_annot && _annot.xform && t !== 'rotate' && t !== 'skew') {
+    if (_annotXformIsIdentity(_annot.xform)) annotXformCancel(true); else annotXformApply();
+  }
   if (_annot) _annot.tool = t;
   document.querySelectorAll('.annot-tool').forEach(b => b.classList.toggle('active', b.getAttribute('data-atool') === t));
   const c = document.getElementById('annotCanvas');
@@ -6155,18 +6391,41 @@ function _annotSetTool(t) {
   // With Move active a whole text label is draggable, not just its little handle.
   document.querySelectorAll('#annotStage .annot-textbox').forEach(b => b.classList.toggle('movable', t === 'move'));
   _annotUpdateCloneMarker();   // show the clone-source pin only while the Clone tool is active
+  // Picking Rotate or Skew opens the transform straight away, so the sliders are
+  // there to use — you shouldn't have to drag once to discover the panel.
+  if (_annot && (t === 'rotate' || t === 'skew') && !_annot.xform) _annotXformBegin();
+  _annotXformSyncBar();
 }
 // Single-key tool switching, Photoshop's letters where they exist.
-const ANNOT_KEYS = { e: 'erase', b: 'paint', g: 'fill', s: 'clone', y: 'history', m: 'select', l: 'lasso', w: 'wand', v: 'move', u: 'line', t: 'text' };
+const ANNOT_KEYS = { e: 'erase', b: 'paint', g: 'fill', s: 'clone', y: 'history', m: 'select', l: 'lasso', w: 'wand', v: 'move', u: 'line', t: 'text', r: 'rotate', k: 'skew' };
+// A history step remembers the canvas SIZE as well as its pixels: rotating the
+// whole picture grows the canvas, and undoing that has to shrink it back.
 function _annotPushHistory() {
   if (!_annot) return;
   try {
-    _annot.history.push(_annot.ctx.getImageData(0, 0, _annot.canvas.width, _annot.canvas.height));
+    _annot.history.push({ img: _annot.ctx.getImageData(0, 0, _annot.canvas.width, _annot.canvas.height), w: _annot.canvas.width, h: _annot.canvas.height });
     if (_annot.history.length > 10) _annot.history.shift();
   } catch (_) {}
 }
 function annotUndo() {
-  if (_annot && _annot.history.length) _annot.ctx.putImageData(_annot.history.pop(), 0, 0);
+  if (!_annot) return;
+  // While a rotate/skew is open, undo means "abandon this turn" — stepping the
+  // canvas back underneath a live session would leave the two out of step.
+  // (Cancel clears the session first, so this never recurses.)
+  if (_annot.xform) { annotXformCancel(); return; }
+  if (!_annot.history.length) return;
+  const step = _annot.history.pop();
+  if (_annot.canvas.width !== step.w || _annot.canvas.height !== step.h) {
+    _annotResizeCanvas(step.w, step.h);
+    annotZoomFit();
+  }
+  _annot.ctx.putImageData(step.img, 0, 0);
+}
+// Resize the working canvas (and the marching-ants overlay that rides on it).
+function _annotResizeCanvas(w, h) {
+  if (!_annot) return;
+  _annot.canvas.width = w; _annot.canvas.height = h;
+  if (_annot.selCanvas) { _annot.selCanvas.width = w; _annot.selCanvas.height = h; }
 }
 function _annotPt(e) {
   const c = _annot.canvas, r = c.getBoundingClientRect();
@@ -6322,6 +6581,21 @@ function _annotAntsLoop() {
     sctx.setLineDash([6 / s, 6 / s]);
     sctx.strokeStyle = '#ffffff'; sctx.lineDashOffset = -phase / s; sctx.stroke(path);
     sctx.strokeStyle = '#111111'; sctx.lineDashOffset = -(phase + 6) / s; sctx.stroke(path);
+  }
+  // The straighten guide rides the same overlay: the line you are tracing along
+  // the crooked edge, drawn on top of the picture rather than into it.
+  const xf = _annot.xform;
+  if (xf && xf.strLine) {
+    const s = _annotDisplayScale() || 1;
+    sctx.setLineDash([]);
+    sctx.lineCap = 'round';
+    sctx.lineWidth = Math.max(1.5 / s, 0.6);
+    sctx.beginPath();
+    sctx.moveTo(xf.strLine.from.x, xf.strLine.from.y);
+    sctx.lineTo(xf.strLine.to.x, xf.strLine.to.y);
+    sctx.strokeStyle = 'rgba(255,255,255,0.9)'; sctx.stroke();
+    sctx.lineWidth = Math.max(0.8 / s, 0.3);
+    sctx.strokeStyle = '#0b6b4f'; sctx.stroke();
   }
   requestAnimationFrame(_annotAntsLoop);
 }
@@ -6494,6 +6768,15 @@ function _annotDown(e) {
       ' — fill it, move it, or widen the ± slider', 'info');
     return;
   }
+  if (_annot.tool === 'rotate' || _annot.tool === 'skew') {
+    if (!_annot.xform) _annotXformBegin();
+    const x = _annot.xform; if (!x) return;
+    if (x.straighten) { x.strLine = { from: p, to: p }; _annot.drawing = true; return; }
+    _annot.start = p;
+    _annot.xfStart = { angle: x.angle, skewX: x.skewX, skewY: x.skewY, ang0: Math.atan2(p.y - x.cy, p.x - x.cx) };
+    _annot.drawing = true;
+    return;
+  }
   if (_annot.tool === 'move') {
     if (!_annot.sel) { showToast('Select an area first (⬚, ➰ or 🪄), then drag it with Move', 'info'); return; }
     _annotPushHistory();
@@ -6576,6 +6859,28 @@ function _annotMove(e) {
   if (!_annot || !_annot.drawing) return;
   e.preventDefault();
   const p = _annotPt(e), ctx = _annot.ctx;
+  if (_annot.tool === 'rotate' || _annot.tool === 'skew') {
+    const x = _annot.xform; if (!x) return;
+    if (x.straighten) { if (x.strLine) x.strLine.to = p; return; }   // the guide is drawn by the ants loop
+    if (!_annot.xfStart) return;
+    if (_annot.tool === 'rotate') {
+      const a = Math.atan2(p.y - x.cy, p.x - x.cx);
+      let deg = _annot.xfStart.angle + (a - _annot.xfStart.ang0) * 180 / Math.PI;
+      if (e.shiftKey) deg = Math.round(deg / 15) * 15;   // Shift snaps to 15°, like every transform tool
+      x.angle = _annotWrapDeg(deg);
+    } else {
+      // Drag sideways to slant sideways, up/down to slant up/down. A drag across
+      // half the picture is 45° of slant; Shift locks to one axis.
+      let dx = p.x - _annot.start.x, dy = p.y - _annot.start.y;
+      if (e.shiftKey) { if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0; }
+      const spanX = Math.max(40, _annot.canvas.height / 2), spanY = Math.max(40, _annot.canvas.width / 2);
+      x.skewX = _annotClampNum(_annot.xfStart.skewX + dx / spanX * 45, -60, 60);
+      x.skewY = _annotClampNum(_annot.xfStart.skewY + dy / spanY * 45, -60, 60);
+    }
+    _annotXformSyncBar();
+    _annotXformPreview();
+    return;
+  }
   if (_annot.tool === 'move') {
     if (!_annot.float) return;
     let dx = p.x - _annot.start.x, dy = p.y - _annot.start.y;
@@ -6639,6 +6944,11 @@ function _annotMove(e) {
 }
 function _annotUp() {
   if (!_annot) return;
+  if (_annot.xform && (_annot.tool === 'rotate' || _annot.tool === 'skew')) {
+    if (_annot.xform.straighten && _annot.xform.strLine) _annotXformStraightenFinish();
+    _annot.drawing = false; _annot.start = null; _annot.xfStart = null;
+    return;
+  }
   if (_annot.float) {
     _annotFloatCommit();
     _annot.drawing = false; _annot.start = null; _annot.last = null;
@@ -6738,6 +7048,8 @@ function _annotPlaceText(p) {
 }
 async function applyAnnotTool() {
   if (!_annot) return;
+  // Settle an open rotate/skew so the turn isn't lost on the way out.
+  if (_annot.xform) annotXformApply(true);
   // Burn any label that's still being edited so it isn't lost on Apply.
   document.querySelectorAll('#annotStage .annot-textbox-input').forEach(i => i.blur());
   const { blockId, canvas } = _annot;
@@ -6768,6 +7080,7 @@ function closeAnnotTool() {
   _annotUnbindZoomListeners();
   _annot = null;
   _annotSelSyncBar();
+  _annotXformSyncBar();
 }
 document.addEventListener('click', function (e) {
   const t = e.target.closest && e.target.closest('[data-atool]');
@@ -36403,6 +36716,13 @@ window.annotSelFillColour = annotSelFillColour;
 window.annotSelPatchFill = annotSelPatchFill;
 window.annotSelAiFill = annotSelAiFill;
 window.annotSelClear = annotSelClear;
+window.annotXformSet = annotXformSet;
+window.annotXformNudge = annotXformNudge;
+window.annotXformReset = annotXformReset;
+window.annotXformApply = annotXformApply;
+window.annotXformCancel = annotXformCancel;
+window.annotXformSetGrow = annotXformSetGrow;
+window.annotXformStraightenStart = annotXformStraightenStart;
 window.showToast = showToast;
 window.showConfirm = showConfirm;
 window.closeConfirm = closeConfirm;
