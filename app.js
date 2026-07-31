@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.204.0';
+const APP_VERSION = 'v1.205.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -4082,6 +4082,7 @@ function renderBlocks() {
             <span class="toolbar-divider"></span>
             ${micForBlockHtml(block.id, 'content', 'Dictate the question text')}
             ${improveBtnHtml(block.id, 'content')}
+            ${shortenBtnHtml(block.id, 'content')}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Enter question text..."
                data-block-id="${block.id}" data-field="content"
@@ -4144,19 +4145,19 @@ function renderBlocks() {
               ${aiAnswerBtnHtml(block.id)}
             </div>
             <div class="cer-section" data-mic-wrap>
-              <div class="cer-label claim-label">Claim ${micButtonHtml('', 'Speak the claim')} ${improveBtnHtml(block.id, 'claim')}</div>
+              <div class="cer-label claim-label">Claim ${micButtonHtml('', 'Speak the claim')} ${improveBtnHtml(block.id, 'claim')} ${shortenBtnHtml(block.id, 'claim')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the claim answer..."
                    data-block-id="${block.id}" data-field="claim"
                    oninput="saveBlockContent('${block.id}', 'claim', this.innerHTML)">${block.claim || ''}</div>
             </div>
             <div class="cer-section" data-mic-wrap>
-              <div class="cer-label evidence-label">Evidence ${micButtonHtml('', 'Speak the evidence')} ${improveBtnHtml(block.id, 'evidence')}</div>
+              <div class="cer-label evidence-label">Evidence ${micButtonHtml('', 'Speak the evidence')} ${improveBtnHtml(block.id, 'evidence')} ${shortenBtnHtml(block.id, 'evidence')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the evidence answer..."
                    data-block-id="${block.id}" data-field="evidence"
                    oninput="saveBlockContent('${block.id}', 'evidence', this.innerHTML)">${block.evidence || ''}</div>
             </div>
             <div class="cer-section" data-mic-wrap>
-              <div class="cer-label reasoning-label">Reasoning ${micButtonHtml('', 'Speak the reasoning')} ${improveBtnHtml(block.id, 'reasoning')}</div>
+              <div class="cer-label reasoning-label">Reasoning ${micButtonHtml('', 'Speak the reasoning')} ${improveBtnHtml(block.id, 'reasoning')} ${shortenBtnHtml(block.id, 'reasoning')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the reasoning answer..."
                    data-block-id="${block.id}" data-field="reasoning"
                    oninput="saveBlockContent('${block.id}', 'reasoning', this.innerHTML)">${block.reasoning || ''}</div>
@@ -4179,6 +4180,7 @@ function renderBlocks() {
               <span class="toolbar-divider"></span>
               ${micButtonHtml('', 'Dictate the answer')}
               ${improveBtnHtml(block.id, 'content')}
+              ${shortenBtnHtml(block.id, 'content')}
               ${aiAnswerBtnHtml(block.id)}
             </div>
             <div class="content-editable" contenteditable="true" data-placeholder="Enter the answer..."
@@ -4208,6 +4210,7 @@ function renderBlocks() {
             <span class="toolbar-divider"></span>
             ${micForBlockHtml(block.id, 'content', 'Dictate the explanation')}
             ${improveBtnHtml(block.id, 'content')}
+            ${shortenBtnHtml(block.id, 'content')}
             ${aiExplainBtnHtml(block.id)}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Enter explanation text… (you can paste a picture here too)"
@@ -4379,6 +4382,13 @@ function improveBtnHtml(blockId, field) {
   return `<button type="button" class="improve-btn" data-improve-block="${blockId}" data-improve-field="${field}" title="Improve grammar, phrasing and sentence structure with AI — keeps your meaning">✨ Improve</button>`;
 }
 
+// "✂️ Shorten" button — sits next to ✨ Improve on every editable text box,
+// answer box and explanation box. Cuts the wordiness out of a paragraph while
+// keeping every science keyword and the exact meaning.
+function shortenBtnHtml(blockId, field) {
+  return `<button type="button" class="improve-btn shorten-btn" data-shorten-block="${blockId}" data-shorten-field="${field}" title="Shorten with AI — trims the words down but keeps every keyword, science fact and the exact meaning">✂️ Shorten</button>`;
+}
+
 // "🤖 AI answer" button shown on every ANSWER block (CER and plain answer).
 // Reads the whole question above it — text, parts, tables and diagrams — and
 // crafts the model answer, grounded FIRST on the Teaching Notes database.
@@ -4534,7 +4544,9 @@ document.addEventListener('click', function (e) {
   .mcq-correct-radio:checked { border-color:var(--primary,#0b6b4f); background:var(--primary,#0b6b4f); box-shadow:inset 0 0 0 3px #fff; }
   .improve-btn { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border:1px solid var(--border,#e3e6e4); background:#fff; border-radius:8px; cursor:pointer; font-size:0.72rem; font-weight:600; color:var(--primary,#0b6b4f); vertical-align:middle; }
   .improve-btn:hover { border-color:var(--primary,#0b6b4f); background:var(--primary-light,#e8f3ec); }
-  .improve-btn:disabled { opacity:.6; cursor:default; }`;
+  .improve-btn:disabled { opacity:.6; cursor:default; }
+  .improve-btn.shorten-btn { color:#b45309; }
+  .improve-btn.shorten-btn:hover { border-color:#b45309; background:#fdf4e3; }`;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
 })();
 // Delegated handler: rewrite the box's current text with better grammar /
@@ -4543,6 +4555,7 @@ document.addEventListener('click', function (e) {
 document.addEventListener('click', async function (e) {
   const btn = e.target.closest && e.target.closest('.improve-btn');
   if (!btn || btn.disabled) return;
+  if (btn.classList.contains('shorten-btn')) return;   // ✂️ Shorten shares the styling, not the handler
   e.preventDefault();
   const blockId = btn.getAttribute('data-improve-block');
   const field = btn.getAttribute('data-improve-field');
@@ -4572,6 +4585,90 @@ document.addEventListener('click', async function (e) {
   finally { btn.disabled = false; btn.innerHTML = orig; }
 });
 
+// ── ✂️ Shorten ──────────────────────────────────────────────────────────────
+// Plain text out of an editable box, but keeping the line breaks — an
+// explanation written as three paragraphs should come back as three paragraphs.
+function _boxPlainText(html) {
+  if (!html) return '';
+  return String(html)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '\n• ')
+    .replace(/<(p|div|h[1-6])[^>]*>/gi, '\n')
+    .replace(/<\/(p|div|h[1-6])>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n').map(l => l.trim()).join('\n')
+    .trim();
+}
+function _wordCount(t) { return (String(t || '').trim().match(/\S+/g) || []).length; }
+
+// Delegated handler: rewrite the box's text as a shorter version of itself.
+// Same wiring as ✨ Improve — content-editables use data-shorten-block +
+// data-shorten-field, plain inputs/textareas use data-shorten-el.
+document.addEventListener('click', async function (e) {
+  const btn = e.target.closest && e.target.closest('.shorten-btn');
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
+  const blockId = btn.getAttribute('data-shorten-block');
+  const field = btn.getAttribute('data-shorten-field');
+  const elId = btn.getAttribute('data-shorten-el');
+  let getText, setText;
+  if (blockId && field) {
+    const el = document.querySelector('.content-editable[data-block-id="' + blockId + '"][data-field="' + field + '"]');
+    if (!el) return;
+    getText = () => _boxPlainText(el.innerHTML || '');
+    setText = (t) => {
+      // Explanation boxes can hold pasted pictures — shorten the words, keep the images.
+      const imgs = Array.from(el.querySelectorAll('img')).map(i => i.outerHTML).join('');
+      el.innerHTML = escapeHtml(t).replace(/\n/g, '<br>') + imgs;
+      saveBlockContent(blockId, field, el.innerHTML);
+    };
+  } else if (elId) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    getText = () => el.value || '';
+    setText = (t) => { el.value = t; el.dispatchEvent(new Event('input', { bubbles: true })); };
+  } else return;
+
+  const text = (getText() || '').trim();
+  if (!text) { showToast('Type something in the box first, then Shorten', 'info'); return; }
+  const before = _wordCount(text);
+  if (before < 12) { showToast('That is already short — nothing worth cutting', 'info'); return; }
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '✂️ …';
+  try {
+    const prompt =
+      'Shorten the text below. It comes from a Singapore primary-school (PSLE) science question, model answer or teacher explanation.\n' +
+      'RULES — follow every one:\n' +
+      '1. Keep the EXACT same meaning. Do not add, remove or change any science fact, idea, conclusion or cause-and-effect link.\n' +
+      '2. Keep ALL the important science keywords and key phrases exactly as written (e.g. "water vapour", "evaporation", "gains heat", "dispersal", "kinetic energy") — these are what the answer is marked on. Never swap a keyword for a simpler word.\n' +
+      '3. Cut only the wordiness: repetition, filler, restating the question, over-long linking phrases. Merge sentences where it reads naturally.\n' +
+      '4. Aim for roughly 60–75% of the original length. Never lose a whole point just to make it shorter.\n' +
+      '5. Keep the same order of ideas, the same paragraph/line breaks, and exam-style phrasing a P6 pupil could write.\n' +
+      '6. Plain text only — no markdown, no quotation marks, no labels, no commentary, no [[brackets]].\n' +
+      'Return ONLY the shortened text.\n\nText:\n' + text;
+    const out = (await askGemini(prompt, { maxOutputTokens: 700, temperature: 0.2 }) || '')
+      .replace(/^\s*```[a-z]*\s*|\s*```\s*$/gi, '')
+      .replace(/\[\[|\]\]/g, '')
+      .trim();
+    if (!out) { showToast('AI returned nothing — try again', 'error'); return; }
+    const after = _wordCount(out);
+    if (after >= before) {
+      // Nothing was actually saved — leave the teacher's own wording alone.
+      showToast('It is already about as tight as it gets — left unchanged', 'info');
+      return;
+    }
+    setText(out);
+    showToast(`Shortened ✂️ ${before} → ${after} words — check the keywords are all still there`, 'success');
+  } catch (err) {
+    console.error('shorten failed', err);
+    showToast('Shorten failed: ' + (err && err.message ? err.message : err), 'error');
+  } finally { btn.disabled = false; btn.innerHTML = orig; }
+});
+
 const COMMON_MISTAKE_COLORS = { teal: '#0d9488', orange: '#ea580c', red: '#dc2626', purple: '#7c3aed', blue: '#2d6ca8' };
 
 // Editor body markup for the worksheet-creator block types.
@@ -4583,7 +4680,7 @@ function renderImportedBlockEditorBody(block) {
         <div class="block-body">
           <input class="form-input" type="text" placeholder="Label (e.g. (a))" style="max-width:160px;margin-bottom:8px;"
                  value="${escapeHtml(block.label || '')}" oninput="saveBlockField('${id}','label',this.value)">
-          <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">${micForBlockHtml(id, 'content', 'Dictate the part text')}</div>
+          <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:4px;">${micForBlockHtml(id, 'content', 'Dictate the part text')} ${improveBtnHtml(id, 'content')} ${shortenBtnHtml(id, 'content')}</div>
           <div class="content-editable" contenteditable="true" data-placeholder="Part text…"
                data-block-id="${id}" data-field="content"
                oninput="saveBlockContent('${id}','content',this.innerHTML)">${block.content || ''}</div>
@@ -4677,6 +4774,7 @@ function renderImportedBlockEditorBody(block) {
                    value="${escapeHtml(block.title || 'Common Mistake')}" oninput="saveBlockField('${id}','title',this.value)">
             <select class="form-input" style="max-width:130px;" onchange="saveBlockField('${id}','color',this.value)">${colorOpts}</select>
             ${micForBlockHtml(id, 'text', 'Dictate the common mistake')}
+            ${shortenBtnHtml(id, 'text')}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Describe the common mistake…"
                data-block-id="${id}" data-field="text"
@@ -4688,7 +4786,7 @@ function renderImportedBlockEditorBody(block) {
         <div class="block-body">
           <input class="form-input" type="text" placeholder="Label" style="margin-bottom:8px;"
                  value="${escapeHtml(block.label || "Student's Answer")}" oninput="saveBlockField('${id}','label',this.value)">
-          <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">${micForBlockHtml(id, 'answer', 'Dictate the student answer')}</div>
+          <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:4px;">${micForBlockHtml(id, 'answer', 'Dictate the student answer')} ${shortenBtnHtml(id, 'answer')}</div>
           <div class="content-editable" contenteditable="true" data-placeholder="Example (often incorrect) answer…"
                data-block-id="${id}" data-field="answer"
                oninput="saveBlockContent('${id}','answer',this.innerHTML)">${block.answer || ''}</div>
@@ -4698,7 +4796,7 @@ function renderImportedBlockEditorBody(block) {
         <div class="block-body">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
             <span style="font-size:0.8rem;color:var(--text-muted);">🔑 Answer key — hidden from students during practice.</span>
-            ${micForBlockHtml(id, 'text', 'Dictate the answer key')}
+            <span style="display:flex;align-items:center;gap:6px;">${micForBlockHtml(id, 'text', 'Dictate the answer key')} ${shortenBtnHtml(id, 'text')}</span>
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Answer key text…"
                data-block-id="${id}" data-field="text"
