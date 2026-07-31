@@ -5479,7 +5479,39 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .elg-legend-box { border: 1px solid #f0b542; background: rgba(240,181,66,0.12); border-radius: 12px; padding: 14px 16px; font-size: 0.85rem; line-height: 1.65; margin-bottom: 18px; }
 .elg-legend-box span { display: block; margin-top: 6px; font-size: 0.72rem; color: rgba(255,255,255,0.55); }
 .elg-tree-map { position: relative; }
-.elg-tree-links { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+/* The radial wheel: a square map, nodes absolutely placed at polar percent
+   coordinates by elgTreeLayout, connectors drawn in a 0-100 viewBox SVG so
+   one layout fits every screen. */
+.elg-tree-map.radial { width: 100%; max-width: 720px; aspect-ratio: 1 / 1; margin: 6px auto 0; }
+.elg-tree-links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+.elg-heart { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 62px; height: 62px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.7rem; background: radial-gradient(circle at 38% 32%, #3a2b52, #17101f); border: 2px solid #f0b542; box-shadow: 0 0 22px rgba(240,181,66,0.4); z-index: 1; }
+.elg-rnode { position: absolute; transform: translate(-50%,-50%); width: 46px; height: 46px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.22); background: #1d1428; color: #f3e9ff; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; z-index: 2; padding: 0; }
+.elg-rnode.small { width: 34px; height: 34px; }
+.elg-rnode-ico { font-size: 1.05rem; line-height: 1; }
+.elg-rnode.small .elg-rnode-ico { font-size: 0.82rem; }
+.elg-rnode-lv { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); font-size: 0.56rem; font-weight: 800; background: #0d0813; border: 1px solid rgba(255,255,255,0.25); border-radius: 999px; padding: 1px 6px; white-space: nowrap; }
+.elg-rnode.faroff { opacity: 0.38; }
+.elg-rnode.poor { border-color: rgba(240,181,66,0.5); }
+.elg-rnode.can { border-color: #ffd98a; box-shadow: 0 0 12px rgba(240,181,66,0.45); }
+.elg-rnode.owned { border-color: #4ade80; }
+.elg-rnode.owned .elg-rnode-lv { border-color: #4ade80; color: #86efac; }
+.elg-rnode.maxed { border-color: #f0b542; background: #2a1f12; }
+.elg-rnode.maxed .elg-rnode-lv { border-color: #f0b542; color: #ffd98a; }
+.elg-rnode.sel { outline: 2px solid #fff; outline-offset: 2px; }
+.elg-node-info { min-height: 92px; border: 1px solid rgba(255,255,255,0.14); border-radius: 14px; background: rgba(255,255,255,0.04); padding: 16px 18px; margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.elg-ni-hint { color: rgba(255,255,255,0.55); font-size: 0.84rem; }
+.elg-ni-head { display: flex; align-items: center; gap: 10px; }
+.elg-ni-ico { font-size: 1.25rem; }
+.elg-ni-head b { font-size: 0.95rem; }
+.elg-ni-lv { margin-left: auto; font-size: 0.76rem; font-weight: 800; color: #ffd98a; background: rgba(240,181,66,0.14); border-radius: 999px; padding: 3px 11px; }
+.elg-ni-desc { color: rgba(255,255,255,0.72); font-size: 0.85rem; line-height: 1.65; }
+.elg-ni-scale { color: rgba(255,255,255,0.5); font-size: 0.78rem; }
+.elg-ni-state { display: flex; align-items: center; gap: 10px; }
+.elg-ni-lock { color: rgba(255,255,255,0.55); font-size: 0.8rem; }
+.elg-ni-max { color: #ffd98a; font-weight: 800; font-size: 0.82rem; }
+.elg-ni-buy { font-size: 0.85rem; padding: 8px 20px; }
+.elg-skill-lv { font-style: normal; font-size: 0.68rem; color: #ffd98a; font-weight: 800; }
+@media (max-width: 640px) { .elg-rnode { width: 38px; height: 38px; } .elg-rnode.small { width: 29px; height: 29px; } }
 .elg-tier { position: relative; z-index: 1; margin-bottom: 26px; }
 .elg-tier-lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.5); margin-bottom: 9px; }
 .elg-tier-row { display: flex; gap: 10px; flex-wrap: wrap; }

@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.221.0';
+const APP_VERSION = 'v1.222.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -29534,7 +29534,7 @@ function tcgGuideHtml() {
         ['Playing', 'Drag (or use WASD / the arrow keys) to move. Your monster attacks the nearest enemy by itself — your job is where to stand and when to fire a skill. Keys <b>1–9</b> fire your learned actives in bar order, and <b>T</b> opens the skill tree mid-fight.'],
         ['✦ Skill points', 'A science question arrives every ' + ELG_Q_EVERY + ' seconds and freezes the battle while it is up: a correct answer is <b>+' + ELG_SP_CORRECT + ' point</b>, and clearing a wave is <b>+' + ELG_SP_WAVE + '</b>. Points are spent in the skill tree, which you can open mid-fight.'],
         ['The four trees', ELG_ROLE_ORDER.map(r => ELG_ROLES[r].icon + ' <b>' + ELG_ROLES[r].name + '</b> — ' + escapeHtml(ELG_ROLES[r].blurb)).join('<br>')
-          + '<br><span class="tcg-guide-dim">Your monster\'s battle skill decides its role, and every monster of that role shares the same tree — so swapping hero never means learning a new game. Each tree holds <b>' + (ELG_TREES.striker || []).length + ' skills over ' + ELG_TIERS.length + ' tiers</b>, linked like a real skill tree: every skill grows from one below it and unlocks only once its parent is learned, ending in two capstones you choose between. Roughly a third of every tree is an <b>active skill</b> with its own button, hotkey and cooldown — lances, dashes, orbiting blades, chain lightning, auras, summons, buffs and arena-wide storms.</span>'],
+          + '<br><span class="tcg-guide-dim">Your monster\'s battle skill decides its role, and every monster of that role shares the same tree — so swapping hero never means learning a new game. Each tree is a <b>wheel of ' + (ELG_TREES.striker || []).length + ' skills over ' + ELG_TIERS.length + ' rings</b> around the role\'s heart, and most skills level <b>1→5</b> (actives to 3, each level +30% power and −8% cooldown) — far more than any run can afford, so every run is a build. Skills unlock along the links: each grows from the one before it, out to two capstones you choose between. Roughly a third of every tree is an <b>active skill</b> with its own button, hotkey and cooldown — lances, dashes, orbiting blades, chain lightning, auras, summons, buffs and arena-wide storms.</span>'],
         ['The horde', 'Enemies are drawn from the other cards, and the further you get the rarer they are. Wave 1 fields <b>' + ELG_WAVE_BASE + ' enemies</b> and every wave after it is <b>10% bigger than the last</b> — compounding, with no final wave: the run only ends when your monster falls. <b>Every fifth wave</b> promotes part of the horde to elites and sends a king to lead it.'],
         ['7★ passives', 'A 7★ hero fights with a run-changing rule of its own:<br>'
           + Object.keys(ELG_LEGEND_PASSIVES).map(k => ELG_LEGEND_PASSIVES[k].icon + ' <b>' + escapeHtml(ELG_LEGEND_PASSIVES[k].name) + '</b> — ' + escapeHtml(ELG_LEGEND_PASSIVES[k].desc)).join('<br>')],
@@ -30812,6 +30812,85 @@ const ELG_REQS = {
   wa_cap1: 'wa_fort',   wa_cap2: 'wa_spike'
 };
 Object.keys(ELG_TREES).forEach(role => ELG_TREES[role].forEach(n => { n.req = ELG_REQS[n.id] || null; }));
+// ---- The connective tissue: 40 extra skills per role -----------------------
+// The 20 hand-written nodes above are the NOTABLES — actives and build-defining
+// passives. Around them, each role's web is filled out with 40 small levelled
+// passives generated from role-flavoured templates, so a tree holds 60 skills
+// and can never be bought out: every run is a build, not a checklist.
+const ELG_SMALLS = {
+  striker: [
+    ['🗡️', 'Whetted Edge',    { dmg: 0.05 },       '+5% attack damage'],
+    ['⚡', 'Fleet Hands',      { aspd: 0.04 },      '+4% attack speed'],
+    ['🎯', 'Sharp Eye',        { crit: 0.03 },      '+3% critical chance'],
+    ['👟', 'Light Feet',       { speed: 0.05 },     '+5% move speed'],
+    ['❤️', 'Battle Vigor',     { hp: 0.05 },        '+5% maximum health'],
+    ['🩸', 'Red Thirst',       { lifesteal: 0.02 }, 'Heal 2% of the damage you deal'],
+    ['🏹', 'Long Reach',       { range: 0.05 },     '+5% attack range'],
+    ['🛡️', 'Duelist Guard',   { armor: 0.03 },     '+3% damage reduction']
+  ],
+  arcanist: [
+    ['✨', 'Attuned Motes',    { dmg: 0.04 },       '+4% attack damage'],
+    ['📡', 'Farther Sight',    { range: 0.06 },     '+6% attack range'],
+    ['🌀', 'Quick Weave',      { cdr: 0.04 },       'Skills recharge 4% faster'],
+    ['📈', 'Deeper Well',      { skillDmg: 0.05 },  '+5% skill damage'],
+    ['⚡', 'Nimble Cast',      { aspd: 0.04 },      '+4% attack speed'],
+    ['❤️', 'Warded Flesh',     { hp: 0.05 },        '+5% maximum health'],
+    ['👟', 'Drift Step',       { speed: 0.04 },     '+4% move speed'],
+    ['🎯', 'Focused Mind',     { crit: 0.03 },      '+3% critical chance']
+  ],
+  mender: [
+    ['❤️', 'Blooming Health',  { hp: 0.06 },        '+6% maximum health'],
+    ['🌿', 'Rooted Renewal',   { regen: 0.003 },    'Regrow 0.3% health a second'],
+    ['💗', 'Kind Light',       { healAmp: 0.06 },   'Healing 6% stronger'],
+    ['🛡️', 'Soft Ward',       { armor: 0.03 },     '+3% damage reduction'],
+    ['🕯️', 'Bright Wick',     { dmg: 0.04 },       '+4% attack damage'],
+    ['👟', 'Gliding Step',     { speed: 0.04 },     '+4% move speed'],
+    ['🩸', 'Gentle Drain',     { lifesteal: 0.02 }, 'Heal 2% of the damage you deal'],
+    ['🌀', 'Patient Craft',    { cdr: 0.04 },       'Skills recharge 4% faster']
+  ],
+  warden: [
+    ['🪨', 'Thick Hide',       { hp: 0.06 },        '+6% maximum health'],
+    ['🛡️', 'Tempered Plate',  { armor: 0.03 },     '+3% damage reduction'],
+    ['🌵', 'Barbed Skin',      { thorns: 0.05 },    'Reflect 5% of damage taken'],
+    ['💪', 'Heavy Arm',        { dmg: 0.04 },       '+4% attack damage'],
+    ['⚓', 'Firm Footing',     { regen: 0.003 },    'Regrow 0.3% health a second'],
+    ['⚡', 'Drilled Reflex',   { aspd: 0.04 },      '+4% attack speed'],
+    ['👟', 'March Pace',       { speed: 0.04 },     '+4% move speed'],
+    ['❤️', 'Iron Constitution',{ hp: 0.05 },        '+5% maximum health']
+  ]
+};
+const ELG_SMALL_TIERS = [8, 8, 8, 8, 6, 2];   // +40 per role across the six rings
+Object.keys(ELG_TREES).forEach(role => {
+  const tpl = ELG_SMALLS[role];
+  let gi = 0;
+  ELG_SMALL_TIERS.forEach((count, ti) => {
+    for (let i = 0; i < count; i++, gi++) {
+      const t = tpl[gi % tpl.length];
+      ELG_TREES[role].push({ id: 'g_' + role + '_' + (ti + 1) + '_' + i, tier: ti + 1,
+        name: t[1], icon: t[0], desc: t[3] + ' per level.', fx: t[2], small: true, req: null });
+    }
+  });
+  // Each generated node grows from a node one ring in, fanned with a stride so
+  // the branches spread around the wheel instead of piling onto one parent.
+  for (let tier = 2; tier <= 6; tier++) {
+    const prev = ELG_TREES[role].filter(n => n.tier === tier - 1);
+    ELG_TREES[role].filter(n => n.tier === tier && n.small).forEach((n, i) => {
+      n.req = prev[(i * 3 + tier) % prev.length].id;
+    });
+  }
+});
+// How many times a skill can be levelled: small passives and plain percentage
+// notables go to 5, an active to 3 (each level: +30% power, -8% cooldown), and
+// one-of-a-kind mechanics (extra shots, revives, capstone rules) stay at 1.
+const ELG_UNIQUE_FX = ['shots', 'pierce', 'revive', 'reviveBlast', 'pulse', 'deathBlast', 'charged',
+                       'killHaste', 'capCyclone', 'capNova', 'capEcho', 'capBloom', 'capFont', 'capRetri'];
+function elgNodeMax(n) {
+  if (!n) return 1;
+  if (n.max) return n.max;
+  if (n.act) return 3;
+  if (n.fx && Object.keys(n.fx).some(k => ELG_UNIQUE_FX.indexOf(k) >= 0)) return 1;
+  return 5;
+}
 const ELG_NODE_BY_ID = {};
 Object.keys(ELG_TREES).forEach(r => ELG_TREES[r].forEach(n => { ELG_NODE_BY_ID[n.id] = Object.assign({ role: r }, n); }));
 
@@ -30878,8 +30957,9 @@ function elgPassives(r) {
               capBloom: 0, capFont: 0, capRetri: 0 };
   Object.keys(r.tree || {}).forEach(id => {
     const n = ELG_NODE_BY_ID[id];
-    if (!n || !n.fx) return;
-    Object.keys(n.fx).forEach(k => { p[k] = (p[k] || 0) + n.fx[k]; });
+    const lvl = Math.min(r.tree[id] | 0, elgNodeMax(n));
+    if (!n || !n.fx || lvl <= 0) return;
+    Object.keys(n.fx).forEach(k => { p[k] = (p[k] || 0) + n.fx[k] * lvl; });
   });
   return p;
 }
@@ -31518,8 +31598,9 @@ function elgCast(id) {
   if ((r.cds[id] || 0) > 0) return;
   const p = elgPassives(r);
   const a = n.act;
-  const power = r.base.dmg * (1 + p.dmg + p.skillDmg);
-  r.cds[id] = a.cd;
+  const lvl = Math.max(1, Math.min(r.tree[id] | 0, elgNodeMax(n)));
+  const power = r.base.dmg * (1 + p.dmg + p.skillDmg) * (1 + 0.3 * (lvl - 1));
+  r.cds[id] = a.cd * (1 - 0.08 * (lvl - 1));
   if (a.kind === 'nova') {
     elgAreaHit(r.x, r.y, a.radius, power * a.dmg, 'nova');
     if (a.stun) r.enemies.forEach(e => { if (Math.hypot(e.x - r.x, e.y - r.y) <= a.radius + e.r) e.stun = a.stun; });
@@ -31608,10 +31689,11 @@ function elgRenderSkills() {
   host.innerHTML = acts.map((n, i) => {
     const cd = r.cds[n.id] || 0;
     const ready = cd <= 0;
-    return '<button type="button" class="elg-skill' + (ready ? ' ready' : '') + '" onclick="elgCast(\'' + n.id + '\')" title="' + escapeHtml(n.name + ' — ' + n.desc + (i < 9 ? ' (key ' + (i + 1) + ')' : '')) + '">'
+    const lv = elgRun.tree[n.id] | 0;
+    return '<button type="button" class="elg-skill' + (ready ? ' ready' : '') + '" onclick="elgCast(\'' + n.id + '\')" title="' + escapeHtml(n.name + ' Lv ' + lv + ' — ' + n.desc + (i < 9 ? ' (key ' + (i + 1) + ')' : '')) + '">'
       + (i < 9 ? '<span class="elg-skill-key">' + (i + 1) + '</span>' : '')
       + '<span class="elg-skill-ico">' + n.icon + '</span>'
-      + '<span class="elg-skill-name">' + escapeHtml(n.name) + '</span>'
+      + '<span class="elg-skill-name">' + escapeHtml(n.name) + (lv > 1 ? ' <i class="elg-skill-lv">L' + lv + '</i>' : '') + '</span>'
       + (ready ? '<span class="elg-skill-cd ok">READY</span>' : '<span class="elg-skill-cd">' + cd.toFixed(1) + 's</span>')
       + '</button>';
   }).join('');
@@ -31642,34 +31724,66 @@ function elgCloseTree() {
   if (r && !r.quiz) r.qPause = false;
   elgRenderSkills();
 }
+// The tree is a WHEEL: the role's heart at the centre, six rings of skills
+// around it, every node placed by polar coordinates (percent of the square
+// map, so one layout serves every screen size) and linked to the node it
+// grows from. Nodes are compact circles; reading and buying happens in the
+// panel below the wheel.
+let elgTreeSel = null;
+function elgTreeLayout(nodes) {
+  const byId = {};
+  nodes.forEach(n => { byId[n.id] = n; });
+  const t1 = nodes.filter(n => n.tier === 1);
+  t1.forEach((n, i) => { n._ang = (i / t1.length) * Math.PI * 2 - Math.PI / 2; });
+  for (let tier = 2; tier <= 6; tier++) {
+    const ring = nodes.filter(n => n.tier === tier);
+    if (!ring.length) continue;
+    // Sit each node near its parent's bearing, then space the ring evenly in
+    // that order — branches stay together, nothing ever overlaps.
+    ring.forEach(n => { const par = byId[n.req]; n._pa = par && par._ang != null ? par._ang : 0; });
+    ring.sort((a, b) => a._pa - b._pa);
+    ring.forEach((n, i) => { n._ang = ring[0]._pa + (i / ring.length) * Math.PI * 2; });
+  }
+  nodes.forEach(n => {
+    const rad = 7.5 + n.tier * 6.3;   // ring 6 tops out at ~45% — nodes stay inside the square
+    n._x = 50 + Math.cos(n._ang) * rad;
+    n._y = 50 + Math.sin(n._ang) * rad;
+  });
+}
 function elgRenderTree() {
   const r = elgRun, host = document.getElementById('elgTree');
   if (!r || !host) return;
-  // Re-rendering (after buying a skill) replaces the overlay's content, which
-  // zeroes its scroll — put the student back where they were in the tree.
   const keepScroll = host.scrollTop;
   const role = ELG_ROLES[r.role];
   const nodes = ELG_TREES[r.role] || [];
-  const tiers = ELG_TIERS.map(t => {
-    return '<div class="elg-tier">'
-      + '<div class="elg-tier-lbl">' + (t === 6 ? 'Capstones' : 'Tier ' + t) + '</div>'
-      + '<div class="elg-tier-row">' + nodes.filter(n => n.tier === t).map(n => {
-          const owned = !!r.tree[n.id];
-          const reach = elgNodeReachable(r, n);
-          const can = !owned && reach && r.sp > 0;
-          const reqName = n.req && ELG_NODE_BY_ID[n.req] ? ELG_NODE_BY_ID[n.req].name : '';
-          const cls = owned ? ' owned' : can ? ' can' : reach ? ' poor' : ' faroff';
-          return '<button type="button" class="elg-node' + cls + '" data-node="' + n.id + '"' + (n.req ? ' data-req="' + n.req + '"' : '')
-            + (can ? ' onclick="elgBuy(\'' + n.id + '\')"' : ' disabled') + '>'
-            + '<span class="elg-node-ico">' + n.icon + '</span>'
-            + '<b>' + escapeHtml(n.name) + '</b>'
-            + '<span class="elg-node-desc">' + escapeHtml(n.desc) + '</span>'
-            + '<span class="elg-node-tag">' + (owned ? '✓ learned'
-                : !reach ? '🔒 grows from ' + escapeHtml(reqName)
-                : !can ? '✦ earn a skill point'
-                : (n.act ? 'ACTIVE · ✦1' : '✦1')) + '</span>'
-            + '</button>';
-        }).join('') + '</div></div>';
+  elgTreeLayout(nodes);
+  const byId = {};
+  nodes.forEach(n => { byId[n.id] = n; });
+  // Connectors: each node to the skill it grows from (ring 1 to the heart).
+  let links = '';
+  nodes.forEach(n => {
+    const par = n.req ? byId[n.req] : null;
+    const x1 = par ? par._x : 50, y1 = par ? par._y : 50;
+    const owned = (r.tree[n.id] | 0) > 0;
+    const open = !n.req || (r.tree[n.req] | 0) > 0;
+    const color = owned ? '#4ade80' : open ? '#f0b542' : 'rgba(255,255,255,0.14)';
+    links += '<line x1="' + x1.toFixed(2) + '" y1="' + y1.toFixed(2) + '" x2="' + n._x.toFixed(2) + '" y2="' + n._y.toFixed(2)
+      + '" stroke="' + color + '" stroke-width="1.6"' + (owned || open ? '' : ' stroke-dasharray="3 3"')
+      + ' vector-effect="non-scaling-stroke"/>';
+  });
+  const nodeHtml = nodes.map(n => {
+    const lvl = r.tree[n.id] | 0;
+    const max = elgNodeMax(n);
+    const reach = elgNodeReachable(r, n);
+    const maxed = lvl >= max;
+    const can = !maxed && reach && r.sp > 0;
+    const cls = (n.small ? ' small' : '') + (maxed ? ' maxed' : lvl > 0 ? ' owned' : can ? ' can' : reach ? ' poor' : ' faroff')
+      + (elgTreeSel === n.id ? ' sel' : '');
+    return '<button type="button" class="elg-rnode' + cls + '" style="left:' + n._x.toFixed(2) + '%;top:' + n._y.toFixed(2) + '%;"'
+      + ' data-node="' + n.id + '" onclick="elgTreeSelect(\'' + n.id + '\')" title="' + escapeHtml(n.name) + '">'
+      + '<span class="elg-rnode-ico">' + n.icon + '</span>'
+      + '<span class="elg-rnode-lv">' + lvl + '/' + max + '</span>'
+      + '</button>';
   }).join('');
   const leg = r.legend;
   host.innerHTML = '<div class="elg-tree-card">'
@@ -31678,52 +31792,66 @@ function elgRenderTree() {
     +   '<span class="elg-tree-sp">✦ ' + r.sp + ' skill point' + (r.sp === 1 ? '' : 's') + '</span>'
     +   '<button type="button" class="elg-x" onclick="elgCloseTree()">✕</button>'
     + '</div>'
-    + '<p class="elg-tree-lead">' + nodes.length + ' skills over ' + ELG_TIERS.length + ' tiers — every ' + role.name + ' shares this tree, whichever monster you brought. Skills unlock along the links: each one needs the skill it grows from. Answer a science question or clear a wave for another point. In the fight, keys <b>1–9</b> fire your learned actives and <b>T</b> opens this tree.</p>'
+    + '<p class="elg-tree-lead">' + nodes.length + ' skills in a wheel around your role\'s heart, most of them levelling 1→5 — far more than any run can afford, so every run is a build. Skills unlock along the links: each one needs the skill it grows from. Answer a science question or clear a wave for another ✦ point; in the fight, keys <b>1–9</b> fire your actives and <b>T</b> opens this wheel.</p>'
     + (leg ? '<div class="elg-legend-box">' + leg.icon + ' <b>' + escapeHtml(leg.name) + '</b> — ' + escapeHtml(leg.desc) + '<span>7★ passive · always on</span></div>' : '')
-    + '<div class="elg-tree-map" id="elgTreeMap"><svg class="elg-tree-links" id="elgTreeLinks" aria-hidden="true"></svg>' + tiers + '</div>'
+    + '<div class="elg-tree-map radial">'
+    +   '<svg class="elg-tree-links" viewBox="0 0 100 100" aria-hidden="true">' + links + '</svg>'
+    +   '<div class="elg-heart" title="' + escapeHtml(role.name + ' — ' + role.blurb) + '">' + role.icon + '</div>'
+    +   nodeHtml
+    + '</div>'
+    + '<div class="elg-node-info" id="elgNodeInfo"></div>'
     + '<div class="elg-tree-foot"><button type="button" class="btn btn-primary" onclick="elgCloseTree()">▶ Back to the fight</button></div>'
     + '</div>';
   host.scrollTop = keepScroll;
-  requestAnimationFrame(elgDrawTreeLinks);
-  if (!elgRenderTree._resize) {
-    elgRenderTree._resize = true;
-    window.addEventListener('resize', () => { if (document.getElementById('elgTreeMap')) elgDrawTreeLinks(); });
-  }
+  elgRenderNodeInfo();
 }
-// The lines between a skill and the one it grows from. Drawn from the real
-// laid-out positions, so they survive wrapping on a narrow screen.
-function elgDrawTreeLinks() {
-  const r = elgRun;
-  const map = document.getElementById('elgTreeMap'), svg = document.getElementById('elgTreeLinks');
-  if (!r || !map || !svg) return;
-  const W = map.scrollWidth, H = map.scrollHeight;
-  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-  svg.setAttribute('width', W); svg.setAttribute('height', H);
-  // Rect-based, not offsetLeft: the tier rows are positioned (to paint above
-  // the SVG), which would make them the offsetParent and skew every line.
-  const mb = map.getBoundingClientRect();
-  let out = '';
-  map.querySelectorAll('[data-req]').forEach(el => {
-    const from = map.querySelector('[data-node="' + el.dataset.req + '"]');
-    if (!from) return;
-    const a = from.getBoundingClientRect(), b = el.getBoundingClientRect();
-    const x1 = a.left - mb.left + a.width / 2, y1 = a.bottom - mb.top;
-    const x2 = b.left - mb.left + b.width / 2, y2 = b.top - mb.top;
-    const owned = !!r.tree[el.dataset.node], open = !!r.tree[el.dataset.req];
-    const color = owned ? '#4ade80' : open ? '#f0b542' : 'rgba(255,255,255,0.16)';
-    const my = (y1 + y2) / 2;
-    out += '<path d="M' + x1 + ' ' + y1 + ' C ' + x1 + ' ' + my + ', ' + x2 + ' ' + my + ', ' + x2 + ' ' + y2 + '"'
-      + ' fill="none" stroke="' + color + '" stroke-width="2"' + (owned || open ? '' : ' stroke-dasharray="4 4"') + '/>';
-  });
-  svg.innerHTML = out;
+function elgTreeSelect(id) {
+  elgTreeSel = id;
+  const host = document.getElementById('elgTree');
+  if (host) {
+    host.querySelectorAll('.elg-rnode.sel').forEach(b => b.classList.remove('sel'));
+    const btn = host.querySelector('[data-node="' + id + '"]');
+    if (btn) btn.classList.add('sel');
+  }
+  elgRenderNodeInfo();
+}
+// The reading panel under the wheel — name, effect, level, and the Learn
+// button when the skill is reachable and a point is in hand.
+function elgRenderNodeInfo() {
+  const r = elgRun, host = document.getElementById('elgNodeInfo');
+  if (!r || !host) return;
+  const n = elgTreeSel ? ELG_NODE_BY_ID[elgTreeSel] : null;
+  if (!n || n.role !== r.role) {
+    host.innerHTML = '<span class="elg-ni-hint">Tap any skill on the wheel to read it — ✦ ' + r.sp + ' point' + (r.sp === 1 ? '' : 's') + ' to spend.</span>';
+    return;
+  }
+  const lvl = r.tree[n.id] | 0;
+  const max = elgNodeMax(n);
+  const reach = elgNodeReachable(r, n);
+  const reqName = n.req && ELG_NODE_BY_ID[n.req] ? ELG_NODE_BY_ID[n.req].name : '';
+  const state = lvl >= max ? '<span class="elg-ni-max">★ MAX LEVEL</span>'
+    : !reach ? '<span class="elg-ni-lock">🔒 grows from ' + escapeHtml(reqName) + '</span>'
+    : r.sp <= 0 ? '<span class="elg-ni-lock">✦ earn a skill point to learn this</span>'
+    : '<button type="button" class="btn btn-primary elg-ni-buy" onclick="elgBuy(\'' + n.id + '\')">⬆ ' + (lvl > 0 ? 'Level up' : 'Learn') + ' (✦ 1)</button>';
+  host.innerHTML = '<div class="elg-ni-head"><span class="elg-ni-ico">' + n.icon + '</span>'
+    + '<b>' + escapeHtml(n.name) + '</b>'
+    + '<span class="elg-ni-lv">Lv ' + lvl + ' / ' + max + '</span></div>'
+    + '<div class="elg-ni-desc">' + escapeHtml(n.desc)
+    + (n.act ? ' <span class="elg-ni-scale">Each level: +30% power, −8% cooldown.</span>' : '')
+    + '</div>'
+    + '<div class="elg-ni-state">' + state + '</div>';
 }
 function elgBuy(id) {
-  const r = elgRun; if (!r || r.sp <= 0 || r.tree[id]) return;
+  const r = elgRun; if (!r || r.sp <= 0) return;
   const n = ELG_NODE_BY_ID[id];
   if (!n || n.role !== r.role || !elgNodeReachable(r, n)) return;
+  const lvl = r.tree[id] | 0;
+  if (lvl >= elgNodeMax(n)) return;
   r.sp--;
-  r.tree[id] = 1;
+  r.tree[id] = lvl + 1;
+  // Health passives grow the pool the moment each level is bought.
   if (n.fx && n.fx.hp) { const add = r.base.maxHp * n.fx.hp; r.maxHp = Math.round(r.maxHp + add); r.hp += add; }
+  elgTreeSel = id;
   elgRenderTree();
   elgRenderSkills();
   elgHud();
@@ -32595,6 +32723,7 @@ window.elgTogglePause = elgTogglePause;
 window.elgOpenTree = elgOpenTree;
 window.elgCloseTree = elgCloseTree;
 window.elgBuy = elgBuy;
+window.elgTreeSelect = elgTreeSelect;
 window.elgCast = elgCast;
 window.elgAnswer = elgAnswer;
 window.elgCloseQuiz = elgCloseQuiz;
