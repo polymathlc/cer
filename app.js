@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.223.0';
+const APP_VERSION = 'v1.224.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -31511,7 +31511,7 @@ function elgUpdate(dt) {
     if (s.t > 2.4 || s.x < -40 || s.y < -40 || s.x > r.fw + 40 || s.y > r.fh + 40) { elgDropNode(s); return false; }
     for (const e of r.enemies) {
       if (s.hit[e.id] || e.hp <= 0) continue;
-      if (Math.hypot(e.x - s.x, e.y - s.y) <= e.r + 8) {
+      if (Math.hypot(e.x - s.x, e.y - s.y) <= e.r + (r.card.stars >= 7 ? 13 : 8)) {
         s.hit[e.id] = 1;
         elgDamage(e, s.dmg);
         elgImpactFx(e.x, e.y);
@@ -31976,7 +31976,7 @@ function elgRender() {
   if (!r.node) {
     const url = tcgAvatarUrl(r.card.id);
     const d = document.createElement('div');
-    d.className = 'elg-unit hero ' + ELG_ELEM_CLASS(r.card);
+    d.className = 'elg-unit hero ' + ELG_ELEM_CLASS(r.card) + (r.card.stars >= 7 ? ' star7' : '');
     d.innerHTML = '<span class="elg-sprite">' + (url ? '<img alt="">' : r.card.em) + '</span>';
     if (url) elgSpriteArt(d.querySelector('img'), url);
     host.appendChild(d);
@@ -31989,7 +31989,7 @@ function elgRender() {
     if (!e.node) {
       const url = tcgAvatarUrl(e.card.id);
       const d = document.createElement('div');
-      d.className = 'elg-unit foe' + (e.king ? ' king' : e.boss ? ' boss' : '');
+      d.className = 'elg-unit foe' + (e.king ? ' king' : e.boss ? ' boss' : '') + (e.card.stars >= 7 ? ' star7' : '');
       d.innerHTML = '<span class="elg-sprite">' + (url ? '<img alt="">' : e.card.em) + '</span>'
         + '<i class="elg-ehp"><b></b></i>';
       if (url) elgSpriteArt(d.querySelector('img'), url);
@@ -32009,7 +32009,7 @@ function elgRender() {
   r.shots.forEach(s => {
     if (!s.node) {
       const d = document.createElement('div');
-      d.className = 'elg-shot';
+      d.className = 'elg-shot' + (r.card.stars >= 7 ? ' mighty' : '');
       d.style.setProperty('--trail', fx.glow);
       d.style.setProperty('--a', Math.atan2(s.vy, s.vx).toFixed(3) + 'rad');
       if (r.flyFrames) { d.classList.add('framed'); d.innerHTML = '<img alt="">'; }
@@ -32115,7 +32115,7 @@ function elgImpactFx(x, y) {
   const r = elgRun; if (!r || !r.hitFrames) return;
   const host = document.getElementById('elgUnits'); if (!host) return;
   const d = document.createElement('div');
-  d.className = 'elg-hitfx';
+  d.className = 'elg-hitfx' + (r.card.stars >= 7 ? ' mighty' : '');
   d.innerHTML = '<img alt="">';
   d.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px) translate(-50%,-50%)';
   host.appendChild(d);
