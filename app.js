@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.215.0';
+const APP_VERSION = 'v1.216.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -19136,30 +19136,95 @@ let _usageBoardRows = null;
 // Compute last month's prize winners straight from the leaderboard so EVERY
 // winner is listed — those who haven't claimed yet show "Address not yet
 // provided". Claimed winners are merged in (contact, address, sent status).
+// Which month the winners table is reading: 'prev' (the month that just ended
+// — the normal award cycle) or 'cur' (the month in progress, for awarding on
+// the last day of it rather than waiting for the calendar to turn).
+let _usagePrizeMonth = 'prev';
+let _usagePrizeMonthPicked = false;
+function _prizeMonthKey() { return _usagePrizeMonth === 'cur' ? rpgMonthKey() : rpgPrevMonthKey(); }
+function _prizeMonthName(key) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(key || ''));
+  if (!m) return String(key || '');
+  return new Date(+m[1], +m[2] - 1, 1).toLocaleString('en-SG', { month: 'long', year: 'numeric' });
+}
+// A game board's score for the month being shown. The month in progress lives
+// on `month`/`monthLabel`; a finished month has usually rolled into last/lastKey.
+function _prizeGameScore(r, key, monthKey) {
+  const g = r[key]; if (!g) return 0;
+  if (g.monthKey === monthKey) return g.month || 0;
+  if (g.lastKey === monthKey) return g.last || 0;
+  return 0;
+}
+function _prizeGameLabel(r, key, monthKey) {
+  const g = r[key]; if (!g) return '';
+  if (g.monthKey === monthKey) return g.monthLabel || '';
+  if (g.lastKey === monthKey) return g.lastLabel || '';
+  return '';
+}
+function _prizeQuestions(r, monthKey) {
+  if (r.monthKey === monthKey) return r.monthQ || 0;
+  if (r.lastMonthKey === monthKey) return r.lastMonthQ || 0;
+  return 0;
+}
 function _computePrizeWinners() {
   const rows = _usageBoardRows;
   if (!rows || !rows.length) return [];
-  const prev = rpgPrevMonthKey();
+  const key = _prizeMonthKey();
   const out = [];
   const push = (cat, ackSuffix, topN, valFn, resultFn) => {
     rows.map(r => ({ r, v: valFn(r) })).filter(x => x.v > 0)
       .sort((a, b) => b.v - a.v).slice(0, topN)
       .forEach((x, i) => out.push({
-        _winId: x.r.uid + '_' + prev + ackSuffix,
-        uid: x.r.uid, name: x.r.name || '', monthKey: prev,
+        _winId: x.r.uid + '_' + key + ackSuffix,
+        uid: x.r.uid, name: x.r.name || '', monthKey: key,
         category: cat, rank: i + 1, result: resultFn(x.r, x.v)
       }));
   };
-  push('questions', '',      5, r => rpgLastMonthQ(r),            (r, v) => v + ' Q');
-  push('defenders', '_td',   3, r => rpgLastMonthGame(r, 'td'),  (r) => rpgLastMonthGameLabel(r, 'td')   || '—');
-  push('raiders',   '_raid', 3, r => rpgLastMonthGame(r, 'raid'),(r) => rpgLastMonthGameLabel(r, 'raid') || '—');
+  // A board listed in RPG_NO_PRIZE_MONTHS for this month simply has no winners
+  // to award — the ranking still exists, the prize does not.
+  const pays = tab => !rpgPrizeOffFor(tab, key);
+  push('questions', '', 5, r => _prizeQuestions(r, key), (r, v) => v + ' Q');
+  if (pays('td'))
+    push('defenders', '_td', 3, r => _prizeGameScore(r, 'td', key), r => _prizeGameLabel(r, 'td', key) || '—');
+  if (pays('raid'))
+    push('raiders', '_raid', 3, r => _prizeGameScore(r, 'raid', key), r => _prizeGameLabel(r, 'raid', key) || '—');
+  if (pays('spire'))
+    push('spire', '_spire', 3, r => _prizeGameScore(r, 'spire', key), r => _prizeGameLabel(r, 'spire', key) || '—');
+  if (pays('legend'))
+    push('legends', '_legend', 5, r => _prizeGameScore(r, 'legend', key), r => _prizeGameLabel(r, 'legend', key) || '—');
+  // Science Strike ranks on ALL-TIME correct answers (that is how its board and
+  // its prize are defined), so the same standings are shown whichever month is
+  // selected — the winners are simply whoever tops it when you award.
+  push('strike', '_fps', 3, r => (r.fps && r.fps.correct) | 0, (r, v) => v + ' correct');
   return out;
+}
+function setPrizeMonth(which) {
+  _usagePrizeMonth = which === 'cur' ? 'cur' : 'prev';
+  _usagePrizeMonthPicked = true;   // an explicit choice is never overridden below
+  renderPrizeClaims();
 }
 function renderPrizeClaims() {
   const tbody = document.getElementById('usagePrizeBody');
   if (!tbody) return;
-  const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders' : c.category === 'streak' ? '🎟️ 30-day streak' : c.category === 'encounter' ? '⚡ Encounter quest' : '🎁 Questions';
-  const _claimResult = c => (c.category === 'defenders' || c.category === 'raiders')
+  // On the last days of a month the board you want to award is the month in
+  // progress, not the one that ended four weeks ago — so if the selected month
+  // has nobody on it and the other one does, show that instead of an empty
+  // table. The chips still let you switch back by hand.
+  if (!_usagePrizeMonthPicked && !_computePrizeWinners().length) {
+    const was = _usagePrizeMonth;
+    _usagePrizeMonth = was === 'prev' ? 'cur' : 'prev';
+    if (!_computePrizeWinners().length) _usagePrizeMonth = was;
+  }
+  const shownKey = _prizeMonthKey();
+  document.querySelectorAll('[data-prizemonth]').forEach(b =>
+    b.classList.toggle('active', b.dataset.prizemonth === _usagePrizeMonth));
+  const hint = document.getElementById('usagePrizeHint');
+  if (hint) hint.textContent = _prizeMonthName(shownKey)
+    + (_usagePrizeMonth === 'cur' ? ' — still in progress, standings as they stand right now' : ' — the completed month');
+  const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders'
+    : c.category === 'spire' ? '🃏 Spire' : c.category === 'strike' ? '🔫 Strike' : c.category === 'legends' ? '⚔️ Ember Legends'
+    : c.category === 'streak' ? '🎟️ 30-day streak' : c.category === 'encounter' ? '⚡ Encounter quest' : '🎁 Questions';
+  const _claimResult = c => ['defenders', 'raiders', 'spire', 'legends', 'strike'].includes(c.category)
     ? (c.scoreLabel || (c.score != null ? c.score + ' pts' : '—'))
     : c.category === 'streak'
       ? (c.scoreLabel || '30 days')
@@ -19189,10 +19254,10 @@ function renderPrizeClaims() {
   });
 
   if (!merged.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No winners yet. Last month’s prize winners will appear here.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No winners for <b>' + escapeHtml(_prizeMonthName(shownKey)) + '</b> — nobody has a score on any of the boards for that month yet. Try the other month above.</td></tr>';
     return;
   }
-  const catOrder = { questions: 0, defenders: 1, raiders: 2, streak: 3 };
+  const catOrder = { questions: 0, defenders: 1, raiders: 2, spire: 3, strike: 4, legends: 5, streak: 6, encounter: 7 };
   merged.sort((a, b) =>
     String(b.monthKey || '').localeCompare(String(a.monthKey || '')) ||
     (catOrder[a.category] ?? 9) - (catOrder[b.category] ?? 9) ||
@@ -38642,6 +38707,7 @@ window.onLegendsObjPick = onLegendsObjPick;
 window.resetLegendsObj = resetLegendsObj;
 window.showStudentDetail = showStudentDetail;
 window.setStudentLevel = setStudentLevel;
+window.setPrizeMonth = setPrizeMonth;
 window.closeStudentDetail = closeStudentDetail;
 window.markPrizeSent = markPrizeSent;
 window.copyReminderEmails = copyReminderEmails;

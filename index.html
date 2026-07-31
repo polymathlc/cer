@@ -4992,6 +4992,10 @@ option {
 .rpg-board-note b { color: #8a5a13; }
 .rpg-board-note.muted { background: var(--bg-subtle, #f6f7f9); border-color: var(--border, #e3e6ea); color: var(--text-muted, #6b7280); }
 .rpg-board-note.muted b { color: inherit; }
+/* Winners table: which month's board the winners are read from. */
+.usage-prize-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; }
+.usage-prize-lbl { font-size: 0.82rem; color: var(--text-muted); }
+.usage-prize-hint { font-size: 0.8rem; color: var(--text-muted); line-height: 1.6; }
 .rpg-board-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 14px; }
 .rpg-board-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 8px; background: #fff; }
 .rpg-board-row.me { outline: 2px solid var(--primary); outline-offset: -1px; }
@@ -7693,6 +7697,12 @@ body.practising-as .page-body { padding-bottom: 96px; }
         <!-- Prize claims (monthly voucher winners) -->
         <div class="usage-section">
           <h3 class="usage-section-title">🎁 Prize claims — monthly $10 voucher winners</h3>
+          <div class="usage-prize-bar">
+            <span class="usage-prize-lbl">Show winners for</span>
+            <button class="rpg-tab" type="button" data-prizemonth="prev" onclick="setPrizeMonth('prev')">🗓️ Last month</button>
+            <button class="rpg-tab" type="button" data-prizemonth="cur" onclick="setPrizeMonth('cur')">📅 This month</button>
+            <span class="usage-prize-hint" id="usagePrizeHint"></span>
+          </div>
           <div class="usage-table-wrapper">
             <table class="usage-table" id="usagePrizeTable">
               <thead>
