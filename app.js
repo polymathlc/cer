@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.218.0';
+const APP_VERSION = 'v1.219.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -31890,14 +31890,23 @@ function elgRender() {
 }
 function ELG_ELEM_CLASS(card) { return 'el-' + (card && card.element || 'flame'); }
 function elgDropNode(o) { if (o && o.node) { o.node.remove(); o.node = null; } }
+// Floating combat number. The OUTER div only positions (with a little sideways
+// jitter so rapid hits fan out instead of stacking unreadably); the INNER span
+// carries the animation — starting small, swelling to full size and drifting
+// upward slowly enough to actually read. Keeping the two transforms on
+// separate elements matters: an animated transform on the positioned element
+// would override the x/y placement and fling the number across the arena.
 function elgPop(x, y, text, cls) {
   const host = document.getElementById('elgUnits'); if (!host) return;
   const d = document.createElement('div');
   d.className = 'elg-pop ' + (cls || '');
-  d.textContent = text;
-  d.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y - 18) + 'px) translate(-50%,-50%)';
+  const jx = Math.round(x + (Math.random() - 0.5) * 30);
+  d.style.transform = 'translate(' + jx + 'px,' + Math.round(y - 26) + 'px) translate(-50%,-50%)';
+  const span = document.createElement('span');
+  span.textContent = text;
+  d.appendChild(span);
   host.appendChild(d);
-  setTimeout(() => d.remove(), 700);
+  setTimeout(() => d.remove(), 1450);
 }
 // The element's impact frames from the Card Art page, played once where a
 // shot lands. Skipped silently until the frames are keyed and cached.

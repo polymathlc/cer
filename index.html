@@ -5419,9 +5419,22 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .elg-zone { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, rgba(255,230,150,0.28) 0%, rgba(255,230,150,0.06) 60%, transparent 72%); border: 1px solid rgba(255,230,150,0.35); }
 .elg-flash { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: none; animation: elgFlash 0.38s ease-out forwards; }
 @keyframes elgFlash { from { opacity: 0.85; transform: translate(-50%,-50%) scale(0.5); } to { opacity: 0; transform: translate(-50%,-50%) scale(1); } }
-.elg-pop { position: absolute; left: 0; top: 0; font-weight: 800; font-size: 0.8rem; color: #fff; text-shadow: 0 1px 3px #000; pointer-events: none; animation: elgPop 0.7s ease-out forwards; }
-.elg-pop.heal { color: #4ade80; } .elg-pop.hurt { color: #fca5a5; } .elg-pop.dmg { color: #fde68a; }
-@keyframes elgPop { from { opacity: 1; } to { opacity: 0; transform: translate(-50%,-160%); } }
+/* Floating combat numbers: the outer div is position-only (elgPop sets its
+   transform), the inner span animates — swelling from small to full size and
+   drifting up slowly enough to read. Never animate transform on .elg-pop
+   itself: it would override the positioning and fling the number away. */
+.elg-pop { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 7; }
+.elg-pop > span { display: block; font-weight: 800; font-size: 1.05rem; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.9), 0 0 12px rgba(0,0,0,0.55); animation: elgPop 1.4s cubic-bezier(0.2, 0.6, 0.3, 1) forwards; }
+.elg-pop.dmg > span { color: #fde68a; }
+.elg-pop.heal > span { color: #4ade80; }
+.elg-pop.hurt > span { color: #fca5a5; font-size: 1.2rem; }
+@keyframes elgPop {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.35); }
+  18%  { opacity: 1; transform: translateY(0) scale(0.85); }
+  55%  { opacity: 1; transform: translateY(-14px) scale(1.35); }
+  82%  { opacity: 1; transform: translateY(-24px) scale(1.4); }
+  100% { opacity: 0; transform: translateY(-40px) scale(1.45); }
+}
 .elg-banner { min-height: 22px; text-align: center; color: #ffd98a; font-weight: 700; font-size: 0.95rem; opacity: 0; transition: opacity 0.2s; }
 .elg-banner.show { opacity: 1; }
 .elg-skillbar { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
