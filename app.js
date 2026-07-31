@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.213.0';
+const APP_VERSION = 'v1.214.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -4170,7 +4170,7 @@ function renderBlocks() {
                    data-block-id="${block.id}" data-field="reasoning"
                    oninput="saveBlockContent('${block.id}', 'reasoning', this.innerHTML)">${block.reasoning || ''}</div>
             </div>
-            ${printLinesFieldHtml(block, PRINT_CER_LINES, 'in each of the Claim, Evidence and Reasoning boxes')}
+            ${printLinesFieldHtml(block, 'in each of the Claim, Evidence and Reasoning boxes', [block.claim, block.evidence, block.reasoning])}
           </div>
         `;
         break;
@@ -4195,7 +4195,7 @@ function renderBlocks() {
             <div class="content-editable" contenteditable="true" data-placeholder="Enter the answer..."
                  data-block-id="${block.id}" data-field="content"
                  oninput="saveBlockContent('${block.id}', 'content', this.innerHTML)">${block.content || ''}</div>
-            ${printLinesFieldHtml(block, PRINT_ANSWER_LINES, 'in the answer box')}
+            ${printLinesFieldHtml(block, 'in the answer box', block.content)}
           </div>
         `;
         break;
@@ -4682,17 +4682,27 @@ document.addEventListener('click', async function (e) {
 const COMMON_MISTAKE_COLORS = { teal: '#0d9488', orange: '#ea580c', red: '#dc2626', purple: '#7c3aed', blue: '#2d6ca8' };
 
 // "Printed lines" control for the two answer blocks — how tall this answer box
-// prints on a worksheet. Stored as block.printLines; blank means the shared
-// default (PRINT_CER_LINES / PRINT_ANSWER_LINES), which is what almost every
-// question should use.
-function printLinesFieldHtml(block, dflt, where) {
+// prints on a worksheet. Stored as block.printLines; blank (the normal case)
+// means Auto, and printAnswerLines sizes the box from the model answer.
+function printLinesFieldHtml(block, where, sample) {
+  const auto = Array.isArray(sample)
+    ? sample.map(t => printAnswerLines({}, t)).join(' / ')
+    : String(printAnswerLines({}, sample));
   return `
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:14px 0 2px;padding:12px 16px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#fafbfa);">
       <label style="font-size:0.85rem;font-weight:600;display:flex;align-items:center;gap:9px;white-space:nowrap;">✍️ Printed lines
-        <input class="form-input" type="number" min="1" max="40" style="width:82px;"
-               value="${printAnswerLines(block, dflt)}" oninput="saveBlockNum('${block.id}','printLines',this.value,1,40)"></label>
-      <span style="flex:1;min-width:220px;font-size:0.78rem;color:var(--text-muted);line-height:1.6;">Ruled lines students get ${where} on printed and PDF worksheets. Every question uses the same ${dflt} by default, so the size of the box never hints at how long the answer is.</span>
+        <input class="form-input" type="number" min="1" max="40" placeholder="Auto" style="width:82px;"
+               value="${Number(block.printLines) > 0 ? Number(block.printLines) : ''}" oninput="setPrintLines('${block.id}', this.value)"></label>
+      <span style="flex:1;min-width:220px;font-size:0.78rem;color:var(--text-muted);line-height:1.6;">Ruled lines students get ${where} on printed and PDF worksheets. Leave it on <b>Auto</b> and the box is sized from the model answer above — ${PRINT_ANSWER_LINES} lines for an ordinary answer, 1 for a number or a few words, more for a long one. This answer works out at <b>${auto}</b>.</span>
     </div>`;
+}
+// Blank clears the override and puts the box back on Auto.
+function setPrintLines(id, value) {
+  const block = blocks.find(b => b.id === id);
+  if (!block) return;
+  const n = parseInt(value, 10);
+  if (!isFinite(n) || n < 1) { delete block.printLines; return; }
+  block.printLines = Math.min(40, n);
 }
 
 // Editor body markup for the worksheet-creator block types.
@@ -10900,19 +10910,37 @@ function sanitizeAnswerKeyHtml(content) {
 
 // How many ruled lines a printed answer box gets.
 //
-// This is DELIBERATELY not derived from the model answer's length. It used to
-// be (max(3, chars/70)), which meant the printed box quietly told the student
-// how much they were expected to write — a two-word answer got a short box and
-// a long one got a tall box, so the paper leaked the answer before they had
-// written anything. Every box now prints the same number of lines, and a
-// question that genuinely needs more (or fewer) sets "Printed lines" on its
-// answer block in the editor.
-const PRINT_CER_LINES = 4;      // per Claim / Evidence / Reasoning box
-const PRINT_ANSWER_LINES = 5;   // plain (single-box) answer
-function printAnswerLines(block, fallback) {
-  const n = parseInt(block && block.printLines, 10);
-  if (!isFinite(n) || n < 1) return fallback;
-  return Math.min(40, n);
+// Sized from the model answer stored in the bank, so the space on the paper
+// matches the answer the question actually wants — but scaled for a hand, not
+// for typed text, and floored at 2 lines so an ordinary short answer never
+// prints a cramped single rule. A one-number or few-word answer ("Population",
+// "4.5 N") gets the single line it needs and nothing more.
+//
+// The old formula was max(3, chars / 70): a 3-line floor on everything, and a
+// character budget from typed text, which left long answers short of room and
+// one-word answers with three empty rules.
+const PRINT_ANSWER_LINES = 2;   // the default — what any ordinary answer gets
+const PRINT_LINE_CHARS = 52;    // characters a P5 hand fits on one ruled line
+const PRINT_HAND_ALLOWANCE = 1.15;  // a student's wording runs longer than the model's
+const PRINT_SHORT_CHARS = 20;   // at or under this, and ≤4 words → one line
+const PRINT_LINES_MAX = 12;     // nothing sensible needs more; a cap stops a runaway box
+// Plain text of a model answer, with the [[keyword]] brackets taken out — they
+// are markup for the recall game, not something the student writes.
+function _printAnswerPlain(text) {
+  return stripHtml(String(text || '')).replace(/\[\[|\]\]/g, '').replace(/\s+/g, ' ').trim();
+}
+// `text` is the model answer this box is for (per field, so a one-line Claim
+// does not inherit a five-line Reasoning). The block's "Printed lines" field
+// overrides the estimate outright.
+function printAnswerLines(block, text) {
+  const override = parseInt(block && block.printLines, 10);
+  if (isFinite(override) && override > 0) return Math.min(40, override);
+  const plain = _printAnswerPlain(text);
+  if (!plain) return PRINT_ANSWER_LINES;                 // nothing stored — give the default
+  const words = plain.split(' ').filter(Boolean).length;
+  if (words <= 4 && plain.length <= PRINT_SHORT_CHARS) return 1;
+  const need = Math.ceil((plain.length * PRINT_HAND_ALLOWANCE) / PRINT_LINE_CHARS);
+  return Math.max(PRINT_ANSWER_LINES, Math.min(PRINT_LINES_MAX, need));
 }
 
 // ===== OPEN ENDED MODE =====
@@ -10967,13 +10995,12 @@ function doPrintWorksheetOpen() {
           break;
         }
         case 'answer': {
-          // CER answer — show labelled blank writing boxes. Same height for
-          // all three, whatever the model answer says.
-          const cerLines = openEndedLines(printAnswerLines(block, PRINT_CER_LINES));
+          // CER answer — labelled blank writing boxes, each sized from ITS OWN
+          // model answer (a one-line Claim beside a five-line Reasoning).
           qHtml += `<div class="print-open-cer-section">`;
-          qHtml += `<div class="print-open-cer-label">Claim</div><div class="print-open-cer-box">${cerLines}</div>`;
-          qHtml += `<div class="print-open-cer-label">Evidence</div><div class="print-open-cer-box">${cerLines}</div>`;
-          qHtml += `<div class="print-open-cer-label">Reasoning</div><div class="print-open-cer-box">${cerLines}</div>`;
+          qHtml += `<div class="print-open-cer-label">Claim</div><div class="print-open-cer-box">${openEndedLines(printAnswerLines(block, block.claim))}</div>`;
+          qHtml += `<div class="print-open-cer-label">Evidence</div><div class="print-open-cer-box">${openEndedLines(printAnswerLines(block, block.evidence))}</div>`;
+          qHtml += `<div class="print-open-cer-label">Reasoning</div><div class="print-open-cer-box">${openEndedLines(printAnswerLines(block, block.reasoning))}</div>`;
           qHtml += `</div>`;
 
           // Collect formatted text for answer key. Empty parts are skipped —
@@ -10986,8 +11013,8 @@ function doPrintWorksheetOpen() {
           break;
         }
         case 'plainanswer': {
-          // Plain answer — blank writing box
-          const paLines = openEndedLines(printAnswerLines(block, PRINT_ANSWER_LINES));
+          // Plain answer — blank writing box, sized from the model answer
+          const paLines = openEndedLines(printAnswerLines(block, block.content));
           qHtml += `<div class="print-open-answer-box"><div class="print-open-lines">${paLines}</div></div>`;
           _pushAnswerKeySection(qSections, null, block.content);
           break;
@@ -15375,11 +15402,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             break;
           }
           case 'answer': {
-            const cerLines = openEndedLines(printAnswerLines(block, PRINT_CER_LINES));
             qHtml += `<div class="print-open-cer-section">`;
-            qHtml += `<div class="print-open-cer-label">Claim</div><div class="print-open-cer-box">${cerLines}</div>`;
-            qHtml += `<div class="print-open-cer-label">Evidence</div><div class="print-open-cer-box">${cerLines}</div>`;
-            qHtml += `<div class="print-open-cer-label">Reasoning</div><div class="print-open-cer-box">${cerLines}</div>`;
+            qHtml += `<div class="print-open-cer-label">Claim</div><div class="print-open-cer-box">${openEndedLines(printAnswerLines(block, block.claim))}</div>`;
+            qHtml += `<div class="print-open-cer-label">Evidence</div><div class="print-open-cer-box">${openEndedLines(printAnswerLines(block, block.evidence))}</div>`;
+            qHtml += `<div class="print-open-cer-label">Reasoning</div><div class="print-open-cer-box">${openEndedLines(printAnswerLines(block, block.reasoning))}</div>`;
             qHtml += `</div>`;
             _pushAnswerKeySection(qSections, 'Claim', block.claim);
             _pushAnswerKeySection(qSections, 'Evidence', block.evidence);
@@ -15387,7 +15413,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             break;
           }
           case 'plainanswer': {
-            qHtml += `<div class="print-open-answer-box"><div class="print-open-lines">${openEndedLines(printAnswerLines(block, PRINT_ANSWER_LINES))}</div></div>`;
+            qHtml += `<div class="print-open-answer-box"><div class="print-open-lines">${openEndedLines(printAnswerLines(block, block.content))}</div></div>`;
             _pushAnswerKeySection(qSections, null, block.content);
             break;
           }
@@ -16248,8 +16274,10 @@ function _wsQeBlockSummary(b) {
   switch (b.type) {
     case 'mcq': return (b.options || []).length + ' answer option' + ((b.options || []).length === 1 ? '' : 's');
     case 'table': return 'Table';
-    case 'answer': return 'Claim / Evidence / Reasoning · ' + printAnswerLines(b, PRINT_CER_LINES) + ' printed lines each';
-    case 'plainanswer': return printAnswerLines(b, PRINT_ANSWER_LINES) + ' printed answer lines';
+    case 'answer': return 'Claim / Evidence / Reasoning · '
+      + [b.claim, b.evidence, b.reasoning].map(t => printAnswerLines(b, t)).join(' / ') + ' printed lines';
+    case 'plainanswer': return printAnswerLines(b, b.content) + ' printed answer line'
+      + (printAnswerLines(b, b.content) === 1 ? '' : 's');
     case 'openLines': return (Number(b.lines) || 4) + ' blank lines';
     case 'workingSpace': return 'Working space';
     case 'answerLine': return 'Answer line';
@@ -37682,6 +37710,7 @@ window.doctorDelete = doctorDelete;
 // Worksheet-creator block types + AI image enhance (inline handlers)
 window.saveBlockField = saveBlockField;
 window.saveBlockNum = saveBlockNum;
+window.setPrintLines = setPrintLines;
 window.toggleWorkingAnnotate = toggleWorkingAnnotate;
 // Student Home screen actions
 window.homeContinuePractice = homeContinuePractice;
