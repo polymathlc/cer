@@ -320,6 +320,7 @@
     </div>
 
     <div class="howto">
+      <b>🪙 Points:</b> every science question you answer in a run pays <b>points into your portal wallet</b> — 8 for a correct answer, 2 for a wrong one. They arrive the next time you open the portal, and buy Realm of Embers booster packs, Spire packs and everything in the shop.<br>
       <b>Controls:</b> WASD move · mouse look (left/right AND up/down) · click shoot · <b>right-click aim/scope</b> · R reload · E pick up loot · <b>Q grenade</b> · <b>F class ability</b> · <b>I skill tree</b> · Esc pause<br>
       <b>Classes:</b> 🪖 Soldier (assault rifle, Bullet Time) · 🎯 Sniper (huge range, slow heavy shots, sees crit boxes, traps) · 🔧 Engineer (turrets, healing drones). Each class has a <b>100-node skill tree</b> with prerequisites — cores are banked and saved the instant you earn them, so you can stop any time and lose nothing.<br>
       <b>Bullets are real:</b> every shot streaks out of your muzzle as a glowing tracer and flies until it hits a monster, a tree trunk, or runs out of range. Enemies standing beside trees CAN be shot — only the trunk itself blocks bullets.<br>
@@ -412,7 +413,8 @@
     <div class="qcard" style="max-width:480px;text-align:center;">
       <h2 style="font-size:1.6rem;">☠️ Run over</h2>
       <div class="death-stats" id="deathStats"></div>
-      <div style="font-size:1.05rem;margin-bottom:16px;">Banked <span class="cores" style="color:#ffd76a;font-weight:800;" id="deathCores">⚛ 0</span> Science Cores this run — already saved. Spend them in the skill tree [I]!</div>
+      <div style="font-size:1.05rem;margin-bottom:10px;">Banked <span class="cores" style="color:#ffd76a;font-weight:800;" id="deathCores">⚛ 0</span> Science Cores this run — already saved. Spend them in the skill tree [I]!</div>
+      <div style="font-size:0.95rem;margin-bottom:16px;color:#9fb0c9;line-height:1.6;">Your questions earned <b style="color:#ffd76a;" id="deathPoints">🪙 0 points</b> — they land in your wallet the next time you open the portal, ready for booster packs.</div>
       <button class="btn good" id="againBtn">↻ Run it back</button>
       <button class="btn ghost" id="deathMenuBtn">Menu</button>
     </div>
@@ -435,7 +437,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.4.1</div>
+<div id="versionBadge">Science Strike v1.5.0</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -1285,6 +1287,7 @@ let pointerLocked = false;
 
 function startRun() {
   ensureMetaShape();
+  _strikeRunPoints = 0;   // the death screen reports THIS run's question points
   const cls = meta.class || 'soldier';
   G = {
     seed: (Math.random() * 1e9) | 0,
@@ -2380,7 +2383,28 @@ function answerQuestion(i, btn) {
   fb.style.display = 'block';
   $('qContinue').style.display = 'inline-block';
   recordAttempt(q, correct, ms);
+  const pts = bankPortalPoints(q, correct, ms);
+  if (pts) verdict.textContent += '  🪙 +' + pts + ' points';
   updateHud();
+}
+/* ---- 🪙 Portal points for the questions answered in here ----
+   Every game mode in the portal pays points for a question, and this is a
+   game mode. index.html owns the hero document wholesale, so writing gold
+   from this page would race with it. Instead the points are banked with
+   increment() into the leaderboard doc this page already owns, and index.html
+   claims the balance into the wallet the next time it loads. Booster packs,
+   Spire packs and the shop all spend it. */
+const STRIKE_Q_POINTS = 8, STRIKE_Q_POINTS_WRONG = 2, STRIKE_BOT_MS = 1200;
+let _strikeRunPoints = 0;
+function bankPortalPoints(q, correct, ms) {
+  try {
+    if (!currentUser || currentUser.role !== 'student' || !q) return 0;
+    if (ms > 0 && ms < STRIKE_BOT_MS) return 0;   // faster than anyone can read it
+    const pts = correct ? STRIKE_Q_POINTS : STRIKE_Q_POINTS_WRONG;
+    _strikeRunPoints += pts;
+    fpsPublish({ pendingPoints: increment(pts) });
+    return pts;
+  } catch (e) { console.warn('portal points bank', e); return 0; }
 }
 $('qContinue').addEventListener('click', () => {
   G.activeQ = null;
@@ -2413,6 +2437,7 @@ function endRun() {
     + '<div style="grid-column:1/-1;"><div class="k">Upgrades drafted</div><div class="v" style="font-size:0.85rem;font-weight:600;">'
     + (G.modsTaken.length ? G.modsTaken.map(n => '<span class="mod-chip">' + n + '</span>').join('') : '—') + '</div></div>';
   $('deathCores').textContent = '⚛ ' + cores;
+  $('deathPoints').textContent = '🪙 ' + _strikeRunPoints.toLocaleString() + ' point' + (_strikeRunPoints === 1 ? '' : 's');
   hideOverlays();
   $('deathOverlay').classList.add('active');
 }

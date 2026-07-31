@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.207.0';
+const APP_VERSION = 'v1.208.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -21972,7 +21972,43 @@ async function rpgInit() {
   rpgPublishLeaderboard();
   setTimeout(() => { rpgCheckPrizeClaim(); }, 2500); // auto-prompt month-end winners
   setTimeout(() => { try { rpgCheckStreakVoucher(); } catch (_) {} }, 3400); // and unclaimed streak vouchers
+  setTimeout(() => { rpgClaimStrikePoints(); }, 1800); // points banked in Science Strike
 }
+// ---- Points earned in Science Strike (fps.html), claimed here ----
+// fps.html is a separate page and must NEVER write the hero document — this
+// page owns it wholesale and would race with it. It banks what its questions
+// earn into `fps.pendingPoints` on the leaderboard doc it already owns, using
+// increment(); this claims the balance into the wallet on the next load and
+// decrements by exactly what was taken, so anything banked in between survives.
+let _strikeClaimBusy = false;
+async function rpgClaimStrikePoints() {
+  if (_strikeClaimBusy || !rpgState || !currentUser || RPG_STORAGE_MODE !== 'firestore') return;
+  _strikeClaimBusy = true;
+  try {
+    const ref = doc(db, 'scienceGameLeaderboard', currentUser.uid);
+    const snap = await getDoc(ref);
+    const pending = Math.round(Number(snap.exists() && snap.data().fps && snap.data().fps.pendingPoints) || 0);
+    if (pending <= 0) return;
+    const claim = Math.min(pending, 20000);   // sanity ceiling on a single claim
+    await setDoc(ref, { fps: { pendingPoints: increment(-claim) } }, { merge: true });
+    rpgApplyRewards(claim, 0);
+    rpgSave();
+    rpgPublishLeaderboard();
+    try { tcgUpdateGoldChip(); } catch (e) {}
+    toast('🔫 Science Strike: 🪙 +' + claim.toLocaleString() + ' points from the questions you answered — spend them on booster packs!', 'success');
+  } catch (e) { console.warn('strike points claim', e); }
+  finally { _strikeClaimBusy = false; }
+}
+// Science Strike opens in its own tab, so the usual way back is switching to
+// this one. Re-claim then (at most once a minute) rather than making the
+// student reload to see what they earned.
+let _strikeClaimAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !rpgState) return;
+  if (Date.now() - _strikeClaimAt < 60000) return;
+  _strikeClaimAt = Date.now();
+  rpgClaimStrikePoints();
+});
 function rpgOnSignOut() {
   advToken++; adv = null;
   rpgState = null;
@@ -25738,6 +25774,77 @@ function _fairMinAnswerMs(questionId, correct) {
   return Math.max(1500, Math.min(8000, 900 + len * 14));
 }
 function _noteAnswerSpeed(ms) { _fastStreak = ms < ANSWER_BOT_MS ? _fastStreak + 1 : 0; }
+
+// =====================================================================
+// 🪙 POINTS FOR A QUESTION ANSWERED INSIDE A GAME
+// =====================================================================
+// Every game mode serves real questions from the same bank, but until now
+// only the practice page paid for them — an hour in Science Defenders bought
+// nothing. A question is worth the same wherever it is answered, so all of
+// them now pay into the ONE wallet the whole portal spends: 🪙 points, which
+// buy Realm of Embers booster packs, Spire packs, RPG packs, Legends gear and
+// everything in the shop.
+// Deliberately a little under a marked practice question (≈6–16): games serve
+// one-click MCQs and pay by volume. Runs are already rate-limited by the daily
+// game-credit pool, so this cannot be farmed all evening.
+const GAME_Q_POINTS = 8;          // correct, first time this question is seen
+const GAME_Q_POINTS_REPEAT = 3;   // correct, but answered before — still worth something
+const GAME_Q_POINTS_WRONG = 2;    // effort, so a struggling student still builds a balance
+let _gameRunPts = 0;              // points earned in the game run on screen
+// Pay for one question answered in a game. `ms` is how long the student took
+// (0 when the mode does not clock it). Anything faster than the shared
+// anti-bot floor pays nothing — the same gate the monthly question count uses.
+// Returns the points actually awarded.
+function rpgAwardGameQuestion(questionId, correct, ms) {
+  if (!rpgState) return 0;
+  const qid = String(questionId || '');
+  ms = Math.max(0, Math.round(Number(ms) || 0));
+  if (ms > 0 && ms < _fairMinAnswerMs(qid, !!correct)) return 0;
+  // Repeats pay the reduced rate, tracked on a DAY-SCOPED map of its own.
+  // Deliberately not rpgState.seenQ: that is practice's ledger, and folding
+  // game answers into it would quietly cut what the practice page pays.
+  // A question with no id is one of the small built-in fallback sets (used
+  // only when the bank has no suitable MCQ) — a pool of twenty that could be
+  // cycled forever, so it always pays the repeat rate.
+  let repeat = !qid;
+  if (qid) {
+    const c = _creditsToday();
+    if (!c.ptsSeen || typeof c.ptsSeen !== 'object') c.ptsSeen = {};
+    repeat = !!c.ptsSeen[qid];
+    c.ptsSeen[qid] = 1;
+  }
+  let pts = correct ? (repeat ? GAME_Q_POINTS_REPEAT : GAME_Q_POINTS) : GAME_Q_POINTS_WRONG;
+  const surge = rpgSurgeBonus('gold');
+  if (pts > 0 && surge) pts = Math.round(pts * (1 + surge));
+  // Points only — no XP. Game MCQs must not inflate the monthly XP the
+  // leaderboard vouchers are decided on.
+  rpgApplyRewards(pts, 0);
+  rpgSave();
+  try { rpgPublishLeaderboard(); } catch (e) {}
+  try { tcgUpdateGoldChip(); } catch (e) {}
+  _gamePtsBump(pts);
+  return pts;
+}
+// Live "points this run" readout in the header above every embedded game, so
+// the student can see the questions paying while they play.
+function _gamePtsBump(pts) {
+  // Only the embedded games have this readout — Ember Siege and the training
+  // quiz print their points in their own answer feedback instead.
+  const host = document.querySelector('.page.active .game-pts');
+  if (!host) return;
+  _gameRunPts += pts;
+  document.querySelectorAll('[data-game-pts]').forEach(el => { el.textContent = _gameRunPts.toLocaleString(); });
+  if (!pts) return;
+  const f = document.createElement('span');
+  f.className = 'game-pts-pop';
+  f.textContent = '+' + pts;
+  host.appendChild(f);
+  setTimeout(() => f.remove(), 1100);
+}
+function _gamePtsReset() {
+  _gameRunPts = 0;
+  document.querySelectorAll('[data-game-pts]').forEach(el => { el.textContent = '0'; });
+}
 function _sdRecordAttempt(d) {
   try {
     if (!currentUser || currentUser.role !== 'student' || !d || !d.questionId) return;
@@ -26008,6 +26115,12 @@ window.addEventListener('message', function (ev) {
   } else if (d.type === 'SD_RECORD') {
     try { _gqMark(d && d.questionId); } catch (e) {}   // stamp it as served in the rotation
     _sdRecordAttempt(d);
+    // Defenders / Raiders / Legends / Slayers / Spire all report answers
+    // through this one message, so paying here pays every one of them.
+    try {
+      const pts = rpgAwardGameQuestion(d.questionId, !!d.correct, d.ms);
+      if (pts) ev.source && ev.source.postMessage({ type: 'SD_POINTS', points: pts, runTotal: _gameRunPts }, '*');
+    } catch (e) {}
   } else if (d.type === 'SD_SHOWN') {
     // A game displayed this question (answered or not — skips and abandoned
     // runs count too), so the rotation must not serve it again soon.
@@ -26028,6 +26141,7 @@ window.addEventListener('message', function (ev) {
     })();
   } else if (d.type === 'SD_PLAY_START') {
     _spendCredit();
+    _gamePtsReset();   // the header readout counts THIS run
     try { ev.source && ev.source.postMessage({ type: 'SD_PLAYS_LEFT', playsLeft: _playsLeftPayload() }, '*'); } catch (e) {}
     // Every run start also gets a freshly rotation-filtered pool, so questions
     // served earlier in the sitting (in this or any other game) drop out.
@@ -28483,6 +28597,7 @@ function _tcgQuizRender() {
     return;
   }
   _tcgQuiz.answered = false;
+  _tcgQuiz.at = performance.now();   // clocked so the shared anti-rush gate applies here too
   const q = _tcgQuiz.pool[_tcgQuiz.i % _tcgQuiz.pool.length];
   _tcgQuiz.cur = q;
   if (q && q.id) _tcgServedMark(q.id);
@@ -28514,6 +28629,10 @@ function _tcgQuizAnswer(idx) {
       } catch (e) {}
     }
   }
+  // Training answers pay points like every other game mode — training a
+  // monster up and saving for the next booster pack are the same session now.
+  const pts = rpgAwardGameQuestion(q && q.id, correct, _tcgQuiz.at ? performance.now() - _tcgQuiz.at : 0);
+  const ptsBit = pts ? ' <span class="tcg-fb-pts">🪙 +' + pts + ' points</span>' : '';
   const body = document.getElementById('tcgqBody');
   const btns = body ? body.querySelectorAll('.tcg-quiz-opt') : [];
   btns.forEach(b => { b.disabled = true; const i = +b.dataset.i; if (i === q.a) b.classList.add('right'); else if (i === idx) b.classList.add('wrong'); });
@@ -28523,15 +28642,15 @@ function _tcgQuizAnswer(idx) {
     _tcgQuizStatus(true);
     if (res && res.leveledUp) {
       _tcgLevelUpBurst();
-      msg = '<div class="tcg-fb-ok">✅ Correct! <b>Level up! → Lv ' + res.level + '</b>' + (res.skillUp ? ' · ⬆ <b>Skill upgraded!</b>' : '') + (res.maxed ? ' · 🌟 MAX level!' : '') + '</div>';
+      msg = '<div class="tcg-fb-ok">✅ Correct! <b>Level up! → Lv ' + res.level + '</b>' + (res.skillUp ? ' · ⬆ <b>Skill upgraded!</b>' : '') + (res.maxed ? ' · 🌟 MAX level!' : '') + ptsBit + '</div>';
       showToast(tcgShortName(TCG_BY_ID[_tcgQuiz.id]) + ' reached Level ' + res.level + (res.skillUp ? ' — skill upgraded!' : '') + '!', 'success');
     } else if (res && res.max) {
-      msg = '<div class="tcg-fb-ok">✅ Correct! This monster is already fully trained.</div>';
+      msg = '<div class="tcg-fb-ok">✅ Correct! This monster is already fully trained.' + ptsBit + '</div>';
     } else {
-      msg = '<div class="tcg-fb-ok">✅ Correct! ' + (res ? res.progress : 0) + ' / ' + TCG_LVL_STEP + ' toward the next level.</div>';
+      msg = '<div class="tcg-fb-ok">✅ Correct! ' + (res ? res.progress : 0) + ' / ' + TCG_LVL_STEP + ' toward the next level.' + ptsBit + '</div>';
     }
   } else {
-    msg = '<div class="tcg-fb-no">❌ Not quite — the correct answer is <b>(' + (q.a + 1) + ')</b>. Keep going, the next one counts!</div>';
+    msg = '<div class="tcg-fb-no">❌ Not quite — the correct answer is <b>(' + (q.a + 1) + ')</b>. Keep going, the next one counts!' + ptsBit + '</div>';
   }
   if (q.ex) msg += '<div class="tcg-fb-ex">' + escapeHtml(q.ex) + '</div>';
   msg += '<div style="margin-top:14px;text-align:center;"><button class="btn btn-primary" type="button" onclick="_tcgQuizNext()">Next question ▶</button></div>';
@@ -28554,7 +28673,7 @@ function tcgCloseTrain() {
 function tcgPacksHtml(s) {
   const gold = (rpgState && rpgState.gold) | 0;
   const oddsLine = p => [1, 2, 3, 4, 5, 6, 7].filter(n => p.odds[n]).map(n => n + '★ ' + p.odds[n] + '%').join(' · ');
-  return '<div class="tcg-section-note">Booster packs are the <b>only</b> way to collect monsters <b>and 🔱 artifacts</b>. You have <b>🪙 ' + gold.toLocaleString() + ' points</b> — earn more by answering questions anywhere in the app.'
+  return '<div class="tcg-section-note">Booster packs are the <b>only</b> way to collect monsters <b>and 🔱 artifacts</b>. You have <b>🪙 ' + gold.toLocaleString() + ' points</b> — every question you answer <b>anywhere</b> pays into this wallet: practice, 🎓 training, 🌋 Ember Siege, and every game in the sidebar (Defenders, Raiders, Spire, Legends, Slayers and 🔫 Science Strike).'
     + (_isAdmin() ? ' <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="tcgAdminGold()">＋500 🪙 test points (admin)</button>' : '') + '</div>'
     + '<div class="tcg-packs">' + TCG_PACKS.map(p =>
       '<div class="tcg-pack tcg-pack-' + p.tier + '">'
@@ -29445,8 +29564,9 @@ function emsGameOver() {
     +   '<div><b>' + r.correct + ' / ' + r.answered + '</b><span>questions right</span></div>'
     +   '<div><b>' + acc + '%</b><span>accuracy</span></div>'
     +   '<div><b>' + r.bestStreak + '</b><span>best streak</span></div>'
-    +   '<div><b>🪙 ' + r.gold + '</b><span>points earned</span></div>'
+    +   '<div><b>🪙 ' + (r.gold + (r.qPoints | 0)) + '</b><span>points earned</span></div>'
     + '</div>'
+    + '<div class="ems-result-pts">🪙 <b>' + (r.qPoints | 0) + '</b> of those came from the questions you answered — already in your wallet, ready for booster packs.</div>'
     + '<div class="ems-result-best">🏅 Your best siege: wave <b>' + best + '</b></div>'
     + '<div class="ems-result-actions">'
     +   '<button type="button" class="btn btn-primary" onclick="emsRestart()">↻ Play again</button>'
@@ -29858,6 +29978,10 @@ function emsAnswer(i) {
     gain = EMS_MANA_WRONG;
   }
   r.mana = Math.min(EMS_MANA_CAP, r.mana + gain);
+  // Mana pays for THIS battle; points are the student's to keep and spend on
+  // booster packs, exactly as in every other game mode.
+  const pts = rpgAwardGameQuestion(q && q.id, correct, ms);
+  r.qPoints = (r.qPoints | 0) + pts;
   emsSyncHud();
   emsRenderDeck();
   emsManaPop(gain);
@@ -29866,9 +29990,10 @@ function emsAnswer(i) {
   const btns = body ? body.querySelectorAll('.ems-quiz-opt') : [];
   btns.forEach(b => { b.disabled = true; const bi = +b.dataset.i; if (bi === q.a) b.classList.add('right'); else if (bi === i) b.classList.add('wrong'); });
   const fb = document.getElementById('emsQuizFb');
+  const ptsBit = pts ? ' · <b>🪙 +' + pts + ' points</b>' : '';
   if (fb) fb.innerHTML = correct
-    ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + (!r.roundTotal && ms < 4000 ? ' · ⚡ lightning fast!' : '') + '</span>'
-    : '<span class="no">❌ The answer was <b>(' + (q.a + 1) + ')</b> — only ⚡ +' + gain + ' mana. Streak reset.</span>';
+    ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + ptsBit + (!r.roundTotal && ms < 4000 ? ' · ⚡ lightning fast!' : '') + '</span>'
+    : '<span class="no">❌ The answer was <b>(' + (q.a + 1) + ')</b> — only ⚡ +' + gain + ' mana' + ptsBit + '. Streak reset.</span>';
   emsQuizStreakHud();
   // A fixed round ends itself (with a small bonus for finishing all five);
   // the open-ended panel just rolls on to the next question.
