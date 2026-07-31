@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.212.0';
+const APP_VERSION = 'v1.213.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -4116,6 +4116,14 @@ function renderBlocks() {
               <button type="button" class="btn btn-outline" style="padding:2px 12px;font-weight:700;" onclick="adjustImgScale('${block.id}',1)" title="Larger — 5% at a time, up to ${IMG_SCALE_MAX}% (the full page width)">+</button>
               <button type="button" class="btn btn-outline" style="padding:2px 10px;font-size:0.76rem;" onclick="resetImgScale('${block.id}')" title="Auto: fill the page width, without stretching the picture past its own resolution">Auto</button>
             </div>
+            <div style="display:${block.url ? 'flex' : 'none'};align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;">
+              <span style="font-size:0.8rem;color:var(--text-muted);white-space:nowrap;">🖨️ Print size</span>
+              <select class="form-input" style="max-width:190px;padding:6px 10px;font-size:0.82rem;" onchange="saveBlockField('${block.id}','printImg',this.value)">
+                ${PRINT_IMG_CHOICES.map(([v, label, tip]) =>
+                  `<option value="${v}" title="${escapeHtml(tip)}"${(String(block.printImg || 'auto') === v) ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+              </select>
+              <span style="font-size:0.76rem;color:var(--text-muted);line-height:1.55;">How tall this picture may print on a worksheet. Use <b>Large</b> for a graph, a data table or a figure that holds the answer options; leave ordinary diagrams on Auto.</span>
+            </div>
             <div class="img-enhance-bar" id="imgEnhance_${block.id}"></div>
             <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:0.8rem;color:var(--text-muted);cursor:pointer;">
               <input type="checkbox" ${block.annotate === false ? '' : 'checked'} onchange="saveBlockContent('${block.id}', 'annotate', this.checked)" style="width:15px;height:15px;flex:0 0 auto;cursor:pointer;">
@@ -4930,6 +4938,44 @@ function imgSizeStyle(block) {
   if (!imgHasScale(block)) return 'height:auto;max-width:100%';
   const pct = Math.round(imgScale(block) * 100);
   return `width:${pct}%;height:auto;max-width:100%`;
+}
+
+// ---- How TALL a picture may print (the width is imgSizeStyle's job) --------
+// The single cap used to be 170mm, two thirds of the sheet, for every picture.
+// A question with a labelled diagram AND a chart therefore could not fit a
+// page at all. So ordinary pictures now print at a modest default, and the
+// ones that need the room — a figure carrying the answer options, a graph, a
+// data table — are marked Large. Only the print stylesheet reads these
+// classes, so adding them costs the on-screen rendering nothing.
+const PRINT_IMG_CLASS = { sm: 'print-img-sm', auto: '', lg: 'print-img-lg', full: 'print-img-full' };
+const PRINT_IMG_CHOICES = [
+  ['auto', 'Auto', 'Standard height — right for a labelled diagram.'],
+  ['sm',   'Small', 'Half height — an inset or a small icon.'],
+  ['lg',   'Large', 'Tall — a graph, a data table or a figure that carries the answer options.'],
+  ['full', 'Full page', 'As tall as the sheet allows. Usually needs a page to itself.']
+];
+function imgPrintClass(block, autoLarge) {
+  const key = String((block && block.printImg) || 'auto');
+  if (key !== 'auto') return PRINT_IMG_CLASS[key] || '';
+  return autoLarge ? PRINT_IMG_CLASS.lg : '';
+}
+// True when a question's picture should default to the big cap: it is the
+// ONLY picture, and the MCQ option labels are too short ("P", "Q", "1", "4")
+// to be the answers themselves — which means the picture is where the options
+// actually live, and shrinking it would make the question unanswerable.
+function imgQuestionNeedsBig(q) {
+  const blocks = (q && q.blocks) || [];
+  if (blocks.filter(b => b && b.type === 'image' && b.url).length !== 1) return false;
+  const mcq = blocks.find(b => b && b.type === 'mcq');
+  const opts = (mcq && mcq.options) || [];
+  if (opts.length < 4) return false;
+  return opts.every(o => stripHtml((o && o.text) || '').length <= 3);
+}
+// `class="…"` for a picture in a printed worksheet (empty string when the
+// picture is on the standard cap, so the markup stays clean).
+function imgPrintAttr(block, autoLarge) {
+  const cls = imgPrintClass(block, autoLarge);
+  return cls ? ` class="${cls}"` : '';
 }
 // What fraction of the column a picture is filling on screen right now. Stepping
 // away from Auto starts HERE, so the first press of − or + moves from the size
@@ -10878,6 +10924,7 @@ function doPrintWorksheetOpen() {
 
   selected.forEach((q, qIndex) => {
     const isMcq = q.blocks.some(b => b.type === 'mcq') && !q.blocks.some(b => b.type === 'answer' || b.type === 'plainanswer');
+    const bigImgs = imgQuestionNeedsBig(q);   // the picture IS the options → print it tall
     let qHtml = `<div class="print-question-chunk" data-qid="${escapeHtml(q.id)}"${isMcq ? ' data-mcq="1"' : ''}>`;
 
     if (qIndex === 0) {
@@ -10915,7 +10962,7 @@ function doPrintWorksheetOpen() {
         }
         case 'image': {
           if (block.url) {
-            qHtml += `<div class="print-text-block"><img src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="${imgSizeStyle(block)}"></div>`;
+            qHtml += `<div class="print-text-block"><img${imgPrintAttr(block, bigImgs)} src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="${imgSizeStyle(block)}"></div>`;
           }
           break;
         }
@@ -11361,6 +11408,30 @@ function _printSeparatorHeightIn(doc, container) {
 // `root` must itself carry `print-question-page pm-fit`, so descendant print
 // rules (image caps, flex layout, margin containment) apply while measuring.
 // Returns the plan, or throws — callers treat a throw as "fall back".
+// Turn a fit-to-page zoom from an ARITHMETIC GUESS into a measured fact.
+//
+// zoomFor() assumes every length on the page shrinks in proportion. Most do,
+// but not all: a picture already sitting on its max-height cap, a writing box
+// that refuses to split, a heading that must stay with what follows — any of
+// them can leave the scaled page taller than the ratio predicted. The page box
+// is a FIXED height with visible overflow, so when that happened the extra
+// content did not clip or reflow: it painted straight over the next sheet, and
+// the top of the following question was buried under the bottom of this one.
+//
+// So try the ratio, measure the page with that zoom really applied, and step
+// down until it genuinely fits. Returns { zoom: 0 } when even the floor cannot
+// do it — the caller then lets the page flow across sheets, which is ugly but
+// never overlaps.
+function _printVerifiedZoom(startZoom, measureAt, usable) {
+  let z = Math.min(1, startZoom);
+  for (let i = 0; i < 14 && z >= PRINT_ZOOM_FLOOR; i++) {
+    const h = measureAt(z);
+    if (h <= usable) return { zoom: z, h };
+    z = +(z - 0.03).toFixed(3);
+  }
+  return { zoom: 0, h: 0 };
+}
+
 function _printPlanIn(doc, root, opts) {
   const chunks = Array.from(root.querySelectorAll('.print-question-chunk'));
   const answerKeys = Array.from(root.querySelectorAll('.print-answer-key-page'));
@@ -11400,13 +11471,15 @@ function _printPlanIn(doc, root, opts) {
   };
   // Build the page for real, read its height, then hand the chunks back so the
   // next candidate layout can be assembled from the same nodes.
-  const measurePage = (group, tall) => {
+  const measurePage = (group, tall, zoom) => {
     const page = doc.createElement('div');
     page.className = 'print-question-page pm-fit' + (tall ? ' print-page-tall' : '');
     // Same shape the printer builds, so the height measured here is the height
-    // that page will really have.
+    // that page will really have — including the fit-to-page zoom when one is
+    // being tried, since that is applied to this same wrapper at print time.
     const content = doc.createElement('div');
     content.className = 'print-page-content';
+    if (zoom && zoom < 0.999) content.style.zoom = zoom;
     page.appendChild(content);
     group.forEach((idx, pos) => {
       if (pos > 0) {
@@ -11442,8 +11515,8 @@ function _printPlanIn(doc, root, opts) {
       h = measurePage(groups[gi], tall);
     }
     if (!tall && h > usable) {
-      const z = zoomFor(h);
-      if (z >= PRINT_ZOOM_FLOOR) pageZoom[gi] = z;
+      const fit = _printVerifiedZoom(zoomFor(h), z => measurePage(groups[gi], false, z), usable);
+      if (fit.zoom) { pageZoom[gi] = fit.zoom; h = fit.h; }
       else { tall = true; h = measurePage(groups[gi], true); }  // too big to shrink readably — let it flow
     }
     pageTall[gi] = tall;
@@ -11452,18 +11525,24 @@ function _printPlanIn(doc, root, opts) {
 
   // Answer-key sheets are pre-built pages; measure them the same way.
   const akPlans = answerKeys.map(ak => {
-    const footer = footerNode();
-    ak.classList.add('pm-fit');
-    _printWrapPageContent(ak, doc);
-    ak.appendChild(footer);
-    stage.appendChild(ak);
-    const h = ak.getBoundingClientRect().height;
-    footer.remove();
-    ak.classList.remove('pm-fit');
-    root.appendChild(ak);
+    const content = _printWrapPageContent(ak, doc);
+    const measureAk = (z) => {
+      const footer = footerNode();
+      ak.classList.add('pm-fit');
+      if (z && z < 0.999) content.style.zoom = z; else content.style.zoom = '';
+      ak.appendChild(footer);
+      stage.appendChild(ak);
+      const got = ak.getBoundingClientRect().height;
+      footer.remove();
+      ak.classList.remove('pm-fit');
+      content.style.zoom = '';
+      root.appendChild(ak);
+      return got;
+    };
+    const h = measureAk(0);
     if (h <= usable) return { zoom: 0, tall: false, h };
-    const z = zoomFor(h);
-    return (z >= PRINT_ZOOM_FLOOR) ? { zoom: z, tall: false, h } : { zoom: 0, tall: true, h };
+    const fit = _printVerifiedZoom(zoomFor(h), measureAk, usable);
+    return fit.zoom ? { zoom: fit.zoom, tall: false, h: fit.h } : { zoom: 0, tall: true, h };
   });
 
   const frontSpans = fronts.map(f => Math.max(1, Math.ceil((f.getBoundingClientRect().height || 1) / PRINT_PAGE_PX)));
@@ -15267,6 +15346,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     // MCQ-style questions (no writing boxes) are flagged so the packer can
     // pair two compact ones onto a single page.
     const isMcq = q.blocks.some(b => b.type === 'mcq') && !q.blocks.some(b => b.type === 'answer' || b.type === 'plainanswer');
+    const bigImgs = imgQuestionNeedsBig(q);   // the picture IS the options → print it tall
     let qHtml = `<div class="print-question-chunk" data-qid="${escapeHtml(String(q.id || ''))}"${isMcq ? ' data-mcq="1"' : ''}>`;
 
     if (qIndex === 0 && !secHtml) {
@@ -15291,7 +15371,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             break;
           }
           case 'image': {
-            if (block.url) qHtml += `<div class="print-text-block"><img src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="${imgSizeStyle(block)}"></div>`;
+            if (block.url) qHtml += `<div class="print-text-block"><img${imgPrintAttr(block, bigImgs)} src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="${imgSizeStyle(block)}"></div>`;
             break;
           }
           case 'answer': {
@@ -16202,6 +16282,14 @@ function _wsQeRender() {
           <button type="button" class="wsqe-step wsqe-step-auto" onclick="wsQeImgSize('${bid}',0)" title="Auto: fill the page width without stretching the picture past its own resolution">Auto</button>
           <span class="wsqe-hint">of the page width — ${IMG_SCALE_MAX}% fills the column</span>
         </div>
+        <div class="wsqe-size">
+          <span class="wsqe-hint" style="margin-left:0;">🖨️ Print height</span>
+          <select class="wsqe-input" style="max-width:160px;padding:5px 8px;" onchange="wsQePrintImg('${bid}', this.value)">
+            ${PRINT_IMG_CHOICES.map(([v, label, tip]) =>
+              `<option value="${v}" title="${escapeHtml(tip)}"${(String(b.printImg || 'auto') === v) ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+          </select>
+          <span class="wsqe-hint">Large for a graph, a table or a figure holding the options</span>
+        </div>
         <label class="wsqe-label" for="wsqeUrl_${bid}">Image link</label>
         <input class="wsqe-input" id="wsqeUrl_${bid}" type="text" value="${escapeHtml(b.url || '')}"
                placeholder="https://…" oninput="wsQeImgUrl('${bid}', this.value)">
@@ -16228,6 +16316,13 @@ function _wsQeBlock(bid) {
 }
 
 // Same range and steps as the editor's own control. dir 0 means "back to Auto".
+// Print height for a picture, edited straight from the worksheet preview —
+// the place where you actually notice a diagram came out too big or too small.
+function wsQePrintImg(bid, val) {
+  const b = _wsQeBlock(bid);
+  if (!b) return;
+  if (!val || val === 'auto') delete b.printImg; else b.printImg = val;
+}
 function wsQeImgSize(bid, dir) {
   const b = _wsQeBlock(bid);
   if (!b) return;
@@ -37485,6 +37580,7 @@ window.closeWsQuickEdit = closeWsQuickEdit;
 window.saveWsQuickEdit = saveWsQuickEdit;
 window.wsQuickEditOpenFull = wsQuickEditOpenFull;
 window.wsQeImgSize = wsQeImgSize;
+window.wsQePrintImg = wsQePrintImg;
 window.wsQeImgUrl = wsQeImgUrl;
 window.renderSavedWorksheets = renderSavedWorksheets;
 window.deleteWorksheet = deleteWorksheet;
