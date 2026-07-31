@@ -5464,6 +5464,8 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .ems-card.off { opacity: 0.4; }
 .ems-card-art { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; }
 .ems-card-art .ems-art.em { font-size: 22px; }
+.ems-card-lvl { font-family: 'Space Mono', monospace; font-size: 0.5rem; font-weight: 700; color: #e8c98a; letter-spacing: 0.02em; white-space: nowrap; }
+.ems-card-lvl i { font-style: normal; color: #c4b5fd; }
 .ems-card-name { font-size: 0.55rem; font-weight: 700; text-align: center; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .ems-card-cost { font-size: 0.58rem; font-weight: 800; color: #ffd76a; }
 .ems-card-cd { position: absolute; inset: 0; border-radius: 10px; background: rgba(0,0,0,0.6); color: #ffd76a; font-size: 0.68rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
@@ -5609,6 +5611,8 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .tcg-count-badge { position: absolute; top: -8px; right: -8px; z-index: 5; background: linear-gradient(180deg,#2a2010,#0b0d13); color: #f0b542; border: 1px solid rgba(240,181,66,0.55); font-family: 'Space Mono', monospace; font-size: 0.62rem; font-weight: 700; border-radius: 999px; padding: 3px 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
 .tcg-new-badge { position: absolute; top: -8px; left: -8px; z-index: 5; background: linear-gradient(135deg,#f59e0b,#ef4444); color: #fff; font-size: 0.6rem; font-weight: 800; border-radius: 999px; padding: 3px 9px; letter-spacing: 0.05em; box-shadow: 0 2px 6px rgba(0,0,0,0.35); animation: tcgPulse 1.2s ease-in-out infinite; }
 .tcg-team-badge { position: absolute; top: -8px; left: -8px; z-index: 5; background: linear-gradient(135deg,#8a6420,#f0b542); color: #1a1206; font-size: 0.6rem; font-weight: 800; border-radius: 999px; padding: 3px 9px; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+/* A repeat pulled from a pack, absorbed into the copy already on the shelf. */
+.tcg-merged-badge { position: absolute; top: -8px; left: -8px; z-index: 6; background: linear-gradient(135deg,#7c3aed,#22d3ee); color: #fff; font-size: 0.6rem; font-weight: 800; border-radius: 999px; padding: 3px 9px; letter-spacing: 0.05em; white-space: nowrap; box-shadow: 0 2px 10px rgba(124,58,237,0.55); animation: tcgPulse 1.2s ease-in-out infinite; }
 @keyframes tcgPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
 /* ---- enlarged card preview (Collection) ---- */
 .tcg-cell { display: flex; flex-direction: column; gap: 8px; }
@@ -5651,6 +5655,23 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .tcg-lvl-num { font-family: 'Space Mono', monospace; font-size: 0.52rem; color: #b39a63; white-space: nowrap; }
 .tcg-lvl-max { font-family: 'Cinzel', serif; font-weight: 900; font-size: 0.58rem; letter-spacing: 1px; color: #1a1206; background: linear-gradient(180deg,#ffd77a,#f0902b); border-radius: 999px; padding: 1px 8px; }
 .tcg-skill-up { color: #f0b542; font-weight: 700; }
+/* ---- merge track (the second road to 99, earned from repeat copies) ----
+   Deliberately violet/cyan so it never reads as the gold training track. */
+.tcg-card-merge { position: absolute; top: 30px; left: 8px; z-index: 4; font-family: 'Cinzel', serif; font-weight: 900; font-size: 0.56rem; letter-spacing: 0.5px; color: #f2eaff; background: linear-gradient(180deg,#8b5cf6,#5b21b6); border: 1px solid rgba(196,181,253,0.7); border-radius: 999px; padding: 2px 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+.tcg-lvl-line.merge { margin-top: 4px; }
+.tcg-merge-tag { font-family: 'Cinzel', serif; font-weight: 900; font-size: 0.62rem; color: #c4b5fd; white-space: nowrap; }
+.tcg-lvl-bar.merge { background: rgba(139,92,246,0.18); }
+.tcg-lvl-bar.merge > i { background: linear-gradient(90deg,#e9d5ff,#a78bfa 55%,#22d3ee); }
+.tcg-lvl-max.merge { color: #f2eaff; background: linear-gradient(180deg,#a78bfa,#6d28d9); }
+.tcg-train-panel.merge { border-color: rgba(167,139,250,0.35); }
+.tcg-train-panel.merge .tcg-train-head { color: #ede9fe; }
+.tcg-train-panel.merge .tcg-train-note { margin-bottom: 0; }
+.tcg-xpbar.merge { background: rgba(139,92,246,0.16); }
+.tcg-xpbar.merge > i { background: linear-gradient(90deg,#e9d5ff,#a78bfa 55%,#22d3ee); }
+.tcg-merge-note { border: 1px solid rgba(167,139,250,0.3); border-radius: 14px; padding: 18px 20px; line-height: 1.7; background: rgba(139,92,246,0.07); }
+.tcg-merge-rates { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 14px 0 12px; }
+.tcg-merge-rates span { font-family: 'Space Mono', monospace; font-size: 0.72rem; color: #c4b5fd; background: rgba(139,92,246,0.14); border: 1px solid rgba(167,139,250,0.3); border-radius: 999px; padding: 5px 12px; }
+.tcg-merge-rates span.hot { color: #fde68a; background: rgba(240,181,66,0.14); border-color: rgba(240,181,66,0.45); }
 /* training panel (under the preview card) */
 .tcg-train-panel { width: min(92vw, 360px); background: linear-gradient(180deg, rgba(24,28,40,0.95), rgba(12,14,22,0.97)); border: 1px solid rgba(240,181,66,0.28); border-radius: 14px; padding: 16px 18px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
 .tcg-train-head { font-family: 'Cinzel', serif; color: #f5ead0; font-size: 1.05rem; }
@@ -5824,6 +5845,8 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .tcgb-plate { margin-top: 3px; background: rgba(2,6,23,0.72); border: 1px solid rgba(148,163,184,0.35); border-radius: 10px; padding: 4px 8px 6px; backdrop-filter: blur(3px); }
 .tcgb-name { color: #fff; font-size: 0.66rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tcgb-stars { font-size: 0.52rem; color: #fbbf24; letter-spacing: 1px; }
+.tcgb-lvl { font-family: 'Space Mono', monospace; font-size: 0.48rem; color: #e8c98a; letter-spacing: 0.02em; margin-top: 1px; }
+.tcgb-lvl i { font-style: normal; color: #c4b5fd; }
 .tcgb-hpbar { height: 7px; border-radius: 999px; background: rgba(255,255,255,0.15); margin-top: 4px; overflow: hidden; }
 .tcgb-hpbar > div { height: 100%; border-radius: 999px; background: linear-gradient(90deg,#4ade80,#22c55e); transition: width 0.4s ease, background 0.4s; }
 .tcgb-hpbar > div.mid { background: linear-gradient(90deg,#fbbf24,#f59e0b); }

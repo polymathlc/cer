@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.206.0';
+const APP_VERSION = 'v1.207.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -23015,6 +23015,10 @@ function rpgPublishLeaderboard() {
       tcg: (rpgState.tcg && Array.isArray(rpgState.tcg.team) && rpgState.tcg.team.length === 5) ? {
         team: rpgState.tcg.team.slice(0, 5),
         power: tcgTeamPower(rpgState.tcg.team),
+        // Both progression tracks travel with the team so an opponent fights
+        // at the strength their owner actually built.
+        lvl: Math.max(1, Math.round(rpgState.tcg.team.reduce((a, id) => a + tcgLevel(id), 0) / 5)),
+        mlvl: Math.max(1, Math.round(rpgState.tcg.team.reduce((a, id) => a + tcgMergeLevel(id), 0) / 5)),
         wins: rpgState.tcg.wins | 0,
         losses: rpgState.tcg.losses | 0,
         dex: Object.keys(rpgState.tcg.cards || {}).length,
@@ -26869,22 +26873,66 @@ function tcgAddLevelProgress(id) {
   rpgSave();
   return res;
 }
-function tcgStats(card, level) {
+// =====================================================================
+// ⟡ MERGE LEVELS (1→99) — the second, completely separate track
+// =====================================================================
+// Training levels come from answering science questions. MERGE levels come
+// from duplicates: pull a monster you already own and the copy is absorbed
+// into the one on your shelf straight away — no button, no screen to visit.
+// One duplicate = +1 merge level. 6★ and 7★ duplicates are so rare that a
+// single copy is worth far more (+4 and +8), so the two top tiers climb this
+// track much faster than everything below them.
+// Merge levels raise every stat by 1.2% each (about 2.2× at M99) and stack
+// MULTIPLICATIVELY on top of the training multiplier, so both tracks are worth
+// pushing. The bonus is read by tcgStats, which every mode goes through —
+// Ember Siege, the Battle Arena and the Infinite Dungeon all feel it.
+const TCG_MERGE_MAX = 99;
+const TCG_MERGE_GAIN = { 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 4, 7: 8 };
+function tcgMergeGain(stars) { return TCG_MERGE_GAIN[stars] || 1; }
+function _tcgClampMerge(m) { m = m | 0; return m < 1 ? 1 : m > TCG_MERGE_MAX ? TCG_MERGE_MAX : m; }
+function _tcgMergeMult(merge) { return 1 + (_tcgClampMerge(merge) - 1) * 0.012; }
+function tcgMergeLevel(id) { const s = tcgState(); return _tcgClampMerge((s && s.merges && s.merges[id]) || 1); }
+// How many merge levels a given number of duplicate copies is worth.
+function tcgMergeLevelFromCopies(stars, copies) {
+  return _tcgClampMerge(1 + Math.max(0, (copies | 0) - 1) * tcgMergeGain(stars));
+}
+// Absorb `copies` duplicate cards into the monster already on the shelf.
+// Returns what happened so the pack-opening ceremony can show it, or null if
+// the card is already at M99 (further duplicates are simply kept as copies).
+function tcgMergeAbsorb(id, copies) {
+  const s = tcgState(); const card = TCG_BY_ID[id];
+  if (!s || !card) return null;
+  s.merges = s.merges || {};
+  const before = _tcgClampMerge(s.merges[id] || 1);
+  if (before >= TCG_MERGE_MAX) return { id, before, after: before, gained: 0, maxed: true };
+  const per = tcgMergeGain(card.stars);
+  const after = _tcgClampMerge(before + per * Math.max(1, copies | 0));
+  s.merges[id] = after;
+  return { id, before, after, gained: after - before, per, maxed: after >= TCG_MERGE_MAX };
+}
+function tcgStats(card, level, merge) {
   const s = card.stars;
   const m = TCG_ROLE_MODS[TCG_SKILLS[card.skillId].kind];
   const lv = _tcgClampLvl(level || 1);
-  const k = _tcgLevelMult(lv);
+  const mg = _tcgClampMerge(merge || 1);
+  const k = _tcgLevelMult(lv) * _tcgMergeMult(mg);
   return {
     hp:   Math.round((200 + s * 80) * m.hp * _tcgJitter(card.id, 'hp') * k),
     atk:  Math.round((42 + s * 20) * m.atk * _tcgJitter(card.id, 'atk') * k),
     def:  Math.round((22 + s * 11) * m.def * _tcgJitter(card.id, 'def') * k),
     heal: Math.round((18 + s * 9) * m.heal * _tcgJitter(card.id, 'heal') * k),
-    spd:  Math.round((70 + s * 6 + m.spd) * _tcgJitter(card.id, 'spd') + (lv - 1) * 0.15)
+    spd:  Math.round((70 + s * 6 + m.spd) * _tcgJitter(card.id, 'spd') + (lv - 1) * 0.15 + (mg - 1) * 0.12)
   };
+}
+// THE stat call for a monster the student actually owns — training level AND
+// merge level together. Every game mode must go through this (or pass both
+// numbers explicitly) or the student's progress silently stops counting.
+function tcgOwnStats(card) {
+  return tcgStats(card, tcgLevel(card.id), tcgMergeLevel(card.id));
 }
 function tcgCardPower(id) {
   const c = TCG_BY_ID[id]; if (!c) return 0;
-  const st = tcgStats(c, tcgLevel(id));
+  const st = tcgOwnStats(c);
   return Math.round(st.atk + st.def + st.heal + st.hp / 8 + st.spd / 2);
 }
 function tcgTeamPower(team) { return (team || []).reduce((a, id) => a + tcgCardPower(id), 0); }
@@ -26961,6 +27009,17 @@ function tcgHydrateState(saved) {
     levels[id] = lv;
     lvlp[id] = lv >= TCG_LVL_MAX ? 0 : Math.max(0, Math.min(TCG_LVL_STEP - 1, sp[id] | 0));
   });
+  // Per-card MERGE level (1–99), earned purely from duplicate copies. Anyone
+  // who was already collecting before merging existed has their spare copies
+  // converted the first time this runs — nobody's duplicates are wasted.
+  const merges = {};
+  const sm = (s.merges && typeof s.merges === 'object') ? s.merges : {};
+  Object.keys(cards).forEach(id => {
+    const stars = TCG_BY_ID[id].stars;
+    merges[id] = sm[id] != null
+      ? _tcgClampMerge(sm[id] | 0)
+      : tcgMergeLevelFromCopies(stars, cards[id]);
+  });
   const strat = (s.strategy && typeof s.strategy === 'object') ? s.strategy : {};
   // Owned artifacts ({id: count}) — dropped by booster packs, like cards.
   const artifacts = {};
@@ -26980,6 +27039,7 @@ function tcgHydrateState(saved) {
     losses: s.losses | 0,
     levels,
     lvlp,
+    merges,
     artifacts,
     artifact: artifacts[s.artifact] ? s.artifact : null,
     strategy: {
@@ -28056,11 +28116,14 @@ function tcgCardHtml(card, opts) {
   opts = opts || {};
   const owned = opts.owned !== false;
   const level = opts.level != null ? _tcgClampLvl(opts.level) : (owned ? tcgLevel(card.id) : 1);
-  const st = tcgStats(card, level);
+  const merge = opts.merge != null ? _tcgClampMerge(opts.merge) : (owned ? tcgMergeLevel(card.id) : 1);
+  const st = tcgStats(card, level, merge);
   const sk = owned ? tcgLeveledSkill(card, level) : TCG_SKILLS[card.skillId];
   const el = TCG_ELEMENTS[card.element];
   const prog = owned ? tcgLvlProg(card.id) : 0;
+  const mg = opts.mergedBy;   // set on a duplicate as it is revealed from a pack
   const badges = (opts.isNew ? '<span class="tcg-new-badge">NEW!</span>' : '')
+    + (mg && mg.gained > 0 ? '<span class="tcg-merged-badge">⟡ MERGED +' + mg.gained + '</span>' : '')
     + (opts.inTeam ? '<span class="tcg-team-badge">⚔️ Team</span>' : '')
     + (opts.count > 1 ? '<span class="tcg-count-badge">×' + opts.count + '</span>' : '');
   const skDesc = escapeHtml(sk.desc) + (owned && sk.tier > 1
@@ -28072,17 +28135,30 @@ function tcgCardHtml(card, opts) {
             : '<span class="tcg-lvl-bar"><i style="width:' + Math.round(prog / TCG_LVL_STEP * 100) + '%;"></i></span><span class="tcg-lvl-num">' + prog + '/' + TCG_LVL_STEP + '</span>')
       + '</div>'
     : '';
+  // The merge track sits directly under the training track, so the two read as
+  // what they are: two separate roads to 99.
+  const mergeLine = owned
+    ? '<div class="tcg-lvl-line merge" title="Merge level — earned only from repeat copies of this monster, which merge in automatically. Every merge level adds 1.2% to all stats, in every game mode.">'
+        + '<span class="tcg-merge-tag">⟡ M ' + merge + '</span>'
+        + (merge >= TCG_MERGE_MAX
+            ? '<span class="tcg-lvl-max merge">MAX</span>'
+            : '<span class="tcg-lvl-bar merge"><i style="width:' + Math.round(merge / TCG_MERGE_MAX * 100) + '%;"></i></span>'
+              + '<span class="tcg-lvl-num">+' + tcgMergeGain(card.stars) + '/repeat</span>')
+      + '</div>'
+    : '';
   return '<div class="tcg-card star-' + card.stars + (owned ? '' : ' unowned') + (opts.onclick ? ' clickable' : '') + '"'
     + (opts.onclick ? ' onclick="' + opts.onclick + '"' : '') + '>'
     + badges
     + '<div class="tcg-card-inner">'
-    +   (owned ? '<div class="tcg-card-lvl">Lv ' + level + '</div>' : '')
+    +   (owned ? '<div class="tcg-card-lvl">Lv ' + level + '</div>'
+          + (merge > 1 ? '<div class="tcg-card-merge" title="Merge level ' + merge + '">⟡ ' + merge + '</div>' : '') : '')
     +   '<div class="tcg-card-no">#' + String(card.num).padStart(3, '0') + '</div>'
     +   '<div class="tcg-art">' + tcgArtHtml(card) + '</div>'
     +   '<div class="tcg-body">'
     +     '<div class="tcg-card-name">' + (owned ? escapeHtml(card.name) : '???') + '</div>'
     +     '<div class="tcg-stars">' + tcgStarsHtml(card.stars) + '</div>'
     +     lvlLine
+    +     mergeLine
     +     '<div class="tcg-type"><span class="ln l"></span><span class="lbl">' + el.icon + ' ' + escapeHtml(el.name) + '</span><span class="ln r"></span></div>'
     +     (function () { const aff = TCG_AFFINITY[tcgAffinity(card)]; const beats = TCG_AFFINITY[aff.beats]; const weak = TCG_AFFINITY[aff.weakTo];
           return '<div class="tcg-aff"><span class="tcg-aff-el">' + aff.icon + ' ' + aff.name + '</span>'
@@ -28221,6 +28297,7 @@ function tcgPreviewCard(id) {
       }) + '</div>'
     + '<div class="tcg-siege-line">🌋 <b>In Ember Siege:</b> ' + escapeHtml(emsSkillLine(c)) + '</div>'
     + (owned ? tcgTrainPanelHtml(c.id) : '')
+    + (owned ? tcgMergePanelHtml(c.id) : '')
     + '<button class="btn btn-primary" type="button" onclick="tcgClosePreview()">Close</button>'
     + '</div>';
   document.body.appendChild(o);
@@ -28239,6 +28316,31 @@ function tcgTrainPanelHtml(id) {
         ? '<div class="tcg-train-note">This monster is fully trained — every stat and skill is maxed out! 🌟</div>'
         : '<div class="tcg-xpbar"><i style="width:' + Math.round(prog / TCG_LVL_STEP * 100) + '%;"></i></div>'
           + '<div class="tcg-train-note">' + prog + ' / ' + TCG_LVL_STEP + ' correct answers to reach Level ' + (level + 1) + (milestone ? ' · ' + milestone : '') + '<br><span style="opacity:.75;">Use the <b>🎓 Train</b> button under this card to answer questions.</span></div>')
+    + '</div>';
+}
+// The second, separate track: merge levels, earned only from repeat copies.
+// There is deliberately no button here — merging happens by itself the moment
+// a duplicate is pulled. This panel just explains the maths.
+function tcgMergePanelHtml(id) {
+  const card = TCG_BY_ID[id]; if (!card) return '';
+  const s = tcgState();
+  const merge = tcgMergeLevel(id);
+  const copies = Math.max(1, (s && s.cards && s.cards[id]) | 0);
+  const per = tcgMergeGain(card.stars);
+  const maxed = merge >= TCG_MERGE_MAX;
+  const boost = Math.round((_tcgMergeMult(merge) - 1) * 1000) / 10;
+  const toMax = Math.ceil((TCG_MERGE_MAX - merge) / per);
+  return '<div class="tcg-train-panel merge">'
+    + '<div class="tcg-train-head"><b>⟡ Merge ' + merge + '</b> <span>/ ' + TCG_MERGE_MAX + '</span>' + (maxed ? ' <span class="tcg-lvl-max merge">MAX</span>' : '') + '</div>'
+    + '<div class="tcg-xpbar merge"><i style="width:' + Math.round(merge / TCG_MERGE_MAX * 100) + '%;"></i></div>'
+    + '<div class="tcg-train-note">'
+    +   (maxed
+        ? 'Fully merged — this monster has absorbed every repeat it needs. 🌟'
+        : 'Pull this monster again and the repeat <b>merges in automatically</b>: <b>+' + per + ' merge level' + (per === 1 ? '' : 's')
+          + '</b> per copy (' + card.stars + '★). ' + toMax + ' more repeat' + (toMax === 1 ? '' : 's') + ' to reach M' + TCG_MERGE_MAX + '.')
+    +   '<br><span style="opacity:.75;">' + copies + ' cop' + (copies === 1 ? 'y' : 'ies') + ' collected · merging is worth <b>+' + boost.toFixed(1)
+    +   '%</b> to every stat right now, in <b>all three game modes</b>.</span>'
+    + '</div>'
     + '</div>';
 }
 function tcgClosePreview() {
@@ -28462,7 +28564,16 @@ function tcgPacksHtml(s) {
       + '<div class="tcg-pack-odds">' + oddsLine(p) + (p.bonusOdds ? '<br><b>Bonus card:</b> ' + Object.keys(p.bonusOdds).map(n => n + '★ ' + p.bonusOdds[n] + '%').join(' · ') : '') + '</div>'
       + '<button class="btn btn-primary" ' + (gold < p.cost ? 'disabled style="opacity:.55;"' : '') + ' onclick="tcgBuyPack(\'' + p.id + '\')">Open · 🪙 ' + p.cost + '</button>'
       + '</div>').join('') + '</div>'
-    + '<div class="tcg-section-note" style="margin-top:22px;">Opened so far: <b>' + (s.packs | 0) + ' pack' + (s.packs === 1 ? '' : 's') + '</b></div>';
+    + '<div class="tcg-section-note tcg-merge-note" style="margin-top:22px;">'
+    +   '<b>⟡ Repeats are never wasted.</b> Pull a monster you already own and the copy <b>merges into it automatically</b> — no button, nothing to sort. '
+    +   'Every merge is a <b>merge level</b> (1 → ' + TCG_MERGE_MAX + '), a track completely separate from the 🎓 training levels you earn by answering questions, '
+    +   'and each one adds <b>1.2% to every stat</b> in <b>all three game modes</b>.'
+    +   '<div class="tcg-merge-rates">' + [1, 2, 3, 4, 5, 6, 7].map(n =>
+          '<span' + (n >= 6 ? ' class="hot"' : '') + '>' + n + '★ <b>+' + tcgMergeGain(n) + '</b></span>').join('') + '</div>'
+    +   '<span style="opacity:.8;">6★ and 7★ repeats are the rarest thing in the game, so they climb this track far faster — a single 7★ repeat is worth '
+    +   tcgMergeGain(7) + ' merge levels.</span>'
+    + '</div>'
+    + '<div class="tcg-section-note" style="margin-top:14px;">Opened so far: <b>' + (s.packs | 0) + ' pack' + (s.packs === 1 ? '' : 's') + '</b></div>';
 }
 function tcgAdminGold() {
   if (!_isAdmin() || !rpgState) return;
@@ -28493,12 +28604,16 @@ function tcgBuyPack(packId) {
   if (((rpgState.gold | 0)) < p.cost) { showToast('Not enough points — answer more questions to earn 🪙 ' + p.cost, 'error'); return; }
   rpgState.gold = (rpgState.gold | 0) - p.cost;
   const pulls = [];
+  let mergedLevels = 0, mergedCards = 0;
   for (let i = 0; i < p.cards; i++) {
     const odds = (p.bonusOdds && i === p.cards - 1) ? p.bonusOdds : p.odds;
     const card = _tcgRollCard(odds);
     const isNew = !s.cards[card.id];
     s.cards[card.id] = (s.cards[card.id] | 0) + 1;
-    pulls.push({ card, isNew });
+    // A repeat is absorbed the moment it is pulled — no button to press.
+    const merge = isNew ? null : tcgMergeAbsorb(card.id, 1);
+    if (merge && merge.gained > 0) { mergedLevels += merge.gained; mergedCards++; }
+    pulls.push({ card, isNew, merge });
   }
   // Bonus artifact slot — the other pack prize, revealed as one extra card.
   if (p.artChance && Math.random() < p.artChance) {
@@ -28513,6 +28628,10 @@ function tcgBuyPack(packId) {
   try { rpgPublishLeaderboard(); } catch (e) {}
   tcgUpdateGoldChip();
   tcgShowReveal(p, pulls);
+  if (mergedLevels) {
+    setTimeout(() => showToast('⟡ ' + mergedCards + ' repeat' + (mergedCards === 1 ? '' : 's') + ' merged — +'
+      + mergedLevels + ' merge level' + (mergedLevels === 1 ? '' : 's') + ', stats up!', 'success'), 700);
+  }
 }
 // -- Pack opening ceremony --
 function tcgShowReveal(pack, pulls) {
@@ -28528,7 +28647,7 @@ function tcgShowReveal(pack, pulls) {
         '<div class="tcg-flip" id="tcgflip-' + i + '" data-stars="' + (pl.card || pl.arti).stars + '" style="animation-delay:' + (i * 0.12) + 's;" onclick="tcgFlipCard(' + i + ')" title="Hover halo hints at the rarity…">'
         + '<div class="tcg-flip-inner">'
         +   '<div class="tcg-flip-back">' + tcgCardBackHtml() + '</div>'
-        +   '<div class="tcg-flip-front">' + (pl.arti ? tcgArtifactCardHtml(pl.arti, { isNew: pl.isNew }) : tcgCardHtml(pl.card, { isNew: pl.isNew })) + '</div>'
+        +   '<div class="tcg-flip-front">' + (pl.arti ? tcgArtifactCardHtml(pl.arti, { isNew: pl.isNew }) : tcgCardHtml(pl.card, { isNew: pl.isNew, mergedBy: pl.merge })) + '</div>'
         + '</div></div>').join('') + '</div>'
     + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">'
     +   '<button class="btn btn-outline" style="color:#fff;border-color:rgba(255,255,255,0.4);" onclick="tcgFlipAll()">Flip all</button>'
@@ -28691,7 +28810,14 @@ async function tcgFindOpponent() {
     // Prefer the closest team power, with a little shuffle so rematches vary.
     candidates.sort((a, b) => Math.abs((a.tcg.power || tcgTeamPower(a.tcg.team)) - myPower) - Math.abs((b.tcg.power || tcgTeamPower(b.tcg.team)) - myPower));
     const pick = candidates[Math.floor(Math.random() * Math.min(3, candidates.length))];
-    return { name: pick.name || 'Trainer', ghost: false, tcgTeam: pick.tcg.team, artifact: pick.tcg.artifact || null };
+    return {
+      name: pick.name || 'Trainer', ghost: false, tcgTeam: pick.tcg.team,
+      // Older published teams carry no level/merge data — fall back to the
+      // scale-to-you defaults in tcgRunBattle rather than fighting a Lv1 team.
+      lvl: _tcgClampLvl(pick.tcg.lvl | 0) > 1 ? _tcgClampLvl(pick.tcg.lvl | 0) : 0,
+      mlvl: _tcgClampMerge(pick.tcg.mlvl | 0) > 1 ? _tcgClampMerge(pick.tcg.mlvl | 0) : 0,
+      artifact: pick.tcg.artifact || null
+    };
   }
   const name = TCG_GHOSTS[Math.floor(Math.random() * TCG_GHOSTS.length)];
   return { name, tcgTeam: _tcgGhostTeam(tcgTeamStars(s.team)), ghost: true };
@@ -28707,6 +28833,8 @@ function _tcgDungeonStats(L) {
   return {
     stars: Math.min(35, 5 + Math.floor(L * 0.7)),          // team star budget 5→35
     lvl: Math.min(99, 1 + Math.round((L - 1) * 1.5)),      // keeper monster level
+    // Keepers merge too — otherwise the merge track would flatten the ladder.
+    mlvl: Math.min(99, 1 + Math.round((L - 1) * 1.2)),     // keeper merge level
     statMult: +(1 + Math.max(0, L - 40) * 0.04).toFixed(2) // endless growth past Floor 40
   };
 }
@@ -28714,7 +28842,7 @@ function _tcgDungeonOpponent(L) {
   const d = _tcgDungeonStats(L);
   return {
     name: TCG_DUNGEON_KEEPERS[(L - 1) % TCG_DUNGEON_KEEPERS.length] + ' · Floor ' + L,
-    ghost: true, dungeon: L, lvl: d.lvl, statMult: d.statMult,
+    ghost: true, dungeon: L, lvl: d.lvl, mlvl: d.mlvl, statMult: d.statMult,
     tcgTeam: _tcgGhostTeam(d.stars)
   };
 }
@@ -28738,7 +28866,7 @@ function tcgDungeonHtml(s) {
     +   '<div><b style="color:#16a34a;">' + (dg.cleared | 0) + '</b><span>FLOORS BEATEN</span></div>'
     +   '<div><b>' + tcgTeamPower(s.team).toLocaleString() + '</b><span>TEAM POWER</span></div>'
     + '</div>'
-    + '<div class="tcg-loadout-line">Next: <b>' + escapeHtml(TCG_DUNGEON_KEEPERS[(L - 1) % TCG_DUNGEON_KEEPERS.length]) + '</b> · ' + d.stars + '★ team · monsters Lv ' + d.lvl + (d.statMult > 1 ? ' · power ×' + d.statMult : '') + '</div>'
+    + '<div class="tcg-loadout-line">Next: <b>' + escapeHtml(TCG_DUNGEON_KEEPERS[(L - 1) % TCG_DUNGEON_KEEPERS.length]) + '</b> · ' + d.stars + '★ team · monsters Lv ' + d.lvl + ' · ⟡ M' + d.mlvl + (d.statMult > 1 ? ' · power ×' + d.statMult : '') + '</div>'
     + (ready
       ? '<button class="btn btn-primary" style="font-size:1rem;padding:12px 30px;" onclick="tcgEnterDungeon()">🏰 Challenge Floor ' + L + '</button>'
       : '<div class="tcg-section-note">Pick 5 monsters on the <b>My Team</b> tab first.</div>')
@@ -28762,7 +28890,7 @@ function tcgModesHtml(s) {
     + '</div>'
     + '<div class="tcg-mode-go">' + btn + '</div>'
     + '</div>';
-  return '<div class="tcg-section-note">Three ways to play with the monsters you have collected. Every mode uses your own cards — the more of the dex you own and the higher you train it, the further you get.</div>'
+  return '<div class="tcg-section-note">Three ways to play with the monsters you have collected. Every mode uses your own cards and <b>your real card stats</b> — so both progression tracks count everywhere: <b>🎓 training levels</b> from answering science questions, and <b>⟡ merge levels</b> from repeat copies merging in by themselves.</div>'
     + '<div class="tcg-modes">'
     + mode('🌋', 'Ember Siege', 'NEW · lane defence',
         'Wave after wave of corrupted monsters marches on your Ember Gate — <b>slowly</b>: a monster takes about ' + EMS_WALK_SECONDS + ' seconds to cross the whole field, so there is always time to think. Place your cards on the field to summon them as defenders — and answer science questions to generate the mana that pays for them. Mana trickles in slowly on its own, but answering is worth far more, and <b>every wave you clear opens a ' + EMS_ROUND_SIZE + '-question mana round with the battle paused and no timer</b>. Answering in the middle of a fight is still clocked — the faster you answer there, the more mana you get.',
@@ -28897,9 +29025,13 @@ function emsSkillLine(card) {
   const sp = emsSplashSize(card);
   return b.label + (sp && sp.lanes > 1 ? ' ' + sp.lanes + '×' + sp.cols : '') + ' — ' + b.desc;
 }
-// A defender's fighting profile, straight off the card's real stats + level.
+// A defender's fighting profile, straight off the card's real stats — BOTH
+// progression tracks included: the training level earned from science
+// questions and the merge level earned from repeat copies. tcgOwnStats is the
+// single door both go through, so anything that levels a card up anywhere in
+// the app is felt on this battlefield too.
 function emsDefProfile(card) {
-  const st = tcgStats(card, tcgLevel(card.id));
+  const st = tcgOwnStats(card);
   const b = emsBehaviour(card);
   const tanky = b.mode === 'wall' ? 1.7 : (b.mode === 'heal' || b.mode === 'healall') ? 1.1 : 1;
   return {
@@ -29119,7 +29251,9 @@ function emsSpawnEnemy(spec) {
   const pool = TCG_CARDS.filter(c => c.stars <= maxStars && c.stars >= minStars);
   const card = pool[Math.floor(Math.random() * pool.length)] || TCG_CARDS[0];
   const k = 1 + (r.wave - 1) * 0.2;
-  const st = tcgStats(card, Math.min(TCG_LVL_MAX, 1 + r.wave * 2));
+  // The corrupted horde levels with the wave but never merges — merge levels
+  // are the student's own advantage, and they should feel like one here.
+  const st = tcgStats(card, Math.min(TCG_LVL_MAX, 1 + r.wave * 2), 1);
   const hp = Math.round(st.hp * 0.5 * k * (spec.boss ? 4.5 : 1));
   r.enemies.push({
     id: r.nextId++, card: card, boss: !!spec.boss,
@@ -29338,8 +29472,16 @@ function emsDeckCardHtml(c) {
   const cost = emsCost(c);
   const cd = emsRun.cooldowns[c.id] || 0;
   const poor = emsRun.mana < cost;
-  return '<button type="button" class="ems-card' + (emsRun.sel === c.id ? ' sel' : '') + (poor || cd > 0 ? ' off' : '') + '" data-ems-card="' + c.id + '" onclick="emsSelect(\'' + c.id + '\')" title="' + escapeHtml(c.name + ' · ⚡' + cost + ' · ' + emsSkillLine(c)) + '">'
+  // Show the two tracks on the tile and spell the summoned stats out in the
+  // tooltip, so training a monster up is visibly worth something HERE too.
+  const lv = tcgLevel(c.id), mg = tcgMergeLevel(c.id);
+  const p = emsDefProfile(c);
+  const tip = c.name + ' · ⚡' + cost + ' · Lv ' + lv + ' · ⟡ M' + mg
+    + '\n' + p.hp + ' HP · ' + p.atk + ' ATK · every level and every merge makes this summon stronger.'
+    + '\n' + emsSkillLine(c);
+  return '<button type="button" class="ems-card' + (emsRun.sel === c.id ? ' sel' : '') + (poor || cd > 0 ? ' off' : '') + '" data-ems-card="' + c.id + '" onclick="emsSelect(\'' + c.id + '\')" title="' + escapeHtml(tip) + '">'
     + '<span class="ems-card-art">' + emsArtHtml(c, 'ems-art') + '</span>'
+    + '<span class="ems-card-lvl">Lv ' + lv + (mg > 1 ? ' <i>⟡' + mg + '</i>' : '') + '</span>'
     + '<span class="ems-card-name">' + escapeHtml(tcgShortName(c)) + '</span>'
     + '<span class="ems-card-cost">⚡' + cost + '</span>'
     + '<span class="ems-card-cd" data-cd="' + c.id + '"' + (cd > 0 ? '' : ' style="display:none;"') + '></span>'
@@ -29812,12 +29954,13 @@ function tcgSleep(ms) {
   if (!b || b.skip) return Promise.resolve();
   return new Promise(r => setTimeout(r, ms / (b.speed || 1)));
 }
-function _tcgMkUnit(cardId, side, slot, level) {
+function _tcgMkUnit(cardId, side, slot, level, merge) {
   const c = TCG_BY_ID[cardId];
   const lv = _tcgClampLvl(level || 1);
-  const st = tcgStats(c, lv);
+  const mg = _tcgClampMerge(merge || 1);
+  const st = tcgStats(c, lv, mg);
   return {
-    uid: side + slot, card: c, side, slot, level: lv,
+    uid: side + slot, card: c, side, slot, level: lv, merge: mg,
     hp: st.hp, maxHp: st.hp, atk: st.atk, def: st.def, heal: st.heal, spd: st.spd,
     skill: tcgLeveledSkill(c, lv),
     charge: Math.floor(Math.random() * 2), shield: 0, stun: 0,
@@ -30114,6 +30257,7 @@ function _tcgUnitHtml(u) {
     + '<div class="tcgb-plate">'
     +   '<div class="tcgb-name">' + escapeHtml(tcgShortName(u.card)) + '</div>'
     +   '<div class="tcgb-stars">' + '★'.repeat(u.card.stars) + '</div>'
+    +   '<div class="tcgb-lvl" title="Training level ' + u.level + ' · merge level ' + u.merge + '">Lv ' + u.level + (u.merge > 1 ? ' <i>⟡' + u.merge + '</i>' : '') + '</div>'
     +   '<div class="tcgb-hpbar"><div style="width:100%;"></div></div>'
     +   '<div class="tcgb-hptext">' + u.maxHp + ' / ' + u.maxHp + '</div>'
     +   '<div class="tcgb-status"></div>'
@@ -30143,13 +30287,19 @@ async function tcgRunBattle(myTeam, me, opp) {
   if (old) old.remove();
   _tcgBattle = { token: 1, speed: 1, skip: false };
   const token = _tcgBattle.token;
-  const mine = myTeam.map((id, i) => _tcgMkUnit(id, 'R', i, tcgLevel(id)));
+  // BOTH progression tracks come into the Arena and the Dungeon: the training
+  // level from answering questions AND the merge level from repeat copies.
+  const mine = myTeam.map((id, i) => _tcgMkUnit(id, 'R', i, tcgLevel(id), tcgMergeLevel(id)));
   // Scale the opponent to ~85% of your team's average level so matches stay
   // competitive as your monsters grow.
   const myAvg = Math.round(myTeam.reduce((a, id) => a + tcgLevel(id), 0) / Math.max(1, myTeam.length));
+  const myAvgMerge = Math.round(myTeam.reduce((a, id) => a + tcgMergeLevel(id), 0) / Math.max(1, myTeam.length));
   // Dungeon keepers bring their own fixed level; arena opponents scale to you.
   const oppLvl = opp.lvl || Math.max(1, Math.round(myAvg * 0.85));
-  const theirs = opp.tcgTeam.map((id, i) => _tcgMkUnit(id, 'L', i, oppLvl));
+  // A real opponent brings their own published merge average; ghosts and arena
+  // fill-ins mirror yours at 85% so merging never trivialises the ladder.
+  const oppMerge = opp.mlvl || Math.max(1, Math.round(myAvgMerge * 0.85));
+  const theirs = opp.tcgTeam.map((id, i) => _tcgMkUnit(id, 'L', i, oppLvl, oppMerge));
   // Endless dungeon growth: past Floor 40 keeper stats keep multiplying forever.
   if (opp.statMult && opp.statMult > 1) theirs.forEach(u => {
     u.maxHp = Math.round(u.maxHp * opp.statMult); u.hp = u.maxHp;
