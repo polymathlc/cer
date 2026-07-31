@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.220.0';
+const APP_VERSION = 'v1.221.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -29535,7 +29535,7 @@ function tcgGuideHtml() {
         ['✦ Skill points', 'A science question arrives every ' + ELG_Q_EVERY + ' seconds and freezes the battle while it is up: a correct answer is <b>+' + ELG_SP_CORRECT + ' point</b>, and clearing a wave is <b>+' + ELG_SP_WAVE + '</b>. Points are spent in the skill tree, which you can open mid-fight.'],
         ['The four trees', ELG_ROLE_ORDER.map(r => ELG_ROLES[r].icon + ' <b>' + ELG_ROLES[r].name + '</b> — ' + escapeHtml(ELG_ROLES[r].blurb)).join('<br>')
           + '<br><span class="tcg-guide-dim">Your monster\'s battle skill decides its role, and every monster of that role shares the same tree — so swapping hero never means learning a new game. Each tree holds <b>' + (ELG_TREES.striker || []).length + ' skills over ' + ELG_TIERS.length + ' tiers</b>, linked like a real skill tree: every skill grows from one below it and unlocks only once its parent is learned, ending in two capstones you choose between. Roughly a third of every tree is an <b>active skill</b> with its own button, hotkey and cooldown — lances, dashes, orbiting blades, chain lightning, auras, summons, buffs and arena-wide storms.</span>'],
-        ['The horde', 'Enemies are drawn from the other cards, and the further you get the rarer they are. <b>Every fifth wave</b> is led by a boss card with several times the health.'],
+        ['The horde', 'Enemies are drawn from the other cards, and the further you get the rarer they are. Wave 1 fields <b>' + ELG_WAVE_BASE + ' enemies</b> and every wave after it is <b>10% bigger than the last</b> — compounding, with no final wave: the run only ends when your monster falls. <b>Every fifth wave</b> promotes part of the horde to elites and sends a king to lead it.'],
         ['7★ passives', 'A 7★ hero fights with a run-changing rule of its own:<br>'
           + Object.keys(ELG_LEGEND_PASSIVES).map(k => ELG_LEGEND_PASSIVES[k].icon + ' <b>' + escapeHtml(ELG_LEGEND_PASSIVES[k].name) + '</b> — ' + escapeHtml(ELG_LEGEND_PASSIVES[k].desc)).join('<br>')],
         ['Training', 'Every correct answer trains the monster you are playing as, exactly like the Siege — those levels are kept for good.'],
@@ -31164,6 +31164,15 @@ function elgBindInput() {
 // ---- Waves ----------------------------------------------------------------
 // The horde is the rest of the collection: the further you get, the rarer the
 // cards that come for you, and every fifth wave sends a legend as a boss.
+//
+// Wave sizing: a genuine horde. Wave 1 fields ELG_WAVE_BASE enemies and every
+// wave after it is 10% bigger than the one before — compound, with no last
+// wave: the run only ends when the hero falls. Individual enemies are tuned
+// lighter than the old small-pack numbers so the threat is the CROWD, not
+// five bags of hit points.
+const ELG_WAVE_BASE = 25;      // 5× the old opening pack
+const ELG_WAVE_GROWTH = 1.10;  // +10% enemies per wave, compounding
+function elgWaveCount(wave) { return Math.round(ELG_WAVE_BASE * Math.pow(ELG_WAVE_GROWTH, wave - 1)); }
 function elgWavePool(wave, boss) {
   const maxStars = Math.min(7, 1 + Math.floor(wave / 3));
   const minStars = boss ? Math.max(4, maxStars - 1) : 1;
@@ -31174,17 +31183,27 @@ function elgStartWave() {
   const r = elgRun; if (!r) return;
   r.wave++;
   const boss = r.wave % 5 === 0;
-  const count = boss ? 2 + Math.floor(r.wave / 5) : 4 + Math.round(r.wave * 1.4);
-  const pool = elgWavePool(r.wave, boss);
+  const count = elgWaveCount(r.wave);
+  const pool = elgWavePool(r.wave, false);
   r.spawnQ = [];
-  for (let i = 0; i < count; i++) r.spawnQ.push({ card: pool[Math.floor(Math.random() * pool.length)], boss });
+  for (let i = 0; i < count; i++) r.spawnQ.push({ card: pool[Math.floor(Math.random() * pool.length)], boss: false });
   if (boss) {
+    // A boss wave keeps its full horde — a share of it is promoted to elites,
+    // and a king leads the whole thing.
     const bp = elgWavePool(r.wave, true);
+    const elites = Math.min(count, 2 + Math.floor(r.wave / 5));
+    for (let i = 0; i < elites; i++) {
+      const spot = r.spawnQ[Math.floor(Math.random() * r.spawnQ.length)];
+      spot.boss = true;
+      spot.card = bp[Math.floor(Math.random() * bp.length)];
+    }
     r.spawnQ.push({ card: bp[Math.floor(Math.random() * bp.length)], boss: true, king: true });
   }
   r.waveLeft = r.spawnQ.length;
   r.spawnT = 0;
-  elgBanner(boss ? '👑 Wave ' + r.wave + ' — a legend leads them!' : 'Wave ' + r.wave, 1800);
+  // Bigger waves pour in faster, or late waves would spend minutes trickling.
+  r.spawnGap = Math.max(0.12, Math.min(0.45, 12 / count));
+  elgBanner(boss ? '👑 Wave ' + r.wave + ' — a legend leads the horde!' : 'Wave ' + r.wave + ' — ' + r.waveLeft + ' enemies!', 1800);
   const el = document.getElementById('elgWave'); if (el) el.textContent = 'Wave ' + r.wave;
 }
 function elgSpawn(spec) {
@@ -31192,7 +31211,7 @@ function elgSpawn(spec) {
   const c = spec.card;
   const wv = r.wave;
   const king = !!spec.king;
-  const hp = Math.round((46 + c.stars * 34 + wv * 16) * (king ? 7 : spec.boss ? 2.2 : 1));
+  const hp = Math.round((22 + c.stars * 16 + wv * 7) * (king ? 12 : spec.boss ? 4 : 1));
   const edge = Math.floor(Math.random() * 4);
   const m = 26;
   const pos = edge === 0 ? { x: Math.random() * r.fw, y: -m }
@@ -31202,7 +31221,7 @@ function elgSpawn(spec) {
   const e = {
     id: r.nextId++, card: c, king, boss: !!spec.boss,
     x: pos.x, y: pos.y, hp, maxHp: hp,
-    dmg: Math.round((4 + c.stars * 1.8 + wv * 0.9) * (king ? 2.4 : spec.boss ? 1.4 : 1)),
+    dmg: Math.round((2.5 + c.stars * 1.1 + wv * 0.5) * (king ? 3 : spec.boss ? 1.7 : 1)),
     speed: (king ? 40 : spec.boss ? 52 : 62) + Math.min(38, wv * 1.1) + c.stars * 2,
     r: king ? 34 : spec.boss ? 26 : 20,
     swing: 0, stun: 0, cursed: 0, node: null
@@ -31242,7 +31261,7 @@ function elgUpdate(dt) {
   }
   if (r.spawnQ.length) {
     r.spawnT -= dt;
-    if (r.spawnT <= 0) { elgSpawn(r.spawnQ.shift()); r.spawnT = 0.45; }
+    if (r.spawnT <= 0) { elgSpawn(r.spawnQ.shift()); r.spawnT = r.spawnGap || 0.45; }
   }
 
   // Hero movement — pointer target first, keys second.
