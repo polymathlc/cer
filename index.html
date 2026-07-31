@@ -5760,6 +5760,31 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .tcgb-arti.right .tcgb-arti-card { right: 0; }
 .tcgb-arti:hover .tcgb-arti-card, .tcgb-arti.open .tcgb-arti-card { display: block; }
 /* ---- dungeon leaderboard ---- */
+/* ---- 📘 How to Play: the Realm of Embers rulebook tab ---- */
+.tcg-guide { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.tcg-guide-hero { text-align: center; border: 1px solid #f0b542; background: linear-gradient(180deg, #fffdf6, #fff4d6); border-radius: 18px; padding: 28px 30px; }
+.tcg-guide-hero h2 { font-size: 1.25rem; font-weight: 800; margin-bottom: 12px; }
+.tcg-guide-hero p { color: var(--text-muted); font-size: 0.92rem; line-height: 1.75; max-width: 560px; margin: 0 auto; }
+.tcg-guide-card { border: 1px solid var(--border); border-radius: 18px; background: var(--surface); padding: 26px 28px; box-shadow: 0 4px 16px rgba(15,23,42,0.05); }
+.tcg-guide-card h3 { display: flex; align-items: center; gap: 12px; font-size: 1.05rem; font-weight: 800; margin-bottom: 12px; }
+.tcg-guide-ico { font-size: 1.3rem; line-height: 1; }
+.tcg-guide-lead { color: var(--text-muted); font-size: 0.9rem; line-height: 1.75; margin-bottom: 20px; }
+.tcg-guide-note { color: var(--text-muted); font-size: 0.84rem; line-height: 1.7; margin-top: 18px; }
+.tcg-guide-dim { color: var(--text-muted); font-size: 0.82rem; }
+.tcg-guide-ring { text-align: center; font-weight: 700; font-size: 0.95rem; line-height: 1.9; padding: 16px 18px; margin-bottom: 20px; border-radius: 14px; background: var(--surface-alt, #f7f8fa); }
+.tcg-guide-defs { display: flex; flex-direction: column; gap: 16px; }
+.tcg-guide-defs > div { display: grid; grid-template-columns: 210px 1fr; gap: 18px; align-items: start; }
+.tcg-guide-defs dt { font-size: 0.88rem; line-height: 1.6; }
+.tcg-guide-defs dd { color: var(--text-muted); font-size: 0.88rem; line-height: 1.8; margin: 0; }
+.tcg-guide-scroll { overflow-x: auto; margin-top: 18px; }
+.tcg-guide-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.tcg-guide-table th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); padding: 0 14px 10px 0; white-space: nowrap; }
+.tcg-guide-table td { padding: 12px 14px 12px 0; border-top: 1px solid var(--border); line-height: 1.7; vertical-align: top; }
+.tcg-guide-tips { display: flex; flex-direction: column; gap: 12px; padding-left: 22px; color: var(--text-muted); font-size: 0.88rem; line-height: 1.75; }
+@media (max-width: 640px) {
+  .tcg-guide-card { padding: 22px 20px; }
+  .tcg-guide-defs > div { grid-template-columns: 1fr; gap: 8px; }
+}
 .tcg-board { max-width: 680px; margin: 0 auto; }
 .tcg-board-prize { text-align: center; border: 1px solid #f0b542; background: linear-gradient(180deg, #fffdf6, #fff4d6); border-radius: 16px; padding: 18px 22px; margin-bottom: 20px; font-size: 0.95rem; line-height: 1.6; }
 .tcg-board-prize span { font-size: 0.8rem; color: var(--text-muted); }
@@ -5808,6 +5833,11 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .tcg-reveal-title { color: #fff; font-size: 1.3rem; font-weight: 800; margin-bottom: 6px; }
 .tcg-reveal-sub { color: rgba(255,255,255,0.65); font-size: 0.85rem; margin-bottom: 22px; }
 .tcg-reveal-row { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; margin-bottom: 24px; }
+/* Secondary button on the dark reveal overlay. .btn-outline is white-on-white
+   here (its background is --surface), so the label vanished — this gives it a
+   translucent dark fill with a light border instead. */
+.tcg-overlay-btn { background: rgba(255,255,255,0.07); color: #fff; border: 1.5px solid rgba(255,255,255,0.45); }
+.tcg-overlay-btn:hover { background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.75); color: #fff; }
 .tcg-flip { width: 200px; min-height: 336px; perspective: 900px; cursor: pointer; }
 .tcg-flip-inner { position: relative; width: 100%; height: 100%; min-height: 336px; transform-style: preserve-3d; transition: transform 0.65s cubic-bezier(.2,.7,.3,1.1); }
 .tcg-flip.flipped .tcg-flip-inner { transform: rotateY(180deg); }
@@ -7799,7 +7829,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
         <div class="rpg-prize-banner">
           <span class="rpg-prize-line">🎁 <b>Monthly prize:</b> the top 5 students with the most <b>questions done</b> each month win a <b>$10 Popular voucher</b> each. Questions only count once, and need a genuine answer.</span>
           <span class="rpg-prize-line">🕹️ <b>Arcade prize:</b> the top 3 each month in <b>Science Raiders</b> also win a <b>$10 Popular voucher</b> each. <b>Science Defenders</b> and <b>Science Spire</b> have <b>no prize in August</b> — those boards rank only.</span>
-          <span class="rpg-prize-line">🔥 <b>Realm of Embers prize:</b> the <b>top 6 trainers</b> by Infinite Dungeon floor win a <b>$10 Popular voucher</b> each.</span>
+          <span class="rpg-prize-line">🔥 <b>Realm of Embers prize:</b> the <b>top 6 trainers</b> by <b>total team power</b> win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🔫 <b>Science Strike prize:</b> the top 3 by <b>correct answers</b> in Science Strike win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🎟️ <b>Streak prize:</b> practise <b>10+ questions every day for 30 days in a row</b> and win a <b>$10 Popular voucher</b> — track your progress on the Your Hero page.</span>
           <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 all-time XP earners win <b>$200, $100 and $50 Popular vouchers</b>.</span>
@@ -7965,6 +7995,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
           <button class="tcg-tab" data-tcgtab="dungeon" onclick="tcgSetTab('dungeon')" type="button">🏰 Dungeon</button>
           <button class="tcg-tab" data-tcgtab="modes" onclick="tcgSetTab('modes')" type="button">🎮 Game Modes</button>
           <button class="tcg-tab" data-tcgtab="board" onclick="tcgSetTab('board')" type="button">🏆 Leaderboard</button>
+          <button class="tcg-tab" data-tcgtab="guide" onclick="tcgSetTab('guide')" type="button">📘 How to Play</button>
           <button class="tcg-tab admin-only" data-tcgtab="art" onclick="tcgSetTab('art')" type="button">🎨 Card Art</button>
         </div>
         <div id="tcgBody"><div class="ga-loading" style="text-align:center;color:#94a3b8;padding:30px;">Loading…</div></div>

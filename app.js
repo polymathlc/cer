@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.211.0';
+const APP_VERSION = 'v1.212.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -23177,9 +23177,9 @@ function rpgPrizeOffFor(tab, monthKey) {
 function rpgBoardMetric(r) {
   if (rpgBoardTab === "alltime") return r.xp || 0;
   if (rpgBoardTab === "fps") return (r.fps && r.fps.correct) | 0;
-  // Realm of Embers TCG: ranked by the Infinite Dungeon floor reached, the same
-  // metric the board inside the TCG page uses.
-  if (rpgBoardTab === "tcg") return r.tcg ? Math.max(1, r.tcg.floor | 0) : 0;
+  // Realm of Embers TCG: ranked by TOTAL TEAM POWER, the same metric the board
+  // inside the TCG page uses.
+  if (rpgBoardTab === "tcg") return r.tcg ? (r.tcg.power | 0) : 0;
   if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey() ? (r.monthQ || 0) : 0;
   if (rpgBoardTab === "papers") return r.monthKey === rpgMonthKey() ? (r.papersQ || 0) : 0;
   if (rpgIsGameTab()) {
@@ -23202,7 +23202,7 @@ function rpgBoardValueHtml(r) {
   }
   if (rpgBoardTab === "tcg") {
     const t = r.tcg || {};
-    return `Floor ${r.shownVal}<span>🏰 ${t.clears | 0} beaten · 🃏 ${t.dex | 0} dex · ⚔️ power ${(t.power | 0).toLocaleString()}</span>`;
+    return `⚔️ ${r.shownVal.toLocaleString()} power<span>🏰 Floor ${Math.max(1, t.floor | 0)} · 🃏 ${t.dex | 0} dex · Lv ${Math.max(1, t.lvl | 0)} · ⟡ M${Math.max(1, t.mlvl | 0)}</span>`;
   }
   if (rpgIsGameTab()) {
     const g = r[rpgBoardTab] || {};
@@ -23240,7 +23240,7 @@ function rpgRowClass(rank) {
 // running without a prize.
 function rpgBoardNote() {
   if (rpgBoardTab === "tcg")
-    return `<div class="rpg-board-note">🔥 <b>Realm of Embers:</b> the <b>top 6 trainers</b> by Infinite Dungeon floor each win a <b>$10 Popular voucher</b>.</div>`;
+    return `<div class="rpg-board-note">🔥 <b>Realm of Embers:</b> the <b>top 6 trainers</b> by <b>total team power</b> each win a <b>$10 Popular voucher</b>. Level your team of 5, merge duplicates and pull stronger monsters to climb.</div>`;
   if (rpgIsGameTab() && rpgPrizeOffFor(rpgBoardTab, rpgMonthKey())) {
     const game = rpgBoardTab === "td" ? "Science Defenders" : rpgBoardTab === "spire" ? "Science Spire" : "Science Raiders";
     const month = new Date().toLocaleString("en-SG", { month: "long" });
@@ -23292,7 +23292,7 @@ async function rpgRenderLeaderboard(force = false) {
       : rpgBoardTab === "raid" ? "No Science Raiders runs this month yet — dive in to top the board!"
       : rpgBoardTab === "spire" ? "No Science Spire climbs this month yet — build a deck and claim the top!"
       : rpgBoardTab === "fps" ? "No Science Strike answers yet — jump into a run and answer questions to claim the board!"
-      : rpgBoardTab === "tcg" ? "No trainers on the board yet — build a team of 5 in Realm of Embers and clear a dungeon floor to claim your rank!"
+      : rpgBoardTab === "tcg" ? "No trainers on the board yet — build a team of 5 in Realm of Embers to put your team power on the board!"
       : "No heroes on the board yet — solve questions to earn XP!";
     body.innerHTML = rpgBoardNote() + `<div class="empty-note">${why}</div>`;
     return;
@@ -26713,8 +26713,8 @@ const TCG_SKILLS = {
   spores:  { name: 'Toxic Spores',     icon: '🍄', kind: 'poison',  pow: 0.95, desc: 'Hits one foe for 95% ATK and poisons it (40% ATK/turn, 3 turns).' },
   // Signature skills — one-of-a-kind mechanics reserved for the 7★ legendary trio.
   sunrise: { name: 'Dawnfather Judgement', icon: '🌅', kind: 'dawn',   pow: 1.20, heal: 0.60, desc: 'Signature: sears ALL foes for 120% ATK while dawnlight washes over the team, healing every ally for 60% HEAL.' },
-  doom:    { name: 'Worldsend Curse',      icon: '🕯️', kind: 'curse',  pow: 1.50, desc: 'Signature: strikes one foe for 150% ATK and brands it with the end of the world — for 3 turns it takes +25% damage and cannot be healed.' },
-  chrono:  { name: 'Time Fracture',        icon: '⌛', kind: 'chrono', pow: 1.65, desc: 'Signature: shatters time for 165% ATK (ignores DEF). Time races around this monster — its skill charges twice as fast.' }
+  doom:    { name: 'Worldsend Curse',      icon: '🕯️', kind: 'curse',  pow: 1.30, desc: 'Signature: the end of the world falls on ALL foes for 130% ATK and brands every one of them — for 3 turns each takes +25% damage and cannot be healed.' },
+  chrono:  { name: 'Time Fracture',        icon: '⌛', kind: 'chrono', pow: 1.30, desc: 'Signature: shatters time over ALL foes for 130% ATK (ignores DEF) and freezes their clocks — every foe loses 2 turns of skill charge.' }
 };
 // How a monster's skill shapes its stat spread (role identity).
 const TCG_ROLE_MODS = {
@@ -28429,6 +28429,7 @@ function tcgRenderBody() {
   else if (tcgTab === 'dungeon') host.innerHTML = tcgDungeonHtml(s);
   else if (tcgTab === 'modes') host.innerHTML = tcgModesHtml(s);
   else if (tcgTab === 'board') { host.innerHTML = '<div class="ga-loading" style="text-align:center;color:#94a3b8;padding:30px;">Loading rankings…</div>'; tcgRenderBoard(); }
+  else if (tcgTab === 'guide') host.innerHTML = tcgGuideHtml();
   else if (tcgTab === 'art') host.innerHTML = _isAdmin() ? tcgArtAdminHtml() : tcgDexHtml(s);
   else host.innerHTML = tcgArenaHtml(s);
 }
@@ -28834,7 +28835,7 @@ function tcgShowReveal(pack, pulls) {
         +   '<div class="tcg-flip-front">' + (pl.arti ? tcgArtifactCardHtml(pl.arti, { isNew: pl.isNew }) : tcgCardHtml(pl.card, { isNew: pl.isNew, mergedBy: pl.merge })) + '</div>'
         + '</div></div>').join('') + '</div>'
     + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">'
-    +   '<button class="btn btn-outline" style="color:#fff;border-color:rgba(255,255,255,0.4);" onclick="tcgFlipAll()">Flip all</button>'
+    +   '<button class="btn tcg-overlay-btn" onclick="tcgFlipAll()">🔄 Flip all</button>'
     +   '<button class="btn btn-primary" onclick="tcgCloseReveal()">Done</button>'
     + '</div></div>';
   document.body.appendChild(o);
@@ -29055,7 +29056,7 @@ function tcgDungeonHtml(s) {
       ? '<button class="btn btn-primary" style="font-size:1rem;padding:12px 30px;" onclick="tcgEnterDungeon()">🏰 Challenge Floor ' + L + '</button>'
       : '<div class="tcg-section-note">Pick 5 monsters on the <b>My Team</b> tab first.</div>')
     + '</div>'
-    + '<div class="tcg-section-note" style="margin-top:18px;">🏆 Your floor is your rank on the <b>Leaderboard</b> tab — the top 6 trainers each win a <b>$10 voucher</b>!</div>';
+    + '<div class="tcg-section-note" style="margin-top:18px;">🏆 The <b>Leaderboard</b> tab ranks trainers by <b>total team power</b> — the top 6 each win a <b>$10 voucher</b>. Clearing floors levels your team, so climbing here lifts you there too.</div>';
 }
 // =====================================================================
 // GAME MODES TAB — the hub for every way to play with your collection
@@ -29074,7 +29075,8 @@ function tcgModesHtml(s) {
     + '</div>'
     + '<div class="tcg-mode-go">' + btn + '</div>'
     + '</div>';
-  return '<div class="tcg-section-note">Three ways to play with the monsters you have collected. Every mode uses your own cards and <b>your real card stats</b> — so both progression tracks count everywhere: <b>🎓 training levels</b> from answering science questions, and <b>⟡ merge levels</b> from repeat copies merging in by themselves.</div>'
+  return '<div class="tcg-section-note">New here? The <b>📘 How to Play</b> tab explains every mechanic in the game.</div>'
+    + '<div class="tcg-section-note">Three ways to play with the monsters you have collected. Every mode uses your own cards and <b>your real card stats</b> — so both progression tracks count everywhere: <b>🎓 training levels</b> from answering science questions, and <b>⟡ merge levels</b> from repeat copies merging in by themselves.</div>'
     + '<div class="tcg-modes">'
     + mode('🌋', 'Ember Siege', 'NEW · lane defence',
         'Wave after wave of corrupted monsters marches on your Ember Gate — <b>slowly</b>: a monster takes about ' + EMS_WALK_SECONDS + ' seconds to cross the whole field, so there is always time to think. Place your cards on the field to summon them as defenders — and answer science questions to generate the mana that pays for them. Mana trickles in slowly on its own, but answering is worth far more, and <b>every wave you clear opens a ' + EMS_ROUND_SIZE + '-question mana round with the battle paused and no timer</b>. Answering in the middle of a fight is still clocked — the faster you answer there, the more mana you get. Every correct answer also <b>🎓 trains the monsters you have on the field</b>, so the levels you earn here are kept for good and carry into the Arena and the Dungeon.',
@@ -29087,10 +29089,204 @@ function tcgModesHtml(s) {
         '🛡️ team: <b>' + s.team.length + ' / 5</b> · 🏆 record: <b>' + (s.wins | 0) + 'W – ' + (s.losses | 0) + 'L</b>',
         '<button class="btn btn-outline" type="button" onclick="tcgSetTab(\'arena\')">Go to Arena</button>')
     + mode('🏰', 'Infinite Dungeon', 'endless',
-        'Endless floors, each with a stronger keeper. Win easily and you leap several floors at once. Your floor is your rank on the leaderboard.',
+        'Endless floors, each with a stronger keeper. Win easily and you leap several floors at once — and every floor you clear levels the team the leaderboard ranks.',
         '🏰 your floor: <b>' + Math.max(1, dg.level | 0) + '</b> · ✅ beaten: <b>' + ((s.dungeon && s.dungeon.cleared) | 0) + '</b>',
         '<button class="btn btn-outline" type="button" onclick="tcgSetTab(\'dungeon\')">Enter Dungeon</button>')
     + '</div>';
+}
+
+// =====================================================================
+// 📘 HOW TO PLAY — the complete rulebook for Realm of Embers
+// =====================================================================
+// Every number here is READ FROM THE GAME'S OWN CONSTANTS rather than typed
+// out, so tuning a pack, a skill or a level curve updates the guide too. If
+// you add a mechanic, add its section here — this page is meant to be the
+// whole game, explained.
+function _tcgGuideSection(icon, title, lead, bodyHtml) {
+  return '<section class="tcg-guide-card">'
+    + '<h3><span class="tcg-guide-ico">' + icon + '</span>' + title + '</h3>'
+    + (lead ? '<p class="tcg-guide-lead">' + lead + '</p>' : '')
+    + bodyHtml
+    + '</section>';
+}
+function _tcgGuideRows(rows) {
+  return '<dl class="tcg-guide-defs">' + rows.map(r =>
+    '<div><dt>' + r[0] + '</dt><dd>' + r[1] + '</dd></div>').join('') + '</dl>';
+}
+function _tcgGuideTable(head, rows) {
+  return '<div class="tcg-guide-scroll"><table class="tcg-guide-table">'
+    + '<thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead>'
+    + '<tbody>' + rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody>'
+    + '</table></div>';
+}
+function tcgGuideHtml() {
+  const pct = n => (Math.round(n * 1000) / 10) + '%';
+  const starRow = n => '★'.repeat(n);
+
+  // ---- Booster packs, straight from TCG_PACKS ----
+  const packRows = TCG_PACKS.map(p => {
+    const odds = Object.keys(p.odds).sort((a, b) => b - a)
+      .map(s => s + '★ ' + p.odds[s] + '%').join(' · ');
+    return [
+      p.em + ' <b>' + escapeHtml(p.name) + '</b>',
+      '🪙 ' + p.cost.toLocaleString(),
+      p.cards + ' cards',
+      (p.artChance >= 1 ? 'always' : pct(p.artChance)),
+      odds + (p.bonusOdds ? '<br><span class="tcg-guide-dim">last card: ' + Object.keys(p.bonusOdds).sort((a, b) => b - a).map(s => s + '★ ' + p.bonusOdds[s] + '%').join(' · ') + '</span>' : '')
+    ];
+  });
+
+  // ---- Skills grouped by mechanic, straight from TCG_SKILLS ----
+  const kindInfo = {
+    strike:  ['🗡️', 'Strike', 'One big hit on a single foe.'],
+    blast:   ['💥', 'Blast', 'Hits EVERY living foe at once — less per target, far more in total.'],
+    pierce:  ['🏹', 'Pierce', 'One foe, and the target\'s Defence is ignored completely.'],
+    drain:   ['🩸', 'Drain', 'One foe, and the attacker heals for 35% of the damage dealt.'],
+    heal:    ['➕', 'Heal', 'Restores one ally (chosen by your healing strategy). Only used when someone is actually hurt.'],
+    healall: ['🎶', 'Heal all', 'Restores every living ally at once.'],
+    shield:  ['🛡️', 'Shield', 'Gives an ally a barrier that soaks damage before HP is touched.'],
+    rage:    ['📣', 'Rage', 'Raises the whole team\'s Attack for 2 rounds.'],
+    stun:    ['💫', 'Stun', 'Hits one foe and makes it skip its next turn.'],
+    poison:  ['☠️', 'Poison', 'Hits one foe, then 40% ATK a turn for 3 turns.'],
+    dawn:    ['🌅', 'Signature — Dawn', 'Hits ALL foes and heals your whole team in the same breath.'],
+    curse:   ['🕯️', 'Signature — Worldsend', 'Hits ALL foes and curses every one of them: +25% damage taken and no healing for 3 turns.'],
+    chrono:  ['⌛', 'Signature — Time Fracture', 'Hits ALL foes ignoring Defence and sets every foe\'s skill charge back by 2 turns.']
+  };
+  const byKind = {};
+  Object.keys(TCG_SKILLS).forEach(k => {
+    const sk = TCG_SKILLS[k];
+    (byKind[sk.kind] = byKind[sk.kind] || []).push(sk);
+  });
+  const skillRows = Object.keys(kindInfo).filter(k => byKind[k]).map(k => {
+    const info = kindInfo[k];
+    const pows = byKind[k].map(s => Math.round(s.pow * 100) + '%').join(' – ');
+    return [info[0] + ' <b>' + info[1] + '</b>', info[2], '<span class="tcg-guide-dim">' + pows + ' ATK</span>'];
+  });
+
+  // ---- The elemental ring, straight from TCG_AFFINITY ----
+  const ringOrder = ['flame', 'nature', 'terra', 'spark', 'aqua'];
+  const ring = ringOrder.map(k => TCG_AFFINITY[k].icon + ' ' + TCG_AFFINITY[k].name).join(' → ') + ' → ' + TCG_AFFINITY.flame.icon + ' ' + TCG_AFFINITY.flame.name;
+  const elemMap = ringOrder.map(combat => {
+    const flavours = Object.keys(TCG_ELEM_AFFINITY).filter(e => TCG_ELEM_AFFINITY[e] === combat)
+      .map(e => (TCG_ELEMENTS[e] ? TCG_ELEMENTS[e].icon + ' ' + TCG_ELEMENTS[e].name : e)).join(', ');
+    return [TCG_AFFINITY[combat].icon + ' <b>' + TCG_AFFINITY[combat].name + '</b>', flavours,
+      'beats ' + TCG_AFFINITY[TCG_AFFINITY[combat].beats].icon + ' ' + TCG_AFFINITY[TCG_AFFINITY[combat].beats].name];
+  });
+
+  // ---- Artifacts, one line per star tier ----
+  const artByStar = {};
+  TCG_ARTIFACTS.forEach(a => { (artByStar[a.stars] = artByStar[a.stars] || []).push(a); });
+  const artRows = Object.keys(artByStar).sort((a, b) => a - b).map(s =>
+    [starRow(+s), artByStar[s].map(a => a.icon + ' ' + escapeHtml(a.name)).join(' · ')]);
+
+  const cardCounts = [1, 2, 3, 4, 5, 6, 7].map(s =>
+    [starRow(s), (TCG_GEN1[s] || []).length + ' monsters']);
+
+  return '<div class="tcg-guide">'
+
+  + '<div class="tcg-guide-hero">'
+  +   '<h2>📘 How to Play — Realm of Embers</h2>'
+  +   '<p>Answer science questions → earn 🪙 points → open booster packs → build a team of five monsters → battle. Everything below is exactly how the game works, in the order you will meet it.</p>'
+  + '</div>'
+
+  + _tcgGuideSection('🪙', 'Points — the only currency',
+      'Points are earned by answering science questions ANYWHERE in the portal: practice, the training quiz, Ember Siege, Science Defenders, Raiders, Spire and Science Strike. There is no other way to get cards.',
+      _tcgGuideRows([
+        ['First time you answer a question correctly', '<b>+' + GAME_Q_POINTS + ' points</b>'],
+        ['Correct, but you have answered that question before today', '+' + GAME_Q_POINTS_REPEAT + ' points'],
+        ['Wrong answer', '+' + GAME_Q_POINTS_WRONG + ' points — effort still pays, so a hard topic never leaves you stuck'],
+        ['Answering far too fast to have read the question', 'nothing — the anti-spam check pays 0']
+      ])
+      + '<p class="tcg-guide-note">Your balance is the 🪙 chip at the top of this page, and it is the same wallet the rest of the portal shop uses.</p>')
+
+  + _tcgGuideSection('🃏', 'The monsters',
+      'There are <b>' + TCG_CARDS.length + '</b> monsters in Generation 1, numbered #001–#' + String(TCG_CARDS.length).padStart(3, '0') + '. Rarity runs 1★ to 7★ — higher stars mean bigger base stats, and only three 7★ legends exist in the whole set.',
+      _tcgGuideTable(['Rarity', 'How many'], cardCounts)
+      + '<p class="tcg-guide-note">Every monster has an <b>element</b> (12 flavours), a <b>skill</b> with its own signature name, and five stats: ⚔️ ATK, 🛡️ DEF, ➕ HEAL, ❤️ HP and ⚡ SPD. Two monsters of the same rarity are never quite identical — each card carries a small permanent stat jitter of its own.</p>')
+
+  + _tcgGuideSection('🎁', 'Booster packs — the only way to get cards',
+      'Packs are bought with points on the 🎁 Booster Packs tab. Every pack also rolls for a bonus 🔱 artifact.',
+      _tcgGuideTable(['Pack', 'Cost', 'Contents', 'Artifact', 'Rarity odds'], packRows)
+      + '<p class="tcg-guide-note">Pull a monster you already own and the duplicate is not wasted — it merges into the one on your shelf automatically (see below).</p>')
+
+  + _tcgGuideSection('📈', 'Two ways a monster grows',
+      'Both tracks run from 1 to 99, they are completely separate, and they <b>multiply together</b> — so it is always worth pushing both.',
+      _tcgGuideRows([
+        ['🎓 <b>Training levels</b> — from science questions',
+          '<b>' + TCG_LVL_STEP + ' correct answers = +1 level.</b> Every level adds ~1.5% to every stat (about ×2.5 at Lv 99). Train from the Collection tab, or just play Ember Siege — every correct answer there trains the monsters you have on the field.'],
+        ['⬆️ <b>Skill upgrades</b>',
+          'At <b>Lv 50</b> the skill gets 25% stronger and gains a <b>+</b>; at <b>Lv 99</b> it is 50% stronger and gains a <b>✦</b>.'],
+        ['⟡ <b>Merge levels</b> — from duplicates',
+          'A duplicate pull is absorbed instantly, no button to press. One copy = <b>+1</b> merge level, but a 6★ copy is worth <b>+' + TCG_MERGE_GAIN[6] + '</b> and a 7★ copy <b>+' + TCG_MERGE_GAIN[7] + '</b>. Each merge level adds 1.2% to every stat (about ×2.2 at ⟡M99).']
+      ]))
+
+  + _tcgGuideSection('🛡️', 'Your team of five',
+      'Pick 5 monsters on the 🛡️ My Team tab. That team is what fights in the Arena and the Dungeon, and it is what the leaderboard ranks.',
+      _tcgGuideRows([
+        ['⚔️ <b>Team power</b>',
+          'Each monster contributes <b>ATK + DEF + HEAL + HP⁄8 + SPD⁄2</b>, using its real stats — stars, training level and merge level all folded in. Your team power is the five added together.'],
+        ['🔱 <b>Artifact</b>',
+          'Equip ONE artifact and its effect applies to your whole team for the whole battle. Artifacts drop from packs only.'],
+        ['🎯 <b>Attack strategy</b>',
+          TCG_STRATS_ATK.map(s => s.icon + ' <b>' + escapeHtml(s.name) + '</b> — ' + escapeHtml(s.blurb)).join('<br>')],
+        ['➕ <b>Healing strategy</b>',
+          TCG_STRATS_HEAL.map(s => s.icon + ' <b>' + escapeHtml(s.name) + '</b> — ' + escapeHtml(s.blurb)).join('<br>')]
+      ])
+      + _tcgGuideTable(['Artifact rarity', 'What exists'], artRows))
+
+  + _tcgGuideSection('🔥', 'Elements — the matchup ring',
+      'The 12 flavour elements map onto <b>5 combat elements</b> in a ring. Attacking the element you beat deals <b>×2</b>; attacking the element that beats you deals <b>×0.5</b>. Everything else is ×1.',
+      '<p class="tcg-guide-ring">' + ring + '</p>'
+      + _tcgGuideTable(['Combat element', 'Monsters with these elements', 'Strong against'], elemMap))
+
+  + _tcgGuideSection('⚔️', 'How a battle actually works',
+      'Battles are automatic — you build the team, the monsters fight. Here is every rule the engine follows.',
+      _tcgGuideRows([
+        ['Turn order', 'Fastest ⚡ SPD acts first, every round, both teams interleaved.'],
+        ['Ordinary attack', 'A monster attacks the foe your attack strategy picks, for 100% of its ATK.'],
+        ['Skill charge', 'Every turn a monster charges 1. At <b>3 charge</b> it fires its skill instead of attacking, then resets to 0. (The 🔋 Battery Core artifact drops that to 2.) A healing skill waits until an ally is actually hurt.'],
+        ['Damage', 'ATK × skill power, reduced by the target\'s DEF (Pierce ignores DEF entirely), ±8% roll, then the elemental multiplier, then <b>×1.5 on a critical hit</b> (10% chance, more with crit artifacts).'],
+        ['Shields', 'A barrier soaks damage before HP is touched, and vanishes when spent.'],
+        ['Status', '💫 stunned = skips its next turn · ☠️ poisoned = 40% ATK a turn for 3 turns · 🕯️ cursed = takes +25% damage and cannot be healed for 3 turns · ⌛ time-locked = builds no skill charge · 📈 = Attack raised.'],
+        ['Winning', 'Wipe the enemy team out — or, if both sides are still standing when the rounds run out, whoever has the greater share of team HP left takes it.']
+      ]))
+
+  + _tcgGuideSection('✨', 'Skills — every mechanic in the game',
+      'A monster\'s skill name is its own, but the mechanic behind it is one of these. Percentages are of the monster\'s ATK, before level upgrades.',
+      _tcgGuideTable(['Mechanic', 'What it does', 'Power range'], skillRows)
+      + '<p class="tcg-guide-note">The three 7★ legends carry one-of-a-kind signature skills — ' + escapeHtml(TCG_SKILLS.sunrise.name) + ', ' + escapeHtml(TCG_SKILLS.doom.name) + ' and ' + escapeHtml(TCG_SKILLS.chrono.name) + ' — and all three hit the entire enemy team.</p>')
+
+  + _tcgGuideSection('🎮', 'The three ways to play',
+      '',
+      _tcgGuideRows([
+        ['🌋 <b>Ember Siege</b> — lane defence',
+          'Waves of corrupted monsters walk on your Ember Gate (about ' + EMS_WALK_SECONDS + ' seconds to cross the field, so there is always time to think). Summon your own cards as defenders using <b>mana</b>, and mana comes from answering science questions — ' + EMS_MANA_BASE + ' for a correct answer plus up to ' + EMS_MANA_SPEED + ' more for speed, ' + EMS_MANA_WRONG + ' for a wrong one. Clear a wave and you get a paused, untimed ' + EMS_ROUND_SIZE + '-question mana round. Every correct answer also trains the monsters on the field.'],
+        ['⚔️ <b>Battle Arena</b> — 5 v 5',
+          'Your five auto-battle another trainer\'s published team. Friendly matches: nothing is won or lost but your W–L record.'],
+        ['🏰 <b>Infinite Dungeon</b> — endless ladder',
+          'Every account starts at Floor 1. Each floor fields a stronger keeper team (bigger star budget, higher levels and merges; past Floor 40 an ever-growing stat multiplier), so it genuinely never ends. <b>Win and you climb 1 floor. Crush it</b> — finish with ~70% of your team\'s health for +3 floors, ~90% for +5. Lose and you keep your floor: train and retry.']
+      ]))
+
+  + _tcgGuideSection('🏆', 'The leaderboard and the prize',
+      'The 🏆 Leaderboard tab here, and the 🔥 Embers tab on the portal\'s Leaderboard page, show the same ranking.',
+      _tcgGuideRows([
+        ['How you are ranked', '<b>Total team power</b> — your five monsters added together. Ties break on dungeon floor, then floors beaten.'],
+        ['The prize', 'The <b>top 6 trainers each win a $10 Popular voucher</b>.'],
+        ['How to climb', 'Train levels with questions, merge duplicates, and pull rarer monsters to replace your weakest slot. You appear on the board as soon as you have a full team of 5 published.']
+      ]))
+
+  + _tcgGuideSection('💡', 'Tips worth knowing',
+      '',
+      '<ul class="tcg-guide-tips">'
+      + '<li>Five correct answers is a level — a ten-minute practice session is real power on the board.</li>'
+      + '<li>Never skip a duplicate. A 7★ duplicate alone is +' + TCG_MERGE_GAIN[7] + ' merge levels.</li>'
+      + '<li>Spread your team across elements so no single opponent element is super-effective against all five.</li>'
+      + '<li>Blast and signature skills hit all five foes — one of them is usually worth more than a bigger single-target hit.</li>'
+      + '<li>A healer or shielder holds a team together far longer than a fifth attacker.</li>'
+      + '<li>Losing costs nothing anywhere in this game. Retry the Dungeon floor as often as you like.</li>'
+      + '</ul>')
+
+  + '</div>';
 }
 
 // =====================================================================
@@ -30160,7 +30356,7 @@ document.addEventListener('keydown', e => {
   if (n >= 1 && n <= 9) { const q = emsRun.quiz.q; if (q && n <= q.opts.length) emsAnswer(n - 1); }
 });
 
-// -- Leaderboard tab: ranked by dungeon floor reached; top 6 win a $10 voucher.
+// -- Leaderboard tab: ranked by TOTAL TEAM POWER; top 6 win a $10 voucher.
 //    The same ranking also appears on the portal's Leaderboard page (🔥 Embers).
 async function tcgRenderBoard() {
   let rows = null;
@@ -30175,19 +30371,19 @@ async function tcgRenderBoard() {
     power: r.tcg.power | 0,
     dex: r.tcg.dex | 0
   }));
-  list.sort((a, b) => b.floor - a.floor || b.clears - a.clears || b.power - a.power || a.name.localeCompare(b.name));
+  list.sort((a, b) => b.power - a.power || b.floor - a.floor || b.clears - a.clears || a.name.localeCompare(b.name));
   const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
   host.innerHTML = '<div class="tcg-board">'
-    + '<div class="tcg-board-prize">🎟️ <b>Top 6 trainers each win a $10 voucher!</b><br><span>Climb the Infinite Dungeon — your rank is the floor you have reached.</span></div>'
+    + '<div class="tcg-board-prize">🎟️ <b>Top 6 trainers each win a $10 voucher!</b><br><span>Ranked by your <b>total team power</b> — level your five monsters, merge duplicates and pull rarer cards to climb.</span></div>'
     + (list.length
       ? '<div class="tcg-board-rows">' + list.map((r, i) =>
           '<div class="tcg-board-row' + (i < 6 ? ' top5' : '') + (r.uid === meUid ? ' me' : '') + '">'
           + '<div class="tcg-board-rank">' + medal(i) + '</div>'
           + '<div class="tcg-board-who"><b>' + escapeHtml(r.name) + (r.uid === meUid ? ' (you)' : '') + '</b>'
-          +   '<span>' + (r.clears | 0) + ' floors beaten · ' + r.dex + '/' + TCG_CARDS.length + ' dex · power ' + r.power.toLocaleString() + '</span></div>'
-          + '<div class="tcg-board-floor"><b>Floor ' + r.floor + '</b>' + (i < 6 ? '<span class="tcg-board-voucher">🎟️ $10</span>' : '') + '</div>'
+          +   '<span>Floor ' + r.floor + ' · ' + (r.clears | 0) + ' floors beaten · ' + r.dex + '/' + TCG_CARDS.length + ' dex</span></div>'
+          + '<div class="tcg-board-floor"><b>' + r.power.toLocaleString() + ' power</b>' + (i < 6 ? '<span class="tcg-board-voucher">🎟️ $10</span>' : '') + '</div>'
           + '</div>').join('') + '</div>'
-      : '<div class="tcg-section-note">No trainers on the board yet — publish a team of 5 and clear dungeon floors to claim your rank!</div>')
+      : '<div class="tcg-section-note">No trainers on the board yet — publish a team of 5 to put your team power on the board!</div>')
     + '</div>';
 }
 
@@ -30207,7 +30403,7 @@ function _tcgMkUnit(cardId, side, slot, level, merge) {
     uid: side + slot, card: c, side, slot, level: lv, merge: mg,
     hp: st.hp, maxHp: st.hp, atk: st.atk, def: st.def, heal: st.heal, spd: st.spd,
     skill: tcgLeveledSkill(c, lv),
-    charge: Math.floor(Math.random() * 2), shield: 0, stun: 0,
+    charge: Math.floor(Math.random() * 2), shield: 0, stun: 0, chargeSlow: 0,
     poison: null, curse: null, atkUp: 0, atkUpPct: 0,
     strat: { attack: 'lowhp', heal: 'mosthurt' }, skillThresh: 3,
     critBonus: 0, emberAmp: 0, wardStatus: false, lifesteal: 0, thorns: 0, regen: 0, ctx: null
@@ -30248,7 +30444,7 @@ function _tcgRefreshUnit(u) {
   const txt = el.querySelector('.tcgb-hptext');
   if (txt) txt.textContent = Math.max(0, Math.round(u.hp)) + ' / ' + u.maxHp;
   const stat = el.querySelector('.tcgb-status');
-  if (stat) stat.textContent = (u.shield > 0 ? '🛡️' : '') + (u.stun > 0 ? '💫' : '') + (u.poison ? '☠️' : '') + (u.curse ? '🕯️' : '') + (u.atkUp > 0 ? '📈' : '');
+  if (stat) stat.textContent = (u.shield > 0 ? '🛡️' : '') + (u.stun > 0 ? '💫' : '') + (u.poison ? '☠️' : '') + (u.curse ? '🕯️' : '') + (u.chargeSlow > 0 ? '⌛' : '') + (u.atkUp > 0 ? '📈' : '');
   el.classList.toggle('dead', u.hp <= 0);
 }
 function _tcgPopup(u, text, cls) {
@@ -30395,8 +30591,15 @@ async function _tcgAct(stage, unit, allies, foes) {
     return;
   }
   if (unit.atkUp > 0) unit.atkUp--;
-  // Time Fracture (Aeonyx): time runs double, so the skill charges twice as fast.
-  unit.charge += (unit.skill && unit.skill.kind === 'chrono') ? 2 : 1;
+  // Time Fracture (Aeonyx) freezes a monster's clock: while the slow lasts its
+  // skill makes no progress, so the skill it was charging is 2 turns further away.
+  if (unit.chargeSlow > 0) {
+    unit.chargeSlow--;
+    _tcgPopup(unit, '⌛ time-locked', 'status');
+    _tcgRefreshUnit(unit);
+  } else {
+    unit.charge += 1;
+  }
   const sk = unit.skill;
   const strat = unit.strat || { attack: 'lowhp', heal: 'mosthurt' };
   const healKinds = sk.kind === 'heal' || sk.kind === 'healall';
@@ -30414,16 +30617,45 @@ async function _tcgAct(stage, unit, allies, foes) {
       _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> unleashes <b>' + escapeHtml(sk.name) + '</b> on the whole enemy team!');
       await tcgSleep(760);
       _tcgUnlunge(unit);
-    } else if (sk.kind === 'strike' || sk.kind === 'pierce' || sk.kind === 'drain' || sk.kind === 'stun' || sk.kind === 'poison' || sk.kind === 'curse' || sk.kind === 'chrono') {
+    } else if (sk.kind === 'curse') {
+      // Worldsend Curse (Draxx): the end of the world falls on the WHOLE enemy
+      // team — every foe is struck and branded (+25% damage taken, unhealable).
+      await _tcgLunge(unit);
+      const targets = foes.filter(f => f.hp > 0);
+      for (const t of targets) { const res = _tcgDamage(unit, t, sk.pow, false); _tcgHitFx(t, res); }
+      for (const t of targets) {
+        if (t.hp <= 0) continue;
+        t.curse = { turns: 3 };
+        _tcgPopup(t, '🕯️ CURSED', 'status');
+        _tcgRefreshUnit(t);
+      }
+      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> speaks <b>' + escapeHtml(sk.name) + '</b> — the whole enemy team is struck and cursed!');
+      await tcgSleep(880);
+      _tcgUnlunge(unit);
+    } else if (sk.kind === 'chrono') {
+      // Time Fracture (Aeonyx): shatters time over the WHOLE enemy team
+      // (ignoring DEF) and sets every foe's skill back by 2 turns.
+      await _tcgLunge(unit);
+      const targets = foes.filter(f => f.hp > 0);
+      for (const t of targets) { const res = _tcgDamage(unit, t, sk.pow, true); _tcgHitFx(t, res); }
+      for (const t of targets) {
+        if (t.hp <= 0) continue;
+        t.chargeSlow = Math.min(4, (t.chargeSlow || 0) + 2);
+        _tcgPopup(t, '⌛ SLOWED', 'status');
+        _tcgRefreshUnit(t);
+      }
+      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> shatters time with <b>' + escapeHtml(sk.name) + '</b> — every foe is hit and loses 2 turns of skill charge!');
+      await tcgSleep(880);
+      _tcgUnlunge(unit);
+    } else if (sk.kind === 'strike' || sk.kind === 'pierce' || sk.kind === 'drain' || sk.kind === 'stun' || sk.kind === 'poison') {
       const t = _tcgTargetByStrat(unit, foes, strat.attack);
       if (t) {
         await _tcgLunge(unit);
-        const res = _tcgDamage(unit, t, sk.pow, sk.kind === 'pierce' || sk.kind === 'chrono');
+        const res = _tcgDamage(unit, t, sk.pow, sk.kind === 'pierce');
         await _tcgHitFx(t, res);
         if (sk.kind === 'drain') { const back = Math.round(res.dmg * 0.35); await _tcgHealFx(unit, back); }
         if (sk.kind === 'stun' && t.hp > 0 && !t.wardStatus) { t.stun = Math.max(t.stun, 1); _tcgPopup(t, '💫', 'status'); }
         if (sk.kind === 'poison' && t.hp > 0 && !t.wardStatus) { t.poison = { dmg: unit.atk * 0.4, turns: 3 }; _tcgPopup(t, '☠️', 'status'); }
-        if (sk.kind === 'curse' && t.hp > 0) { t.curse = { turns: 3 }; _tcgPopup(t, '🕯️ CURSED', 'status'); }
         _tcgRefreshUnit(t);
         _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> uses <b>' + escapeHtml(sk.name) + '</b> on ' + escapeHtml(tcgShortName(t.card)) + (res.crit ? ' — critical hit!' : '!'));
         await tcgSleep(660);
