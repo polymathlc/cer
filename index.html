@@ -4973,8 +4973,14 @@ option {
 .rpg-raid-name { font-size: 0.95rem; margin-bottom: 6px; }
 .rpg-raid-sub { font-size: 0.74rem; color: rgba(255,255,255,0.65); margin-top: 5px; }
 .rpg-raid .rpg-bar { background: rgba(0,0,0,0.4); border-color: rgba(0,0,0,0.3); height: 14px; }
-.rpg-prize-banner { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; margin-bottom: 16px; border-radius: var(--radius-md); background: linear-gradient(135deg, #fdf3d8, #fbe7c2); border: 1px solid #ecd29a; font-size: 0.9rem; line-height: 1.5; }
+.rpg-prize-banner { display: flex; flex-direction: column; gap: 9px; padding: 18px 22px; margin-bottom: 18px; border-radius: var(--radius-md); background: linear-gradient(135deg, #fdf3d8, #fbe7c2); border: 1px solid #ecd29a; font-size: 0.9rem; line-height: 1.6; }
 .rpg-prize-line b { color: #8a5a13; }
+/* One-line note above the board rows: what this tab pays out, or that the
+   month is running without a prize. */
+.rpg-board-note { padding: 12px 16px; margin-bottom: 14px; border-radius: var(--radius-md); background: #fff6e2; border: 1px solid #ecd29a; color: #6b4a12; font-size: 0.85rem; line-height: 1.6; }
+.rpg-board-note b { color: #8a5a13; }
+.rpg-board-note.muted { background: var(--bg-subtle, #f6f7f9); border-color: var(--border, #e3e6ea); color: var(--text-muted, #6b7280); }
+.rpg-board-note.muted b { color: inherit; }
 .rpg-board-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 14px; }
 .rpg-board-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 8px; background: #fff; }
 .rpg-board-row.me { outline: 2px solid var(--primary); outline-offset: -1px; }
@@ -7792,7 +7798,8 @@ body.practising-as .page-body { padding-bottom: 96px; }
         <div id="rpgRaidSlot"></div>
         <div class="rpg-prize-banner">
           <span class="rpg-prize-line">🎁 <b>Monthly prize:</b> the top 5 students with the most <b>questions done</b> each month win a <b>$10 Popular voucher</b> each. Questions only count once, and need a genuine answer.</span>
-          <span class="rpg-prize-line">🕹️ <b>Arcade prizes:</b> the top 3 each month in <b>Science Defenders</b> and <b>Science Raiders</b> also win a <b>$10 Popular voucher</b> each.</span>
+          <span class="rpg-prize-line">🕹️ <b>Arcade prize:</b> the top 3 each month in <b>Science Raiders</b> also win a <b>$10 Popular voucher</b> each. <b>Science Defenders</b> and <b>Science Spire</b> have <b>no prize in August</b> — those boards rank only.</span>
+          <span class="rpg-prize-line">🔥 <b>Realm of Embers prize:</b> the <b>top 6 trainers</b> by Infinite Dungeon floor win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🔫 <b>Science Strike prize:</b> the top 3 by <b>correct answers</b> in Science Strike win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🎟️ <b>Streak prize:</b> practise <b>10+ questions every day for 30 days in a row</b> and win a <b>$10 Popular voucher</b> — track your progress on the Your Hero page.</span>
           <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 all-time XP earners win <b>$200, $100 and $50 Popular vouchers</b>.</span>
@@ -7807,6 +7814,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
               <button class="rpg-tab" data-rpgboard="td" type="button">🧪 Tower Defense</button>
               <button class="rpg-tab" data-rpgboard="raid" type="button">👾 Raiders</button>
               <button class="rpg-tab" data-rpgboard="spire" type="button">🃏 Spire</button>
+              <button class="rpg-tab" data-rpgboard="tcg" type="button">🔥 Embers</button>
               <button class="rpg-tab" data-rpgboard="fps" type="button">🔫 Strike</button>
             </div>
             <button class="btn btn-ghost btn-sm" id="rpgBoardRefresh" type="button">Refresh</button>
