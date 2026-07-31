@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.217.0';
+const APP_VERSION = 'v1.218.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -28825,6 +28825,15 @@ const TCG_QUIZ = [
 // ones with diagrams/pictures — as long as they have an auto-gradable multiple-
 // choice part. The full stem (text + images) is rendered so students answer the
 // actual syllabus questions, not plain text. Best-effort; safe if the bank is empty.
+// HTML → plain text with entities DECODED (an inert DOMParser document, so
+// nothing in the markup can load or run). stripHtml keeps entities encoded,
+// which double-escapes once a consumer runs escapeHtml over the result.
+function _htmlPlainText(html) {
+  try {
+    return (new DOMParser().parseFromString(String(html || ''), 'text/html').body.textContent || '')
+      .replace(/\s+/g, ' ').trim();
+  } catch (e) { return stripHtml(html); }
+}
 function _tcgBankQuestions() {
   const out = [];
   try {
@@ -28844,7 +28853,12 @@ function _tcgBankQuestions() {
         else if (b.type === 'image' && b.url) { html += '<div class="tcg-quiz-img"><img src="' + escapeHtml(transformImageUrl(b.url)) + '" onerror="handleImgError(this)" loading="lazy" decoding="async" style="' + imgSizeStyle(b) + '"></div>'; hasStem = true; }
       });
       if (!hasStem) return;
-      out.push({ id: q.id || '', html: html, opts: opts, a: ai, ex: '', db: true });
+      // The question's explanation block rides along so the modes that teach
+      // after the answer (the Legends arena and the trainer) can show it.
+      // Decoded to real text — stripHtml would leave &amp;/&lt; entities in,
+      // and the consumers escapeHtml the string again on render.
+      const exB = q.blocks.find(b => b && b.type === 'explanation' && b.content && stripHtml(b.content).trim());
+      out.push({ id: q.id || '', html: html, opts: opts, a: ai, ex: exB ? _htmlPlainText(exB.content) : '', db: true });
     });
   } catch (e) {}
   return out;
@@ -29517,10 +29531,10 @@ function tcgGuideHtml() {
   + _tcgGuideSection('⚔️', 'Ember Legends — become your monster',
       'The arena mode. You pick ONE monster from your collection and play <i>as</i> it: its stars, training level and merge level are your stats, and the rest of the 151 are the horde coming for you.',
       _tcgGuideRows([
-        ['Playing', 'Drag (or use WASD / the arrow keys) to move. Your monster attacks the nearest enemy by itself — your job is where to stand and when to fire a skill.'],
+        ['Playing', 'Drag (or use WASD / the arrow keys) to move. Your monster attacks the nearest enemy by itself — your job is where to stand and when to fire a skill. Keys <b>1–9</b> fire your learned actives in bar order, and <b>T</b> opens the skill tree mid-fight.'],
         ['✦ Skill points', 'A science question arrives every ' + ELG_Q_EVERY + ' seconds and freezes the battle while it is up: a correct answer is <b>+' + ELG_SP_CORRECT + ' point</b>, and clearing a wave is <b>+' + ELG_SP_WAVE + '</b>. Points are spent in the skill tree, which you can open mid-fight.'],
         ['The four trees', ELG_ROLE_ORDER.map(r => ELG_ROLES[r].icon + ' <b>' + ELG_ROLES[r].name + '</b> — ' + escapeHtml(ELG_ROLES[r].blurb)).join('<br>')
-          + '<br><span class="tcg-guide-dim">Your monster\'s battle skill decides its role, and every monster of that role shares the same tree — so swapping hero never means learning a new game. Each tree holds <b>' + (ELG_TREES.striker || []).length + ' skills over ' + ELG_TIERS.length + ' tiers</b>, ending in two capstones you choose between; a tier opens once you own enough of the one below it. Roughly a third of every tree is an <b>active skill</b> with its own button and cooldown — lances, dashes, orbiting blades, chain lightning, auras, summons, buffs and arena-wide storms.</span>'],
+          + '<br><span class="tcg-guide-dim">Your monster\'s battle skill decides its role, and every monster of that role shares the same tree — so swapping hero never means learning a new game. Each tree holds <b>' + (ELG_TREES.striker || []).length + ' skills over ' + ELG_TIERS.length + ' tiers</b>, linked like a real skill tree: every skill grows from one below it and unlocks only once its parent is learned, ending in two capstones you choose between. Roughly a third of every tree is an <b>active skill</b> with its own button, hotkey and cooldown — lances, dashes, orbiting blades, chain lightning, auras, summons, buffs and arena-wide storms.</span>'],
         ['The horde', 'Enemies are drawn from the other cards, and the further you get the rarer they are. <b>Every fifth wave</b> is led by a boss card with several times the health.'],
         ['7★ passives', 'A 7★ hero fights with a run-changing rule of its own:<br>'
           + Object.keys(ELG_LEGEND_PASSIVES).map(k => ELG_LEGEND_PASSIVES[k].icon + ' <b>' + escapeHtml(ELG_LEGEND_PASSIVES[k].name) + '</b> — ' + escapeHtml(ELG_LEGEND_PASSIVES[k].desc)).join('<br>')],
@@ -30769,6 +30783,35 @@ const ELG_TREES = {
     { id: 'wa_cap2',  tier: 6, name: 'Retribution',     icon: '⚖️', desc: 'CAPSTONE — every hit you take sends a shockwave through everything around you.', fx: { capRetri: 1 } }
   ]
 };
+// Which skill each node grows FROM — the links drawn on the tree. A node can
+// only be learned once its parent is, exactly like the Science Legends trees.
+const ELG_REQS = {
+  // striker
+  st_lance: 'st_edge',  st_dash: 'st_step',   st_twin: 'st_grip',   st_leech: 'st_keen',
+  st_cyc: 'st_lance',   st_volley: 'st_twin', st_fury: 'st_dash',   st_hunt: 'st_leech',
+  st_rage: 'st_fury',   st_orbit: 'st_cyc',   st_apex: 'st_hunt',   st_deep: 'st_volley',
+  st_storm: 'st_orbit', st_shade: 'st_rage',
+  st_cap1: 'st_storm',  st_cap2: 'st_shade',
+  // arcanist
+  ar_nova: 'ar_flow',   ar_chain: 'ar_pierce', ar_echo: 'ar_focus', ar_split: 'ar_reach',
+  ar_frost: 'ar_nova',  ar_zone: 'ar_chain',   ar_amp: 'ar_split',  ar_drift: 'ar_echo',
+  ar_aura: 'ar_frost',  ar_wisp: 'ar_drift',   ar_chainr: 'ar_zone', ar_deep: 'ar_amp',
+  ar_cata: 'ar_aura',   ar_still: 'ar_deep',
+  ar_cap1: 'ar_cata',   ar_cap2: 'ar_still',
+  // mender
+  me_bloom: 'me_vital', me_ward: 'me_grace',  me_leech: 'me_light', me_push: 'me_regen',
+  me_sanct: 'me_bloom', me_spirit: 'me_push', me_amp: 'me_leech',   me_tough: 'me_ward',
+  me_aura: 'me_spirit', me_shield: 'me_tough', me_pulse: 'me_sanct', me_calm: 'me_amp',
+  me_dawn: 'me_shield', me_thorn: 'me_aura',
+  me_cap1: 'me_dawn',   me_cap2: 'me_thorn',
+  // warden
+  wa_aegis: 'wa_plate', wa_charge: 'wa_heft', wa_might: 'wa_stone', wa_hold: 'wa_thorn',
+  wa_quake: 'wa_charge', wa_orbit: 'wa_aegis', wa_rage: 'wa_might', wa_wall: 'wa_hold',
+  wa_roar: 'wa_quake',  wa_aura: 'wa_wall',   wa_immov: 'wa_orbit', wa_grit: 'wa_rage',
+  wa_fort: 'wa_immov',  wa_spike: 'wa_aura',
+  wa_cap1: 'wa_fort',   wa_cap2: 'wa_spike'
+};
+Object.keys(ELG_TREES).forEach(role => ELG_TREES[role].forEach(n => { n.req = ELG_REQS[n.id] || null; }));
 const ELG_NODE_BY_ID = {};
 Object.keys(ELG_TREES).forEach(r => ELG_TREES[r].forEach(n => { ELG_NODE_BY_ID[n.id] = Object.assign({ role: r }, n); }));
 
@@ -30840,14 +30883,127 @@ function elgPassives(r) {
   });
   return p;
 }
-// A tier opens once you own enough of the tier below it, so the tree is a
-// route through the class rather than a shopping list.
-const ELG_TIER_GATE = { 2: 1, 3: 2, 4: 2, 5: 2, 6: 2 };
 const ELG_TIERS = [1, 2, 3, 4, 5, 6];
-function elgTierUnlocked(r, tier) {
-  if (tier <= 1) return true;
-  const owned = Object.keys(r.tree || {}).filter(id => (ELG_NODE_BY_ID[id] || {}).tier === tier - 1).length;
-  return owned >= (ELG_TIER_GATE[tier] || 2);
+// A node is reachable once the skill it grows from is learned (T1 grows from
+// nothing). The links drawn on the tree ARE the rule — no separate tier gate.
+function elgNodeReachable(r, n) { return !n.req || !!(r.tree && r.tree[n.req]); }
+
+// ---- Background-keyed art --------------------------------------------------
+// The generated card art and element FX are painted on baked backgrounds (the
+// FX frames literally carry a chequerboard where transparency should be), so
+// blitting them raw puts a plate behind every sprite and shot. Each image is
+// run through a canvas once: if it already has real transparency it is used
+// as-is; otherwise the border's dominant colours (both chequer squares, or the
+// flat backdrop) are keyed out with a feathered edge, and the cut-out is
+// cached for the session. On failure (CORS taint, decode error) the caller
+// falls back — sprites re-crop into the old rounded frame, shots use the orb.
+const _elgKeyCache = new Map();
+function elgKeyed(url) {
+  if (!url) return Promise.resolve(null);
+  if (_elgKeyCache.has(url)) return _elgKeyCache.get(url);
+  const p = new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const w = Math.max(1, Math.min(img.naturalWidth || 96, 256));
+        const h = Math.max(1, Math.round((img.naturalHeight || w) / (img.naturalWidth || w) * w));
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        const cx = cv.getContext('2d', { willReadFrequently: true });
+        cx.drawImage(img, 0, 0, w, h);
+        const d = cx.getImageData(0, 0, w, h), px = d.data;
+        // MEANINGFUL transparency (not a stray edge pixel) means the art is
+        // already a cut-out — use it untouched.
+        let clear = 0, probed = 0;
+        for (let i = 3; i < px.length; i += 4 * 13) { probed++; if (px[i] < 250) clear++; }
+        if (clear / Math.max(1, probed) > 0.04) { resolve(url); return; }
+        // The border tells us what the backdrop is — a chequerboard shows up
+        // as its two dominant colours, a flat backdrop as one.
+        const keys = [];
+        const grab = (x, y) => {
+          const i = (y * w + x) * 4, c = [px[i], px[i + 1], px[i + 2]];
+          for (const k of keys) {
+            if (Math.abs(k[0] - c[0]) + Math.abs(k[1] - c[1]) + Math.abs(k[2] - c[2]) < 60) { k[3]++; return; }
+          }
+          keys.push([c[0], c[1], c[2], 1]);
+        };
+        for (let x = 0; x < w; x += 2) { grab(x, 0); grab(x, h - 1); }
+        for (let y = 0; y < h; y += 2) { grab(0, y); grab(w - 1, y); }
+        keys.sort((a, b) => b[3] - a[3]);
+        const bg = keys.slice(0, 3).filter(k => k[3] >= 6);
+        // A border with no dominant colour is a full scene, not a backdrop —
+        // nothing here can be keyed safely, so hand the caller its fallback.
+        if (!bg.length) { resolve(null); return; }
+        const tol = 54;
+        const isBg = i => {
+          for (const k of bg) {
+            if (Math.abs(px[i] - k[0]) + Math.abs(px[i + 1] - k[1]) + Math.abs(px[i + 2] - k[2]) < tol) return true;
+          }
+          return false;
+        };
+        // Flood-fill the backdrop IN from the border instead of keying the
+        // whole image: a white flash or pale core inside the art matches the
+        // white chequer square by colour, but it is not connected to the
+        // border through backdrop pixels, so it survives.
+        const seen = new Uint8Array(w * h);
+        const stack = [];
+        const seed = (x, y) => { const n = y * w + x; if (!seen[n] && isBg(n * 4)) { seen[n] = 1; stack.push(n); } };
+        for (let x = 0; x < w; x++) { seed(x, 0); seed(x, h - 1); }
+        for (let y = 0; y < h; y++) { seed(0, y); seed(w - 1, y); }
+        if (!stack.length) { resolve(null); return; }   // backdrop colours never touch the border? treat as unkeyable
+        while (stack.length) {
+          const n = stack.pop();
+          const x = n % w, y = (n / w) | 0;
+          px[n * 4 + 3] = 0;
+          if (x > 0)     { const m = n - 1; if (!seen[m] && isBg(m * 4)) { seen[m] = 1; stack.push(m); } }
+          if (x < w - 1) { const m = n + 1; if (!seen[m] && isBg(m * 4)) { seen[m] = 1; stack.push(m); } }
+          if (y > 0)     { const m = n - w; if (!seen[m] && isBg(m * 4)) { seen[m] = 1; stack.push(m); } }
+          if (y < h - 1) { const m = n + w; if (!seen[m] && isBg(m * 4)) { seen[m] = 1; stack.push(m); } }
+        }
+        // Soften the cut edge: any kept pixel touching a removed one fades by
+        // how close its colour sits to the backdrop.
+        for (let n = 0; n < w * h; n++) {
+          if (seen[n]) continue;
+          const x = n % w, y = (n / w) | 0;
+          const nearCut = (x > 0 && seen[n - 1]) || (x < w - 1 && seen[n + 1]) || (y > 0 && seen[n - w]) || (y < h - 1 && seen[n + w]);
+          if (!nearCut) continue;
+          for (const k of bg) {
+            const dist = Math.abs(px[n * 4] - k[0]) + Math.abs(px[n * 4 + 1] - k[1]) + Math.abs(px[n * 4 + 2] - k[2]);
+            if (dist < tol * 2) { px[n * 4 + 3] = Math.min(px[n * 4 + 3], Math.round(255 * Math.min(1, dist / (tol * 2)))); break; }
+          }
+        }
+        cx.putImageData(d, 0, 0);
+        resolve(cv.toDataURL('image/png'));
+      } catch (e) { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+  _elgKeyCache.set(url, p);
+  return p;
+}
+// Point a sprite <img> at the keyed cut-out. The sprite starts in the rounded
+// .boxed frame — which crops whatever backdrop the raw art carries — and only
+// steps out of it once the keyed cut-out has actually replaced the pixels, so
+// a baked backdrop never stands frameless, not even for the first frame. On
+// failure (CORS taint, unkeyable scene) it simply stays boxed.
+function elgSpriteArt(imgEl, url) {
+  const sp = imgEl.closest('.elg-sprite');
+  if (sp) sp.classList.add('boxed');
+  imgEl.src = url;
+  elgKeyed(url).then(src => {
+    if (!imgEl.isConnected || !src) return;
+    if (src !== url) imgEl.src = src;
+    if (sp) sp.classList.remove('boxed');
+  });
+}
+// Preload + key the hero's element animation frames (flight loop and impact
+// burst, drawn on the Card Art page) so every shot animates with them.
+function elgPrepFx(r) {
+  const fly = tcgFxSet(r.card.element, 'fly') || tcgFxSet(r.card.element, '');
+  if (fly) Promise.all(fly.map(elgKeyed)).then(fr => { if (elgRun === r && fr.every(Boolean)) r.flyFrames = fr; });
+  const hit = tcgFxSet(r.card.element, 'hit');
+  if (hit) Promise.all(hit.map(elgKeyed)).then(fr => { if (elgRun === r && fr.every(Boolean)) r.hitFrames = fr; });
 }
 
 // ---- Opening: pick the monster you will BE -------------------------------
@@ -30940,6 +31096,7 @@ function elgStart(cardId) {
   const served = _tcgServedLoad();
   elgRun.pool = _tcgShuffle(pool).sort((a, b) => (served[a.id] || 0) - (served[b.id] || 0));
   elgBindInput();
+  elgPrepFx(elgRun);   // key + cache the element FX frames for this hero
   elgRenderSkills();
   elgBanner('Wave 1 — survive!', 2000);
   elgRun.last = performance.now();
@@ -30982,9 +31139,22 @@ function elgBindInput() {
     elgBindInput._keys = true;
     document.addEventListener('keydown', e => {
       const r = elgRun; if (!r) return;
-      if (e.key === 'Escape') { elgCloseQuiz(); return; }
+      if (e.key === 'Escape') {
+        if (document.getElementById('elgTree')) { elgCloseTree(); return; }
+        elgCloseQuiz(); return;
+      }
       const n = parseInt(e.key, 10);
+      // Digits answer the open question first; in the fight they fire your
+      // learned actives in bar order — the number printed on each button.
       if (r.quiz && n >= 1 && n <= 9) { const q = r.quiz.q; if (q && n <= q.opts.length) { elgAnswer(n - 1); return; } }
+      if (!r.quiz && !document.getElementById('elgTree') && n >= 1 && n <= 9) {
+        const acts = elgActives();
+        if (acts[n - 1]) { elgCast(acts[n - 1].id); return; }
+      }
+      if ((e.key === 't' || e.key === 'T') && !r.quiz) {
+        if (document.getElementById('elgTree')) elgCloseTree(); else elgOpenTree();
+        return;
+      }
       if (e.key) r.keys[String(e.key).toLowerCase()] = true;
     });
     document.addEventListener('keyup', e => { if (elgRun && e.key) elgRun.keys[String(e.key).toLowerCase()] = false; });
@@ -31195,6 +31365,7 @@ function elgUpdate(dt) {
       if (Math.hypot(e.x - s.x, e.y - s.y) <= e.r + 8) {
         s.hit[e.id] = 1;
         elgDamage(e, s.dmg);
+        elgImpactFx(e.x, e.y);
         if (s.pierce-- <= 0) { elgDropNode(s); return false; }
       }
     }
@@ -31412,13 +31583,14 @@ function elgRenderSkills() {
   const r = elgRun; if (!host || !r) return;
   const acts = elgActives();
   if (!acts.length) {
-    host.innerHTML = '<div class="elg-skill-empty">No active skills yet — open the 🌳 skill tree and spend a point.</div>';
+    host.innerHTML = '<div class="elg-skill-empty">No active skills yet — press <b>T</b> (or the 🌳 button) and spend a point. Learned actives fire with keys <b>1–9</b>.</div>';
     return;
   }
-  host.innerHTML = acts.map(n => {
+  host.innerHTML = acts.map((n, i) => {
     const cd = r.cds[n.id] || 0;
     const ready = cd <= 0;
-    return '<button type="button" class="elg-skill' + (ready ? ' ready' : '') + '" onclick="elgCast(\'' + n.id + '\')" title="' + escapeHtml(n.name + ' — ' + n.desc) + '">'
+    return '<button type="button" class="elg-skill' + (ready ? ' ready' : '') + '" onclick="elgCast(\'' + n.id + '\')" title="' + escapeHtml(n.name + ' — ' + n.desc + (i < 9 ? ' (key ' + (i + 1) + ')' : '')) + '">'
+      + (i < 9 ? '<span class="elg-skill-key">' + (i + 1) + '</span>' : '')
       + '<span class="elg-skill-ico">' + n.icon + '</span>'
       + '<span class="elg-skill-name">' + escapeHtml(n.name) + '</span>'
       + (ready ? '<span class="elg-skill-cd ok">READY</span>' : '<span class="elg-skill-cd">' + cd.toFixed(1) + 's</span>')
@@ -31457,18 +31629,23 @@ function elgRenderTree() {
   const role = ELG_ROLES[r.role];
   const nodes = ELG_TREES[r.role] || [];
   const tiers = ELG_TIERS.map(t => {
-    const open = elgTierUnlocked(r, t);
-    return '<div class="elg-tier' + (open ? '' : ' locked') + '">'
-      + '<div class="elg-tier-lbl">' + (t === 6 ? 'Capstone' : 'Tier ' + t) + (open ? '' : ' 🔒 needs ' + (ELG_TIER_GATE[t] || 2) + ' from tier ' + (t - 1)) + '</div>'
+    return '<div class="elg-tier">'
+      + '<div class="elg-tier-lbl">' + (t === 6 ? 'Capstones' : 'Tier ' + t) + '</div>'
       + '<div class="elg-tier-row">' + nodes.filter(n => n.tier === t).map(n => {
           const owned = !!r.tree[n.id];
-          const can = !owned && open && r.sp > 0;
-          return '<button type="button" class="elg-node' + (owned ? ' owned' : can ? ' can' : '') + '"'
+          const reach = elgNodeReachable(r, n);
+          const can = !owned && reach && r.sp > 0;
+          const reqName = n.req && ELG_NODE_BY_ID[n.req] ? ELG_NODE_BY_ID[n.req].name : '';
+          const cls = owned ? ' owned' : can ? ' can' : reach ? ' poor' : ' faroff';
+          return '<button type="button" class="elg-node' + cls + '" data-node="' + n.id + '"' + (n.req ? ' data-req="' + n.req + '"' : '')
             + (can ? ' onclick="elgBuy(\'' + n.id + '\')"' : ' disabled') + '>'
             + '<span class="elg-node-ico">' + n.icon + '</span>'
             + '<b>' + escapeHtml(n.name) + '</b>'
             + '<span class="elg-node-desc">' + escapeHtml(n.desc) + '</span>'
-            + '<span class="elg-node-tag">' + (owned ? '✓ learned' : n.act ? 'ACTIVE · ✦1' : '✦1') + '</span>'
+            + '<span class="elg-node-tag">' + (owned ? '✓ learned'
+                : !reach ? '🔒 grows from ' + escapeHtml(reqName)
+                : !can ? '✦ earn a skill point'
+                : (n.act ? 'ACTIVE · ✦1' : '✦1')) + '</span>'
             + '</button>';
         }).join('') + '</div></div>';
   }).join('');
@@ -31479,16 +31656,48 @@ function elgRenderTree() {
     +   '<span class="elg-tree-sp">✦ ' + r.sp + ' skill point' + (r.sp === 1 ? '' : 's') + '</span>'
     +   '<button type="button" class="elg-x" onclick="elgCloseTree()">✕</button>'
     + '</div>'
-    + '<p class="elg-tree-lead">' + nodes.length + ' skills over ' + ELG_TIERS.length + ' tiers — every ' + role.name + ' shares this tree, whichever monster you brought. Answer a science question or clear a wave to earn another point.</p>'
+    + '<p class="elg-tree-lead">' + nodes.length + ' skills over ' + ELG_TIERS.length + ' tiers — every ' + role.name + ' shares this tree, whichever monster you brought. Skills unlock along the links: each one needs the skill it grows from. Answer a science question or clear a wave for another point. In the fight, keys <b>1–9</b> fire your learned actives and <b>T</b> opens this tree.</p>'
     + (leg ? '<div class="elg-legend-box">' + leg.icon + ' <b>' + escapeHtml(leg.name) + '</b> — ' + escapeHtml(leg.desc) + '<span>7★ passive · always on</span></div>' : '')
-    + tiers
+    + '<div class="elg-tree-map" id="elgTreeMap"><svg class="elg-tree-links" id="elgTreeLinks" aria-hidden="true"></svg>' + tiers + '</div>'
     + '<div class="elg-tree-foot"><button type="button" class="btn btn-primary" onclick="elgCloseTree()">▶ Back to the fight</button></div>'
     + '</div>';
+  requestAnimationFrame(elgDrawTreeLinks);
+  if (!elgRenderTree._resize) {
+    elgRenderTree._resize = true;
+    window.addEventListener('resize', () => { if (document.getElementById('elgTreeMap')) elgDrawTreeLinks(); });
+  }
+}
+// The lines between a skill and the one it grows from. Drawn from the real
+// laid-out positions, so they survive wrapping on a narrow screen.
+function elgDrawTreeLinks() {
+  const r = elgRun;
+  const map = document.getElementById('elgTreeMap'), svg = document.getElementById('elgTreeLinks');
+  if (!r || !map || !svg) return;
+  const W = map.scrollWidth, H = map.scrollHeight;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  // Rect-based, not offsetLeft: the tier rows are positioned (to paint above
+  // the SVG), which would make them the offsetParent and skew every line.
+  const mb = map.getBoundingClientRect();
+  let out = '';
+  map.querySelectorAll('[data-req]').forEach(el => {
+    const from = map.querySelector('[data-node="' + el.dataset.req + '"]');
+    if (!from) return;
+    const a = from.getBoundingClientRect(), b = el.getBoundingClientRect();
+    const x1 = a.left - mb.left + a.width / 2, y1 = a.bottom - mb.top;
+    const x2 = b.left - mb.left + b.width / 2, y2 = b.top - mb.top;
+    const owned = !!r.tree[el.dataset.node], open = !!r.tree[el.dataset.req];
+    const color = owned ? '#4ade80' : open ? '#f0b542' : 'rgba(255,255,255,0.16)';
+    const my = (y1 + y2) / 2;
+    out += '<path d="M' + x1 + ' ' + y1 + ' C ' + x1 + ' ' + my + ', ' + x2 + ' ' + my + ', ' + x2 + ' ' + y2 + '"'
+      + ' fill="none" stroke="' + color + '" stroke-width="2"' + (owned || open ? '' : ' stroke-dasharray="4 4"') + '/>';
+  });
+  svg.innerHTML = out;
 }
 function elgBuy(id) {
   const r = elgRun; if (!r || r.sp <= 0 || r.tree[id]) return;
   const n = ELG_NODE_BY_ID[id];
-  if (!n || n.role !== r.role || !elgTierUnlocked(r, n.tier)) return;
+  if (!n || n.role !== r.role || !elgNodeReachable(r, n)) return;
   r.sp--;
   r.tree[id] = 1;
   if (n.fx && n.fx.hp) { const add = r.base.maxHp * n.fx.hp; r.maxHp = Math.round(r.maxHp + add); r.hp += add; }
@@ -31567,7 +31776,8 @@ function elgRender() {
     const url = tcgAvatarUrl(r.card.id);
     const d = document.createElement('div');
     d.className = 'elg-unit hero ' + ELG_ELEM_CLASS(r.card);
-    d.innerHTML = '<span class="elg-sprite">' + (url ? '<img src="' + escapeHtml(url) + '" alt="">' : r.card.em) + '</span>';
+    d.innerHTML = '<span class="elg-sprite">' + (url ? '<img alt="">' : r.card.em) + '</span>';
+    if (url) elgSpriteArt(d.querySelector('img'), url);
     host.appendChild(d);
     r.node = d;
   }
@@ -31579,8 +31789,9 @@ function elgRender() {
       const url = tcgAvatarUrl(e.card.id);
       const d = document.createElement('div');
       d.className = 'elg-unit foe' + (e.king ? ' king' : e.boss ? ' boss' : '');
-      d.innerHTML = '<span class="elg-sprite">' + (url ? '<img src="' + escapeHtml(url) + '" alt="">' : e.card.em) + '</span>'
+      d.innerHTML = '<span class="elg-sprite">' + (url ? '<img alt="">' : e.card.em) + '</span>'
         + '<i class="elg-ehp"><b></b></i>';
+      if (url) elgSpriteArt(d.querySelector('img'), url);
       host.appendChild(d);
       e.node = d;
     }
@@ -31590,19 +31801,24 @@ function elgRender() {
     e.node.classList.toggle('cursed', e.cursed > 0);
     e.node.classList.toggle('stunned', e.stun > 0);
   });
-  // Shots — a CSS orb in the hero's element colours. Drawn, not blitted: the
-  // generated FX frames come with a chequerboard behind them, and the arena
-  // wants a projectile with no background at all.
+  // Shots — the element's Card Art flight animation, background-keyed so
+  // nothing rides behind it; a CSS orb in the element's colours stands in
+  // until the frames are processed (or when keying is impossible).
   const fx = TCG_ELEM_FX[r.card.element] || TCG_ELEM_FX.flame;
   r.shots.forEach(s => {
     if (!s.node) {
       const d = document.createElement('div');
       d.className = 'elg-shot';
       d.style.setProperty('--trail', fx.glow);
-      d.innerHTML = '<i class="elg-orb" style="background:radial-gradient(circle at 38% 36%, #fff 0%, ' + fx.a + ' 34%, ' + fx.b + ' 78%, transparent 100%);box-shadow:0 0 14px ' + fx.glow + ';"></i>';
       d.style.setProperty('--a', Math.atan2(s.vy, s.vx).toFixed(3) + 'rad');
+      if (r.flyFrames) { d.classList.add('framed'); d.innerHTML = '<img alt="">'; }
+      else d.innerHTML = '<i class="elg-orb" style="background:radial-gradient(circle at 38% 36%, #fff 0%, ' + fx.a + ' 34%, ' + fx.b + ' 78%, transparent 100%);box-shadow:0 0 14px ' + fx.glow + ';"></i>';
       host.appendChild(d);
       s.node = d;
+    }
+    if (r.flyFrames && s.node.firstChild && s.node.firstChild.tagName === 'IMG') {
+      const src = r.flyFrames[Math.floor((s.t / 0.1) % r.flyFrames.length)];
+      if (s.src !== src) { s.src = src; s.node.firstChild.src = src; }
     }
     s.node.style.transform = 'translate(' + Math.round(s.x) + 'px,' + Math.round(s.y) + 'px) translate(-50%,-50%)';
   });
@@ -31682,6 +31898,25 @@ function elgPop(x, y, text, cls) {
   d.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y - 18) + 'px) translate(-50%,-50%)';
   host.appendChild(d);
   setTimeout(() => d.remove(), 700);
+}
+// The element's impact frames from the Card Art page, played once where a
+// shot lands. Skipped silently until the frames are keyed and cached.
+function elgImpactFx(x, y) {
+  const r = elgRun; if (!r || !r.hitFrames) return;
+  const host = document.getElementById('elgUnits'); if (!host) return;
+  const d = document.createElement('div');
+  d.className = 'elg-hitfx';
+  d.innerHTML = '<img alt="">';
+  d.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px) translate(-50%,-50%)';
+  host.appendChild(d);
+  const img = d.firstChild;
+  let i = 0;
+  img.src = r.hitFrames[0];
+  const iv = setInterval(() => {
+    i++;
+    if (i >= r.hitFrames.length || !d.isConnected) { clearInterval(iv); d.remove(); }
+    else img.src = r.hitFrames[i];
+  }, 80);
 }
 function elgFlash(x, y, radius, kind) {
   const host = document.getElementById('elgUnits'); if (!host) return;
