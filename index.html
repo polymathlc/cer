@@ -2986,10 +2986,14 @@ option {
   }
 
   /* Open-ended blank answer box */
+  /* min-height is deliberately just one ruled line plus the padding: the line
+     count is now sized from the model answer (printAnswerLines), so a one-word
+     answer must be allowed to print as one line instead of being propped open
+     to three by the old 60pt floor. */
   .print-open-answer-box {
     border: 1.5pt solid #999;
     border-radius: 4pt;
-    min-height: 60pt;
+    min-height: 32pt;
     margin: 4pt 0 6pt 0;
     padding: 6pt;
     position: relative;
@@ -3029,7 +3033,7 @@ option {
   }
   .print-open-cer-box {
     padding: 6pt 10pt;
-    min-height: 56pt;
+    min-height: 32pt;
     break-inside: avoid;
     page-break-inside: avoid;
   }
