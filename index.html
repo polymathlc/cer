@@ -5357,6 +5357,25 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .tcg-mode-go { flex: 0 0 auto; }
 
 /* ---- 🌋 Ember Siege: lane defence over the whole screen ---- */
+/* Realm of Embers nav: a slow burning frame on hover, and the game-mode
+   flyout that unfolds beneath it (inline expansion, so the sidebar's own
+   scrolling never clips it). */
+.nav-tcg-wrap { position: relative; }
+#navTcg { position: relative; }
+#navTcg::after { content: ''; position: absolute; inset: 1px; border-radius: var(--radius-sm); border: 1.5px solid transparent; pointer-events: none; }
+.nav-tcg-wrap:hover #navTcg { background: rgba(240,122,40,0.10); }
+.nav-tcg-wrap:hover #navTcg::after { animation: emberFrame 2.8s ease-in-out infinite; }
+@keyframes emberFrame {
+  0%, 100% { border-color: rgba(200,90,24,0.75); box-shadow: 0 0 6px rgba(240,122,40,0.35), inset 0 0 6px rgba(240,122,40,0.16); }
+  50%      { border-color: rgba(255,176,84,0.95); box-shadow: 0 0 15px rgba(255,176,84,0.55), inset 0 0 10px rgba(255,150,60,0.26); }
+}
+.nav-tcg-sub { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; }
+.nav-tcg-wrap:hover .nav-tcg-sub { max-height: 300px; }
+.nav-tcg-sub button { display: flex; align-items: center; gap: 9px; width: calc(100% - 26px); margin: 2px 0 2px 26px; padding: 7px 10px; background: none; border: 0; border-left: 2px solid rgba(240,122,40,0.4); color: inherit; font: inherit; font-size: 0.82rem; cursor: pointer; text-align: left; border-radius: 0 8px 8px 0; }
+.nav-tcg-sub button:hover { background: rgba(240,122,40,0.13); }
+.nav-tcg-sub .ico { font-size: 0.9rem; }
+.nav-sub-prize { margin-left: auto; font-size: 0.64rem; font-weight: 700; color: #b45309; background: rgba(240,122,40,0.13); border: 1px solid rgba(240,122,40,0.45); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+
 /* ==================== ⚔️ EMBER LEGENDS (arena survival) ==================== */
 .elg-overlay { position: fixed; inset: 0; z-index: 1450; background: radial-gradient(120% 90% at 50% 0%, #241033 0%, #120a1c 60%, #070509 100%); display: flex; align-items: center; justify-content: center; padding: 14px; font-family: 'DM Sans', system-ui, sans-serif; overflow: auto; }
 .elg-shell { width: 100%; max-width: 1080px; display: flex; flex-direction: column; gap: 10px; }
@@ -6668,8 +6687,19 @@ body.practising-as .page-body { padding-bottom: 96px; }
         <span class="ico">🕹️</span> Arcade
       </div>
       <!-- Realm of Embers TCG (beta) — admins always; students only once the admin presses Release -->
-      <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Realm of Embers TCG — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
-        <span class="ico">🃏</span> Realm of Embers TCG <span class="nav-beta tcg-beta-badge">BETA</span>
+      <div class="nav-tcg-wrap" id="navTcgWrap">
+        <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Realm of Embers TCG — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
+          <span class="ico">🃏</span> Realm of Embers TCG <span class="nav-beta tcg-beta-badge">BETA</span>
+        </div>
+        <!-- Hover flyout: the game modes inside the realm, with 🎁 badges on
+             the ones paying a voucher this month (tcgNavPrizeBadges). -->
+        <div class="nav-tcg-sub" id="navTcgSub" style="display:none;">
+          <button type="button" onclick="tcgNavMode('modes','ems')"><span class="ico">🌋</span> Ember Siege <span class="nav-sub-prize" id="navPrizeSiege" style="display:none;"></span></button>
+          <button type="button" id="navModeLegends" style="display:none;" onclick="tcgNavMode('modes','elg')"><span class="ico">⚔️</span> Ember Legends <span class="nav-sub-prize" id="navPrizeLegends" style="display:none;"></span></button>
+          <button type="button" onclick="tcgNavMode('arena')"><span class="ico">🆚</span> Battle Arena</button>
+          <button type="button" onclick="tcgNavMode('dungeon')"><span class="ico">🏰</span> Infinite Dungeon</button>
+          <button type="button" onclick="tcgNavMode('packs')"><span class="ico">🎁</span> Booster Packs</button>
+        </div>
       </div>
       <!-- Science Strike FPS (fps.html) — fully released: everyone signed in sees it -->
       <div class="nav-item" id="navFps" onclick="openFpsGame()" style="display:none;" title="Science Strike — roguelite first-person dungeon shooter with Borderlands-style loot. Answer a science question every 15 seconds to boost your loot luck.">
@@ -8057,6 +8087,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
           <span class="rpg-prize-line">🕹️ <b>Arcade prize:</b> the top 3 each month in <b>Science Raiders</b> also win a <b>$10 Popular voucher</b> each. <b>Science Defenders</b> and <b>Science Spire</b> have <b>no prize in August</b> — those boards rank only.</span>
           <span class="rpg-prize-line">🔥 <b>Realm of Embers prize:</b> the <b>top 6 trainers</b> by <b>total team power</b> win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line" id="prizeLineLegends" style="display:none;">⚔️ <b>Ember Legends prize:</b> the <b>top 5</b> by the best wave reached each month win a <b>$10 Popular voucher</b> each.</span>
+          <span class="rpg-prize-line">🌋 <b>Ember Siege prize:</b> the <b>top 3</b> by the deepest wave held each month win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🔫 <b>Science Strike prize:</b> the top 3 by <b>correct answers</b> in Science Strike win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🎟️ <b>Streak prize:</b> practise <b>10+ questions every day for 30 days in a row</b> and win a <b>$10 Popular voucher</b> — track your progress on the Your Hero page.</span>
           <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 all-time XP earners win <b>$200, $100 and $50 Popular vouchers</b>.</span>
@@ -8072,6 +8103,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
               <button class="rpg-tab" data-rpgboard="raid" type="button">👾 Raiders</button>
               <button class="rpg-tab" data-rpgboard="spire" type="button">🃏 Spire</button>
               <button class="rpg-tab" data-rpgboard="tcg" type="button">🔥 Embers</button>
+              <button class="rpg-tab" data-rpgboard="siege" type="button">🌋 Siege</button>
               <button class="rpg-tab" data-rpgboard="legend" type="button">⚔️ Legends</button>
               <button class="rpg-tab" data-rpgboard="fps" type="button">🔫 Strike</button>
             </div>

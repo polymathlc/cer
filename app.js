@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.222.0';
+const APP_VERSION = 'v1.223.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -19192,6 +19192,8 @@ function _computePrizeWinners() {
     push('spire', '_spire', 3, r => _prizeGameScore(r, 'spire', key), r => _prizeGameLabel(r, 'spire', key) || '—');
   if (pays('legend'))
     push('legends', '_legend', 5, r => _prizeGameScore(r, 'legend', key), r => _prizeGameLabel(r, 'legend', key) || '—');
+  if (pays('siege'))
+    push('siege', '_siege', 3, r => _prizeGameScore(r, 'siege', key), r => _prizeGameLabel(r, 'siege', key) || '—');
   // Science Strike ranks on ALL-TIME correct answers (that is how its board and
   // its prize are defined), so the same standings are shown whichever month is
   // selected — the winners are simply whoever tops it when you award.
@@ -19222,9 +19224,9 @@ function renderPrizeClaims() {
   if (hint) hint.textContent = _prizeMonthName(shownKey)
     + (_usagePrizeMonth === 'cur' ? ' — still in progress, standings as they stand right now' : ' — the completed month');
   const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders'
-    : c.category === 'spire' ? '🃏 Spire' : c.category === 'strike' ? '🔫 Strike' : c.category === 'legends' ? '⚔️ Ember Legends'
+    : c.category === 'spire' ? '🃏 Spire' : c.category === 'strike' ? '🔫 Strike' : c.category === 'legends' ? '⚔️ Ember Legends' : c.category === 'siege' ? '🌋 Ember Siege'
     : c.category === 'streak' ? '🎟️ 30-day streak' : c.category === 'encounter' ? '⚡ Encounter quest' : '🎁 Questions';
-  const _claimResult = c => ['defenders', 'raiders', 'spire', 'legends', 'strike'].includes(c.category)
+  const _claimResult = c => ['defenders', 'raiders', 'spire', 'legends', 'strike', 'siege'].includes(c.category)
     ? (c.scoreLabel || (c.score != null ? c.score + ' pts' : '—'))
     : c.category === 'streak'
       ? (c.scoreLabel || '30 days')
@@ -19257,7 +19259,7 @@ function renderPrizeClaims() {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted);">No winners for <b>' + escapeHtml(_prizeMonthName(shownKey)) + '</b> — nobody has a score on any of the boards for that month yet. Try the other month above.</td></tr>';
     return;
   }
-  const catOrder = { questions: 0, defenders: 1, raiders: 2, spire: 3, strike: 4, legends: 5, streak: 6, encounter: 7 };
+  const catOrder = { questions: 0, defenders: 1, raiders: 2, spire: 3, strike: 4, legends: 5, siege: 6, streak: 7, encounter: 8 };
   merged.sort((a, b) =>
     String(b.monthKey || '').localeCompare(String(a.monthKey || '')) ||
     (catOrder[a.category] ?? 9) - (catOrder[b.category] ?? 9) ||
@@ -22303,7 +22305,7 @@ function isPastPaperQuestion(q) {
 function rpgEnsureGameScores() {
   if (!rpgState) return null;
   if (!rpgState.gameScores) rpgState.gameScores = {};
-  ["defenders", "raiders", "spire", "legend"].forEach(k => {
+  ["defenders", "raiders", "spire", "legend", "siege"].forEach(k => {
     if (!rpgState.gameScores[k]) rpgState.gameScores[k] = { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null };
   });
   rpgRolloverGameScores(rpgMonthKey());
@@ -22312,7 +22314,7 @@ function rpgEnsureGameScores() {
 // Roll each mini-game's month-best into "last month" when the calendar month turns.
 function rpgRolloverGameScores(key) {
   if (!rpgState || !rpgState.gameScores) return;
-  ["defenders", "raiders", "spire", "legend"].forEach(k => {
+  ["defenders", "raiders", "spire", "legend", "siege"].forEach(k => {
     const g = rpgState.gameScores[k]; if (!g) return;
     if (g.monthKey && g.monthKey !== key) {
       g.lastBest = g.monthBest || 0; g.lastLabel = g.monthLabel || ""; g.lastKey = g.monthKey;
@@ -23259,6 +23261,7 @@ function rpgPublishLeaderboard() {
       raid: rpgGameBoardData("raiders"),
       spire: rpgGameBoardData("spire"),
       legend: rpgGameBoardData("legend"),   // Ember Legends — best wave reached
+      siege: rpgGameBoardData("siege"),     // Ember Siege — deepest wave held
       // Realm of Embers TCG: a complete team of 5 is published so other students
       // can be matched against it in the Battle Arena (null until then).
       tcg: (rpgState.tcg && Array.isArray(rpgState.tcg.team) && rpgState.tcg.team.length === 5) ? {
@@ -23353,10 +23356,10 @@ async function rpgFetchLeaderboard(force) {
 // The "td" / "raid" tabs rank by this month's best mini-game score; "month" /
 // "lastmonth" rank by UNIQUE QUESTIONS DONE; "alltime" ranks by XP; "fps"
 // (Science Strike) ranks by all-time correct answers from fps.html's `fps` field.
-function rpgIsGameTab() { return rpgBoardTab === "td" || rpgBoardTab === "raid" || rpgBoardTab === "spire" || rpgBoardTab === "legend"; }
+function rpgIsGameTab() { return rpgBoardTab === "td" || rpgBoardTab === "raid" || rpgBoardTab === "spire" || rpgBoardTab === "legend" || rpgBoardTab === "siege"; }
 // How many winners a game board pays. Ember Legends pays the top 5; the older
 // arcade boards pay the top 3.
-function rpgGameTopN(tab) { return tab === "legend" ? 5 : 3; }
+function rpgGameTopN(tab) { return tab === "legend" ? 5 : 3; }   // Siege and the older arcade boards pay 3
 // Months a board runs WITHOUT a prize. The board still ranks exactly as usual;
 // only the badge, the row highlight and the month-end claim prompt are
 // suppressed for the months listed here. Keyed by board tab
@@ -23435,9 +23438,11 @@ function rpgBoardNote() {
     return `<div class="rpg-board-note">🔥 <b>Realm of Embers:</b> the <b>top 6 trainers</b> by <b>total team power</b> each win a <b>$10 Popular voucher</b>. Level your team of 5, merge duplicates and pull stronger monsters to climb.</div>`;
   if (rpgBoardTab === "legend" && !rpgPrizeOffFor("legend", rpgMonthKey()))
     return `<div class="rpg-board-note">⚔️ <b>Ember Legends:</b> the <b>top 5</b> by best wave reached this month each win a <b>$10 Popular voucher</b>.</div>`;
+  if (rpgBoardTab === "siege" && !rpgPrizeOffFor("siege", rpgMonthKey()))
+    return `<div class="rpg-board-note">🌋 <b>Ember Siege:</b> the <b>top 3</b> by deepest wave held this month each win a <b>$10 Popular voucher</b>.</div>`;
   if (rpgIsGameTab() && rpgPrizeOffFor(rpgBoardTab, rpgMonthKey())) {
     const game = rpgBoardTab === "td" ? "Science Defenders" : rpgBoardTab === "spire" ? "Science Spire"
-      : rpgBoardTab === "legend" ? "Ember Legends" : "Science Raiders";
+      : rpgBoardTab === "legend" ? "Ember Legends" : rpgBoardTab === "siege" ? "Ember Siege" : "Science Raiders";
     const month = new Date().toLocaleString("en-SG", { month: "long" });
     return `<div class="rpg-board-note muted">🚫 <b>No prize in ${month}</b> — ${game} is a ranking board this month. Climb it anyway: your score still counts.</div>`;
   }
@@ -23476,7 +23481,7 @@ async function rpgRenderLeaderboard(force = false) {
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0, rebirths: rpgState.rebirths || 0,
       house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null,
       equipment: rpgState.equipment,
-      td: rpgGameBoardData("defenders"), raid: rpgGameBoardData("raiders"), spire: rpgGameBoardData("spire"), legend: rpgGameBoardData("legend"),
+      td: rpgGameBoardData("defenders"), raid: rpgGameBoardData("raiders"), spire: rpgGameBoardData("spire"), legend: rpgGameBoardData("legend"), siege: rpgGameBoardData("siege"),
       updatedAt: new Date().toISOString()
     };
     const i = rows.findIndex(r => r.uid === currentUser.uid);
@@ -23495,6 +23500,7 @@ async function rpgRenderLeaderboard(force = false) {
       : rpgBoardTab === "raid" ? "No Science Raiders runs this month yet — dive in to top the board!"
       : rpgBoardTab === "spire" ? "No Science Spire climbs this month yet — build a deck and claim the top!"
       : rpgBoardTab === "legend" ? "No Ember Legends runs this month yet — take a monster into the arena and set the first wave!"
+      : rpgBoardTab === "siege" ? "No Ember Siege runs this month yet — defend the gate and set the deepest wave!"
       : rpgBoardTab === "fps" ? "No Science Strike answers yet — jump into a run and answer questions to claim the board!"
       : rpgBoardTab === "tcg" ? "No trainers on the board yet — build a team of 5 in Realm of Embers to put your team power on the board!"
       : "No heroes on the board yet — solve questions to earn XP!";
@@ -23548,6 +23554,7 @@ function _prizeCategoryOf(ctx) {
   if (k.endsWith("_td")) return "defenders";
   if (k.endsWith("_raid")) return "raiders";
   if (k.endsWith("_legend")) return "legends";
+  if (k.endsWith("_siege")) return "siege";
   if (k.endsWith("_spire")) return "spire";
   return "questions";
 }
@@ -23581,6 +23588,8 @@ async function rpgCheckPrizeClaim() {
         rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthGame(r, "raid"), detail: rpgLastMonthGameLabel(r, "raid") })) }
       ,{ key: prev + "_legend", topN: 5, noun: "in Ember Legends", game: "Ember Legends", tab: "legend",
         rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthGame(r, "legend"), detail: rpgLastMonthGameLabel(r, "legend") })) }
+      ,{ key: prev + "_siege", topN: 3, noun: "in Ember Siege", game: "Ember Siege", tab: "siege",
+        rank: rows.map(r => ({ uid: r.uid, v: rpgLastMonthGame(r, "siege"), detail: rpgLastMonthGameLabel(r, "siege") })) }
       // Science Spire has no month-end claim of its own (see RPG_NO_PRIZE_MONTHS).
     ].filter(c => !rpgPrizeOffFor(c.tab, prev));   // months listed as prize-free never prompt
     for (const c of cats) {
@@ -27568,6 +27577,31 @@ async function tcgSetReleased(v) {
   } catch (e) { console.error('tcg release', e); showToast('Could not update — check your connection', 'error'); }
 }
 function tcgAccessAllowed() { return _isAdmin() || tcgReleased(); }
+// Jump from the sidebar flyout straight into a Realm of Embers mode. The tab
+// is set BEFORE navigating so tcgRenderPage lands on it; a game overlay
+// (Siege / Legends) opens a beat later, once the page is on screen.
+function tcgNavMode(tab, game) {
+  try { tcgTab = tab; } catch (_) {}
+  navigateTo('tcg');
+  if (game === 'ems') setTimeout(() => { try { emsOpen(); } catch (_) {} }, 380);
+  if (game === 'elg') setTimeout(() => { try { elgOpen(); } catch (_) {} }, 380);
+}
+// The 🎁 badges on the flyout say which modes pay a voucher THIS month —
+// driven by RPG_NO_PRIZE_MONTHS, so pausing a prize also clears its badge.
+function tcgNavPrizeBadges() {
+  const month = new Date().toLocaleString('en-SG', { month: 'long' });
+  const set = (id, tab, available) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const on = available && !rpgPrizeOffFor(tab, rpgMonthKey());
+    el.style.display = on ? '' : 'none';
+    if (on) el.textContent = '🎁 ' + month + ' voucher';
+  };
+  set('navPrizeSiege', 'siege', true);
+  set('navPrizeLegends', 'legend', elgAccessAllowed());
+  const legRow = document.getElementById('navModeLegends');
+  if (legRow) legRow.style.display = elgAccessAllowed() ? '' : 'none';
+}
 function tcgApplyNavVisibility() {
   const nav = document.getElementById('navTcg');
   if (!nav) return;
@@ -27576,6 +27610,9 @@ function tcgApplyNavVisibility() {
   // Once it is live for students it is no longer a beta — drop the badges.
   const live = tcgReleased();
   document.querySelectorAll('.tcg-beta-badge').forEach(b => { b.style.display = live ? 'none' : ''; });
+  const sub = document.getElementById('navTcgSub');
+  if (sub) sub.style.display = show ? '' : 'none';
+  try { tcgNavPrizeBadges(); } catch (_) {}
 }
 
 // ---- Release announcement ------------------------------------------
@@ -29546,7 +29583,7 @@ function tcgGuideHtml() {
       '',
       _tcgGuideRows([
         ['🌋 <b>Ember Siege</b> — lane defence',
-          'Waves of corrupted monsters walk on your Ember Gate (about ' + EMS_WALK_SECONDS + ' seconds to cross the field, so there is always time to think). Summon your own cards as defenders using <b>mana</b>, and mana comes from answering science questions — ' + EMS_MANA_BASE + ' for a correct answer plus up to ' + EMS_MANA_SPEED + ' more for speed, ' + EMS_MANA_WRONG + ' for a wrong one. Clear a wave and you get a paused, untimed ' + EMS_ROUND_SIZE + '-question mana round. Every correct answer also trains the monsters on the field.'],
+          'Waves of corrupted monsters walk on your Ember Gate (about ' + EMS_WALK_SECONDS + ' seconds to cross the field, so there is always time to think). Summon your own cards as defenders using <b>mana</b>, and mana comes from answering science questions — ' + EMS_MANA_BASE + ' for a correct answer plus up to ' + EMS_MANA_SPEED + ' more for speed, ' + EMS_MANA_WRONG + ' for a wrong one. Clear a wave and you get a paused, untimed ' + EMS_ROUND_SIZE + '-question mana round. Every correct answer also trains the monsters on the field. The <b>top 3</b> by deepest wave held each month win a <b>$10 voucher</b>.'],
         ['⚔️ <b>Battle Arena</b> — 5 v 5',
           'Your five auto-battle another trainer\'s published team. Friendly matches: nothing is won or lost but your W–L record.'],
         ['🏰 <b>Infinite Dungeon</b> — endless ladder',
@@ -29925,6 +29962,19 @@ function emsBank() {
   }
   if (rpgState && emsRun.gold > 0) rpgState.gold = (rpgState.gold | 0) + emsRun.gold;
   try { rpgSave(); } catch (_) {}
+  // The run also ranks: deepest siege held this month, on the shared board.
+  const waves = emsRun.cleared | 0;
+  if (waves > 0 && rpgState) {
+    try {
+      rpgEnsureGameScores();
+      const g = rpgState.gameScores.siege;
+      const label = 'Wave ' + waves;
+      if (waves > (g.best || 0)) { g.best = waves; g.bestLabel = label; }
+      if (waves > (g.monthBest || 0)) { g.monthBest = waves; g.monthLabel = label; }
+      rpgSave();
+      rpgPublishLeaderboard();
+    } catch (e) { console.warn('siege score', e); }
+  }
 }
 function emsBanner(text, ms) {
   const el = document.getElementById('emsBanner');
@@ -32724,6 +32774,7 @@ window.elgOpenTree = elgOpenTree;
 window.elgCloseTree = elgCloseTree;
 window.elgBuy = elgBuy;
 window.elgTreeSelect = elgTreeSelect;
+window.tcgNavMode = tcgNavMode;
 window.elgCast = elgCast;
 window.elgAnswer = elgAnswer;
 window.elgCloseQuiz = elgCloseQuiz;
