@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.219.0';
+const APP_VERSION = 'v1.220.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -31626,6 +31626,9 @@ function elgCloseTree() {
 function elgRenderTree() {
   const r = elgRun, host = document.getElementById('elgTree');
   if (!r || !host) return;
+  // Re-rendering (after buying a skill) replaces the overlay's content, which
+  // zeroes its scroll — put the student back where they were in the tree.
+  const keepScroll = host.scrollTop;
   const role = ELG_ROLES[r.role];
   const nodes = ELG_TREES[r.role] || [];
   const tiers = ELG_TIERS.map(t => {
@@ -31661,6 +31664,7 @@ function elgRenderTree() {
     + '<div class="elg-tree-map" id="elgTreeMap"><svg class="elg-tree-links" id="elgTreeLinks" aria-hidden="true"></svg>' + tiers + '</div>'
     + '<div class="elg-tree-foot"><button type="button" class="btn btn-primary" onclick="elgCloseTree()">▶ Back to the fight</button></div>'
     + '</div>';
+  host.scrollTop = keepScroll;
   requestAnimationFrame(elgDrawTreeLinks);
   if (!elgRenderTree._resize) {
     elgRenderTree._resize = true;
