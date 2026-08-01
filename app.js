@@ -1501,6 +1501,9 @@ async function enterApp(user) {
     loadScheduledQuestions();
     // Load flagged question count for badge
     loadFlaggedQuestions();
+    // Every question ends up with at least one tag: AI-tag the untagged ones
+    // in the background (ten workers, metadata fallback — see autoTagAllQuestions).
+    autoTagWholeBankInBackground();
     // Warm the image cache in the background so bank / Doctor / Past Papers
     // images show instantly (non-blocking, idle-scheduled).
     warmImageCacheInBackground(questionBank);
@@ -1576,7 +1579,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.226.0';
+const APP_VERSION = 'v1.227.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -2598,6 +2601,82 @@ function _bulkTagFinish(verb) {
 }
 
 function bulkTagRemove(tag) { bulkTagApply('remove', tag); }
+
+// ---- automatic whole-bank tagging -------------------------------------------
+// "Every question carries at least one tag" as a standing guarantee, not a chore
+// someone has to remember. After the bank loads for an admin, every owned
+// question with no tags is handed to the AI in the background — ten workers in
+// flight at once, each reading and tagging one question at a time. A question
+// the AI cannot tag (a failed call, or an empty reply) still gets ONE tag from
+// its own metadata (topic, then category), so a completed pass never leaves a
+// question untagged. Saves are per-question, so closing the tab mid-pass keeps
+// everything already done; whatever is left picks up at the next sign-in.
+const AUTO_TAG_WORKERS = 10;        // tagging workers in flight at once
+let _autoTagRun = null;             // { total, done, tagged, failed } while running
+let _autoTagRanThisLoad = false;    // once per sign-in — tagged questions no longer target anyway
+
+// The guaranteed floor: a tag from the question's own metadata. The AI prompt
+// forbids the bare topic as a tag, but as a floor it beats untagged — the
+// question still files under a label the admin recognises, and the next AI pass
+// is free to add finer ones on top.
+function _autoTagFallbackTags(q) {
+  const t = String((q && q.topic) || '').trim() || qSecondaryTopic(q) ||
+            normalizeCategoryValue(q && q.category) || 'general science';
+  return _snapTagsToBank(parseTagInput(t));
+}
+
+async function _autoTagOne(q) {
+  let add = [];
+  try { add = await aiSuggestTags(q); } catch (e) { console.warn('auto tag', q && q.id, e); }
+  if (!add.length) add = _autoTagFallbackTags(q);
+  const merged = qTagList(q);
+  add.forEach(t => { if (!merged.some(x => x.toLowerCase() === t.toLowerCase())) merged.push(t); });
+  if (!merged.length) return false;
+  return _bulkTagWrite(q, merged);
+}
+
+async function autoTagAllQuestions() {
+  if (!_isAdmin() || _autoTagRun) return;
+  // Only questions THIS account owns — another admin's documents are not ours
+  // to write, and Firestore would reject every one (see _bulkTagOwned). Each
+  // admin's own sign-in tags their own bank.
+  const target = (Array.isArray(questionBank) ? questionBank : [])
+    .filter(q => q && q.id != null && !qTagList(q).length &&
+                 _qOwner(q.id) === (currentUser && currentUser.uid));
+  if (!target.length) return;
+  _autoTagRun = { total: target.length, done: 0, tagged: 0, failed: 0 };
+  showToast('🏷 Auto-tagging ' + target.length + ' untagged question' + (target.length === 1 ? '' : 's') + ' in the background…', 'info');
+  let next = 0;
+  const worker = async () => {
+    while (next < target.length) {
+      const q = target[next++];
+      if (await _autoTagOne(q)) _autoTagRun.tagged++; else _autoTagRun.failed++;
+      _autoTagRun.done++;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(AUTO_TAG_WORKERS, target.length) }, worker));
+  const r = _autoTagRun;
+  _autoTagRun = null;
+  _ainsteinTextCache.clear();          // tags feed Ai-nstein's retrieval
+  populateTagFilter();
+  renderQuestionBank();
+  showToast('🏷 Auto-tagged ' + r.tagged + ' question' + (r.tagged === 1 ? '' : 's') +
+    (r.failed ? ' · ' + r.failed + ' failed' : ''), r.failed ? 'error' : 'success');
+}
+
+// Kick the pass off without holding up sign-in: give the page a moment to
+// settle, wait (briefly) for the AI to come up, then run.
+function autoTagWholeBankInBackground() {
+  if (_autoTagRanThisLoad || !_isAdmin()) return;
+  _autoTagRanThisLoad = true;
+  let waited = 0;
+  const tick = () => {
+    if (window.__aiReady && window.__aiReady()) { autoTagAllQuestions().catch(e => console.warn('auto tag pass', e)); return; }
+    if ((waited += 1000) >= 30000) return;   // no AI this session — the next sign-in tries again
+    setTimeout(tick, 1000);
+  };
+  setTimeout(tick, 3000);
+}
 
 // Rebuilt on every bank render, so a tag added a moment ago is selectable now.
 // "Untagged" is a real filter, not an oversight: it is the list an admin works
@@ -39135,6 +39214,8 @@ window.bulkTagStop = bulkTagStop;
 window.bulkTagRemove = bulkTagRemove;
 window.bulkTagAddPick = bulkTagAddPick;
 window.renderBulkTagsPreview = renderBulkTagsPreview;
+window.autoTagAllQuestions = autoTagAllQuestions;   // console / manual re-run
+
 window.renderFlashcardsPage = renderFlashcardsPage;
 window.fcToggleGap = fcToggleGap;
 window.fcClearGaps = fcClearGaps;
