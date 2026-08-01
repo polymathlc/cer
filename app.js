@@ -1501,6 +1501,9 @@ async function enterApp(user) {
     loadScheduledQuestions();
     // Load flagged question count for badge
     loadFlaggedQuestions();
+    // Every question ends up with at least one tag: AI-tag the untagged ones
+    // in the background (ten workers, metadata fallback — see autoTagAllQuestions).
+    autoTagWholeBankInBackground();
     // Warm the image cache in the background so bank / Doctor / Past Papers
     // images show instantly (non-blocking, idle-scheduled).
     warmImageCacheInBackground(questionBank);
@@ -1576,7 +1579,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.226.0';
+const APP_VERSION = 'v1.227.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -2202,7 +2205,10 @@ function _snapToKnownTag(tag, known) {
 async function aiSuggestTags(q) {
   if (!window.__aiReady || !window.__aiReady()) throw new Error('the AI is not ready yet');
   if (!q) return [];
-  const known = allBankTags().map(r => r.tag);
+  // Most-used tags first (allBankTags sorts by count), capped so the prompt does
+  // not grow with the bank — an uncapped vocabulary makes a whole-bank pass cost
+  // quadratic input tokens. Same trick as the screenshot-import prompt.
+  const known = allBankTags().slice(0, 150).map(r => r.tag);
   const p = _docQParts(q);
   const facts = {
     title: _fcClip(q.title || ''),
@@ -2506,8 +2512,17 @@ function bulkTagAddPick(tag) {
 
 // Write one question's tags and keep every in-memory copy in step.
 async function _bulkTagWrite(q, tags) {
+  // Tag passes hold references across awaits. The editor's save REPLACES the
+  // bank slot with a rebuilt object (and a delete removes it), so a held
+  // reference that is no longer the live object must not be written — setDoc
+  // overwrites the whole doc, and writing the stale object would resurrect the
+  // pre-edit (or deleted) question.
+  const live = (Array.isArray(questionBank) ? questionBank : []).find(x => x && x.id === q.id);
+  if (live !== q) return false;
+  const prev = q.tags;
   q.tags = tags;
   const ok = await saveQuestion(q, { quiet: true });
+  if (!ok) q.tags = prev;   // a write that never landed must not tag the in-memory copy
   return ok;
 }
 
@@ -2526,10 +2541,13 @@ async function bulkTagApply(action, oneTag) {
   const keys = new Set(tags.map(t => t.toLowerCase()));
   if (action === 'remove' && !confirm('Remove ' + tags.map(t => '“' + t + '”').join(', ') + ' from every question in this set that has it?\n\nThis cannot be undone.')) return;
 
-  _bulkTagRun = { kind: 'manual', total: target.length, done: 0, tagged: 0, skipped: 0, failed: 0, stop: false };
+  autoTagStop();   // the admin's own pass takes priority over the background one
+  // Hold a LOCAL reference: closing the dialog nulls the global mid-flight, and
+  // the loop resuming from an await must not dereference null.
+  const run = _bulkTagRun = { kind: 'manual', total: target.length, done: 0, tagged: 0, skipped: 0, failed: 0, stop: false };
   renderBulkTags();
   for (const q of target) {
-    if (_bulkTagRun.stop) break;
+    if (run.stop) break;
     const before = qTagList(q);
     let after;
     if (action === 'remove') after = before.filter(t => !keys.has(t.toLowerCase()));
@@ -2537,10 +2555,10 @@ async function bulkTagApply(action, oneTag) {
       after = before.slice();
       tags.forEach(t => { if (!after.some(x => x.toLowerCase() === t.toLowerCase())) after.push(t); });
     }
-    if (after.length === before.length && after.every((t, i) => t === before[i])) _bulkTagRun.skipped++;
-    else if (await _bulkTagWrite(q, after)) _bulkTagRun.tagged++;
-    else _bulkTagRun.failed++;
-    _bulkTagRun.done++;
+    if (after.length === before.length && after.every((t, i) => t === before[i])) run.skipped++;
+    else if (await _bulkTagWrite(q, after)) run.tagged++;
+    else run.failed++;
+    run.done++;
     renderBulkTags();
   }
   _bulkTagFinish(action === 'remove' ? 'removed from' : 'added to');
@@ -2556,25 +2574,28 @@ async function bulkTagAiRun() {
   if (!confirm('Tag ' + target.length + ' question' + (target.length === 1 ? '' : 's') + ' with AI?\n\n'
     + 'That is ' + target.length + ' AI call' + (target.length === 1 ? '' : 's') + '. Tags are ADDED, never removed, and you can stop at any point — everything done so far is kept.')) return;
 
-  _bulkTagRun = { kind: 'ai', total: target.length, done: 0, tagged: 0, skipped: 0, failed: 0, stop: false };
+  autoTagStop();   // the admin's own pass takes priority over the background one
+  // Same LOCAL reference rule as bulkTagApply: workers resuming from an await
+  // must never dereference the nulled global after the dialog closes.
+  const run = _bulkTagRun = { kind: 'ai', total: target.length, done: 0, tagged: 0, skipped: 0, failed: 0, stop: false };
   renderBulkTags();
   let next = 0;
   const worker = async () => {
-    while (!_bulkTagRun.stop && next < target.length) {
+    while (!run.stop && next < target.length) {
       const q = target[next++];
       try {
         const add = await aiSuggestTags(q);
-        if (!add.length) _bulkTagRun.skipped++;
+        if (!add.length) run.skipped++;
         else {
           const merged = qTagList(q);
           add.forEach(t => { if (!merged.some(x => x.toLowerCase() === t.toLowerCase())) merged.push(t); });
-          if (await _bulkTagWrite(q, merged)) _bulkTagRun.tagged++; else _bulkTagRun.failed++;
+          if (await _bulkTagWrite(q, merged)) run.tagged++; else run.failed++;
         }
       } catch (e) {
         console.warn('bulk ai tag', (q && q.id), e);
-        _bulkTagRun.failed++;
+        run.failed++;
       }
-      _bulkTagRun.done++;
+      run.done++;
       renderBulkTags();
     }
   };
@@ -2598,6 +2619,117 @@ function _bulkTagFinish(verb) {
 }
 
 function bulkTagRemove(tag) { bulkTagApply('remove', tag); }
+
+// ---- automatic whole-bank tagging -------------------------------------------
+// "Every question carries at least one tag" as a standing guarantee, not a chore
+// someone has to remember. After the bank loads for an admin, every owned
+// question with no tags is handed to the AI in the background — ten workers in
+// flight at once, each reading and tagging one question at a time. A question
+// the AI reads but has nothing to say about still gets ONE tag from its own
+// metadata (topic, then category), so a successfully processed question never
+// stays untagged; a question whose CALL failed is left alone to retry later
+// (see _autoTagOne for why those must not get the floor). Saves are
+// per-question, so closing the tab mid-pass keeps everything already done;
+// whatever is left picks up at the next sign-in.
+const AUTO_TAG_WORKERS = 10;        // tagging workers in flight at once
+const AUTO_TAG_MAX = 500;           // per pass — a bigger backlog continues at the next sign-in
+let _autoTagRun = null;             // { total, done, tagged, failed, stop } while running
+let _autoTagRanThisLoad = false;    // once per page load — tagged questions no longer target anyway
+
+// The guaranteed floor: a tag from the question's own metadata. The AI prompt
+// forbids the bare topic as a tag, but as a floor it beats untagged — the
+// question still files under a label the admin recognises, and the next AI pass
+// is free to add finer ones on top. Each candidate is pushed through the tag
+// parser BEFORE being chosen, because a candidate can be truthy yet parse to
+// nothing (a purely numeric topic like "2025" is dropped by qTagList) — picking
+// on truthiness alone would skip the candidates behind it and break the floor.
+function _autoTagFallbackTags(q) {
+  const candidates = [String((q && q.topic) || '').trim(), qSecondaryTopic(q),
+                      normalizeCategoryValue(q && q.category), 'general science'];
+  for (const c of candidates) {
+    const tags = _snapTagsToBank(parseTagInput(c));
+    if (tags.length) return tags;
+  }
+  return ['general science'];
+}
+
+// Returns 'tagged' or 'failed'. A FAILED call writes nothing: the question stays
+// untagged, so the next sign-in retries it with a real AI call. Only a genuine
+// empty reply gets the metadata floor — "the AI had nothing to say" is an answer,
+// a quota blip is not, and stamping the topic name on a question just because a
+// call bounced would permanently seal it against ever being properly tagged.
+async function _autoTagOne(q) {
+  let add;
+  try { add = await aiSuggestTags(q); }
+  catch (e) { console.warn('auto tag', q && q.id, e); return 'failed'; }
+  if (!add.length) add = _autoTagFallbackTags(q);
+  const merged = qTagList(q);
+  add.forEach(t => { if (!merged.some(x => x.toLowerCase() === t.toLowerCase())) merged.push(t); });
+  return (await _bulkTagWrite(q, merged)) ? 'tagged' : 'failed';
+}
+
+async function autoTagAllQuestions() {
+  if (!_isAdmin() || _autoTagRun) return;
+  // Only questions THIS account owns — another admin's documents are not ours
+  // to write, and Firestore would reject every one (see _bulkTagOwned). Each
+  // admin's own sign-in tags their own bank.
+  const backlog = (Array.isArray(questionBank) ? questionBank : [])
+    .filter(q => q && q.id != null && !qTagList(q).length &&
+                 _qOwner(q.id) === (currentUser && currentUser.uid));
+  const target = backlog.slice(0, AUTO_TAG_MAX);
+  if (!target.length) return;
+  // Workers hold this LOCAL reference, not the global — nothing outside can null
+  // it out from under an in-flight await.
+  const run = _autoTagRun = { total: target.length, done: 0, tagged: 0, failed: 0, stop: false };
+  showToast('🏷 Auto-tagging ' + target.length + ' untagged question' + (target.length === 1 ? '' : 's') +
+    (backlog.length > target.length ? ' (of ' + backlog.length + ' — the rest at the next sign-in)' : '') +
+    ' in the background…', 'info');
+  let next = 0;
+  const worker = async () => {
+    while (!run.stop && next < target.length) {
+      const q = target[next++];
+      try {
+        // A manual bulk pass or the editor may have tagged — or deleted — this
+        // question since the target was captured: no AI call for those.
+        if (qTagList(q).length || questionBank.indexOf(q) === -1) { run.done++; continue; }
+        run[await _autoTagOne(q)]++;
+      } catch (e) { console.warn('auto tag worker', q && q.id, e); run.failed++; }
+      run.done++;
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(AUTO_TAG_WORKERS, target.length) }, worker));
+  } finally {
+    _autoTagRun = null;                // never leave the guard latched
+  }
+  _ainsteinTextCache.clear();          // tags feed Ai-nstein's retrieval
+  renderQuestionBank();                // rebuilds the tag filter too, behind its focus guard
+  if (run.stop) return;                // yielded to a manual pass — its own toast takes over
+  showToast('🏷 Auto-tagged ' + run.tagged + ' question' + (run.tagged === 1 ? '' : 's') +
+    (run.failed ? ' · ' + run.failed + ' failed — those stay untagged and retry at the next sign-in' : ''),
+    run.failed ? 'error' : 'success');
+}
+
+// Stop the background pass: from the console, or because the admin started a
+// manual bulk pass of their own — two passes writing the same rows at once is
+// wasted AI spend and a write race for no benefit.
+function autoTagStop() { if (_autoTagRun) _autoTagRun.stop = true; }
+
+// Kick the pass off without holding up sign-in: give the page a moment to
+// settle, wait (briefly) for the AI to come up, then run.
+function autoTagWholeBankInBackground() {
+  if (_autoTagRanThisLoad || !_isAdmin()) return;
+  _autoTagRanThisLoad = true;
+  let waited = 0;
+  const tick = () => {
+    if (window.__aiReady && window.__aiReady()) { autoTagAllQuestions().catch(e => console.warn('auto tag pass', e)); return; }
+    // The AI never came up: re-arm, so a sign-out/sign-in in this same tab gets
+    // another go instead of finding the latch stuck for the rest of the load.
+    if ((waited += 1000) >= 30000) { _autoTagRanThisLoad = false; return; }
+    setTimeout(tick, 1000);
+  };
+  setTimeout(tick, 3000);
+}
 
 // Rebuilt on every bank render, so a tag added a moment ago is selectable now.
 // "Untagged" is a real filter, not an oversight: it is the list an admin works
@@ -11827,10 +11959,29 @@ async function saveQuestion(q, opts) {
     if (_inflightOps === 0) _setSaveStatus(ok ? 'saved' : 'error');
     return ok;
   };
+  // Firestore rejects nested arrays. A LOADED table block carries data as
+  // array-of-arrays and colWidths as an array (normalizeLoadedQuestion restores
+  // them for the editor), so a save from a held object — the tag passes, the
+  // usage backfill — must convert them back on the way out, exactly as
+  // collectQuestionData does for the editor. The in-memory object stays as-is.
+  let payload = q;
+  if (q && Array.isArray(q.blocks) && q.blocks.some(b => b && b.type === 'table' &&
+      (Array.isArray(b.data) || Array.isArray(b.colWidths)))) {
+    payload = JSON.parse(JSON.stringify(q));
+    payload.blocks.forEach(b => {
+      if (!b || b.type !== 'table') return;
+      if (Array.isArray(b.data)) b.data = tableDataToFirestore(b.data);
+      if (Array.isArray(b.colWidths)) {
+        const cw = {};
+        b.colWidths.forEach((w, i) => { if (w !== null && w !== undefined) cw[String(i)] = w; });
+        b.colWidths = cw;
+      }
+    });
+  }
   let attempts = 0;
   while (attempts < tries) {
     try {
-      await setDoc(_qRef(q.id), q);
+      await setDoc(_qRef(q.id), payload);
       return done(true);
     } catch (err) {
       attempts++;
@@ -39135,6 +39286,8 @@ window.bulkTagStop = bulkTagStop;
 window.bulkTagRemove = bulkTagRemove;
 window.bulkTagAddPick = bulkTagAddPick;
 window.renderBulkTagsPreview = renderBulkTagsPreview;
+window.autoTagAllQuestions = autoTagAllQuestions;   // console / manual re-run
+window.autoTagStop = autoTagStop;
 window.renderFlashcardsPage = renderFlashcardsPage;
 window.fcToggleGap = fcToggleGap;
 window.fcClearGaps = fcClearGaps;
