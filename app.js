@@ -1576,7 +1576,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.225.0';
+const APP_VERSION = 'v1.226.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -30966,13 +30966,18 @@ const ELG_SHOT_SPEED = 430;      // px/second
 const ELG_CONTACT = 34;          // how close an enemy gets before it swings
 let elgRun = null;
 
-function elgReleased() { return !!(_tcgConfig && _tcgConfig.legendsReleased); }
+// RELEASED BY DEFAULT: students see Ember Legends unless the admin has
+// explicitly taken it back into beta (legendsReleased === false). The old
+// default-hidden gate meant the game — and the August voucher its leaderboard
+// pays — was invisible to every student until a Release click that never
+// obviously presented itself.
+function elgReleased() { return !(_tcgConfig && _tcgConfig.legendsReleased === false); }
 function elgAccessAllowed() { return _isAdmin() || elgReleased(); }
 async function elgSetReleased(v) {
   if (!_isAdmin()) return;
   const on = (v === true || v === 'true');
   if (on && !confirm('Release Ember Legends to all students?\n\nIt appears on the Game Modes tab of Realm of Embers straight away, and its leaderboard starts paying the monthly $10 vouchers.')) return;
-  if (!on && !confirm('Take Ember Legends back into beta? Students will no longer see it.')) return;
+  if (!on && !confirm('Take Ember Legends into beta? Students will no longer see the game, its board tab or its prize line until you release it again.')) return;
   try {
     const patch = { legendsReleased: on, updatedAt: new Date().toISOString() };
     await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'tcgConfig'), patch, { merge: true });
