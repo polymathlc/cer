@@ -1579,7 +1579,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.227.0';
+const APP_VERSION = 'v1.228.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -2998,6 +2998,13 @@ function createBlock(type) {
     case 'explanation':
       block.content = '';
       break;
+    case 'widget':
+      block.html = '';         // the generated single-file widget document
+      block.comments = '';     // the admin's extra instructions to the builder
+      block.engine = 'gemini'; // 'gemini' | 'openai'
+      block.effort = 'high';   // 'standard' | 'high' | 'pro'
+      block.height = 480;      // iframe height (px) when shown to the student
+      break;
     case 'video':
       block.url = '';
       break;
@@ -4166,6 +4173,11 @@ function renderBlocks() {
         badgeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
         badgeLabel = 'Video URL';
         break;
+      case 'widget':
+        badgeClass = 'video-badge';
+        badgeIcon = '🧩';
+        badgeLabel = 'Interactive Widget (AI)';
+        break;
       case 'table':
         badgeClass = 'table-badge';
         badgeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>';
@@ -4377,6 +4389,9 @@ function renderBlocks() {
       case 'table':
         bodyHTML = renderAdvancedTableBlock(block);
         break;
+      case 'widget':
+        bodyHTML = renderWidgetBlockEditor(block);
+        break;
       default:
         bodyHTML = renderImportedBlockEditorBody(block);
         break;
@@ -4437,6 +4452,7 @@ function makeBlockInsertBar(index) {
       <button type="button" class="block-insert-btn" onclick="addBlockAt('answer', ${index})">🧪 CER Answer</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('plainanswer', ${index})">✅ Answer</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('explanation', ${index})">💡 Explanation</button>
+      <button type="button" class="block-insert-btn" onclick="addBlockAt('widget', ${index})">🧩 Widget (AI)</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('image', ${index})">🖼️ Image</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('video', ${index})">🎬 Video</button>
       <button type="button" class="block-insert-btn" onclick="addBlockAt('table', ${index})">▦ Table</button>
@@ -4452,6 +4468,244 @@ function makeBlockInsertBar(index) {
       <button type="button" class="block-insert-btn" onclick="addBlockAt('pageBreak', ${index})">⤵️ Page Break</button>
     </div>`;
   return bar;
+}
+
+// =====================================================================
+// INTERACTIVE WIDGET BLOCK — an AI-built, single-window insert (interactive
+// graph, simulator, drag-and-drop model…) that appears to the student AFTER
+// they have answered the question, to help them understand the concept. Admin
+// only, and only from the question editor: the builder UI lives on the block
+// card, the student side is a sandboxed iframe appended by showExplanation.
+// The widget is ONE self-contained HTML document stored on the block
+// (block.html) — no external requests, so it works offline and can't leak.
+// =====================================================================
+const WIDGET_HTML_MAX = 300000;   // ~300 KB — a question doc must stay well under Firestore's 1 MB
+const WIDGET_EFFORTS = {
+  // 'pro' is deliberately uncapped: no output-token ceiling, maximum thinking.
+  standard: { label: 'Standard', gem: { thinkingLevel: 'minimal', maxOutputTokens: 16384 }, oa: { effort: 'low',    maxTokens: 16384 } },
+  high:     { label: 'High',     gem: { thinkingLevel: 'high',    maxOutputTokens: 32768 }, oa: { effort: 'medium', maxTokens: 32768 } },
+  pro:      { label: 'Pro — no limits', gem: { thinkingLevel: 'high' },                    oa: { effort: 'high' } },
+};
+let _widgetBusy = {};             // blockId -> true while a build is running
+
+// srcdoc attribute value: only & and " need escaping inside a quoted attribute.
+function _widgetSrcdocAttr(html) {
+  return String(html || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+function renderWidgetBlockEditor(block) {
+  const busy = !!_widgetBusy[block.id];
+  const eff = WIDGET_EFFORTS[block.effort] ? block.effort : 'high';
+  const hasKey = !!getOpenAiKey();
+  const has = !!(block.html || '').trim();
+  const engineSel = `
+    <select class="form-input" style="width:auto;min-width:130px;" ${busy ? 'disabled' : ''}
+            onchange="saveBlockField('${block.id}', 'engine', this.value)">
+      <option value="gemini" ${block.engine !== 'openai' ? 'selected' : ''}>✨ Gemini</option>
+      <option value="openai" ${block.engine === 'openai' ? 'selected' : ''} ${hasKey ? '' : 'disabled'}>🤖 ChatGPT${hasKey ? '' : ' — add key in AI Engine'}</option>
+    </select>`;
+  const effortSel = `
+    <select class="form-input" style="width:auto;min-width:150px;" ${busy ? 'disabled' : ''}
+            onchange="saveBlockField('${block.id}', 'effort', this.value)">
+      ${Object.keys(WIDGET_EFFORTS).map(k =>
+        `<option value="${k}" ${eff === k ? 'selected' : ''}>${WIDGET_EFFORTS[k].label}</option>`).join('')}
+    </select>`;
+  return `
+    <div class="block-body">
+      <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
+        🧩 Builds a <b>one-window interactive widget</b> (interactive graph, simulator, explorable model…) shown to the student
+        <b>after they answer</b> this question, to help them understand the concept. Students never see this builder.
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+        <label style="font-size:0.82rem;color:var(--text-muted);">Engine</label>${engineSel}
+        <label style="font-size:0.82rem;color:var(--text-muted);">Effort</label>${effortSel}
+      </div>
+      <textarea class="form-input" rows="3" ${busy ? 'disabled' : ''} placeholder="Additional comments for the builder — what should the widget show or let the student do? e.g. “a slider for the spring load that stretches the spring and plots extension against load”"
+                oninput="saveBlockField('${block.id}', 'comments', this.value)">${escapeHtml(block.comments || '')}</textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
+        <button type="button" class="btn btn-primary" ${busy ? 'disabled' : ''} onclick="widgetGenerate('${block.id}', this)">
+          ${busy ? '⏳ Building…' : (has ? '✨ Rebuild from scratch' : '✨ Generate widget')}
+        </button>
+        ${has ? `<button type="button" class="btn btn-outline" ${busy ? 'disabled' : ''} onclick="widgetClear('${block.id}')">🗑 Discard widget</button>` : ''}
+        <span id="widgetStatus_${block.id}" style="font-size:0.82rem;color:var(--text-muted);">${busy ? 'The AI is writing the widget — this can take a minute on Pro.' : (has ? 'Widget ready — try it below.' : '')}</span>
+      </div>
+      ${has ? `
+      <div style="margin-top:14px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+        <iframe sandbox="allow-scripts" csp="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:"
+                srcdoc="${_widgetSrcdocAttr(block.html)}"
+                style="display:block;width:100%;height:${Math.max(240, Math.min(900, Number(block.height) || 480))}px;border:0;background:#fff;"></iframe>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;">
+        <label style="font-size:0.82rem;color:var(--text-muted);">Window height</label>
+        <input class="form-input" type="number" min="240" max="900" step="20" value="${Math.max(240, Math.min(900, Number(block.height) || 480))}"
+               style="width:90px;" onchange="saveBlockNum('${block.id}', 'height', this.value, 240, 900)"> px
+      </div>
+      <div style="margin-top:12px;">
+        <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:6px;">🔁 Keep iterating — tell the builder what to change, it updates this widget in place:</div>
+        <textarea class="form-input" id="widgetIterate_${block.id}" rows="2" ${busy ? 'disabled' : ''} placeholder="e.g. “make the buttons bigger and add a reset button; the graph should start at zero”"></textarea>
+        <button type="button" class="btn btn-outline" style="margin-top:8px;" ${busy ? 'disabled' : ''} onclick="widgetIterate('${block.id}', this)">🔁 Refine widget</button>
+      </div>` : ''}
+    </div>`;
+}
+
+// The question as it stands in the editor, summarised for the builder prompt.
+function _widgetQuestionContext() {
+  const lines = [];
+  const title = (document.getElementById('questionTitle')?.value || '').trim();
+  const topic = document.getElementById('topicSelect')?.value || '';
+  if (title) lines.push('Title: ' + title);
+  if (topic) lines.push('Topic: ' + topic);
+  (blocks || []).forEach(b => {
+    if (!b) return;
+    if (b.type === 'text' || b.type === 'part') { const t = stripHtml(b.content || '').trim(); if (t) lines.push('Question: ' + _fcClip(t)); }
+    else if (b.type === 'mcq') {
+      (b.options || []).forEach((o, i) => {
+        const t = stripHtml(o.text || '').trim();
+        if (t) lines.push('Option ' + (i + 1) + (o.id === b.correctId ? ' (CORRECT)' : '') + ': ' + _fcClip(t));
+      });
+    }
+    else if (b.type === 'plainanswer' || b.type === 'answer') {
+      const t = [b.content, b.claim, b.evidence, b.reasoning].map(x => stripHtml(x || '').trim()).filter(Boolean).join(' · ');
+      if (t) lines.push('Model answer: ' + _fcClip(t));
+    }
+    else if (b.type === 'explanation') { const t = stripHtml(b.content || '').trim(); if (t) lines.push('Explanation: ' + _fcClip(t)); }
+    else if (b.type === 'fillblank') { const t = stripHtml(b.text || '').trim(); if (t) lines.push('Fill-in-the-blanks: ' + _fcClip(t)); }
+  });
+  return lines.join('\n');
+}
+
+function _widgetSpecPrompt(block) {
+  return [
+    'You are building ONE interactive HTML widget for a Singapore primary-school science app (students aged 9-12).',
+    'It is an INSERT attached to one question, shown in a small embedded window AFTER the student has answered — its job is to let them PLAY with the concept until it clicks. Think interactive graph, simulator, drag-and-drop model, cause-and-effect toy.',
+    '',
+    'HARD REQUIREMENTS:',
+    '- ONE self-contained HTML document: all CSS and JS inline. NO external requests of any kind — no CDNs, fonts, images, fetch. It runs in a sandboxed iframe with no network.',
+    '- ONE WINDOW: everything visible and usable in a single view of about 720×' + (Math.max(240, Math.min(900, Number(block.height) || 480)) - 20) + ' CSS pixels, responsive down to a 360px-wide phone. No page scrolling, no tabs pretending to be pages.',
+    '- Touch-friendly controls (big sliders/buttons, drag targets ≥ 40px), bright and kid-friendly, clear labels, a one-line instruction inside the widget itself.',
+    '- Immediately interactive — something moves or responds within the first second, no Start screens.',
+    '- Robust: no console errors, nothing depends on window size at load time.',
+    '- Never use alert(), confirm() or prompt() — the sandbox silently drops them. Show feedback inside the page.',
+    '- Do NOT repeat the question text or reveal marking — the student has already answered; this is for understanding the concept.',
+    '',
+    'THE QUESTION IT ATTACHES TO:',
+    _widgetQuestionContext() || '(no question text yet — build from the teacher\'s notes below)',
+    '',
+    (block.comments || '').trim() ? 'TEACHER\'S NOTES (follow these):\n' + block.comments.trim() : 'TEACHER\'S NOTES: none — choose the most illuminating interaction for this concept yourself.',
+  ].join('\n');
+}
+
+// One call, on the engine and at the effort the admin chose for THIS block.
+// No cross-engine fallback here (unlike askGemini): the admin picked the
+// engine on purpose, and silently swapping it would misattribute the result.
+async function _widgetAskAI(engine, effortKey, prompt) {
+  const eff = WIDGET_EFFORTS[effortKey] || WIDGET_EFFORTS.high;
+  if (engine === 'openai') {
+    const key = getOpenAiKey();
+    if (!key) throw new Error('No ChatGPT key — add one under AI Engine in the sidebar, or switch to Gemini');
+    const model = getOpenAiModel();
+    const body = { model, messages: [{ role: 'user', content: prompt }] };
+    if (eff.oa.maxTokens) body.max_completion_tokens = eff.oa.maxTokens;
+    // Reasoning models take an effort knob; older chat models 400 on it.
+    if (/^(gpt-5|o\d)/.test(model)) body.reasoning_effort = eff.oa.effort;
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { const ej = await res.json(); detail = ej && ej.error ? ej.error.message : ''; } catch (e) { /* non-JSON body */ }
+      throw new Error('ChatGPT error ' + res.status + (detail ? ': ' + detail : ''));
+    }
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content;
+    if (typeof text !== 'string' || !text.trim()) throw new Error('ChatGPT returned an empty reply');
+    return text;
+  }
+  if (!geminiModel) throw new Error('Gemini is not configured yet');
+  const generationConfig = { temperature: 0.4, thinkingConfig: { thinkingLevel: eff.gem.thinkingLevel } };
+  if (eff.gem.maxOutputTokens) generationConfig.maxOutputTokens = eff.gem.maxOutputTokens;
+  const res = await geminiModel.generateContent({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig
+  });
+  const text = (res.response.text() || '').trim();
+  if (!text) throw new Error('Gemini returned an empty reply');
+  return text;
+}
+
+// Pull the HTML document out of the reply: strip code fences, cut from the
+// first <!doctype/<html to the last </html>. A bare fragment gets wrapped so
+// a model that skipped the boilerplate still produces a working widget.
+function _widgetExtractHtml(raw) {
+  let s = String(raw || '').trim();
+  s = s.replace(/^```(?:html)?\s*/i, '').replace(/```\s*$/, '').trim();
+  const start = s.search(/<!doctype\s+html|<html[\s>]/i);
+  if (start >= 0) {
+    s = s.slice(start);
+    const end = s.toLowerCase().lastIndexOf('</html>');
+    if (end >= 0) s = s.slice(0, end + 7);
+  } else if (/<\w+[\s>]/.test(s)) {
+    s = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;">' + s + '</body></html>';
+  } else {
+    throw new Error('the reply contained no HTML');
+  }
+  if (s.length > WIDGET_HTML_MAX) throw new Error('the widget came out too large (' + Math.round(s.length / 1024) + ' KB) — ask for something simpler');
+  return s;
+}
+
+async function _widgetRun(blockId, btn, buildPrompt) {
+  if (!_isAdmin()) { showToast('Only admins can build widgets', 'error'); return; }
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || block.type !== 'widget') return;
+  if (_widgetBusy[blockId]) return;
+  _widgetBusy[blockId] = true;
+  renderBlocks();
+  try {
+    const html = _widgetExtractHtml(await _widgetAskAI(block.engine === 'openai' ? 'openai' : 'gemini',
+      block.effort, buildPrompt(block)));
+    // The build outlived the render — the admin may have deleted the block.
+    const live = blocks.find(b => b.id === blockId);
+    if (!live || live.type !== 'widget') return;
+    live.html = html;
+    showToast('🧩 Widget ready — try it in the preview, then iterate if needed', 'success');
+  } catch (e) {
+    console.warn('widget build', e);
+    showToast('Couldn\'t build the widget — ' + ((e && e.message) || 'try again'), 'error');
+  } finally {
+    delete _widgetBusy[blockId];
+    renderBlocks();
+  }
+}
+
+function widgetGenerate(blockId, btn) {
+  _widgetRun(blockId, btn, block =>
+    _widgetSpecPrompt(block) + '\n\nReply with ONLY the complete HTML document. No markdown fences, no commentary.');
+}
+
+function widgetIterate(blockId, btn) {
+  const note = (document.getElementById('widgetIterate_' + blockId)?.value || '').trim();
+  if (!note) { showToast('Tell the builder what to change first', 'info'); return; }
+  _widgetRun(blockId, btn, block => [
+    _widgetSpecPrompt(block),
+    '',
+    'THE CURRENT WIDGET (update THIS document — keep everything that works):',
+    block.html || '',
+    '',
+    'CHANGES REQUESTED:',
+    note,
+    '',
+    'Reply with ONLY the complete UPDATED HTML document. No markdown fences, no commentary.',
+  ].join('\n'));
+}
+
+function widgetClear(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || block.type !== 'widget') return;
+  if (!confirm('Discard this widget? The generated widget is deleted; the block and your comments stay.')) return;
+  block.html = '';
+  renderBlocks();
 }
 
 // =====================================================================
@@ -13117,7 +13371,8 @@ function buildOpenBody(q, containerSel, markCfg) {
         break;
       }
       case 'explanation':
-        break; // hidden
+      case 'widget':
+        break; // hidden until the student has answered (see showExplanation)
       case 'video':
         if (block.url) {
           const embedUrl = getYouTubeEmbedUrl(block.url);
@@ -16434,6 +16689,7 @@ function _wsQeBlockSummary(b) {
     case 'answerLine': return 'Answer line';
     case 'fillblank': return 'Fill in the blanks';
     case 'explanation': return 'Explanation (answer key)';
+    case 'widget': return 'Interactive widget (screen-only, not printed)';
     case 'answerKey': return 'Answer key';
     case 'commonMistake': return 'Common mistake note';
     case 'studentAnswer': return "Student's answer";
@@ -18714,6 +18970,21 @@ function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--primary);background:var(--primary-light,#e4f1ec);border-radius:10px;">
         <div style="font-weight:700;color:var(--primary);margin-bottom:6px;">✅ Model answer</div><div style="line-height:1.7;white-space:pre-wrap;">${escapeHtml(model)}</div></div>`;
   }
+  // Interactive widget(s) authored on the question: revealed only here, after
+  // the answer, in a sandboxed iframe. allow-scripts WITHOUT allow-same-origin
+  // means the widget cannot reach storage, Firebase or the parent DOM; the csp
+  // attribute additionally blocks outbound requests where the browser supports
+  // embedded enforcement (the prompt forbids them everywhere).
+  ((q && q.blocks) || []).filter(b => b && b.type === 'widget' && (b.html || '').trim()).forEach(b => {
+    cards +=
+      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-orange,#c77b28);background:var(--accent-orange-light,#f8efe2);border-radius:10px;">
+        <div style="font-weight:700;color:var(--accent-orange,#c77b28);margin-bottom:8px;">🧩 Explore it — interactive</div>
+        <div style="border-radius:8px;overflow:hidden;border:1px solid var(--border);">
+          <iframe sandbox="allow-scripts" csp="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:"
+                  srcdoc="${_widgetSrcdocAttr(b.html)}"
+                  style="display:block;width:100%;height:${Math.max(240, Math.min(900, Number(b.height) || 480))}px;border:0;background:#fff;" loading="lazy"></iframe>
+        </div></div>`;
+  });
   if (!cards) return;
   // Place the cards as a full-width stack below the action bar. Inserting them
   // after the score element would drop them inside the flex action row, where
@@ -39606,6 +39877,9 @@ window.doctorDelete = doctorDelete;
 // Worksheet-creator block types + AI image enhance (inline handlers)
 window.saveBlockField = saveBlockField;
 window.saveBlockNum = saveBlockNum;
+window.widgetGenerate = widgetGenerate;
+window.widgetIterate = widgetIterate;
+window.widgetClear = widgetClear;
 window.setPrintLines = setPrintLines;
 window.toggleWorkingAnnotate = toggleWorkingAnnotate;
 // Student Home screen actions
