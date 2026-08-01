@@ -4531,7 +4531,8 @@ function renderWidgetBlockEditor(block) {
       </div>
       ${has ? `
       <div style="margin-top:14px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
-        <iframe sandbox="allow-scripts" srcdoc="${_widgetSrcdocAttr(block.html)}"
+        <iframe sandbox="allow-scripts" csp="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:"
+                srcdoc="${_widgetSrcdocAttr(block.html)}"
                 style="display:block;width:100%;height:${Math.max(240, Math.min(900, Number(block.height) || 480))}px;border:0;background:#fff;"></iframe>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;">
@@ -4584,6 +4585,7 @@ function _widgetSpecPrompt(block) {
     '- Touch-friendly controls (big sliders/buttons, drag targets ≥ 40px), bright and kid-friendly, clear labels, a one-line instruction inside the widget itself.',
     '- Immediately interactive — something moves or responds within the first second, no Start screens.',
     '- Robust: no console errors, nothing depends on window size at load time.',
+    '- Never use alert(), confirm() or prompt() — the sandbox silently drops them. Show feedback inside the page.',
     '- Do NOT repeat the question text or reveal marking — the student has already answered; this is for understanding the concept.',
     '',
     'THE QUESTION IT ATTACHES TO:',
@@ -18969,14 +18971,17 @@ function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
         <div style="font-weight:700;color:var(--primary);margin-bottom:6px;">✅ Model answer</div><div style="line-height:1.7;white-space:pre-wrap;">${escapeHtml(model)}</div></div>`;
   }
   // Interactive widget(s) authored on the question: revealed only here, after
-  // the answer, in a sandboxed iframe (allow-scripts only — no same-origin, no
-  // network, so the generated code can touch nothing outside its window).
+  // the answer, in a sandboxed iframe. allow-scripts WITHOUT allow-same-origin
+  // means the widget cannot reach storage, Firebase or the parent DOM; the csp
+  // attribute additionally blocks outbound requests where the browser supports
+  // embedded enforcement (the prompt forbids them everywhere).
   ((q && q.blocks) || []).filter(b => b && b.type === 'widget' && (b.html || '').trim()).forEach(b => {
     cards +=
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-orange,#c77b28);background:var(--accent-orange-light,#f8efe2);border-radius:10px;">
         <div style="font-weight:700;color:var(--accent-orange,#c77b28);margin-bottom:8px;">🧩 Explore it — interactive</div>
         <div style="border-radius:8px;overflow:hidden;border:1px solid var(--border);">
-          <iframe sandbox="allow-scripts" srcdoc="${_widgetSrcdocAttr(b.html)}"
+          <iframe sandbox="allow-scripts" csp="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:"
+                  srcdoc="${_widgetSrcdocAttr(b.html)}"
                   style="display:block;width:100%;height:${Math.max(240, Math.min(900, Number(b.height) || 480))}px;border:0;background:#fff;" loading="lazy"></iframe>
         </div></div>`;
   });
