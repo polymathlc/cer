@@ -2509,6 +2509,13 @@ function bulkTagAddPick(tag) {
 
 // Write one question's tags and keep every in-memory copy in step.
 async function _bulkTagWrite(q, tags) {
+  // Tag passes hold references across awaits. The editor's save REPLACES the
+  // bank slot with a rebuilt object (and a delete removes it), so a held
+  // reference that is no longer the live object must not be written — setDoc
+  // overwrites the whole doc, and writing the stale object would resurrect the
+  // pre-edit (or deleted) question.
+  const live = (Array.isArray(questionBank) ? questionBank : []).find(x => x && x.id === q.id);
+  if (live !== q) return false;
   q.tags = tags;
   const ok = await saveQuestion(q, { quiet: true });
   return ok;
@@ -2529,10 +2536,12 @@ async function bulkTagApply(action, oneTag) {
   const keys = new Set(tags.map(t => t.toLowerCase()));
   if (action === 'remove' && !confirm('Remove ' + tags.map(t => '“' + t + '”').join(', ') + ' from every question in this set that has it?\n\nThis cannot be undone.')) return;
 
-  _bulkTagRun = { kind: 'manual', total: target.length, done: 0, tagged: 0, skipped: 0, failed: 0, stop: false };
+  // Hold a LOCAL reference: closing the dialog nulls the global mid-flight, and
+  // the loop resuming from an await must not dereference null.
+  const run = _bulkTagRun = { kind: 'manual', total: target.length, done: 0, tagged: 0, skipped: 0, failed: 0, stop: false };
   renderBulkTags();
   for (const q of target) {
-    if (_bulkTagRun.stop) break;
+    if (run.stop) break;
     const before = qTagList(q);
     let after;
     if (action === 'remove') after = before.filter(t => !keys.has(t.toLowerCase()));
@@ -2540,10 +2549,10 @@ async function bulkTagApply(action, oneTag) {
       after = before.slice();
       tags.forEach(t => { if (!after.some(x => x.toLowerCase() === t.toLowerCase())) after.push(t); });
     }
-    if (after.length === before.length && after.every((t, i) => t === before[i])) _bulkTagRun.skipped++;
-    else if (await _bulkTagWrite(q, after)) _bulkTagRun.tagged++;
-    else _bulkTagRun.failed++;
-    _bulkTagRun.done++;
+    if (after.length === before.length && after.every((t, i) => t === before[i])) run.skipped++;
+    else if (await _bulkTagWrite(q, after)) run.tagged++;
+    else run.failed++;
+    run.done++;
     renderBulkTags();
   }
   _bulkTagFinish(action === 'remove' ? 'removed from' : 'added to');
@@ -2559,25 +2568,27 @@ async function bulkTagAiRun() {
   if (!confirm('Tag ' + target.length + ' question' + (target.length === 1 ? '' : 's') + ' with AI?\n\n'
     + 'That is ' + target.length + ' AI call' + (target.length === 1 ? '' : 's') + '. Tags are ADDED, never removed, and you can stop at any point — everything done so far is kept.')) return;
 
-  _bulkTagRun = { kind: 'ai', total: target.length, done: 0, tagged: 0, skipped: 0, failed: 0, stop: false };
+  // Same LOCAL reference rule as bulkTagApply: workers resuming from an await
+  // must never dereference the nulled global after the dialog closes.
+  const run = _bulkTagRun = { kind: 'ai', total: target.length, done: 0, tagged: 0, skipped: 0, failed: 0, stop: false };
   renderBulkTags();
   let next = 0;
   const worker = async () => {
-    while (!_bulkTagRun.stop && next < target.length) {
+    while (!run.stop && next < target.length) {
       const q = target[next++];
       try {
         const add = await aiSuggestTags(q);
-        if (!add.length) _bulkTagRun.skipped++;
+        if (!add.length) run.skipped++;
         else {
           const merged = qTagList(q);
           add.forEach(t => { if (!merged.some(x => x.toLowerCase() === t.toLowerCase())) merged.push(t); });
-          if (await _bulkTagWrite(q, merged)) _bulkTagRun.tagged++; else _bulkTagRun.failed++;
+          if (await _bulkTagWrite(q, merged)) run.tagged++; else run.failed++;
         }
       } catch (e) {
         console.warn('bulk ai tag', (q && q.id), e);
-        _bulkTagRun.failed++;
+        run.failed++;
       }
-      _bulkTagRun.done++;
+      run.done++;
       renderBulkTags();
     }
   };
@@ -2618,11 +2629,18 @@ let _autoTagRanThisLoad = false;    // once per sign-in — tagged questions no 
 // The guaranteed floor: a tag from the question's own metadata. The AI prompt
 // forbids the bare topic as a tag, but as a floor it beats untagged — the
 // question still files under a label the admin recognises, and the next AI pass
-// is free to add finer ones on top.
+// is free to add finer ones on top. Each candidate is pushed through the tag
+// parser BEFORE being chosen, because a candidate can be truthy yet parse to
+// nothing (a purely numeric topic like "2025" is dropped by qTagList) — picking
+// on truthiness alone would skip the candidates behind it and break the floor.
 function _autoTagFallbackTags(q) {
-  const t = String((q && q.topic) || '').trim() || qSecondaryTopic(q) ||
-            normalizeCategoryValue(q && q.category) || 'general science';
-  return _snapTagsToBank(parseTagInput(t));
+  const candidates = [String((q && q.topic) || '').trim(), qSecondaryTopic(q),
+                      normalizeCategoryValue(q && q.category), 'general science'];
+  for (const c of candidates) {
+    const tags = _snapTagsToBank(parseTagInput(c));
+    if (tags.length) return tags;
+  }
+  return ['general science'];
 }
 
 async function _autoTagOne(q) {
@@ -2631,7 +2649,7 @@ async function _autoTagOne(q) {
   if (!add.length) add = _autoTagFallbackTags(q);
   const merged = qTagList(q);
   add.forEach(t => { if (!merged.some(x => x.toLowerCase() === t.toLowerCase())) merged.push(t); });
-  if (!merged.length) return false;
+  if (!merged.length) merged.push('general science');   // belt over the fallback's braces
   return _bulkTagWrite(q, merged);
 }
 
@@ -2644,24 +2662,32 @@ async function autoTagAllQuestions() {
     .filter(q => q && q.id != null && !qTagList(q).length &&
                  _qOwner(q.id) === (currentUser && currentUser.uid));
   if (!target.length) return;
-  _autoTagRun = { total: target.length, done: 0, tagged: 0, failed: 0 };
+  // Workers hold this LOCAL reference, not the global — nothing outside can null
+  // it out from under an in-flight await.
+  const run = _autoTagRun = { total: target.length, done: 0, tagged: 0, failed: 0 };
   showToast('🏷 Auto-tagging ' + target.length + ' untagged question' + (target.length === 1 ? '' : 's') + ' in the background…', 'info');
   let next = 0;
   const worker = async () => {
     while (next < target.length) {
       const q = target[next++];
-      if (await _autoTagOne(q)) _autoTagRun.tagged++; else _autoTagRun.failed++;
-      _autoTagRun.done++;
+      try {
+        // A manual bulk pass or the editor may have tagged — or deleted — this
+        // question since the target was captured: no AI call for those.
+        if (qTagList(q).length || questionBank.indexOf(q) === -1) { run.done++; continue; }
+        if (await _autoTagOne(q)) run.tagged++; else run.failed++;
+      } catch (e) { console.warn('auto tag worker', q && q.id, e); run.failed++; }
+      run.done++;
     }
   };
-  await Promise.all(Array.from({ length: Math.min(AUTO_TAG_WORKERS, target.length) }, worker));
-  const r = _autoTagRun;
-  _autoTagRun = null;
+  try {
+    await Promise.all(Array.from({ length: Math.min(AUTO_TAG_WORKERS, target.length) }, worker));
+  } finally {
+    _autoTagRun = null;                // never leave the guard latched
+  }
   _ainsteinTextCache.clear();          // tags feed Ai-nstein's retrieval
-  populateTagFilter();
-  renderQuestionBank();
-  showToast('🏷 Auto-tagged ' + r.tagged + ' question' + (r.tagged === 1 ? '' : 's') +
-    (r.failed ? ' · ' + r.failed + ' failed' : ''), r.failed ? 'error' : 'success');
+  renderQuestionBank();                // rebuilds the tag filter too, behind its focus guard
+  showToast('🏷 Auto-tagged ' + run.tagged + ' question' + (run.tagged === 1 ? '' : 's') +
+    (run.failed ? ' · ' + run.failed + ' failed' : ''), run.failed ? 'error' : 'success');
 }
 
 // Kick the pass off without holding up sign-in: give the page a moment to
@@ -11906,10 +11932,29 @@ async function saveQuestion(q, opts) {
     if (_inflightOps === 0) _setSaveStatus(ok ? 'saved' : 'error');
     return ok;
   };
+  // Firestore rejects nested arrays. A LOADED table block carries data as
+  // array-of-arrays and colWidths as an array (normalizeLoadedQuestion restores
+  // them for the editor), so a save from a held object — the tag passes, the
+  // usage backfill — must convert them back on the way out, exactly as
+  // collectQuestionData does for the editor. The in-memory object stays as-is.
+  let payload = q;
+  if (q && Array.isArray(q.blocks) && q.blocks.some(b => b && b.type === 'table' &&
+      (Array.isArray(b.data) || Array.isArray(b.colWidths)))) {
+    payload = JSON.parse(JSON.stringify(q));
+    payload.blocks.forEach(b => {
+      if (!b || b.type !== 'table') return;
+      if (Array.isArray(b.data)) b.data = tableDataToFirestore(b.data);
+      if (Array.isArray(b.colWidths)) {
+        const cw = {};
+        b.colWidths.forEach((w, i) => { if (w !== null && w !== undefined) cw[String(i)] = w; });
+        b.colWidths = cw;
+      }
+    });
+  }
   let attempts = 0;
   while (attempts < tries) {
     try {
-      await setDoc(_qRef(q.id), q);
+      await setDoc(_qRef(q.id), payload);
       return done(true);
     } catch (err) {
       attempts++;
