@@ -1633,7 +1633,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.237.0';
+const APP_VERSION = 'v1.238.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -5168,7 +5168,7 @@ function setPrintLines(id, value) {
   if (!block) return;
   const n = parseInt(value, 10);
   if (!isFinite(n) || n < 1) { delete block.printLines; return; }
-  block.printLines = Math.min(40, n);
+  block.printLines = Math.min(PRINT_LINES_MANUAL_MAX, n);
 }
 
 // Editor body markup for the worksheet-creator block types.
@@ -5313,6 +5313,15 @@ function renderImportedBlockEditorBody(block) {
 }
 
 // Student-facing / preview rendering for the worksheet-creator block types.
+// Row count for the two imported block types that write a raw pixel height.
+// 30 rows x 26px = 780px, which still leaves room for a stem on a 975px sheet.
+const WS_BLOCK_LINES_MAX = 30;
+function _wsBlockLines(lines, fallback) {
+  const n = Number(lines);
+  if (!isFinite(n) || n < 1) return fallback;
+  return Math.min(WS_BLOCK_LINES_MAX, Math.round(n));
+}
+
 // Used as the `default` branch of every practice/quick/topical render switch.
 function renderImportedBlockStudent(block, q) {
   switch (block.type) {
@@ -5331,11 +5340,16 @@ function renderImportedBlockStudent(block, q) {
     }
     case 'answerLine':
       return `<div style="margin:10px 0;">${block.label ? `<span style="font-weight:600;">${escapeHtml(block.label)} </span>` : ''}<input class="ws-answer-line" type="text" placeholder="________" style="border:none;border-bottom:1px solid #999;background:transparent;font-family:inherit;font-size:0.95rem;min-width:${Math.max(120, (Number(block.lineLength) || 30) * 7)}px;"></div>`;
+    // Both of these write a pixel height straight into the page, and both used
+    // to take whatever number the imported worksheet carried. `lines: 60` is a
+    // 1560px (413mm) solid box — taller than any sheet, with no print rule
+    // bounding it — so the question could not be laid out on a page at all.
+    // WS_BLOCK_LINES_MAX rows is the most a sheet can hold with a stem above.
     case 'openLines':
       return `<div class="ws-open-lines" style="margin:10px 0;">` +
-        Array.from({ length: Number(block.lines) || 4 }).map(() => `<div style="border-bottom:1px solid #d4d4d4;height:26px;"></div>`).join('') + `</div>`;
+        Array.from({ length: _wsBlockLines(block.lines, 4) }).map(() => `<div style="border-bottom:1px solid #d4d4d4;height:26px;"></div>`).join('') + `</div>`;
     case 'workingSpace':
-      return `<div class="ws-working" style="margin:10px 0;border:1px dashed #c4c4c4;border-radius:8px;height:${(Number(block.lines) || 6) * 26}px;"></div>`;
+      return `<div class="ws-working" style="margin:10px 0;border:1px dashed #c4c4c4;border-radius:8px;height:${_wsBlockLines(block.lines, 6) * 26}px;"></div>`;
     case 'fillblank':
       return _fbHasBlanks(block) ? `<div style="margin:10px 0;">${_fbReadonlyHtml(block)}</div>` : `<div class="fb-sentence" style="line-height:2;margin:10px 0;">${escapeHtml(block.text || '')}</div>`;
     case 'commonMistake': {
@@ -12012,6 +12026,12 @@ const PRINT_LINE_CHARS = 52;    // characters a P5 hand fits on one ruled line
 const PRINT_HAND_ALLOWANCE = 1.15;  // a student's wording runs longer than the model's
 const PRINT_SHORT_CHARS = 20;   // at or under this, and ≤4 words → one line
 const PRINT_LINES_MAX = 12;     // nothing sensible needs more; a cap stops a runaway box
+// The ceiling on the author's manual "Printed lines" override. It used to be
+// 40: a ruled line is 20pt, so 40 of them plus padding is 287mm — 29mm TALLER
+// than a sheet, in a box that refuses to break. The question went down the
+// tall/flow path, jumped a sheet whole and still did not fit. 24 lines is
+// 169mm, which leaves room for a stem above it and always fits one page.
+const PRINT_LINES_MANUAL_MAX = 24;
 // Plain text of a model answer, with the [[keyword]] brackets taken out — they
 // are markup for the recall game, not something the student writes.
 function _printAnswerPlain(text) {
@@ -12022,7 +12042,7 @@ function _printAnswerPlain(text) {
 // overrides the estimate outright.
 function printAnswerLines(block, text) {
   const override = parseInt(block && block.printLines, 10);
-  if (isFinite(override) && override > 0) return Math.min(40, override);
+  if (isFinite(override) && override > 0) return Math.min(PRINT_LINES_MANUAL_MAX, override);
   const plain = _printAnswerPlain(text);
   if (!plain) return PRINT_ANSWER_LINES;                 // nothing stored — give the default
   const words = plain.split(' ').filter(Boolean).length;
@@ -12131,9 +12151,32 @@ function doPrintWorksheetOpen() {
           qHtml += renderTableReadonly(block, 'print-table');
           break;
         }
-        default:
-          qHtml += renderImportedBlockStudent(block);
+        // Explicit, so it does NOT fall through to renderImportedBlockStudent,
+        // whose fillblank branch prints the answer inside every blank.
+        case 'fillblank': {
+          if (_fbHasBlanks(block)) {
+            qHtml += _fbPrintHtml(block);
+            _pushAnswerKeySection(qSections, 'Fill in the blanks', _fbAnswerKeyText(block), bPart);
+          } else {
+            qHtml += `<div class="print-text-block">${escapeHtmlKeepLines(block.text || '')}</div>`;
+          }
           break;
+        }
+        default: {
+          qHtml += renderImportedBlockStudent(block);
+          // The correct option belongs on the key. Without it an MCQ-only
+          // question produced NO sections at all, and the
+          // `sections.length === 0` guard below dropped it from the key
+          // entirely — so a mostly-MCQ paper printed a key that silently
+          // skipped most of its questions. Same shape the saved-worksheet
+          // builder uses, so the two keys read alike.
+          if (block.type === 'mcq') {
+            const mo = block.options || [];
+            const ci = mo.findIndex(o => o && o.id === block.correctId);
+            if (ci >= 0) qSections.push({ label: 'Answer', content: `<b>${ci + 1}.</b> ` + sanitizeAnswerKeyHtml(mo[ci].text || ''), part: qPartNormalize(bPart) });
+          }
+          break;
+        }
       }
     });
 
@@ -12218,13 +12261,68 @@ function _preloadImageUrls(urls, onProgress){
     uniq.forEach(u => {
       const im = new Image();
       let settled = false;
-      const one = () => { if (settled) return; settled = true; tick(); };
+      const one = () => {
+        if (im.naturalWidth && im.naturalHeight) _printImgNatural.set(u, [im.naturalWidth, im.naturalHeight]);
+        if (settled) return; settled = true; tick();
+      };
       im.onload = one; im.onerror = one;
       im.src = u;
       if (im.complete) one();                 // already cached
       setTimeout(one, 12000);                 // per-image safety cap
     });
   });
+}
+
+// ---- Reserving a picture's space before it has loaded ----------------------
+// An <img> that has not decoded yet occupies about ONE LINE (~22px, its alt
+// box), not the ~350px it really prints at. The planner measures in a throwaway
+// iframe that RE-FETCHES every picture, so on a slow link its readiness net
+// expires with the pictures still in flight and each page is measured as though
+// its diagrams were a line of text. Three questions get packed onto one sheet —
+// and the main document has those same pictures decoded already, so at print
+// time they snap to full height on a page box that is a FIXED height with
+// visible overflow. The surplus paints over the next sheet: two questions'
+// headings, stems and options superimposed, which is exactly the fault this was
+// found from.
+//
+// So remember every picture's intrinsic size wherever the app has already seen
+// it, and stamp width/height onto the copies handed to the planner. Chrome
+// derives the aspect ratio from those attributes and reserves the correct box
+// BEFORE a single byte arrives, so the measurement stops depending on the
+// network. The attributes change nothing once the picture does load — the ratio
+// they describe is the picture's own.
+const _printImgNatural = new Map();   // src → [naturalWidth, naturalHeight]
+
+function _printLearnImgDims(root) {
+  if (!root || !root.querySelectorAll) return;
+  Array.from(root.querySelectorAll('img')).forEach(im => {
+    const src = im.getAttribute('src');
+    if (src && im.naturalWidth && im.naturalHeight) _printImgNatural.set(src, [im.naturalWidth, im.naturalHeight]);
+  });
+}
+
+// Stamp what we know; return how many pictures are STILL without a reserved box
+// and still in flight. A non-zero count means the plan about to be made is
+// measuring a diagram as a line of text, and the caller must not trust it.
+// A picture that has finished and failed (complete, naturalWidth 0) is NOT
+// counted: it renders as the same small broken box in the planner and in the
+// printer, so the two agree and nothing can overflow.
+function _printStampImgDims(root) {
+  let unsized = 0;
+  if (!root || !root.querySelectorAll) return 0;
+  Array.from(root.querySelectorAll('img')).forEach(im => {
+    if (im.getAttribute('width') && im.getAttribute('height')) return;
+    const dim = _printImgNatural.get(im.getAttribute('src'));
+    if (dim) { im.setAttribute('width', String(dim[0])); im.setAttribute('height', String(dim[1])); return; }
+    if (im.naturalWidth && im.naturalHeight) {
+      _printImgNatural.set(im.getAttribute('src'), [im.naturalWidth, im.naturalHeight]);
+      im.setAttribute('width', String(im.naturalWidth));
+      im.setAttribute('height', String(im.naturalHeight));
+      return;
+    }
+    if (!im.complete) unsized++;
+  });
+  return unsized;
 }
 
 function autoscaleAndPrint(output, opts) {
@@ -12311,11 +12409,16 @@ function _printApplyPageNumbers(output) {
   Array.from(output.children).forEach(page => {
     if (!page.classList) return;
     if (page.classList.contains('print-front-page') || page.classList.contains('print-blank-sheet')) return;
-    if (page.querySelector(':scope > .print-page-number')) return;   // never stamp twice
-    const label = document.createElement('div');
-    label.className = 'print-page-number';
-    label.textContent = '– ' + n + ' –';
-    page.appendChild(label);
+    // Never stamp twice — but still ADVANCE the counter past a page that is
+    // already numbered. Returning early left `n` frozen, so every page after an
+    // already-stamped one repeated its number.
+    const already = page.querySelector(':scope > .print-page-number');
+    if (!already) {
+      const label = document.createElement('div');
+      label.className = 'print-page-number';
+      label.textContent = '– ' + n + ' –';
+      page.appendChild(label);
+    }
     let sheets = 1;
     if (page.classList.contains('print-page-tall')) sheets = _printPadTallPage(page, sheetH);
     n += sheets;
@@ -12346,7 +12449,11 @@ function _printPadTallPage(page, sheetH) {
   const z = usePlan ? 1 : (parseFloat(page.style.zoom) || 1);
   const sheet = usePlan ? PRINT_PAGE_PX : sheetH / z;
   const h = usePlan ? planned : page.getBoundingClientRect().height / z;
-  const sheets = Math.max(1, Math.ceil((h / sheet) - 0.02));   // tolerate sub-pixel overshoot
+  // Tolerate sub-pixel overshoot — but in PIXELS. The tolerance used to be 2%
+  // of a sheet, which is 19.5px: a page measuring 985px was reported as one
+  // sheet and really printed on two, and every page number after it was one too
+  // low. 3px is the rounding this is meant to absorb; 19.5px is a whole line.
+  const sheets = Math.max(1, Math.ceil((h - 3) / sheet));
   // Only pad a page that fits WITHIN one sheet. That is the case this is for:
   // a question flagged tall but short enough that its footer used to come to
   // rest wherever the question ended, halfway up the paper. A page that really
@@ -12443,9 +12550,11 @@ const PRINT_PAGE_RESERVE = 10;
 //  - solo  : taller than a page's budget but shrinks onto ONE sheet at ≥ floor
 //  - tall  : too big even shrunk → its own sheet(s), flows (never squashed)
 // solo + tall both take a page to themselves (aloneFlags).
-function _classifyPrintChunks(heights, footerH, budget) {
+// `usable` is passed in rather than recomputed: it has to be the SAME ceiling
+// _printPlanIn checks assembled pages against (which reserves the page number),
+// or a chunk is classified as shrinkable here and then found unfittable there.
+function _classifyPrintChunks(heights, footerH, budget, usable) {
   const half = Math.round(PRINT_PAGE_PX / 2);
-  const usable = PRINT_PAGE_PX - PRINT_FIT_SAFETY;
   const pairFlags = [], soloFlags = [], tallFlags = [], aloneFlags = [];
   heights.forEach((h, i) => {
     // budget already reserves the footer, so a lone chunk fits a normal page
@@ -12547,7 +12656,12 @@ function _printSeparatorHeightIn(doc, container) {
 // never overlaps.
 function _printVerifiedZoom(startZoom, measureAt, usable) {
   let z = Math.min(1, startZoom);
-  for (let i = 0; i < 14 && z >= PRINT_ZOOM_FLOOR; i++) {
+  // The step count is DERIVED from the floor, not a hard-coded 14. Fourteen
+  // steps of 0.03 from a start of 1.0 stop at 0.58 — above PRINT_ZOOM_FLOOR
+  // (0.55) — so a page that would have fitted at 0.56 ran out of attempts and
+  // was declared unfittable, sending it down the tall/flow path for nothing.
+  const steps = Math.ceil((1 - PRINT_ZOOM_FLOOR) / 0.03) + 2;
+  for (let i = 0; i < steps && z >= PRINT_ZOOM_FLOOR; i++) {
     const h = measureAt(z);
     if (h <= usable) return { zoom: z, h };
     z = +(z - 0.03).toFixed(3);
@@ -12568,14 +12682,31 @@ function _printPlanIn(doc, root, opts) {
   const numH = _printNumberHeightIn(doc, root);
   const footerOnlyH = Math.max(0, footerH - numH);
   const sepH = _printSeparatorHeightIn(doc, root);
-  const budget = PRINT_PAGE_PX - footerH - PRINT_PAGE_RESERVE;
-  const usable = PRINT_PAGE_PX - PRINT_FIT_SAFETY;
+  // The ceiling every measured page is checked against. measurePage() assembles
+  // content + footer and NOT the page number, because the number is stamped on
+  // after planning — so the number's line has to come out of the ceiling here
+  // or it is pure overflow. It used to be `PRINT_PAGE_PX - PRINT_FIT_SAFETY`,
+  // and PRINT_FIT_SAFETY (16px) is SMALLER than the number's own line
+  // (~22.7px): every page packed near the limit printed ~7px past the bottom of
+  // a box that is a fixed height with visible overflow, i.e. onto the next
+  // sheet. Reserve the number explicitly and let PRINT_FIT_SAFETY be what its
+  // name says — the cushion.
+  const usable = PRINT_PAGE_PX - numH - PRINT_FIT_SAFETY;
   // Fit-to-page scales the QUESTIONS only — the footer and page number are page
   // chrome and print at full size, on the same baseline as every other sheet.
   // So the ratio is measured against the room left once the chrome is taken
   // out, not against the whole sheet: scaling by usable/h would leave
   // content*z + footer taller than the page and push the footer off the sheet.
-  const contentSpace = usable - footerH;
+  // (`usable` already excludes the number, so only the footer row comes off
+  // here — the resulting figure is the same one this always used.)
+  const contentSpace = usable - footerOnlyH;
+  // What packChunkIndices may fill a page to, derived from the SAME ceiling the
+  // assembled page is verified against rather than from PRINT_PAGE_PX directly.
+  // It used to be `PRINT_PAGE_PX - footerH - PRINT_PAGE_RESERVE`, which is
+  // PRINT_FIT_SAFETY px more generous than the verified ceiling — so an
+  // ordinary full page was packed just over the bar and then had to be rescued
+  // by the pop-loop or a gratuitous 0.99 zoom on every print.
+  const budget = contentSpace - PRINT_PAGE_RESERVE;
   const zoomFor = (h) => contentSpace / Math.max(1, h - footerOnlyH);
   const heights = chunks.map(c => c.getBoundingClientRect().height);
 
@@ -12583,7 +12714,7 @@ function _printPlanIn(doc, root, opts) {
   const merge = (opts && opts.mergeUpIds) || null;
   const forcedFlags = chunks.map(c => !!(forced && forced.has(c.dataset.qid)));
   const mergeFlags = chunks.map(c => !!(merge && merge.has(c.dataset.qid)));
-  const cls = _classifyPrintChunks(heights, footerH, budget);
+  const cls = _classifyPrintChunks(heights, footerH, budget, usable);
   chunks.forEach((c, i) => c.classList.toggle('print-chunk-tall', cls.tallFlags[i]));
   const groups = packChunkIndices(heights, forcedFlags, mergeFlags, budget, sepH, cls.pairFlags, cls.aloneFlags);
 
@@ -12621,14 +12752,19 @@ function _printPlanIn(doc, root, opts) {
   };
 
   const pageHs = [], pageTall = [], pageZoom = [];
-  let guard = 0;
   for (let gi = 0; gi < groups.length; gi++) {
+    // PER PAGE, not per document. A single shared budget of 500 was spent by a
+    // long worksheet somewhere in the middle, after which over-full pages
+    // stopped being split and quietly fell to the zoom/tall path instead — the
+    // layout changed character halfway through the paper for no visible reason.
+    // A page can never need more pops than it has questions on it.
+    let guard = 0;
     let tall = groups[gi].some(idx => cls.tallFlags[idx]);
     let h = measurePage(groups[gi], tall);
     // Over the sheet, more than one question on it, and a shrink wouldn't be
     // invisible → push the last question to the next sheet and re-measure.
     while (!tall && h > usable && groups[gi].length > 1 &&
-           zoomFor(h) < PRINT_GENTLE_ZOOM && guard++ < 500) {
+           zoomFor(h) < PRINT_GENTLE_ZOOM && guard++ < groups[gi].length + 2) {
       const last = groups[gi][groups[gi].length - 1];
       if (mergeFlags[last]) break;              // teacher pinned it to this page
       groups[gi].pop();
@@ -12640,7 +12776,22 @@ function _printPlanIn(doc, root, opts) {
     if (!tall && h > usable) {
       const fit = _printVerifiedZoom(zoomFor(h), z => measurePage(groups[gi], false, z), usable);
       if (fit.zoom) { pageZoom[gi] = fit.zoom; h = fit.h; }
-      else { tall = true; h = measurePage(groups[gi], true); }  // too big to shrink readably — let it flow
+      else {
+        // Too big to shrink readably — let it flow across sheets. Marking the
+        // PAGE tall is not enough: .print-page-tall only opens the page box up,
+        // while every .print-question-chunk still carries `break-inside: avoid`.
+        // A chunk that cannot break on a page that is over the sheet does not
+        // flow, it overflows — straight over the next sheet. The chunks have to
+        // be released too, which is what .print-chunk-tall does, and the flag
+        // has to be recorded because that is what doScaleAndPrint reads when it
+        // rebuilds the page for the printer.
+        tall = true;
+        groups[gi].forEach(idx => {
+          cls.tallFlags[idx] = true;
+          chunks[idx].classList.add('print-chunk-tall');
+        });
+        h = measurePage(groups[gi], true);
+      }
     }
     pageTall[gi] = tall;
     pageHs[gi] = h;
@@ -12673,6 +12824,24 @@ function _printPlanIn(doc, root, opts) {
   return { groups, pageHs, pageTall, pageZoom, akPlans, frontSpans, tallFlags: cls.tallFlags, heights, footerH, sepH, numH };
 }
 
+// The webfont <link>s, rewritten so they actually apply inside a measuring
+// iframe. Both font sheets in index.html are declared `media="print"` — one
+// flips itself to `all` on load, the other (Crimson Pro, the worksheet cover
+// face) never does. A measuring iframe is a SCREEN medium, so copying those
+// tags verbatim hands the planner a document that renders in fallback metrics
+// while the printer renders in DM Sans. DM Sans is wider, so a stem measured at
+// three lines prints at four; ten text blocks a page is over a hundred pixels
+// of growth the plan never budgeted, on a page box that is a fixed height with
+// visible overflow. Forcing `media="all"` on the COPIES costs the host page
+// nothing — it is a string, not the live element.
+function _printFontLinksHtml() {
+  return Array.from(document.querySelectorAll('link[rel="stylesheet"],link[rel="preconnect"]')).map(l => {
+    const c = l.cloneNode(false);
+    if (c.rel === 'stylesheet') { c.media = 'all'; c.removeAttribute('onload'); }
+    return c.outerHTML;
+  }).join('');
+}
+
 // Renders the print HTML in a hidden same-origin iframe with the app's
 // @media print rules unwrapped (the same technique as the worksheet live
 // preview), so every page is planned at the size it will REALLY print at —
@@ -12697,13 +12866,27 @@ function _printPlanPages(html, opts, cb) {
     document.body.appendChild(fr);
     const doc = fr.contentDocument || (fr.contentWindow && fr.contentWindow.document);
     if (!doc) { finish(null); return; }
-    const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"],link[rel="preconnect"]')).map(l => l.outerHTML).join('');
+    const fontLinks = _printFontLinksHtml();
     doc.open();
     doc.write('<!DOCTYPE html><html><head><meta charset="utf-8">' + fontLinks +
       '<style>' + _wsAppCssForPreview() + ' html,body{margin:0;} #pmMeasure{position:absolute;left:0;top:0;width:178mm;}</style></head>' +
       '<body><div id="printOutput"><div id="pmMeasure" class="print-question-page pm-fit">' + html + '</div></div></body></html>');
     doc.close();
+    // Give every picture its box before the planner ever looks at the page, so
+    // a slow or missing fetch inside this iframe cannot make a diagram measure
+    // as one line of text.
+    _printStampImgDims(doc);
     _wsPreviewWhenReady(doc, () => {
+      // Second pass: some pictures will have decoded during the wait, which
+      // teaches us sizes we did not have. Whatever is STILL in flight after it
+      // has no reserved space, and a plan measured around it would pack pages
+      // that overflow. Refuse to guess — the flow fallback is denser than a
+      // planned layout but it can never paint one question over another.
+      if (_printStampImgDims(doc) > 0) {
+        console.warn('print plan: pictures still loading, using flow fallback');
+        finish(null);
+        return;
+      }
       try { finish(_printPlanIn(doc, doc.getElementById('pmMeasure'), opts)); }
       catch (e) { console.warn('print plan', e); finish(null); }
     });
@@ -12803,6 +12986,13 @@ function doScaleAndPrint(output, opts) {
   output.style.cssText = 'display:block;position:absolute;left:-9999px;top:0;width:178mm;';
 
   requestAnimationFrame(() => {
+    // The pictures here are already decoded (autoscaleAndPrint waited for them),
+    // so this is where their intrinsic sizes are cheapest to learn — and
+    // stamping them onto the live nodes puts the width/height into the HTML
+    // string handed to the planner, which is what stops it measuring a diagram
+    // as a line of text inside its own iframe.
+    _printLearnImgDims(output);
+    _printStampImgDims(output);
     const chunks = Array.from(output.querySelectorAll('.print-question-chunk'));
     const answerKeys = Array.from(output.querySelectorAll('.print-answer-key-page'));
     // Front matter (cover / cheat sheet) — kept aside and re-inserted FIRST,
@@ -14796,6 +14986,28 @@ function _fbParse(text) {
 }
 function _fbHasBlanks(block) { return !!(block && block.type === 'fillblank' && /\[\[[\s\S]+?\]\]/.test(block.text || '')); }
 
+// ---- fill-in-the-blank on PAPER --------------------------------------------
+// The print builders used to fall through to renderImportedBlockStudent, whose
+// `fillblank` case is _fbReadonlyHtml — a REVIEW rendering that prints each
+// answer inside its slot. So every fill-in-the-blank question came off the
+// printer with the answers already filled in, which makes the worksheet
+// useless. On paper a blank has to be blank; the answers belong on the key.
+function _fbPrintHtml(block) {
+  const parts = _fbParse(block.text || '');
+  if (!parts.length) return '';
+  // The rule width follows the answer's length, so a one-word blank does not
+  // get the same run of paper as a six-word one.
+  const body = parts.map(p => p.type === 'blank'
+    ? `<span class="print-blank" style="min-width:${Math.max(70, Math.min(240, (p.answer || '').length * 7 + 40))}pt;">&nbsp;</span>`
+    : escapeHtml(p.text)).join('');
+  return `<div class="print-text-block" style="line-height:2.4;">${body}</div>`;
+}
+function _fbAnswerKeyText(block) {
+  const answers = _fbParse(block.text || '').filter(p => p.type === 'blank').map(p => p.answer || '');
+  if (!answers.length) return '';
+  return answers.map((a, i) => `${i + 1}. ${a}`).join('   ');
+}
+
 // ---- editor: clickable word chips + live student preview ----
 function _fbChipsHtml(id, text) {
   const toks = _fbSplitTokens(text);
@@ -16663,6 +16875,19 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             if (akExtras && stripHtml(block.content)) qSections.push({ label: 'Explanation', content: sanitizeAnswerKeyHtml(block.content) });
             break;
           }
+          // Explicit, so it does NOT fall through to
+          // renderImportedBlockStudent, whose fillblank branch prints the
+          // answer inside every blank — the worksheet came off the printer
+          // already filled in.
+          case 'fillblank': {
+            if (_fbHasBlanks(block)) {
+              qHtml += _fbPrintHtml(block);
+              _pushAnswerKeySection(qSections, 'Fill in the blanks', _fbAnswerKeyText(block), bPart);
+            } else {
+              qHtml += `<div class="print-text-block">${escapeHtmlKeepLines(block.text || '')}</div>`;
+            }
+            break;
+          }
           default: {
             qHtml += renderImportedBlockStudent(block);
             if (akExtras && block.type === 'mcq') {
@@ -17343,7 +17568,7 @@ async function renderWsPreview() {
   const title = ctx.title;
   const frontHtml = ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields) : '';
   const html = buildWorksheetHtml(selected, title, { frontHtml, plainNumbers: true, noStudentFields: ctx.noFields });   // exactly what will print
-  const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"],link[rel="preconnect"]')).map(l => l.outerHTML).join('');
+  const fontLinks = _printFontLinksHtml();
   const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
   if (!doc) return;
   doc.open();
@@ -17351,7 +17576,12 @@ async function renderWsPreview() {
     '<style>' + _wsAppCssForPreview() + WS_PREVIEW_CSS + '</style></head><body>' +
     '<div id="printOutput"><div id="wsMeasure" class="print-question-page pm-fit">' + html + '</div><div id="wsPages"></div></div></body></html>');
   doc.close();
-  _wsPreviewWhenReady(doc, () => _wsPreviewPack(doc));
+  // Same picture-space reservation the printer uses. The preview runs the SAME
+  // planner, so without it the teacher is shown a pagination that the printed
+  // sheet will not reproduce — and the whole point of the preview is that the
+  // two agree.
+  _printStampImgDims(doc);
+  _wsPreviewWhenReady(doc, () => { _printStampImgDims(doc); _wsPreviewPack(doc); });
 }
 
 function _wsPreviewWhenReady(doc, cb) {
