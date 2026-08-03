@@ -1633,7 +1633,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.236.2';
+const APP_VERSION = 'v1.237.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -4356,6 +4356,7 @@ function renderBlocks() {
               <input class="form-input" type="text" style="max-width:200px;padding:6px 10px;font-size:0.82rem;" placeholder="e.g. Diagram 2" value="${escapeHtml(block.dgnLabel || '')}" oninput="saveBlockContent('${block.id}', 'dgnLabel', this.value)">
               <span style="font-size:0.74rem;color:var(--text-muted);">shown on the image in practice; “Diagram 2” in the question text becomes a link that jumps to it</span>
             </div>
+            ${annotAnswerEditorHtml(block)}
           </div>
         `;
         break;
@@ -5261,7 +5262,8 @@ function renderImportedBlockEditorBody(block) {
                       placeholder="Describe what a correct annotation / working should show, e.g. an arrow from the battery's positive terminal through the bulb, labelled 'current'."
                       oninput="saveBlockField('${id}','answerKey',this.value)">${escapeHtml(block.answerKey || '')}</textarea>
             <div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;line-height:1.5;">The AI marks the student's drawing &amp; labels against this key. If left empty it falls back to the question's marking guide / model answer.</div>
-          </div>` : ''}
+          </div>
+          ${annotAnswerEditorHtml(block)}` : ''}
         </div>`;
     case 'commonMistake': {
       const colorOpts = Object.keys(COMMON_MISTAKE_COLORS).map(c =>
@@ -5555,6 +5557,150 @@ function _setAnswerKeyFields(note, img) {
   const s = document.getElementById('answerKeyImageStatus'); if (s) s.textContent = '';
   _renderAnswerKeyPreview();
 }
+// =====================================================================
+// 🔑 ANSWER SCREENSHOT FOR AN ANNOTATION PART
+//
+// An annotation question asks a student to draw and label ON a diagram. The
+// answer to that is itself a picture — a copy of the diagram with the correct
+// arrows and labels on it — and describing it in words was the only thing on
+// offer. Paste the marked-up screenshot straight onto the block instead: it is
+// shown to the student as the model answer for THAT pad, printed on the answer
+// key beside that part, and handed to the AI as the reference it marks against.
+//
+// `block.answerImg` is the picture; `block.answerKey` is the words (which the
+// working-space block already had). Either alone is enough — one button reads
+// the picture and writes the words, so uploading is usually all it takes.
+// =====================================================================
+function annotAnswerEditorHtml(block) {
+  const isImg = block.type === 'image';
+  // Only annotation surfaces: an image the students draw on, or a working pad.
+  if (isImg && block.annotate === false) return '';
+  if (isImg && !block.url) return '';
+  const id = block.id;
+  const cur = String(block.answerImg || '').trim();
+  return `
+    <div class="annot-ans" id="annotAns_${id}">
+      <div class="annot-ans-h">🔑 Answer screenshot <span>— the diagram with the correct annotations on it. Hidden from students until they answer.</span></div>
+      <div class="annot-ans-drop" id="annotAnsDrop_${id}" tabindex="0"
+           title="Click here then paste (Ctrl/⌘+V), or drop a picture"
+           onclick="annotAnsFocus('${id}')" onpaste="annotAnsPaste(event,'${id}')"
+           ondragover="event.preventDefault();this.classList.add('over')"
+           ondragleave="this.classList.remove('over')"
+           ondrop="annotAnsDrop(event,'${id}')">
+        📋 Click here, then paste the marked-up screenshot (Ctrl/⌘+V) — or drop an image
+      </div>
+      <div class="annot-ans-body" style="${cur ? '' : 'display:none;'}" id="annotAnsBody_${id}">
+        <img id="annotAnsImg_${id}" alt="answer key picture" ${cur ? `src="${escapeHtml(transformImageUrl(cur))}"` : ''}>
+        <div class="annot-ans-tools">
+          <button type="button" class="btn btn-outline" onclick="annotAnsWriteKey('${id}')"
+            title="Read the picture and write the answer key for this part from it">✨ Write the answer key from this picture</button>
+          <button type="button" class="btn btn-ghost" onclick="annotAnsClear('${id}')">× Remove</button>
+        </div>
+      </div>
+      ${isImg ? `
+      <div style="margin-top:10px;">
+        <label style="font-size:0.8rem;font-weight:600;display:block;margin-bottom:5px;">Answer key in words <span style="font-weight:400;color:var(--text-muted);">(what a correct annotation must show)</span></label>
+        <textarea class="form-input" rows="2" style="width:100%;box-sizing:border-box;font-size:0.88rem;line-height:1.55;resize:vertical;"
+                  placeholder="e.g. an arrow from the battery's positive terminal through the bulb, labelled 'current'"
+                  oninput="saveBlockField('${id}','answerKey',this.value)">${escapeHtml(block.answerKey || '')}</textarea>
+      </div>` : ''}
+      <div class="annot-ans-status" id="annotAnsStatus_${id}"></div>
+    </div>`;
+}
+function annotAnsFocus(id) { const d = document.getElementById('annotAnsDrop_' + id); if (d) d.focus(); }
+function _annotAnsStatus(id, msg) { const s = document.getElementById('annotAnsStatus_' + id); if (s) s.textContent = msg || ''; }
+function _annotAnsBlock(id) { return (blocks || []).find(b => b.id === id); }
+async function _annotAnsStore(id, dataUrl) {
+  const b = _annotAnsBlock(id);
+  if (!b) return;
+  _annotAnsStatus(id, '⏳ Uploading…');
+  try {
+    const url = await uploadImageDataUrl(dataUrl);
+    b.answerImg = url;
+    const img = document.getElementById('annotAnsImg_' + id);
+    const body = document.getElementById('annotAnsBody_' + id);
+    if (img) img.src = transformImageUrl(url);
+    if (body) body.style.display = '';
+    _annotAnsStatus(id, 'Saved ✓ — this is the model answer for this part');
+  } catch (e) {
+    console.error('answer screenshot upload', e);
+    _annotAnsStatus(id, 'Upload failed — try again');
+    showToast('Could not upload that picture: ' + (e && e.message ? e.message : e), 'error');
+  }
+}
+function annotAnsPaste(ev, id) {
+  const items = (ev.clipboardData && ev.clipboardData.items) || [];
+  for (const it of items) {
+    if (it.type && it.type.indexOf('image') === 0) {
+      ev.preventDefault();
+      const f = it.getAsFile();
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => _annotAnsStore(id, r.result);
+      r.readAsDataURL(f);
+      return;
+    }
+  }
+}
+function annotAnsDrop(ev, id) {
+  ev.preventDefault();
+  const d = document.getElementById('annotAnsDrop_' + id); if (d) d.classList.remove('over');
+  const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+  if (!f || f.type.indexOf('image') !== 0) return;
+  const r = new FileReader();
+  r.onload = () => _annotAnsStore(id, r.result);
+  r.readAsDataURL(f);
+}
+function annotAnsClear(id) {
+  const b = _annotAnsBlock(id); if (!b) return;
+  b.answerImg = '';
+  const body = document.getElementById('annotAnsBody_' + id);
+  if (body) body.style.display = 'none';
+  _annotAnsStatus(id, '');
+}
+// Read the marked-up screenshot and write the answer key for this part from it.
+// The question's own text goes in as context so the model describes THIS
+// annotation rather than narrating the picture in general.
+async function annotAnsWriteKey(id) {
+  const b = _annotAnsBlock(id);
+  if (!b || !String(b.answerImg || '').trim()) return;
+  if (!_canAuthor()) return;
+  _annotAnsStatus(id, '✨ Reading the picture…');
+  try {
+    const media = await _annotImgToMedia(b.answerImg);
+    if (!media) throw new Error('Could not read that picture');
+    const ctx = (blocks || []).filter(x => x.type === 'text')
+      .map(x => stripHtml(x.content || '')).join(' ').replace(/\s+/g, ' ').trim().slice(0, 600);
+    const prompt =
+      'You are a Singapore primary-school (PSLE) science teacher writing the ANSWER KEY for an annotation question — '
+      + 'one where the student draws and labels on a diagram.\n'
+      + (ctx ? 'The question says: "' + ctx + '"\n' : '')
+      + 'The attached picture is the diagram WITH the correct annotations already on it. '
+      + 'Describe exactly what a student must draw and label to earn the marks: name each arrow, line, shading or label and say where it goes. '
+      + 'Be specific about position and direction, because a marker will compare a student\'s drawing against your words. '
+      + '2–4 sentences, plain English for a P3–P6 marker. Return ONLY the answer key text, no preamble.';
+    const out = await askGeminiVision(prompt, [media], { maxOutputTokens: 400 });
+    const text = String(out || '').trim();
+    if (!text) throw new Error('The AI had nothing to say about that picture');
+    b.answerKey = text;
+    renderBlocks();
+    showToast('🔑 Answer key written from the picture — check it and edit if needed', 'success');
+  } catch (e) {
+    console.warn('annot answer key', e);
+    _annotAnsStatus(id, 'Could not write the key — ' + (e && e.message ? e.message : 'try again'));
+  }
+}
+// A stored picture as inlineData for the vision call.
+async function _annotImgToMedia(url) {
+  try {
+    const res = await fetch(transformImageUrl(url));
+    const blob = await res.blob();
+    const dataUrl = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
+    const comma = String(dataUrl).indexOf(',');
+    return { mimeType: blob.type || 'image/png', data: String(dataUrl).slice(comma + 1) };
+  } catch (e) { console.warn('answer image fetch', e); return null; }
+}
+
 async function onAnswerKeyImagePick(input) {
   const file = input.files && input.files[0]; if (!file) return;
   const status = document.getElementById('answerKeyImageStatus');
@@ -11795,6 +11941,25 @@ function clearAllParts() {
   showToast('Cleared ' + n + ' part label' + (n === 1 ? '' : 's'), 'success');
 }
 
+// An annotation pad's own answer — the marked-up screenshot and/or the words —
+// pushed onto the printed answer key for the part it belongs to. Annotation
+// questions have no answer block, so without this their key page was blank
+// however carefully the pad had been keyed.
+function _pushAnnotAnswerKey(sections, block, part) {
+  if (!block) return;
+  const isPad = block.type === 'workingSpace' ? !!block.annotate : (block.type === 'image' && block.annotate !== false);
+  if (!isPad) return;
+  const words = stripHtml(block.answerKey || '').trim();
+  const img = String(block.answerImg || '').trim();
+  if (!words && !img) return;
+  const name = String(block.dgnLabel || '').trim();
+  sections.push({
+    label: name ? 'Annotation — ' + name : 'Annotation',
+    part: qPartNormalize(part),
+    content: (img ? `<div><img src="${escapeHtml(transformImageUrl(img))}" alt="answer key" style="max-width:100%;max-height:150pt;"></div>` : '')
+      + (words ? `<div>${escapeHtml(words)}</div>` : '')
+  });
+}
 function _pushAnswerKeySection(sections, label, content, part) {
   const html = sanitizeAnswerKeyHtml(content);
   if (!stripHtml(html)) return;
@@ -11903,6 +12068,11 @@ function doPrintWorksheetOpen() {
 
     q.blocks.forEach(block => {
       const bPart = qPartOf(qParts, block);
+      // Annotation pads (an image students draw on, a working area) carry their
+      // own answer. Done here rather than per-case because the pad types are
+      // spread across `image`, `workingSpace` and the `default` branch; the
+      // helper filters to real pads that actually have an answer.
+      _pushAnnotAnswerKey(qSections, block, bPart);
       switch (block.type) {
         case 'text': {
           // Text blocks are shown normally (questions / instructions),
@@ -14080,7 +14250,7 @@ function annotationPadHtml(block, q, containerSel) {
       </div>
       <div class="dgn-actions" style="margin-top:10px;">
         <button type="button" class="btn btn-check" data-dgn-aicheck="${containerSel}" data-dgn-pid="${pid}" style="padding:7px 14px;font-size:0.83rem;" title="Check your annotations on this diagram — the AI marks them and tells you how you did">✓ Check answer${label ? ' — ' + escapeHtml(label) : ''}</button>
-        <button type="button" class="btn btn-outline" data-dgn-check="${containerSel}" style="padding:7px 14px;font-size:0.83rem;" title="Show the model answer without marking your work">👁 Show model answer</button>
+        <button type="button" class="btn btn-outline" data-dgn-check="${containerSel}" data-dgn-pid="${pid}" style="padding:7px 14px;font-size:0.83rem;" title="Show the model answer without marking your work">👁 Show model answer</button>
       </div>
       <div class="dgn-feedback" data-dgn-fb-pad="${pid}" style="margin-top:6px;"></div>
     </div>`;
@@ -14419,10 +14589,28 @@ function _annotJumpToDiagram(containerSel, name) {
 }
 
 // "Check answer" — reveal the authored model answer / marking guide (self-mark).
-function annotShowAnswer(containerSel) {
+function annotShowAnswer(containerSel, pid) {
   const q = _openQStore[containerSel];
   const cfg = _openSurfaceCfg[containerSel] || {};
   if (!q) return;
+  // A pad that has its own answer — the marked-up screenshot, or the words —
+  // shows THAT, right under the pad it belongs to. Falling back to the whole
+  // question's model answer told a student about parts they hadn't reached.
+  const padEl = pid ? document.getElementById(pid) : null;
+  const padBlockId = padEl && padEl.getAttribute('data-dgn-block');
+  const padBlock = padBlockId ? ((q.blocks || []).find(b => b && String(b.id) === padBlockId)) : null;
+  if (padBlock && (String(padBlock.answerImg || '').trim() || stripHtml(padBlock.answerKey || '').trim())) {
+    const fbPad = document.querySelector(containerSel + ' [data-dgn-fb-pad="' + pid + '"]');
+    if (fbPad) {
+      const words = stripHtml(padBlock.answerKey || '').trim();
+      fbPad.innerHTML = `<div class="dgn-model">`
+        + `<div class="dgn-model-h">✅ Model answer${padEl && padEl.getAttribute('data-dgn-name') ? ' — ' + escapeHtml(padEl.getAttribute('data-dgn-name')) : ''}</div>`
+        + (padBlock.answerImg ? `<img src="${escapeHtml(transformImageUrl(padBlock.answerImg))}" onerror="handleImgError(this)" alt="model answer">` : '')
+        + (words ? `<div class="dgn-model-t">${escapeHtml(words)}</div>` : '')
+        + `</div>`;
+      return;
+    }
+  }
   const model = (q.markingGuide || '').trim() || _deriveModelAnswer(q);
   const hasExp = ((q.blocks) || []).some(b => b.type === 'explanation' && stripHtml(b.content || '').trim());
   showExplanation(containerSel, q, '', cfg.scoreElId, model);
@@ -14458,7 +14646,10 @@ async function annotAiCheck(containerSel, pid, btn) {
   const padBlockId = padEl && padEl.getAttribute('data-dgn-block');
   const padBlock = padBlockId ? ((q.blocks || []).find(b => b && String(b.id) === padBlockId)) : null;
   const isWorkingPad = !!(padBlock && padBlock.type === 'workingSpace');
-  const wsKey = isWorkingPad ? stripHtml(padBlock.answerKey || '').replace(/\s+/g, ' ').trim() : '';
+  // Both pad kinds can now carry their own answer key — the words and, more
+  // usefully for a drawing, a SCREENSHOT of the correctly annotated diagram.
+  const padKey = padBlock ? stripHtml(padBlock.answerKey || '').replace(/\s+/g, ' ').trim() : '';
+  const padAnsImg = padBlock ? String(padBlock.answerImg || '').trim() : '';
   const fb = c.querySelector('[data-dgn-fb-pad="' + pid + '"]') || c.querySelector('.dgn-feedback');
   const scoreEl = cfg.scoreElId ? document.getElementById(cfg.scoreElId) : null;
   const orig = btn ? btn.innerHTML : '';
@@ -14468,6 +14659,14 @@ async function annotAiCheck(containerSel, pid, btn) {
     const d = await _annotExportBase64(pid);
     if (!d) throw new Error('could not read the annotated diagram (the image may block copying)');
     const media = [{ mimeType: 'image/jpeg', data: d }];
+    // The marked-up answer screenshot goes in as a SECOND picture. Comparing
+    // two diagrams is a far more reliable way to mark a drawing than comparing
+    // a drawing against a sentence describing one.
+    let hasAnsImg = false;
+    if (padAnsImg) {
+      const am = await _annotImgToMedia(padAnsImg);
+      if (am) { media.push(am); hasAnsImg = true; }
+    }
     const ctx = _questionContext(q);
     const guide = (q.markingGuide || '').trim();
     const model = _deriveModelAnswer(q);
@@ -14479,12 +14678,16 @@ async function annotAiCheck(containerSel, pid, btn) {
       : `You are a science teacher marking a "ticking and labelling" annotation question. ` +
         `The student was shown a diagram and annotated it DIRECTLY — drawing ticks, crosses, circles or lines with a pen and/or typing text labels onto it. ` +
         `The attached image is the diagram WITH the student's annotations drawn on top. Look carefully at where the ticks/circles/lines point and read any typed labels, then decide whether each is in the right place / correct. `;
-    const expected = isWorkingPad && wsKey
-      ? `ANSWER KEY for this working area — mark the student's work against it: "${wsKey.slice(0, 700)}". `
+    const expected = padKey
+      ? `ANSWER KEY for this ${isWorkingPad ? 'working area' : 'diagram'} — mark the student's work against it: "${padKey.slice(0, 700)}". `
       : (model ? `Expected correct answer: "${model.replace(/\s+/g, ' ').slice(0, 700)}". ` : '');
+    const twoPics = hasAnsImg
+      ? `TWO pictures are attached. The FIRST is the student's work. The SECOND is the CORRECT answer — the same ${isWorkingPad ? 'area' : 'diagram'} with the correct annotations already on it. Compare the first against the second and mark what the student drew and labelled. `
+      : '';
     const prompt =
       intro +
-      (multi ? `This question has ${allPids.length} annotated areas and you are marking ONLY the attached one${padName ? ` (called "${padName}")` : ''} — award marks only for what THIS one asks for. ` : '') +
+      twoPics +
+      (multi ? `This question has ${allPids.length} annotated areas and you are marking ONLY the ${hasAnsImg ? 'FIRST attached' : 'attached'} one${padName ? ` (called "${padName}")` : ''} — award marks only for what THIS one asks for. ` : '') +
       `${_markingPreamble(guide, q && q.topic)}\n` +
       `Question context: "${ctx}". ` +
       expected +
@@ -14568,7 +14771,7 @@ document.addEventListener('click', function (e) {
   const cl = e.target.closest && e.target.closest('[data-dgn-clear]');
   if (cl) { e.preventDefault(); _annotClear(cl.getAttribute('data-dgn-clear')); return; }
   const chk = e.target.closest && e.target.closest('[data-dgn-check]');
-  if (chk) { e.preventDefault(); annotShowAnswer(chk.getAttribute('data-dgn-check')); return; }
+  if (chk) { e.preventDefault(); annotShowAnswer(chk.getAttribute('data-dgn-check'), chk.getAttribute('data-dgn-pid')); return; }
   const aichk = e.target.closest && e.target.closest('[data-dgn-aicheck]');
   if (aichk) { e.preventDefault(); annotAiCheck(aichk.getAttribute('data-dgn-aicheck'), aichk.getAttribute('data-dgn-pid'), aichk); return; }
   const jump = e.target.closest && e.target.closest('[data-dgn-jump]');
@@ -16423,6 +16626,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
       const qParts = qPartMap(q.blocks);
       q.blocks.forEach(block => {
         const bPart = qPartOf(qParts, block);
+        _pushAnnotAnswerKey(qSections, block, bPart);
         switch (block.type) {
           case 'text': {
             const textHtml = escapeHtmlKeepLines(block.content);
@@ -41379,6 +41583,11 @@ window.autoNumberParts = autoNumberParts;
 window.clearAllParts = clearAllParts;
 window.qPartScanBank = qPartScanBank;
 window.qPartAutoConvertInBackground = qPartAutoConvertInBackground;
+window.annotAnsFocus = annotAnsFocus;
+window.annotAnsPaste = annotAnsPaste;
+window.annotAnsDrop = annotAnsDrop;
+window.annotAnsClear = annotAnsClear;
+window.annotAnsWriteKey = annotAnsWriteKey;
 window.qPartApplyScan = qPartApplyScan;
 window.onLegendsObjPaste = onLegendsObjPaste;
 window.onLegendsObjDrop = onLegendsObjDrop;
