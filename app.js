@@ -1579,7 +1579,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.229.0';
+const APP_VERSION = 'v1.230.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -19433,6 +19433,29 @@ async function loadUsageDashboard() {
       if (at && (!studentStats[a.uid].lastAttempt || at > studentStats[a.uid].lastAttempt)) studentStats[a.uid].lastAttempt = at;
     });
 
+    // How each student ANSWERS, for the audit view: attempts that landed less
+    // than RAPID_ATTEMPT_MS after the previous one, and attempts a game clocked
+    // at under AUDIT_FAST_MS. Both are "went too fast to have read it" signals.
+    const byUid = {};
+    allAttempts.forEach(a => { (byUid[a.uid] = byUid[a.uid] || []).push(a); });
+    Object.keys(byUid).forEach(uid => {
+      const list = byUid[uid].slice().sort((x, y) => attemptTime(x) - attemptTime(y));
+      let prev = null, rapid = 0, fast = 0, modes = {};
+      list.forEach(a => {
+        const t = attemptTime(a);
+        if (prev != null && t - prev < RAPID_ATTEMPT_MS) rapid++;
+        prev = t;
+        const ms = Number(a.ms) || 0;
+        if (ms > 0 && ms < AUDIT_FAST_MS) fast++;
+        const m = a.mode || 'practice';
+        modes[m] = (modes[m] || 0) + 1;
+      });
+      if (!studentStats[uid]) return;
+      studentStats[uid].rapidAttempts = rapid;
+      studentStats[uid].fastAttempts = fast;
+      studentStats[uid].modes = modes;
+    });
+
     // Cache so the per-student drill-in (showStudentDetail) can read name/email.
     _usageStudentStats = studentStats;
 
@@ -19525,6 +19548,7 @@ async function loadUsageDashboard() {
     try { _usageBoardRows = await rpgFetchLeaderboard(true); } catch (e) { console.warn('prize board load', e); _usageBoardRows = null; }
     renderPrizeClaims();
     renderPracticeReminders();
+    try { await renderActivityAudit(); } catch (e) { console.warn('activity audit', e); }
 
     usageDashboardLoaded = true;
     showToast('Usage data loaded', 'success');
@@ -19551,6 +19575,206 @@ async function setStudentLevel(uid, level) {
     console.error('setStudentLevel failed', e);
     showToast('Could not save the level — check your connection', 'error');
   }
+}
+
+// =====================================================================
+// 🕵️ ACTIVITY & POINTS — what each student DID next to what they GOT
+//
+// The two halves of a student's record live in different places: what they
+// did (logins, question attempts, how fast they answered) is in the shared
+// `loginEvents` / `questionAttempts` collections, while what they got (the
+// points wallet, XP, duel record, packs opened, board standings) lives in
+// their own hero doc, which a teacher cannot read. `rpgPublishLeaderboard`
+// therefore copies the second half into an `audit` field on the row it
+// already publishes, and this joins the two.
+//
+// The flags below are prompts to LOOK, not verdicts — every one of them has
+// an innocent explanation, so the raw numbers sit next to the flag.
+// =====================================================================
+const AUDIT_FAST_MS = 4000;   // a game-clocked answer this quick wasn't read
+const AUDIT_FLAGS = [
+  { id: 'duel', icon: '👻', label: 'Duel farming',
+    hint: '20+ arena duels won. Duels cost no game credit and paid points until v1.229.0, so a big count is the signature of the farm.',
+    test: r => r.duelWins >= 20 },
+  { id: 'rapid', icon: '⚡', label: 'Rapid answers',
+    hint: 'A quarter or more of their attempts arrived less than 15s after the previous one.',
+    test: r => r.attempts >= 20 && (r.rapid / r.attempts) >= 0.25 },
+  { id: 'fast', icon: '⏱️', label: 'Answered too fast',
+    hint: 'A quarter or more of their game answers were clocked under ' + (AUDIT_FAST_MS / 1000) + 's — faster than the question can be read.',
+    test: r => r.attempts >= 20 && (r.fast / r.attempts) >= 0.25 },
+  { id: 'rich', icon: '🪙', label: 'Points ≫ practice',
+    hint: 'More than 100 points earned for every question marked. Answering pays roughly 8–40, so a much higher ratio means the points came from somewhere else.',
+    test: r => r.earned >= 3000 && (r.earned / Math.max(1, r.marked)) > 100 },
+  { id: 'power', icon: '🔥', label: 'Power without practice',
+    hint: 'A large Realm of Embers team built on very little question practice.',
+    test: r => r.power >= 5000 && r.marked < 50 }
+];
+let _auditSort = 'flags';
+let _auditRows = [];
+function setAuditSort(k) { _auditSort = k || 'flags'; renderActivityAudit(); }
+
+// Join the dashboard's per-student activity with the published game row.
+function _buildAuditRows(boardRows, bans) {
+  const board = {};
+  (boardRows || []).forEach(r => { if (r && r.uid) board[r.uid] = r; });
+  const uids = new Set(Object.keys(_usageStudentStats || {}));
+  Object.keys(board).forEach(u => uids.add(u));   // published but never seen in userProfiles
+  return Array.from(uids).map(uid => {
+    const s = (_usageStudentStats && _usageStudentStats[uid]) || {};
+    const b = board[uid] || {};
+    const a = b.audit || {};
+    const row = {
+      uid,
+      name: s.name || b.name || 'Unknown',
+      email: s.email || '',
+      banned: bans.has(uid),
+      // activity
+      logins: s.loginCount | 0,
+      attempts: s.questionsAttempted | 0,
+      rapid: s.rapidAttempts | 0,
+      fast: s.fastAttempts | 0,
+      accuracy: s.totalBlanks > 0 ? Math.round((s.totalScore / s.totalBlanks) * 100) : null,
+      lastActive: s.lastAttempt || s.lastLogin || null,
+      // points & progression
+      points: a.gold | 0,
+      earned: a.goldEarned | 0,
+      marked: a.marked | 0,
+      level: b.level | 0,
+      xp: b.xp | 0,
+      monthQ: b.monthQ | 0,
+      duelWins: (a.arenaWins != null ? a.arenaWins : b.arenaWins) | 0,
+      duelLosses: a.arenaLosses | 0,
+      packs: a.packsOpened | 0,
+      advRuns: a.advRuns | 0,
+      power: (b.tcg && b.tcg.power) | 0,
+      dex: (b.tcg && b.tcg.dex) | 0,
+      clawedBack: !!a.duelClawback,
+      published: !!b.uid,
+      hasAudit: !!b.audit
+    };
+    row.flags = AUDIT_FLAGS.filter(f => { try { return f.test(row); } catch (e) { return false; } });
+    return row;
+  });
+}
+function _auditSortRows(rows) {
+  const by = {
+    flags: (a, b) => b.flags.length - a.flags.length || b.duelWins - a.duelWins || b.points - a.points,
+    points: (a, b) => b.points - a.points,
+    earned: (a, b) => b.earned - a.earned,
+    duels: (a, b) => b.duelWins - a.duelWins,
+    questions: (a, b) => b.attempts - a.attempts,
+    power: (a, b) => b.power - a.power,
+    rapid: (a, b) => (b.rapid + b.fast) - (a.rapid + a.fast),
+    recent: (a, b) => (b.lastActive ? b.lastActive.getTime() : 0) - (a.lastActive ? a.lastActive.getTime() : 0),
+    name: (a, b) => String(a.name).localeCompare(String(b.name))
+  };
+  return rows.slice().sort(by[_auditSort] || by.flags);
+}
+async function renderActivityAudit() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  const tbody = document.getElementById('usageAuditBody');
+  if (!tbody) return;
+  const bans = await _getBoardBans();
+  _auditRows = _buildAuditRows(rpgBoardRowsRaw(), bans);
+  const rows = _auditSortRows(_auditRows);
+  const flagged = _auditRows.filter(r => r.flags.length).length;
+  const note = document.getElementById('usageAuditNote');
+  if (note) {
+    note.innerHTML = `${_auditRows.length} student${_auditRows.length === 1 ? '' : 's'} · `
+      + `<b style="color:${flagged ? 'var(--accent-red)' : 'var(--text-muted)'};">${flagged} flagged</b> · `
+      + `${bans.size} banned from the boards`;
+  }
+  const sel = document.getElementById('usageAuditSort');
+  if (sel && sel.value !== _auditSort) sel.value = _auditSort;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted);">No student data yet.</td></tr>';
+    return;
+  }
+  const num = n => (n | 0).toLocaleString();
+  tbody.innerHTML = rows.map(r => {
+    const flags = r.flags.map(f =>
+      `<span class="audit-flag" title="${escapeHtml(f.hint)}">${f.icon} ${escapeHtml(f.label)}</span>`).join('');
+    const ratio = r.marked > 0 ? Math.round(r.earned / r.marked) : null;
+    // A row with no `audit` block is a student who hasn't opened the app since
+    // this build shipped — say so rather than showing a misleading 0.
+    const pointsCell = r.hasAudit
+      ? `<b>${num(r.points)}</b><div class="audit-sub">${num(r.earned)} earned all-time${ratio != null ? ` · ${num(ratio)}/question` : ''}</div>`
+      : `<span class="audit-pending" title="This student hasn't opened the app since the audit fields shipped, so their wallet hasn't been published yet.">not yet published</span>`;
+    return `<tr class="${r.banned ? 'audit-banned' : ''}${r.flags.length ? ' audit-flagged' : ''}">
+      <td style="font-weight:600;">
+        <span class="clickable" onclick="showStudentDetail('${escapeHtml(r.uid)}')" style="cursor:pointer;">${escapeHtml(r.name)}</span>
+        ${r.banned ? '<span class="audit-ban-tag" title="Hidden from every leaderboard and from the prize winners table">🚫 banned</span>' : ''}
+        ${r.clawedBack ? '<span class="audit-ban-tag ok" title="The duel-points clawback has already been applied to this student">⚔️ clawed back</span>' : ''}
+        <div class="audit-sub">${escapeHtml(r.email)}</div>
+      </td>
+      <td style="text-align:right;">${pointsCell}</td>
+      <td style="text-align:right;">${num(r.attempts)}<div class="audit-sub">${r.accuracy != null ? r.accuracy + '% avg' : '—'} · ${num(r.logins)} logins</div></td>
+      <td style="text-align:right;">${num(r.rapid)}<div class="audit-sub">${num(r.fast)} under ${AUDIT_FAST_MS / 1000}s</div></td>
+      <td style="text-align:right;">${num(r.duelWins)}<div class="audit-sub">${num(r.duelLosses)} lost</div></td>
+      <td style="text-align:right;">${num(r.power)}<div class="audit-sub">${num(r.dex)} dex · ${num(r.packs)} packs</div></td>
+      <td style="text-align:right;">Lv ${num(r.level)}<div class="audit-sub">${num(r.xp)} XP · ${num(r.monthQ)} Q this month</div></td>
+      <td style="max-width:220px;">${flags || '<span class="audit-sub">—</span>'}</td>
+      <td style="text-align:center;white-space:nowrap;">
+        <button class="btn btn-outline" style="padding:4px 10px;font-size:0.76rem;"
+          onclick="adminSetBoardBan('${escapeHtml(r.uid)}', ${r.banned ? 'false' : 'true'})"
+          title="${r.banned ? 'Put this student back on the leaderboards.' : 'Hide this student from every leaderboard and from the prize winners table. Their own hero, points and progress are untouched.'}">${r.banned ? '↩︎ Unban' : '🚫 Ban'}</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+// Ban / unban a student from every leaderboard. Written to the same shared
+// settings path students already read retiredAccounts from, so their own client
+// filters them out too and a banned student cannot reappear by republishing.
+async function adminSetBoardBan(uid, banned) {
+  if (!currentUser || currentUser.role !== 'admin' || !uid) return;
+  const row = _auditRows.find(r => r.uid === uid);
+  const who = (row && row.name) || 'This student';
+  if (banned && !confirm(
+    `Ban ${who} from the leaderboards?\n\n` +
+    'They disappear from every board tab, from the board inside Realm of Embers, and from the prize winners table — so they cannot be awarded a voucher.\n\n' +
+    'Their own hero, points, cards and progress are NOT touched, and you can undo this at any time.'
+  )) return;
+  try {
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'boardBans'),
+      { uids: { [uid]: !!banned } }, { merge: true });
+    _boardBansCache = null;
+    rpgBoardRows = null;                      // force the next board render to refetch
+    try { _usageBoardRows = await rpgFetchLeaderboard(true); } catch (e) {}
+    await renderActivityAudit();
+    renderPrizeClaims();
+    showToast(banned ? `🚫 ${who} is off the leaderboards` : `↩︎ ${who} is back on the leaderboards`, 'success');
+  } catch (e) {
+    console.error('board ban failed', e);
+    showToast('Could not save that — check your connection', 'error');
+  }
+}
+// One CSV of everything on screen, for keeping a record outside the app.
+function exportActivityAudit() {
+  if (!_auditRows.length) { showToast('Nothing to export yet — load the dashboard first', 'error'); return; }
+  const cols = ['Name', 'Email', 'Points', 'Points earned all-time', 'Questions marked (hero)', 'Attempts logged', 'Avg score %',
+    'Rapid attempts', 'Answers under ' + (AUDIT_FAST_MS / 1000) + 's', 'Logins', 'Duel wins', 'Duel losses', 'Packs opened',
+    'Dungeon raids', 'Embers power', 'Dex', 'Level', 'XP', 'Questions this month', 'Banned', 'Duel points clawed back', 'Flags', 'Last active'];
+  const esc = v => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [cols.join(',')].concat(_auditSortRows(_auditRows).map(r => [
+    r.name, r.email, r.points, r.earned, r.marked, r.attempts, r.accuracy == null ? '' : r.accuracy,
+    r.rapid, r.fast, r.logins, r.duelWins, r.duelLosses, r.packs, r.advRuns, r.power, r.dex, r.level, r.xp, r.monthQ,
+    r.banned ? 'yes' : 'no', r.clawedBack ? 'yes' : 'no',
+    r.flags.map(f => f.label).join(' | '),
+    r.lastActive ? formatDateTimeSGT(r.lastActive) : ''
+  ].map(esc).join(',')));
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'student-activity-points-' + _todayKey() + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  showToast('⬇️ Exported ' + _auditRows.length + ' students', 'success');
 }
 
 // Monthly voucher winners' submitted contact details (admin view).
@@ -19621,6 +19845,10 @@ function _computePrizeWinners() {
   // its prize are defined), so the same standings are shown whichever month is
   // selected — the winners are simply whoever tops it when you award.
   push('strike', '_fps', 3, r => (r.fps && r.fps.correct) | 0, (r, v) => v + ' correct');
+  // Realm of Embers pays its top 6 on TOTAL TEAM POWER, which is all-time like
+  // Strike's, so the same standings show whichever month is selected. `rows`
+  // is the ban-filtered board, so an excluded student cannot win here either.
+  push('embers', '_tcg', 6, r => (r.tcg && r.tcg.power) | 0, (r, v) => v.toLocaleString() + ' power');
   return out;
 }
 function setPrizeMonth(which) {
@@ -19648,6 +19876,7 @@ function renderPrizeClaims() {
     + (_usagePrizeMonth === 'cur' ? ' — still in progress, standings as they stand right now' : ' — the completed month');
   const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders'
     : c.category === 'spire' ? '🃏 Spire' : c.category === 'strike' ? '🔫 Strike' : c.category === 'legends' ? '⚔️ Ember Legends' : c.category === 'siege' ? '🌋 Ember Siege'
+    : c.category === 'embers' ? '🔥 Realm of Embers'
     : c.category === 'streak' ? '🎟️ 30-day streak' : c.category === 'encounter' ? '⚡ Encounter quest' : '🎁 Questions';
   const _claimResult = c => ['defenders', 'raiders', 'spire', 'legends', 'strike', 'siege'].includes(c.category)
     ? (c.scoreLabel || (c.score != null ? c.score + ' pts' : '—'))
@@ -19881,12 +20110,24 @@ async function showStudentDetail(uid) {
     const last = attempts.length ? attempts[attempts.length - 1]._date : null;
     const avgPct = totalBlanks > 0 ? Math.round((totalScore / totalBlanks) * 100) + '%' : '--';
 
+    // The points side of the record, from the audit block on this student's
+    // published leaderboard row — so the log and the wallet read together.
+    const ar = (_auditRows || []).find(x => x.uid === uid);
     const cards = [
       { label: 'Questions Attempted', value: attempts.length, color: 'var(--accent-orange)' },
       { label: 'Average Score', value: avgPct, color: 'var(--primary)' },
       { label: 'Rapid (&lt;15s apart)', value: rapidCount, color: rapidCount ? 'var(--accent-red)' : 'var(--text-muted)' },
       { label: 'Last Active', value: last ? formatDateTimeSGT(last) : '--', color: 'var(--accent-blue)', small: true }
     ];
+    if (ar && ar.hasAudit) {
+      const perQ = ar.marked > 0 ? Math.round(ar.earned / ar.marked) : null;
+      cards.push(
+        { label: '🪙 Points now', value: (ar.points | 0).toLocaleString(), color: 'var(--accent-orange)' },
+        { label: 'Points earned all-time', value: (ar.earned | 0).toLocaleString() + (perQ != null ? ` (${perQ}/Q)` : ''), color: 'var(--primary)', small: true },
+        { label: '👻 Duels won', value: (ar.duelWins | 0).toLocaleString(), color: ar.duelWins >= 20 ? 'var(--accent-red)' : 'var(--text-muted)' },
+        { label: '🔥 Embers power', value: (ar.power | 0).toLocaleString(), color: 'var(--accent-blue)' }
+      );
+    }
     document.getElementById('studentDetailSummary').innerHTML = cards.map(c =>
       `<div class="usage-card"><div class="usage-card-value" style="color:${c.color};${c.small ? 'font-size:0.8rem;line-height:1.35;' : ''}">${c.value}</div><div class="usage-card-label">${c.label}</div></div>`
     ).join('');
@@ -23704,6 +23945,23 @@ function rpgPublishLeaderboard() {
       bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0,
       rebirths: rpgState.rebirths || 0,
+      // Admin audit trail (Usage → 🕵️ Activity & points). The wallet lives in
+      // the student's own hero doc, which a teacher cannot read, so the numbers
+      // needed to explain a board position travel with the published row.
+      audit: {
+        gold: rpgState.gold | 0,
+        goldEarned: (rpgState.stats && rpgState.stats.goldEarned) | 0,
+        marked: (rpgState.stats && rpgState.stats.marked) | 0,
+        correct: (rpgState.stats && rpgState.stats.correct) | 0,
+        arenaWins: (rpgState.stats && rpgState.stats.arenaWins) | 0,
+        arenaLosses: (rpgState.stats && rpgState.stats.arenaLosses) | 0,
+        packsOpened: (rpgState.stats && rpgState.stats.packsOpened) | 0,
+        advRuns: (rpgState.stats && rpgState.stats.advRunsDone) | 0,
+        floors: (rpgState.stats && rpgState.stats.floorsCleared) | 0,
+        credits: (rpgState.credits && rpgState.credits.balance) | 0,
+        duelClawback: rpgState.duelClawbackAck || null,
+        at: new Date().toISOString()
+      },
       house: rpgHouseOf(currentUser.uid).id,
       clazz: rpgState.clazz || null,
       equipment: rpgState.equipment,
@@ -23792,14 +24050,48 @@ async function _getRetiredUids() {
   _retiredUidsCache = out;
   return out;
 }
+// ---- Leaderboard bans ---------------------------------------------------
+// A student the teacher has excluded from the boards — points earned in a way
+// the teacher has ruled out (farming a free button, say) should not outrank
+// classmates who answered questions for theirs. A ban hides the student from
+// EVERY board tab, from the board inside Realm of Embers, and from the prize
+// winners table; it changes nothing about their own hero, wallet or progress.
+// Same shared-settings read path students already use for retiredAccounts.
+let _boardBansCache = null;
+async function _getBoardBans() {
+  if (_boardBansCache) return _boardBansCache;
+  const owner = (currentUser && currentUser.role === 'admin') ? currentUser.uid : adminUid;
+  const out = new Set();
+  if (owner) {
+    try {
+      const s = await getDoc(doc(db, 'users', owner, 'settings', 'boardBans'));
+      const uids = (s.exists() && s.data().uids) || {};
+      Object.keys(uids).forEach(u => { if (uids[u]) out.add(u); });
+      _boardBansCache = out;   // only cache a real read — caching the empty set
+    } catch (e) { console.warn('board bans read', e); }  // before adminUid is
+  }                                                      // known would un-ban everyone for the session
+  return out;
+}
+// Every published row, bans included — the admin audit view needs to SEE a
+// banned student in order to lift the ban again. Never render this to students.
+let _rpgBoardRowsRaw = null;
+function rpgBoardRowsRaw() { return _rpgBoardRowsRaw || []; }
 async function rpgFetchLeaderboard(force) {
   if (rpgBoardRows && !force) return rpgBoardRows;
-  const rows = [];
+  const rows = [], all = [];
   try {
     const retired = await _getRetiredUids();
+    const banned = await _getBoardBans();
     const snap = await getDocs(collection(db, "scienceGameLeaderboard"));
-    snap.forEach(d => { const r = d.data(); if (r && r.uid && r.name && !retired.has(r.uid) && !retired.has(d.id)) rows.push(r); });
+    snap.forEach(d => {
+      const r = d.data();
+      if (!r || !r.uid || !r.name) return;
+      if (retired.has(r.uid) || retired.has(d.id)) return;
+      all.push(r);
+      if (!banned.has(r.uid) && !banned.has(d.id)) rows.push(r);
+    });
   } catch (e) { console.warn("leaderboard load", e); return null; }
+  _rpgBoardRowsRaw = all;
   rpgBoardRows = rows;
   return rows;
 }
@@ -24006,6 +24298,8 @@ function _prizeCategoryOf(ctx) {
   if (k.endsWith("_legend")) return "legends";
   if (k.endsWith("_siege")) return "siege";
   if (k.endsWith("_spire")) return "spire";
+  if (k.endsWith("_tcg")) return "embers";
+  if (k.endsWith("_fps")) return "strike";
   return "questions";
 }
 function rpgLastMonthGame(r, key) { // key: "td" | "raid"
@@ -39919,6 +40213,10 @@ window.loadNextQpQuestion = loadNextQpQuestion;
 window.loadUsageDashboard = loadUsageDashboard;
 window.adminResetGameCredits = adminResetGameCredits;
 window.adminClawbackDuelPoints = adminClawbackDuelPoints;
+window.renderActivityAudit = renderActivityAudit;
+window.setAuditSort = setAuditSort;
+window.adminSetBoardBan = adminSetBoardBan;
+window.exportActivityAudit = exportActivityAudit;
 window.onLegendsObjPaste = onLegendsObjPaste;
 window.onLegendsObjDrop = onLegendsObjDrop;
 window.onLegendsObjPick = onLegendsObjPick;

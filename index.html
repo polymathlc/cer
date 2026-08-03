@@ -4429,6 +4429,47 @@ option {
 .usage-table tbody tr.attempt-rapid:hover { background: var(--accent-red-light); }
 .usage-open-hint { color: var(--primary); font-weight: 600; font-size: 0.8rem; white-space: nowrap; }
 
+/* ---- 🕵️ Activity & points audit ---- */
+.usage-table tbody tr.audit-flagged { background: var(--accent-orange-light); }
+.usage-table tbody tr.audit-flagged:hover { background: var(--accent-orange-light); }
+.usage-table tbody tr.audit-banned { opacity: 0.62; }
+.usage-table tbody tr.audit-banned td:first-child { border-left: 3px solid var(--accent-red); }
+#usageAuditTable td { padding: 12px 14px; vertical-align: top; line-height: 1.5; }
+#usageAuditTable td:nth-child(n+2):nth-child(-n+7) { font-family: 'Space Mono', monospace; white-space: nowrap; }
+.audit-sub {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.audit-pending { font-size: 0.76rem; color: var(--text-muted); font-style: italic; }
+.audit-flag {
+  display: inline-block;
+  margin: 0 5px 5px 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-red-light);
+  color: var(--accent-red);
+  font-size: 0.71rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: help;
+}
+.audit-ban-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-red-light);
+  color: var(--accent-red);
+  font-size: 0.68rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+.audit-ban-tag.ok { background: var(--accent-blue-light); color: var(--accent-blue); }
+
 /* ========== SCHEDULED QUESTIONS ========== */
 .schedule-question-list {
   max-height: 260px;
@@ -7779,6 +7820,54 @@ body.practising-as .page-body { padding-bottom: 96px; }
               </thead>
               <tbody id="usageStudentBody">
                 <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Activity & points audit -->
+        <div class="usage-section">
+          <h3 class="usage-section-title">🕵️ Activity &amp; points — how every student got what they've got</h3>
+          <p style="color:var(--text-muted);font-size:0.84rem;margin:-6px 0 16px;line-height:1.7;">
+            What each student <b>did</b> (logins, questions, how fast they answered) next to what they <b>got</b> (🪙 points, XP, duels, Realm of Embers power).
+            Flags are a prompt to look, not a verdict — hover any flag to see what triggered it, and click a name for their full question log.
+            <b>🚫 Ban</b> hides a student from every leaderboard and from the prize winners table; their own hero and progress are untouched.
+          </p>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;">
+            <span id="usageAuditNote" style="font-size:0.84rem;color:var(--text-muted);"></span>
+            <span style="flex:1;"></span>
+            <label style="font-size:0.82rem;color:var(--text-muted);">Sort by
+              <select id="usageAuditSort" onchange="setAuditSort(this.value)" style="margin-left:6px;padding:5px 9px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:0.82rem;">
+                <option value="flags">🚩 Most flags</option>
+                <option value="points">🪙 Points held</option>
+                <option value="earned">🪙 Points earned</option>
+                <option value="duels">👻 Duel wins</option>
+                <option value="rapid">⚡ Fast answers</option>
+                <option value="power">🔥 Embers power</option>
+                <option value="questions">✍️ Questions done</option>
+                <option value="recent">🕒 Most recent</option>
+                <option value="name">A–Z</option>
+              </select>
+            </label>
+            <button class="btn btn-outline" type="button" onclick="exportActivityAudit()" style="font-size:0.82rem;">⬇️ Export CSV</button>
+          </div>
+          <div class="usage-table-wrapper">
+            <table class="usage-table" id="usageAuditTable">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th style="text-align:right;">🪙 Points</th>
+                  <th style="text-align:right;">✍️ Questions</th>
+                  <th style="text-align:right;">⚡ Fast</th>
+                  <th style="text-align:right;">👻 Duels</th>
+                  <th style="text-align:right;">🔥 Embers</th>
+                  <th style="text-align:right;">Hero</th>
+                  <th>Flags</th>
+                  <th style="text-align:center;">Leaderboard</th>
+                </tr>
+              </thead>
+              <tbody id="usageAuditBody">
+                <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted);">Loading...</td></tr>
               </tbody>
             </table>
           </div>
