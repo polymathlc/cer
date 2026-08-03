@@ -4469,6 +4469,17 @@ option {
   vertical-align: middle;
 }
 .audit-ban-tag.ok { background: var(--accent-blue-light); color: var(--accent-blue); }
+.audit-ban-select {
+  max-width: 190px;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: inherit;
+  font-size: 0.76rem;
+  color: var(--text);
+  cursor: pointer;
+}
 
 /* ========== SCHEDULED QUESTIONS ========== */
 .schedule-question-list {
@@ -5012,8 +5023,12 @@ option {
 .rpg-slot .rpg-slot-label { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-family: 'Space Mono', monospace; font-size: 0.48rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-light); pointer-events: none; }
 .rpg-slot .rpg-slot-empty { font-size: 1.1rem; opacity: 0.35; }
 /* tabs + item grids */
-.rpg-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
-.rpg-tab { font-family: inherit; font-size: 0.86rem; font-weight: 600; padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--border); background: #fff; color: var(--text-muted); cursor: pointer; transition: all var(--transition); }
+/* The row WRAPS and its pills never shrink. Without both, eleven leaderboard
+   tabs were squeezed until each label broke onto three lines; the pill went
+   square, border-radius:999px turned it into a circle, and the emoji on the
+   first line sat outside the curve. */
+.rpg-tabs { display: flex; flex-wrap: wrap; gap: 8px 8px; margin-bottom: 14px; min-width: 0; }
+.rpg-tab { flex: 0 0 auto; white-space: nowrap; font-family: inherit; font-size: 0.86rem; font-weight: 600; line-height: 1.2; padding: 9px 15px; border-radius: 999px; border: 1.5px solid var(--border); background: #fff; color: var(--text-muted); cursor: pointer; transition: all var(--transition); }
 .rpg-tab.active { background: var(--text); border-color: var(--text); color: #fff; }
 .rpg-filter-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .rpg-filter-chip { font-family: 'Space Mono', monospace; font-size: 0.64rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border); background: #fff; color: var(--text-muted); cursor: pointer; transition: all var(--transition); }
@@ -5037,7 +5052,10 @@ option {
 .usage-prize-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; }
 .usage-prize-lbl { font-size: 0.82rem; color: var(--text-muted); }
 .usage-prize-hint { font-size: 0.8rem; color: var(--text-muted); line-height: 1.6; }
-.rpg-board-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 14px; }
+/* The tab row takes the width it needs and Refresh sits after it, rather than
+   the two competing for one line and squashing the pills. */
+.rpg-board-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 16px; }
+.rpg-board-head > .rpg-tabs { flex: 1 1 auto; }
 .rpg-board-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 8px; background: #fff; }
 .rpg-board-row.me { outline: 2px solid var(--primary); outline-offset: -1px; }
 .rpg-board-row.prize-month { background: var(--accent-green-light); border-color: #bfe0cb; }
@@ -7844,6 +7862,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
                 <option value="duels">👻 Duel wins</option>
                 <option value="rapid">⚡ Fast answers</option>
                 <option value="power">🔥 Embers power</option>
+                <option value="score">🏆 Science Score</option>
                 <option value="questions">✍️ Questions done</option>
                 <option value="recent">🕒 Most recent</option>
                 <option value="name">A–Z</option>
@@ -7861,9 +7880,9 @@ body.practising-as .page-body { padding-bottom: 96px; }
                   <th style="text-align:right;">⚡ Fast</th>
                   <th style="text-align:right;">👻 Duels</th>
                   <th style="text-align:right;">🔥 Embers</th>
-                  <th style="text-align:right;">Hero</th>
+                  <th style="text-align:right;">🏆 Score</th>
                   <th>Flags</th>
-                  <th style="text-align:center;">Leaderboard</th>
+                  <th style="text-align:center;">Boards &amp; actions</th>
                 </tr>
               </thead>
               <tbody id="usageAuditBody">
@@ -8197,7 +8216,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
           <span class="rpg-prize-line">🌋 <b>Ember Siege prize:</b> the <b>top 3</b> by the deepest wave held each month win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🔫 <b>Science Strike prize:</b> the top 3 by <b>correct answers</b> in Science Strike win a <b>$10 Popular voucher</b> each.</span>
           <span class="rpg-prize-line">🎟️ <b>Streak prize:</b> practise <b>10+ questions every day for 30 days in a row</b> and win a <b>$10 Popular voucher</b> — track your progress on the Your Hero page.</span>
-          <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 all-time XP earners win <b>$200, $100 and $50 Popular vouchers</b>.</span>
+          <span class="rpg-prize-line">🏆 <b>Grand prizes:</b> the top 3 on the <b>All-Time Science Score</b> win <b>$200, $100 and $50 Popular vouchers</b>. Every question you get <b>right</b> is a point — worth <b>more when your accuracy is high</b> and <b>less when you rush it</b>. Game questions count half. Nothing else in the app can raise it: not XP, not dungeon runs, not duels.</span>
         </div>
         <div class="card card-pad">
           <div class="rpg-board-head">
