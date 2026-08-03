@@ -3714,6 +3714,118 @@ option {
   backdrop-filter: blur(2px);
 }
 .confirm-overlay.active { display: flex; }
+
+/* ---- 📜 Terms of access ---- */
+/* Above every other overlay: this one must not be reachable past. */
+.agreement-overlay { z-index: 900; background: rgba(0,0,0,0.55); }
+/* Column layout with only the MIDDLE scrolling, so Agree / Decline are always
+   on screen — a consent dialog whose buttons are below the fold reads as
+   broken. Alignment is set per-element because .confirm-dialog's
+   `text-align: center` is declared after this block and would win otherwise. */
+/* Both classes in the selector on purpose: .confirm-dialog is declared LATER in
+   this stylesheet and pins max-width:400px, padding and text-align:center, so a
+   single-class rule here silently loses to it. */
+.confirm-dialog.agreement-dialog {
+  max-width: 560px;
+  width: 92%;
+  padding: 32px 32px 26px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+  text-align: left;
+}
+/* …and its own <p>/<h3> defaults, which would grey out and space the terms. */
+.confirm-dialog.agreement-dialog h3 { margin-bottom: 8px; }
+.confirm-dialog.agreement-dialog p { margin-bottom: 0; font-size: inherit; color: inherit; }
+.confirm-dialog.agreement-dialog .agreement-lede { font-size: 0.9rem; color: var(--text-muted); }
+.confirm-dialog.agreement-dialog .agreement-foot { font-size: 0.78rem; color: var(--text-muted); }
+.agreement-actions .btn { flex: 0 0 auto; }
+.agreement-body { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+.agreement-head { flex: 0 0 auto; text-align: center; margin-bottom: 22px; }
+.agreement-mark { font-size: 2.1rem; line-height: 1; margin-bottom: 12px; }
+.agreement-head h3 { margin: 0 0 8px; font-size: 1.25rem; }
+.agreement-lede { margin: 0; font-size: 0.9rem; color: var(--text-muted); line-height: 1.6; }
+.agreement-section {
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px 22px;
+  margin-bottom: 16px;
+  background: var(--surface-alt);
+}
+.agreement-section:last-child { margin-bottom: 0; }
+.agreement-section-title {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+.agreement-choice {
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.agreement-choice:last-child { margin-bottom: 0; }
+.agreement-choice:hover { border-color: var(--text-light); }
+.agreement-choice:has(input:checked) { border-color: var(--primary); box-shadow: 0 0 0 3px var(--accent-blue-light); }
+/* Tailwind's preflight sets appearance:none on form controls, which renders a
+   radio/checkbox as an invisible white box. Put the native control back —
+   accent-color then tints it, and it matches what the device draws elsewhere. */
+.agreement-choice input,
+.agreement-check input { -webkit-appearance: auto; appearance: auto; }
+.agreement-choice input { margin-top: 3px; flex-shrink: 0; width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer; }
+.agreement-choice > span { text-align: left; }
+.agreement-choice b { display: block; font-size: 0.9rem; font-weight: 600; line-height: 1.5; }
+.agreement-choice em { display: block; margin-top: 5px; font-style: normal; font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; }
+.agreement-terms { text-align: left; margin: 0 0 16px; font-size: 0.85rem; line-height: 1.7; color: var(--text); }
+.agreement-check > span { text-align: left; }
+.agreement-check {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  font-size: 0.87rem;
+  line-height: 1.55;
+  cursor: pointer;
+}
+.agreement-check input { margin-top: 2px; flex-shrink: 0; width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer; }
+.agreement-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.agreement-actions .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.agreement-foot {
+  flex: 0 0 auto;
+  margin: 12px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: right;
+  line-height: 1.5;
+}
+@media (max-width: 560px) {
+  .agreement-dialog { padding: 26px 20px 22px; }
+  .agreement-section { padding: 16px 15px; }
+  .agreement-actions { justify-content: stretch; }
+  .agreement-actions .btn { flex: 1 1 auto; }
+  .agreement-foot { text-align: center; }
+}
 .confirm-dialog {
   background: var(--surface);
   border-radius: var(--radius-md);
@@ -4469,6 +4581,18 @@ option {
   vertical-align: middle;
 }
 .audit-ban-tag.ok { background: var(--accent-blue-light); color: var(--accent-blue); }
+/* Terms-of-access status on the student roster */
+.agree-tag {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.69rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.agree-tag.ok { background: var(--accent-blue-light); color: var(--accent-blue); }
+.agree-tag.paying { background: var(--accent-orange-light); color: var(--accent-orange); }
+.agree-tag.pending { background: var(--surface-alt); color: var(--text-muted); }
 .audit-ban-select {
   max-width: 190px;
   padding: 5px 9px;
@@ -9286,6 +9410,59 @@ body.practising-as .page-body { padding-bottom: 96px; }
 <div class="confirm-overlay" id="famLoginOverlay">
   <div class="confirm-dialog" style="max-width:460px;text-align:left;max-height:88vh;overflow-y:auto;">
     <div id="famLoginBody"></div>
+  </div>
+</div>
+
+<!-- Terms of access. Shown to every student before they can use the portal,
+     and shown again whenever AGREEMENT_VERSION is bumped. Sits above every
+     other overlay and has no dismiss — the only ways out are Agree or Decline. -->
+<div class="confirm-overlay agreement-overlay" id="agreementOverlay">
+  <div class="confirm-dialog agreement-dialog">
+    <div class="agreement-head">
+      <div class="agreement-mark">📜</div>
+      <h3>Before you continue</h3>
+      <p class="agreement-lede">Please read and agree to the terms below to use the Science Learning Portal.</p>
+    </div>
+
+    <div class="agreement-body">
+    <div class="agreement-section">
+      <div class="agreement-section-title">1. Who is using this account</div>
+      <label class="agreement-choice" for="agreeEnrolled">
+        <input type="radio" name="agreementWho" id="agreeEnrolled" value="enrolled">
+        <span>
+          <b>I am a currently enrolled Polymath Learning Centre student.</b>
+          <em>Access to this portal is included with your enrolment.</em>
+        </span>
+      </label>
+      <label class="agreement-choice" for="agreePaying">
+        <input type="radio" name="agreementWho" id="agreePaying" value="paying">
+        <span>
+          <b>I am not currently enrolled.</b>
+          <em>My parent or guardian agrees to pay <b>$150 per month</b> for continued access to this portal.</em>
+        </span>
+      </label>
+    </div>
+
+    <div class="agreement-section">
+      <div class="agreement-section-title">2. Changes to the portal</div>
+      <p class="agreement-terms">
+        Polymath Learning Centre may change <b>any aspect of this portal at any time, at its own discretion</b> —
+        including <b>points, rewards, prizes, leaderboards, scores and game progress</b>, for any student.
+        Points and rewards have <b>no cash value</b>, are not owned by the student, and may be adjusted,
+        reset or withdrawn at any time.
+      </p>
+      <label class="agreement-check" for="agreeTerms">
+        <input type="checkbox" id="agreeTerms">
+        <span>I have read and accept these terms.</span>
+      </label>
+    </div>
+    </div>
+
+    <div class="agreement-actions">
+      <button class="btn btn-outline" type="button" id="agreementDeclineBtn">Decline and sign out</button>
+      <button class="btn btn-primary" type="button" id="agreementAcceptBtn" disabled>Agree and continue</button>
+    </div>
+    <p class="agreement-foot" id="agreementFoot">Choose an option above and tick the box to continue.</p>
   </div>
 </div>
 

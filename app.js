@@ -1522,6 +1522,10 @@ async function enterApp(user) {
     // practising (first login asks for name + level instead).
     await famLoadProfile();
     famApplyActiveStudent();
+    // Terms of access first — nothing else may be used until they agree. The
+    // bank and images keep loading behind the dialog, so accepting drops
+    // straight into a ready app.
+    await agreementRequire();
     famShowLoginPopup();
     // Preload all images so they display instantly in practice
     await preloadAllQuestionImages();
@@ -1579,7 +1583,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.231.0';
+const APP_VERSION = 'v1.232.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -17009,6 +17013,110 @@ function famApplyActiveStudent() {
 function famHintHtml() {
   return `<p style="font-size:0.8rem;color:var(--text-muted);line-height:1.5;margin-top:16px;">💡 You can update student names, levels and your address anytime under <strong>⚙ Settings</strong> in the menu. Each student's details can only be edited ${FAM_EDIT_LIMIT} times, so type carefully — your teacher can always fix them for you.</p>`;
 }
+// =====================================================================
+// 📜 TERMS OF ACCESS
+// Every student agrees before they can use the portal. Bump
+// AGREEMENT_VERSION to put the dialog back in front of EVERYONE — the
+// stored acceptance is compared against it, so a new version re-prompts
+// the whole roster on their next visit.
+//
+// The acceptance is written to the student's own userProfiles doc (the
+// same doc famSaveProfile already writes), so the Usage dashboard can
+// show who agreed, when, and which of the two routes they chose — the
+// "not enrolled" route is a billing commitment and the teacher has to be
+// able to see it.
+// =====================================================================
+const AGREEMENT_VERSION = '2026-08-v1';
+const AGREEMENT_FEE = '$150 per month';
+let _agreementResolve = null;
+// Resolves once the student has agreed. Declining signs them out, so the
+// promise deliberately never resolves down that path.
+function agreementRequire() {
+  // Admins are not students, and an admin previewing AS a student must not be
+  // asked to accept terms on that student's behalf.
+  if (!currentUser || currentUser.role !== 'student' || _practiceAs) return Promise.resolve();
+  return new Promise(resolve => {
+    (async () => {
+      let ok = false;
+      try {
+        const s = await getDoc(doc(db, 'userProfiles', currentUser.uid));
+        const a = s.exists() && s.data().agreement;
+        ok = !!(a && a.version === AGREEMENT_VERSION);
+      } catch (e) {
+        // Can't read the profile (offline, rules). Ask again rather than let
+        // someone through on a failed check.
+        console.warn('agreement read', e);
+      }
+      if (ok) { resolve(); return; }
+      _agreementResolve = resolve;
+      agreementShow();
+    })();
+  });
+}
+function agreementShow() {
+  const ov = document.getElementById('agreementOverlay');
+  if (!ov) { if (_agreementResolve) { _agreementResolve(); _agreementResolve = null; } return; }
+  const accept = document.getElementById('agreementAcceptBtn');
+  const decline = document.getElementById('agreementDeclineBtn');
+  const check = document.getElementById('agreeTerms');
+  const radios = Array.prototype.slice.call(ov.querySelectorAll('input[name="agreementWho"]'));
+  const sync = () => {
+    const who = radios.find(r => r.checked);
+    const ready = !!who && !!(check && check.checked);
+    if (accept) accept.disabled = !ready;
+    const foot = document.getElementById('agreementFoot');
+    if (foot) {
+      foot.textContent = ready
+        ? (who.value === 'paying'
+            ? 'By continuing, your parent or guardian agrees to pay ' + AGREEMENT_FEE + ' for access.'
+            : 'Thank you — you can continue.')
+        : 'Choose an option above and tick the box to continue.';
+    }
+  };
+  radios.forEach(r => { r.checked = false; r.onchange = sync; });
+  if (check) { check.checked = false; check.onchange = sync; }
+  if (accept) accept.onclick = () => {
+    const who = radios.find(r => r.checked);
+    if (!who || !check || !check.checked) return;
+    agreementAccept(who.value);
+  };
+  if (decline) decline.onclick = agreementDecline;
+  sync();
+  ov.classList.add('active');
+}
+async function agreementAccept(choice) {
+  const ov = document.getElementById('agreementOverlay');
+  const accept = document.getElementById('agreementAcceptBtn');
+  if (accept) { accept.disabled = true; accept.textContent = 'Saving…'; }
+  const record = {
+    version: AGREEMENT_VERSION,
+    choice: choice === 'paying' ? 'paying' : 'enrolled',
+    fee: choice === 'paying' ? AGREEMENT_FEE : '',
+    at: new Date().toISOString(),
+    name: (currentUser && currentUser.name) || '',
+    email: (currentUser && currentUser.email) || ''
+  };
+  try {
+    await setDoc(doc(db, 'userProfiles', currentUser.uid), { agreement: record }, { merge: true });
+  } catch (e) {
+    // Don't trap a student behind a failed write — they agreed, and the
+    // dialog comes back next time because nothing was stored.
+    console.warn('agreement save', e);
+    showToast("Couldn't save your agreement — you can continue, and we'll ask again next time", 'error');
+  }
+  if (accept) accept.textContent = 'Agree and continue';
+  if (ov) ov.classList.remove('active');
+  if (_agreementResolve) { _agreementResolve(); _agreementResolve = null; }
+}
+async function agreementDecline() {
+  if (!confirm('Decline the terms and sign out?\n\nYou need to accept them to use the Science Learning Portal. You can sign back in and accept at any time.')) return;
+  const ov = document.getElementById('agreementOverlay');
+  if (ov) ov.classList.remove('active');
+  _agreementResolve = null;
+  try { await signOut(auth); } catch (e) { console.warn('agreement sign-out', e); }
+  showToast('Signed out — accept the terms to use the portal', '');
+}
+
 function famShowLoginPopup() {
   if (!currentUser || currentUser.role !== 'student') return;
   renderFamLoginBody();
@@ -19384,6 +19492,9 @@ async function loadUsageDashboard() {
           ? p.students.filter(x => x && /^P[3-6]$/.test(x.level || '')).map(x => x.level) : [],
         famStudents: Array.isArray(p.students) ? p.students.filter(x => x && x.name).map(x => `${x.name} (${x.level || '?'})`).join(', ') : '',
         famAddress: typeof p.address === 'string' ? p.address : '',
+        // Terms of access: null until they accept, and stale once
+        // AGREEMENT_VERSION moves on (they'll be asked again on next visit).
+        agreement: (p.agreement && typeof p.agreement === 'object') ? p.agreement : null,
         lastLogin: p.lastLogin ? (p.lastLogin.toDate ? p.lastLogin.toDate() : new Date(p.lastLogin)) : null,
         loginCount: 0,
         questionsAttempted: 0,
@@ -19503,8 +19614,17 @@ async function loadUsageDashboard() {
         const capNote = (effective && effective !== s.level)
           ? `<div style="font-size:0.68rem;color:var(--text-muted);margin-top:3px;line-height:1.3;" title="${s.servingLevel ? 'The level this account was last served at' : 'Declared by the family when they set up their students'}">serving <b>${escapeHtml(effective)}</b>${s.servingName ? ' · ' + escapeHtml(s.servingName) : ''}</div>`
           : (!effective ? `<div style="font-size:0.68rem;color:var(--accent-orange);margin-top:3px;line-height:1.3;" title="No level assigned and none declared — this account is served every level, up to P6">no level → P6</div>` : '');
+        // Terms of access — the "not enrolled" route is a $150/month billing
+        // commitment, so it gets its own colour rather than a quiet tick.
+        const ag = s.agreement;
+        const agCur = !!(ag && ag.version === AGREEMENT_VERSION);
+        const agHtml = !ag
+          ? `<span class="agree-tag pending" title="Hasn't seen or accepted the terms yet — they'll be asked on their next visit">⏳ Not yet</span>`
+          : ag.choice === 'paying'
+            ? `<span class="agree-tag paying" title="Agreed as NOT enrolled — parent/guardian committed to ${escapeHtml(ag.fee || AGREEMENT_FEE)} on ${escapeHtml(formatDateTimeSGT(new Date(ag.at)))}">💳 Paying${agCur ? '' : ' (old)'}</span>`
+            : `<span class="agree-tag ok" title="Agreed as a currently enrolled student on ${escapeHtml(formatDateTimeSGT(new Date(ag.at)))}">✅ Enrolled${agCur ? '' : ' (old)'}</span>`;
         return `<tr class="clickable" onclick="showStudentDetail('${escapeHtml(s.uid)}')" title="Click to see every question this student attempted, with times">
-          <td style="font-weight:600;">${escapeHtml(s.name)}${s.famStudents ? `<div style="font-weight:400;font-size:0.74rem;color:var(--text-muted);margin-top:2px;">👧 ${escapeHtml(s.famStudents)}</div>` : ''}${s.famAddress ? `<div style="font-weight:400;font-size:0.72rem;color:var(--text-muted);margin-top:1px;">📍 ${escapeHtml(s.famAddress)}</div>` : ''}</td>
+          <td style="font-weight:600;">${escapeHtml(s.name)}<div style="font-weight:400;margin-top:4px;">${agHtml}</div>${s.famStudents ? `<div style="font-weight:400;font-size:0.74rem;color:var(--text-muted);margin-top:2px;">👧 ${escapeHtml(s.famStudents)}</div>` : ''}${s.famAddress ? `<div style="font-weight:400;font-size:0.72rem;color:var(--text-muted);margin-top:1px;">📍 ${escapeHtml(s.famAddress)}</div>` : ''}</td>
           <td style="color:var(--text-muted);font-size:0.82rem;">${escapeHtml(s.email)}</td>
           <td style="text-align:center;" onclick="event.stopPropagation()">
             <select onchange="setStudentLevel('${escapeHtml(s.uid)}', this.value)" title="Assigned level — the student is never served questions above this" style="padding:4px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:0.8rem;">${levelOpts}</select>${capNote}
@@ -19652,6 +19772,7 @@ function _buildAuditRows(boardRows, bans) {
       dex: (b.tcg && b.tcg.dex) | 0,
       score: rpgRowScore(b),
       clawedBack: !!a.duelClawback,
+      agreement: s.agreement || null,
       published: !!b.uid,
       hasAudit: !!b.audit
     };
@@ -19766,7 +19887,7 @@ function exportActivityAudit() {
   if (!_auditRows.length) { showToast('Nothing to export yet — load the dashboard first', 'error'); return; }
   const cols = ['Name', 'Email', 'Points', 'Points earned all-time', 'Questions marked (hero)', 'Attempts logged', 'Avg score %',
     'Rapid attempts', 'Answers under ' + (AUDIT_FAST_MS / 1000) + 's', 'Logins', 'Duel wins', 'Duel losses', 'Packs opened',
-    'Dungeon raids', 'Embers power', 'Dex', 'Level', 'XP', 'Science Score', 'Questions this month', 'Banned from', 'Duel points clawed back', 'Flags', 'Last active'];
+    'Dungeon raids', 'Embers power', 'Dex', 'Level', 'XP', 'Science Score', 'Questions this month', 'Banned from', 'Duel points clawed back', 'Agreement', 'Agreed on', 'Flags', 'Last active'];
   const esc = v => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -19775,6 +19896,8 @@ function exportActivityAudit() {
     r.name, r.email, r.points, r.earned, r.marked, r.attempts, r.accuracy == null ? '' : r.accuracy,
     r.rapid, r.fast, r.logins, r.duelWins, r.duelLosses, r.packs, r.advRuns, r.power, r.dex, r.level, r.xp, r.score, r.monthQ,
     r.banned ? (BOARD_BAN_SCOPES[r.banScope] || BOARD_BAN_SCOPES.all).short : 'no', r.clawedBack ? 'yes' : 'no',
+    r.agreement ? (r.agreement.choice === 'paying' ? 'not enrolled — ' + (r.agreement.fee || AGREEMENT_FEE) : 'enrolled') : 'not yet',
+    r.agreement && r.agreement.at ? formatDateTimeSGT(new Date(r.agreement.at)) : '',
     r.flags.map(f => f.label).join(' | '),
     r.lastActive ? formatDateTimeSGT(r.lastActive) : ''
   ].map(esc).join(',')));
