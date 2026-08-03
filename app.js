@@ -1529,6 +1529,7 @@ async function enterApp(user) {
     // Every question ends up with at least one tag: AI-tag the untagged ones
     // in the background (ten workers, metadata fallback — see autoTagAllQuestions).
     autoTagWholeBankInBackground();
+    qPartAutoConvertLater();   // typed "a)" markers -> official parts, once per load
     // Warm the image cache in the background so bank / Doctor / Past Papers
     // images show instantly (non-blocking, idle-scheduled).
     warmImageCacheInBackground(questionBank);
@@ -1559,6 +1560,7 @@ async function enterApp(user) {
     populateWsTopicFilter();
     renderWsQuestions();
     warmImageCacheInBackground(questionBank);
+    qPartAutoConvertLater();
   } else {
     // Student: load admin's question bank
     configureSidebarForRole('student');
@@ -1631,7 +1633,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.235.0';
+const APP_VERSION = 'v1.236.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -11611,7 +11613,7 @@ function qPartScanQuestion(q) {
 }
 let _qPartScan = null;   // [{ q, hits, note }] awaiting Apply
 function qPartScanBank() {
-  if (!_isAdmin()) return;
+  if (!_canAuthor()) return;
   const out = [], refusedList = [];
   (questionBank || []).forEach(q => {
     const r = qPartScanQuestion(q);
@@ -11620,6 +11622,62 @@ function qPartScanBank() {
   });
   _qPartScan = out;
   qPartRenderScan(refusedList);
+}
+
+// ---- Automatic conversion on sign-in --------------------------------------
+// The Question Doctor panel is the place to REVIEW a conversion, but a bank
+// full of questions whose parts are still characters in the text is a bank
+// whose answer key is unreadable, and nobody should have to remember to go and
+// press a button for that. So the unambiguous ones are converted in the
+// background, once per load, the same way untagged questions get auto-tagged.
+//
+// Only what the scan already approves is touched: two or more markers, each at
+// the very start of its own text block, in a question that has open answer
+// boxes. Anything it refuses — most importantly a text block holding several
+// markers at once — is left for a human and reported.
+let _qPartAutoRan = false;
+async function qPartAutoConvertInBackground() {
+  if (_qPartAutoRan || !_canAuthor()) return;
+  _qPartAutoRan = true;
+  const targets = [];
+  (questionBank || []).forEach(q => {
+    const r = qPartScanQuestion(q);
+    if (r && !r.refused && r.hits && r.hits.length >= 2) targets.push(r);
+  });
+  if (!targets.length) return;
+  let done = 0, failed = 0;
+  for (const r of targets) {
+    const live = (questionBank || []).find(x => x && x.id === r.q.id);
+    if (!live) continue;
+    const next = JSON.parse(JSON.stringify(live));
+    let conflict = false;
+    for (const h of r.hits) {
+      const b = next.blocks && next.blocks[h.i];
+      if (!b || b.type !== 'text' || b.content !== h.before) { conflict = true; break; }
+      b.content = h.html;
+      b.part = h.letter;
+    }
+    if (conflict) continue;
+    let ok = false;
+    try { ok = await saveQuestion(next, { quiet: true }); } catch (e) { console.warn('auto part convert', r.q.id, e); }
+    if (ok) {
+      const i = questionBank.indexOf(live);
+      if (i >= 0) questionBank[i] = next; else Object.assign(live, next);
+      done++;
+    } else failed++;
+  }
+  if (done) {
+    try { renderQuestionBank(); } catch (e) {}
+    try {
+      showToast('🔡 Sorted ' + done + ' question' + (done === 1 ? '' : 's') + ' into official parts (a) (b) (c) — the answer key now labels each part'
+        + (failed ? ' · ' + failed + ' could not be saved' : ''), failed ? 'error' : 'success');
+    } catch (e) {}
+  }
+}
+// Kick it off after sign-in has settled, so it never holds up the first paint.
+function qPartAutoConvertLater() {
+  if (!_canAuthor()) return;
+  setTimeout(() => { qPartAutoConvertInBackground().catch(e => console.warn('part auto convert', e)); }, 4000);
 }
 function qPartRenderScan(refusedList) {
   const host = document.getElementById('qPartScanBody');
@@ -13602,14 +13660,27 @@ function _partActionsHtml(containerSel, kind, pid) {
     <div class="part-hint-box" data-hint-for="${kind}:${pid}" style="display:none;margin-top:6px;padding:8px 12px;border:1px solid var(--accent-orange);background:var(--accent-orange-light,#fff3e0);border-radius:8px;font-size:0.85rem;line-height:1.55;"></div>`;
 }
 
-function _openSection(items, label, modelAnswer, bg, fg, containerSel, source) {
+// One line of question text, with its part marker in front of it when the block
+// opens a part. Flex row rather than a prepended span, because block.content is
+// authored HTML that usually starts with a <p> or <div> — an inline marker
+// inside it would be pushed onto its own line anyway.
+function _qpTextHtml(part, content) {
+  const lab = qPartLabel(part) || (part ? String(part) : '');
+  const text = `<div class="qp-qtext">${content || ''}</div>`;
+  if (!lab) return text;
+  return `<div class="qp-part-row"><span class="qp-part-tag">${escapeHtml(lab)}</span>${text}</div>`;
+}
+// `part` is the question part this box belongs to ('(a)'). It is deliberately
+// NOT shown above the box — the part is already printed beside the question, and
+// repeating it over every answer area is noise that pushes the page down. It
+// still travels into items[].label, which is the name the AI marker uses to tell
+// one answer from another ("Part: [(a) Claim]").
+function _openSection(items, label, modelAnswer, bg, fg, containerSel, source, part) {
   const oidx = items.length;
   // `block`/`field` let admins edit this part's model answer in place and write
   // it straight back to the question (see _adminAnsSave).
-  // A bare part marker is the on-screen chip, but it is a poor NAME for the
-  // answer in the marking prompt — "Part: [(a)]" reads like a fragment of a
-  // CER trio. Name it "(a) Answer" there and leave the chip as "(a)".
-  const itemLabel = label ? (/^\([a-h]\)$/i.test(label) ? label + ' Answer' : label) : 'Answer';
+  const p = part ? String(part).trim() : '';
+  const itemLabel = [p, label || (p ? 'Answer' : '')].filter(Boolean).join(' ') || 'Answer';
   items.push({ label: itemLabel, model: modelAnswer || '', block: source && source.block, field: (source && source.field) || 'content' });
   // Escaped: every caller used to pass a hard-coded literal, but the label now
   // carries the question's own part marker, so it is author-influenced text.
@@ -13806,7 +13877,6 @@ function buildOpenBody(q, containerSel, markCfg) {
   const partsOn = qHasParts(q.blocks);
   const pMap = partsOn ? qPartMap(q.blocks) : null;
   const pOf = b => (partsOn && qPartOf(pMap, b)) ? qPartLabel(qPartOf(pMap, b)) : '';
-  const pJoin = (b, label) => { const p = pOf(b); return p ? (label ? p + ' ' + label : p) : label; };
   q.blocks.forEach(block => {
     const pLab = pOf(block);
     switch (block.type) {
@@ -13825,8 +13895,10 @@ function buildOpenBody(q, containerSel, markCfg) {
         // An official part label starts a new card outright; otherwise fall
         // back to the old heuristic (a text block after an answer area).
         if (cur && (cur.hasAnswer || qBlockOpensPart(block))) cur = null;
-        add((qBlockOpensPart(block) ? `<div class="qp-part-tag">${escapeHtml(qPartLabel(qBlockOpensPart(block)))}</div>` : '')
-          + `<div class="qp-qtext">${block.content || ''}</div>`);
+        // The part sits BESIDE the question, not above it: a label on its own
+        // line costs a whole row of vertical space on every part of every
+        // question, and the marker belongs in front of the words it labels.
+        add(_qpTextHtml(qBlockOpensPart(block), block.content));
         break;
       case 'part':
         // The legacy part BLOCK. It used to fall through to `default:`, which
@@ -13834,8 +13906,7 @@ function buildOpenBody(q, containerSel, markCfg) {
         // rendered as one undivided wall. It opens a part like any other
         // opener now, and its own label is not repeated under the tag.
         if (cur) cur = null;
-        add(`<div class="qp-part-tag">${escapeHtml(qPartLabel(qBlockOpensPart(block)) || String(block.label || ''))}</div>`
-          + `<div class="qp-qtext">${block.content || ''}</div>`);
+        add(_qpTextHtml(qBlockOpensPart(block) || String(block.label || ''), block.content));
         break;
       case 'image':
         if (block.url) {
@@ -13847,13 +13918,13 @@ function buildOpenBody(q, containerSel, markCfg) {
         break;
       case 'answer':
         addAnswer(
-          _openSection(items, pJoin(block, 'Claim'), stripHtml(block.claim || ''), 'var(--accent-blue-light)', 'var(--accent-blue)', containerSel, { block, field: 'claim' }) +
-          _openSection(items, pJoin(block, 'Evidence'), stripHtml(block.evidence || ''), 'var(--accent-orange-light)', 'var(--accent-orange)', containerSel, { block, field: 'evidence' }) +
-          _openSection(items, pJoin(block, 'Reasoning'), stripHtml(block.reasoning || ''), 'var(--primary-light)', 'var(--primary)', containerSel, { block, field: 'reasoning' })
+          _openSection(items, 'Claim', stripHtml(block.claim || ''), 'var(--accent-blue-light)', 'var(--accent-blue)', containerSel, { block, field: 'claim' }, pLab) +
+          _openSection(items, 'Evidence', stripHtml(block.evidence || ''), 'var(--accent-orange-light)', 'var(--accent-orange)', containerSel, { block, field: 'evidence' }, pLab) +
+          _openSection(items, 'Reasoning', stripHtml(block.reasoning || ''), 'var(--primary-light)', 'var(--primary)', containerSel, { block, field: 'reasoning' }, pLab)
         );
         break;
       case 'plainanswer':
-        addAnswer(_openSection(items, pLab, stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }));
+        addAnswer(_openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }, pLab));
         break;
       case 'openLines':
       case 'workingSpace':
@@ -13866,7 +13937,7 @@ function buildOpenBody(q, containerSel, markCfg) {
         }
         // Open-ended mode: just a writing box (no lines). Reads any stored model
         // answer so an admin-set answer persists across renders.
-        addAnswer(_openSection(items, pLab, stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }));
+        addAnswer(_openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }, pLab));
         break;
       case 'fillblank': {
         const parts = _fbParse(block.text || '');
@@ -13877,7 +13948,7 @@ function buildOpenBody(q, containerSel, markCfg) {
         parts.forEach(p => {
           if (p.type === 'text') { sentence += escapeHtml(p.text); return; }
           const oidx = items.length;
-          items.push({ label: pJoin(block, 'Blank ' + (oidxs.length + 1)), model: p.answer, block, field: 'text' });
+          items.push({ label: [pOf(block), 'Blank ' + (oidxs.length + 1)].filter(Boolean).join(' '), model: p.answer, block, field: 'text' });
           oidxs.push(oidx); answers.push(p.answer);
           const w = Math.max(6, Math.min(22, (p.answer || '').length + 3));
           sentence += `<input class="fb-input" data-oidx="${oidx}" type="text" autocomplete="off" spellcheck="false" aria-label="blank" style="width:${w}ch;">`;
@@ -37700,11 +37771,17 @@ function ppPeRender(){
   ppPeRenderBulk();
   const body = document.getElementById('ppPaperEditBody');
   if (body) {
+    // Replacing the body wholesale loses the scroll position. That barely
+    // mattered when a row was six small fields; now that a row is a whole
+    // question, a bulk topic stamp halfway down a forty-question paper would
+    // throw you back to the top and lose your place.
+    const keepTop = body.scrollTop;
     const rows = _ppPeRows || [];
     body.innerHTML = rows.length
       ? rows.map(r => ppPeRowHtml(r)).join('') + `<button type="button" class="pp-add pp-pe-addrow" onclick="ppPeAddRow()">＋ Add another question to this paper</button>`
       : `<div class="pp-pe-empty">This paper has no questions yet.<br><button type="button" class="pp-add" style="margin-top:14px;" onclick="ppPeAddRow()">＋ Add the first question</button></div>`;
     ppPeFillPreviews();   // the containers must exist before buildOpenBody fills them
+    if (keepTop) body.scrollTop = keepTop;
   }
   ppPeRenderStatus();
 }
@@ -41279,6 +41356,7 @@ window.setBlockPart = setBlockPart;
 window.autoNumberParts = autoNumberParts;
 window.clearAllParts = clearAllParts;
 window.qPartScanBank = qPartScanBank;
+window.qPartAutoConvertInBackground = qPartAutoConvertInBackground;
 window.qPartApplyScan = qPartApplyScan;
 window.onLegendsObjPaste = onLegendsObjPaste;
 window.onLegendsObjDrop = onLegendsObjDrop;
