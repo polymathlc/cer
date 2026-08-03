@@ -1583,7 +1583,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.232.0';
+const APP_VERSION = 'v1.233.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -19771,6 +19771,8 @@ function _buildAuditRows(boardRows, bans) {
       power: (b.tcg && b.tcg.power) | 0,
       dex: (b.tcg && b.tcg.dex) | 0,
       score: rpgRowScore(b),
+      gameQ: rpgRowGameQ(b).q,
+      gameCorrect: rpgRowGameQ(b).correct,
       clawedBack: !!a.duelClawback,
       agreement: s.agreement || null,
       published: !!b.uid,
@@ -19787,7 +19789,7 @@ function _auditSortRows(rows) {
     earned: (a, b) => b.earned - a.earned,
     duels: (a, b) => b.duelWins - a.duelWins,
     questions: (a, b) => b.attempts - a.attempts,
-    power: (a, b) => b.power - a.power,
+    power: (a, b) => b.gameCorrect - a.gameCorrect || b.power - a.power,
     score: (a, b) => b.score - a.score,
     rapid: (a, b) => (b.rapid + b.fast) - (a.rapid + a.fast),
     recent: (a, b) => (b.lastActive ? b.lastActive.getTime() : 0) - (a.lastActive ? a.lastActive.getTime() : 0),
@@ -19836,7 +19838,7 @@ async function renderActivityAudit() {
       <td style="text-align:right;">${num(r.attempts)}<div class="audit-sub">${r.accuracy != null ? r.accuracy + '% avg' : '—'} · ${num(r.logins)} logins</div></td>
       <td style="text-align:right;">${num(r.rapid)}<div class="audit-sub">${num(r.fast)} under ${AUDIT_FAST_MS / 1000}s</div></td>
       <td style="text-align:right;">${num(r.duelWins)}<div class="audit-sub">${num(r.duelLosses)} lost</div></td>
-      <td style="text-align:right;">${num(r.power)}<div class="audit-sub">${num(r.dex)} dex · ${num(r.packs)} packs</div></td>
+      <td style="text-align:right;">${num(r.gameCorrect)}<div class="audit-sub">of ${num(r.gameQ)} in games · ⚔️ ${num(r.power)} power · ${num(r.dex)} dex</div></td>
       <td style="text-align:right;">${num(r.score)}<div class="audit-sub">Lv ${num(r.level)} · ${num(r.xp)} XP · ${num(r.monthQ)} Q this month</div></td>
       <td style="max-width:220px;">${flags || '<span class="audit-sub">—</span>'}</td>
       <td style="text-align:center;white-space:nowrap;">
@@ -19887,14 +19889,14 @@ function exportActivityAudit() {
   if (!_auditRows.length) { showToast('Nothing to export yet — load the dashboard first', 'error'); return; }
   const cols = ['Name', 'Email', 'Points', 'Points earned all-time', 'Questions marked (hero)', 'Attempts logged', 'Avg score %',
     'Rapid attempts', 'Answers under ' + (AUDIT_FAST_MS / 1000) + 's', 'Logins', 'Duel wins', 'Duel losses', 'Packs opened',
-    'Dungeon raids', 'Embers power', 'Dex', 'Level', 'XP', 'Science Score', 'Questions this month', 'Banned from', 'Duel points clawed back', 'Agreement', 'Agreed on', 'Flags', 'Last active'];
+    'Dungeon raids', 'Game questions correct', 'Game questions answered', 'Embers power', 'Dex', 'Level', 'XP', 'Science Score', 'Questions this month', 'Banned from', 'Duel points clawed back', 'Agreement', 'Agreed on', 'Flags', 'Last active'];
   const esc = v => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
   const lines = [cols.join(',')].concat(_auditSortRows(_auditRows).map(r => [
     r.name, r.email, r.points, r.earned, r.marked, r.attempts, r.accuracy == null ? '' : r.accuracy,
-    r.rapid, r.fast, r.logins, r.duelWins, r.duelLosses, r.packs, r.advRuns, r.power, r.dex, r.level, r.xp, r.score, r.monthQ,
+    r.rapid, r.fast, r.logins, r.duelWins, r.duelLosses, r.packs, r.advRuns, r.gameCorrect, r.gameQ, r.power, r.dex, r.level, r.xp, r.score, r.monthQ,
     r.banned ? (BOARD_BAN_SCOPES[r.banScope] || BOARD_BAN_SCOPES.all).short : 'no', r.clawedBack ? 'yes' : 'no',
     r.agreement ? (r.agreement.choice === 'paying' ? 'not enrolled — ' + (r.agreement.fee || AGREEMENT_FEE) : 'enrolled') : 'not yet',
     r.agreement && r.agreement.at ? formatDateTimeSGT(new Date(r.agreement.at)) : '',
@@ -19987,7 +19989,7 @@ function _computePrizeWinners() {
   // Realm of Embers pays its top 6 on TOTAL TEAM POWER, which is all-time like
   // Strike's, so the same standings show whichever month is selected. `rows`
   // is the ban-filtered board, so an excluded student cannot win here either.
-  push('embers', '_tcg', 6, r => (r.tcg && r.tcg.power) | 0, (r, v) => v.toLocaleString() + ' power');
+  push('embers', '_tcg', 6, r => rpgRowGameQ(r).correct, (r, v) => v.toLocaleString() + ' correct in games');
   return out;
 }
 function setPrizeMonth(which) {
@@ -23277,6 +23279,23 @@ function rpgScorePayload() {
 // A published row's score. Rows published by a build older than v1.231.0 have
 // no `score` block; their audit counters still give marks and accuracy, and
 // their pace is simply unknown (so treated as unrushed).
+// ---- Questions answered inside the games --------------------------------
+// What the 🔥 Realm of Embers board ranks on, since v1.232.0. It used to rank
+// on total team power, which is downstream of 🪙 points — and points bought
+// booster packs, so anyone who found a way to farm points could buy a place on
+// the board without answering anything. Questions answered in the games can
+// only go up by actually playing and answering.
+//
+// The counters started in v1.231.0, so every student begins level here.
+function rpgRowGameQ(r) {
+  const g = (r && r.games) || null;
+  if (g) return { q: g.q | 0, correct: g.correct | 0 };
+  const a = (r && r.audit) || {};
+  if (a.gameQ != null) return { q: a.gameQ | 0, correct: a.gameCorrect | 0 };
+  // v1.231.0 rows carry the attempt count on the score block but no correct
+  // count — they rank 0 until the student next opens the app.
+  return { q: ((r && r.score && r.score.gameQ) | 0), correct: 0 };
+}
 function rpgRowScore(r) {
   if (r && r.score && r.score.v != null) return r.score.v | 0;
   const a = (r && r.audit) || {};
@@ -24186,6 +24205,14 @@ function rpgPublishLeaderboard() {
       // Science Score — what the All-Time board ranks on. Computed here, on the
       // owner's own client, because only it has the pace data.
       score: rpgScorePayload(),
+      // Questions answered inside the games — what the 🔥 Embers board ranks on.
+      // Every game mode funnels through rpgAwardGameQuestion, so this counts
+      // Defenders, Raiders, Spire, Legends, Slayers, Ember Siege and the
+      // Realm of Embers trainer in one number.
+      games: {
+        q: (rpgState.stats && rpgState.stats.gameQ) | 0,
+        correct: (rpgState.stats && rpgState.stats.gameCorrect) | 0
+      },
       // Admin audit trail (Usage → 🕵️ Activity & points). The wallet lives in
       // the student's own hero doc, which a teacher cannot read, so the numbers
       // needed to explain a board position travel with the published row.
@@ -24194,6 +24221,8 @@ function rpgPublishLeaderboard() {
         goldEarned: (rpgState.stats && rpgState.stats.goldEarned) | 0,
         marked: (rpgState.stats && rpgState.stats.marked) | 0,
         correct: (rpgState.stats && rpgState.stats.correct) | 0,
+        gameQ: (rpgState.stats && rpgState.stats.gameQ) | 0,
+        gameCorrect: (rpgState.stats && rpgState.stats.gameCorrect) | 0,
         arenaWins: (rpgState.stats && rpgState.stats.arenaWins) | 0,
         arenaLosses: (rpgState.stats && rpgState.stats.arenaLosses) | 0,
         packsOpened: (rpgState.stats && rpgState.stats.packsOpened) | 0,
@@ -24388,7 +24417,7 @@ function rpgBoardMetric(r) {
   if (rpgBoardTab === "fps") return (r.fps && r.fps.correct) | 0;
   // Realm of Embers TCG: ranked by TOTAL TEAM POWER, the same metric the board
   // inside the TCG page uses.
-  if (rpgBoardTab === "tcg") return r.tcg ? (r.tcg.power | 0) : 0;
+  if (rpgBoardTab === "tcg") return rpgRowGameQ(r).correct;
   if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey() ? (r.monthQ || 0) : 0;
   if (rpgBoardTab === "papers") return r.monthKey === rpgMonthKey() ? (r.papersQ || 0) : 0;
   if (rpgIsGameTab()) {
@@ -24401,7 +24430,7 @@ function rpgBoardMetric(r) {
   if (r.lastMonthKey === prev) return r.lastMonthQ || 0;  // rolled over
   return 0;
 }
-function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "score" : rpgBoardTab === "fps" ? "correct" : rpgBoardTab === "tcg" ? "floor" : rpgIsGameTab() ? "pts" : "questions"; }
+function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "score" : rpgBoardTab === "fps" || rpgBoardTab === "tcg" ? "correct" : rpgIsGameTab() ? "pts" : "questions"; }
 // Pretty value for a row: game tabs show the run's label (e.g. "Floor 7 · 142 kills").
 function rpgBoardValueHtml(r) {
   const sub = (rpgBoardTab === "month" || rpgBoardTab === "papers") ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : rpgIsGameTab() ? "best this month" : "all-time";
@@ -24411,7 +24440,10 @@ function rpgBoardValueHtml(r) {
   }
   if (rpgBoardTab === "tcg") {
     const t = r.tcg || {};
-    return `⚔️ ${r.shownVal.toLocaleString()} power<span>🏰 Floor ${Math.max(1, t.floor | 0)} · 🃏 ${t.dex | 0} dex · Lv ${Math.max(1, t.lvl | 0)} · ⟡ M${Math.max(1, t.mlvl | 0)}</span>`;
+    const g = rpgRowGameQ(r);
+    const pct = g.q > 0 ? Math.round(g.correct / g.q * 100) : null;
+    const extra = t.power ? ` · ⚔️ ${(t.power | 0).toLocaleString()} power` : "";
+    return `${r.shownVal.toLocaleString()} correct<span>🎮 ${g.q.toLocaleString()} answered in games${pct != null ? ` · ${pct}%` : ""}${extra}</span>`;
   }
   if (rpgIsGameTab()) {
     const g = r[rpgBoardTab] || {};
@@ -24461,7 +24493,7 @@ function rpgRowClass(rank) {
 // running without a prize.
 function rpgBoardNote() {
   if (rpgBoardTab === "tcg")
-    return `<div class="rpg-board-note">🔥 <b>Realm of Embers:</b> the <b>top 6 trainers</b> by <b>total team power</b> each win a <b>$10 Popular voucher</b>. Level your team of 5, merge duplicates and pull stronger monsters to climb.</div>`;
+    return `<div class="rpg-board-note">🔥 <b>Realm of Embers:</b> the <b>top 6</b> by <b>questions answered correctly inside the games</b> each win a <b>$10 Popular voucher</b>. Defenders, Raiders, Spire, Legends, Slayers, 🌋 Ember Siege and the 🎓 trainer all count — nothing you buy can move this board. Counting from August 2026, so everyone starts level.</div>`;
   if (rpgBoardTab === "legend" && !rpgPrizeOffFor("legend", rpgMonthKey()))
     return `<div class="rpg-board-note">⚔️ <b>Ember Legends:</b> the <b>top 5</b> by best wave reached this month each win a <b>$10 Popular voucher</b>.</div>`;
   if (rpgBoardTab === "siege" && !rpgPrizeOffFor("siege", rpgMonthKey()))
@@ -24506,6 +24538,7 @@ async function rpgRenderLeaderboard(force = false) {
       wins: (rpgState.stats && rpgState.stats.wins) || 0, bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0, rebirths: rpgState.rebirths || 0,
       score: rpgScorePayload(),
+      games: { q: (rpgState.stats && rpgState.stats.gameQ) | 0, correct: (rpgState.stats && rpgState.stats.gameCorrect) | 0 },
       house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null,
       equipment: rpgState.equipment,
       td: rpgGameBoardData("defenders"), raid: rpgGameBoardData("raiders"), spire: rpgGameBoardData("spire"), legend: rpgGameBoardData("legend"), siege: rpgGameBoardData("siege"),
@@ -24530,7 +24563,7 @@ async function rpgRenderLeaderboard(force = false) {
       : rpgBoardTab === "legend" ? "No Ember Legends runs this month yet — take a monster into the arena and set the first wave!"
       : rpgBoardTab === "siege" ? "No Ember Siege runs this month yet — defend the gate and set the deepest wave!"
       : rpgBoardTab === "fps" ? "No Science Strike answers yet — jump into a run and answer questions to claim the board!"
-      : rpgBoardTab === "tcg" ? "No trainers on the board yet — build a team of 5 in Realm of Embers to put your team power on the board!"
+      : rpgBoardTab === "tcg" ? "Nobody on the board yet — answer questions inside any Realm of Embers game mode to claim the top spot!"
       : rpgBoardTab === "alltime" ? "No Science Scores yet — answer questions to build one. Your score rebuilds as each student opens the app."
       : "No heroes on the board yet — solve questions to earn XP!";
     body.innerHTML = rpgBoardNote() + `<div class="empty-note">${why}</div>`;
@@ -30546,7 +30579,7 @@ function tcgDungeonHtml(s) {
       ? '<button class="btn btn-primary" style="font-size:1rem;padding:12px 30px;" onclick="tcgEnterDungeon()">🏰 Challenge Floor ' + L + '</button>'
       : '<div class="tcg-section-note">Pick 5 monsters on the <b>My Team</b> tab first.</div>')
     + '</div>'
-    + '<div class="tcg-section-note" style="margin-top:18px;">🏆 The <b>Leaderboard</b> tab ranks trainers by <b>total team power</b> — the top 6 each win a <b>$10 voucher</b>. Clearing floors levels your team, so climbing here lifts you there too.</div>';
+    + '<div class="tcg-section-note" style="margin-top:18px;">🏆 The <b>Leaderboard</b> tab ranks trainers by the <b>questions they answer correctly inside the games</b> — the top 6 each win a <b>$10 voucher</b>. Every floor you fight asks questions, so climbing here lifts you there too.</div>';
 }
 // =====================================================================
 // GAME MODES TAB — the hub for every way to play with your collection
@@ -30787,7 +30820,7 @@ function tcgGuideHtml() {
   + _tcgGuideSection('🏆', 'The leaderboard and the prize',
       'The 🏆 Leaderboard tab here, and the 🔥 Embers tab on the portal\'s Leaderboard page, show the same ranking.',
       _tcgGuideRows([
-        ['How you are ranked', '<b>Total team power</b> — your five monsters added together. Ties break on dungeon floor, then floors beaten.'],
+        ['How you are ranked', '<b>Questions you answer correctly inside the games</b> — Defenders, Raiders, Spire, Legends, Slayers, 🌋 Ember Siege and the 🎓 trainer all count toward the same total. Ties break on how many you answered. It used to be total team power, but power is bought with 🪙 points, so the board could be climbed without answering anything; nothing you buy moves it now. Counting began in August 2026, so every trainer starts level.'],
         ['The prize', 'The <b>top 6 trainers each win a $10 Popular voucher</b>.'],
         ['How to climb', 'Train levels with questions, merge duplicates, and pull rarer monsters to replace your weakest slot. You appear on the board as soon as you have a full team of 5 published.']
       ]))
@@ -33401,34 +33434,46 @@ function elgRestart() {
   elgRenderPick();
 }
 
-// -- Leaderboard tab: ranked by TOTAL TEAM POWER; top 6 win a $10 voucher.
-//    The same ranking also appears on the portal's Leaderboard page (🔥 Embers).
+// -- Leaderboard tab: ranked by QUESTIONS ANSWERED CORRECTLY IN THE GAMES;
+//    top 6 win a $10 voucher. Team power used to rank it, but power is bought
+//    with 🪙 points and points could be farmed, so the board could be bought
+//    without answering anything. The same ranking appears on the portal's
+//    Leaderboard page (🔥 Embers) — keep the two in step.
+//    No team of 5 is required any more: the metric is about answering, so a
+//    student who plays the games belongs on it whether or not they've built one.
 async function tcgRenderBoard() {
   let rows = null;
   try { rows = await rpgFetchLeaderboard(true); } catch (e) {}
   const host = document.getElementById('tcgBody');
   if (!host || tcgTab !== 'board') return; // user moved on while loading
   const meUid = currentUser && currentUser.uid;
-  const list = (rows || []).filter(r => r && r.uid && r.tcg && !rpgBoardBanned(r.uid, 'tcg')).map(r => ({
-    uid: r.uid, name: r.name || 'Trainer',
-    floor: Math.max(1, (r.tcg.floor | 0)),
-    clears: r.tcg.clears | 0,
-    power: r.tcg.power | 0,
-    dex: r.tcg.dex | 0
-  }));
-  list.sort((a, b) => b.power - a.power || b.floor - a.floor || b.clears - a.clears || a.name.localeCompare(b.name));
+  const list = (rows || []).filter(r => r && r.uid && !rpgBoardBanned(r.uid, 'tcg')).map(r => {
+    const g = rpgRowGameQ(r), t = r.tcg || {};
+    return {
+      uid: r.uid, name: r.name || 'Trainer',
+      correct: g.correct, answered: g.q,
+      pct: g.q > 0 ? Math.round(g.correct / g.q * 100) : null,
+      floor: Math.max(1, (t.floor | 0)),
+      clears: t.clears | 0,
+      power: t.power | 0,
+      dex: t.dex | 0
+    };
+  }).filter(r => r.correct > 0);
+  list.sort((a, b) => b.correct - a.correct || b.answered - a.answered || a.name.localeCompare(b.name));
   const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
   host.innerHTML = '<div class="tcg-board">'
-    + '<div class="tcg-board-prize">🎟️ <b>Top 6 trainers each win a $10 voucher!</b><br><span>Ranked by your <b>total team power</b> — level your five monsters, merge duplicates and pull rarer cards to climb.</span></div>'
+    + '<div class="tcg-board-prize">🎟️ <b>Top 6 trainers each win a $10 voucher!</b><br><span>Ranked by the <b>questions you answer correctly inside the games</b> — Defenders, Raiders, Spire, Legends, Slayers, 🌋 Ember Siege and the 🎓 trainer all count. Nothing you buy can move this board.</span></div>'
     + (list.length
       ? '<div class="tcg-board-rows">' + list.map((r, i) =>
           '<div class="tcg-board-row' + (i < 6 ? ' top5' : '') + (r.uid === meUid ? ' me' : '') + '">'
           + '<div class="tcg-board-rank">' + medal(i) + '</div>'
           + '<div class="tcg-board-who"><b>' + escapeHtml(r.name) + (r.uid === meUid ? ' (you)' : '') + '</b>'
-          +   '<span>Floor ' + r.floor + ' · ' + (r.clears | 0) + ' floors beaten · ' + r.dex + '/' + TCG_CARDS.length + ' dex</span></div>'
-          + '<div class="tcg-board-floor"><b>' + r.power.toLocaleString() + ' power</b>' + (i < 6 ? '<span class="tcg-board-voucher">🎟️ $10</span>' : '') + '</div>'
+          +   '<span>' + r.answered.toLocaleString() + ' answered in games'
+          +   (r.pct != null ? ' · ' + r.pct + '%' : '')
+          +   (r.dex ? ' · ' + r.dex + '/' + TCG_CARDS.length + ' dex' : '') + '</span></div>'
+          + '<div class="tcg-board-floor"><b>' + r.correct.toLocaleString() + ' correct</b>' + (i < 6 ? '<span class="tcg-board-voucher">🎟️ $10</span>' : '') + '</div>'
           + '</div>').join('') + '</div>'
-      : '<div class="tcg-section-note">No trainers on the board yet — publish a team of 5 to put your team power on the board!</div>')
+      : '<div class="tcg-section-note">Nobody on the board yet — answer questions inside any game mode to claim the top spot!</div>')
     + '</div>';
 }
 
