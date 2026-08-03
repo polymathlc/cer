@@ -2868,15 +2868,28 @@ option {
     font-size: 11pt;
     line-height: 1.6;
   }
+  /* NO max-height here. Every printed picture is wrapped in a
+     .print-text-block, and `.print-text-block img` has the SAME specificity
+     (0,1,1) as the `.print-question-page img` cap above while sitting later in
+     the file — so a max-height on this rule beat the 92mm default and put the
+     one flat 170mm cap back on every Auto picture, which is the very thing the
+     per-picture Print size control exists to prevent. It also made
+     `print-img-lg` (140mm) SMALLER than Auto and `print-img-full` a no-op.
+     Leave the height to the caps above; this rule only bounds the width. */
   .print-text-block img {
     max-width: 100%;
-    max-height: 170mm;
   }
   /* A block that OPENS a part hangs its (a) in the margin, so the parts line up
      down the left edge instead of the label being buried in the sentence. */
+  /* min-height, because the label is positioned OUT of the flow: a block that
+     carries a part but no text of its own (an answer box under "(b)") measured
+     zero tall, so the "(b)" painted straight over whatever came next AND
+     contributed nothing to the planner's chunk height. One line box of its own
+     type size (11pt x 1.6) is exactly the room the label needs. */
   .print-text-block.print-has-part {
     position: relative;
     padding-left: 26pt;
+    min-height: 17.6pt;
   }
   .print-text-block.print-has-part .print-part-label {
     position: absolute;
@@ -3243,6 +3256,39 @@ option {
   .print-chunk-tall {
     page-break-inside: auto !important;
     break-inside: auto !important;
+  }
+  /* Releasing the CHUNK is not enough on its own. A writing box, a CER section
+     or an answer-key entry keeps its own `break-inside: avoid`, and a box that
+     is taller than a sheet cannot honour that: Chrome jumps it whole to a fresh
+     sheet, discovers it still does not fit, and fragments it there — so the
+     sheet it came from is left mostly blank and every page number after it is
+     one too low. On a page that is already flowing, let these flow too.
+     (.print-open-cer-section has had this release for a while; these are its
+     missing siblings, plus the answer key, whose page is the one most certain
+     to be tall since it carries every question's answers.) */
+  .print-chunk-tall .print-open-answer-box,
+  .print-chunk-tall .print-open-cer-box,
+  .print-chunk-tall .print-cer-section,
+  .print-page-tall .print-open-answer-box,
+  .print-page-tall .print-open-cer-box,
+  .print-page-tall .print-cer-section,
+  .print-page-tall .print-ak-question {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+  /* One long token — a pasted URL, a filename, a chemical formula — must not be
+     able to push the 178mm column wider than the sheet and carry the right-hand
+     side of a table off the paper. */
+  .print-text-block,
+  .print-mcq-option,
+  .print-ak-fulltext,
+  .print-table td,
+  .print-table th {
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  .print-table {
+    max-width: 100%;
   }
   .print-page-tall {
     display: block !important;
