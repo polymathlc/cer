@@ -1583,7 +1583,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.233.0';
+const APP_VERSION = 'v1.234.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -4410,6 +4410,7 @@ function renderBlocks() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
           </div>
           <span class="block-type-badge ${badgeClass}">${badgeIcon} ${badgeLabel}</span>
+          ${qPartPickerHtml(block)}
         </div>
         <div class="block-actions">
           <button class="block-action-btn" title="Move Up" onclick="moveBlock('${block.id}', 'up')">
@@ -11284,10 +11285,390 @@ function stripHtml(content) {
 
 // Add one answer-key section, but only when it actually says something — an
 // empty Claim/Evidence/Reasoning contributes nothing but a stray label.
-function _pushAnswerKeySection(sections, label, content) {
+// =====================================================================
+// QUESTION PARTS — (a) (b) (c)
+//
+// A multi-part question used to be authored by typing the marker into the
+// text: "a) What is X?" then an answer box, then "b) Why?" then another. The
+// marker was just characters, so nothing downstream knew the parts existed —
+// most visibly, the printed ANSWER KEY listed the model answers as unlabelled
+// consecutive lines and the teacher could not tell which answer went with
+// which part.
+//
+// A part is now a field on the block: `block.part` holds 'a', 'b', … . A block
+// carrying a part OPENS that part, and every block after it belongs to that
+// part until the next one opens. So the text block asking (b) and the answer
+// box under it are both part (b) without the answer box having to say so.
+// =====================================================================
+// Stops at 'h' deliberately. Including 'i' made "(i) State the colour" — a
+// roman-numeral SUB-part, which PSLE questions pair with (a)/(b) — parse as
+// letter part 'i', while its sibling "(ii)" did not match at all: the question
+// half-converted and both sub-answers landed under one heading.
+const QPART_LETTERS = 'abcdefgh';
+// A part marker is a SINGLE letter a–h at the very start of the text, followed
+// by whitespace or the end. Three accepted forms, and the third is deliberately
+// stricter: a bare "X." with a CAPITAL letter is ordinary prose far more often
+// than it is a part — "E. coli was grown at 37 °C" would otherwise be rewritten
+// to "coli was grown at 37 °C" and filed as part (e).
+const QPART_MARKER_RE = /^(?:\(\s*([a-hA-H])\s*\)|([a-hA-H])\s*\)|([a-h])\s*\.)(?=\s|$)/;
+
+// Walk html once, yielding every character a reader would actually see along
+// with the span it occupies in the source. Tags are skipped (a <br> or block
+// close counts as a newline), entities collapse to one character. This is what
+// lets a marker be matched on plain text and then removed from the ORIGINAL
+// html: the marker is very often wrapped — "<strong>d)</strong>" — so a
+// plain-text offset applied to the html would cut through the markup.
+function qPartWalkPlain(html) {
+  const s = String(html == null ? '' : html);
+  const out = [];
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] === '<') {
+      const close = s.indexOf('>', i);
+      if (close < 0) break;
+      const tag = s.slice(i, close + 1);
+      // The same tags escapeHtmlKeepLines treats as line breaks. Missing the
+      // headings and table rows let "<h3>a) …</h3><h3>b) …</h3>" collapse to a
+      // single line, so it counted as ONE marker and slipped past the "refuse a
+      // block holding two markers" guard — the exact case that guard is for.
+      if (/^<br\b/i.test(tag) || /^<\/(p|div|li|h[1-6]|tr|td|th)>/i.test(tag)) out.push({ ch: '\n', a: i, b: close + 1, tag: true });
+      i = close + 1;
+      continue;
+    }
+    if (s[i] === '&') {
+      const m = s.slice(i).match(/^&(nbsp|#160|amp|lt|gt|#39|quot);/i);
+      if (m) {
+        const k = m[1].toLowerCase();
+        const ch = (k === 'nbsp' || k === '#160') ? ' ' : k === 'amp' ? '&' : k === 'lt' ? '<' : k === 'gt' ? '>' : k === 'quot' ? '"' : "'";
+        out.push({ ch, a: i, b: i + m[0].length });
+        i += m[0].length;
+        continue;
+      }
+    }
+    out.push({ ch: s[i], a: i, b: i + 1 });
+    i++;
+  }
+  return out;
+}
+function qPartPlain(html) { return qPartWalkPlain(html).map(c => c.ch).join(''); }
+// How many line-starts in this block look like part markers. Two or more means
+// the block holds a whole options list, or several parts written into one box —
+// neither is something to convert by stripping the first marker, so the scan
+// refuses it and asks for a human.
+function qPartCountMarkers(html) {
+  return qPartPlain(html).split('\n').filter(l => QPART_MARKER_RE.test(l.trim())).length;
+}
+// Detect a leading part marker. Returns { letter, html } with the marker gone
+// from the original html — tags are left exactly where they were, because an
+// empty <strong></strong> is harmless and the sanitizer collapses it, whereas
+// guessing which tags to close would not be.
+function qPartDetect(html) {
+  const chars = qPartWalkPlain(html);
+  let start = 0;
+  while (start < chars.length && /\s/.test(chars[start].ch)) start++;
+  const m = chars.slice(start).map(c => c.ch).join('').match(QPART_MARKER_RE);
+  if (!m) return null;
+  const letter = (m[1] || m[2] || m[3]).toLowerCase();
+  let n = m[0].length;
+  while (start + n < chars.length && /[ \t]/.test(chars[start + n].ch)) n++;
+  const kill = new Set();
+  for (let k = 0; k < start + n; k++) {
+    const c = chars[k];
+    if (c && !c.tag) for (let p = c.a; p < c.b; p++) kill.add(p);   // never delete a <br>
+  }
+  const s = String(html == null ? '' : html);
+  let out = '';
+  for (let p = 0; p < s.length; p++) if (!kill.has(p)) out += s[p];
+  return { letter, html: out };
+}
+function qPartNormalize(v) {
+  const s = String(v == null ? '' : v).trim().toLowerCase().replace(/[()\s.]/g, '');
+  return QPART_LETTERS.indexOf(s) >= 0 ? s : '';
+}
+function qPartLabel(p) { const n = qPartNormalize(p); return n ? '(' + n + ')' : ''; }
+// The part each block belongs to: a block carrying `part` opens it, and every
+// block after it inherits until the next one opens. Returns a plain object
+// keyed by block id (blocks always have one — see generateBlockId).
+// Keyed by the block OBJECT, not by b.id: blocks that arrive through an import
+// (the worksheet creator, build-from-screenshot) are not guaranteed to carry an
+// id, and two `undefined` keys would collide and quietly file both answers
+// under the same part. Identity is always unique and always present.
+// Read it with qPartOf(map, block).
+function qPartMap(blocks) {
+  const map = new Map();
+  let cur = '';
+  (blocks || []).forEach(b => {
+    if (!b) return;
+    const opens = qBlockOpensPart(b);
+    // A legacy `part` BLOCK always ends the previous part, even when its label
+    // is something qPartNormalize cannot name ("Part 1", "(i)"). Letting it
+    // inherit instead would file its answers under the PREVIOUS part, which is
+    // worse than leaving them unlabelled.
+    if (opens) cur = opens;
+    else if (b.type === 'part') cur = '';
+    map.set(b, cur);
+  });
+  return map;
+}
+function qPartOf(map, block) { return (map && block && map.get(block)) || ''; }
+// Which part a block OPENS, or '' if it just belongs to the current one.
+// Two authoring styles feed this: the `part` FIELD added in v1.234.0, and the
+// worksheet-creator's dedicated `part` BLOCK type, which has carried its label
+// ("(a)") since it was imported. Both must open the part, or an answer box
+// under a 'part' block would be filed under whatever came before it.
+function qBlockOpensPart(b) {
+  if (!b) return '';
+  const own = qPartNormalize(b.part);
+  if (own) return own;
+  if (b.type === 'part') return qPartNormalize(b.label);
+  return '';
+}
+// Does this question use parts at all? Cheap guard so single-part questions
+// render exactly as they always did.
+function qHasParts(blocks) { return (blocks || []).some(b => qBlockOpensPart(b)); }
+// The next unused letter, for the editor's "add a part" affordance.
+function qPartNext(blocks) {
+  const used = new Set((blocks || []).map(b => qBlockOpensPart(b)).filter(Boolean));
+  for (const c of QPART_LETTERS) if (!used.has(c)) return c;
+  return '';
+}
+// Which block types can OPEN a part: the TEXT that asks the sub-question, and
+// nothing else. An answer box does not — it inherits from the text above it,
+// which is what makes the authoring one click instead of two. Keeping this to
+// text also keeps the printed page honest: the question page prints the part
+// label from the text block, so allowing a picture to open a part would put
+// "(b)" on the answer key with nothing marking it on the paper.
+const QPART_OPENER_TYPES = ['text'];
+// The compact "Part" control in a block's header. Shown on opener blocks; on
+// everything else the header shows which part the block INHERITS, so it is
+// obvious at a glance where each answer box will be filed on the answer key.
+function qPartPickerHtml(block) {
+  if (!block || block.type === 'part' || block.type === 'pageBreak') return '';
+  const map = qPartMap(blocks);
+  const inherited = qPartOf(map, block);
+  const own = qPartNormalize(block.part);
+  if (QPART_OPENER_TYPES.indexOf(block.type) < 0) {
+    return inherited
+      ? `<span class="qpart-chip inherit" title="This block belongs to part (${inherited}). Set the part on the text above it.">↳ ${escapeHtml(qPartLabel(inherited))}</span>`
+      : '';
+  }
+  const opts = ['<option value="">Part —</option>'].concat(
+    QPART_LETTERS.split('').map(c => `<option value="${c}"${own === c ? ' selected' : ''}>Part (${c})</option>`)
+  ).join('');
+  return `<select class="qpart-select${own ? ' on' : ''}" title="Start question part (a), (b), … here. Everything below belongs to this part until the next one starts."
+    onchange="setBlockPart('${block.id}', this.value)">${opts}</select>`
+    + (!own && inherited ? `<span class="qpart-chip inherit" title="Inherited from the part above">↳ ${escapeHtml(qPartLabel(inherited))}</span>` : '');
+}
+function setBlockPart(blockId, value) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b) return;
+  b.part = qPartNormalize(value);
+  renderBlocks();
+}
+// One click: label every opener block that starts a new part, a, b, c… in
+// order. Blocks that already carry a part keep it, so a half-labelled question
+// is finished rather than renumbered under the author's feet.
+function autoNumberParts() {
+  if (!Array.isArray(blocks) || !blocks.length) return;
+  // A part opens at the TEXT that asks it, and only if something a student
+  // writes in follows before the next text block. So a shared preamble above
+  // the first sub-question is not numbered, a stem split over two paragraphs
+  // does not become two parts, and a picture between the question and its
+  // answer box does not steal the label off the text.
+  //
+  // This RELABELS: any part already set is replaced by its position in the
+  // sequence. Preserving hand-set letters and filling around them is how you
+  // end up with two (b)s.
+  const answery = b => b && ['answer', 'plainanswer', 'answerLine', 'openLines', 'workingSpace', 'fillblank', 'mcq'].indexOf(b.type) >= 0;
+  const idx = [];
+  blocks.forEach((b, i) => {
+    if (b.type !== 'text') return;
+    for (let j = i + 1; j < blocks.length; j++) {
+      if (blocks[j].type === 'text') return;              // the next sub-question came first
+      if (answery(blocks[j])) { idx.push(i); return; }
+    }
+  });
+  if (idx.length < 2) { showToast('Nothing to number — a question needs at least two parts, each with its own answer box', 'error'); return; }
+  let stripped = 0;
+  idx.forEach((bi, n) => {
+    const b = blocks[bi];
+    b.part = QPART_LETTERS[n] || '';
+    // If the marker is still typed at the front of the text, take it out —
+    // otherwise the paper reads "(a) a) What is X?".
+    if (qPartCountMarkers(b.content) === 1) {
+      const d = qPartDetect(b.content);
+      if (d) { b.content = d.html; stripped++; }
+    }
+  });
+  renderBlocks();
+  showToast('🔡 Numbered ' + idx.length + ' parts: ' + idx.map((_, n) => '(' + QPART_LETTERS[n] + ')').join(' ')
+    + (stripped ? ' · removed ' + stripped + ' typed marker' + (stripped === 1 ? '' : 's') + ' from the text' : ''), 'success');
+}
+// ---- One-off migration: typed "a)" markers → official parts --------------
+// Questions written before parts existed carry the marker as characters at the
+// front of a text block. This finds them, and the admin applies it after
+// seeing exactly what would change — a bank-wide rewrite of question text is
+// not something to do blind.
+//
+// A question is only offered when it yields TWO OR MORE parts. A lone "a)"
+// with no "b)" anywhere is far more often a stray than a real one-part
+// question, and the cost of a false positive here is mangled question text.
+// Pure MCQs are skipped outright: they have no parts, and "(a) (b) (c) (d)"
+// down a stem is an options list, not a part sequence.
+function qPartScanQuestion(q) {
+  const blocks = (q && q.blocks) || [];
+  if (!blocks.length) return null;
+  if (qHasParts(blocks)) return null;                               // already done
+  const hasOpen = blocks.some(b => ['answer', 'plainanswer', 'openLines', 'workingSpace', 'answerLine', 'fillblank'].indexOf(b.type) >= 0);
+  if (!hasOpen) return null;                                        // pure MCQ / reference — no parts
+  const hits = [];
+  let refused = '';
+  blocks.forEach((b, i) => {
+    if (b.type !== 'text') return;
+    const n = qPartCountMarkers(b.content);
+    if (n > 1) { refused = 'one text block holds ' + n + ' markers — split it by hand first'; return; }
+    const d = qPartDetect(b.content);
+    if (d) hits.push({ i, letter: d.letter, html: d.html, before: b.content });
+  });
+  if (refused) return { q, refused };
+  if (hits.length < 2) return null;
+  // Out-of-order or repeated letters still convert — the author's own labels
+  // are the source of truth — but the admin is told, because it usually means
+  // a typo worth fixing while they are looking.
+  const seq = hits.map(h => h.letter);
+  const tidy = seq.every((c, k) => c === QPART_LETTERS[k]);
+  return { q, hits, note: tidy ? '' : 'labels run ' + seq.join(', ') + ' — not a, b, c…' };
+}
+let _qPartScan = null;   // [{ q, hits, note }] awaiting Apply
+function qPartScanBank() {
+  if (!_isAdmin()) return;
+  const out = [], refusedList = [];
+  (questionBank || []).forEach(q => {
+    const r = qPartScanQuestion(q);
+    if (!r) return;
+    if (r.refused) refusedList.push(r); else out.push(r);
+  });
+  _qPartScan = out;
+  qPartRenderScan(refusedList);
+}
+function qPartRenderScan(refusedList) {
+  const host = document.getElementById('qPartScanBody');
+  if (!host) return;
+  const rows = _qPartScan || [];
+  const refused = refusedList || [];
+  if (!rows.length && !refused.length) {
+    host.innerHTML = `<div class="empty-note">No questions with typed "a)" markers found — either they are already using official parts, or they only have one part each.</div>`;
+    return;
+  }
+  host.innerHTML =
+    (rows.length ? `<div class="qpart-scan-head">
+        <b>${rows.length}</b> question${rows.length === 1 ? '' : 's'} can be converted.
+        The marker is removed from the text and becomes a real part, so the answer key can label each answer.
+        <button class="btn btn-primary" type="button" onclick="qPartApplyScan()" style="margin-left:auto;">✓ Convert all ${rows.length}</button>
+      </div>` : '')
+    + rows.map((r, i) => `
+      <div class="qpart-scan-row">
+        <label class="qpart-scan-title">
+          <input type="checkbox" checked data-qpart-pick="${i}">
+          <span><b>${escapeHtml(r.q.title || 'Untitled')}</b>
+          <span class="qpart-scan-meta">${escapeHtml(r.q.topic || '')} · ${r.hits.length} parts${r.note ? ' · ⚠️ ' + escapeHtml(r.note) : ''}</span></span>
+        </label>
+        ${r.hits.map(h => `<div class="qpart-scan-diff">
+            <span class="qpart-scan-badge">(${h.letter})</span>
+            <span class="qpart-scan-was">${escapeHtml(stripHtml(h.before).slice(0, 90))}</span>
+            <span class="qpart-scan-arrow">→</span>
+            <span class="qpart-scan-now">${escapeHtml(stripHtml(h.html).slice(0, 90))}</span>
+          </div>`).join('')}
+      </div>`).join('')
+    + (refused.length ? `<div class="qpart-scan-refused"><b>${refused.length} left alone.</b> Each has a text block holding more than one marker, which usually means several parts were typed into one box. Splitting those is a judgement call, so they are yours to do by hand:
+        <ul>${refused.map(r => `<li>${escapeHtml(r.q.title || 'Untitled')} — ${escapeHtml(r.refused)}</li>`).join('')}</ul></div>` : '');
+}
+async function qPartApplyScan() {
+  if (!_isAdmin() || !_qPartScan || !_qPartScan.length) return;
+  const picked = Array.prototype.slice.call(document.querySelectorAll('[data-qpart-pick]'))
+    .filter(c => c.checked).map(c => _qPartScan[Number(c.dataset.qpartPick)]).filter(Boolean);
+  if (!picked.length) { showToast('Nothing ticked', 'error'); return; }
+  if (!confirm(`Convert ${picked.length} question${picked.length === 1 ? '' : 's'}?\n\nThe typed "a)" markers are removed from the question text and stored as real parts instead. The wording is otherwise untouched. This cannot be undone in one click.`)) return;
+  const done = [], failed = [], skipped = [];
+  for (const r of picked) {
+    const id = r.q && r.q.id;
+    // Re-resolve by id rather than trusting the object captured at scan time.
+    // The preview survives navigation, so between the scan and this click the
+    // admin may have edited the question (saveEditedQuestion REPLACES the bank
+    // entry with a fresh object) or deleted it — writing the captured object
+    // back would silently undo the edit, or resurrect the deleted document.
+    const live = (questionBank || []).find(x => x && x.id === id);
+    if (!live) { skipped.push((r.q && r.q.title) || 'Untitled'); continue; }
+    // Build the change on a COPY, so a failed write cannot leave the in-memory
+    // bank disagreeing with Firestore for the rest of the session.
+    const next = JSON.parse(JSON.stringify(live));
+    let conflict = false;
+    for (const h of r.hits) {
+      const b = next.blocks && next.blocks[h.i];
+      // The block must still be the one that was scanned. An edit elsewhere
+      // (worksheet quick-edit writes the same object in place) or a reordered
+      // blocks array would otherwise have another block's text overwritten
+      // with this hit's stripped content.
+      if (!b || b.type !== 'text' || b.content !== h.before) { conflict = true; break; }
+      b.content = h.html;
+      b.part = h.letter;
+    }
+    if (conflict) { skipped.push(live.title || 'Untitled'); continue; }
+    let ok = false;
+    try { ok = await saveQuestion(next, { quiet: true }); }
+    catch (e) { console.warn('part convert', id, e); }
+    if (ok) {
+      // Commit to the in-memory bank only once Firestore has it.
+      const i = questionBank.indexOf(live);
+      if (i >= 0) questionBank[i] = next; else Object.assign(live, next);
+      done.push(live.title || 'Untitled');
+    } else {
+      failed.push(live.title || 'Untitled');
+    }
+  }
+  _qPartScan = null;
+  qPartScanBank();          // re-scans from the live bank, so a failure is offered again
+  renderQuestionBank();
+  const bits = [`🔡 Converted ${done.length} question${done.length === 1 ? '' : 's'}`];
+  if (failed.length) bits.push(`${failed.length} failed (${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''}) — press Find again to retry`);
+  if (skipped.length) bits.push(`${skipped.length} skipped, changed since the scan (${skipped.slice(0, 3).join(', ')}${skipped.length > 3 ? '…' : ''})`);
+  showToast(bits.join(' · '), (failed.length || skipped.length) ? 'error' : 'success');
+}
+
+// Clear every part on this question.
+function clearAllParts() {
+  if (!Array.isArray(blocks)) return;
+  let n = 0;
+  blocks.forEach(b => { if (qPartNormalize(b.part)) { b.part = ''; n++; } });
+  if (!n) { showToast('This question has no parts to clear', 'error'); return; }
+  renderBlocks();
+  showToast('Cleared ' + n + ' part label' + (n === 1 ? '' : 's'), 'success');
+}
+
+function _pushAnswerKeySection(sections, label, content, part) {
   const html = sanitizeAnswerKeyHtml(content);
   if (!stripHtml(html)) return;
-  sections.push({ label, content: html });
+  sections.push({ label, content: html, part: qPartNormalize(part) });
+}
+// Render the answer-key body for one question. The part label is printed once,
+// when the part CHANGES — so a question with a Claim/Evidence/Reasoning trio
+// under part (b) gets one "(b)" heading above the three, not three of them.
+// Both print paths call this, which is how they stay in step.
+function _akSectionsHtml(sections) {
+  let html = '', shown = null;
+  (sections || []).forEach(sec => {
+    const p = qPartNormalize(sec.part);
+    if (p && p !== shown) {
+      html += `<div class="ak-part">${escapeHtml(qPartLabel(p))}</div>`;
+      shown = p;
+    }
+    // An unparted section after a parted one (the trailing explanation, say)
+    // must not look like it belongs to the last part.
+    if (!p) shown = null;
+    if (sec.label) html += `<div class="ak-sublabel">${escapeHtml(sec.label)}</div>`;
+    html += `<div class="ak-fullcontent${p ? ' ak-parted' : ''}">${sec.content}</div>`;
+  });
+  return html;
 }
 
 // Keep simple formatting (lists, sup/sub, bold, underline) for answer-key rendering
@@ -11368,15 +11749,23 @@ function doPrintWorksheetOpen() {
     </div>`;
 
     const qSections = [];
+    const qParts = qPartMap(q.blocks);
 
     q.blocks.forEach(block => {
+      const bPart = qPartOf(qParts, block);
       switch (block.type) {
         case 'text': {
           // Text blocks are shown normally (questions / instructions),
           // keeping line breaks so inline option lists stay separated.
           const textHtml = escapeHtmlKeepLines(block.content);
-          if (textHtml) {
-            qHtml += `<div class="print-text-block">${textHtml}</div>`;
+          // A block that OPENS a part prints its label in the margin, so the
+          // paper reads "(a) What is X?" exactly as it used to when the marker
+          // was typed into the text — only now it is a field, not characters.
+          const own = qPartNormalize(block.part);
+          if (textHtml || own) {
+            qHtml += `<div class="print-text-block${own ? ' print-has-part' : ''}">`
+              + (own ? `<span class="print-part-label">${escapeHtml(qPartLabel(own))}</span>` : '')
+              + textHtml + `</div>`;
           }
           break;
         }
@@ -11399,16 +11788,16 @@ function doPrintWorksheetOpen() {
           // pushing blank sections made hasAnySections true for a bank with no
           // model answers, which printed an Answer Key sheet holding nothing
           // but its heading and a row of empty labels.
-          _pushAnswerKeySection(qSections, 'Claim', block.claim);
-          _pushAnswerKeySection(qSections, 'Evidence', block.evidence);
-          _pushAnswerKeySection(qSections, 'Reasoning', block.reasoning);
+          _pushAnswerKeySection(qSections, 'Claim', block.claim, bPart);
+          _pushAnswerKeySection(qSections, 'Evidence', block.evidence, bPart);
+          _pushAnswerKeySection(qSections, 'Reasoning', block.reasoning, bPart);
           break;
         }
         case 'plainanswer': {
           // Plain answer — blank writing box, sized from the model answer
           const paLines = openEndedLines(printAnswerLines(block, block.content));
           qHtml += `<div class="print-open-answer-box"><div class="print-open-lines">${paLines}</div></div>`;
-          _pushAnswerKeySection(qSections, null, block.content);
+          _pushAnswerKeySection(qSections, null, block.content, bPart);
           break;
         }
         case 'explanation': break;
@@ -11445,12 +11834,7 @@ function doPrintWorksheetOpen() {
       allHtml += `<div class="print-ak-question">`;
       allHtml += `<h4>${escapeHtml(qData.title)}</h4>`;
       allHtml += `<div class="print-ak-fulltext">`;
-      qData.sections.forEach(sec => {
-        if (sec.label) {
-          allHtml += `<div class="ak-sublabel">${escapeHtml(sec.label)}</div>`;
-        }
-        allHtml += `<div class="ak-fullcontent">${sec.content}</div>`;
-      });
+      allHtml += _akSectionsHtml(qData.sections);
       allHtml += `</div></div>`;
     });
     allHtml += `</div>`;
@@ -13149,8 +13533,14 @@ function _openSection(items, label, modelAnswer, bg, fg, containerSel, source) {
   const oidx = items.length;
   // `block`/`field` let admins edit this part's model answer in place and write
   // it straight back to the question (see _adminAnsSave).
-  items.push({ label: label || 'Answer', model: modelAnswer || '', block: source && source.block, field: (source && source.field) || 'content' });
-  const labelHtml = label ? `<div class="cer-student-label" style="background:${bg};color:${fg};margin-bottom:6px;">${label}</div>` : '';
+  // A bare part marker is the on-screen chip, but it is a poor NAME for the
+  // answer in the marking prompt — "Part: [(a)]" reads like a fragment of a
+  // CER trio. Name it "(a) Answer" there and leave the chip as "(a)".
+  const itemLabel = label ? (/^\([a-h]\)$/i.test(label) ? label + ' Answer' : label) : 'Answer';
+  items.push({ label: itemLabel, model: modelAnswer || '', block: source && source.block, field: (source && source.field) || 'content' });
+  // Escaped: every caller used to pass a hard-coded literal, but the label now
+  // carries the question's own part marker, so it is author-influenced text.
+  const labelHtml = label ? `<div class="cer-student-label" style="background:${bg};color:${fg};margin-bottom:6px;">${escapeHtml(label)}</div>` : '';
   return `<div class="open-answer-section" data-mic-wrap style="margin-bottom:14px;">
       ${labelHtml}
       <div style="display:flex;gap:6px;align-items:flex-start;">
@@ -13196,10 +13586,28 @@ function _adminAnswerToolHtml(containerSel, oidx, model) {
 
 // The specific sub-question text a part answers: the nearest text block above it.
 // Gives the AI the right context for ONE part of a multi-part question.
+// The sub-question an answer box belongs to. When the question uses official
+// parts this selects by PART — the text that opened this block's part — rather
+// than by "nearest text block above", which picked up a shared preamble or an
+// unrelated aside. Falls back to proximity for questions with no parts.
 function _partPromptText(q, block) {
   const blocks = (q && q.blocks) || [];
   const idx = block ? blocks.indexOf(block) : -1;
   if (idx < 0) return '';
+  const pMap = qHasParts(blocks) ? qPartMap(blocks) : null;
+  const mine = pMap ? qPartOf(pMap, block) : '';
+  if (mine) {
+    const own = [];
+    blocks.forEach(b => {
+      if ((b.type === 'text' || b.type === 'part') && qPartOf(pMap, b) === mine) {
+        own.push(((b.type === 'part' && b.label) ? b.label + ' ' : '') + stripHtml(b.content || ''));
+      }
+    });
+    const joined = own.join(' ').replace(/\s+/g, ' ').trim();
+    // The marker itself is a field now, so put it back in front — the model is
+    // being asked about part (b) and should be told so.
+    if (joined) return qPartLabel(mine) + ' ' + joined;
+  }
   for (let i = idx - 1; i >= 0; i--) {
     if (blocks[i].type === 'text') return stripHtml(blocks[i].content || '');
   }
@@ -13304,7 +13712,17 @@ function buildOpenBody(q, containerSel, markCfg) {
   const sec = () => { if (!cur) { cur = { html: '', hasAnswer: false }; sections.push(cur); } return cur; };
   const add = h => { sec().html += h; };
   const addAnswer = h => { const s = sec(); s.html += h; s.hasAnswer = true; };
+  // Official part labels, when the question has them. `pLab` is the label to
+  // hang on this block's answer boxes — it travels into `items[].label`, which
+  // is what the AI marking prompt names each answer by ("Part: [(b) Claim]"),
+  // so labelling here is what stops the marker matching an answer to the wrong
+  // sub-question.
+  const partsOn = qHasParts(q.blocks);
+  const pMap = partsOn ? qPartMap(q.blocks) : null;
+  const pOf = b => (partsOn && qPartOf(pMap, b)) ? qPartLabel(qPartOf(pMap, b)) : '';
+  const pJoin = (b, label) => { const p = pOf(b); return p ? (label ? p + ' ' + label : p) : label; };
   q.blocks.forEach(block => {
+    const pLab = pOf(block);
     switch (block.type) {
       case 'mcq':
         addAnswer(
@@ -13318,8 +13736,20 @@ function buildOpenBody(q, containerSel, markCfg) {
         });
         break;
       case 'text':
-        if (cur && cur.hasAnswer) cur = null;   // this text begins the next part
-        add(`<div class="qp-qtext">${block.content || ''}</div>`);
+        // An official part label starts a new card outright; otherwise fall
+        // back to the old heuristic (a text block after an answer area).
+        if (cur && (cur.hasAnswer || qBlockOpensPart(block))) cur = null;
+        add((qBlockOpensPart(block) ? `<div class="qp-part-tag">${escapeHtml(qPartLabel(qBlockOpensPart(block)))}</div>` : '')
+          + `<div class="qp-qtext">${block.content || ''}</div>`);
+        break;
+      case 'part':
+        // The legacy part BLOCK. It used to fall through to `default:`, which
+        // never reset the card, so a question authored with real part blocks
+        // rendered as one undivided wall. It opens a part like any other
+        // opener now, and its own label is not repeated under the tag.
+        if (cur) cur = null;
+        add(`<div class="qp-part-tag">${escapeHtml(qPartLabel(qBlockOpensPart(block)) || String(block.label || ''))}</div>`
+          + `<div class="qp-qtext">${block.content || ''}</div>`);
         break;
       case 'image':
         if (block.url) {
@@ -13331,13 +13761,13 @@ function buildOpenBody(q, containerSel, markCfg) {
         break;
       case 'answer':
         addAnswer(
-          _openSection(items, 'Claim', stripHtml(block.claim || ''), 'var(--accent-blue-light)', 'var(--accent-blue)', containerSel, { block, field: 'claim' }) +
-          _openSection(items, 'Evidence', stripHtml(block.evidence || ''), 'var(--accent-orange-light)', 'var(--accent-orange)', containerSel, { block, field: 'evidence' }) +
-          _openSection(items, 'Reasoning', stripHtml(block.reasoning || ''), 'var(--primary-light)', 'var(--primary)', containerSel, { block, field: 'reasoning' })
+          _openSection(items, pJoin(block, 'Claim'), stripHtml(block.claim || ''), 'var(--accent-blue-light)', 'var(--accent-blue)', containerSel, { block, field: 'claim' }) +
+          _openSection(items, pJoin(block, 'Evidence'), stripHtml(block.evidence || ''), 'var(--accent-orange-light)', 'var(--accent-orange)', containerSel, { block, field: 'evidence' }) +
+          _openSection(items, pJoin(block, 'Reasoning'), stripHtml(block.reasoning || ''), 'var(--primary-light)', 'var(--primary)', containerSel, { block, field: 'reasoning' })
         );
         break;
       case 'plainanswer':
-        addAnswer(_openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }));
+        addAnswer(_openSection(items, pLab, stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }));
         break;
       case 'openLines':
       case 'workingSpace':
@@ -13350,7 +13780,7 @@ function buildOpenBody(q, containerSel, markCfg) {
         }
         // Open-ended mode: just a writing box (no lines). Reads any stored model
         // answer so an admin-set answer persists across renders.
-        addAnswer(_openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }));
+        addAnswer(_openSection(items, pLab, stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }));
         break;
       case 'fillblank': {
         const parts = _fbParse(block.text || '');
@@ -13361,7 +13791,7 @@ function buildOpenBody(q, containerSel, markCfg) {
         parts.forEach(p => {
           if (p.type === 'text') { sentence += escapeHtml(p.text); return; }
           const oidx = items.length;
-          items.push({ label: 'Blank ' + (oidxs.length + 1), model: p.answer, block, field: 'text' });
+          items.push({ label: pJoin(block, 'Blank ' + (oidxs.length + 1)), model: p.answer, block, field: 'text' });
           oidxs.push(oidx); answers.push(p.answer);
           const w = Math.max(6, Math.min(22, (p.answer || '').length + 3));
           sentence += `<input class="fb-input" data-oidx="${oidx}" type="text" autocomplete="off" spellcheck="false" aria-label="blank" style="width:${w}ch;">`;
@@ -14249,7 +14679,16 @@ function resetOpenAnswers() { resetOpenAnswersIn('#practiceContainer', 'practice
 
 function _questionContext(q) {
   const parts = [q.title || ''];
-  (q.blocks || []).forEach(b => { if (b.type === 'text') parts.push(stripHtml(b.content || '')); });
+  // Part markers used to be characters inside the text and reached the model
+  // for free. They are a field now, so they are put back — every marking, hint
+  // and explanation call reads this, and "(b)" is often what makes the
+  // sub-question intelligible on its own.
+  const blocks = (q && q.blocks) || [];
+  blocks.forEach(b => {
+    if (b.type !== 'text') return;
+    const opens = qBlockOpensPart(b);
+    parts.push((opens ? qPartLabel(opens) + ' ' : '') + stripHtml(b.content || ''));
+  });
   return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 800);
 }
 
@@ -15802,11 +16241,18 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     // Open ended writing boxes
     {
       const qSections = [];
+      const qParts = qPartMap(q.blocks);
       q.blocks.forEach(block => {
+        const bPart = qPartOf(qParts, block);
         switch (block.type) {
           case 'text': {
             const textHtml = escapeHtmlKeepLines(block.content);
-            if (textHtml) qHtml += `<div class="print-text-block">${textHtml}</div>`;
+            const own = qPartNormalize(block.part);
+            if (textHtml || own) {
+              qHtml += `<div class="print-text-block${own ? ' print-has-part' : ''}">`
+                + (own ? `<span class="print-part-label">${escapeHtml(qPartLabel(own))}</span>` : '')
+                + textHtml + `</div>`;
+            }
             break;
           }
           case 'image': {
@@ -15819,14 +16265,14 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             qHtml += `<div class="print-open-cer-label">Evidence</div><div class="print-open-cer-box">${openEndedLines(printAnswerLines(block, block.evidence))}</div>`;
             qHtml += `<div class="print-open-cer-label">Reasoning</div><div class="print-open-cer-box">${openEndedLines(printAnswerLines(block, block.reasoning))}</div>`;
             qHtml += `</div>`;
-            _pushAnswerKeySection(qSections, 'Claim', block.claim);
-            _pushAnswerKeySection(qSections, 'Evidence', block.evidence);
-            _pushAnswerKeySection(qSections, 'Reasoning', block.reasoning);
+            _pushAnswerKeySection(qSections, 'Claim', block.claim, bPart);
+            _pushAnswerKeySection(qSections, 'Evidence', block.evidence, bPart);
+            _pushAnswerKeySection(qSections, 'Reasoning', block.reasoning, bPart);
             break;
           }
           case 'plainanswer': {
             qHtml += `<div class="print-open-answer-box"><div class="print-open-lines">${openEndedLines(printAnswerLines(block, block.content))}</div></div>`;
-            _pushAnswerKeySection(qSections, null, block.content);
+            _pushAnswerKeySection(qSections, null, block.content, bPart);
             break;
           }
           case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
@@ -15839,10 +16285,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             if (akExtras && block.type === 'mcq') {
               const mo = block.options || [];
               const ci = mo.findIndex(o => o.id === block.correctId);
-              if (ci >= 0) qSections.push({ label: 'Answer', content: `<b>${ci + 1}.</b> ` + sanitizeAnswerKeyHtml(mo[ci].text || '') });
+              if (ci >= 0) qSections.push({ label: 'Answer', content: `<b>${ci + 1}.</b> ` + sanitizeAnswerKeyHtml(mo[ci].text || ''), part: bPart });
             }
             if (akExtras && block.type === 'answerKey' && (stripHtml(block.text) || block.url)) {
-              qSections.push({ label: 'Answer key', content: sanitizeAnswerKeyHtml(block.text || '') + (block.url ? `<div><img src="${escapeHtml(transformImageUrl(block.url))}" style="max-width:100%;max-height:180pt;"></div>` : '') });
+              qSections.push({ label: 'Answer key', content: sanitizeAnswerKeyHtml(block.text || '') + (block.url ? `<div><img src="${escapeHtml(transformImageUrl(block.url))}" style="max-width:100%;max-height:180pt;"></div>` : ''), part: bPart });
             }
             break;
           }
@@ -15865,10 +16311,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
       answerKeyData.forEach(qData => {
         if (!qData.sections || qData.sections.length === 0) return;
         allHtml += `<div class="print-ak-question"><h4>${escapeHtml(qData.title)}</h4><div class="print-ak-fulltext">`;
-        qData.sections.forEach(sec => {
-          if (sec.label) allHtml += `<div class="ak-sublabel">${escapeHtml(sec.label)}</div>`;
-          allHtml += `<div class="ak-fullcontent">${sec.content}</div>`;
-        });
+        allHtml += _akSectionsHtml(qData.sections);
         allHtml += `</div></div>`;
       });
       allHtml += `</div>`;
@@ -19035,19 +19478,31 @@ async function generateReportNarrative(p, topics) {
 function _deriveModelAnswer(q) {
   if (!q || !Array.isArray(q.blocks)) return '';
   const parts = [];
+  // The on-screen twin of the printed answer key: without the part label a
+  // four-part question showed the student four unlabelled consecutive lines.
+  const pMap = qHasParts(q.blocks) ? qPartMap(q.blocks) : null;
+  let shown = null;
+  const pre = b => {
+    if (!pMap) return '';
+    const p = qPartOf(pMap, b);
+    if (!p || p === shown) { if (!p) shown = null; return ''; }
+    shown = p;
+    return qPartLabel(p) + ' ';
+  };
   q.blocks.forEach(b => {
     if (b.type === 'answer') {
       const c = stripHtml(b.claim || ''), e = stripHtml(b.evidence || ''), r = stripHtml(b.reasoning || '');
-      if (c) parts.push('Claim: ' + c);
-      if (e) parts.push('Evidence: ' + e);
-      if (r) parts.push('Reasoning: ' + r);
+      const p = (c || e || r) ? pre(b) : '';
+      if (c) parts.push(p + 'Claim: ' + c);
+      if (e) parts.push((p && !c ? p : '') + 'Evidence: ' + e);
+      if (r) parts.push((p && !c && !e ? p : '') + 'Reasoning: ' + r);
     } else if (b.type === 'plainanswer') {
-      const t = stripHtml(b.content || ''); if (t) parts.push(t);
+      const t = stripHtml(b.content || ''); if (t) parts.push(pre(b) + t);
     } else if (b.type === 'workingSpace' && b.annotate) {
-      const t = stripHtml(b.answerKey || '').trim(); if (t) parts.push('Working area: ' + t);
+      const t = stripHtml(b.answerKey || '').trim(); if (t) parts.push(pre(b) + 'Working area: ' + t);
     } else if (b.type === 'mcq') {
       const opt = (b.options || []).find(o => o.id === b.correctId);
-      if (opt && stripHtml(opt.text || '')) parts.push('Correct option: ' + stripHtml(opt.text));
+      if (opt && stripHtml(opt.text || '')) parts.push(pre(b) + 'Correct option: ' + stripHtml(opt.text));
     }
   });
   return parts.join('\n');
@@ -40622,6 +41077,11 @@ window.setAuditSort = setAuditSort;
 window.adminSetBoardBan = adminSetBoardBan;
 window.exportActivityAudit = exportActivityAudit;
 window.adminHeroOp = adminHeroOp;
+window.setBlockPart = setBlockPart;
+window.autoNumberParts = autoNumberParts;
+window.clearAllParts = clearAllParts;
+window.qPartScanBank = qPartScanBank;
+window.qPartApplyScan = qPartApplyScan;
 window.onLegendsObjPaste = onLegendsObjPaste;
 window.onLegendsObjDrop = onLegendsObjDrop;
 window.onLegendsObjPick = onLegendsObjPick;

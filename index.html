@@ -2872,6 +2872,19 @@ option {
     max-width: 100%;
     max-height: 170mm;
   }
+  /* A block that OPENS a part hangs its (a) in the margin, so the parts line up
+     down the left edge instead of the label being buried in the sentence. */
+  .print-text-block.print-has-part {
+    position: relative;
+    padding-left: 26pt;
+  }
+  .print-text-block.print-has-part .print-part-label {
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-weight: 700;
+    font-size: 11pt;
+  }
 
   /* Blank lines */
   .print-blank {
@@ -3050,6 +3063,17 @@ option {
     padding-left: 12pt;
     margin-bottom: 4pt;
   }
+  /* The part heading on the answer key — printed once per part, so a teacher
+     reading the key can see at a glance which answer belongs to (a) and which
+     to (b). Its content is indented under it. */
+  .print-ak-fulltext .ak-part {
+    font-weight: 700;
+    font-size: 10.5pt;
+    margin-top: 6pt;
+    color: #222;
+  }
+  .print-ak-fulltext .ak-part:first-child { margin-top: 0; }
+  .print-ak-fulltext .ak-fullcontent.ak-parted { padding-left: 16pt; }
   .print-ak-fulltext .ak-sublabel {
     font-family: 'Space Mono', monospace;
     font-size: 7.5pt;
@@ -7105,6 +7129,16 @@ body.practising-as .page-body { padding-bottom: 96px; }
 
         <!-- Blocks List -->
         <div class="blocks-container">
+          <!-- Question parts: one click labels every part that has its own
+               answer box, and each block header carries a Part drop-down for
+               finer control. -->
+          <div class="qpart-bar">
+            <span class="qpart-bar-label">🔡 Parts</span>
+            <button class="btn btn-outline" type="button" onclick="autoNumberParts()"
+              title="Relabel every part (a), (b), (c)… in order, top to bottom. A part is a piece of question text that has its own answer box below it. Any part labels already set are replaced, so the sequence never ends up with two (b)s.">Number parts (a) (b) (c)</button>
+            <button class="btn btn-ghost" type="button" onclick="clearAllParts()" title="Remove every part label from this question.">Clear</button>
+            <span class="qpart-bar-hint">…or set a part on any block from its header.</span>
+          </div>
           <div class="blocks-list" id="blocksList">
             <!-- blocks rendered here -->
           </div>
@@ -8201,6 +8235,20 @@ body.practising-as .page-body { padding-bottom: 96px; }
           </div>
         </div>
         <div id="doctorResults"></div>
+
+        <!-- Typed "a)" markers → official question parts -->
+        <div class="doc-search-card" style="margin-top:22px;">
+          <label>🔡 Question parts <span>(convert typed “a)” markers into real parts)</span></label>
+          <p style="font-size:0.85rem;color:var(--text-muted);line-height:1.75;margin:0 0 14px;">
+            Questions written before parts existed have the marker typed into the text — “a) What is X?”. Nothing downstream knows those are parts,
+            so the printed <b>answer key lists the model answers unlabelled</b> and you cannot tell which answer belongs to which part.
+            This finds them, strips the marker from the wording and stores it as a real part instead. Nothing is written until you press Convert.
+          </p>
+          <div class="doc-actions-row">
+            <button class="btn btn-primary" type="button" onclick="qPartScanBank()" style="font-size:0.88rem;">🔎 Find typed parts</button>
+          </div>
+          <div id="qPartScanBody" style="margin-top:14px;"></div>
+        </div>
       </div>
     </div>
 
@@ -9675,6 +9723,55 @@ body.practising-as .page-body { padding-bottom: 96px; }
 /* ── Practice question parts — clean grouped cards instead of tag chips ── */
 .qp-part{ border:1px solid var(--border); border-radius:14px; padding:18px 20px 14px; margin:0 0 16px; background:var(--surface,#fff); }
 .qp-part.solo{ border:none; border-radius:0; padding:0; margin:0; }
+/* The (a) / (b) tag on a part card, so a student can see which sub-question
+   they are answering without hunting for it inside the sentence. */
+.qpart-bar{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:11px 14px; margin-bottom:14px;
+  border:1px solid var(--border); border-radius:12px;
+  background:var(--surface-alt,#fafafa);
+}
+.qpart-bar-label{ font-weight:700; font-size:0.83rem; }
+.qpart-bar .btn{ padding:5px 12px; font-size:0.79rem; }
+.qpart-bar-hint{ font-size:0.76rem; color:var(--text-muted); }
+/* ---- Editor: the per-block Part control ---- */
+.qpart-select{
+  appearance:auto; -webkit-appearance:auto;
+  margin-left:8px; padding:3px 7px;
+  border:1px solid var(--border); border-radius:8px;
+  background:var(--surface,#fff); color:var(--text-muted);
+  font-family:inherit; font-size:0.74rem; cursor:pointer;
+}
+.qpart-select.on{ border-color:var(--primary); color:var(--primary); font-weight:700; }
+.qpart-chip{
+  margin-left:7px; padding:2px 8px; border-radius:999px;
+  background:var(--surface-alt,#f4f5f6); color:var(--text-muted);
+  font-size:0.7rem; font-weight:600; white-space:nowrap;
+}
+/* ---- Question Doctor: the typed-parts conversion preview ---- */
+.qpart-scan-head{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:0.86rem; line-height:1.6; padding:12px 14px; margin-bottom:14px; border:1px solid var(--border); border-radius:10px; background:var(--surface-alt,#fafafa); }
+.qpart-scan-row{ border:1px solid var(--border); border-radius:10px; padding:13px 15px; margin-bottom:10px; background:var(--surface,#fff); }
+.qpart-scan-title{ display:flex; gap:10px; align-items:flex-start; font-size:0.88rem; line-height:1.5; cursor:pointer; }
+.qpart-scan-title input{ appearance:auto; -webkit-appearance:auto; margin-top:3px; width:16px; height:16px; accent-color:var(--primary); flex-shrink:0; cursor:pointer; }
+.qpart-scan-meta{ display:block; margin-top:3px; font-size:0.76rem; color:var(--text-muted); font-weight:400; }
+.qpart-scan-diff{ display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; margin:9px 0 0 26px; font-size:0.79rem; line-height:1.55; }
+.qpart-scan-badge{ padding:1px 8px; border-radius:999px; background:var(--primary-light,#e8f3ec); color:var(--primary,#0b6b4f); font-weight:700; flex-shrink:0; }
+.qpart-scan-was{ color:var(--text-muted); text-decoration:line-through; }
+.qpart-scan-arrow{ color:var(--text-muted); }
+.qpart-scan-now{ color:var(--on-surface,#14161a); }
+.qpart-scan-refused{ font-size:0.83rem; line-height:1.7; padding:13px 15px; border:1px solid var(--border); border-radius:10px; background:var(--surface-alt,#fafafa); color:var(--text-muted); }
+.qpart-scan-refused ul{ margin:8px 0 0 18px; padding:0; }
+.qp-part-tag{
+  display:inline-block;
+  margin:0 0 10px;
+  padding:3px 11px;
+  border-radius:999px;
+  background:var(--primary-light,#e8f3ec);
+  color:var(--primary,#0b6b4f);
+  font-weight:700;
+  font-size:0.82rem;
+  letter-spacing:0.02em;
+}
 .qp-qtext{ line-height:1.85; font-size:0.97rem; margin:0 0 12px; color:var(--on-surface,#14161a); }
 .qp-qtext + .qp-qtext{ margin-top:-2px; }
 .qp-part .open-answer-section{ margin-bottom:10px; }
