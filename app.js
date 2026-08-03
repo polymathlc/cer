@@ -1382,11 +1382,33 @@ function copyResetCredentials() {
 const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'abigail.yew@stanfordmanpower.com'];
 // Super admin sees questions and vetting from every other admin account.
 const SUPER_ADMIN_EMAIL = 'chungzhikai@gmail.com';
-let adminUid = null; // will be loaded for student accounts
+// ---- Employee accounts ---------------------------------------------------
+// A third role between admin and student: someone hired to WRITE QUESTIONS.
+// They get the question creator, the bank, the vetting list and the worksheet
+// builder, and nothing else — no student data, no usage dashboard, no games,
+// no settings. See EMPLOYEE_PAGES for the whole list of pages they can reach.
+//
+// They have no bank of their own. Everything they author is written straight
+// into the teacher's bank (_bankOwnerUid), because a question filed under the
+// employee's own uid is a question no student would ever be served.
+const EMPLOYEE_EMAILS = ['pkeertana21@gmail.com'];
+const EMPLOYEE_PAGES = ['create', 'bank', 'vetting', 'worksheet', 'myworksheets'];
+let adminUid = null; // the bank owner: loaded for student AND employee accounts
 // Maps question/vetting id -> owning admin's uid. Populated when super admin
 // loads other admins' subcollections so writes/deletes target the right doc.
 const _ownerUidByQuestionId = {};
 const _ownerUidByVettingId  = {};
+
+// Read the shared config/admin pointer into `adminUid`. Students get this as a
+// side effect of loadAdminQuestions; an employee needs it on its own, before
+// the bank is touched, because it decides WHICH bank is touched.
+async function _resolveBankOwner() {
+  try {
+    const snap = await getDoc(doc(db, 'config', 'admin'));
+    if (snap.exists() && snap.data().uid) adminUid = snap.data().uid;
+  } catch (e) { console.warn('bank owner lookup', e); }
+  return adminUid;
+}
 
 async function recordLogin(user) {
   try {
@@ -1438,11 +1460,14 @@ function _practiceAsClear() { try { sessionStorage.removeItem(PRACTICE_AS_KEY); 
 async function enterApp(user) {
   const displayName = user.displayName || user.email.split('@')[0];
   const isAdmin = ADMIN_EMAILS.includes(user.email);
+  // An employee is never also an admin — admin wins if an address is in both.
+  const isEmployee = !isAdmin && EMPLOYEE_EMAILS.includes(user.email);
+  const roleOf = isAdmin ? 'admin' : isEmployee ? 'employee' : 'student';
   // Acting as a student? Only an admin may, and the flag is per-tab.
   const wanted = _practiceAsLoad();
   if (wanted && !isAdmin) _practiceAsClear();
   _practiceAs = (wanted && isAdmin) ? wanted : null;
-  _realUser = { uid: user.uid, email: user.email, name: displayName, role: isAdmin ? 'admin' : 'student' };
+  _realUser = { uid: user.uid, email: user.email, name: displayName, role: roleOf };
   // While acting, run the STUDENT branch below — the visiting student must get
   // their own app, not the admin's.
   const asAdmin = isAdmin && !_practiceAs;
@@ -1466,7 +1491,7 @@ async function enterApp(user) {
   if (cpBtn) cpBtn.style.display = (!_practiceAs && (user.providerData || []).some(p => p && p.providerId === 'password')) ? '' : 'none';
   currentUser = _practiceAs
     ? { uid: _practiceAs.uid, email: _practiceAs.email, name: _practiceAs.name, role: 'student' }
-    : { uid: user.uid, email: user.email, name: displayName, role: isAdmin ? 'admin' : 'student' };
+    : { uid: user.uid, email: user.email, name: displayName, role: roleOf };
   showPage('appWrapper');
   // Record login event for usage tracking. This logs the REAL sign-in (the
   // admin) — a practice session is not a login by the student, and the
@@ -1511,6 +1536,29 @@ async function enterApp(user) {
     if (!studentSetupSeen) {
       setTimeout(() => openStudentSetup(), 600);
     }
+  } else if (isEmployee) {
+    // Employee: an author, not a teacher. They get the question creator, the
+    // bank, the vetting list and the worksheet builder, working directly on
+    // the teacher's bank — so the config/admin pointer, the student roster,
+    // the usage dashboard and every game are all deliberately absent here.
+    configureSidebarForRole('employee');
+    // The bank owner must be resolved BEFORE anything reads or writes it:
+    // _bankOwnerUid falls back to the employee's own uid while adminUid is
+    // null, and a question saved into that subtree is one no student sees.
+    await _resolveBankOwner();
+    if (!adminUid) {
+      showToast('Could not find the teacher\'s question bank — ask Mr Chung to sign in once, then reload', 'error');
+    }
+    await loadCustomCategories();      // before the bank, so the MCQ rule sees custom categories
+    await loadFromStorage();
+    loadMarkingSettings();
+    loadGenSettings();
+    loadTeachingNotes();               // grounds AI question building on the uploaded notes
+    renderBlocks();
+    loadSavedWorksheets().then(renderSavedWorksheets).catch(e => console.warn('saved worksheets', e));
+    populateWsTopicFilter();
+    renderWsQuestions();
+    warmImageCacheInBackground(questionBank);
   } else {
     // Student: load admin's question bank
     configureSidebarForRole('student');
@@ -1583,7 +1631,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.234.0';
+const APP_VERSION = 'v1.235.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -1702,6 +1750,24 @@ function configureSidebarForRole(role) {
   rebuildTopicSelect();
   const adminItems = document.querySelectorAll('.admin-only');
   const studentItems = document.querySelectorAll('.student-only');
+  if (role === 'employee') {
+    // Default-deny: hide every nav item, then show back only the pages on
+    // EMPLOYEE_PAGES. Adding a nav item elsewhere in the app therefore cannot
+    // silently grant an employee access to it.
+    studentItems.forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.nav-item').forEach(el => {
+      el.style.display = EMPLOYEE_PAGES.indexOf(el.dataset.page || '') >= 0 ? '' : 'none';
+    });
+    // The section headings ("Build", "Manage", …) are flat siblings of the
+    // items, not wrappers, so there is no way to tell which survive. With five
+    // items the menu reads perfectly well as one list — hide them all rather
+    // than leave a heading standing over nothing.
+    document.querySelectorAll('.nav-section-label').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    try { navBookmarksInit(); } catch (e) { console.warn('bookmarks', e); }
+    navigateTo('create');
+    return;
+  }
   if (role === 'admin') {
     adminItems.forEach(el => el.style.display = '');
     studentItems.forEach(el => el.style.display = 'none');
@@ -2379,7 +2445,7 @@ function _bulkTagTarget() {
 }
 
 function openBulkTags(scope) {
-  if (!_isAdmin()) { showToast('Only admins can edit tags', 'error'); return; }
+  if (!_canAuthor()) { showToast('Only question authors can edit tags', 'error'); return; }
   const { picked, shown } = _bulkTagSets();
   // Default to whichever set the admin actually has: their picks if they made any.
   _bulkTagScope = scope || (picked.length ? 'picked' : 'shown');
@@ -2777,6 +2843,10 @@ function applyMcqCategory(q) {
 // NAVIGATION
 // =====================================================================
 function navigateTo(page) {
+  // Employees may only reach the pages they were hired to use. Hiding the nav
+  // items is not enough on its own — a bookmark, a deep link (#usage) or any
+  // navigateTo() call from shared code would otherwise walk straight in.
+  if (_isEmployee() && EMPLOYEE_PAGES.indexOf(page) < 0) page = 'create';
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
   if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'arcade' || page === 'defenders' || page === 'raiders' || page === 'spire' || page === 'legends' || page === 'slayers' || page === 'tcg') && rpgGameHidden()) page = rpgHomePage();
@@ -4663,7 +4733,7 @@ function _widgetExtractHtml(raw) {
 }
 
 async function _widgetRun(blockId, btn, buildPrompt) {
-  if (!_isAdmin()) { showToast('Only admins can build widgets', 'error'); return; }
+  if (!_canAuthor()) { showToast('Only question authors can build widgets', 'error'); return; }
   const block = blocks.find(b => b.id === blockId);
   if (!block || block.type !== 'widget') return;
   if (_widgetBusy[blockId]) return;
@@ -10307,7 +10377,7 @@ function _renderBankPickBar(filtered) {
     ${allPicked ? '' : `<button class="btn btn-outline btn-sm" onclick="pickAllBankVisible()">Pick all ${shown.length} shown</button>`}
     <button class="btn btn-outline btn-sm" onclick="clearBankPicks()">Clear</button>
     <span style="flex:1;"></span>
-    ${_isAdmin() ? `<button class="btn btn-outline btn-sm" onclick="openBulkTags('picked')" title="Add or remove tags on all ${n} at once, or have the AI tag each one">🏷 Tag these</button>` : ''}
+    ${_canAuthor() ? `<button class="btn btn-outline btn-sm" onclick="openBulkTags('picked')" title="Add or remove tags on all ${n} at once, or have the AI tag each one">🏷 Tag these</button>` : ''}
     <button class="btn btn-outline btn-sm" onclick="bankPicksToPractice()">✏️ Practice these</button>
     <button class="btn btn-primary btn-sm" onclick="bankPicksToWorksheet()">📄 Build worksheet</button>`;
 }
@@ -12556,12 +12626,15 @@ function doScaleAndPrint(output, opts) {
 // due to contention or document growth.
 // =====================================================================
 
-function _qOwner(id) { return _ownerUidByQuestionId[id] || currentUser.uid; }
-function _vOwner(id) { return _ownerUidByVettingId[id]  || currentUser.uid; }
+// _bankOwnerUid, not currentUser.uid: an employee authors into the teacher's
+// bank, so every read, write and delete has to resolve to the same subtree the
+// students are served from.
+function _qOwner(id) { return _ownerUidByQuestionId[id] || _bankOwnerUid(); }
+function _vOwner(id) { return _ownerUidByVettingId[id]  || _bankOwnerUid(); }
 function _qRef(id) { return doc(db, 'users', _qOwner(id), 'questions', id); }
 function _vRef(id) { return doc(db, 'users', _vOwner(id), 'vetting',   id); }
-function _qCol()   { return collection(db, 'users', currentUser.uid, 'questions'); }
-function _vCol()   { return collection(db, 'users', currentUser.uid, 'vetting');   }
+function _qCol()   { return collection(db, 'users', _bankOwnerUid(), 'questions'); }
+function _vCol()   { return collection(db, 'users', _bankOwnerUid(), 'vetting');   }
 
 let _inflightOps = 0;
 let _saveHideTimer = null;
@@ -13560,6 +13633,19 @@ function _openSection(items, label, modelAnswer, bg, fg, containerSel, source) {
 // to the question bank so every student is marked against the corrected answer.
 // =====================================================================
 function _isAdmin() { return !!(currentUser && currentUser.role === 'admin'); }
+function _isEmployee() { return !!(currentUser && currentUser.role === 'employee'); }
+// Everything an employee is hired to do — authoring questions and building
+// worksheets — is gated on this rather than on _isAdmin. _isAdmin keeps its
+// old meaning everywhere else, so nothing an employee should not touch opens
+// up by accident: adding the role is default-deny.
+function _canAuthor() { return _isAdmin() || _isEmployee(); }
+// Whose question bank this account reads and writes. An employee has none of
+// their own — they author directly into the teacher's, which is the bank
+// students are actually served from.
+function _bankOwnerUid() {
+  if (_isEmployee() && adminUid) return adminUid;
+  return currentUser ? currentUser.uid : null;
+}
 
 function _adminAnswerToolHtml(containerSel, oidx, model) {
   if (!_isAdmin()) return '';
@@ -17074,7 +17160,7 @@ function _wsPreviewPack(doc) {
       // spotting the diagram that printed too small, and the fix used to mean
       // leaving the page for the bank and finding your way back. Admins only:
       // this writes to the shared question bank.
-      if (qid && qid.indexOf('__lo__') !== 0 && _isAdmin()) {
+      if (qid && qid.indexOf('__lo__') !== 0 && _canAuthor()) {
         const eb = doc.createElement('button');
         eb.type = 'button';
         eb.className = 'wspv-brk edit';
@@ -17105,7 +17191,7 @@ let _wsQeDraft = null;    // working copy; discarded unless Save is pressed
 let _wsQeReturn = null;   // preview to reopen after a trip to the full editor
 
 function wsQuickEdit(qid) {
-  if (!_isAdmin()) return;
+  if (!_canAuthor()) return;
   const q = questionBank.find(x => String(x.id) === String(qid));
   if (!q) { showToast('That question is no longer in the bank', 'error'); return; }
   _wsQeQid = String(q.id);
@@ -37482,6 +37568,7 @@ function ppOpenPaperEdit(year){
   _ppPeSel = new Set();
   _ppPeDeleted = [];
   _ppPeDirty = false;
+  _ppPePrevCache = {};
   _ppPeRows = ppQuestions()
     .filter(q => String(q.year) === y)
     .sort((a,b) => (Number(a.n)||0) - (Number(b.n)||0))
@@ -37495,7 +37582,7 @@ function ppOpenPaperEdit(year){
 function ppClosePaperEdit(){
   if (_ppPeDirty && !confirm('Discard every change you made to this paper?')) return;
   const ov = document.getElementById('ppPaperEditOverlay'); if (ov) ov.classList.remove('active');
-  _ppPeYear = null; _ppPeYearDraft = ''; _ppPeRows = null; _ppPeSel = new Set(); _ppPeDeleted = []; _ppPeDirty = false;
+  _ppPeYear = null; _ppPeYearDraft = ''; _ppPeRows = null; _ppPeSel = new Set(); _ppPeDeleted = []; _ppPeDirty = false; _ppPePrevCache = {};
 }
 function ppPeSetYear(v){ _ppPeYearDraft = v; ppPeMarkDirty(); }
 
@@ -37503,6 +37590,19 @@ function ppPeSetYear(v){ _ppPeYearDraft = v; ppPeMarkDirty(); }
 function ppPeSet(k, field, value){
   const r = ppPeFind(k); if (!r) return;
   r[field] = value;
+  // Typing still never re-renders — but the row's own heading now repeats the
+  // number, marks, booklet and topic, so those four are patched in place.
+  // Without this the header would sit there contradicting the field the user
+  // is editing until something else forced a full render.
+  if (field === 'n' || field === 'marks' || field === 'bk' || field === 'topic') {
+    const row = document.getElementById('ppPeRow_' + k);
+    if (row) {
+      const qno = row.querySelector('.pp-pe-qno');
+      if (qno) qno.textContent = 'Q' + String(r.n == null ? '' : r.n);
+      const meta = row.querySelector('.pp-pe-headmeta');
+      if (meta) meta.innerHTML = `${escapeHtml(String(r.marks || 0))} mark${Number(r.marks) === 1 ? '' : 's'} &middot; Booklet ${escapeHtml(String(r.bk || 'A'))}${r.topic ? ' &middot; ' + escapeHtml(String(r.topic)) : ''}`;
+    }
+  }
   ppPeMarkDirty();
 }
 function ppPeToggleSel(k, on){ if (on) _ppPeSel.add(k); else _ppPeSel.delete(k); ppPeRenderBulk(); ppPeRenderStatus(); ppPeSyncRowClasses(); }
@@ -37604,6 +37704,7 @@ function ppPeRender(){
     body.innerHTML = rows.length
       ? rows.map(r => ppPeRowHtml(r)).join('') + `<button type="button" class="pp-add pp-pe-addrow" onclick="ppPeAddRow()">＋ Add another question to this paper</button>`
       : `<div class="pp-pe-empty">This paper has no questions yet.<br><button type="button" class="pp-add" style="margin-top:14px;" onclick="ppPeAddRow()">＋ Add the first question</button></div>`;
+    ppPeFillPreviews();   // the containers must exist before buildOpenBody fills them
   }
   ppPeRenderStatus();
 }
@@ -37615,6 +37716,10 @@ function ppPeRowHtml(r){
     r.id ? '' : '<span class="pp-pe-badge new">NEW</span>',
     bq ? `<span class="pp-pe-badge ok" title="A bank question is attached — students can practise it">✓ attached</span>` : '<span class="pp-pe-badge muted" title="No bank question attached yet — students cannot practise this one">not attached</span>'
   ].join('');
+  // The question exactly as a student is served it, then its answer key, then
+  // the paper's own bookkeeping folded away. Checking a paper means reading the
+  // question and the answer — not filling in a grid of tiny boxes — so those
+  // come first and the metadata is one click away.
   return `<div class="pp-pe-row${sel ? ' sel' : ''}" id="ppPeRow_${k}">
     <div class="pp-pe-rowhead">
       <label class="pp-pe-tick" title="Tick to include this question in the bulk actions above">
@@ -37622,11 +37727,31 @@ function ppPeRowHtml(r){
       </label>
       <span class="pp-pe-qno">Q${escapeHtml(String(r.n))}</span>
       ${badges}
+      <span class="pp-pe-headmeta">${escapeHtml(String(r.marks || 0))} mark${Number(r.marks) === 1 ? '' : 's'} &middot; Booklet ${escapeHtml(String(r.bk || 'A'))}${r.topic ? ' &middot; ' + escapeHtml(String(r.topic)) : ''}</span>
       <div class="pp-pe-rowtools">
-        ${bq ? `<button type="button" class="pp-mini" title="Open the attached quiz question in the full block editor" onclick="ppPeEditBank('${k}')">✏️ Attached question</button>` : ''}
+        ${bq ? `<button type="button" class="pp-mini" title="Open the attached quiz question in the full block editor" onclick="ppPeEditBank('${k}')">✏️ Edit the question</button>` : ''}
         <button type="button" class="pp-mini del" title="Remove this question from the paper" onclick="ppPeDeleteRow('${k}')">&times; Remove</button>
       </div>
     </div>
+
+    <div class="pp-pe-title-line">
+      <input class="form-input pp-pe-titleinput" type="text" placeholder="Short description of the question"
+             value="${escapeHtml(String(r.title || ''))}" oninput="ppPeSet('${k}','title',this.value)">
+    </div>
+
+    <div class="pp-pe-preview" id="ppPePrev_${k}">${bq
+      ? `<div class="pp-pe-prevwait">Loading the question…</div>`
+      : `<div class="pp-pe-noq">No quiz question is attached to this one yet, so there is nothing to show a student. Build it from the paper list, then it appears here.</div>`}</div>
+
+    <div class="pp-pe-key">
+      <div class="pp-pe-key-h">✅ Answer key<span> — the paper's own mark scheme. Edit it here.</span></div>
+      <textarea class="form-input pp-pe-keytext" rows="3" placeholder="Model answer / key"
+                oninput="ppPeSet('${k}','ans',this.value)">${escapeHtml(String(r.ans || ''))}</textarea>
+      <div class="pp-pe-model" id="ppPeModel_${k}"></div>
+    </div>
+
+    <details class="pp-pe-meta">
+      <summary>Paper details — number, booklet, marks, topic, skill, difficulty, analysis</summary>
     <div class="pp-pe-grid">
       <label class="pp-pe-f"><span>Q no.</span><input class="form-input" type="number" min="1" value="${escapeHtml(String(r.n == null ? '' : r.n))}" oninput="ppPeSet('${k}','n',this.value)"></label>
       <label class="pp-pe-f"><span>Booklet</span><select class="form-select" onchange="ppPeSet('${k}','bk',this.value)"><option ${((r.bk||'A') === 'A') ? 'selected' : ''}>A</option><option ${((r.bk||'A') === 'B') ? 'selected' : ''}>B</option></select></label>
@@ -37635,12 +37760,56 @@ function ppPeRowHtml(r){
       <label class="pp-pe-f"><span>Skill tested</span><select class="form-select" onchange="ppPeSet('${k}','type',this.value)">${ppPeSkillOptions(r.type || 'recall')}</select></label>
       <label class="pp-pe-f"><span>Difficulty</span><select class="form-select" onchange="ppPeSet('${k}','diff',this.value)">${ppPeDiffOptions(r.diff)}</select></label>
     </div>
-    <label class="pp-pe-f full"><span>Title</span><input class="form-input" type="text" placeholder="Short description of the question" value="${escapeHtml(String(r.title || ''))}" oninput="ppPeSet('${k}','title',this.value)"></label>
-    <div class="pp-pe-two">
-      <label class="pp-pe-f"><span>What it tests / analysis</span><textarea class="form-input" rows="2" placeholder="How the question works and what to watch for" oninput="ppPeSet('${k}','detail',this.value)">${escapeHtml(String(r.detail || ''))}</textarea></label>
-      <label class="pp-pe-f"><span>Suggested answer</span><textarea class="form-input" rows="2" placeholder="Model answer / key" oninput="ppPeSet('${k}','ans',this.value)">${escapeHtml(String(r.ans || ''))}</textarea></label>
-    </div>
+    <label class="pp-pe-f full"><span>What it tests / analysis</span><textarea class="form-input" rows="2" placeholder="How the question works and what to watch for" oninput="ppPeSet('${k}','detail',this.value)">${escapeHtml(String(r.detail || ''))}</textarea></label>
+    </details>
   </div>`;
+}
+// The student's view of the attached question, plus the bank's own model
+// answer, dropped into each row AFTER the list is in the DOM.
+//
+// buildOpenBody is the single renderer every student-facing surface uses, so
+// this is the real thing rather than a lookalike that would drift from it. It
+// keys its answer stores by container selector, which is why each row gets its
+// own id — the same pattern the worksheet preview uses. The result is made
+// inert with CSS (.pp-pe-preview): this screen is for READING the question, so
+// the answer boxes are shown but not typed in, and the hint / check buttons
+// that would mark them are hidden.
+// Built HTML per row key. ppPeRender() replaces the whole body — a bulk topic
+// stamp, a renumber, a sort, adding a row — and rebuilding forty question
+// previews each time (images, tables, option lists) is the one thing that
+// would make this screen slow. The bank question cannot change while the modal
+// is open (editing one closes it), so the built markup is reusable.
+let _ppPePrevCache = {};
+function ppPeFillPreviews(){
+  (_ppPeRows || []).forEach(r => {
+    const k = r._k;
+    const host = document.getElementById('ppPePrev_' + k);
+    const bq = r.id ? ppBankQ(r.id) : null;
+    if (host && bq) {
+      try {
+        if (_ppPePrevCache[k] == null) {
+          _ppPePrevCache[k] = buildOpenBody(bq, '#ppPePrev_' + k, { scoreElId: 'ppPeScore_' + k, scorePrefix: '', mode: 'preview' });
+        }
+        host.innerHTML = _ppPePrevCache[k];
+      } catch (e) {
+        console.warn('paper preview', r.id, e);
+        host.innerHTML = `<div class="pp-pe-noq">This question could not be previewed — open it in the block editor to check it.</div>`;
+      }
+    }
+    const mh = document.getElementById('ppPeModel_' + k);
+    if (mh) {
+      let bits = '';
+      if (bq) {
+        const model = _deriveModelAnswer(bq);
+        if (model) bits += `<div class="pp-pe-model-h">From the attached question</div>`
+          + `<div class="pp-pe-model-b">${escapeHtml(model).replace(/\n/g, '<br>')}</div>`;
+        const ex = (bq.blocks || []).filter(b => b.type === 'explanation' && stripHtml(b.content || '').trim());
+        if (ex.length) bits += `<div class="pp-pe-model-h">Explanation</div>`
+          + `<div class="pp-pe-model-b">${ex.map(b => sanitizeAnswerKeyHtml(b.content)).join('<br>')}</div>`;
+      }
+      mh.innerHTML = bits;
+    }
+  });
 }
 // Jump from a row straight into the attached bank question's block editor.
 // Anything typed in the paper editor is saved first so it is never lost.
@@ -37681,7 +37850,7 @@ function ppPeRenderBulk(){
 function ppPeRenderStatus(){
   const rows = _ppPeRows || [];
   const sub = document.getElementById('ppPaperEditSub');
-  if (sub) sub.textContent = `Edit every question in this paper on one screen — number, booklet, marks, topic, skill, difficulty, title, analysis and answer — then save the lot in one go. Tick questions to change several at once.`;
+  if (sub) sub.textContent = `Every question exactly as a student is served it, with its answer key underneath — scroll from the top, check each one, edit the key in place. Paper details fold open under each question; tick questions to change several at once. Save the lot in one go.`;
   const st = document.getElementById('ppPaperEditStatus');
   if (!st) return;
   const marks = rows.reduce((s,r) => s + (Number(r.marks) || 0), 0);
@@ -37944,6 +38113,35 @@ function ppStyles(){
   .pp-pe-badge.new { color:#7a5410; background:#fdf4e3; border-color:#c08a2e; }
   .pp-pe-rowtools { margin-left:auto; display:flex; gap:8px; align-items:center; }
   .pp-pe-rowtools .pp-mini { border-radius:9px; border-left:1px solid var(--border); padding:5px 11px; }
+  .pp-pe-headmeta { font-size:0.78rem; color:var(--text-muted); }
+  .pp-pe-title-line .pp-pe-titleinput { width:100%; font-size:1rem; font-weight:600; padding:9px 12px; }
+  /* The question exactly as a student is served it — but for READING, not
+     answering. Pointer events off makes the whole thing inert, and the
+     hint / check / mic controls that only make sense mid-practice are hidden
+     so the card shows the question and its answer spaces, nothing else. */
+  .pp-pe-preview { border:1px solid var(--border); border-radius:12px; padding:18px 20px; background:var(--surface-alt,#fafbfa); }
+  .pp-pe-preview .qp-part { background:var(--surface,#fff); }
+  .pp-pe-preview .open-answer, .pp-pe-preview .fb-input, .pp-pe-preview input[type=radio] { pointer-events:none; }
+  .pp-pe-preview .part-actions, .pp-pe-preview .part-hint-box, .pp-pe-preview .mcq-feedback,
+  .pp-pe-preview .open-feedback, .pp-pe-preview .admin-ans-tool, .pp-pe-preview .mic-btn,
+  .pp-pe-preview .fb-actions, .pp-pe-preview .open-photo-bar,
+  .pp-pe-preview .dgn-toolbar, .pp-pe-preview .dgn-actions { display:none !important; }
+  .pp-pe-preview { pointer-events:none; }
+  .pp-pe-preview img { pointer-events:auto; }   /* still clickable to enlarge */
+  .pp-pe-preview .open-answer { min-height:52px; background:#fff; }
+  .pp-pe-prevwait, .pp-pe-noq { font-size:0.85rem; color:var(--text-muted); line-height:1.65; }
+  /* The answer key sits directly under the question — the thing being checked,
+     next to the thing it answers. */
+  .pp-pe-key { border:1px solid var(--primary,#0b6b4f); border-radius:12px; padding:14px 16px 15px; background:var(--primary-light,#f2f8f5); }
+  .pp-pe-key-h { font-size:0.8rem; font-weight:700; color:var(--primary-dark,#064834); margin-bottom:9px; }
+  .pp-pe-key-h span { font-weight:400; color:var(--text-muted); }
+  .pp-pe-keytext { width:100%; margin:0; resize:vertical; line-height:1.6; background:#fff; }
+  .pp-pe-model { margin-top:10px; }
+  .pp-pe-model-h { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin:8px 0 3px; }
+  .pp-pe-model-b { font-size:0.85rem; line-height:1.65; color:var(--on-surface,#14161a); }
+  .pp-pe-meta > summary { cursor:pointer; font-size:0.8rem; font-weight:600; color:var(--text-muted); padding:6px 0; list-style:revert; }
+  .pp-pe-meta[open] > summary { margin-bottom:11px; }
+  .pp-pe-meta { border-top:1px solid var(--border); padding-top:4px; }
   /* Q no / booklet / marks / topic / skill / difficulty all on ONE line, so a
      whole paper's rows read like a table you can scan and scroll. */
   .pp-pe-grid { display:grid; grid-template-columns:84px 96px 84px 1fr 1fr 1fr; gap:12px 14px; }
