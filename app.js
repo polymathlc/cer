@@ -1633,7 +1633,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.236.0';
+const APP_VERSION = 'v1.236.1';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -11377,6 +11377,16 @@ function stripHtml(content) {
 // letter part 'i', while its sibling "(ii)" did not match at all: the question
 // half-converted and both sub-answers landed under one heading.
 const QPART_LETTERS = 'abcdefgh';
+// The alphabet the editor can ASSIGN, which is deliberately longer than the
+// one qPartDetect will match. Detection has to be conservative about text
+// nobody vetted — 'i' there would eat the roman-numeral sub-part '(i)'. An
+// admin numbering a question by hand is not guessing, so the only letter
+// skipped is 'i', for the same readability reason exam papers skip it.
+// It must be long enough that autoNumberParts never runs out: a question
+// with more sub-questions than letters used to leave the overflow with an
+// EMPTY part, which qPartMap then filed under the previous one — two
+// answers under a single heading, the exact bug parts exist to prevent.
+const QPART_ASSIGN = 'abcdefghjklmnopqrstuvwxyz';
 // A part marker is a SINGLE letter a–h at the very start of the text, followed
 // by whitespace or the end. Three accepted forms, and the third is deliberately
 // stricter: a bare "X." with a CAPITAL letter is ordinary prose far more often
@@ -11455,7 +11465,7 @@ function qPartDetect(html) {
 }
 function qPartNormalize(v) {
   const s = String(v == null ? '' : v).trim().toLowerCase().replace(/[()\s.]/g, '');
-  return QPART_LETTERS.indexOf(s) >= 0 ? s : '';
+  return QPART_ASSIGN.indexOf(s) >= 0 ? s : '';
 }
 function qPartLabel(p) { const n = qPartNormalize(p); return n ? '(' + n + ')' : ''; }
 // The part each block belongs to: a block carrying `part` opens it, and every
@@ -11501,7 +11511,7 @@ function qHasParts(blocks) { return (blocks || []).some(b => qBlockOpensPart(b))
 // The next unused letter, for the editor's "add a part" affordance.
 function qPartNext(blocks) {
   const used = new Set((blocks || []).map(b => qBlockOpensPart(b)).filter(Boolean));
-  for (const c of QPART_LETTERS) if (!used.has(c)) return c;
+  for (const c of QPART_ASSIGN) if (!used.has(c)) return c;
   return '';
 }
 // Which block types can OPEN a part: the TEXT that asks the sub-question, and
@@ -11525,7 +11535,7 @@ function qPartPickerHtml(block) {
       : '';
   }
   const opts = ['<option value="">Part —</option>'].concat(
-    QPART_LETTERS.split('').map(c => `<option value="${c}"${own === c ? ' selected' : ''}>Part (${c})</option>`)
+    QPART_ASSIGN.split('').slice(0, 12).map(c => `<option value="${c}"${own === c ? ' selected' : ''}>Part (${c})</option>`)
   ).join('');
   return `<select class="qpart-select${own ? ' on' : ''}" title="Start question part (a), (b), … here. Everything below belongs to this part until the next one starts."
     onchange="setBlockPart('${block.id}', this.value)">${opts}</select>`
@@ -11561,10 +11571,16 @@ function autoNumberParts() {
     }
   });
   if (idx.length < 2) { showToast('Nothing to number — a question needs at least two parts, each with its own answer box', 'error'); return; }
+  // Never assign past the alphabet. An opener left with an EMPTY part is not
+  // "unlabelled": qPartMap inherits forward, so it would be filed under the
+  // PREVIOUS part and its answer would share that part's heading on the key.
+  // Stopping short and saying so is the only honest outcome.
+  const over = Math.max(0, idx.length - QPART_ASSIGN.length);
+  const take = idx.slice(0, QPART_ASSIGN.length);
   let stripped = 0;
-  idx.forEach((bi, n) => {
+  take.forEach((bi, n) => {
     const b = blocks[bi];
-    b.part = QPART_LETTERS[n] || '';
+    b.part = QPART_ASSIGN[n];
     // If the marker is still typed at the front of the text, take it out —
     // otherwise the paper reads "(a) a) What is X?".
     if (qPartCountMarkers(b.content) === 1) {
@@ -11573,8 +11589,10 @@ function autoNumberParts() {
     }
   });
   renderBlocks();
-  showToast('🔡 Numbered ' + idx.length + ' parts: ' + idx.map((_, n) => '(' + QPART_LETTERS[n] + ')').join(' ')
-    + (stripped ? ' · removed ' + stripped + ' typed marker' + (stripped === 1 ? '' : 's') + ' from the text' : ''), 'success');
+  showToast('🔡 Numbered ' + take.length + ' parts: ' + take.map((_, n) => '(' + QPART_ASSIGN[n] + ')').join(' ')
+    + (stripped ? ' · removed ' + stripped + ' typed marker' + (stripped === 1 ? '' : 's') + ' from the text' : '')
+    + (over ? ' · ' + over + ' more sub-question' + (over === 1 ? '' : 's') + ' than there are letters — label those from each block\'s Part menu' : ''),
+    over ? 'error' : 'success');
 }
 // ---- One-off migration: typed "a)" markers → official parts --------------
 // Questions written before parts existed carry the marker as characters at the
