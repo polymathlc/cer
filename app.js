@@ -1633,7 +1633,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.236.1';
+const APP_VERSION = 'v1.236.2';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -5399,18 +5399,22 @@ function imgScale(block) {
 }
 // Inline style for a rendered picture.
 //
-// Auto (no size chosen): as wide as the column allows, but never stretched past
-// its own resolution. A big scan — a four-option figure, a graph — fills the
-// column, which is what such a picture is FOR; a small inset stays small rather
-// than being blown up into a blur. The flat 60% this replaces is why every
-// large diagram came out at little more than half the size it wanted.
+// Auto (no size chosen): up to IMG_AUTO_MAX_PCT of the column, and never
+// stretched past its own resolution. A small inset stays small rather than
+// being blown up into a blur; a big scan is pulled in to the cap, because a
+// diagram at the full text width dwarfs the question it belongs to.
 //
 // Chosen: a straight percentage of the COLUMN width, 20%–100%, so the control
 // is monotonic — every press of + is bigger than the last, up to the full
 // column. (100% once meant "natural size" here, which made pressing + to the
 // limit the SMALLEST setting a small picture could have.)
+// How wide an AUTO picture may get, as a share of the column. A cap, not a
+// width: setting `width:70%` would STRETCH a small inset up to 70% of the
+// column — the opposite of making pictures smaller. This only pulls the big
+// ones in and leaves a small picture exactly as it was.
+const IMG_AUTO_MAX_PCT = 70;
 function imgSizeStyle(block) {
-  if (!imgHasScale(block)) return 'height:auto;max-width:100%';
+  if (!imgHasScale(block)) return `height:auto;max-width:${IMG_AUTO_MAX_PCT}%`;
   const pct = Math.round(imgScale(block) * 100);
   return `width:${pct}%;height:auto;max-width:100%`;
 }
