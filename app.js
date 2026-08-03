@@ -1579,7 +1579,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.230.0';
+const APP_VERSION = 'v1.231.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -1860,6 +1860,7 @@ async function loadAdminQuestions() {
     adminUid = configSnap.data().uid;
     try { _startCreditResetListener(); } catch (e) {}
     try { _startDuelClawbackListener(); } catch (e) {}
+    try { _startHeroOpsListener(); } catch (e) {}
     // Use the ADMIN's topic→level map (custom topics + removals) so custom
     // topics get their real level on student devices instead of the P6 default.
     try {
@@ -19627,7 +19628,8 @@ function _buildAuditRows(boardRows, bans) {
       uid,
       name: s.name || b.name || 'Unknown',
       email: s.email || '',
-      banned: bans.has(uid),
+      banScope: bans[uid] || '',
+      banned: !!bans[uid],
       // activity
       logins: s.loginCount | 0,
       attempts: s.questionsAttempted | 0,
@@ -19648,6 +19650,7 @@ function _buildAuditRows(boardRows, bans) {
       advRuns: a.advRuns | 0,
       power: (b.tcg && b.tcg.power) | 0,
       dex: (b.tcg && b.tcg.dex) | 0,
+      score: rpgRowScore(b),
       clawedBack: !!a.duelClawback,
       published: !!b.uid,
       hasAudit: !!b.audit
@@ -19664,6 +19667,7 @@ function _auditSortRows(rows) {
     duels: (a, b) => b.duelWins - a.duelWins,
     questions: (a, b) => b.attempts - a.attempts,
     power: (a, b) => b.power - a.power,
+    score: (a, b) => b.score - a.score,
     rapid: (a, b) => (b.rapid + b.fast) - (a.rapid + a.fast),
     recent: (a, b) => (b.lastActive ? b.lastActive.getTime() : 0) - (a.lastActive ? a.lastActive.getTime() : 0),
     name: (a, b) => String(a.name).localeCompare(String(b.name))
@@ -19682,7 +19686,7 @@ async function renderActivityAudit() {
   if (note) {
     note.innerHTML = `${_auditRows.length} student${_auditRows.length === 1 ? '' : 's'} · `
       + `<b style="color:${flagged ? 'var(--accent-red)' : 'var(--text-muted)'};">${flagged} flagged</b> · `
-      + `${bans.size} banned from the boards`;
+      + `${Object.keys(bans).length} banned from a board`;
   }
   const sel = document.getElementById('usageAuditSort');
   if (sel && sel.value !== _auditSort) sel.value = _auditSort;
@@ -19703,7 +19707,7 @@ async function renderActivityAudit() {
     return `<tr class="${r.banned ? 'audit-banned' : ''}${r.flags.length ? ' audit-flagged' : ''}">
       <td style="font-weight:600;">
         <span class="clickable" onclick="showStudentDetail('${escapeHtml(r.uid)}')" style="cursor:pointer;">${escapeHtml(r.name)}</span>
-        ${r.banned ? '<span class="audit-ban-tag" title="Hidden from every leaderboard and from the prize winners table">🚫 banned</span>' : ''}
+        ${r.banned ? `<span class="audit-ban-tag" title="Hidden from these boards, and from the prize winners table for them">🚫 ${escapeHtml((BOARD_BAN_SCOPES[r.banScope] || BOARD_BAN_SCOPES.all).short)}</span>` : ''}
         ${r.clawedBack ? '<span class="audit-ban-tag ok" title="The duel-points clawback has already been applied to this student">⚔️ clawed back</span>' : ''}
         <div class="audit-sub">${escapeHtml(r.email)}</div>
       </td>
@@ -19712,12 +19716,20 @@ async function renderActivityAudit() {
       <td style="text-align:right;">${num(r.rapid)}<div class="audit-sub">${num(r.fast)} under ${AUDIT_FAST_MS / 1000}s</div></td>
       <td style="text-align:right;">${num(r.duelWins)}<div class="audit-sub">${num(r.duelLosses)} lost</div></td>
       <td style="text-align:right;">${num(r.power)}<div class="audit-sub">${num(r.dex)} dex · ${num(r.packs)} packs</div></td>
-      <td style="text-align:right;">Lv ${num(r.level)}<div class="audit-sub">${num(r.xp)} XP · ${num(r.monthQ)} Q this month</div></td>
+      <td style="text-align:right;">${num(r.score)}<div class="audit-sub">Lv ${num(r.level)} · ${num(r.xp)} XP · ${num(r.monthQ)} Q this month</div></td>
       <td style="max-width:220px;">${flags || '<span class="audit-sub">—</span>'}</td>
       <td style="text-align:center;white-space:nowrap;">
-        <button class="btn btn-outline" style="padding:4px 10px;font-size:0.76rem;"
-          onclick="adminSetBoardBan('${escapeHtml(r.uid)}', ${r.banned ? 'false' : 'true'})"
-          title="${r.banned ? 'Put this student back on the leaderboards.' : 'Hide this student from every leaderboard and from the prize winners table. Their own hero, points and progress are untouched.'}">${r.banned ? '↩︎ Unban' : '🚫 Ban'}</button>
+        <select class="audit-ban-select" onchange="adminSetBoardBan('${escapeHtml(r.uid)}', this.value)"
+          title="Which boards this student is excluded from. Their own hero, points, cards and progress are never touched, and this is reversible.">
+          <option value=""${r.banScope ? '' : ' selected'}>On all boards</option>
+          ${Object.keys(BOARD_BAN_SCOPES).map(k =>
+            `<option value="${k}"${r.banScope === k ? ' selected' : ''}>🚫 ${escapeHtml(BOARD_BAN_SCOPES[k].label)}</option>`).join('')}
+        </select>
+        <div style="margin-top:6px;">
+          <button class="btn btn-outline" style="padding:4px 10px;font-size:0.74rem;"
+            onclick="adminHeroOp('${escapeHtml(r.uid)}', 'mergeReset')"
+            title="Set every one of this student's monsters back to no merges (merge level 1). Lowers their Realm of Embers team power; cards, training levels and points are kept.">⟡ Reset merges</button>
+        </div>
       </td>
     </tr>`;
   }).join('');
@@ -19725,18 +19737,19 @@ async function renderActivityAudit() {
 // Ban / unban a student from every leaderboard. Written to the same shared
 // settings path students already read retiredAccounts from, so their own client
 // filters them out too and a banned student cannot reappear by republishing.
-async function adminSetBoardBan(uid, banned) {
+async function adminSetBoardBan(uid, scope) {
   if (!currentUser || currentUser.role !== 'admin' || !uid) return;
+  const key = BOARD_BAN_SCOPES[scope] ? scope : '';
   const row = _auditRows.find(r => r.uid === uid);
   const who = (row && row.name) || 'This student';
-  if (banned && !confirm(
-    `Ban ${who} from the leaderboards?\n\n` +
-    'They disappear from every board tab, from the board inside Realm of Embers, and from the prize winners table — so they cannot be awarded a voucher.\n\n' +
+  if (key && !confirm(
+    `Ban ${who} from ${BOARD_BAN_SCOPES[key].label.replace(/^[^ ]+ /, '')}?\n\n` +
+    'They disappear from those boards and from the prize winners table for them, so they cannot be awarded those vouchers.\n\n' +
     'Their own hero, points, cards and progress are NOT touched, and you can undo this at any time.'
-  )) return;
+  )) { await renderActivityAudit(); return; }   // re-render so the select springs back
   try {
     await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'boardBans'),
-      { uids: { [uid]: !!banned } }, { merge: true });
+      { uids: { [uid]: !!key }, scopes: { [uid]: key || null } }, { merge: true });
     _boardBansCache = null;
     rpgBoardRows = null;                      // force the next board render to refetch
     try { _usageBoardRows = await rpgFetchLeaderboard(true); } catch (e) {}
@@ -19753,15 +19766,15 @@ function exportActivityAudit() {
   if (!_auditRows.length) { showToast('Nothing to export yet — load the dashboard first', 'error'); return; }
   const cols = ['Name', 'Email', 'Points', 'Points earned all-time', 'Questions marked (hero)', 'Attempts logged', 'Avg score %',
     'Rapid attempts', 'Answers under ' + (AUDIT_FAST_MS / 1000) + 's', 'Logins', 'Duel wins', 'Duel losses', 'Packs opened',
-    'Dungeon raids', 'Embers power', 'Dex', 'Level', 'XP', 'Questions this month', 'Banned', 'Duel points clawed back', 'Flags', 'Last active'];
+    'Dungeon raids', 'Embers power', 'Dex', 'Level', 'XP', 'Science Score', 'Questions this month', 'Banned from', 'Duel points clawed back', 'Flags', 'Last active'];
   const esc = v => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
   const lines = [cols.join(',')].concat(_auditSortRows(_auditRows).map(r => [
     r.name, r.email, r.points, r.earned, r.marked, r.attempts, r.accuracy == null ? '' : r.accuracy,
-    r.rapid, r.fast, r.logins, r.duelWins, r.duelLosses, r.packs, r.advRuns, r.power, r.dex, r.level, r.xp, r.monthQ,
-    r.banned ? 'yes' : 'no', r.clawedBack ? 'yes' : 'no',
+    r.rapid, r.fast, r.logins, r.duelWins, r.duelLosses, r.packs, r.advRuns, r.power, r.dex, r.level, r.xp, r.score, r.monthQ,
+    r.banned ? (BOARD_BAN_SCOPES[r.banScope] || BOARD_BAN_SCOPES.all).short : 'no', r.clawedBack ? 'yes' : 'no',
     r.flags.map(f => f.label).join(' | '),
     r.lastActive ? formatDateTimeSGT(r.lastActive) : ''
   ].map(esc).join(',')));
@@ -19819,7 +19832,10 @@ function _computePrizeWinners() {
   const key = _prizeMonthKey();
   const out = [];
   const push = (cat, ackSuffix, topN, valFn, resultFn) => {
-    rows.map(r => ({ r, v: valFn(r) })).filter(x => x.v > 0)
+    // A student banned from the board this prize is decided on cannot win it.
+    const tab = PRIZE_CATEGORY_TAB[cat] || 'month';
+    rows.filter(r => !rpgBoardBanned(r.uid, tab))
+      .map(r => ({ r, v: valFn(r) })).filter(x => x.v > 0)
       .sort((a, b) => b.v - a.v).slice(0, topN)
       .forEach((x, i) => out.push({
         _winId: x.r.uid + '_' + key + ackSuffix,
@@ -22875,6 +22891,7 @@ async function rpgInit() {
   // The clawback marker may have arrived before the hero existed — apply it now
   // that it does (it is a no-op once this student's ack key matches).
   try { rpgApplyDuelClawback(); } catch (_) {}
+  try { rpgApplyHeroOp(); } catch (_) {}
 }
 // ---- Points earned in Science Strike (fps.html), claimed here ----
 // fps.html is a separate page and must NEVER write the hero document — this
@@ -23053,6 +23070,98 @@ function rpgLastMonthQ(r) {
   if (r.lastMonthKey === prev) return r.lastMonthQ || 0;
   return 0;
 }
+// ---- Answer pace --------------------------------------------------------
+// The All-Time board rewards questions answered PROPERLY, so it has to know
+// whether an answer was considered or fired off. Games clock every answer, so
+// their real ms is measured against the same anti-bot floor the points use.
+// The practice page has no per-question timer, so the gap since the previous
+// marked question stands in — the same 15s signal the admin's rapid-attempt
+// column uses. A gap longer than PACE_MAX_MS means the student went away and
+// came back, so it counts as neither rushed nor considered.
+const PACE_MIN_PRACTICE_MS = 15000;
+const PACE_MAX_MS = 360000;
+function rpgNotePace(ms, minMs) {
+  if (!rpgState) return;
+  const now = Date.now();
+  let p = rpgState.pace;
+  if (!p || typeof p !== 'object') p = rpgState.pace = { n: 0, ok: 0, sumMs: 0, lastAt: 0 };
+  const clocked = ms > 0 ? Math.round(ms) : (p.lastAt ? now - p.lastAt : 0);
+  p.lastAt = now;
+  if (clocked <= 0 || clocked > PACE_MAX_MS) return;   // no usable clock
+  p.n = (p.n | 0) + 1;
+  p.sumMs = (p.sumMs | 0) + clocked;
+  if (clocked >= Math.max(1000, minMs | 0)) p.ok = (p.ok | 0) + 1;
+}
+
+// ---- The Science Score: what the All-Time board ranks on -----------------
+// XP used to rank it, and XP came from dungeon runs and (until v1.229.0) free
+// arena duels — so it measured hours in the game, not science learned.
+//
+// The base is MARKS EARNED, not questions attempted. That single choice is
+// what stops the board being won on volume: an early draft used attempts as
+// the base with quality as a multiplier, and 900 questions at 35% still beat
+// 400 at 88%. Marks earned is also the honest thing to rank on — a wrong
+// answer is practice, but it is not a result.
+//
+//   base = marks earned    (a marked question contributes its CREDIT, 0…1, so
+//          partial credit on a hard CER answer counts; a one-click game MCQ
+//          contributes SCORE_GAME_Q, being a smaller piece of work)
+//   A    = accuracy, marks earned ÷ work attempted  → ×0.55 (guessing) … ×1.30
+//   P    = share answered at a considered pace      → ×0.70 (all rushed) … ×1.00
+//
+// SCORE = base × (0.55 + 0.75·A) × (0.70 + 0.30·P)
+//
+// In one line for students: every question you get right is a point, worth
+// more when your accuracy is high and less when you rush it.
+const SCORE_GAME_Q = 0.5;
+const SCORE_ACC_BASE = 0.55, SCORE_ACC_SPAN = 0.75;
+const SCORE_PACE_BASE = 0.70, SCORE_PACE_SPAN = 0.30;
+const SCORE_PACE_MIN_N = 10;   // fewer clocked answers than this is not enough to judge
+function rpgScienceScore(p) {
+  const base = Math.max(0, Number(p && p.base) || 0);
+  if (base <= 0) return 0;
+  const acc = Math.max(0, Math.min(1, Number(p.acc) || 0));
+  const pace = p.pace == null ? 1 : Math.max(0, Math.min(1, Number(p.pace) || 0));
+  return Math.round(base * (SCORE_ACC_BASE + SCORE_ACC_SPAN * acc) * (SCORE_PACE_BASE + SCORE_PACE_SPAN * pace));
+}
+// This student's score parts, straight off their own hero state.
+function rpgMyScoreParts() {
+  const st = (rpgState && rpgState.stats) || {};
+  const marked = st.marked | 0;
+  // creditSum is the fractional total; heroes from before it existed fall back
+  // to the binary correct count, which is the same number for MCQ work.
+  const marks = Math.min(marked, Math.max(0, st.creditSum != null ? Number(st.creditSum) || 0 : (st.correct | 0)));
+  const gq = st.gameQ | 0, gc = st.gameCorrect | 0;
+  const work = marked + SCORE_GAME_Q * gq;
+  const base = marks + SCORE_GAME_Q * gc;
+  const pc = (rpgState && rpgState.pace) || null;
+  const pn = (pc && pc.n) | 0;
+  return {
+    base: Math.round(base * 10) / 10,
+    q: Math.round(work * 10) / 10,
+    acc: work > 0 ? Math.min(1, base / work) : 0,
+    // Too few clocked answers to judge → treated as unrushed, so a new student
+    // is never punished for data nobody has collected yet.
+    pace: pn >= SCORE_PACE_MIN_N ? Math.min(1, ((pc.ok | 0) / pn)) : null,
+    paceN: pn,
+    marked, gameQ: gq
+  };
+}
+function rpgScorePayload() {
+  const p = rpgMyScoreParts();
+  return { v: rpgScienceScore(p), base: p.base, q: p.q, acc: Math.round(p.acc * 1000) / 1000, pace: p.pace, paceN: p.paceN, marked: p.marked, gameQ: p.gameQ };
+}
+// A published row's score. Rows published by a build older than v1.231.0 have
+// no `score` block; their audit counters still give marks and accuracy, and
+// their pace is simply unknown (so treated as unrushed).
+function rpgRowScore(r) {
+  if (r && r.score && r.score.v != null) return r.score.v | 0;
+  const a = (r && r.audit) || {};
+  const marked = a.marked | 0;
+  if (!marked) return 0;
+  const correct = Math.min(marked, a.correct | 0);
+  return rpgScienceScore({ base: correct, acc: correct / marked, pace: null });
+}
 function rpgApplyRewards(gold, xp) {
   const learn = (rpgState && rpgState.star && rpgState.star.learn) || 0;
   if (learn && xp > 0) xp = Math.round(xp * (1 + 0.05 * learn));
@@ -23190,9 +23299,15 @@ function rpgOnMarked(q, score, total, opts = {}) {
   if (xp > 0 && rpgSurgeBonus("xp")) xp = Math.round(xp * (1 + rpgSurgeBonus("xp")));
   rpgState.stats.marked++;
   if (credit >= 0.95) rpgState.stats.correct++;
+  // Fractional total alongside the binary count: the Science Score ranks on
+  // marks EARNED, so a part-right CER answer has to be worth part of a mark.
+  rpgState.stats.creditSum = Math.round(((Number(rpgState.stats.creditSum) || 0) + credit) * 100) / 100;
   if (!opts.simulated) {
     try { rpgNoteStreakActivity(credit >= 0.95); } catch (_) {}
     try { rpgSurgeNote(credit); } catch (_) {}
+    // No per-question timer on this page, so pass 0 and let rpgNotePace use
+    // the gap since the previous marked question.
+    try { rpgNotePace(0, PACE_MIN_PRACTICE_MS); } catch (_) {}
   }
 
   rpgEnsureBattle(); // a foe is always present, so every answer lands on an enemy
@@ -23945,6 +24060,9 @@ function rpgPublishLeaderboard() {
       bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0,
       rebirths: rpgState.rebirths || 0,
+      // Science Score — what the All-Time board ranks on. Computed here, on the
+      // owner's own client, because only it has the pace data.
+      score: rpgScorePayload(),
       // Admin audit trail (Usage → 🕵️ Activity & points). The wallet lives in
       // the student's own hero doc, which a teacher cannot read, so the numbers
       // needed to explain a board position travel with the published row.
@@ -24051,47 +24169,78 @@ async function _getRetiredUids() {
   return out;
 }
 // ---- Leaderboard bans ---------------------------------------------------
-// A student the teacher has excluded from the boards — points earned in a way
-// the teacher has ruled out (farming a free button, say) should not outrank
-// classmates who answered questions for theirs. A ban hides the student from
-// EVERY board tab, from the board inside Realm of Embers, and from the prize
-// winners table; it changes nothing about their own hero, wallet or progress.
-// Same shared-settings read path students already use for retiredAccounts.
-let _boardBansCache = null;
+// A student the teacher has excluded from the boards — a place won with points
+// earned in a way the teacher has ruled out should not outrank classmates who
+// answered questions for theirs. A ban changes NOTHING about the student's own
+// hero, wallet, cards or progress; it only removes them from the rankings, and
+// it is reversible.
+//
+// Bans are SCOPED, because the fair remedy is usually narrower than "every
+// board": a student who farmed points into Realm of Embers should come off the
+// Embers family and still be able to compete honestly on questions.
+//
+// Filtering happens at RENDER, per tab — not at fetch — so one predicate
+// serves the main board, the board inside Realm of Embers and the prize
+// winners table. Read from the same shared-settings path as retiredAccounts,
+// so the student's OWN client filters them out too and republishing cannot put
+// them back.
+const BOARD_BAN_SCOPES = {
+  all:    { label: 'Every leaderboard', short: 'all boards', tabs: null },
+  embers: { label: '🔥 Realm of Embers family (Embers, Siege, Legends)', short: 'Embers family', tabs: ['tcg', 'siege', 'legend'] }
+};
+// Which board tab a prize category is decided on — so a scoped ban keeps a
+// student out of the winners table for exactly the boards they are off.
+const PRIZE_CATEGORY_TAB = {
+  questions: 'month', defenders: 'td', raiders: 'raid', spire: 'spire',
+  legends: 'legend', siege: 'siege', strike: 'fps', embers: 'tcg'
+};
+let _boardBansCache = null;          // uid -> scope key, or null until first read
+function rpgBoardBanMap() { return _boardBansCache || {}; }
+// Is `uid` off the board `tab` shows? An unknown scope is treated as 'all',
+// so a typo in the settings doc fails closed rather than silently doing nothing.
+function rpgBoardBanned(uid, tab) {
+  const scope = rpgBoardBanMap()[uid];
+  if (!scope) return false;
+  const def = BOARD_BAN_SCOPES[scope];
+  if (!def || !def.tabs) return true;
+  return def.tabs.indexOf(tab) >= 0;
+}
 async function _getBoardBans() {
   if (_boardBansCache) return _boardBansCache;
   const owner = (currentUser && currentUser.role === 'admin') ? currentUser.uid : adminUid;
-  const out = new Set();
+  const out = {};
   if (owner) {
     try {
       const s = await getDoc(doc(db, 'users', owner, 'settings', 'boardBans'));
-      const uids = (s.exists() && s.data().uids) || {};
-      Object.keys(uids).forEach(u => { if (uids[u]) out.add(u); });
-      _boardBansCache = out;   // only cache a real read — caching the empty set
-    } catch (e) { console.warn('board bans read', e); }  // before adminUid is
-  }                                                      // known would un-ban everyone for the session
+      const d = (s.exists() && s.data()) || {};
+      const uids = d.uids || {}, scopes = d.scopes || {};
+      // `uids[uid] === true` with no scope is a ban written before scopes
+      // existed — those meant every board, so they stay that way.
+      Object.keys(uids).forEach(u => { if (uids[u]) out[u] = scopes[u] || 'all'; });
+      _boardBansCache = out;   // only cache a real read — caching the empty map
+    } catch (e) { console.warn('board bans read', e); }  // before adminUid is known
+  }                                                      // would un-ban everyone for the session
   return out;
 }
-// Every published row, bans included — the admin audit view needs to SEE a
-// banned student in order to lift the ban again. Never render this to students.
+// Every published row. Bans are applied per tab at render, so this is what the
+// boards start from and what the admin audit view reads.
 let _rpgBoardRowsRaw = null;
 function rpgBoardRowsRaw() { return _rpgBoardRowsRaw || []; }
 async function rpgFetchLeaderboard(force) {
   if (rpgBoardRows && !force) return rpgBoardRows;
-  const rows = [], all = [];
+  const rows = [];
   try {
     const retired = await _getRetiredUids();
-    const banned = await _getBoardBans();
+    await _getBoardBans();   // populate the map the render-time predicate reads
     const snap = await getDocs(collection(db, "scienceGameLeaderboard"));
     snap.forEach(d => {
       const r = d.data();
       if (!r || !r.uid || !r.name) return;
       if (retired.has(r.uid) || retired.has(d.id)) return;
-      all.push(r);
-      if (!banned.has(r.uid) && !banned.has(d.id)) rows.push(r);
+      rows.push(r);
     });
   } catch (e) { console.warn("leaderboard load", e); return null; }
-  _rpgBoardRowsRaw = all;
+  _rpgBoardRowsRaw = rows;
   rpgBoardRows = rows;
   return rows;
 }
@@ -24112,7 +24261,7 @@ function rpgPrizeOffFor(tab, monthKey) {
   return !!(months && months.indexOf(monthKey) >= 0);
 }
 function rpgBoardMetric(r) {
-  if (rpgBoardTab === "alltime") return r.xp || 0;
+  if (rpgBoardTab === "alltime") return rpgRowScore(r);
   if (rpgBoardTab === "fps") return (r.fps && r.fps.correct) | 0;
   // Realm of Embers TCG: ranked by TOTAL TEAM POWER, the same metric the board
   // inside the TCG page uses.
@@ -24129,7 +24278,7 @@ function rpgBoardMetric(r) {
   if (r.lastMonthKey === prev) return r.lastMonthQ || 0;  // rolled over
   return 0;
 }
-function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : rpgBoardTab === "fps" ? "correct" : rpgBoardTab === "tcg" ? "floor" : rpgIsGameTab() ? "pts" : "questions"; }
+function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "score" : rpgBoardTab === "fps" ? "correct" : rpgBoardTab === "tcg" ? "floor" : rpgIsGameTab() ? "pts" : "questions"; }
 // Pretty value for a row: game tabs show the run's label (e.g. "Floor 7 · 142 kills").
 function rpgBoardValueHtml(r) {
   const sub = (rpgBoardTab === "month" || rpgBoardTab === "papers") ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : rpgIsGameTab() ? "best this month" : "all-time";
@@ -24145,6 +24294,18 @@ function rpgBoardValueHtml(r) {
     const g = r[rpgBoardTab] || {};
     const lbl = (g.monthKey === rpgMonthKey() && g.monthLabel) ? g.monthLabel : (r.shownVal + " pts");
     return `${escapeHtml(lbl)}<span>${sub}</span>`;
+  }
+  // All-Time shows how the score was built, so the ranking explains itself.
+  if (rpgBoardTab === "alltime") {
+    const s = r.score || {};
+    const a = r.audit || {};
+    const q = s.q != null ? s.q : (a.marked | 0);
+    const acc = s.acc != null ? Math.round(s.acc * 100) : (a.marked ? Math.round(Math.min(a.marked, a.correct | 0) / a.marked * 100) : null);
+    const pace = s.pace != null ? Math.round(s.pace * 100) : null;
+    const bits = [`✍️ ${Math.round(q).toLocaleString()} answered`];
+    if (acc != null) bits.push(`✅ ${acc}% right`);
+    bits.push(pace != null ? `🕒 ${pace}% unrushed` : `🕒 pace pending`);
+    return `${r.shownVal.toLocaleString()} score<span>${bits.join(" · ")}</span>`;
   }
   return `${r.shownVal} ${rpgBoardUnit()}<span>${sub}</span>`;
 }
@@ -24221,6 +24382,7 @@ async function rpgRenderLeaderboard(force = false) {
       papersQ: rpgState.papersQ || 0, lastPapersQ: rpgState.lastPapersQ || 0,
       wins: (rpgState.stats && rpgState.stats.wins) || 0, bestFloor: (rpgState.stats && rpgState.stats.bestFloor) || 0,
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0, rebirths: rpgState.rebirths || 0,
+      score: rpgScorePayload(),
       house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null,
       equipment: rpgState.equipment,
       td: rpgGameBoardData("defenders"), raid: rpgGameBoardData("raiders"), spire: rpgGameBoardData("spire"), legend: rpgGameBoardData("legend"), siege: rpgGameBoardData("siege"),
@@ -24231,7 +24393,8 @@ async function rpgRenderLeaderboard(force = false) {
     // (e.g. Science Strike's `fps` stats, published by fps.html)
     if (i >= 0) rows[i] = Object.assign({}, rows[i], mine); else rows.push(mine);
   }
-  const list = rows.map(r => Object.assign({}, r, { shownVal: rpgBoardMetric(r) }))
+  const list = rows.filter(r => !rpgBoardBanned(r.uid, rpgBoardTab))
+    .map(r => Object.assign({}, r, { shownVal: rpgBoardMetric(r) }))
     .filter(r => r.shownVal > 0)
     .sort((a, b) => b.shownVal - a.shownVal || String(a.updatedAt || "").localeCompare(String(b.updatedAt || "")));
   if (!list.length) {
@@ -24245,6 +24408,7 @@ async function rpgRenderLeaderboard(force = false) {
       : rpgBoardTab === "siege" ? "No Ember Siege runs this month yet — defend the gate and set the deepest wave!"
       : rpgBoardTab === "fps" ? "No Science Strike answers yet — jump into a run and answer questions to claim the board!"
       : rpgBoardTab === "tcg" ? "No trainers on the board yet — build a team of 5 in Realm of Embers to put your team power on the board!"
+      : rpgBoardTab === "alltime" ? "No Science Scores yet — answer questions to build one. Your score rebuilds as each student opens the app."
       : "No heroes on the board yet — solve questions to earn XP!";
     body.innerHTML = rpgBoardNote() + `<div class="empty-note">${why}</div>`;
     return;
@@ -26842,7 +27006,15 @@ function rpgAwardGameQuestion(questionId, correct, ms) {
   if (!rpgState) return 0;
   const qid = String(questionId || '');
   ms = Math.max(0, Math.round(Number(ms) || 0));
-  const rushed = ms > 0 && ms < _fairMinAnswerMs(qid, !!correct);
+  const fair = _fairMinAnswerMs(qid, !!correct);
+  const rushed = ms > 0 && ms < fair;
+  // Every game answer counts toward the All-Time score, whatever it pays —
+  // games clock the answer, so their real time is measured against the same
+  // floor the points use.
+  rpgState.stats = rpgState.stats || {};
+  rpgState.stats.gameQ = (rpgState.stats.gameQ | 0) + 1;
+  if (correct) rpgState.stats.gameCorrect = (rpgState.stats.gameCorrect | 0) + 1;
+  try { rpgNotePace(ms, fair); } catch (e) {}
   // The wrong-answer run lives on the hero state so it survives a page change,
   // and is reset by any correct answer.
   const run = correct ? 0 : ((rpgState.gameWrongRun | 0) + 1);
@@ -27114,6 +27286,70 @@ async function adminClawbackDuelPoints() {
   } catch (e) {
     console.warn('duel clawback failed', e);
     showToast('Could not send the clawback — check your connection', 'error');
+  }
+}
+
+// ---- teacher broadcast: per-student hero operations -----------------------
+// Same reason as the clawback (the admin cannot write a student's hero doc),
+// but addressed to ONE student instead of everyone: the admin writes an entry
+// under users/{adminUid}/settings/heroOps keyed by uid, and that student's
+// client applies it to itself once, keyed by the op's `key`.
+let _heroOpsMarker = null, _heroOpsUnsub = null;
+function _startHeroOpsListener() {
+  if (_heroOpsUnsub || !adminUid) return;
+  try {
+    _heroOpsUnsub = onSnapshot(doc(db, 'users', adminUid, 'settings', 'heroOps'), snap => {
+      _heroOpsMarker = snap.exists() ? snap.data() : null;
+      try { rpgApplyHeroOp(); } catch (e) {}
+    }, err => console.warn('hero ops listen failed', err));
+  } catch (e) { console.warn('hero ops listener', e); }
+}
+function rpgApplyHeroOp() {
+  const all = _heroOpsMarker && _heroOpsMarker.ops;
+  if (!all || !rpgState || !currentUser || currentUser.role !== 'student') return;
+  const op = all[currentUser.uid];
+  if (!op || !op.key || rpgState.heroOpAck === op.key) return;
+  rpgState.heroOpAck = op.key;
+  let msg = '';
+  if (op.op === 'mergeReset') {
+    // Merge levels run 1…TCG_MERGE_MAX, so "reset" is back to 1 — no merges.
+    // They must be written EXPLICITLY, not deleted: tcgHydrateState rebuilds a
+    // missing entry from the student's spare copies, which would hand every
+    // merge straight back on the next load.
+    const s = (rpgState.tcg && typeof rpgState.tcg === 'object') ? rpgState.tcg : null;
+    let n = 0;
+    if (s) {
+      s.merges = (s.merges && typeof s.merges === 'object') ? s.merges : {};
+      Object.keys(s.cards || {}).forEach(id => { if ((s.merges[id] | 0) > 1) n++; s.merges[id] = 1; });
+    }
+    msg = n
+      ? `⟡ Your merge levels have been reset by your teacher — ${n} monster${n === 1 ? '' : 's'} back to no merges.`
+      : '⟡ Your merge levels have been reset by your teacher.';
+  }
+  try { rpgSave(); } catch (e) {}
+  try { rpgPublishLeaderboard(); } catch (e) {}
+  try { tcgRenderBody(); } catch (e) {}
+  if (msg) { try { toast(msg, ''); } catch (e) {} }
+}
+// Queue an operation against ONE student's hero. Applied the next time that
+// student's app is open; nothing happens to anyone else.
+async function adminHeroOp(uid, op) {
+  if (!currentUser || currentUser.role !== 'admin' || !uid) return;
+  const row = (_auditRows || []).find(r => r.uid === uid);
+  const who = (row && row.name) || 'this student';
+  if (op === 'mergeReset' && !confirm(
+    `Reset every merge level for ${who}?\n\n` +
+    'All their monsters go back to no merges (merge level 1), which lowers their Realm of Embers team power. Cards, training levels, points and everything else are kept.\n\n' +
+    'It applies the next time they open the app, and it cannot be undone.'
+  )) return;
+  try {
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'heroOps'),
+      { ops: { [uid]: { op, key: Date.now().toString(36), at: new Date().toISOString(), by: currentUser.name || 'Admin' } } },
+      { merge: true });
+    showToast(`⟡ Queued for ${who} — applies when they next open the app`, 'success');
+  } catch (e) {
+    console.error('hero op failed', e);
+    showToast('Could not queue that — check your connection', 'error');
   }
 }
 // Push the current plays-left pool into any running game iframe so an open
@@ -33050,7 +33286,7 @@ async function tcgRenderBoard() {
   const host = document.getElementById('tcgBody');
   if (!host || tcgTab !== 'board') return; // user moved on while loading
   const meUid = currentUser && currentUser.uid;
-  const list = (rows || []).filter(r => r && r.uid && r.tcg).map(r => ({
+  const list = (rows || []).filter(r => r && r.uid && r.tcg && !rpgBoardBanned(r.uid, 'tcg')).map(r => ({
     uid: r.uid, name: r.name || 'Trainer',
     floor: Math.max(1, (r.tcg.floor | 0)),
     clears: r.tcg.clears | 0,
@@ -40217,6 +40453,7 @@ window.renderActivityAudit = renderActivityAudit;
 window.setAuditSort = setAuditSort;
 window.adminSetBoardBan = adminSetBoardBan;
 window.exportActivityAudit = exportActivityAudit;
+window.adminHeroOp = adminHeroOp;
 window.onLegendsObjPaste = onLegendsObjPaste;
 window.onLegendsObjDrop = onLegendsObjDrop;
 window.onLegendsObjPick = onLegendsObjPick;
