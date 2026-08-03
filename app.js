@@ -1579,7 +1579,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.228.0';
+const APP_VERSION = 'v1.229.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -1859,6 +1859,7 @@ async function loadAdminQuestions() {
     }
     adminUid = configSnap.data().uid;
     try { _startCreditResetListener(); } catch (e) {}
+    try { _startDuelClawbackListener(); } catch (e) {}
     // Use the ADMIN's topic→level map (custom topics + removals) so custom
     // topics get their real level on student devices instead of the P6 default.
     try {
@@ -22461,14 +22462,34 @@ const RPG_QUESTS = [
   { id: "q_wins4", icon: "⚔️", name: "Win 4 battles", key: "wins", need: 4, gold: 45 },
   { id: "q_raid", icon: "🏰", name: "Finish a dungeon raid", key: "advRunsDone", need: 1, gold: 55 },
   { id: "q_floors3", icon: "🪜", name: "Clear 3 dungeon floors", key: "floorsCleared", need: 3, gold: 60 },
-  { id: "q_duel", icon: "👻", name: "Win an arena duel", key: "arenaWins", need: 1, gold: 50 },
+  // No quest may be completable by a button that can be pressed again and
+  // again for free. "Win an arena duel" was retired for exactly that reason:
+  // duels cost no game credit, so it paid 🪙 50 a day for one click.
+  { id: "q_correct8", icon: "🎯", name: "Get 8 questions right", key: "correct", need: 8, gold: 50 },
   { id: "q_gold150", icon: "🪙", name: "Earn 150 gold", key: "goldEarned", need: 150, gold: 45 },
   { id: "q_packs", icon: "🎁", name: "Open a booster pack", key: "packsOpened", need: 1, gold: 40 }
 ];
 function rpgEnsureDaily() {
   if (!rpgState) return;
   const day = advToday();
-  if (rpgState.daily && rpgState.daily.day === day) return;
+  const cur = rpgState.daily;
+  // A retired quest id left in a saved daily set has no entry to read `need`
+  // from and would break the quest list, so re-roll the day whenever one of
+  // today's picks is no longer in RPG_QUESTS.
+  const stale = !!cur && (!Array.isArray(cur.quests) || cur.quests.some(id => !RPG_QUESTS.some(q => q.id === id)));
+  if (cur && cur.day === day) {
+    if (!stale) return;
+    // Same day, but a pick was retired under the student's feet. Swap ONLY the
+    // dead slots and mark them spent — re-rolling the whole day here would
+    // hand a second full set of quest rewards to anyone who already claimed.
+    cur.quests = cur.quests.map((id, i) => {
+      if (RPG_QUESTS.some(q => q.id === id)) return id;
+      cur.claimed[i] = true;
+      return RPG_QUESTS[0].id;
+    });
+    rpgSave();
+    return;
+  }
   const seed = day.split("-").join("") * 7 + (currentUser ? currentUser.uid.length : 0);
   const picks = [];
   for (let i = 0; picks.length < 3 && i < 24; i++) {
@@ -22505,6 +22526,7 @@ function rpgQuestsHtml() {
   const s = rpgState.streak || { count: 0, best: 0 };
   const rows = rpgState.daily.quests.map((qid, i) => {
     const q = RPG_QUESTS.find(x => x.id === qid);
+    if (!q) return "";   // retired quest id — rpgEnsureDaily swaps it out on the next pass
     const prog = Math.min(q.need, rpgQuestProgress(q));
     const done = prog >= q.need;
     const claimed = rpgState.daily.claimed[i];
@@ -22609,6 +22631,9 @@ async function rpgInit() {
   setTimeout(() => { rpgCheckPrizeClaim(); }, 2500); // auto-prompt month-end winners
   setTimeout(() => { try { rpgCheckStreakVoucher(); } catch (_) {} }, 3400); // and unclaimed streak vouchers
   setTimeout(() => { rpgClaimStrikePoints(); }, 1800); // points banked in Science Strike
+  // The clawback marker may have arrived before the hero existed — apply it now
+  // that it does (it is a no-op once this student's ack key matches).
+  try { rpgApplyDuelClawback(); } catch (_) {}
 }
 // ---- Points earned in Science Strike (fps.html), claimed here ----
 // fps.html is a separate page and must NEVER write the hero document — this
@@ -23150,10 +23175,13 @@ function rpgBattleClick(e) {
   else if (act === "min") { rpgState.battleMin = true; rpgSave(); rpgRenderBattle(); toast("Battle hidden — you're still earning gold & XP 🪙", ""); }
   else if (act === "max") { rpgState.battleMin = false; rpgSave(); rpgRenderBattle(); }
   else if (act === "character") navigateTo("character");
-  else if (act === "sim-correct") rpgSimulate("correct");
-  else if (act === "sim-partial") rpgSimulate("partial");
-  else if (act === "sim-wrong") rpgSimulate("wrong");
-  else if (act === "sim-gold") { rpgState.gold += 500; rpgSave(); rpgRenderBattle(); toast("+500 gold (preview)", "success"); }
+  // The preview row is only RENDERED for teachers, but the handler has to check
+  // too: these hand out points on a repeatable click, and a data-rpg-act button
+  // can be put back into the page from a student's console.
+  else if (act === "sim-correct") { if (rpgCanPreview()) rpgSimulate("correct"); }
+  else if (act === "sim-partial") { if (rpgCanPreview()) rpgSimulate("partial"); }
+  else if (act === "sim-wrong") { if (rpgCanPreview()) rpgSimulate("wrong"); }
+  else if (act === "sim-gold") { if (rpgCanPreview()) { rpgState.gold += 500; rpgSave(); rpgRenderBattle(); toast("+500 gold (preview)", "success"); } }
   else if (act === "sim-reset") {
     if (!confirm("Reset your hero? This clears gold, items and battle progress.")) return;
     rpgResetHero();
@@ -25467,8 +25495,11 @@ function advArenaEnd(won) {
   adv = null;
   advToken++;
   if (won) {
+    // Duels pay NOTHING — no 🪙 points, no ✨ XP, no raid-boss damage. A duel
+    // costs no game credit and can be re-fought forever, so paying one made a
+    // one-click points farm that beat answering questions. The win is still
+    // recorded: the arena record, the 👻 Duelist title and the board's ⚔️ tag.
     rpgState.stats.arenaWins = (rpgState.stats.arenaWins || 0) + 1;
-    rpgApplyRewards(30, 25);
   } else {
     rpgState.stats.arenaLosses = (rpgState.stats.arenaLosses || 0) + 1;
   }
@@ -25478,7 +25509,7 @@ function advArenaEnd(won) {
   $("advStartBtn").style.display = "";
   advUpdateRunsChip();
   advOverlay(`<div><h4>${won ? "🏆 Duel won!" : "💀 Duel lost…"}</h4>
-    <p>${won ? `You defeated ${escapeHtml(name)}'s build! +🪙 30, +✨ 25 — your arena record grows.` : `${escapeHtml(name)}'s build was stronger this time. Upgrade and challenge them again — duels are free!`}</p>
+    <p>${won ? `You defeated ${escapeHtml(name)}'s build! Duels are for bragging rights — no 🪙 points and no ✨ XP, just your arena record. Answer questions to earn points.` : `${escapeHtml(name)}'s build was stronger this time. Upgrade and challenge them again — duels are free and cost no game credit!`}</p>
     <div class="rpg-reward-stats"><span>Arena record: ${rpgState.stats.arenaWins || 0}W – ${rpgState.stats.arenaLosses || 0}L</span></div></div>`);
 }
 const ADV_BEAT_EPOCH = Date.now();
@@ -26716,6 +26747,81 @@ function _startCreditResetListener() {
     }, err => console.warn('credit reset listen failed', err));
   } catch (e) { console.warn('credit reset listener', e); }
 }
+
+// ---- teacher broadcast: claw back the points duels used to pay -------------
+// Duels were free, uncapped and one click, so they were farmed. The wallet
+// lives in each student's OWN hero doc (users/{uid}/settings/scienceRpg) and
+// the admin cannot write it, so this reuses the creditReset pattern: the admin
+// writes ONE marker doc, and every student's client deducts its own balance
+// once, the next time it loads.
+//
+// There are no per-duel timestamps anywhere in the hero doc — arenaWins is a
+// lifetime counter — so the deduction is `perWin × arenaWins`, every duel ever.
+// That is a superset of the fortnight that was farmed; a student who duelled
+// twice a term loses ~60 points, a farmer loses what they farmed.
+//
+// Points only: XP is deliberately left alone. It sets hero level, and levels
+// gate skill points that are already spent — clawing XP back could strand a
+// hero over its skill budget.
+const DUEL_CLAWBACK_PER_WIN = 30;   // what a duel win used to pay
+let _duelClawbackMarker = null, _duelClawbackUnsub = null;
+function _startDuelClawbackListener() {
+  if (_duelClawbackUnsub || !adminUid) return;
+  try {
+    _duelClawbackUnsub = onSnapshot(doc(db, 'users', adminUid, 'settings', 'duelClawback'), snap => {
+      _duelClawbackMarker = snap.exists() ? snap.data() : null;
+      try { rpgApplyDuelClawback(); } catch (e) {}
+    }, err => console.warn('duel clawback listen failed', err));
+  } catch (e) { console.warn('duel clawback listener', e); }
+}
+// Apply the pending clawback to THIS student, at most once per marker key.
+function rpgApplyDuelClawback() {
+  const m = _duelClawbackMarker;
+  if (!m || !m.key || !rpgState || !currentUser || currentUser.role !== 'student') return;
+  if (rpgState.duelClawbackAck === m.key) return;
+  const perWin = Math.max(0, Math.round(Number(m.perWin) || DUEL_CLAWBACK_PER_WIN));
+  const wins = Math.max(0, (rpgState.stats && rpgState.stats.arenaWins) | 0);
+  // Never push a wallet negative: a student who already spent the duel points
+  // on packs simply loses what is left, not more.
+  const take = Math.min((rpgState.gold | 0), perWin * wins);
+  rpgState.duelClawbackAck = m.key;
+  if (take > 0) {
+    rpgState.gold = (rpgState.gold | 0) - take;
+    // goldEarned drives the "Earn 150 gold" quest — keep the lifetime tally
+    // honest so the removed points cannot still complete a quest.
+    if (rpgState.stats) rpgState.stats.goldEarned = Math.max(0, (rpgState.stats.goldEarned | 0) - take);
+  }
+  try { rpgSave(); } catch (e) {}
+  try { rpgRenderSide(); } catch (e) {}
+  try { tcgUpdateGoldChip(); } catch (e) {}
+  try { rpgPublishLeaderboard(); } catch (e) {}
+  if (take > 0) {
+    try {
+      toast(`⚔️ Arena duels no longer pay points, so the 🪙 ${take.toLocaleString()} your ${wins} duel win${wins === 1 ? '' : 's'} paid have been removed. Answer questions to earn points instead!`, '');
+    } catch (e) {}
+  }
+}
+async function adminClawbackDuelPoints() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  if (!confirm(
+    'Remove the points every student earned by DUELLING?\n\n' +
+    `Each student loses 🪙 ${DUEL_CLAWBACK_PER_WIN} for every arena duel they have ever won, applied the next time they open the app.\n\n` +
+    'There are no per-duel timestamps in the save data, so this covers all duel wins, not just the last two weeks.\n\n' +
+    'Nobody goes below zero, and XP and levels are not touched. This cannot be undone.'
+  )) return;
+  try {
+    await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'duelClawback'), {
+      key: Date.now().toString(36),
+      perWin: DUEL_CLAWBACK_PER_WIN,
+      at: new Date().toISOString(),
+      by: currentUser.name || 'Admin'
+    });
+    showToast('⚔️ Duel points will be removed from every student on their next load', 'success');
+  } catch (e) {
+    console.warn('duel clawback failed', e);
+    showToast('Could not send the clawback — check your connection', 'error');
+  }
+}
 // Push the current plays-left pool into any running game iframe so an open
 // game unlocks immediately after a refill.
 function _pushPlaysLeft() {
@@ -26910,6 +27016,16 @@ window.addEventListener('message', function (ev) {
 // loadout persist on rpgState.legends so gear follows the student
 // across devices, like the Spire card collection.
 // =====================================================================
+// Only the game iframes this page embeds may move the wallet. Without this any
+// window that can postMessage here — including the console on this very page —
+// could repeat a positive LEGENDS_GOLD_DELTA for unlimited points.
+function _isEmbeddedGameWindow(source) {
+  if (!source) return false;
+  return ['legendsFrame', 'slayersFrame'].some(id => {
+    const f = document.getElementById(id);
+    try { return !!f && f.contentWindow === source; } catch (e) { return false; }
+  });
+}
 function _legendsGoldDelta(d, source) {
   const reason = (d && d.reason) || '';
   function reply(ok, message) {
@@ -26917,6 +27033,9 @@ function _legendsGoldDelta(d, source) {
   }
   if (!rpgState) { reply(false, 'No hero yet — answer a question in the app first'); return; }
   const delta = Math.round(Number(d && d.delta) || 0);
+  // A spend can come from anywhere (it only ever costs the student); a CREDIT
+  // must come from the embedded Armory itself.
+  if (delta > 0 && !_isEmbeddedGameWindow(source)) { reply(false, 'Points can only be credited from inside the game'); return; }
   if (!delta || delta < -2000 || delta > 500) { reply(false, 'Invalid amount'); return; }
   if (delta < 0 && (rpgState.gold | 0) + delta < 0) { reply(false, `Not enough points — that costs 🪙 ${-delta}. Answer questions to earn more!`); return; }
   rpgState.gold = (rpgState.gold | 0) + delta;
@@ -39799,6 +39918,7 @@ window.loadNextQpQuestion = loadNextQpQuestion;
 // Usage Dashboard
 window.loadUsageDashboard = loadUsageDashboard;
 window.adminResetGameCredits = adminResetGameCredits;
+window.adminClawbackDuelPoints = adminClawbackDuelPoints;
 window.onLegendsObjPaste = onLegendsObjPaste;
 window.onLegendsObjDrop = onLegendsObjDrop;
 window.onLegendsObjPick = onLegendsObjPick;
