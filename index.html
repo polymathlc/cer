@@ -9761,16 +9761,14 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .qpart-scan-now{ color:var(--on-surface,#14161a); }
 .qpart-scan-refused{ font-size:0.83rem; line-height:1.7; padding:13px 15px; border:1px solid var(--border); border-radius:10px; background:var(--surface-alt,#fafafa); color:var(--text-muted); }
 .qpart-scan-refused ul{ margin:8px 0 0 18px; padding:0; }
+.qp-part-row{ display:flex; gap:9px; align-items:baseline; }
+.qp-part-row > .qp-qtext{ flex:1; min-width:0; }
 .qp-part-tag{
-  display:inline-block;
-  margin:0 0 10px;
-  padding:3px 11px;
-  border-radius:999px;
-  background:var(--primary-light,#e8f3ec);
-  color:var(--primary,#0b6b4f);
+  flex:0 0 auto;
   font-weight:700;
-  font-size:0.82rem;
-  letter-spacing:0.02em;
+  font-size:0.97rem;
+  color:var(--primary,#0b6b4f);
+  letter-spacing:0.01em;
 }
 .qp-qtext{ line-height:1.85; font-size:0.97rem; margin:0 0 12px; color:var(--on-surface,#14161a); }
 .qp-qtext + .qp-qtext{ margin-top:-2px; }
