@@ -1392,7 +1392,7 @@ const SUPER_ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // into the teacher's bank (_bankOwnerUid), because a question filed under the
 // employee's own uid is a question no student would ever be served.
 const EMPLOYEE_EMAILS = ['pkeertana21@gmail.com'];
-const EMPLOYEE_PAGES = ['create', 'bank', 'vetting', 'worksheet', 'myworksheets'];
+const EMPLOYEE_PAGES = ['create', 'bank', 'vetting', 'worksheet', 'myworksheets', 'worksession'];
 let adminUid = null; // the bank owner: loaded for student AND employee accounts
 // Maps question/vetting id -> owning admin's uid. Populated when super admin
 // loads other admins' subcollections so writes/deletes target the right doc.
@@ -1589,6 +1589,10 @@ async function enterApp(user) {
     if (document.querySelector('#page-home.active')) renderHomePage();
   }
 
+  // Work sessions: pick a session left running (minimised tab, closed browser,
+  // yesterday evening) back up before anything else can save a question.
+  try { wkInit(); } catch (e) { console.warn('work session init', e); }
+
   rpgInit().then(() => {
     // Hero state carries the streak/day counters the Home screen shows.
     if (document.querySelector('#page-home.active')) renderHomePage();
@@ -1633,7 +1637,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.238.0';
+const APP_VERSION = 'v1.239.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -2932,6 +2936,7 @@ function navigateTo(page) {
     renderWsQuestions();
   }
   if (page === 'myworksheets') renderSavedWorksheets();
+  if (page === 'worksession') { wkRenderPage(); wkLoadHistory(); }
   if (page === 'quickpractice') { populateQpControls(); updateQpProgress(); }
   if (page === 'snapmark') snapInit();
   if (page === 'topicalpractice') tpRenderTopics();
@@ -13056,6 +13061,544 @@ function doScaleAndPrint(output, opts) {
 }
 
 // =====================================================================
+// WORK SESSIONS
+// An author (employee, or the admin) clocks on, and every question they save
+// while the clock runs is logged against that session: how long, how many, and
+// which ones.
+//
+// The clock is a pair of TIMESTAMPS, never a counter something has to keep
+// incrementing: elapsed = (endedAt || pausedAt || now) − startedAt − pausedMs.
+// A minimised tab, a throttled setInterval, a closed lid or a closed browser
+// therefore cost nothing — the 1-second tick only REPAINTS a number derived
+// from the wall clock. The running session is mirrored into localStorage on
+// every change, so reopening the app picks the same session back up mid-count.
+//
+// Where a session is filed:
+//   workSessions/{uid}_{startedAt}   ← shared; this is the one the admin lists
+//   users/{uid}/workSessions/{id}    ← fallback, if the shared collection is
+//                                      not open in the Firestore rules yet
+// The fallback exists because a denied write must never stop the clock or lose
+// the log; the session runs out of localStorage either way, and the admin's
+// history read checks both places.
+// =====================================================================
+const WK_LS_PREFIX = 'sq_work_session:';
+const WK_MAX_MS = 12 * 60 * 60 * 1000;  // a session left open longer than this is closed at its last heartbeat
+const WK_HEARTBEAT_MS = 60 * 1000;      // how often a running session writes back "the tab was open at…"
+const WK_ITEMS_MAX = 500;               // questions listed on one session doc (the count keeps going past it)
+
+let _wkSession = null;        // the running session, or null
+let _wkTickTimer = null;      // 1s repaint
+let _wkSaveTimer = null;      // debounce for the Firestore write
+let _wkSuppress = 0;          // >0 while an AUTOMATIC job saves questions — those are not work done
+let _wkPrivateOnly = false;   // the shared collection refused us; using the private copy
+let _wkHistory = null;        // past sessions, loaded on demand
+let _wkHistoryLoading = false;
+let _wkWho = '';              // admin filter: '' = everyone
+let _wkOpen = {};             // which past sessions are expanded
+let _wkBound = false;
+
+function _wkLsKey() { return WK_LS_PREFIX + ((currentUser && currentUser.uid) || 'anon'); }
+function _wkStoreLocal() {
+  try {
+    if (_wkSession && !_wkSession.endedAt) localStorage.setItem(_wkLsKey(), JSON.stringify(_wkSession));
+    else localStorage.removeItem(_wkLsKey());
+  } catch (e) { /* private mode — the Firestore copy is still being written */ }
+}
+function _wkLoadLocal() {
+  try {
+    const j = JSON.parse(localStorage.getItem(_wkLsKey()) || 'null');
+    if (!j || !j.id || !j.startedAt) return null;
+    if (!Array.isArray(j.items)) j.items = [];
+    return j;
+  } catch (e) { return null; }
+}
+
+function _wkRunning() { return !!(_wkSession && !_wkSession.endedAt); }
+function _wkPaused()  { return !!(_wkRunning() && _wkSession.pausedAt); }
+function _wkCount(s)  { return (s && (s.uniq || (s.items || []).length)) || 0; }
+
+// The whole timer, in one line. Nothing here is incremented by a tick, so a
+// tab that was never open still returns the right elapsed time.
+function _wkElapsed(s) {
+  if (!s || !s.startedAt) return 0;
+  const end = s.endedAt || s.pausedAt || Date.now();
+  return Math.max(0, end - s.startedAt - (s.pausedMs || 0));
+}
+
+function _wkHms(ms) {
+  const t = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+function _wkHuman(ms) {
+  const mins = Math.max(0, Math.round(ms / 60000));
+  if (mins < 60) return mins + ' min';
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return h + 'h' + (m ? ' ' + m + 'm' : '');
+}
+function _wkHours(ms) { return (Math.max(0, ms) / 3600000).toFixed(2); }
+function _wkFmt(ms, opts) {
+  if (!ms) return '';
+  try { return new Date(ms).toLocaleString('en-SG', opts); } catch (e) { return new Date(ms).toLocaleString(); }
+}
+function _wkWhen(ms) { return _wkFmt(ms, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+function _wkTime(ms) { return _wkFmt(ms, { hour: '2-digit', minute: '2-digit' }); }
+function _wkDay(ms)  { return _wkFmt(ms, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }); }
+function _wkPersonName(s)  { return s.name || s.email || 'Unknown'; }
+
+// ---- Persistence ---------------------------------------------------------
+// Flattened on the way out: Firestore rejects `undefined`, and the reader (the
+// admin's history) wants the totals without walking the items array.
+function _wkDoc(s) {
+  return {
+    id: s.id,
+    uid: s.uid || '',
+    email: s.email || '',
+    name: s.name || '',
+    role: s.role || '',
+    bankOwner: s.bankOwner || null,
+    startedAt: s.startedAt,
+    endedAt: s.endedAt || null,
+    pausedMs: s.pausedMs || 0,
+    pausedAt: s.pausedAt || null,
+    lastSeen: s.lastSeen || s.startedAt,
+    ms: _wkElapsed(s),
+    saves: s.saves || 0,
+    questions: _wkCount(s),
+    items: (s.items || []).slice(0, WK_ITEMS_MAX),
+  };
+}
+
+async function _wkPersist(s) {
+  if (!s || !currentUser) return;
+  const payload = _wkDoc(s);
+  if (!_wkPrivateOnly) {
+    try { await setDoc(doc(db, 'workSessions', s.id), payload); return; }
+    catch (err) {
+      // Permission denied is a settled answer, not a blip: stop trying the
+      // shared collection for the rest of the session and file it privately.
+      const denied = err && (err.code === 'permission-denied' || err.code === 'unauthenticated');
+      if (!denied) { console.warn('work session save:', err); return; }
+      _wkPrivateOnly = true;
+      console.warn('workSessions is not open in the rules — filing this session under the author\'s own account instead');
+    }
+  }
+  try { await setDoc(doc(db, 'users', currentUser.uid, 'workSessions', s.id), payload); }
+  catch (err) { console.warn('work session save (own account):', err); }
+}
+
+function _wkQueueSave(now) {
+  const s = _wkSession;
+  if (!s) return;
+  clearTimeout(_wkSaveTimer);
+  if (now) { _wkPersist(s); return; }
+  _wkSaveTimer = setTimeout(() => _wkPersist(s), 1500);
+}
+
+// ---- Start / pause / end -------------------------------------------------
+function wkStart() {
+  if (!_canAuthor()) { showToast('Work sessions are for question authors', 'error'); return; }
+  if (_wkRunning()) { showToast('A session is already running', 'info'); return; }
+  const now = Date.now();
+  _wkSession = {
+    id: currentUser.uid + '_' + now,
+    uid: currentUser.uid,
+    email: currentUser.email || '',
+    name: currentUser.name || '',
+    role: currentUser.role || '',
+    bankOwner: _bankOwnerUid() || null,
+    startedAt: now, endedAt: null, pausedMs: 0, pausedAt: null, lastSeen: now,
+    saves: 0, uniq: 0, items: [],
+  };
+  _wkStoreLocal();
+  _wkQueueSave(true);
+  _wkStartTick();
+  wkRenderAll();
+  showToast('⏱️ Session started — every question you save from now is logged', 'success');
+}
+
+function wkTogglePause() {
+  if (!_wkRunning()) return;
+  const now = Date.now();
+  if (_wkSession.pausedAt) {
+    _wkSession.pausedMs = (_wkSession.pausedMs || 0) + Math.max(0, now - _wkSession.pausedAt);
+    _wkSession.pausedAt = null;
+    showToast('▶ Session resumed', 'info');
+  } else {
+    _wkSession.pausedAt = now;
+    showToast('⏸ Break — the clock is stopped. Questions you save are still logged.', 'info');
+  }
+  _wkSession.lastSeen = now;
+  _wkStoreLocal();
+  _wkQueueSave(true);
+  wkRenderAll();
+}
+
+function wkEnd() {
+  if (!_wkRunning()) return;
+  const n = _wkCount(_wkSession);
+  showConfirm('End work session',
+    'Stop the clock and file this session? ' + _wkHuman(_wkElapsed(_wkSession)) + ' · '
+      + n + ' question' + (n === 1 ? '' : 's') + '. You can start a new one whenever you like.',
+    () => _wkFinish());
+}
+
+// atMs — close the session at a moment in the past (a session left running
+// overnight is filed at its last heartbeat, not at whenever it was reopened).
+function _wkFinish(atMs, quiet) {
+  const s = _wkSession;
+  if (!s || s.endedAt) return;
+  const end = Math.max(s.startedAt, atMs || Date.now());
+  if (s.pausedAt) { s.pausedMs = (s.pausedMs || 0) + Math.max(0, end - s.pausedAt); s.pausedAt = null; }
+  s.endedAt = end;
+  s.lastSeen = end;
+  clearTimeout(_wkSaveTimer);
+  _wkPersist(s);
+  _wkStopTick();
+  if (_wkHistory) _wkHistory = [_wkDoc(s)].concat(_wkHistory.filter(x => x.id !== s.id));
+  _wkSession = null;
+  _wkStoreLocal();          // reads _wkSession — now null, so the key is cleared
+  wkRenderAll();
+  if (!quiet) showToast('Session filed — ' + _wkHuman(_wkElapsed(s)) + ' · ' + _wkCount(s) + ' questions', 'success');
+  return s;
+}
+
+// ---- The tick ------------------------------------------------------------
+function _wkStartTick() {
+  _wkStopTick();
+  _wkPaintClock();
+  _wkTickTimer = setInterval(_wkTick, 1000);
+}
+function _wkStopTick() { if (_wkTickTimer) { clearInterval(_wkTickTimer); _wkTickTimer = null; } }
+
+function _wkTick() {
+  if (!_wkRunning()) { _wkStopTick(); return; }
+  _wkPaintClock();
+  const now = Date.now();
+  // The heartbeat is the last moment the tab was demonstrably open. It is what
+  // an abandoned session gets closed at, so it must keep ticking even when
+  // nothing is being saved.
+  if (!_wkSession.pausedAt && now - (_wkSession.lastSeen || 0) >= WK_HEARTBEAT_MS) {
+    _wkSession.lastSeen = now;
+    _wkStoreLocal();
+    _wkQueueSave(true);
+  }
+}
+
+function _wkPaintClock() {
+  const txt = _wkHms(_wkElapsed(_wkSession));
+  const a = document.getElementById('wkBarClock'); if (a) a.textContent = txt;
+  const b = document.getElementById('wkClock');    if (b) b.textContent = txt;
+}
+
+function _wkBind() {
+  if (_wkBound) return;
+  _wkBound = true;
+  document.addEventListener('visibilitychange', () => {
+    if (!_wkRunning()) return;
+    if (document.hidden) { _wkSession.lastSeen = Date.now(); _wkStoreLocal(); _wkQueueSave(true); }
+    else { _wkPaintClock(); wkRenderAll(); }
+  });
+  // localStorage is synchronous, so this copy always lands — a Firestore write
+  // started here would be cancelled with the page.
+  window.addEventListener('pagehide', () => {
+    if (!_wkRunning()) return;
+    _wkSession.lastSeen = Date.now();
+    _wkStoreLocal();
+  });
+}
+
+// Called once per sign-in, for anyone who can author.
+function wkInit() {
+  if (!_canAuthor()) return;
+  _wkBind();
+  const s = _wkLoadLocal();
+  if (s && !s.endedAt) {
+    const idle = Date.now() - (s.lastSeen || s.startedAt);
+    _wkSession = s;
+    if (_wkElapsed(s) > WK_MAX_MS || idle > WK_MAX_MS) {
+      // Left running. Hours when nobody was at the keyboard are not hours
+      // worked, and a three-day clock helps no one.
+      const closed = _wkFinish(s.lastSeen || s.startedAt, true);
+      showToast('Your last work session was left running — it has been filed at '
+        + _wkWhen(closed.endedAt) + ' (' + _wkHuman(_wkElapsed(closed)) + ')', 'info');
+    } else {
+      _wkStartTick();
+    }
+  }
+  wkRenderBar();
+}
+
+// ---- Logging a question --------------------------------------------------
+// Called from saveQuestion / saveVettingQuestion — the two functions EVERY
+// committed question goes through, so no authoring path can be forgotten.
+function _wkLogQuestion(q, where) {
+  if (!_wkRunning() || _wkSuppress > 0) return;
+  if (!q || q.id == null) return;
+  const s = _wkSession, now = Date.now();
+  s.saves = (s.saves || 0) + 1;
+  s.lastSeen = now;
+  const id = String(q.id);
+  const it = (s.items || []).find(x => x.id === id);
+  if (it) {
+    it.last = now;
+    it.n = (it.n || 1) + 1;
+    it.act = where;
+    if (q.title) it.title = String(q.title).slice(0, 140);
+  } else {
+    // `uniq` keeps counting past WK_ITEMS_MAX so the headline number never
+    // disagrees with the work actually done, even once the list is capped.
+    s.uniq = (s.uniq || 0) + 1;
+    if ((s.items || []).length < WK_ITEMS_MAX) {
+      s.items.push({
+        id,
+        title: String(q.title || 'Untitled question').slice(0, 140),
+        topic: q.topic || '', category: q.category || '',
+        at: now, last: now, n: 1, act: where,
+      });
+    }
+  }
+  _wkStoreLocal();
+  _wkQueueSave();
+  wkRenderAll();
+}
+
+// ---- History -------------------------------------------------------------
+async function wkLoadHistory(force) {
+  if (_wkHistoryLoading) return;
+  if (_wkHistory && !force) return;
+  _wkHistoryLoading = true;
+  wkRenderPage();
+  const byId = new Map();
+  const take = snap => snap.forEach(d => { const v = d.data(); if (v && v.id && v.startedAt) byId.set(v.id, v); });
+  try {
+    const col = collection(db, 'workSessions');
+    // No orderBy alongside the uid filter: that pairing needs a composite
+    // index, and these lists are small enough to sort here.
+    take(_isAdmin() ? await getDocs(col) : await getDocs(query(col, where('uid', '==', currentUser.uid))));
+  } catch (err) { console.warn('work sessions (shared):', err); }
+  try { take(await getDocs(collection(db, 'users', currentUser.uid, 'workSessions'))); }
+  catch (err) { /* nothing filed privately — fine */ }
+  if (_isAdmin()) {
+    // Anything an author had to file privately (see _wkPersist) still has to
+    // reach the teacher, so read each author's own subtree as well.
+    for (const uid of await _wkAuthorUids()) {
+      if (uid === currentUser.uid) continue;
+      try { take(await getDocs(collection(db, 'users', uid, 'workSessions'))); } catch (err) { /* not readable */ }
+    }
+  }
+  _wkHistory = Array.from(byId.values()).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+  _wkHistoryLoading = false;
+  wkRenderPage();
+}
+
+async function _wkAuthorUids() {
+  const out = [];
+  try {
+    const snap = await getDocs(collection(db, 'userProfiles'));
+    snap.forEach(d => {
+      const p = d.data() || {};
+      if (p.uid && p.email && EMPLOYEE_EMAILS.includes(p.email)) out.push(p.uid);
+    });
+  } catch (err) { console.warn('author lookup:', err); }
+  return out;
+}
+
+function _wkFiled() {
+  const running = _wkSession && _wkSession.id;
+  return (_wkHistory || []).filter(s => s.id !== running);
+}
+function _wkVisible() {
+  return _wkFiled().filter(s => !_wkWho || s.uid === _wkWho);
+}
+
+function wkSetWho(uid) { _wkWho = uid || ''; wkRenderPage(); }
+function wkToggleSession(id) { _wkOpen[id] = !_wkOpen[id]; wkRenderPage(); }
+
+// ---- Rendering: the floating bar ----------------------------------------
+function wkRenderBar() {
+  const bar = document.getElementById('wkBar');
+  if (!bar) return;
+  const on = _wkRunning() && _canAuthor();
+  document.body.classList.toggle('wk-clocked-in', on);
+  if (!on) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  bar.classList.toggle('wk-bar-paused', _wkPaused());
+  const n = _wkCount(_wkSession);
+  const dot = document.getElementById('wkBarDot');   if (dot) dot.textContent = _wkPaused() ? '⏸' : '⏱️';
+  const cnt = document.getElementById('wkBarCount'); if (cnt) cnt.textContent = n + (n === 1 ? ' question' : ' questions');
+  const p   = document.getElementById('wkBarPause'); if (p) p.textContent = _wkPaused() ? 'Resume' : 'Pause';
+  _wkPaintClock();
+}
+
+function wkRenderAll() {
+  wkRenderBar();
+  if (document.querySelector('#page-worksession.active')) wkRenderPage();
+}
+
+// ---- Rendering: the page -------------------------------------------------
+function wkRenderPage() {
+  const wrap = document.getElementById('wkPageBody');
+  if (!wrap) return;
+  if (!_canAuthor()) {
+    wrap.innerHTML = '<div class="wk-card"><p class="wk-empty">Work sessions are for question authors.</p></div>';
+    return;
+  }
+  wrap.innerHTML = _wkLiveCardHtml() + _wkItemsCardHtml() + _wkHistoryCardHtml();
+  _wkPaintClock();
+}
+
+function _wkLiveCardHtml() {
+  if (!_wkRunning()) {
+    return `<div class="wk-card wk-live">
+      <div class="wk-live-head"><span class="wk-live-label wk-idle">No session running</span></div>
+      <div class="wk-clock wk-clock-idle">0:00:00</div>
+      <p class="wk-hint">Press <b>Start session</b> when you sit down to write questions. The clock runs off the wall clock, so it keeps counting while this tab is minimised, in the background, or closed altogether — and every question you save while it runs is listed here.</p>
+      <div class="wk-actions"><button class="btn btn-primary" onclick="wkStart()">▶ Start session</button></div>
+    </div>`;
+  }
+  const s = _wkSession, n = _wkCount(s);
+  return `<div class="wk-card wk-live${_wkPaused() ? ' wk-live-paused' : ''}">
+    <div class="wk-live-head">
+      <span class="wk-live-label">${_wkPaused() ? '⏸ On a break' : '<span class="wk-pulse"></span> Session running'}</span>
+      <span class="wk-since">started ${escapeHtml(_wkWhen(s.startedAt))}</span>
+    </div>
+    <div class="wk-clock" id="wkClock">${_wkHms(_wkElapsed(s))}</div>
+    <div class="wk-stats">
+      <div class="wk-stat"><b>${n}</b><span>question${n === 1 ? '' : 's'}</span></div>
+      <div class="wk-stat"><b>${s.saves || 0}</b><span>save${(s.saves || 0) === 1 ? '' : 's'}</span></div>
+      ${s.pausedMs ? `<div class="wk-stat"><b>${escapeHtml(_wkHuman(s.pausedMs))}</b><span>on break</span></div>` : ''}
+    </div>
+    <div class="wk-actions">
+      <button class="btn btn-outline" onclick="wkTogglePause()">${_wkPaused() ? '▶ Resume' : '⏸ Take a break'}</button>
+      <button class="btn btn-primary wk-stop" onclick="wkEnd()">■ End session</button>
+    </div>
+    ${_wkPrivateOnly ? '<p class="wk-warn">⚠ Saving to your own account only — the shared <code>workSessions</code> collection is not open in the database rules yet, so your teacher cannot see this session until it is. Nothing is lost: it is filed and will still be there.</p>' : ''}
+  </div>`;
+}
+
+function _wkItemsCardHtml() {
+  if (!_wkRunning()) return '';
+  const s = _wkSession;
+  const items = (s.items || []).slice().sort((a, b) => (b.last || b.at || 0) - (a.last || a.at || 0));
+  if (!items.length) {
+    return `<div class="wk-card">
+      <h3 class="wk-h3">Questions this session</h3>
+      <p class="wk-empty">Nothing yet. Every question you save — to the question bank or to the vetting list — appears here the moment it is written.</p>
+    </div>`;
+  }
+  const extra = _wkCount(s) - items.length;
+  return `<div class="wk-card">
+    <h3 class="wk-h3">Questions this session <span class="wk-pill">${items.length}</span></h3>
+    <div class="wk-list">${items.map(_wkItemRowHtml).join('')}</div>
+    ${extra > 0 ? `<p class="wk-hint">…and ${extra} more — only the first ${WK_ITEMS_MAX} are listed by name, but all of them are counted.</p>` : ''}
+  </div>`;
+}
+
+function _wkItemRowHtml(it) {
+  const meta = [it.topic, it.category].filter(Boolean).map(escapeHtml).join(' · ');
+  const vet = it.act === 'vetting';
+  return `<div class="wk-row">
+    <div class="wk-row-main">
+      <div class="wk-row-title">${escapeHtml(it.title || 'Untitled question')}</div>
+      ${meta ? `<div class="wk-row-meta">${meta}</div>` : ''}
+    </div>
+    <span class="wk-tag ${vet ? 'wk-tag-vet' : 'wk-tag-bank'}">${vet ? 'Vetting' : 'Bank'}</span>
+    ${(it.n || 1) > 1 ? `<span class="wk-tag wk-tag-n" title="Saved ${it.n} times">×${it.n}</span>` : ''}
+    <span class="wk-row-time">${escapeHtml(_wkTime(it.at))}</span>
+  </div>`;
+}
+
+function _wkHistoryCardHtml() {
+  if (_wkHistory === null) {
+    return `<div class="wk-card">
+      <h3 class="wk-h3">Past sessions</h3>
+      ${_wkHistoryLoading
+        ? '<p class="wk-empty">Loading…</p>'
+        : '<div class="wk-actions"><button class="btn btn-outline" onclick="wkLoadHistory(true)">Load past sessions</button></div>'}
+    </div>`;
+  }
+  const rows = _wkVisible();
+  const totalMs = rows.reduce((a, s) => a + (s.ms || 0), 0);
+  const totalQ  = rows.reduce((a, s) => a + (s.questions || 0), 0);
+  return `<div class="wk-card">
+    <div class="wk-hist-head">
+      <h3 class="wk-h3">Past sessions <span class="wk-pill">${rows.length}</span></h3>
+      <div class="wk-hist-tools">
+        ${_isAdmin() ? _wkWhoSelectHtml() : ''}
+        <button class="btn btn-outline btn-sm" onclick="wkLoadHistory(true)" title="Fetch the latest sessions">↻ Refresh</button>
+        ${rows.length ? '<button class="btn btn-outline btn-sm" onclick="wkExportCsv()" title="Download these sessions as a spreadsheet">⬇ CSV</button>' : ''}
+      </div>
+    </div>
+    ${rows.length ? `<div class="wk-totals">
+      <div class="wk-stat"><b>${escapeHtml(_wkHuman(totalMs))}</b><span>logged</span></div>
+      <div class="wk-stat"><b>${totalQ}</b><span>questions</span></div>
+      <div class="wk-stat"><b>${totalMs ? (totalQ / (totalMs / 3600000)).toFixed(1) : '0.0'}</b><span>questions / hour</span></div>
+    </div>` : ''}
+    ${rows.length
+      ? `<div class="wk-list wk-hist-list">${rows.map(_wkHistRowHtml).join('')}</div>`
+      : '<p class="wk-empty">No sessions filed yet.</p>'}
+  </div>`;
+}
+
+function _wkWhoSelectHtml() {
+  const seen = new Map();
+  _wkFiled().forEach(s => { if (s.uid && !seen.has(s.uid)) seen.set(s.uid, _wkPersonName(s)); });
+  const opts = Array.from(seen.entries()).map(([uid, name]) =>
+    `<option value="${escapeHtml(uid)}"${_wkWho === uid ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('');
+  return `<select class="wk-select" onchange="wkSetWho(this.value)" title="Whose sessions to show">
+    <option value=""${_wkWho ? '' : ' selected'}>Everyone</option>${opts}
+  </select>`;
+}
+
+function _wkHistRowHtml(s) {
+  const open = !!_wkOpen[s.id];
+  const items = Array.isArray(s.items) ? s.items.slice().sort((a, b) => (a.at || 0) - (b.at || 0)) : [];
+  return `<div class="wk-hist${open ? ' wk-hist-open' : ''}">
+    <div class="wk-hist-row" onclick="wkToggleSession('${escapeHtml(s.id)}')" title="Show the questions in this session">
+      <span class="wk-caret">${open ? '▾' : '▸'}</span>
+      <div class="wk-row-main">
+        <div class="wk-row-title">${escapeHtml(_wkDay(s.startedAt))}</div>
+        <div class="wk-row-meta">${escapeHtml(_wkTime(s.startedAt))} – ${escapeHtml(s.endedAt ? _wkTime(s.endedAt) : 'still running')}${_isAdmin() ? ' · ' + escapeHtml(_wkPersonName(s)) : ''}${s.pausedMs ? ' · ' + escapeHtml(_wkHuman(s.pausedMs)) + ' on break' : ''}</div>
+      </div>
+      <span class="wk-tag wk-tag-dur">${escapeHtml(_wkHuman(s.ms || 0))}</span>
+      <span class="wk-tag wk-tag-n">${s.questions || 0} q</span>
+    </div>
+    ${open ? `<div class="wk-hist-body">${items.length
+      ? items.map(_wkItemRowHtml).join('')
+      : '<p class="wk-empty">No questions were saved in this session.</p>'}</div>` : ''}
+  </div>`;
+}
+
+// One row per question, so a session's work can be checked line by line.
+function wkExportCsv() {
+  const rows = _wkVisible();
+  if (!rows.length) { showToast('Nothing to export', 'info'); return; }
+  const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const out = [['Person', 'Email', 'Day', 'Start', 'End', 'Hours', 'Break (min)', 'Questions', 'Saves', 'Question', 'Topic', 'Category', 'Saved to', 'Saved at', 'Times saved'].join(',')];
+  rows.forEach(s => {
+    const head = [_wkPersonName(s), s.email || '', _wkDay(s.startedAt), _wkTime(s.startedAt),
+      s.endedAt ? _wkTime(s.endedAt) : '', _wkHours(s.ms || 0), Math.round((s.pausedMs || 0) / 60000),
+      s.questions || 0, s.saves || 0];
+    const items = Array.isArray(s.items) ? s.items : [];
+    if (!items.length) { out.push(head.concat(['', '', '', '', '', '']).map(esc).join(',')); return; }
+    items.forEach(it => out.push(head.concat([
+      it.title || '', it.topic || '', it.category || '',
+      it.act === 'vetting' ? 'Vetting' : 'Bank', _wkTime(it.at), it.n || 1,
+    ]).map(esc).join(',')));
+  });
+  const blob = new Blob(['﻿' + out.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'work-sessions-' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// =====================================================================
 // STORAGE — subcollection-per-question architecture
 //
 //   users/{uid}/questions/{questionId}   ← question bank
@@ -13108,6 +13651,10 @@ async function saveQuestion(q, opts) {
   // against the old one for the rest of the session.
   try { if (q && q.id != null && typeof _ainsteinTextCache !== 'undefined') _ainsteinTextCache.delete(String(q.id)); } catch (_) {}
   const quiet = !!(opts && opts.quiet);
+  // Decided HERE, not when the write lands: an automatic job that fires saves
+  // off without awaiting them would otherwise have dropped its guard by the
+  // time they resolve, and every one of them would be logged as work done.
+  const wkLog = !quiet && _wkSuppress === 0;
   const tries = quiet ? 1 : 3;
   if (!quiet) { _inflightOps++; _setSaveStatus('saving'); }
   const done = ok => {
@@ -13139,6 +13686,10 @@ async function saveQuestion(q, opts) {
   while (attempts < tries) {
     try {
       await setDoc(_qRef(q.id), payload);
+      // A running work session logs the question. `quiet` writes are background
+      // bookkeeping (the usage backfill, auto-tagging, the part converter) —
+      // machine housekeeping is not work the author did.
+      if (wkLog) _wkLogQuestion(q, 'bank');
       return done(true);
     } catch (err) {
       attempts++;
@@ -13165,12 +13716,14 @@ let _saveQuestionLastError = '';
 // Write one vetting doc with auto-retry
 async function saveVettingQuestion(q) {
   if (!currentUser) return;
+  const wkLog = _wkSuppress === 0;   // see saveQuestion — decided before the await
   _inflightOps++;
   _setSaveStatus('saving');
   let attempts = 0;
   while (attempts < 3) {
     try {
       await setDoc(_vRef(q.id), q);
+      if (wkLog) _wkLogQuestion(q, 'vetting');
       _inflightOps--;
       if (_inflightOps === 0) _setSaveStatus('saved');
       return;
@@ -18943,7 +19496,9 @@ function loadSampleData() {
   });
   
   updateCounts();
-  questionBank.forEach(q => saveQuestion(q));
+  // Seeding the demo bank is not authoring — never log it against a session.
+  _wkSuppress++;
+  try { questionBank.forEach(q => saveQuestion(q)); } finally { _wkSuppress--; }
 }
 
 // =====================================================================
@@ -21408,6 +21963,10 @@ async function checkAndReleaseScheduledQuestions() {
   const now = new Date();
   const sgtStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Singapore' }); // YYYY-MM-DD format
 
+  // A question the scheduler releases on its own is not a question the author
+  // wrote just now — keep it out of any running work session.
+  _wkSuppress++;
+  try {
   for (const sq of scheduledQuestions) {
     if (!sq.released && sq.releaseDate && sq.releaseDate <= sgtStr) {
       // Release this question - add to question bank
@@ -21429,6 +21988,7 @@ async function checkAndReleaseScheduledQuestions() {
       }
     }
   }
+  } finally { _wkSuppress--; }
   updateCounts();
   renderScheduledQuestions();
 }
@@ -41529,6 +42089,14 @@ function ainsteinOnSignOut() {
 }
 
 window.navigateTo = navigateTo;
+// Work sessions — the bar and the page are built from inline on* handlers.
+window.wkStart = wkStart;
+window.wkTogglePause = wkTogglePause;
+window.wkEnd = wkEnd;
+window.wkLoadHistory = wkLoadHistory;
+window.wkToggleSession = wkToggleSession;
+window.wkSetWho = wkSetWho;
+window.wkExportCsv = wkExportCsv;
 window.ainsteinToggle = ainsteinToggle;
 window.navBookmarkToggle = navBookmarkToggle;
 window.ainsteinSend = ainsteinSend;

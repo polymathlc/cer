@@ -5598,6 +5598,79 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .practice-as-row .btn { flex: 0 0 auto; font-size: 0.8rem; }
 @media (max-width: 640px) { #practiceAsBar { border-radius: 16px; font-size: 0.78rem; } }
 
+/* ==================== WORK SESSIONS ====================
+   The floating bar sits bottom-RIGHT: #practiceAsBar owns bottom-centre, and
+   the two can never be mistaken for one another at a glance. */
+#wkBar { position: fixed; right: 18px; bottom: 18px; z-index: 1650; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; max-width: min(560px, calc(100vw - 24px)); padding: 12px 18px; border-radius: 999px; background: linear-gradient(135deg, #0f2b22, #071a14); border: 1px solid #2f7d4f; box-shadow: 0 12px 32px rgba(0,0,0,0.3); color: #e8f5ec; font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.84rem; line-height: 1.5; }
+#wkBar.wk-bar-paused { background: linear-gradient(135deg, #2f2a13, #1a1608); border-color: #8a6a20; }
+.wk-bar-dot { font-size: 1rem; }
+.wk-bar-clock { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 1rem; color: #86efac; letter-spacing: 0.02em; }
+#wkBar.wk-bar-paused .wk-bar-clock { color: #f5d78e; }
+.wk-bar-count { color: #a7c8b4; font-size: 0.78rem; white-space: nowrap; }
+.wk-bar-btn { background: rgba(255,255,255,0.12); color: #e8f5ec; border: none; border-radius: 999px; padding: 7px 15px; font-weight: 600; font-size: 0.78rem; cursor: pointer; font-family: inherit; }
+.wk-bar-btn:hover { background: rgba(255,255,255,0.22); }
+.wk-bar-stop { background: #86efac; color: #14532d; font-weight: 700; }
+.wk-bar-stop:hover { background: #bbf7d0; }
+.wk-bar-ghost { background: transparent; color: #a7c8b4; text-decoration: underline; padding: 7px 6px; }
+.wk-bar-ghost:hover { background: transparent; color: #e8f5ec; }
+@media (max-width: 640px) { #wkBar { left: 12px; right: 12px; bottom: 12px; border-radius: 18px; justify-content: center; font-size: 0.78rem; } }
+/* The bar floats over the page — give whatever is at the bottom room to clear it. */
+body.wk-clocked-in .page-body { padding-bottom: 104px; }
+
+/* ---- The Work Sessions page ---- */
+.wk-wrap { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.wk-card { padding: 28px 30px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 16px rgba(15,23,42,0.05); }
+.wk-live { text-align: center; }
+.wk-live-head { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.wk-live-label { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.9rem; color: var(--primary); }
+.wk-live-paused .wk-live-label { color: var(--accent); }
+.wk-live-label.wk-idle { color: var(--text-muted); font-weight: 600; }
+.wk-since { font-size: 0.78rem; color: var(--text-muted); }
+.wk-pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--primary); animation: wkPulse 1.8s ease-in-out infinite; }
+@keyframes wkPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.82); } }
+.wk-clock { font-size: 3.1rem; font-weight: 700; line-height: 1.15; letter-spacing: 0.01em; font-variant-numeric: tabular-nums; color: var(--text); margin: 6px 0 18px; }
+.wk-clock-idle { color: var(--text-light); }
+.wk-stats, .wk-totals { display: flex; justify-content: center; gap: 34px; flex-wrap: wrap; margin-bottom: 22px; }
+.wk-totals { justify-content: flex-start; gap: 40px; margin: 20px 0 24px; }
+.wk-stat { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.wk-totals .wk-stat { align-items: flex-start; }
+.wk-stat b { font-size: 1.35rem; font-weight: 700; line-height: 1.2; }
+.wk-stat span { font-size: 0.75rem; color: var(--text-muted); }
+.wk-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.wk-live .wk-actions .btn { min-width: 168px; }
+.wk-stop { background: var(--accent-red); border-color: var(--accent-red); }
+.wk-stop:hover { background: #9a322e; border-color: #9a322e; }
+.wk-hint { margin: 0 auto 22px; max-width: 60ch; font-size: 0.84rem; line-height: 1.7; color: var(--text-muted); }
+.wk-warn { margin: 20px auto 0; max-width: 62ch; padding: 12px 16px; border-radius: 10px; background: var(--accent-light); color: #7a5410; font-size: 0.8rem; line-height: 1.65; text-align: left; }
+.wk-warn code { font-size: 0.78rem; }
+.wk-h3 { margin: 0 0 18px; font-size: 1.02rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.wk-pill { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--primary-light); color: var(--primary-dark); font-size: 0.74rem; font-weight: 700; }
+.wk-empty { margin: 0; font-size: 0.85rem; line-height: 1.7; color: var(--text-muted); }
+.wk-list { display: flex; flex-direction: column; gap: 10px; }
+.wk-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 13px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); }
+.wk-row-main { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.wk-row-title { font-size: 0.87rem; font-weight: 600; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; }
+.wk-row-meta { font-size: 0.74rem; color: var(--text-muted); }
+.wk-row-time { flex: 0 0 auto; font-size: 0.74rem; color: var(--text-light); font-variant-numeric: tabular-nums; }
+.wk-tag { flex: 0 0 auto; padding: 3px 10px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; white-space: nowrap; }
+.wk-tag-bank { background: var(--primary-light); color: var(--primary-dark); }
+.wk-tag-vet { background: var(--accent-light); color: #7a5410; }
+.wk-tag-n { background: var(--surface); border: 1px solid var(--border); color: var(--text-muted); }
+.wk-tag-dur { background: var(--primary); color: #fff; }
+.wk-hist-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.wk-hist-head .wk-h3 { margin-bottom: 0; }
+.wk-hist-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wk-select { padding: 7px 12px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--surface); font-family: inherit; font-size: 0.8rem; color: var(--text); }
+.wk-hist-list { margin-top: 18px; }
+.wk-hist { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); overflow: hidden; }
+.wk-hist-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px; cursor: pointer; }
+.wk-hist-row:hover { background: var(--primary-light); }
+.wk-caret { flex: 0 0 auto; color: var(--text-muted); font-size: 0.8rem; }
+.wk-hist-body { display: flex; flex-direction: column; gap: 10px; padding: 4px 16px 18px; border-top: 1px solid var(--border); }
+.wk-hist-body .wk-row { background: var(--surface); }
+.wk-hist-body .wk-empty { padding-top: 14px; }
+@media (max-width: 640px) { .wk-card { padding: 22px 18px; } .wk-clock { font-size: 2.4rem; } .wk-stats, .wk-totals { gap: 22px; } }
+
 /* ---- Game Modes tab: the hub of ways to play ---- */
 .tcg-modes { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
 .tcg-mode-card { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; padding: 24px 26px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 4px 16px rgba(15,23,42,0.05); }
@@ -6490,6 +6563,19 @@ body.practising-as .page-body { padding-bottom: 96px; }
   <button type="button" class="pa-exit" onclick="exitPracticeAs()">End session</button>
 </div>
 
+<!-- ==================== WORK SESSION BAR ====================
+     Shown on every page while an author has the clock running. The time comes
+     from wall-clock timestamps, so it stays correct through a minimised tab,
+     a sleeping laptop or a closed browser. -->
+<div id="wkBar" style="display:none;">
+  <span class="wk-bar-dot" id="wkBarDot">⏱️</span>
+  <span class="wk-bar-clock" id="wkBarClock">0:00:00</span>
+  <span class="wk-bar-count" id="wkBarCount">0 questions</span>
+  <button type="button" class="wk-bar-btn" id="wkBarPause" onclick="wkTogglePause()">Pause</button>
+  <button type="button" class="wk-bar-btn wk-bar-stop" onclick="wkEnd()">End</button>
+  <button type="button" class="wk-bar-btn wk-bar-ghost" onclick="navigateTo('worksession')" title="See every question logged this session">Details</button>
+</div>
+
 <!-- ==================== IMAGE PRELOAD OVERLAY ==================== -->
 <div class="preload-overlay" id="preloadOverlay" style="display:none;">
   <img class="preload-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Loading" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2280%22 height=%2280%22 viewBox=%220 0 80 80%22%3E%3Crect width=%2280%22 height=%2280%22 rx=%2216%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2240%22 y=%2256%22 font-family=%22DM Sans,sans-serif%22 font-size=%2248%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
@@ -6808,6 +6894,9 @@ body.practising-as .page-body { padding-bottom: 96px; }
         Custom Worksheet
       </div>
       <div class="nav-section-label admin-only">Manage</div>
+      <div class="nav-item admin-only" data-page="worksession" onclick="navigateTo('worksession')" title="Work Sessions — clock on before you start writing questions. The timer keeps running while the tab is minimised or closed, and every question you save is logged against the session.">
+        <span class="ico">⏱️</span> Work Sessions
+      </div>
       <div class="nav-item admin-only" data-page="bank" onclick="navigateTo('bank')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
         Question Bank
@@ -7287,6 +7376,24 @@ body.practising-as .page-body { padding-bottom: 96px; }
     </div>
 
     <!-- ===== PAGE: QUESTION BANK ===== -->
+    <!-- ==================== WORK SESSIONS ====================
+         Clock on, write questions, clock off. Everything inside #wkPageBody is
+         built by wkRenderPage() in app.js. -->
+    <div class="page" id="page-worksession">
+      <div class="page-header">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
+            <h2>Work Sessions</h2>
+          </div>
+          <div class="subtitle">Start the clock when you sit down to write. Every question you save while it runs is logged here.</div>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="wk-wrap" id="wkPageBody"></div>
+      </div>
+    </div>
+
     <div class="page" id="page-bank">
       <div class="page-header">
         <div>
