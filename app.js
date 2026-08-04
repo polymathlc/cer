@@ -770,6 +770,7 @@ window.handleGoogleSignIn = handleGoogleSignIn;
 window.handleLogout = handleLogout;
 window.showPage = showPage;
 window.openCreateStudent = openCreateStudent;
+window.csSetRole = csSetRole;
 window.closeCreateStudent = closeCreateStudent;
 window.generateStudentPassword = generateStudentPassword;
 window.handleCreateStudent = handleCreateStudent;
@@ -1077,10 +1078,42 @@ function _getStudentCreator() {
   return _studentCreator;
 }
 
+// The same dialog creates both kinds of account. A student signs in with a bare
+// username (there is no email to type at the centre); an employee must use their
+// REAL address, because EMPLOYEE_EMAILS is matched on it and a synthetic
+// username@students… address would never be recognised as an author.
+let _csRole = 'student';
+function csSetRole(role) {
+  _csRole = role === 'employee' ? 'employee' : 'student';
+  const emp = _csRole === 'employee';
+  const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+  set('csTitle', emp ? 'Create Employee Account' : 'Create Student Account');
+  set('csBlurb', emp
+    ? 'Set up an account for someone hired to write questions. They sign in with their own email address and get the authoring pages only. You stay signed in as admin.'
+    : 'Set up an account for a student practising at your centre. No email needed — just pick a username and password, and the student signs in with them on the login page. You stay signed in as admin.');
+  set('csNameLabel', emp ? 'Full name' : 'Student name');
+  set('csEmailLabel', emp
+    ? 'Email address <span style="font-weight:400;color:var(--text-muted);">(their real one — this is what grants the role)</span>'
+    : 'Username <span style="font-weight:400;color:var(--text-muted);">(letters and numbers, no spaces)</span>');
+  const idEl = document.getElementById('csEmail');
+  if (idEl) idEl.placeholder = emp ? 'e.g. name@gmail.com' : 'e.g. weiming';
+  const nameEl = document.getElementById('csName');
+  if (nameEl) nameEl.placeholder = emp ? 'e.g. Keertana' : 'e.g. Tan Wei Ming';
+  const note = document.getElementById('csEmployeeNote');
+  if (note) note.style.display = emp ? '' : 'none';
+  const doneLbl = document.getElementById('csDoneEmailLabel');
+  if (doneLbl) doneLbl.textContent = emp ? 'Email:' : 'Username:';
+  const btn = document.getElementById('csCreateBtn');
+  if (btn) btn.textContent = emp ? 'Create Employee Account' : 'Create Account';
+}
+
 function openCreateStudent() {
   document.getElementById('csName').value = '';
   document.getElementById('csEmail').value = '';
   document.getElementById('csPass').value = '';
+  const radio = document.querySelector('input[name="csRole"][value="student"]');
+  if (radio) radio.checked = true;
+  csSetRole('student');
   document.getElementById('csError').style.display = 'none';
   document.getElementById('csLoading').classList.remove('active');
   document.getElementById('csCreateBtn').disabled = false;
@@ -1108,14 +1141,25 @@ async function handleCreateStudent() {
   const showErr = msg => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
   errorEl.style.display = 'none';
 
-  if (!name || !username || !pass) return showErr('Please fill in name, username and password');
+  const isEmp = _csRole === 'employee';
+  if (!name || !username || !pass) return showErr('Please fill in name, ' + (isEmp ? 'email' : 'username') + ' and password');
   // A real email is also accepted, but the normal case is a plain username.
   if (!username.includes('@') && !/^[a-z0-9][a-z0-9._-]{2,}$/.test(username)) {
     return showErr('Username must be at least 3 characters — letters, numbers, dots, dashes (no spaces)');
   }
-  if (pass.length < 6) return showErr('Password must be at least 6 characters');
+  // Firebase Auth itself refuses anything shorter — this is not our rule to relax.
+  if (pass.length < 6) return showErr('Password must be at least 6 characters (Firebase will not accept a shorter one)');
   const email = _loginIdToEmail(username);
   if (ADMIN_EMAILS.includes(email)) return showErr('That email belongs to an admin account');
+  if (isEmp) {
+    if (!username.includes('@')) return showErr('An employee signs in with their real email address, not a username');
+    // Default-deny: the role comes from EMPLOYEE_EMAILS, so creating an account
+    // for an address that is not on the list would hand them a student account
+    // and no way to tell why.
+    if (!EMPLOYEE_EMAILS.includes(email)) {
+      return showErr('Add ' + email + ' to EMPLOYEE_EMAILS in app.js and deploy first — that list is what grants the authoring role');
+    }
+  }
 
   const loadingEl = document.getElementById('csLoading');
   loadingEl.classList.add('active');
@@ -1133,7 +1177,9 @@ async function handleCreateStudent() {
         email: email,
         username: username.includes('@') ? null : username,
         displayName: name,
-        role: 'student',
+        // Descriptive only — the live role is decided at sign-in from
+        // ADMIN_EMAILS / EMPLOYEE_EMAILS, never from this doc.
+        role: isEmp ? 'employee' : 'student',
         createdBy: currentUser ? currentUser.uid : null,
         createdAt: Timestamp.now()
       }, { merge: true });
@@ -1141,14 +1187,15 @@ async function handleCreateStudent() {
     await signOut(sc.auth); // ends the secondary session only
 
     document.getElementById('csDoneName').textContent = name;
-    document.getElementById('csDoneEmail').textContent = username;
+    document.getElementById('csDoneEmail').textContent = isEmp ? email : username;
     document.getElementById('csDonePass').textContent = pass;
     document.getElementById('csFormWrap').style.display = 'none';
     document.getElementById('csSuccessWrap').style.display = '';
     try { loadUsageDashboard(); } catch (e) {}
   } catch (error) {
     showErr(error && error.code === 'auth/email-already-in-use'
-      ? 'That username is already taken — try another'
+      ? (isEmp ? 'An account already exists for ' + email + ' — they can sign in with it now'
+               : 'That username is already taken — try another')
       : getAuthErrorMessage(error.code));
   } finally {
     loadingEl.classList.remove('active');
@@ -1158,7 +1205,7 @@ async function handleCreateStudent() {
 
 function copyStudentCredentials() {
   const txt = 'Science Quest login\nName: ' + document.getElementById('csDoneName').textContent +
-    '\nUsername: ' + document.getElementById('csDoneEmail').textContent +
+    '\n' + (_csRole === 'employee' ? 'Email' : 'Username') + ': ' + document.getElementById('csDoneEmail').textContent +
     '\nPassword: ' + document.getElementById('csDonePass').textContent;
   navigator.clipboard.writeText(txt)
     .then(() => showToast('Login details copied', 'success'))
@@ -1637,7 +1684,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.239.0';
+const APP_VERSION = 'v1.240.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -13398,7 +13445,7 @@ async function _wkAuthorUids() {
     const snap = await getDocs(collection(db, 'userProfiles'));
     snap.forEach(d => {
       const p = d.data() || {};
-      if (p.uid && p.email && EMPLOYEE_EMAILS.includes(p.email)) out.push(p.uid);
+      if (p.uid && p.email && (EMPLOYEE_EMAILS.includes(p.email) || p.role === 'employee')) out.push(p.uid);
     });
   } catch (err) { console.warn('author lookup:', err); }
   return out;
@@ -14645,6 +14692,15 @@ function _isEmployee() { return !!(currentUser && currentUser.role === 'employee
 // old meaning everywhere else, so nothing an employee should not touch opens
 // up by accident: adding the role is default-deny.
 function _canAuthor() { return _isAdmin() || _isEmployee(); }
+// configureSidebarForRole('employee') hides every nav item and shows back only
+// EMPLOYEE_PAGES — but several subsystems switch their OWN nav item back on
+// LATER, once an async load resolves (rpgApplyVisibility for the game items,
+// and through it the Realm of Embers and Science Strike navs). Every one of
+// those late shows must ask this first, or the lockdown lasts only until the
+// hero doc arrives and the whole game menu reappears.
+function _navAllowed(page) {
+  return !_isEmployee() || EMPLOYEE_PAGES.indexOf(page) >= 0;
+}
 // Whose question bank this account reads and writes. An employee has none of
 // their own — they author directly into the teacher's, which is the bank
 // students are actually served from.
@@ -24694,7 +24750,10 @@ function rpgOnSignOut() {
 }
 function rpgGameHidden() { return !!(rpgState && rpgState.hidden); }
 function rpgApplyVisibility() {
-  const active = !!rpgState;
+  // An employee is hired to write questions: none of the game pages are on
+  // EMPLOYEE_PAGES, so the hero, the leaderboard, the dungeon, the arcade and
+  // the Hide-game toggle stay gone for them however the hero doc loads.
+  const active = !!rpgState && !_isEmployee();
   const show = active && !rpgState.hidden;
   document.querySelectorAll(".rpg-el").forEach(el => { el.style.display = show ? "" : "none"; });
   try { tcgApplyNavVisibility(); } catch (_) {} // Realm of Embers TCG nav follows its own admin/release rules
@@ -30460,7 +30519,7 @@ function tcgNavPrizeBadges() {
 function tcgApplyNavVisibility() {
   const nav = document.getElementById('navTcg');
   if (!nav) return;
-  const show = !!currentUser && (_isAdmin() || (tcgReleased() && rpgState && !rpgState.hidden));
+  const show = !!currentUser && _navAllowed('tcg') && (_isAdmin() || (tcgReleased() && rpgState && !rpgState.hidden));
   nav.style.display = show ? '' : 'none';
   // Once it is live for students it is no longer a beta — drop the badges.
   const live = tcgReleased();
@@ -30476,7 +30535,7 @@ function tcgApplyNavVisibility() {
 // in the community feed — until they dismiss it.
 function _tcgAnnounceKey() { return 'tcgAnnounceDismissed_v1:' + ((_tcgConfig && _tcgConfig.releasedAt) || 'v1'); }
 function tcgAnnounceVisible() {
-  if (!currentUser || !tcgReleased()) return false;
+  if (!currentUser || _isEmployee() || !tcgReleased()) return false;   // no game news for an author
   if (!_isAdmin() && rpgGameHidden()) return false;   // students with the game hidden are left alone
   try { return localStorage.getItem(_tcgAnnounceKey()) !== '1'; } catch (e) { return true; }
 }
@@ -30515,7 +30574,7 @@ function tcgOpenFromAnnounce() {
 function fpsApplyNavVisibility() {
   const nav = document.getElementById('navFps');
   if (!nav) return;
-  const show = !!currentUser && (_isAdmin() || (rpgState && !rpgState.hidden));
+  const show = !!currentUser && _navAllowed('fps') && (_isAdmin() || (rpgState && !rpgState.hidden));
   nav.style.display = show ? '' : 'none';
 }
 async function fpsNavInit() {
@@ -30532,7 +30591,7 @@ function fpsShowAnnounce() {
   const dismissed = (() => { try { return localStorage.getItem(FPS_ANNOUNCE_KEY) === '1'; } catch (e) { return false; } })();
   // The newer Realm of Embers release announcement gets the slot first.
   const tcgUp = (() => { try { return tcgAnnounceVisible(); } catch (e) { return false; } })();
-  el.style.display = (currentUser && !dismissed && !tcgUp) ? 'block' : 'none';
+  el.style.display = (currentUser && !_isEmployee() && !dismissed && !tcgUp) ? 'block' : 'none';
 }
 function fpsDismissAnnounce() {
   try { localStorage.setItem(FPS_ANNOUNCE_KEY, '1'); } catch (e) {}
