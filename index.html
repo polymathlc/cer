@@ -5598,6 +5598,16 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .practice-as-row .btn { flex: 0 0 auto; font-size: 0.8rem; }
 @media (max-width: 640px) { #practiceAsBar { border-radius: 16px; font-size: 0.78rem; } }
 
+/* ---- Create-account dialog: student or employee ----
+   Tailwind's preflight sets appearance:none on form controls, so a bare radio
+   renders as an invisible white box — these must ask for the native control. */
+.cs-role { display: flex; gap: 22px; flex-wrap: wrap; padding: 4px 0 2px; }
+.cs-role label { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; cursor: pointer; }
+.cs-role label span { color: var(--text-muted); font-size: 0.78rem; }
+.cs-role input[type="radio"] { appearance: auto; -webkit-appearance: auto; width: auto; height: auto; margin: 0; accent-color: var(--primary); }
+.cs-note { margin-top: 14px; padding: 14px 16px; border-radius: 10px; background: var(--accent-light); color: #7a5410; font-size: 0.79rem; line-height: 1.65; }
+.cs-note code { font-size: 0.76rem; }
+
 /* ==================== WORK SESSIONS ====================
    The floating bar sits bottom-RIGHT: #practiceAsBar owns bottom-centre, and
    the two can never be mistaken for one another at a glance. */
@@ -9101,15 +9111,22 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 <div class="confirm-overlay" id="createStudentOverlay">
   <div class="confirm-dialog" style="max-width:460px;text-align:left;max-height:88vh;overflow-y:auto;">
     <div id="csFormWrap">
-      <h3 style="margin-bottom:6px;">Create Student Account</h3>
-      <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.5;margin-bottom:18px;">Set up an account for a student practising at your centre. No email needed — just pick a username and password, and the student signs in with them on the login page. You stay signed in as admin.</p>
+      <h3 style="margin-bottom:6px;" id="csTitle">Create Student Account</h3>
+      <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.5;margin-bottom:18px;" id="csBlurb">Set up an account for a student practising at your centre. No email needed — just pick a username and password, and the student signs in with them on the login page. You stay signed in as admin.</p>
 
       <div class="form-group">
-        <label class="form-label">Student name</label>
+        <label class="form-label">Account type</label>
+        <div class="cs-role">
+          <label><input type="radio" name="csRole" value="student" checked onchange="csSetRole('student')"> Student</label>
+          <label><input type="radio" name="csRole" value="employee" onchange="csSetRole('employee')"> Employee <span>(question author)</span></label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" id="csNameLabel">Student name</label>
         <input id="csName" class="form-input" type="text" placeholder="e.g. Tan Wei Ming" autocomplete="off">
       </div>
       <div class="form-group">
-        <label class="form-label">Username <span style="font-weight:400;color:var(--text-muted);">(letters and numbers, no spaces)</span></label>
+        <label class="form-label" id="csEmailLabel">Username <span style="font-weight:400;color:var(--text-muted);">(letters and numbers, no spaces)</span></label>
         <input id="csEmail" class="form-input" type="text" autocapitalize="none" autocorrect="off" placeholder="e.g. weiming" autocomplete="off">
       </div>
       <div class="form-group">
@@ -9119,6 +9136,8 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <button type="button" class="btn btn-outline" onclick="generateStudentPassword()" title="Generate an easy-to-read password" style="white-space:nowrap;">🎲 Generate</button>
         </div>
       </div>
+
+      <div id="csEmployeeNote" class="cs-note" style="display:none;">An employee gets the question creator, the bank, the vetting list, the worksheet builder and their own work-session timer — and nothing else. The role is granted by the address being on <code>EMPLOYEE_EMAILS</code> in <code>app.js</code>, so it must be added there first; creating the account alone does not grant it.</div>
 
       <div id="csError" class="auth-error" style="margin-top:4px;">Something went wrong</div>
       <div id="csLoading" class="auth-loading"><div class="spinner"></div> Creating account...</div>
@@ -9134,7 +9153,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.5;margin-bottom:18px;">Hand these login details to the student. Copy them now — the password can't be viewed again later.</p>
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:18px;line-height:2;font-size:0.92rem;">
         <div><span style="color:var(--text-muted);">Name:</span> <b id="csDoneName"></b></div>
-        <div><span style="color:var(--text-muted);">Username:</span> <b id="csDoneEmail"></b></div>
+        <div><span style="color:var(--text-muted);" id="csDoneEmailLabel">Username:</span> <b id="csDoneEmail"></b></div>
         <div><span style="color:var(--text-muted);">Password:</span> <b id="csDonePass"></b></div>
       </div>
       <div class="btn-group" style="justify-content:flex-end;">
