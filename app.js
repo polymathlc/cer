@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.245.0';
+const APP_VERSION = 'v1.246.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -4949,6 +4949,20 @@ function shortenBtnHtml(blockId, field) {
 function aiAnswerBtnHtml(blockId) {
   return `<button type="button" class="improve-btn" data-aianswer="${blockId}" title="Craft this answer with AI — it reads the question (including diagrams) and bases the science on your Teaching Notes database">🤖 AI answer</button>`;
 }
+// Walking a question for an AI prompt with ONE part as the subject: the header
+// line to drop in when the walk crosses into a different part, or null while it
+// is still in the same one. Blocks BEFORE the first part are the shared stem —
+// the diagram and the scene-setting every part depends on — so they carry no
+// header and are never dropped. Shared by the 🤖 AI answer and 🤖 AI
+// explanation buttons so both label the parts the same way.
+function _aiPartScopeLine(p, target, mark) {
+  const tag = !p ? 'stem' : (p === target ? '>>' : 'other:' + p);
+  if (tag === mark) return null;
+  if (tag === '>>') return { tag, text: `>>> PART (${target}) — THE SUB-QUESTION THIS BOX BELONGS TO <<<` };
+  if (p) return { tag, text: `[part (${p}) of the same question — background only, it is not the one to write]` };
+  return { tag, text: '' };
+}
+
 async function aiGenerateBlockAnswer(blockId, btn) {
   const block = blocks.find(b => b.id === blockId);
   if (!block || (block.type !== 'answer' && block.type !== 'plainanswer')) return;
@@ -4959,12 +4973,20 @@ async function aiGenerateBlockAnswer(blockId, btn) {
     : !!stripHtml(block.content || '').trim();
   if (hasContent && !confirm('Replace the current answer with an AI-crafted one?')) return;
 
-  // The question in block order, with THIS answer box marked so the AI knows
-  // which part it belongs to. Diagrams go along as images (best effort).
+  // The question in block order, with THIS answer box marked and every part
+  // labelled, so the AI answers the sub-question printed directly above the box
+  // rather than the whole question. Diagrams go along as images (best effort).
+  const pmap = qPartMap(blocks);
+  const target = qPartOf(pmap, block);
   const ctxBits = [];
   const media = [];
   let ansN = 0;
+  let mark = '';
   for (const b of blocks) {
+    if (target) {
+      const line = _aiPartScopeLine(qPartOf(pmap, b), target, mark);
+      if (line !== null) { mark = line.tag; if (line.text) ctxBits.push(line.text); }
+    }
     if (b.type === 'text' && stripHtml(b.content || '').trim()) ctxBits.push(stripHtml(b.content));
     else if (b.type === 'part' && ((b.label || '') + stripHtml(b.content || '')).trim()) ctxBits.push(((b.label || '') + ' ' + stripHtml(b.content || '')).trim());
     else if (b.type === 'image' && b.url) { ctxBits.push('[diagram — attached as an image]'); if (media.length < 3) { try { media.push(await _blockImageToInline(b.id)); } catch (e) { console.warn('AI answer: diagram skipped', e); } } }
@@ -4981,6 +5003,9 @@ async function aiGenerateBlockAnswer(blockId, btn) {
     (title || topic ? `Question: "${title}"${topic ? ' — topic: ' + topic : ''}.\n` : '') +
     `THE QUESTION, in order${media.length ? ' (diagrams attached as images)' : ''}:\n${ctxBits.join('\n').slice(0, 3500)}\n` +
     `Write the model answer for the box marked >>> WRITE THIS ONE <<< only — the part of the question immediately before it.\n` +
+    (target
+      ? `This question has several lettered parts. Answer ONLY part (${target}) — the sub-question marked ">>>" above, the one printed directly above this answer box. The other parts are context; do not answer them and do not roll them into this answer.\n`
+      : '') +
     (block.type === 'answer'
       ? `It is a Claim-Evidence-Reasoning answer. Return ONLY JSON: {"claim":"...","evidence":"...","reasoning":"..."}\n`
       : `Return ONLY JSON: {"answer":"..."}\n`) +
@@ -5057,14 +5082,8 @@ async function aiGenerateBlockExplanation(blockId, btn) {
   for (const b of blocks) {
     if (scoped) {
       const p = qPartOf(pmap, b);
-      // Blocks before the first part are the shared stem — the diagram and the
-      // scene-setting every part depends on — so they always go.
-      const tag = !p ? 'stem' : (p === target ? '>>' : 'other:' + p);
-      if (tag !== mark) {
-        mark = tag;
-        if (tag === '>>') ctxBits.push(`>>> PART (${target}) — THE QUESTION THIS EXPLANATION BOX IS FOR <<<`);
-        else if (p) ctxBits.push(`[part (${p}) of the same question — background only, do NOT explain it]`);
-      }
+      const line = _aiPartScopeLine(p, target, mark);
+      if (line) { mark = line.tag; if (line.text) ctxBits.push(line.text); }
       if (p && p !== target && (b.type === 'image' || b.type === 'table')) continue;   // background needs no pictures
     }
     if (b.type === 'text' && stripHtml(b.content || '').trim()) ctxBits.push(stripHtml(b.content));
@@ -8070,7 +8089,11 @@ function buildBlocksFromAi(data) {
     const expl = stripBrackets(data.explanation);
     if (expl) blocks.push({ id: generateBlockId(), type: 'explanation', content: expl });
   }
-  return { blocks, selectedBlanks };
+  // Parts: typed "(a)" markers become real parts, and an explanation written
+  // for the whole question is given to the part it belongs to — or to none of
+  // them. Done here so EVERY AI authoring path gets it (this function is the
+  // one they all go through), never in a single caller.
+  return { blocks: qApplyAiParts(blocks), selectedBlanks };
 }
 
 // Build a full pending question object from one AI question (used by bulk import).
@@ -8219,8 +8242,9 @@ function _bulkPagePrompt(pageNo, pageCount) {
     _rectangleRules() +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, and set "correctIndex" to the 0-based correct option (work the correct answer out yourself if the paper shows no answer key); no "answer"/"plainanswer".\n` +
-    `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing the model answer yourself if the paper does not show one, and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
-    `- EVERY question (mcq AND open) must FINISH with ONE "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct. Write it yourself — papers almost never print one, so do NOT skip it just because it is not shown.\n` +
+    `- open question: include an answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing the model answer yourself if the paper does not show one, and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only. One answer block for a question with no parts, one per part for a question with parts.\n` +
+    `- EVERY question (mcq AND open) must have an "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct. Write it yourself — papers almost never print one, so do NOT skip it just because it is not shown.\n` +
+    _partsPromptRules() +
     `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
     `- "topicConfidence": how sure you are the chosen topic is right — "high" (clearly this topic), "medium" (likely), "low" (a guess).\n` +
     _aiTagsPromptLine() +
@@ -8314,6 +8338,10 @@ async function handleBulkAiFile(file) {
               const newImgBlocks = built.blocks.filter(b => b.type === 'image');
               lastQ.blocks = lastQ.blocks.concat(built.blocks);
               lastQ.blanks = Object.assign({}, lastQ.blanks, built.selectedBlanks);
+              // The parts of a question split over a page break are only all
+              // known once both halves are together, so its explanations are
+              // scoped again on the whole question.
+              qScopeExplanations(lastQ.blocks);
               if (newImgBlocks.length) {
                 _setBulkImport(`${label(p)} — cropping the pictures continuing “${lastQ.title || 'question'}”…${progress()}`);
                 await _cropPageImagesInto(newImgBlocks, qd, page, m => _setBulkImport(`${label(p)} — ${m}`));
@@ -8593,12 +8621,25 @@ function _aiBuildQuestionPrompt(isPdf, imageCount) {
     _rectangleRules() +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
-    `- If questionType is "open": include ONE answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer. In these answer fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
-    `- ALWAYS finish with ONE "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct — write it yourself if the source shows none.\n` +
+    `- If questionType is "open": include an answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer — one for a question with no parts, one per part for a question with parts. In these answer fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
+    `- An "explanation" block is 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct — write it yourself if the source shows none, and never leave the question without one.\n` +
+    _partsPromptRules() +
     _aiTagsPromptLine() +
     `- Choose topic from EXACTLY this list: ${topics.join('; ')}.\n` +
     `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
     `- Use plain text only, no markdown.`;
+}
+
+// The lettered-parts rules, shared by EVERY prompt that builds a question —
+// Build from screenshot, Rapid add, the bulk PDF import, Regenerate copy and
+// the exam paper builder — so a question with (a), (b), (c) comes out the same
+// way whichever door it came in through. The point of the last rule: an
+// explanation is read as explaining the question printed directly above it, so
+// one explanation covering three parts, dropped under part (a), is wrong.
+function _partsPromptRules() {
+  return `- LETTERED PARTS: if the question has sub-parts (a), (b), (c), give EACH part its own text block, starting with its own marker written exactly as "(a) " / "(b) " — one marker per block, never two parts in the same block.\n` +
+    `- Give EACH part its own answer block ("answer" or "plainanswer") directly under the text block that asks it, so every part has its own model answer.\n` +
+    `- EXPLANATIONS follow the parts: a question with NO parts finishes with ONE "explanation" block; a question WITH parts gets ONE explanation block PER PART, placed directly after that part's own answer block and explaining ONLY that part's question and answer. Never write one explanation covering several parts, and never put an explanation about part (b) underneath part (a).\n`;
 }
 
 // The rectangle-selection (box_2d) rules, shared by the single-question build
@@ -10807,9 +10848,14 @@ function _serializeQuestionForRegen(q) {
   if (q.topic) lines.push('Topic: ' + q.topic);
   if (q.category) lines.push('Category: ' + normalizeCategoryValue(q.category));
   lines.push('Blocks (in order):');
+  // The parts go across too, or the copy comes back as one flat question and
+  // its explanations lose the part each of them belongs to.
+  const pmap = qPartMap(q.blocks || []);
   (q.blocks || []).forEach((b, i) => {
     const n = i + 1;
-    if (b.type === 'text') lines.push(`${n}. TEXT: ${stripHtml(b.content || '')}`);
+    const p = qPartOf(pmap, b);
+    const tag = p ? ` [part (${p})]` : (qPartUnfiled(b) ? ' [no part — about the whole question]' : '');
+    if (b.type === 'text') lines.push(`${n}. TEXT${tag}: ${stripHtml(b.content || '')}`);
     else if (b.type === 'part') lines.push(`${n}. TEXT: ${((b.label || '') + ' ' + stripHtml(b.content || '')).trim()}`);
     else if (b.type === 'image') lines.push(`${n}. IMAGE PLACEHOLDER${b.caption ? ' (caption: ' + stripHtml(b.caption) + ')' : ''}`);
     else if (b.type === 'mcq') {
@@ -10818,9 +10864,9 @@ function _serializeQuestionForRegen(q) {
       lines.push(`${n}. MCQ options:`);
       opts.forEach((o, oi) => lines.push(`     (${oi + 1}) ${stripHtml(o.text || '')}${oi === correct ? '  <-- correct' : ''}`));
     }
-    else if (b.type === 'answer') lines.push(`${n}. ANSWER (Claim/Evidence/Reasoning): Claim: ${stripHtml(b.claim || '')} | Evidence: ${stripHtml(b.evidence || '')} | Reasoning: ${stripHtml(b.reasoning || '')}`);
-    else if (b.type === 'plainanswer') lines.push(`${n}. PLAIN ANSWER: ${stripHtml(b.content || b.text || '')}`);
-    else if (b.type === 'explanation') lines.push(`${n}. EXPLANATION: ${stripHtml(b.content || '')}`);
+    else if (b.type === 'answer') lines.push(`${n}. ANSWER${tag} (Claim/Evidence/Reasoning): Claim: ${stripHtml(b.claim || '')} | Evidence: ${stripHtml(b.evidence || '')} | Reasoning: ${stripHtml(b.reasoning || '')}`);
+    else if (b.type === 'plainanswer') lines.push(`${n}. PLAIN ANSWER${tag}: ${stripHtml(b.content || b.text || '')}`);
+    else if (b.type === 'explanation') lines.push(`${n}. EXPLANATION${tag}: ${stripHtml(b.content || '')}`);
   });
   return lines.join('\n');
 }
@@ -10842,7 +10888,9 @@ function _regenPrompt(q, remark) {
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
-    `- Keep the SAME block types in the SAME order as the original (same number of image placeholders, same answer type, mcq stays mcq) — except ALWAYS finish with ONE "explanation" block (2-4 teacher sentences on WHY the answer is correct), even if the original had none.\n` +
+    `- Keep the SAME block types in the SAME order as the original (same number of image placeholders, same answer type, mcq stays mcq), and the SAME lettered parts — if the original is marked "PART (a)" / "PART (b)", the new copy has the same parts in the same order, each opening with its own "(a) " / "(b) " marker.\n` +
+    `- Every question ends with an explanation even if the original had none.\n` +
+    _partsPromptRules() +
     `- If a text block lists labelled items or options inline, put EACH on its own line separated by a real line break ("\\n").\n` +
     `- For "answer"/"plainanswer" fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
     `- Choose topic from EXACTLY this list: ${currentTopics().join('; ')}.\n` +
@@ -11783,6 +11831,191 @@ function qPartUnfileLoneExplanation(blocks) {
   if (exs.length !== 1 || qPartUnfiled(exs[0])) return false;
   exs[0].part = QPART_NONE;
   return true;
+}
+
+// The parts a set of blocks uses, in the order they open.
+function qPartsUsed(blocks) {
+  const seen = [];
+  (blocks || []).forEach(b => {
+    const p = qBlockOpensPart(b);
+    if (p && seen.indexOf(p) < 0) seen.push(p);
+  });
+  return seen;
+}
+
+// The run of blocks belonging to ONE part. Explanations are left out of the
+// span: one is written per part but a note about the whole question can sit
+// among them, and neither should decide where a part ends.
+function qPartSpan(blocks, letter) {
+  const bs = blocks || [];
+  const map = qPartMap(bs);
+  let first = -1, last = -1;
+  bs.forEach((b, i) => {
+    if (!b || b.type === 'explanation') return;
+    if (qPartOf(map, b) !== letter) return;
+    if (first < 0) first = i;
+    last = i;
+  });
+  return { first, last };
+}
+
+// The first block of a part that matches `want`.
+function qPartFind(blocks, letter, want) {
+  const bs = blocks || [];
+  const map = qPartMap(bs);
+  return bs.find(b => b && want(b) && qPartOf(map, b) === letter) || null;
+}
+
+// A part's explanation goes IN that part — replacing the note already there,
+// or inserted at the end of the part, after its answer. Never merged with
+// another part's: an explanation is read as explaining the question printed
+// directly above it.
+function qPlacePartExplanation(blocks, letter, text) {
+  const bs = blocks || [];
+  const ex = qPartFind(bs, letter, b => b.type === 'explanation');
+  if (ex) { ex.content = text; return ex; }
+  const span = qPartSpan(bs, letter);
+  const nb = { id: generateBlockId(), type: 'explanation', content: text };
+  if (span.first < 0) bs.push(nb); else bs.splice(span.last + 1, 0, nb);
+  return nb;
+}
+
+// ---- Parts in an AI-built question ---------------------------------------
+// A text block holding SEVERAL part markers — "(a) Explain…<br>(b) State…" —
+// is one question's parts written into a single box. The Question Doctor
+// refuses that case because it is rewriting questions a human already vetted;
+// here the block was written by the model seconds ago from a source that
+// plainly HAD parts, so the honest fix is to split it into one block per part
+// rather than leave the question with no parts at all.
+//
+// Only ever split when <br> is the only markup: the cut is made at a source
+// offset, and a slice through a <p> or a <strong> would leave the markup
+// unbalanced. AI-built text blocks are exactly that shape — plain text with
+// <br> line breaks (see _separateOptionLines) — so this covers them all.
+const QPART_ONLY_BR_RE = /^(?:[^<]|<br\s*\/?>)*$/i;
+function qPartSplitHtml(html) {
+  const s = String(html == null ? '' : html);
+  if (!s || !QPART_ONLY_BR_RE.test(s)) return null;
+  const chars = qPartWalkPlain(s);
+  const plain = chars.map(c => c.ch).join('');
+  // Where each line begins, in char-index terms: the start, and every index
+  // just after a newline (which is what <br> becomes in the walk).
+  const lineStarts = [];
+  for (let i = 0; i < chars.length; i++) if (i === 0 || plain[i - 1] === '\n') lineStarts.push(i);
+  const cuts = [];
+  const letters = [];
+  lineStarts.forEach(i => {
+    let j = i;
+    while (j < chars.length && /[ \t]/.test(plain[j])) j++;
+    const m = plain.slice(j).match(QPART_MARKER_RE);
+    if (!m) return;
+    cuts.push(chars[i].a);
+    letters.push((m[1] || m[2] || m[3]));
+  });
+  if (cuts.length < 2) return null;
+  // Lowercase and consecutive — "(a) (b) (c)". An UPPERCASE run is an options
+  // or statement list ("(A) … (B) …"), which is exactly what the two-marker
+  // guard exists to refuse, and letters that skip are not a run of parts.
+  if (letters.some(l => l !== l.toLowerCase())) return null;
+  for (let k = 1; k < letters.length; k++) {
+    if (letters[k].charCodeAt(0) !== letters[k - 1].charCodeAt(0) + 1) return null;
+  }
+  const bounds = (cuts[0] > 0 ? [0] : []).concat(cuts, [s.length]);
+  const out = [];
+  for (let k = 0; k < bounds.length - 1; k++) {
+    // A fragment keeps the <br> that ended it; trim those so the block does not
+    // open or close on an empty line.
+    const frag = s.slice(bounds[k], bounds[k + 1]).replace(/(?:\s|<br\s*\/?>)+$/i, '').replace(/^(?:\s|<br\s*\/?>)+/i, '');
+    if (frag) out.push(frag);
+  }
+  return out.length >= 2 ? out : null;
+}
+
+// Returns the block list to use — a new array when something was split.
+function qSplitPartBlocks(blocks) {
+  const bs = Array.isArray(blocks) ? blocks : [];
+  // A multiple-choice question's lettered lines are its options, or the
+  // statements it asks about — never its parts.
+  if (bs.some(b => b && b.type === 'mcq')) return bs;
+  const out = [];
+  let split = false;
+  bs.forEach(b => {
+    if (!b || b.type !== 'text' || qPartCountMarkers(b.content) < 2) { out.push(b); return; }
+    const frags = qPartSplitHtml(b.content);
+    if (!frags) { out.push(b); return; }
+    split = true;
+    // The first fragment keeps the block's id — text blocks carry no blanks, so
+    // nothing is keyed off it.
+    frags.forEach((f, i) => out.push(i === 0
+      ? Object.assign({}, b, { content: f })
+      : { id: generateBlockId(), type: 'text', content: f }));
+  });
+  return split ? out : bs;
+}
+
+// Lift a typed "(a)" off the front of a text block into a real part. Only TEXT
+// blocks may open a part (QPART_OPENER_TYPES) — an answer box inherits from
+// the text above it.
+function qLiftPartMarkers(blocks) {
+  const bs = Array.isArray(blocks) ? blocks : [];
+  const hasMcq = bs.some(b => b && b.type === 'mcq');
+  let firstText = true;
+  bs.forEach(b => {
+    if (!b || b.type !== 'text') return;
+    const isFirst = firstText;
+    firstText = false;
+    // Inside an MCQ, only the question's OWN opening label can be a part:
+    // every other lettered line down an MCQ is an option or a statement.
+    if (hasMcq && !isFirst) return;
+    if (qBlockOpensPart(b)) return;                       // already labelled
+    // One marker per block. Two means an options list, or several parts in one
+    // box that could not be split — neither converts by stripping the first.
+    if (qPartCountMarkers(b.content) !== 1) return;
+    const hit = qPartDetect(b.content);
+    if (!hit) return;
+    b.part = hit.letter;
+    b.content = hit.html;
+  });
+}
+
+// One explanation written for a question that turns out to have parts. If the
+// model labelled it part by part it is split and each note goes to its own
+// part; if it is one note about everything it is moved to the END and filed
+// under NO part, so it is never read as the note for the part above it.
+function qScopeExplanations(blocks) {
+  const bs = Array.isArray(blocks) ? blocks : [];
+  const parts = qPartsUsed(bs);
+  if (parts.length < 2) return;
+  const exs = bs.filter(b => b && b.type === 'explanation' && String(b.content || '').trim());
+  if (exs.length !== 1) return;          // one per part already — leave them where they are
+  const ex = exs[0];
+  if (qPartUnfiled(ex)) return;          // already settled
+  const frags = qPartSplitHtml(ex.content) || [];
+  // "(a) … (b) …" in one box: one note per part, each stripped of its marker,
+  // because a part label is drawn from the block and never from the text.
+  const hits = frags.map(f => qPartDetect(f)).filter(h => h && parts.indexOf(h.letter) >= 0);
+  bs.splice(bs.indexOf(ex), 1);          // out of the way before anything is placed
+  if (hits.length) {
+    hits.forEach(h => qPlacePartExplanation(bs, h.letter, h.html.trim()));
+    // Anything written before the first marker belongs to no part in
+    // particular, so it is kept as a closing note rather than dropped.
+    const lead = frags.filter(f => !qPartDetect(f)).join('<br>').trim();
+    if (lead) bs.push({ id: generateBlockId(), type: 'explanation', content: lead, part: QPART_NONE });
+    return;
+  }
+  ex.part = QPART_NONE;
+  bs.push(ex);
+}
+
+// Everything above, in the one order that works, for a question the AI has
+// just written. Every AI authoring path goes through buildBlocksFromAi, so
+// this runs there and no path can be forgotten: Build from screenshot, Rapid
+// add, the bulk PDF import, Regenerate copy and the exam paper builder.
+function qApplyAiParts(blocks) {
+  const out = qSplitPartBlocks(blocks);
+  qLiftPartMarkers(out);
+  qScopeExplanations(out);
+  return out;
 }
 function qPartOf(map, block) { return (map && block && map.get(block)) || ''; }
 // Which part a block OPENS, or '' if it just belongs to the current one.
@@ -13582,16 +13815,15 @@ function _epQuestionPrompt(n, from, total) {
     `- "number": the question number EXACTLY as printed on the paper, INCLUDING its part letter — "7", "12", "3a", "15(b)". It is used ONLY to find this question's line on the marking scheme and is never shown to anyone. If no number is printed, use "".\n` +
     `- NEVER write the question number inside a block. A text block starts with the question's own wording — "Explain why the ice melted", not "44. Explain why the ice melted" and not "44) Explain…".\n` +
     `- SUB-PARTS: if the question is a lettered part, keep ONLY that letter at the very START of the text block that asks it, written exactly as "(a) " — it is lifted out into a proper part marker. So "44(a) Explain why…" becomes the text "(a) Explain why…", with the 44 dropped. If ONE question carries several lettered parts, start EACH part's own text block with its own "(a) " / "(b) " marker, one marker per block and never two in the same block.\n` +
-    `- ONE MARKER PER TEXT BLOCK, ALWAYS: a question asking (a), (b) and (c) needs THREE text blocks, one opening each part — never the three parts written into one block. Give EACH part its own answer block ("answer" or "plainanswer") directly under the text block that asks it, so every part has its own model answer.\n` +
     `- "number" for an entry that holds SEVERAL lettered parts is the BASE number only — "44", never "44a" — because each part's answer is found on the marking scheme as 44(a), 44(b), 44(c). An entry that IS one single lettered part keeps its letter: "44(a)".\n` +
     `- ONE entry per question. Put an "image" block exactly where each diagram/picture/graph/figure/table belongs, interleaved with the text blocks.\n` +
     _rectangleRules() +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n").\n` +
     `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, and set "correctIndex" to the 0-based correct option (work it out yourself); no "answer"/"plainanswer".\n` +
-    `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing your best model answer, and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
+    `- open question: include an answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing your best model answer, and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only. One answer block for a question with no parts, one per part for a question with parts.\n` +
     `- The answer you write is a PLACEHOLDER: the paper's official marking scheme is read separately and will replace it. Write it anyway — some questions never get an official answer.\n` +
-    `- EXPLANATION: a question with NO parts FINISHES with ONE "explanation" block — 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct.\n` +
-    `- A question WITH lettered parts gets ONE explanation block PER PART, each placed directly AFTER that part's own answer block and explaining ONLY that part's question and answer. Never write one explanation covering several parts, and never put an explanation about part (b) underneath part (a).\n` +
+    `- An "explanation" block is 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct.\n` +
+    _partsPromptRules() +
     `- "title": a short label saying what the question is ABOUT (e.g. "Melting ice in warm water"). Do NOT put the question number in it.\n` +
     `- "topicConfidence": "high", "medium" or "low".\n` +
     _aiTagsPromptLine() +
@@ -13679,80 +13911,6 @@ function _epPartFromNumber(num) {
   return m ? qPartNormalize(m[1]) : '';
 }
 
-// A text block holding SEVERAL part markers — "(a) Explain…<br>(b) State…" —
-// is one question's parts written into a single box. The Question Doctor
-// refuses that case, because it is rewriting questions a human already vetted;
-// here the block was written by the model seconds ago from a screenshot that
-// plainly HAD parts, so the honest fix is to split it into one block per part
-// rather than leave the whole question with no parts at all — and a question
-// with no parts can never be matched to the key's 44(a) / 44(b) lines.
-//
-// Only ever split when <br> is the only markup in the block: the cut is made
-// at a source offset, and a slice through a <p> or a <strong> would leave the
-// markup unbalanced. AI-built text blocks are exactly that shape (plain text
-// with <br> line breaks — see _separateOptionLines), so this covers them all.
-const EP_ONLY_BR_RE = /^(?:[^<]|<br\s*\/?>)*$/i;
-function _epSplitPartsHtml(html) {
-  const s = String(html == null ? '' : html);
-  if (!s || !EP_ONLY_BR_RE.test(s)) return null;
-  const chars = qPartWalkPlain(s);
-  const plain = chars.map(c => c.ch).join('');
-  // Where each line begins, in char-index terms: the start, and every index
-  // just after a newline (which is what <br> becomes in the walk).
-  const lineStarts = [];
-  for (let i = 0; i < chars.length; i++) if (i === 0 || plain[i - 1] === '\n') lineStarts.push(i);
-  const cuts = [];
-  const letters = [];
-  lineStarts.forEach(i => {
-    let j = i;
-    while (j < chars.length && /[ \t]/.test(plain[j])) j++;
-    const m = plain.slice(j).match(QPART_MARKER_RE);
-    if (!m) return;
-    cuts.push(chars[i].a);
-    letters.push((m[1] || m[2] || m[3]));
-  });
-  if (cuts.length < 2) return null;
-  // Lowercase and consecutive — "(a) (b) (c)". An UPPERCASE run is an options
-  // or statement list ("(A) … (B) …"), which is exactly what the two-marker
-  // guard exists to refuse, and letters that skip are not a run of parts.
-  if (letters.some(l => l !== l.toLowerCase())) return null;
-  for (let k = 1; k < letters.length; k++) {
-    if (letters[k].charCodeAt(0) !== letters[k - 1].charCodeAt(0) + 1) return null;
-  }
-  const bounds = (cuts[0] > 0 ? [0] : []).concat(cuts, [s.length]);
-  const out = [];
-  for (let k = 0; k < bounds.length - 1; k++) {
-    // A fragment keeps the <br> that ended it; trim those so the block does not
-    // open or close on an empty line.
-    const frag = s.slice(bounds[k], bounds[k + 1]).replace(/(?:\s|<br\s*\/?>)+$/i, '').replace(/^(?:\s|<br\s*\/?>)+/i, '');
-    if (frag) out.push(frag);
-  }
-  return out.length >= 2 ? out : null;
-}
-
-function _epSplitPartBlocks(q) {
-  if (!q || !Array.isArray(q.blocks)) return;
-  // A multiple-choice question's lettered lines are its options or the
-  // statements it asks about — never its parts. That is the case the
-  // two-marker guard exists to refuse, so it is never split.
-  if (q.blocks.some(b => b && b.type === 'mcq')) return;
-  const out = [];
-  let split = false;
-  q.blocks.forEach(b => {
-    if (!b || b.type !== 'text' || qPartCountMarkers(b.content) < 2) { out.push(b); return; }
-    const frags = _epSplitPartsHtml(b.content);
-    if (!frags) { out.push(b); return; }
-    split = true;
-    // The first fragment keeps the block's id — text blocks carry no blanks, so
-    // nothing is keyed off it, and keeping it means the question's opening
-    // block is the same object the lead-number strip already cleaned.
-    frags.forEach((f, i) => out.push(i === 0
-      ? Object.assign({}, b, { content: f })
-      : { id: generateBlockId(), type: 'text', content: f }));
-  });
-  if (split) q.blocks = out;
-}
-
 // Parts are lifted with qPartDetect — the same detector the Question Doctor
 // uses — so a marker wrapped in <strong> is removed from the markup rather
 // than sliced out of the middle of a tag. Only TEXT blocks may open a part
@@ -13768,20 +13926,11 @@ function _epStripNumbering(q) {
       firstText = false;
     }
   });
-  // Several parts in one box become one box per part, so every part opens a
-  // block of its own and the loop below can lift each marker.
-  _epSplitPartBlocks(q);
-  q.blocks.forEach(b => {
-    if (!b || b.type !== 'text') return;
-    // One marker per block only. Two means a whole options list, or several
-    // parts written into one box that could not be split — neither is
-    // something to convert by stripping the first one (see qPartCountMarkers).
-    if (qPartCountMarkers(b.content) !== 1) return;
-    const hit = qPartDetect(b.content);
-    if (!hit) return;
-    b.part = hit.letter;
-    b.content = hit.html;
-  });
+  // The paper's number is off the wording now, so a marker that was hiding
+  // behind it ("44 (a) Explain…") can be lifted. Re-running the shared pass is
+  // free: it skips every block that already opens a part.
+  q.blocks = qSplitPartBlocks(q.blocks);
+  qLiftPartMarkers(q.blocks);
   // No marker in the wording, but the paper numbered it 44(a): that letter is
   // still the part, so take it from the number rather than lose it.
   if (!qHasParts(q.blocks)) {
@@ -13793,7 +13942,7 @@ function _epStripNumbering(q) {
   }
   // Now the parts are known, an explanation written for the question as a whole
   // can be given to the part it belongs to — or to none of them.
-  _epScopeExplanations(q);
+  qScopeExplanations(q.blocks);
   // Last, so the fallback reads the wording with the numbering already gone.
   q.title = _epStripTitleNumber(q.title) || _epTitleFromText(q) || 'Untitled question';
 }
@@ -14049,14 +14198,7 @@ function _epNumParts(num) {
 function _epBaseKey(num) { return _epNumParts(num).base; }
 
 // The parts this question actually uses, in the order they open.
-function _epPartLetters(q) {
-  const seen = [];
-  ((q && q.blocks) || []).forEach(b => {
-    const p = qBlockOpensPart(b);
-    if (p && seen.indexOf(p) < 0) seen.push(p);
-  });
-  return seen;
-}
+function _epPartLetters(q) { return qPartsUsed((q && q.blocks) || []); }
 
 function _epAnswerFor(q) {
   const k = _epNumKey(q && q._epNum);
@@ -14159,26 +14301,11 @@ function _epPlaceAnswerBlock(q, nb) {
   if (e >= 0) bs.splice(e, 0, nb); else bs.push(nb);
 }
 
-// The run of blocks that belongs to ONE part, so that part's answer lands
-// inside it instead of on top of the next part's. The explanation is written
-// once for the whole question and sits at the end, where qPartMap's forward
-// inheritance files it under the LAST part — it is never part of the run.
-function _epPartSpan(q, letter) {
-  const map = qPartMap(q.blocks);
-  let first = -1, last = -1;
-  q.blocks.forEach((b, i) => {
-    if (!b || b.type === 'explanation') return;
-    if (qPartOf(map, b) !== letter) return;
-    if (first < 0) first = i;
-    last = i;
-  });
-  return { first, last };
-}
-
-function _epPartBlock(q, letter, want) {
-  const map = qPartMap(q.blocks);
-  return q.blocks.find(b => b && want(b) && qPartOf(map, b) === letter) || null;
-}
+// The exam paper builder's view of the shared part helpers: it works on whole
+// question objects, everything else works on block lists.
+function _epPartSpan(q, letter) { return qPartSpan(q.blocks, letter); }
+function _epPartBlock(q, letter, want) { return qPartFind(q.blocks, letter, want); }
+function _epPlacePartExplanation(q, letter, text) { return qPlacePartExplanation(q.blocks, letter, text); }
 
 // Part (b)'s answer replaces part (b)'s own answer box, or — when the model
 // wrote the question without one — is inserted at the end of part (b), before
@@ -14190,51 +14317,6 @@ function _epPlacePartAnswer(q, letter, nb) {
     k >= span.first && k <= span.last && (b.type === 'answer' || b.type === 'plainanswer'));
   if (i >= 0) { _epDropBlanks(q, q.blocks[i]); q.blocks[i] = nb; return; }
   q.blocks.splice(span.last + 1, 0, nb);
-}
-
-// A part's marking note goes in THAT part — replacing the explanation already
-// sitting in it, or inserted at the end of the part, after its answer. It is
-// never merged with another part's: an explanation is read as explaining the
-// question printed directly above it, so a note about (b) under (a) is simply
-// a wrong answer to a student reading the page.
-function _epPlacePartExplanation(q, letter, text) {
-  const ex = _epPartBlock(q, letter, b => b.type === 'explanation');
-  if (ex) { ex.content = text; return; }
-  const span = _epPartSpan(q, letter);
-  const nb = { id: generateBlockId(), type: 'explanation', content: text };
-  if (span.first < 0) q.blocks.push(nb);
-  else q.blocks.splice(span.last + 1, 0, nb);
-}
-
-// One explanation written for a question that turned out to have parts. If the
-// model labelled it part by part it is split and each note goes to its own
-// part; if it is one note about everything it is moved to the END and filed
-// under NO part, so it is never read as the note for the part above it.
-function _epScopeExplanations(q) {
-  if (!q || !Array.isArray(q.blocks)) return;
-  const parts = _epPartLetters(q);
-  if (parts.length < 2) return;
-  const exs = q.blocks.filter(b => b && b.type === 'explanation' && String(b.content || '').trim());
-  if (exs.length !== 1) return;         // one per part already — leave them where they are
-  const ex = exs[0];
-  const frags = _epSplitPartsHtml(ex.content) || [];
-  // "(a) … (b) …" in one box: one note per part, each stripped of its marker,
-  // because a part label is drawn from the block and never from the text.
-  const hits = frags.map(f => qPartDetect(f)).filter(h => h && parts.indexOf(h.letter) >= 0);
-  if (hits.length) {
-    q.blocks.splice(q.blocks.indexOf(ex), 1);          // out of the way before anything is placed
-    hits.forEach(h => _epPlacePartExplanation(q, h.letter, h.html.trim()));
-    // Anything written before the first marker belongs to no part in
-    // particular, so it is kept as a closing note rather than dropped.
-    const lead = frags.filter(f => !qPartDetect(f)).join('<br>').trim();
-    if (lead) q.blocks.push({ id: generateBlockId(), type: 'explanation', content: lead, part: QPART_NONE });
-    return;
-  }
-  // Not attributable: it is a note on the whole question, so say so instead of
-  // letting it inherit whichever part it happens to follow.
-  q.blocks.splice(q.blocks.indexOf(ex), 1);
-  ex.part = QPART_NONE;
-  q.blocks.push(ex);
 }
 
 // `part` is the letter this answer belongs to, or '' for a question answered
