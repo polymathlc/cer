@@ -1636,6 +1636,11 @@ async function enterApp(user) {
     if (document.querySelector('#page-home.active')) renderHomePage();
   }
 
+  // Concurrent tabs: the channel every other window is heard on. Bound before
+  // the work session picks up, because that session may be shared with a tab
+  // that is already open and running the clock.
+  try { xtInit(); } catch (e) { console.warn('cross-tab sync init', e); }
+
   // Work sessions: pick a session left running (minimised tab, closed browser,
   // yesterday evening) back up before anything else can save a question.
   try { wkInit(); } catch (e) { console.warn('work session init', e); }
@@ -1684,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.242.0';
+const APP_VERSION = 'v1.243.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -2998,7 +3003,13 @@ function navigateTo(page) {
   }
   if (page === 'myworksheets') renderSavedWorksheets();
   if (page === 'worksession') { wkRenderPage(); wkLoadHistory(); }
-  if (page === 'exampaper') { _epBindPaste(); epRender(); }
+  if (page === 'exampaper') {
+    _epBindPaste();
+    epRender();
+    // Looks for this tab's own unsent paper (a reload) and for any left behind
+    // by a window that is no longer open. Runs once per sign-in.
+    if (!_epDraftReady) _epDraftScan().catch(err => console.warn('exam paper drafts:', err));
+  }
   if (page === 'quickpractice') { populateQpControls(); updateQpProgress(); }
   if (page === 'snapmark') snapInit();
   if (page === 'topicalpractice') tpRenderTopics();
@@ -13161,6 +13172,218 @@ let _epDirty = false;    // screenshots changed since the last read
 let _epPasteTarget = 'q';   // which drop zone a Ctrl-V lands in
 let _epPasteBound = false;
 
+// ---- The draft survives the window ---------------------------------------
+// Nothing is written until Send, which is the whole point of the page — and it
+// is also the one thing that could lose an afternoon's work: a reload, a
+// crashed tab or a closed laptop, and forty screenshots and their questions are
+// gone. So the unsent paper is mirrored into IndexedDB (localStorage cannot
+// hold base64 screenshots — its quota is ~5 MB for the whole origin).
+//
+// The draft is keyed by TAB, not by user: two windows may each be building a
+// different paper, and one must never claim the other's screenshots. The tab id
+// lives in sessionStorage, so a refresh finds its own draft again while the
+// window beside it keeps its own. A draft left behind by a window that is no
+// longer open is offered back on the page instead — see _epDraftScan.
+const EPD_DB      = 'sqDrafts';
+const EPD_STORE   = 'exampapers';
+const EPD_TTL     = 7 * 24 * 60 * 60 * 1000;    // an unsent paper older than this is not worth offering back
+const EPD_MAX_B64 = 60 * 1024 * 1024;           // screenshots held in the draft; past this only the read questions are kept
+const EPD_SAVE_MS = 1200;
+
+let _epdDbP = null;
+let _epDraftTimer = null;
+let _epDraftSig = '';        // which screenshots the stored copy holds
+let _epDraftReady = false;   // this tab's own draft has been looked for
+let _epDraftOffers = [];     // recoverable drafts from windows that are gone
+let _epDraftBig = false;     // the screenshots were too big to mirror
+const _epLiveTabs = new Set();
+
+function _epdDb() {
+  if (_epdDbP) return _epdDbP;
+  _epdDbP = new Promise((res, rej) => {
+    let req;
+    try { req = indexedDB.open(EPD_DB, 1); } catch (e) { rej(e); return; }
+    req.onupgradeneeded = () => {
+      const d = req.result;
+      if (!d.objectStoreNames.contains(EPD_STORE)) d.createObjectStore(EPD_STORE, { keyPath: 'key' });
+    };
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  }).catch(err => { console.warn('exam paper drafts unavailable:', err); return null; });
+  return _epdDbP;
+}
+
+// Never throws: a draft that cannot be mirrored must not take the page with
+// it. _epdFailed says whether the last call actually landed, which is what
+// stops a failed screenshot write from being remembered as a successful one.
+let _epdFailed = false;
+function _epdTx(mode, fn) {
+  return _epdDb().then(d => {
+    if (!d) { _epdFailed = true; return null; }
+    return new Promise((res, rej) => {
+      let tx;
+      try { tx = d.transaction(EPD_STORE, mode); } catch (e) { rej(e); return; }
+      const req = fn(tx.objectStore(EPD_STORE));
+      tx.oncomplete = () => { _epdFailed = false; res(req ? req.result : null); };
+      tx.onerror = () => rej(tx.error);
+      tx.onabort = () => rej(tx.error);
+    });
+  }).catch(err => { _epdFailed = true; console.warn('exam paper draft store:', err); return null; });
+}
+
+// A draft is THREE records, not one, and the split is the whole reason opening
+// the page is cheap:
+//   epmeta:  a few numbers — what the recovery banner needs. The scan reads
+//            only these, so it never pulls another window's 90 MB of
+//            screenshots into memory just to say "a paper is waiting".
+//   epwork:  paper name, questions, answers — text, rewritten on every change.
+//   epshot:  the screenshots themselves, rewritten ONLY when one was added or
+//            removed. Everything else on this page (reading, matching, naming)
+//            leaves the megabytes alone.
+function _epUid() { return (currentUser && currentUser.uid) || 'anon'; }
+// uid is explicit for the pruner: a shared machine can hold a draft left by
+// another account under the SAME tab id (sign out, sign in, same window), and
+// dropping that by tab alone would delete this account's paper instead.
+function _epMetaKey(tab, uid) { return 'epmeta:' + (uid || _epUid()) + ':' + (tab || _xtTabId()); }
+function _epWorkKey(tab, uid) { return 'epwork:' + (uid || _epUid()) + ':' + (tab || _xtTabId()); }
+function _epShotKey(tab, uid) { return 'epshot:' + (uid || _epUid()) + ':' + (tab || _xtTabId()); }
+function _epEmpty() { return !_epShots.length && !_epKeyShots.length && !_epQuestions.length && !_epAnswers.length && !_epPaperName; }
+function _epShotsSig() { return _epShots.map(s => s.id).join(',') + '|' + _epKeyShots.map(s => s.id).join(','); }
+function _epB64Bytes() {
+  let n = 0;
+  _epShots.concat(_epKeyShots).forEach(s => { n += (s && s.data && s.data.length) || 0; });
+  return n;
+}
+
+function _epDraftSave() {
+  if (!_epDraftReady) return;         // don't write over a draft we haven't looked at yet
+  clearTimeout(_epDraftTimer);
+  _epDraftTimer = setTimeout(() => { _epDraftFlush().catch(err => console.warn('exam paper draft:', err)); }, EPD_SAVE_MS);
+}
+
+async function _epDraftFlush() {
+  if (!currentUser || !_canAuthor()) return;
+  if (_epEmpty()) { await _epDraftDrop(); return; }
+  // Past the cap the screenshots are not mirrored at all — the questions
+  // already read out of them are worth far more than the pictures, and a
+  // quota error would lose both.
+  const big = _epB64Bytes() > EPD_MAX_B64;
+  if (big && !_epDraftBig) console.warn('exam paper: screenshots exceed the draft cap — only the read questions are being kept');
+  _epDraftBig = big;
+  const sig = big ? '' : _epShotsSig();
+  const at = Date.now();
+  try {
+    await _epdTx('readwrite', st => {
+      st.put({ key: _epMetaKey(), uid: _epUid(), tab: _xtTabId(), at, paper: _epPaperName,
+        nShots: _epShots.length, nKeys: _epKeyShots.length, nQuestions: _epQuestions.length, trimmed: big });
+      return st.put({ key: _epWorkKey(), uid: _epUid(), tab: _xtTabId(), at,
+        paper: _epPaperName, dirty: _epDirty, questions: _epQuestions, answers: _epAnswers });
+    });
+    if (sig !== _epDraftSig) {
+      await _epdTx('readwrite', st => st.put({ key: _epShotKey(), uid: _epUid(), tab: _xtTabId(), at,
+        shots: big ? [] : _epShots, keyShots: big ? [] : _epKeyShots }));
+      // Only remembered if it landed — otherwise (a quota error, say) the next
+      // change tries again instead of trusting a write that never happened.
+      if (!_epdFailed) _epDraftSig = sig;
+    }
+  } catch (err) {
+    // A draft that cannot be mirrored must never take the page down with it.
+    console.warn('exam paper draft save:', err);
+  }
+}
+
+async function _epDraftDrop(tab, uid) {
+  if ((!tab || tab === _xtTabId()) && !uid) _epDraftSig = '';
+  await _epdTx('readwrite', st => {
+    st.delete(_epMetaKey(tab, uid));
+    st.delete(_epWorkKey(tab, uid));
+    return st.delete(_epShotKey(tab, uid));
+  });
+}
+
+// Which drafts belong to windows that are no longer open? Every live tab
+// answers the ping; anything left is offered back.
+async function _epDraftScan() {
+  if (!currentUser || !_canAuthor()) return;
+  const metas = await _epdTx('readonly', st => st.getAll(IDBKeyRange.bound('epmeta:', 'epmeta:￿')));
+  if (!Array.isArray(metas)) { _epDraftReady = true; return; }
+  const mineTab = _xtTabId();
+  const now = Date.now();
+  const others = [];
+  let own = null;
+  metas.forEach(r => {
+    if (!r || !r.tab) return;
+    if (now - (r.at || 0) > EPD_TTL) { _epDraftDrop(r.tab, r.uid).catch(() => {}); return; }  // stale, whoever left it
+    if (r.uid !== _epUid()) return;                                                           // another account on this machine
+    if (r.tab === mineTab) own = r; else others.push(r);
+  });
+
+  // This tab's own draft — a reload, so take it straight back. Only into an
+  // empty builder: the scan is asynchronous, and a screenshot pasted while it
+  // ran must not be thrown away by the restore.
+  let restored = false;
+  if (own && _epEmpty()) restored = await _epDraftLoad(mineTab);
+  _epDraftReady = true;
+  if (restored) { epRender(); showToast('📄 Your unsent paper was restored', 'success'); }
+
+  if (!others.length) { if (!restored) epRender(); return; }
+  // Anything still open answers within the ping window; whatever does not is a
+  // window that has gone, and its paper is the one worth offering back.
+  _epLiveTabs.clear();
+  _xtPost({ type: 'ep-ping' });
+  await new Promise(r => setTimeout(r, XT_PING_MS));
+  _epDraftOffers = others.filter(r => !_epLiveTabs.has(r.tab)).sort((a, b) => (b.at || 0) - (a.at || 0));
+  epRender();
+}
+
+// Pull a tab's draft into the builder. Returns false if there was nothing in it.
+async function _epDraftLoad(tab) {
+  const [work, shot] = await Promise.all([
+    _epdTx('readonly', st => st.get(_epWorkKey(tab))),
+    _epdTx('readonly', st => st.get(_epShotKey(tab))),
+  ]);
+  if (!work && !shot) return false;
+  try {
+    _epShots     = (shot && Array.isArray(shot.shots)) ? shot.shots : [];
+    _epKeyShots  = (shot && Array.isArray(shot.keyShots)) ? shot.keyShots : [];
+    _epQuestions = (work && Array.isArray(work.questions)) ? work.questions : [];
+    _epAnswers   = (work && Array.isArray(work.answers)) ? work.answers : [];
+    _epPaperName = (work && work.paper) || '';
+    _epDirty     = !!(work && work.dirty);
+    _epDraftSig  = _epShotsSig();
+    return !_epEmpty();
+  } catch (err) { console.warn('exam paper draft restore:', err); return false; }
+}
+
+// Take over a draft left by a window that is gone. It becomes THIS tab's draft.
+async function epDraftTake(tab) {
+  if (!_epEmpty()) { showToast('Send or clear the paper you are building first', 'error'); return; }
+  if (!_epDraftOffers.some(r => r.tab === tab)) return;
+  const ok = await _epDraftLoad(tab);
+  _epDraftOffers = _epDraftOffers.filter(r => r.tab !== tab);
+  if (!ok) { showToast('That draft was empty', 'info'); epRender(); return; }
+  await _epDraftDrop(tab);            // it lives under this tab's key from now on
+  _epDraftSig = '';                   // …so the screenshots are written once, here
+  await _epDraftFlush();
+  epRender();
+  showToast('📄 Paper restored — ' + _epShots.length + ' screenshot' + (_epShots.length === 1 ? '' : 's')
+    + (_epQuestions.length ? ' · ' + _epQuestions.length + ' question' + (_epQuestions.length === 1 ? '' : 's') : ''), 'success');
+}
+
+function epDraftDiscard(tab) {
+  const rec = _epDraftOffers.find(r => r.tab === tab);
+  if (!rec) return;
+  const n = rec.nShots || 0;
+  showConfirm('Discard this unsent paper',
+    'Throw away the ' + n + ' screenshot' + (n === 1 ? '' : 's')
+      + ' saved from that window? This cannot be undone.',
+    () => {
+      _epDraftOffers = _epDraftOffers.filter(r => r.tab !== tab);
+      _epDraftDrop(tab).catch(err => console.warn('exam paper draft:', err));
+      epRender();
+    });
+}
+
 function _epId() { return 'ep_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function _epDataUrl(s) { return 'data:' + s.mimeType + ';base64,' + s.data; }
 function _epList(target) { return target === 'key' ? _epKeyShots : _epShots; }
@@ -13788,6 +14011,7 @@ function _epCommit(dest) {
     n++;
   });
   _epShots = []; _epKeyShots = []; _epAnswers = []; _epQuestions = []; _epDirty = false;
+  _epDraftDrop().catch(err => console.warn('exam paper draft:', err));   // it is in the bank now
   epRender();
   updateCounts();
   try { renderVettingList(); } catch (err) {}
@@ -13806,7 +14030,31 @@ function epRender() {
     el.innerHTML = '<div class="ep-card"><p class="ep-empty">Only question authors can use the exam paper builder.</p></div>';
     return;
   }
-  el.innerHTML = _epPaperCardHtml() + _epZoneCardHtml('q') + _epZoneCardHtml('key') + _epMatchCardHtml();
+  el.innerHTML = _epPaperCardHtml() + _epDraftOfferHtml() + _epZoneCardHtml('q') + _epZoneCardHtml('key') + _epMatchCardHtml();
+  // Every mutation on this page ends in a render, so mirroring the draft from
+  // here is the one hook that cannot be forgotten. The write is debounced, and
+  // the screenshots are only rewritten when the set actually changed.
+  _epDraftSave();
+}
+
+// An unsent paper from a window that is no longer open.
+function _epDraftOfferHtml() {
+  if (!_epDraftOffers.length) return '';
+  return _epDraftOffers.map(r => {
+    const bits = [];
+    if (r.nShots) bits.push(r.nShots + ' screenshot' + (r.nShots === 1 ? '' : 's'));
+    if (r.nQuestions) bits.push(r.nQuestions + ' question' + (r.nQuestions === 1 ? '' : 's'));
+    if (r.paper) bits.push('“' + r.paper + '”');
+    const tab = escapeHtml(String(r.tab || '')).replace(/'/g, '&#39;');
+    return `<div class="ep-card ep-recover">
+      <h3 class="ep-h3">📄 An unsent paper is waiting</h3>
+      <p class="ep-lead">Left in another window on ${escapeHtml(_wkWhen(r.at) || 'an earlier visit')}${bits.length ? ' — ' + escapeHtml(bits.join(' · ')) : ''}. Nothing was sent to the bank or vetting.${r.trimmed ? ' <b>The screenshots were too large to keep</b> — the questions already read from them are here.' : ''}</p>
+      <div class="ep-head-tools">
+        <button class="btn btn-primary btn-sm" onclick="epDraftTake('${tab}')">Restore it</button>
+        <button class="btn btn-outline btn-sm" onclick="epDraftDiscard('${tab}')">Discard</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function _epPaperCardHtml() {
@@ -13970,11 +14218,123 @@ let _wkOpen = {};             // which past sessions are expanded
 let _wkBound = false;
 
 function _wkLsKey() { return WK_LS_PREFIX + ((currentUser && currentUser.uid) || 'anon'); }
+
+// ---- One session, many tabs ----------------------------------------------
+// An author works in several windows at once — Rapid add in one, the exam
+// paper builder in another, the block editor in a third — and all of them are
+// the SAME work session. Each tab holds its own copy and each writes the WHOLE
+// doc, so without merging the tab that saves last erases every question the
+// other tabs logged: work really done, gone from the log. localStorage is the
+// shared truth — every write re-reads it and stores the union, and a `storage`
+// event tells the other tabs to do the same.
+//
+// Everything here merges IDEMPOTENTLY, because the same state is merged over
+// and over as the tabs echo each other:
+//   items      union by question id (the log itself)
+//   savesByTab per-tab counters, so a re-save can never be double-counted —
+//              a single `saves` total summed across tabs would grow forever
+//   pausedAt   whichever tab touched the break LAST (pauseSetAt), so a resume
+//              in one window is not undone by another window's stale pause
+//   endedAt    if any tab ended it, it ended
+function _wkMerge(a, b) {
+  if (!a) return b || null;
+  if (!b) return a;
+  // Different sessions entirely (one was ended and another started): the newer
+  // one is the live one.
+  if (a.id !== b.id) return (b.startedAt || 0) > (a.startedAt || 0) ? b : a;
+  const out = Object.assign({}, a, b);
+  out.startedAt = Math.min(a.startedAt || Infinity, b.startedAt || Infinity);
+  out.lastSeen  = Math.max(a.lastSeen || 0, b.lastSeen || 0) || out.startedAt;
+  out.pausedMs  = Math.max(a.pausedMs || 0, b.pausedMs || 0);   // only ever grows
+  out.pauseSetAt = Math.max(a.pauseSetAt || 0, b.pauseSetAt || 0);
+  out.pausedAt  = ((a.pauseSetAt || 0) >= (b.pauseSetAt || 0) ? a : b).pausedAt || null;
+  out.endedAt   = (a.endedAt && b.endedAt) ? Math.min(a.endedAt, b.endedAt) : (a.endedAt || b.endedAt || null);
+  const tabs = Object.assign({}, a.savesByTab, b.savesByTab);
+  Object.keys(tabs).forEach(t => {
+    tabs[t] = Math.max((a.savesByTab && a.savesByTab[t]) || 0, (b.savesByTab && b.savesByTab[t]) || 0);
+  });
+  out.savesByTab = tabs;
+  out.saves = _wkSaves({ savesByTab: tabs, saves: Math.max(a.saves || 0, b.saves || 0) });
+  const byId = new Map();
+  (a.items || []).concat(b.items || []).forEach(it => {
+    if (!it || !it.id) return;
+    const prev = byId.get(it.id);
+    if (!prev) { byId.set(it.id, Object.assign({}, it)); return; }
+    if ((it.last || 0) > (prev.last || 0)) { prev.act = it.act; if (it.title) prev.title = it.title; }
+    prev.n    = Math.max(prev.n || 1, it.n || 1);
+    prev.at   = Math.min(prev.at || it.at || 0, it.at || prev.at || 0);
+    prev.last = Math.max(prev.last || 0, it.last || 0);
+  });
+  out.items = Array.from(byId.values()).sort((x, y) => (x.at || 0) - (y.at || 0)).slice(0, WK_ITEMS_MAX);
+  // Past the item cap the union is the best count either tab can offer; under
+  // it (every ordinary session) the merged list IS the answer and always wins.
+  out.uniq = Math.max(a.uniq || 0, b.uniq || 0, out.items.length);
+  return out;
+}
+
+// A total that cannot drift: each tab counts only its own writes.
+function _wkSaves(s) {
+  if (!s) return 0;
+  if (!s.savesByTab) return s.saves || 0;
+  let n = 0;
+  Object.keys(s.savesByTab).forEach(t => { n += s.savesByTab[t] || 0; });
+  return Math.max(n, s.saves || 0);
+}
+
+// Read-merge-write. Never a plain overwrite: another tab may have logged a
+// question since this one last looked.
 function _wkStoreLocal() {
   try {
-    if (_wkSession && !_wkSession.endedAt) localStorage.setItem(_wkLsKey(), JSON.stringify(_wkSession));
-    else localStorage.removeItem(_wkLsKey());
+    if (!_wkSession || _wkSession.endedAt) { localStorage.removeItem(_wkLsKey()); return; }
+    const merged = _wkMerge(_wkLoadLocal(), _wkSession);
+    _wkSession = merged;
+    // Another tab ended the session while we held a running copy — respect it
+    // rather than writing ours back over the top.
+    if (merged.endedAt) { localStorage.removeItem(_wkLsKey()); _wkStopTick(); _wkSession = null; return; }
+    localStorage.setItem(_wkLsKey(), JSON.stringify(merged));
   } catch (e) { /* private mode — the Firestore copy is still being written */ }
+}
+
+// Another tab wrote the session. Adopt it instead of fighting it, folding this
+// tab's own items back in so neither copy can erase the other.
+function _wkAdoptRemote(raw) {
+  if (!_canAuthor()) return;
+  let remote = null;
+  try { remote = raw ? JSON.parse(raw) : null; } catch (e) { remote = null; }
+  if (!remote || !remote.id || !remote.startedAt) {
+    // The key was cleared: another tab ended the session (and has already
+    // filed the merged log). Stop the clock here without re-persisting, or
+    // this tab would write endedAt back to null and resurrect it.
+    if (_wkRunning()) {
+      _wkStopTick();
+      _wkSession = null;
+      wkRenderAll();
+      showToast('⏱️ The work session was ended in another tab', 'info');
+    }
+    return;
+  }
+  if (!Array.isArray(remote.items)) remote.items = [];
+  const mine = _wkSession;
+  const started = !_wkRunning();
+  const merged = _wkMerge(mine, remote);
+  _wkSession = merged;
+  if (merged.endedAt) { _wkStopTick(); _wkSession = null; wkRenderAll(); return; }
+  if (!_wkTickTimer) _wkStartTick();          // a session was STARTED in another tab
+  // Only write back when we actually hold something the other tab has not
+  // seen. Unconditional write-back would have the two tabs echoing forever;
+  // after one round the remote copy is a superset and this goes quiet.
+  if (mine && _wkAheadOf(merged, remote)) { _wkStoreLocal(); _wkQueueSave(); }
+  wkRenderAll();
+  if (started && mine == null) showToast('⏱️ Work session picked up from another tab', 'info');
+}
+
+// Does `merged` hold anything `remote` does not?
+function _wkAheadOf(merged, remote) {
+  if (!merged) return false;
+  if (_wkSaves(merged) > _wkSaves(remote)) return true;
+  if ((merged.items || []).length > (remote.items || []).length) return true;
+  const seen = new Set((remote.items || []).map(x => x && x.id));
+  return (merged.items || []).some(x => x && !seen.has(x.id));
 }
 function _wkLoadLocal() {
   try {
@@ -14033,9 +14393,13 @@ function _wkDoc(s) {
     endedAt: s.endedAt || null,
     pausedMs: s.pausedMs || 0,
     pausedAt: s.pausedAt || null,
+    pauseSetAt: s.pauseSetAt || 0,
     lastSeen: s.lastSeen || s.startedAt,
     ms: _wkElapsed(s),
-    saves: s.saves || 0,
+    // Carried so a tab that reloads mid-session can keep merging without
+    // double-counting its own earlier writes (see _wkMerge).
+    savesByTab: s.savesByTab || null,
+    saves: _wkSaves(s),
     questions: _wkCount(s),
     items: (s.items || []).slice(0, WK_ITEMS_MAX),
   };
@@ -14059,18 +14423,36 @@ async function _wkPersist(s) {
   catch (err) { console.warn('work session save (own account):', err); }
 }
 
+// Reads _wkSession when the timer FIRES, never a captured copy. Two reasons,
+// both of which lose work otherwise: _wkStoreLocal replaces the object with the
+// merged one, and a session ended in another tab clears it — a queued write
+// holding the old copy would put endedAt back to null and file it again without
+// the other tab's questions.
 function _wkQueueSave(now) {
-  const s = _wkSession;
-  if (!s) return;
+  if (!_wkSession) return;
   clearTimeout(_wkSaveTimer);
-  if (now) { _wkPersist(s); return; }
-  _wkSaveTimer = setTimeout(() => _wkPersist(s), 1500);
+  if (now) { _wkPersist(_wkSession); return; }
+  _wkSaveTimer = setTimeout(() => { if (_wkSession) _wkPersist(_wkSession); }, 1500);
 }
 
 // ---- Start / pause / end -------------------------------------------------
 function wkStart() {
   if (!_canAuthor()) { showToast('Work sessions are for question authors', 'error'); return; }
   if (_wkRunning()) { showToast('A session is already running', 'info'); return; }
+  // Another window may have started one seconds ago — join it rather than
+  // opening a second clock over the same hours.
+  const open = _wkLoadLocal();
+  // Same rule as wkInit: a clock left running for half a day is not a session
+  // to join, it is one to file.
+  if (open && !open.endedAt
+      && _wkElapsed(open) <= WK_MAX_MS
+      && Date.now() - (open.lastSeen || open.startedAt) <= WK_MAX_MS) {
+    _wkSession = open;
+    _wkStartTick();
+    wkRenderAll();
+    showToast('⏱️ Joined the session already running in another tab', 'info');
+    return;
+  }
   const now = Date.now();
   _wkSession = {
     id: currentUser.uid + '_' + now,
@@ -14079,8 +14461,8 @@ function wkStart() {
     name: currentUser.name || '',
     role: currentUser.role || '',
     bankOwner: _bankOwnerUid() || null,
-    startedAt: now, endedAt: null, pausedMs: 0, pausedAt: null, lastSeen: now,
-    saves: 0, uniq: 0, items: [],
+    startedAt: now, endedAt: null, pausedMs: 0, pausedAt: null, pauseSetAt: 0, lastSeen: now,
+    saves: 0, savesByTab: {}, uniq: 0, items: [],
   };
   _wkStoreLocal();
   _wkQueueSave(true);
@@ -14100,6 +14482,9 @@ function wkTogglePause() {
     _wkSession.pausedAt = now;
     showToast('⏸ Break — the clock is stopped. Questions you save are still logged.', 'info');
   }
+  // Stamped so the merge knows which window touched the break last — otherwise
+  // a stale pause in a second window undoes the resume in this one.
+  _wkSession.pauseSetAt = now;
   _wkSession.lastSeen = now;
   _wkStoreLocal();
   _wkQueueSave(true);
@@ -14118,8 +14503,15 @@ function wkEnd() {
 // atMs — close the session at a moment in the past (a session left running
 // overnight is filed at its last heartbeat, not at whenever it was reopened).
 function _wkFinish(atMs, quiet) {
-  const s = _wkSession;
-  if (!s || s.endedAt) return;
+  if (!_wkSession || _wkSession.endedAt) return;
+  // File the UNION, not this window's copy: the questions another tab logged
+  // are in localStorage and would otherwise be dropped by this last write.
+  // Same session only — if another tab has already ended this one and started
+  // a fresh clock, that new session is not ours to close.
+  const stored = _wkLoadLocal();
+  const s = (stored && stored.id === _wkSession.id ? _wkMerge(stored, _wkSession) : _wkSession);
+  _wkSession = s;
+  if (s.endedAt) { _wkStopTick(); _wkSession = null; _wkStoreLocal(); wkRenderAll(); return s; }
   const end = Math.max(s.startedAt, atMs || Date.now());
   if (s.pausedAt) { s.pausedMs = (s.pausedMs || 0) + Math.max(0, end - s.pausedAt); s.pausedAt = null; }
   s.endedAt = end;
@@ -14208,7 +14600,12 @@ function _wkLogQuestion(q, where) {
   if (!_wkRunning() || _wkSuppress > 0) return;
   if (!q || q.id == null) return;
   const s = _wkSession, now = Date.now();
-  s.saves = (s.saves || 0) + 1;
+  // Counted per tab, so merging this window's copy with another window's can
+  // never double-count either one (see _wkMerge).
+  const tab = _xtTabId();
+  if (!s.savesByTab) s.savesByTab = {};
+  s.savesByTab[tab] = (s.savesByTab[tab] || 0) + 1;
+  s.saves = _wkSaves(s);
   s.lastSeen = now;
   const id = String(q.id);
   const it = (s.items || []).find(x => x.id === id);
@@ -14220,7 +14617,9 @@ function _wkLogQuestion(q, where) {
   } else {
     // `uniq` keeps counting past WK_ITEMS_MAX so the headline number never
     // disagrees with the work actually done, even once the list is capped.
-    s.uniq = (s.uniq || 0) + 1;
+    // Under the cap it is DERIVED from the list rather than incremented — a
+    // question logged in another window is already in the merged list, and a
+    // blind +1 here would count it twice.
     if ((s.items || []).length < WK_ITEMS_MAX) {
       s.items.push({
         id,
@@ -14228,6 +14627,9 @@ function _wkLogQuestion(q, where) {
         topic: q.topic || '', category: q.category || '',
         at: now, last: now, n: 1, act: where,
       });
+      s.uniq = Math.max(s.uniq || 0, s.items.length);
+    } else {
+      s.uniq = (s.uniq || 0) + 1;
     }
   }
   _wkStoreLocal();
@@ -14325,7 +14727,7 @@ function _wkLiveCardHtml() {
     return `<div class="wk-card wk-live">
       <div class="wk-live-head"><span class="wk-live-label wk-idle">No session running</span></div>
       <div class="wk-clock wk-clock-idle">0:00:00</div>
-      <p class="wk-hint">Press <b>Start session</b> when you sit down to write questions. The clock runs off the wall clock, so it keeps counting while this tab is minimised, in the background, or closed altogether — and every question you save while it runs is listed here.</p>
+      <p class="wk-hint">Press <b>Start session</b> when you sit down to write questions. The clock runs off the wall clock, so it keeps counting while this tab is minimised, in the background, or closed altogether — and every question you save while it runs is listed here. One session covers <b>all your windows</b>: open Rapid add in one tab and the exam paper builder in another and everything you save in either is logged to the same session.</p>
       <div class="wk-actions"><button class="btn btn-primary" onclick="wkStart()">▶ Start session</button></div>
     </div>`;
   }
@@ -14338,7 +14740,7 @@ function _wkLiveCardHtml() {
     <div class="wk-clock" id="wkClock">${_wkHms(_wkElapsed(s))}</div>
     <div class="wk-stats">
       <div class="wk-stat"><b>${n}</b><span>question${n === 1 ? '' : 's'}</span></div>
-      <div class="wk-stat"><b>${s.saves || 0}</b><span>save${(s.saves || 0) === 1 ? '' : 's'}</span></div>
+      <div class="wk-stat"><b>${_wkSaves(s)}</b><span>save${_wkSaves(s) === 1 ? '' : 's'}</span></div>
       ${s.pausedMs ? `<div class="wk-stat"><b>${escapeHtml(_wkHuman(s.pausedMs))}</b><span>on break</span></div>` : ''}
     </div>
     <div class="wk-actions">
@@ -14562,6 +14964,9 @@ async function saveQuestion(q, opts) {
       // bookkeeping (the usage backfill, auto-tagging, the part converter) —
       // machine housekeeping is not work the author did.
       if (wkLog) _wkLogQuestion(q, 'bank');
+      // Every other window folds this question into its own bank, so nothing
+      // added in one tab is invisible (or duplicated) in the next.
+      if (!quiet) _xtAnnounceQuestion(q.id, 'bank', 'save');
       return done(true);
     } catch (err) {
       attempts++;
@@ -14596,6 +15001,7 @@ async function saveVettingQuestion(q) {
     try {
       await setDoc(_vRef(q.id), q);
       if (wkLog) _wkLogQuestion(q, 'vetting');
+      _xtAnnounceQuestion(q.id, 'vetting', 'save');
       _inflightOps--;
       if (_inflightOps === 0) _setSaveStatus('saved');
       return;
@@ -14616,13 +15022,204 @@ async function saveVettingQuestion(q) {
 // Delete one question doc (fire-and-forget; failure is non-critical)
 function deleteQuestionDoc(id) {
   if (!currentUser) return;
-  deleteDoc(_qRef(id)).catch(err => console.warn('deleteQuestionDoc:', err));
+  deleteDoc(_qRef(id))
+    .then(() => _xtAnnounceQuestion(id, 'bank', 'del'))
+    .catch(err => console.warn('deleteQuestionDoc:', err));
 }
 
 // Delete one vetting doc (fire-and-forget)
 function deleteVettingDoc(id) {
   if (!currentUser) return;
-  deleteDoc(_vRef(id)).catch(err => console.warn('deleteVettingDoc:', err));
+  deleteDoc(_vRef(id))
+    .then(() => _xtAnnounceQuestion(id, 'vetting', 'del'))
+    .catch(err => console.warn('deleteVettingDoc:', err));
+}
+
+// =====================================================================
+// CONCURRENT TABS — one author, many windows
+//
+// Authoring is not a single-window job: Rapid add reads screenshots in one
+// tab while the exam paper builder reads a whole paper in another and the
+// block editor writes a question by hand in a third. Every question is its
+// own document, so the WRITES never collide — but each tab loaded the bank
+// once at sign-in and then never hears about anything the others add, which
+// leaves three real ways for work to go missing:
+//
+//   1. The work session log. Every tab writes the WHOLE session doc, so the
+//      last writer used to erase the other tabs' items. Fixed in _wkMerge.
+//   2. Stale lists. A question added in another window is invisible here
+//      until a reload — it looks lost, duplicate detection cannot see it,
+//      and the counts disagree. Fixed by the sync below.
+//   3. Closing a window mid-write. The document never leaves the tab. Fixed
+//      by the unload guard below.
+//
+// The channel is BroadcastChannel where it exists, a localStorage ping where
+// it does not. Messages are hints, never data: a tab is told an id changed
+// and re-reads that document from Firestore, so two tabs can never talk each
+// other into a state the database does not have.
+// =====================================================================
+const XT_CHANNEL   = 'sq_tabs';
+const XT_TAB_KEY   = 'sq_tab_id';
+const XT_LS_KEY    = 'sq_tab_msg';     // fallback channel for browsers without BroadcastChannel
+const XT_Q_DEBOUNCE = 500;             // an exam paper commit fires one message per question
+const XT_PING_MS   = 400;              // how long a liveness ping waits for answers
+
+let _xtTab = '';
+let _xtChan = null;
+let _xtBound = false;
+const _xtHandlers = {};
+
+// Identity that survives F5 in THIS tab and is unique to it. sessionStorage is
+// exactly that primitive: per-tab, and kept across a reload. It is what lets a
+// refreshed exam paper builder find its own draft again without claiming the
+// draft belonging to the window next to it.
+function _xtTabId() {
+  if (_xtTab) return _xtTab;
+  const made = 'tab_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  try {
+    _xtTab = sessionStorage.getItem(XT_TAB_KEY) || '';
+    if (!_xtTab) { _xtTab = made; sessionStorage.setItem(XT_TAB_KEY, _xtTab); }
+  } catch (e) { _xtTab = made; }
+  return _xtTab;
+}
+
+function xtInit() {
+  if (_xtBound) return;
+  _xtBound = true;
+  _xtTabId();
+  try {
+    if (typeof BroadcastChannel === 'function') {
+      _xtChan = new BroadcastChannel(XT_CHANNEL);
+      _xtChan.onmessage = e => _xtReceive(e && e.data);
+    }
+  } catch (e) { _xtChan = null; }
+  window.addEventListener('storage', e => {
+    if (!e || !e.key) return;
+    // The work session is shared through its own key, so a tab that was
+    // already open when another one started the clock still picks it up.
+    if (e.key === WK_LS_PREFIX + ((currentUser && currentUser.uid) || 'anon')) { _wkAdoptRemote(e.newValue); return; }
+    if (e.key === XT_LS_KEY && !_xtChan && e.newValue) { try { _xtReceive(JSON.parse(e.newValue)); } catch (_) {} }
+  });
+  window.addEventListener('beforeunload', _xtGuardUnload);
+  _xtOn('q', _xtQueueQuestion);
+  _xtOn('ep-ping', env => _xtPost({ type: 'ep-pong', to: env.tab }));
+  _xtOn('ep-pong', env => { _epLiveTabs.add(env.tab); });
+}
+
+function _xtPost(msg) {
+  if (!msg) return;
+  const env = Object.assign({}, msg, {
+    tab: _xtTabId(), uid: (currentUser && currentUser.uid) || '', at: Date.now(),
+  });
+  try {
+    if (_xtChan) { _xtChan.postMessage(env); return; }
+    // The value has to CHANGE or no storage event fires, hence the timestamp.
+    localStorage.setItem(XT_LS_KEY, JSON.stringify(env));
+  } catch (e) { /* channel unavailable — the other tabs just stay on their own copy */ }
+}
+
+function _xtReceive(env) {
+  if (!env || !env.type) return;
+  if (env.tab === _xtTabId()) return;                                    // never our own echo
+  if (!currentUser) return;
+  if (env.uid && env.uid !== currentUser.uid) return;                    // another account, another window
+  const fn = _xtHandlers[env.type];
+  if (fn) { try { fn(env); } catch (err) { console.warn('cross-tab handler', env.type, err); } }
+}
+
+function _xtOn(type, fn) { _xtHandlers[type] = fn; }
+
+// Announce a question document that changed here, so every other window folds
+// it into its own bank / vetting list. `quiet` writes are deliberately silent:
+// the usage backfill and the auto-tagger walk the WHOLE bank, and announcing
+// hundreds of housekeeping writes would have every other tab re-read the bank
+// a document at a time for nothing.
+function _xtAnnounceQuestion(id, where, act) {
+  if (id == null) return;
+  _xtPost({ type: 'q', id: String(id), where, act: act || 'save' });
+}
+
+// ---- Folding another tab's questions into this one -----------------------
+const _xtQPend = new Map();
+let _xtQTimer = null;
+
+function _xtQueueQuestion(env) {
+  if (!_canAuthor()) return;
+  if (!env || !env.id || (env.where !== 'bank' && env.where !== 'vetting')) return;
+  _xtQPend.set(env.where + ':' + env.id, { id: String(env.id), where: env.where, act: env.act });
+  clearTimeout(_xtQTimer);
+  _xtQTimer = setTimeout(() => { _xtFlushQuestions().catch(err => console.warn('cross-tab sync', err)); }, XT_Q_DEBOUNCE);
+}
+
+async function _xtFlushQuestions() {
+  const jobs = Array.from(_xtQPend.values());
+  _xtQPend.clear();
+  if (!jobs.length || !currentUser) return;
+  // READ first, apply after. questionBank / vettingList are re-assigned
+  // wholesale elsewhere (`questionBank = questionBank.filter(…)`), so an index
+  // taken before an await can point into an array that no longer exists.
+  const fetched = await Promise.all(jobs.map(async j => {
+    if (j.act === 'del') return { j, q: null };
+    try {
+      const snap = await getDoc(j.where === 'bank' ? _qRef(j.id) : _vRef(j.id));
+      return { j, q: snap.exists() ? normalizeLoadedQuestion(snap.data()) : null };
+    } catch (err) {
+      // A read that failed says nothing about the question — leave this tab's
+      // copy exactly as it is rather than deleting it on a network blip.
+      console.warn('cross-tab question read:', err);
+      return { j, q: null, failed: true };
+    }
+  }));
+
+  let bank = 0, vet = 0, editedOpen = false;
+  fetched.forEach(({ j, q, failed }) => {
+    if (failed) return;
+    const list = j.where === 'bank' ? questionBank : vettingList;
+    const idx = list.findIndex(x => x && String(x.id) === j.id);
+    if (!q) {
+      if (idx < 0) return;
+      list.splice(idx, 1);
+    } else if (idx >= 0) {
+      list[idx] = q;
+    } else if (j.where === 'bank') {
+      list.push(q);
+    } else {
+      list.unshift(q);          // vetting reads newest-first
+    }
+    try { if (typeof _ainsteinTextCache !== 'undefined') _ainsteinTextCache.delete(j.id); } catch (_) {}
+    // currentEditingQuestion is the question's ID, not the question.
+    if (currentEditingQuestion && String(currentEditingQuestion) === j.id) editedOpen = true;
+    if (j.where === 'bank') bank++; else vet++;
+  });
+
+  if (!bank && !vet) return;
+  try { updateCounts(); } catch (e) {}
+  if (bank) {
+    try { populateTopicFilter(); } catch (e) {}
+    if (document.querySelector('#page-bank.active')) { try { renderQuestionBank(); } catch (e) {} }
+  }
+  if (vet && document.querySelector('#page-vetting.active')) { try { renderVettingList(); } catch (e) {} }
+  // The one case the author has to be told about: they are editing a question
+  // that has just been changed somewhere else, and saving would overwrite it.
+  if (editedOpen) showToast('⚠ This question was just changed in another tab — save here and that change is overwritten', 'error');
+}
+
+// ---- Closing a window mid-write ------------------------------------------
+// The only way an added question really is lost: the tab is closed while its
+// document is still being written, or while the AI is still reading it, and
+// nothing ever reaches Firestore. Everything else survives a closed window.
+function _xtWorkInFlight() {
+  if (_inflightOps > 0) return true;
+  try { if (rapidJobs.some(j => j && j.status === 'processing')) return true; } catch (e) {}
+  try { if (_epBusy) return true; } catch (e) {}
+  return false;
+}
+
+function _xtGuardUnload(e) {
+  if (!currentUser || !_canAuthor() || !_xtWorkInFlight()) return;
+  e.preventDefault();
+  e.returnValue = '';    // browsers show their own wording; anything non-empty triggers it
+  return '';
 }
 
 // no-op kept so any stray internal calls don't throw
@@ -42989,6 +43586,10 @@ window.epSetMatch = epSetMatch;
 window.epCancel = epCancel;
 window.epSend = epSend;
 window.epSetPaper = epSetPaper;
+// Restoring reads IndexedDB, so it is async — an inline onclick would leave
+// the rejection unhandled.
+window.epDraftTake = tab => { epDraftTake(tab).catch(err => console.warn('exam paper draft restore:', err)); };
+window.epDraftDiscard = epDraftDiscard;
 // Work sessions — the bar and the page are built from inline on* handlers.
 window.wkStart = wkStart;
 window.wkTogglePause = wkTogglePause;
