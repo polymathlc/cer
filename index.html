@@ -10024,6 +10024,13 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   background:var(--surface-alt,#f4f5f6); color:var(--text-muted);
   font-size:0.7rem; font-weight:600; white-space:nowrap;
 }
+/* The explanation block's chip is a switch: the note is either about the part
+   above it or about the whole question, and only the author knows which. */
+.qpart-chip-btn{
+  border:1px dashed var(--border); font-family:inherit; cursor:pointer;
+  transition:border-color .15s ease, color .15s ease;
+}
+.qpart-chip-btn:hover{ border-color:var(--primary); color:var(--primary); }
 /* ---- Question Doctor: the typed-parts conversion preview ---- */
 .qpart-scan-head{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:0.86rem; line-height:1.6; padding:12px 14px; margin-bottom:14px; border:1px solid var(--border); border-radius:10px; background:var(--surface-alt,#fafafa); }
 .qpart-scan-row{ border:1px solid var(--border); border-radius:10px; padding:13px 15px; margin-bottom:10px; background:var(--surface,#fff); }

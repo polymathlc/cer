@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.244.0';
+const APP_VERSION = 'v1.245.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -5023,12 +5023,15 @@ document.addEventListener('click', function (e) {
   aiGenerateBlockAnswer(btn.getAttribute('data-aianswer'), btn);
 });
 
-// "🤖 AI explanation" button shown on every EXPLANATION block. Reads the whole
+// "🤖 AI explanation" button shown on every EXPLANATION block. Reads the
 // question as it currently stands in the editor — text, options (with the
 // correct one marked), model answers, tables and diagrams — and writes the
 // teacher explanation, grounded FIRST on the Teaching Notes database.
+// On a question with parts it writes about the PART this box sits in, not the
+// whole question: an explanation under (a) that explains (b) and (c) is wrong
+// wherever it came from.
 function aiExplainBtnHtml(blockId) {
-  return `<button type="button" class="improve-btn" data-aiexplain="${blockId}" title="Write this explanation with AI — it reads the question as it currently stands (including the answer and diagrams) and bases the science on your Teaching Notes database">🤖 AI explanation</button>`;
+  return `<button type="button" class="improve-btn" data-aiexplain="${blockId}" title="Write this explanation with AI — it reads the question directly above this box (its answer and diagrams too) and bases the science on your Teaching Notes database">🤖 AI explanation</button>`;
 }
 async function aiGenerateBlockExplanation(blockId, btn) {
   const block = blocks.find(b => b.id === blockId);
@@ -5037,11 +5040,33 @@ async function aiGenerateBlockExplanation(blockId, btn) {
   syncEditorDomToBlocks();   // explain the question exactly as it stands in the editor
   if (stripHtml(block.content || '').trim() && !confirm('Replace the current explanation with an AI-written one?')) return;
 
-  // The full question in block order — including the model answers, which the
-  // explanation must justify. Diagrams go along as images (best effort).
+  // WHICH question this box explains. A multi-part question has one
+  // explanation per part, and an explanation under (a) that summarises (b) and
+  // (c) is simply wrong — so the box is written for the part it sits in, and
+  // the other parts go along only as background, clearly marked as such.
+  const pmap = qPartMap(blocks);
+  const target = qPartOf(pmap, block);
+  const scoped = !!target && !qPartUnfiled(block);
+
+  // The question in block order — including the model answers, which the
+  // explanation must justify. Diagrams go along as images (best effort), and
+  // when the box is scoped to one part only that part's pictures are sent.
   const ctxBits = [];
   const media = [];
+  let mark = '';
   for (const b of blocks) {
+    if (scoped) {
+      const p = qPartOf(pmap, b);
+      // Blocks before the first part are the shared stem — the diagram and the
+      // scene-setting every part depends on — so they always go.
+      const tag = !p ? 'stem' : (p === target ? '>>' : 'other:' + p);
+      if (tag !== mark) {
+        mark = tag;
+        if (tag === '>>') ctxBits.push(`>>> PART (${target}) — THE QUESTION THIS EXPLANATION BOX IS FOR <<<`);
+        else if (p) ctxBits.push(`[part (${p}) of the same question — background only, do NOT explain it]`);
+      }
+      if (p && p !== target && (b.type === 'image' || b.type === 'table')) continue;   // background needs no pictures
+    }
     if (b.type === 'text' && stripHtml(b.content || '').trim()) ctxBits.push(stripHtml(b.content));
     else if (b.type === 'part' && ((b.label || '') + stripHtml(b.content || '')).trim()) ctxBits.push(((b.label || '') + ' ' + stripHtml(b.content || '')).trim());
     else if (b.type === 'image' && b.url) { ctxBits.push('[diagram — attached as an image]'); if (media.length < 3) { try { media.push(await _blockImageToInline(b.id)); } catch (e) { console.warn('AI explanation: diagram skipped', e); } } }
@@ -5063,6 +5088,9 @@ async function aiGenerateBlockExplanation(blockId, btn) {
     (notesDb ? notesDb + `\nBase the science and the wording on this database FIRST; fall back to standard PSLE syllabus knowledge only where the database does not cover it.\n` : '') +
     (title || topic ? `Question: "${title}"${topic ? ' — topic: ' + topic : ''}.\n` : '') +
     `THE QUESTION, in order${media.length ? ' (diagrams attached as images)' : ''}:\n${ctxBits.join('\n').slice(0, 3500)}\n` +
+    (scoped
+      ? `This question has several lettered parts. Explain ONLY part (${target}) — the sub-question marked ">>>" above, which is the one printed directly above this explanation box — and its answer. The other parts are shown only so you understand the context; do NOT explain them, do NOT summarise the whole question, and do not mention a part other than (${target}) unless part (${target}) genuinely depends on it.\n`
+      : '') +
     `If a correct answer / model answer is shown above, your explanation MUST justify THAT answer (never contradict it); if none is shown, work the correct answer out yourself first.\n` +
     `Return ONLY JSON: {"explanation":"..."}\n` +
     `Rules: clear teacher voice a P3-P6 student understands; plain text only, no markdown, no [[brackets]].`;
@@ -11730,9 +11758,31 @@ function qPartMap(blocks) {
     // worse than leaving them unlabelled.
     if (opens) cur = opens;
     else if (b.type === 'part') cur = '';
-    map.set(b, cur);
+    // QPART_NONE unfiles THIS block only and does not close the part: a
+    // teacher's note about the whole question can sit anywhere among the
+    // parts without detaching everything printed after it.
+    map.set(b, qPartUnfiled(b) ? '' : cur);
   });
   return map;
+}
+// A block explicitly filed under NO part — a note that belongs to the whole
+// question, not to whichever part happens to sit above it. Without this an
+// explanation covering all of (a), (b) and (c) inherits (a) and is shown and
+// printed as part (a)'s explanation, which is a lie about what it explains.
+const QPART_NONE = '-';
+function qPartUnfiled(b) { return !!b && String(b.part == null ? '' : b.part).trim() === QPART_NONE; }
+// A question written flat and only LATER split into parts has one explanation,
+// and it was written about the whole thing — so it must not end up wearing the
+// letter of whichever part it happens to follow. A question that already has an
+// explanation per part is left exactly as its author wrote it.
+function qPartUnfileLoneExplanation(blocks) {
+  const bs = blocks || [];
+  const parts = new Set(bs.map(b => qBlockOpensPart(b)).filter(Boolean));
+  if (parts.size < 2) return false;
+  const exs = bs.filter(b => b && b.type === 'explanation' && stripHtml(b.content || '').trim());
+  if (exs.length !== 1 || qPartUnfiled(exs[0])) return false;
+  exs[0].part = QPART_NONE;
+  return true;
 }
 function qPartOf(map, block) { return (map && block && map.get(block)) || ''; }
 // Which part a block OPENS, or '' if it just belongs to the current one.
@@ -11771,6 +11821,15 @@ function qPartPickerHtml(block) {
   const map = qPartMap(blocks);
   const inherited = qPartOf(map, block);
   const own = qPartNormalize(block.part);
+  // An explanation is the one block that is often written about the WHOLE
+  // question while sitting inside a part, so it gets a switch rather than a
+  // read-only chip: it is either the note for the part above it or the note
+  // for the question, and only the author knows which.
+  if (block.type === 'explanation' && (inherited || qPartUnfiled(block))) {
+    const parted = !qPartUnfiled(block);
+    return `<button type="button" class="qpart-chip inherit qpart-chip-btn" onclick="toggleBlockPartScope('${block.id}')"
+      title="${parted ? `This explanation is filed under part (${inherited}) — click if it explains the WHOLE question instead` : 'This explanation covers the whole question — click to file it under the part above it'}">${parted ? '↳ ' + escapeHtml(qPartLabel(inherited)) : '↳ whole question'}</button>`;
+  }
   if (QPART_OPENER_TYPES.indexOf(block.type) < 0) {
     return inherited
       ? `<span class="qpart-chip inherit" title="This block belongs to part (${inherited}). Set the part on the text above it.">↳ ${escapeHtml(qPartLabel(inherited))}</span>`
@@ -11788,6 +11847,17 @@ function setBlockPart(blockId, value) {
   if (!b) return;
   b.part = qPartNormalize(value);
   renderBlocks();
+}
+// The explanation chip's switch: filed under the part above it, or a note on
+// the whole question. Nothing else about the block moves.
+function toggleBlockPartScope(blockId) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b) return;
+  b.part = qPartUnfiled(b) ? '' : QPART_NONE;
+  renderBlocks();
+  showToast(qPartUnfiled(b)
+    ? 'This explanation now reads as a note on the whole question'
+    : 'This explanation is filed under the part above it again', 'info');
 }
 // One click: label every opener block that starts a new part, a, b, c… in
 // order. Blocks that already carry a part keep it, so a half-labelled question
@@ -11830,6 +11900,9 @@ function autoNumberParts() {
       if (d) { b.content = d.html; stripped++; }
     }
   });
+  // The single explanation this question was written with covers all of it, so
+  // it is filed under the whole question rather than under the last part.
+  qPartUnfileLoneExplanation(blocks);
   renderBlocks();
   showToast('🔡 Numbered ' + take.length + ' parts: ' + take.map((_, n) => '(' + QPART_ASSIGN[n] + ')').join(' ')
     + (stripped ? ' · removed ' + stripped + ' typed marker' + (stripped === 1 ? '' : 's') + ' from the text' : '')
@@ -12002,6 +12075,7 @@ async function qPartApplyScan() {
       b.part = h.letter;
     }
     if (conflict) { skipped.push(live.title || 'Untitled'); continue; }
+    qPartUnfileLoneExplanation(next.blocks);
     let ok = false;
     try { ok = await saveQuestion(next, { quiet: true }); }
     catch (e) { console.warn('part convert', id, e); }
@@ -13516,7 +13590,8 @@ function _epQuestionPrompt(n, from, total) {
     `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, and set "correctIndex" to the 0-based correct option (work it out yourself); no "answer"/"plainanswer".\n` +
     `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing your best model answer, and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
     `- The answer you write is a PLACEHOLDER: the paper's official marking scheme is read separately and will replace it. Write it anyway — some questions never get an official answer.\n` +
-    `- EVERY question must FINISH with ONE "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct.\n` +
+    `- EXPLANATION: a question with NO parts FINISHES with ONE "explanation" block — 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct.\n` +
+    `- A question WITH lettered parts gets ONE explanation block PER PART, each placed directly AFTER that part's own answer block and explaining ONLY that part's question and answer. Never write one explanation covering several parts, and never put an explanation about part (b) underneath part (a).\n` +
     `- "title": a short label saying what the question is ABOUT (e.g. "Melting ice in warm water"). Do NOT put the question number in it.\n` +
     `- "topicConfidence": "high", "medium" or "low".\n` +
     _aiTagsPromptLine() +
@@ -13716,6 +13791,9 @@ function _epStripNumbering(q) {
       if (t) t.part = p;
     }
   }
+  // Now the parts are known, an explanation written for the question as a whole
+  // can be given to the part it belongs to — or to none of them.
+  _epScopeExplanations(q);
   // Last, so the fallback reads the wording with the numbering already gone.
   q.title = _epStripTitleNumber(q.title) || _epTitleFromText(q) || 'Untitled question';
 }
@@ -14114,30 +14192,49 @@ function _epPlacePartAnswer(q, letter, nb) {
   q.blocks.splice(span.last + 1, 0, nb);
 }
 
-// One question has ONE explanation block, so the parts' marking notes are kept
-// per part and the block is rebuilt from all of them, each under its letter.
-// The model's own explanation covers the whole question, so it is kept as long
-// as any part is still without an official note — nothing the teacher had is
-// thrown away by a partial match.
-function _epRebuildExplanation(q) {
-  const ex = q.blocks.find(b => b.type === 'explanation');
-  if (ex && q._epModelEx === undefined) q._epModelEx = ex.content || '';
-  const by = q._epEx || {};
-  const letters = _epPartLetters(q).filter(p => by[p]);
-  const lines = letters.map(p => qPartLabel(p) + ' ' + by[p]);
-  if (letters.length < _epPartLetters(q).length && q._epModelEx) lines.push(q._epModelEx);
-  const content = lines.join('<br>');
-  if (!content) return;
-  if (ex) ex.content = content;
-  else q.blocks.push({ id: generateBlockId(), type: 'explanation', content });
+// A part's marking note goes in THAT part — replacing the explanation already
+// sitting in it, or inserted at the end of the part, after its answer. It is
+// never merged with another part's: an explanation is read as explaining the
+// question printed directly above it, so a note about (b) under (a) is simply
+// a wrong answer to a student reading the page.
+function _epPlacePartExplanation(q, letter, text) {
+  const ex = _epPartBlock(q, letter, b => b.type === 'explanation');
+  if (ex) { ex.content = text; return; }
+  const span = _epPartSpan(q, letter);
+  const nb = { id: generateBlockId(), type: 'explanation', content: text };
+  if (span.first < 0) q.blocks.push(nb);
+  else q.blocks.splice(span.last + 1, 0, nb);
 }
 
-// Put the model's own explanation back — used when a re-slot leaves the
-// question with no official note at all.
-function _epRestoreModelEx(q) {
-  if (!q || q._epModelEx === undefined) return;
-  const ex = q.blocks.find(b => b.type === 'explanation');
-  if (ex) ex.content = q._epModelEx;
+// One explanation written for a question that turned out to have parts. If the
+// model labelled it part by part it is split and each note goes to its own
+// part; if it is one note about everything it is moved to the END and filed
+// under NO part, so it is never read as the note for the part above it.
+function _epScopeExplanations(q) {
+  if (!q || !Array.isArray(q.blocks)) return;
+  const parts = _epPartLetters(q);
+  if (parts.length < 2) return;
+  const exs = q.blocks.filter(b => b && b.type === 'explanation' && String(b.content || '').trim());
+  if (exs.length !== 1) return;         // one per part already — leave them where they are
+  const ex = exs[0];
+  const frags = _epSplitPartsHtml(ex.content) || [];
+  // "(a) … (b) …" in one box: one note per part, each stripped of its marker,
+  // because a part label is drawn from the block and never from the text.
+  const hits = frags.map(f => qPartDetect(f)).filter(h => h && parts.indexOf(h.letter) >= 0);
+  if (hits.length) {
+    q.blocks.splice(q.blocks.indexOf(ex), 1);          // out of the way before anything is placed
+    hits.forEach(h => _epPlacePartExplanation(q, h.letter, h.html.trim()));
+    // Anything written before the first marker belongs to no part in
+    // particular, so it is kept as a closing note rather than dropped.
+    const lead = frags.filter(f => !qPartDetect(f)).join('<br>').trim();
+    if (lead) q.blocks.push({ id: generateBlockId(), type: 'explanation', content: lead, part: QPART_NONE });
+    return;
+  }
+  // Not attributable: it is a note on the whole question, so say so instead of
+  // letting it inherit whichever part it happens to follow.
+  q.blocks.splice(q.blocks.indexOf(ex), 1);
+  ex.part = QPART_NONE;
+  q.blocks.push(ex);
 }
 
 // `part` is the letter this answer belongs to, or '' for a question answered
@@ -14168,15 +14265,14 @@ function _epApplyAnswer(q, a, part) {
     _epSetBlanks(q, id, m);
     touched = true;
   }
-  // The key's own working is the paper's, so it beats the model's explanation.
+  // The key's own working is the paper's, so it beats the model's explanation —
+  // but only for the part it was printed against. A part with no note of its
+  // own keeps the one the model wrote for it.
   if (a.explanation) {
-    if (letter) {
-      q._epEx = q._epEx || {};
-      q._epEx[letter] = a.explanation;
-      _epRebuildExplanation(q);
-    } else {
+    if (letter) _epPlacePartExplanation(q, letter, a.explanation);
+    else {
       const ex = q.blocks.find(b => b.type === 'explanation');
-      if (ex) { if (q._epModelEx === undefined) q._epModelEx = ex.content || ''; ex.content = a.explanation; }
+      if (ex) ex.content = a.explanation;
       else q.blocks.push({ id: generateBlockId(), type: 'explanation', content: a.explanation });
     }
     touched = true;
@@ -14198,7 +14294,6 @@ function _epSlot(quiet) {
       // A question with parts is matched part by part: the paper numbers it 44
       // and the marking scheme answers 44(a), 44(b), 44(c) on lines of their
       // own, so one row per question could never fill it in.
-      q._epEx = {};
       let n = 0;
       parts.forEach(p => {
         const a = _epAnswerForPart(q, p);
@@ -14213,7 +14308,6 @@ function _epSlot(quiet) {
       // line, which is how a single-part question is always matched.
       const whole = _epAnswerFor(q);
       if (whole && _epApplyAnswer(q, whole, '')) { filled++; return; }
-      _epRestoreModelEx(q);
       missed++;
       return;
     }
@@ -14247,11 +14341,8 @@ function epSetMatch(qid, number, part) {
   if (!q) return;
   const letter = qPartNormalize(part);
   if (!number) {
-    if (letter) {
-      if (q._epAnsBy) delete q._epAnsBy[letter];
-      if (q._epEx) delete q._epEx[letter];
-      _epRebuildExplanation(q);
-    } else q._epAns = '';
+    if (letter) { if (q._epAnsBy) delete q._epAnsBy[letter]; }
+    else q._epAns = '';
     epRender();
     return;
   }
@@ -44197,6 +44288,7 @@ window.adminSetBoardBan = adminSetBoardBan;
 window.exportActivityAudit = exportActivityAudit;
 window.adminHeroOp = adminHeroOp;
 window.setBlockPart = setBlockPart;
+window.toggleBlockPartScope = toggleBlockPartScope;
 window.autoNumberParts = autoNumberParts;
 window.clearAllParts = clearAllParts;
 window.qPartScanBank = qPartScanBank;
