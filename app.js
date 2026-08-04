@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.243.0';
+const APP_VERSION = 'v1.244.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -13169,6 +13169,7 @@ let _epPaperName = '';
 let _epBusy = false;
 let _epCancel = false;
 let _epDirty = false;    // screenshots changed since the last read
+let _epKeyBase = '';     // the last full question number seen on the key, for its bare "(a)" lines
 let _epPasteTarget = 'q';   // which drop zone a Ctrl-V lands in
 let _epPasteBound = false;
 
@@ -13507,6 +13508,8 @@ function _epQuestionPrompt(n, from, total) {
     `- "number": the question number EXACTLY as printed on the paper, INCLUDING its part letter — "7", "12", "3a", "15(b)". It is used ONLY to find this question's line on the marking scheme and is never shown to anyone. If no number is printed, use "".\n` +
     `- NEVER write the question number inside a block. A text block starts with the question's own wording — "Explain why the ice melted", not "44. Explain why the ice melted" and not "44) Explain…".\n` +
     `- SUB-PARTS: if the question is a lettered part, keep ONLY that letter at the very START of the text block that asks it, written exactly as "(a) " — it is lifted out into a proper part marker. So "44(a) Explain why…" becomes the text "(a) Explain why…", with the 44 dropped. If ONE question carries several lettered parts, start EACH part's own text block with its own "(a) " / "(b) " marker, one marker per block and never two in the same block.\n` +
+    `- ONE MARKER PER TEXT BLOCK, ALWAYS: a question asking (a), (b) and (c) needs THREE text blocks, one opening each part — never the three parts written into one block. Give EACH part its own answer block ("answer" or "plainanswer") directly under the text block that asks it, so every part has its own model answer.\n` +
+    `- "number" for an entry that holds SEVERAL lettered parts is the BASE number only — "44", never "44a" — because each part's answer is found on the marking scheme as 44(a), 44(b), 44(c). An entry that IS one single lettered part keeps its letter: "44(a)".\n` +
     `- ONE entry per question. Put an "image" block exactly where each diagram/picture/graph/figure/table belongs, interleaved with the text blocks.\n` +
     _rectangleRules() +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n").\n` +
@@ -13530,6 +13533,8 @@ function _epKeyPrompt(i, total) {
     `Rules:\n` +
     `- ONE entry per question number on the key, in the order they appear. Do NOT skip a number because its answer is short, and do NOT merge two numbers into one entry.\n` +
     `- "number": exactly as printed — "1", "12", "3a", "15(b)". This is what links the answer to its question, so copy it precisely.\n` +
+    `- PARTS: a question with lettered parts gets ONE entry PER PART, and every one of those entries REPEATS the question number — "44(a)", "44(b)", "44(c)" — even when the key prints the 44 only once with the parts listed beneath it. Never number a part "(a)" on its own, and never merge two parts into a single entry.\n` +
+    `- A part split further into roman sub-parts keeps both levels: "44(b)(i)", "44(b)(ii)".\n` +
     `- "option": for a multiple-choice answer, the chosen option as printed — "1"-"4" or "A"-"D". Empty string for an open question.\n` +
     `- "answer": the full written answer for an open question, copied as printed. Empty string for a multiple-choice answer.\n` +
     `- "claim"/"evidence"/"reasoning": ONLY if the key itself splits the answer into those three parts. Otherwise leave all three empty and put the whole answer in "answer".\n` +
@@ -13599,6 +13604,80 @@ function _epPartFromNumber(num) {
   return m ? qPartNormalize(m[1]) : '';
 }
 
+// A text block holding SEVERAL part markers — "(a) Explain…<br>(b) State…" —
+// is one question's parts written into a single box. The Question Doctor
+// refuses that case, because it is rewriting questions a human already vetted;
+// here the block was written by the model seconds ago from a screenshot that
+// plainly HAD parts, so the honest fix is to split it into one block per part
+// rather than leave the whole question with no parts at all — and a question
+// with no parts can never be matched to the key's 44(a) / 44(b) lines.
+//
+// Only ever split when <br> is the only markup in the block: the cut is made
+// at a source offset, and a slice through a <p> or a <strong> would leave the
+// markup unbalanced. AI-built text blocks are exactly that shape (plain text
+// with <br> line breaks — see _separateOptionLines), so this covers them all.
+const EP_ONLY_BR_RE = /^(?:[^<]|<br\s*\/?>)*$/i;
+function _epSplitPartsHtml(html) {
+  const s = String(html == null ? '' : html);
+  if (!s || !EP_ONLY_BR_RE.test(s)) return null;
+  const chars = qPartWalkPlain(s);
+  const plain = chars.map(c => c.ch).join('');
+  // Where each line begins, in char-index terms: the start, and every index
+  // just after a newline (which is what <br> becomes in the walk).
+  const lineStarts = [];
+  for (let i = 0; i < chars.length; i++) if (i === 0 || plain[i - 1] === '\n') lineStarts.push(i);
+  const cuts = [];
+  const letters = [];
+  lineStarts.forEach(i => {
+    let j = i;
+    while (j < chars.length && /[ \t]/.test(plain[j])) j++;
+    const m = plain.slice(j).match(QPART_MARKER_RE);
+    if (!m) return;
+    cuts.push(chars[i].a);
+    letters.push((m[1] || m[2] || m[3]));
+  });
+  if (cuts.length < 2) return null;
+  // Lowercase and consecutive — "(a) (b) (c)". An UPPERCASE run is an options
+  // or statement list ("(A) … (B) …"), which is exactly what the two-marker
+  // guard exists to refuse, and letters that skip are not a run of parts.
+  if (letters.some(l => l !== l.toLowerCase())) return null;
+  for (let k = 1; k < letters.length; k++) {
+    if (letters[k].charCodeAt(0) !== letters[k - 1].charCodeAt(0) + 1) return null;
+  }
+  const bounds = (cuts[0] > 0 ? [0] : []).concat(cuts, [s.length]);
+  const out = [];
+  for (let k = 0; k < bounds.length - 1; k++) {
+    // A fragment keeps the <br> that ended it; trim those so the block does not
+    // open or close on an empty line.
+    const frag = s.slice(bounds[k], bounds[k + 1]).replace(/(?:\s|<br\s*\/?>)+$/i, '').replace(/^(?:\s|<br\s*\/?>)+/i, '');
+    if (frag) out.push(frag);
+  }
+  return out.length >= 2 ? out : null;
+}
+
+function _epSplitPartBlocks(q) {
+  if (!q || !Array.isArray(q.blocks)) return;
+  // A multiple-choice question's lettered lines are its options or the
+  // statements it asks about — never its parts. That is the case the
+  // two-marker guard exists to refuse, so it is never split.
+  if (q.blocks.some(b => b && b.type === 'mcq')) return;
+  const out = [];
+  let split = false;
+  q.blocks.forEach(b => {
+    if (!b || b.type !== 'text' || qPartCountMarkers(b.content) < 2) { out.push(b); return; }
+    const frags = _epSplitPartsHtml(b.content);
+    if (!frags) { out.push(b); return; }
+    split = true;
+    // The first fragment keeps the block's id — text blocks carry no blanks, so
+    // nothing is keyed off it, and keeping it means the question's opening
+    // block is the same object the lead-number strip already cleaned.
+    frags.forEach((f, i) => out.push(i === 0
+      ? Object.assign({}, b, { content: f })
+      : { id: generateBlockId(), type: 'text', content: f }));
+  });
+  if (split) q.blocks = out;
+}
+
 // Parts are lifted with qPartDetect — the same detector the Question Doctor
 // uses — so a marker wrapped in <strong> is removed from the markup rather
 // than sliced out of the middle of a tag. Only TEXT blocks may open a part
@@ -13613,9 +13692,15 @@ function _epStripNumbering(q) {
       if (stripped !== null) b.content = stripped;
       firstText = false;
     }
+  });
+  // Several parts in one box become one box per part, so every part opens a
+  // block of its own and the loop below can lift each marker.
+  _epSplitPartBlocks(q);
+  q.blocks.forEach(b => {
+    if (!b || b.type !== 'text') return;
     // One marker per block only. Two means a whole options list, or several
-    // parts written into one box — neither is something to convert by
-    // stripping the first one (see qPartCountMarkers).
+    // parts written into one box that could not be split — neither is
+    // something to convert by stripping the first one (see qPartCountMarkers).
     if (qPartCountMarkers(b.content) !== 1) return;
     const hit = qPartDetect(b.content);
     if (!hit) return;
@@ -13800,6 +13885,9 @@ async function epReadKey() {
     return;
   }
   _epBusy = true; _epCancel = false; epRender();
+  // Reading the key from the top starts the "which question are these bare
+  // (a)/(b) lines under?" carry-over clean; continuing a part-read keeps it.
+  if (todo.length === _epKeyShots.length) _epKeyBase = '';
   let read = 0, failed = 0;
   for (let i = 0; i < todo.length; i++) {
     if (_epCancel) break;
@@ -13813,7 +13901,7 @@ async function epReadKey() {
       const parsed = _parseAIJson(raw);
       const rows = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.answers) ? parsed.answers : []);
       s.answers = rows.map(r => ({
-        number: String((r && r.number) || '').trim(),
+        number: _epKeyNumber(String((r && r.number) || '').trim()),
         option: String((r && r.option) || '').trim(),
         answer: String((r && r.answer) || '').trim(),
         claim: String((r && r.claim) || '').trim(),
@@ -13844,6 +13932,21 @@ async function epReadKey() {
     : 'No answers could be read from those screenshots', read ? 'success' : 'error');
 }
 
+// A marking scheme very often prints the question number ONCE and lists its
+// parts underneath it — 44, then "(a) …", "(b) …" — so those lines come back
+// numbered "(a)" with no question on them. A bare letter belongs to the last
+// full number seen, and giving it back is the difference between an answer
+// that finds its part and one that matches nothing at all.
+function _epKeyNumber(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  if (!s) return s;
+  const bare = s.match(/^\(?\s*([a-hA-H])\s*\)?$/);
+  if (bare) return _epKeyBase ? _epKeyBase + '(' + bare[1].toLowerCase() + ')' : s;
+  const base = _epBaseKey(s);
+  if (base) _epKeyBase = base;
+  return s;
+}
+
 // The key is often spread over several screenshots. Later readings of the same
 // number win, so re-reading a screenshot corrects it instead of duplicating it.
 function _epRebuildAnswers() {
@@ -13856,10 +13959,83 @@ function _epRebuildAnswers() {
 }
 
 // ---- Matching and slotting ----------------------------------------------
+// A number split into the question and the part it belongs to: "44(b)" is
+// question 44, part b. The paper numbers ONE question 44 with parts (a)(b)(c)
+// while the marking scheme answers 44(a), 44(b), 44(c) on three separate
+// lines, so a question is matched part BY part, not as a single row.
+function _epNumParts(num) {
+  const k = _epNumKey(num);
+  const m = k.match(/^(\d{1,3})([a-h])?$/);
+  return m ? { base: m[1], letter: m[2] || '' } : { base: k, letter: '' };
+}
+function _epBaseKey(num) { return _epNumParts(num).base; }
+
+// The parts this question actually uses, in the order they open.
+function _epPartLetters(q) {
+  const seen = [];
+  ((q && q.blocks) || []).forEach(b => {
+    const p = qBlockOpensPart(b);
+    if (p && seen.indexOf(p) < 0) seen.push(p);
+  });
+  return seen;
+}
+
 function _epAnswerFor(q) {
   const k = _epNumKey(q && q._epNum);
   if (!k) return null;
   return _epAnswers.find(a => _epNumKey(a.number) === k) || null;
+}
+
+// The key's line for ONE part of a question. Exact first — 44 + b → "44(b)" —
+// and failing that the roman sub-parts the paper prints underneath it
+// ("44(b)(i)", "44(b)(ii)"), folded into one answer so nothing on the key is
+// dropped just because it was written at a finer grain than the question.
+function _epAnswerForPart(q, letter) {
+  const base = _epBaseKey(q && q._epNum);
+  const p = qPartNormalize(letter);
+  if (!base || !p) return null;
+  const want = base + p;
+  const exact = _epAnswers.find(a => _epNumKey(a.number) === want);
+  if (exact) return exact;
+  const subs = _epAnswers.filter(a => {
+    const k = _epNumKey(a.number);
+    return k.length > want.length && k.indexOf(want) === 0;
+  });
+  if (!subs.length) return null;
+  return subs.length === 1 ? subs[0] : _epMergeAnswers(subs, want);
+}
+
+// Several sub-part lines read as one answer, each labelled with the bit of its
+// number the part itself does not account for — "44(b)(i)" under part (b)
+// becomes "(i) …".
+function _epMergeAnswers(rows, want) {
+  const label = a => {
+    const tail = _epNumKey(a.number).slice(want.length);
+    return tail ? '(' + tail + ') ' : '';
+  };
+  const join = f => rows.map(a => (a[f] ? label(a) + a[f] : '')).filter(Boolean).join('<br>');
+  return {
+    number: rows.map(a => a.number).join(', '),
+    option: rows.length === 1 ? rows[0].option : '',
+    answer: join('answer'), claim: join('claim'), evidence: join('evidence'),
+    reasoning: join('reasoning'), explanation: join('explanation'),
+  };
+}
+
+// How much of this question the key has been matched to. A question with no
+// parts is one row on the key; a question with parts wants one row per part,
+// and a question that got only some of them is flagged rather than counted as
+// done, because the missing parts silently keep the model's placeholder.
+function _epMatchInfo(q) {
+  const parts = _epPartLetters(q);
+  const by = (q && q._epAnsBy) || {};
+  const whole = !!(q && q._epAns);
+  if (!parts.length) return { parts: [], by, done: whole ? 1 : 0, total: 1, any: whole, full: whole };
+  const done = parts.filter(p => by[p]).length;
+  // No per-part line on the key, but the paper answered the whole question on
+  // one line: that IS a complete match.
+  const full = done === parts.length || (!done && whole);
+  return { parts, by, done, total: parts.length, any: done > 0 || whole, full };
 }
 
 // The key may print the option's number, its letter, or its actual wording.
@@ -13905,54 +14081,157 @@ function _epPlaceAnswerBlock(q, nb) {
   if (e >= 0) bs.splice(e, 0, nb); else bs.push(nb);
 }
 
-function _epApplyAnswer(q, a) {
+// The run of blocks that belongs to ONE part, so that part's answer lands
+// inside it instead of on top of the next part's. The explanation is written
+// once for the whole question and sits at the end, where qPartMap's forward
+// inheritance files it under the LAST part — it is never part of the run.
+function _epPartSpan(q, letter) {
+  const map = qPartMap(q.blocks);
+  let first = -1, last = -1;
+  q.blocks.forEach((b, i) => {
+    if (!b || b.type === 'explanation') return;
+    if (qPartOf(map, b) !== letter) return;
+    if (first < 0) first = i;
+    last = i;
+  });
+  return { first, last };
+}
+
+function _epPartBlock(q, letter, want) {
+  const map = qPartMap(q.blocks);
+  return q.blocks.find(b => b && want(b) && qPartOf(map, b) === letter) || null;
+}
+
+// Part (b)'s answer replaces part (b)'s own answer box, or — when the model
+// wrote the question without one — is inserted at the end of part (b), before
+// part (c) starts.
+function _epPlacePartAnswer(q, letter, nb) {
+  const span = _epPartSpan(q, letter);
+  if (span.first < 0) { _epPlaceAnswerBlock(q, nb); return; }
+  const i = q.blocks.findIndex((b, k) =>
+    k >= span.first && k <= span.last && (b.type === 'answer' || b.type === 'plainanswer'));
+  if (i >= 0) { _epDropBlanks(q, q.blocks[i]); q.blocks[i] = nb; return; }
+  q.blocks.splice(span.last + 1, 0, nb);
+}
+
+// One question has ONE explanation block, so the parts' marking notes are kept
+// per part and the block is rebuilt from all of them, each under its letter.
+// The model's own explanation covers the whole question, so it is kept as long
+// as any part is still without an official note — nothing the teacher had is
+// thrown away by a partial match.
+function _epRebuildExplanation(q) {
+  const ex = q.blocks.find(b => b.type === 'explanation');
+  if (ex && q._epModelEx === undefined) q._epModelEx = ex.content || '';
+  const by = q._epEx || {};
+  const letters = _epPartLetters(q).filter(p => by[p]);
+  const lines = letters.map(p => qPartLabel(p) + ' ' + by[p]);
+  if (letters.length < _epPartLetters(q).length && q._epModelEx) lines.push(q._epModelEx);
+  const content = lines.join('<br>');
+  if (!content) return;
+  if (ex) ex.content = content;
+  else q.blocks.push({ id: generateBlockId(), type: 'explanation', content });
+}
+
+// Put the model's own explanation back — used when a re-slot leaves the
+// question with no official note at all.
+function _epRestoreModelEx(q) {
+  if (!q || q._epModelEx === undefined) return;
+  const ex = q.blocks.find(b => b.type === 'explanation');
+  if (ex) ex.content = q._epModelEx;
+}
+
+// `part` is the letter this answer belongs to, or '' for a question answered
+// as a whole (no parts, or a key that gives one line for all of it).
+function _epApplyAnswer(q, a, part) {
   if (!q || !a || !Array.isArray(q.blocks)) return false;
+  const letter = qPartNormalize(part);
   let touched = false;
-  const mcq = q.blocks.find(b => b.type === 'mcq');
+  const mcq = letter
+    ? _epPartBlock(q, letter, b => b.type === 'mcq')
+    : q.blocks.find(b => b.type === 'mcq');
   if (mcq && a.option) {
     const idx = _epOptionIndex(a.option, mcq.options);
     if (idx >= 0) { mcq.correctId = mcq.options[idx].id; touched = true; }
   }
+  const place = nb => letter ? _epPlacePartAnswer(q, letter, nb) : _epPlaceAnswerBlock(q, nb);
   const cer = [a.claim, a.evidence, a.reasoning];
   if (cer.some(x => x)) {
     const id = generateBlockId();
     const c = _markedToBlanks(a.claim), e = _markedToBlanks(a.evidence), r = _markedToBlanks(a.reasoning);
-    _epPlaceAnswerBlock(q, { id, type: 'answer', claim: c.content, evidence: e.content, reasoning: r.content });
+    place({ id, type: 'answer', claim: c.content, evidence: e.content, reasoning: r.content });
     _epSetBlanks(q, id + '_claim', c); _epSetBlanks(q, id + '_evidence', e); _epSetBlanks(q, id + '_reasoning', r);
     touched = true;
   } else if (a.answer && !mcq) {
     const id = generateBlockId();
     const m = _markedToBlanks(a.answer);
-    _epPlaceAnswerBlock(q, { id, type: 'plainanswer', content: m.content });
+    place({ id, type: 'plainanswer', content: m.content });
     _epSetBlanks(q, id, m);
     touched = true;
   }
   // The key's own working is the paper's, so it beats the model's explanation.
   if (a.explanation) {
-    const ex = q.blocks.find(b => b.type === 'explanation');
-    if (ex) ex.content = a.explanation;
-    else q.blocks.push({ id: generateBlockId(), type: 'explanation', content: a.explanation });
+    if (letter) {
+      q._epEx = q._epEx || {};
+      q._epEx[letter] = a.explanation;
+      _epRebuildExplanation(q);
+    } else {
+      const ex = q.blocks.find(b => b.type === 'explanation');
+      if (ex) { if (q._epModelEx === undefined) q._epModelEx = ex.content || ''; ex.content = a.explanation; }
+      else q.blocks.push({ id: generateBlockId(), type: 'explanation', content: a.explanation });
+    }
     touched = true;
   }
-  if (touched) q._epAns = a.number || '';
+  if (touched) {
+    if (letter) { q._epAnsBy = q._epAnsBy || {}; q._epAnsBy[letter] = a.number || ''; }
+    else q._epAns = a.number || '';
+  }
   return touched;
 }
 
 function _epSlot(quiet) {
   const qs = _epAllQuestions();
-  let filled = 0, missed = 0;
+  let filled = 0, missed = 0, partial = 0;
   qs.forEach(q => {
+    q._epAns = ''; q._epAnsBy = {};
+    const parts = _epPartLetters(q);
+    if (parts.length) {
+      // A question with parts is matched part by part: the paper numbers it 44
+      // and the marking scheme answers 44(a), 44(b), 44(c) on lines of their
+      // own, so one row per question could never fill it in.
+      q._epEx = {};
+      let n = 0;
+      parts.forEach(p => {
+        const a = _epAnswerForPart(q, p);
+        if (a && _epApplyAnswer(q, a, p)) n++;
+      });
+      if (n) {
+        filled++;
+        if (n < parts.length) partial++;
+        return;
+      }
+      // No per-part line at all — the key may answer the whole question on one
+      // line, which is how a single-part question is always matched.
+      const whole = _epAnswerFor(q);
+      if (whole && _epApplyAnswer(q, whole, '')) { filled++; return; }
+      _epRestoreModelEx(q);
+      missed++;
+      return;
+    }
     const a = _epAnswerFor(q);
-    if (a && _epApplyAnswer(q, a)) filled++;
-    else { q._epAns = ''; missed++; }
+    if (a && _epApplyAnswer(q, a, '')) filled++;
+    else missed++;
   });
   if (!quiet) {
     epRender();
+    const tail = [
+      missed ? `${missed} question${missed === 1 ? '' : 's'} still unmatched` : '',
+      partial ? `${partial} matched on only some of its parts` : '',
+    ].filter(Boolean).join(' · ');
     showToast(filled
-      ? `Slotted ${filled} answer${filled === 1 ? '' : 's'} in${missed ? ` · ${missed} question${missed === 1 ? '' : 's'} still unmatched` : ' — every question matched ✓'}`
+      ? `Slotted ${filled} answer${filled === 1 ? '' : 's'} in${tail ? ` · ${tail}` : ' — every question matched ✓'}`
       : 'No question numbers matched the key — check the numbers in the table below', filled ? 'success' : 'error');
   }
-  return { filled, missed };
+  return { filled, missed, partial };
 }
 
 function epSlotAnswers() {
@@ -13961,14 +14240,27 @@ function epSlotAnswers() {
   _epSlot(false);
 }
 
-// Manual override for a question the numbers could not link automatically.
-function epSetMatch(qid, number) {
+// Manual override for a question — or for ONE part of it — that the numbers
+// could not link automatically.
+function epSetMatch(qid, number, part) {
   const q = _epAllQuestions().find(x => x.id === qid);
   if (!q) return;
-  if (!number) { q._epAns = ''; epRender(); return; }
+  const letter = qPartNormalize(part);
+  if (!number) {
+    if (letter) {
+      if (q._epAnsBy) delete q._epAnsBy[letter];
+      if (q._epEx) delete q._epEx[letter];
+      _epRebuildExplanation(q);
+    } else q._epAns = '';
+    epRender();
+    return;
+  }
   const a = _epAnswers.find(x => x.number === number);
   if (!a) return;
-  if (_epApplyAnswer(q, a)) showToast('Answer ' + number + ' slotted into “' + (q.title || 'question') + '”', 'success');
+  if (_epApplyAnswer(q, a, letter)) {
+    showToast('Answer ' + number + ' slotted into '
+      + (letter ? 'part ' + qPartLabel(letter) + ' of ' : '') + '“' + (q.title || 'question') + '”', 'success');
+  }
   epRender();
 }
 
@@ -13983,11 +14275,16 @@ function epSend(dest) {
   if (!_canAuthor()) { showToast('Only question authors can save questions', 'error'); return; }
   const qs = _epAllQuestions();
   if (!qs.length) { showToast('Nothing to send yet', 'error'); return; }
-  const unmatched = qs.filter(q => !q._epAns).length;
+  const infos = qs.map(_epMatchInfo);
+  const unmatched = infos.filter(i => !i.any).length;
+  const partial = infos.filter(i => i.any && !i.full).length;
   const where = dest === 'bank' ? 'the question bank' : 'the vetting list';
-  const warn = unmatched
+  const warn = (unmatched
     ? `${unmatched} of ${qs.length} question${qs.length === 1 ? '' : 's'} got no answer from the key — those keep the model answer the AI wrote for them. `
-    : '';
+    : '')
+    + (partial
+      ? `${partial} question${partial === 1 ? '' : 's'} matched on only SOME of ${partial === 1 ? 'its' : 'their'} parts — the rest keep the model's answer. `
+      : '');
   showConfirm('Send ' + qs.length + ' question' + (qs.length === 1 ? '' : 's'),
     warn + 'Send the whole paper to ' + where + '? The screenshots are cleared afterwards.',
     () => _epCommit(dest));
@@ -13998,7 +14295,8 @@ function _epCommit(dest) {
   let n = 0;
   qs.forEach(q => {
     const clean = Object.assign({}, q);
-    delete clean._epNum; delete clean._epAns;
+    delete clean._epNum; delete clean._epAns; delete clean._epAnsBy;
+    delete clean._epEx; delete clean._epModelEx;
     if (dest === 'bank') {
       clean.status = 'approved';
       questionBank.push(clean);
@@ -14010,7 +14308,7 @@ function _epCommit(dest) {
     }
     n++;
   });
-  _epShots = []; _epKeyShots = []; _epAnswers = []; _epQuestions = []; _epDirty = false;
+  _epShots = []; _epKeyShots = []; _epAnswers = []; _epQuestions = []; _epDirty = false; _epKeyBase = '';
   _epDraftDrop().catch(err => console.warn('exam paper draft:', err));   // it is in the bank now
   epRender();
   updateCounts();
@@ -14138,11 +14436,13 @@ function _epMatchCardHtml() {
       <p class="ep-empty">Build the questions and read the key, and every question shows up here beside the answer it was matched to.</p>
     </div>`;
   }
-  const matched = qs.filter(q => q._epAns).length;
+  const infos = qs.map(_epMatchInfo);
+  const matched = infos.filter(i => i.full).length;
+  const partial = infos.filter(i => i.any && !i.full).length;
   const opts = _epAnswers.map(a => a.number);
   return `<div class="ep-card">
     <div class="ep-head">
-      <h3 class="ep-h3">③ Match &amp; send <span class="ep-pill">${matched}/${qs.length} matched</span></h3>
+      <h3 class="ep-h3">③ Match &amp; send <span class="ep-pill">${matched}/${qs.length} matched</span>${partial ? `<span class="ep-pill ep-pill-warn">${partial} part-matched</span>` : ''}</h3>
       <div class="ep-head-tools">
         <button class="btn btn-outline btn-sm" onclick="epSlotAnswers()" ${_epBusy ? 'disabled' : ''}>🔗 Slot answers in</button>
       </div>
@@ -14157,26 +14457,45 @@ function _epMatchCardHtml() {
   </div>`;
 }
 
+// One <select> per part, because a question with parts (a)(b)(c) is matched to
+// THREE lines of the marking scheme — a single picker could only ever link one
+// of them, which is precisely how a part ends up keeping the model's
+// placeholder answer without anyone noticing.
+function _epSelHtml(q, opts, part, chosen) {
+  if (!opts.length) return '<span class="ep-dim">key not read yet</span>';
+  const p = part ? `,'${part}'` : '';
+  const label = part ? 'part ' + qPartLabel(part) + ' of this question' : 'this question';
+  return `<select class="ep-sel" onchange="epSetMatch('${q.id}',this.value${p})" title="Pick the answer from the key that belongs to ${label}">
+      <option value=""${chosen ? '' : ' selected'}>— no answer —</option>
+      ${opts.map(n => `<option value="${escapeHtml(n)}"${chosen === n ? ' selected' : ''}>Answer ${escapeHtml(n)}</option>`).join('')}
+    </select>`;
+}
+
 function _epMatchRowHtml(q, opts) {
-  const ok = !!q._epAns;
+  const info = _epMatchInfo(q);
   const kinds = [];
-  const parts = Array.from(new Set((q.blocks || []).map(b => qBlockOpensPart(b)).filter(Boolean)));
-  if (parts.length) kinds.push('part ' + parts.map(qPartLabel).join(' '));
+  if (info.parts.length) kinds.push('part ' + info.parts.map(qPartLabel).join(' '));
   if ((q.blocks || []).some(b => b.type === 'mcq')) kinds.push('MCQ');
   if ((q.blocks || []).some(b => b.type === 'image')) kinds.push('picture');
-  const sel = opts.length
-    ? `<select class="ep-sel" onchange="epSetMatch('${q.id}',this.value)" title="Pick the answer from the key that belongs to this question">
-         <option value=""${ok ? '' : ' selected'}>— no answer —</option>
-         ${opts.map(n => `<option value="${escapeHtml(n)}"${q._epAns === n ? ' selected' : ''}>Answer ${escapeHtml(n)}</option>`).join('')}
-       </select>`
-    : '<span class="ep-dim">key not read yet</span>';
-  return `<div class="ep-row${ok ? '' : ' ep-row-miss'}">
+  if (info.parts.length && info.done) kinds.push(`${info.done}/${info.total} parts answered`);
+  // Parts get their own row of pickers under the title; a question without
+  // parts keeps the single picker beside it.
+  const perPart = info.parts.length && !(info.full && !info.done);
+  const sel = perPart ? '' : _epSelHtml(q, opts, '', q._epAns || '');
+  const partRow = perPart
+    ? `<div class="ep-parts">${info.parts.map(p => `<label class="ep-part${info.by[p] ? '' : ' ep-part-miss'}">
+        <span class="ep-part-tag">${escapeHtml(qPartLabel(p))}</span>
+        ${_epSelHtml(q, opts, p, info.by[p] || '')}
+      </label>`).join('')}</div>`
+    : '';
+  return `<div class="ep-row${info.full ? '' : (info.any ? ' ep-row-part' : ' ep-row-miss')}">
     <span class="ep-num" title="The paper's number, used only to find this question on the marking scheme — it is not stored on the question itself">${escapeHtml(q._epNum || '?')}</span>
     <div class="ep-row-main">
       <div class="ep-row-title">${escapeHtml(q.title || 'Untitled question')}</div>
-      <div class="ep-row-meta">${escapeHtml([q.topic, q.category].filter(Boolean).join(' · '))}${kinds.length ? ' · ' + kinds.join(' · ') : ''}${q._dupOf ? ' · <span class="ep-dup">possible duplicate</span>' : ''}</div>
+      <div class="ep-row-meta">${escapeHtml([q.topic, q.category].filter(Boolean).join(' · '))}${kinds.length ? ' · ' + escapeHtml(kinds.join(' · ')) : ''}${q._dupOf ? ' · <span class="ep-dup">possible duplicate</span>' : ''}</div>
     </div>
     ${sel}
+    ${partRow}
   </div>`;
 }
 
