@@ -1439,7 +1439,7 @@ const SUPER_ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // into the teacher's bank (_bankOwnerUid), because a question filed under the
 // employee's own uid is a question no student would ever be served.
 const EMPLOYEE_EMAILS = ['pkeertana21@gmail.com'];
-const EMPLOYEE_PAGES = ['create', 'bank', 'vetting', 'worksheet', 'myworksheets', 'worksession'];
+const EMPLOYEE_PAGES = ['create', 'exampaper', 'bank', 'vetting', 'worksheet', 'myworksheets', 'worksession'];
 let adminUid = null; // the bank owner: loaded for student AND employee accounts
 // Maps question/vetting id -> owning admin's uid. Populated when super admin
 // loads other admins' subcollections so writes/deletes target the right doc.
@@ -1684,7 +1684,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.240.1';
+const APP_VERSION = 'v1.241.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -2998,6 +2998,7 @@ function navigateTo(page) {
   }
   if (page === 'myworksheets') renderSavedWorksheets();
   if (page === 'worksession') { wkRenderPage(); wkLoadHistory(); }
+  if (page === 'exampaper') { _epBindPaste(); epRender(); }
   if (page === 'quickpractice') { populateQpControls(); updateQpProgress(); }
   if (page === 'snapmark') snapInit();
   if (page === 'topicalpractice') tpRenderTopics();
@@ -13119,6 +13120,598 @@ function doScaleAndPrint(output, opts) {
       _printAndRestore(output);
     });
   });
+}
+
+// =====================================================================
+// EXAM PAPER BUILDER
+// A whole paper, entered the way a teacher actually has one: screenshots of
+// the questions added ONE BY ONE, and the marking scheme added SEPARATELY.
+// The AI reads each question screenshot into a real question (wording, cropped
+// figures, MCQ options) and reads the key into a list of answers keyed by
+// question NUMBER — then the two are matched on that number and the paper's
+// official answer replaces whatever the model guessed for itself.
+//
+// It is deliberately its own page with its own state. The bulk PDF import
+// (handleBulkAiFile) streams a whole file straight into Vetting with no key
+// step and no chance to check anything; the block editor builds one question
+// at a time by hand. Neither can slot an answer key in.
+//
+// Nothing here writes to the bank until "Send" is pressed — the whole paper
+// sits in memory so a mis-read screenshot can be removed and re-added first.
+// =====================================================================
+const EP_MAX_SHOTS = 120;   // question screenshots held in memory at once
+const EP_MAX_KEYS  = 40;    // answer-key screenshots
+const EP_MAX_BYTES = 12 * 1024 * 1024;
+
+let _epShots = [];       // [{ id, mimeType, data, name, status, err, qs: [question] }]
+let _epKeyShots = [];    // same shape, but each yields answers instead of questions
+let _epAnswers = [];     // [{ number, option, answer, claim, evidence, reasoning, explanation }]
+let _epPaperName = '';
+let _epBusy = false;
+let _epCancel = false;
+let _epPasteTarget = 'q';   // which drop zone a Ctrl-V lands in
+let _epPasteBound = false;
+
+function _epId() { return 'ep_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function _epDataUrl(s) { return 'data:' + s.mimeType + ';base64,' + s.data; }
+function _epList(target) { return target === 'key' ? _epKeyShots : _epShots; }
+function _epAllQuestions() { return _epShots.reduce((a, s) => a.concat(s.qs || []), []); }
+function _epNote(msg) { const el = document.getElementById('epStatus'); if (el) el.textContent = msg || ''; }
+
+// "Q12 (b)" / "12b" / "12(B)" all collapse to the same key, because a paper and
+// its marking scheme almost never number a question the same way twice.
+function _epNumKey(v) {
+  return String(v == null ? '' : v).toLowerCase().replace(/^\s*q(?=\d)/, '').replace(/[^a-z0-9]/g, '');
+}
+
+// ---- Adding screenshots --------------------------------------------------
+async function _epAddFiles(files, target) {
+  const list = _epList(target);
+  const cap = target === 'key' ? EP_MAX_KEYS : EP_MAX_SHOTS;
+  let added = 0, skipped = 0;
+  for (const f of Array.from(files || [])) {
+    if (!f || !f.type || !f.type.startsWith('image/')) { skipped++; continue; }
+    if (f.size > EP_MAX_BYTES) { skipped++; continue; }
+    if (list.length >= cap) { skipped++; continue; }
+    try {
+      list.push({
+        id: _epId(), mimeType: f.type, data: await _fileToBase64(f),
+        name: f.name || 'screenshot', status: 'new', err: '', qs: [], n: 0,
+      });
+      added++;
+    } catch (err) { console.warn('exam paper: could not read file', err); skipped++; }
+  }
+  epRender();
+  if (added) showToast(added + ' screenshot' + (added === 1 ? '' : 's') + ' added' + (skipped ? ' · ' + skipped + ' skipped' : ''), 'success');
+  else if (skipped) showToast('Nothing added — images only, under 12 MB each, up to ' + cap, 'error');
+}
+
+function epPick(target) {
+  const input = document.getElementById(target === 'key' ? 'epKeyFile' : 'epQFile');
+  if (input) { input.value = ''; input.click(); }
+}
+function epFiles(input, target) { if (input && input.files && input.files.length) _epAddFiles(input.files, target); }
+function epDragOver(e, target) { e.preventDefault(); _epPasteTarget = target; epRender(); }
+function epDrop(e, target) {
+  e.preventDefault();
+  _epPasteTarget = target;
+  const dt = e.dataTransfer;
+  if (dt && dt.files && dt.files.length) _epAddFiles(dt.files, target);
+}
+function epFocusZone(target) { _epPasteTarget = target; epRender(); }
+function epRemove(target, id) {
+  const list = _epList(target);
+  const i = list.findIndex(s => s.id === id);
+  if (i >= 0) list.splice(i, 1);
+  if (target === 'key') _epRebuildAnswers();
+  epRender();
+}
+function epClear(target) {
+  const list = _epList(target);
+  if (!list.length) return;
+  showConfirm('Remove all screenshots',
+    'Clear all ' + list.length + ' ' + (target === 'key' ? 'answer-key' : 'question') + ' screenshots? Anything already sent to the bank or vetting is untouched.',
+    () => {
+      if (target === 'key') { _epKeyShots = []; _epAnswers = []; }
+      else _epShots = [];
+      epRender();
+    });
+}
+
+// A Ctrl-V anywhere on the page lands in whichever zone was last touched, so a
+// teacher can screenshot → paste → screenshot → paste without reaching for the
+// mouse. Bound once, and inert on every other page.
+function _epBindPaste() {
+  if (_epPasteBound) return;
+  _epPasteBound = true;
+  document.addEventListener('paste', e => {
+    const page = document.getElementById('page-exampaper');
+    if (!page || !page.classList.contains('active')) return;
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    const files = [];
+    for (const it of items) {
+      if (it && it.kind === 'file' && String(it.type || '').startsWith('image/')) {
+        const f = it.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (!files.length) return;
+    e.preventDefault();
+    _epAddFiles(files, _epPasteTarget);
+  });
+}
+
+// ---- Prompts -------------------------------------------------------------
+const EP_CATEGORIES = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
+
+function _epQuestionPrompt(i, total) {
+  const topics = currentTopics();
+  const paper = _epPaperName ? `The paper is "${_epPaperName}". ` : '';
+  return `You are importing questions from a Singapore primary-school science exam paper into a question bank. ${paper}The attached image is screenshot ${i} of ${total} — normally ONE question, occasionally two.\n` +
+    SCAN_READING_NOTE +
+    _genPreamble() +
+    `Return ONLY JSON: {"questions":[ {"number":"1","title":"short title","topic":"<closest topic>","topicConfidence":"high|medium|low","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
+    `Each item in "blocks" is ONE of:\n` +
+    `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
+    `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table)\n` +
+    `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0}\n` +
+    `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
+    `  {"type":"plainanswer","text":"..."}\n` +
+    `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
+    `Rules:\n` +
+    `- "number": the question number EXACTLY as printed on the paper — "7", "12", "3a", "15(b)". This is how the paper's answer key will be matched to this question, so copy it precisely. If no number is printed, use "".\n` +
+    `- ONE entry per question. Put an "image" block exactly where each diagram/picture/graph/figure/table belongs, interleaved with the text blocks.\n` +
+    _rectangleRules() +
+    `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n").\n` +
+    `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, and set "correctIndex" to the 0-based correct option (work it out yourself); no "answer"/"plainanswer".\n` +
+    `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing your best model answer, and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
+    `- The answer you write is a PLACEHOLDER: the paper's official marking scheme is read separately and will replace it. Write it anyway — some questions never get an official answer.\n` +
+    `- EVERY question must FINISH with ONE "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct.\n` +
+    `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
+    `- "topicConfidence": "high", "medium" or "low".\n` +
+    _aiTagsPromptLine() +
+    `- topic from EXACTLY: ${topics.join('; ')}.\n` +
+    `- category from EXACTLY: ${EP_CATEGORIES.join('; ')}.\n` +
+    `- If this screenshot has no question on it at all, return {"questions":[]}.\n` +
+    `- Plain text only, no markdown.`;
+}
+
+function _epKeyPrompt(i, total) {
+  return `The attached image is screenshot ${i} of ${total} of the ANSWER KEY / marking scheme for a Singapore primary-school science exam paper${_epPaperName ? ` ("${_epPaperName}")` : ''}.\n` +
+    SCAN_READING_NOTE +
+    `Read EVERY answer printed on it and return ONLY JSON: {"answers":[ {"number":"1","option":"3","answer":"","claim":"","evidence":"","reasoning":"","explanation":""}, ... ]}\n` +
+    `Rules:\n` +
+    `- ONE entry per question number on the key, in the order they appear. Do NOT skip a number because its answer is short, and do NOT merge two numbers into one entry.\n` +
+    `- "number": exactly as printed — "1", "12", "3a", "15(b)". This is what links the answer to its question, so copy it precisely.\n` +
+    `- "option": for a multiple-choice answer, the chosen option as printed — "1"-"4" or "A"-"D". Empty string for an open question.\n` +
+    `- "answer": the full written answer for an open question, copied as printed. Empty string for a multiple-choice answer.\n` +
+    `- "claim"/"evidence"/"reasoning": ONLY if the key itself splits the answer into those three parts. Otherwise leave all three empty and put the whole answer in "answer".\n` +
+    `- Wrap 3-8 key science keywords in [[double brackets]] inside "answer", "claim", "evidence" and "reasoning" — this is the only thing you may add to the printed wording.\n` +
+    `- "explanation": any working, marking note, accepted-alternative or reason printed beside the answer. Empty string if there is none.\n` +
+    `- Copy the paper's wording. Do NOT write an answer of your own for a number the key does not show — leave that number out entirely.\n` +
+    `- Plain text only, no markdown.`;
+}
+
+// ---- Reading the question screenshots ------------------------------------
+function _epAiReady() {
+  if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't ready yet — try again in a moment", 'error'); return false; }
+  return true;
+}
+
+async function epBuildQuestions() {
+  if (!_canAuthor()) { showToast('Only question authors can build a paper', 'error'); return; }
+  if (_epBusy || !_epAiReady()) return;
+  const todo = _epShots.filter(s => s.status !== 'done');
+  if (!todo.length) {
+    showToast(_epShots.length ? 'Every screenshot has been read already' : 'Add some question screenshots first', 'info');
+    return;
+  }
+  _epBusy = true; _epCancel = false; epRender();
+  let built = 0, failed = 0;
+  for (let i = 0; i < todo.length; i++) {
+    if (_epCancel) break;
+    const s = todo[i];
+    s.status = 'reading'; s.err = ''; s.qs = [];
+    epRender();
+    _epNote(`Reading screenshot ${i + 1} of ${todo.length}…`);
+    try {
+      const raw = await askGeminiVision(_epQuestionPrompt(i + 1, todo.length),
+        [{ mimeType: s.mimeType, data: s.data }], { maxOutputTokens: 8192, json: true });
+      const parsed = _parseAIJson(raw);
+      const entries = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.questions) ? parsed.questions : []);
+      for (const qd of entries) {
+        const q = buildQuestionFromAi(qd || {});
+        if (!q.blocks.length) continue;
+        q._epNum = String((qd && qd.number) || '').trim();
+        q._epShot = s.id;
+        q._epAns = '';
+        if (_epPaperName) q.source = _epPaperName;
+        const imgBlocks = q.blocks.filter(b => b.type === 'image');
+        if (imgBlocks.length) {
+          s.status = 'cropping'; epRender();
+          _epNote(`Screenshot ${i + 1}: cropping ${imgBlocks.length} picture${imgBlocks.length === 1 ? '' : 's'}…`);
+          await _cropPageImagesInto(imgBlocks, qd, s, m => _epNote(`Screenshot ${i + 1} — ${m}`));
+        }
+        _tagDuplicate(q);
+        s.qs.push(q);
+      }
+      s.status = s.qs.length ? 'done' : 'empty';
+      built += s.qs.length;
+      if (!s.qs.length) failed++;
+    } catch (err) {
+      console.warn('exam paper: question read failed', err);
+      s.status = 'error';
+      s.err = (err && err.message) || 'could not read this screenshot';
+      failed++;
+    }
+    epRender();
+  }
+  _epBusy = false;
+  _epNote('');
+  // Anything already read from the key applies to the questions just built.
+  if (_epAnswers.length) _epSlot(true);
+  epRender();
+  showToast(built
+    ? `Built ${built} question${built === 1 ? '' : 's'}${_epCancel ? ' (stopped early)' : ''}${failed ? ` · ${failed} screenshot${failed === 1 ? '' : 's'} could not be read` : ''}`
+    : 'No questions could be read from those screenshots', built ? 'success' : 'error');
+}
+
+// ---- Reading the answer key ----------------------------------------------
+async function epReadKey() {
+  if (!_canAuthor()) { showToast('Only question authors can build a paper', 'error'); return; }
+  if (_epBusy || !_epAiReady()) return;
+  const todo = _epKeyShots.filter(s => s.status !== 'done');
+  if (!todo.length) {
+    showToast(_epKeyShots.length ? 'The whole key has been read already' : 'Add the answer key screenshots first', 'info');
+    return;
+  }
+  _epBusy = true; _epCancel = false; epRender();
+  let read = 0, failed = 0;
+  for (let i = 0; i < todo.length; i++) {
+    if (_epCancel) break;
+    const s = todo[i];
+    s.status = 'reading'; s.err = ''; s.n = 0;
+    epRender();
+    _epNote(`Reading answer key ${i + 1} of ${todo.length}…`);
+    try {
+      const raw = await askGeminiVision(_epKeyPrompt(i + 1, todo.length),
+        [{ mimeType: s.mimeType, data: s.data }], { maxOutputTokens: 8192, json: true });
+      const parsed = _parseAIJson(raw);
+      const rows = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.answers) ? parsed.answers : []);
+      s.answers = rows.map(r => ({
+        number: String((r && r.number) || '').trim(),
+        option: String((r && r.option) || '').trim(),
+        answer: String((r && r.answer) || '').trim(),
+        claim: String((r && r.claim) || '').trim(),
+        evidence: String((r && r.evidence) || '').trim(),
+        reasoning: String((r && r.reasoning) || '').trim(),
+        explanation: String((r && r.explanation) || '').trim(),
+      })).filter(r => r.number);
+      s.n = s.answers.length;
+      s.status = s.n ? 'done' : 'empty';
+      read += s.n;
+      if (!s.n) failed++;
+    } catch (err) {
+      console.warn('exam paper: key read failed', err);
+      s.status = 'error';
+      s.err = (err && err.message) || 'could not read this answer key';
+      s.answers = [];
+      failed++;
+    }
+    _epRebuildAnswers();
+    epRender();
+  }
+  _epBusy = false;
+  _epNote('');
+  if (_epAllQuestions().length) _epSlot(true);
+  epRender();
+  showToast(read
+    ? `Read ${read} answer${read === 1 ? '' : 's'} from the key${_epCancel ? ' (stopped early)' : ''}${failed ? ` · ${failed} screenshot${failed === 1 ? '' : 's'} gave nothing` : ''}`
+    : 'No answers could be read from those screenshots', read ? 'success' : 'error');
+}
+
+// The key is often spread over several screenshots. Later readings of the same
+// number win, so re-reading a screenshot corrects it instead of duplicating it.
+function _epRebuildAnswers() {
+  const byNum = new Map();
+  _epKeyShots.forEach(s => (s.answers || []).forEach(a => {
+    const k = _epNumKey(a.number);
+    if (k) byNum.set(k, a);
+  }));
+  _epAnswers = Array.from(byNum.values());
+}
+
+// ---- Matching and slotting ----------------------------------------------
+function _epAnswerFor(q) {
+  const k = _epNumKey(q && q._epNum);
+  if (!k) return null;
+  return _epAnswers.find(a => _epNumKey(a.number) === k) || null;
+}
+
+// The key may print the option's number, its letter, or its actual wording.
+function _epOptionIndex(opt, options) {
+  const s = String(opt == null ? '' : opt).trim();
+  const n = (options || []).length;
+  if (!s || !n) return -1;
+  const num = s.match(/^\(?\s*([1-9])\s*[).]?\s*$/);
+  if (num) { const i = Number(num[1]) - 1; return i < n ? i : -1; }
+  const letter = s.match(/^\(?\s*([A-Ha-h])\s*[).]?\s*$/);
+  if (letter) { const i = letter[1].toUpperCase().charCodeAt(0) - 65; return i < n ? i : -1; }
+  const norm = t => String(t == null ? '' : t).toLowerCase().replace(/\s+/g, ' ').trim();
+  const want = norm(s);
+  if (!want) return -1;
+  const exact = options.findIndex(o => norm(o && o.text) === want);
+  return exact;
+}
+
+// Drop the blanks that belonged to a block being replaced — they are word
+// positions in the OLD wording, so keeping them blanks the wrong words.
+function _epDropBlanks(q, block) {
+  if (!q || !q.blanks || !block || !block.id) return;
+  Object.keys(q.blanks).forEach(k => {
+    if (k === block.id || k.indexOf(block.id + '_') === 0) delete q.blanks[k];
+  });
+}
+
+function _epSetBlanks(q, key, marked) {
+  if (Object.keys(marked.blanks || {}).length) {
+    q.blanks = q.blanks || {};
+    q.blanks[key] = marked.blanks;
+  }
+}
+
+// Put the official answer where the question's own answer block already is, so
+// the paper's ordering survives. If the question has none, it goes in just
+// before the explanation.
+function _epPlaceAnswerBlock(q, nb) {
+  const bs = q.blocks;
+  const i = bs.findIndex(b => b.type === 'answer' || b.type === 'plainanswer');
+  if (i >= 0) { _epDropBlanks(q, bs[i]); bs[i] = nb; return; }
+  const e = bs.findIndex(b => b.type === 'explanation');
+  if (e >= 0) bs.splice(e, 0, nb); else bs.push(nb);
+}
+
+function _epApplyAnswer(q, a) {
+  if (!q || !a || !Array.isArray(q.blocks)) return false;
+  let touched = false;
+  const mcq = q.blocks.find(b => b.type === 'mcq');
+  if (mcq && a.option) {
+    const idx = _epOptionIndex(a.option, mcq.options);
+    if (idx >= 0) { mcq.correctId = mcq.options[idx].id; touched = true; }
+  }
+  const cer = [a.claim, a.evidence, a.reasoning];
+  if (cer.some(x => x)) {
+    const id = generateBlockId();
+    const c = _markedToBlanks(a.claim), e = _markedToBlanks(a.evidence), r = _markedToBlanks(a.reasoning);
+    _epPlaceAnswerBlock(q, { id, type: 'answer', claim: c.content, evidence: e.content, reasoning: r.content });
+    _epSetBlanks(q, id + '_claim', c); _epSetBlanks(q, id + '_evidence', e); _epSetBlanks(q, id + '_reasoning', r);
+    touched = true;
+  } else if (a.answer && !mcq) {
+    const id = generateBlockId();
+    const m = _markedToBlanks(a.answer);
+    _epPlaceAnswerBlock(q, { id, type: 'plainanswer', content: m.content });
+    _epSetBlanks(q, id, m);
+    touched = true;
+  }
+  // The key's own working is the paper's, so it beats the model's explanation.
+  if (a.explanation) {
+    const ex = q.blocks.find(b => b.type === 'explanation');
+    if (ex) ex.content = a.explanation;
+    else q.blocks.push({ id: generateBlockId(), type: 'explanation', content: a.explanation });
+    touched = true;
+  }
+  if (touched) q._epAns = a.number || '';
+  return touched;
+}
+
+function _epSlot(quiet) {
+  const qs = _epAllQuestions();
+  let filled = 0, missed = 0;
+  qs.forEach(q => {
+    const a = _epAnswerFor(q);
+    if (a && _epApplyAnswer(q, a)) filled++;
+    else { q._epAns = ''; missed++; }
+  });
+  if (!quiet) {
+    epRender();
+    showToast(filled
+      ? `Slotted ${filled} answer${filled === 1 ? '' : 's'} in${missed ? ` · ${missed} question${missed === 1 ? '' : 's'} still unmatched` : ' — every question matched ✓'}`
+      : 'No question numbers matched the key — check the numbers in the table below', filled ? 'success' : 'error');
+  }
+  return { filled, missed };
+}
+
+function epSlotAnswers() {
+  if (!_epAllQuestions().length) { showToast('Build the questions first', 'error'); return; }
+  if (!_epAnswers.length) { showToast('Read the answer key first', 'error'); return; }
+  _epSlot(false);
+}
+
+// Manual override for a question the numbers could not link automatically.
+function epSetMatch(qid, number) {
+  const q = _epAllQuestions().find(x => x.id === qid);
+  if (!q) return;
+  if (!number) { q._epAns = ''; epRender(); return; }
+  const a = _epAnswers.find(x => x.number === number);
+  if (!a) return;
+  if (_epApplyAnswer(q, a)) showToast('Answer ' + number + ' slotted into “' + (q.title || 'question') + '”', 'success');
+  epRender();
+}
+
+function epCancel() {
+  if (!_epBusy) return;
+  _epCancel = true;
+  _epNote('Stopping — keeping everything read so far…');
+}
+
+// ---- Sending the paper ---------------------------------------------------
+function epSend(dest) {
+  if (!_canAuthor()) { showToast('Only question authors can save questions', 'error'); return; }
+  const qs = _epAllQuestions();
+  if (!qs.length) { showToast('Nothing to send yet', 'error'); return; }
+  const unmatched = qs.filter(q => !q._epAns).length;
+  const where = dest === 'bank' ? 'the question bank' : 'the vetting list';
+  const warn = unmatched
+    ? `${unmatched} of ${qs.length} question${qs.length === 1 ? '' : 's'} got no answer from the key — those keep the model answer the AI wrote for them. `
+    : '';
+  showConfirm('Send ' + qs.length + ' question' + (qs.length === 1 ? '' : 's'),
+    warn + 'Send the whole paper to ' + where + '? The screenshots are cleared afterwards.',
+    () => _epCommit(dest));
+}
+
+function _epCommit(dest) {
+  const qs = _epAllQuestions();
+  let n = 0;
+  qs.forEach(q => {
+    const clean = Object.assign({}, q);
+    delete clean._epNum; delete clean._epShot; delete clean._epAns;
+    if (dest === 'bank') {
+      clean.status = 'approved';
+      questionBank.push(clean);
+      saveQuestion(clean);
+    } else {
+      clean.status = 'pending';
+      vettingList.push(clean);
+      saveVettingQuestion(clean);
+    }
+    n++;
+  });
+  _epShots = []; _epKeyShots = []; _epAnswers = [];
+  epRender();
+  updateCounts();
+  try { renderVettingList(); } catch (err) {}
+  try { renderQuestionBank(); } catch (err) {}
+  showToast(`${n} question${n === 1 ? '' : 's'} sent to ${dest === 'bank' ? 'the question bank' : 'vetting'} ✓`, 'success');
+  navigateTo(dest === 'bank' ? 'bank' : 'vetting');
+}
+
+function epSetPaper(v) { _epPaperName = String(v || '').slice(0, 120); }
+
+// ---- Rendering -----------------------------------------------------------
+function epRender() {
+  const el = document.getElementById('epBody');
+  if (!el) return;
+  if (!_canAuthor()) {
+    el.innerHTML = '<div class="ep-card"><p class="ep-empty">Only question authors can use the exam paper builder.</p></div>';
+    return;
+  }
+  el.innerHTML = _epPaperCardHtml() + _epZoneCardHtml('q') + _epZoneCardHtml('key') + _epMatchCardHtml();
+}
+
+function _epPaperCardHtml() {
+  return `<div class="ep-card ep-intro">
+    <h3 class="ep-h3">📄 Build a paper from screenshots</h3>
+    <p class="ep-lead">Add the questions one screenshot at a time, add the marking scheme separately, and the paper's own answers are slotted into the questions by question number. Nothing is saved until you press Send, so a badly-read screenshot can be removed and re-added first.</p>
+    <label class="form-label" for="epPaper">Paper name <span class="ep-dim">(optional — stored on every question as its source)</span></label>
+    <input id="epPaper" class="form-input" type="text" placeholder="e.g. 2024 Nanyang P6 Prelim Paper 1" value="${escapeHtml(_epPaperName)}" oninput="epSetPaper(this.value)" autocomplete="off">
+  </div>`;
+}
+
+function _epZoneCardHtml(target) {
+  const key = target === 'key';
+  const list = _epList(target);
+  const active = _epPasteTarget === target;
+  const pending = list.filter(s => s.status !== 'done').length;
+  const done = key ? _epAnswers.length : _epAllQuestions().length;
+  return `<div class="ep-card">
+    <div class="ep-head">
+      <h3 class="ep-h3">${key ? '② Answer key' : '① Questions'} ${list.length ? `<span class="ep-pill">${list.length}</span>` : ''}</h3>
+      <div class="ep-head-tools">
+        ${list.length ? `<button class="btn btn-outline btn-sm" onclick="epClear('${target}')" ${_epBusy ? 'disabled' : ''}>Clear all</button>` : ''}
+        ${_epBusy
+          ? '<button class="btn btn-outline btn-sm" onclick="epCancel()">✋ Stop</button>'
+          : `<button class="btn btn-primary btn-sm" onclick="${key ? 'epReadKey()' : 'epBuildQuestions()'}" ${list.length ? '' : 'disabled'}>${key ? '🔑 Read answer key' : '🤖 Build questions'}${pending && list.length ? ` (${pending})` : ''}</button>`}
+      </div>
+    </div>
+    <p class="ep-lead">${key
+      ? 'The marking scheme — usually one or two screenshots covering many answers at once. Each answer is read with its question number, and that number is what links it to a question above.'
+      : 'One screenshot per question. Paste with <b>Ctrl/⌘ V</b>, drop them in, or pick files — the question wording, its diagrams and its options are all read out of the picture.'}</p>
+    <div class="ep-zone${active ? ' ep-zone-on' : ''}" onclick="epFocusZone('${target}')"
+         ondragover="epDragOver(event,'${target}')" ondrop="epDrop(event,'${target}')">
+      <div class="ep-zone-main">
+        <span class="ep-zone-ico">${key ? '🔑' : '🖼️'}</span>
+        <div>
+          <b>${active ? 'Paste here now (Ctrl/⌘ V)' : 'Click here, then paste (Ctrl/⌘ V)'}</b>
+          <span class="ep-dim">…or drop images in, or <button type="button" class="ep-link" onclick="event.stopPropagation();epPick('${target}')">choose files</button></span>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="${key ? 'epKeyFile' : 'epQFile'}" accept="image/*" multiple style="display:none;" onchange="epFiles(this,'${target}')">
+    ${list.length ? `<div class="ep-shots">${list.map(s => _epShotHtml(s, target)).join('')}</div>` : ''}
+    ${done ? `<p class="ep-done-line">${key ? `${done} answer${done === 1 ? '' : 's'} read from the key` : `${done} question${done === 1 ? '' : 's'} built`}</p>` : ''}
+  </div>`;
+}
+
+const EP_STATUS = {
+  new: { label: 'Not read yet', cls: 'ep-s-new' },
+  reading: { label: 'Reading…', cls: 'ep-s-busy' },
+  cropping: { label: 'Cropping pictures…', cls: 'ep-s-busy' },
+  done: { label: 'Read ✓', cls: 'ep-s-ok' },
+  empty: { label: 'Nothing found', cls: 'ep-s-warn' },
+  error: { label: 'Failed', cls: 'ep-s-bad' },
+};
+
+function _epShotHtml(s, target) {
+  const st = EP_STATUS[s.status] || EP_STATUS.new;
+  const detail = target === 'key'
+    ? (s.status === 'done' ? `${s.n} answer${s.n === 1 ? '' : 's'}` : '')
+    : (s.qs || []).map(q => (q._epNum ? 'Q' + q._epNum : 'no number')).join(', ');
+  return `<div class="ep-shot ${st.cls}">
+    <img src="${_epDataUrl(s)}" alt="${escapeHtml(s.name)}" loading="lazy">
+    <div class="ep-shot-body">
+      <span class="ep-shot-status">${st.label}</span>
+      ${detail ? `<span class="ep-shot-detail">${escapeHtml(detail)}</span>` : ''}
+      ${s.err ? `<span class="ep-shot-err">${escapeHtml(s.err)}</span>` : ''}
+    </div>
+    <button type="button" class="ep-shot-x" onclick="epRemove('${target}','${s.id}')" title="Remove this screenshot" ${_epBusy ? 'disabled' : ''}>✕</button>
+  </div>`;
+}
+
+function _epMatchCardHtml() {
+  const qs = _epAllQuestions();
+  if (!qs.length) {
+    return `<div class="ep-card">
+      <h3 class="ep-h3">③ Match &amp; send</h3>
+      <p class="ep-empty">Build the questions and read the key, and every question shows up here beside the answer it was matched to.</p>
+    </div>`;
+  }
+  const matched = qs.filter(q => q._epAns).length;
+  const opts = _epAnswers.map(a => a.number);
+  return `<div class="ep-card">
+    <div class="ep-head">
+      <h3 class="ep-h3">③ Match &amp; send <span class="ep-pill">${matched}/${qs.length} matched</span></h3>
+      <div class="ep-head-tools">
+        <button class="btn btn-outline btn-sm" onclick="epSlotAnswers()" ${_epBusy ? 'disabled' : ''}>🔗 Slot answers in</button>
+      </div>
+    </div>
+    <div class="ep-rows">${qs.map(q => _epMatchRowHtml(q, opts)).join('')}</div>
+    <div class="ep-send">
+      <button class="btn btn-outline" onclick="epSend('vetting')" ${_epBusy ? 'disabled' : ''}>Send ${qs.length} to Vetting</button>
+      <button class="btn btn-primary" onclick="epSend('bank')" ${_epBusy ? 'disabled' : ''}>Send ${qs.length} to the Bank</button>
+    </div>
+    <p class="ep-lead ep-send-note">Vetting is the safe one — the questions queue up for review before students ever see them.</p>
+  </div>`;
+}
+
+function _epMatchRowHtml(q, opts) {
+  const ok = !!q._epAns;
+  const kinds = [];
+  if ((q.blocks || []).some(b => b.type === 'mcq')) kinds.push('MCQ');
+  if ((q.blocks || []).some(b => b.type === 'image')) kinds.push('picture');
+  const sel = opts.length
+    ? `<select class="ep-sel" onchange="epSetMatch('${q.id}',this.value)" title="Pick the answer from the key that belongs to this question">
+         <option value=""${ok ? '' : ' selected'}>— no answer —</option>
+         ${opts.map(n => `<option value="${escapeHtml(n)}"${q._epAns === n ? ' selected' : ''}>Answer ${escapeHtml(n)}</option>`).join('')}
+       </select>`
+    : '<span class="ep-dim">key not read yet</span>';
+  return `<div class="ep-row${ok ? '' : ' ep-row-miss'}">
+    <span class="ep-num">${escapeHtml(q._epNum || '?')}</span>
+    <div class="ep-row-main">
+      <div class="ep-row-title">${escapeHtml(q.title || 'Untitled question')}</div>
+      <div class="ep-row-meta">${escapeHtml([q.topic, q.category].filter(Boolean).join(' · '))}${kinds.length ? ' · ' + kinds.join(' · ') : ''}${q._dupOf ? ' · <span class="ep-dup">possible duplicate</span>' : ''}</div>
+    </div>
+    ${sel}
+  </div>`;
 }
 
 // =====================================================================
@@ -42163,6 +42756,21 @@ function ainsteinOnSignOut() {
 }
 
 window.navigateTo = navigateTo;
+// Exam paper builder — the page is built from inline on* handlers.
+window.epPick = epPick;
+window.epFiles = epFiles;
+window.epDragOver = epDragOver;
+window.epDrop = epDrop;
+window.epFocusZone = epFocusZone;
+window.epRemove = epRemove;
+window.epClear = epClear;
+window.epBuildQuestions = epBuildQuestions;
+window.epReadKey = epReadKey;
+window.epSlotAnswers = epSlotAnswers;
+window.epSetMatch = epSetMatch;
+window.epCancel = epCancel;
+window.epSend = epSend;
+window.epSetPaper = epSetPaper;
 // Work sessions — the bar and the page are built from inline on* handlers.
 window.wkStart = wkStart;
 window.wkTogglePause = wkTogglePause;
