@@ -5582,13 +5582,26 @@ option {
 .tcg-tab.active { background: linear-gradient(135deg,#8E24AA,#7B1FA2); border-color: transparent; color: #fff; box-shadow: 0 4px 12px rgba(142,36,170,0.3); }
 .tcg-section-note { text-align: center; color: var(--text-muted); font-size: 0.88rem; margin: 0 auto 20px; max-width: 620px; line-height: 1.55; }
 /* ---- Practise as Student (centre computers) ---- */
-#practiceAsBar { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 1700; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center; max-width: min(760px, calc(100vw - 24px)); padding: 12px 18px; border-radius: 999px; background: linear-gradient(135deg, #14532d, #0d3a20); border: 1px solid #2f7d4f; box-shadow: 0 12px 32px rgba(0,0,0,0.28); color: #e8f5ec; font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.84rem; line-height: 1.5; }
-#practiceAsBar .pa-dot { font-size: 1rem; }
+/* Collapsed by default to ONE short line: it used to be a 760px bar carrying
+   the whole explanation, which on a laptop sat over the bottom card of every
+   page. Staff still must never be in any doubt about whose account is being
+   played, so the student's name and the End button are always on it — the
+   sentence explaining what the session does moves behind a tap (.pa-open). */
+#practiceAsBar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 1700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: min(420px, calc(100vw - 24px)); padding: 7px 8px 7px 14px; border-radius: 999px; background: linear-gradient(135deg, #14532d, #0d3a20); border: 1px solid #2f7d4f; box-shadow: 0 8px 22px rgba(0,0,0,0.24); color: #e8f5ec; font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.8rem; line-height: 1.45; opacity: 0.94; transition: opacity .2s ease, border-radius .2s ease, padding .2s ease; }
+#practiceAsBar:hover, #practiceAsBar.pa-open { opacity: 1; }
+#practiceAsBar.pa-open { border-radius: 16px; padding: 13px 16px; }
+#practiceAsBar .pa-main { display: inline-flex; align-items: center; gap: 8px; padding: 2px 0; background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+#practiceAsBar .pa-dot { font-size: 0.95rem; }
 #practiceAsBar .pa-text b { color: #86efac; }
-#practiceAsBar .pa-real { font-size: 0.72rem; color: #a7c8b4; }
-#practiceAsBar .pa-exit { background: #86efac; color: #14532d; border: none; border-radius: 999px; padding: 9px 18px; font-weight: 700; font-size: 0.8rem; cursor: pointer; font-family: inherit; }
+#practiceAsBar .pa-caret { font-size: 0.62rem; color: #a7c8b4; transition: transform .2s ease; }
+#practiceAsBar.pa-open .pa-caret { transform: rotate(180deg); }
+#practiceAsBar .pa-detail { display: none; flex-basis: 100%; font-size: 0.76rem; line-height: 1.65; color: #cfe6d8; }
+#practiceAsBar.pa-open .pa-detail { display: block; }
+#practiceAsBar .pa-detail b { color: #86efac; }
+#practiceAsBar .pa-real { display: block; margin-top: 5px; font-size: 0.72rem; color: #a7c8b4; }
+#practiceAsBar .pa-exit { background: #86efac; color: #14532d; border: none; border-radius: 999px; padding: 7px 15px; font-weight: 700; font-size: 0.76rem; cursor: pointer; font-family: inherit; white-space: nowrap; }
 #practiceAsBar .pa-exit:hover { background: #bbf7d0; }
-body.practising-as .page-body { padding-bottom: 96px; }
+body.practising-as .page-body { padding-bottom: 64px; }
 .practice-as-rows { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 .practice-as-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .practice-as-who { flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -5596,7 +5609,7 @@ body.practising-as .page-body { padding-bottom: 96px; }
 .practice-as-who span { font-size: 0.76rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .practice-as-who span.dim { font-size: 0.7rem; opacity: 0.75; }
 .practice-as-row .btn { flex: 0 0 auto; font-size: 0.8rem; }
-@media (max-width: 640px) { #practiceAsBar { border-radius: 16px; font-size: 0.78rem; } }
+@media (max-width: 640px) { #practiceAsBar { font-size: 0.76rem; } }
 
 /* ---- Create-account dialog: student or employee ----
    Tailwind's preflight sets appearance:none on form controls, so a bare radio
@@ -6567,10 +6580,16 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
      Visible on every page for the whole session so centre staff can never be
      in any doubt about whose account is being played. -->
 <div id="practiceAsBar" style="display:none;">
-  <span class="pa-dot">👤</span>
-  <span class="pa-text">Practising as <b id="practiceAsWho"></b> — every point, XP, monster and prize is saved to <b>their</b> account</span>
-  <span class="pa-real">signed in as <span id="practiceAsReal"></span></span>
+  <button type="button" class="pa-main" id="practiceAsToggle" aria-expanded="false" onclick="practiceAsToggleDetail()" title="What does this session do?">
+    <span class="pa-dot">👤</span>
+    <span class="pa-text">Practising as <b id="practiceAsWho"></b></span>
+    <span class="pa-caret">▲</span>
+  </button>
   <button type="button" class="pa-exit" onclick="exitPracticeAs()">End session</button>
+  <div class="pa-detail">
+    Every point, XP, monster and prize is saved to <b>their</b> account, exactly as if they had signed in at home.
+    <span class="pa-real">You are signed in as <span id="practiceAsReal"></span>.</span>
+  </div>
 </div>
 
 <!-- ==================== WORK SESSION BAR ====================

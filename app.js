@@ -1684,7 +1684,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.240.0';
+const APP_VERSION = 'v1.240.1';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -1697,7 +1697,21 @@ function practiceAsRenderBar() {
   if (who) who.textContent = _practiceAs.name || _practiceAs.email;
   if (real) real.textContent = (_realUser && _realUser.email) || '';
   bar.style.display = '';
+  bar.classList.remove('pa-open');   // always comes back collapsed
+  const t = document.getElementById('practiceAsToggle');
+  if (t) t.setAttribute('aria-expanded', 'false');
   document.body.classList.add('practising-as');
+}
+
+// The bar carries the student's name and the End button at all times; the
+// sentence explaining where their progress goes is one tap away, so the pill
+// stays out of the way of the page underneath it.
+function practiceAsToggleDetail() {
+  const bar = document.getElementById('practiceAsBar');
+  if (!bar) return;
+  const open = bar.classList.toggle('pa-open');
+  const t = document.getElementById('practiceAsToggle');
+  if (t) t.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 function exitPracticeAs() {
   if (!_practiceAs) return;
@@ -35691,6 +35705,7 @@ window.onTcgArtDrop = onTcgArtDrop;
 window.onTcgArtPick = onTcgArtPick;
 window.resetTcgArt = resetTcgArt;
 window.openPracticeAsPicker = openPracticeAsPicker;
+window.practiceAsToggleDetail = practiceAsToggleDetail;
 window.closePracticeAsPicker = closePracticeAsPicker;
 window.practiceAsFilter = practiceAsFilter;
 window.startPracticeAs = startPracticeAs;
