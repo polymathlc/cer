@@ -1684,7 +1684,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.241.1';
+const APP_VERSION = 'v1.242.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -13142,20 +13142,29 @@ function doScaleAndPrint(output, opts) {
 const EP_MAX_SHOTS = 120;   // question screenshots held in memory at once
 const EP_MAX_KEYS  = 40;    // answer-key screenshots
 const EP_MAX_BYTES = 12 * 1024 * 1024;
+// How many question screenshots go to the AI in ONE call. A question is very
+// often spread over two or three screenshots — a stem, then a diagram, then
+// the parts — so they are read as a RUN rather than one at a time, and the
+// model decides where each question starts and ends. A question that happens
+// to straddle a batch boundary is stitched back together by the same
+// "continuation" mechanism the bulk PDF import uses across a page break.
+const EP_BATCH = 4;
 
-let _epShots = [];       // [{ id, mimeType, data, name, status, err, qs: [question] }]
+let _epShots = [];       // [{ id, mimeType, data, name, status, err, group, n }]
 let _epKeyShots = [];    // same shape, but each yields answers instead of questions
+let _epQuestions = [];   // everything built from _epShots, in paper order
 let _epAnswers = [];     // [{ number, option, answer, claim, evidence, reasoning, explanation }]
 let _epPaperName = '';
 let _epBusy = false;
 let _epCancel = false;
+let _epDirty = false;    // screenshots changed since the last read
 let _epPasteTarget = 'q';   // which drop zone a Ctrl-V lands in
 let _epPasteBound = false;
 
 function _epId() { return 'ep_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function _epDataUrl(s) { return 'data:' + s.mimeType + ';base64,' + s.data; }
 function _epList(target) { return target === 'key' ? _epKeyShots : _epShots; }
-function _epAllQuestions() { return _epShots.reduce((a, s) => a.concat(s.qs || []), []); }
+function _epAllQuestions() { return _epQuestions; }
 function _epNote(msg) { const el = document.getElementById('epStatus'); if (el) el.textContent = msg || ''; }
 
 // "Q12 (b)" / "12b" / "12(B)" all collapse to the same key, because a paper and
@@ -13176,11 +13185,12 @@ async function _epAddFiles(files, target) {
     try {
       list.push({
         id: _epId(), mimeType: f.type, data: await _fileToBase64(f),
-        name: f.name || 'screenshot', status: 'new', err: '', qs: [], n: 0,
+        name: f.name || 'screenshot', status: 'new', err: '', group: '', n: 0,
       });
       added++;
     } catch (err) { console.warn('exam paper: could not read file', err); skipped++; }
   }
+  if (added && target !== 'key') _epDirty = true;
   epRender();
   if (added) showToast(added + ' screenshot' + (added === 1 ? '' : 's') + ' added' + (skipped ? ' · ' + skipped + ' skipped' : ''), 'success');
   else if (skipped) showToast('Nothing added — images only, under 12 MB each, up to ' + cap, 'error');
@@ -13203,7 +13213,7 @@ function epRemove(target, id) {
   const list = _epList(target);
   const i = list.findIndex(s => s.id === id);
   if (i >= 0) list.splice(i, 1);
-  if (target === 'key') _epRebuildAnswers();
+  if (target === 'key') _epRebuildAnswers(); else _epDirty = true;
   epRender();
 }
 function epClear(target) {
@@ -13213,7 +13223,7 @@ function epClear(target) {
     'Clear all ' + list.length + ' ' + (target === 'key' ? 'answer-key' : 'question') + ' screenshots? Anything already sent to the bank or vetting is untouched.',
     () => {
       if (target === 'key') { _epKeyShots = []; _epAnswers = []; }
-      else _epShots = [];
+      else { _epShots = []; _epQuestions = []; _epDirty = false; }
       epRender();
     });
 }
@@ -13244,21 +13254,33 @@ function _epBindPaste() {
 // ---- Prompts -------------------------------------------------------------
 const EP_CATEGORIES = ['CER', 'Single Relationship', 'Double Relationship', 'Reliability', 'Fairness', 'Accuracy', 'Constant Variable', 'Hypothesis', 'Aim', 'Conclusion', 'Definition', 'Explanation', 'Stating', 'Key Concepts'];
 
-function _epQuestionPrompt(i, total) {
+// One call per BATCH of screenshots, so the model sees them together and can
+// decide for itself where a question starts and ends. `from` is the 1-based
+// position of the first screenshot in the batch within the whole paper.
+function _epQuestionPrompt(n, from, total) {
   const topics = currentTopics();
   const paper = _epPaperName ? `The paper is "${_epPaperName}". ` : '';
-  return `You are importing questions from a Singapore primary-school science exam paper into a question bank. ${paper}The attached image is screenshot ${i} of ${total} — normally ONE question, occasionally two.\n` +
+  const multi = n > 1;
+  const span = multi ? `screenshots ${from}–${from + n - 1} of ${total}` : `screenshot ${from} of ${total}`;
+  return `You are importing questions from a Singapore primary-school science exam paper into a question bank. ${paper}The attached ${multi ? `${n} images are consecutive ${span}` : `image is ${span}`}, in reading order.\n` +
     SCAN_READING_NOTE +
     _genPreamble() +
-    `Return ONLY JSON: {"questions":[ {"number":"1","title":"short title","topic":"<closest topic>","topicConfidence":"high|medium|low","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
+    (multi
+      ? `IMPORTANT — read all ${n} images AS ONE CONTINUOUS RUN of the paper, not as ${n} separate questions. ONE question is very often spread across two or three of these images (its wording on one, its diagram on the next, its parts after that), and ONE image may hold several questions. Decide where each question starts and ends from the question numbers and the wording, NEVER from where one image ends and the next begins. Do not drop content from any image, and do not split one question into two entries just because it crosses an image boundary.\n`
+      : '') +
+    `Return ONLY JSON: {"questions":[ {"continuation":false,"number":"1","title":"short title","topic":"<closest topic>","topicConfidence":"high|medium|low","category":"<closest category>","tags":["..."],"questionType":"mcq or open","blocks":[ ...ordered blocks... ]}, ... ]}\n` +
     `Each item in "blocks" is ONE of:\n` +
     `  {"type":"text","text":"a part of the question wording, plain text"}\n` +
-    `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table)\n` +
+    (multi
+      ? `  {"type":"image","page":<which attached image, 1-based>,"box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table — "page" says which attached image it is on, and box_2d is the rectangle you draw around it on THAT image)\n`
+      : `  {"type":"image","box_2d":[ymin,xmin,ymax,xmax]}   (one diagram/picture/graph/figure/experimental setup OR one data table)\n`) +
     `  {"type":"mcq","options":["option 1 text","option 2 text","option 3 text","option 4 text"],"correctIndex":0}\n` +
     `  {"type":"answer","claim":"...","evidence":"...","reasoning":"..."}\n` +
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
+    (multi ? `- "page" on every "image" block: the 1-based index of the attached image the figure is on (1 = the first attached image). box_2d is measured on THAT image: 0,0 is its top-left corner, 1000,1000 its bottom-right corner.\n` : '') +
+    `- CONTINUATION: if the FIRST attached image opens in the middle of a question that started BEFORE it — it carries on mid-question, before any new question number — return that leftover part as the FIRST entry with "continuation":true and just the leftover content in its "blocks". Every other entry has "continuation":false.\n` +
     `- "number": the question number EXACTLY as printed on the paper, INCLUDING its part letter — "7", "12", "3a", "15(b)". It is used ONLY to find this question's line on the marking scheme and is never shown to anyone. If no number is printed, use "".\n` +
     `- NEVER write the question number inside a block. A text block starts with the question's own wording — "Explain why the ice melted", not "44. Explain why the ice melted" and not "44) Explain…".\n` +
     `- SUB-PARTS: if the question is a lettered part, keep ONLY that letter at the very START of the text block that asks it, written exactly as "(a) " — it is lifted out into a proper part marker. So "44(a) Explain why…" becomes the text "(a) Explain why…", with the 44 dropped. If ONE question carries several lettered parts, start EACH part's own text block with its own "(a) " / "(b) " marker, one marker per block and never two in the same block.\n` +
@@ -13390,38 +13412,129 @@ function _epStripNumbering(q) {
   q.title = _epStripTitleNumber(q.title) || _epTitleFromText(q) || 'Untitled question';
 }
 
+// ---- Cropping figures out of a batch -------------------------------------
+// A question's figures can sit on different screenshots, so the image blocks
+// are grouped by the "page" the model named and each group is cropped from its
+// own screenshot. rawImgs and imgBlocks are index-aligned — buildBlocksFromAi
+// emits exactly one image block per image entry, in order.
+// maxEnhance 0, as in the bulk import: a whole paper would otherwise need
+// dozens of slow image-model calls, and any single picture can be enhanced
+// later by hand.
+async function _epCropInto(imgBlocks, qd, shots, onStatus) {
+  const rawImgs = (Array.isArray(qd && qd.blocks) ? qd.blocks : [])
+    .filter(b => String((b && b.type) || '').toLowerCase() === 'image');
+  const groups = new Map();
+  imgBlocks.forEach((blk, i) => {
+    const rb = rawImgs[i] || {};
+    let pg = Number(rb.page);
+    pg = (Number.isInteger(pg) && pg >= 1 && pg <= shots.length) ? pg - 1 : 0;
+    if (!groups.has(pg)) groups.set(pg, { blks: [], boxes: [] });
+    const g = groups.get(pg);
+    g.blks.push(blk);
+    g.boxes.push((rb.box_2d || rb.box) || null);
+  });
+  let filled = 0;
+  for (const [pg, g] of groups) {
+    const shot = shots[pg];
+    if (!shot) continue;
+    let n = 0;
+    try { n = await _fillBlocksFromAiBoxes(g.blks, g.boxes, shot.mimeType, shot.data, onStatus, { maxEnhance: 0 }); }
+    catch (err) { console.warn('exam paper: crop failed', err); }
+    filled += n;
+    if (n) continue;
+    // Every rectangle on this screenshot failed — attach it whole so the
+    // teacher can crop by hand with ✂️ rather than lose the figure.
+    const fullDataUrl = 'data:' + shot.mimeType + ';base64,' + shot.data;
+    try {
+      const fullUrl = await uploadImageDataUrl(fullDataUrl);
+      g.blks.forEach(b => {
+        if (b.url) return;
+        b.url = fullUrl;
+        _imgEnhanceState[b.id] = { originalDataUrl: fullDataUrl, originalUrl: fullUrl, currentDataUrl: fullDataUrl };
+      });
+    } catch (err) { console.warn('exam paper: whole-screenshot backup failed', err); }
+  }
+  return filled;
+}
+
 // ---- Reading the question screenshots ------------------------------------
 function _epAiReady() {
   if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't ready yet — try again in a moment", 'error'); return false; }
   return true;
 }
 
-async function epBuildQuestions() {
+function epBuildQuestions() {
   if (!_canAuthor()) { showToast('Only question authors can build a paper', 'error'); return; }
   if (_epBusy || !_epAiReady()) return;
-  const todo = _epShots.filter(s => s.status !== 'done');
-  if (!todo.length) {
-    showToast(_epShots.length ? 'Every screenshot has been read already' : 'Add some question screenshots first', 'info');
+  if (!_epShots.length) { showToast('Add some question screenshots first', 'info'); return; }
+  // Reading is always a read of the WHOLE set — a question can span screenshots
+  // added at different times, so there is no honest way to read "only the new
+  // ones" and still get the boundaries right.
+  if (_epQuestions.length) {
+    showConfirm('Read the screenshots again',
+      `All ${_epShots.length} screenshot${_epShots.length === 1 ? '' : 's'} are read together, so this replaces the ${_epQuestions.length} question${_epQuestions.length === 1 ? '' : 's'} built so far — including any answer you matched by hand. Read again?`,
+      () => { _epRunBuild(); });
     return;
   }
-  _epBusy = true; _epCancel = false; epRender();
-  let built = 0, failed = 0;
-  for (let i = 0; i < todo.length; i++) {
+  _epRunBuild();
+}
+
+async function _epRunBuild() {
+  _epBusy = true; _epCancel = false;
+  _epQuestions = [];
+  const total = _epShots.length;
+  _epShots.forEach(s => { s.status = 'new'; s.err = ''; s.group = ''; s.n = 0; });
+  epRender();
+  let failed = 0;
+  let last = null;   // the question a following batch may continue
+  for (let start = 0; start < total; start += EP_BATCH) {
     if (_epCancel) break;
-    const s = todo[i];
-    s.status = 'reading'; s.err = ''; s.qs = [];
+    const batch = _epShots.slice(start, start + EP_BATCH);
+    const span = batch.length > 1 ? `screenshots ${start + 1}–${start + batch.length}` : `screenshot ${start + 1}`;
+    batch.forEach(s => { s.status = 'reading'; s.group = span; });
     epRender();
-    _epNote(`Reading screenshot ${i + 1} of ${todo.length}…`);
+    _epNote(`Reading ${span} of ${total}…`);
+    let entries;
     try {
-      const raw = await askGeminiVision(_epQuestionPrompt(i + 1, todo.length),
-        [{ mimeType: s.mimeType, data: s.data }], { maxOutputTokens: 8192, json: true });
+      const raw = await askGeminiVision(
+        _epQuestionPrompt(batch.length, start + 1, total),
+        batch.map(s => ({ mimeType: s.mimeType, data: s.data })),
+        { maxOutputTokens: 16384, json: true });
       const parsed = _parseAIJson(raw);
-      const entries = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.questions) ? parsed.questions : []);
-      for (const qd of entries) {
-        const q = buildQuestionFromAi(qd || {});
+      entries = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.questions) ? parsed.questions : []);
+    } catch (err) {
+      console.warn('exam paper: batch read failed', err);
+      // One unreadable group must not sink the rest of the paper.
+      batch.forEach(s => { s.status = 'error'; s.err = (err && err.message) || 'could not be read'; });
+      failed += batch.length;
+      epRender();
+      continue;
+    }
+    let made = 0;
+    for (let i = 0; i < entries.length; i++) {
+      if (_epCancel) break;
+      const qd = entries[i] || {};
+      try {
+        if (i === 0 && qd.continuation === true && last) {
+          // This group opens mid-question: append it to the one before rather
+          // than filing half a question of its own.
+          const built = buildBlocksFromAi({ blocks: qd.blocks || [] });
+          if (!built.blocks.length) continue;
+          const newImgs = built.blocks.filter(b => b.type === 'image');
+          last.blocks = last.blocks.concat(built.blocks);
+          last.blanks = Object.assign({}, last.blanks, built.selectedBlanks);
+          if (newImgs.length) {
+            _epNote(`${span}: cropping ${newImgs.length} picture${newImgs.length === 1 ? '' : 's'} continuing “${last.title || 'question'}”…`);
+            await _epCropInto(newImgs, qd, batch, m => _epNote(`${span} — ${m}`));
+          }
+          _epStripNumbering(last);
+          _tagDuplicate(last);
+          epRender();
+          continue;
+        }
+        const q = buildQuestionFromAi(qd);
         if (!q.blocks.length) continue;
         q._epNum = String((qd && qd.number) || '').trim();
-        q._epShot = s.id;
         q._epAns = '';
         // 44(a) becomes a question with no 44 and an official part (a). Runs
         // BEFORE the crop so the wording is settled by the time it is shown.
@@ -13429,29 +13542,26 @@ async function epBuildQuestions() {
         if (_epPaperName) q.source = _epPaperName;
         const imgBlocks = q.blocks.filter(b => b.type === 'image');
         if (imgBlocks.length) {
-          s.status = 'cropping'; epRender();
-          _epNote(`Screenshot ${i + 1}: cropping ${imgBlocks.length} picture${imgBlocks.length === 1 ? '' : 's'}…`);
-          await _cropPageImagesInto(imgBlocks, qd, s, m => _epNote(`Screenshot ${i + 1} — ${m}`));
+          _epNote(`${span}: “${q.title || 'question'}” — cropping ${imgBlocks.length} picture${imgBlocks.length === 1 ? '' : 's'}…`);
+          await _epCropInto(imgBlocks, qd, batch, m => _epNote(`${span} — ${m}`));
         }
         _tagDuplicate(q);
-        s.qs.push(q);
-      }
-      s.status = s.qs.length ? 'done' : 'empty';
-      built += s.qs.length;
-      if (!s.qs.length) failed++;
-    } catch (err) {
-      console.warn('exam paper: question read failed', err);
-      s.status = 'error';
-      s.err = (err && err.message) || 'could not read this screenshot';
-      failed++;
+        _epQuestions.push(q);
+        last = q;
+        made++;
+        epRender();
+      } catch (err) { console.warn('exam paper: question build failed', err); }
     }
+    batch.forEach(s => { s.n = made; if (s.status === 'reading') s.status = made ? 'done' : 'empty'; });
     epRender();
   }
   _epBusy = false;
   _epNote('');
+  if (!_epCancel && !failed) _epDirty = false;
   // Anything already read from the key applies to the questions just built.
   if (_epAnswers.length) _epSlot(true);
   epRender();
+  const built = _epQuestions.length;
   showToast(built
     ? `Built ${built} question${built === 1 ? '' : 's'}${_epCancel ? ' (stopped early)' : ''}${failed ? ` · ${failed} screenshot${failed === 1 ? '' : 's'} could not be read` : ''}`
     : 'No questions could be read from those screenshots', built ? 'success' : 'error');
@@ -13665,7 +13775,7 @@ function _epCommit(dest) {
   let n = 0;
   qs.forEach(q => {
     const clean = Object.assign({}, q);
-    delete clean._epNum; delete clean._epShot; delete clean._epAns;
+    delete clean._epNum; delete clean._epAns;
     if (dest === 'bank') {
       clean.status = 'approved';
       questionBank.push(clean);
@@ -13677,7 +13787,7 @@ function _epCommit(dest) {
     }
     n++;
   });
-  _epShots = []; _epKeyShots = []; _epAnswers = [];
+  _epShots = []; _epKeyShots = []; _epAnswers = []; _epQuestions = []; _epDirty = false;
   epRender();
   updateCounts();
   try { renderVettingList(); } catch (err) {}
@@ -13712,8 +13822,9 @@ function _epZoneCardHtml(target) {
   const key = target === 'key';
   const list = _epList(target);
   const active = _epPasteTarget === target;
-  const pending = list.filter(s => s.status !== 'done').length;
+  const pending = key ? list.filter(s => s.status !== 'done').length : 0;
   const done = key ? _epAnswers.length : _epAllQuestions().length;
+  const again = !key && _epQuestions.length;
   return `<div class="ep-card">
     <div class="ep-head">
       <h3 class="ep-h3">${key ? '② Answer key' : '① Questions'} ${list.length ? `<span class="ep-pill">${list.length}</span>` : ''}</h3>
@@ -13721,12 +13832,13 @@ function _epZoneCardHtml(target) {
         ${list.length ? `<button class="btn btn-outline btn-sm" onclick="epClear('${target}')" ${_epBusy ? 'disabled' : ''}>Clear all</button>` : ''}
         ${_epBusy
           ? '<button class="btn btn-outline btn-sm" onclick="epCancel()">✋ Stop</button>'
-          : `<button class="btn btn-primary btn-sm" onclick="${key ? 'epReadKey()' : 'epBuildQuestions()'}" ${list.length ? '' : 'disabled'}>${key ? '🔑 Read answer key' : '🤖 Build questions'}${pending && list.length ? ` (${pending})` : ''}</button>`}
+          : `<button class="btn btn-primary btn-sm" onclick="${key ? 'epReadKey()' : 'epBuildQuestions()'}" ${list.length ? '' : 'disabled'}>${key ? '🔑 Read answer key' + (pending ? ` (${pending})` : '') : (again ? '🔁 Read again' : '🤖 Build questions')}</button>`}
       </div>
     </div>
     <p class="ep-lead">${key
       ? 'The marking scheme — usually one or two screenshots covering many answers at once. Each answer is read with its question number, and that number is what links it to a question above.'
-      : 'One screenshot per question. Paste with <b>Ctrl/⌘ V</b>, drop them in, or pick files — the question wording, its diagrams and its options are all read out of the picture.'}</p>
+      : `Add them in reading order — paste with <b>Ctrl/⌘ V</b>, drop them in, or pick files. They are read <b>as one run</b>, ${EP_BATCH} at a time, so a question spread over two or three screenshots comes out as one question and a screenshot holding three questions comes out as three. You do not have to line them up one question per screenshot.`}</p>
+    ${!key && _epDirty && _epQuestions.length ? '<p class="ep-warn-line">⚠ The screenshots changed since they were last read — press <b>Read again</b> so the questions match what is here now.</p>' : ''}
     <div class="ep-zone${active ? ' ep-zone-on' : ''}" onclick="epFocusZone('${target}')"
          ondragover="epDragOver(event,'${target}')" ondrop="epDrop(event,'${target}')">
       <div class="ep-zone-main">
@@ -13754,9 +13866,11 @@ const EP_STATUS = {
 
 function _epShotHtml(s, target) {
   const st = EP_STATUS[s.status] || EP_STATUS.new;
+  // A question can span screenshots, so a question count belongs to the GROUP
+  // that was read together, never to one screenshot on its own.
   const detail = target === 'key'
     ? (s.status === 'done' ? `${s.n} answer${s.n === 1 ? '' : 's'}` : '')
-    : (s.qs || []).map(q => (q._epNum ? 'Q' + q._epNum : 'no number')).join(', ');
+    : (s.status === 'done' && s.group ? `${s.n} question${s.n === 1 ? '' : 's'} from ${s.group}` : '');
   return `<div class="ep-shot ${st.cls}">
     <img src="${_epDataUrl(s)}" alt="${escapeHtml(s.name)}" loading="lazy">
     <div class="ep-shot-body">
@@ -13785,6 +13899,7 @@ function _epMatchCardHtml() {
         <button class="btn btn-outline btn-sm" onclick="epSlotAnswers()" ${_epBusy ? 'disabled' : ''}>🔗 Slot answers in</button>
       </div>
     </div>
+    ${_epDirty ? '<p class="ep-warn-line">⚠ These were built from an older set of screenshots — read them again before sending.</p>' : ''}
     <div class="ep-rows">${qs.map(q => _epMatchRowHtml(q, opts)).join('')}</div>
     <div class="ep-send">
       <button class="btn btn-outline" onclick="epSend('vetting')" ${_epBusy ? 'disabled' : ''}>Send ${qs.length} to Vetting</button>
