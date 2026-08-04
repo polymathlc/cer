@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.246.0';
+const APP_VERSION = 'v1.247.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -6726,8 +6726,15 @@ function _annotStepTol(delta) {
 // a value you are adjusting by feel, and the page must not scroll underneath.
 function _annotBindSliderWheel() {
   const xstep = field => d => { const x = _annot && _annot.xform; if (x) annotXformSet(field, (x[field] || 0) + d); };
+  // The size boxes step in percent, so a wheel over them resizes by feel too.
+  const sstep = field => d => {
+    const x = _annot && _annot.xform; if (!x) return;
+    const cur = Math.abs(field === 'sx' ? _annotXformSx(x) : _annotXformSy(x)) * 100;
+    annotXformSetScale(field, cur + d);
+  };
   [['annotSize', _annotStepSize, 1], ['annotTol', _annotStepTol, 4],
-   ['annotXformAngle', xstep('angle'), 1], ['annotXformSkewX', xstep('skewX'), 1], ['annotXformSkewY', xstep('skewY'), 1]
+   ['annotXformAngle', xstep('angle'), 1], ['annotXformSkewX', xstep('skewX'), 1], ['annotXformSkewY', xstep('skewY'), 1],
+   ['annotXformSxNum', sstep('sx'), 1], ['annotXformSyNum', sstep('sy'), 1]
   ].forEach(([id, step, mult]) => {
     const el = document.getElementById(id);
     if (!el || el._wheelBound) return;
@@ -6870,10 +6877,16 @@ function _annotFloatCommit() {
 // layer every frame, so turning 30° and back to 0° leaves the pixels as sharp
 // as they started. Only Apply burns it in.
 const ANNOT_XFORM_MAX_PX = 4000;   // never let "grow to fit" run away with memory
+const ANNOT_SCALE_MIN = 0.05;      // 5% — small enough to shrink a stamp, big enough to still grab
+const ANNOT_SCALE_MAX = 8;
 const _annotRad = d => (d || 0) * Math.PI / 180;
 function _annotWrapDeg(d) { d = ((d + 180) % 360 + 360) % 360 - 180; return Math.abs(d) < 1e-9 ? 0 : d; }
 function _annotClampNum(v, lo, hi) { return Math.min(hi, Math.max(lo, isNaN(v) ? 0 : v)); }
-function _annotXformIsIdentity(x) { return !x || (!x.angle && !x.skewX && !x.skewY); }
+function _annotXformSx(x) { return (x && typeof x.sx === 'number' && x.sx) ? x.sx : 1; }
+function _annotXformSy(x) { return (x && typeof x.sy === 'number' && x.sy) ? x.sy : 1; }
+function _annotXformIsIdentity(x) {
+  return !x || (!x.angle && !x.skewX && !x.skewY && _annotXformSx(x) === 1 && _annotXformSy(x) === 1 && !x.moved);
+}
 
 // Start a transform session. Snapshots history once, up front, so Cancel (and
 // Ctrl+Z afterwards) puts the picture back exactly as it was.
@@ -6901,6 +6914,7 @@ function _annotXformBegin() {
     scope, layer, base, ox, oy,
     cx: ox + layer.width / 2, cy: oy + layer.height / 2,
     angle: 0, skewX: 0, skewY: 0,
+    sx: 1, sy: 1, lock: true, moved: false,
     grow: scope === 'image',
     baseW: cv.width, baseH: cv.height,
     straighten: false, strLine: null, prevSel
@@ -6908,15 +6922,34 @@ function _annotXformBegin() {
   _annotXformSyncBar();
   _annotXformPreview();
 }
-// Skew first, then rotate — the same order the canvas applies them below, so
-// the corner maths and the render can never drift apart.
+// Scale first, then skew, then rotate — the same order the canvas applies them
+// below, so the corner maths and the render can never drift apart. (u, v) are
+// layer pixels measured from the pivot, BEFORE scaling.
 function _annotXformMapper(x) {
   const a = _annotRad(x.angle), cos = Math.cos(a), sin = Math.sin(a);
   const tx = Math.tan(_annotRad(x.skewX)), ty = Math.tan(_annotRad(x.skewY));
+  const sx = _annotXformSx(x), sy = _annotXformSy(x);
   return (u, v) => {
-    const su = u + tx * v, sv = ty * u + v;
+    const zu = u * sx, zv = v * sy;
+    const su = zu + tx * zv, sv = ty * zu + zv;
     return { x: x.cx + su * cos - sv * sin, y: x.cy + su * sin + sv * cos };
   };
+}
+// The other direction, for turning a pointer position back into the object's
+// own coordinates while a handle is being dragged. Two stops on the way back:
+// the M-FRAME (rotation and slant undone, scaling still applied) is what the
+// resize maths works in, and layer coordinates are one divide further.
+function _annotXformMFrameVec(x, vx, vy) {
+  const a = -_annotRad(x.angle), cos = Math.cos(a), sin = Math.sin(a);
+  const rx = vx * cos - vy * sin, ry = vx * sin + vy * cos;
+  const tx = Math.tan(_annotRad(x.skewX)), ty = Math.tan(_annotRad(x.skewY));
+  const det = (1 - tx * ty) || 1e-6;
+  return { x: (rx - tx * ry) / det, y: (ry - ty * rx) / det };
+}
+function _annotXformMFrame(x, px, py) { return _annotXformMFrameVec(x, px - x.cx, py - x.cy); }
+function _annotXformUnmapVec(x, vx, vy) {
+  const m = _annotXformMFrameVec(x, vx, vy);
+  return { x: m.x / (_annotXformSx(x) || 1e-6), y: m.y / (_annotXformSy(x) || 1e-6) };
 }
 function _annotXformCorners(x) {
   const map = _annotXformMapper(x);
@@ -6931,6 +6964,7 @@ function _annotXformDrawInto(ctx, x, offX, offY) {
   ctx.translate(x.cx + offX, x.cy + offY);
   ctx.rotate(_annotRad(x.angle));
   ctx.transform(1, Math.tan(_annotRad(x.skewY)), Math.tan(_annotRad(x.skewX)), 1, 0, 0);
+  ctx.scale(_annotXformSx(x), _annotXformSy(x));
   ctx.drawImage(x.layer, x.ox - x.cx, x.oy - x.cy);
   ctx.restore();
 }
@@ -6959,6 +6993,172 @@ function _annotXformPreview() {
   x.offX = offX; x.offY = offY;
   if (refit) annotZoomFit();
 }
+// ---- Free transform: the eight handles round the box ----------------------
+// Corners resize both ways at once, edge handles one way, and the corner
+// opposite the one you drag stays exactly where it is — the thing everybody
+// expects of a resize box and the reason the maths below anchors rather than
+// just multiplying a scale.
+const ANNOT_HANDLES = [
+  { id: 'nw', hx: 0, hy: 0, cur: 'nwse-resize' }, { id: 'n', hx: 0.5, hy: 0, cur: 'ns-resize' },
+  { id: 'ne', hx: 1, hy: 0, cur: 'nesw-resize' }, { id: 'e', hx: 1, hy: 0.5, cur: 'ew-resize' },
+  { id: 'se', hx: 1, hy: 1, cur: 'nwse-resize' }, { id: 's', hx: 0.5, hy: 1, cur: 'ns-resize' },
+  { id: 'sw', hx: 0, hy: 1, cur: 'nesw-resize' }, { id: 'w', hx: 0, hy: 0.5, cur: 'ew-resize' },
+];
+function _annotXformHandles(x) {
+  const map = _annotXformMapper(x);
+  const W = x.layer.width, H = x.layer.height;
+  const d = { x: x.ox - x.cx, y: x.oy - x.cy };
+  return ANNOT_HANDLES.map(h => Object.assign({}, h, {
+    pt: map(d.x + h.hx * W, d.y + h.hy * H),
+    pD: { x: h.hx * W, y: h.hy * H },            // the handle, in layer pixels
+    pA: { x: (1 - h.hx) * W, y: (1 - h.hy) * H },// the point it pivots against
+  }));
+}
+// Which handle is under the pointer, judged in SCREEN pixels so it stays
+// grabbable at any zoom.
+function _annotXformHandleAt(p) {
+  const x = _annot && _annot.xform; if (!x) return null;
+  const s = _annotDisplayScale() || 1;
+  const q = _annotXformUnoffset(x, p);
+  let best = null, bestD = 11 / s;
+  _annotXformHandles(x).forEach(h => {
+    const d = Math.hypot(q.x - h.pt.x, q.y - h.pt.y);
+    if (d <= bestD) { bestD = d; best = h; }
+  });
+  return best;
+}
+// A pointer position arrives in CANVAS coordinates; the transform maths lives
+// in the frame the object is composed in, which a growing canvas shifts by
+// (offX, offY). Everything that compares the two has to go through here.
+function _annotXformUnoffset(x, p) { return { x: p.x - (x.offX || 0), y: p.y - (x.offY || 0) }; }
+// Is the pointer inside the transform box? (Point-in-quad by winding.) That is
+// what makes dragging the middle of the box move the object.
+function _annotXformInside(p) {
+  const x = _annot && _annot.xform; if (!x) return false;
+  const c = _annotXformCorners(x);
+  p = _annotXformUnoffset(x, p);
+  let sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = c[i], b = c[(i + 1) % 4];
+    const cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    if (Math.abs(cross) < 1e-9) continue;
+    const s = cross > 0 ? 1 : -1;
+    if (!sign) sign = s; else if (s !== sign) return false;
+  }
+  return true;
+}
+// Put the pivot back in the middle of the box without moving a single pixel:
+// the shift is taken straight back out of the layer's own offset. Run after a
+// resize or a move, so a turn afterwards spins about the object's centre.
+function _annotXformRecentre(x) {
+  const W = x.layer.width, H = x.layer.height;
+  const d = { x: x.ox - x.cx, y: x.oy - x.cy };
+  const c = _annotXformMapper(x)(d.x + W / 2, d.y + H / 2);
+  const shift = _annotXformUnmapVec(x, x.cx - c.x, x.cy - c.y);
+  x.cx = c.x; x.cy = c.y;
+  x.ox = c.x + d.x + shift.x;
+  x.oy = c.y + d.y + shift.y;
+}
+// Begin a handle drag: everything the move needs is frozen here, so each frame
+// is computed from the state at mouse-down and can never drift.
+function _annotXformScaleStart(h) {
+  const x = _annot.xform;
+  const d = { x: x.ox - x.cx, y: x.oy - x.cy };
+  const sx = _annotXformSx(x), sy = _annotXformSy(x);
+  _annot.xfScale = {
+    h, sx0: sx, sy0: sy,
+    // The anchor's position in the M-frame — the one point the drag holds still.
+    Ua: (d.x + h.pA.x) * sx, Va: (d.y + h.pA.y) * sy,
+    spanX: h.pD.x - h.pA.x, spanY: h.pD.y - h.pA.y,
+  };
+}
+function _annotXformScaleDrag(p, shift) {
+  const x = _annot && _annot.xform, st = _annot && _annot.xfScale;
+  if (!x || !st) return;
+  const q = _annotXformUnoffset(x, p);
+  const m = _annotXformMFrame(x, q.x, q.y);
+  let sx = st.sx0, sy = st.sy0;
+  if (Math.abs(st.spanX) > 0.5) sx = (m.x - st.Ua) / st.spanX;
+  if (Math.abs(st.spanY) > 0.5) sy = (m.y - st.Va) / st.spanY;
+  // Locked (or Shift held): one factor drives both axes, so the object keeps
+  // its shape. The bigger of the two moves wins, and each axis keeps its own
+  // sign — dragging a handle past the anchor still flips the object.
+  const keep = x.lock !== (!!shift);          // Shift is a momentary override
+  if (keep) {
+    // Only the axes this handle actually drives get a vote: an edge handle
+    // leaves its other axis at 1x, and letting that count would out-vote the
+    // shrink the drag is asking for.
+    const fx = Math.abs(st.spanX) > 0.5 ? sx / (st.sx0 || 1) : null;
+    const fy = Math.abs(st.spanY) > 0.5 ? sy / (st.sy0 || 1) : null;
+    const f = Math.max(fx === null ? 0 : Math.abs(fx), fy === null ? 0 : Math.abs(fy)) || 1;
+    sx = Math.sign(fx === null ? 1 : (fx || 1)) * f * st.sx0;
+    sy = Math.sign(fy === null ? 1 : (fy || 1)) * f * st.sy0;
+  }
+  sx = _annotXformClampScale(x, sx, x.layer.width);
+  sy = _annotXformClampScale(x, sy, x.layer.height);
+  // Hold the anchor: the layer offset is whatever puts it back where it was.
+  x.sx = sx; x.sy = sy;
+  x.ox = x.cx + st.Ua / sx - st.h.pA.x;
+  x.oy = x.cy + st.Va / sy - st.h.pA.y;
+  _annotXformSyncBar();
+  _annotXformPreview();
+}
+// A scale factor has to keep the object visible, keep it under the canvas
+// ceiling, and never be zero — a zero would collapse the object with no way
+// back, because the offset maths divides by it.
+function _annotXformClampScale(x, s, sidePx) {
+  const sign = s < 0 ? -1 : 1;
+  let mag = Math.abs(s);
+  if (!isFinite(mag) || mag < ANNOT_SCALE_MIN) mag = ANNOT_SCALE_MIN;
+  const roomy = Math.max(ANNOT_SCALE_MIN, ANNOT_XFORM_MAX_PX / Math.max(1, sidePx));
+  mag = Math.min(mag, ANNOT_SCALE_MAX, roomy);
+  return sign * mag;
+}
+// Drag the middle of the box to reposition the object. The pivot travels with
+// it, so the object keeps turning about its own centre.
+function _annotXformMoveTo(dx, dy) {
+  const x = _annot && _annot.xform; if (!x) return;
+  x.cx += dx; x.cy += dy; x.ox += dx; x.oy += dy;
+  x.moved = true;
+  _annotXformPreview();
+}
+// The % boxes and the flip buttons scale about the pivot, which _after a
+// recentre_ is the middle of the box — so the object grows evenly both ways
+// instead of creeping off to one side.
+function annotXformSetScale(field, val) {
+  const x = _annot && _annot.xform; if (!x) return;
+  const side = field === 'sx' ? x.layer.width : x.layer.height;
+  const was = field === 'sx' ? _annotXformSx(x) : _annotXformSy(x);
+  const want = _annotXformClampScale(x, (parseFloat(val) || 0) / 100 * (was < 0 ? -1 : 1), side);
+  const f = want / (was || 1);
+  x[field] = want;
+  if (x.lock) {
+    const other = field === 'sx' ? 'sy' : 'sx';
+    const oside = field === 'sx' ? x.layer.height : x.layer.width;
+    x[other] = _annotXformClampScale(x, (field === 'sx' ? _annotXformSy(x) : _annotXformSx(x)) * f, oside);
+  }
+  _annotXformSyncBar();
+  _annotXformPreview();
+}
+function annotXformSetLock(on) {
+  const x = _annot && _annot.xform; if (!x) return;
+  x.lock = !!on;
+  _annotXformSyncBar();
+}
+function annotXformFlip(axis) {
+  const x = _annot && _annot.xform; if (!x) return;
+  if (axis === 'y') x.sy = -_annotXformSy(x); else x.sx = -_annotXformSx(x);
+  _annotXformSyncBar();
+  _annotXformPreview();
+}
+function annotXformScaleNudge(f) {
+  const x = _annot && _annot.xform; if (!x) return;
+  x.sx = _annotXformClampScale(x, _annotXformSx(x) * f, x.layer.width);
+  x.sy = _annotXformClampScale(x, _annotXformSy(x) * f, x.layer.height);
+  _annotXformSyncBar();
+  _annotXformPreview();
+}
+
 // The transformed object becomes the new selection, so it can be turned again,
 // nudged with Move, or filled — the mask comes straight from its alpha.
 function _annotXformSelFromLayer() {
@@ -6986,6 +7186,7 @@ function _annotXformSelFromLayer() {
 function _annotXformEnd() {
   if (!_annot) return;
   _annot.xform = null;
+  _annot.xfScale = null; _annot.xfMove = false;
   _annotXformSyncBar();
   _annotSelSyncBar();
 }
@@ -6998,12 +7199,20 @@ function annotXformApply(quiet) {
   const sel = x.scope === 'sel' ? _annotXformSelFromLayer() : null;
   const what = x.scope === 'sel' ? 'Object' : 'Picture';
   const bits = [];
+  const sx = _annotXformSx(x), sy = _annotXformSy(x);
+  const pct = v => Math.round(Math.abs(v) * 1000) / 10 + '%';
+  if (Math.abs(sx) !== 1 || Math.abs(sy) !== 1) bits.push('resized to ' + pct(sx) + ' × ' + pct(sy));
+  if (sx < 0 && sy < 0) bits.push('flipped both ways');
+  else if (sx < 0) bits.push('flipped ↔');
+  else if (sy < 0) bits.push('flipped ↕');
   if (x.angle) bits.push('turned ' + (Math.round(x.angle * 10) / 10) + '°');
   if (x.skewX) bits.push('slanted ' + (Math.round(x.skewX * 10) / 10) + '° ↔');
   if (x.skewY) bits.push('slanted ' + (Math.round(x.skewY * 10) / 10) + '° ↕');
+  if (x.moved && !bits.length) bits.push('moved');
+  else if (x.moved) bits.push('moved');
   _annotXformEnd();
   if (sel) { _annot.sel = sel; _annotSelSyncBar(); }
-  if (!quiet) showToast(what + ' ' + bits.join(', ') + ' ✓ (Undo puts it back)', 'success');
+  if (!quiet) showToast(what + ' ' + (bits.join(', ') || 'transformed') + ' ✓ (Undo puts it back)', 'success');
 }
 // Throw the session away and restore the snapshot taken when it started. The
 // selection that was lifted comes back too, so cancelling costs nothing.
@@ -7019,6 +7228,7 @@ function annotXformCancel(quiet) {
 function annotXformReset() {
   const x = _annot && _annot.xform; if (!x) return;
   x.angle = 0; x.skewX = 0; x.skewY = 0; x.strLine = null;
+  x.sx = 1; x.sy = 1;
   _annotXformSyncBar(); _annotXformPreview();
 }
 function annotXformSet(field, val) {
@@ -7071,6 +7281,15 @@ function _annotXformSyncBar() {
   set('annotXformSkewX', x.skewX); set('annotXformSkewY', x.skewY);
   const lbl = (id, v, unit) => { const el = document.getElementById(id); if (el) el.textContent = (Math.round(v * 10) / 10) + (unit || '°'); };
   lbl('annotXformSkewXVal', x.skewX); lbl('annotXformSkewYVal', x.skewY);
+  // Size is shown as a percentage, and in real pixels beside it, because "how
+  // big will this actually be" is the question a resize is asked to answer.
+  const sx = _annotXformSx(x), sy = _annotXformSy(x);
+  set('annotXformSxNum', Math.round(Math.abs(sx) * 1000) / 10);
+  set('annotXformSyNum', Math.round(Math.abs(sy) * 1000) / 10);
+  const lock = document.getElementById('annotXformLock');
+  if (lock) lock.checked = x.lock !== false;
+  const px = document.getElementById('annotXformSizePx');
+  if (px) px.textContent = Math.round(Math.abs(sx) * x.layer.width) + ' × ' + Math.round(Math.abs(sy) * x.layer.height) + ' px';
   const scope = document.getElementById('annotXformScope');
   if (scope) scope.textContent = x.scope === 'sel' ? 'the selected object' : 'the whole picture';
   const growWrap = document.getElementById('annotXformGrowWrap');
@@ -7203,11 +7422,11 @@ function _annotUnbindZoomListeners() {
   const st = document.getElementById('annotStage');
   if (st) st.classList.remove('canpan', 'panning');
 }
-const ANNOT_CURSORS = { text: 'text', fill: 'cell', wand: 'cell', move: 'move', rotate: 'grab', skew: 'ew-resize' };
+const ANNOT_CURSORS = { text: 'text', fill: 'cell', wand: 'cell', move: 'move', rotate: 'grab', skew: 'ew-resize', scale: 'move' };
 function _annotSetTool(t) {
-  // Leaving Rotate/Skew settles the open transform: a real turn is kept, an
-  // untouched one is dropped. Nothing is ever left half-applied.
-  if (_annot && _annot.xform && t !== 'rotate' && t !== 'skew') {
+  // Leaving Rotate/Skew/Resize settles the open transform: a real change is
+  // kept, an untouched one is dropped. Nothing is ever left half-applied.
+  if (_annot && _annot.xform && t !== 'rotate' && t !== 'skew' && t !== 'scale') {
     if (_annotXformIsIdentity(_annot.xform)) annotXformCancel(true); else annotXformApply();
   }
   if (_annot) _annot.tool = t;
@@ -7217,13 +7436,14 @@ function _annotSetTool(t) {
   // With Move active a whole text label is draggable, not just its little handle.
   document.querySelectorAll('#annotStage .annot-textbox').forEach(b => b.classList.toggle('movable', t === 'move'));
   _annotUpdateCloneMarker();   // show the clone-source pin only while the Clone tool is active
-  // Picking Rotate or Skew opens the transform straight away, so the sliders are
-  // there to use — you shouldn't have to drag once to discover the panel.
-  if (_annot && (t === 'rotate' || t === 'skew') && !_annot.xform) _annotXformBegin();
+  // Picking Rotate, Skew or Resize opens the transform straight away, so the
+  // handles and sliders are there to use — you shouldn't have to drag once to
+  // discover the panel.
+  if (_annot && (t === 'rotate' || t === 'skew' || t === 'scale') && !_annot.xform) _annotXformBegin();
   _annotXformSyncBar();
 }
 // Single-key tool switching, Photoshop's letters where they exist.
-const ANNOT_KEYS = { e: 'erase', b: 'paint', g: 'fill', s: 'clone', y: 'history', m: 'select', l: 'lasso', w: 'wand', v: 'move', u: 'line', t: 'text', r: 'rotate', k: 'skew' };
+const ANNOT_KEYS = { e: 'erase', b: 'paint', g: 'fill', s: 'clone', y: 'history', m: 'select', l: 'lasso', w: 'wand', v: 'move', u: 'line', t: 'text', r: 'rotate', k: 'skew', f: 'scale' };
 // A history step remembers the canvas SIZE as well as its pixels: rotating the
 // whole picture grows the canvas, and undoing that has to shrink it back.
 function _annotPushHistory() {
@@ -7408,9 +7628,33 @@ function _annotAntsLoop() {
     sctx.strokeStyle = '#ffffff'; sctx.lineDashOffset = -phase / s; sctx.stroke(path);
     sctx.strokeStyle = '#111111'; sctx.lineDashOffset = -(phase + 6) / s; sctx.stroke(path);
   }
-  // The straighten guide rides the same overlay: the line you are tracing along
-  // the crooked edge, drawn on top of the picture rather than into it.
+  // The transform box rides the same overlay: the object's real outline while
+  // it is being turned, slanted or resized, with grab handles on it while the
+  // Resize tool is the one in hand.
   const xf = _annot.xform;
+  if (xf && xf.layer) {
+    const s = _annotDisplayScale() || 1;
+    const c = _annotXformCorners(xf);
+    const off = { x: xf.offX || 0, y: xf.offY || 0 };
+    sctx.setLineDash([]);
+    sctx.beginPath();
+    c.forEach((p, i) => { const X = p.x + off.x, Y = p.y + off.y; i ? sctx.lineTo(X, Y) : sctx.moveTo(X, Y); });
+    sctx.closePath();
+    sctx.lineWidth = Math.max(1.4 / s, 0.5);
+    sctx.strokeStyle = 'rgba(255,255,255,0.95)'; sctx.stroke();
+    sctx.lineWidth = Math.max(0.7 / s, 0.25);
+    sctx.strokeStyle = '#b45309'; sctx.stroke();
+    if (_annot.tool === 'scale') {
+      const r = 5 / s;
+      _annotXformHandles(xf).forEach(h => {
+        const X = h.pt.x + off.x, Y = h.pt.y + off.y;
+        sctx.beginPath(); sctx.rect(X - r, Y - r, r * 2, r * 2);
+        sctx.fillStyle = '#ffffff'; sctx.fill();
+        sctx.lineWidth = Math.max(1 / s, 0.4);
+        sctx.strokeStyle = '#b45309'; sctx.stroke();
+      });
+    }
+  }
   if (xf && xf.strLine) {
     const s = _annotDisplayScale() || 1;
     sctx.setLineDash([]);
@@ -7594,6 +7838,16 @@ function _annotDown(e) {
       ' — fill it, move it, or widen the ± slider', 'info');
     return;
   }
+  if (_annot.tool === 'scale') {
+    if (!_annot.xform) _annotXformBegin();
+    const x = _annot.xform; if (!x) return;
+    const h = _annotXformHandleAt(p);
+    if (h) { _annotXformScaleStart(h); _annot.start = p; _annot.drawing = true; return; }
+    // Not on a handle: dragging the middle of the box slides the object.
+    if (_annotXformInside(p)) { _annot.start = p; _annot.xfMove = true; _annot.drawing = true; return; }
+    showToast('Drag a corner or edge handle to resize — or inside the box to move it', 'info');
+    return;
+  }
   if (_annot.tool === 'rotate' || _annot.tool === 'skew') {
     if (!_annot.xform) _annotXformBegin();
     const x = _annot.xform; if (!x) return;
@@ -7685,6 +7939,16 @@ function _annotMove(e) {
   if (!_annot || !_annot.drawing) return;
   e.preventDefault();
   const p = _annotPt(e), ctx = _annot.ctx;
+  if (_annot.tool === 'scale') {
+    if (_annot.xfScale) { _annotXformScaleDrag(p, e.shiftKey); return; }
+    if (_annot.xfMove && _annot.start) {
+      let dx = p.x - _annot.start.x, dy = p.y - _annot.start.y;
+      if (e.shiftKey) { if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0; }   // Shift = straight
+      _annotXformMoveTo(dx, dy);
+      _annot.start = p;
+    }
+    return;
+  }
   if (_annot.tool === 'rotate' || _annot.tool === 'skew') {
     const x = _annot.xform; if (!x) return;
     if (x.straighten) { if (x.strLine) x.strLine.to = p; return; }   // the guide is drawn by the ants loop
@@ -7770,6 +8034,15 @@ function _annotMove(e) {
 }
 function _annotUp() {
   if (!_annot) return;
+  if (_annot.xform && _annot.tool === 'scale') {
+    // The box has moved or changed size, so the pivot goes back to its middle —
+    // otherwise a turn afterwards swings the object round a point off to one side.
+    if (_annot.xfScale || _annot.xfMove) _annotXformRecentre(_annot.xform);
+    _annot.xfScale = null; _annot.xfMove = false;
+    _annot.drawing = false; _annot.start = null;
+    _annotXformSyncBar();
+    return;
+  }
   if (_annot.xform && (_annot.tool === 'rotate' || _annot.tool === 'skew')) {
     if (_annot.xform.straighten && _annot.xform.strLine) _annotXformStraightenFinish();
     _annot.drawing = false; _annot.start = null; _annot.xfStart = null;
@@ -7938,7 +8211,17 @@ document.addEventListener('pointerdown', function (e) {
 document.addEventListener('pointermove', function (e) {
   if (!_annot) return;
   if (_annot.panning) { _annotPanMove(e); return; }
-  if (_annot.drawing) _annotMove(e);
+  if (_annot.drawing) { _annotMove(e); return; }
+  // Hovering the transform box: the pointer says what each handle will do, so
+  // a resize box behaves like one everywhere else does.
+  if (_annot.tool === 'scale' && _annot.xform) {
+    const c = document.getElementById('annotCanvas');
+    if (c && e.target === c) {
+      const p = _annotPt(e);
+      const h = _annotXformHandleAt(p);
+      c.style.cursor = h ? h.cur : (_annotXformInside(p) ? 'move' : 'default');
+    }
+  }
 });
 document.addEventListener('pointerup', function () { _annotPanEnd(); _annotUp(); });
 
@@ -44196,6 +44479,10 @@ window.annotSelPatchFill = annotSelPatchFill;
 window.annotSelAiFill = annotSelAiFill;
 window.annotSelClear = annotSelClear;
 window.annotXformSet = annotXformSet;
+window.annotXformSetScale = annotXformSetScale;
+window.annotXformSetLock = annotXformSetLock;
+window.annotXformFlip = annotXformFlip;
+window.annotXformScaleNudge = annotXformScaleNudge;
 window.annotXformNudge = annotXformNudge;
 window.annotXformReset = annotXformReset;
 window.annotXformApply = annotXformApply;
