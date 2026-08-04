@@ -1684,7 +1684,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.241.0';
+const APP_VERSION = 'v1.241.1';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -13259,7 +13259,9 @@ function _epQuestionPrompt(i, total) {
     `  {"type":"plainanswer","text":"..."}\n` +
     `  {"type":"explanation","text":"teacher explanation of the model answer"}\n` +
     `Rules:\n` +
-    `- "number": the question number EXACTLY as printed on the paper — "7", "12", "3a", "15(b)". This is how the paper's answer key will be matched to this question, so copy it precisely. If no number is printed, use "".\n` +
+    `- "number": the question number EXACTLY as printed on the paper, INCLUDING its part letter — "7", "12", "3a", "15(b)". It is used ONLY to find this question's line on the marking scheme and is never shown to anyone. If no number is printed, use "".\n` +
+    `- NEVER write the question number inside a block. A text block starts with the question's own wording — "Explain why the ice melted", not "44. Explain why the ice melted" and not "44) Explain…".\n` +
+    `- SUB-PARTS: if the question is a lettered part, keep ONLY that letter at the very START of the text block that asks it, written exactly as "(a) " — it is lifted out into a proper part marker. So "44(a) Explain why…" becomes the text "(a) Explain why…", with the 44 dropped. If ONE question carries several lettered parts, start EACH part's own text block with its own "(a) " / "(b) " marker, one marker per block and never two in the same block.\n` +
     `- ONE entry per question. Put an "image" block exactly where each diagram/picture/graph/figure/table belongs, interleaved with the text blocks.\n` +
     _rectangleRules() +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n").\n` +
@@ -13267,7 +13269,7 @@ function _epQuestionPrompt(i, total) {
     `- open question: include ONE answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing your best model answer, and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only.\n` +
     `- The answer you write is a PLACEHOLDER: the paper's official marking scheme is read separately and will replace it. Write it anyway — some questions never get an official answer.\n` +
     `- EVERY question must FINISH with ONE "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct.\n` +
-    `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
+    `- "title": a short label saying what the question is ABOUT (e.g. "Melting ice in warm water"). Do NOT put the question number in it.\n` +
     `- "topicConfidence": "high", "medium" or "low".\n` +
     _aiTagsPromptLine() +
     `- topic from EXACTLY: ${topics.join('; ')}.\n` +
@@ -13290,6 +13292,102 @@ function _epKeyPrompt(i, total) {
     `- "explanation": any working, marking note, accepted-alternative or reason printed beside the answer. Empty string if there is none.\n` +
     `- Copy the paper's wording. Do NOT write an answer of your own for a number the key does not show — leave that number out entirely.\n` +
     `- Plain text only, no markdown.`;
+}
+
+// ---- Dropping the question number, keeping the part ----------------------
+// A paper's question number never becomes part of the question: 44(a) is
+// stored as a question with NO 44 anywhere and an official part (a). The
+// number survives on `_epNum` alone, purely to find this question's line on
+// the marking scheme.
+// The (?!\d) is load-bearing: without it "2.5 kg of ice was heated" opens with
+// what looks exactly like question 2, and the question would start "5 kg".
+const EP_LEAD_NUM_RE = /^\(?\s*\d{1,3}\s*[).]\s*(?!\d)/;                 // "44." "44)" "(44)"
+const EP_NUM_THEN_PART_RE = /^\s*\d{1,3}\s+(?=\(?\s*[a-hA-H]\s*[).])/;   // "44 (a)"
+
+// Remove a leading number from html WITHOUT cutting through the markup — the
+// number is often wrapped ("<strong>44.</strong>"), so a plain-text offset
+// applied to the html would slice a tag in half. Same walk qPartDetect uses.
+function _epStripLeadNumber(html) {
+  const chars = qPartWalkPlain(html);
+  const plain = chars.map(c => c.ch).join('');
+  const m = plain.match(EP_LEAD_NUM_RE) || plain.match(EP_NUM_THEN_PART_RE);
+  if (!m || !m[0].length) return null;
+  const kill = new Set();
+  for (let k = 0; k < m[0].length && k < chars.length; k++) {
+    const c = chars[k];
+    if (c && !c.tag) for (let p = c.a; p < c.b; p++) kill.add(p);   // never delete a <br>
+  }
+  const s = String(html == null ? '' : html);
+  let out = '';
+  for (let p = 0; p < s.length; p++) if (!kill.has(p)) out += s[p];
+  return out;
+}
+
+// A bare number needs a separator after it before it counts as numbering —
+// "50 ml of water was added" must survive intact. A "Q" prefix is proof enough
+// on its own.
+function _epStripTitleNumber(t) {
+  let s = String(t == null ? '' : t).trim();
+  // A title that is ONLY the number ("44", "Q44a", "(12)") is nothing but the
+  // numbering — there is no label left to keep.
+  if (/^(?:q(?:uestion)?\s*)?\(?\s*\d{1,3}\s*\)?\s*\(?\s*[a-h]?\s*\)?\s*$/i.test(s)) return '';
+  s = s.replace(/^q(?:uestion)?\s*\(?\s*\d{1,3}\s*\)?\s*(?:\(?\s*[a-h]\s*\)?)?\s*[-–—:.,)]?\s*/i, '');
+  s = s.replace(/^\(?\s*\d{1,3}\s*\)?\s*(?:\(?\s*[a-h]\s*\)?)?\s*[-–—:.)]\s*/, '');
+  return s.trim();
+}
+
+// Dropping the numbering can leave nothing behind ("Q44a" was the whole title),
+// so fall back to the opening words of the question rather than to a row of
+// identical "Untitled question" entries nobody can tell apart.
+function _epTitleFromText(q) {
+  const t = (q.blocks || []).find(b => b && b.type === 'text' && b.content);
+  if (!t) return '';
+  const plain = qPartPlain(t.content).replace(/\s+/g, ' ').trim();
+  if (!plain) return '';
+  const words = plain.split(' ').slice(0, 8).join(' ');
+  return words.length < plain.length ? words + '…' : words;
+}
+
+// "44a" / "44(b)" / "3A" → the part letter. A plain "44" has no part.
+function _epPartFromNumber(num) {
+  const m = String(num == null ? '' : num).trim().match(/(?:^|\d)\s*\(?\s*([a-hA-H])\s*\)?\s*$/);
+  return m ? qPartNormalize(m[1]) : '';
+}
+
+// Parts are lifted with qPartDetect — the same detector the Question Doctor
+// uses — so a marker wrapped in <strong> is removed from the markup rather
+// than sliced out of the middle of a tag. Only TEXT blocks may open a part
+// (QPART_OPENER_TYPES): an answer box inherits from the text above it.
+function _epStripNumbering(q) {
+  if (!q || !Array.isArray(q.blocks)) return;
+  let firstText = true;
+  q.blocks.forEach(b => {
+    if (!b || b.type !== 'text') return;
+    if (firstText) {
+      const stripped = _epStripLeadNumber(b.content);
+      if (stripped !== null) b.content = stripped;
+      firstText = false;
+    }
+    // One marker per block only. Two means a whole options list, or several
+    // parts written into one box — neither is something to convert by
+    // stripping the first one (see qPartCountMarkers).
+    if (qPartCountMarkers(b.content) !== 1) return;
+    const hit = qPartDetect(b.content);
+    if (!hit) return;
+    b.part = hit.letter;
+    b.content = hit.html;
+  });
+  // No marker in the wording, but the paper numbered it 44(a): that letter is
+  // still the part, so take it from the number rather than lose it.
+  if (!qHasParts(q.blocks)) {
+    const p = _epPartFromNumber(q._epNum);
+    if (p) {
+      const t = q.blocks.find(b => b && b.type === 'text');
+      if (t) t.part = p;
+    }
+  }
+  // Last, so the fallback reads the wording with the numbering already gone.
+  q.title = _epStripTitleNumber(q.title) || _epTitleFromText(q) || 'Untitled question';
 }
 
 // ---- Reading the question screenshots ------------------------------------
@@ -13325,6 +13423,9 @@ async function epBuildQuestions() {
         q._epNum = String((qd && qd.number) || '').trim();
         q._epShot = s.id;
         q._epAns = '';
+        // 44(a) becomes a question with no 44 and an official part (a). Runs
+        // BEFORE the crop so the wording is settled by the time it is shown.
+        _epStripNumbering(q);
         if (_epPaperName) q.source = _epPaperName;
         const imgBlocks = q.blocks.filter(b => b.type === 'image');
         if (imgBlocks.length) {
@@ -13696,6 +13797,8 @@ function _epMatchCardHtml() {
 function _epMatchRowHtml(q, opts) {
   const ok = !!q._epAns;
   const kinds = [];
+  const parts = Array.from(new Set((q.blocks || []).map(b => qBlockOpensPart(b)).filter(Boolean)));
+  if (parts.length) kinds.push('part ' + parts.map(qPartLabel).join(' '));
   if ((q.blocks || []).some(b => b.type === 'mcq')) kinds.push('MCQ');
   if ((q.blocks || []).some(b => b.type === 'image')) kinds.push('picture');
   const sel = opts.length
@@ -13705,7 +13808,7 @@ function _epMatchRowHtml(q, opts) {
        </select>`
     : '<span class="ep-dim">key not read yet</span>';
   return `<div class="ep-row${ok ? '' : ' ep-row-miss'}">
-    <span class="ep-num">${escapeHtml(q._epNum || '?')}</span>
+    <span class="ep-num" title="The paper's number, used only to find this question on the marking scheme — it is not stored on the question itself">${escapeHtml(q._epNum || '?')}</span>
     <div class="ep-row-main">
       <div class="ep-row-title">${escapeHtml(q.title || 'Untitled question')}</div>
       <div class="ep-row-meta">${escapeHtml([q.topic, q.category].filter(Boolean).join(' · '))}${kinds.length ? ' · ' + kinds.join(' · ') : ''}${q._dupOf ? ' · <span class="ep-dup">possible duplicate</span>' : ''}</div>
