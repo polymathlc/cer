@@ -5661,6 +5661,14 @@ body.practising-as .page-body { padding-bottom: 64px; }
 .ep-row-meta { font-size: 0.73rem; color: var(--text-muted); }
 .ep-dup { color: #7a5410; font-weight: 600; }
 .ep-sel { flex: 0 0 auto; padding: 7px 12px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--surface); font-family: inherit; font-size: 0.78rem; color: var(--text); }
+/* One picker per part: a question asking (a), (b) and (c) is matched to three
+   separate lines of the marking scheme, so each part gets its own row. */
+.ep-parts { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 10px 16px; padding: 12px 0 2px; margin-top: 10px; border-top: 1px dashed var(--border); }
+.ep-part { display: flex; align-items: center; gap: 8px; }
+.ep-part-tag { flex: 0 0 auto; min-width: 34px; padding: 4px 9px; border-radius: 8px; background: var(--primary-light); color: var(--primary-dark); font-size: 0.75rem; font-weight: 700; text-align: center; }
+.ep-part-miss .ep-part-tag { background: var(--accent-light); color: #8a6410; }
+.ep-row-part { border-color: #cbd5c0; background: var(--surface-alt); }
+.ep-pill-warn { background: var(--accent-light); color: #8a6410; margin-left: 8px; }
 .ep-send { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .ep-send-note { margin: 14px 0 0; text-align: right; }
 @media (max-width: 640px) { .ep-card { padding: 20px 16px; } .ep-shots { grid-template-columns: 1fr; } .ep-status { display: none; } }
