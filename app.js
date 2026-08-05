@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.247.0';
+const APP_VERSION = 'v1.248.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -3010,6 +3010,7 @@ function navigateTo(page) {
     // by a window that is no longer open. Runs once per sign-in.
     if (!_epDraftReady) _epDraftScan().catch(err => console.warn('exam paper drafts:', err));
   }
+  if (page === 'markpaper') { _mpBindPaste(); mpRender(); }
   if (page === 'quickpractice') { populateQpControls(); updateQpProgress(); }
   if (page === 'snapmark') snapInit();
   if (page === 'topicalpractice') tpRenderTopics();
@@ -14953,6 +14954,966 @@ function _epMatchRowHtml(q, opts) {
     ${sel}
     ${partRow}
   </div>`;
+}
+
+// =====================================================================
+// MARK PAPER — scan a student's FINISHED script and mark the whole thing
+//
+// The exam paper builder (_ep*) reads a BLANK paper into the question bank.
+// This reads the same paper back AFTER a student has written on it: every
+// page is scanned, the AI finds each question, transcribes what the student
+// wrote by hand, marks it, and the page returns the four things a teacher
+// hands back — the answer key, the student's own answer, feedback on what
+// went wrong, and a report summary over the whole script.
+//
+// It is deliberately NOT Snap & Mark. Snap & Mark is the student's tool: one
+// photo, one question, matched against a question that must already be IN the
+// bank, and it goes quiet the moment a question is not there. A marked script
+// is the opposite case — thirty questions the bank has never seen, spread
+// over ten pages, and every one of them has to come back with a mark. So the
+// questions here are read off the paper itself and the answer key is taken
+// from whichever source is available, best first:
+//     🔑 the official marking scheme (scanned separately, matched by number)
+//     📚 a question in the bank that is plainly the same question
+//     🤖 the model's own answer, when there is neither
+// Every row says which one it used, because a teacher checking a mark needs
+// to know whether the key came from the paper or from the AI.
+//
+// NOTHING IS WRITTEN ANYWHERE. The script, the marks and the report live in
+// memory and leave through Print / Copy — a marked script is a child's work,
+// and there is no reason for it to sit in the question bank or in Firestore.
+// =====================================================================
+const MP_MAX_PAGES = 40;                  // pages of the student's script held at once
+const MP_MAX_KEYS  = 20;                  // marking-scheme pages
+const MP_MAX_BYTES = 18 * 1024 * 1024;
+// Pages are read as a RUN, several at a time, for the same reason the exam
+// paper builder reads screenshots as a run: a question very often starts at
+// the foot of one page and finishes at the top of the next, and only a model
+// that can see both at once knows that is ONE question. A question straddling
+// a batch boundary is carried over by `continuation`, exactly as it is there.
+const MP_READ_BATCH = 3;
+// Marking is a TEXT job — the answers were transcribed while the images were
+// in front of the model — so it batches far more densely than reading does.
+const MP_MARK_BATCH = 6;
+
+let _mpPages = [];        // the student's script: [{ id, mimeType, data, name, status, err, n }]
+let _mpKeyShots = [];     // the official marking scheme, if there is one
+let _mpItems = [];        // one entry per question/part found — see _mpNewItem
+let _mpKeyAnswers = [];   // [{ number, answer, note, marks }] read off the scheme
+let _mpReport = null;     // { summary, strengths[], weaknesses[], next[] }
+let _mpMeta = { student: '', paper: '' };
+let _mpBusy = false;
+let _mpCancel = false;
+let _mpShowWrongOnly = false;
+let _mpPasteTarget = 'script';
+let _mpPasteBound = false;
+
+function _mpId() { return 'mp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function _mpDataUrl(s) { return 'data:' + s.mimeType + ';base64,' + s.data; }
+function _mpList(target) { return target === 'key' ? _mpKeyShots : _mpPages; }
+function _mpNote(msg) { const el = document.getElementById('mpStatus'); if (el) el.textContent = msg || ''; }
+function _mpAiReady() {
+  if (!window.__aiReady || !window.__aiReady()) { showToast("AI isn't ready yet — try again in a moment", 'error'); return false; }
+  return true;
+}
+function _mpStr(v, cap) { const s = String(v == null ? '' : v).trim(); return cap ? s.slice(0, cap) : s; }
+// Multi-line plain text into safe HTML. The transcription of a handwritten
+// answer keeps its line breaks — that is often how the student laid out the
+// three parts of a CER answer.
+function _mpLines(s) { return escapeHtml(String(s == null ? '' : s)).replace(/\r?\n/g, '<br>'); }
+
+// ---- Adding pages --------------------------------------------------------
+// Images and PDFs both, because a scanner hands back a PDF and a phone hands
+// back photos, and a teacher marking a stack of scripts has whichever they
+// were given. Every PDF page becomes one page entry.
+async function _mpAddFiles(files, target) {
+  const list = _mpList(target);
+  const cap = target === 'key' ? MP_MAX_KEYS : MP_MAX_PAGES;
+  let added = 0, skipped = 0, overflow = false;
+  const push = p => {
+    if (list.length >= cap) { overflow = true; return false; }
+    list.push(Object.assign({ id: _mpId(), status: 'new', err: '', n: 0 }, p));
+    added++;
+    return true;
+  };
+  for (const f of Array.from(files || [])) {
+    if (!f) { skipped++; continue; }
+    const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '');
+    try {
+      if (isPdf) {
+        if (f.size > 40 * 1024 * 1024) { showToast('"' + (f.name || 'PDF') + '" is too large (max 40 MB)', 'error'); skipped++; continue; }
+        _mpNote('Reading ' + (f.name || 'your PDF') + '…');
+        const pages = await _pdfToPageImages(f, (p, t) => _mpNote('Reading ' + (f.name || 'PDF') + ' — page ' + p + ' of ' + t + '…'));
+        for (let i = 0; i < pages.length; i++) {
+          if (!push({ mimeType: pages[i].mimeType, data: pages[i].data, name: (f.name || 'PDF') + ' — p' + (i + 1) })) break;
+        }
+        _mpNote('');
+      } else if (f.type && f.type.startsWith('image/')) {
+        if (f.size > MP_MAX_BYTES) { skipped++; continue; }
+        push({ mimeType: f.type, data: await _fileToBase64(f), name: f.name || 'page' });
+      } else { skipped++; }
+    } catch (err) {
+      console.warn('mark paper: could not read file', err);
+      _mpNote('');
+      skipped++;
+    }
+    if (overflow) break;
+  }
+  // The marks on screen were worked out from the pages that were there when
+  // they were read — changing the pages makes them stale, and a stale mark is
+  // worse than no mark, so they go.
+  if (added && target !== 'key') _mpClearMarks();
+  mpRender();
+  if (overflow) showToast('Keeping the first ' + cap + ' page' + (cap === 1 ? '' : 's') + ' — mark these first, then the rest', 'info');
+  else if (added) showToast(added + ' page' + (added === 1 ? '' : 's') + ' added' + (skipped ? ' · ' + skipped + ' skipped' : ''), 'success');
+  else if (skipped) showToast('Nothing added — images or PDFs only, under 18 MB each', 'error');
+}
+
+function _mpClearMarks() { _mpItems = []; _mpReport = null; }
+
+function mpPick(target) {
+  const input = document.getElementById(target === 'key' ? 'mpKeyFile' : 'mpPageFile');
+  if (input) { input.value = ''; input.click(); }
+}
+function mpFiles(input, target) { if (input && input.files && input.files.length) _mpAddFiles(input.files, target); }
+function mpDragOver(e, target) { e.preventDefault(); _mpPasteTarget = target; mpRender(); }
+function mpDrop(e, target) {
+  e.preventDefault();
+  _mpPasteTarget = target;
+  const dt = e.dataTransfer;
+  if (dt && dt.files && dt.files.length) _mpAddFiles(dt.files, target);
+}
+function mpFocusZone(target) { _mpPasteTarget = target; mpRender(); }
+function mpRemove(target, id) {
+  const list = _mpList(target);
+  const i = list.findIndex(s => s.id === id);
+  if (i >= 0) list.splice(i, 1);
+  if (target === 'key') _mpKeyAnswers = _mpKeyShots.reduce((a, s) => a.concat(s.answers || []), []);
+  else _mpClearMarks();
+  mpRender();
+}
+function mpClear(target) {
+  const list = _mpList(target);
+  if (!list.length) return;
+  showConfirm('Remove all pages',
+    'Clear all ' + list.length + ' ' + (target === 'key' ? 'marking-scheme' : 'script') + ' page' + (list.length === 1 ? '' : 's') + '?'
+      + (target === 'key' ? '' : ' The marks and the report go with them.'),
+    () => {
+      if (target === 'key') { _mpKeyShots = []; _mpKeyAnswers = []; }
+      else { _mpPages = []; _mpClearMarks(); }
+      mpRender();
+    });
+}
+function mpSetMeta(field, v) {
+  if (field === 'student') _mpMeta.student = _mpStr(v, 80);
+  else _mpMeta.paper = _mpStr(v, 120);
+}
+function mpCancel() { if (_mpBusy) { _mpCancel = true; _mpNote('Stopping…'); } }
+function mpStartOver() {
+  showConfirm('Start a new script',
+    'Clear this script, its marks and the report, and start again? Nothing here has been saved anywhere.',
+    () => {
+      _mpPages = []; _mpKeyShots = []; _mpKeyAnswers = [];
+      _mpClearMarks();
+      _mpMeta = { student: '', paper: '' };
+      _mpShowWrongOnly = false;
+      mpRender();
+    });
+}
+
+// A Ctrl-V anywhere on the page lands in whichever zone was last touched, so a
+// teacher can screenshot → paste → screenshot → paste without the mouse.
+function _mpBindPaste() {
+  if (_mpPasteBound) return;
+  _mpPasteBound = true;
+  document.addEventListener('paste', e => {
+    const page = document.getElementById('page-markpaper');
+    if (!page || !page.classList.contains('active')) return;
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    const files = [];
+    for (const it of items) {
+      if (it && it.kind === 'file' && (String(it.type || '').startsWith('image/') || it.type === 'application/pdf')) {
+        const f = it.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (!files.length) return;
+    e.preventDefault();
+    _mpAddFiles(files, _mpPasteTarget);
+  });
+}
+
+// ---- Prompts -------------------------------------------------------------
+function _mpWho() {
+  return (_mpMeta.student ? ` The script belongs to ${_mpMeta.student}.` : '')
+    + (_mpMeta.paper ? ` The paper is "${_mpMeta.paper}".` : '');
+}
+
+function _mpScriptPrompt(n, from, total, carry) {
+  return `The attached ${n === 1 ? 'image is page' : `${n} images are pages`} ${from}${n > 1 ? `–${from + n - 1}` : ''} of ${total} of a Singapore primary-school science paper that a student HAS ALREADY WRITTEN ON, in order.${_mpWho()}\n` +
+    SCAN_READING_NOTE +
+    `Find EVERY question printed on these pages and, for each one, transcribe what THE STUDENT wrote by hand.\n` +
+    (carry ? `The previous page ended part-way through this question: "${carry}". If these pages continue it, the FIRST entry you return must have "continuation": true and hold only the rest of it.\n` : '') +
+    `Return ONLY JSON: {"questions":[{"number":"12","page":1,"type":"open","question":"","options":[],"marks":2,"student":"","blank":false,"topic":"","continuation":false}]}\n` +
+    `Rules:\n` +
+    `- ONE entry per question, and ONE ENTRY PER LETTERED PART: a question printed as 8(a) and 8(b) is TWO entries, numbered "8(a)" and "8(b)", because they are marked separately. A part split into roman sub-parts keeps both levels — "8(b)(i)".\n` +
+    `- "number": exactly as printed on the paper — "1", "12", "8(a)". This is what links the question to the marking scheme, so copy it precisely. If a question genuinely carries no number, use "" and it will be numbered by position.\n` +
+    `- "page": which of the attached images this question is printed on, 1 for the first attached image.\n` +
+    `- "type": "mcq" for a multiple-choice question, "open" for anything the student writes an answer to.\n` +
+    `- "question": the printed wording of the question, as plain text. Do NOT include the number itself. If the question depends on a diagram, graph or table, add a short factual description of it in brackets at the end, e.g. "(diagram: a beaker of water on a lit Bunsen burner, thermometer reading 40 °C)".\n` +
+    `- "options": for a multiple-choice question ONLY, every printed option as [{"label":"1","text":"…"}] using the labels the paper prints (1-4 or A-D). Empty array for an open question.\n` +
+    `- "marks": the marks the paper allows for this question, from the [2] or (2 marks) printed beside it. Use null when the paper does not say.\n` +
+    `- "student": THE STUDENT'S OWN HANDWRITTEN ANSWER, transcribed word for word — including their spelling and grammar mistakes, which are part of what is being marked. Keep their line breaks. For a multiple-choice question put ONLY the option they picked ("3" or "C") as they marked it — a circled option, a ticked box, a letter or a number written in the answer space. If they crossed something out and wrote again, transcribe the FINAL answer. If they drew or annotated instead of writing, describe what they drew in one sentence. If a word is genuinely illegible write [illegible] rather than guessing at it.\n` +
+    `- "blank": true when the student left the answer space empty. "student" is then "".\n` +
+    `- "topic": the science topic in two or three words ("heat transfer", "plant reproduction", "forces"), your own judgement.\n` +
+    `- Do NOT mark anything, do NOT write the correct answer, and do NOT correct the student's spelling or wording. Reading is all that is being asked for here.\n` +
+    `- Ignore anything a teacher has already written on the script — ticks, crosses, red-pen marks and totals are not the student's answer.\n` +
+    `- Plain text only, no markdown.`;
+}
+
+function _mpKeyPrompt(i, total) {
+  return `The attached image is page ${i} of ${total} of the official ANSWER KEY / marking scheme for a Singapore primary-school science paper${_mpMeta.paper ? ` ("${_mpMeta.paper}")` : ''}.\n` +
+    SCAN_READING_NOTE +
+    `Read EVERY answer printed on it and return ONLY JSON: {"answers":[{"number":"1","answer":"","marks":2,"note":""}]}\n` +
+    `Rules:\n` +
+    `- ONE entry per question number on the key, in the order they appear. Do NOT skip a number because its answer is short, and do NOT merge two numbers into one entry.\n` +
+    `- "number": exactly as printed — "1", "12", "8(a)". This is what links the answer to its question, so copy it precisely.\n` +
+    `- PARTS: a question with lettered parts gets ONE entry PER PART, and every one of those entries REPEATS the question number — "8(a)", "8(b)" — even when the key prints the 8 only once with the parts listed beneath it. Never number a part "(a)" on its own.\n` +
+    `- "answer": the answer exactly as the key gives it. For a multiple-choice answer that is just the option — "3" or "C".\n` +
+    `- "marks": the marks the key allows for that question, or null if it does not say.\n` +
+    `- "note": any marking note, accepted alternative, or "accept also…" printed beside the answer. Empty string if there is none.\n` +
+    `- Copy the key's wording. Do NOT write an answer of your own for a number the key does not show — leave that number out entirely.\n` +
+    `- Plain text only, no markdown.`;
+}
+
+function _mpMarkPrompt(batch) {
+  const list = batch.map((it, i) => {
+    const bits = [`${i}. [number ${it.number || '?'}] type=${it.type} marks=${it.marks}`];
+    bits.push(`   question: ${it.question}`);
+    if (it.type === 'mcq' && it.options.length) bits.push(`   options: ${it.options.map(o => `${o.label}) ${o.text}`).join(' | ')}`);
+    if (it.key) bits.push(`   OFFICIAL ANSWER (${it.keySrc === 'scheme' ? "from the paper's own marking scheme" : 'from the teacher’s question bank'}): ${it.key}${it.keyNote ? ` [marking note: ${it.keyNote}]` : ''}`);
+    bits.push(`   student wrote: ${it.blank ? '(left blank)' : it.student || '(nothing legible)'}`);
+    return bits.join('\n');
+  }).join('\n');
+  return `You are an experienced Singapore primary-school science teacher marking a student's script.${_mpWho()}\n` +
+    `${_markingPreamble('', '')}\n` +
+    `Mark each question below and return ONLY JSON: {"items":[{"i":0,"verdict":"correct","awarded":2,"answer":"","feedback":"","misconception":"","topic":""}]}\n` +
+    `Rules:\n` +
+    `- "i" is the item number exactly as given below. Return one entry for EVERY item, in order.\n` +
+    `- "answer": the ANSWER KEY — the full correct answer a student should have given, written out properly. When an OFFICIAL ANSWER is supplied above, use it: repeat it, and add the extra wording a full-mark answer needs only if the key is terse. When none is supplied, write the correct answer yourself. For a multiple-choice question state the correct option AND what it says, e.g. "3 — the water gained heat from the surroundings".\n` +
+    `- "verdict": "correct", "partial", "incorrect", or "blank" when the student wrote nothing.\n` +
+    `- Judge an open answer BY MEANING against the answer key. Ignore spelling, grammar and handwriting; ignore wording that differs but says the same science. A wrong scientific idea, a missing required keyword or a missing link in the reasoning is what costs marks. For a multiple-choice question it is correct ONLY if the option matches.\n` +
+    `- "awarded": the marks earned, from 0 to the marks available for that item. Half marks are allowed where the paper allows them. A "correct" verdict earns full marks and a "blank" earns 0.\n` +
+    `- "feedback": addressed to "you", 1-2 sentences, ONLY for a verdict that is not "correct" — say what is actually wrong or missing IN WHAT THEY WROTE (quote their own words), then what a full-mark answer needs. Never just restate the key. For a "correct" verdict return "".\n` +
+    `- "misconception": for a wrong or partial answer, the underlying misunderstanding in a few words ("thinks cold moves into objects", "confuses mass with weight"). Empty string otherwise.\n` +
+    `- "topic": the science topic in two or three words.\n` +
+    `- Plain text only, no markdown, no headings.\n\n` +
+    `ITEMS TO MARK:\n${list}`;
+}
+
+function _mpReportPrompt() {
+  const lines = _mpItems.map((it, i) =>
+    `${i + 1}. [${it.number || i + 1}] (${it.topic || 'unknown topic'}) ${it.awarded}/${it.marks} — ${it.verdict}.`
+    + ` Asked: ${_mpStr(it.question, 160)}.`
+    + (it.verdict === 'correct' ? '' : ` Student wrote: "${_mpStr(it.student, 140) || '(blank)'}". Correct: "${_mpStr(it.key || it.aiAnswer, 140)}".${it.misconception ? ` Misconception: ${it.misconception}.` : ''}`)
+  ).join('\n');
+  const t = _mpTotals();
+  return `You are a Singapore primary-school science teacher writing the report that goes back with a marked script.${_mpWho()}\n` +
+    `The student scored ${t.awarded} out of ${t.marks} (${t.pct}%) over ${_mpItems.length} question${_mpItems.length === 1 ? '' : 's'}.\n` +
+    `Every question, with what they wrote where they went wrong:\n${lines}\n\n` +
+    `Return ONLY JSON: {"summary":"","strengths":[],"weaknesses":[],"next":[]}\n` +
+    `- "summary": 4-6 sentences addressed to "you" — how the script went overall, what the student clearly understands, and the pattern running through the marks that were lost. Be warm but honest, and be SPECIFIC: name the actual topics and refer to the actual mistakes above, never generic encouragement.\n` +
+    `- "strengths": 2-4 short phrases, each naming a topic or skill this script shows they have.\n` +
+    `- "weaknesses": 2-4 short phrases, each naming a topic or a recurring misconception the lost marks point to. Group mistakes that share a cause rather than listing them one by one.\n` +
+    `- "next": 2-4 short, concrete things to revise or practise next, in the order you would do them.\n` +
+    `- Plain text inside the JSON, no markdown.`;
+}
+
+// ---- The run -------------------------------------------------------------
+// One button does the lot: read the script, read the scheme if there is one,
+// find each question its answer key, mark everything, write the report.
+async function mpRun() {
+  if (!_canAuthor()) { showToast('Only teachers can mark a script here', 'error'); return; }
+  if (_mpBusy || !_mpAiReady()) return;
+  if (!_mpPages.length) { showToast('Add the pages of the student’s script first', 'info'); return; }
+  if (_mpItems.length) {
+    showConfirm('Mark this script again',
+      `The whole script is read together, so this replaces the ${_mpItems.length} question${_mpItems.length === 1 ? '' : 's'} marked so far — including any mark you changed by hand. Mark again?`,
+      () => { _mpRunAll(); });
+    return;
+  }
+  _mpRunAll();
+}
+
+async function _mpRunAll() {
+  _mpBusy = true; _mpCancel = false;
+  _mpClearMarks();
+  mpRender();
+  try {
+    if (_mpKeyShots.some(s => s.status !== 'done') && !_mpCancel) await _mpReadKey();
+    if (!_mpCancel) await _mpReadScript();
+    if (!_mpItems.length) {
+      showToast('No questions could be read from those pages — try clearer scans of the full page', 'error');
+      return;
+    }
+    _mpAttachKeys();
+    if (!_mpCancel) await _mpMarkAll();
+    if (!_mpCancel) await _mpWriteReport();
+  } catch (err) {
+    console.error('mark paper:', err);
+    showToast('Marking failed: ' + ((err && err.message) || err), 'error');
+  } finally {
+    _mpBusy = false;
+    _mpNote('');
+    mpRender();
+  }
+  if (_mpItems.length) {
+    const t = _mpTotals();
+    showToast(`Marked ${_mpItems.length} question${_mpItems.length === 1 ? '' : 's'} — ${t.awarded}/${t.marks} (${t.pct}%)${_mpCancel ? ' (stopped early)' : ''}`, 'success');
+  }
+}
+
+// ---- ① reading the script ------------------------------------------------
+async function _mpReadScript() {
+  const total = _mpPages.length;
+  _mpPages.forEach(p => { p.status = 'new'; p.err = ''; p.n = 0; });
+  mpRender();
+  let carry = '';       // a question the next batch may be continuing
+  let failed = 0;
+  for (let start = 0; start < total; start += MP_READ_BATCH) {
+    if (_mpCancel) break;
+    const batch = _mpPages.slice(start, start + MP_READ_BATCH);
+    const span = batch.length > 1 ? `pages ${start + 1}–${start + batch.length}` : `page ${start + 1}`;
+    batch.forEach(p => { p.status = 'reading'; });
+    mpRender();
+    _mpNote(`Reading ${span} of ${total} — finding the questions and your student's answers…`);
+    let rows;
+    try {
+      const raw = await askGeminiVision(
+        _mpScriptPrompt(batch.length, start + 1, total, carry),
+        batch.map(p => ({ mimeType: p.mimeType, data: p.data })),
+        { maxOutputTokens: 16384, json: true });
+      const parsed = _parseAIJson(raw);
+      rows = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.questions) ? parsed.questions : []);
+    } catch (err) {
+      // One unreadable batch must never sink the rest of the script.
+      console.warn('mark paper: page batch failed', err);
+      batch.forEach(p => { p.status = 'error'; p.err = (err && err.message) || 'could not be read'; });
+      failed += batch.length;
+      carry = '';
+      mpRender();
+      continue;
+    }
+    let made = 0;
+    rows.forEach((r, i) => {
+      const it = _mpNewItem(r, start, batch.length);
+      if (!it) return;
+      // This batch opens mid-question: finish the one before rather than
+      // filing half a question of its own.
+      const prev = _mpItems[_mpItems.length - 1];
+      if (i === 0 && r && r.continuation === true && prev) {
+        prev.question = (prev.question + ' ' + it.question).trim();
+        if (it.student) prev.student = (prev.student ? prev.student + '\n' : '') + it.student;
+        if (it.student) prev.blank = false;
+        if (it.marks && !prev.marks) prev.marks = it.marks;
+        return;
+      }
+      _mpItems.push(it);
+      made++;
+    });
+    // Whatever the last entry was, the next batch may be continuing it.
+    const last = _mpItems[_mpItems.length - 1];
+    carry = last ? _mpStr(last.question, 200) : '';
+    batch.forEach(p => { p.n = made; if (p.status === 'reading') p.status = made ? 'done' : 'empty'; });
+    mpRender();
+  }
+  // A paper that numbers nothing still has to be markable, so anything that
+  // came back without a number is numbered by where it sits on the script.
+  _mpItems.forEach((it, i) => { if (!it.number) it.number = String(i + 1); });
+  if (failed) showToast(failed + ' page' + (failed === 1 ? '' : 's') + ' could not be read — the rest were marked', 'error');
+}
+
+function _mpNewItem(r, batchStart, batchLen) {
+  if (!r || typeof r !== 'object') return null;
+  const question = _mpStr(r.question, 1200);
+  const student = _mpStr(r.student, 1200);
+  if (!question && !student) return null;
+  const type = String(r.type || '').toLowerCase() === 'mcq' ? 'mcq' : 'open';
+  const options = Array.isArray(r.options)
+    ? r.options.map(o => ({ label: _mpStr(o && o.label, 4), text: _mpStr(o && o.text, 200) })).filter(o => o.label || o.text)
+    : [];
+  // The model numbers pages 1..n WITHIN the batch it was given; an out-of-range
+  // or missing page falls back to the first page of that batch rather than
+  // pointing at a page that is not there.
+  let page = parseInt(r.page, 10);
+  if (!(page >= 1 && page <= batchLen)) page = 1;
+  const marks = _mpMarks(r.marks, type);
+  const blank = r.blank === true || !student;
+  return {
+    id: _mpId(),
+    number: _mpStr(r.number, 16).replace(/^\s*q\.?\s*/i, ''),
+    page: batchStart + page,
+    question, type, options, marks, student, blank,
+    topic: _mpStr(r.topic, 40),
+    key: '', keySrc: '', keyNote: '', aiAnswer: '',
+    verdict: '', awarded: 0, feedback: '', misconception: '',
+    manual: false,
+  };
+}
+
+// Marks available. A paper that prints nothing gets the sensible default for
+// its kind — one mark for a multiple-choice question, two for a written one.
+function _mpMarks(v, type) {
+  const n = Number(v);
+  if (Number.isFinite(n) && n > 0 && n <= 20) return Math.round(n * 2) / 2;
+  return type === 'mcq' ? 1 : 2;
+}
+
+// ---- ② reading the marking scheme ---------------------------------------
+async function _mpReadKey() {
+  const todo = _mpKeyShots.filter(s => s.status !== 'done');
+  if (!todo.length) return;
+  for (let i = 0; i < todo.length; i++) {
+    if (_mpCancel) break;
+    const s = todo[i];
+    s.status = 'reading'; s.err = ''; s.n = 0;
+    mpRender();
+    _mpNote(`Reading the marking scheme — page ${i + 1} of ${todo.length}…`);
+    try {
+      const raw = await askGeminiVision(_mpKeyPrompt(i + 1, todo.length),
+        [{ mimeType: s.mimeType, data: s.data }], { maxOutputTokens: 8192, json: true });
+      const parsed = _parseAIJson(raw);
+      const rows = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.answers) ? parsed.answers : []);
+      s.answers = rows.map(r => ({
+        number: _mpStr(r && r.number, 16),
+        answer: _mpStr(r && r.answer, 900),
+        note: _mpStr(r && r.note, 400),
+        marks: Number(r && r.marks) || null,
+      })).filter(a => a.number && a.answer);
+      s.n = s.answers.length;
+      s.status = s.n ? 'done' : 'empty';
+    } catch (err) {
+      console.warn('mark paper: key read failed', err);
+      s.status = 'error';
+      s.err = (err && err.message) || 'could not read this page of the key';
+      s.answers = [];
+    }
+    _mpKeyAnswers = _mpKeyShots.reduce((a, sh) => a.concat(sh.answers || []), []);
+    mpRender();
+  }
+}
+
+// ---- ③ giving every question its answer key ------------------------------
+// Best source first: the paper's own marking scheme, then a question in the
+// bank that is plainly the same question, then the model itself at marking
+// time. Every row shows which, because a teacher checking a mark needs to know
+// whether the key came from the paper or was written by the AI.
+function _mpAttachKeys() {
+  const byNum = {};
+  _mpKeyAnswers.forEach(a => {
+    const k = _epNumKey(a.number);      // "Q12 (b)", "12b" and "12(B)" are one key
+    if (k && !byNum[k]) byNum[k] = a;
+  });
+  let fromScheme = 0, fromBank = 0;
+  _mpItems.forEach(it => {
+    const hit = byNum[_epNumKey(it.number)];
+    if (hit) {
+      it.key = hit.answer;
+      it.keyNote = hit.note;
+      it.keySrc = 'scheme';
+      if (hit.marks) it.marks = _mpMarks(hit.marks, it.type);
+      fromScheme++;
+      return;
+    }
+    const q = _mpBankMatch(it);
+    if (q) {
+      it.key = q.key;
+      it.keySrc = 'bank';
+      if (!it.topic && q.topic) it.topic = q.topic;
+      fromBank++;
+    }
+  });
+  if (fromScheme || fromBank) {
+    _mpNote(`Answer key: ${fromScheme} from the marking scheme, ${fromBank} from the question bank.`);
+  }
+}
+
+// The same question, already in the bank, with a model answer on it. This is a
+// cheap token-overlap match (the same one Snap & Mark falls back to) and NOT
+// an AI call — it is only ever used when the marking scheme has nothing, and
+// the threshold is deliberately high because a wrong bank match would mark the
+// student against the wrong question entirely.
+const MP_BANK_MIN_SIM = 0.62;
+function _mpBankMatch(it) {
+  if (!Array.isArray(questionBank) || !questionBank.length) return null;
+  const aSet = _snapTokens(it.question);
+  if (aSet.size < 4) return null;
+  let best = null, bestS = 0;
+  questionBank.forEach(q => {
+    const s = _snapSim(aSet, q);
+    if (s > bestS) { bestS = s; best = q; }
+  });
+  if (!best || bestS < MP_BANK_MIN_SIM) return null;
+  const key = _mpBankAnswer(best);
+  return key ? { key, topic: best.topic || '' } : null;
+}
+
+// The model answer a bank question carries, whatever shape it is stored in.
+function _mpBankAnswer(q) {
+  const bits = [];
+  (q.blocks || []).forEach(b => {
+    if (!b || !b.type) return;
+    if (b.type === 'mcq') {
+      const right = (b.options || []).filter(o => o && o.correct).map(o => stripHtmlToText(o.text));
+      if (right.length) bits.push(right.join(' / '));
+    } else if (b.type === 'openLines' || b.type === 'default' || b.type === 'workingSpace') {
+      ['answer', 'answerKey', 'claim', 'evidence', 'reasoning'].forEach(f => {
+        const v = stripHtmlToText(b[f]);
+        if (v) bits.push(f === 'answer' || f === 'answerKey' ? v : `${f}: ${v}`);
+      });
+    } else if (b.type === 'fillblank') {
+      const v = stripHtmlToText(b.content);
+      if (v) bits.push(v);
+    }
+  });
+  return bits.join(' · ').slice(0, 900).trim();
+}
+
+// ---- ④ marking -----------------------------------------------------------
+async function _mpMarkAll() {
+  const total = _mpItems.length;
+  for (let start = 0; start < total; start += MP_MARK_BATCH) {
+    if (_mpCancel) break;
+    const batch = _mpItems.slice(start, start + MP_MARK_BATCH);
+    _mpNote(`Marking question ${start + 1}${batch.length > 1 ? `–${start + batch.length}` : ''} of ${total}…`);
+    let byI = {};
+    try {
+      const raw = await askGemini(_mpMarkPrompt(batch),
+        { maxOutputTokens: 700 + batch.length * 320, temperature: 0.2, json: true });
+      const parsed = _parseAIJson(raw);
+      const rows = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.items) ? parsed.items : []);
+      rows.forEach(v => { if (v && Number.isFinite(Number(v.i))) byI[Number(v.i)] = v; });
+    } catch (err) {
+      console.warn('mark paper: marking batch failed', err);
+    }
+    batch.forEach((it, i) => _mpApplyMark(it, byI[i]));
+    mpRender();
+  }
+}
+
+function _mpApplyMark(it, v) {
+  if (!v) {
+    // The batch failed. Say so on the row rather than quietly showing a zero,
+    // which a teacher would read as "the student got this wrong".
+    it.verdict = 'unmarked';
+    it.awarded = 0;
+    it.feedback = 'This one could not be marked automatically — mark it yourself and set the verdict below.';
+    return;
+  }
+  const answer = _mpStr(v.answer, 900);
+  it.aiAnswer = answer;
+  // A key from the paper or the bank stands; the model's answer only fills a
+  // question that had neither.
+  if (!it.key && answer) { it.key = answer; it.keySrc = 'ai'; }
+  let verdict = String(v.verdict || '').toLowerCase();
+  if (['correct', 'partial', 'incorrect', 'blank'].indexOf(verdict) < 0) verdict = it.blank ? 'blank' : 'incorrect';
+  if (it.blank) verdict = 'blank';
+  it.verdict = verdict;
+  const n = Number(v.awarded);
+  it.awarded = verdict === 'correct' ? it.marks
+    : verdict === 'blank' ? 0
+    : Math.max(0, Math.min(it.marks, Number.isFinite(n) ? Math.round(n * 2) / 2 : 0));
+  it.feedback = verdict === 'correct' ? '' : _mpStr(v.feedback, 500);
+  it.misconception = verdict === 'correct' ? '' : _mpStr(v.misconception, 120);
+  if (!it.topic) it.topic = _mpStr(v.topic, 40);
+}
+
+// The teacher has the final say — AI marking of handwriting is very good and
+// still not perfect, and a mark that cannot be corrected is worse than no mark.
+function mpSetVerdict(id, verdict) {
+  const it = _mpItems.find(x => x.id === id);
+  if (!it) return;
+  it.verdict = verdict;
+  it.awarded = verdict === 'correct' ? it.marks
+    : verdict === 'partial' ? Math.round(it.marks) / 2
+    : 0;
+  it.manual = true;
+  mpRender();
+}
+
+function mpToggleWrongOnly() { _mpShowWrongOnly = !_mpShowWrongOnly; mpRender(); }
+
+// ---- ⑤ the report --------------------------------------------------------
+async function _mpWriteReport() {
+  _mpNote('Writing the report…');
+  try {
+    const raw = await askGemini(_mpReportPrompt(), { maxOutputTokens: 900, temperature: 0.35, json: true });
+    const p = _parseAIJson(raw) || {};
+    _mpReport = {
+      summary: _mpStr(p.summary, 1600),
+      strengths: _mpArr(p.strengths),
+      weaknesses: _mpArr(p.weaknesses),
+      next: _mpArr(p.next),
+    };
+  } catch (err) {
+    console.warn('mark paper: report failed', err);
+    _mpReport = null;
+  }
+}
+function _mpArr(v) {
+  return (Array.isArray(v) ? v : []).map(x => _mpStr(x, 200)).filter(Boolean).slice(0, 6);
+}
+
+// ---- Totals --------------------------------------------------------------
+function _mpTotals() {
+  let awarded = 0, marks = 0, right = 0, part = 0, wrong = 0, blank = 0;
+  _mpItems.forEach(it => {
+    awarded += it.awarded || 0;
+    marks += it.marks || 0;
+    if (it.verdict === 'correct') right++;
+    else if (it.verdict === 'partial') part++;
+    else if (it.verdict === 'blank') blank++;
+    else wrong++;
+  });
+  awarded = Math.round(awarded * 2) / 2;
+  return { awarded, marks, pct: marks ? Math.round((awarded / marks) * 100) : 0, right, part, wrong, blank };
+}
+
+// Marks by topic — the one view that tells a teacher WHERE the marks went,
+// rather than just how many were lost.
+function _mpByTopic() {
+  const map = new Map();
+  _mpItems.forEach(it => {
+    const t = (it.topic || 'Unsorted').replace(/\s+/g, ' ').trim();
+    const k = t.toLowerCase();
+    const rec = map.get(k) || { label: t.charAt(0).toUpperCase() + t.slice(1), awarded: 0, marks: 0, n: 0 };
+    rec.awarded += it.awarded || 0; rec.marks += it.marks || 0; rec.n++;
+    map.set(k, rec);
+  });
+  return [...map.values()].map(r => Object.assign(r, { pct: r.marks ? Math.round((r.awarded / r.marks) * 100) : 0 }))
+    .sort((a, b) => a.pct - b.pct);
+}
+
+const MP_VERDICT = {
+  correct:   { icon: '✓', label: 'Correct',   cls: 'mp-v-ok' },
+  partial:   { icon: '≈', label: 'Partial',   cls: 'mp-v-part' },
+  incorrect: { icon: '✗', label: 'Incorrect', cls: 'mp-v-bad' },
+  blank:     { icon: '—', label: 'Blank',     cls: 'mp-v-blank' },
+  unmarked:  { icon: '?', label: 'Not marked', cls: 'mp-v-blank' },
+};
+const MP_KEY_SRC = {
+  scheme: { icon: '🔑', label: "from the paper's marking scheme" },
+  bank:   { icon: '📚', label: 'from your question bank' },
+  ai:     { icon: '🤖', label: 'written by AI — check it' },
+};
+
+// ---- Rendering -----------------------------------------------------------
+function mpRender() {
+  const el = document.getElementById('mpBody');
+  if (!el) return;
+  if (!_canAuthor()) {
+    el.innerHTML = '<div class="ep-card"><p class="ep-empty">Only teachers can mark a script here.</p></div>';
+    return;
+  }
+  el.innerHTML = _mpIntroHtml() + _mpZoneHtml('script') + _mpZoneHtml('key') + _mpRunCardHtml() + _mpResultsHtml();
+}
+
+function _mpIntroHtml() {
+  return `<div class="ep-card ep-intro">
+    <h3 class="ep-h3">📝 Mark a whole script</h3>
+    <p class="ep-lead">Scan or photograph every page of a paper the student has already written on. The AI finds each question, reads what they wrote by hand and marks the lot — and you get back the answer key, their own answer, feedback on everything they got wrong, and a report over the whole script. Nothing is saved anywhere: print it or copy it out when you are done.</p>
+    <div class="mp-meta">
+      <div>
+        <label class="form-label" for="mpStudent">Student <span class="ep-dim">(optional — it goes on the report)</span></label>
+        <input id="mpStudent" class="form-input" type="text" placeholder="e.g. Rachel Tan" value="${escapeHtml(_mpMeta.student)}" oninput="mpSetMeta('student',this.value)" autocomplete="off">
+      </div>
+      <div>
+        <label class="form-label" for="mpPaper">Paper <span class="ep-dim">(optional)</span></label>
+        <input id="mpPaper" class="form-input" type="text" placeholder="e.g. 2024 Nanyang P6 Prelim Paper 2" value="${escapeHtml(_mpMeta.paper)}" oninput="mpSetMeta('paper',this.value)" autocomplete="off">
+      </div>
+    </div>
+  </div>`;
+}
+
+function _mpZoneHtml(target) {
+  const key = target === 'key';
+  const list = _mpList(target);
+  const active = _mpPasteTarget === target;
+  const read = key ? _mpKeyAnswers.length : 0;
+  return `<div class="ep-card">
+    <div class="ep-head">
+      <h3 class="ep-h3">${key ? '② Marking scheme <span class="ep-dim">optional</span>' : '① The student’s script'} ${list.length ? `<span class="ep-pill">${list.length} page${list.length === 1 ? '' : 's'}</span>` : ''}</h3>
+      <div class="ep-head-tools">
+        ${list.length ? `<button class="btn btn-outline btn-sm" onclick="mpClear('${target}')" ${_mpBusy ? 'disabled' : ''}>Clear all</button>` : ''}
+      </div>
+    </div>
+    <p class="ep-lead">${key
+      ? 'The paper’s own answer key, if you have it — usually a page or two covering everything. Each answer is read with its question number, and that number is what links it to a question on the script. Without it the answer key is taken from your question bank where the question is already there, and written by the AI where it is not.'
+      : 'Every page, in order — paste with <b>Ctrl/⌘ V</b>, drop them in, or pick files. Images and PDFs both; every page of a PDF becomes one page here. A question running from the foot of one page to the top of the next is put back together for you.'}</p>
+    <div class="ep-zone${active ? ' ep-zone-on' : ''}" onclick="mpFocusZone('${target}')"
+         ondragover="mpDragOver(event,'${target}')" ondrop="mpDrop(event,'${target}')">
+      <div class="ep-zone-main">
+        <span class="ep-zone-ico">${key ? '🔑' : '📄'}</span>
+        <div>
+          <b>${active ? 'Paste here now (Ctrl/⌘ V)' : 'Click here, then paste (Ctrl/⌘ V)'}</b>
+          <span class="ep-dim">…or drop pages in, or <button type="button" class="ep-link" onclick="event.stopPropagation();mpPick('${target}')">choose files</button></span>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="${key ? 'mpKeyFile' : 'mpPageFile'}" accept="image/*,application/pdf" multiple style="display:none;" onchange="mpFiles(this,'${target}')">
+    ${list.length ? `<div class="ep-shots">${list.map((s, i) => _mpPageHtml(s, target, i)).join('')}</div>` : ''}
+    ${read ? `<p class="ep-done-line">${read} answer${read === 1 ? '' : 's'} read from the marking scheme</p>` : ''}
+  </div>`;
+}
+
+const MP_STATUS = {
+  new:     { label: 'Not read yet', cls: 'ep-s-new' },
+  reading: { label: 'Reading…',     cls: 'ep-s-busy' },
+  done:    { label: 'Read ✓',       cls: 'ep-s-ok' },
+  empty:   { label: 'Nothing found', cls: 'ep-s-warn' },
+  error:   { label: 'Failed',       cls: 'ep-s-bad' },
+};
+
+function _mpPageHtml(s, target, i) {
+  const st = MP_STATUS[s.status] || MP_STATUS.new;
+  const detail = s.status === 'done'
+    ? (target === 'key'
+        ? `${s.n} answer${s.n === 1 ? '' : 's'}`
+        : `${s.n} question${s.n === 1 ? '' : 's'} in this batch`)
+    : '';
+  return `<div class="ep-shot ${st.cls}">
+    <img src="${_mpDataUrl(s)}" alt="${escapeHtml(s.name || '')}" loading="lazy">
+    <div class="ep-shot-body">
+      <span class="ep-shot-status">${target === 'key' ? '' : (i + 1) + '. '}${st.label}</span>
+      ${detail ? `<span class="ep-shot-detail">${escapeHtml(detail)}</span>` : ''}
+      ${s.err ? `<span class="ep-shot-err">${escapeHtml(s.err)}</span>` : ''}
+    </div>
+    <button type="button" class="ep-shot-x" onclick="mpRemove('${target}','${s.id}')" title="Remove this page" ${_mpBusy ? 'disabled' : ''}>✕</button>
+  </div>`;
+}
+
+function _mpRunCardHtml() {
+  const n = _mpPages.length;
+  return `<div class="ep-card">
+    <div class="ep-head">
+      <h3 class="ep-h3">③ Find &amp; mark</h3>
+      <div class="ep-head-tools">
+        ${_mpBusy
+          ? '<button class="btn btn-outline btn-sm" onclick="mpCancel()">✋ Stop</button>'
+          : `<button class="btn btn-primary" onclick="mpRun()" ${n ? '' : 'disabled'}>🤖 ${_mpItems.length ? 'Mark again' : 'Find &amp; mark ' + (n ? `all ${n} page${n === 1 ? '' : 's'}` : 'the script')}</button>`}
+        ${!_mpBusy && (_mpItems.length || _mpPages.length) ? '<button class="btn btn-outline btn-sm" onclick="mpStartOver()">Start over</button>' : ''}
+      </div>
+    </div>
+    <p class="ep-lead">${_mpBusy
+      ? 'Reading and marking — this takes a moment on a long paper. You can leave the page; it carries on in the background.'
+      : 'The pages are read a few at a time so a question spread over two of them stays one question, then every question is marked against its answer key. You can change any mark afterwards — the total follows.'}</p>
+  </div>`;
+}
+
+function _mpResultsHtml() {
+  if (!_mpItems.length) {
+    return `<div class="ep-card">
+      <h3 class="ep-h3">④ Marks &amp; report</h3>
+      <p class="ep-empty">Add the script and press <b>Find &amp; mark</b>. Every question comes back here with the answer key, what your student wrote, and feedback on anything they got wrong.</p>
+    </div>`;
+  }
+  const t = _mpTotals();
+  const band = t.pct >= 80 ? 'mp-band-good' : t.pct >= 50 ? 'mp-band-mid' : 'mp-band-low';
+  const shown = _mpShowWrongOnly ? _mpItems.filter(it => it.verdict !== 'correct') : _mpItems;
+  return `<div class="ep-card" id="mpResults">
+    <div class="ep-head">
+      <h3 class="ep-h3">④ Marks &amp; report</h3>
+      <div class="ep-head-tools">
+        <button class="btn btn-outline btn-sm" onclick="mpToggleWrongOnly()">${_mpShowWrongOnly ? 'Show all questions' : 'Show only what was wrong'}</button>
+        <button class="btn btn-outline btn-sm" onclick="mpCopyReport()">📋 Copy</button>
+        <button class="btn btn-primary btn-sm" onclick="mpPrintReport()">🖨️ Print / PDF</button>
+      </div>
+    </div>
+    <div class="mp-score ${band}">
+      <div class="mp-score-big">${t.awarded}<span class="mp-score-of">/${t.marks}</span></div>
+      <div class="mp-score-side">
+        <div class="mp-score-pct">${t.pct}%</div>
+        <div class="mp-score-meta">${_mpItems.length} question${_mpItems.length === 1 ? '' : 's'} · ${t.right} right · ${t.part} partly right · ${t.wrong} wrong${t.blank ? ` · ${t.blank} blank` : ''}</div>
+      </div>
+    </div>
+    ${_mpTopicsHtml()}
+    ${_mpReportHtml()}
+    <h4 class="mp-h4">Question by question</h4>
+    ${_mpShowWrongOnly && !shown.length ? '<p class="ep-empty">Nothing was wrong on this script.</p>' : ''}
+    <div class="mp-items">${shown.map(_mpItemHtml).join('')}</div>
+  </div>`;
+}
+
+function _mpTopicsHtml() {
+  const rows = _mpByTopic();
+  if (rows.length < 2) return '';
+  return `<div class="mp-topics">
+    <h4 class="mp-h4">Where the marks went</h4>
+    ${rows.map(r => `<div class="mp-topic">
+      <span class="mp-topic-label">${escapeHtml(r.label)}</span>
+      <span class="mp-bar"><i style="width:${Math.max(2, r.pct)}%;background:${r.pct >= 80 ? 'var(--primary)' : r.pct >= 50 ? 'var(--accent-orange,#e08a1e)' : 'var(--accent-red,#c0392b)'};"></i></span>
+      <span class="mp-topic-num">${r.awarded}/${r.marks}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+function _mpReportHtml() {
+  if (!_mpReport) return _mpBusy ? '<p class="ep-lead">⏳ The report is written once every question is marked.</p>' : '';
+  const list = (title, arr, cls) => arr.length
+    ? `<div class="mp-list ${cls}"><h5>${title}</h5><ul>${arr.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></div>`
+    : '';
+  return `<div class="mp-report">
+    <h4 class="mp-h4">🧑‍🏫 Report</h4>
+    ${_mpReport.summary ? `<p class="mp-summary">${_mpLines(_mpReport.summary)}</p>` : ''}
+    <div class="mp-lists">
+      ${list('What went well', _mpReport.strengths, 'mp-good')}
+      ${list('What to work on', _mpReport.weaknesses, 'mp-work')}
+      ${list('Revise next', _mpReport.next, 'mp-next')}
+    </div>
+  </div>`;
+}
+
+function _mpItemHtml(it) {
+  const v = MP_VERDICT[it.verdict] || MP_VERDICT.unmarked;
+  const src = MP_KEY_SRC[it.keySrc];
+  return `<div class="mp-item ${v.cls}">
+    <div class="mp-item-head">
+      <span class="ep-num">${escapeHtml(it.number)}</span>
+      <span class="mp-verdict">${v.icon} ${v.label}${it.manual ? ' <span class="ep-dim">(you changed this)</span>' : ''}</span>
+      <span class="mp-marks">${it.awarded}/${it.marks}</span>
+      <span class="mp-item-meta">${it.topic ? escapeHtml(it.topic) + ' · ' : ''}page ${it.page}${it.type === 'mcq' ? ' · MCQ' : ''}</span>
+    </div>
+    <p class="mp-q">${_mpLines(it.question)}</p>
+    ${it.type === 'mcq' && it.options.length
+      ? `<p class="mp-opts">${it.options.map(o => `${escapeHtml(o.label)}) ${escapeHtml(o.text)}`).join('<br>')}</p>`
+      : ''}
+    <div class="mp-ans">
+      <div class="mp-ans-box mp-ans-key">
+        <h6>Answer key ${src ? `<span class="mp-src" title="${escapeHtml(src.label)}">${src.icon} ${escapeHtml(src.label)}</span>` : ''}</h6>
+        <p>${_mpLines(it.key || '—')}</p>
+        ${it.keyNote ? `<p class="mp-keynote">Marking note: ${_mpLines(it.keyNote)}</p>` : ''}
+      </div>
+      <div class="mp-ans-box mp-ans-student">
+        <h6>What your student wrote</h6>
+        <p${it.blank ? ' class="mp-blank"' : ''}>${it.blank ? 'Left blank' : _mpLines(it.student)}</p>
+      </div>
+    </div>
+    ${it.feedback ? `<div class="mp-fb"><b>Feedback</b> ${_mpLines(it.feedback)}${it.misconception ? `<span class="mp-mis">Misconception: ${escapeHtml(it.misconception)}</span>` : ''}</div>` : ''}
+    <div class="mp-fix">
+      <span class="ep-dim">Change the mark:</span>
+      ${['correct', 'partial', 'incorrect', 'blank'].map(k =>
+        `<button type="button" class="mp-fix-btn${it.verdict === k ? ' on' : ''}" onclick="mpSetVerdict('${it.id}','${k}')">${MP_VERDICT[k].icon} ${MP_VERDICT[k].label}</button>`).join('')}
+    </div>
+  </div>`;
+}
+
+// ---- Getting it off the screen -------------------------------------------
+// The marked script leaves as text or as paper, and nothing else — it is a
+// child's work, and it has no business sitting in the question bank.
+function _mpReportText() {
+  const t = _mpTotals();
+  const out = [];
+  out.push(`MARKED SCRIPT${_mpMeta.paper ? ' — ' + _mpMeta.paper : ''}`);
+  if (_mpMeta.student) out.push(`Student: ${_mpMeta.student}`);
+  out.push(`Score: ${t.awarded}/${t.marks} (${t.pct}%) · ${t.right} right · ${t.part} partly right · ${t.wrong} wrong${t.blank ? ` · ${t.blank} blank` : ''}`);
+  if (_mpReport) {
+    if (_mpReport.summary) out.push('', 'REPORT', _mpReport.summary);
+    if (_mpReport.strengths.length) out.push('', 'What went well:', ..._mpReport.strengths.map(s => '  • ' + s));
+    if (_mpReport.weaknesses.length) out.push('', 'What to work on:', ..._mpReport.weaknesses.map(s => '  • ' + s));
+    if (_mpReport.next.length) out.push('', 'Revise next:', ..._mpReport.next.map(s => '  • ' + s));
+  }
+  const topics = _mpByTopic();
+  if (topics.length > 1) out.push('', 'BY TOPIC', ...topics.map(r => `  ${r.label}: ${r.awarded}/${r.marks} (${r.pct}%)`));
+  out.push('', 'QUESTION BY QUESTION');
+  _mpItems.forEach(it => {
+    const v = MP_VERDICT[it.verdict] || MP_VERDICT.unmarked;
+    out.push('', `${it.number}. [${v.label} — ${it.awarded}/${it.marks}]${it.topic ? ' (' + it.topic + ')' : ''}`);
+    out.push(`   Q: ${it.question}`);
+    out.push(`   Answer key: ${it.key || '—'}`);
+    out.push(`   Student wrote: ${it.blank ? '(blank)' : it.student}`);
+    if (it.feedback) out.push(`   Feedback: ${it.feedback}`);
+    if (it.misconception) out.push(`   Misconception: ${it.misconception}`);
+  });
+  return out.join('\n');
+}
+
+function mpCopyReport() {
+  const txt = _mpReportText();
+  const done = () => showToast('Report copied — paste it wherever you need it', 'success');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(done, () => _mpCopyFallback(txt, done));
+  } else _mpCopyFallback(txt, done);
+}
+function _mpCopyFallback(txt, done) {
+  const ta = document.createElement('textarea');
+  ta.value = txt;
+  ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
+  if (ok) done(); else showToast('Could not copy — use Print / PDF instead', 'error');
+}
+
+// A standalone print window, deliberately NOT the worksheet print planner:
+// that plans a fixed-height page box for a printed worksheet, and this is a
+// report that simply flows down as many sheets as it needs.
+function mpPrintReport() {
+  if (!_mpItems.length) return;
+  const t = _mpTotals();
+  const topics = _mpByTopic();
+  const esc = escapeHtml;
+  const body = `
+    <h1>Marked script${_mpMeta.paper ? ' — ' + esc(_mpMeta.paper) : ''}</h1>
+    <p class="who">${_mpMeta.student ? '<b>' + esc(_mpMeta.student) + '</b> · ' : ''}${esc(new Date().toLocaleDateString())}</p>
+    <div class="score"><span class="big">${t.awarded}/${t.marks}</span><span class="pct">${t.pct}%</span>
+      <span class="meta">${_mpItems.length} question${_mpItems.length === 1 ? '' : 's'} · ${t.right} right · ${t.part} partly right · ${t.wrong} wrong${t.blank ? ` · ${t.blank} blank` : ''}</span></div>
+    ${_mpReport && _mpReport.summary ? `<div class="sect"><h2>Report</h2><p>${_mpLines(_mpReport.summary)}</p></div>` : ''}
+    ${_mpReport ? ['strengths', 'weaknesses', 'next'].map((k, i) => _mpReport[k].length
+      ? `<div class="sect"><h3>${['What went well', 'What to work on', 'Revise next'][i]}</h3><ul>${_mpReport[k].map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '').join('') : ''}
+    ${topics.length > 1 ? `<div class="sect"><h3>By topic</h3><ul>${topics.map(r => `<li>${esc(r.label)} — ${r.awarded}/${r.marks} (${r.pct}%)</li>`).join('')}</ul></div>` : ''}
+    <h2>Question by question</h2>
+    ${_mpItems.map(it => {
+      const v = MP_VERDICT[it.verdict] || MP_VERDICT.unmarked;
+      return `<div class="q">
+        <div class="qh"><b>${esc(it.number)}</b> <span class="v v-${it.verdict}">${v.icon} ${v.label}</span> <span class="m">${it.awarded}/${it.marks}</span>${it.topic ? ` <span class="tp">${esc(it.topic)}</span>` : ''}</div>
+        <p class="qt">${_mpLines(it.question)}</p>
+        <p class="k"><b>Answer key:</b> ${_mpLines(it.key || '—')}</p>
+        <p class="s"><b>Student wrote:</b> ${it.blank ? '<i>left blank</i>' : _mpLines(it.student)}</p>
+        ${it.feedback ? `<p class="f"><b>Feedback:</b> ${_mpLines(it.feedback)}</p>` : ''}
+      </div>`;
+    }).join('')}`;
+  const css = `
+    @page { size: A4; margin: 16mm 14mm; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1f2933; font-size: 11pt; line-height: 1.6; margin: 0; }
+    h1 { font-size: 17pt; margin: 0 0 4px; }
+    h2 { font-size: 13pt; margin: 26px 0 10px; }
+    h3 { font-size: 11pt; margin: 16px 0 6px; }
+    .who { color: #6b7280; margin: 0 0 18px; }
+    .score { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding: 14px 18px; border: 1.5px solid #cbd5e1; border-radius: 10px; margin-bottom: 22px; }
+    .score .big { font-size: 22pt; font-weight: 700; }
+    .score .pct { font-size: 13pt; font-weight: 600; color: #4b5563; }
+    .score .meta { color: #6b7280; font-size: 9.5pt; }
+    .sect { margin-bottom: 16px; }
+    .sect ul { margin: 4px 0 0; padding-left: 20px; }
+    .sect li { margin-bottom: 4px; }
+    .q { padding: 12px 16px; border: 1px solid #d7dee6; border-radius: 9px; margin-bottom: 12px; page-break-inside: avoid; }
+    .qh { margin-bottom: 6px; }
+    .qh .v { font-weight: 700; }
+    .v-correct { color: #1c8a4a; } .v-partial { color: #b8741a; }
+    .v-incorrect, .v-blank, .v-unmarked { color: #c0392b; }
+    .qh .m { font-weight: 700; }
+    .qh .tp { color: #6b7280; font-size: 9.5pt; }
+    .qt { margin: 0 0 8px; }
+    .k, .s, .f { margin: 0 0 5px; font-size: 10pt; }
+    .k { color: #14532d; } .s { color: #1f2937; } .f { color: #7c2d12; }`;
+  const w = window.open('', '_blank');
+  if (!w) { showToast('Your browser blocked the print window — allow pop-ups for this site', 'error'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Marked script${_mpMeta.student ? ' — ' + esc(_mpMeta.student) : ''}</title><style>${css}</style></head><body>${body}</body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => { try { w.print(); } catch (e) {} }, 350);
 }
 
 // =====================================================================
@@ -44361,6 +45322,22 @@ window.epSetMatch = epSetMatch;
 window.epCancel = epCancel;
 window.epSend = epSend;
 window.epSetPaper = epSetPaper;
+// Mark Paper — scanning a finished script. Built from inline on* handlers too.
+window.mpPick = mpPick;
+window.mpFiles = mpFiles;
+window.mpDragOver = mpDragOver;
+window.mpDrop = mpDrop;
+window.mpFocusZone = mpFocusZone;
+window.mpRemove = mpRemove;
+window.mpClear = mpClear;
+window.mpSetMeta = mpSetMeta;
+window.mpRun = mpRun;
+window.mpCancel = mpCancel;
+window.mpStartOver = mpStartOver;
+window.mpSetVerdict = mpSetVerdict;
+window.mpToggleWrongOnly = mpToggleWrongOnly;
+window.mpCopyReport = mpCopyReport;
+window.mpPrintReport = mpPrintReport;
 // Restoring reads IndexedDB, so it is async — an inline onclick would leave
 // the rejection unhandled.
 window.epDraftTake = tab => { epDraftTake(tab).catch(err => console.warn('exam paper draft restore:', err)); };
