@@ -4081,7 +4081,9 @@ option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
+  flex-wrap: wrap;              /* five actions — let them drop under the title rather than squeeze */
+  gap: 12px 18px;
+  padding: 16px 20px;
   background: var(--surface);
   border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
@@ -4101,6 +4103,8 @@ option {
 }
 .ws-saved-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
 }
 
@@ -4389,6 +4393,188 @@ option {
 .wsqe-size-val { min-width: 44px; text-align: center; font-size: 0.86rem; font-weight: 700; }
 .wsqe-hint { font-size: 0.76rem; color: var(--text-muted); line-height: 1.5; }
 @media print { .wsqe-overlay { display: none !important; } }
+
+/* ── Saved worksheet — add / remove its questions ─────────────────────────
+   A saved worksheet is an ORDERED list of bank ids, so editing one is editing
+   that list: what is on the sheet on the left, the bank to draw from on the
+   right. Sits above the live preview (400) and the quick-edit drawer (410),
+   because it can be opened from either. */
+.wse-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 420;
+  background: rgba(20, 24, 22, 0.5);
+  align-items: center;
+  justify-content: center;
+  padding: 28px 22px;
+}
+.wse-overlay.show { display: flex; }
+.wse-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 100%);
+  max-height: 100%;
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.wse-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.wse-head h3 { font-size: 1.02rem; font-weight: 700; }
+.wse-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 5px; }
+/* Its own close, not `.preview-close` — that one is white, drawn for a dark
+   header, and vanishes on this light one. */
+.wse-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.wse-close:hover { border-color: var(--accent-red); color: var(--accent-red); }
+.wse-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.wse-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 20px 22px 6px;
+}
+.wse-col + .wse-col { border-left: 1px solid var(--border); }
+.wse-col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.wse-col-title { font-size: 0.86rem; font-weight: 700; }
+.wse-count { color: var(--text-muted); font-weight: 600; }
+.wse-col-hint { font-size: 0.74rem; color: var(--text-muted); }
+.wse-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.wse-filters input,
+.wse-filters select {
+  flex: 1 1 132px;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+}
+.wse-filters input { flex-basis: 100%; }
+.wse-filters input:focus,
+.wse-filters select:focus { outline: none; border-color: var(--primary); }
+.wse-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 16px;
+}
+.wse-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 15px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.wse-row-missing { border-color: var(--accent-orange); background: var(--accent-orange-light); }
+.wse-num {
+  flex: 0 0 auto;
+  min-width: 22px;
+  padding-top: 2px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.wse-row-main { flex: 1; min-width: 0; }
+.wse-row-title { font-size: 0.86rem; font-weight: 600; line-height: 1.45; }
+.wse-row-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.wse-row-prev { font-size: 0.76rem; color: var(--text-muted); line-height: 1.55; margin-top: 8px; }
+.wse-row-acts { flex: 0 0 auto; display: flex; align-items: center; gap: 5px; }
+.wse-act {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.wse-act:hover { border-color: var(--primary); color: var(--primary); }
+.wse-act:disabled { opacity: 0.32; cursor: default; border-color: var(--border); color: var(--text-muted); }
+.wse-act-del:hover { border-color: var(--accent-red); color: var(--accent-red); }
+.wse-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px;
+  border: 1.5px solid var(--primary);
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.wse-add:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.wse-empty { padding: 28px 18px; text-align: center; font-size: 0.82rem; color: var(--text-muted); line-height: 1.65; }
+.wse-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 26px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.wse-foot-note { font-size: 0.76rem; color: var(--text-muted); line-height: 1.5; }
+/* One column on a narrow screen: the two lists stop being independently
+   scrollable panes and become one page that scrolls, so every `flex:1` /
+   `min-height:0` that made the panes work has to be undone or the second
+   column is laid out on top of the first. */
+@media (max-width: 820px) {
+  .wse-body { grid-template-columns: 1fr; align-items: start; overflow-y: auto; }
+  .wse-col { min-height: auto; padding-bottom: 16px; }
+  .wse-col + .wse-col { border-left: 0; border-top: 1px solid var(--border); }
+  .wse-list { flex: none; min-height: auto; overflow: visible; padding-bottom: 0; }
+}
+@media print { .wse-overlay { display: none !important; } }
 
 /* Print blanks-first-letter style */
 .print-blank-first-letter {
@@ -9570,7 +9756,8 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   <div class="wspv-bar">
     <button class="btn btn-outline" type="button" onclick="closeWorksheetPreview()">← Back</button>
     <span class="wspv-title">Worksheet preview <span class="wspv-count" id="wsPreviewPageCount"></span></span>
-    <span class="wspv-hint">⬆ pulls a question onto the previous page (fit 2+ per page) · ⤓ pushes it onto a new page · ✏️ edits the question itself · updates live.</span>
+    <span class="wspv-hint">⬆ pulls a question onto the previous page (fit 2+ per page) · ⤓ pushes it onto a new page · ✏️ edits the question itself · ✕ takes it off the sheet · updates live.</span>
+    <button class="btn btn-outline" type="button" id="wsPreviewEditBtn" style="display:none;" onclick="wseOpenFromPreview()" title="Add or remove questions on this saved worksheet">✎ Questions</button>
     <button class="btn btn-primary" type="button" onclick="printFromPreview()">🖨️ Print / Save PDF</button>
   </div>
   <div class="wspv-stage"><iframe id="wsPreviewFrame" title="Worksheet preview"></iframe></div>
@@ -9594,6 +9781,53 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <span style="flex:1;"></span>
       <button class="btn btn-outline" type="button" onclick="closeWsQuickEdit()">Cancel</button>
       <button class="btn btn-primary" type="button" onclick="saveWsQuickEdit()">Save to bank</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SAVED WORKSHEET — ADD / REMOVE QUESTIONS ==================== -->
+<div class="wse-overlay" id="wsEditOverlay">
+  <div class="wse-panel" role="dialog" aria-label="Add or remove worksheet questions">
+    <div class="wse-head">
+      <div>
+        <h3>Questions on this worksheet</h3>
+        <div class="wse-sub" id="wseSub"></div>
+      </div>
+      <button class="wse-close" type="button" onclick="wseClose()" title="Close" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="wse-body">
+      <div class="wse-col">
+        <div class="wse-col-head">
+          <span class="wse-col-title">On the sheet <span class="wse-count" id="wseInCount"></span></span>
+          <span class="wse-col-hint">Printed in this order</span>
+        </div>
+        <div class="wse-list" id="wseInList"></div>
+      </div>
+      <div class="wse-col">
+        <div class="wse-col-head">
+          <span class="wse-col-title">Add from the bank <span class="wse-count" id="wseBankCount"></span></span>
+        </div>
+        <div class="wse-filters">
+          <input type="text" id="wseSearch" placeholder="Search the bank…" oninput="wseRenderBank()">
+          <select id="wseLevel" onchange="wseRenderBank()">
+            <option value="">All Levels</option>
+            <option value="P3">P3</option>
+            <option value="P4">P4</option>
+            <option value="P5">P5</option>
+            <option value="P6">P6</option>
+          </select>
+          <select id="wseTopic" onchange="wseRenderBank()"><option value="">All Topics</option></select>
+          <select id="wseCategory" onchange="wseRenderBank()"><option value="">All Types</option></select>
+        </div>
+        <div class="wse-list" id="wseBankList"></div>
+      </div>
+    </div>
+    <div class="wse-foot">
+      <span class="wse-foot-note" id="wseFootNote">Every change is saved to this worksheet straight away. The question bank itself is never touched.</span>
+      <span style="flex:1;"></span>
+      <button class="btn btn-primary" type="button" onclick="wseClose()">Done</button>
     </div>
   </div>
 </div>
