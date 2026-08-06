@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.248.0';
+const APP_VERSION = 'v1.249.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -20339,6 +20339,10 @@ function renderSavedWorksheets() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           Preview
         </button>
+        <button class="btn btn-outline" onclick="wseOpen('${ws.id}')" title="Add or remove questions on this worksheet">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="17.5" y1="15.5" x2="17.5" y2="21.5"/><line x1="14.5" y1="18.5" x2="20.5" y2="18.5"/></svg>
+          Questions
+        </button>
         <button class="btn btn-outline" onclick="reprintWorksheet('${ws.id}')" title="Print">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           Print
@@ -20371,7 +20375,7 @@ function reprintWorksheet(id) {
   if (!ws) return;
   const selected = _wsSavedQuestions(ws);
   if (selected.length === 0) {
-    showToast('Questions no longer available', 'error');
+    showToast(_wsEmptyMsg(ws), 'error');
     return;
   }
   const noFields = !_wsStudentFieldsOn('saved');
@@ -20387,6 +20391,274 @@ function _wsSavedQuestions(ws) {
   const byId = new Map(questionBank.map(q => [String(q.id), q]));
   return (ws && Array.isArray(ws.questionIds) ? ws.questionIds : [])
     .map(qid => byId.get(String(qid))).filter(Boolean);
+}
+
+// Why a saved worksheet has nothing to show. Since its questions can be removed
+// (below), "no longer available" is no longer the only answer — an emptied sheet
+// needs to be told where to fill itself back up.
+function _wsEmptyMsg(ws) {
+  const n = (ws && Array.isArray(ws.questionIds) ? ws.questionIds : []).length;
+  return n === 0
+    ? 'This worksheet has no questions — add some with ✎ Questions'
+    : 'Those questions are no longer in the bank — fix the list with ✎ Questions';
+}
+
+// =====================================================================
+// SAVED WORKSHEET CONTENTS — add and remove questions after the fact.
+//
+// A saved worksheet is nothing but an ORDERED list of bank ids, so editing
+// one is editing that list: drop the question that turned out to be too
+// hard, add the two you meant to include, move a late addition up to where
+// it belongs. Everything else about the sheet — the printed layout, the
+// cover, the page breaks, the practice queue — is derived from that list,
+// so all of it follows for free.
+//
+// This NEVER touches the question bank: it only adds and removes
+// references. (Editing the question itself is the quick-edit drawer, which
+// deliberately does write to the bank and says so.) A worksheet doc lives
+// under its OWNER's uid — a student's Ai-nstein worksheet is their own
+// document — so anyone may edit their own; the bank they can pick FROM is
+// capped to their level, the same rule every practice mode applies.
+// =====================================================================
+let _wseId = null;   // id of the worksheet in the editor; null when closed
+
+function _wseFind(id) { return savedWorksheets.find(w => w.id === id) || null; }
+function _wseWs() { return _wseId ? _wseFind(_wseId) : null; }
+
+// One list of ids written back to the worksheet's own doc. A list of ids is a
+// tiny write, so each change persists as it is made — an edit the teacher
+// believes is saved and is not is far worse than a chatty connection.
+function _wsPersistWorksheet(ws) {
+  if (!ws) return;
+  ws.updatedAt = new Date().toISOString();
+  if (!currentUser) return;
+  setDoc(_wsRef(ws.id), ws).catch(err => {
+    console.error('Failed to save worksheet:', err);
+    showToast('Could not save that change — check your connection', 'error');
+  });
+}
+
+// The questions this user may put ON a sheet.
+function _wseBank() {
+  return _canAuthor() ? questionBank : questionBank.filter(qWithinStudentLevel);
+}
+
+// Everything that shows this worksheet, brought back into step after a change:
+// the editor itself, the My Worksheets card's count, and the live A4 preview if
+// it happens to be the sheet on show.
+function _wseCommit(ws, msg) {
+  _wsPersistWorksheet(ws);
+  if (_wseId === ws.id) wseRender();
+  try { renderSavedWorksheets(); } catch (e) { console.warn('saved worksheets render', e); }
+  if (_wsPreviewSaved && _wsPreviewSaved.id === ws.id) {
+    // An empty sheet has no pages to preview, and the packer would be left
+    // staring at nothing — close it rather than show a blank stack of paper.
+    if (!_wsSavedQuestions(ws).length) closeWorksheetPreview();
+    else renderWsPreview();
+  }
+  if (msg) showToast(msg, 'success');
+}
+
+function wseAdd(qid) {
+  const ws = _wseWs();
+  if (!ws) return;
+  qid = String(qid);
+  const ids = Array.isArray(ws.questionIds) ? ws.questionIds.map(String) : [];
+  if (ids.includes(qid)) return;                    // already on the sheet
+  if (!questionBank.some(q => String(q.id) === qid)) { showToast('That question is no longer in the bank', 'error'); return; }
+  ids.push(qid);                                    // new questions land at the end — move them with ▲
+  ws.questionIds = ids;
+  _wseCommit(ws, 'Added to the worksheet');
+}
+
+// Removal works on a worksheet by id rather than on the open editor, because the
+// preview's own ✕ removes a question with the editor closed.
+function wseRemoveFrom(wsId, qid) {
+  const ws = _wseFind(wsId);
+  if (!ws) return;
+  qid = String(qid);
+  const ids = (Array.isArray(ws.questionIds) ? ws.questionIds : []).map(String);
+  const kept = ids.filter(x => x !== qid);
+  if (kept.length === ids.length) return;
+  ws.questionIds = kept;
+  // The page-break overrides are keyed by question id — a break before a
+  // question that is no longer there would sit on whatever came after it.
+  wsManualBreaks.delete(qid);
+  wsMergeUp.delete(qid);
+  _wseCommit(ws, 'Removed from the worksheet');
+}
+
+function wseRemove(qid) { wseRemoveFrom(_wseId, qid); }
+
+function wseMove(qid, dir) {
+  const ws = _wseWs();
+  if (!ws) return;
+  const ids = (Array.isArray(ws.questionIds) ? ws.questionIds : []).map(String);
+  const i = ids.indexOf(String(qid));
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= ids.length) return;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  ws.questionIds = ids;
+  _wseCommit(ws, '');
+}
+
+// ---- the editor overlay ----
+function wseOpen(id) {
+  const ws = _wseFind(id);
+  if (!ws) { showToast('That worksheet is no longer here', 'error'); return; }
+  _wseId = ws.id;
+  const sub = document.getElementById('wseSub');
+  if (sub) sub.textContent = ws.title || 'Untitled worksheet';
+  _wsePopulateFilters();
+  wseRender();
+  const ov = document.getElementById('wsEditOverlay');
+  if (ov) ov.classList.add('show');
+  const search = document.getElementById('wseSearch');
+  if (search) setTimeout(() => search.focus(), 40);
+}
+
+// Opened from the preview bar — the sheet on show is the one to edit.
+function wseOpenFromPreview() {
+  if (!_wsPreviewSaved) return;
+  wseOpen(_wsPreviewSaved.id);
+}
+
+function wseClose() {
+  const ov = document.getElementById('wsEditOverlay');
+  if (ov) ov.classList.remove('show');
+  _wseId = null;
+}
+
+// Topic and type dropdowns built from the bank this user can actually pick
+// from, so neither ever offers a filter that returns nothing.
+function _wsePopulateFilters() {
+  const bank = _wseBank();
+  const fill = (id, values, allLabel) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">${allLabel}</option>`;
+    values.forEach(v => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      sel.appendChild(o);
+    });
+    if (cur && values.includes(cur)) sel.value = cur;
+  };
+  fill('wseTopic', [...new Set(bank.flatMap(q => qTopicList(q)))].filter(Boolean).sort(), 'All Topics');
+  fill('wseCategory', [...new Set(bank.map(q => normalizeCategoryValue(q.category)))].filter(Boolean).sort(), 'All Types');
+}
+
+function wseRender() {
+  wseRenderIn();
+  wseRenderBank();
+}
+
+function _wseMetaHtml(q) {
+  const level = getTopicLevel(q.topic || '');
+  const src = questionSource(q);
+  return `<span class="qb-tag category">${escapeHtml(normalizeCategoryValue(q.category))}</span>
+    <span class="qb-tag topic">${escapeHtml(q.topic || '')}</span>
+    ${qSecondaryTagsHtml(q)}
+    <span class="qb-tag">${escapeHtml(level)}</span>
+    ${src ? `<span class="qb-tag source" title="${escapeHtml(src)}">${escapeHtml(src)}</span>` : ''}`;
+}
+
+function wseRenderIn() {
+  const list = document.getElementById('wseInList');
+  const count = document.getElementById('wseInCount');
+  const ws = _wseWs();
+  if (!list || !ws) return;
+  const ids = (Array.isArray(ws.questionIds) ? ws.questionIds : []).map(String);
+  const byId = new Map(questionBank.map(q => [String(q.id), q]));
+  if (count) count.textContent = '· ' + ids.length + ' question' + (ids.length === 1 ? '' : 's');
+  if (!ids.length) {
+    list.innerHTML = `<div class="wse-empty">Nothing on this worksheet yet.<br>Add questions from the bank on the right.</div>`;
+    return;
+  }
+  list.innerHTML = ids.map((qid, i) => {
+    const q = byId.get(qid);
+    const esc = escapeHtml(qid);
+    const acts = `<div class="wse-row-acts">
+      <button type="button" class="wse-act" onclick="wseMove('${esc}',-1)" title="Move up"${i === 0 ? ' disabled' : ''}>▲</button>
+      <button type="button" class="wse-act" onclick="wseMove('${esc}',1)" title="Move down"${i === ids.length - 1 ? ' disabled' : ''}>▼</button>
+      <button type="button" class="wse-act wse-act-del" onclick="wseRemove('${esc}')" title="Take this question off the worksheet">✕</button>
+    </div>`;
+    // A question deleted from the bank since the sheet was saved. It already
+    // prints as nothing — say so, and offer the one useful action.
+    if (!q) {
+      return `<div class="wse-row wse-row-missing">
+        <span class="wse-num">${i + 1}</span>
+        <div class="wse-row-main">
+          <div class="wse-row-title">Question no longer in the bank</div>
+          <div class="wse-row-prev">It was deleted after this worksheet was saved, so it is already left out of every print. Remove it to tidy the list.</div>
+        </div>
+        ${acts}
+      </div>`;
+    }
+    return `<div class="wse-row">
+      <span class="wse-num">${i + 1}</span>
+      <div class="wse-row-main">
+        <div class="wse-row-title">${escapeHtml(q.title || 'Untitled question')}</div>
+        <div class="wse-row-meta">${_wseMetaHtml(q)}</div>
+        <div class="wse-row-prev">${escapeHtml(getQuestionPreview(q))}</div>
+      </div>
+      ${acts}
+    </div>`;
+  }).join('');
+}
+
+const WSE_BANK_SHOWN = 60;   // the list is a picker, not the bank page — filter to find, don't scroll to find
+
+function wseRenderBank() {
+  const list = document.getElementById('wseBankList');
+  const count = document.getElementById('wseBankCount');
+  const ws = _wseWs();
+  if (!list || !ws) return;
+  const on = new Set((Array.isArray(ws.questionIds) ? ws.questionIds : []).map(String));
+  const level = document.getElementById('wseLevel')?.value || '';
+  const topic = document.getElementById('wseTopic')?.value || '';
+  const cat = document.getElementById('wseCategory')?.value || '';
+  const search = (document.getElementById('wseSearch')?.value || '').trim().toLowerCase();
+  const matches = _wseBank().filter(q => {
+    if (on.has(String(q.id))) return false;              // already on the sheet
+    if (topic && !qMatchesTopic(q, topic)) return false;
+    if (cat && !qMatchesCategory(q, cat)) return false;
+    if (level && getTopicLevel(q.topic || '') !== level) return false;
+    if (search && !extractQuestionSearchText(q).includes(search)) return false;
+    return true;
+  });
+  if (count) count.textContent = '· ' + matches.length + ' available';
+  if (!matches.length) {
+    list.innerHTML = `<div class="wse-empty">${on.size && !search && !topic && !cat && !level
+      ? 'Every question you can use is already on this worksheet.'
+      : 'No questions match those filters.<br>Try widening them.'}</div>`;
+    return;
+  }
+  const shown = matches.slice(0, WSE_BANK_SHOWN);
+  list.innerHTML = shown.map(q => {
+    const esc = escapeHtml(String(q.id));
+    return `<div class="wse-row">
+      <div class="wse-row-main">
+        <div class="wse-row-title">${escapeHtml(q.title || 'Untitled question')}</div>
+        <div class="wse-row-meta">${_wseMetaHtml(q)}</div>
+        <div class="wse-row-prev">${escapeHtml(getQuestionPreview(q))}</div>
+      </div>
+      <div class="wse-row-acts">
+        <button type="button" class="wse-add" onclick="wseAdd('${esc}')" title="Add this question to the end of the worksheet">＋ Add</button>
+      </div>
+    </div>`;
+  }).join('') + (matches.length > shown.length
+    ? `<div class="wse-empty">Showing the first ${shown.length} of ${matches.length}. Narrow the search to see the rest.</div>`
+    : '');
+}
+
+// The ✕ on a question in the live A4 preview — the place you actually notice
+// that a question does not belong on the sheet. No confirm: it is one click to
+// put back through ✎ Questions, and the toast says where.
+function wsePreviewRemove(qid) {
+  if (!_wsPreviewSaved) return;
+  wseRemoveFrom(_wsPreviewSaved.id, qid);
 }
 
 // ---- Practice worksheet questions ----
@@ -20409,7 +20681,7 @@ function practiceSavedWorksheet(id) {
   const ids = Array.isArray(ws.questionIds) ? ws.questionIds.map(String) : [];
   const selected = questionBank.filter(q => ids.includes(String(q.id)));
   if (selected.length === 0) {
-    showToast('Questions no longer available', 'error');
+    showToast(_wsEmptyMsg(ws), 'error');
     return;
   }
   launchWorksheetPractice(selected);
@@ -21222,7 +21494,9 @@ const WS_PREVIEW_CSS = `
   .wspv-brk.up{ color:#2d6ca8; border-color:#9bb8f0; }
   .wspv-brk.up:hover{ background:#2d6ca8; color:#fff; }
   .wspv-brk.edit{ color:#8a5a00; border-color:#e6c489; }
-  .wspv-brk.edit:hover{ background:#8a5a00; color:#fff; }`;
+  .wspv-brk.edit:hover{ background:#8a5a00; color:#fff; }
+  .wspv-brk.del{ color:#b23b36; border-color:#e8b6b4; }
+  .wspv-brk.del:hover{ background:#b23b36; color:#fff; }`;
 
 // Copy the app stylesheet but unwrap the `@media print { … }` block (balanced
 // braces) so its rules apply on the iframe's screen — single source of truth,
@@ -21291,7 +21565,7 @@ function previewSavedWorksheet(id) {
   const ws = savedWorksheets.find(w => w.id === id);
   if (!ws) return;
   if (_wsSavedQuestions(ws).length === 0) {
-    showToast('Questions no longer available', 'error');
+    showToast(_wsEmptyMsg(ws), 'error');
     return;
   }
   _wsPreviewSaved = { id: ws.id, title: ws.title };
@@ -21301,6 +21575,10 @@ function previewSavedWorksheet(id) {
 function _wsShowPreviewOverlay() {
   const ov = document.getElementById('wsPreviewOverlay');
   if (ov) ov.classList.add('show');
+  // Only a SAVED worksheet has a list to edit — the builder's own preview is
+  // driven by the tick boxes on the page behind it.
+  const editBtn = document.getElementById('wsPreviewEditBtn');
+  if (editBtn) editBtn.style.display = _wsPreviewSaved ? '' : 'none';
   renderWsPreview();
 }
 
@@ -21462,6 +21740,18 @@ function _wsPreviewPack(doc) {
         eb.title = 'Edit this question — text and diagram size — without leaving the preview';
         eb.setAttribute('onclick', "parent.wsQuickEdit('" + qid + "')");
         tools.appendChild(eb);
+      }
+      // Take the question OFF the sheet — the preview is where you notice that
+      // it does not belong. Saved worksheets only: the builder's selection is
+      // the tick boxes on the page behind the preview, not a stored list.
+      if (qid && qid.indexOf('__lo__') !== 0 && _wsPreviewSaved) {
+        const rb = doc.createElement('button');
+        rb.type = 'button';
+        rb.className = 'wspv-brk del';
+        rb.textContent = '✕ remove';
+        rb.title = 'Take this question off this worksheet (the question itself stays in the bank)';
+        rb.setAttribute('onclick', "parent.wsePreviewRemove('" + qid + "')");
+        tools.appendChild(rb);
       }
       if (tools.children.length) chunk.appendChild(tools);
       content.appendChild(chunk);
@@ -45605,6 +45895,15 @@ window.wsQeImgSize = wsQeImgSize;
 window.wsQePrintImg = wsQePrintImg;
 window.wsQeImgUrl = wsQeImgUrl;
 window.renderSavedWorksheets = renderSavedWorksheets;
+// Saved worksheet — add / remove / reorder its questions
+window.wseOpen = wseOpen;
+window.wseOpenFromPreview = wseOpenFromPreview;
+window.wseClose = wseClose;
+window.wseAdd = wseAdd;
+window.wseRemove = wseRemove;
+window.wseMove = wseMove;
+window.wseRenderBank = wseRenderBank;
+window.wsePreviewRemove = wsePreviewRemove;
 window.deleteWorksheet = deleteWorksheet;
 window.reprintWorksheet = reprintWorksheet;
 window.practiceCurrentWorksheet = practiceCurrentWorksheet;
