@@ -6856,7 +6856,13 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 /* ── The pack being torn open: seven frames cross-faded in one stack ── */
 .tcg-rip-overlay { display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .tcg-rip-inner { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 24px; }
-.tcg-rip-stage { position: relative; width: min(62vw, 340px); height: min(62vw, 340px); }
+.tcg-rip-stage { position: relative; width: min(62vw, 340px); height: min(62vw, 340px); box-shadow: none; border: 0; --halo: rgba(240,181,66,0.6); }
+/* The stage takes its glow from its OWN tier classes. It must never borrow
+   .tcg-pack-<tier>, which also carries the shop card's border and its 1px
+   box-shadow ring — that ring drew a rectangle round the pack on the overlay. */
+.tcg-rip-bronze { --halo: rgba(205,127,50,0.62); }
+.tcg-rip-silver { --halo: rgba(196,208,220,0.66); }
+.tcg-rip-gold   { --halo: rgba(240,181,66,0.72); }
 .tcg-rip-stage::before {
   content: ''; position: absolute; inset: -12%; border-radius: 50%; pointer-events: none;
   background: radial-gradient(circle, var(--halo) 0%, transparent 66%);

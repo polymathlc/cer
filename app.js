@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.253.1';
+const APP_VERSION = 'v1.253.2';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -34495,7 +34495,26 @@ function tcgCardArtPrompt(c) {
     + 'STYLE: polished painterly digital illustration, rich saturated colour, dramatic rim lighting, glowing elemental effects.\n'
     + 'HARD RULES: absolutely no text, letters, numbers, signatures or watermarks anywhere; no card frame, border, banner or interface; exactly one creature; friendly for primary-school children — no blood, no gore, nothing frightening or gruesome.';
 }
-function tcgAvatarPrompt(c) {
+// ---- "Stand on nothing" — the ONE set of background rules ------------------
+// Battle avatars, element projectile frames and booster-pack frames are all
+// blitted onto a battlefield, a shop card or an overlay with nothing behind
+// them, so all three prompts must say the same thing in the same words. Keep
+// them pointing at THIS fragment rather than restating it, or they drift — and
+// they have drifted before.
+// Never use the word "transparent": told to draw a transparent background, an
+// image model paints the chequered pattern an editor uses to SHOW transparency
+// and it arrives as real pixels. So the pattern is ruled out by name, in every
+// colour, and `harder` is what a redraw says after the check caught one.
+function _noBackgroundRules(subject, harder) {
+  return 'BACKGROUND — CRITICAL: the area around ' + subject + ' must be genuinely EMPTY. '
+    + 'Do NOT draw a chequerboard or chessboard. Do NOT draw a grid or tiling of alternating squares in ANY colour — not light-grey and white, not tinted, not faint, not tucked into a corner. '
+    + 'Do NOT draw any pattern, texture, gradient, vignette, panel, card, canvas, frame, border, plate, ground, floor, shadow or backdrop of any kind to stand in for emptiness. '
+    + 'Nothing at all is drawn outside ' + subject + ' itself and its own glow — not a hint of one, not in a single corner, right out to all four edges of the picture.\n'
+    + (harder
+        ? 'RETRY — the previous attempt came back with a background painted in, which is unusable. Draw ' + subject + ' completely ALONE this time, against nothing whatsoever: no squares, no tiles, no chequered pattern, no shading, no plate, no backdrop, all the way to every edge.\n'
+        : '');
+}
+function tcgAvatarPrompt(c, harder) {
   // Same instruction either way — only the words for WHAT is being redrawn
   // change, because "keep the species and horns identical" means nothing when
   // the reference is a paladin.
@@ -34507,9 +34526,7 @@ function tcgAvatarPrompt(c) {
   return 'Turn the reference picture into a GAME BATTLE AVATAR sprite of the very same ' + subject + ', "' + c.name + '".\n'
     + 'KEEP IDENTICAL: ' + keep + ' — this must read as the exact same character as the reference.\n'
     + 'CHANGE: remove the background scenery completely and leave the area around the creature COMPLETELY EMPTY — no ground, no shadow, no glow plate, no frame, no scenery of any kind. Show the complete creature from head to toe, centred, facing the viewer in a battle-ready three-quarter stance, with a small empty margin on every side.\n'
-    // Same trap as the projectile frames: say "transparent" and the model
-    // paints the chequered pattern that stands for it.
-    + 'BACKGROUND — CRITICAL: do NOT draw a chequerboard or chessboard, do NOT draw a grid or tiling of alternating squares in ANY colour (not light-grey and white, not tinted, not faint), and do NOT draw any pattern, texture, plate or backdrop to stand in for emptiness. That chequered pattern must not appear anywhere in the picture.\n'
+    + _noBackgroundRules('the ' + subject, harder)
     + 'STYLE: clean crisp game-asset sprite with bold shapes that still read clearly at 128 pixels.\n'
     + 'HARD RULES: no text, letters, numbers or watermarks; exactly one creature; nothing frightening or gruesome.';
 }
@@ -34559,6 +34576,44 @@ async function _tcgCardArtDataUrl(card) {
   try { return await _urlToDataUrlRobust(transformImageUrl(url)); }
   catch (e) { console.warn('could not reload card art for ' + card.name, e); return null; }
 }
+// ---- Draw it, cut it, CHECK it, and force it if the check still fails ------
+// The knock-out is deliberately cautious — faced with something it cannot cut
+// safely it hands the picture back untouched, which is right for a paste and
+// wrong for a sprite that has to stand on nothing. So every generated sprite
+// (battle avatar, projectile frame, pack frame) goes through this:
+//   1. draw → cut → check. Clean? done.
+//   2. still carrying a backdrop → redraw with the blunter prompt.
+//   3. STILL carrying one → cut it by FORCE rather than save it dirty. The
+//      forced cut only ever removes more, and it keeps the "that cannot be
+//      right" ceiling, so it can never erase the sprite itself.
+// Every one of the three is needed: the prompt alone does not stop a model
+// painting a plate, and the cautious cut alone does not remove one.
+const TCG_BG_DRAWS = 2;   // how many times a dirty picture is drawn before the forced cut
+async function _tcgGenClean(promptFor, ref, label, strict) {
+  let out = null;
+  for (let attempt = 0; attempt < TCG_BG_DRAWS; attempt++) {
+    const raw = await tcgGenArtImage(promptFor(attempt > 0), ref, true);
+    out = await _stripImageBackground(raw);
+    const left = await _bgLeftover(out, strict);
+    if (!left) return out;
+    if (_tcgGenStop) break;   // the admin pressed Stop — don't spend another draw
+    console.warn(label + ' came back with ' + left + ' behind it — redrawing');
+  }
+  return await _tcgForceClean(out, label, strict);
+}
+// The last resort. Only ever called on a picture the checker has already
+// condemned, so the caution the ordinary cut applies is what is standing
+// between us and a chequerboard on the battlefield.
+async function _tcgForceClean(dataUrl, label, strict) {
+  if (!dataUrl) return dataUrl;
+  const forced = await _stripImageBackground(dataUrl, true);
+  const still = await _bgLeftover(forced, strict);
+  if (!still) { console.warn(label + ': backdrop removed by the forced cut'); return forced; }
+  // Neither pass got it clean. The forced one is strictly closer, so it wins —
+  // and this is loud, because it means a prompt or the detector needs looking at.
+  console.warn(label + ': STILL ' + still + ' after a forced cut — saving the cleanest version there is');
+  return forced;
+}
 async function _tcgGenCardArt(card) {
   const dataUrl = await tcgGenArtImage(tcgCardArtPrompt(card), null, false);
   await _tcgArtStore(card.id, dataUrl);
@@ -34569,7 +34624,9 @@ async function _tcgGenCardArt(card) {
 async function _tcgGenAvatar(card, cardDataUrl) {
   let ref = cardDataUrl || await _tcgCardArtDataUrl(card);
   if (!ref) ref = await _tcgGenCardArt(card);
-  const dataUrl = await tcgGenArtImage(tcgAvatarPrompt(card), ref, true);
+  // Same clean-check-force loop the animation frames get. An avatar stands on
+  // the arena stage with nothing behind it, so a plate here is just as wrong.
+  const dataUrl = await _tcgGenClean(h => tcgAvatarPrompt(card, h), ref, 'avatar for ' + card.name, true);
   await _tcgArtStore(card.id + ':av', dataUrl);
   return dataUrl;
 }
@@ -34725,19 +34782,13 @@ function tcgFxPrompt(element, phase, n, harder) {
     + 'COMPOSITION: perfectly centred on a COMPLETELY EMPTY background, square'
       + (wide ? ', the effect filling the frame edge to edge' : '')
       + '. Nothing else in the frame at all — no character, no monster, no hand, no ground, no scenery, no border, no text, no watermark. Only the effect and its own glow.\n'
-    // Told to draw a "transparent background", image models paint the chequered
-    // pattern an editor uses to SHOW transparency, and it arrives as real
-    // pixels. So: never use that word, and rule the pattern out by name — in
-    // every colour, because a tinted checkerboard (the element's own glow
-    // washed over the squares) is just as wrong as a grey one.
-    + 'BACKGROUND — CRITICAL: the area around the effect must be genuinely empty. Do NOT draw a chequerboard or chessboard. Do NOT draw a grid or tiling of alternating squares in ANY colour — not light-grey and white, not tinted, not faint. Do NOT draw any pattern, texture, gradient, panel, card, canvas, frame or plate to stand in for emptiness. Nothing at all is drawn outside the effect itself and its own glow.\n'
+    // A tinted checkerboard (the element's own glow washed over the squares) is
+    // just as wrong as a grey one — see _noBackgroundRules.
+    + _noBackgroundRules('the effect', harder)
     + ((n > 1 || phase.key !== 'charge')
         ? 'The reference picture already has an empty background — leave it exactly that empty, do not fill it in with squares or a plate.\n'
         : '')
     + 'STYLE: crisp bright game effect art, still readable at 64 pixels, consistent lighting, friendly for primary-school children.\n'
-    + (harder
-        ? 'RETRY — the previous attempt came back with a background painted in, which is unusable. Draw the effect ALONE this time: outside its glow there must be no squares, no tiles, no chequered pattern, no shading and no backdrop of any kind.\n'
-        : '')
     + (n > 1
         ? 'CONSISTENCY: the reference picture is frame ' + (n - 1) + ' of this same animation. Keep the same colours, shape language, style and camera — this is only the next moment of the SAME effect.'
         : phase.key === 'charge'
@@ -34764,25 +34815,36 @@ function _loadImageCors(src) {
     img.src = src;
   });
 }
-async function _recleanStoredArt(url) {
-  let before;
+// Read a stored picture back as a data URL so a canvas can work on it.
+async function _tcgArtToDataUrl(url) {
   try {
     const img = await _loadImageCors(url);
     const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-    if (!w || !h) return null;
+    if (!w || !h) throw new Error('empty image');
     const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
     cv.getContext('2d').drawImage(img, 0, 0);
-    before = cv.toDataURL('image/png');       // throws if the fetch was not CORS-readable
+    return cv.toDataURL('image/png');         // throws if the fetch was not CORS-readable
   } catch (e) {
     // A Storage bucket without CORS headers taints the canvas and the picture
     // is unreadable — the same wall the AI reference loader hit, so use the
     // same way round it (cache-busted CORS <img>, then the image proxy) rather
     // than telling the admin their art cannot be cleaned.
-    before = await _urlToDataUrlRobust(transformImageUrl(url));
+    return await _urlToDataUrlRobust(transformImageUrl(url));
   }
-  // Exactly the knock-out a freshly drawn frame gets — chequerboard first, then
-  // any plate left underneath — so repairing old art and drawing new art agree.
-  const after = await _stripImageBackground(before);
+}
+// Which stored pictures must stand clear of the edges — see _bgLeftoverInPixels.
+// Everything that has to stand on nothing, except the blast frames.
+function _tcgStrictBg(id) {
+  return /(^pk:|:av$)/.test(id) || (id.indexOf('fx:') === 0 && id.indexOf(':blast') < 0);
+}
+async function _recleanStoredArt(url, strict) {
+  const before = await _tcgArtToDataUrl(url);
+  // Exactly what a freshly drawn frame gets — the gentle knock-out, then the
+  // check, then the forced cut if the check still finds a backdrop — so
+  // repairing old art and drawing new art can never disagree.
+  let after = await _stripImageBackground(before);
+  const left = await _bgLeftover(after, strict);
+  if (left) after = await _tcgForceClean(after, 'stored art', strict);
   return after === before ? null : after;     // unchanged → nothing to write back
 }
 // Every id whose picture is meant to stand on nothing: the battlefield sprites
@@ -34806,7 +34868,7 @@ async function tcgRepairArtBackgrounds() {
     done++;
     btns.forEach(b => { b.textContent = '🧽 Checking ' + done + ' / ' + ids.length + '…'; });
     try {
-      const cleaned = await _recleanStoredArt(_tcgArt[id]);
+      const cleaned = await _recleanStoredArt(_tcgArt[id], _tcgStrictBg(id));
       if (!cleaned) continue;
       const url = await uploadImageDataUrl(cleaned);
       await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: { [id]: url } }, { merge: true });
@@ -34865,27 +34927,17 @@ async function _tcgFxRef(element, phase, n) {
   }
   return await _tcgGenFxFrame(element, phase, n - 1);
 }
-// Draw ONE frame and hand back a picture whose background is genuinely empty.
-//
-// Two things have to be true or the chequerboard comes back:
-//   1. the knock-out runs on the frame BEFORE it is chained onward — the next
-//      frame is drawn *from* this picture, so a background left in here is
-//      copied faithfully into every frame after it, and into the other three
-//      phases through the charge-up anchor;
-//   2. the result is actually checked. If the model painted a background the
-//      knock-out could not safely remove, the frame is drawn again with a
-//      blunter instruction rather than saved dirty.
-async function _tcgGenFxClean(element, phase, n, ref) {
-  let out = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = await tcgGenArtImage(tcgFxPrompt(element, phase, n, attempt > 0), ref, true);
-    out = await _stripImageBackground(raw);
-    const left = await _bgLeftover(out);
-    if (!left || _tcgGenStop) return out;   // clean, or the admin pressed Stop — don't spend another draw
-    console.warn('fx frame came back with ' + left + ' behind it' + (attempt ? ' — keeping it anyway' : ' — redrawing'),
-      element, phase.key, n);
-  }
-  return out;
+// Draw ONE frame and hand back a picture whose background is genuinely empty
+// (_tcgGenClean: draw → cut → check → redraw → forced cut). It matters most
+// here because the next frame is drawn *from* this picture, so a background
+// left in would be copied faithfully into every frame after it — and into the
+// other three phases through the charge-up anchor.
+function _tcgGenFxClean(element, phase, n, ref) {
+  // Every phase must stand clear of the edges except the blast, whose whole
+  // brief is to fill the frame edge to edge — checking that one strictly would
+  // condemn its own outer glow as a backdrop.
+  return _tcgGenClean(h => tcgFxPrompt(element, phase, n, h), ref,
+    'fx frame ' + element + ' ' + phase.key + ' ' + n, phase.key !== 'blast');
 }
 async function _tcgGenFxFrame(element, phase, n) {
   // Guard the recursion: without this, a bad call (or a NaN frame number)
@@ -35066,7 +35118,25 @@ const TCG_PACK_SET_LOOK = {
 // back, so a cleaned pack costs one decode.
 // The admin's Card Art thumbnails are deliberately LEFT RAW: that panel is
 // where the plate has to be visible, or nobody would know to press the button.
-const TCG_PACK_KEY_PX = 512;   // the rip stage tops out at 340 CSS px
+// Display-only cleaning uses the SAME knock-out the generator uses — gentle
+// cut, check, and a forced cut if the check still finds something — rather
+// than a second, weaker algorithm. Two cleaners disagreeing is exactly how a
+// plate ends up on screen that the admin panel swears is gone.
+const _tcgPackClean = new Map();
+function _tcgPackDisplayClean(url) {
+  if (!url) return Promise.resolve(null);
+  if (_tcgPackClean.has(url)) return _tcgPackClean.get(url);
+  const p = (async () => {
+    try {
+      const data = await _tcgArtToDataUrl(url);
+      const cut = await _stripImageBackground(data);
+      if (!(await _bgLeftover(cut, true))) return cut;
+      return await _stripImageBackground(cut, true);
+    } catch (e) { console.warn('pack display clean skipped', e); return null; }
+  })();
+  _tcgPackClean.set(url, p);
+  return p;
+}
 function _tcgPackImgHtml(url, alt, cls) {
   return '<img' + (cls ? ' class="' + cls + '"' : '') + ' data-packkey="1" src="' + url + '" alt="' + escapeHtml(alt || '') + '">';
 }
@@ -35088,7 +35158,7 @@ function tcgKeyPackImgs(root, onReady) {
   imgs.forEach(el => {
     const src = el.getAttribute('src');
     const done = keyed => { if (keyed && keyed !== src) el.src = keyed; if (--left <= 0) show(); };
-    try { elgKeyed(src, TCG_PACK_KEY_PX).then(done, () => done(null)); }
+    try { _tcgPackDisplayClean(src).then(done, () => done(null)); }
     catch (e) { done(null); }
   });
 }
@@ -35123,14 +35193,9 @@ function tcgPackFramePrompt(setKey, tier, n, harder) {
     + 'FRAME ' + n + ' OF ' + TCG_PACK_FRAMES + ' — ' + step.t + ': ' + step.d + '.\n'
     + 'CRITICAL — THIS IS ONE FRAME OF AN ANIMATION: the pack must stay the SAME pack at the SAME size in the SAME place in every frame, with the same wrapper artwork and the same colours. Only the tear, the light and the cards change from frame to frame. Do not re-design the packet, do not move it, do not zoom in or out.\n'
     + 'COMPOSITION: the pack centred on a COMPLETELY EMPTY background, square, filling about 70% of the frame. No hands, no table, no ground, no shadow plate, no scenery, no border, no interface.\n'
-    // Same trap as the element FX and the battle avatars: say "transparent"
-    // and the model paints the chequerboard that stands for it.
-    + 'BACKGROUND — CRITICAL: the area around the pack must be genuinely empty. Do NOT draw a chequerboard or chessboard. Do NOT draw a grid or tiling of alternating squares in ANY colour — not light-grey and white, not tinted, not faint. Do NOT draw any pattern, texture, gradient, panel, card, canvas, frame or plate to stand in for emptiness. Nothing at all outside the pack itself and its own glow.\n'
+    + _noBackgroundRules('the pack', harder)
     + (n > 1 ? 'The reference picture is frame ' + (n - 1) + ' of this same animation. Keep the pack IDENTICAL to it — same shape, same size, same position, same wrapper art, same colours — and change only what this frame describes. Its background is already empty; leave it exactly that empty.\n' : '')
     + 'STYLE: polished painterly digital game art, rich saturated colour, dramatic rim lighting — the same finish as a painted fantasy trading-card set.\n'
-    + (harder
-        ? 'RETRY — the previous attempt came back with a background painted in, which is unusable. Draw the pack ALONE this time: outside the packet and its own glow there must be no squares, no tiles, no chequered pattern, no shading, no plate and no backdrop of any kind.\n'
-        : '')
     + 'HARD RULES: no text, letters, numbers, logos, signatures or watermarks anywhere on the pack or in the frame; friendly for primary-school children.';
 }
 function tcgPackMissing() {
@@ -35192,24 +35257,13 @@ function _tcgPackRefreshCount() {
   b.disabled = !miss;
   b.textContent = '✨ Generate every pack animation' + (miss ? ' · ' + miss + ' frame' + (miss === 1 ? '' : 's') + ' missing' : ' · all done 🎉');
 }
-// Draw ONE frame and hand back a pack standing on a genuinely empty background.
-// Exactly the two rules the element FX above live by, and for the same reason:
-// the knock-out runs BEFORE the picture is chained onward (the next frame is
-// drawn from this one, so a backdrop left in here is copied faithfully through
-// the rest of the tear), and the result is checked — a background the
-// knock-out could not safely cut is redrawn with a blunter instruction rather
-// than saved dirty.
-async function _tcgGenPackClean(setKey, tier, n, ref) {
-  let out = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = await tcgGenArtImage(tcgPackFramePrompt(setKey, tier, n, attempt > 0), ref, true);
-    out = await _stripImageBackground(raw);
-    const left = await _bgLeftover(out);
-    if (!left || _tcgGenStop) return out;   // clean, or the admin pressed Stop — don't spend another draw
-    console.warn('pack frame came back with ' + left + ' behind it' + (attempt ? ' — keeping it anyway' : ' — redrawing'),
-      setKey, tier, n);
-  }
-  return out;
+// Draw ONE frame and hand back a pack standing on a genuinely empty background
+// — the same _tcgGenClean loop the element FX use, and for the same reason: the
+// next frame is drawn from this one, so a backdrop left in here would be copied
+// faithfully through the rest of the tear.
+function _tcgGenPackClean(setKey, tier, n, ref) {
+  return _tcgGenClean(h => tcgPackFramePrompt(setKey, tier, n, h), ref,
+    'pack frame ' + setKey + ' ' + tier + ' ' + n, true);
 }
 // Draw one run of 7, each frame from the one before it.
 async function _tcgPackRunFrames(setKey, tier, redraw, onProgress) {
@@ -36357,7 +36411,10 @@ function tcgShowReveal(pack, pulls, setKey) {
   o.className = 'tcg-overlay tcg-rip-overlay';
   o.id = 'tcgRevealOverlay';
   o.innerHTML = '<div class="tcg-rip-inner">'
-    + '<div class="tcg-rip-stage tcg-pack-' + tier + '">'
+    // tcg-rip-<tier>, NOT tcg-pack-<tier>: the pack card's tier classes carry the
+    // shop card's own border and 1px box-shadow ring, and borrowing them just to
+    // pick up --halo drew a rectangle round the pack on the overlay.
+    + '<div class="tcg-rip-stage tcg-rip-' + tier + '">'
     +   frames.map((u, i) => _tcgPackImgHtml(u, '', 'tcg-rip-frame' + (i ? '' : ' on'))).join('')
     + '</div>'
     + '<div class="tcg-rip-hint">tap to skip</div>'
@@ -38319,14 +38376,11 @@ function elgNodeReachable(r, n) { return !n.req || !!(r.tree && r.tree[n.req]); 
 // flat backdrop) are keyed out with a feathered edge, and the cut-out is
 // cached for the session. On failure (CORS taint, decode error) the caller
 // falls back — sprites re-crop into the old rounded frame, shots use the orb.
-// `maxPx` caps the working width — 256 is plenty for a battlefield sprite, and
-// the booster packs ask for more because they are drawn far bigger. It is part
-// of the cache key: the same picture keyed at two sizes is two cut-outs.
 const _elgKeyCache = new Map();
-function elgKeyed(url, maxPx) {
+function elgKeyed(url) {
   if (!url) return Promise.resolve(null);
-  const cap = Math.max(32, maxPx || 256);
-  const ck = cap + '|' + url;
+  const cap = 256;
+  const ck = url;
   if (_elgKeyCache.has(ck)) return _elgKeyCache.get(ck);
   const p = new Promise(resolve => {
     const img = new Image();
@@ -40164,6 +40218,10 @@ window.tcgStopArtGen = tcgStopArtGen;
 // eating the artwork.
 const _BG_TOL = 30;        // colour distance still counted as "the background"
 const _BG_EDGE_TOL = 52;   // looser band used only to feather the cut edge
+// The forced pass — see _stripImageBackground(dataUrl, true). Wider bands,
+// because by then the picture is known to be carrying a backdrop.
+const _BG_FORCE_TOL = 46;
+const _BG_FORCE_EDGE_TOL = 72;
 const _CHECK_TOL = 26;     // colour distance still counted as "a checker square"
 const _CHECK_CHROMA = 40;  // how far from grey a checker square may drift (the effect's glow tints it)
 
@@ -40309,7 +40367,13 @@ function _cutCheckerboard(px, w, h, pair) {
   }
   return removed;
 }
-async function _stripImageBackground(dataUrl) {
+// `force` is the last resort, used ONLY on a picture the checker has already
+// condemned (see _tcgForceClean). It relaxes the three guards that make the
+// ordinary pass hand a picture back untouched — a busy border, a small cut and
+// a tight colour tolerance — because at that point a plate is certain and a
+// slightly over-eager cut is the lesser evil. The "that cannot be right"
+// ceiling stays in both modes, so it can never erase the sprite itself.
+async function _stripImageBackground(dataUrl, force) {
   try {
     const img = await _loadImageEl(dataUrl);
     const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
@@ -40337,16 +40401,21 @@ async function _stripImageBackground(dataUrl) {
     if (pair && _cutCheckerboard(px, w, h, pair) > 0) cutSomething = true;
 
     // Already transparent? The model did as it was asked — leave it alone.
+    // NOT under force: the forced pass runs on a picture the checker has
+    // already condemned, and usually on one the gentle pass has ALREADY cut
+    // (so it is full of transparency). Bailing here would make force a no-op.
     let clear = 0;
     for (let i = 3; i < px.length; i += 4) if (px[i] < 16) clear++;
-    if (clear > n * 0.06) return finish();
+    if (!force && clear > n * 0.06) return finish();
 
     // What colour is the border? Group near-identical shades: a plate has one,
     // a transparency checkerboard has two.
     const groups = [];
+    let borderOpaque = 0;
     const sample = (x, y) => {
       const o = (y * w + x) * 4;
       if (px[o + 3] < 200) return;
+      borderOpaque++;
       const r = px[o], g = px[o + 1], b = px[o + 2];
       for (const gr of groups) {
         if (Math.abs(gr.r - r) < 22 && Math.abs(gr.g - g) < 22 && Math.abs(gr.b - b) < 22) { gr.count++; return; }
@@ -40356,11 +40425,17 @@ async function _stripImageBackground(dataUrl) {
     for (let x = 0; x < w; x++) { sample(x, 0); sample(x, h - 1); }
     for (let y = 0; y < h; y++) { sample(0, y); sample(w - 1, y); }
     const borderPx = 2 * (w + h);
+    // Under force the border is usually mostly CUT already, so what is left
+    // opaque on it is the leftover — measure the coverage against that, not
+    // against the whole ring, or every forced pass bails on its own success.
+    const ref = force ? Math.max(1, borderOpaque) : borderPx;
     groups.sort((a, b) => b.count - a.count);
-    const bg = groups.slice(0, 2).filter(g => g.count > borderPx * 0.12);
+    const bg = groups.slice(0, force ? 3 : 2).filter(g => g.count > ref * (force ? 0.05 : 0.12));
     const covered = bg.reduce((s, g) => s + g.count, 0);
     // A busy border means the artwork itself reaches the edge — don't risk it.
-    if (!bg.length || covered < borderPx * 0.8) return finish();
+    // Under force we already KNOW there is a backdrop, so a busy border means
+    // the plate is textured, not that the art runs to the edge.
+    if (!bg.length || covered < ref * (force ? 0.35 : 0.8)) return finish();
 
     const isBg = (o, tol) => {
       if (px[o + 3] < 24) return true;
@@ -40381,19 +40456,24 @@ async function _stripImageBackground(dataUrl) {
     for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
     for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
     const cut = new Uint8Array(n);
-    let removed = 0;
+    let removed = 0, removedSolid = 0;
     while (stack.length) {
       const i = stack.pop();
-      if (!isBg(i * 4, _BG_TOL)) continue;
+      if (!isBg(i * 4, force ? _BG_FORCE_TOL : _BG_TOL)) continue;
       cut[i] = 1; removed++;
+      if (px[i * 4 + 3] >= 24) removedSolid++;   // pixels that were actually painted
       const x = i % w, y = (i - x) / w;
       if (x > 0) push(x - 1, y);
       if (x < w - 1) push(x + 1, y);
       if (y > 0) push(x, y - 1);
       if (y < h - 1) push(x, y + 1);
     }
-    if (removed < n * 0.02) return finish();   // nothing worth doing
-    if (removed > n * 0.97) return finish();   // that cannot be right — keep the art
+    if (removed < n * (force ? 0.004 : 0.02)) return finish();   // nothing worth doing
+    // "That cannot be right — keep the art." Under force the count has to be of
+    // pixels that were PAINTED: the picture is usually mostly transparent
+    // already, and counting the emptiness would trip this ceiling on a frame
+    // that is only a corner of plate away from clean.
+    if ((force ? removedSolid : removed) > n * 0.97) return finish();
 
     for (let i = 0; i < n; i++) if (cut[i]) px[i * 4 + 3] = 0;
     // Soften the 1px fringe so edges don't look sawn off.
@@ -40404,7 +40484,7 @@ async function _stripImageBackground(dataUrl) {
         const o = i * 4;
         if (px[o + 3] === 0) continue;
         const edge = (x > 0 && cut[i - 1]) || (x < w - 1 && cut[i + 1]) || (y > 0 && cut[i - w]) || (y < h - 1 && cut[i + w]);
-        if (edge && isBg(o, _BG_EDGE_TOL)) px[o + 3] = 110;
+        if (edge && isBg(o, force ? _BG_FORCE_EDGE_TOL : _BG_EDGE_TOL)) px[o + 3] = 110;
       }
     }
     cutSomething = true;
@@ -40421,7 +40501,14 @@ async function _stripImageBackground(dataUrl) {
 // That is the right call for a paste, but a freshly GENERATED frame can simply
 // be drawn again — so this says whether one is still carrying a background,
 // and returns a short human phrase for the log when it is.
-function _bgLeftoverInPixels(px, w, h) {
+// `strict` means "this sprite is supposed to stand clear of the edges", which
+// is true of every battle avatar, every pack frame and every projectile frame
+// EXCEPT the blast (whose prompt asks for the effect to fill the frame edge to
+// edge). For those, a border ring that is still opaque IS a backdrop, whatever
+// colour it is — which is what catches the gradient and vignette plates the
+// flat-plate test below cannot see, and those are exactly the ones the cautious
+// cut refuses to touch, so nothing else would ever catch them.
+function _bgLeftoverInPixels(px, w, h, strict) {
   if (_detectCheckerPair(px, w, h)) return 'a chequerboard';
   // A plate: the whole border ring still opaque and nearly all one flat colour.
   // Art that genuinely runs to the edge (a blast at full power) varies along
@@ -40443,9 +40530,10 @@ function _bgLeftoverInPixels(px, w, h) {
   for (let y = 0; y < h; y++) { sample(0, y); sample(w - 1, y); }
   if (!ring || opaque < ring * 0.85) return null;   // the edges are mostly empty — that is what we want
   groups.sort((a, b) => b.count - a.count);
-  return (groups[0] && groups[0].count > ring * 0.75) ? 'a solid background plate' : null;
+  if (groups[0] && groups[0].count > ring * 0.75) return 'a solid background plate';
+  return strict ? 'a painted backdrop running to the edges' : null;
 }
-async function _bgLeftover(dataUrl) {
+async function _bgLeftover(dataUrl, strict) {
   try {
     const img = await _loadImageEl(dataUrl);
     const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
@@ -40453,7 +40541,7 @@ async function _bgLeftover(dataUrl) {
     const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
     const ctx = cv.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(img, 0, 0);
-    return _bgLeftoverInPixels(ctx.getImageData(0, 0, w, h).data, w, h);
+    return _bgLeftoverInPixels(ctx.getImageData(0, 0, w, h).data, w, h, strict);
   } catch (e) {
     console.warn('background check skipped', e);
     return null;   // never block a frame over the check itself
