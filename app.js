@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.255.0';
+const APP_VERSION = 'v1.256.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -30829,8 +30829,8 @@ function _commTcgAnnouncePost() {
   return {
     _id: '__tcgAnnounce', _builtin: true,
     type: 'news', pinned: true, status: 'approved',
-    title: '🃏 NEW GAME RELEASED — Realm of Embers TCG!',
-    text: 'Collect every card in the dex! Spend the points you earn answering questions on booster packs, level your cards up, build a team of 5 and battle other trainers in the Arena — then take on the infinite Dungeon. Every card has a star rating from 1★ to 7★, and 7★ legends are the rarest thing in the game. Find it in your sidebar under 🃏 Realm of Embers TCG.',
+    title: '🃏 NEW GAME RELEASED — the Realm of Embers Trading Card Game!',
+    text: 'Collect every card in the dex! Spend the points you earn answering questions on booster packs, level your cards up, build a team of 5 and battle other trainers in the Arena — then take on the infinite Dungeon. Every card has a star rating from 1★ to 7★, and 7★ legends are the rarest thing in the game. Find it in your sidebar under 🃏 Realm of Embers.',
     _ctaHtml: '<div class="comm-actions"><button class="btn btn-primary" onclick="tcgOpenFromAnnounce()">🃏 Open my first pack</button></div>',
     authorUid: '', authorName: COMM_ADMIN_NAME, authorRole: 'admin',
     authorAvatar: COMM_ADMIN_AVATAR, authorStatus: COMM_ADMIN_STATUS,
@@ -34183,8 +34183,8 @@ function tcgReleased() { return !!(_tcgConfig && _tcgConfig.released); }
 async function tcgSetReleased(v) {
   if (!_isAdmin()) return;
   const on = (v === true || v === 'true');
-  if (on && !confirm('Release Realm of Embers TCG to all students?\n\nIt appears in their sidebar straight away, and every student is greeted with a release announcement the next time they log in — plus a pinned post in the community feed.')) return;
-  if (!on && !confirm('Take Realm of Embers TCG back into beta? Students will no longer see it, and the release announcement stops showing.')) return;
+  if (on && !confirm('Release the Realm of Embers Trading Card Game to all students?\n\nIt appears in their sidebar straight away, and every student is greeted with a release announcement the next time they log in — plus a pinned post in the community feed.')) return;
+  if (!on && !confirm('Take the Realm of Embers Trading Card Game back into beta? Students will no longer see it, and the release announcement stops showing.')) return;
   try {
     const now = new Date().toISOString();
     // releasedAt stamps THIS release. The announcement banner is dismissed
@@ -34197,7 +34197,7 @@ async function tcgSetReleased(v) {
     tcgRenderAdminBanner();
     tcgShowAnnounce();                              // preview exactly what the students get
     try { _renderCommFeed(); } catch (_) {}         // the community feed carries the same announcement
-    showToast(on ? '🚀 Realm of Embers TCG released to students — they will see the announcement when they log in!' : 'Realm of Embers TCG is back in beta (admins only)', 'success');
+    showToast(on ? '🚀 The Realm of Embers Trading Card Game is released to students — they will see the announcement when they log in!' : 'The Realm of Embers Trading Card Game is back in beta (admins only)', 'success');
   } catch (e) { console.error('tcg release', e); showToast('Could not update — check your connection', 'error'); }
 }
 function tcgAccessAllowed() { return _isAdmin() || tcgReleased(); }
@@ -35572,6 +35572,40 @@ const TCG_LORE_NEXT = {
   text: "The coal under the roots of the world has started to dream again, and the Chronicle has left the last page of Book Two deliberately blank. Every new set of cards brings the next chapter of it — new heroes, new elders, and whatever it is that woke the Ember."
 };
 
+// ---- Who built the realm ---------------------------------------------------
+// The colophon. It closes the 📜 Lore tab and the 📘 How to Play tab, because
+// those are the two places a student is already reading rather than playing —
+// a credit nobody reads is not a credit. Names live in ONE constant so a
+// rebrand is one edit rather than a search across two files.
+const TCG_CREDITS = {
+  org: 'Polymath Learning Centre',
+  gm: 'Mr Chung',
+  gmTitle: 'Game Master'
+};
+function tcgCreditsHtml() {
+  const logo = tcgLogoUrl();
+  return '<div class="tcg-credits">'
+    + '<div class="tcg-credits-rule"></div>'
+    + '<div class="tcg-credits-seal">'
+    +   (logo ? '<img src="' + logo + '" alt="' + escapeHtml(TCG_CREDITS.org) + '">' : '<span>🔥</span>')
+    + '</div>'
+    + '<div class="tcg-credits-kicker">Brought into the world by</div>'
+    + '<h4 class="tcg-credits-org">' + escapeHtml(TCG_CREDITS.org) + '</h4>'
+    + '<div class="tcg-credits-body">'
+    +   '<p>The Realm of Embers was not found. It was <b>built</b> — card by card, chapter by chapter — at ' + escapeHtml(TCG_CREDITS.org) + ', by people who refused to accept that learning science and going on an adventure had to be two different afternoons.</p>'
+    +   '<p>Every monster in the dex, every page of the Chronicle and every star on every card exists because a student somewhere sat down in front of a hard question and answered it anyway. That is the only currency this realm has ever accepted, and it is not an accident: the points, the packs and the legends were designed from the first day to be <b>earned by understanding something you did not understand yesterday</b>.</p>'
+    +   '<p>That is what a learning centre is for. This is simply what it looks like when one decides to build a world.</p>'
+    + '</div>'
+    + '<div class="tcg-credits-gm">'
+    +   '<div class="tcg-credits-kicker">' + escapeHtml(TCG_CREDITS.gmTitle) + '</div>'
+    +   '<h4 class="tcg-credits-name">' + escapeHtml(TCG_CREDITS.gm) + '</h4>'
+    +   '<p>Keeper of the realm, writer of its Chronicle, and the hand behind every card in the dex. He sets the questions, tunes the odds, decides what a legend is worth, and settles what the rules actually meant. If a card feels almost impossible to pull, that was a decision. If a topic keeps coming back, that was a decision too.</p>'
+    +   '<p class="tcg-credits-oath">And he answers to the same Ember as everybody else: <b>nothing in here is bought, and nothing in here is given. It is answered for.</b></p>'
+    + '</div>'
+    + '<div class="tcg-credits-foot">' + escapeHtml(TCG_CREDITS.org) + ' · Realm of Embers Trading Card Game · ' + escapeHtml(APP_VERSION) + '</div>'
+    + '</div>';
+}
+
 // ---- Reading the lore ------------------------------------------------------
 let _tcgLoreByName = null;
 function _tcgLoreNameIndex() {
@@ -35704,7 +35738,8 @@ function tcgLoreHtml() {
     + (unwritten.length
         ? '<div class="tcg-lore-next-sets">Waiting for their chapter: ' + unwritten.map(k => TCG_SETS[k].em + ' ' + escapeHtml(TCG_SETS[k].title)).join(' · ') + '</div>'
         : '')
-    + '</div>';
+    + '</div>'
+    + tcgCreditsHtml();
   return html + '</div>';
 }
 
@@ -36698,7 +36733,7 @@ function tcgRenderAdminBanner() {
   host.innerHTML = '<div class="tcg-admin-banner">'
     + '<div class="tcg-ab-main">'
     +   '<span class="tcg-status-pill ' + (live ? 'live' : 'locked') + '">' + (live ? '🟢 RELEASED TO STUDENTS' : '🔒 BETA — ADMINS ONLY') + '</span>'
-    +   '<h4>' + (live ? 'Realm of Embers TCG is live' : 'You are play-testing Realm of Embers TCG') + '</h4>'
+    +   '<h4>' + (live ? 'The Realm of Embers Trading Card Game is live' : 'You are play-testing the Realm of Embers Trading Card Game') + '</h4>'
     +   '<p>' + (live
           ? 'Students see it in their sidebar, are greeted with the release announcement when they log in, and can buy packs with their points and battle each other. You can take it back into beta at any time.'
           : 'Students cannot see this game yet. Open packs, set a team and run battles to try everything — then press Release when you are happy, and every student meets the announcement at their next login. Each monster\'s trading-card art and battle avatar live on the 🎨 Card Art tab, where the ✨ AI art generator can draw them all for you.')
@@ -37678,7 +37713,7 @@ function tcgGuideHtml() {
   return '<div class="tcg-guide">'
 
   + '<div class="tcg-guide-hero">'
-  +   '<h2>📘 How to Play — Realm of Embers</h2>'
+  +   '<h2>📘 How to Play — the Realm of Embers Trading Card Game</h2>'
   +   '<p>Answer science questions → earn 🪙 points → open booster packs → build a team of five monsters → battle. Everything below is exactly how the game works, in the order you will meet it.</p>'
   + '</div>'
 
@@ -37809,6 +37844,8 @@ function tcgGuideHtml() {
       + '<li>A healer or shielder holds a team together far longer than a fifth attacker.</li>'
       + '<li>Losing costs nothing anywhere in this game. Retry the Dungeon floor as often as you like.</li>'
       + '</ul>')
+
+  + tcgCreditsHtml()
 
   + '</div>';
 }

@@ -7097,8 +7097,8 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
      and on every login after that until they dismiss it. Re-releasing announces it again. -->
 <div id="tcgAnnounce" style="display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1200;width:min(660px,calc(100vw - 28px));background:linear-gradient(135deg,#2a1608,#160d06);border:1px solid #8a5a1e;border-radius:16px;padding:24px 26px;box-shadow:0 18px 48px rgba(0,0,0,0.45);color:#f6ecdc;font-family:'DM Sans',system-ui,sans-serif;">
   <button id="tcgAnnounceClose" title="Dismiss" style="position:absolute;top:10px;right:12px;background:none;border:none;color:#b79b74;font-size:1.1rem;cursor:pointer;padding:4px;">✕</button>
-  <div style="font-weight:800;font-size:1.05rem;letter-spacing:0.01em;margin-bottom:10px;">🃏 NEW GAME RELEASED — Realm of Embers TCG!</div>
-  <div style="color:#d6c3a6;font-size:0.9rem;line-height:1.65;margin-bottom:18px;">Collect all <b>151 legendary monsters</b>. Spend the points you earn answering questions on <b>booster packs</b>, level your monsters up, build a team of 5 and battle other trainers in the <b>Arena</b> — then take on the infinite <b style="color:#f0b542;">Dungeon</b>. Find it in your sidebar under <b>🃏 Realm of Embers TCG</b>.</div>
+  <div style="font-weight:800;font-size:1.05rem;letter-spacing:0.01em;margin-bottom:10px;">🃏 NEW GAME RELEASED — the Realm of Embers Trading Card Game!</div>
+  <div style="color:#d6c3a6;font-size:0.9rem;line-height:1.65;margin-bottom:18px;">Collect <b>every card in the dex</b>. Spend the points you earn answering questions on <b>booster packs</b>, level your monsters up, build a team of 5 and battle other trainers in the <b>Arena</b> — then take on the infinite <b style="color:#f0b542;">Dungeon</b>. Find it in your sidebar under <b>🃏 Realm of Embers</b>.</div>
   <div style="display:flex;gap:12px;flex-wrap:wrap;">
     <button id="tcgAnnounceOpen" style="background:linear-gradient(135deg,#e08a2b,#c2691a);color:#fff;border:none;border-radius:10px;padding:12px 22px;font-weight:700;font-size:0.92rem;cursor:pointer;">🃏 Open my first pack</button>
     <button id="tcgAnnounceLater" style="background:transparent;color:#b79b74;border:1px solid #5a3f1c;border-radius:10px;padding:12px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">Later</button>
@@ -7609,7 +7609,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
            it is put back if the role changes. -->
       <div id="navTcgHome"></div>
       <div class="nav-tcg-wrap" id="navTcgWrap">
-        <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Realm of Embers TCG — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
+        <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Realm of Embers Trading Card Game — collect every card in the dex from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
           <span class="ico" id="navTcgIco">🃏</span> Realm of Embers <span class="nav-beta tcg-beta-badge">BETA</span>
         </div>
         <!-- Hover flyout: the game modes inside the realm, with 🎁 badges on
@@ -7626,7 +7626,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="nav-item" id="navFps" onclick="openFpsGame()" style="display:none;" title="Science Strike — roguelite first-person dungeon shooter with Borderlands-style loot. Answer a science question every 15 seconds to boost your loot luck.">
         <span class="ico">🔫</span> Science Strike
       </div>
-      <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire. Realm of Embers TCG art lives on that page's Card Art tab.">
+      <div class="nav-item admin-only" data-page="gameassets" onclick="navigateTo('gameassets')" title="Game Objects — paste a PNG to replace any game sprite: Science Raiders, Science Legends (heroes, followers, summons, enemies, ground), Avatar & Items, Science Spire. Realm of Embers Trading Card Game art lives on that page's Card Art tab.">
         <span class="ico">🎨</span> Game Objects
       </div>
       <div class="nav-item" id="rpgHideToggle" style="display:none;"><span class="ico">🙈</span> Hide game</div>
@@ -9300,9 +9300,9 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         <div>
           <div style="display:flex;align-items:center;gap:10px;">
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
-            <h2><span id="tcgLogoMark" class="tcg-logo-slot">🃏</span> Realm of Embers TCG <span class="nav-beta tcg-beta-badge" style="font-size:0.6rem;padding:3px 9px;">BETA</span></h2>
+            <h2><span id="tcgLogoMark" class="tcg-logo-slot">🃏</span> Realm of Embers Trading Card Game <span class="nav-beta tcg-beta-badge" style="font-size:0.6rem;padding:3px 9px;">BETA</span></h2>
           </div>
-          <div class="subtitle">Collect all 151 legendary monsters! Open booster packs with the points you earn answering questions, build a team of 5, battle other trainers and climb the infinite Dungeon.</div>
+          <div class="subtitle">Collect every card in the dex! Open booster packs with the points you earn answering questions, build a team of 5, battle other trainers and climb the infinite Dungeon.</div>
         </div>
         <div class="tcg-gold-chip" id="tcgGoldChip">🪙 —</div>
       </div>
@@ -9642,7 +9642,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         <option value="gpt-image-1" selected>gpt-image-1 &mdash; best quality (recommended)</option>
         <option value="gpt-image-1-mini">gpt-image-1-mini &mdash; cheaper &amp; faster</option>
       </select>
-      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;">Used only by the <strong>✨ AI art generator</strong> on Realm of Embers TCG &rarr; Card Art (the chat model above cannot draw). If ChatGPT image generation fails, the app falls back to the Gemini image model.</p>
+      <p style="color:var(--text-muted);font-size:0.78rem;margin-top:8px;line-height:1.5;">Used only by the <strong>✨ AI art generator</strong> on the Realm of Embers Trading Card Game &rarr; Card Art (the chat model above cannot draw). If ChatGPT image generation fails, the app falls back to the Gemini image model.</p>
     </div>
 
     <div class="form-group">
@@ -10671,6 +10671,46 @@ body.realm-embers .nav-tcg-sub button { border-left-color: rgba(240,205,122,0.45
 .tcg-lore-next h4 { margin: 0 0 14px; font-family: 'Cinzel', Georgia, serif; font-size: 1.15rem; color: #f7e9c6; }
 .tcg-lore-next p { margin: 0 auto; max-width: 480px; font-size: 0.87rem; line-height: 1.8; color: #b3c3e9; }
 .tcg-lore-next-sets { margin-top: 18px; font-size: 0.78rem; color: rgba(240,205,122,0.8); }
+
+/* ---- The colophon: who built the realm ----
+   Closes both the 📜 Lore tab and the 📘 How to Play tab. Deliberately quiet
+   and wide-margined — it is the last page of a book, not a banner. */
+.tcg-credits {
+  position: relative;
+  max-width: 680px; margin: 48px auto 8px; padding: 44px 38px 34px;
+  text-align: center; border-radius: 22px;
+  border: 1px solid rgba(240,205,122,0.32);
+  background:
+    radial-gradient(120% 90% at 50% -25%, rgba(240,205,122,0.14), transparent 62%),
+    linear-gradient(165deg, rgba(20,34,78,0.86), rgba(8,14,38,0.92));
+  box-shadow: 0 18px 50px rgba(3,7,20,0.5);
+}
+.tcg-credits-rule { width: 96px; height: 1px; margin: 0 auto 26px; background: linear-gradient(90deg, transparent, rgba(240,205,122,0.9), transparent); }
+.tcg-credits-seal {
+  width: 76px; height: 76px; margin: 0 auto 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 2rem;
+  border: 1px solid rgba(240,205,122,0.45);
+  background: radial-gradient(70% 70% at 50% 35%, rgba(240,205,122,0.2), rgba(6,11,30,0.9));
+  box-shadow: 0 0 26px rgba(240,181,66,0.25);
+}
+.tcg-credits-seal img { width: 60px; height: 60px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(240,181,66,0.55)); }
+.tcg-credits-kicker { font-family: 'Cinzel', Georgia, serif; font-size: 0.68rem; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(240,205,122,0.85); }
+.tcg-credits-org, .tcg-credits-name {
+  margin: 12px 0 20px; font-family: 'Cinzel', Georgia, serif; line-height: 1.25;
+  background: linear-gradient(100deg, #fff5da 0%, #f0cd7a 48%, #b9891f 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+}
+.tcg-credits-org { font-size: 1.5rem; }
+.tcg-credits-name { font-size: 1.25rem; }
+.tcg-credits-body p, .tcg-credits-gm p {
+  margin: 0 auto 16px; max-width: 520px;
+  font-family: Georgia, 'Times New Roman', serif; font-size: 0.95rem; line-height: 1.9; color: #d6dff4;
+}
+.tcg-credits-body b, .tcg-credits-gm b { color: #f5e6bd; }
+.tcg-credits-gm { margin-top: 34px; padding-top: 30px; border-top: 1px solid rgba(240,205,122,0.22); }
+.tcg-credits-oath { color: #c3d1f2 !important; font-style: italic; }
+.tcg-credits-foot { margin-top: 30px; font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(240,205,122,0.6); }
+@media (max-width: 640px) { .tcg-credits { padding: 34px 22px 26px; margin-top: 34px; } .tcg-credits-org { font-size: 1.25rem; } }
 
 /* ==================== 📜 THE PICTURE-BOOK READER ==================== */
 .lore-book {
