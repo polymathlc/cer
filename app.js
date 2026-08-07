@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.252.0';
+const APP_VERSION = 'v1.252.1';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -34327,10 +34327,11 @@ function tcgArtRefresh() {
 // says nothing, so the batch generator can call it 300 times in a row.
 async function _tcgArtStore(id, dataUrl) {
   if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
-  // Battle avatars and projectile frames stand on the battlefield with nothing
-  // behind them, so any background the model left in is knocked out first —
-  // pasted and uploaded pictures included. Card art keeps its scene.
-  if (id.endsWith(':av') || id.indexOf('fx:') === 0) dataUrl = await _stripImageBackground(dataUrl);
+  // Battle avatars, projectile frames and booster packs all stand with nothing
+  // behind them — the pack sits on the shop card and over the rip overlay with
+  // only its own tier halo — so any background the model left in is knocked out
+  // first, pasted and uploaded pictures included. Card art keeps its scene.
+  if (id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0) dataUrl = await _stripImageBackground(dataUrl);
   // Battle avatars are small stage sprites; card art gets more resolution.
   // Blast frames are stretched over a 3×3 block of panels, so they get more
   // pixels than the small sprites (avatars, charge/flight/impact frames).
@@ -34739,30 +34740,46 @@ function _loadImageCors(src) {
   });
 }
 async function _recleanStoredArt(url) {
-  const img = await _loadImageCors(url);
-  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-  if (!w || !h) return null;
-  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-  cv.getContext('2d').drawImage(img, 0, 0);
-  const before = cv.toDataURL('image/png');   // throws if the fetch was not CORS-readable
+  let before;
+  try {
+    const img = await _loadImageCors(url);
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    if (!w || !h) return null;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    cv.getContext('2d').drawImage(img, 0, 0);
+    before = cv.toDataURL('image/png');       // throws if the fetch was not CORS-readable
+  } catch (e) {
+    // A Storage bucket without CORS headers taints the canvas and the picture
+    // is unreadable — the same wall the AI reference loader hit, so use the
+    // same way round it (cache-busted CORS <img>, then the image proxy) rather
+    // than telling the admin their art cannot be cleaned.
+    before = await _urlToDataUrlRobust(transformImageUrl(url));
+  }
   // Exactly the knock-out a freshly drawn frame gets — chequerboard first, then
   // any plate left underneath — so repairing old art and drawing new art agree.
   const after = await _stripImageBackground(before);
   return after === before ? null : after;     // unchanged → nothing to write back
 }
+// Every id whose picture is meant to stand on nothing: the battlefield sprites
+// and the booster packs. Card art keeps its painted scene and is never touched.
+function _tcgBgFreeIds() {
+  return Object.keys(_tcgArt || {}).filter(id =>
+    id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.endsWith(':av'));
+}
 async function tcgRepairArtBackgrounds() {
   const uid = _tcgOwnerUid();
   if (!uid) { showToast('Sign in first', 'error'); return; }
   await tcgLoadArt();
-  // Only the sprites that stand on the battlefield with nothing behind them.
-  const ids = Object.keys(_tcgArt || {}).filter(id => id.indexOf('fx:') === 0 || id.endsWith(':av'));
-  const btn = document.getElementById('tcgFxRepairBtn');
-  if (!ids.length) { showToast('No generated frames or avatars to check yet', 'error'); return; }
-  if (btn) btn.disabled = true;
+  const ids = _tcgBgFreeIds();
+  // Both panels carry this button (element FX and booster packs) and either can
+  // start the same sweep, so the progress goes to whichever ones are on screen.
+  const btns = Array.prototype.slice.call(document.querySelectorAll('.tcg-bg-repair'));
+  if (!ids.length) { showToast('No generated frames, avatars or packs to check yet', 'error'); return; }
+  btns.forEach(b => { b.disabled = true; });
   let fixed = 0, unreadable = 0, done = 0;
   for (const id of ids) {
     done++;
-    if (btn) btn.textContent = '🧽 Checking ' + done + ' / ' + ids.length + '…';
+    btns.forEach(b => { b.textContent = '🧽 Checking ' + done + ' / ' + ids.length + '…'; });
     try {
       const cleaned = await _recleanStoredArt(_tcgArt[id]);
       if (!cleaned) continue;
@@ -34775,13 +34792,13 @@ async function tcgRepairArtBackgrounds() {
       console.warn('checkerboard repair skipped', id, e);
     }
   }
-  if (btn) { btn.disabled = false; btn.textContent = '🧽 Clean painted backgrounds'; }
+  btns.forEach(b => { b.disabled = false; b.textContent = '🧽 Clean painted backgrounds'; });
   tcgArtRefresh();
   showToast(fixed
-    ? '🧽 Cleaned ' + fixed + ' sprite' + (fixed === 1 ? '' : 's') + (unreadable ? ' · ' + unreadable + ' could not be read' : '')
+    ? '🧽 Cleaned ' + fixed + ' picture' + (fixed === 1 ? '' : 's') + (unreadable ? ' · ' + unreadable + ' could not be read' : '')
     : unreadable
       ? 'Could not read ' + unreadable + ' image' + (unreadable === 1 ? '' : 's') + ' — check the Storage CORS settings'
-      : 'No painted backgrounds found — every sprite is already clean',
+      : 'No painted backgrounds found — every sprite and pack is already clean',
     fixed || !unreadable ? 'success' : 'error');
 }
 function tcgFxHas(element, prefix, n) { return !!(_tcgArt && _tcgArt[tcgFxSlotId(element, prefix, n)]); }
@@ -34929,6 +34946,42 @@ const TCG_PACK_SET_LOOK = {
   gen1: 'The wrapper carries the ORIGINAL monster set: a bold fantasy-creature emblem — scales, horns and claws — over a dark starry field, in the style of a painted monster-collecting card game.',
   nd:   'The wrapper carries the NATIONAL DAY set, the Lionheart Legion: a heraldic LION crest on a red-and-white banner, flanked by a crossed sword and staff, in the style of a painted fantasy card game. Regal and ceremonial.'
 };
+// The knock-out in _tcgArtStore runs when a frame is SAVED, so any frame drawn
+// before it learned about packs still has its plate baked into the PNG sitting
+// in Storage. 🧽 Clean painted backgrounds fixes those for good; until someone
+// presses it, this cuts them out FOR DISPLAY ONLY on the two surfaces a student
+// sees — the shop card and the tear-open overlay — using the same border
+// flood-fill Ember Legends runs on its sprites. It writes nothing anywhere and
+// is cached per picture, and a frame that is already a cut-out comes straight
+// back, so a cleaned pack costs one decode.
+// The admin's Card Art thumbnails are deliberately LEFT RAW: that panel is
+// where the plate has to be visible, or nobody would know to press the button.
+const TCG_PACK_KEY_PX = 512;   // the rip stage tops out at 340 CSS px
+function _tcgPackImgHtml(url, alt, cls) {
+  return '<img' + (cls ? ' class="' + cls + '"' : '') + ' data-packkey="1" src="' + url + '" alt="' + escapeHtml(alt || '') + '">';
+}
+// Hidden until the cut-out lands, so a plate never flashes on screen — and
+// NEVER left hidden: an unkeyable picture, a tainted canvas, a stalled decode
+// and a thrown error all end with the picture shown exactly as it arrived.
+function tcgKeyPackImgs(root, onReady) {
+  const imgs = Array.prototype.slice.call((root || document).querySelectorAll('img[data-packkey]'));
+  if (!imgs.length) { if (onReady) onReady(); return; }
+  let left = imgs.length, shown = false;
+  const show = () => {
+    if (shown) return;
+    shown = true;
+    imgs.forEach(el => { el.style.visibility = ''; });
+    if (onReady) onReady();
+  };
+  imgs.forEach(el => { el.removeAttribute('data-packkey'); el.style.visibility = 'hidden'; });
+  setTimeout(show, 2500);
+  imgs.forEach(el => {
+    const src = el.getAttribute('src');
+    const done = keyed => { if (keyed && keyed !== src) el.src = keyed; if (--left <= 0) show(); };
+    try { elgKeyed(src, TCG_PACK_KEY_PX).then(done, () => done(null)); }
+    catch (e) { done(null); }
+  });
+}
 function tcgPackSlotId(setKey, tier, n) { return 'pk:' + setKey + ':' + tier + ':' + n; }
 function tcgPackParseSlot(slotId) {
   const m = /^pk:([a-z0-9]+):([a-z]+):(\d+)$/.exec(String(slotId || ''));
@@ -34949,7 +35002,7 @@ function tcgPackFramesFor(setKey, tier) {
   for (let i = 1; i <= TCG_PACK_FRAMES; i++) out.push(_tcgArt[tcgPackSlotId(setKey, tier, i)]);
   return out;
 }
-function tcgPackFramePrompt(setKey, tier, n) {
+function tcgPackFramePrompt(setKey, tier, n, harder) {
   const look = TCG_PACK_LOOK[tier] || TCG_PACK_LOOK.bronze;
   const set = TCG_SETS[setKey] || TCG_SETS.gen1;
   const step = TCG_PACK_STEPS[n - 1] || TCG_PACK_STEPS[0];
@@ -34965,6 +35018,9 @@ function tcgPackFramePrompt(setKey, tier, n) {
     + 'BACKGROUND — CRITICAL: the area around the pack must be genuinely empty. Do NOT draw a chequerboard or chessboard. Do NOT draw a grid or tiling of alternating squares in ANY colour — not light-grey and white, not tinted, not faint. Do NOT draw any pattern, texture, gradient, panel, card, canvas, frame or plate to stand in for emptiness. Nothing at all outside the pack itself and its own glow.\n'
     + (n > 1 ? 'The reference picture is frame ' + (n - 1) + ' of this same animation. Keep the pack IDENTICAL to it — same shape, same size, same position, same wrapper art, same colours — and change only what this frame describes. Its background is already empty; leave it exactly that empty.\n' : '')
     + 'STYLE: polished painterly digital game art, rich saturated colour, dramatic rim lighting — the same finish as a painted fantasy trading-card set.\n'
+    + (harder
+        ? 'RETRY — the previous attempt came back with a background painted in, which is unusable. Draw the pack ALONE this time: outside the packet and its own glow there must be no squares, no tiles, no chequered pattern, no shading, no plate and no backdrop of any kind.\n'
+        : '')
     + 'HARD RULES: no text, letters, numbers, logos, signatures or watermarks anywhere on the pack or in the frame; friendly for primary-school children.';
 }
 function tcgPackMissing() {
@@ -35002,9 +35058,11 @@ function tcgPackArtAdminHtml() {
   const miss = tcgPackMissing();
   let html = '<h3 class="ga-cat">🎁 Booster pack opening animation</h3>'
     + '<div class="tcg-section-note">Each booster pack is <b>torn open</b> on screen before the cards are revealed — <b>' + TCG_PACK_FRAMES + ' frames</b> from sealed packet to empty wrapper. Every pack tier has its own run, and <b>each card set has its own again</b>, so the ' + TCG_SETS.nd.em + ' National Day pack is a different packet rather than the original one recoloured. Every frame is drawn <b>from the one before it</b>, so the pack stays the same pack all the way through the tear. A run with any frame missing simply doesn\'t animate — the pack opens straight to the cards, so you can do one run at a time.</div>'
+    + '<div class="tcg-section-note">The pack stands on <b>nothing</b> — just its own tier glow behind it — so every frame has its background knocked out before it is saved. Frames drawn before that existed still carry the black plate, white card or chequerboard the model painted: press <b>🧽 Clean painted backgrounds</b> once and they are cut out and written back, no re-drawing and no cost.</div>'
     + '<div class="tcg-gen-actions" style="margin-bottom:20px;">'
     +   '<button type="button" class="btn btn-primary" id="tcgPackAllBtn" onclick="tcgGenAllPackArt()"' + (miss ? '' : ' disabled') + '>✨ Generate every pack animation'
     +     (miss ? ' · ' + miss + ' frame' + (miss === 1 ? '' : 's') + ' missing' : ' · all done 🎉') + '</button>'
+    +   '<button type="button" class="btn btn-outline tcg-bg-repair" onclick="tcgRepairArtBackgrounds()">🧽 Clean painted backgrounds</button>'
     + '</div>';
   Object.keys(TCG_SETS).forEach(sk => {
     ['bronze', 'silver', 'gold'].forEach(tier => {
@@ -35024,6 +35082,25 @@ function _tcgPackRefreshCount() {
   b.disabled = !miss;
   b.textContent = '✨ Generate every pack animation' + (miss ? ' · ' + miss + ' frame' + (miss === 1 ? '' : 's') + ' missing' : ' · all done 🎉');
 }
+// Draw ONE frame and hand back a pack standing on a genuinely empty background.
+// Exactly the two rules the element FX above live by, and for the same reason:
+// the knock-out runs BEFORE the picture is chained onward (the next frame is
+// drawn from this one, so a backdrop left in here is copied faithfully through
+// the rest of the tear), and the result is checked — a background the
+// knock-out could not safely cut is redrawn with a blunter instruction rather
+// than saved dirty.
+async function _tcgGenPackClean(setKey, tier, n, ref) {
+  let out = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = await tcgGenArtImage(tcgPackFramePrompt(setKey, tier, n, attempt > 0), ref, true);
+    out = await _stripImageBackground(raw);
+    const left = await _bgLeftover(out);
+    if (!left || _tcgGenStop) return out;   // clean, or the admin pressed Stop — don't spend another draw
+    console.warn('pack frame came back with ' + left + ' behind it' + (attempt ? ' — keeping it anyway' : ' — redrawing'),
+      setKey, tier, n);
+  }
+  return out;
+}
 // Draw one run of 7, each frame from the one before it.
 async function _tcgPackRunFrames(setKey, tier, redraw, onProgress) {
   let made = 0, ref = null;
@@ -35036,9 +35113,9 @@ async function _tcgPackRunFrames(setKey, tier, redraw, onProgress) {
       continue;
     }
     if (onProgress) onProgress(n);
-    const dataUrl = await tcgGenArtImage(tcgPackFramePrompt(setKey, tier, n), ref, true);
+    const dataUrl = await _tcgGenPackClean(setKey, tier, n, ref);
     await _tcgArtStore(id, dataUrl);
-    ref = dataUrl;
+    ref = dataUrl;   // already cut out, so the next frame is drawn from an empty background
     made++;
     _tcgPackRowRefresh(setKey, tier);
     _tcgPackRefreshCount();
@@ -35102,7 +35179,7 @@ function tcgFxAdminHtml() {
     + '<div class="tcg-gen-actions" style="margin-bottom:20px;">'
     +   '<button type="button" class="btn btn-primary" id="tcgFxAllBtn" onclick="tcgGenAllFx()"' + (miss ? '' : ' disabled') + '>✨ Generate every element animation'
     +     (miss ? ' · ' + miss + ' frame' + (miss === 1 ? '' : 's') + ' missing' : ' · all done 🎉') + '</button>'
-    +   '<button type="button" class="btn btn-outline" id="tcgFxRepairBtn" onclick="tcgRepairArtBackgrounds()">🧽 Clean painted backgrounds</button>'
+    +   '<button type="button" class="btn btn-outline tcg-bg-repair" id="tcgFxRepairBtn" onclick="tcgRepairArtBackgrounds()">🧽 Clean painted backgrounds</button>'
     + '</div>'
     + '<div class="tcg-section-note">Older frames can still have a <b>background baked in</b> — usually the chequered grey-and-white pattern image editors use to <i>show</i> transparency, which the model painted as real pixels, sometimes faintly tinted the element\'s own colour, and sometimes a plain white plate. It shows up as squares or a box behind a shot as it starts and fades. <b>🧽 Clean painted backgrounds</b> re-reads every stored frame and battle avatar, strips whatever is behind the artwork, and leaves clean ones untouched. It costs nothing and redraws nothing — run it once. New frames are cleaned and checked automatically as they are drawn.</div>';
   Object.keys(TCG_ELEMENTS).forEach(el => {
@@ -35291,7 +35368,7 @@ async function tcgAiGenSlot(slotId) {
         const prev = _tcgArt && _tcgArt[tcgPackSlotId(setKey, tier, n - 1)];
         if (prev) { try { ref = await _urlToDataUrlRobust(transformImageUrl(prev)); } catch (e) { ref = null; } }
       }
-      const dataUrl = await tcgGenArtImage(tcgPackFramePrompt(setKey, tier, n), ref, true);
+      const dataUrl = await _tcgGenPackClean(setKey, tier, n, ref);
       await _tcgArtStore(slotId, dataUrl);
       showToast('🎁 ' + ((TCG_SETS[setKey] || {}).name || setKey) + ' · ' + ((TCG_PACK_LOOK[tier] || {}).name || tier) + ' frame ' + n + ' drawn', 'success');
     } catch (e) {
@@ -35598,7 +35675,10 @@ function tcgRenderBody() {
   const s = tcgState();
   if (!s) { host.innerHTML = '<div class="tcg-section-note">Answer a question anywhere in the app to wake your hero, then come back!</div>'; return; }
   if (tcgTab === 'dex') host.innerHTML = tcgDexHtml(s);
-  else if (tcgTab === 'packs') host.innerHTML = tcgPacksHtml(s);
+  // The pack pictures are cut out of whatever backdrop they were saved with
+  // before they are shown — done here, in the same task as the innerHTML, so
+  // nothing is ever painted with a plate behind it.
+  else if (tcgTab === 'packs') { host.innerHTML = tcgPacksHtml(s); tcgKeyPackImgs(host); }
   else if (tcgTab === 'team') host.innerHTML = tcgTeamHtml(s);
   else if (tcgTab === 'dungeon') host.innerHTML = tcgDungeonHtml(s);
   else if (tcgTab === 'modes') host.innerHTML = tcgModesHtml(s);
@@ -35979,7 +36059,7 @@ function tcgPacksHtml(s) {
         const art = _tcgArt && _tcgArt[tcgPackSlotId(tcgPackSet, p.tier, 1)];
         return '<div class="tcg-pack tcg-pack-' + p.tier + '">'
         + '<div class="tcg-pack-art' + (art ? ' has-img' : '') + '">'
-        +   (art ? '<img src="' + art + '" alt="' + escapeHtml(p.name) + '">' : tcgPackArt(p.tier)) + '</div>'
+        +   (art ? _tcgPackImgHtml(art, p.name) : tcgPackArt(p.tier)) + '</div>'
         + '<h4>' + escapeHtml(p.name) + '</h4>'
         + '<div class="tcg-pack-desc">' + escapeHtml(p.desc) + '</div>'
         + '<div class="tcg-pack-odds">' + oddsLine(p) + (p.bonusOdds ? '<br><b>Bonus card:</b> ' + Object.keys(p.bonusOdds).map(n => n + '★ ' + p.bonusOdds[n] + '%').join(' · ') : '') + '</div>'
@@ -36085,7 +36165,7 @@ function tcgShowReveal(pack, pulls, setKey) {
   o.id = 'tcgRevealOverlay';
   o.innerHTML = '<div class="tcg-rip-inner">'
     + '<div class="tcg-rip-stage tcg-pack-' + tier + '">'
-    +   frames.map((u, i) => '<img class="tcg-rip-frame' + (i ? '' : ' on') + '" src="' + u + '" alt="">').join('')
+    +   frames.map((u, i) => _tcgPackImgHtml(u, '', 'tcg-rip-frame' + (i ? '' : ' on'))).join('')
     + '</div>'
     + '<div class="tcg-rip-hint">tap to skip</div>'
     + '</div>';
@@ -36108,7 +36188,10 @@ function tcgShowReveal(pack, pulls, setKey) {
     timer = setTimeout(step, hold);
   };
   o.addEventListener('click', finish);
-  timer = setTimeout(step, TCG_PACK_FRAME_MS[0] || 400);
+  // Cut the frames out of their backdrop first, then start the tear — the pack
+  // has to be standing free on the very first frame, not from the second one
+  // onwards. A tap during that beat still skips straight to the cards.
+  tcgKeyPackImgs(o, () => { if (!done) timer = setTimeout(step, TCG_PACK_FRAME_MS[0] || 400); });
 }
 function _tcgShowRevealCards(pack, pulls) {
   const old = document.getElementById('tcgRevealOverlay');
@@ -38043,16 +38126,21 @@ function elgNodeReachable(r, n) { return !n.req || !!(r.tree && r.tree[n.req]); 
 // flat backdrop) are keyed out with a feathered edge, and the cut-out is
 // cached for the session. On failure (CORS taint, decode error) the caller
 // falls back — sprites re-crop into the old rounded frame, shots use the orb.
+// `maxPx` caps the working width — 256 is plenty for a battlefield sprite, and
+// the booster packs ask for more because they are drawn far bigger. It is part
+// of the cache key: the same picture keyed at two sizes is two cut-outs.
 const _elgKeyCache = new Map();
-function elgKeyed(url) {
+function elgKeyed(url, maxPx) {
   if (!url) return Promise.resolve(null);
-  if (_elgKeyCache.has(url)) return _elgKeyCache.get(url);
+  const cap = Math.max(32, maxPx || 256);
+  const ck = cap + '|' + url;
+  if (_elgKeyCache.has(ck)) return _elgKeyCache.get(ck);
   const p = new Promise(resolve => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
-        const w = Math.max(1, Math.min(img.naturalWidth || 96, 256));
+        const w = Math.max(1, Math.min(img.naturalWidth || 96, cap));
         const h = Math.max(1, Math.round((img.naturalHeight || w) / (img.naturalWidth || w) * w));
         const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
         const cx = cv.getContext('2d', { willReadFrequently: true });
@@ -38125,7 +38213,7 @@ function elgKeyed(url) {
     img.onerror = () => resolve(null);
     img.src = url;
   });
-  _elgKeyCache.set(url, p);
+  _elgKeyCache.set(ck, p);
   return p;
 }
 // Point a sprite <img> at the keyed cut-out. The sprite starts in the rounded
