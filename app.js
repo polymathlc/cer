@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.253.0';
+const APP_VERSION = 'v1.253.1';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -35669,9 +35669,22 @@ function tcgCardBackHtml() {
     + '<div class="tcg-back-word"><span class="ln l"></span><span class="t">Realm of Embers</span><span class="ln r"></span></div>'
     + '</div>';
 }
+// What a rarity is CALLED. Only the pack-opening face shows it — the stars
+// carry it everywhere else — because the whole point of that face is the art
+// and how rare the thing you just pulled is.
+const TCG_RARITY = ['', 'Common', 'Uncommon', 'Rare', 'Epic', 'Elite', 'Mythic', 'Legendary'];
+function tcgRarityName(stars) { return TCG_RARITY[stars] || TCG_RARITY[1]; }
+function tcgRarityHtml(stars) {
+  return '<div class="tcg-rarity">' + escapeHtml(tcgRarityName(stars)) + ' · ' + stars + '★</div>';
+}
 function tcgCardHtml(card, opts) {
   opts = opts || {};
   const owned = opts.owned !== false;
+  // The pack-opening face. The art fills it, the rarity is spelled out under
+  // the name, and everything a student can read at leisure in the Collection —
+  // the skill text, the two level tracks, the affinity triangle — is left off
+  // so nothing competes with the picture. The stats stay, small.
+  const rev = !!opts.reveal;
   const level = opts.level != null ? _tcgClampLvl(opts.level) : (owned ? tcgLevel(card.id) : 1);
   const merge = opts.merge != null ? _tcgClampMerge(opts.merge) : (owned ? tcgMergeLevel(card.id) : 1);
   const st = tcgStats(card, level, merge);
@@ -35685,7 +35698,7 @@ function tcgCardHtml(card, opts) {
     + (opts.count > 1 ? '<span class="tcg-count-badge">×' + opts.count + '</span>' : '');
   const skDesc = escapeHtml(sk.desc) + (owned && sk.tier > 1
     ? ' <span class="tcg-skill-up">(' + (sk.tier === 3 ? 'Lv99' : 'Lv50') + ' upgrade · power ×' + (sk.tier === 3 ? '1.5' : '1.25') + ')</span>' : '');
-  const lvlLine = owned
+  const lvlLine = owned && !rev
     ? '<div class="tcg-lvl-line"><span class="tcg-lvl-tag">Lv ' + level + '</span>'
         + (level >= TCG_LVL_MAX
             ? '<span class="tcg-lvl-max">MAX</span>'
@@ -35694,7 +35707,7 @@ function tcgCardHtml(card, opts) {
     : '';
   // The merge track sits directly under the training track, so the two read as
   // what they are: two separate roads to 99.
-  const mergeLine = owned
+  const mergeLine = owned && !rev
     ? '<div class="tcg-lvl-line merge" title="Merge level — earned only from repeat copies of this monster, which merge in automatically. Every merge level adds 1.2% to all stats, in every game mode.">'
         + '<span class="tcg-merge-tag">⟡ M ' + merge + '</span>'
         + (merge >= TCG_MERGE_MAX
@@ -35703,28 +35716,29 @@ function tcgCardHtml(card, opts) {
               + '<span class="tcg-lvl-num">+' + tcgMergeGain(card.stars) + '/repeat</span>')
       + '</div>'
     : '';
-  return '<div class="tcg-card star-' + card.stars + (owned ? '' : ' unowned') + (opts.onclick ? ' clickable' : '') + '"'
+  return '<div class="tcg-card star-' + card.stars + (owned ? '' : ' unowned') + (rev ? ' reveal' : '') + (opts.onclick ? ' clickable' : '') + '"'
     + (opts.onclick ? ' onclick="' + opts.onclick + '"' : '') + '>'
     + badges
     + '<div class="tcg-card-inner">'
-    +   (owned ? '<div class="tcg-card-lvl">Lv ' + level + '</div>'
+    +   (owned && !rev ? '<div class="tcg-card-lvl">Lv ' + level + '</div>'
           + (merge > 1 ? '<div class="tcg-card-merge" title="Merge level ' + merge + '">⟡ ' + merge + '</div>' : '') : '')
     +   '<div class="tcg-card-no">#' + String(card.num).padStart(3, '0') + '</div>'
     +   '<div class="tcg-art">' + tcgArtHtml(card) + '</div>'
     +   '<div class="tcg-body">'
     +     '<div class="tcg-card-name">' + (owned ? escapeHtml(card.name) : '???') + '</div>'
     +     '<div class="tcg-stars">' + tcgStarsHtml(card.stars) + '</div>'
+    +     (rev ? tcgRarityHtml(card.stars) : '')
     +     lvlLine
     +     mergeLine
     +     '<div class="tcg-type"><span class="ln l"></span><span class="lbl">' + el.icon + ' ' + escapeHtml(el.name) + '</span><span class="ln r"></span></div>'
-    +     (function () { const aff = TCG_AFFINITY[tcgAffinity(card)]; const beats = TCG_AFFINITY[aff.beats]; const weak = TCG_AFFINITY[aff.weakTo];
+    +     (rev ? '' : (function () { const aff = TCG_AFFINITY[tcgAffinity(card)]; const beats = TCG_AFFINITY[aff.beats]; const weak = TCG_AFFINITY[aff.weakTo];
           return '<div class="tcg-aff"><span class="tcg-aff-el">' + aff.icon + ' ' + aff.name + '</span>'
             + '<span class="tcg-aff-vs" title="Deals double damage to ' + beats.name + '">▲ ' + beats.icon + '</span>'
-            + '<span class="tcg-aff-weak" title="Takes double damage from ' + weak.name + '">▼ ' + weak.icon + '</span></div>'; })()
-    +     '<div class="tcg-skill">' + (owned
+            + '<span class="tcg-aff-weak" title="Takes double damage from ' + weak.name + '">▼ ' + weak.icon + '</span></div>'; })())
+    +     (rev ? '' : '<div class="tcg-skill">' + (owned
             ? '<span class="tcg-skill-name">' + sk.icon + ' ' + escapeHtml(sk.name) + '.</span> ' + skDesc
             : '<span class="tcg-skill-name">❓ Special skill.</span> Collect this monster to reveal its skill.')
-    +     '</div>'
+    +     '</div>')
     +     '<div class="tcg-statsrow">'
     +       tcgStatPill('atk', st.atk) + tcgStatPill('def', st.def) + tcgStatPill('heal', st.heal) + tcgStatPill('hp', st.hp)
     +     '</div>'
@@ -35747,6 +35761,9 @@ function tcgArtifactCardHtml(a, opts) {
     +   '<div class="tcg-body">'
     +     '<div class="tcg-card-name">' + escapeHtml(a.name) + '</div>'
     +     '<div class="tcg-stars">' + tcgStarsHtml(a.stars) + '</div>'
+    // An artifact has no artwork to look at — its effect IS the card — so the
+    // reveal face keeps the blurb and gains only the rarity line.
+    +     (opts.reveal ? tcgRarityHtml(a.stars) : '')
     +     '<div class="tcg-type"><span class="ln l"></span><span class="lbl">🔱 Artifact</span><span class="ln r"></span></div>'
     +     '<div class="tcg-skill"><span class="tcg-skill-name">' + a.icon + ' Team effect.</span> ' + escapeHtml(a.blurb) + '</div>'
     +   '</div>'
@@ -36358,7 +36375,6 @@ function tcgShowReveal(pack, pulls, setKey) {
     if (!document.getElementById('tcgRevealOverlay')) { done = true; return; }
     if (i >= imgs.length) { finish(); return; }
     imgs.forEach((el, k) => el.classList.toggle('on', k === i));
-    if (i === imgs.length - 2) { try { tcgConfetti(40); } catch (_) {} }   // the burst frame
     const hold = TCG_PACK_FRAME_MS[i] || 340;
     i++;
     timer = setTimeout(step, hold);
@@ -36382,7 +36398,9 @@ function _tcgShowRevealCards(pack, pulls) {
         '<div class="tcg-flip" id="tcgflip-' + i + '" data-stars="' + (pl.card || pl.arti).stars + '" style="animation-delay:' + (i * 0.12) + 's;" onclick="tcgFlipCard(' + i + ')" title="Hover halo hints at the rarity…">'
         + '<div class="tcg-flip-inner">'
         +   '<div class="tcg-flip-back">' + tcgCardBackHtml() + '</div>'
-        +   '<div class="tcg-flip-front">' + (pl.arti ? tcgArtifactCardHtml(pl.arti, { isNew: pl.isNew }) : tcgCardHtml(pl.card, { isNew: pl.isNew, mergedBy: pl.merge })) + '</div>'
+        +   '<div class="tcg-flip-front">' + (pl.arti
+              ? tcgArtifactCardHtml(pl.arti, { isNew: pl.isNew, reveal: true })
+              : tcgCardHtml(pl.card, { isNew: pl.isNew, mergedBy: pl.merge, reveal: true })) + '</div>'
         + '</div></div>').join('') + '</div>'
     + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">'
     +   '<button class="btn tcg-overlay-btn" onclick="tcgFlipAll()">🔄 Flip all</button>'
@@ -36391,14 +36409,13 @@ function _tcgShowRevealCards(pack, pulls) {
   document.body.appendChild(o);
   o._pulls = pulls;
 }
+// No confetti here, and none on the tear-open burst either. Paper falling over
+// a 7★ pull cheapens it — the card's own art, its halo and the rarity line are
+// the moment. Confetti stays where it is earned: winning an arena battle.
 function tcgFlipCard(i) {
-  const o = document.getElementById('tcgRevealOverlay');
   const f = document.getElementById('tcgflip-' + i);
-  if (!o || !f || f.classList.contains('flipped')) return;
+  if (!f || f.classList.contains('flipped')) return;
   f.classList.add('flipped');
-  const pl = o._pulls && o._pulls[i];
-  const stars = pl && (pl.card || pl.arti).stars;
-  if (stars >= 5) tcgConfetti(stars >= 7 ? 90 : 45);
 }
 function tcgFlipAll() {
   const o = document.getElementById('tcgRevealOverlay');

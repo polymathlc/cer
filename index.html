@@ -6882,8 +6882,38 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
    translucent dark fill with a light border instead. */
 .tcg-overlay-btn { background: rgba(255,255,255,0.07); color: #fff; border: 1.5px solid rgba(255,255,255,0.45); }
 .tcg-overlay-btn:hover { background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.75); color: #fff; }
-.tcg-flip { width: 200px; min-height: 336px; perspective: 900px; cursor: pointer; }
-.tcg-flip-inner { position: relative; width: 100%; height: 100%; min-height: 336px; transform-style: preserve-3d; transition: transform 0.65s cubic-bezier(.2,.7,.3,1.1); }
+.tcg-flip { width: 216px; min-height: 368px; perspective: 900px; cursor: pointer; }
+.tcg-flip-inner { position: relative; width: 100%; height: 100%; min-height: 368px; transform-style: preserve-3d; transition: transform 0.65s cubic-bezier(.2,.7,.3,1.1); }
+/* ── The pack-opening face ────────────────────────────────────────────────
+   What a student just pulled is a PICTURE and a RARITY, so those are the whole
+   card here: the art goes square and fills it, the stars grow, the rarity is
+   spelled out, and the stats shrink to a footnote. The skill text, the two
+   level tracks and the affinity triangle are not rendered at all on this face
+   — they are all still on the Collection card, read at leisure. */
+.tcg-card.reveal .tcg-art { aspect-ratio: 1 / 1; }
+.tcg-card.reveal .tcg-body { margin-top: -16px; padding: 0 8px 9px; }
+.tcg-card.reveal .tcg-card-name { font-size: 0.86rem; }
+.tcg-card.reveal .tcg-stars { margin-top: 8px; gap: 4px; }
+.tcg-card.reveal .tcg-star-pip { width: 15px; height: 15px; }
+.tcg-card.reveal .tcg-type { margin-top: 7px; }
+/* margin-top:auto — the skill block used to be the flex filler, so without it
+   the stats would float up under the element line with slack beneath them. */
+.tcg-card.reveal .tcg-statsrow { grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: auto; padding-top: 9px; opacity: 0.9; }
+.tcg-card.reveal .tcg-stat { font-size: 0.62rem; padding: 4px 0; gap: 3px; border-radius: 7px; }
+.tcg-card.reveal .tcg-stat svg { width: 10px; height: 10px; }
+/* The rarity, in words — the line the whole face is built around. */
+.tcg-rarity {
+  font-family: 'Cinzel', serif; font-weight: 900; text-transform: uppercase;
+  font-size: 0.66rem; letter-spacing: 0.16em; text-align: center; margin-top: 6px;
+  color: var(--halo, #f0b542); text-shadow: 0 0 14px var(--halo, rgba(240,181,66,0.6)), 0 1px 3px rgba(0,0,0,0.9);
+}
+.tcg-card.reveal.star-1 { --halo: #cbd5e1; }
+.tcg-card.reveal.star-2 { --halo: #4ade80; }
+.tcg-card.reveal.star-3 { --halo: #60a5fa; }
+.tcg-card.reveal.star-4 { --halo: #c084fc; }
+.tcg-card.reveal.star-5 { --halo: #fb923c; }
+.tcg-card.reveal.star-6 { --halo: #fb7185; }
+.tcg-card.reveal.star-7 { --halo: #fde047; }
 .tcg-flip.flipped .tcg-flip-inner { transform: rotateY(180deg); }
 .tcg-flip-back, .tcg-flip-front { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 14px; }
 .tcg-flip-back { background: radial-gradient(ellipse at 50% 42%, #171a26 0%, #0c0e15 55%, #08090e 100%); border: 2px solid #8a6420; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.5), inset 0 0 30px rgba(240,181,66,0.12); }
