@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.252.1';
+const APP_VERSION = 'v1.253.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -33834,11 +33834,34 @@ const TCG_CARDS = [];
 });
 // The sets, for the headings and the pack copy. `human` switches the art
 // generator from "draw a monster" to "draw a person".
+// Each set has a NAME (short, used in headings, toasts and admin lists) and a
+// BILLING — the series line over the set title, laid out the way a real trading
+// card set is billed on its packet: the line the sets share small on top, the
+// set's own name big underneath. The National Day expansion is entirely human,
+// so its title says so: the Lionheart Legion, and the Rise of Humanity.
+// `art` is the art direction for the set's own banner picture (slot `set:<key>`).
 const TCG_SETS = {
-  gen1: { key: 'gen1', name: 'Original dex', em: '🐉' },
-  nd:   { key: 'nd',   name: 'National Day — the Lionheart Legion', em: '🦁' }
+  gen1: {
+    key: 'gen1', name: 'Original dex', em: '🐉',
+    series: 'The Original Dex', title: 'Primal Dominion',
+    sub: '151 monsters — where every collection begins',
+    art: 'A horde of legendary FANTASY MONSTERS — dragons, beasts and elemental titans — bursting forward together out of a storm-lit sky, wings and horns and scales filling the frame.'
+  },
+  nd: {
+    key: 'nd', name: 'National Day — the Lionheart Legion', em: '🦁',
+    series: 'Lionheart Legion', title: 'Rise of Humanity',
+    sub: '50 human heroes — the National Day expansion',
+    art: 'A band of HUMAN HEROES — knights, mages and sorceresses in gleaming armour and flowing robes — standing shoulder to shoulder and charging forward together, banners flying, under a sky of golden light. Humanity rising: no monsters among them, people are the heroes here.'
+  }
 };
 function tcgSetOf(c) { return TCG_SETS[(c && c.set) || 'gen1'] || TCG_SETS.gen1; }
+// The set's 7★ cards — the faces a set is sold on (the legendary trio in the
+// original dex, the legendary pair in the National Day expansion). They
+// headline the set banner on the Packs tab, and the set's own artwork is drawn
+// from them, so the legends on the banner are the same characters as the cards.
+function tcgSetHeroes(setKey) {
+  return TCG_CARDS.filter(c => (c.set || 'gen1') === setKey && c.stars === 7);
+}
 const TCG_BY_ID = {};
 TCG_CARDS.forEach(c => { TCG_BY_ID[c.id] = c; });
 // Deterministic ±6% jitter per card so the same monster has the same stats
@@ -34335,8 +34358,10 @@ async function _tcgArtStore(id, dataUrl) {
   // Battle avatars are small stage sprites; card art gets more resolution.
   // Blast frames are stretched over a 3×3 block of panels, so they get more
   // pixels than the small sprites (avatars, charge/flight/impact frames).
+  // Set artwork is a wide banner across the top of the Packs tab, so it gets
+  // the most pixels of anything here.
   const maxSide = id.indexOf('fx:') === 0 ? (id.indexOf(':blast') > 0 ? 384 : 256)
-    : id.endsWith(':av') ? 256 : 512;
+    : id.endsWith(':av') ? 256 : id.indexOf('set:') === 0 ? 768 : 512;
   const scaled = await _scaleDownDataUrl(dataUrl, maxSide);
   const url = await uploadImageDataUrl(scaled);
   const uid = _tcgOwnerUid(); if (!uid) throw new Error('Not signed in');
@@ -34915,6 +34940,91 @@ function tcgFxRowInnerHtml(element) {
   });
   return html;
 }
+// ---- Set artwork ----------------------------------------------------------
+// One picture per set, the way a real trading-card set is sold: its 7★ legends
+// together in a wide hero shot. It headlines the set chooser on the Packs tab
+// so a student can see at a glance which set they are opening.
+// The set NAME is deliberately NOT part of the picture — an image model asked
+// for lettering returns gibberish, and gibberish printed across the top of the
+// Packs tab is worse than no artwork at all. The name is set in Cinzel over the
+// artwork in the app instead, which is also how it stays legible on a phone.
+function tcgSetArtSlotId(setKey) { return 'set:' + setKey; }
+function tcgSetArtUrl(setKey) { return (_tcgArt && _tcgArt[tcgSetArtSlotId(setKey)]) || ''; }
+// The reference handed to the model: the set's 7★ card art laid out side by
+// side on one sheet. tcgGenArtImage takes a SINGLE reference picture, so a
+// line-up is how several characters reach it at once — and it is what keeps the
+// legends in the banner recognisably the same characters as the cards.
+// No card art drawn yet → no sheet, and the model works from the words alone.
+async function _tcgSetRefSheet(setKey) {
+  const heroes = tcgSetHeroes(setKey);
+  const shots = [];
+  for (const c of heroes) {
+    const url = await _tcgCardArtDataUrl(c);
+    if (url) shots.push(url);
+  }
+  if (!shots.length) return null;
+  const cell = 384;
+  const cv = document.createElement('canvas');
+  cv.width = cell * shots.length; cv.height = cell;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = '#0b1220';
+  cx.fillRect(0, 0, cv.width, cv.height);
+  for (let i = 0; i < shots.length; i++) {
+    const img = await _loadImageEl(shots[i]);
+    cx.drawImage(img, i * cell, 0, cell, cell);
+  }
+  return cv.toDataURL('image/png');
+}
+function tcgSetArtPrompt(setKey, withRef) {
+  const set = TCG_SETS[setKey] || TCG_SETS.gen1;
+  const heroes = tcgSetHeroes(setKey);
+  const names = heroes.map(c => '"' + c.name + '"').join(', ');
+  return 'Key artwork for one SET of a children\'s fantasy collectible trading-card game — the picture printed across the booster packet and the set banner.\n'
+    + 'THE SET: "' + set.title + '". ' + set.art + '\n'
+    + (heroes.length
+        ? 'THE HEADLINE CHARACTERS — the ' + heroes.length + ' legendary 7-star cards of this set — are the stars of the picture and must be big, central and unmistakable: ' + names + '.\n'
+          + (withRef
+              ? 'The reference picture is a line-up of those exact characters, side by side. Keep every one of them recognisably the SAME character — same face, same build, same colours, same armour or robes, same weapon, same silhouette — and rearrange them into the group shot described below.\n'
+              : '')
+        : '')
+    + 'COMPOSITION: ONE WIDE LANDSCAPE BANNER, about 16:9. A dynamic group hero shot — the legends overlapping and layered at different depths, the boldest of them anchoring the centre, with sweeping ribbons of colour, bursts of light and drifting sparks behind them and smaller silhouettes filling the far corners. Energetic and celebratory, exactly how a real trading-card set is sold.\n'
+    + 'STYLE: polished painterly digital game art, rich saturated colour, dramatic rim lighting — the same finish as the painted cards in this set.\n'
+    + 'HARD RULES: absolutely NO text, letters, numbers, logos, signatures or watermarks anywhere — the set name is printed over this picture afterwards, so the artwork must be left clean; no card frames, no borders, no interface; friendly for primary-school children — no blood, no gore, nothing frightening and nothing suggestive.';
+}
+async function _tcgGenSetArt(setKey) {
+  const ref = await _tcgSetRefSheet(setKey);
+  const dataUrl = await tcgGenArtImage(tcgSetArtPrompt(setKey, !!ref), ref, false);
+  await _tcgArtStore(tcgSetArtSlotId(setKey), dataUrl);
+  return dataUrl;
+}
+function _tcgSetArtThumb(setKey) {
+  const set = TCG_SETS[setKey] || TCG_SETS.gen1;
+  const url = tcgSetArtUrl(setKey);
+  if (url) return '<img src="' + url + '" alt="' + escapeHtml(set.title) + '">';
+  return '<div style="font-size:30px;line-height:64px;text-align:center;opacity:.7;">'
+    + tcgSetHeroes(setKey).map(c => c.em).join(' ') + '</div>';
+}
+function tcgSetArtRowInnerHtml(setKey) {
+  const set = TCG_SETS[setKey] || TCG_SETS.gen1;
+  const heroes = tcgSetHeroes(setKey);
+  const drawn = heroes.filter(c => _tcgArt && _tcgArt[c.id]).length;
+  return _tcgArtSlotHtml(tcgSetArtSlotId(setKey), escapeHtml(set.series) + ' · ' + escapeHtml(set.title), set.em,
+    _tcgSetArtThumb(setKey), 'set art',
+    'Drawn from this set\'s ' + heroes.length + ' legendary 7★ cards — ' + drawn + ' of them have card art so far'
+      + (drawn < heroes.length ? ' (draw those first and the legends in the banner will match them).' : '.'));
+}
+function _tcgSetArtRowRefresh(setKey) {
+  const row = document.getElementById('tcgsetrow-' + setKey);
+  if (row) row.innerHTML = tcgSetArtRowInnerHtml(setKey);
+}
+function tcgSetArtAdminHtml() {
+  return '<h3 class="ga-cat">🖼️ Set artwork</h3>'
+    + '<div class="tcg-section-note">Every set is sold on <b>one picture</b> — its <b>7★ legends together</b> in a wide hero shot, the way a real trading-card set is billed on its packet. It headlines the <b>set chooser</b> on the Packs tab, so a student can see at a glance which set they are opening. Each set\'s picture is drawn <b>from that set\'s own 7★ card art</b>, so draw those cards first and the legends in the banner will be the same characters. The set <b>name is not drawn by the AI</b> — lettering comes back as gibberish — it is printed over the artwork in the app.</div>'
+    + '<div class="ga-cards">'
+    + Object.keys(TCG_SETS).map(k =>
+        '<div id="tcgsetrow-' + k + '" style="display:contents;">' + tcgSetArtRowInnerHtml(k) + '</div>').join('')
+    + '</div>';
+}
 // ---- Booster pack opening animation -------------------------------------
 // Seven frames per pack, played in order when a pack is opened: the sealed
 // pack, the first nick, the tear running across it, the light bursting out,
@@ -35303,6 +35413,7 @@ function tcgArtAdminHtml() {
   let html = '<div class="tcg-art-admin">'
     + '<div class="tcg-section-note">Every monster carries <b>two graphics</b>: the <b>🃏 trading-card art</b> shown on the card face, and the <b>⚔️ battle avatar</b> that fights on the arena stage. Paste a PNG into either slot, upload one, or let the AI draw them — until both are set, one image stands in for the other. Square images look best.</div>'
     + tcgArtGenPanelHtml()
+    + tcgSetArtAdminHtml()
     + tcgPackArtAdminHtml()
     + tcgFxAdminHtml();
   // Grouped by SET first, then by star tier — with 200 cards a flat star list
@@ -35348,6 +35459,26 @@ async function tcgAiGenSlot(slotId) {
       _tcgGenBusy = false;
       _tcgFxRowRefresh(element);
       _tcgGenRefreshFxCount();
+    }
+    return;
+  }
+  // Set banner: drawn from the set's own 7★ cards, so the legends on the
+  // banner are the same characters a student pulls out of the packet.
+  if (slotId.indexOf('set:') === 0) {
+    const setKey = slotId.slice(4);
+    if (!TCG_SETS[setKey]) { showToast('That set id is not one I recognise', 'error'); return; }
+    _tcgGenBusy = true;
+    _tcgSlotStatus(slotId, '⏳ Drawing…');
+    try {
+      await _tcgGenSetArt(setKey);
+      showToast('🖼️ ' + TCG_SETS[setKey].title + ' set artwork drawn', 'success');
+    } catch (e) {
+      console.error('set art generation failed', e);
+      _tcgSlotStatus(slotId, '⚠️ Failed');
+      showToast('Could not draw it: ' + (e && e.message ? e.message : e), 'error');
+    } finally {
+      _tcgGenBusy = false;
+      _tcgSetArtRowRefresh(setKey);
     }
     return;
   }
@@ -35692,7 +35823,7 @@ function tcgDexHtml(s) {
   const ownedCount = Object.keys(s.cards).length;
   const pct = Math.round(ownedCount / TCG_CARDS.length * 100);
   const chips = [['all', 'All'], ['owned', 'Owned']]
-    .concat(Object.keys(TCG_SETS).map(k => ['set:' + k, TCG_SETS[k].em + ' ' + (k === 'nd' ? 'National Day' : 'Original')]))
+    .concat(Object.keys(TCG_SETS).map(k => ['set:' + k, TCG_SETS[k].em + ' ' + TCG_SETS[k].title]))
     .concat([1, 2, 3, 4, 5, 6, 7].map(n => [String(n), n + '★']));
   let list = TCG_CARDS;
   if (tcgDexFilter === 'owned') list = list.filter(c => s.cards[c.id]);
@@ -36035,6 +36166,51 @@ function _tcgEnergyHtml() {
     + (e.packs ? '<div class="tcg-energy-sub">Earned so far: <b>' + (e.packs | 0) + '</b></div>' : '')
     + '</div>';
 }
+// -- The set chooser --
+// One banner per set, billed the way a real trading-card set is: the series
+// line small on top, the set's name big underneath in Cinzel, its 7★ legends
+// lined up along the bottom, and the set's own artwork behind the lot. The
+// name is HTML rather than part of the picture, so it stays sharp and legible
+// at any size and reads correctly however the artwork came out.
+function _tcgHeroFaceHtml(c, owned) {
+  const art = (_tcgArt && (_tcgArt[c.id] || _tcgArt[c.id + ':av'])) || '';
+  const face = art
+    ? '<img src="' + art + '" alt="' + escapeHtml(c.name) + '">'
+    : '<span class="tcg-setpick-em">' + c.em + '</span>';
+  // The short name — "Ariselle, the Snow Queen" is a mouthful under a 56px face.
+  const short = String(c.name).split(',')[0];
+  return '<div class="tcg-setpick-hero' + (owned ? ' owned' : '') + '">'
+    + '<div class="tcg-setpick-face">' + face + '</div>'
+    + '<div class="tcg-setpick-heroname">' + escapeHtml(short) + '</div>'
+    + '</div>';
+}
+function tcgSetPickHtml(setKey, s) {
+  const set = TCG_SETS[setKey] || TCG_SETS.gen1;
+  const on = tcgPackSet === setKey;
+  const cards = TCG_CARDS.filter(c => (c.set || 'gen1') === setKey);
+  const owned = cards.filter(c => s && s.cards && s.cards[c.id]).length;
+  const art = tcgSetArtUrl(setKey);
+  const heroes = tcgSetHeroes(setKey);
+  return '<button type="button" class="tcg-setpick' + (on ? ' on' : '') + ' tcg-setpick-' + setKey + '"'
+    +   ' onclick="tcgSetPackSet(\'' + setKey + '\')" aria-pressed="' + (on ? 'true' : 'false') + '">'
+    + '<div class="tcg-setpick-art">' + (art ? '<img src="' + art + '" alt="">' : '') + '</div>'
+    + '<div class="tcg-setpick-body">'
+    +   '<div class="tcg-setpick-series">' + set.em + ' ' + escapeHtml(set.series) + '</div>'
+    +   '<div class="tcg-setpick-title">' + escapeHtml(set.title) + '</div>'
+    +   '<div class="tcg-setpick-sub">' + escapeHtml(set.sub) + '</div>'
+    +   (heroes.length
+          ? '<div class="tcg-setpick-heroes">'
+            + heroes.map(c => _tcgHeroFaceHtml(c, !!(s && s.cards && s.cards[c.id]))).join('')
+            + '</div>'
+            + '<div class="tcg-setpick-heroline">7★ · the ' + heroes.length + ' legends of this set</div>'
+          : '')
+    +   '<div class="tcg-setpick-foot">'
+    +     '<span class="tcg-setpick-count">' + owned + ' / ' + cards.length + ' collected</span>'
+    +     '<span class="tcg-setpick-state">' + (on ? '✓ Opening this set' : 'Open this set') + '</span>'
+    +   '</div>'
+    + '</div>'
+    + '</button>';
+}
 // -- Packs tab --
 function tcgPacksHtml(s) {
   const gold = (rpgState && rpgState.gold) | 0;
@@ -36044,23 +36220,23 @@ function tcgPacksHtml(s) {
     + _tcgEnergyHtml()
     // Which SET you are opening. A pack pulls only from its own set, so this
     // chooses what you are chasing — and it picks the pack artwork and the
-    // tear-open animation with it.
+    // tear-open animation with it. It is the biggest thing on the tab on
+    // purpose: a student must never have to guess which set they are opening.
     + '<div class="tcg-packset">'
-    +   '<div class="tcg-packset-label">Which set are you opening? A pack only ever gives you cards from the set you pick.</div>'
-    +   '<div class="tcg-filters">' + Object.keys(TCG_SETS).map(k => {
-          const set = TCG_SETS[k];
-          const n = TCG_CARDS.filter(c => (c.set || 'gen1') === k).length;
-          return '<button type="button" class="tcg-filter-chip' + (tcgPackSet === k ? ' active' : '') + '" onclick="tcgSetPackSet(\'' + k + '\')">'
-            + set.em + ' ' + escapeHtml(k === 'nd' ? 'National Day' : 'Original dex') + ' · ' + n + ' cards</button>';
-        }).join('') + '</div>'
+    +   '<div class="tcg-packset-label">Choose your set — a pack only ever gives you cards from the set you pick</div>'
+    +   '<div class="tcg-setpicks">' + Object.keys(TCG_SETS).map(k => tcgSetPickHtml(k, s)).join('') + '</div>'
     + '</div>'
     + '<div class="tcg-packs">' + TCG_PACKS.map(p => {
         const anim = tcgPackAnimReady(tcgPackSet, p.tier);
         const art = _tcgArt && _tcgArt[tcgPackSlotId(tcgPackSet, p.tier, 1)];
+        const set = TCG_SETS[tcgPackSet] || TCG_SETS.gen1;
         return '<div class="tcg-pack tcg-pack-' + p.tier + '">'
         + '<div class="tcg-pack-art' + (art ? ' has-img' : '') + '">'
         +   (art ? _tcgPackImgHtml(art, p.name) : tcgPackArt(p.tier)) + '</div>'
         + '<h4>' + escapeHtml(p.name) + '</h4>'
+        // Repeated on every pack because this is the moment the points are
+        // spent — the chooser above is the choice, this is the confirmation.
+        + '<div class="tcg-pack-from">' + set.em + ' ' + escapeHtml(set.title) + '</div>'
         + '<div class="tcg-pack-desc">' + escapeHtml(p.desc) + '</div>'
         + '<div class="tcg-pack-odds">' + oddsLine(p) + (p.bonusOdds ? '<br><b>Bonus card:</b> ' + Object.keys(p.bonusOdds).map(n => n + '★ ' + p.bonusOdds[n] + '%').join(' · ') : '') + '</div>'
         + '<button class="btn btn-primary" ' + (gold < p.cost ? 'disabled style="opacity:.55;"' : '') + ' onclick="tcgBuyPack(\'' + p.id + '\')">Open · 🪙 ' + p.cost + '</button>'
@@ -36591,7 +36767,7 @@ function tcgGuideHtml() {
   + _tcgGuideSection('🃏', 'The cards',
       'There are <b>' + TCG_CARDS.length + '</b> cards in the dex, numbered #001–#' + String(TCG_CARDS.length).padStart(3, '0') + ', across <b>two sets</b>: '
         + '<b>' + TCG_SETS.gen1.em + ' the original dex</b> (#001–#' + String(TCG_CARDS.filter(c => (c.set || 'gen1') === 'gen1').length).padStart(3, '0') + ', monsters), and '
-        + '<b>' + TCG_SETS.nd.em + ' National Day — the Lionheart Legion</b> (' + TCG_CARDS.filter(c => c.set === 'nd').length + ' cards), which is entirely <b>human</b>: warriors, paladins, wizards, sorceresses, mages, warlocks and necromancers. '
+        + '<b>' + TCG_SETS.nd.em + ' ' + TCG_SETS.nd.series + ' — ' + TCG_SETS.nd.title + '</b> (the National Day expansion, ' + TCG_CARDS.filter(c => c.set === 'nd').length + ' cards), which is entirely <b>human</b>: warriors, paladins, wizards, sorceresses, mages, warlocks and necromancers. '
         + 'Rarity runs 1★ to 7★ — higher stars mean bigger base stats, and only <b>' + TCG_CARDS.filter(c => c.stars === 7).length + '</b> 7★ legends exist across both sets. '
         + 'Both sets drop from the same booster packs, and the Collection tab has a chip for each.',
       _tcgGuideTable(['Rarity', 'How many'], cardCounts)
@@ -36600,7 +36776,7 @@ function tcgGuideHtml() {
   + _tcgGuideSection('🎁', 'Booster packs — the only way to get cards',
       'Packs are bought with points on the 🎁 Booster Packs tab. Every pack also rolls for a bonus 🔱 artifact.',
       _tcgGuideTable(['Pack', 'Cost', 'Contents', 'Artifact', 'Rarity odds'], packRows)
-      + '<p class="tcg-guide-note"><b>Pick your set before you open.</b> Every pack comes in a ' + TCG_SETS.gen1.em + ' <b>Original dex</b> and a ' + TCG_SETS.nd.em + ' <b>National Day</b> version, and a pack only ever gives you cards from the set you chose — so if you are hunting the Lionheart Legion, open National Day packs. The cost and the rarity odds are identical either way.</p>'
+      + '<p class="tcg-guide-note"><b>Pick your set before you open.</b> Every pack comes in a ' + TCG_SETS.gen1.em + ' <b>' + TCG_SETS.gen1.title + '</b> and a ' + TCG_SETS.nd.em + ' <b>' + TCG_SETS.nd.title + '</b> version — the two banners at the top of the Packs tab — and a pack only ever gives you cards from the set you chose, so if you are hunting the Lionheart Legion, open ' + TCG_SETS.nd.title + ' packs. The cost and the rarity odds are identical either way.</p>'
       + '<p class="tcg-guide-note">Pull a monster you already own and the duplicate is not wasted — it merges into the one on your shelf automatically (see below).</p>')
 
   + _tcgGuideSection('📈', 'Two ways a monster grows',
