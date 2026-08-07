@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.250.0';
+const APP_VERSION = 'v1.251.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -30824,7 +30824,7 @@ function _commTcgAnnouncePost() {
     _id: '__tcgAnnounce', _builtin: true,
     type: 'news', pinned: true, status: 'approved',
     title: '🃏 NEW GAME RELEASED — Realm of Embers TCG!',
-    text: 'Collect all 151 legendary monsters! Spend the points you earn answering questions on booster packs, level your monsters up, build a team of 5 and battle other trainers in the Arena — then take on the infinite Dungeon. Every monster has a star rating from 1★ to 7★, and only three 7★ legends exist in the whole set. Find it in your sidebar under 🃏 Realm of Embers TCG.',
+    text: 'Collect every card in the dex! Spend the points you earn answering questions on booster packs, level your cards up, build a team of 5 and battle other trainers in the Arena — then take on the infinite Dungeon. Every card has a star rating from 1★ to 7★, and 7★ legends are the rarest thing in the game. Find it in your sidebar under 🃏 Realm of Embers TCG.',
     _ctaHtml: '<div class="comm-actions"><button class="btn btn-primary" onclick="tcgOpenFromAnnounce()">🃏 Open my first pack</button></div>',
     authorUid: '', authorName: COMM_ADMIN_NAME, authorRole: 'admin',
     authorAvatar: COMM_ADMIN_AVATAR, authorStatus: COMM_ADMIN_STATUS,
@@ -33449,7 +33449,11 @@ const TCG_SKILLS = {
   // Signature skills — one-of-a-kind mechanics reserved for the 7★ legendary trio.
   sunrise: { name: 'Dawnfather Judgement', icon: '🌅', kind: 'dawn',   pow: 1.20, heal: 0.60, desc: 'Signature: sears ALL foes for 120% ATK while dawnlight washes over the team, healing every ally for 60% HEAL.' },
   doom:    { name: 'Worldsend Curse',      icon: '🕯️', kind: 'curse',  pow: 1.30, desc: 'Signature: the end of the world falls on ALL foes for 130% ATK and brands every one of them — for 3 turns each takes +25% damage and cannot be healed.' },
-  chrono:  { name: 'Time Fracture',        icon: '⌛', kind: 'chrono', pow: 1.30, desc: 'Signature: shatters time over ALL foes for 130% ATK (ignores DEF) and freezes their clocks — every foe loses 2 turns of skill charge.' }
+  chrono:  { name: 'Time Fracture',        icon: '⌛', kind: 'chrono', pow: 1.30, desc: 'Signature: shatters time over ALL foes for 130% ATK (ignores DEF) and freezes their clocks — every foe loses 2 turns of skill charge.' },
+  // National Day set — the two 7★ signatures. Same rule as the trio above:
+  // a one-of-a-kind mechanic nothing else in the dex can do.
+  dragonfall: { name: 'Dragonfall Execution', icon: '🗡️', kind: 'slay',       pow: 2.30, exec: 0.15, desc: 'Signature: one titanic blow on a single foe for 230% ATK — ignores DEF and carves away another 15% of that foe\'s MAXIMUM health. The bigger they are, the harder it lands.' },
+  winter:     { name: "Winter's Crown",       icon: '👑', kind: 'frostreign', pow: 1.35, desc: 'Signature: a killing winter falls on ALL foes for 135% ATK and freezes every one of them solid — each skips its next turn.' }
 };
 // How a monster's skill shapes its stat spread (role identity).
 const TCG_ROLE_MODS = {
@@ -33465,7 +33469,11 @@ const TCG_ROLE_MODS = {
   poison:  { atk: 1.02, def: 0.95, heal: 0.80, hp: 0.98, spd: 6 },
   dawn:    { atk: 1.12, def: 0.95, heal: 1.05, hp: 1.00, spd: 2 },
   curse:   { atk: 1.15, def: 0.95, heal: 0.70, hp: 1.00, spd: 6 },
-  chrono:  { atk: 1.18, def: 0.92, heal: 0.65, hp: 0.98, spd: 10 }
+  chrono:  { atk: 1.18, def: 0.92, heal: 0.65, hp: 0.98, spd: 10 },
+  // National Day 7★ signatures. tcgStats() reads this map by kind and would
+  // throw on a missing entry — a new kind MUST be added here.
+  slay:       { atk: 1.28, def: 0.94, heal: 0.60, hp: 1.02, spd: 6 },
+  frostreign: { atk: 1.16, def: 0.96, heal: 0.72, hp: 1.00, spd: 4 }
 };
 // ---- Elemental affinity: 5 combat elements in a super-effective ring. Each
 // deals ×2 to the one it "beats" and takes ×2 (deals ×0.5) to the one that
@@ -33723,14 +33731,114 @@ const TCG_GEN1 = {
     ['Aeonyx, the Timeless One', '🐉', 'cosmic', 'chrono', 'Time Fracture']
   ]
 };
-// Flatten to the master dex: id c001…c151 by position.
+// ── National Day expansion — the Lionheart Legion (50 cards) ────────────────
+// The first set is monsters; this one is entirely HUMAN — warriors, paladins,
+// wizards, sorceresses, mages, warlocks and necromancers, an order raised
+// under a red-and-white lion banner. That difference is not just flavour: the
+// art generator draws a person instead of a beast for anything in this set
+// (see tcgCardArtPrompt), so every row carries its CLASS and whether the
+// character is a man or a woman.
+//   row = [name, emoji, element, skillId, skillName, class, sex, artNote?]
+// The optional art note is extra direction for that one character — the two
+// 7★ legends are the face of the set, so they are described rather than left
+// to whatever the class default produces.
+// Appended AFTER gen 1 so the existing ids (c001…c151) never move — students'
+// collections, merge levels and card levels are all keyed by id.
+const TCG_GEN2 = {
+  1: [ // 4 × 1★ — the recruits
+    ['Tam, the Shield Recruit', '🛡️', 'metal', 'aegis', 'Recruit\'s Guard', 'warrior', 'male'],
+    ['Mira, the Hearth Acolyte', '🕯️', 'light', 'bloom', 'Hearthlight Mend', 'mage', 'female'],
+    ['Bram, the Hedge Conjurer', '🪄', 'flora', 'spores', 'Hedgewitch Spores', 'wizard', 'male'],
+    ['Sela, the Ashen Novice', '🔥', 'flame', 'scratch', 'Novice Emberlash', 'sorceress', 'female']
+  ],
+  2: [ // 6 × 2★
+    ['Corin, the Dawn Squire', '🛡️', 'light', 'aegis', 'Dawnsquire Bulwark', 'paladin', 'male'],
+    ['Ysolde, the Frost Apprentice', '❄️', 'frost', 'freeze', 'Apprentice Rimelock', 'mage', 'female'],
+    ['Havel, the Ironfist', '⚔️', 'metal', 'smash', 'Ironfist Hammerfall', 'warrior', 'male'],
+    ['Nerin, the Gravewatch Adept', '💀', 'shadow', 'drain', 'Gravewatch Tithe', 'necromancer', 'male'],
+    ['Talia, the Emberweaver', '🪄', 'flame', 'inferno', 'Emberweave Flare', 'sorceress', 'female'],
+    ['Odric, the Pactbound', '🔮', 'venom', 'venomf', 'Pactbound Bite', 'warlock', 'male']
+  ],
+  3: [ // 12 × 3★
+    ['Sir Aldric, the Lionshield', '🦁', 'metal', 'aegis', 'Lionshield Wall', 'paladin', 'male'],
+    ['Marisol, the Tidecaller', '🌊', 'aqua', 'rain', 'Tidecall Rainfall', 'mage', 'female'],
+    ['Garruk, the Redbanner', '⚔️', 'flame', 'warcry', 'Redbanner Rally', 'warrior', 'male'],
+    ['Ilvane, the Starscribe', '📜', 'cosmic', 'arrow', 'Starscribe Bolt', 'wizard', 'female'],
+    ['Dessa, the Rimeveil', '❄️', 'frost', 'freeze', 'Rimeveil Lock', 'sorceress', 'female'],
+    ['Malric, the Bonepiper', '💀', 'shadow', 'eclipse', 'Bonepipe Harvest', 'necromancer', 'male'],
+    ['Ravenna, the Hexbinder', '🔮', 'psychic', 'arrow', 'Hexbind Lance', 'warlock', 'female'],
+    ['Bastion, the Wallwarden', '🛡️', 'terra', 'bark', 'Wallwarden Guard', 'paladin', 'male'],
+    ['Kell, the Emberblade', '🗡️', 'flame', 'scratch', 'Emberblade Flurry', 'warrior', 'male'],
+    ['Nimue, the Springtender', '🌿', 'flora', 'bloom', 'Springtender Grace', 'mage', 'female'],
+    ['Aurin, the Sparkwright', '⚡', 'spark', 'jolt', 'Sparkwright Arc', 'wizard', 'male'],
+    ['Vessa, the Blightsower', '🧪', 'venom', 'spores', 'Blightsown Cloud', 'warlock', 'female']
+  ],
+  4: [ // 12 × 4★
+    ['Dame Elowyn, the Sunbulwark', '🛡️', 'light', 'aegis', 'Sunbulwark Aegis', 'paladin', 'female'],
+    ['Rhogar, the Stormbreaker', '⚔️', 'spark', 'storm', 'Stormbreaker Barrage', 'warrior', 'male'],
+    ['Selune, the Moonwrought', '🌙', 'cosmic', 'aurora', 'Moonwrought Mending', 'sorceress', 'female'],
+    ['Thane Kaidos, the Ashenguard', '🔥', 'flame', 'roar', 'Ashenguard Decree', 'warrior', 'male'],
+    ['Verity, the Glasswind Mage', '🪄', 'frost', 'freeze', 'Glasswind Shatter', 'mage', 'female'],
+    ['Morgrave, the Coffinbearer', '⚰️', 'shadow', 'drain', 'Coffinbearer Toll', 'necromancer', 'male'],
+    ['Isolde, the Thornqueen', '🌹', 'flora', 'chorus', 'Thornqueen Hymn', 'sorceress', 'female'],
+    ['Cassian, the Runeforged', '⚙️', 'metal', 'smash', 'Runeforged Crash', 'wizard', 'male'],
+    ['Lyra, the Voidwhisper', '🔮', 'psychic', 'drain', 'Voidwhisper Feast', 'warlock', 'female'],
+    ['Dorian, the Tidebreaker', '🌊', 'aqua', 'tidal', 'Tidebreaker Surge', 'mage', 'male'],
+    ['Serrath, the Graveknight', '💀', 'terra', 'quake', 'Graveknight Stomp', 'necromancer', 'male'],
+    ['Auriel, the Lanternbearer', '🕯️', 'light', 'solar', 'Lanternbearer Blaze', 'paladin', 'female']
+  ],
+  5: [ // 8 × 5★
+    ['High Templar Roland', '🛡️', 'light', 'aurora', 'Templar Radiance', 'paladin', 'male'],
+    ['Archmage Ysera, the Starloom', '🌌', 'cosmic', 'nova', 'Starloom Detonation', 'mage', 'female'],
+    ['Warlord Kestrel, the Redmane', '🦁', 'flame', 'roar', 'Redmane Warcall', 'warrior', 'male'],
+    ['Seraphine, the Wintersong', '❄️', 'frost', 'chorus', 'Wintersong Chorale', 'sorceress', 'female'],
+    ['Necrarch Vayne, the Gravecrown', '💀', 'shadow', 'eclipse', 'Gravecrown Feast', 'necromancer', 'male'],
+    ['Malachar, the Doomspeaker', '🔮', 'venom', 'spores', 'Doomspoken Rot', 'warlock', 'male'],
+    ['Sable, the Ironvow', '⚔️', 'metal', 'aegis', 'Ironvow Rampart', 'warrior', 'female'],
+    ['Evanthe, the Stormsinger', '⚡', 'spark', 'storm', 'Stormsinger Fury', 'sorceress', 'female']
+  ],
+  6: [ // 6 × 6★ — the epics
+    ['Grandmaster Valdren, the Unbroken', '🛡️', 'metal', 'aegis', 'Unbroken Bastion', 'paladin', 'male'],
+    ['Archsorceress Nyx, the Starfall', '🌠', 'cosmic', 'nova', 'Starfall Verdict', 'sorceress', 'female'],
+    ['Warmaster Thorne, the Bloodbanner', '⚔️', 'flame', 'roar', 'Bloodbanner Onslaught', 'warrior', 'male'],
+    ['Lich-Queen Morrigane', '💀', 'shadow', 'eclipse', 'Soulharvest Requiem', 'necromancer', 'female'],
+    ['Archwarlock Belial, the Pactmaker', '🔮', 'venom', 'venomf', 'Pactmaker\'s Bargain', 'warlock', 'male'],
+    ['Magus Cyrene, the Everflame', '🔥', 'flame', 'inferno', 'Everflame Cataclysm', 'mage', 'female']
+  ],
+  7: [ // 2 × 7★ — the National Day legends, each with a one-of-a-kind signature
+    ['Kaelen Draxmoor, the Dragon Slayer', '🗡️', 'metal', 'dragonfall', 'Dragonfall Execution', 'warrior', 'male',
+      'THE legendary dragon slayer of the set — a broad-shouldered human man in scarred, ornate steel plate with a red battle-cloak, gripping an enormous rune-etched greatsword. Behind and above him, the vast shadow, wing and horned silhouette of the dragon he hunts looms through smoke and firelight, dwarfing him — he stands his ground unafraid. Make him look utterly legendary and awe-inspiring.'],
+    ['Ariselle, the Snow Queen', '👑', 'frost', 'winter', "Winter's Crown", 'sorceress', 'female',
+      'THE legendary snow queen of the set — a strikingly beautiful, regal human woman with pale skin and long silver-white hair, wearing a magnificent floor-length gown of frost-white and ice-blue with a high crystalline collar, an intricate crown of ice shards, and a flowing cape of falling snow. Delicate snowflakes and shards of ice orbit her raised hands. Serene, elegant and utterly commanding, in a cathedral of ice under an aurora. Make her look breathtakingly beautiful and legendary.']
+  ]
+};
+// Flatten to the master dex: gen 1 takes c001…c151 by position, the National
+// Day set continues from c152. Gen 1 MUST be flattened first — the ids are
+// positional and they live in every student's save.
 const TCG_CARDS = [];
 [1, 2, 3, 4, 5, 6, 7].forEach(stars => {
   (TCG_GEN1[stars] || []).forEach(row => {
     const n = TCG_CARDS.length + 1;
-    TCG_CARDS.push({ id: 'c' + String(n).padStart(3, '0'), num: n, name: row[0], em: row[1], element: row[2], skillId: row[3], skillName: row[4] || null, stars });
+    TCG_CARDS.push({ id: 'c' + String(n).padStart(3, '0'), num: n, name: row[0], em: row[1], element: row[2], skillId: row[3], skillName: row[4] || null, stars, set: 'gen1' });
   });
 });
+[1, 2, 3, 4, 5, 6, 7].forEach(stars => {
+  (TCG_GEN2[stars] || []).forEach(row => {
+    const n = TCG_CARDS.length + 1;
+    TCG_CARDS.push({
+      id: 'c' + String(n).padStart(3, '0'), num: n, name: row[0], em: row[1], element: row[2],
+      skillId: row[3], skillName: row[4] || null, stars,
+      set: 'nd', human: true, cls: row[5] || 'warrior', sex: row[6] || 'male', art: row[7] || null
+    });
+  });
+});
+// The sets, for the headings and the pack copy. `human` switches the art
+// generator from "draw a monster" to "draw a person".
+const TCG_SETS = {
+  gen1: { key: 'gen1', name: 'Original dex', em: '🐉' },
+  nd:   { key: 'nd',   name: 'National Day — the Lionheart Legion', em: '🦁' }
+};
+function tcgSetOf(c) { return TCG_SETS[(c && c.set) || 'gen1'] || TCG_SETS.gen1; }
 const TCG_BY_ID = {};
 TCG_CARDS.forEach(c => { TCG_BY_ID[c.id] = c; });
 // Deterministic ±6% jitter per card so the same monster has the same stats
@@ -34309,7 +34417,42 @@ function _tcgTierMood(stars) {
     'a confident mid-tier fighter', 'a battle-hardened veteran', 'a powerful elite boss',
     'an awe-inspiring legendary titan', 'a mythic, world-shaping god-tier being'][stars] || 'a fighter';
 }
+// The National Day set is people, not beasts, so it needs its own subject
+// wording — but it must come out looking like it belongs in the SAME box as
+// the original 151. The COMPOSITION / STYLE / HARD RULES lines below are held
+// deliberately identical to the monster prompt, and the style line says out
+// loud that this is one card in an existing set, because a model handed
+// "fantasy warrior" with no other steer will drift into a different rendering
+// style card by card.
+const TCG_CLASS_LOOK = {
+  warrior:     'a human warrior in battle-worn plate and leather, wielding a great blade or war-hammer',
+  paladin:     'a human paladin in gleaming ornate armour with a tower shield and a holy warhammer or longsword, a banner or cloak flowing behind',
+  wizard:      'a human wizard in long embroidered robes with a tall staff, spellbook and floating arcane glyphs',
+  sorceress:   'a human sorceress in flowing elegant robes, raw magic streaming from her open hands',
+  mage:        'a human mage in layered travelling robes channelling a spell through a focus crystal or staff',
+  warlock:     'a human warlock in dark hooded finery, bound sigils and eldritch energy coiling around the arms',
+  necromancer: 'a human necromancer in tattered dark robes and bone ornaments, pale spirit-light and drifting wisps at their command'
+};
+function _tcgHumanArtPrompt(c) {
+  const el = TCG_ELEMENTS[c.element] || { name: 'Elemental' };
+  const look = TCG_CLASS_LOOK[c.cls] || TCG_CLASS_LOOK.warrior;
+  const woman = c.sex === 'female';
+  const person = woman ? 'woman' : 'man';
+  return 'Original fantasy CHARACTER artwork for a children\'s collectible trading-card game — one card in an existing set.\n'
+    + 'CHARACTER: "' + c.name + '" — ' + look + '. A ' + (c.stars >= 6 ? 'strikingly heroic ' : '') + 'human ' + person + ', '
+    + el.name.toLowerCase() + '-element, ' + _tcgTierMood(c.stars) + ' (' + c.stars + ' of 7 stars).\n'
+    + 'IMPORTANT: this is a PERSON, not a monster or a beast — noble and heroic, a hero a child would want on their card.\n'
+    + (c.art ? 'THIS CHARACTER SPECIFICALLY: ' + c.art + '\n' : '')
+    + 'ELEMENT LOOK: ' + (TCG_ART_PALETTE[c.element] || 'vivid fantasy colours') + '.\n'
+    + (c.skillName ? 'SIGNATURE MOVE: "' + c.skillName + '" — let the pose and the effects hint at it.\n' : '')
+    + 'COMPOSITION: square, full-bleed illustration; the whole figure is inside the frame, centred and filling most of it, in a heroic three-quarter view; an atmospheric background scene that matches the element.\n'
+    // Identical wording to the monster prompt, plus the explicit "same set"
+    // instruction — this is what keeps the expansion in the house style.
+    + 'STYLE — MATCH THE EXISTING SET EXACTLY: polished painterly digital illustration, rich saturated colour, dramatic rim lighting, glowing elemental effects. This card sits in the same binder as a set of painted fantasy monster cards drawn in that exact style, so it must look as though the SAME artist painted it on the SAME day: same painterly rendering, same colour saturation, same lighting drama, same finish. Do not use anime, cel-shading, comic-book line art, photo-realism, 3D render or pixel art.\n'
+    + 'HARD RULES: absolutely no text, letters, numbers, signatures or watermarks anywhere; no card frame, border, banner or interface; exactly one character; friendly for primary-school children — no blood, no gore, nothing frightening or gruesome, and nothing suggestive: modest, fully-covering clothing, robes or armour.';
+}
 function tcgCardArtPrompt(c) {
+  if (c && c.human) return _tcgHumanArtPrompt(c);
   const el = TCG_ELEMENTS[c.element] || { name: 'Elemental' };
   const creature = TCG_EM_WORD[c.em] || 'mythical beast';
   return 'Original fantasy monster artwork for a children\'s collectible trading-card game.\n'
@@ -34321,8 +34464,16 @@ function tcgCardArtPrompt(c) {
     + 'HARD RULES: absolutely no text, letters, numbers, signatures or watermarks anywhere; no card frame, border, banner or interface; exactly one creature; friendly for primary-school children — no blood, no gore, nothing frightening or gruesome.';
 }
 function tcgAvatarPrompt(c) {
-  return 'Turn the reference picture into a GAME BATTLE AVATAR sprite of the very same monster, "' + c.name + '".\n'
-    + 'KEEP IDENTICAL: species, silhouette, body plan, colour scheme, markings, horns, wings, limbs and elemental effects — this must read as the exact same character as the reference.\n'
+  // Same instruction either way — only the words for WHAT is being redrawn
+  // change, because "keep the species and horns identical" means nothing when
+  // the reference is a paladin.
+  const human = !!(c && c.human);
+  const subject = human ? 'character' : 'monster';
+  const keep = human
+    ? 'face, hair, build, armour, robes, weapon, colour scheme, insignia and elemental effects'
+    : 'species, silhouette, body plan, colour scheme, markings, horns, wings, limbs and elemental effects';
+  return 'Turn the reference picture into a GAME BATTLE AVATAR sprite of the very same ' + subject + ', "' + c.name + '".\n'
+    + 'KEEP IDENTICAL: ' + keep + ' — this must read as the exact same character as the reference.\n'
     + 'CHANGE: remove the background scenery completely and leave the area around the creature COMPLETELY EMPTY — no ground, no shadow, no glow plate, no frame, no scenery of any kind. Show the complete creature from head to toe, centred, facing the viewer in a battle-ready three-quarter stance, with a small empty margin on every side.\n'
     // Same trap as the projectile frames: say "transparent" and the model
     // paints the chequered pattern that stands for it.
@@ -34873,11 +35024,21 @@ function tcgArtAdminHtml() {
     + '<div class="tcg-section-note">Every monster carries <b>two graphics</b>: the <b>🃏 trading-card art</b> shown on the card face, and the <b>⚔️ battle avatar</b> that fights on the arena stage. Paste a PNG into either slot, upload one, or let the AI draw them — until both are set, one image stands in for the other. Square images look best.</div>'
     + tcgArtGenPanelHtml()
     + tcgFxAdminHtml();
-  [1, 2, 3, 4, 5, 6, 7].forEach(stars => {
-    const tier = TCG_CARDS.filter(c => c.stars === stars);
-    html += '<h3 class="ga-cat">' + '★'.repeat(stars) + ' ' + stars + '-star monsters (' + tier.length + ')</h3>';
-    tier.forEach(c => {
-      html += '<div class="ga-objrow" id="tcgrow-' + c.id + '">' + tcgArtRowInnerHtml(c) + '</div>';
+  // Grouped by SET first, then by star tier — with 200 cards a flat star list
+  // buried the expansion inside the original dex.
+  Object.keys(TCG_SETS).forEach(setKey => {
+    const set = TCG_SETS[setKey];
+    const inSet = TCG_CARDS.filter(c => (c.set || 'gen1') === setKey);
+    if (!inSet.length) return;
+    html += '<h2 class="ga-cat" style="margin-top:30px;">' + set.em + ' ' + escapeHtml(set.name) + ' — ' + inSet.length + ' cards</h2>';
+    [1, 2, 3, 4, 5, 6, 7].forEach(stars => {
+      const tier = inSet.filter(c => c.stars === stars);
+      if (!tier.length) return;
+      html += '<h3 class="ga-cat">' + '★'.repeat(stars) + ' ' + stars + '-star '
+        + (setKey === 'nd' ? 'heroes' : 'monsters') + ' (' + tier.length + ')</h3>';
+      tier.forEach(c => {
+        html += '<div class="ga-objrow" id="tcgrow-' + c.id + '">' + tcgArtRowInnerHtml(c) + '</div>';
+      });
     });
   });
   return html + '</div>';
@@ -35211,9 +35372,12 @@ function tcgRenderBody() {
 function tcgDexHtml(s) {
   const ownedCount = Object.keys(s.cards).length;
   const pct = Math.round(ownedCount / TCG_CARDS.length * 100);
-  const chips = [['all', 'All'], ['owned', 'Owned']].concat([1, 2, 3, 4, 5, 6, 7].map(n => [String(n), n + '★']));
+  const chips = [['all', 'All'], ['owned', 'Owned']]
+    .concat(Object.keys(TCG_SETS).map(k => ['set:' + k, TCG_SETS[k].em + ' ' + (k === 'nd' ? 'National Day' : 'Original')]))
+    .concat([1, 2, 3, 4, 5, 6, 7].map(n => [String(n), n + '★']));
   let list = TCG_CARDS;
   if (tcgDexFilter === 'owned') list = list.filter(c => s.cards[c.id]);
+  else if (String(tcgDexFilter).startsWith('set:')) { const k = String(tcgDexFilter).slice(4); list = list.filter(c => (c.set || 'gen1') === k); }
   else if (tcgDexFilter !== 'all') list = list.filter(c => c.stars === +tcgDexFilter);
   return '<div class="tcg-dex-progress">'
     +   '<div class="tcg-dex-nums">' + ownedCount + ' / ' + TCG_CARDS.length + ' collected · ' + pct + '%</div>'
@@ -36018,8 +36182,10 @@ function tcgGuideHtml() {
   const artRows = Object.keys(artByStar).sort((a, b) => a - b).map(s =>
     [starRow(+s), artByStar[s].map(a => a.icon + ' ' + escapeHtml(a.name)).join(' · ')]);
 
+  // Both sets, counted from the dex itself so an expansion updates the guide.
   const cardCounts = [1, 2, 3, 4, 5, 6, 7].map(s =>
-    [starRow(s), (TCG_GEN1[s] || []).length + ' monsters']);
+    [starRow(s), TCG_CARDS.filter(c => c.stars === s).length + ' cards'
+      + ' (' + (TCG_GEN1[s] || []).length + ' + ' + (TCG_GEN2[s] || []).length + ' 🦁)']);
 
   return '<div class="tcg-guide">'
 
@@ -36039,8 +36205,12 @@ function tcgGuideHtml() {
       ])
       + '<p class="tcg-guide-note">Your balance is the 🪙 chip at the top of this page, and it is the same wallet the rest of the portal shop uses.</p>')
 
-  + _tcgGuideSection('🃏', 'The monsters',
-      'There are <b>' + TCG_CARDS.length + '</b> monsters in Generation 1, numbered #001–#' + String(TCG_CARDS.length).padStart(3, '0') + '. Rarity runs 1★ to 7★ — higher stars mean bigger base stats, and only three 7★ legends exist in the whole set.',
+  + _tcgGuideSection('🃏', 'The cards',
+      'There are <b>' + TCG_CARDS.length + '</b> cards in the dex, numbered #001–#' + String(TCG_CARDS.length).padStart(3, '0') + ', across <b>two sets</b>: '
+        + '<b>' + TCG_SETS.gen1.em + ' the original dex</b> (#001–#' + String(TCG_CARDS.filter(c => (c.set || 'gen1') === 'gen1').length).padStart(3, '0') + ', monsters), and '
+        + '<b>' + TCG_SETS.nd.em + ' National Day — the Lionheart Legion</b> (' + TCG_CARDS.filter(c => c.set === 'nd').length + ' cards), which is entirely <b>human</b>: warriors, paladins, wizards, sorceresses, mages, warlocks and necromancers. '
+        + 'Rarity runs 1★ to 7★ — higher stars mean bigger base stats, and only <b>' + TCG_CARDS.filter(c => c.stars === 7).length + '</b> 7★ legends exist across both sets. '
+        + 'Both sets drop from the same booster packs, and the Collection tab has a chip for each.',
       _tcgGuideTable(['Rarity', 'How many'], cardCounts)
       + '<p class="tcg-guide-note">Every monster has an <b>element</b> (12 flavours), a <b>skill</b> with its own signature name, and five stats: ⚔️ ATK, 🛡️ DEF, ➕ HEAL, ❤️ HP and ⚡ SPD. Two monsters of the same rarity are never quite identical — each card carries a small permanent stat jitter of its own.</p>')
 
@@ -36094,7 +36264,11 @@ function tcgGuideHtml() {
   + _tcgGuideSection('✨', 'Skills — every mechanic in the game',
       'A monster\'s skill name is its own, but the mechanic behind it is one of these. Percentages are of the monster\'s ATK, before level upgrades.',
       _tcgGuideTable(['Mechanic', 'What it does', 'Power range'], skillRows)
-      + '<p class="tcg-guide-note">The three 7★ legends carry one-of-a-kind signature skills — ' + escapeHtml(TCG_SKILLS.sunrise.name) + ', ' + escapeHtml(TCG_SKILLS.doom.name) + ' and ' + escapeHtml(TCG_SKILLS.chrono.name) + ' — and all three hit the entire enemy team.</p>')
+      + '<p class="tcg-guide-note">Every 7★ legend carries a one-of-a-kind signature skill nothing else in the dex can copy — '
+        + [TCG_SKILLS.sunrise, TCG_SKILLS.doom, TCG_SKILLS.chrono, TCG_SKILLS.winter].map(k => escapeHtml(k.name)).join(', ')
+        + ' all hit the entire enemy team, and ' + escapeHtml(TCG_SKILLS.dragonfall.name)
+        + ' puts everything into ONE blow instead: it ignores DEF and tears away a further '
+        + Math.round(TCG_SKILLS.dragonfall.exec * 100) + '% of the target\'s maximum health, so the bigger the enemy, the more it hurts.</p>')
 
   + _tcgGuideSection('⚔️', 'Ember Legends — become your monster',
       'The arena mode. You pick ONE monster from your collection and play <i>as</i> it: its stars, training level and merge level are your stats, and the rest of the 151 are the horde coming for you.',
@@ -36219,7 +36393,12 @@ const EMS_SKILL_FX = {
   poison:  { mode: 'poison',  label: '☠️ Poison',      atk: 0.68, rate: 0.95, range: 4.6, desc: 'Hits leave poison that keeps eating away at the target.' },
   dawn:    { mode: 'dawn',    label: '🌅 Dawnfire',    atk: 0.85, rate: 1.05, range: 4.8, desc: 'Strikes a foe and mends the nearest hurt defender with the same light.' },
   curse:   { mode: 'curse',   label: '💀 Curse',       atk: 0.82, rate: 1.00, range: 4.8, desc: 'Marks what it hits — the cursed take 40% more damage from everything.' },
-  chrono:  { mode: 'chrono',  label: '⏳ Time fracture', atk: 0.90, rate: 1.00, range: 6.0, desc: 'Bends time around the lane: pierces every enemy and slows them all.' }
+  chrono:  { mode: 'chrono',  label: '⏳ Time fracture', atk: 0.90, rate: 1.00, range: 6.0, desc: 'Bends time around the lane: pierces every enemy and slows them all.' },
+  // National Day 7★ signatures. Both reuse an EXISTING lane `mode` — the mode
+  // is what the siege engine actually implements, so a new kind gets its own
+  // label and tuning without needing new lane behaviour written for it.
+  slay:       { mode: 'pierce', label: '🗡️ Dragonsbane',  atk: 1.15, rate: 0.85, range: 6.5, desc: 'One enormous swing that carves straight down the lane through everything in it.' },
+  frostreign: { mode: 'slow',   label: '👑 Deep winter',  atk: 0.80, rate: 1.15, range: 5.4, desc: 'Every hit drags the target down to a crawl — a whole lane held in winter.' }
 };
 function emsBehaviour(card) {
   const kind = (TCG_SKILLS[card && card.skillId] || {}).kind || 'strike';
@@ -37252,8 +37431,8 @@ const ELG_ROLES = {
 const ELG_ROLE_ORDER = ['striker', 'arcanist', 'mender', 'warden'];
 // A monster's battle skill decides which tree it plays with.
 const ELG_ROLE_BY_KIND = {
-  strike: 'striker', pierce: 'striker', drain: 'striker',
-  blast: 'arcanist', poison: 'arcanist', stun: 'arcanist', chrono: 'arcanist', curse: 'arcanist',
+  strike: 'striker', pierce: 'striker', drain: 'striker', slay: 'striker',
+  blast: 'arcanist', poison: 'arcanist', stun: 'arcanist', chrono: 'arcanist', curse: 'arcanist', frostreign: 'arcanist',
   heal: 'mender', healall: 'mender', dawn: 'mender',
   shield: 'warden', rage: 'warden'
 };
@@ -39039,6 +39218,43 @@ async function _tcgAct(stage, unit, allies, foes) {
         _tcgRefreshUnit(t);
       }
       _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> shatters time with <b>' + escapeHtml(sk.name) + '</b> — every foe is hit and loses 2 turns of skill charge!');
+      await tcgSleep(880);
+      _tcgUnlunge(unit);
+    } else if (sk.kind === 'slay') {
+      // Dragonfall Execution (Kaelen Draxmoor): ONE colossal blow that ignores
+      // DEF, then carves away a slice of the target's MAXIMUM health on top —
+      // the dragon slayer's answer to something far bigger than he is. The
+      // execute is dealt straight to hp (it is a fraction of the health bar,
+      // not an attack roll) and never finishes a target the main hit spared.
+      const t = _tcgTargetByStrat(unit, foes, strat.attack);
+      if (t) {
+        await _tcgLunge(unit);
+        const res = _tcgDamage(unit, t, sk.pow, true);
+        await _tcgHitFx(t, res);
+        if (t.hp > 0 && sk.exec) {
+          const bite = Math.max(1, Math.round(t.maxHp * sk.exec));
+          t.hp = Math.max(1, t.hp - bite);
+          _tcgPopup(t, '🗡️ -' + bite, 'status');
+          _tcgRefreshUnit(t);
+        }
+        _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> brings down <b>' + escapeHtml(sk.name) + '</b> on '
+          + escapeHtml(tcgShortName(t.card)) + ' — armour counts for nothing' + (res.crit ? ', and it lands clean!' : '!'));
+        await tcgSleep(820);
+        _tcgUnlunge(unit);
+      }
+    } else if (sk.kind === 'frostreign') {
+      // Winter's Crown (Ariselle, the Snow Queen): the whole enemy team is
+      // struck and frozen solid — a team-wide stun, which nothing else does.
+      await _tcgLunge(unit);
+      const targets = foes.filter(f => f.hp > 0);
+      for (const t of targets) { const res = _tcgDamage(unit, t, sk.pow, false); _tcgHitFx(t, res); }
+      for (const t of targets) {
+        if (t.hp <= 0 || t.wardStatus) continue;
+        t.stun = Math.max(t.stun, 1);
+        _tcgPopup(t, '❄️ FROZEN', 'status');
+        _tcgRefreshUnit(t);
+      }
+      _tcgLog('<b>' + escapeHtml(tcgShortName(unit.card)) + '</b> calls down <b>' + escapeHtml(sk.name) + '</b> — the whole enemy team is struck and frozen where they stand!');
       await tcgSleep(880);
       _tcgUnlunge(unit);
     } else if (sk.kind === 'strike' || sk.kind === 'pierce' || sk.kind === 'drain' || sk.kind === 'stun' || sk.kind === 'poison') {
