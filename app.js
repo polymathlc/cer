@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.254.0';
+const APP_VERSION = 'v1.255.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -34237,6 +34237,7 @@ function tcgApplyNavVisibility() {
   const sub = document.getElementById('navTcgSub');
   if (sub) sub.style.display = show ? '' : 'none';
   _tcgPlaceNavItem();
+  try { tcgApplyLogo(); } catch (_) {}   // the door wears the crest
   try { tcgNavPrizeBadges(); } catch (_) {}
 }
 // Where the realm's door sits in the sidebar. For a STUDENT it belongs
@@ -34358,6 +34359,7 @@ async function tcgLoadArt(force) {
     const snap = await getDoc(doc(db, 'users', uid, 'settings', 'tcgArt'));
     _tcgArt = (snap.exists() && snap.data().overrides) ? snap.data().overrides : {};
   } catch (e) { console.warn('tcg art load', e); _tcgArt = _tcgArt || {}; }
+  try { tcgApplyLogo(); } catch (e) {}   // put the crest on as soon as we know there is one
   return _tcgArt;
 }
 // Two graphics per monster: '<id>' is the trading-card art shown on the card
@@ -34367,6 +34369,7 @@ function tcgArtUrl(id) { return (_tcgArt && (_tcgArt[id] || _tcgArt[id + ':av'])
 function tcgAvatarUrl(id) { return (_tcgArt && (_tcgArt[id + ':av'] || _tcgArt[id])) || null; }
 // Repaint whichever art surface is on screen after an upload/reset.
 function tcgArtRefresh() {
+  try { tcgApplyLogo(); } catch (e) {}   // the crest is worn outside the page body
   try { if (document.querySelector('#page-tcg.active')) tcgRenderBody(); } catch (e) {}
   try { if (document.querySelector('#page-gameassets.active')) loadGameAssets(); } catch (e) {}
 }
@@ -34378,7 +34381,7 @@ async function _tcgArtStore(id, dataUrl) {
   // behind them — the pack sits on the shop card and over the rip overlay with
   // only its own tier halo — so any background the model left in is knocked out
   // first, pasted and uploaded pictures included. Card art keeps its scene.
-  if (id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0) dataUrl = await _stripImageBackground(dataUrl);
+  if (id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0) dataUrl = await _stripImageBackground(dataUrl);
   // Battle avatars are small stage sprites; card art gets more resolution.
   // Blast frames are stretched over a 3×3 block of panels, so they get more
   // pixels than the small sprites (avatars, charge/flight/impact frames).
@@ -34859,7 +34862,7 @@ async function _tcgArtToDataUrl(url) {
 // Which stored pictures must stand clear of the edges — see _bgLeftoverInPixels.
 // Everything that has to stand on nothing, except the blast frames.
 function _tcgStrictBg(id) {
-  return /(^pk:|:av$)/.test(id) || (id.indexOf('fx:') === 0 && id.indexOf(':blast') < 0);
+  return /(^pk:|^logo:|:av$)/.test(id) || (id.indexOf('fx:') === 0 && id.indexOf(':blast') < 0);
 }
 async function _recleanStoredArt(url, strict) {
   const before = await _tcgArtToDataUrl(url);
@@ -34875,7 +34878,7 @@ async function _recleanStoredArt(url, strict) {
 // and the booster packs. Card art keeps its painted scene and is never touched.
 function _tcgBgFreeIds() {
   return Object.keys(_tcgArt || {}).filter(id =>
-    id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.endsWith(':av'));
+    id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.endsWith(':av'));
 }
 async function tcgRepairArtBackgrounds() {
   const uid = _tcgOwnerUid();
@@ -35015,6 +35018,71 @@ function tcgFxRowInnerHtml(element) {
       + '</div>';
   });
   return html;
+}
+// ---- 🔥 The realm's LOGO ---------------------------------------------------
+// One mark for the whole realm — the crest on the box. It is not a picture of
+// anything in the game, which is what separates it from the set banners: a set
+// banner sells what is inside the packet, the logo is the realm's signature and
+// has to work at 22 pixels in the sidebar as well as at full size.
+//
+// Two rules make it a logo rather than an illustration:
+//   * It stands on NOTHING. It is stamped over the page header, over the nav
+//     door and over whatever galaxy is behind it, so it joins the avatars, the
+//     element FX and the pack frames in the background knock-out — same shared
+//     _tcgGenClean loop, same strict _bgLeftover check, so a painted plate is
+//     caught and redrawn rather than saved.
+//   * It carries NO lettering. An image model asked for a name returns
+//     gibberish, and gibberish is worse than no logo; "Realm of Embers" is set
+//     in Cinzel beside the mark in the app, exactly as the set titles are.
+const TCG_LOGO_SLOT = 'logo:realm';
+function tcgLogoUrl() { return (_tcgArt && _tcgArt[TCG_LOGO_SLOT]) || ''; }
+function tcgLogoPrompt(harder) {
+  return 'A LOGO EMBLEM for a medieval-fantasy trading-card game called "Realm of Embers" — the crest stamped on the box, NOT an illustration of a scene.\n'
+    + 'THE MARK: one elegant heraldic crest built around a single LIVING EMBER at its heart — a glowing coal burning amber and gold, throwing off a few small sparks that rise from it. The ember is cradled inside a finely engraved medieval frame: a slender pointed shield or a circular wax-seal ring of dark antique metal, edged in worked gold filigree, with a small crown or laurel resting above it and one restrained flourish to either side. Perfectly symmetrical, balanced and precise.\n'
+    + 'THE FEEL — elegant first, fantasy second: the mark of an old and disciplined order, not a poster for a video game. Think an illuminated manuscript initial, a wax seal, or a knight\'s crest engraved into a signet ring — fine confident linework, deep shadow, warm gold and ember-amber against dark antique bronze, and the only light in the whole mark coming from the coal itself.\n'
+    + 'COMPOSITION: ONE mark, centred, roughly square, filling the frame with a small even margin on all four sides. Bold enough in its shapes to still read clearly at 32 pixels, fine enough in its engraving to reward a close look at full size. No characters, no creatures, no scenery, no photographic realism.\n'
+    + _noBackgroundRules('the emblem', harder)
+    + 'HARD RULES: absolutely NO text, letters, words, numbers, runes, monograms, signatures or watermarks anywhere in the picture — the name is set in type beside the mark afterwards, so the emblem must be left clean; no card frame, no border box, no interface; suitable for primary-school children.';
+}
+// Drawn through the shared clean-check-redraw loop with the STRICT check on:
+// a logo that has to sit over a galaxy must stand clear of its own edges.
+async function _tcgGenLogo() {
+  const dataUrl = await _tcgGenClean(h => tcgLogoPrompt(h), null, 'realm logo', true);
+  await _tcgArtStore(TCG_LOGO_SLOT, dataUrl);
+  return dataUrl;
+}
+// Wherever the mark is worn: the Realm of Embers page header, and the nav door
+// in the sidebar. Both fall back to the 🃏 emoji until a logo is drawn, so this
+// is safe to call before there is any art at all.
+function tcgApplyLogo() {
+  const url = tcgLogoUrl();
+  const wear = (id, cls) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = url ? '<img src="' + url + '" class="' + cls + '" alt="Realm of Embers">' : '🃏';
+  };
+  wear('tcgLogoMark', 'tcg-logo-mark');
+  wear('navTcgIco', 'tcg-logo-nav');
+}
+function tcgLogoArtAdminHtml() {
+  const url = tcgLogoUrl();
+  const thumb = url ? '<img src="' + url + '" alt="Realm of Embers logo">'
+    : '<div style="font-size:30px;line-height:64px;text-align:center;opacity:.7;">🔥</div>';
+  return '<h3 class="ga-cat">🔥 Realm of Embers logo</h3>'
+    + '<div class="tcg-section-note">The realm\'s own <b>crest</b> — one elegant medieval emblem built around a <b>living ember</b>. It is worn on the <b>page header</b> and on the <b>sidebar door</b>, over the galaxy, so it is drawn to stand on <b>nothing</b> and is checked for a painted-in background exactly like the battle avatars and the booster packs. The <b>name is not drawn by the AI</b> — lettering comes back as gibberish — it is set in Cinzel beside the mark in the app.</div>'
+    + '<div class="ga-cards" id="tcglogorow">'
+    + _tcgArtSlotHtml(TCG_LOGO_SLOT, 'Realm of Embers crest', '🔥', thumb, 'logo',
+        'Square works best. Until one is drawn, the 🃏 emoji stands in everywhere the mark is worn.')
+    + '</div>';
+}
+function _tcgLogoRowRefresh() {
+  const row = document.getElementById('tcglogorow');
+  if (!row) return;
+  const url = tcgLogoUrl();
+  row.innerHTML = _tcgArtSlotHtml(TCG_LOGO_SLOT, 'Realm of Embers crest', '🔥',
+    url ? '<img src="' + url + '" alt="Realm of Embers logo">'
+        : '<div style="font-size:30px;line-height:64px;text-align:center;opacity:.7;">🔥</div>',
+    'logo', 'Square works best. Until one is drawn, the 🃏 emoji stands in everywhere the mark is worn.');
 }
 // ---- Set artwork ----------------------------------------------------------
 // One picture per set, the way a real trading-card set is sold: its 7★ legends
@@ -36072,6 +36140,7 @@ function tcgArtAdminHtml() {
   let html = '<div class="tcg-art-admin">'
     + '<div class="tcg-section-note">Every monster carries <b>two graphics</b>: the <b>🃏 trading-card art</b> shown on the card face, and the <b>⚔️ battle avatar</b> that fights on the arena stage. Paste a PNG into either slot, upload one, or let the AI draw them — until both are set, one image stands in for the other. Square images look best.</div>'
     + tcgArtGenPanelHtml()
+    + tcgLogoArtAdminHtml()
     + tcgSetArtAdminHtml()
     + tcgPackArtAdminHtml()
     + tcgLoreArtAdminHtml()
@@ -36119,6 +36188,25 @@ async function tcgAiGenSlot(slotId) {
       _tcgGenBusy = false;
       _tcgFxRowRefresh(element);
       _tcgGenRefreshFxCount();
+    }
+    return;
+  }
+  // The realm's crest. Stands on nothing, so it goes through the same
+  // clean-check-redraw loop as the avatars and the pack frames.
+  if (slotId === TCG_LOGO_SLOT) {
+    _tcgGenBusy = true;
+    _tcgSlotStatus(slotId, '⏳ Engraving…');
+    try {
+      await _tcgGenLogo();
+      showToast('🔥 Realm of Embers crest drawn', 'success');
+    } catch (e) {
+      console.error('logo generation failed', e);
+      _tcgSlotStatus(slotId, '⚠️ Failed');
+      showToast('Could not draw it: ' + (e && e.message ? e.message : e), 'error');
+    } finally {
+      _tcgGenBusy = false;
+      _tcgLogoRowRefresh();
+      tcgApplyLogo();
     }
     return;
   }
