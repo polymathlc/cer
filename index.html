@@ -5328,6 +5328,9 @@ option {
 .rpg-bar-fill { height: 100%; border-radius: 999px; transition: width 0.45s ease; }
 .rpg-bar-fill.hp { background: linear-gradient(90deg, #e25c5c, #f08a5e); }
 .rpg-bar-fill.xp { background: linear-gradient(90deg, #5ea7f0, #6b4fa0); }
+/* ⚡ Energy — fills on correct answers, 50 of them buy a free Gold Pack */
+.rpg-bar-fill.energy { background: linear-gradient(90deg, #f5c542, #ffe98a); }
+.rpg-bar-fill.energy.full { background: linear-gradient(90deg, #ffd76a, #fff4c2); box-shadow: 0 0 9px rgba(255, 215, 106, 0.85); }
 .rpg-bar-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Space Mono', monospace; font-size: 0.58rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.45); letter-spacing: 0.04em; }
 .rpg-bar-row { margin-bottom: 8px; }
 .rpg-bar-row .rpg-bar-cap { display: flex; justify-content: space-between; font-family: 'Space Mono', monospace; font-size: 0.6rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px; }
@@ -5767,6 +5770,14 @@ option {
 .tcg-tab:hover { border-color: #8E24AA; color: #8E24AA; }
 .tcg-tab.active { background: linear-gradient(135deg,#8E24AA,#7B1FA2); border-color: transparent; color: #fff; box-shadow: 0 4px 12px rgba(142,36,170,0.3); }
 .tcg-section-note { text-align: center; color: var(--text-muted); font-size: 0.88rem; margin: 0 auto 20px; max-width: 620px; line-height: 1.55; }
+/* ⚡ Energy card — the free Gold Pack earned every 50 correct answers */
+.tcg-energy { max-width: 560px; margin: 0 auto 26px; padding: 20px 24px; border-radius: 16px; border: 1px solid var(--border); background: var(--surface, rgba(255,255,255,0.04)); text-align: center; }
+.tcg-energy .rpg-bar { height: 16px; margin: 4px 0 14px; }
+.tcg-energy-head { font-family: 'Space Mono', monospace; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.04em; margin-bottom: 12px; }
+.tcg-energy-sub { color: var(--text-muted); font-size: 0.84rem; line-height: 1.6; margin-top: 12px; }
+.tcg-energy.ready { border-color: #ffd76a; box-shadow: 0 0 0 1px rgba(255,215,106,0.35), 0 6px 22px rgba(255,215,106,0.18); }
+.tcg-energy.ready .tcg-energy-head { color: #ffd76a; font-size: 1.02rem; }
+.tcg-energy.ready .btn { margin-top: 16px; }
 /* ---- Practise as Student (centre computers) ---- */
 /* Collapsed by default to ONE short line: it used to be a 760px bar carrying
    the whole explanation, which on a laptop sat over the bottom card of every
@@ -7430,7 +7441,9 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="rpg-side-top"><span class="rpg-side-level" id="rpgSideLevel">Lv 1</span><span class="rpg-side-gold" id="rpgSideGold">🪙 0</span></div>
       <div class="rpg-bar mini" title="HP"><div class="rpg-bar-fill hp" id="rpgSideHp" style="width:100%;"></div></div>
       <div class="rpg-bar mini" title="XP to next level"><div class="rpg-bar-fill xp" id="rpgSideXp" style="width:0%;"></div></div>
-      <div class="rpg-side-credits" id="rpgSideCredits" style="display:none;" title="Game credits left today — each game play costs 1 credit. Answer 5 questions in any non-game mode to earn another."></div>
+      <div class="rpg-bar mini" id="rpgSideEnergyBar" style="display:none;" title="⚡ Energy — 50 correct answers fills it and earns a free 💠 Gold Pack in Realm of Embers"><div class="rpg-bar-fill energy" id="rpgSideEnergy" style="width:0%;"></div></div>
+      <div class="rpg-side-credits" id="rpgSideEnergyText" style="display:none;" title="⚡ Energy — 50 correct answers fills the bar and earns a free 💠 Gold Pack in Realm of Embers"></div>
+      <div class="rpg-side-credits" id="rpgSideCredits" style="display:none;" title="Game credits left today — each game play costs 1 credit (Science Strike included). Answer 5 questions in any non-game mode to earn another."></div>
     </div>
     <div id="saveStatusIndicator" style="display:none;width:100%;text-align:center;font-size:0.7rem;padding:4px 12px;border-radius:6px;margin:0 8px 6px;font-family:'Space Mono',monospace;letter-spacing:0.03em;"></div>
     <div class="sidebar-footer">

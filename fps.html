@@ -299,6 +299,7 @@
     <h1>🔫 Science Strike</h1>
     <p class="sub" id="menuHello">Open world. Infinite waves. Every 15 seconds, science decides your luck.</p>
     <button class="btn good" id="playBtn" style="font-size:1.15rem;padding:15px 42px;">▶ Start Run</button>
+    <div id="creditLine" style="display:none;margin-top:14px;font-size:0.86rem;opacity:0.88;line-height:1.5;"></div>
     <div style="margin-top:4px;">
       <button class="btn" id="menuSkillsBtn">🧠 Skill Tree</button>
       <a class="btn ghost" href="index.html">← Back to Science Quest</a>
@@ -437,7 +438,7 @@
   </div>
 </div>
 
-<div id="versionBadge">Science Strike v1.5.0</div>
+<div id="versionBadge">Science Strike v1.6.0</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
@@ -497,6 +498,7 @@ onAuthStateChanged(auth, async (user) => {
   $('versionBadge').style.display = isAdmin() ? 'block' : 'none';
   await loadAdminUid();
   await loadStudentLevelCap();   // before the bank loads — the cap filters it
+  await loadGameCredits();       // a run costs a credit, so the menu must know
   enterMenu();     // fully released — every signed-in user goes straight in
   loadQuestions(); // background — the run can start before it finishes
 });
@@ -565,6 +567,72 @@ async function loadStudentLevelCap() {
       if (t.exists() && t.data() && typeof t.data().custom === 'object') customTopicLevels = t.data().custom || {};
     }
   } catch (e) { console.warn('shared topics read', e); }
+}
+
+/* ---------- game credits (mirrors index.html's shared daily pool) ----------
+   Every game in the portal costs 1 credit per play; Science Strike was the one
+   that charged nothing, so it was the free way to farm question points. It
+   cannot spend the credit itself — this page must NEVER write the hero doc
+   (users/{uid}/settings/scienceRpg), which index.html owns wholesale. So it
+   READS the balance here, gates the run on it, and banks each run started into
+   `fps.pendingRuns` on the leaderboard doc it does own. index.html settles that
+   against the real balance on its next load (rpgClaimStrikePoints).           */
+const DAILY_CREDITS = 6;          // must match index.html's DAILY_CREDITS
+let creditBalance = 99;           // credits at page load (99 = admin, no limit)
+let creditsSpentHere = 0;         // runs started in this tab, already banked
+let creditsPendingIn = 0;         // runs banked earlier that index.html hasn't settled yet
+function todayKeyLocal() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function creditsLeft() {
+  if (!currentUser || currentUser.role !== 'student') return 99;
+  return Math.max(0, creditBalance - creditsPendingIn - creditsSpentHere);
+}
+async function loadGameCredits() {
+  creditBalance = 99; creditsSpentHere = 0; creditsPendingIn = 0;
+  if (!currentUser || isAdmin()) return;
+  try {
+    const snap = await getDoc(doc(db, 'users', currentUser.uid, 'settings', 'scienceRpg'));
+    const st = (snap.exists() && snap.data()) || {};
+    const c = st.credits || {};
+    const bonus = (st.star && Number(st.star.raids)) || 0;   // index.html's _creditBonus()
+    const allowance = DAILY_CREDITS + (isFinite(bonus) ? bonus : 0);
+    // Same rollover rule as _creditsToday(): a new day refills to the allowance.
+    creditBalance = (c.day === todayKeyLocal() && typeof c.balance === 'number')
+      ? Math.max(0, Math.round(c.balance)) : allowance;
+  } catch (e) {
+    // A denied or failed read must not lock a student out of a game they have
+    // credits for — index.html still settles every run this page banks.
+    console.warn('game credit read', e);
+    creditBalance = 99;
+  }
+  try {
+    const snap = await getDoc(doc(db, 'scienceGameLeaderboard', currentUser.uid));
+    const f = (snap.exists() && snap.data().fps) || {};
+    creditsPendingIn = Math.max(0, Math.round(Number(f.pendingRuns) || 0));
+  } catch (e) { console.warn('pending runs read', e); }
+}
+// Spend one credit on a run. Banked immediately so closing the tab mid-run
+// still costs the credit — otherwise the charge is trivially dodged.
+function spendGameCredit() {
+  if (!currentUser || currentUser.role !== 'student') return true;
+  if (creditsLeft() <= 0) return false;
+  creditsSpentHere++;
+  fpsPublish({ pendingRuns: increment(1) });
+  paintCredits();
+  return true;
+}
+function paintCredits() {
+  const el = $('creditLine');
+  if (!el) return;
+  if (!currentUser || currentUser.role !== 'student') { el.style.display = 'none'; return; }
+  const n = creditsLeft();
+  el.style.display = '';
+  el.textContent = n > 0
+    ? '🎮 ' + n + ' game credit' + (n === 1 ? '' : 's') + ' left today — each run costs 1'
+    : '🎮 No game credits left today — answer 5 questions in practice to earn one';
+  el.style.color = n > 0 ? '' : '#ff9b9b';
 }
 
 /* ---------- question bank (union across admin accounts, like index.html) ---------- */
@@ -769,6 +837,7 @@ function enterMenu() {
   $('menuHello').textContent = 'Welcome, ' + currentUser.name + '. Pick a class, spec your skill tree, and survive. Every 15 seconds, science decides your luck.';
   renderMeta();
   renderClassRow();
+  paintCredits();
   showScreen('menuScreen');
 }
 
@@ -1298,6 +1367,14 @@ const keys = {};
 let pointerLocked = false;
 
 function startRun() {
+  // One credit per run — the same toll every other game in the portal takes.
+  // Gated here rather than on the buttons so "▶ Start Run" and "↻ Run it back"
+  // both pay, and the player is put back on the menu (never a dead canvas).
+  if (!spendGameCredit()) {
+    hideOverlays();
+    enterMenu();
+    return;
+  }
   ensureMetaShape();
   _strikeRunPoints = 0;   // the death screen reports THIS run's question points
   const cls = meta.class || 'soldier';
@@ -2414,7 +2491,12 @@ function bankPortalPoints(q, correct, ms) {
     if (ms > 0 && ms < STRIKE_BOT_MS) return 0;   // faster than anyone can read it
     const pts = correct ? STRIKE_Q_POINTS : STRIKE_Q_POINTS_WRONG;
     _strikeRunPoints += pts;
-    fpsPublish({ pendingPoints: increment(pts) });
+    // A correct answer here fills the ⚡ energy bar too (50 → a free Gold
+    // Pack). Banked the same way the points are, past the same bot guard
+    // above, and claimed by index.html's rpgClaimStrikePoints.
+    const bank = { pendingPoints: increment(pts) };
+    if (correct) bank.pendingCorrect = increment(1);
+    fpsPublish(bank);
     return pts;
   } catch (e) { console.warn('portal points bank', e); return 0; }
 }
