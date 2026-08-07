@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.249.1';
+const APP_VERSION = 'v1.250.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -28160,12 +28160,16 @@ async function rpgInit() {
   try { rpgApplyDuelClawback(); } catch (_) {}
   try { rpgApplyHeroOp(); } catch (_) {}
 }
-// ---- Points earned in Science Strike (fps.html), claimed here ----
+// ---- Points, runs and correct answers from Science Strike, claimed here ----
 // fps.html is a separate page and must NEVER write the hero document — this
-// page owns it wholesale and would race with it. It banks what its questions
-// earn into `fps.pendingPoints` on the leaderboard doc it already owns, using
-// increment(); this claims the balance into the wallet on the next load and
-// decrements by exactly what was taken, so anything banked in between survives.
+// page owns it wholesale and would race with it. It banks three things into
+// the `fps` block of the leaderboard doc it already owns, all with increment():
+//   pendingPoints  — 🪙 earned by its questions        → the wallet
+//   pendingRuns    — runs started, 1 game credit each  → today's credit balance
+//   pendingCorrect — correct answers                   → the ⚡ energy bar
+// Each is claimed and decremented by EXACTLY what was taken, so anything banked
+// in between survives. A run is spent optimistically over there (fps.html gates
+// itself on the balance it reads) and settled here.
 let _strikeClaimBusy = false;
 async function rpgClaimStrikePoints() {
   if (_strikeClaimBusy || !rpgState || !currentUser || RPG_STORAGE_MODE !== 'firestore') return;
@@ -28173,15 +28177,33 @@ async function rpgClaimStrikePoints() {
   try {
     const ref = doc(db, 'scienceGameLeaderboard', currentUser.uid);
     const snap = await getDoc(ref);
-    const pending = Math.round(Number(snap.exists() && snap.data().fps && snap.data().fps.pendingPoints) || 0);
-    if (pending <= 0) return;
-    const claim = Math.min(pending, 20000);   // sanity ceiling on a single claim
-    await setDoc(ref, { fps: { pendingPoints: increment(-claim) } }, { merge: true });
-    rpgApplyRewards(claim, 0);
+    const f = (snap.exists() && snap.data().fps) || {};
+    const num = v => Math.round(Number(v) || 0);
+    const pending = num(f.pendingPoints), runs = num(f.pendingRuns), corr = num(f.pendingCorrect);
+    if (pending <= 0 && runs <= 0 && corr <= 0) return;
+    const claim = Math.min(Math.max(0, pending), 20000);   // sanity ceilings on a single claim
+    const runClaim = Math.min(Math.max(0, runs), 50);
+    const corrClaim = Math.min(Math.max(0, corr), 500);
+    const take = {};
+    if (claim) take.pendingPoints = increment(-claim);
+    if (runClaim) take.pendingRuns = increment(-runClaim);
+    if (corrClaim) take.pendingCorrect = increment(-corrClaim);
+    await setDoc(ref, { fps: take }, { merge: true });
+    // Settle the credits the runs cost. Floored at 0: the gate lives in
+    // fps.html, and a student must never be pushed into a negative balance
+    // that would eat tomorrow's credits too.
+    if (runClaim && currentUser.role === 'student') {
+      const c = _creditsToday();
+      c.balance = Math.max(0, (c.balance | 0) - runClaim);
+    }
+    if (claim) rpgApplyRewards(claim, 0);
     rpgSave();
     rpgPublishLeaderboard();
     try { tcgUpdateGoldChip(); } catch (e) {}
-    toast('🔫 Science Strike: 🪙 +' + claim.toLocaleString() + ' points from the questions you answered — spend them on booster packs!', 'success');
+    try { rpgRenderSide(); } catch (e) {}
+    // Energy last: it saves and repaints on its own, and may pop its own toast.
+    if (corrClaim) { try { rpgNoteEnergy(corrClaim); } catch (e) {} }
+    if (claim) toast('🔫 Science Strike: 🪙 +' + claim.toLocaleString() + ' points from the questions you answered — spend them on booster packs!', 'success');
   } catch (e) { console.warn('strike points claim', e); }
   finally { _strikeClaimBusy = false; }
 }
@@ -28601,7 +28623,7 @@ function rpgOnMarked(q, score, total, opts = {}) {
   const round = rpgState.battle ? rpgBattleRound(credit) : null;
   if (round && round.victory) { gold += round.victory.gold; xp += round.victory.xp; }
   const lvl = rpgApplyRewards(gold, xp);
-  if (!opts.simulated) { const _bq = rpgState.monthQ || 0; rpgNoteUniqueQuestion(qid, opts.answerText); if ((rpgState.monthQ || 0) > _bq) { try { commNoteEncounterProgress(q); } catch (_) {} if (isPastPaperQuestion(q)) rpgState.papersQ = (rpgState.papersQ || 0) + 1; } try { _noteQuestionForCredit(qid); } catch (_) {} try { commQuestRunCapture(q, credit); } catch (_) {} }
+  if (!opts.simulated) { const _bq = rpgState.monthQ || 0; rpgNoteUniqueQuestion(qid, opts.answerText); if ((rpgState.monthQ || 0) > _bq) { try { commNoteEncounterProgress(q); } catch (_) {} if (isPastPaperQuestion(q)) rpgState.papersQ = (rpgState.papersQ || 0) + 1; } try { _noteQuestionForCredit(qid); } catch (_) {} try { commQuestRunCapture(q, credit); } catch (_) {} try { if (credit >= 0.95) rpgNoteEnergy(1); } catch (_) {} }
   rpgHintUsedQ = false;
   rpgSave();
   rpgPublishLeaderboard();
@@ -28703,6 +28725,22 @@ function rpgRenderSide() {
       cr.textContent = `🎮 ${left} game credit${left === 1 ? "" : "s"} today · ${need} more Q${need === 1 ? "" : "s"} → +1`;
     } else {
       cr.style.display = "none";
+    }
+  }
+  // ⚡ Energy bar — students only (an admin has no faucet to fill it).
+  const enBar = $("rpgSideEnergyBar"), enFill = $("rpgSideEnergy"), enTxt = $("rpgSideEnergyText");
+  const student = !!(currentUser && currentUser.role === "student");
+  const e = student ? _energyState() : null;
+  if (enBar) enBar.style.display = e ? "" : "none";
+  if (enTxt) enTxt.style.display = e ? "" : "none";
+  if (e && enFill) {
+    const pend = e.pending | 0;
+    enFill.style.width = (pend > 0 ? 100 : rpgEnergyPct()) + "%";
+    enFill.classList.toggle("full", pend > 0);
+    if (enTxt) {
+      enTxt.textContent = pend > 0
+        ? `⚡ ${pend} free 💠 Gold Pack${pend === 1 ? "" : "s"} ready — open in Realm of Embers`
+        : `⚡ ${e.fill | 0}/${ENERGY_PER_PACK} to a free 💠 Gold Pack`;
     }
   }
 }
@@ -32336,6 +32374,9 @@ function rpgAwardGameQuestion(questionId, correct, ms) {
     _gamePtsBump(GAME_Q_POINTS_RUSHED);
     return GAME_Q_POINTS_RUSHED;
   }
+  // Correct, and past the rushed guard — the ⚡ bar fills on exactly the
+  // answers that are allowed to pay, so it can't be farmed any faster.
+  try { rpgNoteEnergy(1); } catch (e) {}
   // Repeats pay the reduced rate, tracked on a DAY-SCOPED map of its own.
   // Deliberately not rpgState.seenQ: that is practice's ledger, and folding
   // game answers into it would quietly cut what the practice page pays.
@@ -32722,6 +32763,74 @@ function _noteQuestionForCredit(qid) {
 }
 // The mini-games gate on playsLeft[mode]; every mode reads the same shared pool.
 function _playsLeftPayload() { const n = _creditsLeft(); return { defenders: n, raiders: n, spire: n, legends: n, slayers: n }; }
+
+// ---- ⚡ Energy bar: 50 correct answers → one free 💠 Gold Pack ----
+// A faucet, so it obeys the same rule points do: it fills ONLY on a correct
+// answer that already paid out — a marked practice question, or a game
+// question that passed the rushed-answer and wrong-run guards. No button can
+// advance it. The pack is banked UNOPENED (`energy.pending`) rather than torn
+// open on the spot: the reveal ceremony belongs on the Realm of Embers page,
+// not on top of the question the student is in the middle of answering.
+const ENERGY_PER_PACK = 50;        // correct answers to fill the bar once
+const ENERGY_PACK_ID = 'galaxy';   // 💠 Gold Pack — see TCG_PACKS
+function _energyState() {
+  if (!rpgState) return null;
+  let e = rpgState.energy;
+  if (!e || typeof e !== 'object') e = rpgState.energy = {};
+  const pos = v => { v = Number(v); return (isFinite(v) && v > 0) ? v : 0; };
+  // rpgNoteEnergy always drains a full bar into `pending`, so a stored fill is
+  // below one pack by construction — clamping to that keeps a corrupted or
+  // hand-edited value from sitting on a permanently "full" bar.
+  e.fill = Math.min(Math.round(pos(e.fill)), ENERGY_PER_PACK - 1);
+  e.pending = Math.min(Math.round(pos(e.pending)), 99);
+  e.packs = Math.round(pos(e.packs));
+  return e;
+}
+function rpgEnergyPct() {
+  const e = _energyState();
+  return e ? Math.max(0, Math.min(100, Math.round((e.fill / ENERGY_PER_PACK) * 100))) : 0;
+}
+// Count correct answers toward the bar. `n` is only ever > 1 when a batch is
+// claimed back from Science Strike, which banks its correct answers instead of
+// writing the hero doc itself. Returns how many packs that filled.
+function rpgNoteEnergy(n = 1) {
+  if (!rpgState || !currentUser || currentUser.role !== 'student') return 0;
+  const e = _energyState();
+  if (!e) return 0;
+  n = Math.round(Number(n) || 0);
+  if (n <= 0) return 0;
+  n = Math.min(n, ENERGY_PER_PACK * 4);   // sanity ceiling on any single claim
+  e.fill += n;
+  let earned = 0;
+  while (e.fill >= ENERGY_PER_PACK) { e.fill -= ENERGY_PER_PACK; e.pending = (e.pending | 0) + 1; e.packs = (e.packs | 0) + 1; earned++; }
+  if (earned > 0) {
+    try {
+      toast('⚡ Energy full! ' + (earned === 1 ? 'A free 💠 Gold Pack is' : earned + ' free 💠 Gold Packs are')
+        + ' waiting for you in 🔥 Realm of Embers', 'success');
+    } catch (_) {}
+  }
+  try { rpgSave(); } catch (_) {}
+  try { rpgRenderSide(); } catch (_) {}
+  if (earned > 0) try { _tcgRefreshIfOpen(); } catch (_) {}
+  return earned;
+}
+// Repaint the Realm of Embers body only when that page is actually on screen —
+// the energy bar can fill from anywhere in the app.
+function _tcgRefreshIfOpen() {
+  const pg = document.getElementById('page-tcg');
+  if (pg && pg.classList.contains('active') && typeof tcgRenderBody === 'function') tcgRenderBody();
+}
+// Open one banked free Gold Pack. Costs nothing — it was already paid for with
+// 50 correct answers.
+function tcgOpenFreePack() {
+  const e = _energyState();
+  if (!e || (e.pending | 0) <= 0) return;
+  const p = TCG_PACKS.find(x => x.id === ENERGY_PACK_ID);
+  if (!p || !tcgState()) return;
+  e.pending = (e.pending | 0) - 1;   // spend first, so a mid-open error cannot re-grant it
+  _tcgOpenPack(p);
+  try { rpgRenderSide(); } catch (_) {}
+}
 
 // ---- No-repeat rotation for game questions (invisible to students) ----
 // A per-student localStorage map stamps every question a game mode serves with
@@ -34040,7 +34149,18 @@ async function fpsNavInit() {
   fpsShowAnnounce();
   try { _renderCommFeed(); } catch (_) {}  // community feed carries the built-in Strike announcement
 }
-function openFpsGame() { window.location.href = 'fps.html'; }
+// Science Strike costs a game credit per run, exactly like every other game.
+// The charge itself happens in fps.html (it owns the run, and a student can
+// reach the page directly), so this only turns them back at the door when
+// there is nothing left to spend — walking into a locked menu is worse.
+function openFpsGame() {
+  if (currentUser && currentUser.role === 'student' && rpgState && _creditsLeft() <= 0) {
+    const need = _creditsToNextReward();
+    showToast(`🎮 No game credits left today — answer ${need} more question${need === 1 ? '' : 's'} in practice to earn one`, 'error');
+    return;
+  }
+  window.location.href = 'fps.html';
+}
 // ---- Release announcement banner (top of screen, dismissible per device) ----
 const FPS_ANNOUNCE_KEY = 'fpsAnnounceDismissed_v1';
 function fpsShowAnnounce() {
@@ -35407,12 +35527,38 @@ function tcgCloseTrain() {
   try { tcgRenderBody(); } catch (_) {}
 }
 
+// -- ⚡ Energy: the free Gold Pack every 50 correct answers --
+// Sits at the top of the Packs tab because that is where a student looks for a
+// pack. Shows the bar filling while it fills, and the claim button once full.
+function _tcgEnergyHtml() {
+  const e = (currentUser && currentUser.role === 'student') ? _energyState() : null;
+  if (!e) return '';
+  const pend = e.pending | 0;
+  const pack = TCG_PACKS.find(x => x.id === ENERGY_PACK_ID);
+  const name = pack ? pack.name : 'Gold Pack';
+  if (pend > 0) {
+    return '<div class="tcg-energy ready">'
+      + '<div class="tcg-energy-head">⚡ Energy full — ' + pend + ' free 💠 ' + escapeHtml(name) + (pend === 1 ? '' : 's') + ' ready</div>'
+      + '<div class="tcg-energy-sub">You earned ' + (pend === 1 ? 'this' : 'these') + ' by answering <b>' + ENERGY_PER_PACK + ' questions correctly</b> — nothing to pay.</div>'
+      + '<button class="btn btn-primary" onclick="tcgOpenFreePack()">Open free 💠 ' + escapeHtml(name) + '</button>'
+      + '</div>';
+  }
+  const left = Math.max(0, ENERGY_PER_PACK - (e.fill | 0));
+  return '<div class="tcg-energy">'
+    + '<div class="tcg-energy-head">⚡ Energy · ' + (e.fill | 0) + ' / ' + ENERGY_PER_PACK + '</div>'
+    + '<div class="rpg-bar"><div class="rpg-bar-fill energy" style="width:' + rpgEnergyPct() + '%;"></div>'
+    +   '<div class="rpg-bar-label">' + left + ' more correct → free 💠 ' + escapeHtml(name) + '</div></div>'
+    + '<div class="tcg-energy-sub">Every question you get <b>right</b> — practice, training, the Siege, Legends and every game in the sidebar — fills this bar. Fill it and a <b>free ' + escapeHtml(name) + '</b> is yours.</div>'
+    + (e.packs ? '<div class="tcg-energy-sub">Earned so far: <b>' + (e.packs | 0) + '</b></div>' : '')
+    + '</div>';
+}
 // -- Packs tab --
 function tcgPacksHtml(s) {
   const gold = (rpgState && rpgState.gold) | 0;
   const oddsLine = p => [1, 2, 3, 4, 5, 6, 7].filter(n => p.odds[n]).map(n => n + '★ ' + p.odds[n] + '%').join(' · ');
   return '<div class="tcg-section-note">Booster packs are the <b>only</b> way to collect monsters <b>and 🔱 artifacts</b>. You have <b>🪙 ' + gold.toLocaleString() + ' points</b> — every question you answer <b>anywhere</b> pays into this wallet: practice, 🎓 training, 🌋 Ember Siege, and every game in the sidebar (Defenders, Raiders, Spire, Legends, Slayers and 🔫 Science Strike).'
     + (_isAdmin() ? ' <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="tcgAdminGold()">＋500 🪙 test points (admin)</button>' : '') + '</div>'
+    + _tcgEnergyHtml()
     + '<div class="tcg-packs">' + TCG_PACKS.map(p =>
       '<div class="tcg-pack tcg-pack-' + p.tier + '">'
       + '<div class="tcg-pack-art">' + tcgPackArt(p.tier) + '</div>'
@@ -35460,6 +35606,15 @@ function tcgBuyPack(packId) {
   if (!p || !s || !rpgState) return;
   if (((rpgState.gold | 0)) < p.cost) { showToast('Not enough points — answer more questions to earn 🪙 ' + p.cost, 'error'); return; }
   rpgState.gold = (rpgState.gold | 0) - p.cost;
+  _tcgOpenPack(p);
+}
+// The rolls, the merges, the save and the reveal ceremony — shared by a pack
+// BOUGHT with points and by a free ⚡ energy pack, which is the same thing
+// minus the charge. Anything that opens a pack must come through here, or the
+// merge absorb / publish / reveal steps drift apart.
+function _tcgOpenPack(p) {
+  const s = tcgState();
+  if (!p || !s || !rpgState) return;
   const pulls = [];
   let mergedLevels = 0, mergedCards = 0;
   for (let i = 0; i < p.cards; i++) {
@@ -39135,6 +39290,7 @@ window.tcgSetStrategy = tcgSetStrategy;
 window._tcgQuizAnswer = _tcgQuizAnswer;
 window._tcgQuizNext = _tcgQuizNext;
 window.tcgBuyPack = tcgBuyPack;
+window.tcgOpenFreePack = tcgOpenFreePack;
 window.tcgAdminGold = tcgAdminGold;
 window.tcgAdminGrantAll = tcgAdminGrantAll;
 window.tcgFlipCard = tcgFlipCard;
