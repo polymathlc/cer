@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.251.0';
+const APP_VERSION = 'v1.252.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -32828,7 +32828,7 @@ function tcgOpenFreePack() {
   const p = TCG_PACKS.find(x => x.id === ENERGY_PACK_ID);
   if (!p || !tcgState()) return;
   e.pending = (e.pending | 0) - 1;   // spend first, so a mid-open error cannot re-grant it
-  _tcgOpenPack(p);
+  _tcgOpenPack(p, tcgPackSet);       // the set chosen on the Packs tab, same as a bought pack
   try { rpgRenderSide(); } catch (_) {}
 }
 
@@ -34005,9 +34005,15 @@ function _tcgRollStars(odds) {
   for (const k of Object.keys(odds)) { r -= odds[k]; if (r <= 0) return +k; }
   return +Object.keys(odds)[0];
 }
-function _tcgRollCard(odds) {
+// A pack belongs to a card SET, and pulls only from that set — that is what
+// lets a student chase the National Day cards instead of hoping. An empty
+// pool (a set with nothing at that rarity) falls back to the whole dex rather
+// than returning undefined and killing the pack open.
+function _tcgRollCard(odds, setKey) {
   const stars = _tcgRollStars(odds);
-  const pool = TCG_CARDS.filter(c => c.stars === stars);
+  let pool = TCG_CARDS.filter(c => c.stars === stars && (!setKey || (c.set || 'gen1') === setKey));
+  if (!pool.length) pool = TCG_CARDS.filter(c => c.stars === stars);
+  if (!pool.length) pool = TCG_CARDS;
   return pool[Math.floor(Math.random() * pool.length)];
 }
 // Bonus artifact slot: rarity rolled with the same star odds as the pack's cards.
@@ -34892,6 +34898,203 @@ function tcgFxRowInnerHtml(element) {
   });
   return html;
 }
+// ---- Booster pack opening animation -------------------------------------
+// Seven frames per pack, played in order when a pack is opened: the sealed
+// pack, the first nick, the tear running across it, the light bursting out,
+// the cards coming free, the empty wrapper falling away. Each pack TIER
+// (bronze / silver / gold) has its own seven, and each card SET has its own
+// again — the National Day pack is not the original pack in different
+// colours. 2 sets × 3 tiers × 7 frames = 42 pictures.
+// Same rules as the element FX above: every frame is drawn FROM the one
+// before it, so the run stays one continuous animation rather than seven
+// unrelated pictures of a packet.
+const TCG_PACK_FRAMES = 7;
+const TCG_PACK_STEPS = [
+  { t: 'Sealed',          d: 'the sealed booster pack, untouched and pristine, standing upright and facing the viewer, foil catching the light. Nothing is torn yet' },
+  { t: 'First nick',      d: 'exactly the same pack in exactly the same position, now with a small nick torn into the TOP edge — a single short split in the foil, a few millimetres wide. Everything else is identical to the frame before' },
+  { t: 'Tear starting',   d: 'the tear has run a third of the way across the top edge, the torn foil curling up and back, with the first thin line of bright light escaping from inside the pack' },
+  { t: 'Tear halfway',    d: 'the split now runs most of the way across the top, the flap peeling back, and light is pouring out of the opening in a widening beam' },
+  { t: 'Torn wide open',  d: 'the top of the pack is torn right off and peeling away, the opening gaping wide, brilliant light blazing out of it and washing over the torn edges' },
+  { t: 'Cards bursting',  d: 'the light at maximum — a blaze of glowing energy erupting from the open pack, with the edges of several blank glowing cards fanning up and out of the opening. The brightest frame of the seven' },
+  { t: 'Wrapper falling', d: 'the aftermath — the emptied, torn wrapper tumbling away and downward, drained of light, with only fading sparks and drifting motes left where the glow was. Mostly empty frame' }
+];
+const TCG_PACK_LOOK = {
+  bronze: { name: 'Bronze', words: 'warm copper and bronze foil, burnt-orange highlights, deep amber glow' },
+  silver: { name: 'Silver', words: 'cool polished silver and pearl-white foil, pale blue-grey highlights, clean white glow' },
+  gold:   { name: 'Gold',   words: 'rich gold and champagne foil, deep amber highlights, brilliant warm golden glow' }
+};
+// The wrapper's own artwork, per card set — this is what makes the two runs
+// look like two different products rather than one recoloured one.
+const TCG_PACK_SET_LOOK = {
+  gen1: 'The wrapper carries the ORIGINAL monster set: a bold fantasy-creature emblem — scales, horns and claws — over a dark starry field, in the style of a painted monster-collecting card game.',
+  nd:   'The wrapper carries the NATIONAL DAY set, the Lionheart Legion: a heraldic LION crest on a red-and-white banner, flanked by a crossed sword and staff, in the style of a painted fantasy card game. Regal and ceremonial.'
+};
+function tcgPackSlotId(setKey, tier, n) { return 'pk:' + setKey + ':' + tier + ':' + n; }
+function tcgPackParseSlot(slotId) {
+  const m = /^pk:([a-z0-9]+):([a-z]+):(\d+)$/.exec(String(slotId || ''));
+  if (!m) return null;
+  const n = +m[3];
+  if (!TCG_SETS[m[1]] || !TCG_PACK_LOOK[m[2]] || n < 1 || n > TCG_PACK_FRAMES) return null;
+  return { setKey: m[1], tier: m[2], n: n };
+}
+function tcgPackHas(setKey, tier, n) { return !!(_tcgArt && _tcgArt[tcgPackSlotId(setKey, tier, n)]); }
+// Every frame present = the animation can play. A partial run is not played
+// at all — half a tear looks broken, and the plain reveal is fine.
+function tcgPackAnimReady(setKey, tier) {
+  for (let i = 1; i <= TCG_PACK_FRAMES; i++) if (!tcgPackHas(setKey, tier, i)) return false;
+  return true;
+}
+function tcgPackFramesFor(setKey, tier) {
+  const out = [];
+  for (let i = 1; i <= TCG_PACK_FRAMES; i++) out.push(_tcgArt[tcgPackSlotId(setKey, tier, i)]);
+  return out;
+}
+function tcgPackFramePrompt(setKey, tier, n) {
+  const look = TCG_PACK_LOOK[tier] || TCG_PACK_LOOK.bronze;
+  const set = TCG_SETS[setKey] || TCG_SETS.gen1;
+  const step = TCG_PACK_STEPS[n - 1] || TCG_PACK_STEPS[0];
+  return 'Game artwork: ONE frame from a ' + TCG_PACK_FRAMES + '-frame animation of a ' + look.name
+      + ' booster pack being TORN OPEN in a fantasy collectible card game.\n'
+    + 'THE PACK: a foil trading-card booster packet standing upright, seen straight on. ' + look.words + '.\n'
+    + 'WRAPPER ARTWORK: ' + (TCG_PACK_SET_LOOK[setKey] || TCG_PACK_SET_LOOK.gen1) + '\n'
+    + 'FRAME ' + n + ' OF ' + TCG_PACK_FRAMES + ' — ' + step.t + ': ' + step.d + '.\n'
+    + 'CRITICAL — THIS IS ONE FRAME OF AN ANIMATION: the pack must stay the SAME pack at the SAME size in the SAME place in every frame, with the same wrapper artwork and the same colours. Only the tear, the light and the cards change from frame to frame. Do not re-design the packet, do not move it, do not zoom in or out.\n'
+    + 'COMPOSITION: the pack centred on a COMPLETELY EMPTY background, square, filling about 70% of the frame. No hands, no table, no ground, no shadow plate, no scenery, no border, no interface.\n'
+    // Same trap as the element FX and the battle avatars: say "transparent"
+    // and the model paints the chequerboard that stands for it.
+    + 'BACKGROUND — CRITICAL: the area around the pack must be genuinely empty. Do NOT draw a chequerboard or chessboard. Do NOT draw a grid or tiling of alternating squares in ANY colour — not light-grey and white, not tinted, not faint. Do NOT draw any pattern, texture, gradient, panel, card, canvas, frame or plate to stand in for emptiness. Nothing at all outside the pack itself and its own glow.\n'
+    + (n > 1 ? 'The reference picture is frame ' + (n - 1) + ' of this same animation. Keep the pack IDENTICAL to it — same shape, same size, same position, same wrapper art, same colours — and change only what this frame describes. Its background is already empty; leave it exactly that empty.\n' : '')
+    + 'STYLE: polished painterly digital game art, rich saturated colour, dramatic rim lighting — the same finish as a painted fantasy trading-card set.\n'
+    + 'HARD RULES: no text, letters, numbers, logos, signatures or watermarks anywhere on the pack or in the frame; friendly for primary-school children.';
+}
+function tcgPackMissing() {
+  let n = 0;
+  Object.keys(TCG_SETS).forEach(sk => Object.keys(TCG_PACK_LOOK).forEach(t => {
+    for (let i = 1; i <= TCG_PACK_FRAMES; i++) if (!tcgPackHas(sk, t, i)) n++;
+  }));
+  return n;
+}
+function tcgPackRowInnerHtml(setKey, tier) {
+  const set = TCG_SETS[setKey] || TCG_SETS.gen1;
+  const look = TCG_PACK_LOOK[tier] || TCG_PACK_LOOK.bronze;
+  const pack = TCG_PACKS.find(p => p.tier === tier);
+  let have = 0;
+  for (let i = 1; i <= TCG_PACK_FRAMES; i++) if (tcgPackHas(setKey, tier, i)) have++;
+  let slots = '';
+  for (let i = 1; i <= TCG_PACK_FRAMES; i++) {
+    const id = tcgPackSlotId(setKey, tier, i);
+    const url = _tcgArt && _tcgArt[id];
+    const step = TCG_PACK_STEPS[i - 1];
+    const thumb = url ? '<img src="' + url + '" alt="' + escapeHtml(step.t) + '">'
+      : '<div class="tcg-pack-ph tcg-pack-' + tier + '">' + tcgPackArt(tier) + '</div>';
+    slots += _tcgArtSlotHtml(id, 'Frame ' + i + ' / ' + TCG_PACK_FRAMES + ' · ' + step.t, '🎁', thumb,
+      'frame ' + i, step.d.charAt(0).toUpperCase() + step.d.slice(1) + '.' + (i > 1 ? ' Drawn from frame ' + (i - 1) + '.' : ''));
+  }
+  return '<div class="tcg-fx-head">'
+    + '<b>' + set.em + ' ' + escapeHtml(set.name) + ' · ' + (pack ? pack.em + ' ' + escapeHtml(pack.name) : look.name) + '</b>'
+    + '<span class="tcg-fx-state ' + (have === TCG_PACK_FRAMES ? 'on' : '') + '">' + have + ' / ' + TCG_PACK_FRAMES + ' frames'
+      + (have === TCG_PACK_FRAMES ? ' — the tear-open animation plays in game' : ' — until all 7 are set the pack opens with no animation') + '</span>'
+    + '<button type="button" class="btn btn-primary ga-mini" onclick="tcgGenPackRun(\'' + setKey + '\',\'' + tier + '\')">✨ Generate all ' + TCG_PACK_FRAMES + ' frames</button>'
+    + '</div>'
+    + '<div class="ga-cards">' + slots + '</div>';
+}
+function tcgPackArtAdminHtml() {
+  const miss = tcgPackMissing();
+  let html = '<h3 class="ga-cat">🎁 Booster pack opening animation</h3>'
+    + '<div class="tcg-section-note">Each booster pack is <b>torn open</b> on screen before the cards are revealed — <b>' + TCG_PACK_FRAMES + ' frames</b> from sealed packet to empty wrapper. Every pack tier has its own run, and <b>each card set has its own again</b>, so the ' + TCG_SETS.nd.em + ' National Day pack is a different packet rather than the original one recoloured. Every frame is drawn <b>from the one before it</b>, so the pack stays the same pack all the way through the tear. A run with any frame missing simply doesn\'t animate — the pack opens straight to the cards, so you can do one run at a time.</div>'
+    + '<div class="tcg-gen-actions" style="margin-bottom:20px;">'
+    +   '<button type="button" class="btn btn-primary" id="tcgPackAllBtn" onclick="tcgGenAllPackArt()"' + (miss ? '' : ' disabled') + '>✨ Generate every pack animation'
+    +     (miss ? ' · ' + miss + ' frame' + (miss === 1 ? '' : 's') + ' missing' : ' · all done 🎉') + '</button>'
+    + '</div>';
+  Object.keys(TCG_SETS).forEach(sk => {
+    ['bronze', 'silver', 'gold'].forEach(tier => {
+      html += '<div class="ga-objrow tcg-fx-row" id="tcgpkrow-' + sk + '-' + tier + '">' + tcgPackRowInnerHtml(sk, tier) + '</div>';
+    });
+  });
+  return html;
+}
+function _tcgPackRowRefresh(setKey, tier) {
+  const row = document.getElementById('tcgpkrow-' + setKey + '-' + tier);
+  if (row) row.innerHTML = tcgPackRowInnerHtml(setKey, tier);
+}
+function _tcgPackRefreshCount() {
+  const b = document.getElementById('tcgPackAllBtn');
+  if (!b) return;
+  const miss = tcgPackMissing();
+  b.disabled = !miss;
+  b.textContent = '✨ Generate every pack animation' + (miss ? ' · ' + miss + ' frame' + (miss === 1 ? '' : 's') + ' missing' : ' · all done 🎉');
+}
+// Draw one run of 7, each frame from the one before it.
+async function _tcgPackRunFrames(setKey, tier, redraw, onProgress) {
+  let made = 0, ref = null;
+  for (let n = 1; n <= TCG_PACK_FRAMES; n++) {
+    if (_tcgGenStop) break;
+    const id = tcgPackSlotId(setKey, tier, n);
+    if (!redraw && tcgPackHas(setKey, tier, n)) {
+      // Already drawn — still needed as the reference for the next frame.
+      try { ref = await _urlToDataUrlRobust(transformImageUrl(_tcgArt[id])); } catch (e) { ref = null; }
+      continue;
+    }
+    if (onProgress) onProgress(n);
+    const dataUrl = await tcgGenArtImage(tcgPackFramePrompt(setKey, tier, n), ref, true);
+    await _tcgArtStore(id, dataUrl);
+    ref = dataUrl;
+    made++;
+    _tcgPackRowRefresh(setKey, tier);
+    _tcgPackRefreshCount();
+  }
+  return made;
+}
+async function tcgGenPackRun(setKey, tier, redraw) {
+  if (!_isAdmin()) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let it finish or press Stop', 'error'); return; }
+  const set = TCG_SETS[setKey], look = TCG_PACK_LOOK[tier];
+  if (!set || !look) return;
+  _tcgGenBusy = true; _tcgGenStop = false;
+  _tcgGenSetRunning(true);
+  let made = 0;
+  try {
+    made = await _tcgPackRunFrames(setKey, tier, !!redraw, n =>
+      _tcgGenProgress(n - 1, TCG_PACK_FRAMES, 'Drawing <b>' + escapeHtml(set.name) + ' · ' + look.name + '</b> — frame ' + n + ' of ' + TCG_PACK_FRAMES + '…'));
+    _tcgGenProgress(TCG_PACK_FRAMES, TCG_PACK_FRAMES, '<b>Finished</b> — ' + made + ' frame' + (made === 1 ? '' : 's') + ' drawn');
+    showToast(made ? made + ' pack frames drawn ✨' : 'That run was already complete', 'success');
+  } catch (e) {
+    console.warn('pack art run', e);
+    _tcgGenProgress(0, 1, '<span class="tcg-gen-fail">Failed — ' + escapeHtml((e && e.message) || 'could not draw') + '</span>');
+    showToast('Pack art failed — ' + ((e && e.message) || 'try again'), 'error');
+  }
+  _tcgGenBusy = false;
+  _tcgGenSetRunning(false);
+  _tcgPackRowRefresh(setKey, tier);
+  _tcgPackRefreshCount();
+}
+async function tcgGenAllPackArt() {
+  if (!_isAdmin()) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let it finish or press Stop', 'error'); return; }
+  const miss = tcgPackMissing();
+  if (!miss) { showToast('Every pack animation is already drawn 🎉', 'success'); return; }
+  if (!confirm('Draw ' + miss + ' missing pack frame' + (miss === 1 ? '' : 's') + ' with ' + _tcgArtEngineLabel() + '?\n\n'
+    + 'Each run of ' + TCG_PACK_FRAMES + ' is drawn in order, every frame from the one before it, so the pack stays the same pack through the whole tear.\n\n'
+    + 'This runs one picture at a time and can take a while — keep this tab open. Every finished frame is saved as it lands, and you can press Stop at any point.')) return;
+  _tcgGenBusy = true; _tcgGenStop = false;
+  _tcgGenSetRunning(true);
+  let done = 0;
+  const runs = [];
+  Object.keys(TCG_SETS).forEach(sk => ['bronze', 'silver', 'gold'].forEach(t => runs.push([sk, t])));
+  for (const [sk, tier] of runs) {
+    if (_tcgGenStop) break;
+    try {
+      done += await _tcgPackRunFrames(sk, tier, false, n =>
+        _tcgGenProgress(done, miss, 'Drawing <b>' + escapeHtml(TCG_SETS[sk].name) + ' · ' + TCG_PACK_LOOK[tier].name + '</b> — frame ' + n + ' of ' + TCG_PACK_FRAMES + ' · ' + done + ' / ' + miss + ' done'));
+    } catch (e) { console.warn('pack run ' + sk + '/' + tier, e); }
+  }
+  _tcgGenBusy = false;
+  _tcgGenSetRunning(false);
+  _tcgPackRefreshCount();
+  _tcgGenProgress(miss, miss, '<b>' + (_tcgGenStop ? 'Stopped' : 'Finished') + '</b> — ' + done + ' frame' + (done === 1 ? '' : 's') + ' drawn');
+  showToast((_tcgGenStop ? 'Stopped — ' : 'Done — ') + done + ' pack frames drawn', 'success');
+}
+
 function tcgFxAdminHtml() {
   const miss = tcgFxMissing();
   let html = '<h3 class="ga-cat">🎇 Element projectile animations — Ember Siege</h3>'
@@ -35023,6 +35226,7 @@ function tcgArtAdminHtml() {
   let html = '<div class="tcg-art-admin">'
     + '<div class="tcg-section-note">Every monster carries <b>two graphics</b>: the <b>🃏 trading-card art</b> shown on the card face, and the <b>⚔️ battle avatar</b> that fights on the arena stage. Paste a PNG into either slot, upload one, or let the AI draw them — until both are set, one image stands in for the other. Square images look best.</div>'
     + tcgArtGenPanelHtml()
+    + tcgPackArtAdminHtml()
     + tcgFxAdminHtml();
   // Grouped by SET first, then by star tier — with 200 cards a flat star list
   // buried the expansion inside the original dex.
@@ -35067,6 +35271,37 @@ async function tcgAiGenSlot(slotId) {
       _tcgGenBusy = false;
       _tcgFxRowRefresh(element);
       _tcgGenRefreshFxCount();
+    }
+    return;
+  }
+  // Pack tear-open frame: drawn FROM the frame before it, exactly like the
+  // element animation above, so the packet stays the same packet.
+  if (slotId.indexOf('pk:') === 0) {
+    const parsed = tcgPackParseSlot(slotId);
+    if (!parsed) { showToast('That pack slot id is not one I recognise', 'error'); return; }
+    const setKey = parsed.setKey, tier = parsed.tier, n = parsed.n;
+    _tcgGenBusy = true;
+    _tcgSlotStatus(slotId, '⏳ Drawing…');
+    try {
+      let ref = null;
+      if (n > 1) {
+        // Frame N-1 is the reference — draw the run up to here if the earlier
+        // frames aren't there yet, or the packet won't match.
+        if (!tcgPackHas(setKey, tier, n - 1)) await _tcgPackRunFrames(setKey, tier, false);
+        const prev = _tcgArt && _tcgArt[tcgPackSlotId(setKey, tier, n - 1)];
+        if (prev) { try { ref = await _urlToDataUrlRobust(transformImageUrl(prev)); } catch (e) { ref = null; } }
+      }
+      const dataUrl = await tcgGenArtImage(tcgPackFramePrompt(setKey, tier, n), ref, true);
+      await _tcgArtStore(slotId, dataUrl);
+      showToast('🎁 ' + ((TCG_SETS[setKey] || {}).name || setKey) + ' · ' + ((TCG_PACK_LOOK[tier] || {}).name || tier) + ' frame ' + n + ' drawn', 'success');
+    } catch (e) {
+      console.error('pack frame generation failed', e);
+      _tcgSlotStatus(slotId, '⚠️ Failed');
+      showToast('Could not draw it: ' + (e && e.message ? e.message : e), 'error');
+    } finally {
+      _tcgGenBusy = false;
+      _tcgPackRowRefresh(setKey, tier);
+      _tcgPackRefreshCount();
     }
     return;
   }
@@ -35314,6 +35549,10 @@ function tcgArtifactCardHtml(a, opts) {
 // ---- Page rendering ----
 let tcgTab = 'dex';
 let tcgDexFilter = 'all';
+// Which card set the Packs tab is buying from. A pack pulls only from its own
+// set, and the pack artwork / tear-open animation follow the same choice.
+let tcgPackSet = 'gen1';
+function tcgSetPackSet(k) { if (TCG_SETS[k]) { tcgPackSet = k; tcgRenderBody(); } }
 function tcgUpdateGoldChip() {
   const chip = document.getElementById('tcgGoldChip');
   if (chip) chip.textContent = '🪙 ' + ((rpgState && rpgState.gold) | 0).toLocaleString() + ' points';
@@ -35703,7 +35942,7 @@ function _tcgEnergyHtml() {
   if (pend > 0) {
     return '<div class="tcg-energy ready">'
       + '<div class="tcg-energy-head">⚡ Energy full — ' + pend + ' free 💠 ' + escapeHtml(name) + (pend === 1 ? '' : 's') + ' ready</div>'
-      + '<div class="tcg-energy-sub">You earned ' + (pend === 1 ? 'this' : 'these') + ' by answering <b>' + ENERGY_PER_PACK + ' questions correctly</b> — nothing to pay.</div>'
+      + '<div class="tcg-energy-sub">You earned ' + (pend === 1 ? 'this' : 'these') + ' by answering <b>' + ENERGY_PER_PACK + ' questions correctly</b> — nothing to pay. It opens the set you have selected below.</div>'
       + '<button class="btn btn-primary" onclick="tcgOpenFreePack()">Open free 💠 ' + escapeHtml(name) + '</button>'
       + '</div>';
   }
@@ -35723,14 +35962,31 @@ function tcgPacksHtml(s) {
   return '<div class="tcg-section-note">Booster packs are the <b>only</b> way to collect monsters <b>and 🔱 artifacts</b>. You have <b>🪙 ' + gold.toLocaleString() + ' points</b> — every question you answer <b>anywhere</b> pays into this wallet: practice, 🎓 training, 🌋 Ember Siege, and every game in the sidebar (Defenders, Raiders, Spire, Legends, Slayers and 🔫 Science Strike).'
     + (_isAdmin() ? ' <button class="btn btn-ghost" style="font-size:0.75rem;" onclick="tcgAdminGold()">＋500 🪙 test points (admin)</button>' : '') + '</div>'
     + _tcgEnergyHtml()
-    + '<div class="tcg-packs">' + TCG_PACKS.map(p =>
-      '<div class="tcg-pack tcg-pack-' + p.tier + '">'
-      + '<div class="tcg-pack-art">' + tcgPackArt(p.tier) + '</div>'
-      + '<h4>' + escapeHtml(p.name) + '</h4>'
-      + '<div class="tcg-pack-desc">' + escapeHtml(p.desc) + '</div>'
-      + '<div class="tcg-pack-odds">' + oddsLine(p) + (p.bonusOdds ? '<br><b>Bonus card:</b> ' + Object.keys(p.bonusOdds).map(n => n + '★ ' + p.bonusOdds[n] + '%').join(' · ') : '') + '</div>'
-      + '<button class="btn btn-primary" ' + (gold < p.cost ? 'disabled style="opacity:.55;"' : '') + ' onclick="tcgBuyPack(\'' + p.id + '\')">Open · 🪙 ' + p.cost + '</button>'
-      + '</div>').join('') + '</div>'
+    // Which SET you are opening. A pack pulls only from its own set, so this
+    // chooses what you are chasing — and it picks the pack artwork and the
+    // tear-open animation with it.
+    + '<div class="tcg-packset">'
+    +   '<div class="tcg-packset-label">Which set are you opening? A pack only ever gives you cards from the set you pick.</div>'
+    +   '<div class="tcg-filters">' + Object.keys(TCG_SETS).map(k => {
+          const set = TCG_SETS[k];
+          const n = TCG_CARDS.filter(c => (c.set || 'gen1') === k).length;
+          return '<button type="button" class="tcg-filter-chip' + (tcgPackSet === k ? ' active' : '') + '" onclick="tcgSetPackSet(\'' + k + '\')">'
+            + set.em + ' ' + escapeHtml(k === 'nd' ? 'National Day' : 'Original dex') + ' · ' + n + ' cards</button>';
+        }).join('') + '</div>'
+    + '</div>'
+    + '<div class="tcg-packs">' + TCG_PACKS.map(p => {
+        const anim = tcgPackAnimReady(tcgPackSet, p.tier);
+        const art = _tcgArt && _tcgArt[tcgPackSlotId(tcgPackSet, p.tier, 1)];
+        return '<div class="tcg-pack tcg-pack-' + p.tier + '">'
+        + '<div class="tcg-pack-art' + (art ? ' has-img' : '') + '">'
+        +   (art ? '<img src="' + art + '" alt="' + escapeHtml(p.name) + '">' : tcgPackArt(p.tier)) + '</div>'
+        + '<h4>' + escapeHtml(p.name) + '</h4>'
+        + '<div class="tcg-pack-desc">' + escapeHtml(p.desc) + '</div>'
+        + '<div class="tcg-pack-odds">' + oddsLine(p) + (p.bonusOdds ? '<br><b>Bonus card:</b> ' + Object.keys(p.bonusOdds).map(n => n + '★ ' + p.bonusOdds[n] + '%').join(' · ') : '') + '</div>'
+        + '<button class="btn btn-primary" ' + (gold < p.cost ? 'disabled style="opacity:.55;"' : '') + ' onclick="tcgBuyPack(\'' + p.id + '\')">Open · 🪙 ' + p.cost + '</button>'
+        + (anim ? '' : (_isAdmin() ? '<div class="tcg-pack-note">No opening animation yet — draw it on the Card Art tab</div>' : ''))
+        + '</div>';
+      }).join('') + '</div>'
     + '<div class="tcg-section-note tcg-merge-note" style="margin-top:22px;">'
     +   '<b>⟡ Repeats are never wasted.</b> Pull a monster you already own and the copy <b>merges into it automatically</b> — no button, nothing to sort. '
     +   'Every merge is a <b>merge level</b> (1 → ' + TCG_MERGE_MAX + '), a track completely separate from the 🎓 training levels you earn by answering questions, '
@@ -35770,20 +36026,21 @@ function tcgBuyPack(packId) {
   if (!p || !s || !rpgState) return;
   if (((rpgState.gold | 0)) < p.cost) { showToast('Not enough points — answer more questions to earn 🪙 ' + p.cost, 'error'); return; }
   rpgState.gold = (rpgState.gold | 0) - p.cost;
-  _tcgOpenPack(p);
+  _tcgOpenPack(p, tcgPackSet);
 }
 // The rolls, the merges, the save and the reveal ceremony — shared by a pack
 // BOUGHT with points and by a free ⚡ energy pack, which is the same thing
 // minus the charge. Anything that opens a pack must come through here, or the
 // merge absorb / publish / reveal steps drift apart.
-function _tcgOpenPack(p) {
+function _tcgOpenPack(p, setKey) {
   const s = tcgState();
   if (!p || !s || !rpgState) return;
+  setKey = TCG_SETS[setKey] ? setKey : 'gen1';
   const pulls = [];
   let mergedLevels = 0, mergedCards = 0;
   for (let i = 0; i < p.cards; i++) {
     const odds = (p.bonusOdds && i === p.cards - 1) ? p.bonusOdds : p.odds;
-    const card = _tcgRollCard(odds);
+    const card = _tcgRollCard(odds, setKey);
     const isNew = !s.cards[card.id];
     s.cards[card.id] = (s.cards[card.id] | 0) + 1;
     // A repeat is absorbed the moment it is pulled — no button to press.
@@ -35803,14 +36060,57 @@ function _tcgOpenPack(p) {
   rpgSave();
   try { rpgPublishLeaderboard(); } catch (e) {}
   tcgUpdateGoldChip();
-  tcgShowReveal(p, pulls);
+  tcgShowReveal(p, pulls, setKey);
   if (mergedLevels) {
     setTimeout(() => showToast('⟡ ' + mergedCards + ' repeat' + (mergedCards === 1 ? '' : 's') + ' merged — +'
       + mergedLevels + ' merge level' + (mergedLevels === 1 ? '' : 's') + ', stats up!', 'success'), 700);
   }
 }
 // -- Pack opening ceremony --
-function tcgShowReveal(pack, pulls) {
+// How long each frame of the tear-open run is held, in ms. The burst frame
+// (6) lingers; the rest run quick so the animation never outstays its welcome.
+const TCG_PACK_FRAME_MS = [420, 300, 300, 300, 340, 620, 420];
+// Play the pack being torn open, then hand over to the card reveal. Falls
+// straight through to the cards when the run isn't fully drawn — a half-drawn
+// tear is worse than none — and a tap skips the rest.
+function tcgShowReveal(pack, pulls, setKey) {
+  setKey = TCG_SETS[setKey] ? setKey : 'gen1';
+  const tier = (pack && pack.tier) || 'bronze';
+  if (!tcgPackAnimReady(setKey, tier)) { _tcgShowRevealCards(pack, pulls); return; }
+  const frames = tcgPackFramesFor(setKey, tier);
+  const old = document.getElementById('tcgRevealOverlay');
+  if (old) old.remove();
+  const o = document.createElement('div');
+  o.className = 'tcg-overlay tcg-rip-overlay';
+  o.id = 'tcgRevealOverlay';
+  o.innerHTML = '<div class="tcg-rip-inner">'
+    + '<div class="tcg-rip-stage tcg-pack-' + tier + '">'
+    +   frames.map((u, i) => '<img class="tcg-rip-frame' + (i ? '' : ' on') + '" src="' + u + '" alt="">').join('')
+    + '</div>'
+    + '<div class="tcg-rip-hint">tap to skip</div>'
+    + '</div>';
+  document.body.appendChild(o);
+  let i = 0, timer = null, done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    if (timer) clearTimeout(timer);
+    _tcgShowRevealCards(pack, pulls);
+  };
+  const step = () => {
+    const imgs = o.querySelectorAll('.tcg-rip-frame');
+    if (!document.getElementById('tcgRevealOverlay')) { done = true; return; }
+    if (i >= imgs.length) { finish(); return; }
+    imgs.forEach((el, k) => el.classList.toggle('on', k === i));
+    if (i === imgs.length - 2) { try { tcgConfetti(40); } catch (_) {} }   // the burst frame
+    const hold = TCG_PACK_FRAME_MS[i] || 340;
+    i++;
+    timer = setTimeout(step, hold);
+  };
+  o.addEventListener('click', finish);
+  timer = setTimeout(step, TCG_PACK_FRAME_MS[0] || 400);
+}
+function _tcgShowRevealCards(pack, pulls) {
   const old = document.getElementById('tcgRevealOverlay');
   if (old) old.remove();
   const o = document.createElement('div');
@@ -36217,6 +36517,7 @@ function tcgGuideHtml() {
   + _tcgGuideSection('🎁', 'Booster packs — the only way to get cards',
       'Packs are bought with points on the 🎁 Booster Packs tab. Every pack also rolls for a bonus 🔱 artifact.',
       _tcgGuideTable(['Pack', 'Cost', 'Contents', 'Artifact', 'Rarity odds'], packRows)
+      + '<p class="tcg-guide-note"><b>Pick your set before you open.</b> Every pack comes in a ' + TCG_SETS.gen1.em + ' <b>Original dex</b> and a ' + TCG_SETS.nd.em + ' <b>National Day</b> version, and a pack only ever gives you cards from the set you chose — so if you are hunting the Lionheart Legion, open National Day packs. The cost and the rarity odds are identical either way.</p>'
       + '<p class="tcg-guide-note">Pull a monster you already own and the duplicate is not wasted — it merges into the one on your shelf automatically (see below).</p>')
 
   + _tcgGuideSection('📈', 'Two ways a monster grows',
@@ -39497,6 +39798,9 @@ async function tcgRunBattle(myTeam, me, opp) {
 // Inline handlers on the TCG page/overlays (module scope → must be on window).
 window.tcgSetTab = tcgSetTab;
 window.tcgSetDexFilter = tcgSetDexFilter;
+window.tcgSetPackSet = tcgSetPackSet;
+window.tcgGenPackRun = tcgGenPackRun;
+window.tcgGenAllPackArt = tcgGenAllPackArt;
 window.tcgPreviewCard = tcgPreviewCard;
 window.tcgClosePreview = tcgClosePreview;
 window.tcgTrainCard = tcgTrainCard;

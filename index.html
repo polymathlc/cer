@@ -6760,6 +6760,47 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 .tcg-pack-bronze .tcg-pack-art { filter: drop-shadow(0 6px 12px rgba(140,80,30,0.45)); }
 .tcg-pack-silver .tcg-pack-art { filter: drop-shadow(0 6px 12px rgba(120,130,145,0.45)); }
 .tcg-pack-gold .tcg-pack-art { filter: drop-shadow(0 6px 14px rgba(230,170,50,0.5)); }
+/* ── Pack halo: bronze / silver / gold. The glow sits BEHIND the pack art as
+   its own ring, so a generated PNG gets the same halo the SVG placeholder
+   does. `--halo` is the one value each tier overrides. */
+.tcg-pack { position: relative; --halo: rgba(150,150,150,0.5); }
+.tcg-pack-bronze { --halo: rgba(205,127,50,0.62); }
+.tcg-pack-silver { --halo: rgba(196,208,220,0.66); }
+.tcg-pack-gold   { --halo: rgba(240,181,66,0.72); }
+.tcg-pack .tcg-pack-art { position: relative; }
+.tcg-pack .tcg-pack-art::before {
+  content: ''; position: absolute; left: 50%; top: 50%; width: 116px; height: 116px;
+  transform: translate(-50%, -50%); border-radius: 50%; z-index: 0; pointer-events: none;
+  background: radial-gradient(circle, var(--halo) 0%, transparent 68%);
+  filter: blur(3px); animation: tcgHalo 3.4s ease-in-out infinite;
+}
+.tcg-pack .tcg-pack-art > * { position: relative; z-index: 1; }
+@keyframes tcgHalo { 0%, 100% { opacity: 0.62; transform: translate(-50%, -50%) scale(0.94); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); } }
+.tcg-pack-gold { border-color: rgba(240,181,66,0.55); box-shadow: 0 3px 12px rgba(15,23,42,0.08), 0 0 0 1px rgba(240,181,66,0.28); }
+.tcg-pack-silver { border-color: rgba(196,208,220,0.6); box-shadow: 0 3px 12px rgba(15,23,42,0.08), 0 0 0 1px rgba(196,208,220,0.3); }
+.tcg-pack-bronze { border-color: rgba(205,127,50,0.5); box-shadow: 0 3px 12px rgba(15,23,42,0.08), 0 0 0 1px rgba(205,127,50,0.26); }
+/* Generated pack artwork replaces the inline SVG in the same box. */
+.tcg-pack-art.has-img { font-size: 0; }
+.tcg-pack-art.has-img img { width: 104px; height: 104px; object-fit: contain; display: block; margin: 0 auto; }
+.tcg-pack-note { font-size: 0.68rem; color: var(--text-muted); line-height: 1.5; margin-top: 2px; }
+.tcg-pack-ph { display: flex; align-items: center; justify-content: center; }
+.tcg-pack-ph .tcg-pack-svg { width: 46px; height: 54px; }
+/* Which set the packs come from */
+.tcg-packset { max-width: 560px; margin: 0 auto 22px; text-align: center; }
+.tcg-packset-label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px; letter-spacing: 0.03em; }
+/* ── The pack being torn open: seven frames cross-faded in one stack ── */
+.tcg-rip-overlay { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.tcg-rip-inner { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 24px; }
+.tcg-rip-stage { position: relative; width: min(62vw, 340px); height: min(62vw, 340px); }
+.tcg-rip-stage::before {
+  content: ''; position: absolute; inset: -12%; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, var(--halo) 0%, transparent 66%);
+  filter: blur(10px); animation: tcgHaloRip 1.4s ease-in-out infinite;
+}
+@keyframes tcgHaloRip { 0%, 100% { opacity: 0.55; transform: scale(0.95); } 50% { opacity: 1; transform: scale(1.06); } }
+.tcg-rip-frame { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity 0.12s linear; }
+.tcg-rip-frame.on { opacity: 1; }
+.tcg-rip-hint { font-size: 0.76rem; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.6); }
 @keyframes tcgBobPack { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-7px) rotate(2deg); } }
 .tcg-pack h4 { font-size: 1.05rem; }
 .tcg-pack .tcg-pack-desc { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; min-height: 3.6em; }
