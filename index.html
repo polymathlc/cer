@@ -6045,17 +6045,65 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 .tcg-mode-go { flex: 0 0 auto; }
 
 /* ---- 🌋 Ember Siege: lane defence over the whole screen ---- */
-/* Realm of Embers nav: a slow burning frame on hover, and the game-mode
-   flyout that unfolds beneath it (inline expansion, so the sidebar's own
-   scrolling never clips it). */
-.nav-tcg-wrap { position: relative; }
-#navTcg { position: relative; }
-#navTcg::after { content: ''; position: absolute; inset: 1px; border-radius: var(--radius-sm); border: 1.5px solid transparent; pointer-events: none; }
-.nav-tcg-wrap:hover #navTcg { background: rgba(240,122,40,0.10); }
+/* Realm of Embers nav — the DOOR to the realm, so it does not look like the
+   other nav items: a gold-bordered slab of deep galaxy blue, with a field of
+   stars that wakes up and drifts under the cursor on hover. The game-mode
+   flyout unfolds beneath it (inline expansion, so the sidebar's own scrolling
+   never clips it). */
+.nav-tcg-wrap { position: relative; margin: 8px 0 6px; }
+#navTcg {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: #f6ecd2;
+  font-weight: 600;
+  border: 1.5px solid rgba(240,205,122,0.5);
+  background: linear-gradient(135deg, #16264f 0%, #0c1533 52%, #1a1442 100%);
+  box-shadow: 0 6px 18px rgba(4,8,24,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  transition: border-color 0.35s ease, box-shadow 0.35s ease, transform 0.25s ease;
+}
+/* The starfield. It sits behind the label, still and faint at rest; on hover it
+   brightens and drifts, which is the whole "step through the door" cue. */
+#navTcg::before {
+  content: '';
+  position: absolute; inset: -50%;
+  pointer-events: none;
+  opacity: 0.45;
+  transition: opacity 0.45s ease;
+  /* Each layer TILES, so a handful of gradients make a whole field of stars
+     rather than seven lonely dots — and the differing tile sizes stop the
+     repeat from reading as a grid. */
+  background-image:
+    radial-gradient(1.7px 1.7px at 18% 26%, rgba(255,255,255,0.95), transparent 62%),
+    radial-gradient(1.4px 1.4px at 64% 16%, rgba(255,226,150,0.95), transparent 62%),
+    radial-gradient(1.2px 1.2px at 86% 54%, rgba(255,255,255,0.85), transparent 62%),
+    radial-gradient(1.6px 1.6px at 32% 72%, rgba(200,220,255,0.9), transparent 62%),
+    radial-gradient(1.3px 1.3px at 74% 86%, rgba(255,226,150,0.9), transparent 62%),
+    radial-gradient(2px 2px at 46% 44%, rgba(255,255,255,0.8), transparent 62%);
+  background-size: 46px 34px, 62px 41px, 38px 29px, 71px 47px, 53px 37px, 88px 58px;
+}
+/* The gold rim, animated only on hover so it never nags from the corner of the eye. */
+#navTcg::after { content: ''; position: absolute; inset: 1px; border-radius: 10px; border: 1.5px solid transparent; pointer-events: none; }
+.nav-tcg-wrap:hover #navTcg { transform: translateY(-1px); border-color: rgba(255,224,150,0.9); }
+.nav-tcg-wrap:hover #navTcg::before { opacity: 1; animation: emberStars 26s linear infinite, emberTwinkle 3.4s ease-in-out infinite; }
 .nav-tcg-wrap:hover #navTcg::after { animation: emberFrame 2.8s ease-in-out infinite; }
+#navTcg.active { background: linear-gradient(135deg, #1d3168 0%, #101b44 52%, #241a56 100%); border-color: rgba(255,224,150,0.95); color: #fff6e2; }
+@keyframes emberStars {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); }
+  100% { transform: translate3d(-14px, -10px, 0) rotate(4deg); }
+}
+@keyframes emberTwinkle {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.7); }
+}
 @keyframes emberFrame {
-  0%, 100% { border-color: rgba(200,90,24,0.75); box-shadow: 0 0 6px rgba(240,122,40,0.35), inset 0 0 6px rgba(240,122,40,0.16); }
-  50%      { border-color: rgba(255,176,84,0.95); box-shadow: 0 0 15px rgba(255,176,84,0.55), inset 0 0 10px rgba(255,150,60,0.26); }
+  0%, 100% { border-color: rgba(201,162,39,0.75); box-shadow: 0 0 6px rgba(240,205,122,0.35), inset 0 0 8px rgba(240,205,122,0.14); }
+  50%      { border-color: rgba(255,232,168,0.95); box-shadow: 0 0 16px rgba(255,224,150,0.6), inset 0 0 12px rgba(240,205,122,0.26); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-tcg-wrap:hover #navTcg::before { animation: none; }
+  .nav-tcg-wrap:hover #navTcg::after { animation: none; border-color: rgba(255,232,168,0.9); }
 }
 .nav-tcg-sub { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; }
 .nav-tcg-wrap:hover .nav-tcg-sub { max-height: 300px; }
@@ -7555,10 +7603,14 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div class="nav-item rpg-el" data-page="arcade" onclick="navigateTo('arcade')" style="display:none;" title="Arcade — Science Defenders, Raiders, Spire, Legends and Slayers, all in one place. Each play costs 1 game credit.">
         <span class="ico">🕹️</span> Arcade
       </div>
-      <!-- Realm of Embers TCG (beta) — admins always; students only once the admin presses Release -->
+      <!-- Realm of Embers TCG (beta) — admins always; students only once the admin presses Release.
+           For a STUDENT the whole wrap is moved up to sit directly under 🏛️ Community
+           (_tcgPlaceNavItem); this empty anchor is where it lives for an admin, and where
+           it is put back if the role changes. -->
+      <div id="navTcgHome"></div>
       <div class="nav-tcg-wrap" id="navTcgWrap">
         <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Realm of Embers TCG — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
-          <span class="ico">🃏</span> Realm of Embers TCG <span class="nav-beta tcg-beta-badge">BETA</span>
+          <span class="ico">🃏</span> Realm of Embers <span class="nav-beta tcg-beta-badge">BETA</span>
         </div>
         <!-- Hover flyout: the game modes inside the realm, with 🎁 badges on
              the ones paying a voucher this month (tcgNavPrizeBadges). -->
@@ -9263,6 +9315,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <button class="tcg-tab" data-tcgtab="arena" onclick="tcgSetTab('arena')" type="button">⚔️ Battle Arena</button>
           <button class="tcg-tab" data-tcgtab="dungeon" onclick="tcgSetTab('dungeon')" type="button">🏰 Dungeon</button>
           <button class="tcg-tab" data-tcgtab="modes" onclick="tcgSetTab('modes')" type="button">🎮 Game Modes</button>
+          <button class="tcg-tab" data-tcgtab="lore" onclick="tcgSetTab('lore')" type="button">📜 Lore</button>
           <button class="tcg-tab" data-tcgtab="board" onclick="tcgSetTab('board')" type="button">🏆 Leaderboard</button>
           <button class="tcg-tab" data-tcgtab="guide" onclick="tcgSetTab('guide')" type="button">📘 How to Play</button>
           <button class="tcg-tab admin-only" data-tcgtab="art" onclick="tcgSetTab('art')" type="button">🎨 Card Art</button>
@@ -10416,6 +10469,293 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <div class="overlay-head"><h3 id="rpgRewardTitle">Victory!</h3><button class="close" data-close="rpgRewardOverlay" type="button">×</button></div>
     <div class="overlay-body" id="rpgRewardBody"></div>
     <div class="overlay-foot"><button class="btn btn-primary" data-close="rpgRewardOverlay" type="button">Continue</button></div>
+  </div>
+</div>
+
+<!-- ==================== 🔥 REALM OF EMBERS — the gold-on-galaxy theme ====================
+     The portal is white and quiet on purpose; the realm is not. Opening Realm of Embers puts
+     ONE class on <body> (navigateTo → body.realm-embers) and everything below repaints from it:
+     a deep-navy galaxy behind the whole app, gold accents in front of it, and the sidebar
+     turned to match so the swap is the whole screen rather than one panel.
+
+     The mechanism is deliberately the design TOKENS, not a fork of every rule: redefining
+     --surface / --border / --text / --primary inside #page-tcg re-skins every .tcg-* surface
+     that was already using them, and only the handful of rules that hardcode a colour (the
+     page header, the active tab, .btn-primary's white label) need naming here. Keep it that
+     way — a themed copy of a component is a component that will drift. -->
+<style>
+body.realm-embers {
+  --ro-void: #05070f;
+  --ro-deep: #0a1230;
+  --ro-navy: #101c46;
+  --ro-gold: #f0cd7a;
+  --ro-gold-hi: #ffe8a8;
+  --ro-gold-deep: #c9a227;
+  --ro-ink: #f4ecd8;
+  background: var(--ro-void);
+  color: var(--ro-ink);
+}
+/* The galaxy itself — one fixed layer behind everything, so it does not scroll,
+   does not reflow and costs nothing to paint. */
+body.realm-embers::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(120% 85% at 18% -12%, rgba(58,92,204,0.42), transparent 62%),
+    radial-gradient(95% 70% at 86% 6%, rgba(126,72,196,0.30), transparent 64%),
+    radial-gradient(80% 65% at 52% 108%, rgba(201,162,39,0.20), transparent 66%),
+    linear-gradient(180deg, #0b1436 0%, #070d20 55%, #05070f 100%);
+}
+/* …and the stars over it, drifting slowly enough to be felt rather than watched. */
+body.realm-embers::after {
+  content: '';
+  position: fixed; inset: -10%; z-index: 0; pointer-events: none; opacity: 0.7;
+  background-image:
+    radial-gradient(1.4px 1.4px at 12% 18%, rgba(255,255,255,0.9), transparent 60%),
+    radial-gradient(1.1px 1.1px at 34% 62%, rgba(240,205,122,0.85), transparent 60%),
+    radial-gradient(1.6px 1.6px at 58% 24%, rgba(255,255,255,0.75), transparent 60%),
+    radial-gradient(1.2px 1.2px at 78% 71%, rgba(198,220,255,0.9), transparent 60%),
+    radial-gradient(1.3px 1.3px at 90% 33%, rgba(255,255,255,0.7), transparent 60%),
+    radial-gradient(1.1px 1.1px at 22% 86%, rgba(240,205,122,0.8), transparent 60%),
+    radial-gradient(1.5px 1.5px at 66% 92%, rgba(255,255,255,0.6), transparent 60%),
+    radial-gradient(1.2px 1.2px at 44% 44%, rgba(255,255,255,0.55), transparent 60%);
+  background-size: 640px 640px, 520px 520px, 700px 700px, 460px 460px, 580px 580px, 620px 620px, 540px 540px, 480px 480px;
+  animation: roSky 180s linear infinite;
+}
+@keyframes roSky { 0% { transform: translate3d(0,0,0); } 100% { transform: translate3d(-120px, -80px, 0); } }
+@media (prefers-reduced-motion: reduce) { body.realm-embers::after { animation: none; } }
+body.realm-embers .main-content { position: relative; z-index: 1; }
+
+/* The sidebar comes with us — the realm is the whole screen, not one panel. */
+body.realm-embers .sidebar {
+  background: linear-gradient(185deg, #0d1738 0%, #080e24 60%, #06091a 100%);
+  border-right: 1px solid rgba(240,205,122,0.18);
+}
+body.realm-embers .sidebar-brand { border-bottom-color: rgba(240,205,122,0.16); }
+body.realm-embers .nav-section-label { color: rgba(240,205,122,0.55); }
+body.realm-embers .nav-item:hover { background: rgba(240,205,122,0.10); color: #fff6e2; }
+body.realm-embers .nav-item.active { background: linear-gradient(135deg, var(--ro-gold-deep), #a8821b); color: #14161a; }
+body.realm-embers .sidebar-footer { border-top-color: rgba(240,205,122,0.16); }
+
+/* ---- Inside the realm: retune the tokens, and everything follows ---- */
+body.realm-embers #page-tcg {
+  --surface: rgba(19,32,72,0.72);
+  --surface-alt: rgba(11,20,50,0.72);
+  --border: rgba(240,205,122,0.22);
+  --border-focus: var(--ro-gold);
+  --text: #f4ecd8;
+  --text-muted: #b8c7ee;
+  --text-light: #91a2ca;
+  --primary: var(--ro-gold-deep);
+  --primary-hover: #e0b93f;
+  --primary-dark: #8c6d16;
+  --primary-light: rgba(240,205,122,0.12);
+  --accent: var(--ro-gold);
+  --accent-light: rgba(240,205,122,0.14);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.35), 0 2px 10px rgba(0,0,0,0.32);
+  --shadow-md: 0 2px 6px rgba(0,0,0,0.38), 0 8px 24px rgba(0,0,0,0.38);
+  --shadow-lg: 0 6px 14px rgba(0,0,0,0.42), 0 20px 50px rgba(0,0,0,0.5);
+  color: var(--text);
+}
+body.realm-embers #page-tcg .page-header {
+  background: linear-gradient(180deg, rgba(11,20,54,0.94), rgba(8,14,38,0.86));
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(240,205,122,0.3);
+}
+body.realm-embers #page-tcg .page-header h2 {
+  font-family: 'Cinzel', Georgia, serif;
+  letter-spacing: 0.02em;
+  background: linear-gradient(100deg, #fff3d2 0%, var(--ro-gold) 45%, #b9891f 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+body.realm-embers #page-tcg .page-header .subtitle { color: #a9bbe6; }
+body.realm-embers #page-tcg .tcg-tab { background: rgba(12,22,54,0.7); border-color: rgba(240,205,122,0.22); color: #b8c7ee; }
+body.realm-embers #page-tcg .tcg-tab:hover { border-color: rgba(240,205,122,0.6); color: #fff3d2; }
+body.realm-embers #page-tcg .tcg-tab.active {
+  background: linear-gradient(135deg, #f0cd7a, #c9a227);
+  color: #14161a; border-color: transparent;
+  box-shadow: 0 4px 16px rgba(201,162,39,0.4);
+}
+body.realm-embers #page-tcg .btn-primary { background: linear-gradient(135deg, #f0cd7a, #c9a227); color: #14161a; font-weight: 700; }
+body.realm-embers #page-tcg .btn-primary:hover { background: linear-gradient(135deg, #ffe8a8, #d9b230); color: #14161a; }
+body.realm-embers #page-tcg .btn-ghost, body.realm-embers #page-tcg .btn-outline { color: #e7dfc8; }
+body.realm-embers #page-tcg input, body.realm-embers #page-tcg select, body.realm-embers #page-tcg textarea {
+  background: rgba(8,15,40,0.8); color: var(--ro-ink); border-color: rgba(240,205,122,0.28);
+}
+body.realm-embers #page-tcg h3, body.realm-embers #page-tcg h4, body.realm-embers #page-tcg .ga-cat { color: #f7e9c6; }
+/* The realm's own headings answer to Cinzel — it is already in the ONE font
+   request the page makes (the set banners use it), so this costs nothing. */
+body.realm-embers #page-tcg .ga-cat, body.realm-embers #page-tcg .tcg-gen-panel h4 { font-family: 'Cinzel', Georgia, serif; letter-spacing: 0.02em; }
+body.realm-embers #page-tcg .tcg-gen-track i { background: linear-gradient(90deg, #f0cd7a, #c9a227); }
+/* The game-mode flyout under the nav door, in gold rather than the old ember orange. */
+body.realm-embers .nav-tcg-sub button { border-left-color: rgba(240,205,122,0.45); }
+.nav-tcg-sub button:hover { background: rgba(240,205,122,0.14); }
+.nav-sub-prize { color: #f0cd7a; background: rgba(240,205,122,0.12); border-color: rgba(240,205,122,0.5); }
+
+/* ==================== 📜 LORE TAB ==================== */
+.tcg-lore { max-width: 1000px; margin: 0 auto; }
+.tcg-lore-hero {
+  position: relative; overflow: hidden;
+  max-width: 720px; margin: 0 auto 34px;
+  padding: 38px 34px 34px;
+  border-radius: 22px; text-align: center;
+  border: 1px solid rgba(240,205,122,0.35);
+  background:
+    radial-gradient(110% 90% at 50% -20%, rgba(240,205,122,0.16), transparent 62%),
+    linear-gradient(160deg, rgba(22,38,84,0.92), rgba(10,18,46,0.94));
+  box-shadow: 0 18px 50px rgba(3,7,20,0.55);
+}
+.tcg-lore-hero-kicker { font-family: 'Cinzel', Georgia, serif; font-size: 0.74rem; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(240,205,122,0.85); margin-bottom: 14px; }
+.tcg-lore-hero h3 {
+  font-family: 'Cinzel', Georgia, serif; font-size: 1.6rem; line-height: 1.3; margin: 0 0 16px;
+  background: linear-gradient(100deg, #fff5da 0%, #f0cd7a 48%, #b9891f 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+}
+.tcg-lore-hero p { margin: 0 auto 20px; max-width: 520px; font-size: 0.92rem; line-height: 1.8; color: #c3d1f2; }
+.tcg-lore-hero-meta { font-size: 0.78rem; letter-spacing: 0.04em; color: rgba(240,205,122,0.75); margin-bottom: 24px; }
+.tcg-lore-gen { max-width: 720px; }
+
+.tcg-lore-book { margin: 0 0 40px; }
+.tcg-lore-book-head { display: flex; align-items: center; gap: 18px; padding: 0 4px 18px; border-bottom: 1px solid rgba(240,205,122,0.22); margin-bottom: 24px; }
+.tcg-lore-book-em { font-size: 2.1rem; line-height: 1; flex: 0 0 auto; filter: drop-shadow(0 0 12px rgba(240,205,122,0.5)); }
+.tcg-lore-book-kicker { font-family: 'Cinzel', Georgia, serif; font-size: 0.7rem; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(240,205,122,0.8); }
+.tcg-lore-book-head h4 { margin: 6px 0 4px; font-family: 'Cinzel', Georgia, serif; font-size: 1.28rem; color: #f7e9c6; }
+.tcg-lore-book-sub { font-size: 0.85rem; color: #a9bbe6; line-height: 1.6; }
+
+.tcg-lore-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 22px; }
+.tcg-lore-card {
+  display: flex; flex-direction: column; text-align: left; padding: 0; cursor: pointer;
+  border-radius: 18px; overflow: hidden; font: inherit; color: inherit;
+  border: 1px solid rgba(240,205,122,0.24);
+  background: linear-gradient(165deg, rgba(21,35,80,0.86), rgba(9,16,42,0.9));
+  box-shadow: 0 10px 30px rgba(3,7,20,0.45);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.tcg-lore-card:hover { transform: translateY(-4px); border-color: rgba(255,224,150,0.75); box-shadow: 0 16px 40px rgba(3,7,20,0.6); }
+.tcg-lore-thumb { position: relative; aspect-ratio: 16 / 9; background: radial-gradient(90% 90% at 50% 30%, rgba(58,92,204,0.34), rgba(6,11,30,0.9)); }
+.tcg-lore-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tcg-lore-thumb::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(6,11,30,0.75) 100%); pointer-events: none; }
+.tcg-lore-thumb-empty { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 1.9rem; letter-spacing: 0.14em; opacity: 0.8; }
+.tcg-lore-card-body { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 9px; }
+.tcg-lore-card-no { font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(240,205,122,0.8); }
+.tcg-lore-card-title { font-family: 'Cinzel', Georgia, serif; font-size: 1.04rem; font-weight: 700; color: #f7e9c6; line-height: 1.35; }
+.tcg-lore-card-ex { font-size: 0.83rem; line-height: 1.7; color: #b3c3e9; }
+.tcg-lore-card-cast { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; }
+.tcg-lore-chip { font-size: 0.7rem; padding: 4px 10px; border-radius: 999px; background: rgba(240,205,122,0.1); border: 1px solid rgba(240,205,122,0.3); color: #e3d6b0; white-space: nowrap; }
+.tcg-lore-chip i { font-style: normal; color: #f0cd7a; }
+
+.tcg-lore-next {
+  max-width: 640px; margin: 8px auto 10px; padding: 32px 30px; text-align: center;
+  border-radius: 20px; border: 1px dashed rgba(240,205,122,0.4);
+  background: linear-gradient(160deg, rgba(18,30,70,0.6), rgba(8,14,38,0.7));
+}
+.tcg-lore-next-em { font-size: 1.9rem; margin-bottom: 12px; }
+.tcg-lore-next h4 { margin: 0 0 14px; font-family: 'Cinzel', Georgia, serif; font-size: 1.15rem; color: #f7e9c6; }
+.tcg-lore-next p { margin: 0 auto; max-width: 480px; font-size: 0.87rem; line-height: 1.8; color: #b3c3e9; }
+.tcg-lore-next-sets { margin-top: 18px; font-size: 0.78rem; color: rgba(240,205,122,0.8); }
+
+/* ==================== 📜 THE PICTURE-BOOK READER ==================== */
+.lore-book {
+  position: fixed; inset: 0; z-index: 1500;
+  display: flex; align-items: center; justify-content: center; padding: 18px;
+  background:
+    radial-gradient(120% 80% at 20% -10%, rgba(58,92,204,0.38), transparent 62%),
+    radial-gradient(90% 70% at 85% 4%, rgba(126,72,196,0.3), transparent 64%),
+    linear-gradient(180deg, #0a1234 0%, #060b1e 60%, #04060e 100%);
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+body.lore-reading { overflow: hidden; }
+.lore-book-shell {
+  width: 100%; max-width: 980px; max-height: 100%;
+  display: flex; flex-direction: column;
+  border-radius: 22px; overflow: hidden;
+  border: 1px solid rgba(240,205,122,0.4);
+  background: linear-gradient(170deg, rgba(16,28,68,0.92), rgba(7,12,32,0.96));
+  box-shadow: 0 30px 90px rgba(0,0,0,0.7);
+}
+.lore-book-bar { display: flex; align-items: center; gap: 16px; padding: 16px 22px; border-bottom: 1px solid rgba(240,205,122,0.24); }
+.lore-book-brand { font-family: 'Cinzel', Georgia, serif; font-size: 0.9rem; letter-spacing: 0.1em; color: #f0cd7a; }
+.lore-book-count { margin-left: auto; font-size: 0.76rem; letter-spacing: 0.06em; color: #93a4cd; }
+.lore-book-x { background: rgba(255,255,255,0.07); border: 0; color: #f4ecd8; width: 34px; height: 32px; border-radius: 9px; font-size: 1.25rem; line-height: 1; cursor: pointer; }
+.lore-book-x:hover { background: rgba(240,205,122,0.22); }
+.lore-book-body { flex: 1 1 auto; overflow-y: auto; padding: 26px 30px 30px; }
+.lore-book-foot { display: flex; align-items: center; gap: 16px; padding: 14px 22px; border-top: 1px solid rgba(240,205,122,0.24); }
+.lore-book-hint { flex: 1 1 auto; text-align: center; font-size: 0.72rem; color: #7f90ba; }
+.lore-turn {
+  flex: 0 0 auto; padding: 9px 18px; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 0.82rem; font-weight: 600; color: #f4ecd8;
+  background: rgba(240,205,122,0.1); border: 1px solid rgba(240,205,122,0.4);
+}
+.lore-turn:hover:not(:disabled) { background: rgba(240,205,122,0.22); border-color: rgba(255,224,150,0.8); }
+.lore-turn:disabled { opacity: 0.32; cursor: default; }
+
+.tcg-lore-page { max-width: 760px; margin: 0 auto; }
+.tcg-lore-plate {
+  border-radius: 16px; overflow: hidden; aspect-ratio: 16 / 9;
+  border: 1px solid rgba(240,205,122,0.45);
+  background: radial-gradient(90% 90% at 50% 25%, rgba(58,92,204,0.3), rgba(5,9,26,0.95));
+  box-shadow: 0 16px 44px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+.tcg-lore-plate img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tcg-lore-plate-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 100%; }
+.tcg-lore-plate-empty .em { font-size: 2.4rem; letter-spacing: 0.16em; opacity: 0.85; }
+.tcg-lore-plate-empty .cap { font-size: 0.8rem; color: #93a4cd; }
+.tcg-lore-text { padding: 28px 4px 4px; }
+.tcg-lore-kicker { font-family: 'Cinzel', Georgia, serif; font-size: 0.72rem; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(240,205,122,0.85); }
+.tcg-lore-text h3 {
+  margin: 12px 0 20px; font-family: 'Cinzel', Georgia, serif; font-size: 1.55rem; line-height: 1.3;
+  background: linear-gradient(100deg, #fff5da 0%, #f0cd7a 48%, #b9891f 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+}
+/* Storybook body copy: a serif, generously leaded, with a raised opening line —
+   it should read like a page of a book, not like an interface. */
+.tcg-lore-text p { margin: 0 0 18px; font-family: Georgia, 'Times New Roman', serif; font-size: 1.03rem; line-height: 1.95; color: #e2e8f8; }
+.tcg-lore-text p:first-of-type { font-size: 1.12rem; color: #f2eddf; }
+.tcg-lore-text p:first-of-type::first-letter { font-family: 'Cinzel', Georgia, serif; float: left; font-size: 3.1rem; line-height: 0.86; padding: 6px 12px 0 0; color: #f0cd7a; }
+.tcg-lore-cast { margin-top: 26px; padding-top: 22px; border-top: 1px solid rgba(240,205,122,0.22); }
+.tcg-lore-cast-label { font-size: 0.7rem; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(240,205,122,0.8); margin-bottom: 14px; }
+.tcg-lore-cast-row { display: flex; flex-wrap: wrap; gap: 16px; }
+.tcg-lore-cast-card { width: 116px; text-align: center; }
+.tcg-lore-cast-art {
+  width: 116px; height: 116px; border-radius: 14px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; font-size: 2.1rem;
+  border: 1px solid rgba(240,205,122,0.4);
+  background: radial-gradient(80% 80% at 50% 30%, rgba(58,92,204,0.34), rgba(6,11,30,0.92));
+}
+.tcg-lore-cast-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tcg-lore-cast-name { margin-top: 9px; font-size: 0.72rem; line-height: 1.45; color: #c3d1f2; }
+.tcg-lore-cast-stars { font-size: 0.68rem; color: #f0cd7a; letter-spacing: 0.06em; }
+.tcg-lore-admin { margin-top: 26px; padding-top: 20px; border-top: 1px dashed rgba(240,205,122,0.3); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.tcg-lore-admin .btn-primary { background: linear-gradient(135deg, #f0cd7a, #c9a227); color: #14161a; font-weight: 700; }
+.tcg-lore-admin-note { font-size: 0.74rem; color: #8fa0c9; }
+@media (max-width: 640px) {
+  .lore-book { padding: 0; }
+  .lore-book-shell { border-radius: 0; max-width: none; height: 100%; }
+  .lore-book-body { padding: 18px 18px 24px; }
+  .tcg-lore-text p { font-size: 0.98rem; line-height: 1.85; }
+  .lore-book-hint { display: none; }
+  .tcg-lore-hero { padding: 30px 22px 28px; }
+}
+</style>
+
+<!-- ==================== 📜 THE CHRONICLE OF EMBERS — picture-book reader ====================
+     One page at a time: the illustration on top, the story beneath it, and the cards
+     starring in it along the bottom. ← → turn the page, Esc closes. The pages themselves
+     live in TCG_LORE_SAGAS in app.js. -->
+<div class="lore-book" id="tcgLoreBook" style="display:none;">
+  <div class="lore-book-shell">
+    <div class="lore-book-bar">
+      <div class="lore-book-brand">📜 The Chronicle of Embers</div>
+      <div class="lore-book-count" id="tcgLoreCount"></div>
+      <button type="button" class="lore-book-x" onclick="tcgLoreClose()" title="Close the book (Esc)">×</button>
+    </div>
+    <div class="lore-book-body" id="tcgLoreBookBody"></div>
+    <div class="lore-book-foot">
+      <button type="button" class="lore-turn" id="tcgLorePrev" onclick="tcgLoreTurn(-1)">‹ Previous page</button>
+      <div class="lore-book-hint">Use ← and → to turn the page</div>
+      <button type="button" class="lore-turn" id="tcgLoreNext" onclick="tcgLoreTurn(1)">Next page ›</button>
+    </div>
   </div>
 </div>
 

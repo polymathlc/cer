@@ -2935,6 +2935,12 @@ function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
+  // 🔥 Realm of Embers takes the whole app with it: stepping into the realm
+  // swaps the portal's white theme for the gold-on-galaxy one, and stepping
+  // out puts it back. One class on <body>; everything else is CSS, which is
+  // what keeps the swap instant and impossible to leave half-applied.
+  document.body.classList.toggle('realm-embers', page === 'tcg');
+  if (page !== 'tcg') { try { tcgLoreClose(); } catch (_) {} }
   // The five games live inside the Arcade — highlight its nav item for them.
   const navItem = document.querySelector(`.nav-item[data-page="${page}"]`) ||
     (['defenders', 'raiders', 'spire', 'legends', 'slayers'].includes(page) ? document.querySelector('.nav-item[data-page="arcade"]') : null);
@@ -34230,7 +34236,25 @@ function tcgApplyNavVisibility() {
   document.querySelectorAll('.tcg-beta-badge').forEach(b => { b.style.display = live ? 'none' : ''; });
   const sub = document.getElementById('navTcgSub');
   if (sub) sub.style.display = show ? '' : 'none';
+  _tcgPlaceNavItem();
   try { tcgNavPrizeBadges(); } catch (_) {}
+}
+// Where the realm's door sits in the sidebar. For a STUDENT it belongs
+// directly under 🏛️ Community, near the top, where they will actually find it
+// — not buried at the bottom of the Game section under five other games. For
+// an admin it stays where it has always been, among the game tools, which is
+// where they expect to go looking for it. `navTcgHome` is an empty anchor left
+// behind at the original position so the move can be undone (the role can
+// change under us — an admin previewing as a student and back again).
+function _tcgPlaceNavItem() {
+  const wrap = document.getElementById('navTcgWrap');
+  const home = document.getElementById('navTcgHome');
+  const comm = document.querySelector('.nav-item[data-page="community"]');
+  if (!wrap || !home) return;
+  const wantComm = !_isAdmin() && !!comm;
+  const parked = wrap.previousElementSibling === comm;
+  if (wantComm && !parked) comm.insertAdjacentElement('afterend', wrap);
+  else if (!wantComm && wrap.previousElementSibling !== home) home.insertAdjacentElement('afterend', wrap);
 }
 
 // ---- Release announcement ------------------------------------------
@@ -34368,7 +34392,7 @@ async function _tcgArtStore(id, dataUrl, opts) {
   // Set artwork is a wide banner across the top of the Packs tab, so it gets
   // the most pixels of anything here.
   const maxSide = id.indexOf('fx:') === 0 ? (id.indexOf(':blast') > 0 ? 384 : 256)
-    : id.endsWith(':av') ? 256 : id.indexOf('set:') === 0 ? 768 : 512;
+    : id.endsWith(':av') ? 256 : (id.indexOf('set:') === 0 || id.indexOf('lore:') === 0) ? 768 : 512;
   const scaled = await _scaleDownDataUrl(dataUrl, maxSide);
   const url = await uploadImageDataUrl(scaled);
   const uid = _tcgOwnerUid(); if (!uid) throw new Error('Not signed in');
@@ -35125,9 +35149,13 @@ function tcgSetArtUrl(setKey) { return (_tcgArt && _tcgArt[tcgSetArtSlotId(setKe
 // legends in the banner recognisably the same characters as the cards.
 // No card art drawn yet → no sheet, and the model works from the words alone.
 async function _tcgSetRefSheet(setKey) {
-  const heroes = tcgSetHeroes(setKey);
+  return await _tcgRefSheet(tcgSetHeroes(setKey));
+}
+// The line-up itself, given any list of cards — shared with the Chronicle's
+// picture-book illustrations, which are drawn from the cards starring in them.
+async function _tcgRefSheet(cards) {
   const shots = [];
-  for (const c of heroes) {
+  for (const c of (cards || [])) {
     const url = await _tcgCardArtDataUrl(c);
     if (url) shots.push(url);
   }
@@ -35194,6 +35222,583 @@ function tcgSetArtAdminHtml() {
         '<div id="tcgsetrow-' + k + '" style="display:contents;">' + tcgSetArtRowInnerHtml(k) + '</div>').join('')
     + '</div>';
 }
+// =====================================================================
+// 📜 THE CHRONICLE OF EMBERS — the realm's lore, told as a picture book
+// =====================================================================
+// The Realm of Embers is a collection of cards; the Chronicle is what makes
+// them a WORLD. It is deliberately built to GROW: every card set gets its own
+// BOOK (a saga), and a book is nothing but a list of chapters, so shipping an
+// expansion means appending one entry to TCG_LORE_SAGAS — nothing else in the
+// app has to change. A set with no book yet is billed on the Lore tab as
+// "being written", which is honest and also does the selling.
+//
+// The cast is deliberately the TOP of the dex — the 7★ legends carry the
+// spine of the story, the 6★ elders carry the chapters, and the 5★ cards fill
+// them out. A student who pulls one of them should be able to go and read
+// about the thing they just pulled.
+//
+// A chapter is:
+//   { id, title, cards: [card NAMES], scene: 'art direction', text: [paragraphs] }
+// Cards are named, not id'd, because a chapter should read as prose in the
+// source (and the ids are positional — see the note above TCG_CARDS). An
+// unknown name is dropped with a warning rather than breaking the page.
+//
+// Each chapter's illustration lives in the ordinary art slot
+// `lore:<sagaKey>:<chapterId>` — paste / drop / upload / ✨ AI on the Card Art
+// tab's own Chronicle panel, exactly like every other picture in the realm —
+// and it is drawn FROM the starring cards' own card art, so the hero of a page
+// is unmistakably the same character the student holds in their collection.
+
+const TCG_LORE_SAGAS = [
+  {
+    key: 'prologue', set: null, em: '🔥',
+    book: 'Prologue', title: 'The Ember',
+    sub: 'Before the world, one coal burning in the dark',
+    chapters: [
+      {
+        id: 'coal', title: 'The Coal That Dreamed',
+        cards: ['Aeonyx, the Timeless One'],
+        scene: 'A single glowing ember hanging alone in an endless velvet-black void, unfurling outward into galaxies, oceans, mountains and the first sunrise. A vast serene cosmic dragon is coiled in a perfect ring around the ember, watching it, its scales scattered with stars.',
+        text: [
+          "Before the mountains. Before the sea. Before there was any morning at all, there was one coal burning in the dark.",
+          "It had no hearth to sit in and no hand to hold it. It simply burned — and while it burned, it dreamed. Everything the coal dreamed came true. It dreamed of water, and there was water. It dreamed of a wind to push the water about, and the wind came. It dreamed of green, and the world went green from one shoulder to the other.",
+          "The old books call that coal the Ember, and the world it dreamed the Realm of Embers.",
+          "Only one creature was awake to see it happen. Aeonyx, the Timeless One, lay coiled around the coal the way a ring lies round a finger, and counted the seconds — patiently, carefully — before there were any seconds to count."
+        ]
+      }
+    ]
+  },
+  {
+    key: 'emberdawn', set: 'gen1', em: '☀️',
+    book: 'Book One', title: 'The Ember Dawn',
+    sub: 'How the light, the dark and the eight elders came into the world',
+    chapters: [
+      {
+        id: 'auros', title: 'Auros Lights the Sky',
+        cards: ['Auros, the Dawnfather'],
+        scene: 'A towering golden radiant guardian of light standing on a mountaintop at the very first dawn, lifting a small splinter of burning ember high above his head; the splinter is blazing into a brand-new sun, and warm gold light is pouring down the mountainside over a dark sleeping world.',
+        text: [
+          "The first thing the coal dreamed that could dream back was Auros.",
+          "He came out of the fire full-grown and blinking, made of morning, and the very first thing he noticed was that the world he had woken into was terribly, terribly dark. So he did a bold thing. He reached into the Ember, broke off one splinter no bigger than a seed, carried it to the highest mountain there was, and threw it as hard as he could into the sky.",
+          "It stuck. It is still up there. We call it the sun.",
+          "That is why the Dawnfather is drawn with his hands open — he gave away the only thing he had, on his first morning alive, to a world that had not yet thanked him for anything."
+        ]
+      },
+      {
+        id: 'draxx', title: 'The Shadow the First Light Cast',
+        cards: ['Draxx, the End Bringer'],
+        scene: 'An enormous dark eclipse-crowned beast of shadow rising out of the long black shadow cast by a shining mountain; a ring of cold black light behind him like a dark sun. Dramatic, awe-inspiring, not gory.',
+        text: [
+          "Here is a thing about light that nobody had thought about yet, because there had never been any: light makes shadows.",
+          "The moment the new sun shone on the mountain, the mountain threw a shadow a hundred miles long across the plain behind it — and in that shadow something stood up. It was made of the same Ember as Auros was. It was simply made of the side of him that the fire did not reach.",
+          "He named himself Draxx, the End Bringer, and he said, quite reasonably, that everything which begins is owed an ending, and that he had come to keep the accounts.",
+          "Auros begged him to wait. Draxx has been waiting ever since. He is very patient, and he is never, ever in a hurry."
+        ]
+      },
+      {
+        id: 'longnight', title: 'The War of the Long Night',
+        cards: ['Auros, the Dawnfather', 'Draxx, the End Bringer', 'Aeonyx, the Timeless One'],
+        scene: 'A colossal clash between a radiant golden god of dawn and a vast shadow-wreathed titan of darkness across a splitting sky, while a serene star-scaled cosmic dragon glides between them and time itself cracks like glass; a shattered ember bursting into thousands of tiny falling sparks raining down over the whole world.',
+        text: [
+          "It lasted, the songs say, one night — but the night lasted a very long time.",
+          "Neither of them could win. Every time Auros pushed the dark back, the dark simply moved behind him. Every time Draxx put out a light, another one was lit somewhere he was not looking. The mountains cracked. The sea stood up on its end. The world the coal had dreamed began to come apart at the seams.",
+          "So Aeonyx did the only thing left. The Timeless One reached into the middle of the fight and broke the Ember itself — not out of anger, but the way you break bread — and scattered it.",
+          "Thousands upon thousands of sparks went up and out and down, over the oceans and the forests and the ice, and every single one landed inside something living. That is why a bird has a spark. That is why you have one. And that is why no one, not even the End Bringer, can put the fire out any more: to finish the Ember now you would have to finish everybody, one at a time, and the world got very good at making more of everybody."
+        ]
+      },
+      {
+        id: 'firebeneath', title: 'Ignarok and the Fire Beneath',
+        cards: ['Ignarok, the Extinction Flame', 'Volkarrion, the Flame Tyrant', 'Pyrelia, the Undying Flame'],
+        scene: 'An enormous ancient fire-breathing tyrant lizard erupting from a cracked volcano at night, lava rivers pouring down the slopes; a great burning dragon circling above him, and a radiant phoenix of white-gold flame rising through the ash cloud between them.',
+        text: [
+          "The sparks that fell into the deep places under the world did not stay small.",
+          "Ignarok woke first, under a mountain that had never been a volcano until the moment he stretched. They named him the Extinction Flame, because where he walks the map has to be drawn again afterwards. Volkarrion, the Flame Tyrant, rose from the ash he left and crowned himself king of it, which Ignarok found extremely funny and did not contest.",
+          "And out of the very last cinder — the one everybody had stopped watching — came Pyrelia, who burns out completely every hundred years and comes back every hundred years and one day.",
+          "The fire elders quarrel constantly. But when the Long Night comes round again, all three of them face the same way."
+        ]
+      },
+      {
+        id: 'drownedcrown', title: 'The Drowned Crown of Dagrath',
+        cards: ['Dagrath, the Abyssal King', 'Nereth, the Deep Sovereign', 'Thalassor, the Tidal Colossus'],
+        scene: 'A gigantic abyssal kraken king enthroned in a sunken palace of blue light at the bottom of the ocean, a vast glowing whale-sovereign gliding above him, and an immense whale-shaped colossus of living water rising as a wave in the distance. Shafts of pale light coming down from far above.',
+        text: [
+          "Some sparks fell into the sea, and the sea is deep, and things that grow in the dark grow strange.",
+          "Dagrath, the Abyssal King, sits in a palace nobody built at a depth where sunlight has never once arrived, and rules by simply being larger than every argument. Nereth, the Deep Sovereign, is older and quieter and sings the tides where they ought to go. Thalassor is not really a creature at all — he is the ocean deciding, occasionally, to stand up.",
+          "Sailors leave a coin on the water for the King, a song for the Sovereign, and for Thalassor they leave the harbour altogether."
+        ]
+      },
+      {
+        id: 'stormmountain', title: 'The Storm and the Mountain',
+        cards: ['Voltrannus, the Storm Eternal', 'Mammorak, the Walking Mountain', 'Raivo, the Tempest Incarnate', 'Gaiagor, the Earthshaker'],
+        scene: 'A vast lightning dragon of pure storm cloud crashing down out of a thunderhead onto an enormous shaggy mammoth-titan the size of a mountain range, who braces and does not move; a whirling storm spirit and a huge armoured bison-beast charging in from either side, dust and lightning everywhere.',
+        text: [
+          "Voltrannus, the Storm Eternal, has never once touched the ground. Mammorak, the Walking Mountain, has never once left it. They have been arguing about which of them is right for eleven thousand years.",
+          "The argument is loud. When the sky goes green and the windows rattle and the ground gives one slow shrug beneath your feet, that is the two of them, still going.",
+          "Raivo runs ahead of the storm because he IS the excitement of it, and Gaiagor walks behind the mountain because somebody sensible has to. Between the four of them they made every valley, every canyon and every quiet round lake you have ever swum in — none of which they meant to make, and all of which they are quietly proud of."
+        ]
+      },
+      {
+        id: 'nightanswered', title: 'Celestine, and the Night That Answered',
+        cards: ['Celestine, the First Light', 'Nyxthara, the Endless Night', 'Solandra, the Lightmother', 'Erevos, the Voidprowler'],
+        scene: 'A luminous white stag with antlers of pure light standing on a hilltop at dusk, facing an enormous coiling serpent of starless night; a gentle glowing doe of dawn-light behind the stag and a sleek shadow-panther prowling low beside the serpent. Beautiful and calm rather than frightening.',
+        text: [
+          "When Auros threw the sun up, a little of the light did not go with it. It settled instead in the shape of a white stag, and that was Celestine — the First Light, the small warm kind, the sort you can carry.",
+          "Nyxthara came the other way. She is not evil. She is simply what the world looks like when the lamps go out, and she has an excellent point: everything alive needs somewhere dark to sleep.",
+          "So the two of them made an arrangement, and the arrangement is the reason you get an evening. Solandra, the Lightmother, walks the border at dawn. Erevos, the Voidprowler, walks it at dusk. They pass each other twice a day and never say a word, because the whole treaty depends on neither of them being late."
+        ]
+      },
+      {
+        id: 'ironandgreen', title: 'The Iron Song and the Green',
+        cards: ['Chromagog, the Iron Colossus', 'Vulcanor, the Worldforge', 'Amara, the Everbloom', 'Yggdris, the Elder Oak'],
+        scene: 'A titanic iron colossus and a colossal machine-forge god standing among glowing anvils and rivers of molten metal, while an enormous ancient oak-titan with a whole forest in his branches and a graceful blossom-crowned guardian spirit grow straight up through the ironworks, cracking and softening it with roots and flowers.',
+        text: [
+          "Not every spark landed in something soft.",
+          "Some fell into the ore, and the ore stood up. Chromagog, the Iron Colossus, took one step, liked it, and has been taking them ever since. Vulcanor, the Worldforge, built himself out of the leftovers, and then built almost everything else.",
+          "And some sparks fell into the seeds. Yggdris, the Elder Oak, has not moved in nine thousand years and does not intend to; there are four hundred kinds of bird living in him who would have to be rehoused. Amara, the Everbloom, sings once a year, and wherever the song lands the desert has to apologise and turn green.",
+          "Iron and green have never got on. Iron is quicker. Green is patient. Look at any old wall, and you can see who is winning."
+        ]
+      },
+      {
+        id: 'starcourt', title: 'The Court of Falling Stars',
+        cards: ['Sera, the Archangel', 'Andrella, the Startide', 'Illithar, the Thoughtdrinker', 'Cryvexa, the Frozen Warden', 'Sythrax, the Rotmonarch'],
+        scene: 'A radiant six-winged archangel holding a sword of white starlight, floating at the centre of a great court of falling stars; a shimmering cosmic tide-spirit, a strange many-eyed deep-thinking squid creature, a colossal armoured ice warden and a huge crowned serpent of thorns and spores arrayed around her in a ring of thrones.',
+        text: [
+          "High above all of it, where the air runs out and the stars start, the Ember kept a court.",
+          "Sera, the Archangel, was made to be its judge. Andrella, the Startide, carries the messages, because starlight is quicker than anybody. Cryvexa, the Frozen Warden, keeps whatever must not be allowed to move again — sealed in ice, precisely, forever. Sythrax, the Rotmonarch, is on the court because everything that dies has to go somewhere, and someone has to sign for it.",
+          "And Illithar, the Thoughtdrinker, is there because the court needed a memory, and Illithar remembers everything anyone has ever thought near him. Which is why nobody stands too close to Illithar."
+        ]
+      },
+      {
+        id: 'embersleeps', title: 'The Ember Sleeps',
+        cards: ['Aeonyx, the Timeless One'],
+        scene: 'A dim, quiet, half-buried ember glowing faintly under the roots of the world in a great dark cavern, with a vast starry cosmic dragon curled protectively around it, asleep. Countless tiny sparks drift up out of the cavern and out into a night sky full of small lit windows.',
+        text: [
+          "After that, for a very long time, nothing much happened — which is the best thing that can happen to a world.",
+          "The elders settled into their oceans and their mountains. Draxx went to the edge of everything and sat down to wait. Auros went round and round overhead, as he still does. And what was left of the Ember dimmed down to a coal again, deep under the roots of the world, with Aeonyx curled around it, asleep at last.",
+          "The Chronicle ends Book One there, on purpose, with one line the scribes never explained:",
+          "\"It sleeps. It does not go out. And it is dreaming again.\""
+        ]
+      }
+    ]
+  },
+  {
+    key: 'lionheart', set: 'nd', em: '🦁',
+    book: 'Book Two', title: 'The Lionheart Legion',
+    sub: 'The sparks that fell in the valley, and what people did with them',
+    chapters: [
+      {
+        id: 'valley', title: 'The Sparks That Fell in the Valley',
+        cards: [],
+        scene: 'A wide green valley at sunrise with a small village of thatched roofs and smoking chimneys; tiny golden sparks drifting gently down out of the sky and settling over the fields and the rooftops. Ordinary people — a smith, a girl with a lantern, an old woman on a step — looking up in wonder. Warm and hopeful.',
+        text: [
+          "Not every spark landed somewhere grand.",
+          "A great many of them came down in the low green valleys, where there were no volcanoes to wake into and no oceans to rule, and settled quietly into people. People, who had no scales. No wings. No fire in the belly, no mountain to be. Just hands, and one small spark each, and — as it turned out — an alarming amount of nerve.",
+          "The elders did not notice for a thousand years. There was no reason to. Then somebody in a valley picked up a hammer and made a thing that had never existed before, and somebody else wrote down how, and a third person read it.",
+          "That was the moment humanity became a problem worth putting in the Chronicle."
+        ]
+      },
+      {
+        id: 'banner', title: 'The Lion Banner',
+        cards: ['Grandmaster Valdren, the Unbroken', 'High Templar Roland', 'Sable, the Ironvow'],
+        scene: 'A grizzled human grandmaster in magnificent silver plate planting an enormous red-and-white lion banner into the ground on a hilltop at dawn; a golden-armoured templar knight and a determined woman warrior in dark iron standing at his shoulders, and a long column of ordinary volunteers coming up the hill behind them.',
+        text: [
+          "Valdren was not the strongest. He was simply the one who did not fall down.",
+          "Nine times the elders' storms came through the valley, and nine times Valdren stood in the gap in the wall and was still standing in it afterwards, which is how a man ends up called the Unbroken by people who watched. On the tenth morning he planted a banner — a red lion on white, because there was red cloth and white cloth and nothing else in the village — and said that anybody who wanted to stop being rescued and start helping could stand behind it.",
+          "By evening there were forty of them. By the end of the year there were four thousand.",
+          "High Templar Roland brought the light, and Sable the Ironvow brought the discipline, and between the three of them the Lionheart Legion stopped being a rumour and started being a wall."
+        ]
+      },
+      {
+        id: 'dragonfall', title: 'Kaelen and the Dragon',
+        cards: ['Kaelen Draxmoor, the Dragon Slayer'],
+        scene: 'A broad-shouldered human warrior in scarred ornate steel plate and a red battle-cloak standing alone on a burning ridge, gripping an enormous rune-etched greatsword; the vast horned silhouette of a dragon looming through the smoke above him, dwarfing him utterly. He does not step back. Legendary and awe-inspiring, not gory.',
+        text: [
+          "When Ignarok's brood came down out of the mountains, the Legion did what walls do: it held, and it burned, and it held, and it burned.",
+          "Kaelen Draxmoor did not think much of walls. He walked out of the gate on his own with a greatsword he had inherited and no plan anybody has ever been able to reconstruct, and he went up the ridge to meet a dragon that had recently eaten a town.",
+          "The songs disagree about almost everything that happened next. They agree on two details. The first is that he never once stepped backwards. The second is that when the smoke cleared in the morning, the ridge was quiet, and Kaelen was sitting on it.",
+          "He has never explained how. When asked, he says only that a dragon is very large and a heart is very small, and that he simply had to get to the second one before the first one got to him."
+        ]
+      },
+      {
+        id: 'wintercrown', title: 'The Winter Crown',
+        cards: ['Ariselle, the Snow Queen', 'Seraphine, the Wintersong'],
+        scene: 'A breathtakingly beautiful regal human woman with long silver-white hair in a magnificent floor-length gown of frost-white and ice-blue, wearing an intricate crown of ice shards, raising both hands as a wall of falling snow and orbiting ice crystals sweeps across a burning valley and puts the fire out. A frost-robed sorceress singing beside her. A cathedral of ice and an aurora behind them.',
+        text: [
+          "Ariselle was a scholar before she was a queen, and she would tell you she still is.",
+          "She had gone north to study Cryvexa's ice — how it holds, how it seals, why a thing frozen properly never rots — and she was still there, three winters deep in her notes, when word came that the fire had jumped the river and the whole eastern valley was going to burn by Thursday.",
+          "There was a crown in that ice. It had been sealed there specifically so that nobody would ever put it on. Ariselle read every warning carved around it, agreed with all of them, and put it on anyway.",
+          "The fire stopped at the valley mouth. It stopped so completely that there is a line on the ground there to this day: black on one side, green on the other, and a rim of frost between them that has never melted in a hundred summers. She has worn the crown ever since. She says she can take it off whenever she likes. Nobody has asked her to prove it."
+        ]
+      },
+      {
+        id: 'starloom', title: 'The Starloom and the Everflame',
+        cards: ['Archsorceress Nyx, the Starfall', 'Magus Cyrene, the Everflame', 'Archmage Ysera, the Starloom', 'Evanthe, the Stormsinger'],
+        scene: 'Four human spellcasters on the balcony of a high tower at night: a dark-robed archsorceress pulling a falling star down out of the sky on a thread of light, a fire-mage wreathed in living flame, an older archmage weaving a great loom made of constellations, and a young storm-singer with lightning braided through her hair. Vast night sky, enormous magic, no monsters.',
+        text: [
+          "People, having no natural magic of their own, did the obvious thing and studied everybody else's.",
+          "Archmage Ysera built the Starloom — a machine, an argument and a piece of art all at once — which takes starlight apart and weaves it back into whatever shape a person needs. Her student Nyx thought that was too slow, and learned instead how to simply reach up and take a star down. Magus Cyrene borrowed her fire from the elders and, notoriously, never gave it back. Evanthe learned the storm by singing at it until it sang along.",
+          "The elders regard all four of them as thieves, which is fair, and as harmless, which is not."
+        ]
+      },
+      {
+        id: 'bloodbanner', title: 'The Bloodbanner Charge',
+        cards: ['Warmaster Thorne, the Bloodbanner', 'Warlord Kestrel, the Redmane'],
+        scene: 'A huge armoured human warmaster with a torn crimson banner strapped to his back, roaring and leading a cavalry charge down a hillside into a dark tide at dawn; a lion-maned warlord riding at his flank with a raised sword. Dust, sunrise, banners, momentum. Heroic and stirring, not gory.',
+        text: [
+          "Thorne did not have Valdren's patience and never pretended to.",
+          "The Legion's whole doctrine was to hold the line, and holding the line had worked for ninety years, and on the ninety-first the line was going to break by nightfall no matter who was standing in it. So Warmaster Thorne tore the banner off the wall, strapped it to his own back, and did the one thing the manual absolutely forbids: he opened the gate and went out.",
+          "Warlord Kestrel went with him, because Kestrel always goes.",
+          "Every soldier in the Legion is taught the Bloodbanner Charge, and every one of them is taught the second half of the lesson too, which the songs usually leave out: he only did it once, and he only did it when there was nothing left to lose. A charge is not a plan. It is what you spend when the plan is gone."
+        ]
+      },
+      {
+        id: 'pactmaker', title: "The Pactmaker's Bargain",
+        cards: ['Archwarlock Belial, the Pactmaker', 'Malachar, the Doomspeaker'],
+        scene: 'A tall hooded human warlock standing inside a circle of green candlelight in a vaulted library, holding out one hand to a huge shadowy presence that fills the far wall; an older robed doom-speaker beside him writing furiously in a great book. Eerie, dramatic, mysterious — not frightening for children, no gore.',
+        text: [
+          "There is always somebody willing to ask the dark a question, and Belial asked more of them than anyone before or since.",
+          "He is not the villain of Book Two, which surprises people. Every bargain he ever struck, he struck on behalf of somebody else — a harvest, a siege, a city with three days of water left — and he wrote every one of them down in full, in the open, in the Legion's own library, where anybody can go and read exactly what was promised and exactly what it cost.",
+          "Malachar, the Doomspeaker, keeps that library. He reads out the price at every signing, slowly, twice, in a very flat voice, and gives the signer one last chance to walk away.",
+          "Most of them sign. That is the part of the story the Chronicle wants you to notice."
+        ]
+      },
+      {
+        id: 'requiem', title: 'The Requiem of Morrigane',
+        cards: ['Lich-Queen Morrigane', 'Necrarch Vayne, the Gravecrown'],
+        scene: 'A pale crowned lich-queen in torn royal robes standing alone in a vast moonlit hall of stone tombs, holding a single candle; ghostly pale-blue figures listening quietly all around her, and a tall grave-crowned necromancer standing respectfully at the door. Solemn, beautiful and sad rather than scary.',
+        text: [
+          "Morrigane was a queen first, and only became everything else afterwards.",
+          "Her city fell in a single night. There was no army left to bury it and nobody coming, so she sat down in the hall among her people and refused — flatly, stubbornly, for one hundred and forty years — to let them be forgotten. Death came for her twice. The first time she asked it to wait. The second time she simply did not go.",
+          "The Legion calls her an enemy in its records and quietly leaves flowers at her gate on the anniversary, which tells you what the Legion actually thinks.",
+          "Necrarch Vayne learned everything he knows standing in that doorway. He says she taught him one rule and only one: you may keep them, but you may never make them serve."
+        ]
+      },
+      {
+        id: 'keeps', title: 'What the Legion Keeps',
+        cards: ['Grandmaster Valdren, the Unbroken', 'Kaelen Draxmoor, the Dragon Slayer', 'Ariselle, the Snow Queen'],
+        scene: 'A great hall at night lit by one enormous hearth, with the red-and-white lion banner hanging above it; a grandmaster, a dragon-slaying warrior and a silver-haired snow queen standing together looking into the fire, their shadows long behind them. In the very centre of the hearth, one small ember glowing far brighter than it should.',
+        text: [
+          "The Legion keeps a fire in its hall, and it has never been allowed to go out.",
+          "It is not a monument. Valdren was very clear about that, and it is written on the stone above it in the plainest words he could find: the sparks fell into everybody. Not into the strong ones. Not into the chosen ones. Everybody.",
+          "So the Legion keeps the fire lit, and keeps the books open, and keeps the gate mended, and waits — because the coal under the roots of the world has begun to stir again, and Aeonyx has begun to uncoil, and something is coming that will need meeting.",
+          "The next book has not been written yet. That is not the same as saying nothing is happening."
+        ]
+      }
+    ]
+  }
+];
+
+// What the Lore tab says at the end of the last written book, and what it says
+// about a card set that has no book yet. Shipping an expansion means adding its
+// saga above; until then its cards are billed here rather than going unmentioned.
+const TCG_LORE_NEXT = {
+  title: 'Book Three is being written',
+  text: "The coal under the roots of the world has started to dream again, and the Chronicle has left the last page of Book Two deliberately blank. Every new set of cards brings the next chapter of it — new heroes, new elders, and whatever it is that woke the Ember."
+};
+
+// ---- Reading the lore ------------------------------------------------------
+let _tcgLoreByName = null;
+function _tcgLoreNameIndex() {
+  if (_tcgLoreByName) return _tcgLoreByName;
+  _tcgLoreByName = {};
+  TCG_CARDS.forEach(c => { _tcgLoreByName[c.name.toLowerCase()] = c; });
+  return _tcgLoreByName;
+}
+// A chapter names its cast in prose. An unknown name is dropped (loudly, in the
+// console) rather than breaking the page — a typo in a story must never take
+// the Lore tab down.
+function tcgLoreCards(ch) {
+  const idx = _tcgLoreNameIndex();
+  return (ch.cards || []).map(n => {
+    const c = idx[String(n).toLowerCase()];
+    if (!c) console.warn('lore: no card called "' + n + '"');
+    return c;
+  }).filter(Boolean);
+}
+function tcgLoreSlotId(sagaKey, chapterId) { return 'lore:' + sagaKey + ':' + chapterId; }
+function tcgLoreArtUrl(sagaKey, chapterId) { return (_tcgArt && _tcgArt[tcgLoreSlotId(sagaKey, chapterId)]) || ''; }
+function tcgLoreSagaFor(setKey) { return TCG_LORE_SAGAS.filter(s => s.set === setKey)[0] || null; }
+// Every chapter of every book, in reading order — the reader turns pages
+// straight through the whole Chronicle, so the last page of Book One turns
+// into the first page of Book Two.
+function tcgLorePages() {
+  const out = [];
+  TCG_LORE_SAGAS.forEach(saga => (saga.chapters || []).forEach(ch => out.push({ saga, ch })));
+  return out;
+}
+function tcgLorePageIndex(sagaKey, chapterId) {
+  const pages = tcgLorePages();
+  for (let i = 0; i < pages.length; i++) if (pages[i].saga.key === sagaKey && pages[i].ch.id === chapterId) return i;
+  return -1;
+}
+function _tcgLoreExcerpt(ch, n) {
+  const s = (ch.text && ch.text[0]) || '';
+  return s.length > (n || 120) ? s.slice(0, (n || 120)).replace(/\s+\S*$/, '') + '…' : s;
+}
+function _tcgLoreEmojiStrip(ch) {
+  const cards = tcgLoreCards(ch);
+  return cards.length ? cards.map(c => c.em).join(' ') : '📜';
+}
+
+// ---- The illustration ------------------------------------------------------
+// Drawn FROM the starring cards' own card art, exactly the way the set banner
+// is drawn from its 7★ cards, so the hero of a page is unmistakably the same
+// character the student holds in their collection.
+async function _tcgLoreRefSheet(ch) {
+  return await _tcgRefSheet(tcgLoreCards(ch));
+}
+function tcgLoreArtPrompt(saga, ch, withRef) {
+  const cards = tcgLoreCards(ch);
+  const names = cards.map(c => '"' + c.name + '"').join(', ');
+  return 'A full-page ILLUSTRATION from a beautiful hardback CHILDREN\'S PICTURE BOOK of fantasy legends — the big painted picture that fills the page above the story text.\n'
+    + 'THE BOOK: "' + saga.book + ' — ' + saga.title + '", from the Chronicle of Embers.\n'
+    + 'THE PAGE: "' + ch.title + '".\n'
+    + 'THE SCENE TO PAINT: ' + ch.scene + '\n'
+    + (cards.length
+        ? 'THE CHARACTERS in this scene are cards from the game and must be drawn as themselves: ' + names + '.\n'
+          + (withRef
+              ? 'The reference picture is a line-up of those exact characters side by side. Keep every one of them recognisably the SAME character — same face, same build, same colours, same armour, robes, horns, scales or weapon, same silhouette — and place them into the scene described above.\n'
+              : '')
+        : '')
+    + 'COMPOSITION: ONE WIDE LANDSCAPE picture, about 16:9, composed as a storybook spread — a clear main subject, a real sense of scale and distance, and plenty of atmosphere (mist, sparks, falling snow, shafts of light) so it reads instantly from across a room.\n'
+    + 'STYLE: warm painterly storybook illustration with visible brushwork, deep jewel colours, glowing golden light and soft edges — the finish of a treasured illustrated book of myths, not a screenshot and not a cartoon. Rich, magical and awe-inspiring.\n'
+    + 'HARD RULES: absolutely NO text, letters, numbers, words, titles, logos, signatures, watermarks or speech bubbles anywhere in the picture — the story is printed beside it afterwards, so the artwork must be left clean; no card frames, no borders, no interface; suitable for primary-school children — no blood, no gore, nothing frightening and nothing suggestive.';
+}
+async function _tcgGenLoreArt(saga, ch) {
+  const ref = await _tcgLoreRefSheet(ch);
+  const dataUrl = await tcgGenArtImage(tcgLoreArtPrompt(saga, ch, !!ref), ref, false);
+  await _tcgArtStore(tcgLoreSlotId(saga.key, ch.id), dataUrl);
+  return dataUrl;
+}
+function _tcgLoreMissing() {
+  return tcgLorePages().filter(p => !tcgLoreArtUrl(p.saga.key, p.ch.id)).length;
+}
+
+// ---- The Lore tab ----------------------------------------------------------
+function tcgLoreHtml() {
+  const pages = tcgLorePages();
+  let html = '<div class="tcg-lore">'
+    + '<div class="tcg-lore-hero">'
+    +   '<div class="tcg-lore-hero-kicker">The Chronicle of Embers</div>'
+    +   '<h3>Every card in this realm is somebody</h3>'
+    +   '<p>One coal, burning in the dark, dreamed the whole world — and when it was broken, every spark of it landed inside something living. These are the books of what happened next. Read them straight through, or go and look up whoever you just pulled out of a packet.</p>'
+    +   '<div class="tcg-lore-hero-meta">' + pages.length + ' illustrated pages · ' + TCG_LORE_SAGAS.length + ' books · more with every expansion</div>'
+    +   '<button type="button" class="btn btn-primary" onclick="tcgLoreOpen(0)">📖 Start reading</button>'
+    + '</div>';
+  if (_isAdmin()) html += tcgLoreGenPanelHtml();
+  TCG_LORE_SAGAS.forEach(saga => {
+    const set = saga.set ? TCG_SETS[saga.set] : null;
+    html += '<div class="tcg-lore-book">'
+      + '<div class="tcg-lore-book-head">'
+      +   '<div class="tcg-lore-book-em">' + saga.em + '</div>'
+      +   '<div>'
+      +     '<div class="tcg-lore-book-kicker">' + escapeHtml(saga.book) + (set ? ' · ' + escapeHtml(set.title) : '') + '</div>'
+      +     '<h4>' + escapeHtml(saga.title) + '</h4>'
+      +     '<div class="tcg-lore-book-sub">' + escapeHtml(saga.sub) + '</div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="tcg-lore-grid">'
+      + (saga.chapters || []).map(ch => {
+          const i = tcgLorePageIndex(saga.key, ch.id);
+          const art = tcgLoreArtUrl(saga.key, ch.id);
+          return '<button type="button" class="tcg-lore-card" onclick="tcgLoreOpen(' + i + ')">'
+            + '<div class="tcg-lore-thumb">'
+            +   (art ? '<img src="' + art + '" alt="' + escapeHtml(ch.title) + '" loading="lazy">'
+                    : '<div class="tcg-lore-thumb-empty">' + _tcgLoreEmojiStrip(ch) + '</div>')
+            + '</div>'
+            + '<div class="tcg-lore-card-body">'
+            +   '<div class="tcg-lore-card-no">Page ' + (i + 1) + '</div>'
+            +   '<div class="tcg-lore-card-title">' + escapeHtml(ch.title) + '</div>'
+            +   '<div class="tcg-lore-card-ex">' + escapeHtml(_tcgLoreExcerpt(ch, 110)) + '</div>'
+            +   (tcgLoreCards(ch).length
+                  ? '<div class="tcg-lore-card-cast">' + tcgLoreCards(ch).map(c =>
+                      '<span class="tcg-lore-chip">' + c.em + ' ' + escapeHtml(c.name.split(',')[0]) + ' <i>' + c.stars + '★</i></span>').join('') + '</div>'
+                  : '')
+            + '</div>'
+            + '</button>';
+        }).join('')
+      + '</div></div>';
+  });
+  // Sets with no book yet get billed rather than going unmentioned.
+  const unwritten = Object.keys(TCG_SETS).filter(k => !tcgLoreSagaFor(k));
+  html += '<div class="tcg-lore-next">'
+    + '<div class="tcg-lore-next-em">✨</div>'
+    + '<h4>' + escapeHtml(TCG_LORE_NEXT.title) + '</h4>'
+    + '<p>' + escapeHtml(TCG_LORE_NEXT.text) + '</p>'
+    + (unwritten.length
+        ? '<div class="tcg-lore-next-sets">Waiting for their chapter: ' + unwritten.map(k => TCG_SETS[k].em + ' ' + escapeHtml(TCG_SETS[k].title)).join(' · ') + '</div>'
+        : '')
+    + '</div>';
+  return html + '</div>';
+}
+
+// ---- The picture-book reader ----------------------------------------------
+let _tcgLorePage = 0;
+function tcgLoreOpen(idx) {
+  const pages = tcgLorePages();
+  if (!pages.length) return;
+  _tcgLorePage = Math.max(0, Math.min(pages.length - 1, idx | 0));
+  const ov = document.getElementById('tcgLoreBook');
+  if (!ov) return;
+  ov.style.display = 'flex';
+  document.body.classList.add('lore-reading');
+  _tcgLoreRender();
+}
+function tcgLoreClose() {
+  const ov = document.getElementById('tcgLoreBook');
+  if (ov) ov.style.display = 'none';
+  document.body.classList.remove('lore-reading');
+}
+function tcgLoreTurn(d) {
+  const pages = tcgLorePages();
+  const next = _tcgLorePage + d;
+  if (next < 0 || next >= pages.length) return;
+  _tcgLorePage = next;
+  _tcgLoreRender();
+  const body = document.getElementById('tcgLoreBookBody');
+  if (body) body.scrollTop = 0;
+}
+function _tcgLoreRender() {
+  const host = document.getElementById('tcgLoreBookBody');
+  if (!host) return;
+  const pages = tcgLorePages();
+  const p = pages[_tcgLorePage];
+  if (!p) return;
+  const saga = p.saga, ch = p.ch;
+  const art = tcgLoreArtUrl(saga.key, ch.id);
+  const cast = tcgLoreCards(ch);
+  host.innerHTML = '<div class="tcg-lore-page">'
+    + '<div class="tcg-lore-plate' + (art ? '' : ' empty') + '" id="tcgLorePlate">'
+    +   (art ? '<img src="' + art + '" alt="' + escapeHtml(ch.title) + '">'
+            : '<div class="tcg-lore-plate-empty"><div class="em">' + _tcgLoreEmojiStrip(ch) + '</div>'
+              + '<div class="cap">' + (_isAdmin() ? 'No illustration yet — draw it below.' : 'The illustration for this page is still being painted.') + '</div></div>')
+    + '</div>'
+    + '<div class="tcg-lore-text">'
+    +   '<div class="tcg-lore-kicker">' + saga.em + ' ' + escapeHtml(saga.book) + ' — ' + escapeHtml(saga.title) + '</div>'
+    +   '<h3>' + escapeHtml(ch.title) + '</h3>'
+    +   (ch.text || []).map(t => '<p>' + escapeHtml(t) + '</p>').join('')
+    + '</div>'
+    + (cast.length
+        ? '<div class="tcg-lore-cast">'
+          + '<div class="tcg-lore-cast-label">Starring</div>'
+          + '<div class="tcg-lore-cast-row">' + cast.map(c => {
+              const cardArt = tcgArtUrl(c.id);
+              return '<div class="tcg-lore-cast-card">'
+                + '<div class="tcg-lore-cast-art">' + (cardArt ? '<img src="' + cardArt + '" alt="' + escapeHtml(c.name) + '" loading="lazy">' : '<span>' + c.em + '</span>') + '</div>'
+                + '<div class="tcg-lore-cast-name">' + escapeHtml(c.name) + '</div>'
+                + '<div class="tcg-lore-cast-stars">' + '★'.repeat(c.stars) + '</div>'
+                + '</div>';
+            }).join('') + '</div></div>'
+        : '')
+    + (_isAdmin()
+        ? '<div class="tcg-lore-admin"><button type="button" class="btn btn-primary" id="tcgLoreDrawBtn" onclick="tcgLoreDrawPage(' + _tcgLorePage + ')">✨ ' + (art ? 'Redraw' : 'Draw') + ' this illustration</button>'
+          + '<span class="tcg-lore-admin-note" id="tcgLoreDrawNote">' + escapeHtml(_tcgArtEngineLabel()) + '</span></div>'
+        : '')
+    + '</div>';
+  const num = document.getElementById('tcgLoreCount');
+  if (num) num.textContent = 'Page ' + (_tcgLorePage + 1) + ' of ' + pages.length;
+  const prev = document.getElementById('tcgLorePrev'), next = document.getElementById('tcgLoreNext');
+  if (prev) prev.disabled = _tcgLorePage === 0;
+  if (next) next.disabled = _tcgLorePage === pages.length - 1;
+}
+// ← → turn the page, Esc closes — but only while the book is open, so the
+// arrow keys keep working everywhere else in the app.
+document.addEventListener('keydown', e => {
+  const ov = document.getElementById('tcgLoreBook');
+  if (!ov || ov.style.display !== 'flex') return;
+  if (e.key === 'Escape') { tcgLoreClose(); }
+  else if (e.key === 'ArrowRight') { tcgLoreTurn(1); }
+  else if (e.key === 'ArrowLeft') { tcgLoreTurn(-1); }
+});
+
+// ---- Drawing the Chronicle (admin) ----------------------------------------
+function tcgLoreGenPanelHtml() {
+  const miss = _tcgLoreMissing(), total = tcgLorePages().length;
+  return '<div class="tcg-gen-panel tcg-lore-gen">'
+    + '<h4>✨ Illustrate the Chronicle</h4>'
+    + '<p>Every page is painted as a <b>children\'s picture-book illustration</b>, and each one is drawn <b>from the card art of the characters starring in it</b> — so the hero of a page is the same character the student pulls out of a packet. Draw those cards first and the story will match them. Engine: <b>' + escapeHtml(_tcgArtEngineLabel()) + '</b>.</p>'
+    + '<div class="tcg-gen-actions">'
+    +   '<button type="button" class="btn btn-primary" id="tcgLoreGenBtn" onclick="tcgLoreDrawAll()"' + (miss ? '' : ' disabled') + '>✨ Draw all missing pages'
+    +     (miss ? ' · ' + miss + ' of ' + total : ' · all ' + total + ' done 🎉') + '</button>'
+    +   '<button type="button" class="btn btn-ghost" id="tcgLoreStopBtn" onclick="tcgStopArtGen()" style="display:none;">■ Stop</button>'
+    + '</div>'
+    + '<div class="tcg-gen-track" id="tcgLoreTrack" style="display:none;"><i id="tcgLoreFill" style="width:0%;"></i></div>'
+    + '<div class="tcg-gen-status" id="tcgLoreStatus"></div>'
+    + '</div>';
+}
+function _tcgLoreGenStatus(done, total, line) {
+  const fill = document.getElementById('tcgLoreFill');
+  if (fill) fill.style.width = Math.round(done / Math.max(1, total) * 100) + '%';
+  const s = document.getElementById('tcgLoreStatus');
+  if (s) s.innerHTML = line;
+}
+async function tcgLoreDrawPage(idx) {
+  if (!_isAdmin()) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let that one finish first', 'error'); return; }
+  const p = tcgLorePages()[idx];
+  if (!p) return;
+  const btn = document.getElementById('tcgLoreDrawBtn');
+  _tcgGenBusy = true;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Painting…'; }
+  try {
+    await _tcgGenLoreArt(p.saga, p.ch);
+    showToast('📜 "' + p.ch.title + '" illustrated', 'success');
+  } catch (e) {
+    console.error('lore art generation failed', e);
+    showToast('Could not draw it: ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    _tcgGenBusy = false;
+    _tcgLoreRender();
+    try { if (tcgTab === 'lore' && document.querySelector('#page-tcg.active')) tcgRenderBody(); } catch (_) {}
+  }
+}
+async function tcgLoreDrawAll() {
+  if (!_isAdmin()) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let it finish or press Stop', 'error'); return; }
+  const jobs = tcgLorePages().filter(p => !tcgLoreArtUrl(p.saga.key, p.ch.id));
+  if (!jobs.length) { showToast('Every page of the Chronicle is already illustrated 🎉', 'success'); return; }
+  if (!confirm('Paint ' + jobs.length + ' picture-book illustration' + (jobs.length === 1 ? '' : 's') + ' with ' + _tcgArtEngineLabel() + '?\n\n'
+    + 'Each page is drawn from the card art of the characters in it, so draw those cards first if you want them to match.\n\n'
+    + 'This runs one picture at a time and can take a while — keep this tab open. Every finished page is saved as it lands, and you can press Stop at any point.')) return;
+  _tcgGenBusy = true; _tcgGenStop = false;
+  const btn = document.getElementById('tcgLoreGenBtn'), stop = document.getElementById('tcgLoreStopBtn'), track = document.getElementById('tcgLoreTrack');
+  if (btn) btn.disabled = true;
+  if (stop) stop.style.display = '';
+  if (track) track.style.display = '';
+  let done = 0, failed = 0;
+  for (const p of jobs) {
+    if (_tcgGenStop) break;
+    _tcgLoreGenStatus(done, jobs.length, 'Painting <b>' + escapeHtml(p.ch.title) + '</b> — ' + done + ' / ' + jobs.length + ' done');
+    try { await _tcgGenLoreArt(p.saga, p.ch); }
+    catch (e) { failed++; console.error('lore art failed for ' + p.ch.title, e); }
+    done++;
+    _tcgLoreGenStatus(done, jobs.length, done + ' / ' + jobs.length + ' painted' + (failed ? ' · ' + failed + ' failed' : ''));
+  }
+  _tcgGenBusy = false;
+  if (stop) stop.style.display = 'none';
+  _tcgLoreGenStatus(done, jobs.length, '<b>' + (_tcgGenStop ? 'Stopped' : 'Finished') + '</b> — ' + (done - failed) + ' page' + (done - failed === 1 ? '' : 's') + ' painted' + (failed ? ', ' + failed + ' failed' : '') + '.');
+  showToast(_tcgGenStop ? 'Stopped — ' + (done - failed) + ' painted' : '📜 Chronicle illustrated — ' + (done - failed) + ' page' + (done - failed === 1 ? '' : 's'), failed ? 'info' : 'success');
+  try { if (tcgTab === 'lore' && document.querySelector('#page-tcg.active')) tcgRenderBody(); } catch (_) {}
+}
+// The Card Art tab lists every lore slot too, so a page can be pasted, dropped
+// or uploaded by hand exactly like a card.
+function tcgLoreArtAdminHtml() {
+  return '<h3 class="ga-cat">📜 Chronicle illustrations</h3>'
+    + '<div class="tcg-section-note">One picture per page of the <b>Chronicle of Embers</b>, painted as a <b>children\'s picture-book illustration</b> and drawn from the card art of the characters starring in it. They show on the <b>📜 Lore tab</b> and in the picture-book reader.</div>'
+    + '<div class="ga-cards">'
+    + tcgLorePages().map(p => {
+        const slot = tcgLoreSlotId(p.saga.key, p.ch.id);
+        const url = tcgLoreArtUrl(p.saga.key, p.ch.id);
+        const thumb = url ? '<img src="' + url + '" alt="' + escapeHtml(p.ch.title) + '">'
+          : '<div style="font-size:26px;line-height:64px;text-align:center;opacity:.7;">' + _tcgLoreEmojiStrip(p.ch) + '</div>';
+        return '<div id="tcgloreslotrow-' + p.saga.key + '-' + p.ch.id + '" style="display:contents;">'
+          + _tcgArtSlotHtml(slot, escapeHtml(p.saga.book) + ' · ' + escapeHtml(p.ch.title), p.saga.em, thumb, 'illustration',
+              tcgLoreCards(p.ch).length ? 'Starring ' + tcgLoreCards(p.ch).map(c => c.name.split(',')[0]).join(', ') : 'No cards in this scene — drawn from the words alone')
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+
 // ---- Booster pack opening animation -------------------------------------
 // Seven frames per pack, played in order when a pack is opened: the sealed
 // pack, the first nick, the tear running across it, the light bursting out,
@@ -35592,6 +36197,7 @@ function tcgArtAdminHtml() {
     + tcgArtGenPanelHtml()
     + tcgSetArtAdminHtml()
     + tcgPackArtAdminHtml()
+    + tcgLoreArtAdminHtml()
     + tcgFxAdminHtml();
   // Grouped by SET first, then by star tier — with 200 cards a flat star list
   // buried the expansion inside the original dex.
@@ -35656,6 +36262,35 @@ async function tcgAiGenSlot(slotId) {
     } finally {
       _tcgGenBusy = false;
       _tcgSetArtRowRefresh(setKey);
+    }
+    return;
+  }
+  // A page of the Chronicle: a picture-book illustration, drawn from the card
+  // art of whoever stars in that scene.
+  if (slotId.indexOf('lore:') === 0) {
+    const bits = slotId.split(':');
+    const saga = TCG_LORE_SAGAS.filter(s => s.key === bits[1])[0];
+    const ch = saga && (saga.chapters || []).filter(c => c.id === bits[2])[0];
+    if (!ch) { showToast('That story page is not one I recognise', 'error'); return; }
+    _tcgGenBusy = true;
+    _tcgSlotStatus(slotId, '⏳ Painting…');
+    try {
+      await _tcgGenLoreArt(saga, ch);
+      showToast('📜 "' + ch.title + '" illustrated', 'success');
+    } catch (e) {
+      console.error('lore art generation failed', e);
+      _tcgSlotStatus(slotId, '⚠️ Failed');
+      showToast('Could not draw it: ' + (e && e.message ? e.message : e), 'error');
+    } finally {
+      _tcgGenBusy = false;
+      const row = document.getElementById('tcgloreslotrow-' + saga.key + '-' + ch.id);
+      if (row) {
+        const url = tcgLoreArtUrl(saga.key, ch.id);
+        row.innerHTML = _tcgArtSlotHtml(slotId, escapeHtml(saga.book) + ' · ' + escapeHtml(ch.title), saga.em,
+          url ? '<img src="' + url + '" alt="' + escapeHtml(ch.title) + '">'
+              : '<div style="font-size:26px;line-height:64px;text-align:center;opacity:.7;">' + _tcgLoreEmojiStrip(ch) + '</div>',
+          'illustration', '');
+      }
     }
     return;
   }
@@ -36008,6 +36643,7 @@ function tcgRenderBody() {
   else if (tcgTab === 'dungeon') host.innerHTML = tcgDungeonHtml(s);
   else if (tcgTab === 'modes') host.innerHTML = tcgModesHtml(s);
   else if (tcgTab === 'board') { host.innerHTML = '<div class="ga-loading" style="text-align:center;color:#94a3b8;padding:30px;">Loading rankings…</div>'; tcgRenderBoard(); }
+  else if (tcgTab === 'lore') host.innerHTML = tcgLoreHtml();
   else if (tcgTab === 'guide') host.innerHTML = tcgGuideHtml();
   else if (tcgTab === 'art') host.innerHTML = _isAdmin() ? tcgArtAdminHtml() : tcgDexHtml(s);
   else host.innerHTML = tcgArenaHtml(s);
@@ -36960,6 +37596,13 @@ function tcgGuideHtml() {
         ['Correct, but answered too fast to have read the question', '+' + GAME_Q_POINTS_RUSHED + ' point only']
       ])
       + '<p class="tcg-guide-note">Your balance is the 🪙 chip at the top of this page, and it is the same wallet the rest of the portal shop uses.</p>')
+
+  + _tcgGuideSection('📜', 'The Chronicle of Embers — the story behind the cards',
+      'Every card in this realm is <b>somebody</b>. The <b>📜 Lore tab</b> is an illustrated picture book — '
+        + tcgLorePages().length + ' painted pages across ' + TCG_LORE_SAGAS.length + ' books — telling how one burning coal dreamed the world, how it was broken, and where every spark landed. '
+        + 'The 7★ legends carry the spine of the story, the 6★ elders carry the chapters, and the 5★ cards fill them out, so anything rare you pull out of a packet has a page you can go and read. '
+        + 'Turn the pages with ← and → , or open any page straight from the tab.',
+      '<p class="tcg-guide-note">Each new card set brings its <b>own book</b>, so the Chronicle keeps growing — the last page of the newest book is deliberately left blank.</p>')
 
   + _tcgGuideSection('🃏', 'The cards',
       'There are <b>' + TCG_CARDS.length + '</b> cards in the dex, numbered #001–#' + String(TCG_CARDS.length).padStart(3, '0') + ', across <b>two sets</b>: '
@@ -40332,6 +40975,12 @@ window.tcgGenFxPhase = tcgGenFxPhase;
 window.tcgGenAllFx = tcgGenAllFx;
 window.tcgGenerateAllArt = tcgGenerateAllArt;
 window.tcgStopArtGen = tcgStopArtGen;
+// 📜 The Chronicle of Embers — the picture-book reader and its illustrations
+window.tcgLoreOpen = tcgLoreOpen;
+window.tcgLoreClose = tcgLoreClose;
+window.tcgLoreTurn = tcgLoreTurn;
+window.tcgLoreDrawPage = tcgLoreDrawPage;
+window.tcgLoreDrawAll = tcgLoreDrawAll;
 
 // =====================================================================
 // BACKGROUND KNOCK-OUT — for art that has to sit on the battlefield
