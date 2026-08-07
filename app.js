@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.249.0';
+const APP_VERSION = 'v1.249.1';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -21982,8 +21982,18 @@ function studentCapLevel() {
   return 'P6';
 }
 function studentCapNum() { return getLevelNumber(studentCapLevel()); }
+// A question's level is the HIGHEST level of any topic it is filed under —
+// primary AND secondary (q.topic2). A question filed as "Magnets" (P3) with a
+// secondary topic of "Forces" (P6) teaches P6 material, so it must not reach a
+// P4 student just because its primary topic is low. Reading only q.topic was
+// how above-level questions leaked into every mode that caps by level.
+function qLevelNum(q) {
+  const ts = qTopicList(q);
+  if (!ts.length) return getLevelNumber(getTopicLevel(''));
+  return ts.reduce((n, t) => Math.max(n, getLevelNumber(getTopicLevel(t))), 0);
+}
 function qWithinStudentLevel(q) {
-  return getLevelNumber(getTopicLevel((q && q.topic) || '')) <= studentCapNum();
+  return qLevelNum(q) <= studentCapNum();
 }
 // Clamp a P-level string to the student's cap (admins pass through unchanged).
 function clampToStudentLevel(level) {
@@ -22668,7 +22678,7 @@ function buildQpQueue(level) {
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
     if (!qpMatchesType(q, type)) return false;
     if (topic) { const ts = qTopicList(q); if (!(ts.length ? ts.includes(topic) : topic === 'General')) return false; }
-    return getLevelNumber(getTopicLevel(q.topic || '')) <= levelNum;
+    return qLevelNum(q) <= levelNum;   // primary AND secondary topic, highest wins
   });
 
   // Serving order: questions this student has NEVER attempted (in any mode, on
@@ -35239,6 +35249,10 @@ function _tcgBankQuestions() {
     (typeof questionBank !== 'undefined' && Array.isArray(questionBank) ? questionBank : []).forEach(q => {
       if (!q || (q.status && q.status !== 'approved') || !Array.isArray(q.blocks)) return;
       if (!qInSyllabus(q)) return;   // retired topics never reach the Realm of Embers TCG quiz
+      // Never above the pupil's level. This one pool feeds the monster trainer,
+      // Ember Siege AND Ember Legends, so leaving it uncapped served P5/P6
+      // questions to P3/P4 students in all three modes at once.
+      if (!qWithinStudentLevel(q)) return;
       const mcq = q.blocks.find(b => b && b.type === 'mcq' && b.correctId && Array.isArray(b.options) && b.options.length >= 2);
       if (!mcq) return;
       const ai = mcq.options.findIndex(o => o.id === mcq.correctId);
@@ -41942,7 +41956,9 @@ function _ppExtractOeq(q, pool){
   };
   const shuffle = arr => { const s = arr.slice(); for (let i = s.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [s[i], s[j]] = [s[j], s[i]]; } return s; };
   harvest(shuffle(pool || []));
-  if (decoys.length < 3) harvest(shuffle((questionBank || []).filter(x => x && x.status !== 'pending' && x.status !== 'flagged')));
+  // Decoys are read by the student too, so they obey the same level cap as the
+  // stem — a P4 pupil must not be shown a P6 model answer as a wrong option.
+  if (decoys.length < 3) harvest(shuffle((questionBank || []).filter(x => x && x.status !== 'pending' && x.status !== 'flagged' && qWithinStudentLevel(x))));
   if (!decoys.length) return null; // a self-check needs at least one decoy
   const options = shuffle([correct].concat(decoys));
   const answer = options.indexOf(correct);
@@ -41958,7 +41974,13 @@ function _ppExtractOeq(q, pool){
 }
 // Game-playable payload for a portion of the past papers (year '' = all).
 function ppGamePool(year){
-  const bqs = ppAttachedBankQs(year).filter(q => q && q.status !== 'pending' && q.status !== 'flagged');
+  // Same two gates buildDefenderQuestions() applies — a game launched from the
+  // Past Papers page swaps this pool in for that one, so without them the
+  // arcade served retired topics and above-level questions by that route only.
+  const bqs = ppAttachedBankQs(year)
+    .filter(q => q && q.status !== 'pending' && q.status !== 'flagged')
+    .filter(qInSyllabus)
+    .filter(qWithinStudentLevel);
   const out = [];
   bqs.forEach(q => { const m = _sdExtractMcq(q) || _ppExtractOeq(q, bqs); if (m) out.push(m); });
   return out;

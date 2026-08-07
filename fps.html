@@ -531,6 +531,16 @@ function topicLevelNum(topic) {
   const l = customTopicLevels[topic] || TOPIC_LEVEL_MAP[topic] || 'P6';   // unknown topic = P6, as in index.html
   return levelNum(l) || 6;
 }
+// A question's level = the highest level of any topic it is filed under,
+// primary or secondary (q.topic2) — mirrors index.html's qLevelNum.
+function qLevelNumOf(q) {
+  const ts = [];
+  [(q && q.topic) || '', (q && typeof q.topic2 === 'string') ? q.topic2.trim() : ''].forEach(t => {
+    t = (t || '').trim(); if (t && ts.indexOf(t) < 0) ts.push(t);
+  });
+  if (!ts.length) return topicLevelNum('');
+  return ts.reduce((n, t) => Math.max(n, topicLevelNum(t)), 0);
+}
 // The cap in force for this account: the teacher's assigned level and the
 // family's declared level, LOWER wins — the same rule index.html applies.
 async function loadStudentLevelCap() {
@@ -611,7 +621,9 @@ async function loadQuestions() {
           // mirror index.html's qInSyllabus rule so they never appear in the FPS
           if (q.notInSyllabus || /cell\s*system/i.test(q.topic || '')) return;
           // Never above the pupil's level — index.html's qWithinStudentLevel rule.
-          if (topicLevelNum(q.topic || '') > studentLevelCap) return;
+          // Both topics count, highest wins: a question filed under a P3 primary
+          // topic and a P6 secondary one is P6 material (index.html's qLevelNum).
+          if (qLevelNumOf(q) > studentLevelCap) return;
           seen.add(q.id);
           const m = extractMcq(q);
           if (m) pool.push(m);
