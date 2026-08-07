@@ -7610,7 +7610,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <div id="navTcgHome"></div>
       <div class="nav-tcg-wrap" id="navTcgWrap">
         <div class="nav-item" id="navTcg" data-page="tcg" onclick="navigateTo('tcg')" style="display:none;" title="Realm of Embers TCG — collect all 151 legendary monsters from booster packs bought with your points, build a team of 5 and auto-battle other trainers.">
-          <span class="ico">🃏</span> Realm of Embers <span class="nav-beta tcg-beta-badge">BETA</span>
+          <span class="ico" id="navTcgIco">🃏</span> Realm of Embers <span class="nav-beta tcg-beta-badge">BETA</span>
         </div>
         <!-- Hover flyout: the game modes inside the realm, with 🎁 badges on
              the ones paying a voucher this month (tcgNavPrizeBadges). -->
@@ -9300,7 +9300,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         <div>
           <div style="display:flex;align-items:center;gap:10px;">
             <button class="mobile-toggle" onclick="toggleSidebar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg></button>
-            <h2>🃏 Realm of Embers TCG <span class="nav-beta tcg-beta-badge" style="font-size:0.6rem;padding:3px 9px;">BETA</span></h2>
+            <h2><span id="tcgLogoMark" class="tcg-logo-slot">🃏</span> Realm of Embers TCG <span class="nav-beta tcg-beta-badge" style="font-size:0.6rem;padding:3px 9px;">BETA</span></h2>
           </div>
           <div class="subtitle">Collect all 151 legendary monsters! Open booster packs with the points you earn answering questions, build a team of 5, battle other trainers and climb the infinite Dungeon.</div>
         </div>
@@ -10592,6 +10592,23 @@ body.realm-embers #page-tcg .tcg-gen-track i { background: linear-gradient(90deg
 body.realm-embers .nav-tcg-sub button { border-left-color: rgba(240,205,122,0.45); }
 .nav-tcg-sub button:hover { background: rgba(240,205,122,0.14); }
 .nav-sub-prize { color: #f0cd7a; background: rgba(240,205,122,0.12); border-color: rgba(240,205,122,0.5); }
+
+/* ---- 🔥 The realm's crest, worn on the page header and the sidebar door ----
+   The mark is knocked out to real transparency when it is saved, so it sits
+   straight over the galaxy with only its own ember glow under it. Both places
+   fall back to the 🃏 emoji until a logo is drawn. */
+.tcg-logo-slot { display: inline-flex; align-items: center; vertical-align: -0.18em; }
+.tcg-logo-mark {
+  height: 1.9em; width: auto; display: block;
+  filter: drop-shadow(0 0 10px rgba(240,181,66,0.5)) drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+}
+#navTcg .ico { display: inline-flex; align-items: center; justify-content: center; width: 22px; }
+.tcg-logo-nav {
+  width: 22px; height: 22px; object-fit: contain; display: block;
+  filter: drop-shadow(0 0 7px rgba(240,205,122,0.6));
+  transition: filter 0.35s ease, transform 0.35s ease;
+}
+.nav-tcg-wrap:hover .tcg-logo-nav { filter: drop-shadow(0 0 12px rgba(255,224,150,0.9)); transform: scale(1.08); }
 
 /* ==================== 📜 LORE TAB ==================== */
 .tcg-lore { max-width: 1000px; margin: 0 auto; }
