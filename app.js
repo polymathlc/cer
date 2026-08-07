@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.253.2';
+const APP_VERSION = 'v1.254.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -34348,13 +34348,20 @@ function tcgArtRefresh() {
 }
 // Scale → upload → save one slot. Throws on failure; repaints nothing and
 // says nothing, so the batch generator can call it 300 times in a row.
-async function _tcgArtStore(id, dataUrl) {
+// `opts.cleaned` means the caller has ALREADY keyed or cut this picture and had
+// the result verified. Cutting it a second time here is not free: the second
+// pass has no rollback of its own, and it re-reads a picture whose background
+// is now transparent, which is the state every guard in the cutter is weakest
+// against. The generate paths pass it; paste, drop and upload do not.
+async function _tcgArtStore(id, dataUrl, opts) {
   if (!/^data:image\//i.test(dataUrl)) throw new Error('Not an image');
   // Battle avatars, projectile frames and booster packs all stand with nothing
   // behind them — the pack sits on the shop card and over the rip overlay with
   // only its own tier halo — so any background the model left in is knocked out
-  // first, pasted and uploaded pictures included. Card art keeps its scene.
-  if (id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0) dataUrl = await _stripImageBackground(dataUrl);
+  // first, pasted and uploaded pictures included. Card art and set banners keep
+  // their painted scene and are never cut, whatever else changes here.
+  const standsOnNothing = id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0;
+  if (standsOnNothing && !(opts && opts.cleaned)) dataUrl = await _stripImageBackground(dataUrl);
   // Battle avatars are small stage sprites; card art gets more resolution.
   // Blast frames are stretched over a 3×3 block of panels, so they get more
   // pixels than the small sprites (avatars, charge/flight/impact frames).
@@ -34505,6 +34512,52 @@ function tcgCardArtPrompt(c) {
 // image model paints the chequered pattern an editor uses to SHOW transparency
 // and it arrives as real pixels. So the pattern is ruled out by name, in every
 // colour, and `harder` is what a redraw says after the check caught one.
+// ---- The chroma screen ----------------------------------------------------
+// An image model has no alpha channel: it MUST put a value in every pixel. Told
+// only what not to paint, it invents a backdrop from context — and for a pack
+// briefed as "a dark starry field" the context says near-black, which is how a
+// dark backdrop and a dark inner panel ended up a hair apart and the cutter was
+// asked to tell them apart. It could not, and it hollowed the pack out.
+// So stop asking for "empty" and ask for something a model can actually paint:
+// ONE flat, named, fully saturated screen, exactly as a film studio does it.
+// Then the cut is not a guess about connectivity, it is a fact about colour —
+// and a hole in the middle of the artwork becomes impossible, because the
+// artwork is not the screen colour wherever it happens to sit.
+const TCG_SCREENS = {
+  magenta: { name: 'magenta', hex: '#FF00FF', rgb: '255, 0, 255' },
+  green:   { name: 'green',   hex: '#00FF00', rgb: '0, 255, 0' },
+  blue:    { name: 'blue',    hex: '#0000FF', rgb: '0, 0, 255' }
+};
+// The screen must be a colour the SUBJECT cannot contain, so it is chosen per
+// element from that element's own palette: magenta for everything except the
+// violet/pink elements (which get green) and the green ones (which get blue).
+const TCG_SCREEN_BY_ELEMENT = {
+  flame: 'magenta', aqua: 'magenta', spark: 'magenta', terra: 'magenta',
+  frost: 'magenta', light: 'magenta', metal: 'magenta',
+  psychic: 'green', shadow: 'green', cosmic: 'green',
+  flora: 'blue', venom: 'blue'
+};
+function tcgScreenForElement(el) { return TCG_SCREEN_BY_ELEMENT[el] || 'magenta'; }
+// Packs: the original set is gold/silver/bronze foil over a dark starry field —
+// magenta is nowhere near any of it. The National Day set is red-and-white
+// heraldry, and red sits close enough to magenta to be worth avoiding.
+function tcgScreenForSet(setKey) { return setKey === 'nd' ? 'green' : 'magenta'; }
+function _screenRules(subject, screen, harder) {
+  const K = TCG_SCREENS[screen] || TCG_SCREENS.magenta;
+  return 'BACKGROUND — READ THIS TWICE. IT MATTERS MORE THAN ANYTHING ELSE HERE.\n'
+    + subject.charAt(0).toUpperCase() + subject.slice(1) + ' stands in front of a CHROMA-KEY SCREEN: one flat studio wall painted a single colour, pure ' + K.name
+      + ' — hex ' + K.hex + ', RGB ' + K.rgb + ' — the brightest, most saturated ' + K.name + ' there is.\n'
+    + 'EVERY pixel that is not ' + subject + ' itself is exactly that ' + K.name + ': all four corners, all four edges, the gaps between its parts, and anything visible through an opening in it.\n'
+    + 'The wall is perfectly flat and evenly lit — the same ' + K.name + ' everywhere, as if filled with a paint bucket. No gradient, no vignette, no darkening towards the edges, no lighting falloff, no texture, no grain, no pattern, no tiles or squares of alternating shades in ANY colour, no panel, card, canvas, frame or border, no floor, ground or table, no cast shadow and no reflection on the wall, and nothing drawn or written on it.\n'
+    + subject.charAt(0).toUpperCase() + subject.slice(1) + ' itself must contain NO ' + K.name + ' anywhere — no ' + K.name + ' paint, cloth, metal, light, glow or rim light — so it can always be told apart from the wall.\n'
+    + 'The wall is not part of the artwork: it is cut away afterwards and replaced, so the outline of ' + subject + ' must be crisp and complete against it.\n'
+    + (harder
+        ? 'RETRY — the last attempt did not come back on a flat pure ' + K.name + ' wall, which makes it unusable. This time fill EVERY pixel that is not ' + subject + ' with pure ' + K.hex + ' ' + K.name + ' and nothing else at all: the corners, the edges, the gaps, everything. One flat colour, no shading of any kind.\n'
+        : '');
+}
+// Kept for anything that still wants the old wording. New callers use the
+// screen rules above — a named colour the model can paint beats ten clauses
+// about what not to.
 function _noBackgroundRules(subject, harder) {
   return 'BACKGROUND — CRITICAL: the area around ' + subject + ' must be genuinely EMPTY. '
     + 'Do NOT draw a chequerboard or chessboard. Do NOT draw a grid or tiling of alternating squares in ANY colour — not light-grey and white, not tinted, not faint, not tucked into a corner. '
@@ -34525,8 +34578,8 @@ function tcgAvatarPrompt(c, harder) {
     : 'species, silhouette, body plan, colour scheme, markings, horns, wings, limbs and elemental effects';
   return 'Turn the reference picture into a GAME BATTLE AVATAR sprite of the very same ' + subject + ', "' + c.name + '".\n'
     + 'KEEP IDENTICAL: ' + keep + ' — this must read as the exact same character as the reference.\n'
-    + 'CHANGE: remove the background scenery completely and leave the area around the creature COMPLETELY EMPTY — no ground, no shadow, no glow plate, no frame, no scenery of any kind. Show the complete creature from head to toe, centred, facing the viewer in a battle-ready three-quarter stance, with a small empty margin on every side.\n'
-    + _noBackgroundRules('the ' + subject, harder)
+    + 'CHANGE: remove the background scenery completely and stand the ' + subject + ' in front of the chroma-key screen described below — no ground, no shadow, no glow plate, no frame, no scenery of any kind. Show the complete ' + subject + ' from head to toe, centred, facing the viewer in a battle-ready three-quarter stance, with a clear margin of screen on every side.\n'
+    + _screenRules('the ' + subject, tcgScreenForElement(c && c.element), harder)
     + 'STYLE: clean crisp game-asset sprite with bold shapes that still read clearly at 128 pixels.\n'
     + 'HARD RULES: no text, letters, numbers or watermarks; exactly one creature; nothing frightening or gruesome.';
 }
@@ -34553,7 +34606,18 @@ async function _tcgGenOnce(prompt, refDataUrl, transparent) {
     throw err;
   }
 }
+// The words that make an image model paint the very thing we are trying to
+// avoid. "Transparent" makes it paint the editor's chequerboard; naming the
+// chequerboard describes it. They have leaked into these prompts twice — once
+// through a shared fragment and once through two animation step descriptions —
+// so the prompt is checked on the way out rather than by eye.
+const TCG_BANNED_PROMPT_RE = /transparen|alpha channel|che(ck|qu)er|chess ?board/i;
 async function tcgGenArtImage(prompt, refDataUrl, transparent) {
+  const banned = TCG_BANNED_PROMPT_RE.exec(prompt || '');
+  if (banned) {
+    console.error('art prompt contains "' + banned[0] + '" — an image model paints that word rather than honouring it. '
+      + 'Say what to PAINT (the chroma screen), never what the background is made of.');
+  }
   let lastErr = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt) await _tcgSleep(attempt * 6000);
@@ -34589,17 +34653,54 @@ async function _tcgCardArtDataUrl(card) {
 // Every one of the three is needed: the prompt alone does not stop a model
 // painting a plate, and the cautious cut alone does not remove one.
 const TCG_BG_DRAWS = 2;   // how many times a dirty picture is drawn before the forced cut
-async function _tcgGenClean(promptFor, ref, label, strict) {
-  let out = null;
+const TCG_BG_KEEP_MIN = 0.62;   // a forced cut may not cost more than this share of the painted pixels
+// Returns { url, ref }: the KEYED picture to store, and the picture to chain
+// into the next frame. They are not the same thing and that matters — see
+// _tcgPackRunFrames. A model has no alpha input: hand it the keyed PNG and the
+// canvas flattens the empty pixels to solid black, so it is shown a sprite on a
+// black plate and told that is what the background should look like. Chaining
+// the SCREEN version instead is what keeps a run consistent.
+async function _tcgGenClean(promptFor, ref, label, strict, screen) {
+  let out = null, raw = null;
   for (let attempt = 0; attempt < TCG_BG_DRAWS; attempt++) {
-    const raw = await tcgGenArtImage(promptFor(attempt > 0), ref, true);
+    // Never ask the ENGINE for transparency while asking the model for a
+    // screen: they are contradictory instructions, and gpt-image-1's
+    // transparent mode knocks out interior regions of the subject that match
+    // the background — the reported bug arrived at from the other direction.
+    raw = await tcgGenArtImage(promptFor(attempt > 0), ref, !screen);
+    // 1. The screen. If the model painted the wall it was asked for, the cut is
+    //    a fact about colour and cannot reach into the artwork.
+    if (screen) {
+      const keyed = await _screenKeyOut(raw, screen, strict);
+      if (keyed) {
+        const bad = await _bgLeftover(keyed, strict);
+        // The reference is the picture the model actually painted, screen and
+        // all — and the prompt tells the next frame that wall is there, so it
+        // has to BE there.
+        if (!bad) return { url: keyed, ref: raw };
+        console.warn(label + ': keyed the ' + screen + ' screen but ' + bad + ' is left — falling back to the knock-out');
+        out = await _stripImageBackground(keyed);
+        if (!(await _bgLeftover(out, strict))) return { url: out, ref: raw };
+      }
+    }
+    // 2. No screen in the picture (or keying it left something behind): the
+    //    ordinary cautious knock-out, exactly as before.
     out = await _stripImageBackground(raw);
     const left = await _bgLeftover(out, strict);
-    if (!left) return out;
+    if (!left) return await _screened({ url: out }, screen);
     if (_tcgGenStop) break;   // the admin pressed Stop — don't spend another draw
     console.warn(label + ' came back with ' + left + ' behind it — redrawing');
   }
-  return await _tcgForceClean(out, label, strict);
+  return await _screened({ url: await _tcgForceClean(out, label, strict) }, screen);
+}
+// The model never painted the wall, so the cut picture is composited ONTO one
+// before it is chained. Without this the next frame is handed a reference the
+// prompt describes as "already standing on that same flat magenta wall" when it
+// is standing on nothing of the sort — a lie the model resolves by inventing a
+// backdrop, which is the whole failure this change exists to end.
+async function _screened(got, screen) {
+  got.ref = screen ? await _screenBack(got.url, screen) : got.url;
+  return got;
 }
 // The last resort. Only ever called on a picture the checker has already
 // condemned, so the caution the ordinary cut applies is what is standing
@@ -34607,10 +34708,19 @@ async function _tcgGenClean(promptFor, ref, label, strict) {
 async function _tcgForceClean(dataUrl, label, strict) {
   if (!dataUrl) return dataUrl;
   const forced = await _stripImageBackground(dataUrl, true);
+  if (forced === dataUrl) return dataUrl;                // it declined to cut — nothing gained
+  // "The forced version is strictly closer" is only ever true about the
+  // BACKGROUND, never about the subject, so measure the subject too. A forced
+  // pass that took most of the artwork with it is not an improvement at any
+  // price — keep the gentle version and a visible backdrop instead.
+  const [was, now] = await Promise.all([_opaqueArea(dataUrl), _opaqueArea(forced)]);
+  if (was > 0 && now < was * TCG_BG_KEEP_MIN) {
+    console.warn(label + ': forced cut REJECTED — it would have taken '
+      + Math.round((1 - now / was) * 100) + '% of the painted pixels with it');
+    return dataUrl;
+  }
   const still = await _bgLeftover(forced, strict);
   if (!still) { console.warn(label + ': backdrop removed by the forced cut'); return forced; }
-  // Neither pass got it clean. The forced one is strictly closer, so it wins —
-  // and this is loud, because it means a prompt or the detector needs looking at.
   console.warn(label + ': STILL ' + still + ' after a forced cut — saving the cleanest version there is');
   return forced;
 }
@@ -34626,9 +34736,10 @@ async function _tcgGenAvatar(card, cardDataUrl) {
   if (!ref) ref = await _tcgGenCardArt(card);
   // Same clean-check-force loop the animation frames get. An avatar stands on
   // the arena stage with nothing behind it, so a plate here is just as wrong.
-  const dataUrl = await _tcgGenClean(h => tcgAvatarPrompt(card, h), ref, 'avatar for ' + card.name, true);
-  await _tcgArtStore(card.id + ':av', dataUrl);
-  return dataUrl;
+  const got = await _tcgGenClean(h => tcgAvatarPrompt(card, h), ref, 'avatar for ' + card.name, true,
+    tcgScreenForElement(card.element));
+  await _tcgArtStore(card.id + ':av', got.url, { cleaned: true });
+  return got.url;
 }
 
 // ---- Card Art tab (admin) ----
@@ -34742,7 +34853,7 @@ const TCG_FX_PHASES = [
     steps: [
       { t: 'First contact', d: 'the instant of contact — the ball flattening and cracking against an invisible surface, energy beginning to spray sideways' },
       { t: 'Burst peak', d: 'the impact at its peak — a bright starburst of the element with shards and sparks thrown outward in all directions, largest and brightest of the three' },
-      { t: 'Fading sparks', d: 'the hit dying away — only scattered fading sparks, thin smoke or drifting motes left, mostly transparent' }
+      { t: 'Fading sparks', d: 'the hit dying away — only scattered fading sparks, thin smoke or drifting motes left, very sparse and faint, with the screen showing between them' }
     ]
   },
   {
@@ -34752,7 +34863,7 @@ const TCG_FX_PHASES = [
       { t: 'Ignition core', d: 'the very start of a large explosion — a small, blinding core igniting at the centre with the first ring of energy forming around it' },
       { t: 'Shockwave peak', d: 'the explosion at full power — a huge blazing ball with an expanding shockwave ring, filling almost the whole frame. The brightest frame of the four' },
       { t: 'Rolling outward', d: 'the blast rolling outward and thinning — the ring now wide and open with a hollow, darker centre, energy tumbling away from the middle' },
-      { t: 'Dissipating', d: 'the aftermath — faint drifting embers, motes and thin smoke spreading out, mostly transparent' }
+      { t: 'Dissipating', d: 'the aftermath — faint drifting embers, motes and thin smoke spreading out, very sparse and faint, with the screen showing between them' }
     ]
   }
 ];
@@ -34779,14 +34890,12 @@ function tcgFxPrompt(element, phase, n, harder) {
       + '-element projectile in a fantasy card game.\n'
     + 'ELEMENT LOOK: ' + fx.words + '.\n'
     + 'FRAME ' + n + ' OF ' + phase.frames + ' — ' + step.t + ': ' + step.d + '.\n'
-    + 'COMPOSITION: perfectly centred on a COMPLETELY EMPTY background, square'
+    + 'COMPOSITION: perfectly centred against the chroma-key screen described below, square'
       + (wide ? ', the effect filling the frame edge to edge' : '')
-      + '. Nothing else in the frame at all — no character, no monster, no hand, no ground, no scenery, no border, no text, no watermark. Only the effect and its own glow.\n'
-    // A tinted checkerboard (the element's own glow washed over the squares) is
-    // just as wrong as a grey one — see _noBackgroundRules.
-    + _noBackgroundRules('the effect', harder)
+      + '. Nothing else in the frame at all — no character, no monster, no hand, no ground, no scenery, no border, no text, no watermark. Only the effect, its own glow, and the screen behind it.\n'
+    + _screenRules('the effect', tcgScreenForElement(element), harder)
     + ((n > 1 || phase.key !== 'charge')
-        ? 'The reference picture already has an empty background — leave it exactly that empty, do not fill it in with squares or a plate.\n'
+        ? 'The reference picture is already standing on that same flat ' + (TCG_SCREENS[tcgScreenForElement(element)] || TCG_SCREENS.magenta).name + ' wall — keep exactly that wall, the same flat colour, everywhere around the effect.\n'
         : '')
     + 'STYLE: crisp bright game effect art, still readable at 64 pixels, consistent lighting, friendly for primary-school children.\n'
     + (n > 1
@@ -34816,6 +34925,11 @@ function _loadImageCors(src) {
   });
 }
 // Read a stored picture back as a data URL so a canvas can work on it.
+// A stored frame reloaded to be used as a REFERENCE, back on its screen.
+async function _tcgRefOnScreen(url, screen) {
+  const data = await _urlToDataUrlRobust(transformImageUrl(url));
+  return await _screenBack(data, screen);
+}
 async function _tcgArtToDataUrl(url) {
   try {
     const img = await _loadImageCors(url);
@@ -34911,7 +35025,7 @@ async function _tcgFxAnchor(element) {
   const charge = TCG_FX_BY_KEY.charge;
   const url = _tcgArt && _tcgArt[tcgFxSlotId(element, charge.prefix, charge.frames)];
   if (url) {
-    try { return await _urlToDataUrlRobust(transformImageUrl(url)); }
+    try { return await _tcgRefOnScreen(url, tcgScreenForElement(element)); }
     catch (e) { console.warn('charge anchor reload failed — redrawing it', e); }
   }
   return await _tcgGenFxFrame(element, charge, charge.frames);
@@ -34922,7 +35036,7 @@ async function _tcgFxRef(element, phase, n) {
   // …every other frame follows the frame before it.
   const prev = _tcgArt && _tcgArt[tcgFxSlotId(element, phase.prefix, n - 1)];
   if (prev) {
-    try { return await _urlToDataUrlRobust(transformImageUrl(prev)); }
+    try { return await _tcgRefOnScreen(prev, tcgScreenForElement(element)); }
     catch (e) { console.warn('fx ref reload', e); }
   }
   return await _tcgGenFxFrame(element, phase, n - 1);
@@ -34937,7 +35051,8 @@ function _tcgGenFxClean(element, phase, n, ref) {
   // brief is to fill the frame edge to edge — checking that one strictly would
   // condemn its own outer glow as a backdrop.
   return _tcgGenClean(h => tcgFxPrompt(element, phase, n, h), ref,
-    'fx frame ' + element + ' ' + phase.key + ' ' + n, phase.key !== 'blast');
+    'fx frame ' + element + ' ' + phase.key + ' ' + n, phase.key !== 'blast',
+    tcgScreenForElement(element));
 }
 async function _tcgGenFxFrame(element, phase, n) {
   // Guard the recursion: without this, a bad call (or a NaN frame number)
@@ -34946,9 +35061,11 @@ async function _tcgGenFxFrame(element, phase, n) {
     throw new Error('bad animation frame request (' + element + ' ' + ((phase && phase.key) || phase) + ' ' + n + ')');
   }
   const ref = await _tcgFxRef(element, phase, n);
-  const url = await _tcgGenFxClean(element, phase, n, ref);
-  await _tcgArtStore(tcgFxSlotId(element, phase.prefix, n), url);
-  return url;   // already cleaned, so it is safe to chain into the next frame
+  const got = await _tcgGenFxClean(element, phase, n, ref);
+  await _tcgArtStore(tcgFxSlotId(element, phase.prefix, n), got.url, { cleaned: true });
+  // The SCREEN version is what the next frame is drawn from — a model has no
+  // alpha input, so handing it the keyed PNG shows it a sprite on solid black.
+  return got.ref || got.url;
 }
 function _tcgFxRowRefresh(element) {
   const row = document.getElementById('tcgfxrow-' + element);
@@ -35192,9 +35309,9 @@ function tcgPackFramePrompt(setKey, tier, n, harder) {
     + 'WRAPPER ARTWORK: ' + (TCG_PACK_SET_LOOK[setKey] || TCG_PACK_SET_LOOK.gen1) + '\n'
     + 'FRAME ' + n + ' OF ' + TCG_PACK_FRAMES + ' — ' + step.t + ': ' + step.d + '.\n'
     + 'CRITICAL — THIS IS ONE FRAME OF AN ANIMATION: the pack must stay the SAME pack at the SAME size in the SAME place in every frame, with the same wrapper artwork and the same colours. Only the tear, the light and the cards change from frame to frame. Do not re-design the packet, do not move it, do not zoom in or out.\n'
-    + 'COMPOSITION: the pack centred on a COMPLETELY EMPTY background, square, filling about 70% of the frame. No hands, no table, no ground, no shadow plate, no scenery, no border, no interface.\n'
-    + _noBackgroundRules('the pack', harder)
-    + (n > 1 ? 'The reference picture is frame ' + (n - 1) + ' of this same animation. Keep the pack IDENTICAL to it — same shape, same size, same position, same wrapper art, same colours — and change only what this frame describes. Its background is already empty; leave it exactly that empty.\n' : '')
+    + 'COMPOSITION: the pack centred against the chroma-key screen described below, square, filling about 70% of the frame. No hands, no table, no ground, no shadow plate, no scenery, no border, no interface.\n'
+    + _screenRules('the pack', tcgScreenForSet(setKey), harder)
+    + (n > 1 ? 'The reference picture is frame ' + (n - 1) + ' of this same animation. Keep the pack IDENTICAL to it — same shape, same size, same position, same wrapper art, same colours — and change only what this frame describes. It is already standing on that same flat ' + (TCG_SCREENS[tcgScreenForSet(setKey)] || TCG_SCREENS.magenta).name + ' wall — keep exactly that wall, including through the tear.\n' : '')
     + 'STYLE: polished painterly digital game art, rich saturated colour, dramatic rim lighting — the same finish as a painted fantasy trading-card set.\n'
     + 'HARD RULES: no text, letters, numbers, logos, signatures or watermarks anywhere on the pack or in the frame; friendly for primary-school children.';
 }
@@ -35262,8 +35379,12 @@ function _tcgPackRefreshCount() {
 // next frame is drawn from this one, so a backdrop left in here would be copied
 // faithfully through the rest of the tear.
 function _tcgGenPackClean(setKey, tier, n, ref) {
+  // Frames 5 and 6 are the blaze — brilliant light pouring out of the pack and
+  // washing to the edges, exactly like the fx 'blast' phase — so they are not
+  // held to "must stand clear of the edges" either.
   return _tcgGenClean(h => tcgPackFramePrompt(setKey, tier, n, h), ref,
-    'pack frame ' + setKey + ' ' + tier + ' ' + n, true);
+    'pack frame ' + setKey + ' ' + tier + ' ' + n, n !== 5 && n !== 6,
+    tcgScreenForSet(setKey));
 }
 // Draw one run of 7, each frame from the one before it.
 async function _tcgPackRunFrames(setKey, tier, redraw, onProgress) {
@@ -35273,13 +35394,13 @@ async function _tcgPackRunFrames(setKey, tier, redraw, onProgress) {
     const id = tcgPackSlotId(setKey, tier, n);
     if (!redraw && tcgPackHas(setKey, tier, n)) {
       // Already drawn — still needed as the reference for the next frame.
-      try { ref = await _urlToDataUrlRobust(transformImageUrl(_tcgArt[id])); } catch (e) { ref = null; }
+      try { ref = await _tcgRefOnScreen(_tcgArt[id], tcgScreenForSet(setKey)); } catch (e) { ref = null; }
       continue;
     }
     if (onProgress) onProgress(n);
-    const dataUrl = await _tcgGenPackClean(setKey, tier, n, ref);
-    await _tcgArtStore(id, dataUrl);
-    ref = dataUrl;   // already cut out, so the next frame is drawn from an empty background
+    const got = await _tcgGenPackClean(setKey, tier, n, ref);
+    await _tcgArtStore(id, got.url, { cleaned: true });
+    ref = got.ref || got.url;   // the SCREEN version — see _tcgGenClean
     made++;
     _tcgPackRowRefresh(setKey, tier);
     _tcgPackRefreshCount();
@@ -35370,13 +35491,15 @@ async function _tcgFxRunPhases(element, phases, onProgress) {
       if (_tcgGenStop) return made;
       if (onProgress) onProgress(phase, n);
       _tcgSlotStatus(tcgFxSlotId(element, phase.prefix, n), '⏳ Drawing…');
-      // Cleaned before it is chained on — see _tcgGenFxClean. Chaining the raw
-      // picture is what copied a painted background through a whole element.
-      const url = await _tcgGenFxClean(element, phase, n, ref);
-      await _tcgArtStore(tcgFxSlotId(element, phase.prefix, n), url);
+      const got = await _tcgGenFxClean(element, phase, n, ref);
+      await _tcgArtStore(tcgFxSlotId(element, phase.prefix, n), got.url, { cleaned: true });
+      // Store the keyed frame, chain the SCREEN one: the model cannot read
+      // alpha, so a keyed PNG reaches it as a sprite on a solid black plate —
+      // and that plate is then copied faithfully through the whole element.
+      const chain = got.ref || got.url;
       // The last charge-up frame becomes the anchor the later phases open from.
-      if (phase.key === 'charge' && n === phase.frames) anchor = url;
-      ref = url;                    // the next frame grows out of this one
+      if (phase.key === 'charge' && n === phase.frames) anchor = chain;
+      ref = chain;                  // the next frame grows out of this one
       made++;
       _tcgFxRowRefresh(element);
       await _tcgSleep(300);
@@ -35551,10 +35674,10 @@ async function tcgAiGenSlot(slotId) {
         // frames aren't there yet, or the packet won't match.
         if (!tcgPackHas(setKey, tier, n - 1)) await _tcgPackRunFrames(setKey, tier, false);
         const prev = _tcgArt && _tcgArt[tcgPackSlotId(setKey, tier, n - 1)];
-        if (prev) { try { ref = await _urlToDataUrlRobust(transformImageUrl(prev)); } catch (e) { ref = null; } }
+        if (prev) { try { ref = await _tcgRefOnScreen(prev, tcgScreenForSet(setKey)); } catch (e) { ref = null; } }
       }
-      const dataUrl = await _tcgGenPackClean(setKey, tier, n, ref);
-      await _tcgArtStore(slotId, dataUrl);
+      const got = await _tcgGenPackClean(setKey, tier, n, ref);
+      await _tcgArtStore(slotId, got.url, { cleaned: true });
       showToast('🎁 ' + ((TCG_SETS[setKey] || {}).name || setKey) + ' · ' + ((TCG_PACK_LOOK[tier] || {}).name || tier) + ' frame ' + n + ' drawn', 'success');
     } catch (e) {
       console.error('pack frame generation failed', e);
@@ -38426,20 +38549,29 @@ function elgKeyed(url) {
         // whole image: a white flash or pale core inside the art matches the
         // white chequer square by colour, but it is not connected to the
         // border through backdrop pixels, so it survives.
+        // The same edge barrier the main knock-out uses: a pixel is only
+        // backdrop if it ALSO sits a small step from the pixel the fill reached
+        // it from. Colour proximity alone cannot separate a dark sprite from a
+        // dark backdrop, and this is the loosest cutter in the app — it runs on
+        // the student's own device, on art nothing else has cleaned.
+        const step = 34;   // Manhattan, to match isBg's metric above
+        const near = (a, b2) => Math.abs(px[a] - px[b2]) + Math.abs(px[a + 1] - px[b2 + 1])
+          + Math.abs(px[a + 2] - px[b2 + 2]) <= step;
         const seen = new Uint8Array(w * h);
         const stack = [];
         const seed = (x, y) => { const n = y * w + x; if (!seen[n] && isBg(n * 4)) { seen[n] = 1; stack.push(n); } };
         for (let x = 0; x < w; x++) { seed(x, 0); seed(x, h - 1); }
         for (let y = 0; y < h; y++) { seed(0, y); seed(w - 1, y); }
         if (!stack.length) { resolve(null); return; }   // backdrop colours never touch the border? treat as unkeyable
+        const grow = (m, n) => { if (!seen[m] && isBg(m * 4) && near(m * 4, n * 4)) { seen[m] = 1; stack.push(m); } };
         while (stack.length) {
           const n = stack.pop();
           const x = n % w, y = (n / w) | 0;
           px[n * 4 + 3] = 0;
-          if (x > 0)     { const m = n - 1; if (!seen[m] && isBg(m * 4)) { seen[m] = 1; stack.push(m); } }
-          if (x < w - 1) { const m = n + 1; if (!seen[m] && isBg(m * 4)) { seen[m] = 1; stack.push(m); } }
-          if (y > 0)     { const m = n - w; if (!seen[m] && isBg(m * 4)) { seen[m] = 1; stack.push(m); } }
-          if (y < h - 1) { const m = n + w; if (!seen[m] && isBg(m * 4)) { seen[m] = 1; stack.push(m); } }
+          if (x > 0)     grow(n - 1, n);
+          if (x < w - 1) grow(n + 1, n);
+          if (y > 0)     grow(n - w, n);
+          if (y < h - 1) grow(n + w, n);
         }
         // Soften the cut edge: any kept pixel touching a removed one fades by
         // how close its colour sits to the backdrop.
@@ -40222,8 +40354,45 @@ const _BG_EDGE_TOL = 52;   // looser band used only to feather the cut edge
 // because by then the picture is known to be carrying a backdrop.
 const _BG_FORCE_TOL = 46;
 const _BG_FORCE_EDGE_TOL = 72;
+// How big a colour STEP the flood fill may take from one pixel to the next.
+// A backdrop — flat, gradient or vignette — moves in ones and twos; the edge of
+// a subject is a jump. This is what keeps the fill outside the artwork even
+// when the artwork's own colours sit inside the backdrop tolerance.
+const _BG_STEP_TOL = 13;
+const _BG_STEP_FORCE_TOL = 17;
+// How close to the plate's own colour a painted pixel must be to be treated as
+// a fresh piece of background when the fill steps out of an empty region.
+// Tighter than _BG_TOL on purpose: this is the one step with no neighbour to
+// measure against, so it has to stand on its own evidence.
+const _BG_SEED_TOL = 18;
 const _CHECK_TOL = 26;     // colour distance still counted as "a checker square"
 const _CHECK_CHROMA = 40;  // how far from grey a checker square may drift (the effect's glow tints it)
+// …but as a share of brightness, never as an absolute: max-min = 36 reads as
+// "near enough to grey" for a dark navy (#101834) as readily as for a pale
+// grey, which is how a pack's navy inner panel came to be read as a chequer
+// square and cut out. This is saturation, so a dark colour has to be far more
+// nearly neutral than a bright one to qualify.
+function _nearNeutral(r, g, b) {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  return (mx - mn) <= Math.min(_CHECK_CHROMA, Math.max(10, mx * 0.18));
+}
+// Is the detected pair actually present along the frame's edge? A chequerboard
+// painted as a BACKGROUND is; a texture inside the artwork is not.
+function _checkerOnBorder(px, w, h, pair) {
+  const tol = pair.tol || _CHECK_TOL;
+  let hit = 0, tot = 0;
+  const look = (x, y) => {
+    const o = (y * w + x) * 4;
+    tot++;
+    if (px[o + 3] < 200) return;
+    if (!_nearNeutral(px[o], px[o + 1], px[o + 2])) return;
+    const v = (px[o] + px[o + 1] + px[o + 2]) / 3;
+    if (Math.min(Math.abs(v - pair.a), Math.abs(v - pair.b)) <= tol) hit++;
+  };
+  for (let x = 0; x < w; x++) { look(x, 0); look(x, h - 1); }
+  for (let y = 0; y < h; y++) { look(0, y); look(w - 1, y); }
+  return tot > 0 && hit / tot >= 0.15;
+}
 
 // Asked for a transparent background, image models very often PAINT the
 // chequered grey-and-white pattern that image editors use to *display*
@@ -40248,7 +40417,7 @@ function _detectCheckerPair(px, w, h) {
       const r = px[o], g = px[o + 1], b = px[o + 2];
       // Near-neutral, but not strictly grey: the effect's own glow bleeds over
       // the squares, so an aqua frame's chequerboard comes back faintly blue.
-      if (Math.max(r, g, b) - Math.min(r, g, b) > _CHECK_CHROMA) continue;
+      if (!_nearNeutral(r, g, b)) continue;
       const v = (r + g + b) / 3;
       const key = Math.round(v) >> 3;
       const e = levels.get(key) || { sum: 0, n: 0 };
@@ -40298,7 +40467,7 @@ function _detectCheckerPair(px, w, h) {
   };
   // A transparent or coloured pixel is not either shade, so it breaks the run
   // rather than being read as one of them.
-  const value = o => (px[o + 3] < 200 || Math.max(px[o], px[o + 1], px[o + 2]) - Math.min(px[o], px[o + 1], px[o + 2]) > _CHECK_CHROMA)
+  const value = o => (px[o + 3] < 200 || !_nearNeutral(px[o], px[o + 1], px[o + 2]))
     ? -999 : (px[o] + px[o + 1] + px[o + 2]) / 3;
   let good = 0;
   for (let k = 1; k <= 8; k++) {
@@ -40313,7 +40482,12 @@ function _detectCheckerPair(px, w, h) {
   // The square size, so the cut can check that a pixel really does alternate
   // with its neighbours instead of trusting its colour alone.
   runs.sort((p, q) => p - q);
-  const sq = Math.max(2, Math.min(Math.floor(Math.min(w, h) / 3), runs[runs.length >> 1] || 8));
+  // The probe distance. Capped at a TWELFTH of the short side: a transparency
+  // chequerboard's squares are small, and a median run of a third of the
+  // picture is not a square at all — it is a flat region of artwork, and
+  // probing that far compares a pixel with something on the far side of the
+  // subject.
+  const sq = Math.max(2, Math.min(Math.floor(Math.min(w, h) / 12), runs[runs.length >> 1] || 8));
   return { a: a, b: b, tol: tol, sq: sq };
 }
 // Clear both checker shades everywhere and feather what is left. Returns the
@@ -40327,7 +40501,7 @@ function _cutCheckerboard(px, w, h, pair) {
     const o = i * 4;
     if (px[o + 3] < 24) { shade[i] = 3; continue; }        // already empty
     const r = px[o], g = px[o + 1], b = px[o + 2];
-    if (Math.max(r, g, b) - Math.min(r, g, b) > _CHECK_CHROMA) continue;   // too colourful to be a square
+    if (!_nearNeutral(r, g, b)) continue;   // too colourful (or too dark to be this near grey) to be a square
     const v = (r + g + b) / 3;
     const da = Math.abs(v - pair.a), db = Math.abs(v - pair.b);
     if (Math.min(da, db) > tol) continue;
@@ -40350,9 +40524,12 @@ function _cutCheckerboard(px, w, h, pair) {
       if (t === 1 || t === 2) { if (t === s) same++; else opposite++; }
     };
     look(x - sq, y); look(x + sq, y); look(x, y - sq); look(x, y + sq);
-    // No checker neighbour either way — an isolated speck. Bias to cutting it:
-    // a leftover square is the visible bug, a lost grey speck is not.
-    if (opposite > 0 || (!same && !opposite)) { cut[i] = 1; removed++; }
+    // Cutting needs POSITIVE evidence of alternation. This used to cut a pixel
+    // with no checker neighbour either way ("an isolated speck, bias to cutting
+    // it") — but on a second pass over an already-cut sprite every probe lands
+    // on transparency, which is neither shade, so that clause deleted the
+    // sprite. A leftover speck is a far smaller bug than a hole in the artwork.
+    if (opposite > 0) { cut[i] = 1; removed++; }
   }
   for (let i = 0; i < n; i++) if (cut[i]) px[i * 4 + 3] = 0;
   for (let y = 0; y < h; y++) {
@@ -40384,29 +40561,58 @@ async function _stripImageBackground(dataUrl, force) {
     const id = ctx.getImageData(0, 0, w, h);
     const px = id.data, n = w * h;
     let cutSomething = false;
+    // What was painted when the picture arrived. Every guard below that asks
+    // "did we damage the artwork?" asks it against THIS, not against whatever
+    // an earlier stage in the same pass has already removed.
+    const alpha0 = new Uint8Array(n);
+    for (let i = 0; i < n; i++) alpha0[i] = px[i * 4 + 3];
     // Nothing is written back unless a cut actually happened, so a picture the
     // model got right is returned byte-for-byte as it arrived.
     const finish = () => {
       if (!cutSomething) return dataUrl;
+      // THE SUBJECT-SIDE GUARD. Until this existed nothing in the pipeline ever
+      // asked whether the artwork survived: the verifier only looks for a
+      // background, and a hollowed-out sprite is the cleanest possible result
+      // to it — so the hole was rewarded and uploaded. A cut that takes painted
+      // pixels which are NOT reachable from the frame edge has not removed a
+      // backdrop, it has punched a hole in the picture, and the whole pass is
+      // thrown away rather than saved.
+      const holes = _cutHoleArea(alpha0, px, w, h);
+      if (holes > n * 0.005) {
+        console.warn('background removal reverted — it would have cut a hole of '
+          + Math.round(holes / n * 100) + '% inside the artwork');
+        return dataUrl;
+      }
       ctx.putImageData(id, 0, 0);
       return cv.toDataURL('image/png');
     };
+
+    // Already a cut-out? Then there is nothing joined to the edge to remove, and
+    // the picture is handed back untouched. This is FIRST, before the
+    // chequerboard stage: every generated frame goes through this function more
+    // than once (generate, store, display, repair), and on the second pass the
+    // only thing left for the chequer detector to look at is the SPRITE.
+    // Measured on the BORDER, not on the whole frame: a fading effect is 95%
+    // empty and still has a corner of plate stuck to one edge.
+    let ringClear = 0, ringN = 0;
+    const ringAt = (x, y) => { ringN++; if (px[(y * w + x) * 4 + 3] < 24) ringClear++; };
+    for (let x = 0; x < w; x++) { ringAt(x, 0); ringAt(x, h - 1); }
+    for (let y = 0; y < h; y++) { ringAt(0, y); ringAt(w - 1, y); }
+    if (ringClear > ringN * 0.97) return dataUrl;
 
     // A painted transparency checkerboard is dealt with first and on its own
     // terms — every square goes, wherever it sits, and none of the guards
     // below apply (a fading frame that is 98% checkerboard SHOULD come back
     // 98% empty). Models sometimes paint the squares ON TOP of a plate, so the
     // flood fill below still gets its turn afterwards.
+    // …and only if the pattern is actually ON THE BORDER. A painted chequerboard
+    // stands BEHIND the subject, so it reaches the frame edge. Scale armour, a
+    // woven panel inside a pack and any other regular two-tone texture inside
+    // the artwork do not — and without this test the cutter deleted them
+    // wholesale, wherever they sat, with no ceiling and no way back.
     const pair = _detectCheckerPair(px, w, h);
-    if (pair && _cutCheckerboard(px, w, h, pair) > 0) cutSomething = true;
+    if (pair && _checkerOnBorder(px, w, h, pair) && _cutCheckerboard(px, w, h, pair) > 0) cutSomething = true;
 
-    // Already transparent? The model did as it was asked — leave it alone.
-    // NOT under force: the forced pass runs on a picture the checker has
-    // already condemned, and usually on one the gentle pass has ALREADY cut
-    // (so it is full of transparency). Bailing here would make force a no-op.
-    let clear = 0;
-    for (let i = 3; i < px.length; i += 4) if (px[i] < 16) clear++;
-    if (!force && clear > n * 0.06) return finish();
 
     // What colour is the border? Group near-identical shades: a plate has one,
     // a transparency checkerboard has two.
@@ -40450,23 +40656,56 @@ async function _stripImageBackground(dataUrl, force) {
     // Flood-fill inwards from the border with an explicit stack — never
     // recursion, so a big picture cannot blow the call stack. Only background
     // JOINED to the edge goes, so the black heart of a cosmic blast survives.
+    //
+    // TWO tests have to pass, and the second one is what stops the fill eating
+    // the artwork. Colour proximity to the backdrop is NOT enough on its own: a
+    // dark navy panel inside a pack sits ~21 from a dark backdrop, well inside
+    // the tolerance, so the moment the packet is torn open the fill walked in
+    // through the tear and hollowed the pack out. So a pixel is only background
+    // if it is ALSO a small STEP from the pixel the fill arrived from —
+    // backdrops are smooth, and the edge of a subject is not. Every step across
+    // a real boundary is a jump, and a jump ends the fill.
     const seen = new Uint8Array(n);
     const stack = [];
-    const push = (x, y) => { const i = y * w + x; if (!seen[i]) { seen[i] = 1; stack.push(i); } };
-    for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
-    for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+    const from = new Int32Array(n);            // which pixel the fill arrived from (-1 = the border)
+    const push = (x, y, src) => { const i = y * w + x; if (!seen[i]) { seen[i] = 1; from[i] = src; stack.push(i); } };
+    for (let x = 0; x < w; x++) { push(x, 0, -1); push(x, h - 1, -1); }
+    for (let y = 0; y < h; y++) { push(0, y, -1); push(w - 1, y, -1); }
+    const stepTol = force ? _BG_STEP_FORCE_TOL : _BG_STEP_TOL;
+    // Emptiness must not become a colour-blind conductor. Letting any step in
+    // or out of a transparent pixel skip the edge test hands the fill a free
+    // corridor: it enters the region an earlier stage (or an earlier PASS) cut,
+    // travels the whole silhouette inside it, and steps out anywhere it likes
+    // with only the loose absolute colour test in the way — which is how a
+    // guard against hollowing the artwork could still let it happen.
+    // So: only pixels that were ALREADY empty when this call started conduct
+    // freely, and stepping OUT of emptiness into something painted has to land
+    // on a pixel that looks like the plate ITSELF, not merely like the plate's
+    // neighbourhood. RGB survives an alpha cut, so a pixel this pass zeroed is
+    // still compared on its own colour.
+    const smallStep = (i, pi) => {
+      if (pi < 0) return true;                             // seeded from the border itself
+      const o = i * 4, po = pi * 4;
+      const fromEmpty = alpha0[pi] < 24, toEmpty = alpha0[i] < 24;
+      if (fromEmpty && toEmpty) return true;               // both were always empty
+      if (fromEmpty) return isBg(o, _BG_SEED_TOL);         // leaving emptiness: must BE the plate
+      if (toEmpty) return true;                            // walking into what was always empty
+      const dr = px[o] - px[po], dg = px[o + 1] - px[po + 1], db = px[o + 2] - px[po + 2];
+      return dr * dr + dg * dg + db * db <= stepTol * stepTol;
+    };
     const cut = new Uint8Array(n);
     let removed = 0, removedSolid = 0;
     while (stack.length) {
       const i = stack.pop();
       if (!isBg(i * 4, force ? _BG_FORCE_TOL : _BG_TOL)) continue;
+      if (!smallStep(i, from[i])) continue;
       cut[i] = 1; removed++;
       if (px[i * 4 + 3] >= 24) removedSolid++;   // pixels that were actually painted
       const x = i % w, y = (i - x) / w;
-      if (x > 0) push(x - 1, y);
-      if (x < w - 1) push(x + 1, y);
-      if (y > 0) push(x, y - 1);
-      if (y < h - 1) push(x, y + 1);
+      if (x > 0) push(x - 1, y, i);
+      if (x < w - 1) push(x + 1, y, i);
+      if (y > 0) push(x, y - 1, i);
+      if (y < h - 1) push(x, y + 1, i);
     }
     if (removed < n * (force ? 0.004 : 0.02)) return finish();   // nothing worth doing
     // "That cannot be right — keep the art." Under force the count has to be of
@@ -40495,6 +40734,173 @@ async function _stripImageBackground(dataUrl, force) {
   }
 }
 
+// ---- Keying the chroma screen out -----------------------------------------
+// This is a fact about COLOUR, not about connectivity: a pixel is screen if it
+// is that hue, wherever it sits. That is the whole point — the backdrop showing
+// through a tear in a pack, or between a monster's legs, is keyed for the same
+// reason the corners are, and a dark panel INSIDE the pack is never keyed at
+// all because navy is not magenta. No flood fill, so no corridor into the art.
+const TCG_SCREEN_HI = 0.55;     // this screen-ness or more: pure backdrop
+const TCG_SCREEN_LO = 0.26;     // this or less: pure subject
+const TCG_SCREEN_DARK = 26;     // too dark for a hue to mean anything — subject
+const TCG_SCREEN_MIN_COVER = 0.08;   // less screen than this and the model ignored the brief
+// How much of this pixel is the screen colour, 1 = pure screen, <=0 = not it.
+// Divided by the brightest channel so an unevenly lit or vignetted wall still
+// reads as one colour — which is the commonest way a model misses "flat".
+// `min` of the two high channels for magenta, never their mean: pure red would
+// otherwise score mid-ramp and come back half transparent.
+function _screenDn(r, g, b, name) {
+  const L = Math.max(r, g, b);
+  if (L < TCG_SCREEN_DARK) return -1;
+  if (name === 'green') return (g - Math.max(r, b)) / L;
+  if (name === 'blue') return (b - Math.max(r, g)) / L;
+  return (Math.min(r, b) - g) / L;
+}
+// Returns the keyed picture, or null when it is not safe to key — in which case
+// the caller falls back to the ordinary knock-out. THREE preconditions, and
+// they are the whole reason a colour cut is safer than a flood fill:
+//   * enough of the frame is the screen colour at all;
+//   * the BORDER RING is almost entirely screen — that is the proof the model
+//     actually painted the wall rather than happening to use the hue in the art;
+//   * for a sprite that must stand clear of the edges, the screen colour is not
+//     shot through the middle of the subject. If the model painted the key
+//     colour ONTO the subject, keying it would punch holes — so it is refused.
+//     Screen visible through a tear or between a monster's legs reaches the
+//     border and is not "enclosed", so the pack's torn opening still keys.
+const TCG_SCREEN_RING_MIN = 0.90;   // this much of the border ring must be screen
+// Enclosed screen inside the subject, as a share of the frame. Small on
+// purpose: a patch this size is already a visible hole, and refusing to key
+// only costs a fall back to the cautious knock-out — the safe direction. A
+// subject with a genuine enclosed gap pays the same price, which is fine.
+const TCG_SCREEN_HOLE_MAX = 0.015;
+async function _screenKeyOut(dataUrl, screen, strict) {
+  try {
+    const name = (TCG_SCREENS[screen] || TCG_SCREENS.magenta).name;
+    const img = await _loadImageEl(dataUrl);
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    if (!w || !h) return null;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const id = ctx.getImageData(0, 0, w, h), px = id.data, n = w * h;
+    const isScreen = new Uint8Array(n);
+    let cover = 0;
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      if (px[o + 3] < 24) continue;                     // already empty: not evidence of a screen
+      if (_screenDn(px[o], px[o + 1], px[o + 2], name) >= TCG_SCREEN_HI) { isScreen[i] = 1; cover++; }
+    }
+    if (cover < n * TCG_SCREEN_MIN_COVER) return null;  // no screen to key — not this path
+    // The ring. A picture that merely CONTAINS the hue is not a picture shot
+    // against a wall of it, and keying the difference is how art gets holed.
+    let ring = 0, ringScreen = 0;
+    const ringAt = (x, y) => {
+      const i = y * w + x; ring++;
+      if (isScreen[i] || px[i * 4 + 3] < 24) ringScreen++;
+    };
+    for (let x = 0; x < w; x++) { ringAt(x, 0); ringAt(x, h - 1); }
+    for (let y = 0; y < h; y++) { ringAt(0, y); ringAt(w - 1, y); }
+    if (!ring || ringScreen < ring * TCG_SCREEN_RING_MIN) return null;
+    // Screen colour that does NOT connect to the border is screen colour the
+    // model painted onto the subject. Keying that is exactly the hole we are
+    // here to prevent, so hand the picture to the cautious path instead.
+    if (strict) {
+      const seen = new Uint8Array(n), st = [];
+      const push = i => { if (!seen[i] && (isScreen[i] || px[i * 4 + 3] < 24)) { seen[i] = 1; st.push(i); } };
+      for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+      for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+      while (st.length) {
+        const i = st.pop(), x = i % w, y = (i - x) / w;
+        if (x > 0) push(i - 1);
+        if (x < w - 1) push(i + 1);
+        if (y > 0) push(i - w);
+        if (y < h - 1) push(i + w);
+      }
+      let enclosed = 0;
+      for (let i = 0; i < n; i++) if (isScreen[i] && !seen[i]) enclosed++;
+      if (enclosed > n * TCG_SCREEN_HOLE_MAX) {
+        console.warn('chroma key refused — ' + Math.round(enclosed / n * 100)
+          + '% of the frame is screen colour painted INSIDE the subject');
+        return null;
+      }
+    }
+    const span = TCG_SCREEN_HI - TCG_SCREEN_LO;
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      if (px[o + 3] < 24) continue;
+      const r = px[o], g = px[o + 1], b = px[o + 2];
+      const dn = _screenDn(r, g, b, name);
+      if (dn <= TCG_SCREEN_LO) continue;               // subject, untouched
+      const a = dn >= TCG_SCREEN_HI ? 0 : Math.max(0, Math.min(1, (TCG_SCREEN_HI - dn) / span));
+      // Despill every pixel the screen touched, the fully keyed ones included:
+      // their colour still bleeds into the edges when the picture is scaled
+      // down, and a magenta halo round a sprite is the tell-tale of a bad key.
+      if (name === 'green') { const t = Math.max(r, b); if (g > t) px[o + 1] = t + (g - t) * 0.15; }
+      else if (name === 'blue') { const t = Math.max(r, g); if (b > t) px[o + 2] = t + (b - t) * 0.15; }
+      else { const t = g; if (r > t) px[o] = t + (r - t) * 0.15; if (b > t) px[o + 2] = t + (b - t) * 0.15; }
+      px[o + 3] = Math.round(px[o + 3] * a);
+    }
+    ctx.putImageData(id, 0, 0);
+    return cv.toDataURL('image/png');
+  } catch (e) { console.warn('chroma key skipped', e); return null; }
+}
+// Put a keyed picture back on its screen. A stored frame has real transparency
+// and a model cannot read alpha — handed one, it sees the sprite on solid
+// black and copies that plate into the next frame. So every reference reloaded
+// from storage is composited back onto the flat wall the brief describes.
+async function _screenBack(dataUrl, screen) {
+  try {
+    const K = TCG_SCREENS[screen] || TCG_SCREENS.magenta;
+    const img = await _loadImageEl(dataUrl);
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    if (!w || !h) return dataUrl;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = K.hex;
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0);
+    return cv.toDataURL('image/png');
+  } catch (e) { console.warn('screen backing skipped', e); return dataUrl; }
+}
+// How much PAINTED area a cut took out of the middle of the picture — pixels
+// that were opaque on arrival, are transparent now, and cannot be reached from
+// the frame edge without crossing something still opaque. A backdrop is joined
+// to the edge by definition, so anything else is a hole in the artwork.
+function _cutHoleArea(alpha0, px, w, h) {
+  const n = w * h;
+  // Reachable = walk in from the edge over everything that is transparent NOW.
+  const seen = new Uint8Array(n);
+  const stack = [];
+  const push = i => { if (!seen[i] && px[i * 4 + 3] < 24) { seen[i] = 1; stack.push(i); } };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+  while (stack.length) {
+    const i = stack.pop(), x = i % w, y = (i - x) / w;
+    if (x > 0) push(i - 1);
+    if (x < w - 1) push(i + 1);
+    if (y > 0) push(i - w);
+    if (y < h - 1) push(i + w);
+  }
+  let holes = 0;
+  for (let i = 0; i < n; i++) if (alpha0[i] >= 24 && px[i * 4 + 3] < 24 && !seen[i]) holes++;
+  return holes;
+}
+// How much of the picture is still painted — used to tell a cut that removed a
+// backdrop from one that removed the subject.
+function _opaqueArea(dataUrl) {
+  return _loadImageEl(dataUrl).then(img => {
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    if (!w || !h) return 0;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const px = ctx.getImageData(0, 0, w, h).data;
+    let opaque = 0;
+    for (let i = 3; i < px.length; i += 4) if (px[i] >= 200) opaque++;
+    return opaque;
+  }).catch(() => 0);
+}
+
 // ---- Did anything survive the knock-out? ----------------------------------
 // The knock-out is deliberately cautious: faced with something it cannot cut
 // safely it hands the picture back untouched rather than eating the artwork.
@@ -40508,8 +40914,27 @@ async function _stripImageBackground(dataUrl, force) {
 // colour it is — which is what catches the gradient and vignette plates the
 // flat-plate test below cannot see, and those are exactly the ones the cautious
 // cut refuses to touch, so nothing else would ever catch them.
+// The most opaque of the four corner patches, 0..1. A sprite that stands on
+// nothing is centred with a margin, so all four of its corners are empty —
+// whereas a plate, a gradient, a vignette and a lone corner of leftover all
+// fill at least one of them. A wing tip touching an edge halfway up does not,
+// which is what keeps this from condemning good artwork.
+function _cornerOpacity(px, w, h) {
+  const cw = Math.max(2, Math.round(w * 0.09)), ch = Math.max(2, Math.round(h * 0.09));
+  let worst = 0;
+  [[0, 0], [w - cw, 0], [0, h - ch], [w - cw, h - ch]].forEach(([sx, sy]) => {
+    let opaque = 0, tot = 0;
+    for (let y = sy; y < sy + ch; y++) for (let x = sx; x < sx + cw; x++) {
+      tot++; if (px[(y * w + x) * 4 + 3] >= 200) opaque++;
+    }
+    if (tot && opaque / tot > worst) worst = opaque / tot;
+  });
+  return worst;
+}
 function _bgLeftoverInPixels(px, w, h, strict) {
   if (_detectCheckerPair(px, w, h)) return 'a chequerboard';
+  // Checked BEFORE the ring test below, which lets a mostly-empty border off.
+  if (strict && _cornerOpacity(px, w, h) >= 0.5) return 'a patch of backdrop left in a corner';
   // A plate: the whole border ring still opaque and nearly all one flat colour.
   // Art that genuinely runs to the edge (a blast at full power) varies along
   // that ring, so it does not trip this.
