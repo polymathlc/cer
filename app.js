@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.266.1';
+const APP_VERSION = 'v1.267.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -34178,9 +34178,16 @@ function tcgHydrateState(saved) {
     siege: { best: Math.max(0, sg.best | 0), runs: Math.max(0, sg.runs | 0) },
     legends: { best: Math.max(0, lg.best | 0), runs: Math.max(0, lg.runs | 0), kills: Math.max(0, lg.kills | 0) },
     duel: {
-      // The deck the student built. Filtered here against BOTH the dex and the
-      // cards they still own (spells are universal), so a sold, merged-away or
-      // retired id can never poison a saved deck — the same rule `team` uses.
+      // The student's DECK SLOTS — up to DUEL_DECKS_MAX of them, each a name
+      // and a list of ids. Every list is filtered here against BOTH the dex and
+      // the cards they still own (spells are universal), so a sold, merged-away
+      // or retired id can never poison a saved deck — the same rule `team` uses.
+      decks: _duelHydrateDecks(dl, cards),
+      active: Math.max(0, Math.min(DUEL_DECKS_MAX - 1, dl.active | 0)),
+      // The legacy single-deck field, kept as a MIRROR of the active slot. It
+      // is never read once `decks` exists; it is here so that rolling the app
+      // back to a build from before slots existed finds a student's deck where
+      // it used to be instead of an empty builder.
       deck: Array.isArray(dl.deck)
         ? dl.deck.filter(id => duelIsSpell(id) || (TCG_BY_ID[id] && cards[id])).slice(0, DUEL_DECK_SIZE)
         : [],
@@ -38122,10 +38129,14 @@ function tcgModesHtml(s) {
         'A proper <b>card duel</b>: two heroes on ' + DUEL_HERO_HP + ' life, one mana crystal more every turn, and your monsters summoned onto the board to fight. Every card keeps its arena skill and <b>gains a duel ability of its own</b> — Taunt, Charge, Lifesteal, Divine Shield, Poisonous, battlecries that sweep the board — and <b>the rarer the card, the stronger that ability is</b>. There are <b>' + DUEL_SPELLS.length + ' spells</b> too: direct damage, card draw, freezes and sweeps. <b>Drag one of your minions onto a rival card to attack it</b>, and answer a science question each turn for a free card and a mana crystal back.'
         + (_isAdmin() ? '<br><span style="color:var(--text-muted);font-size:0.8rem;">' + (duelReleased() ? 'Released to students.' : 'Beta — only you can see this card. Press Launch when you are happy with it.') + '</span>' : ''),
         '🏆 record: <b>' + ((s.duel && s.duel.wins) | 0) + 'W – ' + ((s.duel && s.duel.losses) | 0) + 'L</b> · ⚔️ ' + ((s.duel && s.duel.runs) | 0) + ' duel' + (((s.duel && s.duel.runs) | 0) === 1 ? '' : 's')
-          + ' · 🎴 ' + (duelDeckValid((s.duel && s.duel.deck) || [], s) ? '<b>your own deck</b>' : 'no deck yet — one is built for you'),
+          + ' · 🎴 ' + (duelDeckValid(duelActiveDeck(s), s)
+              ? '<b>' + escapeHtml((duelDecks(s)[duelActiveIndex(s)] || {}).name || 'your deck') + '</b>'
+                + (duelDeckCount(s) > 1 ? ' of ' + duelDeckCount(s) + ' decks' : '')
+              : 'no deck yet — one is built for you')
+          + duelDeckPickHtml(s),
         (owned
           ? '<button class="btn btn-primary" type="button" onclick="duelOpen()">▶ Play</button>'
-            + '<button class="btn btn-outline" type="button" style="margin-top:8px;" onclick="duelOpenBuilder()">🎴 Build deck</button>'
+            + '<button class="btn btn-outline" type="button" style="margin-top:8px;" onclick="duelOpenBuilder()">🎴 Build decks</button>'
           : '<button class="btn btn-outline" type="button" onclick="tcgSetTab(\'packs\')">🎁 Get cards first</button>')
         + (_isAdmin()
           ? (duelReleased()
@@ -38338,7 +38349,7 @@ function tcgGuideHtml() {
       ]))
 
   + (duelAccessAllowed() ? _tcgGuideSection('🎴', 'Ember Duel — the card duel' + (duelReleased() ? '' : ' (BETA)'),
-      'A proper card game with your own collection. Both heroes start on <b>' + DUEL_HERO_HP + ' life</b>, you gain <b>one mana crystal a turn</b> up to ' + DUEL_MANA_CAP + ', and you summon monsters onto a board of up to ' + DUEL_BOARD_MAX + '. A monster cannot attack the turn it lands unless its ability says otherwise, and when it attacks another monster <b>both of them take damage</b> — so choosing what to trade with is the whole game. Your deck is <b>' + DUEL_DECK_SIZE + ' cards that you choose yourself</b> — up to ' + DUEL_COPIES_MAX + ' copies of any monster, only <b>one</b> of a 7★ legend, and up to ' + DUEL_COPIES_SPELL + ' of any spell — from the monsters you own plus all ' + DUEL_SPELLS.length + ' spells, which everybody has. Never built one? One is put together from your strongest cards so you can play straight away.',
+      'A proper card game with your own collection. Both heroes start on <b>' + DUEL_HERO_HP + ' life</b>, you gain <b>one mana crystal a turn</b> up to ' + DUEL_MANA_CAP + ', and you summon monsters onto a board of up to ' + DUEL_BOARD_MAX + '. A monster cannot attack the turn it lands unless its ability says otherwise, and when it attacks another monster <b>both of them take damage</b> — so choosing what to trade with is the whole game. Your deck is <b>' + DUEL_DECK_SIZE + ' cards that you choose yourself</b> — up to ' + DUEL_COPIES_MAX + ' copies of any monster, only <b>one</b> of a 7★ legend, and up to ' + DUEL_COPIES_SPELL + ' of any spell — from the monsters you own plus all ' + DUEL_SPELLS.length + ' spells, which everybody has. You can keep <b>' + DUEL_DECKS_MAX + ' different decks</b> saved at once and switch between them whenever you like, so trying an idea never costs you the deck you already had. Never built one? One is put together from your strongest cards so you can play straight away.',
       _tcgGuideRows([
         ['Where the duel ability comes from',
           'Every card <b>keeps its arena skill</b> and <b>gains a duel ability</b> generated from the same skill type — so a blaster sweeps the board here too, a healer mends, a poisoner poisons. Nothing is written per card, which is why all ' + TCG_CARDS.length + ' of them have one.'],
@@ -38815,10 +38826,11 @@ function duelSummon(hc, side) {
 // collection turns into a decision — which is the whole point of a deck builder.
 //
 // A deck is an array of ids, and an id is either a card (`c001`… — must be
-// OWNED) or a spell (`sp_*` — everybody has every spell). It lives on
-// tcgState().duel.deck, which is registered in tcgHydrateState's whitelist and
-// filtered there against both the dex and what the student actually owns, so a
-// card that is sold, merged away or retired can never poison a saved deck.
+// OWNED) or a spell (`sp_*` — everybody has every spell). Decks live on
+// tcgState().duel.decks (see DUEL_DECKS_MAX below), which is registered in
+// tcgHydrateState's whitelist and filtered there against both the dex and what
+// the student actually owns, so a card that is sold, merged away or retired
+// can never poison a saved deck.
 const DUEL_COPIES_MAX = 2;        // …of any one monster
 const DUEL_COPIES_LEGEND = 1;     // …but only one of any 7★ legend
 // Spells are the free basic set — every student has all of them whatever they
@@ -38862,20 +38874,105 @@ function duelDeckProblem(deck, s) {
   return '';
 }
 function duelDeckValid(deck, s) { return !duelDeckProblem(deck, s); }
-// The saved deck if it is still legal, otherwise one built for them. A student
+
+// ---- DECK SLOTS ------------------------------------------------------------
+// A student keeps up to five decks and plays whichever one is ACTIVE. One deck
+// was enough while every duel was the same fight; it is not enough now that a
+// card's rank, its element and the rival's own average rarity all pull a deck
+// in different directions — rebuilding forty cards to try an idea, and then
+// rebuilding them again to get back, is not a decision, it is a chore.
+//
+// The slots are stored as a plain array on `tcgState().duel.decks` and are
+// hydrated through the same whitelist as everything else, so the rules that
+// protect one deck protect all five: an id that is no longer owned is dropped
+// on load, and a slot that is no longer LEGAL is still offered in the builder
+// rather than thrown away (duelDraftSeed).
+const DUEL_DECKS_MAX = 5;
+const DUEL_DECK_NAME_MAX = 18;
+function duelDeckDefaultName(i) { return 'Deck ' + ((i | 0) + 1); }
+function _duelCleanDeckName(v, i) {
+  const t = String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, DUEL_DECK_NAME_MAX);
+  return t || duelDeckDefaultName(i);
+}
+// Called from tcgHydrateState. Reads the slots if they are there, and MIGRATES
+// the one legacy deck into slot 1 if they are not — a student who built forty
+// cards before slots existed must find them where they left them.
+function _duelHydrateDecks(dl, cards) {
+  const clean = list => (Array.isArray(list) ? list : [])
+    .filter(id => duelIsSpell(id) || (TCG_BY_ID[id] && cards[id]))
+    .slice(0, DUEL_DECK_SIZE);
+  const src = Array.isArray(dl && dl.decks) ? dl.decks.slice(0, DUEL_DECKS_MAX) : null;
+  if (src) {
+    return src.map((d, i) => ({
+      name: _duelCleanDeckName(d && d.name, i),
+      cards: clean(d && d.cards)
+    }));
+  }
+  const legacy = clean(dl && dl.deck);
+  return legacy.length ? [{ name: duelDeckDefaultName(0), cards: legacy }] : [];
+}
+// The slots, always an array, always at least one entry to edit.
+function duelDecks(s) {
+  const d = (s && s.duel) || {};
+  const list = Array.isArray(d.decks) ? d.decks.slice(0, DUEL_DECKS_MAX) : [];
+  if (!list.length) {
+    const legacy = Array.isArray(d.deck) ? d.deck.slice() : [];
+    list.push({ name: duelDeckDefaultName(0), cards: legacy });
+  }
+  return list.map((x, i) => ({ name: _duelCleanDeckName(x && x.name, i), cards: Array.isArray(x && x.cards) ? x.cards.slice() : [] }));
+}
+function duelActiveIndex(s) {
+  const n = duelDecks(s).length;
+  return Math.max(0, Math.min(n - 1, ((s && s.duel && s.duel.active) | 0)));
+}
+function duelActiveDeck(s) { return (duelDecks(s)[duelActiveIndex(s)] || { cards: [] }).cards; }
+// How many of the five slots hold a deck that could actually be played.
+function duelDeckCount(s) { return duelDecks(s).filter(d => duelDeckValid(d.cards, s)).length; }
+// Write the slots back. `deck` is mirrored to the active slot for the rollback
+// reason given in tcgHydrateState — one line, and nobody loses forty cards.
+function _duelStoreDecks(s, list, active) {
+  s.duel = s.duel || { wins: 0, losses: 0, runs: 0, best: 0 };
+  s.duel.decks = list.slice(0, DUEL_DECKS_MAX).map((d, i) => ({ name: _duelCleanDeckName(d.name, i), cards: (d.cards || []).slice(0, DUEL_DECK_SIZE) }));
+  if (active != null) s.duel.active = Math.max(0, Math.min(s.duel.decks.length - 1, active | 0));
+  s.duel.active = Math.max(0, Math.min(Math.max(0, s.duel.decks.length - 1), s.duel.active | 0));
+  s.duel.deck = ((s.duel.decks[s.duel.active] || {}).cards || []).slice();
+}
+// Switch which deck is played, from anywhere outside the builder.
+function duelSetActiveDeck(i) {
+  const s = tcgState(); if (!s) return;
+  const list = duelDecks(s), n = Math.max(0, Math.min(list.length - 1, i | 0));
+  _duelStoreDecks(s, list, n);
+  try { rpgSave(); } catch (_) {}
+  showToast('🎴 Now playing ' + list[n].name, 'success');
+  try { if (document.querySelector('#page-tcg.active')) tcgRenderBody(); } catch (_) {}
+}
+// The switcher on the mode card: tap a deck, play with it. Only drawn once a
+// student actually HAS a choice — one deck needs no picker, and the builder is
+// where a second one gets made.
+function duelDeckPickHtml(s) {
+  const list = duelDecks(s), active = duelActiveIndex(s);
+  const playable = list.map((d, i) => ({ d, i })).filter(x => duelDeckValid(x.d.cards, s));
+  if (playable.length < 2) return '';
+  return '<div class="duel-deckpick">'
+    + playable.map(x => '<button type="button" class="duel-deckpick-b' + (x.i === active ? ' on' : '') + '"'
+        + ' onclick="duelSetActiveDeck(' + x.i + ')" title="' + escapeHtml('Duel with ' + x.d.name) + '">'
+        + escapeHtml(x.d.name) + '</button>').join('')
+    + '</div>';
+}
+// The ACTIVE deck if it is still legal, otherwise one built for them. A student
 // who has never opened the builder still gets a playable duel.
 function duelDeckFor(s) {
-  const saved = (s && s.duel && Array.isArray(s.duel.deck)) ? s.duel.deck : [];
+  const saved = duelActiveDeck(s);
   if (duelDeckValid(saved, s)) return saved.slice();
   return duelBuildDeck(s);
 }
-// What the BUILDER opens on. A saved deck that is no longer legal is usually
-// not rubbish — it is a deck built when DUEL_DECK_SIZE was smaller, or one
-// holding a card since sold. Throwing it away would make a student who had
+// What the BUILDER opens a SLOT on. A saved deck that is no longer legal is
+// usually not rubbish — it is a deck built when DUEL_DECK_SIZE was smaller, or
+// one holding a card since sold. Throwing it away would make a student who had
 // chosen forty cards start again from nothing, so keep every pick that is
 // still legal and let them fill the rest.
-function duelDraftSeed(s) {
-  const saved = (s && s.duel && Array.isArray(s.duel.deck)) ? s.duel.deck : [];
+function duelDraftSeed(s, slot) {
+  const saved = slot == null ? duelActiveDeck(s) : ((duelDecks(s)[slot] || {}).cards || []);
   if (duelDeckValid(saved, s)) return saved.slice();
   const cards = (s && s.cards) || {}, out = [], n = {};
   saved.forEach(id => {
@@ -38904,8 +39001,71 @@ function duelOpenBuilder() {
     host.innerHTML = '<div class="duel-shell" id="duelShell"></div>';
     document.body.appendChild(host);
   }
-  duelDraft = { deck: duelDraftSeed(s), filter: 'all' };
+  const slot = duelActiveIndex(s);
+  duelDraft = { deck: duelDraftSeed(s, slot), filter: 'all', slot, name: (duelDecks(s)[slot] || {}).name || duelDeckDefaultName(slot) };
   tcgLoadArt().catch(() => {}).then(() => duelRenderBuilder());
+}
+// Everything the slot row needs to draw itself, including the empty slots a
+// student has not used yet — five is the promise, so all five are on screen.
+function duelDraftSlots() {
+  const s = tcgState(); if (!s) return [];
+  const list = duelDecks(s), active = duelActiveIndex(s), out = [];
+  for (let i = 0; i < DUEL_DECKS_MAX; i++) {
+    const d = list[i];
+    const cards = duelDraft && duelDraft.slot === i ? duelDraft.deck : ((d && d.cards) || []);
+    out.push({
+      i,
+      name: duelDraft && duelDraft.slot === i ? duelDraft.name : ((d && d.name) || duelDeckDefaultName(i)),
+      n: cards.length,
+      ready: duelDeckValid(cards, s),
+      active: i === active,
+      editing: !!(duelDraft && duelDraft.slot === i)
+    });
+  }
+  return out;
+}
+// Has the slot on screen been changed since it was saved? Compared as a
+// MULTISET, not by order: the deck list is drawn sorted by cost, so a rebuilt
+// deck holding the same forty cards is the same deck.
+function duelDraftDirty() {
+  const s = tcgState(); if (!s || !duelDraft) return false;
+  const saved = ((duelDecks(s)[duelDraft.slot] || {}).cards || []).slice().sort();
+  const now = duelDraft.deck.slice().sort();
+  if (saved.length !== now.length) return true;
+  return saved.some((id, i) => id !== now[i]);
+}
+// Move the builder to another slot. Unsaved work is never dropped silently.
+function duelDraftSlot(i) {
+  const s = tcgState(); if (!s || !duelDraft) return;
+  const n = Math.max(0, Math.min(DUEL_DECKS_MAX - 1, i | 0));
+  if (n === duelDraft.slot) return;
+  if (duelDraftDirty() && !confirm('Leave ' + duelDraft.name + ' without saving?\n\nThe changes you have made to it will be lost.')) return;
+  const d = duelDecks(s)[n];
+  duelDraft = { deck: duelDraftSeed(s, n), filter: duelDraft.filter, slot: n, name: (d && d.name) || duelDeckDefaultName(n) };
+  duelRenderBuilder();
+}
+function duelDraftRename() {
+  if (!duelDraft) return;
+  const v = prompt('Name this deck (up to ' + DUEL_DECK_NAME_MAX + ' characters)', duelDraft.name);
+  if (v == null) return;
+  duelDraft.name = _duelCleanDeckName(v, duelDraft.slot);
+  duelRenderBuilder();
+}
+// Empty a SAVED slot. Clear only empties what is on screen; this forgets the
+// deck, so it asks first.
+function duelDraftDelete() {
+  const s = tcgState(); if (!s || !duelDraft) return;
+  const list = duelDecks(s);
+  const cur = list[duelDraft.slot];
+  if (!cur || !cur.cards.length) { duelDraft.deck = []; duelRenderBuilder(); return; }
+  if (!confirm('Delete ' + cur.name + '?\n\nThe ' + cur.cards.length + ' cards in it go back to your collection — nothing is lost from your account, only this deck list.')) return;
+  while (list.length <= duelDraft.slot) list.push({ name: duelDeckDefaultName(list.length), cards: [] });
+  list[duelDraft.slot] = { name: duelDeckDefaultName(duelDraft.slot), cards: [] };
+  _duelStoreDecks(s, list, null);
+  try { rpgSave(); } catch (_) {}
+  duelDraft.deck = []; duelDraft.name = duelDeckDefaultName(duelDraft.slot);
+  duelRenderBuilder();
+  showToast('Deck deleted', 'info');
 }
 // Editing the deck mid-duel abandons that duel — a deck cannot change under a
 // board that was dealt from it.
@@ -38948,15 +39108,19 @@ function duelDraftAuto() {
   duelRenderBuilder();
   showToast('Filled from your strongest cards — change anything you like', 'info');
 }
-// Save, and only then. An illegal deck is refused with the reason.
+// Save, and only then. An illegal deck is refused with the reason. Saving a
+// slot also makes it the deck you PLAY — a student who has just finished
+// building one expects to duel with it, not with whatever was active before.
 function duelDraftSave(thenPlay) {
   const s = tcgState(), d = duelDraft; if (!s || !d) return;
   const why = duelDeckProblem(d.deck, s);
   if (why) { showToast(why, 'error'); return; }
-  s.duel = s.duel || { wins: 0, losses: 0, runs: 0, best: 0, deck: [] };
-  s.duel.deck = d.deck.slice();
+  const list = duelDecks(s);
+  while (list.length <= d.slot) list.push({ name: duelDeckDefaultName(list.length), cards: [] });
+  list[d.slot] = { name: _duelCleanDeckName(d.name, d.slot), cards: d.deck.slice() };
+  _duelStoreDecks(s, list, d.slot);
   try { rpgSave(); } catch (_) {}
-  showToast('🎴 Deck saved', 'success');
+  showToast('🎴 ' + list[d.slot].name + ' saved — this is the deck you duel with', 'success');
   duelDraft = null;
   if (thenPlay) duelStart();
   else duelCloseBuilder();
@@ -39038,10 +39202,23 @@ function duelRenderBuilder() {
   const why = duelDeckProblem(d.deck, s);
   const chips = [['all', 'All'], ['spells', '✨ Spells']].concat([7, 6, 5, 4, 3, 2, 1]
     .filter(n => col.cards.some(c => c.stars === n)).map(n => [String(n), n + '★']));
+  const slots = duelDraftSlots();
   shell.innerHTML = '<div class="duel-top">'
-    +   '<div class="duel-title">🎴 Build your deck</div>'
+    +   '<div class="duel-title">🎴 ' + escapeHtml(d.name)
+    +     '<button type="button" class="duel-rename" onclick="duelDraftRename()" title="Rename this deck">✎</button></div>'
     +   '<div class="duel-deckcount' + (d.deck.length === DUEL_DECK_SIZE ? ' full' : '') + '">' + d.deck.length + ' / ' + DUEL_DECK_SIZE + '</div>'
     +   '<button type="button" class="duel-x" onclick="duelCloseBuilder()" title="Close">✕</button>'
+    + '</div>'
+    // Five slots, always all five: an empty one is an invitation, not a gap.
+    + '<div class="duel-slots">'
+    +   slots.map(x => '<button type="button" class="duel-slot'
+          + (x.editing ? ' on' : '') + (x.active ? ' playing' : '') + (x.n ? '' : ' empty')
+          + '" onclick="duelDraftSlot(' + x.i + ')"'
+          + ' title="' + escapeHtml(x.name + (x.n ? ' — ' + x.n + '/' + DUEL_DECK_SIZE + ' cards' : ' — empty slot') + (x.active ? '\nThis is the deck you duel with.' : '')) + '">'
+          + '<b>' + escapeHtml(x.name) + (x.active ? ' <em>▶</em>' : '') + '</b>'
+          + '<i>' + (x.n ? (x.ready ? x.n + ' cards' : x.n + ' / ' + DUEL_DECK_SIZE) : 'empty') + '</i>'
+          + '</button>').join('')
+    +   '<span class="duel-slots-note">' + DUEL_DECKS_MAX + ' decks · ▶ is the one you play</span>'
     + '</div>'
     + '<div class="duel-build">'
     +   '<div class="duel-build-col">'
@@ -39061,7 +39238,8 @@ function duelRenderBuilder() {
     + '<div class="duel-bar">'
     +   '<button type="button" class="btn btn-outline" onclick="duelDraftAuto()">✨ Suggest a deck</button>'
     +   '<button type="button" class="btn btn-outline" onclick="duelDraftClear()">Clear</button>'
-    +   '<div class="duel-hint">' + (why ? escapeHtml(why) : 'Ready to play.') + '</div>'
+    +   '<button type="button" class="btn btn-outline" onclick="duelDraftDelete()" title="Forget this deck and empty the slot">🗑 Delete</button>'
+    +   '<div class="duel-hint">' + (why ? escapeHtml(why) : (duelDraftDirty() ? 'Ready — save it to keep it.' : 'Ready to play.')) + '</div>'
     +   '<button type="button" class="btn btn-outline" onclick="duelDraftSave(false)"' + (why ? ' disabled' : '') + '>💾 Save</button>'
     +   '<button type="button" class="btn btn-primary" onclick="duelDraftSave(true)"' + (why ? ' disabled' : '') + '>▶ Save &amp; duel</button>'
     + '</div>';
@@ -43371,6 +43549,10 @@ window.duelDraftSetFilter = duelDraftSetFilter;
 window.duelDraftClear = duelDraftClear;
 window.duelDraftAuto = duelDraftAuto;
 window.duelDraftSave = duelDraftSave;
+window.duelDraftSlot = duelDraftSlot;
+window.duelDraftRename = duelDraftRename;
+window.duelDraftDelete = duelDraftDelete;
+window.duelSetActiveDeck = duelSetActiveDeck;
 window.elgOpen = elgOpen;
 window.elgStart = elgStart;
 window.elgClose = elgClose;
