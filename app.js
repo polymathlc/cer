@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.273.0';
+const APP_VERSION = 'v1.274.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -10825,7 +10825,7 @@ function renderQuestionBank() {
               ${qSecondaryTagsHtml(q)}
               <span class="qb-tag">${escapeHtml(qLevel)}</span>
               ${usageBadgeHtml(q)}
-              ${q.notInSyllabus ? `<span class="qb-tag" style="background:#fdf4e3;color:#7a5410;border:1px solid #e0b768;" title="Hidden from practice; still shown in PSLE Papers">🚫 Not in syllabus</span>` : ''}
+              ${!qInSyllabus(q) ? `<span class="qb-tag" style="background:#fdf4e3;color:#7a5410;border:1px solid #e0b768;" title="${q.notInSyllabus ? 'Hidden everywhere except the PSLE Papers page' : 'Retired topic — hidden everywhere except the PSLE Papers page'}">🚫 ${q.notInSyllabus ? 'Not in syllabus' : 'Retired topic'}</span>` : ''}
               ${qSource ? `<span class="qb-tag source" title="${escapeHtml(qSource)}">${escapeHtml(qSource)}</span>` : ''}
               ${qTagChipsHtml(q)}
             </div>
@@ -11767,6 +11767,7 @@ function _getFilteredPrintQuestions() {
   const catFilter = document.getElementById('printFilterCategory')?.value || '';
   const topFilter = document.getElementById('printFilterTopic')?.value || '';
   return questionBank.filter(q => {
+    if (!qInSyllabus(q)) return false;             // retired topics: PSLE papers only
     if (catFilter && q.category !== catFilter) return false;
     if (topFilter && q.topic !== topFilter) return false;
     return true;
@@ -17722,15 +17723,30 @@ function renderPracticeReady() {
     </div>`;
 }
 
-// Out-of-syllabus questions are kept in the bank and shown on the Past Papers
-// page, but never served in any general practice mode.
+// ---- Retired topics --------------------------------------------------------
+// A topic that has left the syllabus (Cell Systems) belongs in exactly ONE
+// place: the 📄 PSLE / past papers segment, where a paper is reproduced whole
+// and a missing question would just confuse the student reading it. Everywhere
+// else — every practice mode, every game, every worksheet, every quiz builder —
+// it must not appear at all.
+//
+// The rule is a TOPIC rule, not a per-question flag, so it cannot be defeated
+// by an admin forgetting to tick a box on one question out of forty. It reads
+// BOTH topic fields: a question filed under Cell Systems as its secondary topic
+// is still a Cell Systems question.
+const QRETIRED_TOPIC_RE = /cell\s*systems?/i;
+function qRetiredTopic(q) {
+  if (!q) return false;
+  return QRETIRED_TOPIC_RE.test(q.topic || '') || QRETIRED_TOPIC_RE.test(qSecondaryTopic(q) || '');
+}
+// Out-of-syllabus questions are kept in the bank and shown on the PSLE / past
+// papers page, but are never SERVED anywhere else. The Question Bank page
+// itself still lists them (marked 🚫) — it is the admin's management surface,
+// and a question nobody can find is a question nobody can fix or delete.
 function qInSyllabus(q) {
   if (!q) return true;
-  if (q.notInSyllabus) return false;
-  // Retired topics (Cell Systems) are past-paper-completion ONLY — never
-  // served in any practice or game mode, even if the admin missed ticking
-  // the "Not in syllabus" flag on an individual question.
-  if (/cell\s*system/i.test(q.topic || '')) return false;
+  if (q.notInSyllabus) return false;      // the per-question flag, ticked by hand
+  if (qRetiredTopic(q)) return false;     // …and the topic rule, which needs no ticking
   return true;
 }
 
@@ -19880,7 +19896,9 @@ function snapShowSuggestions(questionText, photoIdx) {
   if (_snapPhotos.length <= 1) setSnapStatus('', false);
   const label = _snapPhotos.length > 1 ? `<p style="margin:0 0 6px;font-weight:700;">📷 Photo ${i + 1}${_snapPhotos[i] && _snapPhotos[i].name ? ' — ' + escapeHtml(_snapPhotos[i].name) : ''}</p>` : '';
   const aSet = _snapTokens(questionText);
-  const ranked = questionBank.map(q => ({ q, s: _snapSim(aSet, q) }))
+  // Retired topics are PSLE-papers-only, so Snap & Mark must not match one
+  // either — it is a student surface, and matching would serve the question.
+  const ranked = questionBank.filter(qInSyllabus).map(q => ({ q, s: _snapSim(aSet, q) }))
     .sort((a, b) => b.s - a.s).filter(x => x.s > 0.12).slice(0, 3);
   if (!ranked.length) {
     host.innerHTML = `<div class="practice-card"><div class="practice-card-body">${label}
@@ -20043,6 +20061,7 @@ function renderWsQuestions() {
   const searchRaw = (document.getElementById('wsSearch')?.value || '').trim().toLowerCase();
 
   let filtered = questionBank.filter(q => {
+    if (!qInSyllabus(q)) return false;             // retired topics: PSLE papers only
     if (topicFilter && !qMatchesTopic(q, topicFilter)) return false;
     if (catFilter && !qMatchesCategory(q, catFilter)) return false;
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
@@ -20444,9 +20463,12 @@ function _wsPersistWorksheet(ws) {
   });
 }
 
-// The questions this user may put ON a sheet.
+// The questions this user may put ON a sheet. Retired topics are excluded for
+// everybody, author or student — a worksheet is a teaching surface, not the
+// past-papers archive.
 function _wseBank() {
-  return _canAuthor() ? questionBank : questionBank.filter(qWithinStudentLevel);
+  const live = questionBank.filter(qInSyllabus);
+  return _canAuthor() ? live : live.filter(qWithinStudentLevel);
 }
 
 // Everything that shows this worksheet, brought back into step after a change:
@@ -25599,6 +25621,7 @@ function renderScheduleQuestionList() {
   const searchTerm = (document.getElementById('scheduleSearchInput')?.value || '').toLowerCase().trim();
 
   let filtered = questionBank.filter(q => {
+    if (!qInSyllabus(q)) return false;             // retired topics are never released to students
     if (searchTerm) {
       const haystack = (q.title + ' ' + q.topic + ' ' + qSecondaryTopic(q) + ' ' + q.category + ' ' + qSecondaryCategory(q)).toLowerCase();
       return haystack.includes(searchTerm);
@@ -30274,6 +30297,7 @@ function commRenderQuestPicker() {
 
   const filtered = (questionBank || []).filter(q => {
     if (!q || q.id == null) return false;
+    if (!qInSyllabus(q)) return false;             // retired topics: PSLE papers only
     if (topicFilter && !qMatchesTopic(q, topicFilter)) return false;
     if (catFilter && !qMatchesCategory(q, catFilter)) return false;
     if (sourceFilter && questionSource(q) !== sourceFilter) return false;
@@ -47481,7 +47505,10 @@ function ppHoverEl(){
 // "Not in syllabus" ribbon for the past-paper previews — explains why an
 // attached question shows here but never appears in practice.
 function _ppNisBadge(bq){
-  if (!bq || !bq.notInSyllabus) return '';
+  // Same predicate the serving code uses, so a question hidden by the TOPIC
+  // rule wears the ribbon too — it used to read the hand-ticked flag only, and
+  // a Cell Systems question showed here with nothing explaining why.
+  if (!bq || qInSyllabus(bq)) return '';
   return `<div style="margin:6px 0;padding:5px 9px;border-radius:8px;background:#fdf4e3;border:1px solid #e0b768;color:#7a5410;font-size:0.74rem;font-weight:600;">🚫 Not in syllabus — kept here for reference; it is not served in any practice mode.</div>`;
 }
 function ppHoverHtml(id){
