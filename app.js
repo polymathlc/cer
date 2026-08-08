@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.256.0';
+const APP_VERSION = 'v1.257.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -35557,7 +35557,173 @@ const TCG_LORE_SAGAS = [
           "The Legion keeps a fire in its hall, and it has never been allowed to go out.",
           "It is not a monument. Valdren was very clear about that, and it is written on the stone above it in the plainest words he could find: the sparks fell into everybody. Not into the strong ones. Not into the chosen ones. Everybody.",
           "So the Legion keeps the fire lit, and keeps the books open, and keeps the gate mended, and waits — because the coal under the roots of the world has begun to stir again, and Aeonyx has begun to uncoil, and something is coming that will need meeting.",
-          "The next book has not been written yet. That is not the same as saying nothing is happening."
+          "What came was not what anybody at that hearth expected. It came from above, it was the size of a mountain range, and it had been alive for nine thousand years before the first human ever picked up a hammer."
+        ]
+      }
+    ]
+  },
+  {
+    // Book Three is the first CROSSOVER book: it belongs to no single card set,
+    // because its whole subject is the two sets meeting. `set: null` is what
+    // says so — tcgLoreSagaFor() only matches a saga to a set that has one, so
+    // an expansion book and a crossover book can sit side by side without
+    // either claiming the other's cards.
+    key: 'dragonaccord', set: null, em: '🐲',
+    book: 'Book Three', title: 'The Dragon Accord',
+    sub: 'The war between the elder gods and the Legion, and the treaty that ended it',
+    chapters: [
+      {
+        id: 'everflame', title: 'The Theft of the Everflame',
+        cards: ['Magus Cyrene, the Everflame', 'Ignarok, the Extinction Flame', 'Pyrelia, the Undying Flame'],
+        scene: 'A young human fire-mage in scarlet robes standing waist-deep in a river of lava inside a vast volcanic cavern, reaching out with cupped hands and lifting a single burning coal from the sleeping form of an enormous ancient fire-tyrant; a radiant phoenix of white-gold flame watching from a ledge above. Awe and enormous danger, no gore.',
+        text: [
+          "The war did not begin with an army. It began with a girl and a bucket.",
+          "Cyrene was nineteen, and the village below her had run out of winter. She had read everything the Legion's library held on where fire comes from, and all of it said the same unhelpful thing: down. So she went down — past the last ladder, past the last map, past the last place anybody had ever come back from — and she found Ignarok asleep in his own furnace with the world's oldest fire banked at his side.",
+          "She took a coal the size of a plum. She left a written note, signed, explaining exactly what she had taken and why, because she had been raised properly.",
+          "The note is the part the elders could never forgive. A thief they understood. A thief who thought the fire was hers to borrow, who put it in writing, who expected to be reasoned with — that was something new in the world, and Ignarok woke up eleven days later to find the smell of a human on his coal and a piece of paper he could not read."
+        ]
+      },
+      {
+        id: 'ashfall', title: 'The Council at Ashfall',
+        cards: ['Ignarok, the Extinction Flame', 'Volkarrion, the Flame Tyrant', 'Nyxthara, the Endless Night', 'Chromagog, the Iron Colossus', 'Sera, the Archangel'],
+        scene: 'A council of colossal elder gods gathered in a ring on a black volcanic plain under a red sky — an enormous fire-tyrant lizard, a great burning dragon, a vast coiling serpent of night, a titanic iron colossus and a radiant six-winged archangel — each the size of a hill, arguing. Ash falling like snow. Vast in scale, majestic rather than frightening.',
+        text: [
+          "The elders had not all stood in one place since the Long Night. They stood in one place at Ashfall, and the ground remembers it.",
+          "Ignarok wanted an ending. Not a punishment — an ending: the valleys glassed, the libraries burned, the whole experiment closed before the small clever things worked out how to take anything else. Volkarrion agreed loudly, because Volkarrion agrees loudly. Nyxthara said only that she had watched them for a thousand years and they were the first creatures who had ever been afraid of the dark and gone into it anyway, and she was not certain that deserved glassing.",
+          "Chromagog, who had watched them build a bridge over a gorge he had personally made impassable, said one word: \"interesting.\"",
+          "Sera the Archangel called for the vote. Four for the ending. Three against. One — Aeonyx — did not come, and did not send word, and the empty place in the ring is still there.",
+          "The vote passed. That is how the War of the Ember started: not with hatred, but with a committee."
+        ]
+      },
+      {
+        id: 'redbanner', title: 'The Burning of the Redbanner Fields',
+        cards: ['Warmaster Thorne, the Bloodbanner', 'Warlord Kestrel, the Redmane', 'Volkarrion, the Flame Tyrant', 'Gaiagor, the Earthshaker'],
+        scene: 'A vast wheat plain at dusk with an enormous burning dragon sweeping low over it, fire rolling across the crops in a wall; far below, a human warmaster with a crimson banner and a lion-maned warlord wheeling a thin line of cavalry to face it head on. Enormous scale difference. Heroic, stirring, no gore.',
+        text: [
+          "Volkarrion came first, because Volkarrion always goes first.",
+          "The Redbanner Fields fed four cities. They burned in a single evening, and there was nothing anybody could have done about it — a dragon at altitude is not a battle, it is weather. What Thorne could do, and did, was get eleven thousand farmers over the eastern bridge before the fire reached it, by putting the entire Legion cavalry between the fire and the road and holding there for six hours.",
+          "Kestrel lost his warhorse and most of his company on that road, and never once let the line bend past the milestone he had picked at noon.",
+          "By morning the fields were black from horizon to horizon and Gaiagor was walking the ash flat, and the Legion had lost its harvest, its border and every illusion it still had. It had not lost eleven thousand people.",
+          "Thorne wrote four words in the campaign book that night, and the Legion has never taken them out: \"Ground is not the point.\""
+        ]
+      },
+      {
+        id: 'irongate', title: 'The Siege of the Iron Gate',
+        cards: ['Grandmaster Valdren, the Unbroken', 'High Templar Roland', 'Sable, the Ironvow', 'Chromagog, the Iron Colossus', 'Mammorak, the Walking Mountain'],
+        scene: 'A colossal iron colossus and a mountain-sized shaggy mammoth titan striding towards a great fortress gate at dawn, dwarfing it entirely; on the wall, a grandmaster in silver plate, a golden templar and a woman warrior in dark iron standing shoulder to shoulder beneath a red-and-white lion banner, refusing to move. Epic scale, awe rather than horror.',
+        text: [
+          "Two elders walked to the Iron Gate. It took them nine days, because neither of them hurries, and the Legion spent all nine of them building.",
+          "Not walls — Valdren had already worked out that walls were pointless. They built slopes: nine days of earth heaped against the curtain wall at exactly the angle a falling colossus would slide down instead of landing on. Roland lit the whole gate with templar light so bright that Chromagog, whose eyes are furnace-slits, had to fight looking slightly away. Sable put every spear in the fortress into one hedge and told the Ironvow that they were not going to kill anything today, they were going to make it inconvenient.",
+          "Mammorak leaned on the north wall and the north wall stopped existing. Chromagog put a fist through the gatehouse and did not get it back for two hours.",
+          "The Iron Gate held for eleven days against two beings who had shaped continents, and when it finally fell the fortress was empty, because the entire garrison had left through a tunnel Valdren had ordered dug on the first morning, before a single stone was laid.",
+          "Chromagog stood in the ruins of an empty fortress for a long time. Then he said the second word anybody ever recorded him saying. It was: \"clever.\""
+        ]
+      },
+      {
+        id: 'straits', title: 'The Storm Over the Straits',
+        cards: ['Voltrannus, the Storm Eternal', 'Dagrath, the Abyssal King', 'Thalassor, the Tidal Colossus', 'Raivo, the Tempest Incarnate', 'Evanthe, the Stormsinger', 'Archmage Ysera, the Starloom'],
+        scene: 'A titanic lightning dragon in a black thunderhead above a raging sea, an enormous kraken king rising from beneath, and a wave the size of a cliff shaped like a whale bearing down on a scattered human fleet; on the lead ship, a young storm-singer with lightning braided through her hair standing at the mast with both arms raised, and an older archmage weaving a lattice of constellations over the fleet. Dramatic, thrilling, no gore.',
+        text: [
+          "The sea was the Legion's last road, so the sea was where the elders went next.",
+          "Voltrannus above and Dagrath below, and Thalassor standing up between them: the Straits campaign should have lasted an afternoon. It lasted a month, because of two women on the deck of a merchant hull neither of them owned.",
+          "Ysera flew the Starloom over the fleet — a lattice of borrowed constellations that turned every lightning strike into light and left a stripe of pale dawn across the black water. It held for exactly as long as she could stay awake, which was four days and then eleven days and then, at the end, twenty-six hours in one sitting.",
+          "And Evanthe sang. She had learned the storm by singing at it until it sang along, and out there in the middle of a thunderhead that was also a god she simply kept doing it — not fighting Voltrannus, harmonising with him, until the Storm Eternal found that he was, embarrassingly, keeping time with a nineteen-year-old.",
+          "He broke off at dawn on the twenty-seventh day and went back up into the cloud without a word. The Legion has always insisted that this was tactical. Evanthe has always insisted, quietly, that it was not."
+        ]
+      },
+      {
+        id: 'deepbargain', title: 'The Pactmaker Goes Down to the Deep',
+        cards: ['Archwarlock Belial, the Pactmaker', 'Malachar, the Doomspeaker', 'Nereth, the Deep Sovereign', 'Illithar, the Thoughtdrinker'],
+        scene: 'A hooded human warlock and an older robed scholar standing on a lantern-lit stone jetty at the very bottom of the ocean, facing an enormous glowing whale-sovereign whose eye alone is larger than they are; a strange many-eyed deep-thinking squid creature coiled in the dark behind her, listening. Green candlelight, blue depth, solemn and mysterious.',
+        text: [
+          "Everybody else was fighting the elders. Belial went to ask one.",
+          "He picked Nereth because she was the only one who had abstained twice — at the Long Night and at Ashfall — and because a Sovereign who sings the tides where they ought to go is, in his professional assessment, somebody who negotiates. He went down in a diving bell of his own design with Malachar beside him and one page of terms, and he opened by conceding the theft.",
+          "That is the detail the Chronicle keeps. He did not argue that Cyrene was right. He said the fire was taken, that taking it was wrong, that a war for one coal was a disproportionate wrong, and that he had come to discuss which of the two was going to be settled first.",
+          "Nereth listened for six hours. Then she asked one question, which Illithar remembers exactly and will recite to anyone who stands too close: \"If we give you the fire, what do you become?\"",
+          "Belial said he did not know. He said nobody in the whole history of the world had ever known that, elders included, and that this was the entire reason it was worth finding out.",
+          "She signed. It is the first name on the Accord, and it was written eight months before there was an Accord to sign."
+        ]
+      },
+      {
+        id: 'wintertruce', title: 'The Winter Truce',
+        cards: ['Ariselle, the Snow Queen', 'Cryvexa, the Frozen Warden', 'Seraphine, the Wintersong'],
+        scene: 'A silver-haired queen in a frost-white gown and a crown of ice walking alone across a frozen sea towards a colossal armoured ice warden seated like a mountain at the horizon, with a frost-robed sorceress singing behind her; the aurora enormous overhead and a war burning red far away on the southern skyline. Beautiful, still and vast.',
+        text: [
+          "Ariselle did not go north to ask for an army. She went to ask for time.",
+          "Cryvexa, the Frozen Warden, keeps whatever must not be allowed to move again, and keeps it perfectly, and forever. Ariselle put the proposal in one sentence, standing on the ice with no escort: seal the northern front. Not the humans, not the elders — the front. Freeze the ground the war was walking on, so that neither side could take another step across it, and make both of them go the long way round while somebody worked out how to stop.",
+          "It was a terrible idea. It ceded four provinces and it froze eleven Legion companies in place along with everything else. Seraphine, who had walked north with her, said so out loud, twice, in front of a god.",
+          "Cryvexa did it anyway. The Warden had been sealing things for nine thousand years and had never once been asked to seal a situation, and the novelty of it, apparently, was worth four provinces.",
+          "The Winter Truce bought the world eleven weeks. Every alliance in this book was made inside them."
+        ]
+      },
+      {
+        id: 'cinderthrone', title: 'The Duel at the Cinder Throne',
+        cards: ['Kaelen Draxmoor, the Dragon Slayer', 'Volkarrion, the Flame Tyrant', 'Ignarok, the Extinction Flame'],
+        scene: 'A lone human warrior in scarred steel plate standing at the top of a mountain of black cinders, greatsword lowered and point-down in the ash, facing an enormous burning dragon crouched on a throne of volcanic rock; a far larger fire-tyrant watching from the smoke behind them both. The moment after a fight, not during it. Legendary, awe-struck, no blood.',
+        text: [
+          "Kaelen Draxmoor walked up to the Cinder Throne alone and challenged the Flame Tyrant in the old form, which nobody had used in six thousand years and which Volkarrion, to his credit, honoured.",
+          "The Chronicle does not describe the fight. Four eyewitness accounts survive and no two of them agree on anything except the ending, so the scribes wrote down the ending and left the rest alone.",
+          "The ending is this: it took most of a day, and at the close of it the Flame Tyrant was down in the ash and the Dragon Slayer had the point of his greatsword resting on the seam behind Volkarrion's jaw, and he stood there, and he did not push.",
+          "\"You came here to kill me,\" said Volkarrion.",
+          "\"I came here to be listened to,\" said Kaelen, \"and you were extremely difficult to get an appointment with.\"",
+          "Ignarok, who had come to watch a human die, watched instead as the man who had every right to a legend walked back down the mountain without it. He has said since that this was the moment the ending stopped being obvious to him — that he could kill them all, certainly, but that he had just seen one of them decline to do the same thing on much better grounds."
+        ]
+      },
+      {
+        id: 'skywentout', title: 'The Night the Sky Went Out',
+        cards: ['Draxx, the End Bringer', 'Nyxthara, the Endless Night', 'Erevos, the Voidprowler', 'Auros, the Dawnfather', 'Celestine, the First Light'],
+        scene: 'A vast shadow-wreathed titan with a ring of cold black light behind him rising over a darkened world as every star and the sun itself go out one by one; far below, a radiant golden guardian of dawn and a luminous white stag standing alone on a hilltop, holding up the only light left. Enormous, awe-inspiring, dark but not frightening.',
+        text: [
+          "Draxx had been waiting at the edge of everything since the first morning, and he was very patient, and he was never in a hurry. He had also been counting.",
+          "A world at war spends its sparks. Every field burned, every fleet sunk, every elder and every soldier pouring themselves into hurting the other — the End Bringer had not needed to lift a hand, and by the eleventh week of the Winter Truce the accounts had finally come round to a number he liked.",
+          "He put the sky out on a Tuesday.",
+          "Not the sun only. The stars, the aurora, the phosphorescence in the sea, the light in a lamp, the light behind a closed eye. Nyxthara went to him and stood at his shoulder, because the dark is hers and she had thought he was on her side, and she discovered in about four seconds that the End Bringer has no side. Erevos ran the whole border in one night and came back with the same news from every direction: it is going out everywhere.",
+          "Auros went up alone and could not relight it. The Dawnfather, who made the sun out of a splinter and a good throw, stood on his mountain and threw and threw and nothing caught.",
+          "And Celestine, the First Light — the small warm kind, the sort you can carry — walked down off her hill into a valley of terrified farmers and simply stayed lit. One stag. One hillside. All night.",
+          "It was not enough to save anything. It was enough to be seen from the Legion's walls, and from Ashfall, and that turned out to be the whole point."
+        ]
+      },
+      {
+        id: 'twoarmies', title: 'Two Armies, One Enemy',
+        cards: ['Grandmaster Valdren, the Unbroken', 'Ignarok, the Extinction Flame', 'Vulcanor, the Worldforge', 'Lich-Queen Morrigane', 'Necrarch Vayne, the Gravecrown'],
+        scene: 'A human grandmaster in silver plate standing on a wall at night with one hand raised, facing an enormous fire-tyrant elder who has lowered his head to the same height to listen; behind the wall a colossal machine-forge god hammering weapons in a river of molten metal, and a pale crowned lich-queen leading a silent column of ghostly blue figures up the road to join them. Alliance, not battle. Solemn and stirring.',
+        text: [
+          "Ignarok came to the Iron Gate in the dark, and Valdren went out to meet him with no guard and no weapon, which his officers described in writing as \"inadvisable\".",
+          "The conversation is recorded in full, because Malachar was standing behind a rock with a lamp and no shame. It is four lines long.",
+          "\"You cannot fight him,\" said Ignarok.",
+          "\"No,\" said Valdren.",
+          "\"Neither can I,\" said Ignarok.",
+          "\"I know,\" said Valdren. \"That is why I have been waiting out here since sundown.\"",
+          "What followed was the strangest eleven days in the history of the world. Vulcanor the Worldforge lit every furnace he owned and made human weapons — actual human-sized weapons, for hands, at scale, the Worldforge who had never made anything smaller than a mountain range squinting over a spear haft. Amara sang the burned fields back to green so the alliance could eat. And Morrigane opened her gate and came south with her whole silent city, on one condition, which Vayne read aloud at every crossroads so that no one could pretend not to have heard it — \"they may keep them, but they may never make them serve.\"",
+          "Two armies. Neither of which had ever imagined the other as anything but a problem. One enemy who had been counting on exactly that."
+        ]
+      },
+      {
+        id: 'brokensky', title: 'The Battle of the Broken Sky',
+        cards: ['Sera, the Archangel', 'Archsorceress Nyx, the Starfall', 'Andrella, the Startide', 'Kaelen Draxmoor, the Dragon Slayer', 'Ariselle, the Snow Queen', 'Draxx, the End Bringer'],
+        scene: 'An enormous battle in a black sky: a radiant six-winged archangel with a sword of white starlight and a dark-robed human archsorceress pulling a burning star down on a thread of light, side by side; a shimmering cosmic tide-spirit carrying a warrior in steel plate upward through the dark; a silver-haired snow queen below raising a cathedral of ice; and above them all a vast shadow titan with a ring of cold black light. Epic, cinematic, awe-inspiring, no gore.',
+        text: [
+          "There was no ground to fight on, because he had taken the sky, so they fought in it.",
+          "Sera the Archangel went up first and drew the only light anybody had left. Archsorceress Nyx — a human who had learned, illegally, from watching an elder — went up beside her and did the thing she is named for: she reached into the dark where the stars used to be, found one, and pulled it down anyway. Andrella carried the rest of them up on the startide, one at a time, at a speed that broke eleven of her own rules.",
+          "Ariselle stayed on the ground. Everybody wanted her in the sky and she refused, and she was right: the Snow Queen built a cathedral of ice a mile across over the valley below, and every scrap of light the fight threw off came down, hit that ice, and went back up doubled. The whole army was a mirror.",
+          "And Kaelen Draxmoor, who cannot fly, who has no magic, who had been carried up there by a tide-spirit and dropped, got close enough to the End Bringer to be heard.",
+          "What he said is not recorded. Draxx has never repeated it. But the End Bringer stopped — for one second, in the middle of finishing the world, he stopped — and a second was all Sera needed.",
+          "The sky came back at dawn, one star at a time, then all at once, and forty thousand soldiers and eight elder gods stood in the light looking at each other and realising, more or less simultaneously, that they had just won something together."
+        ]
+      },
+      {
+        id: 'accord', title: 'The Dragon Accord',
+        cards: ['Grandmaster Valdren, the Unbroken', 'Ignarok, the Extinction Flame', 'Aeonyx, the Timeless One', 'Malachar, the Doomspeaker', 'Amara, the Everbloom', 'Yggdris, the Elder Oak'],
+        scene: 'A great treaty stone standing in a green field at sunrise with an enormous fire-tyrant elder and a vast star-scaled cosmic dragon on one side, a human grandmaster and a robed scholar with an open book on the other, and a blossom-crowned guardian spirit growing flowers up over the stone as it is signed. Behind them, an ancient oak-titan. Peaceful, warm, monumental.',
+        text: [
+          "The Accord was written by Malachar, because somebody had to read the price out loud, slowly, twice, in a very flat voice.",
+          "It is shorter than anybody expected. The elders keep the deep places, the high places and the old fire. The Legion keeps the valleys, the roads and the books. Neither may take from the other without asking. Either may ask.",
+          "That last line is four words long and it is the entire treaty. Everything before it is furniture.",
+          "Cyrene's coal was not returned. The Accord's first schedule grants it to her, in writing, in perpetuity, in exchange for one honest answer a year to any question Ignarok cares to put to the Legion's library — which is how the Extinction Flame, who wanted the valleys glassed, ended up with a standing appointment in a reading room.",
+          "Aeonyx came, at last, and signed nothing. The Timeless One read the whole document twice, coiled up beside the stone, and said only that it would hold for a long time and not forever, and that this was the best thing anybody had ever built.",
+          "Amara sang, and the treaty stone went green, and Yggdris put one root under it so that nobody could move it later and pretend it had always been somewhere else.",
+          "Draxx was not at the signing. He went back to the edge of everything and sat down. He is very patient. He is still counting.",
+          "And under the roots of the world, in a cavern nobody has walked into since the first morning, the coal that dreamed all of this turned over in its sleep — and dreamed something new."
         ]
       }
     ]
@@ -35568,8 +35734,8 @@ const TCG_LORE_SAGAS = [
 // about a card set that has no book yet. Shipping an expansion means adding its
 // saga above; until then its cards are billed here rather than going unmentioned.
 const TCG_LORE_NEXT = {
-  title: 'Book Three is being written',
-  text: "The coal under the roots of the world has started to dream again, and the Chronicle has left the last page of Book Two deliberately blank. Every new set of cards brings the next chapter of it — new heroes, new elders, and whatever it is that woke the Ember."
+  title: 'Book Four is being written',
+  text: "The Accord holds. It will not hold forever — the Timeless One said so at the signing, and the Timeless One has never once been wrong about time. The End Bringer is back at the edge of everything, still counting, and under the roots of the world the coal that dreamed all of this has turned over and dreamed something new. Every set of cards brings the next chapter of the Chronicle: new heroes, new elders, and whatever it is that has begun to wake."
 };
 
 // ---- Who built the realm ---------------------------------------------------
