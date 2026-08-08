@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.260.0';
+const APP_VERSION = 'v1.261.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -28392,35 +28392,39 @@ function rpgNotePace(ms, minMs) {
 }
 
 // ---- The Science Score: what the All-Time board ranks on -----------------
-// XP used to rank it, and XP came from dungeon runs and (until v1.229.0) free
-// arena duels — so it measured hours in the game, not science learned.
+// QUESTIONS DONE × ACCURACY, and accuracy carries DOUBLE weight — so it is
+// squared. That is the whole formula, and the fact that it fits in one line is
+// most of the point: a leaderboard nobody can explain is a leaderboard nobody
+// trusts, and this board has already been re-based under students once.
 //
-// The base is MARKS EARNED, not questions attempted. That single choice is
-// what stops the board being won on volume: an early draft used attempts as
-// the base with quality as a multiplier, and 900 questions at 35% still beat
-// 400 at 88%. Marks earned is also the honest thing to rank on — a wrong
-// answer is practice, but it is not a result.
+//   q     = every question this student has ever done — marked practice
+//           questions AND questions answered inside the games, each counting
+//           ONCE. No hidden weighting: "all questions done" means all of them.
+//   acc   = how many of them were right ÷ q  (0…1). Practice questions use
+//           their fractional credit where we have it, so partial marks on a
+//           hard CER answer count for what they were worth.
 //
-//   base = marks earned    (a marked question contributes its CREDIT, 0…1, so
-//          partial credit on a hard CER answer counts; a one-click game MCQ
-//          contributes SCORE_GAME_Q, being a smaller piece of work)
-//   A    = accuracy, marks earned ÷ work attempted  → ×0.55 (guessing) … ×1.30
-//   P    = share answered at a considered pace      → ×0.70 (all rushed) … ×1.00
+//   SCORE = q × acc²
 //
-// SCORE = base × (0.55 + 0.75·A) × (0.70 + 0.30·P)
+// Squaring accuracy is what stops the board being won on volume alone, which
+// is the failure an earlier draft actually shipped: with accuracy applied only
+// once, 900 questions at 35% still beat 400 at 88%. Under this formula that
+// case comes out 110 against 310, the right way round. Re-check exactly that
+// pair if you ever retune the weight.
 //
-// In one line for students: every question you get right is a point, worth
-// more when your accuracy is high and less when you rush it.
-const SCORE_GAME_Q = 0.5;
-const SCORE_ACC_BASE = 0.55, SCORE_ACC_SPAN = 0.75;
-const SCORE_PACE_BASE = 0.70, SCORE_PACE_SPAN = 0.30;
+// In one line for students: every question you do counts, and how many you get
+// right counts twice over.
+const SCORE_ACC_WEIGHT = 2;    // accuracy's weighting — 2 = double, i.e. acc²
 const SCORE_PACE_MIN_N = 10;   // fewer clocked answers than this is not enough to judge
+// Pace is still measured and still published (rpgState.pace) — it is shown in
+// the admin's audit view — but it does NOT move the ranking. The teacher asked
+// for questions and accuracy, and nothing else belongs in a formula students
+// are meant to be able to check for themselves.
 function rpgScienceScore(p) {
-  const base = Math.max(0, Number(p && p.base) || 0);
-  if (base <= 0) return 0;
+  const q = Math.max(0, Number(p && p.q) || 0);
+  if (q <= 0) return 0;
   const acc = Math.max(0, Math.min(1, Number(p.acc) || 0));
-  const pace = p.pace == null ? 1 : Math.max(0, Math.min(1, Number(p.pace) || 0));
-  return Math.round(base * (SCORE_ACC_BASE + SCORE_ACC_SPAN * acc) * (SCORE_PACE_BASE + SCORE_PACE_SPAN * pace));
+  return Math.round(q * Math.pow(acc, SCORE_ACC_WEIGHT));
 }
 // This student's score parts, straight off their own hero state.
 function rpgMyScoreParts() {
@@ -28428,26 +28432,30 @@ function rpgMyScoreParts() {
   const marked = st.marked | 0;
   // creditSum is the fractional total; heroes from before it existed fall back
   // to the binary correct count, which is the same number for MCQ work.
-  const marks = Math.min(marked, Math.max(0, st.creditSum != null ? Number(st.creditSum) || 0 : (st.correct | 0)));
-  const gq = st.gameQ | 0, gc = st.gameCorrect | 0;
-  const work = marked + SCORE_GAME_Q * gq;
-  const base = marks + SCORE_GAME_Q * gc;
+  const credit = Math.min(marked, Math.max(0, st.creditSum != null ? Number(st.creditSum) || 0 : (st.correct | 0)));
+  const gq = st.gameQ | 0, gc = Math.min(gq, st.gameCorrect | 0);
+  const q = marked + gq;              // every question done, each counting once
+  const correct = credit + gc;
   const pc = (rpgState && rpgState.pace) || null;
   const pn = (pc && pc.n) | 0;
   return {
-    base: Math.round(base * 10) / 10,
-    q: Math.round(work * 10) / 10,
-    acc: work > 0 ? Math.min(1, base / work) : 0,
-    // Too few clocked answers to judge → treated as unrushed, so a new student
-    // is never punished for data nobody has collected yet.
+    q,
+    correct: Math.round(correct * 10) / 10,
+    acc: q > 0 ? Math.min(1, correct / q) : 0,
+    // Recorded for the admin's audit view only — it does not rank anything.
     pace: pn >= SCORE_PACE_MIN_N ? Math.min(1, ((pc.ok | 0) / pn)) : null,
     paceN: pn,
     marked, gameQ: gq
   };
 }
+// `f` is the payload FORMAT. Bump it whenever the parts change meaning, so a
+// row published by an older build is recognised as old rather than being read
+// with the wrong units — v1.231.0's `q` was work-weighted (a game MCQ counted
+// half), and reading it as a plain question count would flatter nobody evenly.
+const SCORE_PAYLOAD_FORMAT = 2;
 function rpgScorePayload() {
   const p = rpgMyScoreParts();
-  return { v: rpgScienceScore(p), base: p.base, q: p.q, acc: Math.round(p.acc * 1000) / 1000, pace: p.pace, paceN: p.paceN, marked: p.marked, gameQ: p.gameQ };
+  return { f: SCORE_PAYLOAD_FORMAT, v: rpgScienceScore(p), q: p.q, correct: p.correct, acc: Math.round(p.acc * 1000) / 1000, pace: p.pace, paceN: p.paceN, marked: p.marked, gameQ: p.gameQ };
 }
 // A published row's score. Rows published by a build older than v1.231.0 have
 // no `score` block; their audit counters still give marks and accuracy, and
@@ -28469,13 +28477,39 @@ function rpgRowGameQ(r) {
   // count — they rank 0 until the student next opens the app.
   return { q: ((r && r.score && r.score.gameQ) | 0), correct: 0 };
 }
-function rpgRowScore(r) {
-  if (r && r.score && r.score.v != null) return r.score.v | 0;
+// A published row's score. Deliberately RECOMPUTED from the row's parts rather
+// than trusting the `v` the publisher wrote: retuning the formula then re-ranks
+// the whole board on the next render, instead of leaving students who have not
+// opened the app since ranked under the old rule.
+//   1. A current payload (f >= 2) carries the question count and the correct
+//      count in the units this formula wants.
+//   2. Otherwise the `audit` block has the raw counters every build publishes —
+//      binary rather than fractional credit, so a hair off for part-marked CER
+//      work, and exact again the next time that student opens the app.
+//   3. Last resort, a v1.231.0 payload: `marked` + `gameQ` still give the true
+//      question count, and its `acc` is close enough to rank on until then.
+function rpgRowScoreParts(r) {
+  const s = (r && r.score) || null;
+  if (s && (s.f | 0) >= 2 && s.q != null) {
+    const q = Math.max(0, Number(s.q) || 0);
+    const correct = s.correct != null ? Math.max(0, Number(s.correct) || 0)
+      : q * Math.max(0, Math.min(1, Number(s.acc) || 0));
+    return { q, correct: Math.min(q, correct) };
+  }
   const a = (r && r.audit) || {};
-  const marked = a.marked | 0;
-  if (!marked) return 0;
-  const correct = Math.min(marked, a.correct | 0);
-  return rpgScienceScore({ base: correct, acc: correct / marked, pace: null });
+  if (a.marked != null || a.gameQ != null) {
+    const marked = a.marked | 0, gq = a.gameQ | 0;
+    return { q: marked + gq, correct: Math.min(marked, a.correct | 0) + Math.min(gq, a.gameCorrect | 0) };
+  }
+  if (s && s.marked != null) {
+    const q = (s.marked | 0) + (s.gameQ | 0);
+    return { q, correct: q * Math.max(0, Math.min(1, Number(s.acc) || 0)) };
+  }
+  return { q: 0, correct: 0 };
+}
+function rpgRowScore(r) {
+  const p = rpgRowScoreParts(r);
+  return p.q > 0 ? rpgScienceScore({ q: p.q, acc: p.correct / p.q }) : 0;
 }
 function rpgApplyRewards(gold, xp) {
   const learn = (rpgState && rpgState.star && rpgState.star.learn) || 0;
@@ -29602,13 +29636,11 @@ function rpgPrizeOffFor(tab, monthKey) {
   return !!(months && months.indexOf(monthKey) >= 0);
 }
 function rpgBoardMetric(r) {
-  // All-Time ranks on XP. It ranked on the Science Score from v1.231.0 and was
-  // put back in v1.260.0 — the students it was meant to reward found their
-  // standing rewritten overnight, and a board nobody trusts ranks nothing.
-  // The score itself is still computed and still published on every row
-  // (rpgScorePayload), and the admin's 🕵️ Activity & points table still shows
-  // it, so switching back is one line here and no student loses a day of data.
-  if (rpgBoardTab === "alltime") return r.xp || 0;
+  // All-Time: questions done × accuracy², the one line above rpgScienceScore.
+  // It ranked on XP before v1.261.0 (and on a more elaborate score between
+  // v1.231.0 and v1.260.0) — XP came from dungeon runs and free duels, so it
+  // measured hours in the game rather than questions answered.
+  if (rpgBoardTab === "alltime") return rpgRowScore(r);
   if (rpgBoardTab === "fps") return (r.fps && r.fps.correct) | 0;
   // Realm of Embers TCG: ranked by TOTAL TEAM POWER, the same metric the board
   // inside the TCG page uses.
@@ -29625,7 +29657,7 @@ function rpgBoardMetric(r) {
   if (r.lastMonthKey === prev) return r.lastMonthQ || 0;  // rolled over
   return 0;
 }
-function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : rpgBoardTab === "fps" || rpgBoardTab === "tcg" ? "correct" : rpgIsGameTab() ? "pts" : "questions"; }
+function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "score" : rpgBoardTab === "fps" || rpgBoardTab === "tcg" ? "correct" : rpgIsGameTab() ? "pts" : "questions"; }
 // Pretty value for a row: game tabs show the run's label (e.g. "Floor 7 · 142 kills").
 function rpgBoardValueHtml(r) {
   const sub = (rpgBoardTab === "month" || rpgBoardTab === "papers") ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : rpgIsGameTab() ? "best this month" : "all-time";
@@ -29644,6 +29676,13 @@ function rpgBoardValueHtml(r) {
     const g = r[rpgBoardTab] || {};
     const lbl = (g.monthKey === rpgMonthKey() && g.monthLabel) ? g.monthLabel : (r.shownVal + " pts");
     return `${escapeHtml(lbl)}<span>${sub}</span>`;
+  }
+  // All-Time shows the two numbers the score is made of, so a student can check
+  // their own ranking rather than being asked to take it on trust.
+  if (rpgBoardTab === "alltime") {
+    const p = rpgRowScoreParts(r);
+    const acc = p.q > 0 ? Math.round(p.correct / p.q * 100) : null;
+    return `${r.shownVal.toLocaleString()} score<span>✍️ ${Math.round(p.q).toLocaleString()} questions${acc != null ? ` · ✅ ${acc}% right` : ""}</span>`;
   }
   return `${r.shownVal} ${rpgBoardUnit()}<span>${sub}</span>`;
 }
@@ -29747,6 +29786,7 @@ async function rpgRenderLeaderboard(force = false) {
       : rpgBoardTab === "siege" ? "No Ember Siege runs this month yet — defend the gate and set the deepest wave!"
       : rpgBoardTab === "fps" ? "No Science Strike answers yet — jump into a run and answer questions to claim the board!"
       : rpgBoardTab === "tcg" ? "Nobody on the board yet — answer questions inside any Realm of Embers game mode to claim the top spot!"
+      : rpgBoardTab === "alltime" ? "Nobody on the board yet — answer questions anywhere in the app to build a score."
       : "No heroes on the board yet — solve questions to earn XP!";
     body.innerHTML = rpgBoardNote() + `<div class="empty-note">${why}</div>`;
     return;
