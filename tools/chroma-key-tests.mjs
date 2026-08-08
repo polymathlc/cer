@@ -14,7 +14,11 @@ const grab = sig => { const i = src.indexOf(sig); if (i < 0) throw new Error('mi
 const consts = src.slice(src.indexOf('const TCG_SCREEN_HI'), src.indexOf('function _screenDn'))
   + '\n' + src.slice(src.indexOf('const TCG_SCREEN_RING_MIN'), src.indexOf('async function _screenKeyOut'));
 const screens = src.slice(src.indexOf('const TCG_SCREENS = {'), src.indexOf('function tcgScreenForElement'));
-const pieces = [screens, consts, grab('function _screenDn'), grab('async function _screenKeyOut'), grab('async function _screenBack')].join('\n');
+// The MANUAL background remover (v1.277.0) — the 🧼 button. Same file, same
+// functions, so the tests below run the shipping code.
+const plate = src.slice(src.indexOf('const TCG_PLATE_RING_MIN'), src.indexOf('// Remove that colour.'));
+const pieces = [screens, consts, plate, grab('function _screenDn'), grab('async function _screenKeyOut'),
+  grab('async function _screenBack'), grab('function _tcgPlateColour'), grab('async function _tcgKeyPlate')].join('\n');
 const store = new Map(); let seq = 0;
 const mk = (w,h,px) => { const u='buf:'+(++seq); store.set(u,{w,h,px}); return u; };
 class ImageData { constructor(px,w,h){this.data=px;this.width=w;this.height=h;} }
@@ -36,7 +40,7 @@ const canvas = () => { let W=0,H=0,PX=null; return {
 let FILL=[255,0,255];
 global.document = { createElement: canvas };
 const _loadImageEl = async u => { const b=store.get(u); return {naturalWidth:b.w,naturalHeight:b.h,width:b.w,height:b.h,src:u}; };
-const M = new Function('_loadImageEl','ImageData','console', pieces + '\nreturn {_screenKeyOut,_screenBack,_screenDn,TCG_SCREENS};')(_loadImageEl, ImageData, console);
+const M = new Function('_loadImageEl','ImageData','console', pieces + '\nreturn {_screenKeyOut,_screenBack,_screenDn,TCG_SCREENS,_tcgPlateColour,_tcgKeyPlate};')(_loadImageEl, ImageData, console);
 
 const S = 220;
 const paint = fn => { const px = new Uint8ClampedArray(S*S*4);
@@ -168,6 +172,83 @@ const check = (name, got, want) => { const bad=[];
   const out = await M._screenKeyOut(u,'magenta',true);
   if (out === null) { pass++; console.log('pass  hue-in-art-no-wall          refused (border ring is not screen)'); }
   else { fail++; console.log('FAIL  hue-in-art-no-wall          keyed a subject that merely contains the hue'); }
+}
+// 12. THE DUEL ZONE WALL (v1.277.0). A wide effect fills the frame edge to
+//     edge by design — a wall of water rising from the bottom leaves only the
+//     TOP edge on the screen. The whole-ring test refuses that at ~50%, which
+//     is exactly why the generated frames came back with a magenta band still
+//     across the top. A `wide` slot relaxes the ring but still demands one
+//     WHOLE edge of clean screen, so it is real evidence of a wall.
+{
+  const wave = (x,y) => y > 60 + Math.sin(x/14)*18;      // fills left-right, open at the top
+  const u = paint((x,y)=> wave(x,y) ? [30,120+((x*7)%80),190] : [255,0,255]);
+  const strictOut = await M._screenKeyOut(u,'magenta',false);          // the old behaviour
+  const wideOut   = await M._screenKeyOut(u,'magenta',false,true);     // wide
+  if (strictOut === null && wideOut !== null) {
+    const sc = scoreOf(wideOut, (x,y)=> wave(x,y) ? 'wall' : 'screen');
+    check('duel-zone-wall', sc, { wall:'keep', screen:'cut' });
+  } else if (wideOut === null) {
+    fail++; console.log('FAIL  duel-zone-wall              a wide slot still refused — the magenta band survives');
+  } else {
+    fail++; console.log('FAIL  duel-zone-wall              the un-widened call should have refused, so the flag does nothing');
+  }
+}
+// 13. …and the relaxation must not become a way in for a picture that merely
+//     CONTAINS the hue. No clean edge → still refused, wide or not.
+{
+  const u = paint((x,y)=> Math.hypot(x-110,y-110)<80?[236,20,230]:[12,14,30]);
+  const out = await M._screenKeyOut(u,'magenta',false,true);
+  if (out === null) { pass++; console.log('pass  wide-hue-in-art-no-wall     refused (no clean edge of screen anywhere)'); }
+  else { fail++; console.log('FAIL  wide-hue-in-art-no-wall     wide keyed a subject that merely contains the hue'); }
+}
+// ---- the 🧼 manual remover -------------------------------------------------
+// 14. The exact frame from the report: a wall of water with a band of the
+//     magenta screen still across the top. The button finds the flat colour the
+//     border is made of and takes out that colour and nothing else.
+{
+  const wave = (x,y) => y > 60 + Math.sin(x/14)*18;
+  const u = paint((x,y)=> wave(x,y) ? [30,120+((x*7)%80),190] : [255,0,255]);
+  const got = await M._tcgKeyPlate(u);
+  if (!got) { fail++; console.log('FAIL  plate-remove-magenta-band    found no plate to remove'); }
+  else {
+    const sc = scoreOf(got.url, (x,y)=> wave(x,y) ? 'wall' : 'plate');
+    check('plate-remove-magenta-band', sc, { wall:'keep', plate:'cut' });
+  }
+}
+// 15. It is not limited to the three named screens — the point of the button is
+//     that the admin can SEE the colour that sticks out, whatever it is.
+{
+  const blob = (x,y) => Math.hypot(x-110,y-110) < 70;
+  const u = paint((x,y)=> blob(x,y) ? [250,230,120] : [17,17,17]);   // a near-black plate
+  const got = await M._tcgKeyPlate(u);
+  if (!got) { fail++; console.log('FAIL  plate-remove-black-plate     found no plate to remove'); }
+  else check('plate-remove-black-plate', scoreOf(got.url, (x,y)=> blob(x,y) ? 'art' : 'plate'), { art:'keep', plate:'cut' });
+}
+// 16. A painted SCENE has no flat border, so there is nothing to remove and the
+//     button must say so rather than eating a quarter of the picture.
+{
+  const u = paint((x,y)=> [40+((x*3)%180), 30+((y*5)%160), 90+((x*y)%120)]);
+  const got = await M._tcgKeyPlate(u);
+  if (got === null) { pass++; console.log('pass  plate-none-on-a-scene       nothing flat on the border -> nothing removed'); }
+  else { fail++; console.log('FAIL  plate-none-on-a-scene       removed a colour from a painted scene'); }
+}
+// 17. …and a picture that is ALREADY cut out reports nothing to do rather than
+//     nibbling its edges — the button is pressed more than once.
+{
+  const blob = (x,y) => Math.hypot(x-110,y-110) < 70;
+  const u = paint((x,y)=> blob(x,y) ? [250,230,120] : null);
+  const got = await M._tcgKeyPlate(u);
+  if (got === null || got.cut === 0) { pass++; console.log('pass  plate-already-cut-out       nothing removed on a second press'); }
+  else { fail++; console.log('FAIL  plate-already-cut-out       cut ' + got.cut + ' more pixels from a finished sprite'); }
+}
+// 18. The one failure that looks tidy and has destroyed the artwork: the plate
+//     colour IS the subject. `kept` is what tcgCleanSlotBg guards on, so it has
+//     to fall below TCG_BG_KEEP_MIN here.
+{
+  const u = paint((x,y)=> [255,0,255]);        // the whole frame is the plate
+  const got = await M._tcgKeyPlate(u);
+  if (got && got.kept < 0.62) { pass++; console.log('pass  plate-would-hollow-it       kept ' + Math.round(got.kept*100) + '% -> refused by the caller'); }
+  else { fail++; console.log('FAIL  plate-would-hollow-it       kept ' + (got ? Math.round(got.kept*100) : '—') + '%, the guard would not fire'); }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
