@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.274.0';
+const APP_VERSION = 'v1.275.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -34576,14 +34576,15 @@ async function _tcgArtStore(id, dataUrl, opts) {
   // first, pasted and uploaded pictures included. Card art, set banners and the
   // Chronicle's illustrations keep their painted scene and are never cut,
   // whatever else changes here.
-  const standsOnNothing = id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0 || id.indexOf('hero:') === 0;
+  const standsOnNothing = id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('dfx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0 || id.indexOf('hero:') === 0;
   if (standsOnNothing && !(opts && opts.cleaned)) dataUrl = await _stripImageBackground(dataUrl);
   // Battle avatars are small stage sprites; card art gets more resolution.
   // Blast frames are stretched over a 3×3 block of panels, so they get more
   // pixels than the small sprites (avatars, charge/flight/impact frames).
   // Set artwork is a wide banner across the top of the Packs tab, so it gets
   // the most pixels of anything here.
-  const maxSide = id.indexOf('fx:') === 0 ? (id.indexOf(':blast') > 0 ? 384 : 256)
+  const maxSide = id.indexOf('dfx:') === 0 ? 512
+    : id.indexOf('fx:') === 0 ? (id.indexOf(':blast') > 0 ? 384 : 256)
     : id.endsWith(':av') ? 256 : (id.indexOf('set:') === 0 || id.indexOf('lore:') === 0) ? 768 : 512;
   const scaled = await _scaleDownDataUrl(dataUrl, maxSide);
   const url = await uploadImageDataUrl(scaled);
@@ -35125,6 +35126,269 @@ function tcgFxPrompt(element, phase, n, harder) {
                   ? 'It is that same ball at the instant it strikes something, so its material and colours must be unmistakably the same — only its shape is now breaking apart on impact.'
                   : 'It is that same ball detonating, so the fireball and shockwave must be made of the same colours and material as the reference, only vastly bigger.'));
 }
+// ---- 🎴 DUEL EFFECT ANIMATIONS --------------------------------------------
+// A duel is fought on ZONES, not lanes: a battlecry that hits "ALL enemy
+// minions" happens across the whole opposing row at once. The element FX above
+// animate a PROJECTILE crossing a lane, which is the wrong shape entirely for
+// that — so the duel gets its own set, authored on the Card Art tab exactly
+// like the element FX and the pack frames.
+//
+// TWO AXES, and the split is what keeps the set finite:
+//   · ELEMENTAL shapes are drawn once per element (12×), because a fire wall
+//     and a frost wall are different pictures and that is the whole point of
+//     the request — "its fire, a fire wall appears over the opponent's zone".
+//   · NEUTRAL shapes are drawn ONCE for everybody, because healing light is
+//     golden whatever the monster's element is, and drawing 12 identical
+//     shield domes helps nobody.
+//
+// Every frame is drawn FROM the one before it (the same chaining rule the
+// element FX and the pack frames use), so a run is one continuous animation
+// rather than N unrelated pictures. Every shape stands on nothing — it is
+// composited over the board — so they go through the chroma screen and the
+// background knock-out like every other sprite in the realm.
+const DUEL_FX_SHAPES = [
+  {
+    key: 'sweep', icon: '🌊', name: 'Zone wall', frames: 4, elemental: true, strict: false,
+    what: 'a WALL of the element sweeping across the whole enemy row',
+    blurb: 'The big one — a battlecry or spell that hits EVERY enemy minion. It is stretched across the opposing row, so it is drawn WIDE.',
+    wide: true,
+    steps: [
+      { t: 'Rising', d: 'the wall only just rising along the bottom edge — a low, bright line of the element with the first tongues reaching upward, most of the frame still empty' },
+      { t: 'Full wall', d: 'the wall at full height and full power, a churning curtain of the element filling the frame from edge to edge, brightest of the four' },
+      { t: 'Rolling through', d: 'the wall rolling forward and thinning — the curtain now torn into streaks and vortices with gaps opening through it' },
+      { t: 'Fading', d: 'the aftermath — only drifting embers, motes and thin haze strung across the frame, very sparse and faint, with the screen showing between them' }
+    ]
+  },
+  {
+    key: 'strike', icon: '🎯', name: 'Single strike', frames: 3, elemental: true, strict: true,
+    what: 'a single lance of the element striking ONE card',
+    blurb: 'A battlecry or spell aimed at one target — it plays over that card alone.',
+    steps: [
+      { t: 'Incoming lance', d: 'a sharp lance or spear of the element driving in steeply from the upper left, its tip almost at the centre, a bright trail behind it' },
+      { t: 'Impact', d: 'the lance striking home — a bright starburst of the element at the centre with shards thrown outward, the brightest of the three' },
+      { t: 'Fading sparks', d: 'the hit dying away — scattered fading sparks and thin drifting smoke, very sparse, with the screen showing between them' }
+    ]
+  },
+  {
+    key: 'freeze', icon: '❄️', name: 'Deep freeze', frames: 3, elemental: false, strict: false, wide: true,
+    what: 'pale blue ice locking a card (or a whole row) in place',
+    blurb: 'Freeze, Flash Freeze, Winter\'s Crown, Time Fracture and the Chill Touch hero power.',
+    steps: [
+      { t: 'Frost creeping', d: 'the first frost creeping in from the edges of the frame — thin pale-blue crystal fingers reaching inward, the middle still clear' },
+      { t: 'Locked in ice', d: 'the frame filled with a sheet of translucent pale-blue ice, thick frost crystals and a bright rime edge, brightest of the three' },
+      { t: 'Settled frost', d: 'the ice settled and calm — a quiet pale-blue crystal glaze with a few drifting snow motes, much fainter than frame 2' }
+    ]
+  },
+  {
+    key: 'mend', icon: '💚', name: 'Healing light', frames: 3, elemental: false, strict: false, wide: true,
+    what: 'warm golden-green healing light rising over your own row',
+    blurb: 'Mending Light, Healing Chorus, the heal spells and the healing half of Dawnfather Judgement.',
+    steps: [
+      { t: 'First glow', d: 'a soft warm golden-green glow gathering along the bottom of the frame with the first motes of light beginning to rise' },
+      { t: 'Rising light', d: 'a column of warm golden-green light rising through the frame, thick with floating motes, small crosses and sparkles, brightest of the three' },
+      { t: 'Drifting motes', d: 'the light fading — only a few golden-green motes still drifting upward, very sparse and faint, with the screen showing between them' }
+    ]
+  },
+  {
+    key: 'ward', icon: '🛡️', name: 'Shield dome', frames: 3, elemental: false, strict: true,
+    what: 'a translucent golden shield dome closing over a card',
+    blurb: 'Divine Shield, Bulwark, Ember Bulwark and the Warden\'s armour hero power.',
+    steps: [
+      { t: 'Forming', d: 'a golden hexagonal energy shell only just forming — faint, incomplete, its panels still assembling with gaps between them' },
+      { t: 'Sealed', d: 'the dome complete and sealed — a translucent golden hexagonal barrier with a bright rim and a soft inner glow, brightest of the three' },
+      { t: 'Settling', d: 'the dome settled and calm — the same barrier much fainter, a steady thin golden outline with a couple of drifting sparks' }
+    ]
+  },
+  {
+    key: 'rally', icon: '📣', name: 'War cry', frames: 3, elemental: false, strict: false, wide: true,
+    what: 'an upward surge of red-gold energy under your own row',
+    blurb: 'War Cry, War Call, the +1/+1 hero power and drawing a card — anything that lifts your own side.',
+    steps: [
+      { t: 'Gathering', d: 'a low band of red-gold energy gathering along the bottom of the frame with the first arrows and streaks beginning to point upward' },
+      { t: 'Surge', d: 'a full surge of red-gold energy rushing upward through the frame — bold upward streaks, chevrons and sparks, brightest of the three' },
+      { t: 'Trailing off', d: 'the surge trailing away — a few faint upward streaks and drifting sparks left, very sparse, with the screen showing between them' }
+    ]
+  },
+  {
+    key: 'venom', icon: '☠️', name: 'Creeping venom', frames: 3, elemental: false, strict: false, wide: true,
+    what: 'sickly green poison mist creeping over the enemy row',
+    blurb: 'Poisonous and Venom Burst.',
+    steps: [
+      { t: 'Seeping', d: 'the first wisps of sickly yellow-green vapour seeping up from the bottom of the frame, thin and low' },
+      { t: 'Thick fumes', d: 'thick roiling yellow-green poison fumes filling the frame with bubbling globules and darker green veins running through them, densest of the three' },
+      { t: 'Dispersing', d: 'the fumes dispersing — thin ragged green wisps and a few drifting droplets, very sparse and faint' }
+    ]
+  },
+  {
+    key: 'drain', icon: '🩸', name: 'Life siphon', frames: 3, elemental: false, strict: false, wide: true,
+    what: 'crimson life pulled out of the enemy row in ribbons',
+    blurb: 'Lifesteal and Soul Siphon.',
+    steps: [
+      { t: 'First threads', d: 'the first thin crimson threads lifting away from the bottom of the frame and curling upward, faint and few' },
+      { t: 'Full siphon', d: 'thick crimson ribbons and glowing red orbs streaming upward and to one side, twisting like a drawn thread, brightest of the three' },
+      { t: 'Last drops', d: 'the siphon ending — a few last crimson droplets and thin fading threads, very sparse, with the screen showing between them' }
+    ]
+  },
+  {
+    key: 'slay', icon: '🗡️', name: 'Execution', frames: 3, elemental: false, strict: true,
+    what: 'a single white slash that executes a card',
+    blurb: 'Dragonfall Execution — the blow that destroys a minion outright.',
+    steps: [
+      { t: 'Wind-up', d: 'a thin bright white line drawn diagonally across the frame, keen and sharp, like the path a blade is about to take' },
+      { t: 'The cut', d: 'the slash at full force — a wide blazing white-and-silver crescent cutting diagonally across the frame with a shockwave along its edge, brightest of the three' },
+      { t: 'Aftermath', d: 'the cut fading — a thin silver after-image of the slash and a scatter of drifting sparks, very faint' }
+    ]
+  },
+  {
+    key: 'summon', icon: '✨', name: 'Arrival', frames: 3, elemental: false, strict: true,
+    what: 'a rune circle flaring as a monster lands on the board',
+    blurb: 'Plays under every monster as it is summoned — the one effect a student sees on nearly every turn, so keep it quick and quiet.',
+    steps: [
+      { t: 'Circle drawn', d: 'a flat circular rune ring seen at a low angle, drawn in thin pale gold light, dim and only just appearing' },
+      { t: 'Flare', d: 'the same rune ring blazing at full brightness with a column of pale gold light rising out of it and sparks lifting from the rim, brightest of the three' },
+      { t: 'Settling', d: 'the ring dimming back down — a faint gold outline with a few last sparks drifting up from it, very faint' }
+    ]
+  }
+];
+const DUEL_FX_BY_SHAPE = {};
+DUEL_FX_SHAPES.forEach(sh => { DUEL_FX_BY_SHAPE[sh.key] = sh; });
+// EVERY skill kind in the duel maps to a shape and to what it plays OVER.
+// `on`: 'foe' the enemy row · 'mine' your row · 'target' the card that was
+// aimed at · 'self' the minion that was played · 'hero' the hero panel.
+// A kind missing from this table simply gets no animation — it is never an
+// error, which is why a new skill kind cannot break the play path here the way
+// it can in TCG_ROLE_MODS.
+const DUEL_FX_BY_KIND = {
+  // ---- minion abilities (DUEL_ABILITIES kinds) ----
+  sweep:     { fx: 'sweep',  on: 'foe' },
+  dawn:      { fx: 'sweep',  on: 'foe' },
+  curse:     { fx: 'sweep',  on: 'foe' },
+  winter:    { fx: 'freeze', on: 'foe' },
+  chrono:    { fx: 'freeze', on: 'foe' },
+  snipe:     { fx: 'strike', on: 'target' },
+  mend:      { fx: 'mend',   on: 'mine' },
+  mendall:   { fx: 'mend',   on: 'mine' },
+  guard:     { fx: 'ward',   on: 'self' },
+  warcry:    { fx: 'rally',  on: 'mine' },
+  freeze:    { fx: 'freeze', on: 'target' },
+  venom:     { fx: 'venom',  on: 'foe' },
+  lifesteal: { fx: 'drain',  on: 'foe' },
+  slay:      { fx: 'slay',   on: 'target' },
+  rush:      { fx: 'summon', on: 'self' },
+  // ---- spells (DUEL_SPELLS kinds) ----
+  dmgAny:    { fx: 'strike', on: 'target' },
+  draw:      { fx: 'rally',  on: 'mine' },
+  heal:      { fx: 'mend',   on: 'mine' },
+  buff:      { fx: 'rally',  on: 'mine' },
+  siphon:    { fx: 'drain',  on: 'target' },
+  judge:     { fx: 'sweep',  on: 'foe' },
+  // ---- hero powers (DUEL_HEROES power kinds) ----
+  armor:     { fx: 'ward',   on: 'hero' },
+  grow:      { fx: 'rally',  on: 'target' },
+  chill:     { fx: 'freeze', on: 'target' },
+  study:     { fx: 'rally',  on: 'hero' }
+};
+// A spell has no element of its own, so it is given one — purely so the two
+// ELEMENTAL shapes come out the right colour when a spell casts them.
+const DUEL_SPELL_ELEMENT = {
+  sp_bolt: 'flame', sp_lance: 'flame', sp_meteor: 'flame', sp_ashfall: 'flame',
+  sp_scry: 'cosmic', sp_study: 'cosmic', sp_mend: 'light', sp_judgement: 'light',
+  sp_frost: 'frost', sp_warcall: 'metal', sp_bulwark: 'metal', sp_siphon: 'shadow'
+};
+// Neutral shapes are stored under this one key instead of an element.
+const DUEL_FX_ANY = 'any';
+function duelFxSlotId(shape, element, n) { return 'dfx:' + shape + ':' + (element || DUEL_FX_ANY) + ':' + n; }
+// 'dfx:sweep:flame:2' → { shape:<sweep>, element:'flame', n:2 }
+function duelFxParseSlot(slotId) {
+  const m = /^dfx:([a-z]+):([a-z]+):(\d+)$/.exec(String(slotId || ''));
+  if (!m) return null;
+  const shape = DUEL_FX_BY_SHAPE[m[1]];
+  const n = +m[3];
+  if (!shape || n < 1 || n > shape.frames) return null;
+  const element = shape.elemental ? m[2] : DUEL_FX_ANY;
+  if (shape.elemental && !TCG_ELEMENTS[element]) return null;
+  if (!shape.elemental && m[2] !== DUEL_FX_ANY) return null;
+  return { shape: shape, element: element, n: n };
+}
+// A neutral shape ignores whatever element is passed in — one picture serves
+// every card, which is what keeps the whole set at ~100 slots instead of 360.
+function duelFxKeyFor(shape, element) { return shape.elemental ? (element || 'flame') : DUEL_FX_ANY; }
+function duelFxHas(shape, element, n) { return !!(_tcgArt && _tcgArt[duelFxSlotId(shape.key, duelFxKeyFor(shape, element), n)]); }
+// The whole run, or null. A PARTIAL run never plays — half an animation looks
+// broken, and this is what makes the feature safe to ship before any art at
+// all exists: everything falls back to the CSS effect until a shape is done.
+function duelFxFrames(shapeKey, element) {
+  const shape = DUEL_FX_BY_SHAPE[shapeKey];
+  if (!shape || !_tcgArt) return null;
+  const key = duelFxKeyFor(shape, element);
+  const out = [];
+  for (let i = 1; i <= shape.frames; i++) {
+    const u = _tcgArt[duelFxSlotId(shape.key, key, i)];
+    if (!u) return null;
+    out.push(u);
+  }
+  return out;
+}
+function duelFxScreen(shape, element) {
+  if (shape.elemental) return tcgScreenForElement(element);
+  // The neutral shapes each pick a screen their own colours cannot contain.
+  return { mend: 'magenta', ward: 'blue', rally: 'green', freeze: 'magenta',
+           venom: 'magenta', drain: 'green', slay: 'magenta', summon: 'blue' }[shape.key] || 'magenta';
+}
+function duelFxPrompt(shape, element, n, harder) {
+  const step = shape.steps[n - 1] || shape.steps[0];
+  const el = shape.elemental ? (TCG_ELEMENTS[element] || { name: 'Elemental' }) : null;
+  const fx = shape.elemental ? (TCG_ELEM_FX[element] || TCG_ELEM_FX.flame) : null;
+  return 'Game VFX sprite: ONE frame from the ' + shape.frames + '-frame "' + shape.name
+      + '" animation in a fantasy card-battle game — ' + shape.what + '.\n'
+    + (fx ? 'ELEMENT LOOK: ' + fx.words + '. Everything in the frame is made of this element.\n' : '')
+    + 'FRAME ' + n + ' OF ' + shape.frames + ' — ' + step.t + ': ' + step.d + '.\n'
+    + 'COMPOSITION: the effect ' + (shape.wide
+        ? 'spread ACROSS a WIDE frame, edge to edge — it is composited over a whole row of cards, so it must read as a broad curtain rather than a ball'
+        : 'centred in the frame with a clear margin of screen around it — it is composited over ONE card')
+      + '. Nothing else in the frame at all — no character, no monster, no card, no hand, no ground, no scenery, no border, no text, no watermark. Only the effect, its own glow, and the screen behind it.\n'
+    + _screenRules('the effect', duelFxScreen(shape, element), harder)
+    + (n > 1 ? 'The reference picture is already standing on that same flat wall — keep exactly that wall, the same flat colour, everywhere around the effect.\n' : '')
+    + 'STYLE: crisp bright game effect art, still readable at 120 pixels wide, consistent lighting, friendly for primary-school children — dramatic, never gruesome.\n'
+    + (n > 1
+        ? 'CONSISTENCY: the reference picture is frame ' + (n - 1) + ' of this same animation. Keep the same colours, shape language, style and camera — this is only the next moment of the SAME effect. Do not redesign it.'
+        : 'This is the opening frame of the effect.');
+}
+// Frame N is drawn FROM frame N-1, which is drawn first if it is not there yet.
+async function _duelFxRef(shape, element, n) {
+  if (n <= 1) return null;
+  const key = duelFxKeyFor(shape, element);
+  const have = _tcgArt && _tcgArt[duelFxSlotId(shape.key, key, n - 1)];
+  if (have) {
+    try { return await _tcgRefOnScreen(have, duelFxScreen(shape, element)); } catch (e) { return null; }
+  }
+  return await _duelFxGenFrame(shape, element, n - 1);
+}
+async function _duelFxGenFrame(shape, element, n) {
+  if (!shape || !shape.steps || !(n >= 1) || n > shape.frames) {
+    throw new Error('bad duel animation frame request (' + ((shape && shape.key) || shape) + ' ' + n + ')');
+  }
+  const ref = await _duelFxRef(shape, element, n);
+  const got = await _tcgGenClean(h => duelFxPrompt(shape, element, n, h), ref,
+    'duel fx ' + shape.key + ' ' + duelFxKeyFor(shape, element) + ' ' + n, !!shape.strict, duelFxScreen(shape, element));
+  await _tcgArtStore(duelFxSlotId(shape.key, duelFxKeyFor(shape, element), n), got.url, { cleaned: true });
+  return got.ref || got.url;
+}
+// How many slots the whole set has, and how many are drawn — the headline the
+// admin panel needs.
+function duelFxSlotCount() {
+  const els = Object.keys(TCG_ELEMENTS).length;
+  return DUEL_FX_SHAPES.reduce((n, sh) => n + sh.frames * (sh.elemental ? els : 1), 0);
+}
+function duelFxDoneCount() {
+  let n = 0;
+  DUEL_FX_SHAPES.forEach(sh => {
+    const keys = sh.elemental ? Object.keys(TCG_ELEMENTS) : [DUEL_FX_ANY];
+    keys.forEach(k => { for (let i = 1; i <= sh.frames; i++) if (duelFxHas(sh, k, i)) n++; });
+  });
+  return n;
+}
+
 // ---- Repairing art that was stored before the knockout could catch it ----
 // The knockout only ever ran at upload time, so every frame drawn before it
 // learned about checkerboards still has one baked into the PNG in Storage.
@@ -35165,6 +35429,9 @@ async function _tcgArtToDataUrl(url) {
 // Which stored pictures must stand clear of the edges — see _bgLeftoverInPixels.
 // Everything that has to stand on nothing, except the blast frames.
 function _tcgStrictBg(id) {
+  // A duel shape declares its own strictness: the wide curtains fill the frame
+  // by design, so checking them strictly would condemn their own outer glow.
+  if (id.indexOf('dfx:') === 0) { const p = duelFxParseSlot(id); return !!(p && p.shape.strict); }
   return /(^pk:|^logo:|^arti:|^hero:|:av$)/.test(id) || (id.indexOf('fx:') === 0 && id.indexOf(':blast') < 0);
 }
 async function _recleanStoredArt(url, strict) {
@@ -35181,7 +35448,7 @@ async function _recleanStoredArt(url, strict) {
 // and the booster packs. Card art keeps its painted scene and is never touched.
 function _tcgBgFreeIds() {
   return Object.keys(_tcgArt || {}).filter(id =>
-    id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0 || id.indexOf('hero:') === 0 || id.endsWith(':av'));
+    id.indexOf('fx:') === 0 || id.indexOf('dfx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0 || id.indexOf('hero:') === 0 || id.endsWith(':av'));
 }
 async function tcgRepairArtBackgrounds() {
   const uid = _tcgOwnerUid();
@@ -35493,6 +35760,129 @@ async function tcgArtifactDrawAll() {
   _tcgArtiGenStatus(done, jobs.length, '<b>' + (_tcgGenStop ? 'Stopped' : 'Finished') + '</b> — ' + okN + ' artifact' + (okN === 1 ? '' : 's') + ' drawn' + (failed ? ', ' + failed + ' failed' : '') + '.');
   showToast(_tcgGenStop ? 'Stopped — ' + okN + ' drawn' : '🔱 Artifacts drawn — ' + okN + ' picture' + (okN === 1 ? '' : 's'), failed ? 'info' : 'success');
 }
+// ---- 🎴 Duel effect animations (admin panel) -------------------------------
+function _duelFxRunKey(shape, element) { return shape.key + ':' + duelFxKeyFor(shape, element); }
+function _duelFxRowRefresh(shape, element) {
+  const row = document.getElementById('dfxrow-' + _duelFxRunKey(shape, element).replace(':', '-'));
+  if (row) row.innerHTML = _duelFxRunHtml(shape, element);
+}
+function _duelFxRunHtml(shape, element) {
+  const key = duelFxKeyFor(shape, element);
+  const el = shape.elemental ? (TCG_ELEMENTS[element] || { icon: '✨', name: element }) : null;
+  const fx = TCG_ELEM_FX[element] || TCG_ELEM_FX.flame;
+  let have = 0;
+  for (let i = 1; i <= shape.frames; i++) if (duelFxHas(shape, key, i)) have++;
+  let slots = '';
+  for (let i = 1; i <= shape.frames; i++) {
+    const id = duelFxSlotId(shape.key, key, i);
+    const url = _tcgArt && _tcgArt[id];
+    const step = shape.steps[i - 1];
+    const ph = '<div class="ems-shot-orb fx-ph" style="width:' + (20 + i * 8) + 'px;height:' + (20 + i * 8)
+      + 'px;background:radial-gradient(circle at 35% 35%, ' + fx.a + ', ' + fx.b + ' 68%);box-shadow:0 0 8px 2px ' + fx.glow + ';"></div>';
+    slots += _tcgArtSlotHtml(id, 'Frame ' + i + ' / ' + shape.frames + ' · ' + step.t, shape.icon,
+      url ? '<img src="' + url + '" alt="' + escapeHtml(step.t) + '">' : ph, 'frame ' + i,
+      step.d.charAt(0).toUpperCase() + step.d.slice(1) + '.' + (i > 1 ? ' Drawn from frame ' + (i - 1) + '.' : ''));
+  }
+  return '<div class="tcg-fx-phase-head">'
+    + '<b>' + (el ? el.icon + ' ' + escapeHtml(el.name) : shape.icon + ' every card') + '</b>'
+    + '<span class="tcg-fx-state ' + (have === shape.frames ? 'on' : '') + '">' + have + ' / ' + shape.frames
+    +   (have === shape.frames ? ' — plays in the duel' : ' — falls back to the plain effect until all ' + shape.frames + ' are drawn') + '</span>'
+    + '<button type="button" class="btn btn-outline ga-mini" onclick="duelFxGenRun(\'' + shape.key + '\',\'' + key + '\')">✨ Generate these ' + shape.frames + '</button>'
+    + '</div>'
+    + '<div class="ga-cards">' + slots + '</div>';
+}
+function duelFxAdminHtml() {
+  const done = duelFxDoneCount(), total = duelFxSlotCount();
+  let html = '<h3 class="ga-cat">🎴 Ember Duel effect animations</h3>'
+    + '<div class="tcg-section-note">What a skill LOOKS like when it goes off in a duel. A duel is fought on <b>zones</b>, not lanes — a battlecry that hits "ALL enemy minions" happens across the whole opposing row at once — so these are their own set, separate from the element projectiles below. Play a fire monster with a sweeping battlecry and a <b>wall of fire rolls across the rival\'s side of the board</b>.<br>'
+    + 'The two <b>elemental</b> shapes are drawn once per element, because a fire wall and a frost wall are different pictures. The other ' + DUEL_FX_SHAPES.filter(x => !x.elemental).length + ' are drawn <b>once for everybody</b> — healing light is golden whatever the monster is made of. <b>Every skill in the game maps to one of these shapes</b>, so nothing goes off in silence. A shape with a <b>partial</b> run never plays: it falls back to a plain coloured effect until all its frames exist, so this is safe to leave half-drawn.</div>'
+    + '<div class="tcg-gen-panel tcg-dfx-gen">'
+    +   '<h4>✨ Draw the duel effects</h4>'
+    +   '<p>Engine: <b>' + escapeHtml(_tcgArtEngineLabel()) + '</b> — change it in the sidebar under <b>AI Engine</b>. Each frame is drawn <b>from the one before it</b>, so a run is one continuous animation.</p>'
+    +   '<div class="tcg-gen-actions">'
+    +     '<button type="button" class="btn btn-primary" id="tcgDfxGenBtn" onclick="duelFxDrawAll()"' + (done >= total ? ' disabled' : '') + '>✨ Draw all missing frames · ' + done + ' / ' + total + '</button>'
+    +     '<button type="button" class="btn btn-ghost" id="tcgDfxStopBtn" onclick="tcgStopArtGen()" style="display:none;">■ Stop</button>'
+    +   '</div>'
+    +   '<div class="tcg-gen-track" id="tcgDfxTrack" style="display:none;"><i id="tcgDfxFill" style="width:0%;"></i></div>'
+    +   '<div class="tcg-gen-status" id="tcgDfxStatus"></div>'
+    + '</div>';
+  DUEL_FX_SHAPES.forEach(shape => {
+    const keys = shape.elemental ? Object.keys(TCG_ELEMENTS) : [DUEL_FX_ANY];
+    html += '<div class="tcg-fx-phase">'
+      + '<div class="tcg-fx-phase-head">'
+      +   '<b>' + shape.icon + ' ' + escapeHtml(shape.name) + '</b>'
+      +   '<span>' + escapeHtml(shape.blurb) + (shape.elemental ? ' Drawn per element (' + keys.length + ' × ' + shape.frames + ' frames).' : '') + '</span>'
+      + '</div>'
+      + keys.map(k => '<div id="dfxrow-' + _duelFxRunKey(shape, k).replace(':', '-') + '">' + _duelFxRunHtml(shape, k) + '</div>').join('')
+      + '</div>';
+  });
+  return html;
+}
+function _duelFxGenStatus(done, total, line) {
+  const fill = document.getElementById('tcgDfxFill');
+  if (fill) fill.style.width = Math.round(done / Math.max(1, total) * 100) + '%';
+  const st = document.getElementById('tcgDfxStatus');
+  if (st) st.innerHTML = line;
+}
+// One run — all the frames of one shape in one element, in order, each drawn
+// from the last.
+async function duelFxGenRun(shapeKey, element) {
+  if (!_isAdmin()) return;
+  const shape = DUEL_FX_BY_SHAPE[shapeKey]; if (!shape) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let it finish or press Stop', 'error'); return; }
+  _tcgGenBusy = true; _tcgGenStop = false;
+  try {
+    for (let i = 1; i <= shape.frames; i++) {
+      if (_tcgGenStop) break;
+      if (duelFxHas(shape, element, i)) continue;
+      _tcgSlotStatus(duelFxSlotId(shape.key, duelFxKeyFor(shape, element), i), '⏳ Drawing…');
+      await _duelFxGenFrame(shape, element, i);
+    }
+    showToast('🎇 ' + shape.name + ' drawn', 'success');
+  } catch (e) {
+    console.error('duel fx run failed', e);
+    showToast('Could not draw it: ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    _tcgGenBusy = false;
+    _duelFxRowRefresh(shape, element);
+  }
+}
+async function duelFxDrawAll() {
+  if (!_isAdmin()) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let it finish or press Stop', 'error'); return; }
+  const jobs = [];
+  DUEL_FX_SHAPES.forEach(shape => {
+    const keys = shape.elemental ? Object.keys(TCG_ELEMENTS) : [DUEL_FX_ANY];
+    keys.forEach(k => { for (let i = 1; i <= shape.frames; i++) if (!duelFxHas(shape, k, i)) jobs.push({ shape, k, i }); });
+  });
+  if (!jobs.length) { showToast('Every duel effect frame is already drawn 🎉', 'success'); return; }
+  if (!confirm('Draw ' + jobs.length + ' duel effect frame' + (jobs.length === 1 ? '' : 's') + ' with ' + _tcgArtEngineLabel() + '?\n\n'
+    + 'Each frame is drawn from the one before it, so this runs one at a time and can take a long while — keep this tab open. Every finished frame is saved as it lands, and you can press Stop at any point.')) return;
+  _tcgGenBusy = true; _tcgGenStop = false;
+  const btn = document.getElementById('tcgDfxGenBtn'), stop = document.getElementById('tcgDfxStopBtn'), track = document.getElementById('tcgDfxTrack');
+  if (btn) btn.disabled = true;
+  if (stop) stop.style.display = '';
+  if (track) track.style.display = '';
+  let done = 0, failed = 0;
+  for (const job of jobs) {
+    if (_tcgGenStop) break;
+    _duelFxGenStatus(done, jobs.length, 'Drawing <b>' + job.shape.icon + ' ' + escapeHtml(job.shape.name) + '</b> · '
+      + escapeHtml(job.k) + ' frame ' + job.i + ' — ' + done + ' / ' + jobs.length + ' done');
+    // A frame already drawn as another frame's reference is skipped rather
+    // than redrawn — the chain fills them in ahead of the loop.
+    if (duelFxHas(job.shape, job.k, job.i)) { done++; continue; }
+    try { await _duelFxGenFrame(job.shape, job.k, job.i); _duelFxRowRefresh(job.shape, job.k); }
+    catch (e) { failed++; console.error('duel fx failed', job.shape.key, job.k, job.i, e); }
+    done++;
+    _duelFxGenStatus(done, jobs.length, done + ' / ' + jobs.length + ' drawn' + (failed ? ' · ' + failed + ' failed' : ''));
+  }
+  _tcgGenBusy = false;
+  if (stop) stop.style.display = 'none';
+  const okN = done - failed;
+  _duelFxGenStatus(done, jobs.length, '<b>' + (_tcgGenStop ? 'Stopped' : 'Finished') + '</b> — ' + okN + ' frame' + (okN === 1 ? '' : 's') + ' drawn' + (failed ? ', ' + failed + ' failed' : '') + '.');
+  showToast(_tcgGenStop ? 'Stopped — ' + okN + ' drawn' : '🎇 Duel effects drawn — ' + okN + ' frame' + (okN === 1 ? '' : 's'), failed ? 'info' : 'success');
+}
+
 // ---- 🦸 Duel hero portraits ------------------------------------------------
 // One picture per hero, worn as the AVATAR on the duel board and on the tile in
 // the hero chooser. Same slot machinery as everything else — paste / drop /
@@ -36921,6 +37311,7 @@ function tcgArtAdminHtml() {
     + tcgArtGenPanelHtml()
     + tcgLogoArtAdminHtml()
     + tcgHeroArtAdminHtml()
+    + duelFxAdminHtml()
     + tcgArtifactArtAdminHtml()
     + tcgSetArtAdminHtml()
     + tcgPackArtAdminHtml()
@@ -36988,6 +37379,26 @@ async function tcgAiGenSlot(slotId) {
     } finally {
       _tcgGenBusy = false;
       _tcgArtifactRowRefresh(a);
+    }
+    return;
+  }
+  // A duel effect frame: drawn from the frame before it, which is drawn first
+  // if it is not there yet.
+  if (slotId.indexOf('dfx:') === 0) {
+    const parsed = duelFxParseSlot(slotId);
+    if (!parsed) { showToast('That duel effect slot id is not one I recognise', 'error'); return; }
+    _tcgGenBusy = true;
+    _tcgSlotStatus(slotId, '⏳ Drawing…');
+    try {
+      await _duelFxGenFrame(parsed.shape, parsed.element, parsed.n);
+      showToast('🎇 ' + parsed.shape.name + ' frame ' + parsed.n + ' drawn', 'success');
+    } catch (e) {
+      console.error('duel fx generation failed', e);
+      _tcgSlotStatus(slotId, '⚠️ Failed');
+      showToast('Could not draw it: ' + (e && e.message ? e.message : e), 'error');
+    } finally {
+      _tcgGenBusy = false;
+      _duelFxRowRefresh(parsed.shape, parsed.element);
     }
     return;
   }
@@ -38645,6 +39056,8 @@ function tcgGuideHtml() {
           'Once a turn you can answer a science question. Get it right and you <b>draw a card and get a mana crystal back</b> — and, like every other mode, the question <b>🎓 trains every monster on your board</b> and pays 🪙 points. That is the only thing a duel pays: winning is worth nothing but the record, so it can be fought as often as you like.'],
         ['How to attack',
           '<b>Drag one of your monsters onto a rival card</b> — or tap yours and then tap theirs. Drag it onto the rival hero to go for the win.'],
+        ['🎇 What a skill looks like',
+          'Every skill in the duel has its <b>own animation</b>, and it plays where the skill actually lands. A battlecry that hits ALL enemy minions rolls a <b>wall of your monster\'s element right across the rival\'s side of the board</b> — a fire monster brings a wall of fire, a frost monster a sheet of ice. A single-target spell drives a lance into that one card; a heal lifts golden light over your own row; Divine Shield closes a dome over the minion wearing it; a freeze locks the row in ice; and every monster lands on a rune circle as it is summoned.'],
         ['🔍 Read any card in full',
           '<b>Hover over any card</b> — in your hand, on the board or in the deck builder — and the whole card opens beside it: the artwork at size, ⚔️ its attack and 🛡️ its defence, the duel ability in full, and its training, merge and rank lines. <b>On a phone, press and hold</b> a card instead. Every number on a card is ⚔️ for attack and 🛡️ for defence, everywhere in the duel.<br><span class="tcg-guide-dim">It shows only what a <b>duel</b> uses. A monster\'s arena skill, its arena stats and its element matchups do nothing in here, so they are not printed here — tap the <b>👁</b> on a monster in the Battle Arena, Ember Siege or Ember Legends to read what it does in <i>that</i> game instead.</span>'],
         ['🌋 Who the rival brought',
@@ -39028,35 +39441,35 @@ const DUEL_HERO_DEFAULT = 'warden';
 const DUEL_HEROES = [
   {
     id: 'warden', name: 'Warden Elowen', title: 'Keeper of the Hearth', em: '🛡️', tier: 'basic',
-    safe: true, screen: 'magenta',
+    safe: true, screen: 'magenta', el: 'metal',
     blurb: 'Holds the line while your board grows. Armour stacks up turn after turn, and nothing you press can ever be wasted — which is why she is the hero you start with.',
     look: 'a calm young woman knight in dented silver plate armour with a deep blue tabard, a heavy round shield held steady in front of her, short dark hair, a warm patient expression',
     power: { name: 'Bulwark', icon: '🛡️', kind: 'armor', v: 2, text: 'Gain 2 Armor.' }
   },
   {
     id: 'ember', name: 'Emberfist Rook', title: 'Of the Burning Road', em: '🔥', tier: 'basic',
-    screen: 'green',
+    screen: 'green', el: 'flame',
     blurb: 'One point of damage a turn does not sound like much — until it is the point that finishes a minion your board could not quite kill, every single turn.',
     look: 'a broad-shouldered young man in scorched leather and a red half-cloak, one bare fist wrapped in burning orange flame held up in front of him, cropped hair, a grin like he enjoys this',
     power: { name: 'Ember Spark', icon: '🔥', kind: 'dmgAny', v: 1, need: 'any', text: 'Deal 1 damage to any target.' }
   },
   {
     id: 'grove', name: 'Sage Wren', title: 'Voice of the Green', em: '🌿', tier: 'basic',
-    screen: 'blue',
+    screen: 'blue', el: 'flora',
     blurb: 'Makes one of your minions a little better every turn. Put it on something with Taunt or Lifesteal and the rival has to answer a card that keeps growing.',
     look: 'a slender older woman in flowing green and brown robes with a woven leaf mantle, long grey hair, one hand open with small glowing green shoots curling up out of her palm, kind eyes',
     power: { name: 'Green Gift', icon: '🌿', kind: 'grow', v: 1, need: 'friendlyMinion', text: 'Give a friendly minion +1/+1.' }
   },
   {
     id: 'frost', name: 'Tidecaller Nell', title: 'Daughter of the Deep Frost', em: '❄️', tier: 'basic',
-    screen: 'magenta',
+    screen: 'magenta', el: 'frost',
     blurb: 'Take the rival\'s best attacker out of the fight for a turn, every turn. It deals no damage at all — it simply means their biggest minion never gets to swing.',
     look: 'a young woman in pale blue-and-white sealskin robes with silver clasps, long white braided hair, both hands cupped around a slowly turning shard of ice, a quiet unbothered face',
     power: { name: 'Chill Touch', icon: '❄️', kind: 'chill', need: 'enemyMinion', v: 0, text: 'Freeze an enemy minion.' }
   },
   {
     id: 'scribe', name: 'Ashen Scribe Pip', title: 'Reader of Cinders', em: '📖', tier: 'basic',
-    screen: 'green',
+    screen: 'green', el: 'cosmic',
     blurb: 'More cards than anybody else — at a price. One life a turn is cheap early and expensive late, so this hero is about knowing when to stop.',
     look: 'a small studious young person in a soot-smudged grey scholar\'s robe with ink-stained fingers, round spectacles, an open book floating open in front of them with glowing ember-orange letters drifting off the page',
     power: { name: 'Ashen Study', icon: '📖', kind: 'study', v: 1, text: 'Draw a card. Your hero takes 1 damage.' }
@@ -40130,6 +40543,14 @@ function duelCommitPlay(who, i, target) {
     duelLog((who === 'P' ? 'You summon ' : 'Rival summons ') + tcgShortName(m.card) + '.');
     // Battlecry — the card's generated duel ability.
     duelResolveBattlecry(who, m, target);
+    // …and its animation. This is dispatched HERE rather than inside
+    // duelResolveBattlecry, which returns early for a PASSIVE ability — doing
+    // it there meant Divine Shield, Poisonous, Lifesteal and Rush never
+    // animated at all. A kind with no row falls back to the arrival rune, so
+    // every summon shows something.
+    const ab = m.ab || {};
+    if (DUEL_FX_BY_KIND[ab.kind]) duelFxForKind(ab.kind, who, m.card.element, { selfUid: m.uid, target: target });
+    else duelZoneFx('summon', who, m.card.element, m.uid);
   }
   r.pending = null; r.sel = null;
   duelCheckOver();
@@ -40161,6 +40582,9 @@ function duelResolveSpell(who, sp, target) {
     foe.board.filter(m => !m.dead).forEach(m => duelHurtMinion(m, sp.v, { cls: 'spell' }));
     duelHealHero(who, sp.v);
   }
+  // A spell has no element of its own, so DUEL_SPELL_ELEMENT lends it one —
+  // purely so the elemental shapes come out the right colour.
+  duelFxForKind(sp.kind, who, DUEL_SPELL_ELEMENT[sp.id] || 'flame', { target: target });
 }
 function duelResolveBattlecry(who, m, target) {
   const r = duelRun; if (!r) return;
@@ -40294,6 +40718,7 @@ function duelResolvePower(who, p, target) {
     duelDraw(who === 'P' ? 'p' : 'e');
     if (p.v) duelHurtHero(who, p.v);
   }
+  duelFxForKind(p.kind, who, (me.hero && me.hero.el) || 'light', { target: target });
 }
 
 // ---- Attacking -------------------------------------------------------------
@@ -40538,6 +40963,31 @@ function duelFxHero(who, amount, cls, element) {
   r.fxq = r.fxq || [];
   r.fxq.push({ t: 'h', who, amount, cls, element });
 }
+// ---- 🎇 Playing a duel effect ----------------------------------------------
+// Queued like every other effect (duelRender replaces the shell, so anything
+// started while the rules are still running is destroyed) and flushed against
+// the DOM duelRender has just painted.
+function duelZoneFx(shapeKey, side, element, uid) {
+  const r = duelRun; if (!r || !DUEL_FX_BY_SHAPE[shapeKey]) return;
+  r.fxq = r.fxq || [];
+  r.fxq.push({ t: 'zone', shape: shapeKey, side: side, element: element, uid: uid || null });
+}
+// The one dispatcher every resolver calls. `who` is the side that CAUSED it,
+// so 'foe' means the other side's row.
+function duelFxForKind(kind, who, element, opts) {
+  const row = DUEL_FX_BY_KIND[kind]; if (!row) return;   // no animation is never an error
+  opts = opts || {};
+  const foe = who === 'P' ? 'E' : 'P';
+  if (row.on === 'target') {
+    const t = opts.target;
+    if (t && t.type === 'minion' && t.m) return duelZoneFx(row.fx, t.m.side, element, t.m.uid);
+    if (t && t.type === 'hero') return duelZoneFx(row.fx, t.who, element, 'hero');
+    return duelZoneFx(row.fx, foe, element);             // auto-picked: play it over the row
+  }
+  if (row.on === 'self') return duelZoneFx(row.fx, who, element, opts.selfUid || null);
+  if (row.on === 'hero') return duelZoneFx(row.fx, who, element, 'hero');
+  return duelZoneFx(row.fx, row.on === 'mine' ? who : foe, element);
+}
 function duelAttackFx(att, target) {
   const r = duelRun; if (!r) return;
   r.fxq = r.fxq || [];
@@ -40550,7 +41000,8 @@ function duelFlushFx() {
   let dying = false;
   const lunged = q.some(x => x.t === 'lunge');
   q.filter(x => x.t === 'lunge').forEach(_duelPlayLunge);
-  q.filter(x => x.t !== 'lunge').forEach(x => {
+  q.filter(x => x.t === 'zone').forEach(_duelPlayZoneFx);
+  q.filter(x => x.t !== 'lunge' && x.t !== 'zone').forEach(x => {
     if (x.t === 'h') _duelPlayHeroFx(x.who, x.amount, x.cls, x.element);
     else { _duelPlayFx(x.uid, x.amount, x.cls, x.element); if (x.cls === 'slay') dying = true; }
   });
@@ -40594,6 +41045,39 @@ function _duelPlayHeroFx(who, amount, cls, element) {
     _duelRetrigger(el, 'duel-ward');
   }
   duelFloat(el, cls === 'shield' ? '🛡 +' + amount : (cls === 'heal' ? '+' : '-') + amount, cls);
+}
+// Where an effect is painted: a whole row, one minion, or a hero panel.
+function _duelFxHost(x) {
+  if (x.uid === 'hero') return _duelHeroEl(x.side);
+  if (x.uid) return _duelMinionEl(x.uid);
+  return document.getElementById(x.side === 'P' ? 'duelBoardP' : 'duelBoardE');
+}
+// The authored frames when a shape's whole run exists, and a CSS effect when it
+// does not — so the duel looks right before a single frame has been drawn, and
+// every shape upgrades on its own as the art lands.
+function _duelPlayZoneFx(x) {
+  const host = _duelFxHost(x); if (!host) return;
+  const shape = DUEL_FX_BY_SHAPE[x.shape]; if (!shape) return;
+  const frames = duelFxFrames(x.shape, x.element);
+  const node = document.createElement('div');
+  node.className = 'duel-zonefx zfx-' + x.shape + (x.uid ? ' one' : ' row');
+  if (frames && frames.length) {
+    node.innerHTML = '<img src="' + escapeHtml(frames[0]) + '" alt="">';
+    host.appendChild(node);
+    _emsPlayFrames(node, frames, DUEL_ZONEFX_MS);
+    return;
+  }
+  // The fallback. Elemental shapes are tinted from the element's own palette,
+  // so a fire wall is orange and a frost wall is blue even with no art at all.
+  const fx = TCG_ELEM_FX[x.element] || TCG_ELEM_FX.flame;
+  if (shape.elemental) {
+    node.style.setProperty('--zfx-a', fx.a);
+    node.style.setProperty('--zfx-b', fx.b);
+    node.style.setProperty('--zfx-glow', fx.glow);
+  }
+  node.innerHTML = '<i></i>';
+  host.appendChild(node);
+  setTimeout(() => { if (node.isConnected) node.remove(); }, DUEL_ZONEFX_MS * shape.frames + 120);
 }
 function duelFloat(host, text, cls) {
   if (!host) return;
@@ -40641,6 +41125,7 @@ const DUEL_SFX_KEY = 'sq_duel_sfx';                       // localStorage: '0' s
 const DUEL_SFX_DIR = 'assets/sfx/duel/';
 const DUEL_SFX_MANIFEST = DUEL_SFX_DIR + 'manifest.json';
 const DUEL_HIT_DELAY = 0.16;    // seconds — the lunge's travel, so the blow lands on contact
+const DUEL_ZONEFX_MS = 110;    // ms a frame of a duel effect animation is held
 // `quake` is the screen-shake level, 1-4, and `body`/`noise`/`sub`/`dur` are the
 // synth's shape. Retune these, not the individual call sites.
 const DUEL_HIT_TIERS = [
@@ -44891,6 +45376,8 @@ window.duelPickHero = duelPickHero;
 window.tcgPeekOpen = tcgPeekOpen;
 window.tcgPeekClose = tcgPeekClose;
 window.tcgHeroDrawAll = tcgHeroDrawAll;
+window.duelFxGenRun = duelFxGenRun;
+window.duelFxDrawAll = duelFxDrawAll;
 window.elgOpen = elgOpen;
 window.elgStart = elgStart;
 window.elgClose = elgClose;
