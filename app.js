@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.268.0';
+const APP_VERSION = 'v1.269.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -39356,6 +39356,9 @@ function duelDraw(who, silent) {
     return null;
   }
   side.hand.push(hc);
+  // Only the student's own draws are heard. The rival's hand is face down, so a
+  // sound for it carries no information and is just one more noise a turn.
+  if (who === 'p') duelSfxPlay('draw');
   return hc;
 }
 function duelBeginTurn(who) {
@@ -39370,7 +39373,8 @@ function duelBeginTurn(who) {
     else { m.canAttack = true; m.rushOnly = false; }
   });
   r.whose = who;
-  if (who === 'P') { r.insightUsed = false; duelDraw('p'); }
+  // The turn chime leads its own draw — the crystal, then the card.
+  if (who === 'P') { r.insightUsed = false; duelSfxPlay('turn'); duelDraw('p'); }
   else duelDraw('e');
 }
 function duelEndTurn() {
@@ -39393,6 +39397,9 @@ function duelGameOver(won) {
   r.over = true; r.won = !!won;
   duelBank();
   duelRender();
+  // After the render, so the killing blow's own impact is already sounding and
+  // the result arrives on top of it rather than underneath.
+  duelSfxPlay(won ? 'win' : 'lose', 0.32);
   if (won) { try { tcgConfetti(90); } catch (_) {} }
 }
 function duelLog(msg) {
@@ -39517,6 +39524,9 @@ function duelCommitPlay(who, i, target) {
   const hc = side.hand[i]; if (!hc) return;
   side.hand.splice(i, 1);
   side.mana -= hc.cost;
+  // Both sides are heard here — unlike a draw, a card being played is on the
+  // board in front of the student either way.
+  duelSfxPlay(hc.type === 'spell' ? 'cast' : 'summon');
   if (hc.type === 'spell') {
     duelLog((who === 'P' ? 'You cast ' : 'Rival casts ') + hc.spell.name + '.');
     duelResolveSpell(who, hc.spell, target);
@@ -39905,6 +39915,25 @@ const DUEL_HEAL_TIERS = [
   { max: Infinity, cue: 'heal2', synth: 'heal', gain: 0.40, rate: 0.96, base: 392.00, steps: [0, 4, 7, 12, 16], dur: 0.66 }
 ];
 const DUEL_SLAY_TIER = { cue: 'slay', synth: 'slay', gain: 0.40, rate: 1, dur: 0.55 };
+// Everything that is not a blow. These are DELIBERATELY quieter than the
+// impacts — a card being drawn happens every single turn and an impact does
+// not, so anything routine that sits at fighting volume becomes noise the
+// student turns the whole mode off to escape.
+// `gap` staggers repeats of one cue so a burst is a riffle — see duelSfxPlay.
+const DUEL_CUES = {
+  draw:    { cue: 'draw',    synth: 'swish', gain: 0.20, rate: 1, f0: 800,  f1: 2800, q: 3.5, dur: 0.13, noise: 0.5, gap: 0.09 },
+  summon:  { cue: 'summon',  synth: 'hit',   gain: 0.26, rate: 1, body: 150, dur: 0.24, noise: 0.30, sub: 0.20, gap: 0.06 },
+  cast:    { cue: 'cast',    synth: 'swish', gain: 0.26, rate: 1, f0: 2600, f1: 480,  q: 5,   dur: 0.34, noise: 0.7, gap: 0.06 },
+  freeze:  { cue: 'freeze',  synth: 'tone',  gain: 0.24, rate: 1, type: 'sine',     f0: 1900, f1: 520, dur: 0.44, gap: 0.05 },
+  shield:  { cue: 'shield',  synth: 'chord', gain: 0.24, rate: 1, base: 880,     steps: [0, 7],        dur: 0.32, gap: 0.05 },
+  buff:    { cue: 'buff',    synth: 'tone',  gain: 0.22, rate: 1, type: 'triangle', f0: 330,  f1: 700, dur: 0.22, gap: 0.05 },
+  rank:    { cue: 'rank',    synth: 'chord', gain: 0.34, rate: 1, base: 523.25,  steps: [0, 4, 7, 12], dur: 0.50, gap: 0.14 },
+  turn:    { cue: 'turn',    synth: 'chord', gain: 0.18, rate: 1, base: 392.00,  steps: [0, 7],        dur: 0.34 },
+  right:   { cue: 'right',   synth: 'chord', gain: 0.30, rate: 1, base: 523.25,  steps: [0, 4, 7],     dur: 0.38 },
+  wrong:   { cue: 'wrong',   synth: 'tone',  gain: 0.26, rate: 1, type: 'square',   f0: 260,  f1: 150, dur: 0.30 },
+  win:     { cue: 'win',     synth: 'chord', gain: 0.42, rate: 1, base: 523.25,  steps: [0, 4, 7, 12, 16, 19], dur: 0.85 },
+  lose:    { cue: 'lose',    synth: 'tone',  gain: 0.34, rate: 1, type: 'sawtooth', f0: 330,  f1: 62,  dur: 1.00 }
+};
 function duelHitTier(amount) {
   const a = Math.max(0, amount | 0);
   return DUEL_HIT_TIERS.filter(t => a <= t.max)[0] || DUEL_HIT_TIERS[DUEL_HIT_TIERS.length - 1];
@@ -39916,7 +39945,18 @@ function duelHealTier(amount) {
 
 let _duelAC = null, _duelACDead = false, _duelBus = null;
 let _duelSfxOff = null, _duelSfxBuf = {}, _duelSfxMap = null, _duelSfxMapP = null;
-let _duelNoiseBuf = null, _duelQuakeT = 0;
+let _duelNoiseBuf = null, _duelQuakeT = 0, _duelCueAt = {};
+// The synth each cue routes to. A tier naming a kind that is not here falls to
+// the impact rather than going silent — a missing sound is much harder to
+// notice than a wrong one.
+const DUEL_SYNTHS = {
+  hit:   (t, at) => _duelSynthHit(t, at),
+  heal:  (t, at) => _duelSynthChord(t, at),
+  chord: (t, at) => _duelSynthChord(t, at),
+  slay:  (t, at) => _duelSynthSlay(t, at),
+  swish: (t, at) => _duelSynthSwish(t, at),
+  tone:  (t, at) => _duelSynthTone(t, at)
+};
 // Lazily built, and only ever from a click — every entry into a duel is a button
 // press, so the context is never created in the state a browser suspends.
 function _duelAudio() {
@@ -39990,9 +40030,31 @@ function duelSfxCue(tier, at) {
     return;
   }
   if (_duelSfxMap && !(tier.cue in _duelSfxBuf)) _duelSfxLoad(tier.cue);
-  if (tier.synth === 'heal') _duelSynthHeal(tier, at);
-  else if (tier.synth === 'slay') _duelSynthSlay(tier, at);
-  else _duelSynthHit(tier, at);
+  (DUEL_SYNTHS[tier.synth] || _duelSynthHit)(tier, at);
+}
+// The one-shots that are not damage: a card off the deck, a minion landing, a
+// spell leaving the hand, the turn changing, the duel ending. Same two layers
+// as the impacts — a file named in the manifest wins, the synth stands in.
+//
+// `gap` is what keeps a burst listenable. Three opening draws resolve in the
+// same millisecond, so without it they are one loud click instead of a riffle;
+// with it each repeat of a cue is nudged past the last one. `defer` caps that
+// so a spell that draws six cards does not still be dealing a second later.
+function duelSfxPlay(name, at) {
+  const tier = DUEL_CUES[name];
+  if (!tier || !duelSfxOn()) return;
+  const ac = _duelAudio(); if (!ac) return;
+  let when = at || 0;
+  if (tier.gap) {
+    // `undefined`, not 0 — an AudioContext starts its clock at 0, so a default
+    // of 0 pushes the very first draw of the very first turn behind a gap that
+    // nothing is actually occupying.
+    const prev = _duelCueAt[name];
+    if (prev !== undefined && ac.currentTime + when < prev + tier.gap) when = prev + tier.gap - ac.currentTime;
+    if (when > (tier.defer || 0.7)) return;          // too far behind to still mean anything
+    _duelCueAt[name] = ac.currentTime + when;
+  }
+  duelSfxCue(tier, when);
 }
 function _duelNoise() {
   const ac = _duelAudio(); if (!ac) return null;
@@ -40043,9 +40105,10 @@ function _duelSynthHit(t, at) {
     sub.start(t0); sub.stop(t0 + t.dur * 1.35 + 0.05);
   }
 }
-// Healing is the opposite shape: nothing percussive, a chord that arrives from
-// underneath and opens upward. The bigger heal simply gets more of the chord.
-function _duelSynthHeal(t, at) {
+// A chord that arrives from underneath and opens upward — nothing percussive.
+// It is healing's shape, and also a ward, a rank-up and a won duel: `steps` is
+// how much of the chord the moment deserves.
+function _duelSynthChord(t, at) {
   const ac = _duelAudio(); if (!ac) return;
   const t0 = ac.currentTime + (at || 0), out = ac.createGain();
   out.gain.value = t.gain; out.connect(_duelBus);
@@ -40062,6 +40125,43 @@ function _duelSynthHeal(t, at) {
     o.connect(g); g.connect(out);
     o.start(st); o.stop(st + t.dur + 0.05);
   });
+}
+// Noise through a band-pass that SWEEPS — the shape of anything that moves
+// rather than lands: a card off the deck, a spell leaving the hand. Sweeping up
+// reads as something setting off, sweeping down as something arriving.
+function _duelSynthSwish(t, at) {
+  const ac = _duelAudio(); if (!ac) return;
+  const noise = _duelNoise(); if (!noise) return;
+  const t0 = ac.currentTime + (at || 0), out = ac.createGain();
+  out.gain.value = t.gain; out.connect(_duelBus);
+  const n = ac.createBufferSource(); n.buffer = noise;
+  const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = t.q || 3;
+  f.frequency.setValueAtTime(t.f0, t0);
+  f.frequency.exponentialRampToValueAtTime(t.f1, t0 + t.dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(t.noise || 0.6, t0 + t.dur * 0.3);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + t.dur);
+  n.connect(f); f.connect(g); g.connect(out);
+  n.start(t0); n.stop(t0 + t.dur + 0.05);
+}
+// One pitched voice gliding from f0 to f1 — a blip, a shiver, a fall. The whole
+// character is in which way the glide runs and what waveform carries it.
+function _duelSynthTone(t, at) {
+  const ac = _duelAudio(); if (!ac) return;
+  const t0 = ac.currentTime + (at || 0), out = ac.createGain();
+  out.gain.value = t.gain; out.connect(_duelBus);
+  const o = ac.createOscillator(); o.type = t.type || 'sine';
+  o.frequency.setValueAtTime(t.f0, t0);
+  o.frequency.exponentialRampToValueAtTime(t.f1, t0 + t.dur);
+  const f = ac.createBiquadFilter(); f.type = 'lowpass';
+  f.frequency.setValueAtTime(Math.max(t.f0, t.f1) * 3 + 400, t0);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(0.55, t0 + Math.min(0.05, t.dur * 0.2));
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + t.dur);
+  o.connect(f); f.connect(g); g.connect(out);
+  o.start(t0); o.stop(t0 + t.dur + 0.05);
 }
 // A death: no crack at all, just the body falling away under a dark tail.
 function _duelSynthSlay(t, at) {
@@ -40103,17 +40203,27 @@ function duelQuake(level, at) {
 function duelSfxFlush(q, hasLunge) {
   if (!q || !q.length) return;
   let dmg = 0, heal = 0, slay = false, ownHero = false;
+  const once = {};                            // the keyword cues, at most one each
   q.forEach(x => {
     if (x.t === 'lunge') return;
     const a = Math.max(0, x.amount | 0);
     if (x.cls === 'heal') heal = Math.max(heal, a);
     else if (x.cls === 'slay') slay = true;
-    else if (x.cls === 'dmg' || x.cls === 'venom' || x.cls === 'spell' || x.cls === 'skill') {
+    else if (x.cls === 'shield' || x.cls === 'buff' || x.cls === 'rank') once[x.cls] = 1;
+    else if (x.cls === 'freeze') {
+      // A freeze that also CHIPS carries its damage under the freeze tag, so it
+      // has to feed the impact as well or Ariselle's board-wide hit lands in
+      // silence and never shakes anything.
+      once.freeze = 1;
+      dmg = Math.max(dmg, a);
+    } else if (x.cls === 'dmg' || x.cls === 'venom' || x.cls === 'spell' || x.cls === 'skill') {
       dmg = Math.max(dmg, a);
       if (x.t === 'h' && x.who === 'P') ownHero = true;
     }
   });
   const at = hasLunge ? DUEL_HIT_DELAY : 0;   // wait for the attacker to arrive
+  // The keyword cues sit just behind the blow rather than inside it.
+  Object.keys(once).forEach((cls, i) => duelSfxPlay(cls, at + (dmg > 0 ? 0.06 : 0) + i * 0.05));
   if (dmg > 0) {
     // A blow to your OWN hero is worth more drama than the same number landing
     // on a minion — it is the one that can end the duel.
@@ -40468,6 +40578,7 @@ function duelAnswer(i) {
   r.quiz.answered = true;
   const q = r.quiz.q;
   const correct = (i | 0) === (q.a | 0);
+  duelSfxPlay(correct ? 'right' : 'wrong');
   const ms = Math.max(0, Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - r.quiz.at));
   try { rpgAwardGameQuestion(q.id, correct, ms); } catch (_) {}
   try { _duelLogAttempt(q, correct); } catch (_) {}

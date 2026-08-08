@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy this file to manifest.json to switch the duel from its synthesised sounds to real recorded ones. Each value is a filename in this folder, or a full https:// URL. Any cue you leave out keeps the synth. See README.md for where to download the files and what each cue should sound like.",
+  "_comment": "Copy this file to manifest.json to switch the duel from its synthesised sounds to real recorded ones. Each value is a filename in this folder, or a full https:// URL. Any cue you leave out keeps the synth, so a partial manifest is fine. See README.md for where to download the files and what each cue should sound like.",
 
   "hit1": "hit-light.mp3",
   "hit2": "hit-medium.mp3",
@@ -7,5 +7,18 @@
   "hit4": "hit-massive.mp3",
   "heal1": "heal-small.mp3",
   "heal2": "heal-big.mp3",
-  "slay": "slay.mp3"
+  "slay": "slay.mp3",
+
+  "draw": "draw.mp3",
+  "summon": "summon.mp3",
+  "cast": "cast.mp3",
+  "freeze": "freeze.mp3",
+  "shield": "shield.mp3",
+  "buff": "buff.mp3",
+  "rank": "rank-up.mp3",
+  "turn": "turn.mp3",
+  "right": "right.mp3",
+  "wrong": "wrong.mp3",
+  "win": "win.mp3",
+  "lose": "lose.mp3"
 }

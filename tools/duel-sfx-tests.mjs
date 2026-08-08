@@ -75,11 +75,13 @@ const env = {
 // A fresh instance per call: duelSfxOn() caches the student's choice for the
 // life of the page, so the muted case has to be its own "page load".
 const build = () => new Function(...Object.keys(env), section + '\nreturn {' + [
-  'DUEL_HIT_TIERS', 'DUEL_HEAL_TIERS', 'DUEL_SLAY_TIER', 'DUEL_HIT_DELAY',
-  'duelHitTier', 'duelHealTier', 'duelSfxOn', 'duelToggleSfx', 'duelSfxCue',
+  'DUEL_HIT_TIERS', 'DUEL_HEAL_TIERS', 'DUEL_SLAY_TIER', 'DUEL_HIT_DELAY', 'DUEL_CUES', 'DUEL_SYNTHS',
+  'duelHitTier', 'duelHealTier', 'duelSfxOn', 'duelToggleSfx', 'duelSfxCue', 'duelSfxPlay',
   'duelQuake', 'duelSfxFlush', '_duelSfxBuf: () => _duelSfxBuf'
 ].join(',') + '};')(...Object.values(env));
-const M = build();
+// Rebuilt per case by reset(), so the stagger clock and the cached mute choice
+// never leak from one case into the next.
+let M = build();
 
 // ---- harness ---------------------------------------------------------------
 const cases = [];
@@ -89,7 +91,7 @@ const eq = (got, want, what) => {
   if (g !== w) throw new Error((what || 'value') + ': got ' + g + ', wanted ' + w);
 };
 const ok = (cond, what) => { if (!cond) throw new Error(what); };
-const reset = () => { log = []; store = {}; classes = new Set(); quakeEl = makeEl(); timers = []; };
+const reset = () => { log = []; store = {}; classes = new Set(); quakeEl = makeEl(); timers = []; M = build(); };
 
 // ---- the ladder ------------------------------------------------------------
 // The whole feature in one assertion: every tier is louder, deeper, longer and
@@ -189,15 +191,30 @@ test('a trade heals, kills and hits in one flush', () => {
 });
 
 test('nothing that is not damage shakes the screen', () => {
-  ['freeze', 'shield', 'buff', 'rank'].forEach(cls => {
+  ['shield', 'buff', 'rank'].forEach(cls => {
     reset();
     M.duelSfxFlush([{ t: 'm', uid: 1, amount: 3, cls }], false);
     eq(classes.size, 0, cls + ' must not shake the board');
+    ok(started().length > 0, cls + ' must still be heard');
   });
   reset();
   M.duelSfxFlush([{ t: 'm', uid: 1, amount: 5, cls: 'heal' }], false);
   eq(classes.size, 0, 'healing must not shake the board');
   ok(started().length > 0, '…but it must still be heard');
+});
+
+// A freeze that also chips carries its damage under the FREEZE tag, so it is
+// the one keyword that has to feed the impact as well — otherwise Ariselle's
+// board-wide hit lands in total silence and never shakes anything.
+test('a freeze that chips is both a shimmer and a blow', () => {
+  reset();
+  M.duelSfxFlush([{ t: 'm', uid: 1, amount: 0, cls: 'freeze' }], false);
+  eq(classes.size, 0, 'a pure freeze does not shake');
+  ok(started().length > 0, '…but it is heard');
+  reset();
+  M.duelSfxFlush([{ t: 'm', uid: 1, amount: 7, cls: 'freeze' }], false);
+  eq(classes.has('duel-quake-3'), true, 'a freeze that deals 7 shakes like 7 damage');
+  ok(log.some(x => x.node === 'osc' && x.type === 'triangle'), 'and lands an impact, not only a shimmer');
 });
 
 test('a flush with nothing in it plays nothing', () => {
@@ -206,6 +223,77 @@ test('a flush with nothing in it plays nothing', () => {
   M.duelSfxFlush(null, false);
   M.duelSfxFlush([{ t: 'lunge', uid: 1 }], true);
   eq(started().length, 0, 'a lunge on its own is silent — the impact is the sound');
+});
+
+// ---- the one-shots: drawing, playing, the turn, the result -----------------
+test('every cue routes to a synth that exists', () => {
+  Object.keys(M.DUEL_CUES).forEach(name => {
+    const c = M.DUEL_CUES[name];
+    eq(c.cue, name, 'cue ' + name + ' must name its own manifest key');
+    ok(M.DUEL_SYNTHS[c.synth], name + ' routes to an unknown synth "' + c.synth + '"');
+    ok(c.gain > 0 && c.dur > 0, name + ' needs a gain and a length');
+  });
+  M.DUEL_HIT_TIERS.concat(M.DUEL_HEAL_TIERS, [M.DUEL_SLAY_TIER])
+    .forEach(t => ok(M.DUEL_SYNTHS[t.synth], 'tier ' + t.cue + ' routes to an unknown synth'));
+});
+
+// The routine cues happen every single turn and an impact does not. A draw that
+// is as loud as a blow is what makes a student mute the whole mode.
+test('the routine cues stay under the blows', () => {
+  const loudestRoutine = Math.max(...['draw', 'summon', 'cast', 'turn', 'buff', 'shield', 'freeze']
+    .map(k => M.DUEL_CUES[k].gain));
+  ok(loudestRoutine < M.DUEL_HIT_TIERS[0].gain, 'a routine cue must be quieter than the lightest blow');
+  ok(M.DUEL_CUES.turn.gain <= M.DUEL_CUES.draw.gain, 'the turn chime is the most frequent thing there is');
+  ok(M.DUEL_CUES.win.gain > loudestRoutine, 'winning is allowed to be loud');
+});
+
+test('a burst of draws is a riffle, not one click', () => {
+  reset();
+  for (let i = 0; i < 3; i++) M.duelSfxPlay('draw');       // the opening hand, dealt in one tick
+  const at = started().map(x => Math.round(x.start * 100) / 100).sort((a, b) => a - b);
+  eq(at.length, 3, 'three draws, three sounds');
+  eq(at[0], 0, 'the first one is not deferred behind a gap nothing is occupying');
+  ok(at[0] < at[1] && at[1] < at[2], 'each one is nudged past the last');
+  ok(at[2] <= M.DUEL_CUES.draw.gap * 2 + 0.001, 'and the riffle stays tight');
+});
+
+test('a run of draws stops rather than dealing into next week', () => {
+  reset();
+  for (let i = 0; i < 40; i++) M.duelSfxPlay('draw');
+  const at = started().map(x => x.start);
+  ok(at.length < 40, 'the tail is dropped once it is too far behind to mean anything');
+  ok(Math.max(...at) <= 0.7, 'nothing is scheduled beyond the defer cap');
+});
+
+test('cues with no gap are never deferred', () => {
+  reset();
+  M.duelSfxPlay('turn'); M.duelSfxPlay('turn'); M.duelSfxPlay('turn');
+  // A chord staggers its own partials, so "not deferred" means each CALL opened
+  // at zero — three voices starting on the beat, one per call.
+  eq(started().filter(x => x.start === 0).length, 3, 'a turn chime cannot collide with itself');
+});
+
+test('an unknown cue is silence, not a crash', () => {
+  reset();
+  M.duelSfxPlay('nope');
+  M.duelSfxPlay(undefined);
+  eq(started().length, 0, 'nothing plays');
+});
+
+test('the result lands after the killing blow', () => {
+  reset();
+  M.duelSfxPlay('win', 0.32);
+  ok(started().every(x => x.start >= 0.32), 'the fanfare waits for the last impact to sound');
+});
+
+test('the keyword cues ride the flush', () => {
+  reset();
+  M.duelSfxFlush([{ t: 'm', uid: 1, amount: 0, cls: 'shield' }, { t: 'm', uid: 2, amount: 0, cls: 'buff' }], false);
+  ok(started().length >= 2, 'a ward and a buff in one flush are both heard');
+  reset();
+  // …but at most once each, however many minions a battlecry touches.
+  M.duelSfxFlush([1, 2, 3, 4, 5].map(uid => ({ t: 'm', uid, amount: 0, cls: 'buff' })), false);
+  eq(log.filter(x => x.node === 'osc' && x.type === 'triangle').length, 1, 'one buff cue for the whole board');
 });
 
 // ---- the switch ------------------------------------------------------------
