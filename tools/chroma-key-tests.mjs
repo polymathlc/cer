@@ -18,7 +18,8 @@ const screens = src.slice(src.indexOf('const TCG_SCREENS = {'), src.indexOf('fun
 // functions, so the tests below run the shipping code.
 const plate = src.slice(src.indexOf('const TCG_PLATE_RING_MIN'), src.indexOf('// Remove that colour.'));
 const pieces = [screens, consts, plate, grab('function _screenDn'), grab('async function _screenKeyOut'),
-  grab('async function _screenBack'), grab('function _tcgPlateColour'), grab('async function _tcgKeyPlate')].join('\n');
+  grab('async function _screenBack'), grab('function _tcgPlateColour'), grab('function _tcgEnclosedPlateColour'),
+  grab('async function _tcgKeyPlate')].join('\n');   // _screenStillThere + its constant ride along in `consts`
 const store = new Map(); let seq = 0;
 const mk = (w,h,px) => { const u='buf:'+(++seq); store.set(u,{w,h,px}); return u; };
 class ImageData { constructor(px,w,h){this.data=px;this.width=w;this.height=h;} }
@@ -40,7 +41,7 @@ const canvas = () => { let W=0,H=0,PX=null; return {
 let FILL=[255,0,255];
 global.document = { createElement: canvas };
 const _loadImageEl = async u => { const b=store.get(u); return {naturalWidth:b.w,naturalHeight:b.h,width:b.w,height:b.h,src:u}; };
-const M = new Function('_loadImageEl','ImageData','console', pieces + '\nreturn {_screenKeyOut,_screenBack,_screenDn,TCG_SCREENS,_tcgPlateColour,_tcgKeyPlate};')(_loadImageEl, ImageData, console);
+const M = new Function('_loadImageEl','ImageData','console', pieces + '\nreturn {_screenKeyOut,_screenBack,_screenDn,TCG_SCREENS,_tcgPlateColour,_tcgKeyPlate,_screenStillThere};')(_loadImageEl, ImageData, console);
 
 const S = 220;
 const paint = fn => { const px = new Uint8ClampedArray(S*S*4);
@@ -201,6 +202,35 @@ const check = (name, got, want) => { const bad=[];
   if (out === null) { pass++; console.log('pass  wide-hue-in-art-no-wall     refused (no clean edge of screen anywhere)'); }
   else { fail++; console.log('FAIL  wide-hue-in-art-no-wall     wide keyed a subject that merely contains the hue'); }
 }
+// 19. THE RING (v1.280.0). A metal ring with the screen showing through the
+//     middle. The interior is REAL background — the wall, seen through a hole —
+//     but it does not touch the border, so the strict "enclosed screen" guard
+//     counted it as key colour painted onto the subject and refused the whole
+//     key. The artifact shipped with a solid magenta disc inside it.
+{
+  const R = 92, r = 52, cx = 110, cy = 110;
+  const d = (x,y) => Math.hypot(x-cx, y-cy);
+  const ringPx = (x,y) => d(x,y) <= R && d(x,y) >= r;
+  const holePx = (x,y) => d(x,y) < r;
+  const u = paint((x,y)=> ringPx(x,y) ? [150,120,80] : [255,0,255]);
+  const out = await M._screenKeyOut(u,'magenta',true);
+  if (out === null) { fail++; console.log('FAIL  ring-hole-keeps-screen       refused — the hole keeps its magenta disc'); }
+  else check('ring-hole-keeps-screen', scoreOf(out, (x,y)=> ringPx(x,y) ? 'ring' : holePx(x,y) ? 'hole' : 'outside'),
+    { ring:'keep', hole:'cut', outside:'cut' });
+}
+
+// 19b. The paired negative, which pins that the rule is THINNESS and not merely
+//      "is enclosed": the same disc inside a THICK body. That is a patch of key
+//      colour sitting deep in a mass — paint, not an opening — and it must
+//      still be refused however flat and pure its colour is.
+{
+  const d = (x,y) => Math.hypot(x-110,y-110);
+  const u = paint((x,y)=> (d(x,y) <= 96 && d(x,y) >= 24) ? [150,120,80] : d(x,y) < 24 ? [255,0,255] : [255,0,255]);
+  const out = await M._screenKeyOut(u,'magenta',true);
+  if (out === null) { pass++; console.log('pass  thick-body-patch-refused    a patch deep inside a mass is paint, not a hole'); }
+  else { fail++; console.log('FAIL  thick-body-patch-refused    keyed a patch buried in the subject'); }
+}
+
 // ---- the 🧼 manual remover -------------------------------------------------
 // 14. The exact frame from the report: a wall of water with a band of the
 //     magenta screen still across the top. The button finds the flat colour the
@@ -249,6 +279,36 @@ const check = (name, got, want) => { const bad=[];
   const got = await M._tcgKeyPlate(u);
   if (got && got.kept < 0.62) { pass++; console.log('pass  plate-would-hollow-it       kept ' + Math.round(got.kept*100) + '% -> refused by the caller'); }
   else { fail++; console.log('FAIL  plate-would-hollow-it       kept ' + (got ? Math.round(got.kept*100) : '—') + '%, the guard would not fire'); }
+}
+// 20. …and the 🧼 button could not rescue it either. By the time the admin
+//     presses it the OUTSIDE is already transparent, so the border ring the
+//     plate detector samples is empty and it finds no plate at all — while the
+//     magenta the admin is actually looking at sits in the middle of the frame.
+{
+  const R = 92, r = 52, cx = 110, cy = 110;
+  const d = (x,y) => Math.hypot(x-cx, y-cy);
+  const ringPx = (x,y) => d(x,y) <= R && d(x,y) >= r;
+  const holePx = (x,y) => d(x,y) < r;
+  const u = paint((x,y)=> ringPx(x,y) ? [150,120,80] : holePx(x,y) ? [255,0,255] : null);
+  const got = await M._tcgKeyPlate(u);
+  if (!got || !got.cut) { fail++; console.log('FAIL  plate-enclosed-on-cut-sprite the 🧼 button found nothing to remove'); }
+  else check('plate-enclosed-on-cut-sprite', scoreOf(got.url, (x,y)=> ringPx(x,y) ? 'ring' : holePx(x,y) ? 'hole' : null),
+    { ring:'keep', hole:'cut' });
+}
+// 21. The VERIFIER could never see this either: it only ever inspected the
+//     border ring and the corners, so a disc walled in behind a ring passed as
+//     clean and was saved. The screen is a colour we chose and the subject is
+//     briefed never to contain it, so "is any of it still here, anywhere?" is
+//     the honest question.
+{
+  const R = 92, r = 52, cx = 110, cy = 110;
+  const d = (x,y) => Math.hypot(x-cx, y-cy);
+  const dirty = paint((x,y)=> (d(x,y) <= R && d(x,y) >= r) ? [150,120,80] : d(x,y) < r ? [255,0,255] : null);
+  const clean = paint((x,y)=> (d(x,y) <= R && d(x,y) >= r) ? [150,120,80] : null);
+  const a = await M._screenStillThere(dirty,'magenta');
+  const b = await M._screenStillThere(clean,'magenta');
+  if (a && !b) { pass++; console.log('pass  verifier-sees-walled-in-plate ' + a); }
+  else { fail++; console.log('FAIL  verifier-sees-walled-in-plate dirty=' + a + ' clean=' + b); }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
