@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.258.0';
+const APP_VERSION = 'v1.259.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -30837,6 +30837,24 @@ function _commTcgAnnouncePost() {
     createdAt: (_tcgConfig && _tcgConfig.releasedAt) || ''
   };
 }
+// The expansion news, pinned above the release post. Unlike the banner there is
+// nothing to dismiss — a student who wants to read it again comes back here.
+function _commTcgExpansionPost() {
+  if (!tcgReleased()) return null;
+  return {
+    _id: '__tcgExpansion', _builtin: true,
+    type: 'news', pinned: true, status: 'approved',
+    title: '🦁 NEW EXPANSION — the Lionheart Legion is here!',
+    text: 'The Realm of Embers just got 50 brand-new cards, and for the first time they are PEOPLE: knights, paladins, wizards, sorceresses, mages, warlocks and necromancers, fighting under the red-and-white lion banner. Leading them are two 7★ legends — Kaelen Draxmoor, the Dragon Slayer, who walked up a burning ridge alone to meet a dragon, and Ariselle, the Snow Queen, who put on a crown of ice everybody had been warned never to touch. That takes the dex to 201 cards.\n\n'
+      + 'What is new when you get there: you now CHOOSE which set your booster pack comes from, so you can hunt the Lionheart cards on purpose — and the packet tears open on screen before the cards turn over. There is a whole new 📜 Chronicle of Embers too: an illustrated storybook of the realm, 32 pages across four books, and every 5★, 6★ and 7★ card in the game has a page you can go and read. Book Three is the war between the elder dragon gods and the Legion.\n\n'
+      + 'Your points are already waiting, and every 50 correct answers fills the ⚡ energy bar for a FREE Gold Pack. Go and open something.',
+    _ctaHtml: '<div class="comm-actions"><button class="btn btn-primary" onclick="tcgOpenExpansionPacks()">🎁 Open a Lionheart pack</button>'
+      + '<button class="btn btn-outline" onclick="tcgOpenExpansionLore()">📜 Read the Chronicle</button></div>',
+    authorUid: '', authorName: COMM_ADMIN_NAME, authorRole: 'admin',
+    authorAvatar: '🦁', authorStatus: COMM_ADMIN_STATUS,
+    createdAt: ''
+  };
+}
 function _commPostHtml(p, moderate) {
   const admin = _isAdmin();
   const isStaff = p.authorRole === 'admin';
@@ -30869,6 +30887,8 @@ function _renderCommFeed() {
   if (fpsPost) posts.unshift(fpsPost);
   const tcgPost = _commTcgAnnouncePost();   // newest release sits above the Strike one
   if (tcgPost) posts.unshift(tcgPost);
+  const expPost = _commTcgExpansionPost();  // …and the expansion news above that
+  if (expPost) posts.unshift(expPost);
   if (!posts.length) { feed.innerHTML = '<div class="empty-note">No posts yet. ' + (_isAdmin() ? 'Share the first update above!' : 'Check back soon!') + '</div>'; return; }
   feed.innerHTML = posts.map(p => _commPostHtml(p, false)).join('');
 }
@@ -34266,9 +34286,57 @@ function _tcgAnnounceKey() { return 'tcgAnnounceDismissed_v1:' + ((_tcgConfig &&
 function tcgAnnounceVisible() {
   if (!currentUser || _isEmployee() || !tcgReleased()) return false;   // no game news for an author
   if (!_isAdmin() && rpgGameHidden()) return false;   // students with the game hidden are left alone
+  if (tcgExpAnnounceVisible()) return false;   // the newer news owns the slot
   try { return localStorage.getItem(_tcgAnnounceKey()) !== '1'; } catch (e) { return true; }
 }
+
+// ---- Expansion announcement ------------------------------------------
+// A DIFFERENT piece of news from the one above, and it needs its own key.
+// The release banner is keyed to releasedAt, so a student who dismissed it
+// never meets it again — which is right for "the game exists" and useless for
+// "there is a new set sitting in the packs". Bump TCG_NEWS_VERSION and the
+// whole roster meets the new announcement once, on their next visit; the
+// release banner comes back underneath it if they never dismissed that one.
+//
+// Everything a student is told here has to be TRUE and reachable in one tap,
+// so the copy points at exactly three things: the new cards, the tear-open
+// pack, and the Chronicle.
+const TCG_NEWS_VERSION = 'lionheart-1';
+function _tcgNewsKey() { return 'tcgNewsDismissed:' + TCG_NEWS_VERSION; }
+function tcgExpAnnounceVisible() {
+  if (!currentUser || _isEmployee() || !tcgReleased()) return false;
+  if (!_isAdmin() && rpgGameHidden()) return false;
+  try { return localStorage.getItem(_tcgNewsKey()) !== '1'; } catch (e) { return true; }
+}
+function tcgDismissExpAnnounce() {
+  try { localStorage.setItem(_tcgNewsKey(), '1'); } catch (e) {}
+  const el = document.getElementById('tcgExpAnnounce');
+  if (el) el.style.display = 'none';
+  try { tcgShowAnnounce(); } catch (_) {}   // the older banners get the slot back
+}
+// The two calls to action. Both dismiss first — a student who has acted on the
+// news does not need to be told it again on the next page.
+function tcgOpenExpansionPacks() {
+  tcgDismissExpAnnounce();
+  try { navigateTo('tcg'); tcgSetPackSet('nd'); tcgSetTab('packs'); } catch (e) {}
+}
+function tcgOpenExpansionLore() {
+  tcgDismissExpAnnounce();
+  try { navigateTo('tcg'); tcgSetTab('lore'); } catch (e) {}
+}
+(function _tcgWireExpAnnounce() {
+  const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+  bind('tcgExpAnnounceClose', tcgDismissExpAnnounce);
+  bind('tcgExpAnnounceLater', tcgDismissExpAnnounce);
+  bind('tcgExpAnnounceOpen', tcgOpenExpansionPacks);
+  bind('tcgExpAnnounceLore', tcgOpenExpansionLore);
+})();
 function tcgShowAnnounce() {
+  // Three banners share the one slot at the top of the screen, newest first:
+  // the expansion news, then the game release, then Science Strike. Each one
+  // asks the ones above it whether the slot is free.
+  const exp = document.getElementById('tcgExpAnnounce');
+  if (exp) exp.style.display = tcgExpAnnounceVisible() ? 'block' : 'none';
   const el = document.getElementById('tcgAnnounce');
   if (!el) return;
   el.style.display = tcgAnnounceVisible() ? 'block' : 'none';
@@ -34329,8 +34397,9 @@ function fpsShowAnnounce() {
   const el = document.getElementById('fpsAnnounce');
   if (!el) return;
   const dismissed = (() => { try { return localStorage.getItem(FPS_ANNOUNCE_KEY) === '1'; } catch (e) { return false; } })();
-  // The newer Realm of Embers release announcement gets the slot first.
-  const tcgUp = (() => { try { return tcgAnnounceVisible(); } catch (e) { return false; } })();
+  // Both newer Realm of Embers banners get the slot first — the expansion
+  // news, and the release announcement under it.
+  const tcgUp = (() => { try { return tcgExpAnnounceVisible() || tcgAnnounceVisible(); } catch (e) { return false; } })();
   el.style.display = (currentUser && !_isEmployee() && !dismissed && !tcgUp) ? 'block' : 'none';
 }
 function fpsDismissAnnounce() {
@@ -41434,6 +41503,9 @@ window.practiceAsFilter = practiceAsFilter;
 window.startPracticeAs = startPracticeAs;
 window.exitPracticeAs = exitPracticeAs;
 window.tcgOpenFromAnnounce = tcgOpenFromAnnounce;
+// Expansion news CTAs — the community post's buttons are inline onclick
+window.tcgOpenExpansionPacks = tcgOpenExpansionPacks;
+window.tcgOpenExpansionLore = tcgOpenExpansionLore;
 window.elgOpen = elgOpen;
 window.elgStart = elgStart;
 window.elgClose = elgClose;
