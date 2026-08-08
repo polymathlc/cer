@@ -53,6 +53,11 @@ const env = {
   duelLog: msg => log.push({ line: msg }),
   duelRender: () => log.push({ render: 1 }),
   duelCheckOver: () => false,
+  // The effect dispatcher lives in the animation section, which is not sliced
+  // in — recorded rather than stubbed away, so a power that animates nothing
+  // is a visible failure rather than a silent one.
+  duelFxForKind: (kind, who) => log.push({ fx: kind, who }),
+  DUEL_FX_BY_KIND: { armor: 1, dmgAny: 1, grow: 1, chill: 1, study: 1 },
   __state: null
 };
 // The two side lookups live in the turn-flow section, which is not sliced in —
@@ -285,6 +290,23 @@ test('the chooser offers exactly the basic heroes', () => {
   const list = M.duelHeroesFor({ cards: {} });
   eq(list.length, M.DUEL_HEROES.filter(h => h.tier === 'basic').length, 'basics are free to everybody');
   ok(list.every(h => h.tier === 'basic'), 'and nothing above basic leaks in before its expansion');
+});
+
+// Every power must queue an animation as well as change the board — a hero
+// power that resolves in silence reads as a button that did nothing.
+test('every hero power animates', () => {
+  M.DUEL_HEROES.forEach(h => {
+    reset();
+    const r = run(h, M.DUEL_HEROES[0]);
+    r.p.board.push(minion('p1', 'P', 2, 3));
+    r.e.board.push(minion('e1', 'E', 4, 5));
+    M.duelResolvePower('P', h.power, null);
+    ok(log.some(x => x.fx === h.power.kind && x.who === 'P'), h.id + ' resolved without an animation');
+  });
+});
+
+test('every hero names an element for its animation', () => {
+  M.DUEL_HEROES.forEach(h => ok(h.el, h.id + ' has no element, so its power would animate in the default colour'));
 });
 
 // ---- the rival -------------------------------------------------------------
