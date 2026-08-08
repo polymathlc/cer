@@ -11118,19 +11118,22 @@ body.lore-reading { overflow: hidden; }
 .duel-heropick-blurb { font-size: 0.76rem; color: #a9b8dd; line-height: 1.7; }
 
 /* ---- 🎇 duel effect animations ---- */
-/* The layer an effect is painted on: over a whole board row, over one minion,
-   or over a hero panel. Always pointer-events:none — a spell going off must
-   never sit between the student and the card they are about to drag. */
+/* The layer an effect is painted on. It is FIXED and lives in #duelOverlay,
+   positioned over the board row / card / hero panel it belongs to — not inside
+   it. duelRender() replaces the whole shell's innerHTML on every action, so an
+   effect parented to the board is destroyed the moment anything else happens,
+   which a 1.6-second animation would never survive. Same reason the screen
+   shake rides the overlay.
+   pointer-events:none is load-bearing: a spell going off must never sit
+   between the student and the card they are about to drag. */
 .duel-board, .duel-hero, .duel-mini { position: relative; }
-.duel-zonefx { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: visible; }
+.duel-zonefx {
+  position: fixed; z-index: 6; pointer-events: none; overflow: hidden;
+  border-radius: 14px; transition: opacity var(--zfx-fade, 380ms) ease-out;
+}
+.duel-zonefx.zfx-out { opacity: 0; }
 .duel-zonefx img { width: 100%; height: 100%; object-fit: fill; display: block; }
-/* A row effect is allowed to overspill its box a little — a wall of fire that
-   stops dead at the border reads as a rectangle, not a wall. */
-.duel-zonefx.row { inset: -10px -6px; }
-.duel-zonefx.row img { object-fit: fill; }
-/* A minion card is overflow:hidden, so an effect pinned to one card is clipped
-   to it by design — same as the impact burst. No overspill to ask for. */
-.duel-zonefx.one { inset: 0; }
+.duel-zonefx.one { border-radius: 12px; }
 /* ---- the art-free fallback ---- */
 /* Every shape has one, so the duel looks right before a single frame has been
    drawn and each shape upgrades on its own as its art lands. The two elemental
@@ -11138,15 +11141,21 @@ body.lore-reading { overflow: hidden; }
 .duel-zonefx i {
   position: absolute; inset: 0; display: block; border-radius: 12px;
   --zfx-a: #ffd08a; --zfx-b: #c2270a; --zfx-glow: rgba(255,120,40,.75);
+  /* Driven off the same duration the authored frames run for, so the pace of
+     the mode does not change on the day a shape's art lands. */
+  animation-duration: var(--zfx-dur, 1400ms) !important;
 }
 .zfx-sweep i {
   background: linear-gradient(0deg, var(--zfx-b) 0%, var(--zfx-a) 55%, transparent 100%);
   box-shadow: 0 0 30px 6px var(--zfx-glow) inset;
   animation: duelZfxWall 0.52s ease-out forwards;
 }
+/* The plateau is the point: the wall goes UP, it STANDS there while the
+   student looks at it, and only then does it roll away. */
 @keyframes duelZfxWall {
   0% { opacity: 0; transform: scaleY(0.1); transform-origin: bottom; }
-  35% { opacity: 0.92; transform: scaleY(1); transform-origin: bottom; }
+  18% { opacity: 0.95; transform: scaleY(1); transform-origin: bottom; }
+  70% { opacity: 0.95; transform: scaleY(1.02); transform-origin: bottom; }
   100% { opacity: 0; transform: scaleY(1.15); transform-origin: bottom; }
 }
 .zfx-strike i {
@@ -11162,12 +11171,13 @@ body.lore-reading { overflow: hidden; }
 .zfx-drain i { background: linear-gradient(0deg, rgba(220,40,70,0.7), rgba(255,120,140,0.3) 60%, transparent 90%); animation: duelZfxRise 0.55s ease-out forwards; }
 .zfx-slay i { background: linear-gradient(120deg, transparent 40%, #fff 49%, #dbe6ff 51%, transparent 60%); box-shadow: 0 0 26px 5px rgba(220,235,255,0.85); animation: duelZfxFlash 0.4s ease-out forwards; }
 .zfx-summon i { background: radial-gradient(ellipse at 50% 88%, rgba(255,222,150,0.9), rgba(240,205,122,0.3) 45%, transparent 68%); animation: duelZfxRise 0.45s ease-out forwards; }
-@keyframes duelZfxFade { from { opacity: 0; } 30% { opacity: 1; } to { opacity: 0; } }
-@keyframes duelZfxFlash { from { opacity: 0; transform: scale(0.85); } 30% { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.08); } }
+@keyframes duelZfxFade { from { opacity: 0; } 18% { opacity: 1; } 70% { opacity: 1; } to { opacity: 0; } }
+@keyframes duelZfxFlash { from { opacity: 0; transform: scale(0.85); } 18% { opacity: 1; transform: scale(1); } 68% { opacity: 1; transform: scale(1.02); } to { opacity: 0; transform: scale(1.1); } }
 @keyframes duelZfxRise {
   from { opacity: 0; transform: translateY(14%); }
-  35% { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(-12%); }
+  20% { opacity: 1; transform: translateY(0); }
+  70% { opacity: 1; transform: translateY(-3%); }
+  to { opacity: 0; transform: translateY(-14%); }
 }
 
 .duel-mid { display: flex; justify-content: center; }
@@ -11443,6 +11453,7 @@ body.lore-reading { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .duel-mini.duel-lunge, .duel-hit, .duel-frost, .duel-ward, .duel-burst-orb, .duel-float, .duel-peek { animation-duration: 0.01ms !important; }
   .duel-zonefx i { animation-duration: 0.01ms !important; }
+  .duel-zonefx { transition-duration: 0.01ms !important; }
   /* The shake is the one effect that moves the WHOLE screen — someone who has
      asked for less motion gets none of it, not a faster version of it. */
   .duel-quake-1, .duel-quake-2, .duel-quake-3, .duel-quake-4 { animation: none !important; }
