@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.278.0';
+const APP_VERSION = 'v1.279.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -6704,6 +6704,11 @@ function _annotOpenSrc(srcP, target, title) {
     orig.width = canvas.width; orig.height = canvas.height;
     orig.getContext('2d').drawImage(canvas, 0, 0);
     _annot = { blockId: target.blockId || null, artSlot: target.artSlot || null,
+      // WHAT ERASE LEAVES BEHIND. A scanned question is paper, so erasing a
+      // word means painting it white. A piece of game art stands on nothing, so
+      // erasing means erasing — real transparency, not a white patch. The
+      // default follows what is being edited; the toolbar button flips it.
+      eraseTo: target.artSlot ? 'clear' : 'white',
       canvas, ctx, tool: 'erase', color: '#e23c3c', size: 6, tol: 32, drawing: false, history: [], start: null, snap: null,
       zoom: 1, fit: 1, panX: 0, panY: 0, space: false, panning: false, cloneSrc: null, cloneSnap: null, cloneOff: null,
       anchor: null, sel: null, selPts: null, selCanvas, aiFillBusy: false, origSnap: orig, float: null, xform: null, xfStart: null };
@@ -6712,6 +6717,7 @@ function _annotOpenSrc(srcP, target, title) {
     _annotSyncControls();
     _annotBindSliderWheel();
     _annotSetTool('erase');
+    _annotSyncEraseTo();
     const head = document.querySelector('#annotOverlay .overlay-head h3');
     if (head) head.innerHTML = title || '✏️ Touch up &amp; label';
     document.getElementById('annotOverlay').classList.add('show');
@@ -6719,6 +6725,39 @@ function _annotOpenSrc(srcP, target, title) {
     requestAnimationFrame(() => { annotZoomFit(); });
     _annotBindZoomListeners();
   }).catch(e => { console.warn('open annot', e); showToast('Could not open touch-up for this image', 'error'); });
+}
+// Does the eraser CUT rather than paint white?
+function annotEraseClears() { return !!(_annot && _annot.eraseTo === 'clear'); }
+function annotToggleEraseTo() {
+  if (!_annot) return;
+  _annot.eraseTo = annotEraseClears() ? 'white' : 'clear';
+  _annotSyncEraseTo();
+  showToast(annotEraseClears()
+    ? '🩹 Erase now cuts the picture away — transparent, not white'
+    : '🩹 Erase now paints white, for erasing words off paper', 'info');
+}
+function _annotSyncEraseTo() {
+  const b = document.getElementById('annotEraseTo');
+  if (!b) return;
+  const clear = annotEraseClears();
+  b.innerHTML = clear ? '▨ Erase to: <b>transparent</b>' : '⬜ Erase to: <b>white</b>';
+  b.classList.toggle('on', clear);
+  b.title = clear
+    ? 'Erase, the paint bucket and Delete all cut the picture away to nothing — the right thing for card art, sprites and effect frames, which stand on a transparent background. Click to paint white instead.'
+    : 'Erase and the paint bucket paint WHITE — the right thing for rubbing a word off a scanned question. Click to cut the picture away to transparent instead.';
+}
+// Put the canvas into the right mode for the tool about to draw, and set the
+// colour. `destination-out` is what turns a brush stroke into a real hole
+// instead of a white one; _annotUp puts the mode back.
+function _annotPaintCompose(ctx) {
+  const clear = _annot.tool === 'erase' && annotEraseClears();
+  ctx.strokeStyle = clear ? '#000000' : (_annot.tool === 'erase' ? '#ffffff' : _annot.color);
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.globalCompositeOperation = clear ? 'destination-out' : 'source-over';
+  return clear;
+}
+function _annotResetCompose() {
+  if (_annot && _annot.ctx) _annot.ctx.globalCompositeOperation = 'source-over';
 }
 function _annotSyncControls() {
   const col = document.getElementById('annotColor'), sz = document.getElementById('annotSize'), tl = document.getElementById('annotTol');
@@ -6818,9 +6857,13 @@ function _annotFloodFill(sx, sy) {
   const at = (x, y) => (y * W + x) * 4;
   const s0 = at(sx, sy);
   const tr = src[s0], tg = src[s0 + 1], tb = src[s0 + 2], ta = src[s0 + 3];
+  // Erasing with the bucket CUTS when the session is set to transparent — the
+  // fastest way to take a flat plate off a sprite: click it, it is gone.
+  const cut = _annot.tool === 'erase' && annotEraseClears();
   const fill = _annot.tool === 'erase' ? [255, 255, 255] : _annotHexToRgb(_annot.color);
   const fr = fill[0], fg = fill[1], fb = fill[2];
-  if (Math.abs(tr - fr) < 2 && Math.abs(tg - fg) < 2 && Math.abs(tb - fb) < 2 && ta === 255) return; // already that colour
+  if (!cut && Math.abs(tr - fr) < 2 && Math.abs(tg - fg) < 2 && Math.abs(tb - fb) < 2 && ta === 255) return; // already that colour
+  if (cut && ta === 0) return;                    // already empty here
   const t = Math.max(1, _annot.tol || 32);
   const TOL = t * t * 3;   // squared colour distance a pixel may differ and still count
   const match = i => { const dr = src[i] - tr, dg = src[i + 1] - tg, db = src[i + 2] - tb, da = src[i + 3] - ta; return dr * dr + dg * dg + db * db + da * da <= TOL; };
@@ -6832,7 +6875,9 @@ function _annotFloodFill(sx, sy) {
     let up = false, dn = false;
     for (; x < W && match(at(x, y)); x++) {
       const k = y * W + x; if (seen[k]) continue; seen[k] = 1;
-      const i = k * 4; out[i] = fr; out[i + 1] = fg; out[i + 2] = fb; out[i + 3] = 255;
+      const i = k * 4;
+      if (cut) { out[i + 3] = 0; }
+      else { out[i] = fr; out[i + 1] = fg; out[i + 2] = fb; out[i + 3] = 255; }
       if (y > 0) { const mu = match(at(x, y - 1)); if (mu && !up && !seen[k - W]) stack.push([x, y - 1]); up = mu; }
       if (y < H - 1) { const md = match(at(x, y + 1)); if (md && !dn && !seen[k + W]) stack.push([x, y + 1]); dn = md; }
     }
@@ -6841,8 +6886,8 @@ function _annotFloodFill(sx, sy) {
 }
 // ---- MOVE: lift the selection off the picture and drop it anywhere ---------
 // Photoshop's Move tool. Dragging inside a selection cuts those pixels out onto
-// a floating layer that follows the pointer; the hole they left is painted
-// white (the same white Erase uses, which is what a scanned page wants). Hold
+// a floating layer that follows the pointer; the hole they left follows the
+// ⬜/▨ Erase-to setting — white on a scanned page, a real hole on art. Hold
 // Alt to copy instead of cut, leaving the original where it was. The float is
 // only burned in on release, so nothing is committed until you let go.
 function _annotSelLift(copy) {
@@ -6861,10 +6906,14 @@ function _annotSelLift(copy) {
   }
   lx.putImageData(cut, 0, 0);
   if (!copy) {
+    // The hole the pixels left behind follows the same rule Erase does: white
+    // on a scanned page, a real hole on a piece of art that stands on nothing.
+    const clear = annotEraseClears();
     for (let k = 0; k < m.mask.length; k++) {
       if (!m.mask[k]) continue;
       const i = k * 4;
-      src.data[i] = 255; src.data[i + 1] = 255; src.data[i + 2] = 255; src.data[i + 3] = 255;
+      if (clear) { src.data[i + 3] = 0; }
+      else { src.data[i] = 255; src.data[i + 1] = 255; src.data[i + 2] = 255; src.data[i + 3] = 255; }
     }
     ctx.putImageData(src, m.x, m.y);
   }
@@ -6898,7 +6947,7 @@ function _annotFloatCommit() {
 // it (an arrow, a label, a pasted diagram) sits at the wrong angle.
 //
 // With a selection live the selected pixels are lifted onto their own layer —
-// the hole behind them is painted white, exactly like Move does — so the object
+// the hole behind them is filled the way Move fills one (⬜/▨ Erase to) — so the object
 // turns on its own. With nothing selected the WHOLE picture is the object, and
 // the canvas grows so no corner is ever cut off.
 //
@@ -6929,7 +6978,7 @@ function _annotXformBegin() {
   let layer, ox, oy, base, scope;
   const prevSel = _annot.sel;
   if (_annot.sel) {
-    const lift = _annotSelLift(false);   // cut the object out; the hole goes white
+    const lift = _annotSelLift(false);   // cut the object out; the hole follows ⬜/▨ Erase to
     if (!lift) { showToast('That selection is empty — nothing to turn', 'info'); _annot.history.pop(); return; }
     layer = lift.layer; ox = lift.mask.x; oy = lift.mask.y; base = lift.base; scope = 'sel';
     _annot.sel = null; _annotSelSyncBar();   // the old outline no longer describes anything
@@ -7015,8 +7064,11 @@ function _annotXformPreview() {
   if (cv.width !== W || cv.height !== H) { _annotResizeCanvas(W, H); refit = true; }
   const ctx = _annot.ctx;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, W, H);
+  // Turning the WHOLE picture opens up new corners. On a scanned page those are
+  // paper, so they go white; on a piece of art that stands on nothing they must
+  // stay empty, or straightening a sprite boxes it in a white rectangle.
+  ctx.clearRect(0, 0, W, H);
+  if (!annotEraseClears()) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H); }
   if (x.base) ctx.drawImage(x.base, offX, offY);
   _annotXformDrawInto(ctx, x, offX, offY);
   x.offX = offX; x.offY = offY;
@@ -7433,6 +7485,8 @@ function _annotKeyDown(e) {
   if (k === '+' || k === '=') { e.preventDefault(); annotZoomStep(1.3); return; }
   if (k === '-' || k === '_') { e.preventDefault(); annotZoomStep(1 / 1.3); return; }
   if (k === '0') { e.preventDefault(); annotZoomFit(); return; }
+  // Delete / Backspace cuts the selection away, the way every image editor does.
+  if ((k === 'Delete' || k === 'Backspace') && _annot.sel) { e.preventDefault(); annotSelDelete(); return; }
   // Enter commits an open transform (Photoshop's habit); otherwise it saves.
   if (k === 'Enter') { e.preventDefault(); if (_annot.xform) annotXformApply(); else applyAnnotTool(); return; }
   const tool = ANNOT_KEYS[String(k).toLowerCase()];
@@ -7453,6 +7507,7 @@ function _annotUnbindZoomListeners() {
 }
 const ANNOT_CURSORS = { text: 'text', fill: 'cell', wand: 'cell', move: 'move', rotate: 'grab', skew: 'ew-resize', scale: 'move' };
 function _annotSetTool(t) {
+  _annotResetCompose();      // never strand the canvas in destination-out
   // Leaving Rotate/Skew/Resize settles the open transform: a real change is
   // kept, an untouched one is dropped. Nothing is ever left half-applied.
   if (_annot && _annot.xform && t !== 'rotate' && t !== 'skew' && t !== 'scale') {
@@ -7546,11 +7601,11 @@ function _annotSquarePt(s, p) {
 function _annotBrushLine(a, b) {
   const ctx = _annot.ctx, lw = Math.max(1, Math.round(_annot.size));
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.strokeStyle = _annot.tool === 'erase' ? '#ffffff' : _annot.color;
-  ctx.fillStyle = ctx.strokeStyle;
+  _annotPaintCompose(ctx);
   ctx.lineWidth = lw;
   if (lw <= 1) { _annotPlotLine(ctx, a.x, a.y, b.x, b.y); }
   else { ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+  _annotResetCompose();
 }
 // ---- SELECTION (rectangle / lasso) with marching ants, then fill the area
 // with a flat colour, the surrounding texture, or AI content-aware fill. ----
@@ -7741,6 +7796,30 @@ function _annotWithSelClip(fn) {
     before.data[i + 2] = after.data[i + 2]; before.data[i + 3] = 255;
   }
   ctx.putImageData(before, m.x, m.y);
+}
+// ---- DELETE: cut the selection away to nothing -----------------------------
+// The flow this exists for: pick the 🪄 wand, click the colour that should not
+// be there (Alt+click to take it across the WHOLE picture), press Delete. Those
+// pixels become transparent — not white, not black, gone — and the PNG that is
+// saved keeps the hole.
+function annotSelDelete() {
+  if (!_annot || !_annot.sel) { showToast('Select an area first — 🪄 wand, ⬚ select or ➰ lasso', 'info'); return; }
+  _annotPushHistory();
+  const ctx = _annot.ctx, sel = _annot.sel;
+  if (sel.pts) {
+    // A polygon gets a real clip, so the edge is anti-aliased rather than jagged.
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = '#000';
+    ctx.fill(_annotSelPath(sel.pts));
+    ctx.restore();
+  } else {
+    const m = sel;
+    const d = ctx.getImageData(m.x, m.y, m.w, m.h);
+    for (let k = 0; k < m.mask.length; k++) if (m.mask[k]) d.data[k * 4 + 3] = 0;
+    ctx.putImageData(d, m.x, m.y);
+  }
+  showToast('Deleted — that area is transparent now ✓', 'success');
 }
 function annotSelFillColour() {
   if (!_annot || !_annot.sel) return;
@@ -7953,8 +8032,9 @@ function _annotDown(e) {
   // independent of the current zoom, so precise edits are possible when zoomed in.
   const lw = Math.max(1, Math.round(_annot.size));
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.strokeStyle = _annot.tool === 'erase' ? '#ffffff' : _annot.color;
-  ctx.fillStyle = ctx.strokeStyle;
+  // The mode is set for the WHOLE stroke — the drag carries on in pointermove
+  // against this same context — and _annotUp puts it back.
+  _annotPaintCompose(ctx);
   ctx.lineWidth = lw;
   if (lw <= 1) {
     // A 1px brush paints a crisp single pixel (no anti-aliasing) — pixel-perfect.
@@ -8095,6 +8175,7 @@ function _annotUp() {
   // Remember where the brush stroke ended — a later Shift-click continues from
   // here with a straight line (Photoshop behaviour).
   if ((_annot.tool === 'erase' || _annot.tool === 'paint') && _annot.last) _annot.anchor = _annot.last;
+  _annotResetCompose();
   _annot.drawing = false; _annot.start = null; _annot.snap = null; _annot.shiftSeg = null; _annot.last = null; _annot.cloneSnap = null; _annot.cloneOff = null;
 }
 function _annotPlaceText(p) {
@@ -45678,6 +45759,8 @@ window.duelFxDrawAll = duelFxDrawAll;
 window.duelFxCleanRun = duelFxCleanRun;
 window.tcgCleanSlotBg = tcgCleanSlotBg;
 window.tcgTouchUpSlot = tcgTouchUpSlot;
+window.annotSelDelete = annotSelDelete;
+window.annotToggleEraseTo = annotToggleEraseTo;
 window.elgOpen = elgOpen;
 window.elgStart = elgStart;
 window.elgClose = elgClose;
