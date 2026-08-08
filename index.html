@@ -7106,6 +7106,26 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   </div>
 </div>
 
+<!-- ==================== EXPANSION ANNOUNCEMENT (a new card SET is out) ====================
+     The release banner below is keyed to releasedAt, so a student who dismissed it never sees
+     it again — right for "the game exists", useless for "there is a new set in the packs".
+     This one has its OWN key: bump TCG_NEWS_VERSION in app.js and the whole roster meets it
+     once, on their next visit. It wears the realm's own gold-on-galaxy, not the ember brown,
+     because that is what they are about to walk into. -->
+<div id="tcgExpAnnounce" style="display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:1201;width:min(680px,calc(100vw - 28px));background:radial-gradient(120% 100% at 50% -30%,rgba(240,205,122,0.18),transparent 60%),linear-gradient(150deg,#16264f,#0b1230 60%,#080c1e);border:1px solid rgba(240,205,122,0.55);border-radius:18px;padding:26px 28px;box-shadow:0 22px 60px rgba(0,0,0,0.55);color:#f4ecd8;font-family:'DM Sans',system-ui,sans-serif;">
+  <button id="tcgExpAnnounceClose" title="Dismiss" style="position:absolute;top:10px;right:12px;background:none;border:none;color:#93a4cd;font-size:1.1rem;cursor:pointer;padding:4px;">✕</button>
+  <div style="font-family:'Cinzel',Georgia,serif;font-size:0.66rem;letter-spacing:0.28em;text-transform:uppercase;color:rgba(240,205,122,0.9);margin-bottom:10px;">New expansion · Realm of Embers</div>
+  <!-- The emoji sits OUTSIDE the gradient span: -webkit-text-fill-color:transparent
+       applies to it too, and a gradient-filled 🦁 comes out as a pale blob. -->
+  <div style="font-family:'Cinzel',Georgia,serif;font-weight:700;font-size:1.3rem;line-height:1.3;margin-bottom:12px;"><span style="margin-right:8px;">🦁</span><span style="background:linear-gradient(100deg,#fff5da,#f0cd7a 48%,#b9891f);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;">The Lionheart Legion has arrived</span></div>
+  <div style="color:#c3d1f2;font-size:0.92rem;line-height:1.7;margin-bottom:20px;"><b style="color:#f5e6bd;">50 brand-new human heroes</b> — knights, paladins, mages, sorceresses, warlocks and necromancers — join the dex, led by two 7★ legends: <b style="color:#f5e6bd;">Kaelen Draxmoor, the Dragon Slayer</b> and <b style="color:#f5e6bd;">Ariselle, the Snow Queen</b>. Choose which set you open, watch the packet <b>tear open</b> in your hands, and read their whole story in the new <b>📜 Chronicle of Embers</b>.<br><br>Your points are already waiting. <b style="color:#f0cd7a;">Go and open a pack.</b></div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;">
+    <button id="tcgExpAnnounceOpen" style="background:linear-gradient(135deg,#f0cd7a,#c9a227);color:#14161a;border:none;border-radius:10px;padding:12px 22px;font-weight:800;font-size:0.92rem;cursor:pointer;">🎁 Open a Lionheart pack</button>
+    <button id="tcgExpAnnounceLore" style="background:transparent;color:#e7dfc8;border:1px solid rgba(240,205,122,0.5);border-radius:10px;padding:12px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">📜 Read the story</button>
+    <button id="tcgExpAnnounceLater" style="background:transparent;color:#93a4cd;border:1px solid rgba(147,164,205,0.35);border-radius:10px;padding:12px 18px;font-weight:600;font-size:0.92rem;cursor:pointer;">Later</button>
+  </div>
+</div>
+
 <!-- ==================== NEW GAME ANNOUNCEMENT (Realm of Embers TCG release) ====================
      Shown to every signed-in student the moment the admin presses "Release to students",
      and on every login after that until they dismiss it. Re-releasing announces it again. -->
