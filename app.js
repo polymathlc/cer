@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.264.0';
+const APP_VERSION = 'v1.265.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -38587,10 +38587,17 @@ const DUEL_ABILITIES = {
     name: () => 'Worldsend Curse',
     text: (st, v) => 'Battlecry: deal ' + v + ' damage to ALL enemy minions and to the enemy hero.'
   },
+  // Aeonyx, the Timeless One — the keeper of the Ember, and the strongest card
+  // in the game. This used to be a bare "freeze everything", which made it a
+  // strictly WORSE Ariselle: she freezes the board too, and does damage, and
+  // brings Taunt. The two legends now read completely differently — she is the
+  // WALL (stand in front, stop the board, chip it down), he is the TURN ITSELF.
+  // Nothing else in the realm gives a student their mana back, which is what
+  // "time runs back" has to mean if it means anything.
   chrono: {
-    icon: '⌛', kind: 'chrono', trig: 'battlecry', v: () => 0,
+    icon: '⌛', kind: 'chrono', trig: 'battlecry', v: st => 2 + Math.floor(st / 2),
     name: () => 'Time Fracture',
-    text: () => 'Battlecry: FREEZE every enemy minion — none of them attack next turn.'
+    text: (st, v) => 'Battlecry: freeze EVERY enemy minion, deal ' + v + ' damage to each, and REFILL your mana crystals — time itself runs back, and your turn begins again.'
   },
   dragonfall: {
     icon: '🗡️', kind: 'slay', trig: 'battlecry', v: () => 0,
@@ -39350,7 +39357,11 @@ function duelResolveBattlecry(who, m, target) {
     alive().forEach(f => duelHurtMinion(f, ab.v, { cls: 'skill', element: el }));
     duelHurtHero(foeWho, ab.v, el);
   } else if (ab.kind === 'chrono') {
-    alive().forEach(f => { f.frozen = 1; f.canAttack = false; duelFx(f.uid, 0, 'freeze'); });
+    alive().forEach(f => { f.frozen = 1; f.canAttack = false; duelHurtMinion(f, ab.v, { cls: 'freeze', element: el }); });
+    // The turn given back. This is the whole signature — a board stop AND a
+    // second helping of mana, so the Timeless One is played FOR the tempo.
+    me.mana = me.cap;
+    duelLog('⌛ Time runs back — your mana crystals are restored.');
   } else if (ab.kind === 'slay') {
     const list = alive().sort((a, b) => b.atk - a.atk);
     if (list.length) { duelFx(list[0].uid, 0, 'slay'); duelKill(list[0]); }
