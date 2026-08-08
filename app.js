@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.267.0';
+const APP_VERSION = 'v1.268.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -39289,6 +39289,7 @@ function duelStart() {
     fxq: [],           // effects waiting for the next paint (duelFlushFx)
     reapT: 0
   };
+  duelSfxPrime();                 // the run opens from a click, so the audio may be woken here
   for (let i = 0; i < DUEL_START_HAND; i++) duelDraw('p', true);
   for (let i = 0; i < DUEL_START_HAND + 1; i++) duelDraw('e', true);
   duelBeginTurn('P');
@@ -39800,11 +39801,13 @@ function duelFlushFx() {
   const r = duelRun; if (!r || !r.fxq || !r.fxq.length) return;
   const q = r.fxq; r.fxq = [];
   let dying = false;
+  const lunged = q.some(x => x.t === 'lunge');
   q.filter(x => x.t === 'lunge').forEach(_duelPlayLunge);
   q.filter(x => x.t !== 'lunge').forEach(x => {
     if (x.t === 'h') _duelPlayHeroFx(x.who, x.amount, x.cls, x.element);
     else { _duelPlayFx(x.uid, x.amount, x.cls, x.element); if (x.cls === 'slay') dying = true; }
   });
+  try { duelSfxFlush(q, lunged); } catch (_) {}   // audio must never break the board
   if (dying || (r.p.board.concat(r.e.board)).some(m => m.dying)) {
     clearTimeout(r.reapT);
     r.reapT = setTimeout(() => { try { duelReap(); } catch (_) {} }, 480);
@@ -39865,6 +39868,261 @@ function _duelPlayLunge(x) {
   from.style.setProperty('--ly', Math.round(dy * 0.55) + 'px');
   _duelRetrigger(from, 'duel-lunge');
   setTimeout(() => { if (from.isConnected) from.classList.remove('duel-lunge'); }, 460);
+}
+
+// ---- Sound and the screen shake -------------------------------------------
+// A duel is the one mode where a blow is meant to have WEIGHT, so it is the one
+// that has to be heard. Everything below is sized by the DAMAGE — the tiers set
+// the sample, the loudness, the pitch and how hard the screen shakes, so a
+// 2-damage poke and a 14-damage legend do not land the same way.
+//
+// There are two layers, in this order, and the second is why the mode is never
+// silent:
+//   1. SAMPLES. `assets/sfx/duel/manifest.json` names a file (or a full URL)
+//      per cue — real recorded effects from a free sound library. It is fetched
+//      ONCE per page; if it is not deployed, or a file fails to decode, that cue
+//      falls through to layer 2 and is never asked for again.
+//   2. THE SYNTH. A layered WebAudio impact — a noise transient under a falling
+//      low-pass, a pitched body that drops, and a sub boom on the heavy tiers.
+//      It costs the page not one byte and works on a school laptop with no
+//      assets deployed at all, which is what makes the samples optional.
+// Adding a cue is a row in a table plus a filename in the manifest; nothing in
+// the duel's rules knows any of this exists.
+const DUEL_SFX_KEY = 'sq_duel_sfx';                       // localStorage: '0' silences the duel
+const DUEL_SFX_DIR = 'assets/sfx/duel/';
+const DUEL_SFX_MANIFEST = DUEL_SFX_DIR + 'manifest.json';
+const DUEL_HIT_DELAY = 0.16;    // seconds — the lunge's travel, so the blow lands on contact
+// `quake` is the screen-shake level, 1-4, and `body`/`noise`/`sub`/`dur` are the
+// synth's shape. Retune these, not the individual call sites.
+const DUEL_HIT_TIERS = [
+  { max: 2,        cue: 'hit1', synth: 'hit', gain: 0.34, rate: 1.24, body: 200, dur: 0.20, noise: 0.50, sub: 0,    quake: 1 },
+  { max: 5,        cue: 'hit2', synth: 'hit', gain: 0.50, rate: 1.06, body: 140, dur: 0.30, noise: 0.70, sub: 0.22, quake: 2 },
+  { max: 9,        cue: 'hit3', synth: 'hit', gain: 0.68, rate: 0.94, body: 100, dur: 0.46, noise: 0.90, sub: 0.50, quake: 3 },
+  { max: Infinity, cue: 'hit4', synth: 'hit', gain: 0.88, rate: 0.82, body:  66, dur: 0.70, noise: 1.10, sub: 0.85, quake: 4 }
+];
+const DUEL_HEAL_TIERS = [
+  { max: 4,        cue: 'heal1', synth: 'heal', gain: 0.30, rate: 1.08, base: 523.25, steps: [0, 4, 7],         dur: 0.40 },
+  { max: Infinity, cue: 'heal2', synth: 'heal', gain: 0.40, rate: 0.96, base: 392.00, steps: [0, 4, 7, 12, 16], dur: 0.66 }
+];
+const DUEL_SLAY_TIER = { cue: 'slay', synth: 'slay', gain: 0.40, rate: 1, dur: 0.55 };
+function duelHitTier(amount) {
+  const a = Math.max(0, amount | 0);
+  return DUEL_HIT_TIERS.filter(t => a <= t.max)[0] || DUEL_HIT_TIERS[DUEL_HIT_TIERS.length - 1];
+}
+function duelHealTier(amount) {
+  const a = Math.max(0, amount | 0);
+  return DUEL_HEAL_TIERS.filter(t => a <= t.max)[0] || DUEL_HEAL_TIERS[DUEL_HEAL_TIERS.length - 1];
+}
+
+let _duelAC = null, _duelACDead = false, _duelBus = null;
+let _duelSfxOff = null, _duelSfxBuf = {}, _duelSfxMap = null, _duelSfxMapP = null;
+let _duelNoiseBuf = null, _duelQuakeT = 0;
+// Lazily built, and only ever from a click — every entry into a duel is a button
+// press, so the context is never created in the state a browser suspends.
+function _duelAudio() {
+  if (_duelACDead) return null;
+  if (!_duelAC) {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { _duelACDead = true; return null; }
+      _duelAC = new AC();
+      _duelBus = _duelAC.createGain();
+      _duelBus.gain.value = 0.9;
+      _duelBus.connect(_duelAC.destination);
+    } catch (_) { _duelACDead = true; return null; }
+  }
+  if (_duelAC.state === 'suspended') { try { _duelAC.resume(); } catch (_) {} }
+  return _duelAC;
+}
+function duelSfxOn() {
+  if (_duelSfxOff === null) {
+    try { _duelSfxOff = localStorage.getItem(DUEL_SFX_KEY) === '0'; } catch (_) { _duelSfxOff = false; }
+  }
+  return !_duelSfxOff;
+}
+function duelToggleSfx() {
+  _duelSfxOff = duelSfxOn();
+  try { localStorage.setItem(DUEL_SFX_KEY, _duelSfxOff ? '0' : '1'); } catch (_) {}
+  if (!_duelSfxOff) { duelSfxPrime(); duelSfxCue(DUEL_HEAL_TIERS[0], 0); }   // let them hear it come back on
+  duelRender();
+}
+// Warmed when a duel starts, so the first blow of the run is already a sample
+// rather than the synth standing in for one that is still downloading.
+function duelSfxPrime() {
+  if (!duelSfxOn()) return;
+  if (!_duelAudio()) return;
+  _duelSfxManifest().then(m => Object.keys(m || {}).forEach(_duelSfxLoad)).catch(() => {});
+}
+// ONE request per page, and a missing manifest is the ordinary case — it just
+// means nobody has dropped any audio files in, and the synth carries the mode.
+function _duelSfxManifest() {
+  if (_duelSfxMapP) return _duelSfxMapP;
+  _duelSfxMapP = fetch(DUEL_SFX_MANIFEST, { cache: 'force-cache' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(m => (_duelSfxMap = (m && typeof m === 'object') ? m : {}))
+    .catch(() => (_duelSfxMap = {}));
+  return _duelSfxMapP;
+}
+function _duelSfxLoad(cue) {
+  if (cue in _duelSfxBuf) return Promise.resolve(_duelSfxBuf[cue]);
+  const ac = _duelAudio();
+  const src = (_duelSfxMap || {})[cue];
+  _duelSfxBuf[cue] = null;                 // the synth stands in until this really lands
+  if (!ac || !src) return Promise.resolve(null);
+  const url = /^(https?:)?\/\//.test(src) ? src : DUEL_SFX_DIR + src;
+  return fetch(url, { cache: 'force-cache' })
+    .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('sfx ' + r.status))))
+    .then(b => ac.decodeAudioData(b))
+    .then(buf => (_duelSfxBuf[cue] = buf))
+    .catch(() => (_duelSfxBuf[cue] = null));
+}
+// The one play path: the sample if it is in memory, the synth if it is not.
+function duelSfxCue(tier, at) {
+  if (!tier || !duelSfxOn()) return;
+  const ac = _duelAudio(); if (!ac) return;
+  const buf = _duelSfxBuf[tier.cue];
+  if (buf) {
+    const s = ac.createBufferSource(); s.buffer = buf;
+    s.playbackRate.value = tier.rate || 1;
+    const g = ac.createGain(); g.gain.value = tier.gain;
+    s.connect(g); g.connect(_duelBus);
+    s.start(ac.currentTime + (at || 0));
+    return;
+  }
+  if (_duelSfxMap && !(tier.cue in _duelSfxBuf)) _duelSfxLoad(tier.cue);
+  if (tier.synth === 'heal') _duelSynthHeal(tier, at);
+  else if (tier.synth === 'slay') _duelSynthSlay(tier, at);
+  else _duelSynthHit(tier, at);
+}
+function _duelNoise() {
+  const ac = _duelAudio(); if (!ac) return null;
+  if (_duelNoiseBuf) return _duelNoiseBuf;
+  const buf = ac.createBuffer(1, Math.floor(ac.sampleRate), ac.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return (_duelNoiseBuf = buf);
+}
+// An impact is three things at once: the crack (filtered noise), the body (a
+// pitch that falls, which is what gives a blow its weight) and — only on the
+// heavy tiers — a sub boom you feel more than hear.
+function _duelSynthHit(t, at) {
+  const ac = _duelAudio(); if (!ac) return;
+  const t0 = ac.currentTime + (at || 0), out = ac.createGain();
+  out.gain.value = t.gain; out.connect(_duelBus);
+  const noise = _duelNoise();
+  if (noise) {
+    const n = ac.createBufferSource(); n.buffer = noise;
+    const nf = ac.createBiquadFilter(); nf.type = 'lowpass'; nf.Q.value = 1.2;
+    nf.frequency.setValueAtTime(4600, t0);
+    nf.frequency.exponentialRampToValueAtTime(300, t0 + t.dur * 0.85);
+    const ng = ac.createGain();
+    ng.gain.setValueAtTime(0.0001, t0);
+    ng.gain.exponentialRampToValueAtTime(t.noise, t0 + 0.006);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t0 + t.dur);
+    n.connect(nf); nf.connect(ng); ng.connect(out);
+    n.start(t0); n.stop(t0 + t.dur + 0.05);
+  }
+  const o = ac.createOscillator(); o.type = 'triangle';
+  o.frequency.setValueAtTime(t.body * 2.4, t0);
+  o.frequency.exponentialRampToValueAtTime(t.body * 0.5, t0 + t.dur * 0.9);
+  const og = ac.createGain();
+  og.gain.setValueAtTime(0.0001, t0);
+  og.gain.exponentialRampToValueAtTime(0.9, t0 + 0.008);
+  og.gain.exponentialRampToValueAtTime(0.0001, t0 + t.dur);
+  o.connect(og); og.connect(out);
+  o.start(t0); o.stop(t0 + t.dur + 0.05);
+  if (t.sub > 0) {
+    const sub = ac.createOscillator(); sub.type = 'sine';
+    sub.frequency.setValueAtTime(58, t0);
+    sub.frequency.exponentialRampToValueAtTime(26, t0 + t.dur * 1.2);
+    const sg = ac.createGain();
+    sg.gain.setValueAtTime(0.0001, t0);
+    sg.gain.exponentialRampToValueAtTime(t.sub, t0 + 0.02);
+    sg.gain.exponentialRampToValueAtTime(0.0001, t0 + t.dur * 1.3);
+    sub.connect(sg); sg.connect(out);
+    sub.start(t0); sub.stop(t0 + t.dur * 1.35 + 0.05);
+  }
+}
+// Healing is the opposite shape: nothing percussive, a chord that arrives from
+// underneath and opens upward. The bigger heal simply gets more of the chord.
+function _duelSynthHeal(t, at) {
+  const ac = _duelAudio(); if (!ac) return;
+  const t0 = ac.currentTime + (at || 0), out = ac.createGain();
+  out.gain.value = t.gain; out.connect(_duelBus);
+  (t.steps || [0, 4, 7]).forEach((semi, i) => {
+    const st = t0 + i * 0.055;
+    const o = ac.createOscillator(); o.type = 'sine';
+    const f = (t.base || 523.25) * Math.pow(2, semi / 12) * (t.rate || 1);
+    o.frequency.setValueAtTime(f * 0.985, st);
+    o.frequency.linearRampToValueAtTime(f, st + 0.09);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, st);
+    g.gain.exponentialRampToValueAtTime(0.34, st + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, st + t.dur);
+    o.connect(g); g.connect(out);
+    o.start(st); o.stop(st + t.dur + 0.05);
+  });
+}
+// A death: no crack at all, just the body falling away under a dark tail.
+function _duelSynthSlay(t, at) {
+  const ac = _duelAudio(); if (!ac) return;
+  const t0 = ac.currentTime + (at || 0), out = ac.createGain();
+  out.gain.value = t.gain; out.connect(_duelBus);
+  const o = ac.createOscillator(); o.type = 'sawtooth';
+  o.frequency.setValueAtTime(220, t0);
+  o.frequency.exponentialRampToValueAtTime(38, t0 + t.dur);
+  const f = ac.createBiquadFilter(); f.type = 'lowpass';
+  f.frequency.setValueAtTime(1800, t0);
+  f.frequency.exponentialRampToValueAtTime(180, t0 + t.dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(0.55, t0 + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + t.dur);
+  o.connect(f); f.connect(g); g.connect(out);
+  o.start(t0); o.stop(t0 + t.dur + 0.05);
+}
+// The screen shake. It rides the OVERLAY, not the shell, so the whole board and
+// its backdrop move together — and because duelRender() only replaces the
+// shell's innerHTML, a shake started mid-turn survives the repaint that follows.
+function duelQuake(level, at) {
+  const lv = Math.max(1, Math.min(4, level | 0));
+  const go = () => {
+    const el = document.getElementById('duelOverlay') || document.getElementById('duelShell');
+    if (!el) return;
+    for (let i = 1; i <= 4; i++) el.classList.remove('duel-quake-' + i);
+    void el.offsetWidth;                      // same reflow read the hit shake needs
+    el.classList.add('duel-quake-' + lv);
+    clearTimeout(_duelQuakeT);
+    _duelQuakeT = setTimeout(() => { try { el.classList.remove('duel-quake-' + lv); } catch (_) {} }, 700);
+  };
+  if (at > 0) setTimeout(go, at * 1000); else go();
+}
+// One beat per flush, sized by the LOUDEST thing in it. A battlecry that hits
+// five minions is one big blow, not five overlapping ones — which is both what
+// it should sound like and the only way an area spell does not clip.
+function duelSfxFlush(q, hasLunge) {
+  if (!q || !q.length) return;
+  let dmg = 0, heal = 0, slay = false, ownHero = false;
+  q.forEach(x => {
+    if (x.t === 'lunge') return;
+    const a = Math.max(0, x.amount | 0);
+    if (x.cls === 'heal') heal = Math.max(heal, a);
+    else if (x.cls === 'slay') slay = true;
+    else if (x.cls === 'dmg' || x.cls === 'venom' || x.cls === 'spell' || x.cls === 'skill') {
+      dmg = Math.max(dmg, a);
+      if (x.t === 'h' && x.who === 'P') ownHero = true;
+    }
+  });
+  const at = hasLunge ? DUEL_HIT_DELAY : 0;   // wait for the attacker to arrive
+  if (dmg > 0) {
+    // A blow to your OWN hero is worth more drama than the same number landing
+    // on a minion — it is the one that can end the duel.
+    const tier = duelHitTier(dmg + (ownHero ? 2 : 0));
+    duelSfxCue(tier, at);
+    duelQuake(tier.quake, at);
+  }
+  if (slay) duelSfxCue(DUEL_SLAY_TIER, at + 0.12);
+  if (heal > 0) duelSfxCue(duelHealTier(heal), 0);
 }
 
 // ---- Rendering -------------------------------------------------------------
@@ -39987,6 +40245,9 @@ function duelRender() {
   shell.innerHTML = '<div class="duel-top">'
     +   '<div class="duel-title">🎴 Ember Duel <span class="duel-beta">' + (duelReleased() ? 'NEW' : 'BETA') + '</span></div>'
     +   '<div class="duel-turn' + (yourTurn ? ' you' : '') + '">' + (r.over ? 'Duel over' : (yourTurn ? 'Your turn' : 'Rival thinking…')) + '</div>'
+    +   '<button type="button" class="duel-x duel-sfx-btn' + (duelSfxOn() ? '' : ' off') + '" onclick="duelToggleSfx()"'
+    +     ' title="' + (duelSfxOn() ? 'Sound on — tap to silence the duel' : 'Sound off — tap to turn it back on') + '">'
+    +     (duelSfxOn() ? '🔊' : '🔇') + '</button>'
     +   '<button type="button" class="duel-x" onclick="duelClose()" title="Leave the duel">✕</button>'
     + '</div>'
     + '<div class="duel-field">'
@@ -43531,6 +43792,7 @@ window.tcgOpenExpansionLore = tcgOpenExpansionLore;
 window.duelOpen = duelOpen;
 window.duelStart = duelStart;
 window.duelClose = duelClose;
+window.duelToggleSfx = duelToggleSfx;
 window.duelRestart = duelRestart;
 window.duelSetReleased = duelSetReleased;
 window.duelPlayCard = duelPlayCard;

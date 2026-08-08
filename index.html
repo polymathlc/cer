@@ -11014,6 +11014,47 @@ body.lore-reading { overflow: hidden; }
 .duel-float.freeze, .duel-float.shield { color: #8fd8ff; }
 .duel-float.spell, .duel-float.skill { color: #e0a8ff; }
 
+/* ---- the screen shake ----
+   Four levels, chosen by the DAMAGE (DUEL_HIT_TIERS[].quake in app.js): a poke
+   nudges the board, a legend's blow throws it. The class rides .duel-overlay so
+   the backdrop moves with the board — duelRender() only replaces the shell's
+   innerHTML, so a shake started mid-turn survives the repaint. */
+@keyframes duelQuake1 {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  30% { transform: translate3d(-2px, 1px, 0); }
+  60% { transform: translate3d(2px, -1px, 0); }
+}
+@keyframes duelQuake2 {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-5px, 2px, 0); }
+  45% { transform: translate3d(4px, -3px, 0); }
+  70% { transform: translate3d(-3px, 1px, 0); }
+  88% { transform: translate3d(2px, 0, 0); }
+}
+@keyframes duelQuake3 {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  12% { transform: translate3d(-9px, 4px, 0) rotate(-0.4deg); }
+  30% { transform: translate3d(8px, -5px, 0) rotate(0.35deg); }
+  50% { transform: translate3d(-6px, 3px, 0) rotate(-0.25deg); }
+  70% { transform: translate3d(5px, -2px, 0) rotate(0.15deg); }
+  88% { transform: translate3d(-3px, 1px, 0) rotate(0deg); }
+}
+@keyframes duelQuake4 {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  8%  { transform: translate3d(-15px, 7px, 0) rotate(-0.8deg) scale(1.012); }
+  22% { transform: translate3d(14px, -9px, 0) rotate(0.7deg) scale(1.01); }
+  38% { transform: translate3d(-11px, 6px, 0) rotate(-0.55deg) scale(1.006); }
+  54% { transform: translate3d(9px, -4px, 0) rotate(0.4deg); }
+  70% { transform: translate3d(-6px, 3px, 0) rotate(-0.25deg); }
+  85% { transform: translate3d(3px, -1px, 0) rotate(0.1deg); }
+}
+.duel-quake-1 { animation: duelQuake1 0.18s ease-out; }
+.duel-quake-2 { animation: duelQuake2 0.28s ease-out; }
+.duel-quake-3 { animation: duelQuake3 0.42s cubic-bezier(.36,.07,.19,.97); }
+.duel-quake-4 { animation: duelQuake4 0.62s cubic-bezier(.36,.07,.19,.97); }
+/* The sound switch shares the ✕ button's shape; only the dimming is its own. */
+.duel-sfx-btn.off { opacity: 0.45; }
+
 /* ---- the science question ---- */
 .duel-quiz { position: fixed; inset: 0; z-index: 1750; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(4,7,18,0.86); }
 .duel-quiz-card { width: min(680px, 100%); max-height: 100%; overflow: auto; border-radius: 18px; padding: 24px 26px; border: 1px solid rgba(240,205,122,0.45); background: linear-gradient(165deg, #16264f, #0b1230); box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
@@ -11165,6 +11206,9 @@ body.lore-reading { overflow: hidden; }
 }
 @media (prefers-reduced-motion: reduce) {
   .duel-mini.duel-lunge, .duel-hit, .duel-frost, .duel-ward, .duel-burst-orb, .duel-float { animation-duration: 0.01ms !important; }
+  /* The shake is the one effect that moves the WHOLE screen — someone who has
+     asked for less motion gets none of it, not a faster version of it. */
+  .duel-quake-1, .duel-quake-2, .duel-quake-3, .duel-quake-4 { animation: none !important; }
 }
 
 </style>
