@@ -7651,6 +7651,8 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         <div class="nav-tcg-sub" id="navTcgSub" style="display:none;">
           <button type="button" onclick="tcgNavMode('modes','ems')"><span class="ico">🌋</span> Ember Siege <span class="nav-sub-prize" id="navPrizeSiege" style="display:none;"></span></button>
           <button type="button" id="navModeLegends" style="display:none;" onclick="tcgNavMode('modes','elg')"><span class="ico">⚔️</span> Ember Legends <span class="nav-sub-prize" id="navPrizeLegends" style="display:none;"></span></button>
+          <!-- Ember Duel — hidden until duelAccessAllowed() shows it (tcgNavPrizeBadges) -->
+          <button type="button" id="navModeDuel" style="display:none;" onclick="tcgNavMode('modes','duel')"><span class="ico">🎴</span> Ember Duel</button>
           <button type="button" onclick="tcgNavMode('arena')"><span class="ico">🆚</span> Battle Arena</button>
           <button type="button" onclick="tcgNavMode('dungeon')"><span class="ico">🏰</span> Infinite Dungeon</button>
           <button type="button" onclick="tcgNavMode('packs')"><span class="ico">🎁</span> Booster Packs</button>
@@ -10837,6 +10839,222 @@ body.lore-reading { overflow: hidden; }
   .lore-book-hint { display: none; }
   .tcg-lore-hero { padding: 30px 22px 28px; }
 }
+
+/* ==================== 🎴 EMBER DUEL — the card duel (beta) ====================
+   z-index sits above Ember Siege (1400), Ember Legends (1450) and the Siege's
+   own quiz/result panels (1500/1600), so nothing this mode paints can end up
+   underneath a panel belonging to another mode. */
+.duel-overlay {
+  position: fixed; inset: 0; z-index: 1700;
+  background:
+    radial-gradient(120% 90% at 50% -10%, rgba(58,92,204,0.40), transparent 62%),
+    radial-gradient(90% 70% at 85% 8%, rgba(126,72,196,0.30), transparent 64%),
+    linear-gradient(180deg, #0b1436 0%, #070d20 58%, #05070f 100%);
+  display: flex; align-items: center; justify-content: center; padding: 12px;
+  font-family: 'DM Sans', system-ui, sans-serif; color: #f4ecd8; overflow: auto;
+}
+.duel-shell {
+  width: min(1180px, 100%); max-height: 100%;
+  display: flex; flex-direction: column; gap: 10px;
+  user-select: none;
+}
+/* touch-action is INTERSECTED down the tree, so `none` on the shell disabled
+   panning for everything inside it — including .duel-overlay, the only scroll
+   container the duel has, and the horizontally scrolling hand. It belongs on
+   the elements a drag actually starts from, and nowhere else. */
+.duel-mini { touch-action: none; }
+.duel-top { display: flex; align-items: center; gap: 14px; }
+.duel-title { font-family: 'Cinzel', Georgia, serif; font-size: 1.05rem; color: #f0cd7a; letter-spacing: 0.04em; }
+.duel-beta { font-size: 0.6rem; letter-spacing: 0.16em; padding: 3px 8px; border-radius: 999px; background: rgba(240,205,122,0.16); border: 1px solid rgba(240,205,122,0.5); color: #f0cd7a; vertical-align: 2px; }
+.duel-turn { margin-left: auto; font-size: 0.84rem; font-weight: 700; color: #93a4cd; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(147,164,205,0.3); }
+.duel-turn.you { color: #14161a; background: linear-gradient(135deg, #f0cd7a, #c9a227); border-color: transparent; }
+.duel-x { background: rgba(255,255,255,0.07); border: 0; color: #f4ecd8; width: 34px; height: 32px; border-radius: 9px; font-size: 1.1rem; cursor: pointer; }
+.duel-x:hover { background: rgba(240,205,122,0.22); }
+
+.duel-field { display: flex; flex-direction: column; gap: 8px; }
+.duel-row { display: flex; align-items: stretch; gap: 12px; }
+.duel-board {
+  flex: 1 1 auto; display: flex; gap: 8px; align-items: stretch; justify-content: center;
+  min-height: 132px; padding: 8px; border-radius: 14px;
+  border: 1px dashed rgba(240,205,122,0.22); background: rgba(8,14,38,0.5);
+}
+.duel-row-foe .duel-board { border-color: rgba(248,113,113,0.28); }
+.duel-empty { align-self: center; font-size: 0.78rem; color: #7f90ba; }
+
+/* ---- a minion on the board ---- */
+.duel-mini {
+  position: relative; width: 104px; flex: 0 0 auto;
+  border-radius: 12px; overflow: hidden; cursor: default;
+  border: 2px solid rgba(240,205,122,0.28);
+  background: linear-gradient(170deg, rgba(21,35,80,0.95), rgba(9,16,42,0.98));
+  box-shadow: 0 6px 16px rgba(3,7,20,0.5);
+  transform: translate3d(var(--dx, 0px), var(--dy, 0px), 0);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.duel-mini.star-5 { border-color: rgba(186,142,255,0.6); }
+.duel-mini.star-6 { border-color: rgba(255,168,84,0.7); }
+.duel-mini.star-7 { border-color: rgba(255,232,168,0.95); box-shadow: 0 0 16px rgba(240,205,122,0.4), 0 6px 16px rgba(3,7,20,0.5); }
+/* Ready to attack — the one cue a student needs before they drag. */
+.duel-mini.ready { cursor: grab; border-color: rgba(120,255,190,0.8); box-shadow: 0 0 0 2px rgba(120,255,190,0.25), 0 6px 16px rgba(3,7,20,0.5); }
+.duel-mini.ready:active { cursor: grabbing; }
+.duel-mini.sel { border-color: #ffe8a8; box-shadow: 0 0 0 3px rgba(255,232,168,0.35); }
+.duel-mini.targetable { border-color: rgba(248,113,113,0.9); box-shadow: 0 0 0 2px rgba(248,113,113,0.3); cursor: crosshair; }
+.duel-mini.duel-over-target { transform: translate3d(var(--dx,0px), var(--dy,0px), 0) scale(1.06); border-color: #ff6b6b; box-shadow: 0 0 0 3px rgba(255,107,107,0.5), 0 0 24px rgba(255,107,107,0.5); }
+.duel-mini.frozen { filter: saturate(0.45) brightness(0.9); }
+.duel-mini.duel-dragging { z-index: 40; opacity: 0.92; transition: none; box-shadow: 0 18px 40px rgba(0,0,0,0.6); }
+/* The card art IS the animation stage — relative + hidden, so any FX layer
+   appended into it is clipped to the picture for free. */
+.duel-art { position: relative; overflow: hidden; aspect-ratio: 1 / 1; background: radial-gradient(circle at 50% 38%, #1b2440, #0b0d13 78%); display: flex; align-items: center; justify-content: center; }
+.duel-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.duel-em { font-size: 34px; line-height: 1; opacity: 0.85; }
+.duel-mini-name { font-size: 0.66rem; font-weight: 700; text-align: center; padding: 4px 4px 0; line-height: 1.2; color: #f5e6bd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.duel-mini-el { font-size: 0.7rem; text-align: center; padding-bottom: 2px; }
+.duel-kws { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; padding: 0 3px 3px; }
+.duel-kw { font-size: 0.52rem; padding: 1px 5px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.duel-kw.taunt { color: #9ec5ff; } .duel-kw.shield { color: #ffe8a8; }
+.duel-kw.life { color: #ff9db4; } .duel-kw.venom { color: #a8e063; } .duel-kw.frozen { color: #8fd8ff; }
+.duel-mini-stats { display: flex; justify-content: space-between; padding: 3px 7px 6px; }
+.duel-atk { font-weight: 900; font-size: 0.9rem; color: #ffcf8a; }
+.duel-hp { font-weight: 900; font-size: 0.9rem; color: #8ef0a8; }
+.duel-hp.hurt { color: #ff8f8f; }
+
+/* ---- heroes ---- */
+.duel-hero {
+  position: relative; flex: 0 0 auto; width: 168px; display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 14px;
+  border: 2px solid rgba(240,205,122,0.35); background: linear-gradient(165deg, rgba(22,38,84,0.9), rgba(9,16,42,0.95));
+}
+.duel-hero.targetable { border-color: rgba(248,113,113,0.9); box-shadow: 0 0 0 2px rgba(248,113,113,0.28); cursor: crosshair; }
+.duel-hero.duel-over-target { border-color: #ff6b6b; box-shadow: 0 0 0 3px rgba(255,107,107,0.5), 0 0 24px rgba(255,107,107,0.45); }
+.duel-hero-art { position: relative; overflow: hidden; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; background: radial-gradient(circle at 45% 35%, rgba(240,205,122,0.24), rgba(6,11,30,0.9)); border: 1px solid rgba(240,205,122,0.4); flex: 0 0 auto; }
+.duel-hero-name { font-size: 0.74rem; font-weight: 700; color: #c3d1f2; }
+.duel-hero-hp { font-size: 1rem; font-weight: 900; color: #ff9d9d; }
+.duel-hero-deck { font-size: 0.62rem; color: #7f90ba; margin-top: 2px; }
+.duel-crystals { display: inline-flex; gap: 2px; margin-top: 3px; }
+.duel-crystal { width: 7px; height: 7px; border-radius: 2px; transform: rotate(45deg); background: rgba(255,255,255,0.1); }
+.duel-crystal.on { background: linear-gradient(135deg, #7ecbff, #2f7fd6); box-shadow: 0 0 5px rgba(126,203,255,0.8); }
+.duel-crystal.spent { background: rgba(126,203,255,0.22); }
+
+.duel-mid { display: flex; justify-content: center; }
+.duel-log { display: flex; flex-direction: column; gap: 2px; text-align: center; font-size: 0.72rem; color: #93a4cd; min-height: 18px; }
+
+/* ---- bar + hand ---- */
+.duel-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.duel-hint { flex: 1 1 auto; text-align: center; font-size: 0.74rem; color: #93a4cd; }
+.duel-bar .btn { font-size: 0.82rem; }
+/* The overlay is outside #page-tcg, so it does not inherit the realm's token
+   overrides — the two primary buttons are named here instead of themed. */
+.duel-bar .btn-primary, .duel-over-btns .btn-primary, .duel-quiz-foot .btn-primary {
+  background: linear-gradient(135deg, #f0cd7a, #c9a227); color: #14161a; font-weight: 800; border: 0;
+}
+.duel-bar .btn-primary:hover:not(:disabled), .duel-over-btns .btn-primary:hover, .duel-quiz-foot .btn-primary:hover {
+  background: linear-gradient(135deg, #ffe8a8, #d9b230); color: #14161a;
+}
+.duel-bar .btn-outline, .duel-over-btns .btn-outline { color: #e7dfc8; border-color: rgba(240,205,122,0.45); background: transparent; }
+.duel-bar .btn-outline:hover:not(:disabled), .duel-over-btns .btn-outline:hover { background: rgba(240,205,122,0.14); border-color: rgba(255,232,168,0.8); }
+.duel-bar .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.duel-hand { display: flex; gap: 8px; overflow-x: auto; padding: 6px 2px 2px; min-height: 150px; align-items: stretch; }
+.duel-hand-card {
+  position: relative; flex: 0 0 auto; width: 122px; text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px; padding: 0 0 6px;
+  border-radius: 12px; overflow: hidden; font: inherit; color: #f4ecd8;
+  border: 2px solid rgba(240,205,122,0.3);
+  background: linear-gradient(170deg, rgba(21,35,80,0.95), rgba(9,16,42,0.98));
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.duel-hand-card:hover:not(.off) { transform: translateY(-6px); border-color: #ffe8a8; box-shadow: 0 14px 28px rgba(0,0,0,0.55); }
+.duel-hand-card.off { opacity: 0.42; cursor: not-allowed; }
+.duel-hand-card.armed { border-color: #ffe8a8; box-shadow: 0 0 0 3px rgba(255,232,168,0.4); }
+.duel-hand-card.star-6 { border-color: rgba(255,168,84,0.6); }
+.duel-hand-card.star-7 { border-color: rgba(255,232,168,0.9); }
+.duel-hand-card.spell { border-color: rgba(126,203,255,0.55); background: linear-gradient(170deg, rgba(24,44,92,0.95), rgba(9,18,46,0.98)); align-items: center; text-align: center; padding-top: 26px; }
+.duel-cost { position: absolute; top: 5px; left: 5px; z-index: 3; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 900; color: #eaf6ff; background: linear-gradient(135deg, #4aa3e8, #1f5fa8); box-shadow: 0 0 8px rgba(74,163,232,0.7); }
+.duel-hand-em { font-size: 30px; line-height: 1; }
+.duel-hand-name { font-size: 0.7rem; font-weight: 800; color: #f5e6bd; padding: 3px 6px 0; line-height: 1.2; }
+.duel-hand-text { font-size: 0.6rem; color: #b3c3e9; line-height: 1.35; padding: 0 6px; }
+.duel-hand-tag { font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase; color: #7ecbff; padding: 2px 6px 0; }
+.duel-hand-stats { display: flex; align-items: center; justify-content: space-between; padding: 4px 7px 0; margin-top: auto; }
+.duel-hand-el { font-size: 0.55rem; color: #f0cd7a; }
+
+/* ---- the attack: lunge, hit, burst, floating numbers ---- */
+@keyframes duelLunge {
+  0%   { transform: translate3d(0,0,0) scale(1); }
+  45%  { transform: translate3d(var(--lx, 0px), var(--ly, 0px), 0) scale(1.08); }
+  100% { transform: translate3d(0,0,0) scale(1); }
+}
+.duel-mini.duel-lunge { animation: duelLunge 0.42s cubic-bezier(.34,1.4,.5,1); z-index: 30; }
+@keyframes duelHit {
+  0%, 100% { transform: translate3d(var(--dx,0px), var(--dy,0px), 0); filter: none; }
+  15% { transform: translate3d(calc(var(--dx,0px) - 7px), var(--dy,0px), 0); filter: brightness(2.1) saturate(0.4); }
+  35% { transform: translate3d(calc(var(--dx,0px) + 6px), var(--dy,0px), 0); filter: brightness(1.5); }
+  55% { transform: translate3d(calc(var(--dx,0px) - 4px), var(--dy,0px), 0); filter: brightness(1.2); }
+  75% { transform: translate3d(calc(var(--dx,0px) + 2px), var(--dy,0px), 0); }
+}
+.duel-hit { animation: duelHit 0.42s ease-out; }
+@keyframes duelFrost { 0% { filter: none; } 40% { filter: hue-rotate(180deg) brightness(1.6); } 100% { filter: saturate(0.45) brightness(0.9); } }
+.duel-frost { animation: duelFrost 0.6s ease-out; }
+@keyframes duelSlain { 0% { transform: scale(1); filter: none; } 60% { transform: scale(1.12); filter: brightness(2.4) saturate(0); } 100% { transform: scale(0.8); opacity: 0.2; } }
+.duel-slain { animation: duelSlain 0.45s ease-in forwards; }
+@keyframes duelWard { 0%,100% { box-shadow: none; } 40% { box-shadow: 0 0 0 4px rgba(255,232,168,0.85), 0 0 26px rgba(255,232,168,0.7); } }
+.duel-ward { animation: duelWard 0.5s ease-out; }
+/* The burst is appended INSIDE .duel-art, so it is clipped to the picture. */
+.duel-burst { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 2; }
+.duel-burst img { width: 100%; height: 100%; object-fit: contain; }
+@keyframes duelBurstPop { 0% { transform: scale(0.3); opacity: 0; } 30% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1.7); opacity: 0; } }
+.duel-burst-orb { width: 62%; height: 62%; border-radius: 50%; animation: duelBurstPop 0.44s ease-out forwards; }
+@keyframes duelFloatUp { 0% { transform: translate(-50%, 0) scale(0.7); opacity: 0; } 20% { transform: translate(-50%, -8px) scale(1.15); opacity: 1; } 100% { transform: translate(-50%, -42px) scale(1); opacity: 0; } }
+.duel-float {
+  position: absolute; left: 50%; top: 4px; z-index: 6; pointer-events: none;
+  font-weight: 900; font-size: 1.15rem; color: #ff8f8f;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.9), 0 0 12px rgba(255,120,120,0.7);
+  animation: duelFloatUp 0.9s ease-out forwards;
+}
+.duel-float.heal { color: #8ef0a8; text-shadow: 0 2px 6px rgba(0,0,0,0.9), 0 0 12px rgba(120,240,160,0.7); }
+.duel-float.buff { color: #ffcf8a; }
+.duel-float.freeze, .duel-float.shield { color: #8fd8ff; }
+.duel-float.spell, .duel-float.skill { color: #e0a8ff; }
+
+/* ---- the science question ---- */
+.duel-quiz { position: fixed; inset: 0; z-index: 1750; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(4,7,18,0.86); }
+.duel-quiz-card { width: min(680px, 100%); max-height: 100%; overflow: auto; border-radius: 18px; padding: 24px 26px; border: 1px solid rgba(240,205,122,0.45); background: linear-gradient(165deg, #16264f, #0b1230); box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
+.duel-quiz-head { font-family: 'Cinzel', Georgia, serif; color: #f0cd7a; font-size: 1rem; margin-bottom: 16px; }
+.duel-quiz-head span { display: block; font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.78rem; color: #93a4cd; margin-top: 4px; letter-spacing: 0; }
+/* Bank question HTML arrives with its own dark-on-white colours — without this
+   override the stem is invisible on a dark panel. */
+.duel-quiz-q, .duel-quiz-q * { color: #eef3ff !important; background: transparent !important; font-size: 0.95rem; line-height: 1.6; }
+.duel-quiz-q img { max-width: 100%; height: auto; border-radius: 10px; }
+.duel-quiz-opts { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+.duel-quiz-opt { text-align: left; padding: 12px 14px; border-radius: 11px; cursor: pointer; font: inherit; font-size: 0.9rem; color: #f4ecd8; background: rgba(8,15,40,0.7); border: 1px solid rgba(240,205,122,0.28); }
+.duel-quiz-opt:hover:not(:disabled) { border-color: #ffe8a8; background: rgba(240,205,122,0.12); }
+.duel-quiz-opt:disabled { cursor: default; }
+.duel-quiz-opt b { color: #f0cd7a; margin-right: 6px; }
+.duel-quiz-opt.right { border-color: #4ade80; background: rgba(74,222,128,0.18); }
+.duel-quiz-opt.wrong { border-color: #f87171; background: rgba(248,113,113,0.18); }
+.duel-quiz-foot { margin-top: 16px; font-size: 0.86rem; line-height: 1.6; color: #c3d1f2; }
+.duel-quiz-foot .ok { color: #8ef0a8; } .duel-quiz-foot .no { color: #ff9d9d; }
+.duel-quiz-foot .btn { margin-top: 14px; }
+.duel-quiz-ex { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(126,203,255,0.1); border: 1px solid rgba(126,203,255,0.28); font-size: 0.84rem; }
+
+/* ---- game over ---- */
+.duel-over { position: fixed; inset: 0; z-index: 1760; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(4,7,18,0.88); }
+.duel-over-card { width: min(460px, 100%); text-align: center; border-radius: 20px; padding: 32px 28px; border: 1px solid rgba(240,205,122,0.5); background: linear-gradient(165deg, #16264f, #0b1230); box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
+.duel-over-em { font-size: 2.6rem; margin-bottom: 10px; }
+.duel-over-card h3 { font-family: 'Cinzel', Georgia, serif; font-size: 1.3rem; margin: 0 0 14px; color: #f7e9c6; }
+.duel-over-card p { font-size: 0.88rem; line-height: 1.75; color: #b3c3e9; margin: 0 0 16px; }
+.duel-over-rec { font-size: 0.8rem; color: #f0cd7a; margin-bottom: 20px; }
+.duel-over-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+@media (max-width: 780px) {
+  .duel-row { flex-direction: column; gap: 6px; }
+  .duel-hero { width: 100%; }
+  .duel-mini { width: 88px; }
+  .duel-hand-card { width: 108px; }
+  .duel-board { min-height: 116px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .duel-mini.duel-lunge, .duel-hit, .duel-frost, .duel-ward, .duel-burst-orb, .duel-float { animation-duration: 0.01ms !important; }
+}
+
 </style>
 
 <!-- ==================== 📜 THE CHRONICLE OF EMBERS — picture-book reader ====================
