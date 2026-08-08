@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.277.0';
+const APP_VERSION = 'v1.278.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -6639,7 +6639,17 @@ async function applyCropTool() {
     border-bottom-width:2px; border-radius:4px; background:var(--surface,#fff); white-space:nowrap; }
   #annotStage.moving #annotCanvas { cursor:move; }
   #annotStage { position:relative; display:block; margin:0 auto; width:86vw; max-width:1080px; height:56vh; overflow:hidden; line-height:0; background:#eef0ee; border:1px solid var(--border,#e3e6e4); border-radius:6px; touch-action:none; }
-  #annotCanvas { position:absolute; top:0; left:0; transform-origin:0 0; touch-action:none; cursor:crosshair; image-rendering:auto; }
+  /* The canvas keeps its alpha, so a sprite that has already had its background
+     removed is edited transparent. This grey check behind it is how you can SEE
+     which parts are empty — a card-art slot is often a cut-out. It is only ever
+     visible where the picture is transparent, so an ordinary opaque question
+     image looks exactly as it always did. (This is the editor's own backdrop,
+     not something painted into a picture — the chequerboard an image model
+     paints is a different thing entirely, and still banned in prompts.) */
+  #annotCanvas { position:absolute; top:0; left:0; transform-origin:0 0; touch-action:none; cursor:crosshair; image-rendering:auto;
+    background-color:#fbfbfb;
+    background-image:linear-gradient(45deg,#dfe2df 25%,transparent 25%,transparent 75%,#dfe2df 75%),linear-gradient(45deg,#dfe2df 25%,transparent 25%,transparent 75%,#dfe2df 75%);
+    background-size:16px 16px; background-position:0 0,8px 8px; }
   #annotSelCanvas { position:absolute; top:0; left:0; transform-origin:0 0; pointer-events:none; z-index:4; }
   #annotCanvas.pixelated { image-rendering:pixelated; image-rendering:crisp-edges; }
   #annotStage.panning, #annotStage.panning #annotCanvas { cursor:grabbing; }
@@ -6668,6 +6678,15 @@ function openAnnotTool(blockId) {
   const srcP = st.currentDataUrl ? Promise.resolve(st.currentDataUrl)
     : st.originalDataUrl ? Promise.resolve(st.originalDataUrl)
     : _urlToDataUrlRobust(transformImageUrl(block.url));
+  _annotOpenSrc(srcP, { blockId: blockId }, '✏️ Touch up &amp; label');
+}
+// The editor itself, opened on a picture from ANYWHERE. `target` says where
+// Apply writes it back to — a question's image block (`blockId`) or a Realm of
+// Embers art slot (`artSlot`). Everything between opening and applying is the
+// same tool, which is the point: the card art gets erase, paint, fill, clone,
+// history, lasso, wand, move, resize, rotate, skew, straighten, line, text and
+// AI content-aware fill without a second editor being written.
+function _annotOpenSrc(srcP, target, title) {
   srcP.then(_loadImageEl).then(img => {
     const canvas = document.getElementById('annotCanvas');
     const cap = 1600; // keep the working canvas (and undo snapshots) sane
@@ -6684,7 +6703,8 @@ function openAnnotTool(blockId) {
     const orig = document.createElement('canvas');
     orig.width = canvas.width; orig.height = canvas.height;
     orig.getContext('2d').drawImage(canvas, 0, 0);
-    _annot = { blockId, canvas, ctx, tool: 'erase', color: '#e23c3c', size: 6, tol: 32, drawing: false, history: [], start: null, snap: null,
+    _annot = { blockId: target.blockId || null, artSlot: target.artSlot || null,
+      canvas, ctx, tool: 'erase', color: '#e23c3c', size: 6, tol: 32, drawing: false, history: [], start: null, snap: null,
       zoom: 1, fit: 1, panX: 0, panY: 0, space: false, panning: false, cloneSrc: null, cloneSnap: null, cloneOff: null,
       anchor: null, sel: null, selPts: null, selCanvas, aiFillBusy: false, origSnap: orig, float: null, xform: null, xfStart: null };
     _annotSelSyncBar();
@@ -6692,6 +6712,8 @@ function openAnnotTool(blockId) {
     _annotSyncControls();
     _annotBindSliderWheel();
     _annotSetTool('erase');
+    const head = document.querySelector('#annotOverlay .overlay-head h3');
+    if (head) head.innerHTML = title || '✏️ Touch up &amp; label';
     document.getElementById('annotOverlay').classList.add('show');
     // Fit the image after the overlay is visible so the stage has real dimensions.
     requestAnimationFrame(() => { annotZoomFit(); });
@@ -8158,10 +8180,25 @@ async function applyAnnotTool() {
   if (_annot.xform) annotXformApply(true);
   // Burn any label that's still being edited so it isn't lost on Apply.
   document.querySelectorAll('#annotStage .annot-textbox-input').forEach(i => i.blur());
-  const { blockId, canvas } = _annot;
+  const { blockId, artSlot, canvas } = _annot;
   const dataUrl = canvas.toDataURL('image/png');
   closeAnnotTool();
   showToast('✏️ Saving touch-ups…', 'info');
+  // A Realm of Embers art slot. It is stored with `cleaned` set: the admin has
+  // just spent time looking at this picture in an editor, so the automatic
+  // background cutter must not run behind them and second-guess it. 🧼 Remove
+  // background is right there on the same slot when they do want it.
+  if (artSlot) {
+    try {
+      await _tcgArtStore(artSlot, dataUrl, { cleaned: true });
+      tcgArtRefresh();
+      showToast('Touch-ups applied ✓', 'success');
+    } catch (e) {
+      console.warn('annot apply (art slot) failed', e);
+      showToast('Could not save touch-ups: ' + (e && e.message ? e.message : e), 'error');
+    }
+    return;
+  }
   try {
     const url = await uploadImageDataUrl(dataUrl);
     const block = blocks.find(b => b.id === blockId);
@@ -34980,6 +35017,8 @@ function _tcgArtSlotHtml(slotId, label, icon, thumb, aiLabel, hint) {
     + '<div class="ga-actions">'
     +   '<button type="button" class="btn btn-primary ga-mini" onclick="tcgAiGenSlot(\'' + slotId + '\')">✨ AI ' + aiText + '</button>'
     +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onTcgArtPick(\'' + slotId + '\', event)"></label>'
+    +   (has ? '<button type="button" class="btn btn-outline ga-mini" onclick="tcgTouchUpSlot(\'' + slotId + '\')"'
+            + ' title="Open this picture in the full Touch up &amp; label editor — erase, paint, fill, clone, select, move, resize, rotate, straighten, add text and AI content-aware fill">✏️ Touch up</button>' : '')
     +   (has && _tcgSlotStandsOnNothing(slotId)
           ? '<button type="button" class="btn btn-outline ga-mini" onclick="tcgCleanSlotBg(\'' + slotId + '\')"'
             + ' title="Remove the flat colour behind this picture — the magenta, green or blue screen it was drawn against, or any other plate the model left in">🧼 Remove background</button>'
@@ -35392,6 +35431,25 @@ function duelFxDoneCount() {
     keys.forEach(k => { for (let i = 1; i <= sh.frames; i++) if (duelFxHas(sh, k, i)) n++; });
   });
   return n;
+}
+
+// ---- ✏️ Touch up a picture slot ---------------------------------------------
+// The question editor's "Touch up & label" tool, pointed at a Realm of Embers
+// art slot instead of a question's image block. It is the SAME editor — erase,
+// paint, fill, clone, history brush, rectangle / lasso / wand select, move,
+// resize, rotate, skew, straighten, line, text and AI content-aware fill — so
+// card art, avatars, effect frames, pack frames, hero portraits, artifacts, the
+// crest, set banners and the Chronicle's plates can all be corrected by hand
+// without a second editor existing to drift out of step with the first.
+function tcgTouchUpSlot(slotId) {
+  if (!_isAdmin()) return;
+  const url = _tcgArt && _tcgArt[slotId];
+  if (!url) { showToast('Nothing in that slot yet — draw, paste or upload a picture first', 'error'); return; }
+  // Straight to a data URL: an art slot is a hosted Storage URL, and the canvas
+  // cannot read one back without CORS. _urlToDataUrlRobust is the same door the
+  // AI reference loader and the background repair sweep use.
+  _annotOpenSrc(_urlToDataUrlRobust(transformImageUrl(url)), { artSlot: slotId },
+    '✏️ Touch up &amp; label — ' + escapeHtml(slotId));
 }
 
 // ---- 🧼 Remove this background, by hand -------------------------------------
@@ -45619,6 +45677,7 @@ window.duelFxGenRun = duelFxGenRun;
 window.duelFxDrawAll = duelFxDrawAll;
 window.duelFxCleanRun = duelFxCleanRun;
 window.tcgCleanSlotBg = tcgCleanSlotBg;
+window.tcgTouchUpSlot = tcgTouchUpSlot;
 window.elgOpen = elgOpen;
 window.elgStart = elgStart;
 window.elgClose = elgClose;
