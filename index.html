@@ -11069,6 +11069,40 @@ body.lore-reading { overflow: hidden; }
 .duel-rankup { animation: duelRankUp 0.7s ease-out; }
 .duel-float.rank { color: #8ef0a8; font-size: 0.82rem; letter-spacing: 0.04em; }
 /* ---- 🎴 the deck builder ---- */
+/* Five deck slots. The one being EDITED is gold; the one being PLAYED wears a
+   left rail and the ▶ mark, because those are two different things and a
+   student switching decks needs to see both at once. */
+.duel-slots { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 2px 0 2px; }
+.duel-slot {
+  font: inherit; text-align: left; cursor: pointer; color: #b8c7ee;
+  padding: 7px 14px; border-radius: 12px; min-width: 116px;
+  background: rgba(12,22,54,0.7); border: 1px solid rgba(240,205,122,0.24);
+  border-left: 3px solid transparent; transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.duel-slot b { display: block; font-size: 0.82rem; font-weight: 700; line-height: 1.4; }
+.duel-slot i { display: block; font-style: normal; font-size: 0.68rem; color: #7f8fb8; margin-top: 2px; }
+.duel-slot em { font-style: normal; color: #f0cd7a; }
+.duel-slot:hover { border-color: rgba(240,205,122,0.6); color: #fff3d2; }
+.duel-slot.empty b { color: #7f8fb8; font-weight: 600; }
+.duel-slot.playing { border-left-color: #f0cd7a; }
+.duel-slot.on { color: #14161a; background: linear-gradient(135deg, #f0cd7a, #c9a227); border-color: transparent; }
+.duel-slot.on i { color: rgba(20,22,26,0.72); }
+.duel-slot.on em { color: #14161a; }
+.duel-slots-note { font-size: 0.68rem; color: #7f8fb8; margin-left: auto; }
+.duel-rename {
+  font: inherit; font-size: 0.9rem; line-height: 1; cursor: pointer; margin-left: 10px; padding: 4px 9px;
+  border-radius: 8px; color: #f0cd7a; background: rgba(240,205,122,0.1); border: 1px solid rgba(240,205,122,0.35);
+}
+.duel-rename:hover { color: #fff3d2; background: rgba(240,205,122,0.22); border-color: rgba(240,205,122,0.8); }
+/* The quick switcher on the Game Modes card — outside the duel overlay, so it
+   uses the portal's own tokens rather than the realm's hard-coded golds. */
+.duel-deckpick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.duel-deckpick-b {
+  font: inherit; font-size: 0.7rem; padding: 4px 11px; border-radius: 999px; cursor: pointer;
+  color: var(--text); background: var(--surface); border: 1px solid var(--border);
+}
+.duel-deckpick-b:hover { border-color: var(--primary); }
+.duel-deckpick-b.on { color: #14161a; background: linear-gradient(135deg, #f0cd7a, #c9a227); border-color: transparent; font-weight: 700; }
 .duel-deckcount { margin-left: auto; font-size: 0.9rem; font-weight: 900; color: #93a4cd; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(147,164,205,0.3); }
 .duel-deckcount.full { color: #14161a; background: linear-gradient(135deg, #f0cd7a, #c9a227); border-color: transparent; }
 .duel-build { display: flex; gap: 14px; flex: 1 1 auto; min-height: 0; }
