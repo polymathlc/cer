@@ -6474,14 +6474,13 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 .ems-quiz { position: fixed; right: 18px; bottom: 18px; width: min(440px, calc(100vw - 36px)); max-height: min(70vh, 620px); overflow-y: auto; z-index: 1500; border: 1px solid #8a5a1e; border-radius: 16px; background: linear-gradient(135deg,#241505,#140c05); box-shadow: 0 20px 50px rgba(0,0,0,0.6); padding: 18px 20px 20px; color: #f6ecdc; }
 .ems-quiz.bump { animation: emsBump 0.3s ease; }
 @keyframes emsBump { 50% { transform: scale(1.03); } }
-.ems-quiz-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+/* 16px, not 12: the draining speed bar used to sit under this head and carry
+   its own 14px of space. With the timer gone (v1.272.0) the question would
+   otherwise sit right under the title. */
+.ems-quiz-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
 .ems-quiz-title { font-weight: 800; font-size: 0.92rem; }
 .ems-quiz-streak { margin-left: auto; font-size: 0.72rem; color: #ffd76a; }
 .ems-quiz-streak .dim { color: #8d7758; }
-.ems-quiz-speed { height: 6px; border-radius: 999px; background: rgba(0,0,0,0.5); overflow: hidden; margin-bottom: 14px; }
-.ems-quiz-speed i { display: block; height: 100%; width: 100%; background: #6fe09a; transition: width 0.1s linear; }
-.ems-quiz-speed i.warm { background: #f0b542; }
-.ems-quiz-speed i.cold { background: #d0402a; }
 .ems-quiz-q { font-size: 0.9rem; line-height: 1.65; margin-bottom: 14px; }
 /* Question stems come out of the bank carrying the app's own (dark-on-white)
    markup and inline colours — on this dark panel that renders invisible, so
