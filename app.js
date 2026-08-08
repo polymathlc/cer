@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.265.0';
+const APP_VERSION = 'v1.266.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -38311,7 +38311,7 @@ function tcgGuideHtml() {
       ]))
 
   + (duelAccessAllowed() ? _tcgGuideSection('🎴', 'Ember Duel — the card duel' + (duelReleased() ? '' : ' (BETA)'),
-      'A proper card game with your own collection. Both heroes start on <b>' + DUEL_HERO_HP + ' life</b>, you gain <b>one mana crystal a turn</b> up to ' + DUEL_MANA_CAP + ', and you summon monsters onto a board of up to ' + DUEL_BOARD_MAX + '. A monster cannot attack the turn it lands unless its ability says otherwise, and when it attacks another monster <b>both of them take damage</b> — so choosing what to trade with is the whole game. Your deck is <b>' + DUEL_DECK_SIZE + ' cards that you choose yourself</b> — up to ' + DUEL_COPIES_MAX + ' copies of any card and only <b>one</b> of a 7★ legend — from the monsters you own plus all ' + DUEL_SPELLS.length + ' spells. Never built one? One is put together from your strongest cards so you can play straight away.',
+      'A proper card game with your own collection. Both heroes start on <b>' + DUEL_HERO_HP + ' life</b>, you gain <b>one mana crystal a turn</b> up to ' + DUEL_MANA_CAP + ', and you summon monsters onto a board of up to ' + DUEL_BOARD_MAX + '. A monster cannot attack the turn it lands unless its ability says otherwise, and when it attacks another monster <b>both of them take damage</b> — so choosing what to trade with is the whole game. Your deck is <b>' + DUEL_DECK_SIZE + ' cards that you choose yourself</b> — up to ' + DUEL_COPIES_MAX + ' copies of any monster, only <b>one</b> of a 7★ legend, and up to ' + DUEL_COPIES_SPELL + ' of any spell — from the monsters you own plus all ' + DUEL_SPELLS.length + ' spells, which everybody has. Never built one? One is put together from your strongest cards so you can play straight away.',
       _tcgGuideRows([
         ['Where the duel ability comes from',
           'Every card <b>keeps its arena skill</b> and <b>gains a duel ability</b> generated from the same skill type — so a blaster sweeps the board here too, a healer mends, a poisoner poisons. Nothing is written per card, which is why all ' + TCG_CARDS.length + ' of them have one.'],
@@ -38414,7 +38414,8 @@ const DUEL_HERO_HP = 30;        // both heroes
 const DUEL_MANA_CAP = 10;       // crystals, gained one a turn
 const DUEL_HAND_MAX = 7;
 const DUEL_BOARD_MAX = 5;       // Hearthstone allows 7; five fits a phone
-const DUEL_DECK_SIZE = 20;
+const DUEL_DECK_SIZE = 40;      // a real deck — see DUEL_COPIES_SPELL for why it is always reachable
+const DUEL_AUTO_SPELLS = Math.round(DUEL_DECK_SIZE / 4);   // spells an auto-built deck aims for
 const DUEL_START_HAND = 3;      // the player goes first; the rival draws one more
 const DUEL_FATIGUE = 1;         // damage per draw from an empty deck, growing
 // ---- ⬆ RANKS: a card gets STRONGER every 10 training levels ---------------
@@ -38703,15 +38704,16 @@ function duelBuildDeck(s) {
     n[id] = (n[id] | 0) + 1; deck.push(id); return true;
   };
   const ranked = owned.slice().sort((a, b) => tcgCardPower(b) - tcgCardPower(a));
-  // Leave room for a handful of spells; a tiny collection simply takes more.
-  const wantMinions = Math.max(0, DUEL_DECK_SIZE - 6);
+  // Leave room for spells — about a quarter of the deck, so the shape holds
+  // whatever DUEL_DECK_SIZE is. A tiny collection simply takes more of them.
+  const wantMinions = Math.max(0, DUEL_DECK_SIZE - DUEL_AUTO_SPELLS);
   for (let copy = 0; copy < DUEL_COPIES_MAX; copy++) {
     for (let i = 0; i < ranked.length && deck.length < wantMinions; i++) take(ranked[i], duelMaxCopies(ranked[i]));
   }
   // Spells fill whatever is left — cheapest first, so the curve stays playable.
   const spells = DUEL_SPELLS.slice().sort((a, b) => a.cost - b.cost);
-  for (let copy = 0; copy < DUEL_COPIES_MAX && deck.length < DUEL_DECK_SIZE; copy++) {
-    for (let i = 0; i < spells.length && deck.length < DUEL_DECK_SIZE; i++) take(spells[i].id, DUEL_COPIES_MAX);
+  for (let copy = 0; copy < DUEL_COPIES_SPELL && deck.length < DUEL_DECK_SIZE; copy++) {
+    for (let i = 0; i < spells.length && deck.length < DUEL_DECK_SIZE; i++) take(spells[i].id, DUEL_COPIES_SPELL);
   }
   // Still short only if the collection AND the spell list are both exhausted,
   // which cannot happen at the current numbers — but never return an illegal
@@ -38731,8 +38733,11 @@ function duelRivalDeck(s) {
   const use = pool.length ? pool : TCG_CARDS;
   const deck = [];
   const shuffled = _tcgShuffle(use);
-  for (let i = 0; deck.length < DUEL_DECK_SIZE - 5; i++) deck.push(shuffled[i % shuffled.length].id);
-  const sp = _tcgShuffle(DUEL_SPELLS).slice(0, 5).map(x => x.id);
+  // The rival keeps the same shape as an auto-built deck, so a bigger deck size
+  // does not quietly turn it into forty monsters and no answers.
+  const want = Math.min(DUEL_AUTO_SPELLS, DUEL_SPELLS.length);
+  for (let i = 0; deck.length < DUEL_DECK_SIZE - want; i++) deck.push(shuffled[i % shuffled.length].id);
+  const sp = _tcgShuffle(DUEL_SPELLS).slice(0, want).map(x => x.id);
   return _tcgShuffle(deck.concat(sp));
 }
 // The level the rival's cards fight at — the student's own average, so the
@@ -38787,9 +38792,18 @@ function duelSummon(hc, side) {
 // tcgState().duel.deck, which is registered in tcgHydrateState's whitelist and
 // filtered there against both the dex and what the student actually owns, so a
 // card that is sold, merged away or retired can never poison a saved deck.
-const DUEL_COPIES_MAX = 2;        // …of any one card
+const DUEL_COPIES_MAX = 2;        // …of any one monster
 const DUEL_COPIES_LEGEND = 1;     // …but only one of any 7★ legend
+// Spells are the free basic set — every student has all of them whatever they
+// own — and they are what makes a DUEL_DECK_SIZE deck reachable for a small
+// collection. With monsters capped at two, a student holding N different cards
+// can only build 2N + DUEL_SPELLS.length × this many cards; at two copies of a
+// spell that floor is 2N + 24, so anyone under eight distinct cards could never
+// legally fill forty and the builder would refuse every deck they made. Four
+// puts the ceiling at 2N + 48 — always over the line, from the very first pack.
+const DUEL_COPIES_SPELL = 4;
 function duelMaxCopies(id) {
+  if (duelIsSpell(id)) return DUEL_COPIES_SPELL;
   const c = TCG_BY_ID[id];
   return (c && c.stars === 7) ? DUEL_COPIES_LEGEND : DUEL_COPIES_MAX;
 }
@@ -38814,7 +38828,7 @@ function duelDeckProblem(deck, s) {
   const counts = duelDeckCounts(d);
   const cards = (s && s.cards) || {};
   for (const id in counts) {
-    if (duelIsSpell(id)) { if (counts[id] > DUEL_COPIES_MAX) return 'Only ' + DUEL_COPIES_MAX + ' copies of any spell.'; continue; }
+    if (duelIsSpell(id)) { if (counts[id] > DUEL_COPIES_SPELL) return 'Only ' + DUEL_COPIES_SPELL + ' copies of any spell.'; continue; }
     if (!TCG_BY_ID[id] || !cards[id]) return 'That deck has a card you no longer own — rebuild it.';
     if (counts[id] > duelMaxCopies(id)) return 'Only ' + duelMaxCopies(id) + ' copy of ' + tcgShortName(TCG_BY_ID[id]) + ' (7★ legends are one of a kind).';
   }
@@ -38827,6 +38841,23 @@ function duelDeckFor(s) {
   const saved = (s && s.duel && Array.isArray(s.duel.deck)) ? s.duel.deck : [];
   if (duelDeckValid(saved, s)) return saved.slice();
   return duelBuildDeck(s);
+}
+// What the BUILDER opens on. A saved deck that is no longer legal is usually
+// not rubbish — it is a deck built when DUEL_DECK_SIZE was smaller, or one
+// holding a card since sold. Throwing it away would make a student who had
+// chosen forty cards start again from nothing, so keep every pick that is
+// still legal and let them fill the rest.
+function duelDraftSeed(s) {
+  const saved = (s && s.duel && Array.isArray(s.duel.deck)) ? s.duel.deck : [];
+  if (duelDeckValid(saved, s)) return saved.slice();
+  const cards = (s && s.cards) || {}, out = [], n = {};
+  saved.forEach(id => {
+    if (out.length >= DUEL_DECK_SIZE) return;
+    if (!duelIsSpell(id) && (!TCG_BY_ID[id] || !cards[id])) return;
+    if ((n[id] | 0) >= duelMaxCopies(id)) return;
+    n[id] = (n[id] | 0) + 1; out.push(id);
+  });
+  return out;
 }
 
 // ---- The builder screen ----------------------------------------------------
@@ -38846,8 +38877,7 @@ function duelOpenBuilder() {
     host.innerHTML = '<div class="duel-shell" id="duelShell"></div>';
     document.body.appendChild(host);
   }
-  const saved = (s.duel && Array.isArray(s.duel.deck)) ? s.duel.deck.slice() : [];
-  duelDraft = { deck: duelDeckValid(saved, s) ? saved : [], filter: 'all' };
+  duelDraft = { deck: duelDraftSeed(s), filter: 'all' };
   tcgLoadArt().catch(() => {}).then(() => duelRenderBuilder());
 }
 // Editing the deck mid-duel abandons that duel — a deck cannot change under a
@@ -38870,9 +38900,10 @@ function duelDraftAdd(id) {
   if (!duelIsSpell(id) && (!TCG_BY_ID[id] || !s.cards[id])) return;
   if (d.deck.length >= DUEL_DECK_SIZE) { showToast('Your deck is full — ' + DUEL_DECK_SIZE + ' cards', 'error'); return; }
   const have = duelDeckCounts(d.deck)[id] | 0;
-  const max = duelIsSpell(id) ? DUEL_COPIES_MAX : duelMaxCopies(id);
+  const max = duelMaxCopies(id);
   if (have >= max) {
-    showToast(max === 1 ? 'Only one copy of a 7★ legend' : 'Only ' + max + ' copies of any card', 'error');
+    showToast(max === 1 ? 'Only one copy of a 7★ legend'
+      : 'Only ' + max + ' copies of any ' + (duelIsSpell(id) ? 'spell' : 'monster'), 'error');
     return;
   }
   d.deck.push(id);
@@ -38923,7 +38954,7 @@ function duelPickHtml(id, inDeck) {
   const s = tcgState() || { cards: {} };
   const counts = duelDeckCounts(duelDraft ? duelDraft.deck : []);
   const have = counts[id] | 0;
-  const max = sp ? DUEL_COPIES_MAX : duelMaxCopies(id);
+  const max = duelMaxCopies(id);
   const full = have >= max;
   if (sp) {
     return '<button type="button" class="duel-pick spell' + (full && !inDeck ? ' maxed' : '') + '"'
@@ -38987,7 +39018,7 @@ function duelRenderBuilder() {
     + '</div>'
     + '<div class="duel-build">'
     +   '<div class="duel-build-col">'
-    +     '<div class="duel-build-head">Your collection <span>tap a card to add it · ' + DUEL_COPIES_MAX + ' copies of anything, and only <b>one</b> of a 7★ legend</span></div>'
+    +     '<div class="duel-build-head">Your collection <span>tap a card to add it · ' + DUEL_COPIES_MAX + ' copies of a monster, one of a 7★ legend, ' + DUEL_COPIES_SPELL + ' of a spell</span></div>'
     +     '<div class="duel-build-chips">' + chips.map(([v, label]) =>
             '<button type="button" class="duel-chip' + (d.filter === v ? ' on' : '') + '" onclick="duelDraftSetFilter(\'' + v + '\')">' + label + '</button>').join('') + '</div>'
     +     '<div class="duel-build-list">' + (pool.length ? pool.map(id => duelPickHtml(id, false)).join('')
