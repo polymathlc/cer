@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.275.0';
+const APP_VERSION = 'v1.276.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -35148,7 +35148,7 @@ function tcgFxPrompt(element, phase, n, harder) {
 // background knock-out like every other sprite in the realm.
 const DUEL_FX_SHAPES = [
   {
-    key: 'sweep', icon: '🌊', name: 'Zone wall', frames: 4, elemental: true, strict: false,
+    key: 'sweep', icon: '🌊', name: 'Zone wall', frames: 4, elemental: true, strict: false, pace: 1.15,
     what: 'a WALL of the element sweeping across the whole enemy row',
     blurb: 'The big one — a battlecry or spell that hits EVERY enemy minion. It is stretched across the opposing row, so it is drawn WIDE.',
     wide: true,
@@ -35160,7 +35160,7 @@ const DUEL_FX_SHAPES = [
     ]
   },
   {
-    key: 'strike', icon: '🎯', name: 'Single strike', frames: 3, elemental: true, strict: true,
+    key: 'strike', icon: '🎯', name: 'Single strike', frames: 3, elemental: true, strict: true, pace: 1,
     what: 'a single lance of the element striking ONE card',
     blurb: 'A battlecry or spell aimed at one target — it plays over that card alone.',
     steps: [
@@ -35240,7 +35240,7 @@ const DUEL_FX_SHAPES = [
     ]
   },
   {
-    key: 'summon', icon: '✨', name: 'Arrival', frames: 3, elemental: false, strict: true,
+    key: 'summon', icon: '✨', name: 'Arrival', frames: 3, elemental: false, strict: true, pace: 0.5,
     what: 'a rune circle flaring as a monster lands on the board',
     blurb: 'Plays under every monster as it is summoned — the one effect a student sees on nearly every turn, so keep it quick and quiet.',
     steps: [
@@ -39511,6 +39511,22 @@ let duelRun = null;
 // playing into a duel the student had already closed and reopened.
 let _duelRunSeq = 0;
 function duelSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// The rival's own pause between actions. It is at least `ms`, and at least long
+// enough for whatever effect is on screen to finish — an animation worth
+// drawing is worth letting a student watch, and the rival used to play its next
+// card straight over the top of one.
+function duelAiWait(ms) {
+  const r = duelRun;
+  const left = r && r.fxUntil ? r.fxUntil - Date.now() : 0;
+  return duelSleep(Math.max(ms, Math.min(left, DUEL_AI_FX_WAIT_MAX)));
+}
+// A safety net: however long an effect claims to be, the rival never sits
+// still for more than this between actions. It is deliberately shorter than
+// the longest effect — the layer lives in the overlay now, so an effect is no
+// longer destroyed by the next action and its tail can happily overlap. The
+// wait is there so effects are seen one at a time, not so the board freezes
+// until the last ember has faded.
+const DUEL_AI_FX_WAIT_MAX = 1500;
 function duelRunAlive(r) { return !!(r && duelRun === r && !r.over); }
 let _duelUid = 0;
 function _duelNextUid(side) { _duelUid++; return side + _duelUid; }
@@ -40257,7 +40273,7 @@ function duelStart() {
   const pHero = duelHero(s), eHero = duelRivalHero(s, pHero, plan);
   duelRun = {
     id: ++_duelRunSeq,
-    turn: 1, whose: 'P', over: false, won: false, banked: false, busy: false,
+    turn: 1, whose: 'P', over: false, won: false, banked: false, busy: false, fxUntil: 0,
     p: { hp: DUEL_HERO_HP, maxHp: DUEL_HERO_HP, armor: 0, hero: pHero, powerUsed: false, mana: 0, cap: 0, deck: pDeck.slice(), hand: [], board: [], fatigue: 0 },
     e: { hp: DUEL_HERO_HP, maxHp: DUEL_HERO_HP, armor: 0, hero: eHero, powerUsed: false, mana: 0, cap: 0, deck: eDeck.slice(), hand: [], board: [], fatigue: 0 },
     rivalLvl,
@@ -40805,14 +40821,14 @@ async function duelAiTurn() {
     const target = duelAiTargetFor(pick.hc);
     duelCommitPlay('E', pick.i, target);
     duelRender();
-    await duelSleep(520);
+    await duelAiWait(520);
   }
   // 1b. The hero power, if there is mana spare once the cards are down. It is
   // deliberately spent AFTER the hand: a card on the board beats two armour.
   if (duelRunAlive(r) && duelCanUsePower('E')) {
     duelCommitPower('E', duelAiPowerTarget());
     duelRender();
-    await duelSleep(480);
+    await duelAiWait(480);
   }
   // 2. Attack.
   for (let guard = 0; guard < 10; guard++) {
@@ -40839,7 +40855,7 @@ async function duelAiTurn() {
     // A pass that changed nothing means something is wrong — stop rather than
     // sitting on "Rival thinking…" for ten more sleeps.
     if (duelCanAttack(att)) { att.attacked = true; att.canAttack = false; break; }
-    await duelSleep(560);
+    await duelAiWait(560);
   }
   if (!duelRunAlive(r)) { r.busy = false; if (duelRun === r) duelRender(); return; }
   r.busy = false;
@@ -41000,7 +41016,17 @@ function duelFlushFx() {
   let dying = false;
   const lunged = q.some(x => x.t === 'lunge');
   q.filter(x => x.t === 'lunge').forEach(_duelPlayLunge);
-  q.filter(x => x.t === 'zone').forEach(_duelPlayZoneFx);
+  // How long the board is busy showing an effect — the rival waits for it
+  // rather than playing its next card over the top (see duelAiWait).
+  const zones = q.filter(x => x.t === 'zone');
+  zones.forEach(_duelPlayZoneFx);
+  if (zones.length) {
+    const longest = zones.reduce((n, x) => {
+      const sh = DUEL_FX_BY_SHAPE[x.shape];
+      return sh ? Math.max(n, duelFxDurMs(sh)) : n;
+    }, 0);
+    r.fxUntil = Date.now() + longest;
+  }
   q.filter(x => x.t !== 'lunge' && x.t !== 'zone').forEach(x => {
     if (x.t === 'h') _duelPlayHeroFx(x.who, x.amount, x.cls, x.element);
     else { _duelPlayFx(x.uid, x.amount, x.cls, x.element); if (x.cls === 'slay') dying = true; }
@@ -41052,32 +41078,86 @@ function _duelFxHost(x) {
   if (x.uid) return _duelMinionEl(x.uid);
   return document.getElementById(x.side === 'P' ? 'duelBoardP' : 'duelBoardE');
 }
+// How long each frame is held, and how long the whole effect lasts. The peak
+// frame gets the long hold; `pace` lets a shape run slower or quicker than the
+// rest (the arrival rune fires on nearly every turn, so it is the quick one).
+function duelFxHolds(shape) {
+  const pace = shape.pace || 1;
+  const out = [];
+  for (let i = 1; i <= shape.frames; i++) {
+    out.push(Math.round(DUEL_ZONEFX_MS * pace * (i === DUEL_ZONEFX_PEAK_FRAME ? DUEL_ZONEFX_PEAK : 1)));
+  }
+  return out;
+}
+function duelFxDurMs(shape) {
+  return duelFxHolds(shape).reduce((a, b) => a + b, 0) + DUEL_ZONEFX_FADE;
+}
+// Step the frames with a PER-FRAME hold (a fixed interval cannot linger on the
+// peak), then fade the whole thing out rather than snapping it off.
+function _duelFxRunFrames(node, frames, holds) {
+  const img = node.querySelector('img');
+  let i = 0;
+  const step = () => {
+    if (!node.isConnected) return;
+    i++;
+    if (i >= frames.length) {
+      node.classList.add('zfx-out');
+      setTimeout(() => { if (node.isConnected) node.remove(); }, DUEL_ZONEFX_FADE);
+      return;
+    }
+    if (img) img.src = frames[i];
+    setTimeout(step, holds[i] || DUEL_ZONEFX_MS);
+  };
+  setTimeout(step, holds[0] || DUEL_ZONEFX_MS);
+}
 // The authored frames when a shape's whole run exists, and a CSS effect when it
 // does not — so the duel looks right before a single frame has been drawn, and
 // every shape upgrades on its own as the art lands.
+//
+// The layer is appended to #duelOverlay and positioned OVER the board, not
+// inside it. duelRender() replaces the whole shell's innerHTML on every action,
+// so an effect parented to a board row or a card is destroyed the moment
+// anything else happens — which was survivable at 440ms and is not at 1.6s.
+// This is the same reason the screen shake rides the overlay.
 function _duelPlayZoneFx(x) {
   const host = _duelFxHost(x); if (!host) return;
+  const over = document.getElementById('duelOverlay'); if (!over) return;
   const shape = DUEL_FX_BY_SHAPE[x.shape]; if (!shape) return;
+  const b = host.getBoundingClientRect();
+  if (!b.width || !b.height) return;
   const frames = duelFxFrames(x.shape, x.element);
+  const holds = duelFxHolds(shape);
   const node = document.createElement('div');
   node.className = 'duel-zonefx zfx-' + x.shape + (x.uid ? ' one' : ' row');
+  // A row effect is allowed to overspill a little — a wall of fire that stops
+  // dead at the border reads as a rectangle rather than a wall.
+  const pad = x.uid ? 0 : 10;
+  node.style.left = (b.left - pad) + 'px';
+  node.style.top = (b.top - pad) + 'px';
+  node.style.width = (b.width + pad * 2) + 'px';
+  node.style.height = (b.height + pad * 2) + 'px';
+  node.style.setProperty('--zfx-fade', DUEL_ZONEFX_FADE + 'ms');
   if (frames && frames.length) {
     node.innerHTML = '<img src="' + escapeHtml(frames[0]) + '" alt="">';
-    host.appendChild(node);
-    _emsPlayFrames(node, frames, DUEL_ZONEFX_MS);
+    over.appendChild(node);
+    _duelFxRunFrames(node, frames, holds);
     return;
   }
   // The fallback. Elemental shapes are tinted from the element's own palette,
   // so a fire wall is orange and a frost wall is blue even with no art at all.
+  // It is driven off the SAME duration as the art, so the pace of the mode does
+  // not change the day a shape's frames land.
   const fx = TCG_ELEM_FX[x.element] || TCG_ELEM_FX.flame;
   if (shape.elemental) {
     node.style.setProperty('--zfx-a', fx.a);
     node.style.setProperty('--zfx-b', fx.b);
     node.style.setProperty('--zfx-glow', fx.glow);
   }
+  const dur = duelFxDurMs(shape);
+  node.style.setProperty('--zfx-dur', dur + 'ms');
   node.innerHTML = '<i></i>';
-  host.appendChild(node);
-  setTimeout(() => { if (node.isConnected) node.remove(); }, DUEL_ZONEFX_MS * shape.frames + 120);
+  over.appendChild(node);
+  setTimeout(() => { if (node.isConnected) node.remove(); }, dur + 80);
 }
 function duelFloat(host, text, cls) {
   if (!host) return;
@@ -41125,7 +41205,20 @@ const DUEL_SFX_KEY = 'sq_duel_sfx';                       // localStorage: '0' s
 const DUEL_SFX_DIR = 'assets/sfx/duel/';
 const DUEL_SFX_MANIFEST = DUEL_SFX_DIR + 'manifest.json';
 const DUEL_HIT_DELAY = 0.16;    // seconds — the lunge's travel, so the blow lands on contact
-const DUEL_ZONEFX_MS = 110;    // ms a frame of a duel effect animation is held
+// ---- How long an effect is on screen ---------------------------------------
+// These are ART, and the whole point of drawing them is that a student looks at
+// them. The first pass held every frame for 110ms, which put a four-frame wall
+// of fire on screen for under half a second — over before anyone could see what
+// it was. The numbers below are the ones to turn if the pace ever needs
+// changing; nothing else knows about them.
+const DUEL_ZONEFX_MS = 300;      // base hold per frame
+// The brightest frame — the one the prompts describe as "brightest of the
+// three/four" — is held far longer than the rest. That is what makes an effect
+// read as a MOMENT rather than a flicker: the wall goes up, it STANDS there,
+// and then it rolls away.
+const DUEL_ZONEFX_PEAK = 2.4;
+const DUEL_ZONEFX_PEAK_FRAME = 2; // 1-based; every shape's peak is its 2nd frame
+const DUEL_ZONEFX_FADE = 380;    // ms of fade-out after the last frame
 // `quake` is the screen-shake level, 1-4, and `body`/`noise`/`sub`/`dur` are the
 // synth's shape. Retune these, not the individual call sites.
 const DUEL_HIT_TIERS = [
