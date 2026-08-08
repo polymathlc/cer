@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.279.0';
+const APP_VERSION = 'v1.280.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -35021,7 +35021,14 @@ async function _tcgGenClean(promptFor, ref, label, strict, screen, wide) {
     // 2. No screen in the picture (or keying it left something behind): the
     //    ordinary cautious knock-out, exactly as before.
     out = await _stripImageBackground(raw);
-    const left = await _bgLeftover(out, strict);
+    // _bgLeftover only ever inspects the border ring and the corners, so it is
+    // structurally incapable of seeing a plate in the MIDDLE of the frame — a
+    // disc of screen colour walled in behind a ring sailed straight past it and
+    // was saved. The screen is a colour we chose, and the subject is told to
+    // contain none of it, so "is any of it still here, anywhere?" is a question
+    // with no false positives.
+    const inside = screen ? await _screenStillThere(out, screen) : null;
+    const left = (await _bgLeftover(out, strict)) || inside;
     if (!left) return await _screened({ url: out }, screen);
     if (_tcgGenStop) break;   // the admin pressed Stop — don't spend another draw
     console.warn(label + ' came back with ' + left + ' behind it — redrawing');
@@ -35560,9 +35567,13 @@ function _tcgPlateColour(px, w, h) {
   const edgeN = [0, 0, 0, 0];
   const at = (x, y) => (y * w + x) * 4;
   const add = (x, y, e) => {
-    ring++; edgeN[e]++;
     const o = at(x, y);
-    if (px[o + 3] < 24) return;                       // already empty
+    // An empty border pixel is not evidence either way, so it is left OUT of
+    // the count entirely. It used to be counted in the denominator and not the
+    // numerator, which made the thresholds unreachable on a sprite whose
+    // outside had already been cut — the exact frames this button is for.
+    if (px[o + 3] < 24) return;
+    ring++; edgeN[e]++;
     // Coarse 4-bit-per-channel buckets: a flat plate lands in one of them even
     // when the model dithered it slightly.
     const k = ((px[o] >> 4) << 8) | ((px[o + 1] >> 4) << 4) | (px[o + 2] >> 4);
@@ -35579,6 +35590,55 @@ function _tcgPlateColour(px, w, h) {
   if (best.n < ring * TCG_PLATE_RING_MIN && !wholeEdge) return null;
   return { r: best.r / best.n, g: best.g / best.n, b: best.b / best.n, share: best.n / ring };
 }
+// A plate that does not touch the border at all: the wall seen through a hole
+// in the subject — the inside of a ring, a torc, an ankh, a shield dome — on a
+// picture whose OUTSIDE has already been cut away. There is no border left to
+// survey then, so the border detector above can never fire, and the colour the
+// admin is looking at sits in the middle of the frame.
+//
+// The test that separates a hole from the SUBJECT is not size and not colour —
+// it is that a hole is WALLED IN. Every pixel of it is surrounded by painted
+// pixels, and it never touches the frame edge. The subject itself always meets
+// the transparency that was cut away round it, and so does every part of it, so
+// the artwork can never be mistaken for a plate however big or flat it is.
+const TCG_PLATE_BLOB_MIN = 0.008;   // share of the frame before a walled-in block counts
+const TCG_PLATE_KEEP_MIN = 0.25;    // …and how little of a picture a walled-in cut may leave
+function _tcgEnclosedPlateColour(px, w, h) {
+  const n = w * h;
+  const bucketOf = i => {
+    const o = i * 4;
+    if (px[o + 3] < 24) return -1;                    // empty: not part of any block
+    return ((px[o] >> 4) << 8) | ((px[o + 1] >> 4) << 4) | (px[o + 2] >> 4);
+  };
+  const seen = new Uint8Array(n);
+  let best = null;
+  for (let i0 = 0; i0 < n; i0++) {
+    if (seen[i0]) continue;
+    const k0 = bucketOf(i0);
+    if (k0 < 0) { seen[i0] = 1; continue; }
+    const st = [i0]; seen[i0] = 1;
+    let count = 0, r = 0, g = 0, b = 0, open = false;
+    while (st.length) {
+      const i = st.pop(), x = i % w, y = (i - x) / w, o = i * 4;
+      count++; r += px[o]; g += px[o + 1]; b += px[o + 2];
+      if (x === 0 || y === 0 || x === w - 1 || y === h - 1) open = true;   // reaches the frame edge
+      const nb = j => {
+        if (j < 0 || j >= n) return;
+        const k = bucketOf(j);
+        if (k < 0) { open = true; return; }            // touches empty space — not walled in
+        if (!seen[j] && k === k0) { seen[j] = 1; st.push(j); }
+      };
+      if (x > 0) nb(i - 1);
+      if (x < w - 1) nb(i + 1);
+      if (y > 0) nb(i - w);
+      if (y < h - 1) nb(i + w);
+    }
+    if (open) continue;                                // the subject, or background proper
+    if (!best || count > best.n) best = { n: count, r: r / count, g: g / count, b: b / count };
+  }
+  if (!best || best.n < n * TCG_PLATE_BLOB_MIN) return null;
+  return { r: best.r, g: best.g, b: best.b, share: best.n / n, enclosed: true };
+}
 // Remove that colour. Returns { url, cut, kept } or null when there was no
 // plate to find.
 async function _tcgKeyPlate(dataUrl) {
@@ -35589,7 +35649,7 @@ async function _tcgKeyPlate(dataUrl) {
   const ctx = cv.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(img, 0, 0);
   const id = ctx.getImageData(0, 0, w, h), px = id.data, n = w * h;
-  const plate = _tcgPlateColour(px, w, h);
+  const plate = _tcgPlateColour(px, w, h) || _tcgEnclosedPlateColour(px, w, h);
   if (!plate) return null;
   const soft = TCG_PLATE_TOL * TCG_PLATE_SOFT;
   let cut = 0, was = 0, now = 0;
@@ -35636,8 +35696,12 @@ async function tcgCleanSlotBg(slotId, quiet) {
       return true;
     }
     // Never save a hollowed sprite — the one failure a background remover can
-    // produce that looks tidy and has destroyed the artwork.
-    if (got.kept < TCG_BG_KEEP_MIN) {
+    // produce that looks tidy and has destroyed the artwork. A WALLED-IN plate
+    // is a gentler case: it is surrounded by artwork on every side, so it
+    // cannot be the subject however much of the frame it covers, and a thin
+    // ring round a wide hole would trip the ordinary margin.
+    const floor = got.plate && got.plate.enclosed ? TCG_PLATE_KEEP_MIN : TCG_BG_KEEP_MIN;
+    if (got.kept < floor) {
       if (!quiet) showToast('Not removed — that colour is most of the artwork, so taking it out would leave almost nothing', 'error');
       return false;
     }
@@ -35707,6 +35771,16 @@ async function _recleanStoredArt(url, strict) {
   let after = await _stripImageBackground(before);
   const left = await _bgLeftover(after, strict);
   if (left) after = await _tcgForceClean(after, 'stored art', strict);
+  // …and then the plate keyer, which is the ONLY one of these that can reach a
+  // colour walled in behind the artwork — the wall seen through the middle of a
+  // ring. Every step above is seeded from the frame edge and cannot get there,
+  // so without this the sweep reproduced the fault instead of repairing it.
+  try {
+    const plate = await _tcgKeyPlate(after);
+    if (plate && plate.cut && plate.kept >= (plate.plate && plate.plate.enclosed ? TCG_PLATE_KEEP_MIN : TCG_BG_KEEP_MIN)) {
+      after = plate.url;
+    }
+  } catch (e) { console.warn('plate key skipped during repair', e); }
   return after === before ? null : after;     // unchanged → nothing to write back
 }
 // Every id whose picture is meant to stand on nothing: the battlefield sprites
@@ -46247,6 +46321,87 @@ const TCG_SCREEN_EDGE_MIN = 0.85;   // …and one full edge at least this clean
 // only costs a fall back to the cautious knock-out — the safe direction. A
 // subject with a genuine enclosed gap pays the same price, which is fine.
 const TCG_SCREEN_HOLE_MAX = 0.015;
+// …but an enclosed region can be one of TWO things, and colour cannot tell them
+// apart: a flat patch painted in the wall's own colour IS the wall's own
+// colour. What separates them is GEOMETRY.
+//
+// A ring, a torc, the eye of an ankh is MOSTLY HOLE — the material round the
+// opening is thin compared with the opening itself. Key colour painted onto a
+// body is the opposite: a patch sitting deep inside a thick mass. So each
+// enclosed region is measured, not sampled:
+//   shell = the thinnest crossing of subject material between the region and
+//           the real background outside
+//   rad   = the region's own inscribed radius
+// and `shell <= rad * TCG_HOLE_SHELL_MAX` is what a hole looks like.
+//
+// The screen-ness statistics are a SECOND veto, and they are deliberately not
+// the primary one: a real painted gem is faceted and specular, so its `dn`
+// spread gives it away — but a synthetically flat one would not, and the shell
+// test catches that. `dn` is divided by the brightest channel, so both stats
+// survive a vignetted or unevenly lit wall, which an absolute RGB comparison
+// against the border would not.
+const TCG_HOLE_MIN_AREA = 0.0015;   // of the frame — under this it is a speck, never an opening
+const TCG_HOLE_SHELL_MAX = 1.0;     // shell thickness ÷ the opening's inscribed radius
+const TCG_HOLE_DN_MIN = 0.80;       // mean screen-ness: the wall itself, not a tint of it
+const TCG_HOLE_DN_SD_MAX = 0.10;    // …and as FLAT as a wall is
+const TCG_HOLE_TOTAL_MAX = 0.40;    // openings may not be most of the picture
+const TCG_HOLE_REGIONS_MAX = 8;     // eight openings is jewellery; twenty is spatter
+// Chamfer 3-4 distance transform, two passes. Distances come back multiplied by
+// 3, so one straight step is 3 and one diagonal is 4 — near enough Euclidean
+// for a thickness comparison and far cheaper.
+function _chamferDist(seedAt, w, h) {
+  const n = w * h, d = new Uint16Array(n), INF = 65535;
+  for (let i = 0; i < n; i++) d[i] = seedAt(i) ? 0 : INF;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x; let v = d[i]; if (!v) continue;
+    if (x > 0 && d[i - 1] + 3 < v) v = d[i - 1] + 3;
+    if (y > 0) {
+      if (d[i - w] + 3 < v) v = d[i - w] + 3;
+      if (x > 0 && d[i - w - 1] + 4 < v) v = d[i - w - 1] + 4;
+      if (x < w - 1 && d[i - w + 1] + 4 < v) v = d[i - w + 1] + 4;
+    }
+    d[i] = v;
+  }
+  for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) {
+    const i = y * w + x; let v = d[i]; if (!v) continue;
+    if (x < w - 1 && d[i + 1] + 3 < v) v = d[i + 1] + 3;
+    if (y < h - 1) {
+      if (d[i + w] + 3 < v) v = d[i + w] + 3;
+      if (x < w - 1 && d[i + w + 1] + 4 < v) v = d[i + w + 1] + 4;
+      if (x > 0 && d[i + w - 1] + 4 < v) v = d[i + w - 1] + 4;
+    }
+    d[i] = v;
+  }
+  return d;
+}
+
+// Is any of the chroma screen still in this picture, ANYWHERE — border, middle,
+// or walled in behind the artwork? The subject is briefed never to contain the
+// screen colour, so any of it left over is background that was not removed, and
+// asking the question this way has no false positives. A few stray pixels along
+// a keyed edge are not a plate; more than this is.
+const TCG_SCREEN_REST_MAX = 0.004;
+async function _screenStillThere(dataUrl, screen) {
+  try {
+    const name = (TCG_SCREENS[screen] || TCG_SCREENS.magenta).name;
+    const img = await _loadImageEl(dataUrl);
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    if (!w || !h) return null;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const px = ctx.getImageData(0, 0, w, h).data, n = w * h;
+    let hit = 0;
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      if (px[o + 3] < 24) continue;
+      if (_screenDn(px[o], px[o + 1], px[o + 2], name) >= TCG_SCREEN_HI) hit++;
+    }
+    return hit > n * TCG_SCREEN_REST_MAX
+      ? Math.round(hit / n * 100) + '% of it is still the ' + name + ' screen'
+      : null;
+  } catch (e) { return null; }
+}
 async function _screenKeyOut(dataUrl, screen, strict, wide) {
   try {
     const name = (TCG_SCREENS[screen] || TCG_SCREENS.magenta).name;
@@ -46297,8 +46452,53 @@ async function _screenKeyOut(dataUrl, screen, strict, wide) {
         if (y > 0) push(i - w);
         if (y < h - 1) push(i + w);
       }
+      // Not every enclosed patch of screen colour is paint ON the subject — a
+      // RING, a torc, an ankh or a lens in a bezel has real wall showing
+      // through a hole that never touches the border. Judged as one global
+      // total, that hole read as "the model painted magenta on the artwork" and
+      // the whole key was refused, so the artifact shipped with a solid disc of
+      // magenta inside it. Each region is now classified on its own; only what
+      // is judged PAINT counts towards the budget below.
       let enclosed = 0;
       for (let i = 0; i < n; i++) if (isScreen[i] && !seen[i]) enclosed++;
+      if (enclosed) {
+        const encAt = i => isScreen[i] && !seen[i];
+        // Both transforms are read while `seen` still means "the outside", so
+        // they must be computed BEFORE the regions are labelled into it.
+        const dOut = _chamferDist(i => !!seen[i], w, h);       // …to the real background
+        const dIn = _chamferDist(i => !encAt(i), w, h);        // …to the region's own edge
+        let paint = 0, holeArea = 0, holes = 0;
+        const done = new Uint8Array(n);
+        for (let i0 = 0; i0 < n; i0++) {
+          if (!encAt(i0) || done[i0]) continue;
+          const st2 = [i0]; done[i0] = 1;
+          let area = 0, shell = 65535, rad = 0, dnSum = 0, dnSq = 0;
+          while (st2.length) {
+            const i = st2.pop(), x = i % w, y = (i - x) / w, o = i * 4;
+            area++;
+            if (dOut[i] < shell) shell = dOut[i];
+            if (dIn[i] > rad) rad = dIn[i];
+            const dn = _screenDn(px[o], px[o + 1], px[o + 2], name);
+            dnSum += dn; dnSq += dn * dn;
+            const nb = j => { if (j >= 0 && j < n && !done[j] && encAt(j)) { done[j] = 1; st2.push(j); } };
+            if (x > 0) nb(i - 1);
+            if (x < w - 1) nb(i + 1);
+            if (y > 0) nb(i - w);
+            if (y < h - 1) nb(i + w);
+          }
+          const mean = dnSum / area;
+          const sd = Math.sqrt(Math.max(0, dnSq / area - mean * mean));
+          const isHole = area >= n * TCG_HOLE_MIN_AREA
+            && shell <= rad * TCG_HOLE_SHELL_MAX
+            && mean >= TCG_HOLE_DN_MIN && sd <= TCG_HOLE_DN_SD_MAX
+            && holes < TCG_HOLE_REGIONS_MAX
+            && (holeArea + area) <= n * TCG_HOLE_TOTAL_MAX;
+          if (isHole) { holes++; holeArea += area; } else paint += area;
+        }
+        if (holes) console.info('chroma key: ' + holes + ' opening(s) in the subject — '
+          + Math.round(holeArea / n * 100) + '% of the frame is the wall seen THROUGH it, keyed');
+        enclosed = paint;
+      }
       if (enclosed > n * TCG_SCREEN_HOLE_MAX) {
         console.warn('chroma key refused — ' + Math.round(enclosed / n * 100)
           + '% of the frame is screen colour painted INSIDE the subject');
