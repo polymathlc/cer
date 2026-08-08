@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.269.0';
+const APP_VERSION = 'v1.270.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -34184,6 +34184,12 @@ function tcgHydrateState(saved) {
       // or retired id can never poison a saved deck — the same rule `team` uses.
       decks: _duelHydrateDecks(dl, cards),
       active: Math.max(0, Math.min(DUEL_DECKS_MAX - 1, dl.active | 0)),
+      // 🦸 The hero they duel as. Left UNSET when they have never chosen, so
+      // duelHeroId can tell "picked the safe one" from "never looked" and the
+      // chooser can say so — the duel itself defaults to the safest hero either
+      // way. An id that is no longer in the set is dropped, like every other
+      // field here.
+      hero: duelHeroById(dl.hero) ? dl.hero : null,
       // The legacy single-deck field, kept as a MIRROR of the active slot. It
       // is never read once `decks` exists; it is here so that rolling the app
       // back to a build from before slots existed finds a student's deck where
@@ -34546,7 +34552,7 @@ async function _tcgArtStore(id, dataUrl, opts) {
   // first, pasted and uploaded pictures included. Card art, set banners and the
   // Chronicle's illustrations keep their painted scene and are never cut,
   // whatever else changes here.
-  const standsOnNothing = id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0;
+  const standsOnNothing = id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0 || id.indexOf('hero:') === 0;
   if (standsOnNothing && !(opts && opts.cleaned)) dataUrl = await _stripImageBackground(dataUrl);
   // Battle avatars are small stage sprites; card art gets more resolution.
   // Blast frames are stretched over a 3×3 block of panels, so they get more
@@ -35135,7 +35141,7 @@ async function _tcgArtToDataUrl(url) {
 // Which stored pictures must stand clear of the edges — see _bgLeftoverInPixels.
 // Everything that has to stand on nothing, except the blast frames.
 function _tcgStrictBg(id) {
-  return /(^pk:|^logo:|^arti:|:av$)/.test(id) || (id.indexOf('fx:') === 0 && id.indexOf(':blast') < 0);
+  return /(^pk:|^logo:|^arti:|^hero:|:av$)/.test(id) || (id.indexOf('fx:') === 0 && id.indexOf(':blast') < 0);
 }
 async function _recleanStoredArt(url, strict) {
   const before = await _tcgArtToDataUrl(url);
@@ -35151,7 +35157,7 @@ async function _recleanStoredArt(url, strict) {
 // and the booster packs. Card art keeps its painted scene and is never touched.
 function _tcgBgFreeIds() {
   return Object.keys(_tcgArt || {}).filter(id =>
-    id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0 || id.endsWith(':av'));
+    id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0 || id.indexOf('hero:') === 0 || id.endsWith(':av'));
 }
 async function tcgRepairArtBackgrounds() {
   const uid = _tcgOwnerUid();
@@ -35463,6 +35469,97 @@ async function tcgArtifactDrawAll() {
   _tcgArtiGenStatus(done, jobs.length, '<b>' + (_tcgGenStop ? 'Stopped' : 'Finished') + '</b> — ' + okN + ' artifact' + (okN === 1 ? '' : 's') + ' drawn' + (failed ? ', ' + failed + ' failed' : '') + '.');
   showToast(_tcgGenStop ? 'Stopped — ' + okN + ' drawn' : '🔱 Artifacts drawn — ' + okN + ' picture' + (okN === 1 ? '' : 's'), failed ? 'info' : 'success');
 }
+// ---- 🦸 Duel hero portraits ------------------------------------------------
+// One picture per hero, worn as the AVATAR on the duel board and on the tile in
+// the hero chooser. Same slot machinery as everything else — paste / drop /
+// upload / ✨ AI on the Card Art tab — under `hero:<id>`.
+//
+// A hero portrait stands on NOTHING (it sits inside a round frame on the board
+// and on a card in the chooser), so it joins the battle avatars, the artifacts,
+// the pack frames and the crest: chroma screen, strict background check, and
+// nothing saved until the backdrop is really gone. Each hero names its own
+// screen in DUEL_HEROES — a colour that hero cannot be wearing.
+function tcgHeroSlotId(id) { return 'hero:' + id; }
+function tcgHeroArtUrl(id) { return (_tcgArt && _tcgArt[tcgHeroSlotId(id)]) || ''; }
+function tcgHeroArtPrompt(h, harder) {
+  return 'A single fantasy HERO PORTRAIT for a children\'s collectible card game — the face a player wears on the duel board.\n'
+    + 'THE HERO: "' + h.name + '", ' + h.title + ' — ' + h.look + '.\n'
+    + 'THEIR POWER (flavour only, do not draw words, symbols or diagrams): ' + h.power.name + ' — ' + h.power.text + '\n'
+    + 'COMPOSITION: exactly ONE character, alone, facing the viewer at a slight three-quarter angle, from the WAIST UP, centred and whole in a SQUARE frame with a clear margin of screen all around them. Head and shoulders large enough to read at 48 pixels. No other people, no creatures, no scenery, no ground, floor, throne or pedestal — they stand free.\n'
+    + 'STYLE: polished painterly digital game art with rich saturated colour and dramatic rim lighting — the same finish as the painted monster cards in this game, and unmistakably part of the same set. Heroic, warm and friendly; a face a child would want to play as.\n'
+    + _screenRules('the hero', h.screen || 'magenta', harder)
+    + 'HARD RULES: absolutely NO text, letters, numbers, runes that read as writing, labels, signatures or watermarks anywhere; no card frame, border, banner or interface; no weapon pointed at the viewer; suitable for primary-school children — nothing gruesome, nothing frightening and nothing revealing.';
+}
+async function _tcgGenHeroArt(h) {
+  const got = await _tcgGenClean(x => tcgHeroArtPrompt(h, x), null, 'hero ' + h.name, true, h.screen || 'magenta');
+  await _tcgArtStore(tcgHeroSlotId(h.id), got.url, { cleaned: true });
+  return got.url;
+}
+function _tcgHeroMissing() { return DUEL_HEROES.filter(h => !tcgHeroArtUrl(h.id)).length; }
+function _tcgHeroSlotRow(h) {
+  const url = tcgHeroArtUrl(h.id);
+  const thumb = url ? '<img src="' + url + '" alt="' + escapeHtml(h.name) + '">'
+    : '<div style="font-size:30px;line-height:64px;text-align:center;opacity:.7;">' + h.em + '</div>';
+  return _tcgArtSlotHtml(tcgHeroSlotId(h.id), escapeHtml(h.name), '🦸', thumb, 'hero portrait',
+    h.title + ' · ' + h.power.icon + ' ' + h.power.name + ': ' + h.power.text);
+}
+function _tcgHeroRowRefresh(h) {
+  const row = document.getElementById('tcgherorow-' + h.id);
+  if (row) row.innerHTML = _tcgHeroSlotRow(h);
+}
+function tcgHeroArtAdminHtml() {
+  const miss = _tcgHeroMissing();
+  return '<h3 class="ga-cat">🦸 Duel hero portraits</h3>'
+    + '<div class="tcg-section-note">One portrait per <b>Ember Duel hero</b>. It is worn on the duel board beside the life total and on the tile in the <b>🦸 Choose your hero</b> screen, so it is a FACE, not a scene — waist up, alone, looking at the player. These ' + DUEL_HEROES.length + ' are the <b>basic heroes</b> every student can choose from; legendary heroes arrive with the next expansion and will appear here automatically. A hero stands on <b>nothing</b>, like the battle avatars, so the backdrop is keyed out and checked before anything is saved.</div>'
+    + '<div class="tcg-gen-panel tcg-hero-gen">'
+    +   '<h4>✨ Draw the heroes</h4>'
+    +   '<p>Engine: <b>' + escapeHtml(_tcgArtEngineLabel()) + '</b> — change it in the sidebar under <b>AI Engine</b>.</p>'
+    +   '<div class="tcg-gen-actions">'
+    +     '<button type="button" class="btn btn-primary" id="tcgHeroGenBtn" onclick="tcgHeroDrawAll()"' + (miss ? '' : ' disabled') + '>✨ Draw all missing heroes'
+    +       (miss ? ' · ' + miss + ' of ' + DUEL_HEROES.length : ' · all ' + DUEL_HEROES.length + ' done 🎉') + '</button>'
+    +     '<button type="button" class="btn btn-ghost" id="tcgHeroStopBtn" onclick="tcgStopArtGen()" style="display:none;">■ Stop</button>'
+    +   '</div>'
+    +   '<div class="tcg-gen-track" id="tcgHeroTrack" style="display:none;"><i id="tcgHeroFill" style="width:0%;"></i></div>'
+    +   '<div class="tcg-gen-status" id="tcgHeroStatus"></div>'
+    + '</div>'
+    + '<div class="ga-cards">'
+    + DUEL_HEROES.map(h => '<div id="tcgherorow-' + h.id + '" style="display:contents;">' + _tcgHeroSlotRow(h) + '</div>').join('')
+    + '</div>';
+}
+function _tcgHeroGenStatus(done, total, line) {
+  const fill = document.getElementById('tcgHeroFill');
+  if (fill) fill.style.width = Math.round(done / Math.max(1, total) * 100) + '%';
+  const s = document.getElementById('tcgHeroStatus');
+  if (s) s.innerHTML = line;
+}
+async function tcgHeroDrawAll() {
+  if (!_isAdmin()) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let it finish or press Stop', 'error'); return; }
+  const jobs = DUEL_HEROES.filter(h => !tcgHeroArtUrl(h.id));
+  if (!jobs.length) { showToast('Every hero already has a portrait 🎉', 'success'); return; }
+  if (!confirm('Draw ' + jobs.length + ' hero portrait' + (jobs.length === 1 ? '' : 's') + ' with ' + _tcgArtEngineLabel() + '?\n\n'
+    + 'This runs one picture at a time and can take a while — keep this tab open. Every finished picture is saved as it lands, and you can press Stop at any point.')) return;
+  _tcgGenBusy = true; _tcgGenStop = false;
+  const btn = document.getElementById('tcgHeroGenBtn'), stop = document.getElementById('tcgHeroStopBtn'), track = document.getElementById('tcgHeroTrack');
+  if (btn) btn.disabled = true;
+  if (stop) stop.style.display = '';
+  if (track) track.style.display = '';
+  let done = 0, failed = 0;
+  for (const h of jobs) {
+    if (_tcgGenStop) break;
+    _tcgHeroGenStatus(done, jobs.length, 'Drawing <b>' + escapeHtml(h.name) + '</b> — ' + done + ' / ' + jobs.length + ' done');
+    try { await _tcgGenHeroArt(h); _tcgHeroRowRefresh(h); }
+    catch (e) { failed++; console.error('hero art failed for ' + h.name, e); }
+    done++;
+    _tcgHeroGenStatus(done, jobs.length, done + ' / ' + jobs.length + ' drawn' + (failed ? ' · ' + failed + ' failed' : ''));
+  }
+  _tcgGenBusy = false;
+  if (stop) stop.style.display = 'none';
+  const okN = done - failed;
+  _tcgHeroGenStatus(done, jobs.length, '<b>' + (_tcgGenStop ? 'Stopped' : 'Finished') + '</b> — ' + okN + ' hero' + (okN === 1 ? '' : 'es') + ' drawn' + (failed ? ', ' + failed + ' failed' : '') + '.');
+  showToast(_tcgGenStop ? 'Stopped — ' + okN + ' drawn' : '🦸 Heroes drawn — ' + okN + ' portrait' + (okN === 1 ? '' : 's'), failed ? 'info' : 'success');
+}
+
 // ---- 🔥 The realm's LOGO ---------------------------------------------------
 // One mark for the whole realm — the crest on the box. It is not a picture of
 // anything in the game, which is what separates it from the set banners: a set
@@ -36799,6 +36896,7 @@ function tcgArtAdminHtml() {
     + '<div class="tcg-section-note">Every monster carries <b>two graphics</b>: the <b>🃏 trading-card art</b> shown on the card face, and the <b>⚔️ battle avatar</b> that fights on the arena stage. Paste a PNG into either slot, upload one, or let the AI draw them — until both are set, one image stands in for the other. Square images look best.</div>'
     + tcgArtGenPanelHtml()
     + tcgLogoArtAdminHtml()
+    + tcgHeroArtAdminHtml()
     + tcgArtifactArtAdminHtml()
     + tcgSetArtAdminHtml()
     + tcgPackArtAdminHtml()
@@ -36866,6 +36964,25 @@ async function tcgAiGenSlot(slotId) {
     } finally {
       _tcgGenBusy = false;
       _tcgArtifactRowRefresh(a);
+    }
+    return;
+  }
+  // A duel hero: one face, on nothing, on that hero's own chroma screen.
+  if (slotId.indexOf('hero:') === 0) {
+    const h = duelHeroById(slotId.slice(5));
+    if (!h) { showToast('That hero id is not one I recognise', 'error'); return; }
+    _tcgGenBusy = true;
+    _tcgSlotStatus(slotId, '⏳ Drawing…');
+    try {
+      await _tcgGenHeroArt(h);
+      showToast('🦸 ' + h.name + ' drawn', 'success');
+    } catch (e) {
+      console.error('hero art generation failed', e);
+      _tcgSlotStatus(slotId, '⚠️ Failed');
+      showToast('Could not draw it: ' + (e && e.message ? e.message : e), 'error');
+    } finally {
+      _tcgGenBusy = false;
+      _tcgHeroRowRefresh(h);
     }
     return;
   }
@@ -38126,16 +38243,18 @@ function tcgModesHtml(s) {
     // 🎴 Ember Duel — the whole CARD is hidden while it is in beta, never
     // rendered disabled: a student must not see a mode they cannot open.
     + (duelAccessAllowed() ? mode('🎴', 'Ember Duel', (duelReleased() ? 'NEW · card duel' : 'BETA · card duel'),
-        'A proper <b>card duel</b>: two heroes on ' + DUEL_HERO_HP + ' life, one mana crystal more every turn, and your monsters summoned onto the board to fight. Every card keeps its arena skill and <b>gains a duel ability of its own</b> — Taunt, Charge, Lifesteal, Divine Shield, Poisonous, battlecries that sweep the board — and <b>the rarer the card, the stronger that ability is</b>. There are <b>' + DUEL_SPELLS.length + ' spells</b> too: direct damage, card draw, freezes and sweeps. <b>Drag one of your minions onto a rival card to attack it</b>, and answer a science question each turn for a free card and a mana crystal back.'
+        'A proper <b>card duel</b>: two heroes on ' + DUEL_HERO_HP + ' life, one mana crystal more every turn, and your monsters summoned onto the board to fight. <b>Choose one of the ' + duelHeroesFor(s).length + ' heroes</b> and you get their <b>hero power</b> — ' + DUEL_POWER_COST + ' mana, once every turn, all duel long. Every card keeps its arena skill and <b>gains a duel ability of its own</b> — Taunt, Charge, Lifesteal, Divine Shield, Poisonous, battlecries that sweep the board — and <b>the rarer the card, the stronger that ability is</b>. There are <b>' + DUEL_SPELLS.length + ' spells</b> too: direct damage, card draw, freezes and sweeps. <b>Drag one of your minions onto a rival card to attack it</b>, and answer a science question each turn for a free card and a mana crystal back.'
         + (_isAdmin() ? '<br><span style="color:var(--text-muted);font-size:0.8rem;">' + (duelReleased() ? 'Released to students.' : 'Beta — only you can see this card. Press Launch when you are happy with it.') + '</span>' : ''),
         '🏆 record: <b>' + ((s.duel && s.duel.wins) | 0) + 'W – ' + ((s.duel && s.duel.losses) | 0) + 'L</b> · ⚔️ ' + ((s.duel && s.duel.runs) | 0) + ' duel' + (((s.duel && s.duel.runs) | 0) === 1 ? '' : 's')
           + ' · 🎴 ' + (duelDeckValid(duelActiveDeck(s), s)
               ? '<b>' + escapeHtml((duelDecks(s)[duelActiveIndex(s)] || {}).name || 'your deck') + '</b>'
                 + (duelDeckCount(s) > 1 ? ' of ' + duelDeckCount(s) + ' decks' : '')
               : 'no deck yet — one is built for you')
+          + ' · 🦸 <b>' + escapeHtml(duelHero(s).name) + '</b>' + (duelHeroChosen(s) ? '' : ' <span style="opacity:.75;">(default)</span>')
           + duelDeckPickHtml(s),
         (owned
           ? '<button class="btn btn-primary" type="button" onclick="duelOpen()">▶ Play</button>'
+            + '<button class="btn btn-outline" type="button" style="margin-top:8px;" onclick="duelOpenHeroes()">🦸 Choose hero</button>'
             + '<button class="btn btn-outline" type="button" style="margin-top:8px;" onclick="duelOpenBuilder()">🎴 Build decks</button>'
           : '<button class="btn btn-outline" type="button" onclick="tcgSetTab(\'packs\')">🎁 Get cards first</button>')
         + (_isAdmin()
@@ -38351,6 +38470,10 @@ function tcgGuideHtml() {
   + (duelAccessAllowed() ? _tcgGuideSection('🎴', 'Ember Duel — the card duel' + (duelReleased() ? '' : ' (BETA)'),
       'A proper card game with your own collection. Both heroes start on <b>' + DUEL_HERO_HP + ' life</b>, you gain <b>one mana crystal a turn</b> up to ' + DUEL_MANA_CAP + ', and you summon monsters onto a board of up to ' + DUEL_BOARD_MAX + '. A monster cannot attack the turn it lands unless its ability says otherwise, and when it attacks another monster <b>both of them take damage</b> — so choosing what to trade with is the whole game. Your deck is <b>' + DUEL_DECK_SIZE + ' cards that you choose yourself</b> — up to ' + DUEL_COPIES_MAX + ' copies of any monster, only <b>one</b> of a 7★ legend, and up to ' + DUEL_COPIES_SPELL + ' of any spell — from the monsters you own plus all ' + DUEL_SPELLS.length + ' spells, which everybody has. You can keep <b>' + DUEL_DECKS_MAX + ' different decks</b> saved at once and switch between them whenever you like, so trying an idea never costs you the deck you already had. Never built one? One is put together from your strongest cards so you can play straight away.',
       _tcgGuideRows([
+        ['🦸 Your hero and their hero power',
+          'You choose <b>who you are</b> before the duel: one of the <b>' + DUEL_HEROES.length + ' basic heroes</b>, all free and all yours from your very first duel. Each brings a <b>hero power</b> — <b>' + DUEL_POWER_COST + ' mana, once every turn, for the whole duel</b>. It is not part of your deck and it never runs out, so two students with exactly the same ' + DUEL_DECK_SIZE + ' cards still play a different game.<br>'
+            + DUEL_HEROES.map(h => h.power.icon + ' <b>' + escapeHtml(h.name) + '</b> — ' + escapeHtml(h.power.name) + ': ' + escapeHtml(h.power.text)).join('<br>')
+            + '<br><span class="tcg-guide-dim">Never chosen one? You play as <b>' + escapeHtml(duelHeroDefault().name) + '</b>, the safest hero in the set — her armour is added on top of your life, is spent before your life is, and can never be wasted or mis-aimed. <b>Legendary heroes arrive with the next expansion.</b></span>'],
         ['Where the duel ability comes from',
           'Every card <b>keeps its arena skill</b> and <b>gains a duel ability</b> generated from the same skill type — so a blaster sweeps the board here too, a healer mends, a poisoner poisons. Nothing is written per card, which is why all ' + TCG_CARDS.length + ' of them have one.'],
         ['⬆ Your cards RANK UP every ' + DUEL_RANK_EVERY + ' training levels',
@@ -38716,6 +38839,95 @@ function duelHandNeed(hc) {
                              : (DUEL_BC_TARGETED[(hc.ab || {}).kind] || null);
 }
 
+// ---- 🦸 HEROES -------------------------------------------------------------
+// The student is somebody in the duel, not just a life total. A hero is chosen
+// once (it sits on the save, so it is theirs across every duel), it wears its
+// own portrait on the board, and it brings a HERO POWER — the Hearthstone
+// shape: DUEL_POWER_COST mana, once a turn, never runs out. That is what makes
+// two students with the same forty cards play differently.
+//
+// These five are the BASIC heroes: free, available to everybody from the first
+// duel, and deliberately WEAK — one damage, one armour step, one +1/+1. They
+// are the floor the game is balanced on. The next expansion adds LEGENDARY
+// heroes, which is why every row already carries `tier`: a legendary hero is a
+// row with `tier: 'legend'` and a bigger `v`, plus whatever unlock rule it is
+// given in duelHeroesFor(). Nothing else has to change.
+//
+// A power's `kind` is resolved in duelResolvePower and MUST be handled there —
+// the same rule DUEL_ABILITIES lives under. `need` reuses the spell targeter
+// (DUEL_TARGETED's vocabulary), so a power that asks for a target costs no new
+// interaction code at all.
+const DUEL_POWER_COST = 2;        // every basic hero power, exactly as Hearthstone
+// The safest hero in the set, and the one a student who has never chosen gets.
+// Armour cannot be wasted, cannot be mis-aimed and cannot be played into an
+// empty board — there is no way for a beginner to press it at the wrong moment.
+const DUEL_HERO_DEFAULT = 'warden';
+const DUEL_HEROES = [
+  {
+    id: 'warden', name: 'Warden Elowen', title: 'Keeper of the Hearth', em: '🛡️', tier: 'basic',
+    safe: true, screen: 'magenta',
+    blurb: 'Holds the line while your board grows. Armour stacks up turn after turn, and nothing you press can ever be wasted — which is why she is the hero you start with.',
+    look: 'a calm young woman knight in dented silver plate armour with a deep blue tabard, a heavy round shield held steady in front of her, short dark hair, a warm patient expression',
+    power: { name: 'Bulwark', icon: '🛡️', kind: 'armor', v: 2, text: 'Gain 2 Armor.' }
+  },
+  {
+    id: 'ember', name: 'Emberfist Rook', title: 'Of the Burning Road', em: '🔥', tier: 'basic',
+    screen: 'green',
+    blurb: 'One point of damage a turn does not sound like much — until it is the point that finishes a minion your board could not quite kill, every single turn.',
+    look: 'a broad-shouldered young man in scorched leather and a red half-cloak, one bare fist wrapped in burning orange flame held up in front of him, cropped hair, a grin like he enjoys this',
+    power: { name: 'Ember Spark', icon: '🔥', kind: 'dmgAny', v: 1, need: 'any', text: 'Deal 1 damage to any target.' }
+  },
+  {
+    id: 'grove', name: 'Sage Wren', title: 'Voice of the Green', em: '🌿', tier: 'basic',
+    screen: 'blue',
+    blurb: 'Makes one of your minions a little better every turn. Put it on something with Taunt or Lifesteal and the rival has to answer a card that keeps growing.',
+    look: 'a slender older woman in flowing green and brown robes with a woven leaf mantle, long grey hair, one hand open with small glowing green shoots curling up out of her palm, kind eyes',
+    power: { name: 'Green Gift', icon: '🌿', kind: 'grow', v: 1, need: 'friendlyMinion', text: 'Give a friendly minion +1/+1.' }
+  },
+  {
+    id: 'frost', name: 'Tidecaller Nell', title: 'Daughter of the Deep Frost', em: '❄️', tier: 'basic',
+    screen: 'magenta',
+    blurb: 'Take the rival\'s best attacker out of the fight for a turn, every turn. It deals no damage at all — it simply means their biggest minion never gets to swing.',
+    look: 'a young woman in pale blue-and-white sealskin robes with silver clasps, long white braided hair, both hands cupped around a slowly turning shard of ice, a quiet unbothered face',
+    power: { name: 'Chill Touch', icon: '❄️', kind: 'chill', need: 'enemyMinion', v: 0, text: 'Freeze an enemy minion.' }
+  },
+  {
+    id: 'scribe', name: 'Ashen Scribe Pip', title: 'Reader of Cinders', em: '📖', tier: 'basic',
+    screen: 'green',
+    blurb: 'More cards than anybody else — at a price. One life a turn is cheap early and expensive late, so this hero is about knowing when to stop.',
+    look: 'a small studious young person in a soot-smudged grey scholar\'s robe with ink-stained fingers, round spectacles, an open book floating open in front of them with glowing ember-orange letters drifting off the page',
+    power: { name: 'Ashen Study', icon: '📖', kind: 'study', v: 1, text: 'Draw a card. Your hero takes 1 damage.' }
+  }
+];
+const DUEL_HERO_BY_ID = {};
+DUEL_HEROES.forEach(h => { DUEL_HERO_BY_ID[h.id] = h; });
+function duelHeroById(id) { return DUEL_HERO_BY_ID[id] || null; }
+// The heroes a given student may choose. Every BASIC hero is free to everybody;
+// this is the one place a future legendary hero's unlock rule goes, so the
+// chooser, the save and the rival picker all obey it without being told twice.
+function duelHeroesFor(_s) { return DUEL_HEROES.filter(h => h.tier === 'basic'); }
+// The hero the student duels as. An unknown or missing id falls back to the
+// SAFEST hero rather than to nothing — a student who has never opened the
+// chooser still gets a hero, and gets the forgiving one.
+function duelHeroId(s) {
+  const id = s && s.duel && s.duel.hero;
+  return duelHeroById(id) ? id : DUEL_HERO_DEFAULT;
+}
+function duelHero(s) { return duelHeroById(duelHeroId(s)) || duelHeroById(DUEL_HERO_DEFAULT) || DUEL_HEROES[0]; }
+function duelHeroDefault() { return duelHeroById(DUEL_HERO_DEFAULT) || DUEL_HEROES[0]; }
+// Has the student actually made a choice, or are they on the default? Only used
+// to nudge them towards the chooser — never to gate anything.
+function duelHeroChosen(s) { return !!(s && s.duel && duelHeroById(s.duel.hero)); }
+function duelSetHero(id) {
+  const s = tcgState(); if (!s) return;
+  const h = duelHeroById(id);
+  if (!h || duelHeroesFor(s).indexOf(h) < 0) { showToast('That hero is not one you can choose yet', 'error'); return; }
+  s.duel = s.duel || {};
+  s.duel.hero = h.id;
+  try { rpgSave(); } catch (_) {}
+  showToast('🦸 ' + h.name + ' is your hero — ' + h.power.icon + ' ' + h.power.name, 'success');
+}
+
 // ---- The live run — never persisted ---------------------------------------
 let duelRun = null;
 // Each run gets an id. The rival's turn is a chain of awaits several seconds
@@ -38785,6 +38997,13 @@ function duelRivalLevel(s) {
   if (!mine.length) return 1;
   const avg = mine.reduce((n, id) => n + tcgLevel(id), 0) / mine.length;
   return _tcgClampLvl(Math.round(avg));
+}
+// The rival's hero — a basic one at random, and never the student's own, so
+// the two portraits on the board are always two different people.
+function duelRivalHero(s, mine) {
+  const pool = duelHeroesFor(s).filter(h => !mine || h.id !== mine.id);
+  if (!pool.length) return duelHeroDefault();
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 // A card id (monster or spell) turned into a hand card.
@@ -39081,6 +39300,81 @@ function duelCloseBuilder() {
   const o = document.getElementById('duelOverlay'); if (o) o.remove();
   try { if (document.querySelector('#page-tcg.active')) tcgRenderBody(); } catch (_) {}
 }
+
+// ---- 🦸 The hero chooser ---------------------------------------------------
+// Lives in the same overlay as the deck builder, for the same reasons. Choosing
+// is instant and saved on the spot — there is nothing to commit, so there is no
+// Save button and no way to leave a half-made choice behind.
+function duelOpenHeroes() {
+  const s = tcgState();
+  if (!s) { showToast('Answer a question anywhere in the app to wake your hero first', 'error'); return; }
+  if (!duelAccessAllowed()) { showToast('Ember Duel is still in beta', 'error'); return; }
+  // A hero cannot change under a board that was dealt with it standing there.
+  const r = duelRun;
+  if (r && !r.over && !confirm('Leave this duel and change your hero?\n\nThe duel you are in will end (nothing is lost — a duel costs nothing to play).')) return;
+  if (r) { clearTimeout(r.reapT); duelRun = null; }
+  duelDropQuiz();
+  duelDraft = null;
+  let host = document.getElementById('duelOverlay');
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'duel-overlay'; host.id = 'duelOverlay';
+    host.innerHTML = '<div class="duel-shell" id="duelShell"></div>';
+    document.body.appendChild(host);
+  }
+  tcgLoadArt().catch(() => {}).then(() => duelRenderHeroes());
+}
+function duelCloseHeroes() {
+  const o = document.getElementById('duelOverlay'); if (o) o.remove();
+  try { if (document.querySelector('#page-tcg.active')) tcgRenderBody(); } catch (_) {}
+}
+function duelPickHero(id) {
+  duelSetHero(id);
+  duelRenderHeroes();
+}
+function duelHeroCardHtml(h, chosen) {
+  const url = tcgHeroArtUrl(h.id);
+  return '<button type="button" class="duel-heropick' + (chosen ? ' on' : '') + (h.safe ? ' safe' : '') + '"'
+    + ' onclick="duelPickHero(\'' + h.id + '\')">'
+    + '<div class="duel-heropick-face">' + (url
+        ? '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(h.name) + '" loading="lazy">'
+        : '<span>' + h.em + '</span>') + '</div>'
+    + '<div class="duel-heropick-body">'
+    +   '<div class="duel-heropick-name">' + escapeHtml(h.name)
+    +     (h.safe ? '<em title="The most forgiving hero — nothing you press with it can be wasted">safest pick</em>' : '')
+    +     (chosen ? '<i>✓ your hero</i>' : '') + '</div>'
+    +   '<div class="duel-heropick-title">' + escapeHtml(h.title) + '</div>'
+    +   '<div class="duel-heropick-power">' + h.power.icon + ' <b>' + escapeHtml(h.power.name) + '</b>'
+    +     ' <span>' + DUEL_POWER_COST + '💧 · once a turn</span><br>' + escapeHtml(h.power.text) + '</div>'
+    +   '<div class="duel-heropick-blurb">' + escapeHtml(h.blurb) + '</div>'
+    + '</div></button>';
+}
+function duelRenderHeroes() {
+  const shell = document.getElementById('duelShell');
+  const s = tcgState();
+  if (!shell || !s) return;
+  const list = duelHeroesFor(s);
+  const mine = duelHeroId(s);
+  shell.innerHTML = '<div class="duel-top">'
+    +   '<div class="duel-title">🦸 Choose your hero</div>'
+    +   '<button type="button" class="duel-x" onclick="duelCloseHeroes()" title="Close">✕</button>'
+    + '</div>'
+    + '<div class="duel-herointro">'
+    +   'Your hero stands behind your board with <b>' + DUEL_HERO_HP + ' life</b> and brings a <b>hero power</b> — '
+    +   '<b>' + DUEL_POWER_COST + ' mana, once every turn, all duel long</b>. It never runs out and it is not part of your deck, '
+    +   'so two students with exactly the same forty cards still play a different game.'
+    +   '<br>These are the <b>basic heroes</b> — every one of them is free and yours from your very first duel. '
+    +   '<b>Legendary heroes arrive with the next expansion.</b>'
+    +   (duelHeroChosen(s) ? '' : '<br><b>You have not chosen yet</b>, so you are playing as ' + escapeHtml(duelHeroDefault().name)
+        + ' — the safest hero in the set. Pick any of them; you can change your mind whenever you like.')
+    + '</div>'
+    + '<div class="duel-heroes">' + list.map(h => duelHeroCardHtml(h, h.id === mine)).join('') + '</div>'
+    + '<div class="duel-bar">'
+    +   '<div class="duel-hint">Tap a hero to make them yours — it is saved straight away.</div>'
+    +   '<button type="button" class="btn btn-outline" onclick="duelOpenBuilder()">🎴 Build decks</button>'
+    +   '<button type="button" class="btn btn-primary" onclick="duelOpen()">▶ Duel</button>'
+    + '</div>';
+}
 function duelDraftSetFilter(f) { if (duelDraft) { duelDraft.filter = String(f); duelRenderBuilder(); } }
 function duelDraftAdd(id) {
   const d = duelDraft, s = tcgState(); if (!d || !s) return;
@@ -39236,6 +39530,7 @@ function duelRenderBuilder() {
     +   '</div>'
     + '</div>'
     + '<div class="duel-bar">'
+    +   '<button type="button" class="btn btn-outline" onclick="duelOpenHeroes()" title="Choose the hero you duel as">🦸 Hero</button>'
     +   '<button type="button" class="btn btn-outline" onclick="duelDraftAuto()">✨ Suggest a deck</button>'
     +   '<button type="button" class="btn btn-outline" onclick="duelDraftClear()">Clear</button>'
     +   '<button type="button" class="btn btn-outline" onclick="duelDraftDelete()" title="Forget this deck and empty the slot">🗑 Delete</button>'
@@ -39269,11 +39564,14 @@ function duelStart() {
   const pDeck = duelDeckFor(s), eDeck = duelRivalDeck(s);
   if (!pDeck.length) { showToast('Open a booster pack first — you need at least one monster', 'error'); duelClose(); return; }
   const pool = _tcgQuizPool(), served = _tcgServedLoad();
+  // The rival is somebody too — a basic hero drawn at random, so the same deck
+  // does not meet the same fight every time.
+  const pHero = duelHero(s), eHero = duelRivalHero(s, pHero);
   duelRun = {
     id: ++_duelRunSeq,
     turn: 1, whose: 'P', over: false, won: false, banked: false, busy: false,
-    p: { hp: DUEL_HERO_HP, maxHp: DUEL_HERO_HP, mana: 0, cap: 0, deck: pDeck.slice(), hand: [], board: [], fatigue: 0 },
-    e: { hp: DUEL_HERO_HP, maxHp: DUEL_HERO_HP, mana: 0, cap: 0, deck: eDeck.slice(), hand: [], board: [], fatigue: 0 },
+    p: { hp: DUEL_HERO_HP, maxHp: DUEL_HERO_HP, armor: 0, hero: pHero, powerUsed: false, mana: 0, cap: 0, deck: pDeck.slice(), hand: [], board: [], fatigue: 0 },
+    e: { hp: DUEL_HERO_HP, maxHp: DUEL_HERO_HP, armor: 0, hero: eHero, powerUsed: false, mana: 0, cap: 0, deck: eDeck.slice(), hand: [], board: [], fatigue: 0 },
     rivalLvl,
     log: [],
     sel: null,          // tap-to-select: the hand index or board uid awaiting a target
@@ -39366,6 +39664,7 @@ function duelBeginTurn(who) {
   const side = _duelSide(who);
   side.cap = Math.min(DUEL_MANA_CAP, side.cap + 1);
   side.mana = side.cap;
+  side.powerUsed = false;              // the hero power is once a TURN, not once a duel
   side.board.forEach(m => {
     m.justPlayed = false;
     m.attacked = false;
@@ -39428,13 +39727,28 @@ function duelHurtMinion(m, amount, opts) {
   if (m.hp <= 0) duelKill(m);
   return dealt;
 }
+// Armour is spent BEFORE life, exactly as Hearthstone spends it, and it is the
+// only thing standing between the Warden's power and being a worse heal: it
+// never overheals, it stacks all game, and it can be laid down before the blow
+// arrives rather than after.
 function duelHurtHero(who, amount, element) {
   const r = duelRun; if (!r) return 0;
   const side = _duelSide(who);
   const dealt = Math.max(0, amount | 0);
-  side.hp -= dealt;
+  const soaked = Math.min(side.armor | 0, dealt);
+  side.armor = (side.armor | 0) - soaked;
+  side.hp -= (dealt - soaked);
   duelFxHero(who, dealt, 'dmg', element);
   return dealt;
+}
+function duelGainArmor(who, amount) {
+  const r = duelRun; if (!r) return 0;
+  const side = _duelSide(who);
+  const got = Math.max(0, amount | 0);
+  if (!got) return 0;
+  side.armor = (side.armor | 0) + got;
+  duelFxHero(who, got, 'shield');
+  return got;
 }
 function duelHealHero(who, amount) {
   const r = duelRun; if (!r) return 0;
@@ -39618,6 +39932,90 @@ function duelResolveBattlecry(who, m, target) {
   if (ab.trig === 'battlecry') duelLog('✨ ' + ab.name + '.');
 }
 
+// ---- 🦸 The hero power -----------------------------------------------------
+// DUEL_POWER_COST mana, once a turn, for as long as the duel lasts. It reuses
+// the spell targeter wholesale: a power with a `need` arms r.pending exactly as
+// a targeted spell does, and the same tap resolves it — see duelTap.
+function duelPowerNeed(hero) { return (hero && hero.power && hero.power.need) || null; }
+// Can this side press it right now? The same three questions duelCanPlay asks:
+// enough mana, not already spent, and something legal to aim at.
+function duelCanUsePower(who) {
+  const r = duelRun; if (!r || r.over) return false;
+  const side = _duelSide(who);
+  if (!side.hero || side.powerUsed) return false;
+  if (side.mana < DUEL_POWER_COST) return false;
+  const need = duelPowerNeed(side.hero);
+  if (need) {
+    const foe = _duelFoe(who);
+    const foeAlive = foe.board.filter(m => !m.dead).length;
+    const myAlive = side.board.filter(m => !m.dead).length;
+    if (need === 'enemyMinion' && !foeAlive) return false;
+    if (need === 'friendlyMinion' && !myAlive) return false;
+    if (need === 'anyMinion' && !foeAlive && !myAlive) return false;
+  }
+  return true;
+}
+// The student presses the button. A power that chooses a target waits for the
+// tap; one that does not resolves on the spot.
+function duelUsePower() {
+  const r = duelRun; if (!r || r.over || r.busy || r.whose !== 'P') return;
+  if (!duelCanUsePower('P')) {
+    const side = r.p;
+    showToast(side.powerUsed ? 'Your hero power is spent for this turn'
+      : side.mana < DUEL_POWER_COST ? 'Not enough mana — a hero power costs ' + DUEL_POWER_COST
+      : 'Nothing to aim it at yet', 'error');
+    return;
+  }
+  const need = duelPowerNeed(r.p.hero);
+  if (need) {
+    r.pending = { power: true, need };
+    r.sel = null;
+    duelRender();
+    showToast('Now tap a target for ' + r.p.hero.power.name, 'info');
+    return;
+  }
+  duelCommitPower('P', null);
+}
+function duelCommitPower(who, target) {
+  const r = duelRun; if (!r) return;
+  const side = _duelSide(who);
+  if (!duelCanUsePower(who)) { r.pending = null; duelRender(); return; }
+  side.mana -= DUEL_POWER_COST;
+  side.powerUsed = true;
+  duelSfxPlay('cast');
+  duelLog((who === 'P' ? 'You use ' : 'Rival uses ') + side.hero.power.name + '.');
+  duelResolvePower(who, side.hero.power, target);
+  r.pending = null; r.sel = null;
+  duelCheckOver();
+  duelRender();
+}
+// Every hero power's effect. A `kind` added to DUEL_HEROES must be handled
+// here — the basic five are armour, a point of damage, a +1/+1, a freeze and a
+// card off the top for a life. The legendary heroes of the next set plug in as
+// new kinds beside them.
+function duelResolvePower(who, p, target) {
+  const r = duelRun; if (!r || !p) return;
+  const me = _duelSide(who), foe = _duelFoe(who);
+  const foeWho = who === 'P' ? 'E' : 'P';
+  if (p.kind === 'armor') {
+    duelGainArmor(who, p.v);
+  } else if (p.kind === 'dmgAny') {
+    if (target && target.type === 'minion') duelHurtMinion(target.m, p.v, { cls: 'spell' });
+    else duelHurtHero(target && target.type === 'hero' ? target.who : foeWho, p.v);
+  } else if (p.kind === 'grow') {
+    const pick = (target && target.type === 'minion' && target.m.side === who) ? target.m
+      : me.board.filter(m => !m.dead).sort((a, b) => b.atk - a.atk)[0];
+    if (pick) { pick.atk += p.v; pick.hp += p.v; pick.maxHp += p.v; duelFx(pick.uid, p.v, 'buff'); }
+  } else if (p.kind === 'chill') {
+    const pick = (target && target.type === 'minion' && target.m.side !== who) ? target.m
+      : foe.board.filter(m => !m.dead).sort((a, b) => b.atk - a.atk)[0];
+    if (pick) { pick.frozen = 1; pick.canAttack = false; duelFx(pick.uid, 0, 'freeze'); }
+  } else if (p.kind === 'study') {
+    duelDraw(who === 'P' ? 'p' : 'e');
+    if (p.v) duelHurtHero(who, p.v);
+  }
+}
+
 // ---- Attacking -------------------------------------------------------------
 function duelCanAttack(m) {
   return !!(m && !m.dead && m.canAttack && !m.attacked && m.frozen <= 0 && m.atk > 0);
@@ -39693,6 +40091,13 @@ async function duelAiTurn() {
     duelRender();
     await duelSleep(520);
   }
+  // 1b. The hero power, if there is mana spare once the cards are down. It is
+  // deliberately spent AFTER the hand: a card on the board beats two armour.
+  if (duelRunAlive(r) && duelCanUsePower('E')) {
+    duelCommitPower('E', duelAiPowerTarget());
+    duelRender();
+    await duelSleep(480);
+  }
   // 2. Attack.
   for (let guard = 0; guard < 10; guard++) {
     if (!duelRunAlive(r)) { r.busy = false; return; }
@@ -39725,6 +40130,23 @@ async function duelAiTurn() {
   r.turn++;
   duelBeginTurn('P');
   duelRender();
+}
+// Where the rival aims its hero power. The same shape as duelAiTargetFor, kept
+// separate because a power has no hand card behind it.
+function duelAiPowerTarget() {
+  const r = duelRun; if (!r || !r.e.hero) return null;
+  const p = r.e.hero.power;
+  const need = duelPowerNeed(r.e.hero);
+  if (!need) return null;
+  const foes = r.p.board.filter(m => !m.dead).sort((a, b) => b.atk - a.atk);
+  const mine = r.e.board.filter(m => !m.dead).sort((a, b) => b.atk - a.atk);
+  if (need === 'friendlyMinion') return mine.length ? { type: 'minion', m: mine[0] } : null;
+  if (need === 'enemyMinion' || need === 'anyMinion') return foes.length ? { type: 'minion', m: foes[0] } : null;
+  // 'any' — finish something it can finish, else the face.
+  const v = p.v | 0;
+  if (r.p.hp <= v) return { type: 'hero', who: 'P' };
+  const kill = foes.filter(m => m.hp <= v && !m.shield)[0];
+  return kill ? { type: 'minion', m: kill } : { type: 'hero', who: 'P' };
 }
 function duelAiTargetFor(hc) {
   const r = duelRun; if (!r) return null;
@@ -39853,8 +40275,10 @@ function _duelPlayHeroFx(who, amount, cls, element) {
   if (cls === 'dmg') {
     _duelRetrigger(el, 'duel-hit');
     duelBurst(el.querySelector('.duel-hero-art'), element || 'flame');
+  } else if (cls === 'shield') {
+    _duelRetrigger(el, 'duel-ward');
   }
-  duelFloat(el, (cls === 'heal' ? '+' : '-') + amount, cls);
+  duelFloat(el, cls === 'shield' ? '🛡 +' + amount : (cls === 'heal' ? '+' : '-') + amount, cls);
 }
 function duelFloat(host, text, cls) {
   if (!host) return;
@@ -40330,14 +40754,26 @@ function duelHeroHtml(who) {
   const mine = who === 'P';
   const heroTargetable = !mine && ((r.pending && r.pending.need === 'any')
     || (r.sel && r.sel.kind === 'attacker' && duelLegalTargets('P').hero));
+  const hero = side.hero || duelHeroDefault();
+  const armor = side.armor | 0;
   return '<div class="duel-hero' + (heroTargetable ? ' targetable' : '') + '" id="duelHero' + who + '" data-duel-hero="' + who + '">'
-    + '<div class="duel-hero-art">' + (mine ? '🛡️' : '🔥') + '</div>'
+    + '<div class="duel-hero-art" title="' + escapeHtml(hero.name + ' — ' + hero.power.name + ': ' + hero.power.text) + '">'
+    +   duelHeroFaceHtml(hero) + '</div>'
     + '<div class="duel-hero-info">'
-    +   '<div class="duel-hero-name">' + (mine ? 'You' : 'Rival Trainer') + '</div>'
-    +   '<div class="duel-hero-hp">❤️ ' + Math.max(0, side.hp) + '</div>'
+    +   '<div class="duel-hero-name">' + escapeHtml(mine ? hero.name : 'Rival · ' + hero.name) + '</div>'
+    +   '<div class="duel-hero-hp">❤️ ' + Math.max(0, side.hp)
+    +     (armor ? '<span class="duel-hero-armor" title="Armor — spent before your life is">🛡 ' + armor + '</span>' : '') + '</div>'
     +   '<div class="duel-hero-mana">' + duelManaHtml(side) + '</div>'
     +   '<div class="duel-hero-deck">🎴 ' + side.deck.length + ' left · ✋ ' + side.hand.length + '</div>'
     + '</div></div>';
+}
+// The hero's own portrait where one has been drawn, its emoji until then —
+// exactly how every other art slot in the realm degrades.
+function duelHeroFaceHtml(hero) {
+  const url = tcgHeroArtUrl(hero.id);
+  return url
+    ? '<img src="' + escapeHtml(url) + '" alt="' + escapeHtml(hero.name) + '" loading="lazy">'
+    : '<span class="duel-hero-em">' + hero.em + '</span>';
 }
 function duelManaHtml(side) {
   let out = '';
@@ -40374,6 +40810,7 @@ function duelRender() {
     +     '</div></div>'
     + '</div>'
     + '<div class="duel-bar">'
+    +   duelPowerBtnHtml(yourTurn)
     +   '<button type="button" class="btn btn-outline duel-insight" onclick="duelOpenQuiz()"'
     +     (yourTurn && !r.insightUsed ? '' : ' disabled') + '>⚡ Ember Insight'
     +     (r.insightUsed ? ' · used' : ' · draw a card') + '</button>'
@@ -40387,6 +40824,20 @@ function duelRender() {
     + (r.over ? duelOverHtml() : '');
   duelBindField();
   duelFlushFx();          // the DOM these animate against has only just been painted
+}
+// The hero power button. It always says what the power DOES — a student should
+// never have to remember which hero they picked to know what the button costs.
+function duelPowerBtnHtml(yourTurn) {
+  const r = duelRun; if (!r) return '';
+  const hero = r.p.hero || duelHeroDefault();
+  const p = hero.power;
+  const can = yourTurn && duelCanUsePower('P');
+  return '<button type="button" class="btn btn-outline duel-power' + (r.p.powerUsed ? ' spent' : '') + '"'
+    + ' onclick="duelUsePower()"' + (can ? '' : ' disabled')
+    + ' title="' + escapeHtml(hero.name + ' — ' + p.name + ' (' + DUEL_POWER_COST + ' mana, once a turn): ' + p.text) + '">'
+    + p.icon + ' ' + escapeHtml(p.name)
+    + ' <span class="duel-power-cost">' + (r.p.powerUsed ? 'used' : DUEL_POWER_COST + '💧') + '</span>'
+    + '</button>';
 }
 function duelHint() {
   const r = duelRun; if (!r) return '';
@@ -40409,6 +40860,7 @@ function duelOverHtml() {
     + '<div class="duel-over-rec">🏆 ' + (rec.wins | 0) + 'W – ' + (rec.losses | 0) + 'L</div>'
     + '<div class="duel-over-btns">'
     +   '<button type="button" class="btn btn-primary" onclick="duelRestart()">↻ Duel again</button>'
+    +   '<button type="button" class="btn btn-outline" onclick="duelOpenHeroes()">🦸 Change hero</button>'
     +   '<button type="button" class="btn btn-outline" onclick="duelOpenBuilder()">🎴 Change deck</button>'
     +   '<button type="button" class="btn btn-outline" onclick="duelClose()">Leave</button>'
     + '</div></div></div>';
@@ -40521,17 +40973,21 @@ function duelTap(e) {
   }
   const uid = wrap.getAttribute('data-duel-uid');
   const hero = wrap.getAttribute('data-duel-hero');
-  // A spell is waiting for its target.
+  // A spell — or a hero power — is waiting for its target. The two share this
+  // path completely; only the last line differs.
   if (r.pending) {
     const need = r.pending.need;
+    const power = !!r.pending.power;
     if (hero) {
       if (need !== 'any' || hero !== 'E') { showToast('That is not a legal target', 'error'); return; }
-      duelCommitPlay('P', r.pending.i, { type: 'hero', who: 'E' });
+      if (power) duelCommitPower('P', { type: 'hero', who: 'E' });
+      else duelCommitPlay('P', r.pending.i, { type: 'hero', who: 'E' });
       return;
     }
     const m = (r.p.board.concat(r.e.board)).filter(x => x.uid === uid)[0];
     if (!m || !duelIsTargetable(m)) { showToast('That is not a legal target', 'error'); return; }
-    duelCommitPlay('P', r.pending.i, { type: 'minion', m });
+    if (power) duelCommitPower('P', { type: 'minion', m });
+    else duelCommitPlay('P', r.pending.i, { type: 'minion', m });
     return;
   }
   // Attacking by tap.
@@ -43926,6 +44382,11 @@ window.duelDraftSlot = duelDraftSlot;
 window.duelDraftRename = duelDraftRename;
 window.duelDraftDelete = duelDraftDelete;
 window.duelSetActiveDeck = duelSetActiveDeck;
+window.duelUsePower = duelUsePower;
+window.duelOpenHeroes = duelOpenHeroes;
+window.duelCloseHeroes = duelCloseHeroes;
+window.duelPickHero = duelPickHero;
+window.tcgHeroDrawAll = tcgHeroDrawAll;
 window.elgOpen = elgOpen;
 window.elgStart = elgStart;
 window.elgClose = elgClose;

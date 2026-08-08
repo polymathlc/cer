@@ -10934,6 +10934,63 @@ body.lore-reading { overflow: hidden; }
 .duel-crystal { width: 7px; height: 7px; border-radius: 2px; transform: rotate(45deg); background: rgba(255,255,255,0.1); }
 .duel-crystal.on { background: linear-gradient(135deg, #7ecbff, #2f7fd6); box-shadow: 0 0 5px rgba(126,203,255,0.8); }
 .duel-crystal.spent { background: rgba(126,203,255,0.22); }
+/* The hero's own portrait fills the round frame; the emoji stands in until one
+   has been drawn, exactly as every other art slot in the realm degrades. */
+.duel-hero-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.duel-hero-em { font-size: 24px; line-height: 1; }
+.duel-hero-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 104px; }
+/* Armour sits beside the life total, never inside it — it is spent first and a
+   student has to be able to see both numbers at once. */
+.duel-hero-armor { font-size: 0.82rem; font-weight: 900; color: #9ec5ff; margin-left: 7px; }
+
+/* ---- 🦸 the hero power ---- */
+.duel-bar .duel-power { border-color: rgba(158,197,255,0.5); color: #cfe2ff; }
+.duel-bar .duel-power:hover:not(:disabled) { background: rgba(158,197,255,0.16); border-color: rgba(200,225,255,0.9); }
+.duel-power-cost { font-size: 0.72rem; font-weight: 700; opacity: 0.85; margin-left: 5px; }
+.duel-bar .duel-power.spent { border-style: dashed; }
+
+/* ---- 🦸 the hero chooser ---- */
+.duel-herointro {
+  max-width: 760px; margin: 0 auto; text-align: center; line-height: 1.7;
+  font-size: 0.82rem; color: #b8c7ee; padding: 4px 6px 2px;
+}
+.duel-herointro b { color: #f5e6bd; }
+.duel-heroes {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 4px;
+  display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-content: start;
+}
+.duel-heropick {
+  font: inherit; text-align: left; cursor: pointer; color: #e3ebff;
+  display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px;
+  border-radius: 16px; background: rgba(12,22,54,0.72); border: 2px solid rgba(240,205,122,0.22);
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.duel-heropick:hover { border-color: rgba(240,205,122,0.65); background: rgba(18,32,72,0.85); transform: translateY(-2px); }
+.duel-heropick.on { border-color: #f0cd7a; box-shadow: 0 0 0 1px rgba(240,205,122,0.4), 0 12px 30px rgba(0,0,0,0.35); }
+.duel-heropick-face {
+  flex: 0 0 auto; width: 84px; height: 84px; border-radius: 50%; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; font-size: 38px;
+  background: radial-gradient(circle at 45% 35%, rgba(240,205,122,0.24), rgba(6,11,30,0.9));
+  border: 1px solid rgba(240,205,122,0.4);
+}
+.duel-heropick-face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.duel-heropick-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.duel-heropick-name { font-family: 'Cinzel', Georgia, serif; font-size: 1rem; font-weight: 700; color: #f5e6bd; line-height: 1.4; }
+.duel-heropick-name em, .duel-heropick-name i {
+  font-style: normal; font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.64rem;
+  padding: 2px 9px; border-radius: 999px; margin-left: 8px; white-space: nowrap;
+}
+.duel-heropick-name em { color: #8ef0a8; border: 1px solid rgba(142,240,168,0.45); }
+.duel-heropick-name i { color: #14161a; background: linear-gradient(135deg, #f0cd7a, #c9a227); font-weight: 700; }
+.duel-heropick-title { font-size: 0.72rem; color: #93a4cd; letter-spacing: 0.02em; }
+.duel-heropick-power {
+  font-size: 0.8rem; color: #cfe2ff; line-height: 1.6;
+  padding: 9px 12px; border-radius: 11px; background: rgba(158,197,255,0.1); border: 1px solid rgba(158,197,255,0.28);
+}
+.duel-heropick-power b { color: #fff3d2; }
+.duel-heropick-power span { font-size: 0.68rem; color: #93a4cd; }
+.duel-heropick-blurb { font-size: 0.76rem; color: #a9b8dd; line-height: 1.7; }
 
 .duel-mid { display: flex; justify-content: center; }
 .duel-log { display: flex; flex-direction: column; gap: 2px; text-align: center; font-size: 0.72rem; color: #93a4cd; min-height: 18px; }
