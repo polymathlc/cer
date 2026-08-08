@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.259.0';
+const APP_VERSION = 'v1.260.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -29602,7 +29602,13 @@ function rpgPrizeOffFor(tab, monthKey) {
   return !!(months && months.indexOf(monthKey) >= 0);
 }
 function rpgBoardMetric(r) {
-  if (rpgBoardTab === "alltime") return rpgRowScore(r);
+  // All-Time ranks on XP. It ranked on the Science Score from v1.231.0 and was
+  // put back in v1.260.0 — the students it was meant to reward found their
+  // standing rewritten overnight, and a board nobody trusts ranks nothing.
+  // The score itself is still computed and still published on every row
+  // (rpgScorePayload), and the admin's 🕵️ Activity & points table still shows
+  // it, so switching back is one line here and no student loses a day of data.
+  if (rpgBoardTab === "alltime") return r.xp || 0;
   if (rpgBoardTab === "fps") return (r.fps && r.fps.correct) | 0;
   // Realm of Embers TCG: ranked by TOTAL TEAM POWER, the same metric the board
   // inside the TCG page uses.
@@ -29619,7 +29625,7 @@ function rpgBoardMetric(r) {
   if (r.lastMonthKey === prev) return r.lastMonthQ || 0;  // rolled over
   return 0;
 }
-function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "score" : rpgBoardTab === "fps" || rpgBoardTab === "tcg" ? "correct" : rpgIsGameTab() ? "pts" : "questions"; }
+function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "XP" : rpgBoardTab === "fps" || rpgBoardTab === "tcg" ? "correct" : rpgIsGameTab() ? "pts" : "questions"; }
 // Pretty value for a row: game tabs show the run's label (e.g. "Floor 7 · 142 kills").
 function rpgBoardValueHtml(r) {
   const sub = (rpgBoardTab === "month" || rpgBoardTab === "papers") ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : rpgIsGameTab() ? "best this month" : "all-time";
@@ -29638,18 +29644,6 @@ function rpgBoardValueHtml(r) {
     const g = r[rpgBoardTab] || {};
     const lbl = (g.monthKey === rpgMonthKey() && g.monthLabel) ? g.monthLabel : (r.shownVal + " pts");
     return `${escapeHtml(lbl)}<span>${sub}</span>`;
-  }
-  // All-Time shows how the score was built, so the ranking explains itself.
-  if (rpgBoardTab === "alltime") {
-    const s = r.score || {};
-    const a = r.audit || {};
-    const q = s.q != null ? s.q : (a.marked | 0);
-    const acc = s.acc != null ? Math.round(s.acc * 100) : (a.marked ? Math.round(Math.min(a.marked, a.correct | 0) / a.marked * 100) : null);
-    const pace = s.pace != null ? Math.round(s.pace * 100) : null;
-    const bits = [`✍️ ${Math.round(q).toLocaleString()} answered`];
-    if (acc != null) bits.push(`✅ ${acc}% right`);
-    bits.push(pace != null ? `🕒 ${pace}% unrushed` : `🕒 pace pending`);
-    return `${r.shownVal.toLocaleString()} score<span>${bits.join(" · ")}</span>`;
   }
   return `${r.shownVal} ${rpgBoardUnit()}<span>${sub}</span>`;
 }
@@ -29753,7 +29747,6 @@ async function rpgRenderLeaderboard(force = false) {
       : rpgBoardTab === "siege" ? "No Ember Siege runs this month yet — defend the gate and set the deepest wave!"
       : rpgBoardTab === "fps" ? "No Science Strike answers yet — jump into a run and answer questions to claim the board!"
       : rpgBoardTab === "tcg" ? "Nobody on the board yet — answer questions inside any Realm of Embers game mode to claim the top spot!"
-      : rpgBoardTab === "alltime" ? "No Science Scores yet — answer questions to build one. Your score rebuilds as each student opens the app."
       : "No heroes on the board yet — solve questions to earn XP!";
     body.innerHTML = rpgBoardNote() + `<div class="empty-note">${why}</div>`;
     return;
