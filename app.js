@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.271.0';
+const APP_VERSION = 'v1.272.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -38500,7 +38500,7 @@ function tcgGuideHtml() {
       '',
       _tcgGuideRows([
         ['🌋 <b>Ember Siege</b> — lane defence',
-          'Waves of corrupted monsters walk on your Ember Gate (about ' + EMS_WALK_SECONDS + ' seconds to cross the field, so there is always time to think). Summon your own cards as defenders using <b>mana</b>, and mana comes from answering science questions — ' + EMS_MANA_BASE + ' for a correct answer plus up to ' + EMS_MANA_SPEED + ' more for speed, ' + EMS_MANA_WRONG + ' for a wrong one. Clear a wave and you get a paused, untimed ' + EMS_ROUND_SIZE + '-question mana round. Every correct answer also trains the monsters on the field. The <b>top 3</b> by deepest wave held each month win a <b>$10 voucher</b>.'],
+          'Waves of corrupted monsters walk on your Ember Gate (about ' + EMS_WALK_SECONDS + ' seconds to cross the field, so there is always time to think). Summon your own cards as defenders using <b>mana</b>, and mana comes from answering science questions — <b>' + EMS_MANA_CORRECT + ' mana for a correct answer</b>, ' + EMS_MANA_WRONG + ' for a wrong one. <b>There is no timer on the question</b>: read it properly, because a right answer pays the same whether it took you four seconds or forty — the horde walking towards your gate is the only clock in the game. Clear a wave and you get a paused, untimed ' + EMS_ROUND_SIZE + '-question mana round. Every correct answer also trains the monsters on the field. The <b>top 3</b> by deepest wave held each month win a <b>$10 voucher</b>.'],
         ['⚔️ <b>Battle Arena</b> — 5 v 5',
           'Your five auto-battle another trainer\'s published team. Friendly matches: nothing is won or lost but your W–L record.'],
         ['🏰 <b>Infinite Dungeon</b> — endless ladder',
@@ -41485,19 +41485,26 @@ function _duelLogAttempt(q, correct) {
 // student summons ANY monster from their collection onto the field; the only
 // currency is mana, and the only way to make mana is to answer MCQs from the
 // bank in a small window that floats over the battlefield — the fight keeps
-// running behind it, so a slow answer costs ground. Correct + fast = most
-// mana; a wrong answer still trickles a little so nobody dead-ends.
+// running behind it, so a slow answer costs ground on the FIELD. A wrong answer
+// still trickles a little so nobody dead-ends.
+//
+// There is NO CLOCK on the question itself (v1.272.0). There used to be a
+// draining speed bar that paid up to EMS_MANA_SPEED of extra mana for answering
+// quickly, which meant a student who read a long stem properly was paid less
+// than one who guessed at it — the opposite of what this app is for. The wave
+// round was already untimed and already paid the full rate, so that rate is now
+// simply what a correct answer is worth, everywhere. The pressure that makes
+// the mode a game has not gone anywhere: the horde keeps walking while the
+// panel is open, so time still costs ground — it just no longer costs marks.
 const EMS_LANES = 5;
 const EMS_COLS = 8;
 const EMS_GATE_HP = 100;
 const EMS_START_MANA = 70;
 const EMS_MANA_CAP = 400;
-const EMS_FAST_MS = 12000;          // answer inside this for the full speed bonus
-const EMS_MANA_BASE = 20;           // correct answer, however slow
-const EMS_MANA_SPEED = 22;          // extra, scaled by how fast it came in
+const EMS_MANA_CORRECT = 42;        // a correct answer, however long it took
 const EMS_MANA_WRONG = 5;           // consolation so a stuck student can still build
 // A slow trickle so the field is never completely frozen between questions —
-// deliberately far below what answering pays (a fast correct answer is worth
+// deliberately far below what answering pays (a correct answer is worth
 // roughly 30 seconds of trickle), so questions stay the real economy.
 const EMS_PASSIVE_MANA = 1.4;       // mana per second, always on
 const EMS_ROUND_SIZE = 3;           // questions served back-to-back after each wave
@@ -41695,7 +41702,7 @@ function emsOpen() {
     +   '<div class="ems-grid" id="emsGrid"></div>'
     +   '<div class="ems-units" id="emsUnits"></div>'
     + '</div>'
-    + '<div class="ems-fieldnote">Mana trickles in slowly on its own — answering questions is far faster, and every cleared wave opens a ' + EMS_ROUND_SIZE + '-question mana round with the battle paused and no timer.</div>'
+    + '<div class="ems-fieldnote">Mana trickles in slowly on its own — answering questions is far faster, and <b>no question is ever timed</b>. Every cleared wave opens a ' + EMS_ROUND_SIZE + '-question mana round with the battle paused as well.</div>'
     + '<div class="ems-legend">' + Object.keys(EMS_SKILL_FX).map(k => '<span title="' + escapeHtml(EMS_SKILL_FX[k].desc) + '">' + EMS_SKILL_FX[k].label + '</span>').join('') + '</div>'
     + '</div>'
     + '</div>';
@@ -42370,8 +42377,9 @@ function emsPoof(el) {
 // The two behave differently on purpose:
 //   • wave round  — the battle is PAUSED and there is NO timer, so the student
 //                   can read a long stem properly and still earn full mana.
-//   • open-ended  — the fight keeps running behind it and the speed bar drains,
-//                   so answering mid-battle is the fast, risky way to make mana.
+//   • open-ended  — the fight keeps running behind it, so answering mid-battle
+//                   is the risky way to make mana: the question is untimed, but
+//                   the horde is not waiting for you.
 function emsOpenQuiz(count) {
   const r = emsRun;
   if (!r || r.over) return;
@@ -42380,7 +42388,7 @@ function emsOpenQuiz(count) {
     // Already open — a wave round just tops up whatever is left to answer.
     if (setOf) {
       r.roundTotal = setOf; r.roundDone = 0; r.qPause = true;
-      emsQuizHeadHud(); emsHideSpeedBar(true);
+      emsQuizHeadHud();
       emsBanner('⏸ Battle paused · ' + setOf + '-question mana round — take your time!', 2400);
     }
     const box = document.getElementById('emsQuiz'); if (box) box.classList.add('bump');
@@ -42397,17 +42405,10 @@ function emsOpenQuiz(count) {
     + '<span class="ems-quiz-streak" id="emsQuizStreak"></span>'
     + '<button type="button" class="ems-icon-btn" onclick="emsCloseQuiz()" title="Back to the battle">✕</button>'
     + '</div>'
-    + '<div class="ems-quiz-speed" id="emsQuizSpeedWrap"><i id="emsQuizSpeed"></i></div>'
     + '<div class="ems-quiz-body" id="emsQuizBody"></div>';
   o.appendChild(box);
-  emsHideSpeedBar(!!setOf);
   if (setOf) emsBanner('⏸ Battle paused · ' + setOf + '-question mana round — take your time!', 2400);
   emsNextQuestion();
-}
-// No timer on the wave round, so the draining bar is hidden outright there.
-function emsHideSpeedBar(hide) {
-  const wrap = document.getElementById('emsQuizSpeedWrap');
-  if (wrap) wrap.style.display = hide ? 'none' : '';
 }
 function emsQuizHeadHud() {
   const r = emsRun, el = document.getElementById('emsQuizTitle');
@@ -42439,22 +42440,9 @@ function emsNextQuestion() {
     + '</div>'
     + '<div class="ems-quiz-fb" id="emsQuizFb">' + (r.roundTotal
         ? '⏸ The battle is paused and there is no timer — read carefully, every correct answer pays full mana.'
-        : 'Answer fast — the speed bar above is your mana bonus.') + '</div>';
+        : 'No timer — take the time to read it. Every correct answer pays ⚡ ' + EMS_MANA_CORRECT + ' mana, but the horde keeps walking while you think.') + '</div>';
   emsQuizStreakHud();
   emsQuizHeadHud();
-  emsHideSpeedBar(!!r.roundTotal);
-  if (!r.roundTotal) emsQuizSpeedTick();
-}
-// The speed bar drains over EMS_FAST_MS; whatever is left when the answer
-// lands is the bonus mana, so hesitating literally costs you.
-function emsQuizSpeedTick() {
-  const r = emsRun;
-  const bar = document.getElementById('emsQuizSpeed');
-  if (!r || !r.quiz || !bar) return;
-  const left = Math.max(0, 1 - (performance.now() - r.quiz.at) / EMS_FAST_MS);
-  bar.style.width = Math.round(left * 100) + '%';
-  bar.className = left > 0.5 ? 'hot' : left > 0.2 ? 'warm' : 'cold';
-  if (!r.quiz.answered) requestAnimationFrame(emsQuizSpeedTick);
 }
 function emsQuizStreakHud() {
   const r = emsRun;
@@ -42479,10 +42467,9 @@ function emsAnswer(i) {
     r.correct++;
     r.streak++;
     r.bestStreak = Math.max(r.bestStreak, r.streak);
-    // Wave round = no timer, so it always pays the full speed bonus; only the
-    // open-ended mid-battle panel is clocked.
-    const speed = r.roundTotal ? 1 : Math.max(0, 1 - ms / EMS_FAST_MS);
-    gain = Math.round((EMS_MANA_BASE + EMS_MANA_SPEED * speed) * emsStreakMult(r.streak));
+    // One flat rate, in the wave round and mid-battle alike — a correct answer
+    // is a correct answer however long it took to read the question.
+    gain = Math.round(EMS_MANA_CORRECT * emsStreakMult(r.streak));
   } else {
     r.streak = 0;
     gain = EMS_MANA_WRONG;
@@ -42513,7 +42500,7 @@ function emsAnswer(i) {
     ? ' · <b>🎓 ' + ups.map(u => tcgShortName(u.card) + ' → Lv ' + u.level).join(', ') + '</b>'
     : (correct && r.defenders.length ? ' · 🎓 your defenders trained' : '');
   if (fb) fb.innerHTML = correct
-    ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + ptsBit + trainBit + (!r.roundTotal && ms < 4000 ? ' · ⚡ lightning fast!' : '') + '</span>'
+    ? '<span class="ok">✅ Correct — <b>⚡ +' + gain + ' mana</b>' + ptsBit + trainBit + '</span>'
     : '<span class="no">❌ The answer was <b>(' + (q.a + 1) + ')</b> — only ⚡ +' + gain + ' mana' + ptsBit + '. Streak reset.</span>';
   emsQuizStreakHud();
   // A fixed round ends itself (with a small bonus for finishing all five);
@@ -42550,12 +42537,12 @@ function emsManaPop(gain) {
   const host = document.querySelector('.ems-mana');
   if (!host) return;
   const d = document.createElement('div');
-  d.className = 'ems-mana-pop' + (gain >= EMS_MANA_BASE ? '' : ' weak');
+  d.className = 'ems-mana-pop' + (gain >= EMS_MANA_CORRECT ? '' : ' weak');
   d.textContent = '+' + gain;
   host.appendChild(d);
   setTimeout(() => d.remove(), 900);
 }
-// 1–4 answer the open question; Esc closes it. Speed is the point.
+// 1–4 answer the open question; Esc closes it.
 document.addEventListener('keydown', e => {
   if (!emsRun || !emsRun.quiz || !document.getElementById('emsQuiz')) return;
   if (e.key === 'Escape') { emsCloseQuiz(); return; }
