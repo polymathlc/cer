@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.262.0';
+const APP_VERSION = 'v1.263.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -34150,7 +34150,16 @@ function tcgHydrateState(saved) {
     dungeon: { level: Math.max(1, dg.level | 0), cleared: Math.max(0, dg.cleared | 0) },
     siege: { best: Math.max(0, sg.best | 0), runs: Math.max(0, sg.runs | 0) },
     legends: { best: Math.max(0, lg.best | 0), runs: Math.max(0, lg.runs | 0), kills: Math.max(0, lg.kills | 0) },
-    duel: { wins: Math.max(0, dl.wins | 0), losses: Math.max(0, dl.losses | 0), runs: Math.max(0, dl.runs | 0), best: Math.max(0, dl.best | 0) },
+    duel: {
+      // The deck the student built. Filtered here against BOTH the dex and the
+      // cards they still own (spells are universal), so a sold, merged-away or
+      // retired id can never poison a saved deck — the same rule `team` uses.
+      deck: Array.isArray(dl.deck)
+        ? dl.deck.filter(id => duelIsSpell(id) || (TCG_BY_ID[id] && cards[id])).slice(0, DUEL_DECK_SIZE)
+        : [],
+      wins: Math.max(0, dl.wins | 0), losses: Math.max(0, dl.losses | 0),
+      runs: Math.max(0, dl.runs | 0), best: Math.max(0, dl.best | 0)
+    },
     cards,
     team: Array.isArray(s.team) ? s.team.filter(id => TCG_BY_ID[id] && cards[id]).slice(0, 5) : [],
     packs: s.packs | 0,
@@ -38085,9 +38094,11 @@ function tcgModesHtml(s) {
     + (duelAccessAllowed() ? mode('🎴', 'Ember Duel', (duelReleased() ? 'NEW · card duel' : 'BETA · card duel'),
         'A proper <b>card duel</b>: two heroes on ' + DUEL_HERO_HP + ' life, one mana crystal more every turn, and your monsters summoned onto the board to fight. Every card keeps its arena skill and <b>gains a duel ability of its own</b> — Taunt, Charge, Lifesteal, Divine Shield, Poisonous, battlecries that sweep the board — and <b>the rarer the card, the stronger that ability is</b>. There are <b>' + DUEL_SPELLS.length + ' spells</b> too: direct damage, card draw, freezes and sweeps. <b>Drag one of your minions onto a rival card to attack it</b>, and answer a science question each turn for a free card and a mana crystal back.'
         + (_isAdmin() ? '<br><span style="color:var(--text-muted);font-size:0.8rem;">' + (duelReleased() ? 'Released to students.' : 'Beta — only you can see this card. Press Launch when you are happy with it.') + '</span>' : ''),
-        '🏆 record: <b>' + ((s.duel && s.duel.wins) | 0) + 'W – ' + ((s.duel && s.duel.losses) | 0) + 'L</b> · ⚔️ ' + ((s.duel && s.duel.runs) | 0) + ' duel' + (((s.duel && s.duel.runs) | 0) === 1 ? '' : 's'),
+        '🏆 record: <b>' + ((s.duel && s.duel.wins) | 0) + 'W – ' + ((s.duel && s.duel.losses) | 0) + 'L</b> · ⚔️ ' + ((s.duel && s.duel.runs) | 0) + ' duel' + (((s.duel && s.duel.runs) | 0) === 1 ? '' : 's')
+          + ' · 🎴 ' + (duelDeckValid((s.duel && s.duel.deck) || [], s) ? '<b>your own deck</b>' : 'no deck yet — one is built for you'),
         (owned
           ? '<button class="btn btn-primary" type="button" onclick="duelOpen()">▶ Play</button>'
+            + '<button class="btn btn-outline" type="button" style="margin-top:8px;" onclick="duelOpenBuilder()">🎴 Build deck</button>'
           : '<button class="btn btn-outline" type="button" onclick="tcgSetTab(\'packs\')">🎁 Get cards first</button>')
         + (_isAdmin()
           ? (duelReleased()
@@ -38300,7 +38311,7 @@ function tcgGuideHtml() {
       ]))
 
   + (duelAccessAllowed() ? _tcgGuideSection('🎴', 'Ember Duel — the card duel' + (duelReleased() ? '' : ' (BETA)'),
-      'A proper card game with your own collection. Both heroes start on <b>' + DUEL_HERO_HP + ' life</b>, you gain <b>one mana crystal a turn</b> up to ' + DUEL_MANA_CAP + ', and you summon monsters onto a board of up to ' + DUEL_BOARD_MAX + '. A monster cannot attack the turn it lands unless its ability says otherwise, and when it attacks another monster <b>both of them take damage</b> — so choosing what to trade with is the whole game. Your deck is ' + DUEL_DECK_SIZE + ' cards, built for you from your strongest monsters plus ' + DUEL_SPELLS.length + ' spells.',
+      'A proper card game with your own collection. Both heroes start on <b>' + DUEL_HERO_HP + ' life</b>, you gain <b>one mana crystal a turn</b> up to ' + DUEL_MANA_CAP + ', and you summon monsters onto a board of up to ' + DUEL_BOARD_MAX + '. A monster cannot attack the turn it lands unless its ability says otherwise, and when it attacks another monster <b>both of them take damage</b> — so choosing what to trade with is the whole game. Your deck is <b>' + DUEL_DECK_SIZE + ' cards that you choose yourself</b> — up to ' + DUEL_COPIES_MAX + ' copies of any card and only <b>one</b> of a 7★ legend — from the monsters you own plus all ' + DUEL_SPELLS.length + ' spells. Never built one? One is put together from your strongest cards so you can play straight away.',
       _tcgGuideRows([
         ['Where the duel ability comes from',
           'Every card <b>keeps its arena skill</b> and <b>gains a duel ability</b> generated from the same skill type — so a blaster sweeps the board here too, a healer mends, a poisoner poisons. Nothing is written per card, which is why all ' + TCG_CARDS.length + ' of them have one.'],
@@ -38595,21 +38606,31 @@ function _duelNextUid(side) { _duelUid++; return side + _duelUid; }
 // cards lead, duplicates are allowed up to two of anything, and a handful of
 // spells is mixed in so every deck can reach across the board.
 function duelBuildDeck(s) {
-  const owned = Object.keys(s.cards || {}).filter(id => TCG_BY_ID[id]);
+  const owned = Object.keys((s && s.cards) || {}).filter(id => TCG_BY_ID[id]);
   if (!owned.length) return [];
+  // It must obey the SAME copy limits the builder enforces, or "✨ Suggest a
+  // deck" hands the student a deck they are then told they cannot save.
+  const deck = [], n = {};
+  const take = (id, max) => {
+    if (deck.length >= DUEL_DECK_SIZE) return false;
+    if ((n[id] | 0) >= max) return false;
+    n[id] = (n[id] | 0) + 1; deck.push(id); return true;
+  };
   const ranked = owned.slice().sort((a, b) => tcgCardPower(b) - tcgCardPower(a));
-  const minions = [];
-  const wantMinions = Math.min(DUEL_DECK_SIZE - 6, Math.max(6, ranked.length * 2));
-  // Two copies of each, best first, wrapping round a small collection so a
-  // student with four cards still gets a full deck.
-  for (let copy = 0; copy < 2 && minions.length < wantMinions; copy++) {
-    for (let i = 0; i < ranked.length && minions.length < wantMinions; i++) minions.push(ranked[i]);
+  // Leave room for a handful of spells; a tiny collection simply takes more.
+  const wantMinions = Math.max(0, DUEL_DECK_SIZE - 6);
+  for (let copy = 0; copy < DUEL_COPIES_MAX; copy++) {
+    for (let i = 0; i < ranked.length && deck.length < wantMinions; i++) take(ranked[i], duelMaxCopies(ranked[i]));
   }
-  while (minions.length < wantMinions) minions.push(ranked[minions.length % ranked.length]);
-  const spells = [];
-  const affordable = DUEL_SPELLS.slice().sort((a, b) => a.cost - b.cost);
-  for (let i = 0; spells.length < DUEL_DECK_SIZE - minions.length; i++) spells.push(affordable[i % affordable.length].id);
-  return _tcgShuffle(minions.concat(spells)).slice(0, DUEL_DECK_SIZE);
+  // Spells fill whatever is left — cheapest first, so the curve stays playable.
+  const spells = DUEL_SPELLS.slice().sort((a, b) => a.cost - b.cost);
+  for (let copy = 0; copy < DUEL_COPIES_MAX && deck.length < DUEL_DECK_SIZE; copy++) {
+    for (let i = 0; i < spells.length && deck.length < DUEL_DECK_SIZE; i++) take(spells[i].id, DUEL_COPIES_MAX);
+  }
+  // Still short only if the collection AND the spell list are both exhausted,
+  // which cannot happen at the current numbers — but never return an illegal
+  // deck if it ever does: a short deck is refused, a duplicated one is a bug.
+  return _tcgShuffle(deck);
 }
 // The rival's deck: drawn from the WHOLE dex around the student's own average
 // rarity, so the duel scales with the collection instead of always being the
@@ -38667,6 +38688,236 @@ function duelSummon(hc, side) {
   };
 }
 
+// ---- 🎴 Deck building ------------------------------------------------------
+// Hearthstone's rules, and the reasons for them are the same here: a fixed deck
+// size so every duel has the same shape, and a copy limit so a student cannot
+// simply run twenty of their single best card. The limits are the ONE place the
+// collection turns into a decision — which is the whole point of a deck builder.
+//
+// A deck is an array of ids, and an id is either a card (`c001`… — must be
+// OWNED) or a spell (`sp_*` — everybody has every spell). It lives on
+// tcgState().duel.deck, which is registered in tcgHydrateState's whitelist and
+// filtered there against both the dex and what the student actually owns, so a
+// card that is sold, merged away or retired can never poison a saved deck.
+const DUEL_COPIES_MAX = 2;        // …of any one card
+const DUEL_COPIES_LEGEND = 1;     // …but only one of any 7★ legend
+function duelMaxCopies(id) {
+  const c = TCG_BY_ID[id];
+  return (c && c.stars === 7) ? DUEL_COPIES_LEGEND : DUEL_COPIES_MAX;
+}
+function duelDeckCounts(deck) {
+  const n = {};
+  (deck || []).forEach(id => { n[id] = (n[id] | 0) + 1; });
+  return n;
+}
+// Everything a student may put in a deck: the cards they own, plus every spell.
+function duelCollection(s) {
+  const owned = Object.keys((s && s.cards) || {}).filter(id => TCG_BY_ID[id]);
+  return { cards: owned.map(id => TCG_BY_ID[id]), spells: DUEL_SPELLS.slice() };
+}
+// Why a deck is not legal yet — one short sentence, or '' when it is fine.
+function duelDeckProblem(deck, s) {
+  const d = deck || [];
+  if (d.length !== DUEL_DECK_SIZE) {
+    return d.length < DUEL_DECK_SIZE
+      ? 'Add ' + (DUEL_DECK_SIZE - d.length) + ' more card' + (DUEL_DECK_SIZE - d.length === 1 ? '' : 's') + ' — a deck is exactly ' + DUEL_DECK_SIZE + '.'
+      : 'Remove ' + (d.length - DUEL_DECK_SIZE) + ' card' + (d.length - DUEL_DECK_SIZE === 1 ? '' : 's') + ' — a deck is exactly ' + DUEL_DECK_SIZE + '.';
+  }
+  const counts = duelDeckCounts(d);
+  const cards = (s && s.cards) || {};
+  for (const id in counts) {
+    if (duelIsSpell(id)) { if (counts[id] > DUEL_COPIES_MAX) return 'Only ' + DUEL_COPIES_MAX + ' copies of any spell.'; continue; }
+    if (!TCG_BY_ID[id] || !cards[id]) return 'That deck has a card you no longer own — rebuild it.';
+    if (counts[id] > duelMaxCopies(id)) return 'Only ' + duelMaxCopies(id) + ' copy of ' + tcgShortName(TCG_BY_ID[id]) + ' (7★ legends are one of a kind).';
+  }
+  return '';
+}
+function duelDeckValid(deck, s) { return !duelDeckProblem(deck, s); }
+// The saved deck if it is still legal, otherwise one built for them. A student
+// who has never opened the builder still gets a playable duel.
+function duelDeckFor(s) {
+  const saved = (s && s.duel && Array.isArray(s.duel.deck)) ? s.duel.deck : [];
+  if (duelDeckValid(saved, s)) return saved.slice();
+  return duelBuildDeck(s);
+}
+
+// ---- The builder screen ----------------------------------------------------
+// It lives inside the duel overlay so it inherits the realm's look and the one
+// z-index. The draft is a module variable — nothing is written to the save
+// until Save is pressed, so backing out of a half-built deck changes nothing.
+let duelDraft = null;      // { deck: [ids], filter: 'all'|'spells'|'1'..'7' }
+function duelOpenBuilder() {
+  const s = tcgState();
+  if (!s) { showToast('Answer a question anywhere in the app to wake your hero first', 'error'); return; }
+  if (!Object.keys(s.cards || {}).length) { showToast('Open a booster pack first — you need at least one monster', 'error'); return; }
+  if (!duelAccessAllowed()) { showToast('Ember Duel is still in beta', 'error'); return; }
+  let host = document.getElementById('duelOverlay');
+  if (!host) {
+    host = document.createElement('div');
+    host.className = 'duel-overlay'; host.id = 'duelOverlay';
+    host.innerHTML = '<div class="duel-shell" id="duelShell"></div>';
+    document.body.appendChild(host);
+  }
+  const saved = (s.duel && Array.isArray(s.duel.deck)) ? s.duel.deck.slice() : [];
+  duelDraft = { deck: duelDeckValid(saved, s) ? saved : [], filter: 'all' };
+  tcgLoadArt().catch(() => {}).then(() => duelRenderBuilder());
+}
+// Editing the deck mid-duel abandons that duel — a deck cannot change under a
+// board that was dealt from it.
+function duelEditDeck() {
+  const r = duelRun;
+  if (r && !r.over && !confirm('Leave this duel and change your deck?\n\nThe duel you are in will end (nothing is lost — a duel costs nothing to play).')) return;
+  if (r) { clearTimeout(r.reapT); duelRun = null; }
+  duelDropQuiz();
+  duelOpenBuilder();
+}
+function duelCloseBuilder() {
+  duelDraft = null;
+  const o = document.getElementById('duelOverlay'); if (o) o.remove();
+  try { if (document.querySelector('#page-tcg.active')) tcgRenderBody(); } catch (_) {}
+}
+function duelDraftSetFilter(f) { if (duelDraft) { duelDraft.filter = String(f); duelRenderBuilder(); } }
+function duelDraftAdd(id) {
+  const d = duelDraft, s = tcgState(); if (!d || !s) return;
+  if (!duelIsSpell(id) && (!TCG_BY_ID[id] || !s.cards[id])) return;
+  if (d.deck.length >= DUEL_DECK_SIZE) { showToast('Your deck is full — ' + DUEL_DECK_SIZE + ' cards', 'error'); return; }
+  const have = duelDeckCounts(d.deck)[id] | 0;
+  const max = duelIsSpell(id) ? DUEL_COPIES_MAX : duelMaxCopies(id);
+  if (have >= max) {
+    showToast(max === 1 ? 'Only one copy of a 7★ legend' : 'Only ' + max + ' copies of any card', 'error');
+    return;
+  }
+  d.deck.push(id);
+  duelRenderBuilder();
+}
+function duelDraftRemove(id) {
+  const d = duelDraft; if (!d) return;
+  const at = d.deck.lastIndexOf(id);
+  if (at >= 0) { d.deck.splice(at, 1); duelRenderBuilder(); }
+}
+function duelDraftClear() { if (duelDraft) { duelDraft.deck = []; duelRenderBuilder(); } }
+function duelDraftAuto() {
+  const s = tcgState(); if (!duelDraft || !s) return;
+  duelDraft.deck = duelBuildDeck(s);
+  duelRenderBuilder();
+  showToast('Filled from your strongest cards — change anything you like', 'info');
+}
+// Save, and only then. An illegal deck is refused with the reason.
+function duelDraftSave(thenPlay) {
+  const s = tcgState(), d = duelDraft; if (!s || !d) return;
+  const why = duelDeckProblem(d.deck, s);
+  if (why) { showToast(why, 'error'); return; }
+  s.duel = s.duel || { wins: 0, losses: 0, runs: 0, best: 0, deck: [] };
+  s.duel.deck = d.deck.slice();
+  try { rpgSave(); } catch (_) {}
+  showToast('🎴 Deck saved', 'success');
+  duelDraft = null;
+  if (thenPlay) duelStart();
+  else duelCloseBuilder();
+}
+// The mana curve — the one piece of feedback that teaches deck building without
+// a word of explanation: too many expensive cards and the shape says so.
+function duelCurveHtml(deck) {
+  const bins = [0, 0, 0, 0, 0, 0, 0, 0];   // 1,2,3,4,5,6,7,8+
+  (deck || []).forEach(id => {
+    const sp = duelSpellById(id);
+    const cost = sp ? sp.cost : (TCG_BY_ID[id] ? duelCardStats(TCG_BY_ID[id]).cost : 1);
+    bins[Math.max(0, Math.min(7, cost - 1))]++;
+  });
+  const max = Math.max(1, ...bins);
+  return '<div class="duel-curve" title="How much your deck costs to play — a good deck has plenty of cheap cards">'
+    + bins.map((n, i) => '<span class="duel-curve-col"><i style="height:' + Math.round(n / max * 100) + '%;"></i>'
+        + '<b>' + (n || '') + '</b><em>' + (i === 7 ? '8+' : i + 1) + '</em></span>').join('')
+    + '</div>';
+}
+function duelPickHtml(id, inDeck) {
+  const sp = duelSpellById(id);
+  const s = tcgState() || { cards: {} };
+  const counts = duelDeckCounts(duelDraft ? duelDraft.deck : []);
+  const have = counts[id] | 0;
+  const max = sp ? DUEL_COPIES_MAX : duelMaxCopies(id);
+  const full = have >= max;
+  if (sp) {
+    return '<button type="button" class="duel-pick spell' + (full && !inDeck ? ' maxed' : '') + '"'
+      + ' onclick="' + (inDeck ? 'duelDraftRemove' : 'duelDraftAdd') + '(\'' + id + '\')"'
+      + ' title="' + escapeHtml(sp.name + ' — ' + sp.text) + '">'
+      + '<span class="duel-pick-cost">' + sp.cost + '</span>'
+      + '<span class="duel-pick-em">' + sp.icon + '</span>'
+      + '<span class="duel-pick-body"><b>' + escapeHtml(sp.name) + '</b><i>' + escapeHtml(sp.text) + '</i></span>'
+      + (have ? '<span class="duel-pick-n">×' + have + '</span>' : '')
+      + '</button>';
+  }
+  const card = TCG_BY_ID[id]; if (!card) return '';
+  const st = duelCardStats(card);
+  const ab = duelAbility(card);
+  const owned = (s.cards[id] | 0);
+  return '<button type="button" class="duel-pick star-' + card.stars + (full && !inDeck ? ' maxed' : '') + '"'
+    + ' onclick="' + (inDeck ? 'duelDraftRemove' : 'duelDraftAdd') + '(\'' + id + '\')"'
+    + ' title="' + escapeHtml(card.name + ' — ' + ab.name + ': ' + ab.text) + '">'
+    + '<span class="duel-pick-cost">' + st.cost + '</span>'
+    + '<span class="duel-pick-art">' + duelArtHtml(card) + '</span>'
+    + '<span class="duel-pick-body"><b>' + escapeHtml(tcgShortName(card)) + '</b>'
+    +   '<i>' + '★'.repeat(card.stars) + ' · ' + ab.icon + ' ' + escapeHtml(ab.name) + '</i></span>'
+    + '<span class="duel-pick-stats">' + st.atk + '/' + st.hp + '</span>'
+    + (have ? '<span class="duel-pick-n">×' + have + (max === 1 ? '' : '/' + max) + '</span>'
+            : (owned > 1 ? '<span class="duel-pick-own">you have ' + owned + '</span>' : ''))
+    + '</button>';
+}
+function duelRenderBuilder() {
+  const shell = document.getElementById('duelShell');
+  const s = tcgState();
+  if (!shell || !duelDraft || !s) return;
+  const d = duelDraft;
+  const col = duelCollection(s);
+  const counts = duelDeckCounts(d.deck);
+  // Left: everything they can put in, filtered. Sorted by cost — the order a
+  // deck is actually thought about.
+  let pool = [];
+  if (d.filter === 'spells') pool = col.spells.map(x => x.id);
+  else {
+    pool = col.cards.filter(c => d.filter === 'all' || c.stars === +d.filter)
+      .sort((a, b) => duelCardStats(a).cost - duelCardStats(b).cost || b.stars - a.stars || a.name.localeCompare(b.name))
+      .map(c => c.id);
+    if (d.filter === 'all') pool = pool.concat(col.spells.sort((a, b) => a.cost - b.cost).map(x => x.id));
+  }
+  // Right: the deck itself, one row per distinct card, cheapest first.
+  const deckIds = Object.keys(counts).sort((a, b) => {
+    const ca = duelSpellById(a) ? duelSpellById(a).cost : duelCardStats(TCG_BY_ID[a]).cost;
+    const cb = duelSpellById(b) ? duelSpellById(b).cost : duelCardStats(TCG_BY_ID[b]).cost;
+    return ca - cb || a.localeCompare(b);
+  });
+  const why = duelDeckProblem(d.deck, s);
+  const chips = [['all', 'All'], ['spells', '✨ Spells']].concat([7, 6, 5, 4, 3, 2, 1]
+    .filter(n => col.cards.some(c => c.stars === n)).map(n => [String(n), n + '★']));
+  shell.innerHTML = '<div class="duel-top">'
+    +   '<div class="duel-title">🎴 Build your deck</div>'
+    +   '<div class="duel-deckcount' + (d.deck.length === DUEL_DECK_SIZE ? ' full' : '') + '">' + d.deck.length + ' / ' + DUEL_DECK_SIZE + '</div>'
+    +   '<button type="button" class="duel-x" onclick="duelCloseBuilder()" title="Close">✕</button>'
+    + '</div>'
+    + '<div class="duel-build">'
+    +   '<div class="duel-build-col">'
+    +     '<div class="duel-build-head">Your collection <span>tap a card to add it · ' + DUEL_COPIES_MAX + ' copies of anything, and only <b>one</b> of a 7★ legend</span></div>'
+    +     '<div class="duel-build-chips">' + chips.map(([v, label]) =>
+            '<button type="button" class="duel-chip' + (d.filter === v ? ' on' : '') + '" onclick="duelDraftSetFilter(\'' + v + '\')">' + label + '</button>').join('') + '</div>'
+    +     '<div class="duel-build-list">' + (pool.length ? pool.map(id => duelPickHtml(id, false)).join('')
+            : '<div class="duel-empty">Nothing here yet — open a booster pack.</div>') + '</div>'
+    +   '</div>'
+    +   '<div class="duel-build-col deck">'
+    +     '<div class="duel-build-head">Your deck <span>tap a card to take it out</span></div>'
+    +     duelCurveHtml(d.deck)
+    +     '<div class="duel-build-list">' + (deckIds.length ? deckIds.map(id => duelPickHtml(id, true)).join('')
+            : '<div class="duel-empty">Empty. Tap ✨ Suggest a deck to start from your best cards.</div>') + '</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="duel-bar">'
+    +   '<button type="button" class="btn btn-outline" onclick="duelDraftAuto()">✨ Suggest a deck</button>'
+    +   '<button type="button" class="btn btn-outline" onclick="duelDraftClear()">Clear</button>'
+    +   '<div class="duel-hint">' + (why ? escapeHtml(why) : 'Ready to play.') + '</div>'
+    +   '<button type="button" class="btn btn-outline" onclick="duelDraftSave(false)"' + (why ? ' disabled' : '') + '>💾 Save</button>'
+    +   '<button type="button" class="btn btn-primary" onclick="duelDraftSave(true)"' + (why ? ' disabled' : '') + '>▶ Save &amp; duel</button>'
+    + '</div>';
+}
+
 // ---- Opening the mode ------------------------------------------------------
 // Four guards, exactly as elgOpen has them: hiding the mode card is not enough
 // because the sidebar flyout, a stale tab and the console all reach this.
@@ -38688,7 +38939,7 @@ function duelStart() {
   const s = tcgState(); if (!s) return;
   duelDropQuiz();                 // nothing from a previous run may outlive it
   const rivalLvl = duelRivalLevel(s);
-  const pDeck = duelBuildDeck(s), eDeck = duelRivalDeck(s);
+  const pDeck = duelDeckFor(s), eDeck = duelRivalDeck(s);
   if (!pDeck.length) { showToast('Open a booster pack first — you need at least one monster', 'error'); duelClose(); return; }
   const pool = _tcgQuizPool(), served = _tcgServedLoad();
   duelRun = {
@@ -38746,7 +38997,7 @@ function duelBank() {
   if (!r.over) return;           // a duel abandoned mid-game is not a result
   const s = tcgState();
   if (s) {
-    s.duel = s.duel || { wins: 0, losses: 0, runs: 0, best: 0 };
+    s.duel = s.duel || { deck: [], wins: 0, losses: 0, runs: 0, best: 0 };
     s.duel.runs = (s.duel.runs | 0) + 1;
     if (r.won) s.duel.wins = (s.duel.wins | 0) + 1; else s.duel.losses = (s.duel.losses | 0) + 1;
     s.duel.best = Math.max(s.duel.best | 0, r.won ? r.p.hp | 0 : 0);
@@ -39410,6 +39661,7 @@ function duelRender() {
     +   '<button type="button" class="btn btn-outline duel-insight" onclick="duelOpenQuiz()"'
     +     (yourTurn && !r.insightUsed ? '' : ' disabled') + '>⚡ Ember Insight'
     +     (r.insightUsed ? ' · used' : ' · draw a card') + '</button>'
+    +   '<button type="button" class="btn btn-outline duel-deckbtn" onclick="duelEditDeck()" title="Build or change your deck — this ends the duel you are in">🎴 Deck</button>'
     +   '<div class="duel-hint">' + escapeHtml(duelHint()) + '</div>'
     +   '<button type="button" class="btn btn-primary duel-end" onclick="duelEndTurn()"' + (yourTurn ? '' : ' disabled') + '>End turn ▶</button>'
     + '</div>'
@@ -39441,6 +39693,7 @@ function duelOverHtml() {
     + '<div class="duel-over-rec">🏆 ' + (rec.wins | 0) + 'W – ' + (rec.losses | 0) + 'L</div>'
     + '<div class="duel-over-btns">'
     +   '<button type="button" class="btn btn-primary" onclick="duelRestart()">↻ Duel again</button>'
+    +   '<button type="button" class="btn btn-outline" onclick="duelOpenBuilder()">🎴 Change deck</button>'
     +   '<button type="button" class="btn btn-outline" onclick="duelClose()">Leave</button>'
     + '</div></div></div>';
 }
@@ -42917,6 +43170,16 @@ window.duelEndTurn = duelEndTurn;
 window.duelOpenQuiz = duelOpenQuiz;
 window.duelAnswer = duelAnswer;
 window.duelCloseQuiz = duelCloseQuiz;
+// 🎴 the deck builder — every one of these is an inline onclick
+window.duelOpenBuilder = duelOpenBuilder;
+window.duelCloseBuilder = duelCloseBuilder;
+window.duelEditDeck = duelEditDeck;
+window.duelDraftAdd = duelDraftAdd;
+window.duelDraftRemove = duelDraftRemove;
+window.duelDraftSetFilter = duelDraftSetFilter;
+window.duelDraftClear = duelDraftClear;
+window.duelDraftAuto = duelDraftAuto;
+window.duelDraftSave = duelDraftSave;
 window.elgOpen = elgOpen;
 window.elgStart = elgStart;
 window.elgClose = elgClose;
