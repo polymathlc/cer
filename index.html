@@ -6222,6 +6222,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 .elg-pick-group h4 { font-size: 0.95rem; font-weight: 800; margin-bottom: 12px; }
 .elg-pick-group h4 span { font-weight: 400; color: rgba(255,255,255,0.55); font-size: 0.8rem; }
 .elg-pick-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.elg-pick-wrap { position: relative; display: block; }
 .elg-pick-card { width: 132px; padding: 14px 10px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.05); color: #f3e9ff; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px; font-family: inherit; }
 .elg-pick-card:hover { border-color: #ffd98a; background: rgba(240,181,66,0.14); }
 .elg-pick-card.legend { border-color: #f0b542; box-shadow: 0 0 16px rgba(240,181,66,0.35); }
@@ -6458,6 +6459,9 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 .ems-role-count { margin-left: auto; font-size: 0.62rem; font-weight: 700; color: #b79b74; background: rgba(0,0,0,0.32); border-radius: 999px; padding: 3px 9px; }
 .ems-role-note { font-size: 0.64rem; line-height: 1.6; color: #8d7758; margin: 0 0 10px; }
 .ems-role-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 8px; }
+/* The 👁 sits OUTSIDE the tile, not inside it: .ems-card is a <button> and a
+   button cannot contain another button. */
+.ems-card-wrap { position: relative; display: block; }
 .ems-card { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px 7px; border-radius: 10px; border: 1px solid #5a3f1c; background: rgba(30,18,8,0.9); color: #f6ecdc; cursor: pointer; position: relative; }
 .ems-card:hover { border-color: #b07a2e; }
 .ems-card.sel { border-color: #ffd76a; box-shadow: 0 0 0 2px rgba(255,215,106,0.35); }
@@ -6594,6 +6598,72 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 .tcg-type .lbl { font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 1.5px; color: #b39a63; text-transform: uppercase; white-space: nowrap; }
 .tcg-skill { margin: 9px 2px 0; flex: 1; background: linear-gradient(180deg, rgba(24,28,40,0.85), rgba(15,18,27,0.9)); border: 1px solid rgba(240,181,66,0.2); border-radius: 9px; padding: 8px 10px; font-size: 0.64rem; line-height: 1.42; color: #c3c9d6; text-align: center; box-shadow: 0 6px 18px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.04) inset; }
 .tcg-skill-name { color: #f0b542; font-weight: 700; }
+/* ---- 👁 "what does this do in THIS game" ---- */
+/* One button, three pickers (Battle Arena team, Ember Siege deck column, Ember
+   Legends hero pick). It is a real tap target because these are used on phones
+   mid-battle, where a hover tooltip can never be reached. */
+.tcg-eye {
+  position: absolute; top: 5px; right: 5px; z-index: 3; cursor: pointer;
+  width: 26px; height: 26px; padding: 0; line-height: 1; font-size: 0.8rem;
+  border-radius: 50%; border: 1px solid rgba(255,255,255,0.28);
+  background: rgba(8,12,28,0.82); color: #e7eefc;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0.75; transition: opacity 0.15s, transform 0.15s, border-color 0.15s;
+}
+.tcg-eye:hover, .tcg-eye:focus-visible { opacity: 1; transform: scale(1.1); border-color: #f0cd7a; outline: none; }
+.ems-card-wrap .tcg-eye { top: 2px; right: 2px; width: 20px; height: 20px; font-size: 0.62rem; }
+/* On a full card the top-right corner already holds the #number badge, so the
+   eye tucks in underneath it — and above it in z-order, since the number and
+   the ×N count badge both sit at z-index 4–5. */
+.tcg-card .tcg-eye { top: 30px; right: 8px; z-index: 6; }
+.tcg-peek {
+  position: fixed; z-index: 3000; width: 320px; max-width: calc(100vw - 16px);
+  animation: duelPeekIn 0.12s ease-out;
+}
+.tcg-peek-card {
+  position: relative; display: flex; flex-direction: column; gap: 11px; padding: 16px 17px;
+  border-radius: 16px; color: #e7eefc;
+  background: linear-gradient(165deg, rgba(18,30,68,0.98), rgba(7,12,32,0.99));
+  border: 2px solid rgba(240,205,122,0.55); box-shadow: 0 18px 44px rgba(0,0,0,0.6);
+}
+.tcg-peek-card.star-5 { border-color: rgba(160,200,255,0.6); }
+.tcg-peek-card.star-6 { border-color: rgba(200,160,255,0.65); }
+.tcg-peek-card.star-7 { border-color: rgba(255,214,120,0.9); box-shadow: 0 18px 44px rgba(0,0,0,0.6), 0 0 26px rgba(255,200,90,0.25); }
+.tcg-peek-x {
+  position: absolute; top: 8px; right: 9px; cursor: pointer; width: 26px; height: 26px; padding: 0;
+  border-radius: 50%; border: 1px solid rgba(147,164,205,0.35); background: transparent; color: #93a4cd; font-size: 0.8rem;
+}
+.tcg-peek-x:hover { color: #fff3d2; border-color: #f0cd7a; }
+.tcg-peek-mode {
+  font-size: 0.64rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #f0cd7a; padding-right: 30px;
+}
+.tcg-peek-head { display: flex; gap: 12px; align-items: flex-start; }
+.tcg-peek-art { width: 76px; height: 76px; border-radius: 12px; overflow: hidden; flex: none; background: rgba(0,0,0,0.35); }
+.tcg-peek-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* tcgArtHtml falls back to <div>emoji</div> when a card has no artwork yet. */
+.tcg-peek-art div { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 34px; }
+.tcg-peek-name { font-family: 'Cinzel', Georgia, serif; font-size: 0.95rem; font-weight: 700; color: #f5e6bd; line-height: 1.35; }
+.tcg-peek-sub { font-size: 0.68rem; color: #93a4cd; margin-top: 4px; line-height: 1.5; }
+.tcg-peek-skill {
+  font-size: 0.78rem; line-height: 1.65; padding: 10px 12px; border-radius: 11px;
+  color: #d6c9a6; background: rgba(240,205,122,0.09); border: 1px solid rgba(240,205,122,0.26);
+}
+.tcg-peek-skill b { color: #f0cd7a; }
+.tcg-peek-skill i { font-style: normal; color: #93a4cd; }
+.tcg-peek-skill span { font-size: 0.6rem; color: #93a4cd; text-transform: uppercase; letter-spacing: 0.06em; }
+.tcg-peek-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.tcg-peek-n {
+  padding: 7px 10px; border-radius: 10px; background: rgba(158,197,255,0.08); border: 1px solid rgba(158,197,255,0.22);
+}
+.tcg-peek-n b { display: block; font-size: 0.88rem; font-weight: 900; color: #cfe2ff; }
+.tcg-peek-n span { font-size: 0.6rem; color: #93a4cd; }
+.tcg-peek-pills { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.tcg-peek-pills .tcg-stat { font-size: 0.78rem; padding: 5px 0; }
+.tcg-peek-foot { font-size: 0.68rem; color: #93a4cd; line-height: 1.65; border-top: 1px solid rgba(147,164,205,0.18); padding-top: 9px; }
+.tcg-peek-foot b { color: #d6c9a6; }
+@media (max-width: 720px) { .tcg-peek { width: 274px; } }
+
 .tcg-statsrow { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 9px; }
 .tcg-stat { display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 9px; padding: 6px 0; font-family: 'Cinzel', serif; font-weight: 900; font-size: 0.92rem; }
 .tcg-stat svg { flex: none; }
@@ -10986,19 +11056,17 @@ body.lore-reading { overflow: hidden; }
 .duel-peek-nums .duel-atk, .duel-peek-nums .duel-hp { font-size: 1.05rem; }
 .duel-peek-nums .duel-ico { width: 15px; height: 15px; }
 .duel-peek-kws { display: flex; flex-wrap: wrap; gap: 3px; }
-.duel-peek-ab, .duel-peek-skill {
+/* Only the DUEL ability is printed here — the arena skill, the arena stat block
+   and the affinity triangle were removed in v1.273.0 because none of the three
+   does anything in a duel. They live behind the 👁 on the pickers of the modes
+   that actually run them. */
+.duel-peek-ab {
   font-size: 0.76rem; line-height: 1.65; padding: 9px 11px; border-radius: 11px;
+  color: #cfe2ff; background: rgba(158,197,255,0.1); border: 1px solid rgba(158,197,255,0.28);
 }
-.duel-peek-ab { color: #cfe2ff; background: rgba(158,197,255,0.1); border: 1px solid rgba(158,197,255,0.28); }
 .duel-peek-ab b { color: #fff3d2; }
-.duel-peek-skill { color: #d6c9a6; background: rgba(240,205,122,0.08); border: 1px solid rgba(240,205,122,0.24); }
-.duel-peek-skill b { color: #f0cd7a; }
-.duel-peek-skill span { font-size: 0.62rem; color: #93a4cd; text-transform: uppercase; letter-spacing: 0.06em; }
-.duel-peek-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-.duel-peek-stats .tcg-stat { font-size: 0.78rem; padding: 5px 0; }
-.duel-peek-aff { font-size: 0.72rem; color: #a9b8dd; display: flex; gap: 8px; align-items: center; }
 .duel-peek-foot { font-size: 0.66rem; color: #7f90ba; line-height: 1.6; border-top: 1px solid rgba(147,164,205,0.18); padding-top: 8px; }
-@media (max-width: 720px) { .duel-peek { width: 258px; } .duel-peek-stats { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 720px) { .duel-peek { width: 258px; } }
 
 /* ---- 🦸 the hero power ---- */
 .duel-bar .duel-power { border-color: rgba(158,197,255,0.5); color: #cfe2ff; }

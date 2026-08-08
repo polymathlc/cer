@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.272.0';
+const APP_VERSION = 'v1.273.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -37228,6 +37228,136 @@ const TCG_STAT_SVG = {
 function tcgStatPill(kind, val) {
   return '<div class="tcg-stat ' + kind + '">' + TCG_STAT_SVG[kind] + '<span>' + val + '</span></div>';
 }
+// ---- 👁 What this monster does IN THIS GAME --------------------------------
+// One monster means four different things depending on which mode you are in:
+// Crystal Aegis is a shield in the Battle Arena, a 🛡️ Wall that blocks a lane in
+// Ember Siege, a Warden's skill tree in Ember Legends, and Divine Shield in a
+// duel. Printing all four wherever a card appears is how a student learns to
+// ignore the text entirely — so every picker shows exactly ONE of them: the one
+// that fires in the game they are standing in.
+//
+// It opens on a CLICK of the 👁 button, not on hover. These pickers are used on
+// school phones mid-battle (the Siege deck column especially), where there is no
+// hover at all and the tiles are 54px — a browser tooltip was the only way to
+// read them, and a tooltip is unreachable by touch.
+const TCG_PEEK_MODES = {
+  arena:   { icon: '⚔️', name: 'Battle Arena' },
+  siege:   { icon: '🌋', name: 'Ember Siege' },
+  legends: { icon: '⚔️', name: 'Ember Legends' }
+};
+function tcgEyeHtml(id, mode) {
+  return '<button type="button" class="tcg-eye" data-tcg-eye="1"'
+    + ' onclick="event.stopPropagation(); tcgPeekOpen(\'' + id + '\',\'' + mode + '\', this)"'
+    + ' title="See what this monster does in ' + escapeHtml((TCG_PEEK_MODES[mode] || {}).name || 'this game') + '">👁</button>';
+}
+// The shared head — who the card is. Identical in all three modes on purpose:
+// only the SKILL section below it changes.
+function _tcgPeekHead(card) {
+  const el = TCG_ELEMENTS[card.element] || TCG_ELEMENTS.flame;
+  return '<div class="tcg-peek-head">'
+    + '<div class="tcg-peek-art">' + tcgArtHtml(card) + '</div>'
+    + '<div><div class="tcg-peek-name">' + escapeHtml(card.name) + '</div>'
+    +   '<div class="tcg-peek-sub">' + '★'.repeat(card.stars) + ' ' + escapeHtml(tcgRarityName(card.stars))
+    +     ' · ' + el.icon + ' ' + escapeHtml(el.name) + '</div>'
+    +   '<div class="tcg-peek-sub">Lv ' + tcgLevel(card.id) + ' · ⟡ M ' + tcgMergeLevel(card.id) + '</div>'
+    + '</div></div>';
+}
+function _tcgPeekBox(label, title, body) {
+  return '<div class="tcg-peek-skill"><b>' + title + '</b>' + (label ? ' <span>' + label + '</span>' : '')
+    + '<br>' + body + '</div>';
+}
+function tcgPeekHtml(card, mode) {
+  const m = TCG_PEEK_MODES[mode] || TCG_PEEK_MODES.arena;
+  let body = '';
+  if (mode === 'siege') {
+    // The lane battlefield does not run the arena skill — it TRANSLATES it into
+    // a lane behaviour, so that behaviour is the only honest thing to show.
+    const role = emsRole(card), b = emsBehaviour(card), p = emsDefProfile(card);
+    body = _tcgPeekBox('on the lane', b.label, escapeHtml(b.desc))
+      + '<div class="tcg-peek-stats">'
+      +   '<div class="tcg-peek-n"><b>⚡ ' + emsCost(card) + '</b><span>to summon</span></div>'
+      +   '<div class="tcg-peek-n"><b>❤️ ' + p.hp + '</b><span>health</span></div>'
+      +   '<div class="tcg-peek-n"><b>⚔️ ' + p.atk + '</b><span>attack</span></div>'
+      +   '<div class="tcg-peek-n"><b>⏳ ' + emsCardCooldown(card) + 's</b><span>recharge</span></div>'
+      + '</div>'
+      + '<div class="tcg-peek-foot">' + role.icon + ' <b>' + escapeHtml(role.name) + '</b> — ' + escapeHtml(role.blurb)
+      +   '<br>Every training level and every merge makes this summon stronger, and it levels up while it holds the line.</div>';
+  } else if (mode === 'legends') {
+    // You PLAY as this monster, so what matters is the tree its skill puts you
+    // in and the body you will be fighting with.
+    const role = elgRole(card), st = elgHeroStats(card), leg = elgLegendPassive(card);
+    body = _tcgPeekBox('your skill tree', role.icon + ' ' + escapeHtml(role.name),
+        '<i>' + escapeHtml(role.tag) + '</i> — ' + escapeHtml(role.blurb))
+      + '<div class="tcg-peek-stats">'
+      +   '<div class="tcg-peek-n"><b>❤️ ' + st.maxHp + '</b><span>health</span></div>'
+      +   '<div class="tcg-peek-n"><b>⚔️ ' + st.dmg + '</b><span>damage</span></div>'
+      +   '<div class="tcg-peek-n"><b>🛡️ ' + Math.round(st.armor * 100) + '%</b><span>damage cut</span></div>'
+      +   '<div class="tcg-peek-n"><b>🏹 ' + Math.round(st.range) + '</b><span>reach</span></div>'
+      + '</div>'
+      + (leg ? _tcgPeekBox('7★ legend passive', leg.icon + ' ' + escapeHtml(leg.name), escapeHtml(leg.desc)) : '')
+      + '<div class="tcg-peek-foot">Every monster of this role shares the same skill tree, so swapping hero never means learning a new game.</div>';
+  } else {
+    // The arena is the one mode the printed skill actually fires in.
+    const sk = tcgLeveledSkill(card, tcgLevel(card.id));
+    const st = tcgOwnStats(card);
+    const aff = TCG_AFFINITY[tcgAffinity(card)];
+    const beats = TCG_AFFINITY[aff.beats], weak = TCG_AFFINITY[aff.weakTo];
+    body = _tcgPeekBox('arena skill', sk.icon + ' ' + escapeHtml(sk.name), escapeHtml(sk.desc)
+        + (sk.tier > 1 ? ' <i>(' + (sk.tier === 3 ? 'Lv99' : 'Lv50') + ' upgrade — power ×' + (sk.tier === 3 ? '1.5' : '1.25') + ')</i>' : ''))
+      + '<div class="tcg-peek-pills">'
+      +   tcgStatPill('atk', st.atk) + tcgStatPill('def', st.def)
+      +   tcgStatPill('heal', st.heal) + tcgStatPill('hp', st.hp)
+      + '</div>'
+      + '<div class="tcg-peek-foot">' + aff.icon + ' <b>' + escapeHtml(aff.name) + '</b>'
+      +   ' · ▲ double damage to ' + beats.icon + ' ' + escapeHtml(beats.name)
+      +   ' · ▼ double damage from ' + weak.icon + ' ' + escapeHtml(weak.name) + '</div>';
+  }
+  return '<div class="tcg-peek-card star-' + card.stars + '">'
+    + '<button type="button" class="tcg-peek-x" onclick="tcgPeekClose()" title="Close">✕</button>'
+    + '<div class="tcg-peek-mode">' + m.icon + ' in ' + escapeHtml(m.name) + '</div>'
+    + _tcgPeekHead(card)
+    + body
+    + '</div>';
+}
+let _tcgPeekOn = null;
+function tcgPeekClose() {
+  _tcgPeekOn = null;
+  const el = document.getElementById('tcgPeek'); if (el) el.remove();
+  document.removeEventListener('click', _tcgPeekDocClick, true);
+}
+function _tcgPeekDocClick(e) {
+  const el = document.getElementById('tcgPeek');
+  if (el && e.target && e.target.closest && e.target.closest('#tcgPeek')) return;   // inside the panel
+  if (e.target && e.target.closest && e.target.closest('[data-tcg-eye]')) return;   // another eye handles itself
+  tcgPeekClose();
+}
+function tcgPeekOpen(id, mode, btn) {
+  const card = TCG_BY_ID[id]; if (!card) return;
+  const key = id + '|' + mode;
+  if (_tcgPeekOn === key) { tcgPeekClose(); return; }        // tapping the same eye closes it
+  tcgPeekClose();
+  _tcgPeekOn = key;
+  const el = document.createElement('div');
+  el.className = 'tcg-peek'; el.id = 'tcgPeek';
+  el.innerHTML = tcgPeekHtml(card, mode);
+  document.body.appendChild(el);
+  _tcgPeekPlace(el, btn);
+  // Deferred, or the very click that opened the panel closes it again.
+  setTimeout(() => document.addEventListener('click', _tcgPeekDocClick, true), 0);
+}
+// Beside the button that opened it, and always inside the window.
+function _tcgPeekPlace(el, btn) {
+  const b = btn && btn.getBoundingClientRect ? btn.getBoundingClientRect() : { left: 20, right: 20, top: 20, bottom: 20, width: 0, height: 0 };
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const w = el.offsetWidth, h = el.offsetHeight, gap = 10;
+  let x = b.right + gap;
+  if (x + w > vw - 8) x = b.left - gap - w;
+  if (x < 8) x = Math.max(8, Math.min(vw - w - 8, b.left + b.width / 2 - w / 2));
+  let y = b.top + b.height / 2 - h / 2;
+  y = Math.max(8, Math.min(Math.max(8, vh - h - 8), y));
+  el.style.left = Math.round(x) + 'px';
+  el.style.top = Math.round(y) + 'px';
+}
 // Face-down Realm of Embers card back (pack reveal).
 function tcgCardBackHtml() {
   return '<div class="tcg-back-crest">'
@@ -37267,7 +37397,10 @@ function tcgCardHtml(card, opts) {
   const badges = (opts.isNew ? '<span class="tcg-new-badge">NEW!</span>' : '')
     + (mg && mg.gained > 0 ? '<span class="tcg-merged-badge">⟡ MERGED +' + mg.gained + '</span>' : '')
     + (opts.inTeam ? '<span class="tcg-team-badge">⚔️ Team</span>' : '')
-    + (opts.count > 1 ? '<span class="tcg-count-badge">×' + opts.count + '</span>' : '');
+    + (opts.count > 1 ? '<span class="tcg-count-badge">×' + opts.count + '</span>' : '')
+    // 👁 opens the mode-specific panel. It stops the click from reaching the
+    // card, whose own onclick would add or drop the monster from the team.
+    + (opts.eye ? tcgEyeHtml(card.id, opts.eye) : '');
   const skDesc = escapeHtml(sk.desc) + (owned && sk.tier > 1
     ? ' <span class="tcg-skill-up">(' + (sk.tier === 3 ? 'Lv99' : 'Lv50') + ' upgrade · power ×' + (sk.tier === 3 ? '1.5' : '1.25') + ')</span>' : '');
   const lvlLine = owned && !rev
@@ -38022,7 +38155,7 @@ function tcgTeamHtml(s) {
     const id = s.team[i];
     const c = id && TCG_BY_ID[id];
     return '<div class="tcg-team-slot">' + (c
-      ? tcgCardHtml(c, { onclick: "tcgToggleTeam('" + c.id + "')" })
+      ? tcgCardHtml(c, { onclick: "tcgToggleTeam('" + c.id + "')", eye: 'arena' })
       : '<div class="tcg-empty"><span class="big">➕</span><span>Pick a monster<br>from below</span></div>') + '</div>';
   }).join('');
   const owned = TCG_CARDS.filter(c => s.cards[c.id]);
@@ -38034,7 +38167,7 @@ function tcgTeamHtml(s) {
     + '<h3 class="tcg-team-h">Your monsters</h3>'
     + (owned.length
       ? '<div class="tcg-grid">' + owned.map(c => tcgCardHtml(c, {
-          count: s.cards[c.id] | 0, inTeam: s.team.includes(c.id), onclick: "tcgToggleTeam('" + c.id + "')"
+          count: s.cards[c.id] | 0, inTeam: s.team.includes(c.id), onclick: "tcgToggleTeam('" + c.id + "')", eye: 'arena'
         })).join('') + '</div>'
       : '<div class="tcg-section-note">You don\'t own any monsters yet — open a booster pack first! 🎁</div>');
 }
@@ -38489,7 +38622,7 @@ function tcgGuideHtml() {
         ['How to attack',
           '<b>Drag one of your monsters onto a rival card</b> — or tap yours and then tap theirs. Drag it onto the rival hero to go for the win.'],
         ['🔍 Read any card in full',
-          '<b>Hover over any card</b> — in your hand, on the board or in the deck builder — and the whole card opens beside it: the artwork at size, ⚔️ its attack and 🛡️ its defence, the duel ability in full, the <b>arena skill it was generated from</b>, the complete stat block and its training and merge levels. <b>On a phone, press and hold</b> a card instead. Every number on a card is ⚔️ for attack and 🛡️ for defence, everywhere in the duel.'],
+          '<b>Hover over any card</b> — in your hand, on the board or in the deck builder — and the whole card opens beside it: the artwork at size, ⚔️ its attack and 🛡️ its defence, the duel ability in full, and its training, merge and rank lines. <b>On a phone, press and hold</b> a card instead. Every number on a card is ⚔️ for attack and 🛡️ for defence, everywhere in the duel.<br><span class="tcg-guide-dim">It shows only what a <b>duel</b> uses. A monster\'s arena skill, its arena stats and its element matchups do nothing in here, so they are not printed here — tap the <b>👁</b> on a monster in the Battle Arena, Ember Siege or Ember Legends to read what it does in <i>that</i> game instead.</span>'],
         ['🌋 Who the rival brought',
           'The rival does not shuffle a random forty any more — they turn up with a <b>deck</b>, and it is named on their side of the board:<br>'
             + DUEL_RIVAL_PLANS.map(p => p.em + ' <b>' + escapeHtml(p.name) + '</b> — ' + escapeHtml(p.note)).join('<br>')
@@ -38497,7 +38630,7 @@ function tcgGuideHtml() {
       ])) : '')
 
   + _tcgGuideSection('🎮', 'The other three ways to play',
-      '',
+      'Every mode reads your monsters differently, so every picker carries a <b>👁</b> — tap it on a monster and it tells you what <i>that</i> monster does in <i>that</i> game, and nothing else. The same card is a shield in the Arena, a wall that blocks a lane in the Siege, a Warden\'s skill tree in Legends and Divine Shield in a duel.',
       _tcgGuideRows([
         ['🌋 <b>Ember Siege</b> — lane defence',
           'Waves of corrupted monsters walk on your Ember Gate (about ' + EMS_WALK_SECONDS + ' seconds to cross the field, so there is always time to think). Summon your own cards as defenders using <b>mana</b>, and mana comes from answering science questions — <b>' + EMS_MANA_CORRECT + ' mana for a correct answer</b>, ' + EMS_MANA_WRONG + ' for a wrong one. <b>There is no timer on the question</b>: read it properly, because a right answer pays the same whether it took you four seconds or forty — the horde walking towards your gate is the only clock in the game. Clear a wave and you get a paused, untimed ' + EMS_ROUND_SIZE + '-question mana round. Every correct answer also trains the monsters on the field. The <b>top 3</b> by deepest wave held each month win a <b>$10 voucher</b>.'],
@@ -41047,12 +41180,19 @@ function duelOverHtml() {
 
 // ---- 🔍 The card peek ------------------------------------------------------
 // Every card in the duel is small — a board minion is a thumbnail and a hand
-// card is 122px — so the ability text is clipped, the skill it came from is not
-// shown at all and the artwork is a postage stamp. Hovering any of them (in
-// hand, on the board, or in the deck builder) opens the FULL card beside it:
-// the art at size, both duel numbers, the duel ability in full, the arena skill
-// it was generated from, the whole arena stat block, and the training and merge
-// levels.
+// card is 122px — so the ability text is clipped and the artwork is a postage
+// stamp. Hovering any of them (in hand, on the board, or in the deck builder)
+// opens the FULL card beside it: the art at size, both duel numbers, the duel
+// ability in full, and the training / merge / rank lines.
+//
+// It shows ONLY what a duel actually uses (v1.273.0). It used to carry the
+// card's ARENA skill, its arena stat block and its affinity triangle as well —
+// none of which does anything here: the duel ability is generated from the
+// arena skill but does not fire it, the duel's numbers are its own 4/4, and
+// duelHurtMinion ignores element entirely. Four numbers a student cannot act on,
+// printed next to the two they can, is worse than no panel. The arena skill is
+// shown where it fires — see the 👁 button on the Battle Arena, Ember Siege and
+// Ember Legends pickers.
 //
 // It is ONE panel, positioned beside whatever is hovered, and it is
 // `pointer-events: none` — it can never sit between the student and the card
@@ -41129,11 +41269,7 @@ function duelPeekHtml(id, live) {
   const level = live ? live.level : st.level;
   const ab = live ? live.ab : duelAbility(card, level);
   const merge = tcgMergeLevel(card.id);
-  const arena = tcgStats(card, level, merge);
-  const sk = tcgLeveledSkill(card, level);
   const el = TCG_ELEMENTS[card.element] || TCG_ELEMENTS.flame;
-  const aff = TCG_AFFINITY[tcgAffinity(card)];
-  const beats = TCG_AFFINITY[aff.beats], weak = TCG_AFFINITY[aff.weakTo];
   const next = duelNextUpgrade(card, level);
   const owned = (s.cards || {})[card.id] | 0;
   const kws = live ? duelKwHtml(live) : '';
@@ -41151,15 +41287,6 @@ function duelPeekHtml(id, live) {
     + '</div>'
     + (kws ? '<div class="duel-peek-kws">' + kws + '</div>' : '')
     + '<div class="duel-peek-ab"><b>' + ab.icon + ' ' + escapeHtml(ab.name) + '</b><br>' + escapeHtml(ab.text) + '</div>'
-    + '<div class="duel-peek-skill"><b>' + sk.icon + ' ' + escapeHtml(sk.name) + '</b> <span>arena skill</span><br>'
-    +   escapeHtml(sk.desc) + '</div>'
-    + '<div class="duel-peek-stats">'
-    +   tcgStatPill('atk', arena.atk) + tcgStatPill('def', arena.def)
-    +   tcgStatPill('heal', arena.heal) + tcgStatPill('hp', arena.hp)
-    + '</div>'
-    + '<div class="duel-peek-aff">' + aff.icon + ' ' + escapeHtml(aff.name)
-    +   ' <span title="Deals double damage to ' + escapeHtml(beats.name) + '">▲ ' + beats.icon + '</span>'
-    +   ' <span title="Takes double damage from ' + escapeHtml(weak.name) + '">▼ ' + weak.icon + '</span></div>'
     + '<div class="duel-peek-foot">Lv ' + level + ' · ⟡ M ' + merge + ' · rank ' + (st.rank | 0) + '/' + DUEL_RANK_MAX
     +   (next ? ' · next at Lv' + next.at + ': ' + escapeHtml(next.text) : ' · fully ranked')
     +   (owned > 1 ? ' · you have ' + owned : '') + '</div>'
@@ -42116,13 +42243,18 @@ function emsDeckCardHtml(c) {
   const tip = c.name + ' · ⚡' + cost + ' · Lv ' + lv + ' · ⟡ M' + mg
     + '\n' + p.hp + ' HP · ' + p.atk + ' ATK · every level and every merge makes this summon stronger, and it levels up right here while it holds the line.'
     + '\n' + emsSkillLine(c);
-  return '<button type="button" class="ems-card' + (emsRun.sel === c.id ? ' sel' : '') + (poor || cd > 0 ? ' off' : '') + '" data-ems-card="' + c.id + '" onclick="emsSelect(\'' + c.id + '\')" title="' + escapeHtml(tip) + '">'
+  return '<div class="ems-card-wrap">'
+    + '<button type="button" class="ems-card' + (emsRun.sel === c.id ? ' sel' : '') + (poor || cd > 0 ? ' off' : '') + '" data-ems-card="' + c.id + '" onclick="emsSelect(\'' + c.id + '\')" title="' + escapeHtml(tip) + '">'
     + '<span class="ems-card-art">' + emsArtHtml(c, 'ems-art') + '</span>'
     + '<span class="ems-card-lvl">Lv ' + lv + (mg > 1 ? ' <i>⟡' + mg + '</i>' : '') + '</span>'
     + '<span class="ems-card-name">' + escapeHtml(tcgShortName(c)) + '</span>'
     + '<span class="ems-card-cost">⚡' + cost + '</span>'
     + '<span class="ems-card-cd" data-cd="' + c.id + '"' + (cd > 0 ? '' : ' style="display:none;"') + '></span>'
-    + '</button>';
+    + '</button>'
+    // A tile is 54px and the battle is running — the 👁 is how you read what a
+    // monster does on a phone, where the tooltip above can never be reached.
+    + tcgEyeHtml(c.id, 'siege')
+    + '</div>';
 }
 function emsRenderDeck() {
   const host = document.getElementById('emsDeck');
@@ -43039,13 +43171,16 @@ function elgRenderPick() {
       + '<div class="elg-pick-row">' + list.map(c => {
           const url = tcgAvatarUrl(c.id);
           const leg = elgLegendPassive(c);
-          return '<button type="button" class="elg-pick-card' + (leg ? ' legend' : '') + '" onclick="elgStart(\'' + c.id + '\')" title="'
+          return '<div class="elg-pick-wrap">'
+            + '<button type="button" class="elg-pick-card' + (leg ? ' legend' : '') + '" onclick="elgStart(\'' + c.id + '\')" title="'
             + escapeHtml(c.name + ' · Lv ' + tcgLevel(c.id) + ' · ⟡M' + tcgMergeLevel(c.id) + (leg ? ' · ' + leg.name : '')) + '">'
             + '<span class="elg-pick-av">' + (url ? '<img src="' + escapeHtml(url) + '" alt="">' : c.em) + '</span>'
             + '<b>' + escapeHtml(tcgShortName(c)) + '</b>'
             + '<span class="elg-pick-meta">' + '★'.repeat(c.stars) + ' · Lv ' + tcgLevel(c.id) + '</span>'
             + (leg ? '<span class="elg-pick-leg">' + leg.icon + ' ' + escapeHtml(leg.name) + '</span>' : '')
-            + '</button>';
+            + '</button>'
+            + tcgEyeHtml(c.id, 'legends')
+            + '</div>';
         }).join('') + '</div>'
       + '</div>';
   }).join('');
@@ -44729,6 +44864,8 @@ window.duelUsePower = duelUsePower;
 window.duelOpenHeroes = duelOpenHeroes;
 window.duelCloseHeroes = duelCloseHeroes;
 window.duelPickHero = duelPickHero;
+window.tcgPeekOpen = tcgPeekOpen;
+window.tcgPeekClose = tcgPeekClose;
 window.tcgHeroDrawAll = tcgHeroDrawAll;
 window.elgOpen = elgOpen;
 window.elgStart = elgStart;
