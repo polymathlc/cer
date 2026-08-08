@@ -11044,6 +11044,61 @@ body.lore-reading { overflow: hidden; }
 .duel-over-rec { font-size: 0.8rem; color: #f0cd7a; margin-bottom: 20px; }
 .duel-over-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
+
+/* ---- 🎴 the deck builder ---- */
+.duel-deckcount { margin-left: auto; font-size: 0.9rem; font-weight: 900; color: #93a4cd; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(147,164,205,0.3); }
+.duel-deckcount.full { color: #14161a; background: linear-gradient(135deg, #f0cd7a, #c9a227); border-color: transparent; }
+.duel-build { display: flex; gap: 14px; flex: 1 1 auto; min-height: 0; }
+.duel-build-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.duel-build-col.deck { flex: 0 0 clamp(280px, 36%, 400px); }
+.duel-build-head { font-family: 'Cinzel', Georgia, serif; font-size: 0.9rem; color: #f0cd7a; }
+.duel-build-head span { display: block; font-family: 'DM Sans', system-ui, sans-serif; font-size: 0.72rem; color: #93a4cd; margin-top: 3px; line-height: 1.5; }
+.duel-build-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.duel-chip { font: inherit; font-size: 0.72rem; padding: 5px 12px; border-radius: 999px; cursor: pointer; color: #b8c7ee; background: rgba(12,22,54,0.7); border: 1px solid rgba(240,205,122,0.24); }
+.duel-chip:hover { border-color: rgba(240,205,122,0.6); color: #fff3d2; }
+.duel-chip.on { color: #14161a; background: linear-gradient(135deg, #f0cd7a, #c9a227); border-color: transparent; font-weight: 700; }
+.duel-build-list {
+  flex: 1 1 auto; min-height: 180px; max-height: min(46vh, 420px); overflow-y: auto;
+  display: flex; flex-direction: column; gap: 5px; padding: 8px; border-radius: 12px;
+  border: 1px solid rgba(240,205,122,0.2); background: rgba(8,14,38,0.55);
+  overscroll-behavior: contain;
+}
+/* One row per card — a list, not a grid: a deck is read down a column. */
+.duel-pick {
+  position: relative; display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 5px 9px 5px 5px; border-radius: 10px; cursor: pointer; text-align: left;
+  font: inherit; color: #f4ecd8; border: 1px solid rgba(240,205,122,0.2);
+  background: linear-gradient(100deg, rgba(21,35,80,0.92), rgba(9,16,42,0.92));
+  transition: border-color 0.13s ease, transform 0.13s ease, background 0.13s ease;
+}
+.duel-pick:hover { border-color: #ffe8a8; transform: translateX(3px); }
+.duel-pick.maxed { opacity: 0.42; cursor: not-allowed; }
+.duel-pick.maxed:hover { transform: none; border-color: rgba(240,205,122,0.2); }
+.duel-pick.star-6 { border-left: 3px solid rgba(255,168,84,0.8); }
+.duel-pick.star-7 { border-left: 3px solid #ffe8a8; }
+.duel-pick.spell { border-left: 3px solid rgba(126,203,255,0.7); }
+.duel-pick-cost { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.76rem; font-weight: 900; color: #eaf6ff; background: linear-gradient(135deg, #4aa3e8, #1f5fa8); box-shadow: 0 0 6px rgba(74,163,232,0.6); }
+.duel-pick-art { flex: 0 0 auto; width: 36px; }
+.duel-pick-art .duel-art { border-radius: 7px; }
+.duel-pick-art .duel-em { font-size: 20px; }
+.duel-pick-em { flex: 0 0 auto; width: 36px; text-align: center; font-size: 20px; }
+.duel-pick-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.duel-pick-body b { font-size: 0.76rem; color: #f5e6bd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.duel-pick-body i { font-style: normal; font-size: 0.63rem; color: #93a4cd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.duel-pick-stats { flex: 0 0 auto; font-size: 0.74rem; font-weight: 900; color: #ffcf8a; }
+.duel-pick-n { flex: 0 0 auto; font-size: 0.66rem; font-weight: 800; color: #14161a; background: #f0cd7a; padding: 2px 7px; border-radius: 999px; }
+.duel-pick-own { flex: 0 0 auto; font-size: 0.6rem; color: #7f90ba; }
+/* The mana curve — the one piece of feedback that teaches deck building. */
+.duel-curve { display: flex; align-items: flex-end; gap: 4px; height: 62px; padding: 6px 8px 0; border-radius: 10px; background: rgba(8,14,38,0.55); border: 1px solid rgba(240,205,122,0.16); }
+.duel-curve-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 2px; }
+.duel-curve-col i { display: block; width: 100%; min-height: 2px; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, #7ecbff, #2f7fd6); }
+.duel-curve-col b { font-size: 0.58rem; color: #c3d1f2; line-height: 1; }
+.duel-curve-col em { font-style: normal; font-size: 0.55rem; color: #7f90ba; line-height: 1; }
+@media (max-width: 780px) {
+  .duel-build { flex-direction: column; }
+  .duel-build-col.deck { flex: 1 1 auto; }
+  .duel-build-list { max-height: 32vh; }
+}
 @media (max-width: 780px) {
   .duel-row { flex-direction: column; gap: 6px; }
   .duel-hero { width: 100%; }
