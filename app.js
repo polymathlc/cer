@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.276.0';
+const APP_VERSION = 'v1.277.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -34877,7 +34877,7 @@ const TCG_BG_KEEP_MIN = 0.62;   // a forced cut may not cost more than this shar
 // canvas flattens the empty pixels to solid black, so it is shown a sprite on a
 // black plate and told that is what the background should look like. Chaining
 // the SCREEN version instead is what keeps a run consistent.
-async function _tcgGenClean(promptFor, ref, label, strict, screen) {
+async function _tcgGenClean(promptFor, ref, label, strict, screen, wide) {
   let out = null, raw = null;
   for (let attempt = 0; attempt < TCG_BG_DRAWS; attempt++) {
     // Never ask the ENGINE for transparency while asking the model for a
@@ -34888,7 +34888,7 @@ async function _tcgGenClean(promptFor, ref, label, strict, screen) {
     // 1. The screen. If the model painted the wall it was asked for, the cut is
     //    a fact about colour and cannot reach into the artwork.
     if (screen) {
-      const keyed = await _screenKeyOut(raw, screen, strict);
+      const keyed = await _screenKeyOut(raw, screen, strict, wide);
       if (keyed) {
         const bad = await _bgLeftover(keyed, strict);
         // The reference is the picture the model actually painted, screen and
@@ -34980,6 +34980,10 @@ function _tcgArtSlotHtml(slotId, label, icon, thumb, aiLabel, hint) {
     + '<div class="ga-actions">'
     +   '<button type="button" class="btn btn-primary ga-mini" onclick="tcgAiGenSlot(\'' + slotId + '\')">✨ AI ' + aiText + '</button>'
     +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onTcgArtPick(\'' + slotId + '\', event)"></label>'
+    +   (has && _tcgSlotStandsOnNothing(slotId)
+          ? '<button type="button" class="btn btn-outline ga-mini" onclick="tcgCleanSlotBg(\'' + slotId + '\')"'
+            + ' title="Remove the flat colour behind this picture — the magenta, green or blue screen it was drawn against, or any other plate the model left in">🧼 Remove background</button>'
+          : '')
     +   (has ? '<button type="button" class="btn btn-ghost ga-mini" onclick="resetTcgArt(\'' + slotId + '\')">Reset</button>' : '')
     + '</div>'
     + '<div class="ga-status ' + (has ? 'custom' : '') + '" id="tcgstatus-' + key + '">' + (has ? '● Custom' : 'Default') + '</div>'
@@ -35344,7 +35348,7 @@ function duelFxPrompt(shape, element, n, harder) {
     + (fx ? 'ELEMENT LOOK: ' + fx.words + '. Everything in the frame is made of this element.\n' : '')
     + 'FRAME ' + n + ' OF ' + shape.frames + ' — ' + step.t + ': ' + step.d + '.\n'
     + 'COMPOSITION: the effect ' + (shape.wide
-        ? 'spread ACROSS a WIDE frame, edge to edge — it is composited over a whole row of cards, so it must read as a broad curtain rather than a ball'
+        ? 'spread ACROSS a WIDE frame from the left edge to the right edge — it is composited over a whole row of cards, so it must read as a broad curtain rather than a ball. It rises from the BOTTOM of the frame, and the TOP of the frame stays clear: leave a clean band of at least a fifth of the height across the very top showing nothing but the screen colour'
         : 'centred in the frame with a clear margin of screen around it — it is composited over ONE card')
       + '. Nothing else in the frame at all — no character, no monster, no card, no hand, no ground, no scenery, no border, no text, no watermark. Only the effect, its own glow, and the screen behind it.\n'
     + _screenRules('the effect', duelFxScreen(shape, element), harder)
@@ -35370,7 +35374,8 @@ async function _duelFxGenFrame(shape, element, n) {
   }
   const ref = await _duelFxRef(shape, element, n);
   const got = await _tcgGenClean(h => duelFxPrompt(shape, element, n, h), ref,
-    'duel fx ' + shape.key + ' ' + duelFxKeyFor(shape, element) + ' ' + n, !!shape.strict, duelFxScreen(shape, element));
+    'duel fx ' + shape.key + ' ' + duelFxKeyFor(shape, element) + ' ' + n,
+    !!shape.strict, duelFxScreen(shape, element), !!shape.wide);
   await _tcgArtStore(duelFxSlotId(shape.key, duelFxKeyFor(shape, element), n), got.url, { cleaned: true });
   return got.ref || got.url;
 }
@@ -35387,6 +35392,127 @@ function duelFxDoneCount() {
     keys.forEach(k => { for (let i = 1; i <= sh.frames; i++) if (duelFxHas(sh, k, i)) n++; });
   });
   return n;
+}
+
+// ---- 🧼 Remove this background, by hand -------------------------------------
+// The automatic path is a chroma key against the screen the frame was ASKED to
+// stand on, and it refuses rather than risk holing the artwork. When it refuses
+// the frame is saved with its plate still in — a band of magenta across the top
+// of a wall of water — and until now the only remedy was to redraw it.
+//
+// This is the manual override: the admin can SEE the colour that sticks out, so
+// the button finds whatever flat colour the border is actually made of and
+// removes exactly that. It is deliberately more decisive than the automatic
+// path — it is only ever pressed by someone looking at the picture — but it is
+// still a colour test, never a flood fill, so it cannot walk into the artwork
+// through a gap.
+// Evidence that there IS a plate, and it mirrors the automatic keyer's rule for
+// the same reason: a wide effect buries whole edges and leaves whole edges
+// clean, so "half the border" and "one whole edge" are both proof.
+const TCG_PLATE_RING_MIN = 0.30;   // this much of the whole border is one flat colour…
+const TCG_PLATE_EDGE_MIN = 0.80;   // …or one entire edge is
+const TCG_PLATE_TOL = 66;          // RGB distance that still counts as the plate
+const TCG_PLATE_SOFT = 0.55;       // …below this fraction of it, fully removed
+// The flat colour the border is made of, or null when the border is not one
+// colour — i.e. there is no plate here to remove.
+function _tcgPlateColour(px, w, h) {
+  const bins = new Map();
+  let ring = 0;
+  const edgeN = [0, 0, 0, 0];
+  const at = (x, y) => (y * w + x) * 4;
+  const add = (x, y, e) => {
+    ring++; edgeN[e]++;
+    const o = at(x, y);
+    if (px[o + 3] < 24) return;                       // already empty
+    // Coarse 4-bit-per-channel buckets: a flat plate lands in one of them even
+    // when the model dithered it slightly.
+    const k = ((px[o] >> 4) << 8) | ((px[o + 1] >> 4) << 4) | (px[o + 2] >> 4);
+    const b = bins.get(k) || { n: 0, r: 0, g: 0, b: 0, e: [0, 0, 0, 0] };
+    b.n++; b.e[e]++; b.r += px[o]; b.g += px[o + 1]; b.b += px[o + 2];
+    bins.set(k, b);
+  };
+  for (let x = 0; x < w; x++) { add(x, 0, 0); add(x, h - 1, 1); }
+  for (let y = 0; y < h; y++) { add(0, y, 2); add(w - 1, y, 3); }
+  let best = null;
+  bins.forEach(b => { if (!best || b.n > best.n) best = b; });
+  if (!best || !ring) return null;
+  const wholeEdge = best.e.some((v, e) => edgeN[e] && v >= edgeN[e] * TCG_PLATE_EDGE_MIN);
+  if (best.n < ring * TCG_PLATE_RING_MIN && !wholeEdge) return null;
+  return { r: best.r / best.n, g: best.g / best.n, b: best.b / best.n, share: best.n / ring };
+}
+// Remove that colour. Returns { url, cut, kept } or null when there was no
+// plate to find.
+async function _tcgKeyPlate(dataUrl) {
+  const img = await _loadImageEl(dataUrl);
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  if (!w || !h) return null;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const id = ctx.getImageData(0, 0, w, h), px = id.data, n = w * h;
+  const plate = _tcgPlateColour(px, w, h);
+  if (!plate) return null;
+  const soft = TCG_PLATE_TOL * TCG_PLATE_SOFT;
+  let cut = 0, was = 0, now = 0;
+  for (let i = 0; i < n; i++) {
+    const o = i * 4;
+    if (px[o + 3] < 24) continue;
+    was++;
+    const d = Math.sqrt(Math.pow(px[o] - plate.r, 2) + Math.pow(px[o + 1] - plate.g, 2) + Math.pow(px[o + 2] - plate.b, 2));
+    if (d >= TCG_PLATE_TOL) { now++; continue; }              // artwork, untouched
+    // A soft edge, so the sprite does not come back with a jagged outline.
+    const a = d <= soft ? 0 : Math.max(0, Math.min(1, (d - soft) / (TCG_PLATE_TOL - soft)));
+    px[o + 3] = Math.round(px[o + 3] * a);
+    if (px[o + 3] < 24) cut++; else now++;
+  }
+  ctx.putImageData(id, 0, 0);
+  return { url: cv.toDataURL('image/png'), cut: cut, kept: was ? now / was : 1, plate: plate };
+}
+// Which slots are meant to stand on nothing — the same list _tcgArtStore uses.
+// Card art, set banners and the Chronicle's plates keep their painted scene, so
+// they never get the button.
+function _tcgSlotStandsOnNothing(id) {
+  id = String(id || '');
+  return id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('dfx:') === 0
+    || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0
+    || id.indexOf('arti:') === 0 || id.indexOf('hero:') === 0;
+}
+// The button. Reads the stored picture back, removes the plate, writes it
+// straight back to the same slot.
+async function tcgCleanSlotBg(slotId, quiet) {
+  if (!_isAdmin()) return false;
+  const url = _tcgArt && _tcgArt[slotId];
+  if (!url) { if (!quiet) showToast('Nothing drawn in that slot yet', 'error'); return false; }
+  if (!quiet) _tcgSlotStatus(slotId, '🧼 Cleaning…');
+  try {
+    const before = await _tcgArtToDataUrl(url);
+    let got = await _tcgKeyPlate(before);
+    // No flat plate on the border: fall back to the ordinary cautious knock-out,
+    // which is what an uneven or gradient backdrop needs.
+    if (!got) {
+      const after = await _stripImageBackground(before);
+      if (after === before) { if (!quiet) showToast('That frame already has no background to remove', 'info'); return false; }
+      await _tcgArtStore(slotId, after, { cleaned: true });
+      if (!quiet) showToast('🧼 Background removed', 'success');
+      return true;
+    }
+    // Never save a hollowed sprite — the one failure a background remover can
+    // produce that looks tidy and has destroyed the artwork.
+    if (got.kept < TCG_BG_KEEP_MIN) {
+      if (!quiet) showToast('Not removed — that colour is most of the artwork, so taking it out would leave almost nothing', 'error');
+      return false;
+    }
+    if (!got.cut) { if (!quiet) showToast('That frame already has no background to remove', 'info'); return false; }
+    await _tcgArtStore(slotId, got.url, { cleaned: true });
+    if (!quiet) showToast('🧼 Background removed — ' + Math.round((1 - got.kept) * 100) + '% of the frame cleared', 'success');
+    return true;
+  } catch (e) {
+    console.error('slot background clean failed', slotId, e);
+    if (!quiet) showToast('Could not clean it: ' + (e && e.message ? e.message : e), 'error');
+    return false;
+  } finally {
+    if (!quiet) tcgArtRefresh();
+  }
 }
 
 // ---- Repairing art that was stored before the knockout could catch it ----
@@ -35788,6 +35914,8 @@ function _duelFxRunHtml(shape, element) {
     + '<span class="tcg-fx-state ' + (have === shape.frames ? 'on' : '') + '">' + have + ' / ' + shape.frames
     +   (have === shape.frames ? ' — plays in the duel' : ' — falls back to the plain effect until all ' + shape.frames + ' are drawn') + '</span>'
     + '<button type="button" class="btn btn-outline ga-mini" onclick="duelFxGenRun(\'' + shape.key + '\',\'' + key + '\')">✨ Generate these ' + shape.frames + '</button>'
+    + (have ? '<button type="button" class="btn btn-outline ga-mini" onclick="duelFxCleanRun(\'' + shape.key + '\',\'' + key + '\')"'
+        + ' title="Remove the flat screen colour left behind any of these frames">🧼 Remove backgrounds</button>' : '')
     + '</div>'
     + '<div class="ga-cards">' + slots + '</div>';
 }
@@ -35846,6 +35974,24 @@ async function duelFxGenRun(shapeKey, element) {
     _tcgGenBusy = false;
     _duelFxRowRefresh(shape, element);
   }
+}
+// Every frame of one run, cleaned in one press — the frames of a run are drawn
+// together and go wrong together.
+async function duelFxCleanRun(shapeKey, element) {
+  if (!_isAdmin()) return;
+  const shape = DUEL_FX_BY_SHAPE[shapeKey]; if (!shape) return;
+  if (_tcgGenBusy) { showToast('Busy drawing — let that finish first', 'error'); return; }
+  const key = duelFxKeyFor(shape, element);
+  let fixed = 0, looked = 0;
+  for (let i = 1; i <= shape.frames; i++) {
+    if (!duelFxHas(shape, key, i)) continue;
+    looked++;
+    if (await tcgCleanSlotBg(duelFxSlotId(shape.key, key, i), true)) fixed++;
+  }
+  _duelFxRowRefresh(shape, key);
+  showToast(!looked ? 'Nothing drawn in this run yet'
+    : fixed ? '🧼 ' + fixed + ' of ' + looked + ' frame' + (looked === 1 ? '' : 's') + ' cleaned'
+            : 'Those frames already have no background to remove', fixed ? 'success' : 'info');
 }
 async function duelFxDrawAll() {
   if (!_isAdmin()) return;
@@ -45471,6 +45617,8 @@ window.tcgPeekClose = tcgPeekClose;
 window.tcgHeroDrawAll = tcgHeroDrawAll;
 window.duelFxGenRun = duelFxGenRun;
 window.duelFxDrawAll = duelFxDrawAll;
+window.duelFxCleanRun = duelFxCleanRun;
+window.tcgCleanSlotBg = tcgCleanSlotBg;
 window.elgOpen = elgOpen;
 window.elgStart = elgStart;
 window.elgClose = elgClose;
@@ -45943,12 +46091,21 @@ function _screenDn(r, g, b, name) {
 //     Screen visible through a tear or between a monster's legs reaches the
 //     border and is not "enclosed", so the pack's torn opening still keys.
 const TCG_SCREEN_RING_MIN = 0.90;   // this much of the border ring must be screen
+// …except for a WIDE effect, which fills the frame edge to edge BY DESIGN — a
+// duel zone wall rises from the bottom and reaches both sides, so only the top
+// edge is left on the screen and the whole-ring test refuses it at ~50%. That
+// is exactly why the first generated walls came back with a band of magenta
+// still across the top (v1.277.0). A wide slot relaxes the ring, but must still
+// show one WHOLE edge of clean screen — that is what keeps it evidence of a
+// wall rather than a licence to key anything containing the hue.
+const TCG_SCREEN_RING_WIDE = 0.30;
+const TCG_SCREEN_EDGE_MIN = 0.85;   // …and one full edge at least this clean
 // Enclosed screen inside the subject, as a share of the frame. Small on
 // purpose: a patch this size is already a visible hole, and refusing to key
 // only costs a fall back to the cautious knock-out — the safe direction. A
 // subject with a genuine enclosed gap pays the same price, which is fine.
 const TCG_SCREEN_HOLE_MAX = 0.015;
-async function _screenKeyOut(dataUrl, screen, strict) {
+async function _screenKeyOut(dataUrl, screen, strict, wide) {
   try {
     const name = (TCG_SCREENS[screen] || TCG_SCREENS.magenta).name;
     const img = await _loadImageEl(dataUrl);
@@ -45969,13 +46126,20 @@ async function _screenKeyOut(dataUrl, screen, strict) {
     // The ring. A picture that merely CONTAINS the hue is not a picture shot
     // against a wall of it, and keying the difference is how art gets holed.
     let ring = 0, ringScreen = 0;
-    const ringAt = (x, y) => {
-      const i = y * w + x; ring++;
-      if (isScreen[i] || px[i * 4 + 3] < 24) ringScreen++;
+    // Per EDGE as well as overall — a wide effect leaves whole edges buried and
+    // whole edges clean, and it is the clean one that proves the wall is there.
+    const edges = [0, 0, 0, 0], edgeN = [0, 0, 0, 0];
+    const ringAt = (x, y, e) => {
+      const i = y * w + x; ring++; edgeN[e]++;
+      if (isScreen[i] || px[i * 4 + 3] < 24) { ringScreen++; edges[e]++; }
     };
-    for (let x = 0; x < w; x++) { ringAt(x, 0); ringAt(x, h - 1); }
-    for (let y = 0; y < h; y++) { ringAt(0, y); ringAt(w - 1, y); }
-    if (!ring || ringScreen < ring * TCG_SCREEN_RING_MIN) return null;
+    for (let x = 0; x < w; x++) { ringAt(x, 0, 0); ringAt(x, h - 1, 1); }
+    for (let y = 0; y < h; y++) { ringAt(0, y, 2); ringAt(w - 1, y, 3); }
+    if (!ring) return null;
+    if (ringScreen < ring * TCG_SCREEN_RING_MIN) {
+      const cleanEdge = edges.some((v, e) => edgeN[e] && v >= edgeN[e] * TCG_SCREEN_EDGE_MIN);
+      if (!wide || !cleanEdge || ringScreen < ring * TCG_SCREEN_RING_WIDE) return null;
+    }
     // Screen colour that does NOT connect to the border is screen colour the
     // model painted onto the subject. Keying that is exactly the hole we are
     // here to prevent, so hand the picture to the cautious path instead.
