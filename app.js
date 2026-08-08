@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.263.0';
+const APP_VERSION = 'v1.264.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -38315,6 +38315,8 @@ function tcgGuideHtml() {
       _tcgGuideRows([
         ['Where the duel ability comes from',
           'Every card <b>keeps its arena skill</b> and <b>gains a duel ability</b> generated from the same skill type — so a blaster sweeps the board here too, a healer mends, a poisoner poisons. Nothing is written per card, which is why all ' + TCG_CARDS.length + ' of them have one.'],
+        ['⬆ Your cards RANK UP every ' + DUEL_RANK_EVERY + ' training levels',
+          'This is where the questions you answer show up. Every <b>' + DUEL_RANK_EVERY + ' training levels</b> a card gains <b>one upgrade</b> — <b>⚔️ more Attack</b>, <b>❤️ more Health</b>, <b>💧 a cheaper mana cost</b> or <b>✨ a stronger ability</b> — up to <b>' + DUEL_RANK_MAX + ' upgrades</b> at Lv' + (DUEL_RANK_MAX * DUEL_RANK_EVERY) + '. The deck builder shows every card\'s rank and tells you exactly which upgrade is coming next, and a rank earned <b>during</b> a duel is felt by the minions already on the board. <b>The rarer the card, the more dramatic its life:</b> a 1★ collects +1s and ends around 6/6 for 1 mana, while a 7★ legend gains <b>+3 Attack and +3 Health a step, two mana discounts and three boosts to its signature</b> — roughly a 10/8 for 8 mana at Lv1 and a <b>16/14 for 6</b> with a far bigger battlecry at Lv90.'],
         ['Rarity is power',
           'The ability\'s numbers come straight from the card\'s <b>star rating</b>. A 1★ Wild Swipes gives Rush; a 4★+ gives full Charge. A 1★ blaster\'s battlecry hits for 1, a 7★ legend\'s for 4 — and the 7★ signatures (Dawnfather Judgement, Worldsend Curse, Time Fracture, Dragonfall Execution, Winter\'s Crown) are one of a kind, exactly as they are in the Arena. Higher stars cost more mana for it.'],
         ['Keywords you will meet',
@@ -38415,17 +38417,90 @@ const DUEL_BOARD_MAX = 5;       // Hearthstone allows 7; five fits a phone
 const DUEL_DECK_SIZE = 20;
 const DUEL_START_HAND = 3;      // the player goes first; the rival draws one more
 const DUEL_FATIGUE = 1;         // damage per draw from an empty deck, growing
-// A duel minion in Hearthstone numbers, derived from the card's REAL stats so
-// BOTH progression tracks count: 🎓 training levels and ⟡ merge levels. The
-// caps are what stop a fully maxed 7★ being unanswerable — tune the divisors
-// if it needs rebalancing, but keep the caps.
-const DUEL_ATK_DIV = 22, DUEL_HP_DIV = 90, DUEL_ATK_MAX = 12, DUEL_HP_MAX = 14;
-function duelCardStats(card, level, merge) {
-  const st = (level == null) ? tcgOwnStats(card) : tcgStats(card, level, merge || 1);
+// ---- ⬆ RANKS: a card gets STRONGER every 10 training levels ---------------
+// Elsewhere in the realm a training level is a smooth 1.5% — invisible from one
+// answer to the next. In a duel that is useless: a card is 4/3 for 2 mana, and
+// a number that reads the same after fifty questions has not rewarded anybody.
+// So the duel spends the levels in STEPS. Every 10 levels a card gains ONE
+// upgrade — more attack, more health, a cheaper mana cost, or a stronger
+// ability — and the student is told in advance which one is coming next.
+//
+// Lv10 → rank 1 … Lv90 → rank 9. Nine upgrades over a card's life.
+//
+// The DUEL base is deliberately taken at Lv1 (merge levels still count, so the
+// ⟡ track is not thrown away). Levels reach the duel ONLY through the ranks —
+// otherwise the smooth curve and the rank steps would double-count and the
+// caps would swallow both.
+const DUEL_RANK_EVERY = 10, DUEL_RANK_MAX = 9;
+// WHAT each rank gives, per star tier. The rarer the card the more dramatic
+// its life: a 1★ collects steady little stat bumps, a 7★ collects big ones AND
+// two mana discounts AND three boosts to a legendary ability. Read a row left
+// to right — that is the order the upgrades arrive in.
+const DUEL_RANK_TRACKS = {
+  1: ['atk', 'hp', 'atk', 'hp', 'pow', 'atk', 'hp', 'pow', 'cost'],
+  2: ['atk', 'hp', 'atk', 'hp', 'pow', 'atk', 'hp', 'pow', 'cost'],
+  3: ['atk', 'hp', 'pow', 'atk', 'hp', 'cost', 'atk', 'hp', 'pow'],
+  4: ['atk', 'hp', 'pow', 'atk', 'hp', 'cost', 'atk', 'pow', 'hp'],
+  5: ['atk', 'hp', 'pow', 'cost', 'atk', 'hp', 'pow', 'atk', 'hp'],
+  6: ['atk', 'hp', 'pow', 'cost', 'atk', 'hp', 'pow', 'cost', 'atk'],
+  7: ['atk', 'hp', 'pow', 'cost', 'atk', 'hp', 'pow', 'cost', 'pow']
+};
+// HOW MUCH each step is worth, per star tier — the second half of "dramatic
+// for the rarer ones". A 7★ gains three attack a step where a 1★ gains one.
+const DUEL_RANK_GAIN = {
+  1: { atk: 1, hp: 1, pow: 1, cost: 1 },
+  2: { atk: 1, hp: 1, pow: 1, cost: 1 },
+  3: { atk: 1, hp: 1, pow: 1, cost: 1 },
+  4: { atk: 1, hp: 2, pow: 1, cost: 1 },
+  5: { atk: 2, hp: 2, pow: 1, cost: 1 },
+  6: { atk: 2, hp: 2, pow: 2, cost: 1 },
+  7: { atk: 3, hp: 3, pow: 2, cost: 1 }
+};
+const DUEL_RANK_LABEL = { atk: ['⚔️', 'Attack'], hp: ['❤️', 'Health'], pow: ['✨', 'Ability'], cost: ['💧', 'Mana cost'] };
+function _duelStars(card) { return Math.max(1, Math.min(7, (card && card.stars) | 0 || 1)); }
+function duelRankTrack(card) { return DUEL_RANK_TRACKS[_duelStars(card)] || DUEL_RANK_TRACKS[1]; }
+function duelRankGain(card) { return DUEL_RANK_GAIN[_duelStars(card)] || DUEL_RANK_GAIN[1]; }
+function duelRank(level) { return Math.max(0, Math.min(DUEL_RANK_MAX, Math.floor(_tcgClampLvl(level) / DUEL_RANK_EVERY))); }
+// Everything the ranks earned so far, added up.
+function duelRankUp(card, rank) {
+  const track = duelRankTrack(card), gain = duelRankGain(card);
+  const up = { atk: 0, hp: 0, pow: 0, cost: 0 };
+  for (let i = 0; i < rank && i < track.length; i++) up[track[i]] += gain[track[i]] | 0;
+  return up;
+}
+// What the NEXT upgrade is, and at what level — so a student can see what they
+// are working towards instead of being surprised by it.
+function duelNextUpgrade(card, level) {
+  const rank = duelRank(level), track = duelRankTrack(card);
+  if (rank >= track.length) return null;                     // fully ranked
+  const kind = track[rank];
+  const lab = DUEL_RANK_LABEL[kind] || DUEL_RANK_LABEL.atk;
+  const n = duelRankGain(card)[kind] | 0;
   return {
-    atk: Math.max(1, Math.min(DUEL_ATK_MAX, Math.round(st.atk / DUEL_ATK_DIV))),
-    hp: Math.max(1, Math.min(DUEL_HP_MAX, Math.round(st.hp / DUEL_HP_DIV))),
-    cost: Math.max(1, Math.min(DUEL_MANA_CAP, card.stars + 1))   // rarity is the price
+    at: (rank + 1) * DUEL_RANK_EVERY, kind, n, icon: lab[0],
+    text: kind === 'cost' ? lab[0] + ' −' + n + ' mana cost' : lab[0] + ' +' + n + ' ' + lab[1]
+  };
+}
+// A duel minion in Hearthstone numbers. The BASE is the card at Lv1 with its
+// merge levels — rarity, its own jitter and the ⟡ track — and every training
+// level arrives as a rank step on top. The caps are a safety net, not the
+// design: tune the tracks above, not these.
+const DUEL_ATK_DIV = 22, DUEL_HP_DIV = 90, DUEL_ATK_MAX = 24, DUEL_HP_MAX = 24;
+function duelCardStats(card, level, merge) {
+  const lv = (level == null) ? tcgLevel(card.id) : _tcgClampLvl(level);
+  const mg = (merge == null) ? tcgMergeLevel(card.id) : merge;
+  const st = tcgStats(card, 1, mg);              // Lv1 base — levels come in as ranks
+  const rank = duelRank(lv);
+  const up = duelRankUp(card, rank);
+  // A mana discount can never take a card below half its rarity price, or a
+  // trained 7★ legend would cost the same as a 1★ trinket.
+  const base = Math.max(1, Math.min(DUEL_MANA_CAP, _duelStars(card) + 1));
+  const floor = Math.max(1, Math.ceil(base / 2));
+  return {
+    atk: Math.max(1, Math.min(DUEL_ATK_MAX, Math.round(st.atk / DUEL_ATK_DIV) + up.atk)),
+    hp: Math.max(1, Math.min(DUEL_HP_MAX, Math.round(st.hp / DUEL_HP_DIV) + up.hp)),
+    cost: Math.max(floor, base - up.cost),
+    rank, up, level: lv
   };
 }
 
@@ -38544,13 +38619,17 @@ const DUEL_ABILITIES = {
 };
 // A card's duel ability, resolved. Falls back to `strike` for any skill kind
 // that has no row — a new kind must never be a crash on the play path.
-function duelAbility(card) {
+function duelAbility(card, level) {
   const skill = TCG_SKILLS[card && card.skillId] || TCG_SKILLS.scratch;
   const row = DUEL_ABILITIES[skill.kind] || DUEL_ABILITIES.strike;
-  const st = Math.max(1, Math.min(7, (card && card.stars) | 0 || 1));
-  const v = row.v(st) | 0;
+  const st = _duelStars(card);
+  const lv = (level == null) ? tcgLevel(card && card.id) : _tcgClampLvl(level);
+  // The 'pow' rank steps land HERE — a trained card's battlecry really does hit
+  // harder, and the text says the number it will actually deal.
+  const rank = duelRank(lv);
+  const v = Math.max(0, (row.v(st) | 0) + (duelRankUp(card, rank).pow | 0));
   return {
-    icon: row.icon, kind: row.kind, trig: row.trig, v,
+    icon: row.icon, kind: row.kind, trig: row.trig, v, rank,
     name: row.name(st), text: row.text(st, v),
     kw: row.kw ? row.kw(st) : []
   };
@@ -38665,16 +38744,18 @@ function duelMakeHandCard(id, side, rivalLvl) {
   const card = TCG_BY_ID[id];
   if (!card) return null;
   const lvl = side === 'E' ? rivalLvl : null;
-  const st = duelCardStats(card, lvl, 1);
-  const ab = duelAbility(card);
-  return { uid: _duelNextUid(side), type: 'minion', card, id: card.id, level: lvl, cost: st.cost, atk: st.atk, hp: st.hp, ab };
+  const st = duelCardStats(card, lvl, side === 'E' ? 1 : null);
+  const ab = duelAbility(card, st.level);
+  return { uid: _duelNextUid(side), type: 'minion', card, id: card.id, level: st.level,
+           cost: st.cost, atk: st.atk, hp: st.hp, ab, rank: st.rank };
 }
 // A hand card summoned onto the board.
 function duelSummon(hc, side) {
-  const ab = hc.ab || duelAbility(hc.card);
+  const ab = hc.ab || duelAbility(hc.card, hc.level);
   return {
-    uid: _duelNextUid(side), side, card: hc.card, level: hc.level,
+    uid: _duelNextUid(side), side, card: hc.card, level: hc.level, rank: hc.rank | 0,
     atk: hc.atk, hp: hc.hp, maxHp: hc.hp, ab,
+    mkAtk: hc.atk, mkHp: hc.hp,     // what the card was worth when summoned (rank-up delta)
     taunt: ab.kw.indexOf('taunt') >= 0,
     shield: ab.kw.indexOf('shield') >= 0,
     lifesteal: ab.kw.indexOf('lifesteal') >= 0,
@@ -38849,15 +38930,18 @@ function duelPickHtml(id, inDeck) {
   }
   const card = TCG_BY_ID[id]; if (!card) return '';
   const st = duelCardStats(card);
-  const ab = duelAbility(card);
+  const ab = duelAbility(card, st.level);
   const owned = (s.cards[id] | 0);
+  const next = duelNextUpgrade(card, st.level);
   return '<button type="button" class="duel-pick star-' + card.stars + (full && !inDeck ? ' maxed' : '') + '"'
     + ' onclick="' + (inDeck ? 'duelDraftRemove' : 'duelDraftAdd') + '(\'' + id + '\')"'
-    + ' title="' + escapeHtml(card.name + ' — ' + ab.name + ': ' + ab.text) + '">'
+    + ' title="' + escapeHtml(card.name + ' (Lv ' + st.level + ', rank ' + st.rank + '/' + DUEL_RANK_MAX + ') — ' + ab.name + ': ' + ab.text
+        + (next ? '\nNext upgrade at Lv' + next.at + ': ' + next.text.replace(/^\S+\s/, '') : '\nFully ranked — every upgrade earned.')) + '">'
     + '<span class="duel-pick-cost">' + st.cost + '</span>'
     + '<span class="duel-pick-art">' + duelArtHtml(card) + '</span>'
-    + '<span class="duel-pick-body"><b>' + escapeHtml(tcgShortName(card)) + '</b>'
-    +   '<i>' + '★'.repeat(card.stars) + ' · ' + ab.icon + ' ' + escapeHtml(ab.name) + '</i></span>'
+    + '<span class="duel-pick-body"><b>' + escapeHtml(tcgShortName(card)) + duelRankChip(st.rank) + '</b>'
+    +   '<i>' + '★'.repeat(card.stars) + ' · ' + ab.icon + ' ' + escapeHtml(ab.name)
+    +     (next ? ' · <u>Lv' + next.at + ': ' + next.text + '</u>' : ' · <u>fully ranked</u>') + '</i></span>'
     + '<span class="duel-pick-stats">' + st.atk + '/' + st.hp + '</span>'
     + (have ? '<span class="duel-pick-n">×' + have + (max === 1 ? '' : '/' + max) + '</span>'
             : (owned > 1 ? '<span class="duel-pick-own">you have ' + owned + '</span>' : ''))
@@ -39398,7 +39482,7 @@ function duelAiTargetFor(hc) {
     if (foes.length && foes[0].hp <= hc.spell.v) return { type: 'minion', m: foes[0] };
     return { type: 'hero', who: 'P' };
   }
-  const ab = duelAbility(hc.card);
+  const ab = hc.ab || duelAbility(hc.card, hc.level);
   if (ab.kind === 'snipe') {
     if (r.p.hp <= ab.v) return { type: 'hero', who: 'P' };
     return foes.length ? { type: 'minion', m: foes[0] } : { type: 'hero', who: 'P' };
@@ -39492,14 +39576,17 @@ function _duelPlayFx(uid, amount, cls, element) {
     _duelRetrigger(wrap, 'duel-slain');
   } else if (cls === 'shield') {
     _duelRetrigger(wrap, 'duel-ward');
+  } else if (cls === 'rank') {
+    _duelRetrigger(wrap, 'duel-rankup');
   }
   const label = cls === 'heal' ? '+' + amount
     : cls === 'buff' ? '+' + amount + '⚔'
     : cls === 'freeze' ? '❄'
     : cls === 'shield' ? '🛡'
     : cls === 'slay' ? '☠'
+    : cls === 'rank' ? '⬆ RANK UP'
     : '-' + amount;
-  if (amount || cls === 'freeze' || cls === 'shield' || cls === 'slay') duelFloat(wrap, label, cls);
+  if (amount || cls === 'freeze' || cls === 'shield' || cls === 'slay' || cls === 'rank') duelFloat(wrap, label, cls);
 }
 function _duelPlayHeroFx(who, amount, cls, element) {
   const el = _duelHeroEl(who); if (!el) return;
@@ -39534,6 +39621,15 @@ function _duelPlayLunge(x) {
 }
 
 // ---- Rendering -------------------------------------------------------------
+// The rank badge. Nothing at rank 0 — an untrained card should not wear a
+// medal for it — and gold from rank 5 so the difference is visible across the
+// board.
+function duelRankChip(rank) {
+  rank = rank | 0;
+  if (rank <= 0) return '';
+  return '<span class="duel-rank' + (rank >= DUEL_RANK_MAX ? ' max' : (rank >= 5 ? ' high' : '')) + '" title="Rank '
+    + rank + ' of ' + DUEL_RANK_MAX + ' — one upgrade for every ' + DUEL_RANK_EVERY + ' training levels">⬆<b>' + rank + '</b></span>';
+}
 function duelArtHtml(card) {
   const url = tcgArtUrl(card.id) || tcgAvatarUrl(card.id);
   return '<div class="duel-art">' + (url
@@ -39559,8 +39655,9 @@ function duelBoardCardHtml(m, mine) {
   return '<div class="duel-mini star-' + m.card.stars + (ready ? ' ready' : '') + (sel ? ' sel' : '')
     + (targetable ? ' targetable' : '') + (m.frozen > 0 ? ' frozen' : '') + '"'
     + ' data-duel-uid="' + m.uid + '" data-duel-side="' + m.side + '"'
-    + ' title="' + escapeHtml(m.card.name + ' — ' + m.ab.name + ': ' + m.ab.text) + '">'
+    + ' title="' + escapeHtml(m.card.name + (m.rank ? ' (rank ' + m.rank + '/' + DUEL_RANK_MAX + ')' : '') + ' — ' + m.ab.name + ': ' + m.ab.text) + '">'
     + duelArtHtml(m.card)
+    + duelRankChip(m.rank)
     + '<div class="duel-mini-name">' + escapeHtml(tcgShortName(m.card)) + '</div>'
     + '<div class="duel-mini-el">' + el.icon + ' ' + m.ab.icon + '</div>'
     + duelKwHtml(m)
@@ -39585,9 +39682,10 @@ function duelHandCardHtml(hc, i) {
   }
   const el = TCG_ELEMENTS[hc.card.element] || TCG_ELEMENTS.flame;
   return '<button type="button" class="duel-hand-card star-' + hc.card.stars + (can ? '' : ' off') + (armed ? ' armed' : '') + '"'
-    + ' onclick="duelPlayCard(' + i + ')" title="' + escapeHtml(hc.card.name + ' — ' + hc.ab.name + ': ' + hc.ab.text) + '">'
+    + ' onclick="duelPlayCard(' + i + ')" title="' + escapeHtml(hc.card.name + (hc.rank ? ' (rank ' + hc.rank + '/' + DUEL_RANK_MAX + ')' : '') + ' — ' + hc.ab.name + ': ' + hc.ab.text) + '">'
     + '<span class="duel-cost">' + hc.cost + '</span>'
     + duelArtHtml(hc.card)
+    + duelRankChip(hc.rank)
     + '<span class="duel-hand-name">' + escapeHtml(tcgShortName(hc.card)) + '</span>'
     + '<span class="duel-hand-text">' + hc.ab.icon + ' ' + escapeHtml(hc.ab.text) + '</span>'
     + '<span class="duel-hand-stats"><b class="duel-atk">' + hc.atk + '</b>'
@@ -39877,7 +39975,8 @@ function duelAnswer(i) {
     r.p.mana = Math.min(r.p.cap, r.p.mana + 1);
     const ups = duelTrainBoard();
     note = '<b class="ok">✅ Correct!</b> You draw a card and get a mana crystal back.'
-      + (ups.length ? ' <b>🎓 ' + ups.map(u => escapeHtml(tcgShortName(u.card)) + ' reached Lv ' + u.level).join(', ') + '</b>' : '');
+      + (ups.length ? ' <b>🎓 ' + ups.map(u => escapeHtml(tcgShortName(u.card)) + ' reached Lv ' + u.level
+          + (u.level % DUEL_RANK_EVERY === 0 ? ' — ⬆ RANK UP!' : '')).join(', ') + '</b>' : '');
   } else {
     note = '<b class="no">❌ Not this time.</b> The right answer is <b>' + String.fromCharCode(65 + (q.a | 0)) + '</b>.';
   }
@@ -39907,7 +40006,30 @@ function duelTrainBoard() {
     if (res.leveledUp) ups.push({ card: m.card, level: res.level });
   });
   if (trained) { try { rpgSave(); } catch (_) {} }
+  // A rank crossed mid-duel is felt by the minions already standing.
+  if (ups.length) { try { duelRefreshBoard(); } catch (_) {} }
   return ups;
+}
+// A rank earned mid-duel is felt straight away by the minions already standing
+// — the same idea as emsRefreshProfiles. Applied as a DELTA against what the
+// card was worth when it was summoned, so a War Cry buff is not wiped and the
+// damage a minion has already taken is not healed.
+function duelRefreshBoard() {
+  const r = duelRun; if (!r) return false;
+  let any = false;
+  r.p.board.forEach(m => {
+    if (m.dead) return;
+    const st = duelCardStats(m.card);
+    const dA = st.atk - (m.mkAtk | 0), dH = st.hp - (m.mkHp | 0);
+    if (dA <= 0 && dH <= 0 && st.rank === (m.rank | 0)) return;
+    if (dA > 0) { m.atk += dA; m.mkAtk = st.atk; }
+    if (dH > 0) { m.maxHp += dH; m.hp += dH; m.mkHp = st.hp; }
+    m.ab = duelAbility(m.card, st.level);
+    m.rank = st.rank;
+    duelFx(m.uid, 0, 'rank');
+    any = true;
+  });
+  return any;
 }
 // The teacher's attempt log — same shape as the Siege's, with its own mode
 // string so duel answers are tellable apart in My Progress.

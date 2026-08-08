@@ -11045,6 +11045,29 @@ body.lore-reading { overflow: hidden; }
 .duel-over-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
 
+
+/* ---- ⬆ rank badges: one upgrade every 10 training levels ---- */
+.duel-rank {
+  position: absolute; top: 4px; right: 4px; z-index: 4;
+  font-size: 0.58rem; font-weight: 900; padding: 2px 6px; border-radius: 999px; color: #0d1430;
+}
+/* The arrow and the number need air between them, or "⬆9" reads as "19". */
+.duel-rank b { margin-left: 3px; font-weight: 900; }
+.duel-rank {
+  background: linear-gradient(135deg, #9fe8c0, #4bbf8a);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.55);
+}
+.duel-rank.high { background: linear-gradient(135deg, #ffe8a8, #d9b230); }
+.duel-rank.max { background: linear-gradient(135deg, #fff5da, #f0cd7a); box-shadow: 0 0 10px rgba(240,205,122,0.85), 0 1px 4px rgba(0,0,0,0.55); }
+/* In the builder the badge sits inline beside the name, not over the art. */
+.duel-pick-body .duel-rank { position: static; margin-left: 6px; vertical-align: 1px; }
+.duel-pick-body u { text-decoration: none; color: #8ef0a8; }
+@keyframes duelRankUp {
+  0%, 100% { box-shadow: none; filter: none; }
+  40% { box-shadow: 0 0 0 4px rgba(140,255,190,0.85), 0 0 26px rgba(140,255,190,0.7); filter: brightness(1.5); }
+}
+.duel-rankup { animation: duelRankUp 0.7s ease-out; }
+.duel-float.rank { color: #8ef0a8; font-size: 0.82rem; letter-spacing: 0.04em; }
 /* ---- 🎴 the deck builder ---- */
 .duel-deckcount { margin-left: auto; font-size: 0.9rem; font-weight: 900; color: #93a4cd; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(147,164,205,0.3); }
 .duel-deckcount.full { color: #14161a; background: linear-gradient(135deg, #f0cd7a, #c9a227); border-color: transparent; }
