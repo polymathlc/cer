@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.257.0';
+const APP_VERSION = 'v1.258.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -34388,7 +34388,7 @@ async function _tcgArtStore(id, dataUrl, opts) {
   // first, pasted and uploaded pictures included. Card art, set banners and the
   // Chronicle's illustrations keep their painted scene and are never cut,
   // whatever else changes here.
-  const standsOnNothing = id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0;
+  const standsOnNothing = id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0;
   if (standsOnNothing && !(opts && opts.cleaned)) dataUrl = await _stripImageBackground(dataUrl);
   // Battle avatars are small stage sprites; card art gets more resolution.
   // Blast frames are stretched over a 3×3 block of panels, so they get more
@@ -34977,7 +34977,7 @@ async function _tcgArtToDataUrl(url) {
 // Which stored pictures must stand clear of the edges — see _bgLeftoverInPixels.
 // Everything that has to stand on nothing, except the blast frames.
 function _tcgStrictBg(id) {
-  return /(^pk:|^logo:|:av$)/.test(id) || (id.indexOf('fx:') === 0 && id.indexOf(':blast') < 0);
+  return /(^pk:|^logo:|^arti:|:av$)/.test(id) || (id.indexOf('fx:') === 0 && id.indexOf(':blast') < 0);
 }
 async function _recleanStoredArt(url, strict) {
   const before = await _tcgArtToDataUrl(url);
@@ -34993,7 +34993,7 @@ async function _recleanStoredArt(url, strict) {
 // and the booster packs. Card art keeps its painted scene and is never touched.
 function _tcgBgFreeIds() {
   return Object.keys(_tcgArt || {}).filter(id =>
-    id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.endsWith(':av'));
+    id.indexOf('fx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0 || id.endsWith(':av'));
 }
 async function tcgRepairArtBackgrounds() {
   const uid = _tcgOwnerUid();
@@ -35136,6 +35136,174 @@ function tcgFxRowInnerHtml(element) {
       + '</div>';
   });
   return html;
+}
+// ---- 🔱 Artifact artwork ---------------------------------------------------
+// The 32 artifacts had no pictures at all — an emoji stood in on the reveal
+// card and in the chooser, which made a 7★ Wyrmheart Ruby look exactly as
+// special as a 1★ Iron Pin. They get the same art pipeline as everything else:
+// slot `arti:<id>`, paste / drop / upload / ✨ AI on the Card Art tab.
+//
+// An artifact is an OBJECT sitting on a card, not a scene, so it stands on
+// nothing — same chroma screen, same strict background check as the battle
+// avatars, the pack frames and the crest.
+//
+// HOW EPIC IT LOOKS IS THE STAR RATING. That is the whole point: the tier
+// drives the material, the light, the ornament and how much energy is moving
+// around the object, so a student can tell a trinket from a myth across a room
+// without reading a word. TCG_ARTI_TIER is the only place that scales.
+function tcgArtifactSlotId(id) { return 'arti:' + id; }
+function tcgArtifactArtUrl(id) { return (_tcgArt && _tcgArt[tcgArtifactSlotId(id)]) || ''; }
+// The screen has to be a colour the artifact cannot contain. Most are metal,
+// stone or wood, so magenta; anything red, pink or fiery gets green (red sits
+// too close to magenta), and anything green gets blue.
+const TCG_ARTI_SCREEN = {
+  flint: 'green', keen: 'green', leech: 'green', banner: 'green', torc: 'green',
+  ember: 'green', chalice: 'green', titan: 'green', phoenix: 'green', wyrm: 'green',
+  moss: 'blue', bud: 'blue', bramble: 'blue', battery: 'blue'
+};
+function tcgScreenForArtifact(a) { return TCG_ARTI_SCREEN[a && a.id] || 'magenta'; }
+// What the thing physically IS. The rows carry a name, an emoji and what the
+// artifact DOES, none of which tells an image model what to draw — "Sun Chip"
+// could be anything. One short phrase each, and the tier below supplies the
+// grandeur.
+const TCG_ARTI_LOOK = {
+  pin:       'a small plain iron pin or brooch',
+  flint:     'a rough chip of red flint on a leather cord',
+  moss:      'a simple woven band wrapped in living green moss',
+  pebble:    'a smooth grey river pebble carved with one protective mark',
+  vial:      'a small glass vial of faintly glowing liquid, stoppered with cork',
+  feather:   'a single light feather token bound with thread',
+  swift:     'an hourglass sigil of pale metal, sand caught mid-fall',
+  oak:       'a chest plate of banded oak heartwood with iron studs',
+  emberdrop: 'a faceted amber-orange gemstone shaped like a falling drop',
+  bud:       'a silver clasp cradling one green sprouting bud',
+  bead:      'a string of round prayer beads carved from pale stone',
+  sunchip:   'a warm golden disc like a chip broken off the sun',
+  keen:      'a lens of polished crystal in a brass ring, an aiming reticle etched on it',
+  leech:     'a curved fang of dark bone with a single crimson drop at its tip',
+  bramble:   'a vest woven from thorned bramble and hardened bark',
+  idol:      'a squat carved stone idol with a heavy blunt face',
+  gale:      'a long curved feather of white and pale blue, wind curling round it',
+  ward:      'a blue-and-white glass eye amulet on a silver chain',
+  banner:    'a crimson war banner on a spear haft, torn at the edge',
+  torc:      'a golden neck torc blooming with living pink flowers',
+  bulwark:   'a huge tower shield shaped like a fortress wall, iron and stone',
+  falcon:    'a golden falcon-eye amulet, the iris a sharp amber gemstone',
+  battery:   'a heavy arcane power cell of dark metal with glowing green cells',
+  ember:     'a floating prism of red crystal splitting light into elements',
+  chalice:   'a tall dark chalice with a deep red pool inside it',
+  titan:     'a colossal crystalline heart, still beating, veined with red light',
+  phoenix:   'a single enormous burning feather, orange-gold and alive with flame',
+  mirror:    'a great spiral shell with an inner surface like a mirror',
+  wyrm:      'an enormous cut ruby with a dragon\'s slit pupil burning inside it',
+  ankh:      'a great golden ankh, worn smooth, older than the world'
+};
+// The ladder. Nothing else in the prompt changes with rarity — this is it.
+const TCG_ARTI_TIER = {
+  1: { word: 'trinket',  look: 'PLAIN AND HUMBLE. Everyday materials, honest wear and small chips, no gold, no gemstones, NO glow and NO magic at all. It is a useful little thing somebody has carried for years.' },
+  2: { word: 'charm',    look: 'WELL MADE AND CARED FOR. Cleanly worked metal or wood with one small ornament, and the faintest warm glow — a hint of magic, nothing more. A couple of tiny motes of light at most.' },
+  3: { word: 'relic',    look: 'ORNATE AND CLEARLY MAGICAL. Carved detail, precious-metal inlay, a steady inner light, and a scatter of drifting sparks around it. Something a temple would keep.' },
+  4: { word: 'treasure', look: 'MAGNIFICENT. Gold filigree, set gemstones, a bright coloured aura, swirling motes of light and a faint ring of energy turning slowly around it. A king\'s treasure.' },
+  5: { word: 'wonder',   look: 'AWE-INSPIRING. Radiant light pouring out of it, orbiting rings of arcane energy, crackling power arcing across the surface, shards of light floating free around it. The air itself is bent by it.' },
+  6: { word: 'legend',   look: 'LEGENDARY AND OVERWHELMING. Blinding radiance, a storm of fire and light wrapped around it, orbiting runes and shattered fragments turning in the air, energy tearing outward in every direction. Only two of these exist.' },
+  7: { word: 'myth',     look: 'A WORLD-SHAPING MYTH — the single most spectacular object in the entire realm. Divine, overwhelming radiance; reality visibly bending and cracking around it; a vortex of golden and elemental energy; orbiting constellations, falling embers and rings of light stacked one inside another. Absolutely enormous presence. Nothing else in the game may look more powerful than this.' }
+};
+function tcgArtifactArtPrompt(a, harder) {
+  const tier = TCG_ARTI_TIER[a.stars] || TCG_ARTI_TIER[1];
+  const look = TCG_ARTI_LOOK[a.id] || a.name;
+  return 'A single fantasy ARTEFACT object for a children\'s collectible card game — the item picture printed on the card.\n'
+    + 'THE OBJECT: "' + a.name + '" — ' + look + '.\n'
+    + 'WHAT IT DOES (flavour only, do not draw words or diagrams): ' + a.blurb + '\n'
+    + 'RARITY — ' + a.stars + ' out of 7 stars, a ' + tier.word + '. THIS IS THE MOST IMPORTANT INSTRUCTION AFTER THE OBJECT ITSELF, because the whole set is looked at side by side and the rarity has to be obvious at a glance: ' + tier.look + '\n'
+    + 'COMPOSITION: exactly ONE object, centred, whole, seen at a slight three-quarter angle, filling most of a SQUARE frame with a clear margin of screen on all four sides. No hands, no characters, no creatures, no scenery, no table or pedestal underneath it — the object floats.\n'
+    + 'STYLE: polished painterly digital game art with rich saturated colour and dramatic rim lighting — the same finish as the painted monster cards in this game. Bold enough in silhouette to read at 48 pixels.\n'
+    + _screenRules('the object', tcgScreenForArtifact(a), harder)
+    + 'HARD RULES: absolutely NO text, letters, numbers, runes that read as writing, labels, signatures or watermarks anywhere; no card frame, border or interface; suitable for primary-school children — nothing gruesome.';
+}
+async function _tcgGenArtifactArt(a) {
+  const got = await _tcgGenClean(h => tcgArtifactArtPrompt(a, h), null, 'artifact ' + a.name, true, tcgScreenForArtifact(a));
+  await _tcgArtStore(tcgArtifactSlotId(a.id), got.url, { cleaned: true });
+  return got.url;
+}
+// The picture where one exists, the emoji until then. Used by the reveal card
+// and by the artifact chooser, so both surfaces upgrade together.
+function tcgArtifactIconHtml(a, cls) {
+  const url = tcgArtifactArtUrl(a.id);
+  return url
+    ? '<img src="' + url + '" class="' + (cls || 'tcg-arti-img') + '" alt="' + escapeHtml(a.name) + '" loading="lazy">'
+    : '<span class="tcg-arti-em">' + a.icon + '</span>';
+}
+function _tcgArtifactMissing() { return TCG_ARTIFACTS.filter(a => !tcgArtifactArtUrl(a.id)).length; }
+function _tcgArtifactSlotRow(a) {
+  const url = tcgArtifactArtUrl(a.id);
+  const thumb = url ? '<img src="' + url + '" alt="' + escapeHtml(a.name) + '">'
+    : '<div style="font-size:30px;line-height:64px;text-align:center;opacity:.7;">' + a.icon + '</div>';
+  return _tcgArtSlotHtml(tcgArtifactSlotId(a.id), '★'.repeat(a.stars) + ' ' + escapeHtml(a.name), '🔱', thumb, 'artifact art',
+    (TCG_ARTI_TIER[a.stars] || TCG_ARTI_TIER[1]).word + ' · ' + a.blurb);
+}
+function _tcgArtifactRowRefresh(a) {
+  const row = document.getElementById('tcgartirow-' + a.id);
+  if (row) row.innerHTML = _tcgArtifactSlotRow(a);
+}
+function tcgArtifactArtAdminHtml() {
+  const miss = _tcgArtifactMissing();
+  let html = '<h3 class="ga-cat">🔱 Artifact artwork</h3>'
+    + '<div class="tcg-section-note">One picture per artifact, shown on the <b>reveal card</b> when it drops out of a pack and in the <b>🔱 Artifacts chooser</b> on My Team. <b>How epic it looks is driven by the star rating</b> — a 1★ is a plain worn trinket with no glow at all, a 7★ is a world-shaping myth with reality bending around it — so the whole set reads as a ladder when it is laid out side by side. Artifacts stand on <b>nothing</b>, like the battle avatars, so the backdrop is keyed out and checked before anything is saved.</div>'
+    + '<div class="tcg-gen-panel tcg-arti-gen">'
+    +   '<h4>✨ Draw the artifacts</h4>'
+    +   '<p>Engine: <b>' + escapeHtml(_tcgArtEngineLabel()) + '</b> — change it in the sidebar under <b>AI Engine</b>.</p>'
+    +   '<div class="tcg-gen-actions">'
+    +     '<button type="button" class="btn btn-primary" id="tcgArtiGenBtn" onclick="tcgArtifactDrawAll()"' + (miss ? '' : ' disabled') + '>✨ Draw all missing artifacts'
+    +       (miss ? ' · ' + miss + ' of ' + TCG_ARTIFACTS.length : ' · all ' + TCG_ARTIFACTS.length + ' done 🎉') + '</button>'
+    +     '<button type="button" class="btn btn-ghost" id="tcgArtiStopBtn" onclick="tcgStopArtGen()" style="display:none;">■ Stop</button>'
+    +   '</div>'
+    +   '<div class="tcg-gen-track" id="tcgArtiTrack" style="display:none;"><i id="tcgArtiFill" style="width:0%;"></i></div>'
+    +   '<div class="tcg-gen-status" id="tcgArtiStatus"></div>'
+    + '</div>';
+  [1, 2, 3, 4, 5, 6, 7].forEach(stars => {
+    const tier = TCG_ARTIFACTS.filter(a => a.stars === stars);
+    if (!tier.length) return;
+    html += '<h3 class="ga-cat">' + '★'.repeat(stars) + ' ' + stars + '-star '
+      + (TCG_ARTI_TIER[stars] || TCG_ARTI_TIER[1]).word + 's (' + tier.length + ')</h3>'
+      + '<div class="ga-cards">'
+      + tier.map(a => '<div id="tcgartirow-' + a.id + '" style="display:contents;">' + _tcgArtifactSlotRow(a) + '</div>').join('')
+      + '</div>';
+  });
+  return html;
+}
+function _tcgArtiGenStatus(done, total, line) {
+  const fill = document.getElementById('tcgArtiFill');
+  if (fill) fill.style.width = Math.round(done / Math.max(1, total) * 100) + '%';
+  const s = document.getElementById('tcgArtiStatus');
+  if (s) s.innerHTML = line;
+}
+async function tcgArtifactDrawAll() {
+  if (!_isAdmin()) return;
+  if (_tcgGenBusy) { showToast('Already drawing — let it finish or press Stop', 'error'); return; }
+  const jobs = TCG_ARTIFACTS.filter(a => !tcgArtifactArtUrl(a.id));
+  if (!jobs.length) { showToast('Every artifact already has a picture 🎉', 'success'); return; }
+  if (!confirm('Draw ' + jobs.length + ' artifact picture' + (jobs.length === 1 ? '' : 's') + ' with ' + _tcgArtEngineLabel() + '?\n\n'
+    + 'Each one is drawn to match its star rating — a 1★ comes back as a plain worn trinket, a 7★ as a world-shaking myth.\n\n'
+    + 'This runs one picture at a time and can take a while — keep this tab open. Every finished picture is saved as it lands, and you can press Stop at any point.')) return;
+  _tcgGenBusy = true; _tcgGenStop = false;
+  const btn = document.getElementById('tcgArtiGenBtn'), stop = document.getElementById('tcgArtiStopBtn'), track = document.getElementById('tcgArtiTrack');
+  if (btn) btn.disabled = true;
+  if (stop) stop.style.display = '';
+  if (track) track.style.display = '';
+  let done = 0, failed = 0;
+  for (const a of jobs) {
+    if (_tcgGenStop) break;
+    _tcgArtiGenStatus(done, jobs.length, 'Drawing <b>' + '★'.repeat(a.stars) + ' ' + escapeHtml(a.name) + '</b> — ' + done + ' / ' + jobs.length + ' done');
+    try { await _tcgGenArtifactArt(a); _tcgArtifactRowRefresh(a); }
+    catch (e) { failed++; console.error('artifact art failed for ' + a.name, e); }
+    done++;
+    _tcgArtiGenStatus(done, jobs.length, done + ' / ' + jobs.length + ' drawn' + (failed ? ' · ' + failed + ' failed' : ''));
+  }
+  _tcgGenBusy = false;
+  if (stop) stop.style.display = 'none';
+  const okN = done - failed;
+  _tcgArtiGenStatus(done, jobs.length, '<b>' + (_tcgGenStop ? 'Stopped' : 'Finished') + '</b> — ' + okN + ' artifact' + (okN === 1 ? '' : 's') + ' drawn' + (failed ? ', ' + failed + ' failed' : '') + '.');
+  showToast(_tcgGenStop ? 'Stopped — ' + okN + ' drawn' : '🔱 Artifacts drawn — ' + okN + ' picture' + (okN === 1 ? '' : 's'), failed ? 'info' : 'success');
 }
 // ---- 🔥 The realm's LOGO ---------------------------------------------------
 // One mark for the whole realm — the crest on the box. It is not a picture of
@@ -36473,6 +36641,7 @@ function tcgArtAdminHtml() {
     + '<div class="tcg-section-note">Every monster carries <b>two graphics</b>: the <b>🃏 trading-card art</b> shown on the card face, and the <b>⚔️ battle avatar</b> that fights on the arena stage. Paste a PNG into either slot, upload one, or let the AI draw them — until both are set, one image stands in for the other. Square images look best.</div>'
     + tcgArtGenPanelHtml()
     + tcgLogoArtAdminHtml()
+    + tcgArtifactArtAdminHtml()
     + tcgSetArtAdminHtml()
     + tcgPackArtAdminHtml()
     + tcgLoreArtAdminHtml()
@@ -36520,6 +36689,25 @@ async function tcgAiGenSlot(slotId) {
       _tcgGenBusy = false;
       _tcgFxRowRefresh(element);
       _tcgGenRefreshFxCount();
+    }
+    return;
+  }
+  // An artifact: one object, drawn as epic as its star rating says it is.
+  if (slotId.indexOf('arti:') === 0) {
+    const a = tcgArtifactById(slotId.slice(5));
+    if (!a) { showToast('That artifact id is not one I recognise', 'error'); return; }
+    _tcgGenBusy = true;
+    _tcgSlotStatus(slotId, '⏳ Drawing…');
+    try {
+      await _tcgGenArtifactArt(a);
+      showToast('🔱 ' + a.name + ' drawn', 'success');
+    } catch (e) {
+      console.error('artifact art generation failed', e);
+      _tcgSlotStatus(slotId, '⚠️ Failed');
+      showToast('Could not draw it: ' + (e && e.message ? e.message : e), 'error');
+    } finally {
+      _tcgGenBusy = false;
+      _tcgArtifactRowRefresh(a);
     }
     return;
   }
@@ -36866,7 +37054,7 @@ function tcgArtifactCardHtml(a, opts) {
     + badges
     + '<div class="tcg-card-inner">'
     +   '<div class="tcg-card-no">🔱</div>'
-    +   '<div class="tcg-art"><div>' + a.icon + '</div></div>'
+    +   '<div class="tcg-art arti">' + (tcgArtifactArtUrl(a.id) ? tcgArtifactIconHtml(a, 'tcg-arti-card-img') : '<div>' + a.icon + '</div>') + '</div>'
     +   '<div class="tcg-body">'
     +     '<div class="tcg-card-name">' + escapeHtml(a.name) + '</div>'
     +     '<div class="tcg-stars">' + tcgStarsHtml(a.stars) + '</div>'
@@ -37588,7 +37776,8 @@ function tcgArtifactPickerHtml(s) {
         const n = inv[a.id] | 0;
         const owned = n > 0;
         return '<button type="button" class="tcg-arti' + (s.artifact === a.id ? ' on' : '') + (owned ? '' : ' locked') + '" onclick="tcgSetArtifact(\'' + a.id + '\')">'
-          + '<div class="tcg-arti-ic">' + (owned ? a.icon : '🔒') + '</div>'
+          // Locked artifacts keep the padlock — the picture is part of the reward.
+          + '<div class="tcg-arti-ic">' + (owned ? tcgArtifactIconHtml(a) : '<span class="tcg-arti-em">🔒</span>') + '</div>'
           + '<div class="tcg-arti-name">' + escapeHtml(a.name) + (n > 1 ? ' <span class="tcg-arti-count">×' + n + '</span>' : '') + '</div>'
           + '<div class="tcg-arti-stars">' + '★'.repeat(a.stars) + '</div>'
           + '<div class="tcg-arti-blurb">' + (owned ? escapeHtml(a.blurb) : 'Locked — find this artifact in a booster pack to see what it does.') + '</div></button>';
@@ -41215,6 +41404,7 @@ window.tcgClosePreview = tcgClosePreview;
 window.tcgTrainCard = tcgTrainCard;
 window.tcgCloseTrain = tcgCloseTrain;
 window.tcgSetArtifact = tcgSetArtifact;
+window.tcgArtifactDrawAll = tcgArtifactDrawAll;   // 🔱 Card Art tab: draw every missing artifact
 window.tcgSetStrategy = tcgSetStrategy;
 window._tcgQuizAnswer = _tcgQuizAnswer;
 window._tcgQuizNext = _tcgQuizNext;
