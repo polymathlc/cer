@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.270.0';
+const APP_VERSION = 'v1.271.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -38487,7 +38487,13 @@ function tcgGuideHtml() {
         ['⚡ Ember Insight',
           'Once a turn you can answer a science question. Get it right and you <b>draw a card and get a mana crystal back</b> — and, like every other mode, the question <b>🎓 trains every monster on your board</b> and pays 🪙 points. That is the only thing a duel pays: winning is worth nothing but the record, so it can be fought as often as you like.'],
         ['How to attack',
-          '<b>Drag one of your monsters onto a rival card</b> — or tap yours and then tap theirs. Drag it onto the rival hero to go for the win.']
+          '<b>Drag one of your monsters onto a rival card</b> — or tap yours and then tap theirs. Drag it onto the rival hero to go for the win.'],
+        ['🔍 Read any card in full',
+          '<b>Hover over any card</b> — in your hand, on the board or in the deck builder — and the whole card opens beside it: the artwork at size, ⚔️ its attack and 🛡️ its defence, the duel ability in full, the <b>arena skill it was generated from</b>, the complete stat block and its training and merge levels. <b>On a phone, press and hold</b> a card instead. Every number on a card is ⚔️ for attack and 🛡️ for defence, everywhere in the duel.'],
+        ['🌋 Who the rival brought',
+          'The rival does not shuffle a random forty any more — they turn up with a <b>deck</b>, and it is named on their side of the board:<br>'
+            + DUEL_RIVAL_PLANS.map(p => p.em + ' <b>' + escapeHtml(p.name) + '</b> — ' + escapeHtml(p.note)).join('<br>')
+            + '<br><span class="tcg-guide-dim">If <b>your</b> deck is built on cheap minions played wide, you will meet <b>Ashfall Legion</b> more often — that is the counter to going wide, and it is beaten by patience: keep a card back, trade before you commit everything, and make them clear a board of two rather than a board of five. The rival <b>holds its board clears</b> until they are worth casting, so a full board is a target.</span>']
       ])) : '')
 
   + _tcgGuideSection('🎮', 'The other three ways to play',
@@ -38973,22 +38979,124 @@ function duelBuildDeck(s) {
 // The rival's deck: drawn from the WHOLE dex around the student's own average
 // rarity, so the duel scales with the collection instead of always being the
 // same fight. Levels are synthetic (the rival owns nothing).
-function duelRivalDeck(s) {
+// ---- Who the rival brought -------------------------------------------------
+// A rival that always shuffles a random forty is a rival with no plan, and a
+// student who floods the board with cheap minions beats it every single time —
+// which is exactly the report this exists to answer. So the rival now turns up
+// with a DECK ARCHETYPE, and one of them is a hard counter to going wide.
+//
+// The counter is not a difficulty slider and it is not every duel: it is a
+// deck, it is announced on the board, and it can be played around (hold a card
+// back, trade before you commit, bait the clear). A student who learns that
+// has learned the actual lesson a card game teaches.
+//
+// `bias` is what makes it fair AND pointed: the sweeper's odds go UP when the
+// student's own deck is a swarm deck, so the counter shows up against the
+// strategy it answers rather than at random against everybody.
+const DUEL_AOE_ABILITIES = { sweep: 1, dawn: 1, curse: 1, winter: 1, chrono: 1, venom: 1 };
+const DUEL_WALL_ABILITIES = { guard: 1, mend: 1, mendall: 1, lifesteal: 1, freeze: 1 };
+const DUEL_RIVAL_PLANS = [
+  {
+    id: 'mixed', name: 'Mixed Company', em: '🎴', weight: 55, swarmWeight: 30,
+    note: 'a bit of everything',
+    // The old behaviour, kept as the common case: no preference at all.
+    score: () => 0,
+    spells: () => DUEL_SPELLS.map(x => x.id)
+  },
+  {
+    id: 'ashfall', name: 'Ashfall Legion', em: '🌋', weight: 27, swarmWeight: 45,
+    note: 'board clears — do not put your whole hand on the table',
+    hero: 'ember',       // one damage a turn finishes a 1-health swarm minion
+    score: (card, ab) => (DUEL_AOE_ABILITIES[ab.kind] ? 3 : 0) + (card.stars >= 5 ? 1 : 0),
+    spells: () => ['sp_ashfall', 'sp_judgement', 'sp_meteor', 'sp_bolt', 'sp_lance', 'sp_scry']
+  },
+  {
+    id: 'bulwark', name: 'Bulwark Order', em: '🛡️', weight: 18, swarmWeight: 25,
+    note: 'taunts and healing — small attackers cannot get through',
+    hero: 'warden',
+    score: (card, ab) => (DUEL_WALL_ABILITIES[ab.kind] ? 3 : 0) + ((ab.kw || []).indexOf('taunt') >= 0 ? 2 : 0),
+    spells: () => ['sp_bulwark', 'sp_mend', 'sp_ashfall', 'sp_frost', 'sp_judgement', 'sp_study']
+  }
+];
+function duelPlanById(id) { return DUEL_RIVAL_PLANS.filter(p => p.id === id)[0] || DUEL_RIVAL_PLANS[0]; }
+// Is the student's own deck a SWARM deck — lots of cheap bodies, played wide?
+// Half or more of its monsters costing 2 or less is the line: that is a deck
+// whose plan is the board, and it is the deck the sweeper answers.
+const DUEL_SWARM_COST = 2, DUEL_SWARM_SHARE = 0.5;
+// How many cards an archetype needs to find inside the student's star band
+// before it stops looking. Below this it widens by one star — see duelRivalDeck.
+const DUEL_PLAN_MIN_PREF = 6;
+function duelDeckIsSwarm(deck) {
+  const mons = (deck || []).filter(id => !duelIsSpell(id) && TCG_BY_ID[id]);
+  if (mons.length < 8) return false;
+  const cheap = mons.filter(id => duelCardStats(TCG_BY_ID[id]).cost <= DUEL_SWARM_COST).length;
+  return cheap / mons.length >= DUEL_SWARM_SHARE;
+}
+// Roll the archetype. Weighted, and re-weighted when the student is swarming.
+function duelPlanFor(s) {
+  const swarm = duelDeckIsSwarm(duelDeckFor(s));
+  const weights = DUEL_RIVAL_PLANS.map(p => Math.max(0, (swarm ? p.swarmWeight : p.weight) | 0));
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return DUEL_RIVAL_PLANS[0];
+  let roll = Math.random() * total;
+  for (let i = 0; i < DUEL_RIVAL_PLANS.length; i++) {
+    roll -= weights[i];
+    if (roll < 0) return DUEL_RIVAL_PLANS[i];
+  }
+  return DUEL_RIVAL_PLANS[0];
+}
+function duelRivalDeck(s, plan) {
+  plan = plan || DUEL_RIVAL_PLANS[0];
   const mine = Object.keys(s.cards || {}).filter(id => TCG_BY_ID[id]);
   const avg = mine.length
     ? mine.reduce((n, id) => n + TCG_BY_ID[id].stars, 0) / mine.length
     : 2;
   const lo = Math.max(1, Math.round(avg) - 1), hi = Math.min(7, Math.round(avg) + 1);
-  const pool = TCG_CARDS.filter(c => c.stars >= lo && c.stars <= hi);
-  const use = pool.length ? pool : TCG_CARDS;
-  const deck = [];
-  const shuffled = _tcgShuffle(use);
+  let pool = TCG_CARDS.filter(c => c.stars >= lo && c.stars <= hi);
+  if (!pool.length) pool = TCG_CARDS.slice();
+  const lvl = duelRivalLevel(s);
+  // Score the band for this plan, keeping the shuffle underneath so two
+  // Ashfall Legions are never the same forty cards.
+  const scored = _tcgShuffle(pool).map(c => ({ c, n: plan.score(c, duelAbility(c, lvl)) | 0 }));
+  // A narrow star band may hold almost none of what the plan wants — a
+  // beginner's band is 1–3★ and every Taunt in the dex is 4★ and up. Rather
+  // than let the archetype quietly collapse back into a random deck, widen far
+  // enough to find its own cards: ONE star above the band and no further, so a
+  // beginner never meets a deck of legends.
+  const pref = scored.filter(x => x.n > 0).length;
+  if (pref < DUEL_PLAN_MIN_PREF) {
+    const top = Math.min(7, hi + 1);
+    TCG_CARDS.filter(c => c.stars <= top && pool.indexOf(c) < 0).forEach(c => {
+      const n = plan.score(c, duelAbility(c, lvl)) | 0;
+      if (n > 0) scored.push({ c, n });
+    });
+  }
+  scored.sort((a, b) => b.n - a.n);
+  const order = scored.map(x => x.c.id);
   // The rival keeps the same shape as an auto-built deck, so a bigger deck size
   // does not quietly turn it into forty monsters and no answers.
   const want = Math.min(DUEL_AUTO_SPELLS, DUEL_SPELLS.length);
-  for (let i = 0; deck.length < DUEL_DECK_SIZE - want; i++) deck.push(shuffled[i % shuffled.length].id);
-  const sp = _tcgShuffle(DUEL_SPELLS).slice(0, want).map(x => x.id);
-  return _tcgShuffle(deck.concat(sp));
+  const deck = _duelFill(order, DUEL_DECK_SIZE - want, DUEL_COPIES_MAX);
+  const spellOrder = plan.spells().filter(duelIsSpell)
+    .concat(_tcgShuffle(DUEL_SPELLS).map(x => x.id));      // whatever the plan did not name
+  return _tcgShuffle(deck.concat(_duelFill(spellOrder, want, DUEL_COPIES_SPELL)));
+}
+// Take ids from `order`, best first, up to `n` cards and `max` copies of any
+// one of them. If the list is too short to fill the deck under that cap the cap
+// is lifted rather than looping forever — a tiny dex must still get a deck.
+function _duelFill(order, n, max) {
+  const out = [], used = {};
+  for (let pass = 0; out.length < n && pass < 40; pass++) {
+    const cap = pass < 20 ? max : max + pass;
+    let added = 0;
+    for (const id of order) {
+      if (out.length >= n) break;
+      if ((used[id] | 0) >= cap) continue;
+      used[id] = (used[id] | 0) + 1; out.push(id); added++;
+    }
+    if (!added && !order.length) break;
+  }
+  return out;
 }
 // The level the rival's cards fight at — the student's own average, so the
 // duel keeps pace with training instead of going stale.
@@ -39000,10 +39108,13 @@ function duelRivalLevel(s) {
 }
 // The rival's hero — a basic one at random, and never the student's own, so
 // the two portraits on the board are always two different people.
-function duelRivalHero(s, mine) {
+function duelRivalHero(s, mine, plan) {
   const pool = duelHeroesFor(s).filter(h => !mine || h.id !== mine.id);
   if (!pool.length) return duelHeroDefault();
-  return pool[Math.floor(Math.random() * pool.length)];
+  // A plan that names a hero gets it when the student is not already playing
+  // them — the Ashfall Legion wants the point of damage that finishes a swarm.
+  const want = plan && plan.hero ? pool.filter(h => h.id === plan.hero)[0] : null;
+  return want || pool[Math.floor(Math.random() * pool.length)];
 }
 
 // A card id (monster or spell) turned into a hand card.
@@ -39220,6 +39331,7 @@ function duelOpenBuilder() {
     host.innerHTML = '<div class="duel-shell" id="duelShell"></div>';
     document.body.appendChild(host);
   }
+  duelPeekBind();
   const slot = duelActiveIndex(s);
   duelDraft = { deck: duelDraftSeed(s, slot), filter: 'all', slot, name: (duelDecks(s)[slot] || {}).name || duelDeckDefaultName(slot) };
   tcgLoadArt().catch(() => {}).then(() => duelRenderBuilder());
@@ -39322,6 +39434,7 @@ function duelOpenHeroes() {
     host.innerHTML = '<div class="duel-shell" id="duelShell"></div>';
     document.body.appendChild(host);
   }
+  duelPeekBind();
   tcgLoadArt().catch(() => {}).then(() => duelRenderHeroes());
 }
 function duelCloseHeroes() {
@@ -39443,7 +39556,7 @@ function duelPickHtml(id, inDeck) {
   const full = have >= max;
   if (sp) {
     return '<button type="button" class="duel-pick spell' + (full && !inDeck ? ' maxed' : '') + '"'
-      + ' onclick="' + (inDeck ? 'duelDraftRemove' : 'duelDraftAdd') + '(\'' + id + '\')"'
+      + ' onclick="' + (inDeck ? 'duelDraftRemove' : 'duelDraftAdd') + '(\'' + id + '\')" data-peek="' + id + '"'
       + ' title="' + escapeHtml(sp.name + ' — ' + sp.text) + '">'
       + '<span class="duel-pick-cost">' + sp.cost + '</span>'
       + '<span class="duel-pick-em">' + sp.icon + '</span>'
@@ -39457,7 +39570,7 @@ function duelPickHtml(id, inDeck) {
   const owned = (s.cards[id] | 0);
   const next = duelNextUpgrade(card, st.level);
   return '<button type="button" class="duel-pick star-' + card.stars + (full && !inDeck ? ' maxed' : '') + '"'
-    + ' onclick="' + (inDeck ? 'duelDraftRemove' : 'duelDraftAdd') + '(\'' + id + '\')"'
+    + ' onclick="' + (inDeck ? 'duelDraftRemove' : 'duelDraftAdd') + '(\'' + id + '\')" data-peek="' + id + '"'
     + ' title="' + escapeHtml(card.name + ' (Lv ' + st.level + ', rank ' + st.rank + '/' + DUEL_RANK_MAX + ') — ' + ab.name + ': ' + ab.text
         + (next ? '\nNext upgrade at Lv' + next.at + ': ' + next.text.replace(/^\S+\s/, '') : '\nFully ranked — every upgrade earned.')) + '">'
     + '<span class="duel-pick-cost">' + st.cost + '</span>'
@@ -39465,7 +39578,7 @@ function duelPickHtml(id, inDeck) {
     + '<span class="duel-pick-body"><b>' + escapeHtml(tcgShortName(card)) + duelRankChip(st.rank) + '</b>'
     +   '<i>' + '★'.repeat(card.stars) + ' · ' + ab.icon + ' ' + escapeHtml(ab.name)
     +     (next ? ' · <u>Lv' + next.at + ': ' + next.text + '</u>' : ' · <u>fully ranked</u>') + '</i></span>'
-    + '<span class="duel-pick-stats">' + st.atk + '/' + st.hp + '</span>'
+    + '<span class="duel-pick-stats">' + duelAtkHtml(st.atk) + duelDefHtml(st.hp) + '</span>'
     + (have ? '<span class="duel-pick-n">×' + have + (max === 1 ? '' : '/' + max) + '</span>'
             : (owned > 1 ? '<span class="duel-pick-own">you have ' + owned + '</span>' : ''))
     + '</button>';
@@ -39474,6 +39587,7 @@ function duelRenderBuilder() {
   const shell = document.getElementById('duelShell');
   const s = tcgState();
   if (!shell || !duelDraft || !s) return;
+  duelPeekHide();
   const d = duelDraft;
   const col = duelCollection(s);
   const counts = duelDeckCounts(d.deck);
@@ -39553,6 +39667,7 @@ function duelOpen() {
   o.className = 'duel-overlay'; o.id = 'duelOverlay';
   o.innerHTML = '<div class="duel-shell" id="duelShell"></div>';
   document.body.appendChild(o);
+  duelPeekBind();
   // The art has to be in memory before a single sprite renders — _tcgArt is
   // null until this resolves and every getter returns null.
   tcgLoadArt().catch(() => {}).then(() => duelStart());
@@ -39561,18 +39676,22 @@ function duelStart() {
   const s = tcgState(); if (!s) return;
   duelDropQuiz();                 // nothing from a previous run may outlive it
   const rivalLvl = duelRivalLevel(s);
-  const pDeck = duelDeckFor(s), eDeck = duelRivalDeck(s);
+  // What the rival BROUGHT. Rolled once per duel, before the deck, because the
+  // deck, the hero and the opening line all come out of it.
+  const plan = duelPlanFor(s);
+  const pDeck = duelDeckFor(s), eDeck = duelRivalDeck(s, plan);
   if (!pDeck.length) { showToast('Open a booster pack first — you need at least one monster', 'error'); duelClose(); return; }
   const pool = _tcgQuizPool(), served = _tcgServedLoad();
-  // The rival is somebody too — a basic hero drawn at random, so the same deck
-  // does not meet the same fight every time.
-  const pHero = duelHero(s), eHero = duelRivalHero(s, pHero);
+  // The rival is somebody too — a basic hero, drawn to suit the deck they
+  // brought, so the same deck does not meet the same fight every time.
+  const pHero = duelHero(s), eHero = duelRivalHero(s, pHero, plan);
   duelRun = {
     id: ++_duelRunSeq,
     turn: 1, whose: 'P', over: false, won: false, banked: false, busy: false,
     p: { hp: DUEL_HERO_HP, maxHp: DUEL_HERO_HP, armor: 0, hero: pHero, powerUsed: false, mana: 0, cap: 0, deck: pDeck.slice(), hand: [], board: [], fatigue: 0 },
     e: { hp: DUEL_HERO_HP, maxHp: DUEL_HERO_HP, armor: 0, hero: eHero, powerUsed: false, mana: 0, cap: 0, deck: eDeck.slice(), hand: [], board: [], fatigue: 0 },
     rivalLvl,
+    plan,
     log: [],
     sel: null,          // tap-to-select: the hand index or board uid awaiting a target
     pending: null,      // a played spell waiting for its target
@@ -39588,6 +39707,10 @@ function duelStart() {
     reapT: 0
   };
   duelSfxPrime();                 // the run opens from a click, so the audio may be woken here
+  // Say what you are up against. A student who loses to a board clear and is
+  // never told it was coming learns nothing; one who is told learns to hold a
+  // card back next time.
+  duelLog(plan.em + ' Your rival brought ' + plan.name + ' — ' + plan.note + '.');
   for (let i = 0; i < DUEL_START_HAND; i++) duelDraw('p', true);
   for (let i = 0; i < DUEL_START_HAND + 1; i++) duelDraw('e', true);
   duelBeginTurn('P');
@@ -40085,7 +40208,18 @@ async function duelAiTurn() {
       .filter(x => duelCanPlay('E', x.hc))
       .sort((a, b) => b.hc.cost - a.hc.cost);
     if (!playable.length) break;
-    const pick = playable[0];
+    // Hold the board clears. An Ashfall cast into an empty board is a wasted
+    // card, and casting one the turn it is drawn is exactly why the rival used
+    // to be beatable by simply playing more minions than it could kill.
+    const good = playable.filter(x => duelAiWorthPlaying(x.hc));
+    // …but a rival with nothing on the table needs a BODY more than it needs
+    // patience, or it holds a perfect hand while it loses. Only minions are
+    // released this way: a clear cast at an empty board is still a wasted card,
+    // so the spells go on waiting.
+    const list = good.length ? good
+      : (r.e.board.filter(m => !m.dead).length ? [] : playable.filter(x => x.hc.type === 'minion'));
+    if (!list.length) break;
+    const pick = list[0];
     const target = duelAiTargetFor(pick.hc);
     duelCommitPlay('E', pick.i, target);
     duelRender();
@@ -40130,6 +40264,30 @@ async function duelAiTurn() {
   r.turn++;
   duelBeginTurn('P');
   duelRender();
+}
+// Is this card worth playing THIS turn? Only the cards whose value depends on
+// the board are ever held — a plain minion is always played. This is the other
+// half of the counter-decks: a sweeper deck that fires its sweepers at nothing
+// is not a counter to anything.
+function duelAiWorthPlaying(hc) {
+  const r = duelRun; if (!r || !hc) return true;
+  const foes = r.p.board.filter(m => !m.dead);
+  const mine = r.e.board.filter(m => !m.dead);
+  if (hc.type === 'spell') {
+    const sp = hc.spell;
+    if (sp.kind === 'sweep' || sp.kind === 'judge') {
+      // Two bodies, or one it actually kills. Anything less and it waits.
+      return foes.length >= 2 || foes.some(m => m.hp <= sp.v);
+    }
+    if (sp.kind === 'heal') return (r.e.maxHp - r.e.hp) >= Math.ceil(sp.v / 2);
+    if (sp.kind === 'buff') return mine.length >= 2;
+    return true;
+  }
+  // A minion with a board-clearing battlecry is still a body, so it is only
+  // held while there is nothing at all to clear AND something else to do.
+  const ab = hc.ab || duelAbility(hc.card, hc.level);
+  if (DUEL_AOE_ABILITIES[ab.kind] && ab.trig === 'battlecry' && !foes.length) return false;
+  return true;
 }
 // Where the rival aims its hero power. The same shape as duelAiTargetFor, kept
 // separate because a power has no hand card behind it.
@@ -40669,6 +40827,22 @@ function duelRankChip(rank) {
   return '<span class="duel-rank' + (rank >= DUEL_RANK_MAX ? ' max' : (rank >= 5 ? ' high' : '')) + '" title="Rank '
     + rank + ' of ' + DUEL_RANK_MAX + ' — one upgrade for every ' + DUEL_RANK_EVERY + ' training levels">⬆<b>' + rank + '</b></span>';
 }
+// ⚔️ / 🛡️ — the two numbers every card in the duel wears. They are drawn as
+// inline SVG rather than emoji for the same reason the landing page is: an
+// emoji is a different picture on every phone, and these two sit side by side
+// on a 122px card where they have to read instantly. Both are stroked in
+// `currentColor`, so the sword takes the attack colour and the shield takes the
+// defence colour — including the red it turns when a minion is hurt.
+const DUEL_ICON_SWORD = '<svg class="duel-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5"></path><path d="M13 19l6-6"></path><path d="M16 16l4 4"></path><path d="M19 21l2-2"></path></svg>';
+const DUEL_ICON_SHIELD = '<svg class="duel-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>';
+function duelAtkHtml(n, cls) {
+  return '<span class="duel-atk' + (cls ? ' ' + cls : '') + '" title="Attack — the damage it deals">'
+    + DUEL_ICON_SWORD + '<b>' + n + '</b></span>';
+}
+function duelDefHtml(n, cls) {
+  return '<span class="duel-hp' + (cls ? ' ' + cls : '') + '" title="Defence — the damage it can take before it falls">'
+    + DUEL_ICON_SHIELD + '<b>' + n + '</b></span>';
+}
 function duelArtHtml(card) {
   const url = tcgArtUrl(card.id) || tcgAvatarUrl(card.id);
   return '<div class="duel-art">' + (url
@@ -40693,15 +40867,15 @@ function duelBoardCardHtml(m, mine) {
   const el = TCG_ELEMENTS[m.card.element] || TCG_ELEMENTS.flame;
   return '<div class="duel-mini star-' + m.card.stars + (ready ? ' ready' : '') + (sel ? ' sel' : '')
     + (targetable ? ' targetable' : '') + (m.frozen > 0 ? ' frozen' : '') + '"'
-    + ' data-duel-uid="' + m.uid + '" data-duel-side="' + m.side + '"'
+    + ' data-duel-uid="' + m.uid + '" data-duel-side="' + m.side + '" data-peek="' + m.card.id + '"'
     + ' title="' + escapeHtml(m.card.name + (m.rank ? ' (rank ' + m.rank + '/' + DUEL_RANK_MAX + ')' : '') + ' — ' + m.ab.name + ': ' + m.ab.text) + '">'
     + duelArtHtml(m.card)
     + duelRankChip(m.rank)
     + '<div class="duel-mini-name">' + escapeHtml(tcgShortName(m.card)) + '</div>'
     + '<div class="duel-mini-el">' + el.icon + ' ' + m.ab.icon + '</div>'
     + duelKwHtml(m)
-    + '<div class="duel-mini-stats"><span class="duel-atk">' + m.atk + '</span>'
-    + '<span class="duel-hp' + (m.hp < m.maxHp ? ' hurt' : '') + '">' + Math.max(0, m.hp) + '</span></div>'
+    + '<div class="duel-mini-stats">' + duelAtkHtml(m.atk)
+    + duelDefHtml(Math.max(0, m.hp), m.hp < m.maxHp ? 'hurt' : '') + '</div>'
     + '</div>';
 }
 // A card in the student's hand.
@@ -40711,7 +40885,8 @@ function duelHandCardHtml(hc, i) {
   const armed = r.pending && r.pending.i === i;
   if (hc.type === 'spell') {
     return '<button type="button" class="duel-hand-card spell' + (can ? '' : ' off') + (armed ? ' armed' : '') + '"'
-      + ' onclick="duelPlayCard(' + i + ')" title="' + escapeHtml(hc.spell.name + ' — ' + hc.spell.text) + '">'
+      + ' onclick="duelPlayCard(' + i + ')" data-peek="' + hc.spell.id + '"'
+      + ' title="' + escapeHtml(hc.spell.name + ' — ' + hc.spell.text) + '">'
       + '<span class="duel-cost">' + hc.cost + '</span>'
       + '<span class="duel-hand-em">' + hc.spell.icon + '</span>'
       + '<span class="duel-hand-name">' + escapeHtml(hc.spell.name) + '</span>'
@@ -40721,15 +40896,16 @@ function duelHandCardHtml(hc, i) {
   }
   const el = TCG_ELEMENTS[hc.card.element] || TCG_ELEMENTS.flame;
   return '<button type="button" class="duel-hand-card star-' + hc.card.stars + (can ? '' : ' off') + (armed ? ' armed' : '') + '"'
-    + ' onclick="duelPlayCard(' + i + ')" title="' + escapeHtml(hc.card.name + (hc.rank ? ' (rank ' + hc.rank + '/' + DUEL_RANK_MAX + ')' : '') + ' — ' + hc.ab.name + ': ' + hc.ab.text) + '">'
+    + ' onclick="duelPlayCard(' + i + ')" data-peek="' + hc.card.id + '"'
+    + ' title="' + escapeHtml(hc.card.name + (hc.rank ? ' (rank ' + hc.rank + '/' + DUEL_RANK_MAX + ')' : '') + ' — ' + hc.ab.name + ': ' + hc.ab.text) + '">'
     + '<span class="duel-cost">' + hc.cost + '</span>'
     + duelArtHtml(hc.card)
     + duelRankChip(hc.rank)
     + '<span class="duel-hand-name">' + escapeHtml(tcgShortName(hc.card)) + '</span>'
     + '<span class="duel-hand-text">' + hc.ab.icon + ' ' + escapeHtml(hc.ab.text) + '</span>'
-    + '<span class="duel-hand-stats"><b class="duel-atk">' + hc.atk + '</b>'
+    + '<span class="duel-hand-stats">' + duelAtkHtml(hc.atk)
     + '<span class="duel-hand-el">' + el.icon + ' ' + '★'.repeat(hc.card.stars) + '</span>'
-    + '<b class="duel-hp">' + hc.hp + '</b></span>'
+    + duelDefHtml(hc.hp) + '</span>'
     + '</button>';
 }
 // Is this minion a legal target for whatever is currently armed?
@@ -40765,6 +40941,8 @@ function duelHeroHtml(who) {
     +     (armor ? '<span class="duel-hero-armor" title="Armor — spent before your life is">🛡 ' + armor + '</span>' : '') + '</div>'
     +   '<div class="duel-hero-mana">' + duelManaHtml(side) + '</div>'
     +   '<div class="duel-hero-deck">🎴 ' + side.deck.length + ' left · ✋ ' + side.hand.length + '</div>'
+    +   (!mine && r.plan ? '<div class="duel-hero-plan" title="' + escapeHtml('This rival brought ' + r.plan.name + ' — ' + r.plan.note) + '">'
+          + r.plan.em + ' ' + escapeHtml(r.plan.name) + '</div>' : '')
     + '</div></div>';
 }
 // The hero's own portrait where one has been drawn, its emoji until then —
@@ -40786,6 +40964,7 @@ function duelRender() {
   const r = duelRun;
   const shell = document.getElementById('duelShell');
   if (!shell) return;
+  duelPeekHide();          // the card it was pinned to is about to be replaced
   if (!r) { shell.innerHTML = ''; return; }
   const yourTurn = r.whose === 'P' && !r.busy && !r.over;
   shell.innerHTML = '<div class="duel-top">'
@@ -40864,6 +41043,183 @@ function duelOverHtml() {
     +   '<button type="button" class="btn btn-outline" onclick="duelOpenBuilder()">🎴 Change deck</button>'
     +   '<button type="button" class="btn btn-outline" onclick="duelClose()">Leave</button>'
     + '</div></div></div>';
+}
+
+// ---- 🔍 The card peek ------------------------------------------------------
+// Every card in the duel is small — a board minion is a thumbnail and a hand
+// card is 122px — so the ability text is clipped, the skill it came from is not
+// shown at all and the artwork is a postage stamp. Hovering any of them (in
+// hand, on the board, or in the deck builder) opens the FULL card beside it:
+// the art at size, both duel numbers, the duel ability in full, the arena skill
+// it was generated from, the whole arena stat block, and the training and merge
+// levels.
+//
+// It is ONE panel, positioned beside whatever is hovered, and it is
+// `pointer-events: none` — it can never sit between the student and the card
+// they are trying to drag. Anything that wants a peek carries `data-peek` with
+// a card or spell id; a board minion is peeked from its LIVE state (damage,
+// buffs, keywords), everything else from the card itself.
+let _duelPeekFor = null, _duelPeekBound = false, _duelPeekHold = 0, _duelPeekHeld = null;
+const DUEL_PEEK_HOLD_MS = 420;      // touch: how long a press has to last to be a peek
+function duelPeekEl() {
+  let el = document.getElementById('duelPeek');
+  if (!el) {
+    const host = document.getElementById('duelOverlay'); if (!host) return null;
+    el = document.createElement('div');
+    el.className = 'duel-peek'; el.id = 'duelPeek';
+    host.appendChild(el);
+  }
+  return el;
+}
+function duelPeekHide() {
+  _duelPeekFor = null;
+  const el = document.getElementById('duelPeek');
+  if (el) el.remove();
+}
+function duelPeekShow(host) {
+  if (!host) return;
+  const id = host.getAttribute('data-peek'); if (!id) return;
+  if (_duelPeekFor === host) return;                 // already showing this one
+  const uid = host.getAttribute('data-duel-uid');
+  const r = duelRun;
+  const live = (uid && r) ? (r.p.board.concat(r.e.board)).filter(m => m.uid === uid)[0] : null;
+  const html = duelPeekHtml(id, live);
+  if (!html) return;
+  const el = duelPeekEl(); if (!el) return;
+  _duelPeekFor = host;
+  el.innerHTML = html;
+  duelPeekPlace(el, host);
+}
+// Beside the card if there is room, otherwise on its other side, and always
+// inside the window — a peek that hangs off the screen is worse than none.
+function duelPeekPlace(el, host) {
+  const b = host.getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  el.style.visibility = 'hidden';
+  el.style.left = '0px'; el.style.top = '0px';
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const gap = 12;
+  let x = b.right + gap;
+  if (x + w > vw - 8) x = b.left - gap - w;
+  if (x < 8) x = Math.max(8, Math.min(vw - w - 8, b.left + b.width / 2 - w / 2));
+  let y = b.top + b.height / 2 - h / 2;
+  y = Math.max(8, Math.min(vh - h - 8, y));
+  el.style.left = Math.round(x) + 'px';
+  el.style.top = Math.round(y) + 'px';
+  el.style.visibility = '';
+}
+function duelPeekHtml(id, live) {
+  const sp = duelSpellById(id);
+  if (sp) {
+    return '<div class="duel-peek-card spell">'
+      + '<div class="duel-peek-head"><span class="duel-peek-cost">' + sp.cost + '</span>'
+      +   '<span class="duel-peek-em">' + sp.icon + '</span>'
+      +   '<div><div class="duel-peek-name">' + escapeHtml(sp.name) + '</div>'
+      +   '<div class="duel-peek-sub">✨ Spell · ' + sp.cost + ' mana</div></div></div>'
+      + '<div class="duel-peek-ab"><b>' + escapeHtml(sp.name) + '</b><br>' + escapeHtml(sp.text) + '</div>'
+      + '<div class="duel-peek-foot">Every student has all ' + DUEL_SPELLS.length + ' spells — they are not collected.</div>'
+      + '</div>';
+  }
+  const card = TCG_BY_ID[id]; if (!card) return '';
+  const s = tcgState() || { cards: {} };
+  // A minion ON the board is shown as it stands: the damage it has taken, the
+  // attack a War Cry gave it and the keywords it is actually carrying. A card
+  // in hand or in the builder is shown as the card.
+  const st = live ? { atk: live.atk, hp: live.hp, cost: 0, level: live.level, rank: live.rank | 0 } : duelCardStats(card);
+  const level = live ? live.level : st.level;
+  const ab = live ? live.ab : duelAbility(card, level);
+  const merge = tcgMergeLevel(card.id);
+  const arena = tcgStats(card, level, merge);
+  const sk = tcgLeveledSkill(card, level);
+  const el = TCG_ELEMENTS[card.element] || TCG_ELEMENTS.flame;
+  const aff = TCG_AFFINITY[tcgAffinity(card)];
+  const beats = TCG_AFFINITY[aff.beats], weak = TCG_AFFINITY[aff.weakTo];
+  const next = duelNextUpgrade(card, level);
+  const owned = (s.cards || {})[card.id] | 0;
+  const kws = live ? duelKwHtml(live) : '';
+  return '<div class="duel-peek-card star-' + card.stars + '">'
+    + '<div class="duel-peek-head">'
+    +   (live ? '' : '<span class="duel-peek-cost">' + st.cost + '</span>')
+    +   '<div class="duel-peek-art">' + duelArtHtml(card) + '</div>'
+    +   '<div><div class="duel-peek-name">' + escapeHtml(card.name) + '</div>'
+    +     '<div class="duel-peek-sub">' + '★'.repeat(card.stars) + ' ' + escapeHtml(tcgRarityName(card.stars))
+    +       ' · ' + el.icon + ' ' + escapeHtml(el.name)
+    +       (live ? '' : ' · ' + st.cost + ' mana') + '</div>'
+    +     '<div class="duel-peek-nums">' + duelAtkHtml(st.atk) + duelDefHtml(Math.max(0, st.hp))
+    +       (st.rank ? duelRankChip(st.rank) : '') + '</div>'
+    +   '</div>'
+    + '</div>'
+    + (kws ? '<div class="duel-peek-kws">' + kws + '</div>' : '')
+    + '<div class="duel-peek-ab"><b>' + ab.icon + ' ' + escapeHtml(ab.name) + '</b><br>' + escapeHtml(ab.text) + '</div>'
+    + '<div class="duel-peek-skill"><b>' + sk.icon + ' ' + escapeHtml(sk.name) + '</b> <span>arena skill</span><br>'
+    +   escapeHtml(sk.desc) + '</div>'
+    + '<div class="duel-peek-stats">'
+    +   tcgStatPill('atk', arena.atk) + tcgStatPill('def', arena.def)
+    +   tcgStatPill('heal', arena.heal) + tcgStatPill('hp', arena.hp)
+    + '</div>'
+    + '<div class="duel-peek-aff">' + aff.icon + ' ' + escapeHtml(aff.name)
+    +   ' <span title="Deals double damage to ' + escapeHtml(beats.name) + '">▲ ' + beats.icon + '</span>'
+    +   ' <span title="Takes double damage from ' + escapeHtml(weak.name) + '">▼ ' + weak.icon + '</span></div>'
+    + '<div class="duel-peek-foot">Lv ' + level + ' · ⟡ M ' + merge + ' · rank ' + (st.rank | 0) + '/' + DUEL_RANK_MAX
+    +   (next ? ' · next at Lv' + next.at + ': ' + escapeHtml(next.text) : ' · fully ranked')
+    +   (owned > 1 ? ' · you have ' + owned : '') + '</div>'
+    + '</div>';
+}
+// Bound ONCE on the document, not on the shell: duelRender() replaces the
+// shell's innerHTML and the builder replaces it again, so a listener living on
+// it would have to be re-attached on every repaint. Everything is filtered to
+// what is inside #duelOverlay.
+function duelPeekBind() {
+  if (_duelPeekBound) return;
+  _duelPeekBound = true;
+  const inOverlay = t => !!(t && t.closest && t.closest('#duelOverlay'));
+  document.addEventListener('mouseover', e => {
+    if (!inOverlay(e.target)) return;
+    const host = e.target.closest('[data-peek]');
+    if (host) duelPeekShow(host); else duelPeekHide();
+  });
+  document.addEventListener('mouseout', e => {
+    if (!_duelPeekFor) return;
+    const to = e.relatedTarget;
+    if (to && to.closest && to.closest('[data-peek]') === _duelPeekFor) return;
+    duelPeekHide();
+  });
+  // A press is a play, not a peek — get out of the way the moment one starts.
+  document.addEventListener('pointerdown', e => {
+    duelPeekHide();
+    clearTimeout(_duelPeekHold); _duelPeekHeld = null;
+    if (e.pointerType === 'mouse' || !inOverlay(e.target)) return;
+    const host = e.target.closest('[data-peek]'); if (!host) return;
+    // Touch has no hover, so a LONG PRESS is the peek. It cancels whatever drag
+    // or tap the press had started — a student holding a card still is asking
+    // to read it, not to play it.
+    const x0 = e.clientX, y0 = e.clientY;
+    _duelPeekHold = setTimeout(() => {
+      _duelPeekHeld = host;
+      try { duelPointerCancel(); } catch (_) {}
+      duelPeekShow(host);
+    }, DUEL_PEEK_HOLD_MS);
+    const moved = ev => { if (Math.abs(ev.clientX - x0) + Math.abs(ev.clientY - y0) > 8) { clearTimeout(_duelPeekHold); } };
+    const done = () => {
+      clearTimeout(_duelPeekHold);
+      document.removeEventListener('pointermove', moved);
+      document.removeEventListener('pointerup', done);
+      document.removeEventListener('pointercancel', done);
+    };
+    document.addEventListener('pointermove', moved);
+    document.addEventListener('pointerup', done);
+    document.addEventListener('pointercancel', done);
+  }, true);
+  // The click that follows a long press would play the card the student was
+  // only reading. Swallowed once, in the capture phase, before it reaches the
+  // inline onclick.
+  document.addEventListener('click', e => {
+    if (!_duelPeekHeld) return;
+    const host = e.target.closest && e.target.closest('[data-peek]');
+    if (host === _duelPeekHeld) { e.preventDefault(); e.stopPropagation(); }
+    _duelPeekHeld = null;
+  }, true);
+  window.addEventListener('scroll', () => duelPeekHide(), true);
 }
 
 // ---- Interaction: drag with a tap fallback ---------------------------------
