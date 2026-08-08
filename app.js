@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.266.0';
+const APP_VERSION = 'v1.266.1';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -27192,6 +27192,17 @@ function rpgHydrate(saved) {
   st.spireCards = Object.assign({}, (saved && saved.spireCards) || {});
   st.spireDeck = Array.isArray(saved && saved.spireDeck) ? saved.spireDeck.slice(0, 60) : [];
   st.stats = Object.assign(rpgDefaults().stats, (saved && saved.stats) || {});
+  // creditSum (the fractional marks total) only started counting in v1.231.0,
+  // while `marked` / `correct` go back to the start of the hero. An honestly
+  // accumulated creditSum can never sit below 0.95 × correct — every question
+  // in that count scored at least 0.95 — so anything lower is history the
+  // counter never saw, and it is seeded from the binary count once. Without
+  // this every question a student answered before that date reads as WRONG
+  // for the rest of their life on the All-Time board.
+  {
+    const sc = Number(st.stats.creditSum) || 0, sb = st.stats.correct | 0;
+    if (sc < sb * 0.95) st.stats.creditSum = Math.min(st.stats.marked | 0, sb);
+  }
   st.upgrades = Object.assign({}, (saved && saved.upgrades) || {});
   st.skills = Object.assign({}, (saved && saved.skills) || {});
   st.paths = Object.assign({}, (saved && saved.paths) || {});
@@ -28430,9 +28441,16 @@ function rpgScienceScore(p) {
 function rpgMyScoreParts() {
   const st = (rpgState && rpgState.stats) || {};
   const marked = st.marked | 0;
-  // creditSum is the fractional total; heroes from before it existed fall back
-  // to the binary correct count, which is the same number for MCQ work.
-  const credit = Math.min(marked, Math.max(0, st.creditSum != null ? Number(st.creditSum) || 0 : (st.correct | 0)));
+  // creditSum is the fractional total and `correct` is the binary lifetime
+  // count of the same questions. Take whichever is HIGHER, because `correct`
+  // is a valid LOWER BOUND on the fractional total — every question counted
+  // there scored at least 0.95, and part-right answers only add on top. A
+  // hero whose creditSum covers their whole history is always the higher of
+  // the two; one whose creditSum started mid-life (it only exists from
+  // v1.231.0, while `marked` is months older) would otherwise be ranked as
+  // though every question before that date had been answered WRONG. That is
+  // what put a student with 2,497 questions on the board at 8% right.
+  const credit = Math.min(marked, Math.max(0, Number(st.creditSum) || 0, st.correct | 0));
   const gq = st.gameQ | 0, gc = Math.min(gq, st.gameCorrect | 0);
   const q = marked + gq;              // every question done, each counting once
   const correct = credit + gc;
@@ -28490,16 +28508,25 @@ function rpgRowGameQ(r) {
 //      question count, and its `acc` is close enough to rank on until then.
 function rpgRowScoreParts(r) {
   const s = (r && r.score) || null;
+  const a = (r && r.audit) || {};
+  // The binary counters, when the row carries them. They are a LOWER BOUND on
+  // the fractional total, and they cover the student's whole history — which
+  // the payload's `correct` may not, if it was published by a build that read
+  // a creditSum still missing everything before v1.231.0. Taking the higher of
+  // the two re-ranks every already-published row on the next render, instead
+  // of leaving a student on 8% until they next happen to open the app.
+  const auditCorrect = (a.marked != null || a.gameQ != null)
+    ? Math.min(a.marked | 0, a.correct | 0) + Math.min(a.gameQ | 0, a.gameCorrect | 0)
+    : null;
   if (s && (s.f | 0) >= 2 && s.q != null) {
     const q = Math.max(0, Number(s.q) || 0);
-    const correct = s.correct != null ? Math.max(0, Number(s.correct) || 0)
+    let correct = s.correct != null ? Math.max(0, Number(s.correct) || 0)
       : q * Math.max(0, Math.min(1, Number(s.acc) || 0));
+    if (auditCorrect != null) correct = Math.max(correct, auditCorrect);
     return { q, correct: Math.min(q, correct) };
   }
-  const a = (r && r.audit) || {};
-  if (a.marked != null || a.gameQ != null) {
-    const marked = a.marked | 0, gq = a.gameQ | 0;
-    return { q: marked + gq, correct: Math.min(marked, a.correct | 0) + Math.min(gq, a.gameCorrect | 0) };
+  if (auditCorrect != null) {
+    return { q: (a.marked | 0) + (a.gameQ | 0), correct: auditCorrect };
   }
   if (s && s.marked != null) {
     const q = (s.marked | 0) + (s.gameQ | 0);
