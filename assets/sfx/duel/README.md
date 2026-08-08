@@ -22,7 +22,10 @@ cue, with no code change.
    | <https://opengameart.org/> | mixed — **check each file** | Prefer the CC0 ones |
 
    Search terms that land on the right thing: *impact*, *punch*, *sword hit*,
-   *heavy impact*, *explosion boom*, *magic heal*, *heal chime*, *monster death*.
+   *heavy impact*, *explosion boom*, *magic heal*, *heal chime*, *monster death*,
+   *card draw*, *card slide*, *magic whoosh*, *ice freeze*, *metal ping*,
+   *power up*, *level up*, *correct answer*, *wrong answer*, *victory fanfare*,
+   *game over*.
 
 2. Save them into this folder as `.mp3` (or `.ogg` / `.wav` — anything the
    browser can decode). Keep each one **short**: 0.2–0.8 s. A cue with a long
@@ -36,10 +39,12 @@ cue, with no code change.
 
 ## The cues
 
+### Blows — `DUEL_HIT_TIERS` / `DUEL_HEAL_TIERS`
+
 Damage cues are picked by how much damage a single blow does — that is the
-"the larger the damage, the more dramatic the sound" rule, and the tiers live in
-`DUEL_HIT_TIERS` in `app.js`. A hit on your own hero counts as 2 damage more
-than it is, because that is the one that can end the duel.
+"the larger the damage, the more dramatic the sound" rule. A hit on your own
+hero counts as 2 damage more than it is, because that is the one that can end
+the duel.
 
 | Cue | Fires on | What to pick |
 |---|---|---|
@@ -54,6 +59,31 @@ than it is, because that is the one that can end the duel.
 Each of the four damage tiers also sets how hard the screen shakes
 (`quake`, 1–4). The shake is CSS (`.duel-quake-1` … `-4` in `index.html`) and is
 suppressed entirely under `prefers-reduced-motion`.
+
+### Everything else — `DUEL_CUES`
+
+| Cue | Fires on | What to pick |
+|---|---|---|
+| `draw` | you draw a card | A short paper swish. The rival's draws are silent — their hand is face down |
+| `summon` | either side plays a minion | A soft thud, something landing |
+| `cast` | either side plays a spell | A magic whoosh |
+| `freeze` | a minion is frozen | An icy shiver. If the freeze also chips, the impact plays too |
+| `shield` | a Divine Shield takes a hit | A bright metallic ping |
+| `buff` | a minion gains attack | A short rising blip |
+| `rank` | a card ranks up mid-duel | A small fanfare |
+| `turn` | your turn begins | A quiet two-note chime |
+| `right` / `wrong` | the science question | A bright chime / a soft buzz |
+| `win` / `lose` | the duel ends | A full fanfare / a long fall |
+
+**Keep these quieter than the blows.** A draw happens every single turn and an
+impact does not; anything routine at fighting volume is what makes a student
+mute the mode. The test harness enforces it (`the routine cues stay under the
+blows`).
+
+Repeats of the same cue in one moment are staggered by `gap` — three opening
+draws come out as a riffle rather than one loud click — and the tail is dropped
+once it is more than `defer` behind, so a spell that draws six cards does not
+still be dealing a second later.
 
 ## Remote files
 
