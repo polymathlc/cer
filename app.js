@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.282.0';
+const APP_VERSION = 'v1.283.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -38194,10 +38194,30 @@ function _tcgPeekBox(label, title, body) {
   return '<div class="tcg-peek-skill"><b>' + title + '</b>' + (label ? ' <span>' + label + '</span>' : '')
     + '<br>' + body + '</div>';
 }
-function tcgPeekHtml(card, mode) {
-  const m = TCG_PEEK_MODES[mode] || TCG_PEEK_MODES.arena;
+// The body of ONE mode's panel. Split out of tcgPeekHtml so the pack reveal can
+// stack all four of them — see tcgAllModesHtml. A picker still shows exactly
+// one, because a picker is inside a game; the reveal is the moment a student
+// asks "what did I just get?", which is a question about the whole realm.
+function _tcgModeBodyHtml(card, mode) {
   let body = '';
-  if (mode === 'siege') {
+  if (mode === 'duel') {
+    // The duel runs its OWN ability, generated from the arena skill but never
+    // firing it, and its own 4/4 numbers.
+    const st = duelCardStats(card);
+    const ab = duelAbility(card, st.level);
+    const next = duelNextUpgrade(card, st.level);
+    body = _tcgPeekBox('duel ability', ab.icon + ' ' + escapeHtml(ab.name), escapeHtml(ab.text))
+      + '<div class="tcg-peek-stats">'
+      +   '<div class="tcg-peek-n"><b>' + duelAtkHtml(st.atk) + '</b><span>attack</span></div>'
+      +   '<div class="tcg-peek-n"><b>' + duelDefHtml(st.hp) + '</b><span>defence</span></div>'
+      +   '<div class="tcg-peek-n"><b>💧 ' + st.cost + '</b><span>mana to play</span></div>'
+      +   '<div class="tcg-peek-n"><b>⬆ ' + (st.rank | 0) + '/' + DUEL_RANK_MAX + '</b><span>rank</span></div>'
+      + '</div>'
+      + '<div class="tcg-peek-foot">' + (next
+          ? 'Next upgrade at <b>Lv' + next.at + '</b>: ' + escapeHtml(next.text)
+          : 'Fully ranked — every upgrade earned.')
+        + '<br>A card ranks up every ' + DUEL_RANK_EVERY + ' training levels, and the rarer it is the bigger each step.</div>';
+  } else if (mode === 'siege') {
     // The lane battlefield does not run the arena skill — it TRANSLATES it into
     // a lane behaviour, so that behaviour is the only honest thing to show.
     const role = emsRole(card), b = emsBehaviour(card), p = emsDefProfile(card);
@@ -38240,11 +38260,37 @@ function tcgPeekHtml(card, mode) {
       +   ' · ▲ double damage to ' + beats.icon + ' ' + escapeHtml(beats.name)
       +   ' · ▼ double damage from ' + weak.icon + ' ' + escapeHtml(weak.name) + '</div>';
   }
+  return body;
+}
+function tcgPeekHtml(card, mode) {
+  const m = TCG_PEEK_MODES[mode] || TCG_PEEK_MODES.arena;
   return '<div class="tcg-peek-card star-' + card.stars + '">'
     + '<button type="button" class="tcg-peek-x" onclick="tcgPeekClose()" title="Close">✕</button>'
     + '<div class="tcg-peek-mode">' + m.icon + ' in ' + escapeHtml(m.name) + '</div>'
     + _tcgPeekHead(card)
-    + body
+    + _tcgModeBodyHtml(card, mode)
+    + '</div>';
+}
+// EVERY mode at once. Used by the pack reveal, where the question is not "what
+// does this do in the game I am standing in" but "what have I just won" — and
+// the honest answer to that is all four, because one monster means four
+// different things across the realm.
+const TCG_ALL_MODES = [
+  { key: 'arena',   icon: '⚔️', name: 'Battle Arena',  sub: 'and the Infinite Dungeon' },
+  { key: 'duel',    icon: '🎴', name: 'Ember Duel',    sub: 'the card game' },
+  { key: 'siege',   icon: '🌋', name: 'Ember Siege',   sub: 'lane defence' },
+  { key: 'legends', icon: '⚔️', name: 'Ember Legends', sub: 'play AS it' }
+];
+function tcgAllModesHtml(card) {
+  return '<div class="tcg-peek-card star-' + card.stars + ' allmodes">'
+    + _tcgPeekHead(card)
+    + TCG_ALL_MODES.map(m => {
+        let body = '';
+        try { body = _tcgModeBodyHtml(card, m.key); } catch (e) { body = ''; }
+        if (!body) return '';
+        return '<div class="tcg-peek-modehead">' + m.icon + ' <b>' + escapeHtml(m.name) + '</b> <span>'
+          + escapeHtml(m.sub) + '</span></div>' + body;
+      }).join('')
     + '</div>';
 }
 let _tcgPeekOn = null;
@@ -39038,21 +39084,32 @@ function _tcgShowRevealCards(pack, pulls) {
   const o = document.createElement('div');
   o.className = 'tcg-overlay';
   o.id = 'tcgRevealOverlay';
+  // Two columns: the cards, and a panel that fills the empty space beside them
+  // with everything the card the student is pointing at can do. A pack is the
+  // one moment they are deciding what they have WON, so it shows all four modes
+  // rather than the one they happen to be standing in.
   o.innerHTML = '<div class="tcg-reveal-inner">'
     + '<div class="tcg-reveal-title">' + pack.em + ' ' + escapeHtml(pack.name) + ' opened!</div>'
     + '<div class="tcg-reveal-sub">Tap each card to flip it over…</div>'
-    + '<div class="tcg-reveal-row">' + pulls.map((pl, i) =>
-        '<div class="tcg-flip" id="tcgflip-' + i + '" data-stars="' + (pl.card || pl.arti).stars + '" style="animation-delay:' + (i * 0.12) + 's;" onclick="tcgFlipCard(' + i + ')" title="Hover halo hints at the rarity…">'
-        + '<div class="tcg-flip-inner">'
-        +   '<div class="tcg-flip-back">' + tcgCardBackHtml() + '</div>'
-        +   '<div class="tcg-flip-front">' + (pl.arti
-              ? tcgArtifactCardHtml(pl.arti, { isNew: pl.isNew, reveal: true, lvl: pl.lvl,
-                  level: (tcgState() && (tcgState().artiLevels || {})[pl.arti.id]) || 1 })
-              : tcgCardHtml(pl.card, { isNew: pl.isNew, mergedBy: pl.merge, reveal: true })) + '</div>'
-        + '</div></div>').join('') + '</div>'
-    + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">'
-    +   '<button class="btn tcg-overlay-btn" onclick="tcgFlipAll()">🔄 Flip all</button>'
-    +   '<button class="btn btn-primary" onclick="tcgCloseReveal()">Done</button>'
+    + '<div class="tcg-reveal-stage">'
+    +   '<div class="tcg-reveal-main">'
+    +     '<div class="tcg-reveal-row">' + pulls.map((pl, i) =>
+            '<div class="tcg-flip" id="tcgflip-' + i + '" data-stars="' + (pl.card || pl.arti).stars + '" style="animation-delay:' + (i * 0.12) + 's;"'
+            + ' onclick="tcgFlipCard(' + i + ')" onmouseenter="tcgRevealDetail(' + i + ')" onfocus="tcgRevealDetail(' + i + ')" tabindex="0"'
+            + ' title="Hover halo hints at the rarity…">'
+            + '<div class="tcg-flip-inner">'
+            +   '<div class="tcg-flip-back">' + tcgCardBackHtml() + '</div>'
+            +   '<div class="tcg-flip-front">' + (pl.arti
+                  ? tcgArtifactCardHtml(pl.arti, { isNew: pl.isNew, reveal: true, lvl: pl.lvl,
+                      level: (tcgState() && (tcgState().artiLevels || {})[pl.arti.id]) || 1 })
+                  : tcgCardHtml(pl.card, { isNew: pl.isNew, mergedBy: pl.merge, reveal: true })) + '</div>'
+            + '</div></div>').join('') + '</div>'
+    +     '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">'
+    +       '<button class="btn tcg-overlay-btn" onclick="tcgFlipAll()">🔄 Flip all</button>'
+    +       '<button class="btn btn-primary" onclick="tcgCloseReveal()">Done</button>'
+    +     '</div>'
+    +   '</div>'
+    +   '<aside class="tcg-reveal-side" id="tcgRevealSide">' + _tcgRevealSideEmpty() + '</aside>'
     + '</div></div>';
   document.body.appendChild(o);
   o._pulls = pulls;
@@ -39062,8 +39119,47 @@ function _tcgShowRevealCards(pack, pulls) {
 // the moment. Confetti stays where it is earned: winning an arena battle.
 function tcgFlipCard(i) {
   const f = document.getElementById('tcgflip-' + i);
-  if (!f || f.classList.contains('flipped')) return;
+  if (!f) return;
+  if (f.classList.contains('flipped')) { tcgRevealDetail(i); return; }   // already open: show it
   f.classList.add('flipped');
+  tcgRevealDetail(i);
+}
+function _tcgRevealSideEmpty() {
+  return '<div class="tcg-reveal-side-empty">'
+    + '<div class="big">🔍</div>'
+    + '<p><b>Hover a card</b> to see everything it can do.</p>'
+    + '<p class="dim">One monster means four different things — what it does in the Battle Arena, in a duel, on the Siege lanes and when you play AS it in Legends. It is all here, so you know what you have just won.</p>'
+    + '</div>';
+}
+// Fill the side panel from the card the student is pointing at. A card that has
+// not been turned over yet shows nothing — the flip is the moment, and printing
+// the answer beside a face-down card would give it away.
+function tcgRevealDetail(i) {
+  const side = document.getElementById('tcgRevealSide');
+  const o = document.getElementById('tcgRevealOverlay');
+  const f = document.getElementById('tcgflip-' + i);
+  if (!side || !o || !f) return;
+  const pl = (o._pulls || [])[i];
+  if (!pl) return;
+  if (!f.classList.contains('flipped')) { side.innerHTML = _tcgRevealSideEmpty(); return; }
+  o.querySelectorAll('.tcg-flip.detailed').forEach(n => n.classList.remove('detailed'));
+  f.classList.add('detailed');
+  if (pl.arti) {
+    const lv = _tcgClampArti((tcgState() && (tcgState().artiLevels || {})[pl.arti.id]) || 1);
+    side.innerHTML = '<div class="tcg-peek-card star-' + pl.arti.stars + ' allmodes">'
+      + '<div class="tcg-peek-head">'
+      +   '<div class="tcg-peek-art">' + (tcgArtifactArtUrl(pl.arti.id)
+            ? tcgArtifactIconHtml(pl.arti, 'tcg-arti-card-img') : '<div>' + pl.arti.icon + '</div>') + '</div>'
+      +   '<div><div class="tcg-peek-name">' + escapeHtml(pl.arti.name) + '</div>'
+      +     '<div class="tcg-peek-sub">' + '★'.repeat(pl.arti.stars) + ' ' + escapeHtml(tcgRarityName(pl.arti.stars)) + ' · 🔱 Artifact</div>'
+      +     '<div class="tcg-peek-sub">⟡ Lv ' + lv + ' of ' + TCG_ARTI_MAX + '</div>'
+      +   '</div></div>'
+      + _tcgPeekBox('equip ONE for your whole team', pl.arti.icon + ' Team effect', escapeHtml(tcgArtiBlurb(pl.arti, lv)))
+      + '<div class="tcg-peek-foot">It works in <b>every</b> mode that fields your team — the Battle Arena and the Infinite Dungeon. Every repeat copy you pull is <b>+' + tcgArtiGain(pl.arti.stars) + ' level' + (tcgArtiGain(pl.arti.stars) === 1 ? '' : 's') + '</b>, and every level makes it stronger.</div>'
+      + '</div>';
+    return;
+  }
+  side.innerHTML = tcgAllModesHtml(pl.card);
 }
 function tcgFlipAll() {
   const o = document.getElementById('tcgRevealOverlay');
@@ -45952,6 +46048,7 @@ window.tcgOpenFreePack = tcgOpenFreePack;
 window.tcgAdminGold = tcgAdminGold;
 window.tcgAdminGrantAll = tcgAdminGrantAll;
 window.tcgFlipCard = tcgFlipCard;
+window.tcgRevealDetail = tcgRevealDetail;
 window.tcgFlipAll = tcgFlipAll;
 window.tcgCloseReveal = tcgCloseReveal;
 window.tcgToggleTeam = tcgToggleTeam;
