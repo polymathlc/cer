@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.281.0';
+const APP_VERSION = 'v1.282.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -25273,6 +25273,13 @@ function _computePrizeWinners() {
   // Strike's, so the same standings show whichever month is selected. `rows`
   // is the ban-filtered board, so an excluded student cannot win here either.
   push('embers', '_tcg', 6, r => rpgRowGameQ(r).correct, (r, v) => v.toLocaleString() + ' correct in games');
+  // 🎴 Ember Duel pays its top 3 on questions × accuracy², all-time like the
+  // two above, so the same standings show whichever month is selected.
+  push('duel', '_duel', 3, r => rpgRowDuelScore(r), (r, v) => {
+    const d = rpgRowDuel(r);
+    return v.toLocaleString() + ' score · ' + d.q.toLocaleString() + ' Q'
+      + (d.q ? ' · ' + Math.round(d.correct / d.q * 100) + '%' : '');
+  });
   return out;
 }
 function setPrizeMonth(which) {
@@ -25300,6 +25307,7 @@ function renderPrizeClaims() {
     + (_usagePrizeMonth === 'cur' ? ' — still in progress, standings as they stand right now' : ' — the completed month');
   const _prizeLabel = c => c.category === 'defenders' ? '🧪 Defenders' : c.category === 'raiders' ? '👾 Raiders'
     : c.category === 'spire' ? '🃏 Spire' : c.category === 'strike' ? '🔫 Strike' : c.category === 'legends' ? '⚔️ Ember Legends' : c.category === 'siege' ? '🌋 Ember Siege'
+    : c.category === 'duel' ? '🎴 Ember Duel'
     : c.category === 'embers' ? '🔥 Realm of Embers'
     : c.category === 'streak' ? '🎟️ 30-day streak' : c.category === 'encounter' ? '⚡ Encounter quest' : '🎁 Questions';
   const _claimResult = c => ['defenders', 'raiders', 'spire', 'legends', 'strike', 'siege'].includes(c.category)
@@ -27298,6 +27306,7 @@ function rpgDefaults() {
     v: 2, gold: 60, xp: 0, hp: null, hidden: false, battleMin: false, gender: null,
     monthKey: null, monthXp: 0, lastMonthKey: null, lastMonthXp: 0, advRuns: null, dungeonFloor: 1,
     monthQ: 0, lastMonthQ: 0, monthQids: {}, monthPrints: {}, prizeAck: {},
+    duelQ: 0, duelCorrect: 0,          // 🎴 Ember Duel board: questions done and got right
     gameScores: { defenders: { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null },
                   raiders:   { best: 0, bestLabel: "", monthBest: 0, monthLabel: "", monthKey: null, lastBest: 0, lastLabel: "", lastKey: null } },
     inventory: { wood_sword: 1, cloth_tunic: 1 },
@@ -28627,6 +28636,17 @@ function rpgScorePayload() {
 // only go up by actually playing and answering.
 //
 // The counters started in v1.231.0, so every student begins level here.
+// A published row's duel numbers, and the score they make. Same shape as the
+// All-Time board — questions done × accuracy² — so accuracy counts TWICE and
+// the board cannot be climbed by rattling through questions carelessly.
+function rpgRowDuel(r) {
+  const d = (r && r.duel) || {};
+  return { q: d.q | 0, correct: d.correct | 0, wins: d.wins | 0, losses: d.losses | 0 };
+}
+function rpgRowDuelScore(r) {
+  const d = rpgRowDuel(r);
+  return rpgScienceScore({ q: d.q, acc: d.q > 0 ? d.correct / d.q : 0 });
+}
 function rpgRowGameQ(r) {
   const g = (r && r.games) || null;
   if (g) return { q: g.q | 0, correct: g.correct | 0 };
@@ -29649,6 +29669,12 @@ function rpgPublishLeaderboard() {
         // …and what it is levelled to, or a rival's Wyrmheart Ruby fights at Lv1.
         artiLvl: _tcgClampArti((rpgState.tcg.artiLevels || {})[rpgState.tcg.artifact] || 1)
       } : null,
+      // 🎴 Ember Duel: the two numbers its board ranks on, plus the record.
+      duel: {
+        q: rpgState.duelQ | 0, correct: rpgState.duelCorrect | 0,
+        wins: ((rpgState.tcg && rpgState.tcg.duel) || {}).wins | 0,
+        losses: ((rpgState.tcg && rpgState.tcg.duel) || {}).losses | 0
+      },
       updatedAt: new Date().toISOString()
     }, { merge: true }).catch(e => console.warn("leaderboard publish", e));
   }, 1200);
@@ -29731,13 +29757,13 @@ async function _getRetiredUids() {
 // them back.
 const BOARD_BAN_SCOPES = {
   all:    { label: 'Every leaderboard', short: 'all boards', tabs: null },
-  embers: { label: '🔥 Realm of Embers family (Embers, Siege, Legends)', short: 'Embers family', tabs: ['tcg', 'siege', 'legend'] }
+  embers: { label: '🔥 Realm of Embers family (Embers, Siege, Legends, Duel)', short: 'Embers family', tabs: ['tcg', 'siege', 'legend', 'duel'] }
 };
 // Which board tab a prize category is decided on — so a scoped ban keeps a
 // student out of the winners table for exactly the boards they are off.
 const PRIZE_CATEGORY_TAB = {
   questions: 'month', defenders: 'td', raiders: 'raid', spire: 'spire',
-  legends: 'legend', siege: 'siege', strike: 'fps', embers: 'tcg'
+  legends: 'legend', siege: 'siege', strike: 'fps', embers: 'tcg', duel: 'duel'
 };
 let _boardBansCache = null;          // uid -> scope key, or null until first read
 function rpgBoardBanMap() { return _boardBansCache || {}; }
@@ -29815,6 +29841,7 @@ function rpgBoardMetric(r) {
   // Realm of Embers TCG: ranked by TOTAL TEAM POWER, the same metric the board
   // inside the TCG page uses.
   if (rpgBoardTab === "tcg") return rpgRowGameQ(r).correct;
+  if (rpgBoardTab === "duel") return rpgRowDuelScore(r);
   if (rpgBoardTab === "month") return r.monthKey === rpgMonthKey() ? (r.monthQ || 0) : 0;
   if (rpgBoardTab === "papers") return r.monthKey === rpgMonthKey() ? (r.papersQ || 0) : 0;
   if (rpgIsGameTab()) {
@@ -29827,7 +29854,7 @@ function rpgBoardMetric(r) {
   if (r.lastMonthKey === prev) return r.lastMonthQ || 0;  // rolled over
   return 0;
 }
-function rpgBoardUnit() { return rpgBoardTab === "alltime" ? "score" : rpgBoardTab === "fps" || rpgBoardTab === "tcg" ? "correct" : rpgIsGameTab() ? "pts" : "questions"; }
+function rpgBoardUnit() { return rpgBoardTab === "alltime" || rpgBoardTab === "duel" ? "score" : rpgBoardTab === "fps" || rpgBoardTab === "tcg" ? "correct" : rpgIsGameTab() ? "pts" : "questions"; }
 // Pretty value for a row: game tabs show the run's label (e.g. "Floor 7 · 142 kills").
 function rpgBoardValueHtml(r) {
   const sub = (rpgBoardTab === "month" || rpgBoardTab === "papers") ? "this month" : rpgBoardTab === "lastmonth" ? "last month" : rpgIsGameTab() ? "best this month" : "all-time";
@@ -29841,6 +29868,12 @@ function rpgBoardValueHtml(r) {
     const pct = g.q > 0 ? Math.round(g.correct / g.q * 100) : null;
     const extra = t.power ? ` · ⚔️ ${(t.power | 0).toLocaleString()} power` : "";
     return `${r.shownVal.toLocaleString()} correct<span>🎮 ${g.q.toLocaleString()} answered in games${pct != null ? ` · ${pct}%` : ""}${extra}</span>`;
+  }
+  if (rpgBoardTab === "duel") {
+    const d = rpgRowDuel(r);
+    const acc = d.q > 0 ? Math.round(d.correct / d.q * 100) : null;
+    const rec = (d.wins || d.losses) ? ` · 🏆 ${d.wins}W–${d.losses}L` : "";
+    return `${r.shownVal.toLocaleString()} score<span>⚡ ${d.q.toLocaleString()} answered in duels${acc != null ? ` · ✅ ${acc}% right` : ""}${rec}</span>`;
   }
   if (rpgIsGameTab()) {
     const g = r[rpgBoardTab] || {};
@@ -29860,6 +29893,7 @@ function rpgPrizeBadge(rank) {
   if (rpgBoardTab === "papers") return "";   // ranking board only — no prize attached
   if (rpgBoardTab === "fps") return rank <= 3 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rpgBoardTab === "tcg") return rank <= 6 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
+  if (rpgBoardTab === "duel") return rank <= 3 ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
   if (rpgIsGameTab()) {
     if (rpgPrizeOffFor(rpgBoardTab, rpgMonthKey())) return "";  // month runs without a prize
     return rank <= rpgGameTopN(rpgBoardTab) ? `<span class="rpg-board-prize">🎁 $10 voucher</span>` : "";
@@ -29874,6 +29908,7 @@ function rpgRowClass(rank) {
   if (rpgBoardTab === "papers") return "";
   if (rpgBoardTab === "fps") return rank <= 3 ? `prize-${rank}` : "";
   if (rpgBoardTab === "tcg") return rank <= 3 ? `prize-${rank}` : rank <= 6 ? "prize-month" : "";
+  if (rpgBoardTab === "duel") return rank <= 3 ? `prize-${rank}` : "";
   if (rpgIsGameTab()) {
     if (rpgPrizeOffFor(rpgBoardTab, rpgMonthKey())) return "";
     return rank <= 3 ? `prize-${rank}` : rank <= rpgGameTopN(rpgBoardTab) ? "prize-month" : "";
@@ -29886,6 +29921,8 @@ function rpgRowClass(rank) {
 function rpgBoardNote() {
   if (rpgBoardTab === "tcg")
     return `<div class="rpg-board-note">🔥 <b>Realm of Embers:</b> the <b>top 6</b> by <b>questions answered correctly inside the games</b> each win a <b>$10 Popular voucher</b>. Defenders, Raiders, Spire, Legends, Slayers, 🌋 Ember Siege and the 🎓 trainer all count — nothing you buy can move this board. Counting from August 2026, so everyone starts level.</div>`;
+  if (rpgBoardTab === "duel")
+    return `<div class="rpg-board-note">🎴 <b>Ember Duel:</b> the <b>top 3</b> each win a <b>$10 Popular voucher</b>. Ranked on <b>⚡ Ember Insight questions answered in duels × your accuracy, counted twice</b> — so answering more climbs it, and answering carefully climbs it faster. Winning duels is worth nothing here; only the questions are.</div>`;
   if (rpgBoardTab === "legend" && !rpgPrizeOffFor("legend", rpgMonthKey()))
     return `<div class="rpg-board-note">⚔️ <b>Ember Legends:</b> the <b>top 5</b> by best wave reached this month each win a <b>$10 Popular voucher</b>.</div>`;
   if (rpgBoardTab === "siege" && !rpgPrizeOffFor("siege", rpgMonthKey()))
@@ -29904,6 +29941,11 @@ async function rpgRenderLeaderboard(force = false) {
   document.querySelectorAll("[data-rpgboard]").forEach(b => b.classList.toggle("active", b.dataset.rpgboard === rpgBoardTab));
   // Ember Legends is beta-gated, so its board and its prize line stay hidden
   // until the admin releases it — no advertising a prize nobody can play for.
+  // Ember Duel is default-CLOSED until the admin launches it, so its board and
+  // its prize line stay hidden the same way Legends' do.
+  const duelTab = document.getElementById('rpgBoardTabDuel');
+  if (duelTab) duelTab.style.display = duelAccessAllowed() ? '' : 'none';
+  if (!duelAccessAllowed() && rpgBoardTab === "duel") rpgBoardTab = "month";
   const legendOn = elgAccessAllowed();
   const legendTab = document.querySelector('[data-rpgboard="legend"]');
   if (legendTab) legendTab.style.display = legendOn ? "" : "none";
@@ -39525,6 +39567,8 @@ function tcgGuideHtml() {
           '<b>Taunt</b> — enemies must attack it first. <b>Divine Shield</b> — it ignores the first hit. <b>Charge / Rush</b> — it can attack the turn it lands. <b>Lifesteal</b> — its damage heals your hero. <b>Poisonous</b> — anything it damages is destroyed. <b>Frozen</b> — it misses its next attack.'],
         ['Spells',
           '' + DUEL_SPELLS.length + ' of them, in every deck: direct damage to any target (' + DUEL_SPELLS.filter(x => x.kind === 'dmgAny').length + ' of them), board sweeps, <b>card draw</b>, healing, freezes and buffs. A spell that needs a target waits for you to tap one.'],
+        ['🏆 The Ember Duel board',
+          'There is a <b>🎴 Duel</b> tab on the Leaderboard, and the <b>top 3 each win a $10 Popular voucher</b>. It ranks on the <b>⚡ Ember Insight questions you answer inside duels, multiplied by your accuracy counted twice</b> — the same rule the All-Time board uses. So answering more climbs it, and answering carefully climbs it faster: 200 questions at 90% beats 400 at 60%. <b>Winning duels is worth nothing on it</b> — only the questions are, which is why a duel costs no credits and can be played as often as you like.'],
         ['⚡ Ember Insight',
           'Once a turn you can answer a science question. Get it right and you <b>draw a card and get a mana crystal back</b> — and, like every other mode, the question <b>🎓 trains every monster on your board</b> and pays 🪙 points. That is the only thing a duel pays: winning is worth nothing but the record, so it can be fought as often as you like.'],
         ['How to attack',
@@ -39886,6 +39930,18 @@ function duelHandNeed(hc) {
   if (!hc) return null;
   return hc.type === 'spell' ? (DUEL_TARGETED[hc.spell.kind] || null)
                              : (DUEL_BC_TARGETED[(hc.ab || {}).kind] || null);
+}
+
+// ---- 🎴 The duel's own question counters -----------------------------------
+// The 🎴 Ember Duel board ranks on QUESTIONS DONE × ACCURACY², the same shape
+// the All-Time board uses — so accuracy counts twice and the board cannot be
+// climbed by rattling through questions carelessly. These two numbers are all
+// it needs, and they live beside the rest of the hero's stats.
+function duelNoteQuestion(correct) {
+  if (!rpgState) return;
+  rpgState.duelQ = (rpgState.duelQ | 0) + 1;
+  if (correct) rpgState.duelCorrect = (rpgState.duelCorrect | 0) + 1;
+  try { rpgSave(); } catch (_) {}
 }
 
 // ---- 🦸 HEROES -------------------------------------------------------------
@@ -42595,6 +42651,11 @@ function duelAnswer(i) {
   duelSfxPlay(correct ? 'right' : 'wrong');
   const ms = Math.max(0, Math.round((typeof performance !== 'undefined' ? performance.now() : Date.now()) - r.quiz.at));
   try { rpgAwardGameQuestion(q.id, correct, ms); } catch (_) {}
+  // The duel's own counters, for the 🎴 board. Counted HERE and nowhere else —
+  // this is the one place a duel question is answered — and counted whether or
+  // not rpgAwardGameQuestion decided to pay for it, because the board ranks on
+  // questions done, not on points earned.
+  try { duelNoteQuestion(correct); } catch (_) {}
   try { _duelLogAttempt(q, correct); } catch (_) {}
   const box = document.getElementById('duelQuiz');
   (box || document).querySelectorAll('.duel-quiz-opt').forEach((b, n) => {
