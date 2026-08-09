@@ -6813,6 +6813,18 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 .tcg-arti-stars { color: #f0b542; font-size: 0.78rem; letter-spacing: 2px; margin-bottom: 4px; text-shadow: 0 1px 2px rgba(154,111,24,0.35); }
 .tcg-arti-count { font-weight: 700; font-size: 0.74rem; color: var(--text-muted); }
 .tcg-arti-blurb { font-size: 0.78rem; color: var(--text-muted); line-height: 1.45; }
+/* ⟡ The artifact's level. It sits between the stars and the blurb because the
+   blurb below it already shows the CURRENT numbers — the two read together. */
+.tcg-arti-lvl {
+  display: inline-flex; align-items: baseline; gap: 2px; margin: 4px auto 2px;
+  font-family: 'Cinzel', Georgia, serif; font-size: 0.62rem; font-weight: 900; letter-spacing: 0.03em;
+  padding: 2px 9px; border-radius: 999px; color: #e6d9ff;
+  background: linear-gradient(135deg, rgba(124,58,237,0.55), rgba(34,211,238,0.35));
+  border: 1px solid rgba(196,181,253,0.5);
+}
+.tcg-arti-lvl i { font-style: normal; font-weight: 700; opacity: 0.6; font-size: 0.9em; }
+.tcg-arti-lvl.max { color: #14161a; background: linear-gradient(135deg, #f0cd7a, #c9a227); border-color: transparent; }
+.tcgb-arti-pill i { font-style: normal; color: #c4b5fd; font-size: 0.9em; }
 .tcg-arti.locked { opacity: 0.6; background: var(--surface-alt); }
 .tcg-arti.locked:hover { border-color: var(--border); transform: none; }
 .tcg-arti.locked .tcg-arti-stars { filter: grayscale(1); }
