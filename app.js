@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.283.1';
+const APP_VERSION = 'v1.283.2';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -39116,40 +39116,82 @@ function _tcgShowRevealCards(pack, pulls) {
     + '</div></div>';
   document.body.appendChild(o);
   o._pulls = pulls;
+  _tcgRevealPin = null; _tcgRevealScrollAt = 0;
+  // Any wheel or scroll inside the overlay freezes the hover swap briefly, so
+  // the cards the cursor is dragged across on the way cannot steal the panel.
+  const stamp = () => { _tcgRevealScrollAt = Date.now(); };
+  o.addEventListener('wheel', stamp, { passive: true });
+  o.addEventListener('scroll', stamp, { passive: true, capture: true });
+  o.addEventListener('touchmove', stamp, { passive: true });
 }
 // No confetti here, and none on the tear-open burst either. Paper falling over
 // a 7★ pull cheapens it — the card's own art, its halo and the rarity line are
 // the moment. Confetti stays where it is earned: winning an arena battle.
+// Which card the panel is HELD on, and when the student last scrolled.
+//
+// Two things made the panel unusable and both come back to the same moment:
+// reading down the panel meant scrolling, scrolling dragged the cursor across
+// the cards, and every card it crossed replaced what was being read. The layout
+// fix (the panel is its own scroll region now) removes most of it; these two
+// close the rest — a wheel anywhere freezes the hover swap for a moment, and a
+// CLICK holds the panel on one card until it is released.
+let _tcgRevealPin = null, _tcgRevealScrollAt = 0;
+const TCG_REVEAL_SCROLL_HOLD = 500;   // ms after a scroll that hover cannot swap the panel
 function tcgFlipCard(i) {
   const f = document.getElementById('tcgflip-' + i);
   if (!f) return;
-  if (f.classList.contains('flipped')) { tcgRevealDetail(i); return; }   // already open: show it
+  if (f.classList.contains('flipped')) { tcgRevealPin(i); return; }   // already open: hold it here
   f.classList.add('flipped');
-  tcgRevealDetail(i);
+  _tcgRevealPin = null;
+  tcgRevealDetail(i, true);
+}
+// Click a card that is already turned over: hold the panel on it, or let go if
+// it was already held.
+function tcgRevealPin(i) {
+  _tcgRevealPin = (_tcgRevealPin === i) ? null : i;
+  tcgRevealDetail(i, true);
+}
+function tcgRevealUnpin() {
+  const was = _tcgRevealPin;
+  _tcgRevealPin = null;
+  if (was != null) tcgRevealDetail(was, true);
 }
 function _tcgRevealSideEmpty() {
   return '<div class="tcg-reveal-side-empty">'
     + '<div class="big">🔍</div>'
-    + '<p><b>Hover a card</b> to see everything it can do.</p>'
+    + '<p><b>Hover a card</b> to see everything it can do — <b>click it</b> to hold it here while you read.</p>'
     + '<p class="dim">One monster means four different things — what it does in the Battle Arena, in a duel, on the Siege lanes and when you play AS it in Legends. It is all here, so you know what you have just won.</p>'
     + '</div>';
 }
 // Fill the side panel from the card the student is pointing at. A card that has
 // not been turned over yet shows nothing — the flip is the moment, and printing
 // the answer beside a face-down card would give it away.
-function tcgRevealDetail(i) {
+function tcgRevealDetail(i, force) {
   const side = document.getElementById('tcgRevealSide');
   const o = document.getElementById('tcgRevealOverlay');
   const f = document.getElementById('tcgflip-' + i);
   if (!side || !o || !f) return;
+  if (!force) {
+    // Held on another card, or the cursor only crossed this one because the
+    // student was scrolling — either way, leave what they are reading alone.
+    if (_tcgRevealPin != null && _tcgRevealPin !== i) return;
+    if (Date.now() - _tcgRevealScrollAt < TCG_REVEAL_SCROLL_HOLD) return;
+  }
   const pl = (o._pulls || [])[i];
   if (!pl) return;
   if (!f.classList.contains('flipped')) { side.innerHTML = _tcgRevealSideEmpty(); return; }
-  o.querySelectorAll('.tcg-flip.detailed').forEach(n => n.classList.remove('detailed'));
+  o.querySelectorAll('.tcg-flip.detailed, .tcg-flip.pinned').forEach(n => n.classList.remove('detailed', 'pinned'));
   f.classList.add('detailed');
+  if (_tcgRevealPin === i) f.classList.add('pinned');
+  const pinned = _tcgRevealPin === i;
+  const pinBar = '<button type="button" class="tcg-peek-pin' + (pinned ? ' on' : '') + '"'
+    + ' onclick="' + (pinned ? 'tcgRevealUnpin()' : 'tcgRevealPin(' + i + ')') + '">'
+    + (pinned ? '📌 <span><b>Held on this card.</b> Click to follow the cursor again.</span>'
+              : '👆 <span>Following your cursor — <b>click a card to hold it here</b> while you read.</span>')
+    + '</button>';
   if (pl.arti) {
     const lv = _tcgClampArti((tcgState() && (tcgState().artiLevels || {})[pl.arti.id]) || 1);
-    side.innerHTML = '<div class="tcg-peek-card star-' + pl.arti.stars + ' allmodes">'
+    side.innerHTML = pinBar + '<div class="tcg-peek-card star-' + pl.arti.stars + ' allmodes">'
       + '<div class="tcg-peek-head">'
       +   '<div class="tcg-peek-art">' + (tcgArtifactArtUrl(pl.arti.id)
             ? tcgArtifactIconHtml(pl.arti, 'tcg-arti-card-img') : '<div>' + pl.arti.icon + '</div>') + '</div>'
@@ -39162,7 +39204,8 @@ function tcgRevealDetail(i) {
       + '</div>';
     return;
   }
-  side.innerHTML = tcgAllModesHtml(pl.card);
+  side.innerHTML = pinBar + tcgAllModesHtml(pl.card);
+  side.scrollTop = 0;                 // a new card starts at its top, not where the last one was left
 }
 function tcgFlipAll() {
   const o = document.getElementById('tcgRevealOverlay');
@@ -46052,6 +46095,8 @@ window.tcgAdminGold = tcgAdminGold;
 window.tcgAdminGrantAll = tcgAdminGrantAll;
 window.tcgFlipCard = tcgFlipCard;
 window.tcgRevealDetail = tcgRevealDetail;
+window.tcgRevealPin = tcgRevealPin;
+window.tcgRevealUnpin = tcgRevealUnpin;
 window.tcgFlipAll = tcgFlipAll;
 window.tcgCloseReveal = tcgCloseReveal;
 window.tcgToggleTeam = tcgToggleTeam;
