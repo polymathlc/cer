@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.285.0';
+const APP_VERSION = 'v1.286.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -7073,6 +7073,10 @@ function _annotClampNum(v, lo, hi) { return Math.min(hi, Math.max(lo, isNaN(v) ?
 function _annotXformSx(x) { return (x && typeof x.sx === 'number' && x.sx) ? x.sx : 1; }
 function _annotXformSy(x) { return (x && typeof x.sy === 'number' && x.sy) ? x.sy : 1; }
 function _annotXformIsIdentity(x) {
+  // A PASTED picture is never "nothing to do": the object itself is new, so
+  // even at 100% and 0° there is something to burn in. Reading it as identity
+  // would make ✓ Apply — and every tool switch — throw the paste away.
+  if (x && x.scope === 'paste') return false;
   return !x || (!x.angle && !x.skewX && !x.skewY && _annotXformSx(x) === 1 && _annotXformSy(x) === 1 && !x.moved);
 }
 
@@ -7109,6 +7113,142 @@ function _annotXformBegin() {
   };
   _annotXformSyncBar();
   _annotXformPreview();
+}
+
+// ---- PASTE a picture straight into the editor ------------------------------
+// The picture somebody wants to drop onto a diagram is nearly always already on
+// the clipboard — a screenshot, a photo, a figure lifted out of another
+// question. Ctrl+V (or 📋 Paste) puts it on the canvas scaled to FIT the
+// picture it is landing on, and opens the transform box on it straight away, so
+// the eight handles are live from the first moment: drag a corner to resize,
+// drag the middle to move, then ✓ Apply. That is the PowerPoint gesture, which
+// is the one everybody already has in their fingers.
+//
+// It is its OWN transform scope (`paste`) rather than a selection lift, because
+// the pixels do not come off the canvas: `base` is the picture untouched, so
+// Cancel — and the history step taken here — simply leave no trace of it.
+const ANNOT_PASTE_FIT = 0.9;       // land inside this much of the canvas, so the handles have room
+const ANNOT_PASTE_MAX_PX = 2200;   // never hold a layer bitmap bigger than this
+// The image file on the clipboard, if there is one. `items` is what a
+// screenshot arrives as; `files` is what a copied file arrives as.
+function _annotClipboardImageFile(e) {
+  const dt = e && e.clipboardData;
+  if (!dt) return null;
+  const items = dt.items ? Array.from(dt.items) : [];
+  for (const it of items) {
+    if (it && it.kind === 'file' && String(it.type || '').startsWith('image/')) {
+      const f = it.getAsFile();
+      if (f) return f;
+    }
+  }
+  const files = dt.files ? Array.from(dt.files) : [];
+  for (const f of files) if (f && String(f.type || '').startsWith('image/')) return f;
+  return null;
+}
+// Bound in CAPTURE while the editor is open, so it beats the page-level paste
+// handlers (the exam paper builder, Mark Paper, the contenteditable guard) —
+// any of which could be on the page underneath the overlay.
+function _annotPasteHandler(e) {
+  if (!_annot) return;
+  const ov = document.getElementById('annotOverlay');
+  if (!ov || !ov.classList.contains('show')) return;
+  // A label being typed keeps its own paste: pasting WORDS into a text box is
+  // the other honest meaning of Ctrl+V in here.
+  if (_annotTypingInField(e)) return;
+  const file = _annotClipboardImageFile(e);
+  if (!file) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const r = new FileReader();
+  r.onload = () => _annotPasteDataUrl(String(r.result || ''));
+  r.onerror = () => showToast('Could not read that picture from the clipboard', 'error');
+  r.readAsDataURL(file);
+}
+function _annotPasteDataUrl(url) {
+  if (!url || !_annot) return;
+  _loadImageEl(url).then(img => _annotPasteImage(img))
+    .catch(err => { console.warn('annot paste', err); showToast('Could not open that pasted picture', 'error'); });
+}
+// The 📋 button: the keyboard shortcut is invisible, and a toolbar full of
+// tools is where somebody looks for "put a picture in". Reading the clipboard
+// needs permission, and Safari/Firefox may refuse outright — so a refusal says
+// to use Ctrl+V instead rather than failing silently.
+async function annotPasteFromClipboard() {
+  if (!_annot) return;
+  if (!navigator.clipboard || !navigator.clipboard.read) {
+    showToast('Press Ctrl+V (⌘V) to paste a picture in from the clipboard', 'info');
+    return;
+  }
+  try {
+    const items = await navigator.clipboard.read();
+    for (const it of items) {
+      const type = (it.types || []).find(t => String(t).startsWith('image/'));
+      if (!type) continue;
+      const blob = await it.getType(type);
+      const url = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result || '')); r.onerror = rej;
+        r.readAsDataURL(blob);
+      });
+      _annotPasteDataUrl(url);
+      return;
+    }
+    showToast('There is no picture on the clipboard — copy one first', 'info');
+  } catch (err) {
+    console.warn('clipboard read', err);
+    showToast('This browser will not let a page read the clipboard — press Ctrl+V (⌘V) instead', 'info');
+  }
+}
+function _annotPasteImage(img) {
+  if (!_annot) return;
+  const iw = img.naturalWidth || img.width || 0, ih = img.naturalHeight || img.height || 0;
+  if (!iw || !ih) { showToast('That clipboard picture was empty', 'error'); return; }
+  // Settle whatever transform was open first — a paste is a NEW object and must
+  // never inherit the last one's angle, nor silently discard its work.
+  if (_annot.xform) {
+    if (_annotXformIsIdentity(_annot.xform)) annotXformCancel(true); else annotXformApply(true);
+  }
+  // A label mid-type would be left pointing at a picture that has moved on.
+  document.querySelectorAll('#annotStage .annot-textbox-input').forEach(i => i.blur());
+  _annotPushHistory();
+  const cv = _annot.canvas;
+  // The layer holds the pasted picture at its OWN resolution (capped), and what
+  // fits it into the window is the transform's scale — which is exactly what
+  // the handles then edit. So dragging a corner back out stays sharp instead of
+  // magnifying an already-shrunken bitmap.
+  const cap = Math.min(1, ANNOT_PASTE_MAX_PX / Math.max(iw, ih));
+  const lw = Math.max(1, Math.round(iw * cap)), lh = Math.max(1, Math.round(ih * cap));
+  const layer = document.createElement('canvas');
+  layer.width = lw; layer.height = lh;
+  const lx = layer.getContext('2d');
+  lx.imageSmoothingEnabled = true;
+  try { lx.imageSmoothingQuality = 'high'; } catch (_) {}
+  lx.drawImage(img, 0, 0, lw, lh);
+  // The picture as it stands, so every preview frame redraws from a clean base.
+  const base = document.createElement('canvas');
+  base.width = cv.width; base.height = cv.height;
+  base.getContext('2d').drawImage(cv, 0, 0);
+  // Fit it inside what it is landing on — never blown UP past its own pixels,
+  // and never so large that the corner handles sit off the edge of the stage.
+  const fit = Math.min(1, (cv.width * ANNOT_PASTE_FIT) / lw, (cv.height * ANNOT_PASTE_FIT) / lh);
+  const s = _annotXformClampScale(null, fit, Math.max(lw, lh));
+  const prevSel = _annot.sel;
+  _annot.sel = null; _annot.selPts = null; _annotSelSyncBar();
+  const cx = cv.width / 2, cy = cv.height / 2;
+  _annot.xform = {
+    scope: 'paste', layer, base, ox: cx - lw / 2, oy: cy - lh / 2,
+    cx, cy, angle: 0, skewX: 0, skewY: 0,
+    sx: s, sy: s, lock: true, moved: false,
+    grow: false,
+    baseW: cv.width, baseH: cv.height,
+    straighten: false, strLine: null, prevSel
+  };
+  // Resize is the tool the handles belong to, so the pasted picture arrives
+  // ready to drag rather than waiting to be discovered.
+  _annotSetTool('scale');
+  _annotXformSyncBar();
+  _annotXformPreview();
+  showToast('📋 Pasted ' + iw + '×' + ih + ' — drag the handles to resize, drag the middle to move, then ✓ Apply', 'success');
 }
 // Scale first, then skew, then rotate — the same order the canvas applies them
 // below, so the corner maths and the render can never drift apart. (u, v) are
@@ -7387,8 +7527,10 @@ function annotXformApply(quiet) {
   const x = _annot && _annot.xform; if (!x) return;
   if (_annotXformIsIdentity(x)) { annotXformCancel(true); return; }
   _annotXformPreview();
-  const sel = x.scope === 'sel' ? _annotXformSelFromLayer() : null;
-  const what = x.scope === 'sel' ? 'Object' : 'Picture';
+  // A pasted picture becomes the selection too, so it can be nudged, filled or
+  // turned again straight afterwards without hunting for it with the lasso.
+  const sel = x.scope === 'image' ? null : _annotXformSelFromLayer();
+  const what = x.scope === 'image' ? 'Picture' : x.scope === 'paste' ? 'Pasted picture' : 'Object';
   const bits = [];
   const sx = _annotXformSx(x), sy = _annotXformSy(x);
   const pct = v => Math.round(Math.abs(v) * 1000) / 10 + '%';
@@ -7401,6 +7543,7 @@ function annotXformApply(quiet) {
   if (x.skewY) bits.push('slanted ' + (Math.round(x.skewY * 10) / 10) + '° ↕');
   if (x.moved && !bits.length) bits.push('moved');
   else if (x.moved) bits.push('moved');
+  if (x.scope === 'paste' && !bits.length) bits.push('placed');
   _annotXformEnd();
   if (sel) { _annot.sel = sel; _annotSelSyncBar(); }
   if (!quiet) showToast(what + ' ' + (bits.join(', ') || 'transformed') + ' ✓ (Undo puts it back)', 'success');
@@ -7410,11 +7553,12 @@ function annotXformApply(quiet) {
 function annotXformCancel(quiet) {
   if (!_annot || !_annot.xform) return;
   const prevSel = _annot.xform.prevSel || null;
+  const wasPaste = _annot.xform.scope === 'paste';
   _annotXformEnd();
   annotUndo();
   _annot.sel = prevSel;
   _annotSelSyncBar();
-  if (!quiet) showToast('Turn cancelled — picture put back', 'info');
+  if (!quiet) showToast(wasPaste ? 'Pasted picture removed' : 'Turn cancelled — picture put back', 'info');
 }
 function annotXformReset() {
   const x = _annot && _annot.xform; if (!x) return;
@@ -7482,7 +7626,8 @@ function _annotXformSyncBar() {
   const px = document.getElementById('annotXformSizePx');
   if (px) px.textContent = Math.round(Math.abs(sx) * x.layer.width) + ' × ' + Math.round(Math.abs(sy) * x.layer.height) + ' px';
   const scope = document.getElementById('annotXformScope');
-  if (scope) scope.textContent = x.scope === 'sel' ? 'the selected object' : 'the whole picture';
+  if (scope) scope.textContent = x.scope === 'sel' ? 'the selected object'
+    : x.scope === 'paste' ? 'the pasted picture' : 'the whole picture';
   const growWrap = document.getElementById('annotXformGrowWrap');
   if (growWrap) growWrap.style.display = x.scope === 'image' ? 'inline-flex' : 'none';
   const grow = document.getElementById('annotXformGrow');
@@ -7614,10 +7759,14 @@ function _annotBindZoomListeners() {
   }
   window.addEventListener('keydown', _annotKeyDown);
   window.addEventListener('keyup', _annotKeyUp);
+  // Capture, so a picture pasted into the editor never reaches the page-level
+  // paste handlers sitting underneath the overlay.
+  window.addEventListener('paste', _annotPasteHandler, true);
 }
 function _annotUnbindZoomListeners() {
   window.removeEventListener('keydown', _annotKeyDown);
   window.removeEventListener('keyup', _annotKeyUp);
+  window.removeEventListener('paste', _annotPasteHandler, true);
   const st = document.getElementById('annotStage');
   if (st) st.classList.remove('canpan', 'panning');
 }
@@ -46348,6 +46497,7 @@ window.tcgCleanSlotBg = tcgCleanSlotBg;
 window.tcgTouchUpSlot = tcgTouchUpSlot;
 window.annotSelDelete = annotSelDelete;
 window.annotToggleEraseTo = annotToggleEraseTo;
+window.annotPasteFromClipboard = annotPasteFromClipboard;
 window.elgOpen = elgOpen;
 window.elgStart = elgStart;
 window.elgClose = elgClose;
