@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.280.0';
+const APP_VERSION = 'v1.281.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -29645,7 +29645,9 @@ function rpgPublishLeaderboard() {
         dex: Object.keys(rpgState.tcg.cards || {}).length,
         floor: Math.max(1, ((rpgState.tcg.dungeon || {}).level | 0)),
         clears: (rpgState.tcg.dungeon || {}).cleared | 0,
-        artifact: rpgState.tcg.artifact || null
+        artifact: rpgState.tcg.artifact || null,
+        // …and what it is levelled to, or a rival's Wyrmheart Ruby fights at Lv1.
+        artiLvl: _tcgClampArti((rpgState.tcg.artiLevels || {})[rpgState.tcg.artifact] || 1)
       } : null,
       updatedAt: new Date().toISOString()
     }, { merge: true }).catch(e => console.warn("leaderboard publish", e));
@@ -33775,6 +33777,84 @@ const TCG_ARTIFACTS = [
   { id: 'ankh',      name: 'Eternity Ankh',   icon: '☥', stars: 7, kind: 'phoenix',     pow: 0.60, blurb: 'The first ally to faint is reborn at 60% HP. Fainting is only a suggestion.' }
 ];
 function tcgArtifactById(id) { return TCG_ARTIFACTS.find(a => a.id === id) || null; }
+
+// ---- 🔱 Artifact levels ----------------------------------------------------
+// A repeat artifact used to be dead weight: the count went up and nothing else
+// did. They now LEVEL, exactly the way a repeat monster merges — every spare
+// copy is levels, and every level makes the artifact's own effect a little
+// stronger, all the way to Lv99.
+//
+// The gain per copy is the merge table's, so a repeat of a rare thing is worth
+// more: a 7★ myth is eight levels a copy, a 1★ trinket one.
+const TCG_ARTI_MAX = 99;
+const TCG_ARTI_STEP = 0.012;        // +1.2% of the artifact's OWN power per level
+function tcgArtiGain(stars) { return TCG_MERGE_GAIN[stars] || 1; }
+function _tcgClampArti(n) { n = n | 0; return n < 1 ? 1 : n > TCG_ARTI_MAX ? TCG_ARTI_MAX : n; }
+function _tcgArtiMult(level) { return 1 + (_tcgClampArti(level) - 1) * TCG_ARTI_STEP; }
+function tcgArtiLevel(id) { const s = tcgState(); return _tcgClampArti((s && s.artiLevels && s.artiLevels[id]) || 1); }
+function tcgArtiLevelFromCopies(stars, copies) {
+  return _tcgClampArti(1 + Math.max(0, (copies | 0) - 1) * tcgArtiGain(stars));
+}
+// A ceiling per effect, so nothing becomes silly at Lv99. These are the numbers
+// to retune if an artifact ends up too strong — never TCG_ARTI_STEP, which is
+// shared by all of them.
+const TCG_ARTI_CAP = {
+  atk: 0.60, def: 0.60, hp: 0.60, swift: 1.20, crit: 0.75, healamp: 0.60,
+  shieldstart: 0.45, lifesteal: 0.55, thorns: 0.75, regen: 0.12, phoenix: 1
+};
+// Skills charge one turn sooner again once the Battery Core is this well fed —
+// its power is a COUNTDOWN, so levelling has to push it the other way, and one
+// step is all there is between "every other turn" and "every turn".
+const TCG_ARTI_BATTERY_LVL = 75;
+// The artifact's power AT a level. Most kinds are a plain percentage and simply
+// scale; three are not, and each is handled on its own terms.
+function tcgArtiPow(art, level) {
+  if (!art) return 0;
+  const lv = _tcgClampArti(level == null ? 1 : level);
+  const k = _tcgArtiMult(lv);
+  // An immunity is on or off — there is nothing to scale.
+  if (art.kind === 'ward') return art.pow;
+  // Turns to charge a skill: LOWER is better, so scaling it up would make the
+  // artifact worse the more you fed it.
+  if (art.kind === 'battery') return Math.max(1, art.pow - (lv >= TCG_ARTI_BATTERY_LVL ? 1 : 0));
+  // A damage MULTIPLIER on a super-effective hit. ×2 is what everybody gets, so
+  // only the part ABOVE it is the artifact's own, and only that part grows.
+  if (art.kind === 'ember') return 2 + (art.pow - 2) * k;
+  const cap = TCG_ARTI_CAP[art.kind];
+  const v = art.pow * k;
+  return cap ? Math.min(cap, v) : v;
+}
+// The artifact's own words, with its CURRENT numbers in them — a student
+// looking at a levelled artifact must see what it does now, not what it did
+// out of the packet. The rows' blurbs carry the Lv1 figures, so the numbers are
+// substituted rather than the sentence rewritten.
+function tcgArtiBlurb(art, level) {
+  if (!art) return '';
+  const lv = _tcgClampArti(level == null ? 1 : level);
+  if (lv <= 1) return art.blurb;
+  const base = art.pow, now = tcgArtiPow(art, lv);
+  if (art.kind === 'ward') return art.blurb;
+  if (art.kind === 'battery') {
+    return now <= 1 ? 'Skills charge two turns faster, so your monsters unleash their special skills as often as possible.' : art.blurb;
+  }
+  if (art.kind === 'ember') return art.blurb.replace(/×[\d.]+/, '×' + (Math.round(now * 100) / 100));
+  // Everything else is written as a percentage of the base figure.
+  const pctBase = Math.round(base * 100), pctNow = Math.round(now * 100);
+  if (pctBase && art.blurb.indexOf(pctBase + '%') >= 0) return art.blurb.split(pctBase + '%').join(pctNow + '%');
+  return art.blurb;
+}
+// Absorb `copies` repeats into the artifact already on the shelf. Mirrors
+// tcgMergeAbsorb, and returns the same shape so the reveal ceremony can show it.
+function tcgArtiAbsorb(id, copies) {
+  const s = tcgState(); const art = tcgArtifactById(id);
+  if (!s || !art) return null;
+  s.artiLevels = s.artiLevels || {};
+  const before = _tcgClampArti(s.artiLevels[id] || 1);
+  if (before >= TCG_ARTI_MAX) return { id, before, after: before, gained: 0, maxed: true };
+  const after = _tcgClampArti(before + Math.max(0, copies | 0) * tcgArtiGain(art.stars));
+  s.artiLevels[id] = after;
+  return { id, before, after, gained: after - before, maxed: after >= TCG_ARTI_MAX };
+}
 // ---- Auto-battle strategies the student picks (who to attack / who to heal).
 const TCG_STRATS_ATK = [
   { id: 'lowhp',   name: 'Finisher',     icon: '🎯', blurb: 'Attack the foe with the LEAST health — finish them off.' },
@@ -34303,6 +34383,17 @@ function tcgHydrateState(saved) {
   // Owned artifacts ({id: count}) — dropped by booster packs, like cards.
   const artifacts = {};
   Object.keys(s.artifacts || {}).forEach(id => { if (tcgArtifactById(id) && (s.artifacts[id] | 0) > 0) artifacts[id] = s.artifacts[id] | 0; });
+  // Artifact levels, earned from repeat copies. Anyone who was already
+  // collecting before levelling existed has their spares converted the first
+  // time this runs — nobody's duplicates are wasted, exactly as merges did.
+  const artiLevels = {};
+  const sa = (s.artiLevels && typeof s.artiLevels === 'object') ? s.artiLevels : {};
+  Object.keys(artifacts).forEach(id => {
+    const stars = tcgArtifactById(id).stars;
+    artiLevels[id] = sa[id] != null
+      ? _tcgClampArti(sa[id] | 0)
+      : tcgArtiLevelFromCopies(stars, artifacts[id]);
+  });
   // Infinite dungeon: every account starts at Floor 1. level = next floor to
   // fight (the floor you have "reached"); cleared = total floors beaten.
   const dg = (s.dungeon && typeof s.dungeon === 'object') ? s.dungeon : {};
@@ -34351,6 +34442,7 @@ function tcgHydrateState(saved) {
     lvlp,
     merges,
     artifacts,
+    artiLevels,
     artifact: artifacts[s.artifact] ? s.artifact : null,
     strategy: {
       attack: TCG_STRATS_ATK.some(x => x.id === strat.attack) ? strat.attack : 'lowhp',
@@ -38250,7 +38342,9 @@ function tcgCardHtml(card, opts) {
 // star tier driving the border glow.
 function tcgArtifactCardHtml(a, opts) {
   opts = opts || {};
+  const lv = opts.level != null ? _tcgClampArti(opts.level) : null;
   const badges = (opts.isNew ? '<span class="tcg-new-badge">NEW!</span>' : '')
+    + (opts.lvl && opts.lvl.gained > 0 ? '<span class="tcg-merged-badge">⟡ LEVEL +' + opts.lvl.gained + '</span>' : '')
     + (opts.count > 1 ? '<span class="tcg-count-badge">×' + opts.count + '</span>' : '');
   return '<div class="tcg-card star-' + a.stars + '">'
     + badges
@@ -38264,7 +38358,11 @@ function tcgArtifactCardHtml(a, opts) {
     // reveal face keeps the blurb and gains only the rarity line.
     +     (opts.reveal ? tcgRarityHtml(a.stars) : '')
     +     '<div class="tcg-type"><span class="ln l"></span><span class="lbl">🔱 Artifact</span><span class="ln r"></span></div>'
-    +     '<div class="tcg-skill"><span class="tcg-skill-name">' + a.icon + ' Team effect.</span> ' + escapeHtml(a.blurb) + '</div>'
+    +     (lv != null && lv > 1 ? '<div class="tcg-lvl-line merge"><span class="tcg-merge-tag">⟡ Lv ' + lv + '</span>'
+            + (lv >= TCG_ARTI_MAX ? '<span class="tcg-lvl-max merge">MAX</span>'
+              : '<span class="tcg-lvl-bar merge"><i style="width:' + Math.round(lv / TCG_ARTI_MAX * 100) + '%;"></i></span>'
+                + '<span class="tcg-lvl-num">+' + tcgArtiGain(a.stars) + '/repeat</span>') + '</div>' : '')
+    +     '<div class="tcg-skill"><span class="tcg-skill-name">' + a.icon + ' Team effect.</span> ' + escapeHtml(tcgArtiBlurb(a, lv || 1)) + '</div>'
     +   '</div>'
     + '</div>'
     + '</div>';
@@ -38827,7 +38925,11 @@ function _tcgOpenPack(p, setKey) {
     s.artifacts = s.artifacts || {};
     const isNew = !s.artifacts[arti.id];
     s.artifacts[arti.id] = (s.artifacts[arti.id] | 0) + 1;
-    pulls.push({ arti, isNew });
+    // A repeat is levels, not dead weight.
+    const lvl = isNew ? null : tcgArtiAbsorb(arti.id, 1);
+    if (isNew) { s.artiLevels = s.artiLevels || {}; s.artiLevels[arti.id] = 1; }
+    if (lvl && lvl.gained > 0) { mergedLevels += lvl.gained; mergedCards++; }
+    pulls.push({ arti, isNew, lvl });
   }
   s.packs = (s.packs | 0) + 1;
   rpgSave();
@@ -38902,7 +39004,8 @@ function _tcgShowRevealCards(pack, pulls) {
         + '<div class="tcg-flip-inner">'
         +   '<div class="tcg-flip-back">' + tcgCardBackHtml() + '</div>'
         +   '<div class="tcg-flip-front">' + (pl.arti
-              ? tcgArtifactCardHtml(pl.arti, { isNew: pl.isNew, reveal: true })
+              ? tcgArtifactCardHtml(pl.arti, { isNew: pl.isNew, reveal: true, lvl: pl.lvl,
+                  level: (tcgState() && (tcgState().artiLevels || {})[pl.arti.id]) || 1 })
               : tcgCardHtml(pl.card, { isNew: pl.isNew, mergedBy: pl.merge, reveal: true })) + '</div>'
         + '</div></div>').join('') + '</div>'
     + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">'
@@ -38977,12 +39080,20 @@ function tcgArtifactPickerHtml(s) {
     + list.map(a => {
         const n = inv[a.id] | 0;
         const owned = n > 0;
+        const lv = _tcgClampArti((s.artiLevels || {})[a.id] || 1);
+        const maxed = lv >= TCG_ARTI_MAX;
         return '<button type="button" class="tcg-arti' + (s.artifact === a.id ? ' on' : '') + (owned ? '' : ' locked') + '" onclick="tcgSetArtifact(\'' + a.id + '\')">'
           // Locked artifacts keep the padlock — the picture is part of the reward.
           + '<div class="tcg-arti-ic">' + (owned ? tcgArtifactIconHtml(a) : '<span class="tcg-arti-em">🔒</span>') + '</div>'
           + '<div class="tcg-arti-name">' + escapeHtml(a.name) + (n > 1 ? ' <span class="tcg-arti-count">×' + n + '</span>' : '') + '</div>'
           + '<div class="tcg-arti-stars">' + '★'.repeat(a.stars) + '</div>'
-          + '<div class="tcg-arti-blurb">' + (owned ? escapeHtml(a.blurb) : 'Locked — find this artifact in a booster pack to see what it does.') + '</div></button>';
+          // The level, and how much of the next one a repeat is worth — an
+          // artifact that levels has to SHOW that it levels.
+          + (owned ? '<div class="tcg-arti-lvl' + (maxed ? ' max' : '') + '" title="'
+              + escapeHtml('Level ' + lv + ' of ' + TCG_ARTI_MAX + ' — every repeat copy of this artifact is worth '
+                + tcgArtiGain(a.stars) + ' level' + (tcgArtiGain(a.stars) === 1 ? '' : 's') + ', and every level makes its effect stronger.')
+              + '">⟡ Lv ' + lv + (maxed ? ' · MAX' : '<i>/' + TCG_ARTI_MAX + '</i>') + '</div>' : '')
+          + '<div class="tcg-arti-blurb">' + (owned ? escapeHtml(tcgArtiBlurb(a, lv)) : 'Locked — find this artifact in a booster pack to see what it does.') + '</div></button>';
       }).join('')
     + '</div></div>';
 }
@@ -39072,7 +39183,8 @@ async function tcgFindOpponent() {
       // scale-to-you defaults in tcgRunBattle rather than fighting a Lv1 team.
       lvl: _tcgClampLvl(pick.tcg.lvl | 0) > 1 ? _tcgClampLvl(pick.tcg.lvl | 0) : 0,
       mlvl: _tcgClampMerge(pick.tcg.mlvl | 0) > 1 ? _tcgClampMerge(pick.tcg.mlvl | 0) : 0,
-      artifact: pick.tcg.artifact || null
+      artifact: pick.tcg.artifact || null,
+      artiLvl: _tcgClampArti(pick.tcg.artiLvl || 1)
     };
   }
   const name = TCG_GHOSTS[Math.floor(Math.random() * TCG_GHOSTS.length)];
@@ -39346,7 +39458,9 @@ function tcgGuideHtml() {
         ['⚔️ <b>Team power</b>',
           'Each monster contributes <b>ATK + DEF + HEAL + HP⁄8 + SPD⁄2</b>, using its real stats — stars, training level and merge level all folded in. Your team power is the five added together.'],
         ['🔱 <b>Artifact</b>',
-          'Equip ONE artifact and its effect applies to your whole team for the whole battle. Artifacts drop from packs only.'],
+          'Equip ONE artifact and its effect applies to your whole team for the whole battle. Artifacts drop from packs only — there are <b>' + TCG_ARTIFACTS.length + '</b> of them.<br>'
+            + '<b>⟡ Artifacts LEVEL, up to Lv' + TCG_ARTI_MAX + '.</b> Every repeat copy you pull is levels rather than dead weight, and every level makes that artifact\'s own effect a little stronger — a repeat of a rarer artifact is worth more (a 7★ myth is <b>' + tcgArtiGain(7) + ' levels</b> a copy, a 1★ trinket <b>' + tcgArtiGain(1) + '</b>). The 🔱 chooser always shows the numbers your artifact has <i>now</i>, not the ones it came out of the packet with.<br>'
+            + '<span class="tcg-guide-dim">Three of them do not simply grow a percentage: the <b>Warding Charm</b> is an immunity, so it is the same at Lv1 and Lv99; the <b>Battery Core</b> counts DOWN, and past Lv' + TCG_ARTI_BATTERY_LVL + ' your monsters fire their skills every single turn; and the two element prisms grow the part of their multiplier <i>above</i> ×2, which is the share that is actually theirs.</span>'],
         ['🎯 <b>Attack strategy</b>',
           TCG_STRATS_ATK.map(s => s.icon + ' <b>' + escapeHtml(s.name) + '</b> — ' + escapeHtml(s.blurb)).join('<br>')],
         ['➕ <b>Healing strategy</b>',
@@ -45239,11 +45353,14 @@ function _tcgMkUnit(cardId, side, slot, level, merge) {
 }
 // Equip the player's chosen artifact onto their whole team for a battle.
 // Effects are driven by the artifact's kind + pow so rarities scale cleanly.
-function _tcgApplyArtifact(units, artId, ctx) {
+function _tcgApplyArtifact(units, artId, ctx, level) {
   const art = tcgArtifactById(artId);
   if (!art) return;
   units.forEach(u => { u.ctx = ctx; });
-  const p = art.pow;
+  // The level is passed IN, never read from the save here: this same function
+  // equips the OPPONENT's artifact onto their team, and reading the local
+  // student's level would hand it to them.
+  const p = tcgArtiPow(art, level);
   switch (art.kind) {
     case 'swift':       units.forEach(u => { u.spd = Math.round(u.spd * (1 + p)); }); break;
     case 'crit':        units.forEach(u => { u.critBonus = p; }); break;
@@ -45574,15 +45691,17 @@ async function _tcgAct(stage, unit, allies, foes) {
 // Artifact badge pinned to the battle stage (opponent top-left, you top-right).
 // Hover — or tap on touch screens — reveals the full artifact card so the
 // effect can be read mid-battle. Shows a muted "no artifact" pill when empty.
-function _tcgArtiBadge(art, side, ownerLabel) {
+function _tcgArtiBadge(art, side, ownerLabel, level) {
   if (!art) {
     return '<div class="tcgb-arti ' + side + ' none"><span class="tcgb-arti-owner">' + escapeHtml(ownerLabel) + '</span>'
       + '<span class="tcgb-arti-pill">🔱 No artifact</span></div>';
   }
-  return '<div class="tcgb-arti ' + side + '" onclick="this.classList.toggle(\'open\')" title="' + escapeHtml(art.name + ' — ' + art.blurb) + '">'
+  const lv = _tcgClampArti(level || 1);
+  return '<div class="tcgb-arti ' + side + '" onclick="this.classList.toggle(\'open\')" title="' + escapeHtml(art.name + (lv > 1 ? ' (Lv ' + lv + ')' : '') + ' — ' + tcgArtiBlurb(art, lv)) + '">'
     + '<span class="tcgb-arti-owner">' + escapeHtml(ownerLabel) + '</span>'
-    + '<span class="tcgb-arti-pill">' + art.icon + ' <b>' + escapeHtml(art.name) + '</b></span>'
-    + '<div class="tcgb-arti-card">' + tcgArtifactCardHtml(art) + '</div>'
+    + '<span class="tcgb-arti-pill">' + art.icon + ' <b>' + escapeHtml(art.name) + '</b>'
+    +   (lv > 1 ? ' <i>⟡' + lv + '</i>' : '') + '</span>'
+    + '<div class="tcgb-arti-card">' + tcgArtifactCardHtml(art, { level: lv }) + '</div>'
     + '</div>';
 }
 function _tcgUnitHtml(u) {
@@ -45655,12 +45774,14 @@ async function tcgRunBattle(myTeam, me, opp) {
   mine.forEach(u => { u.strat = { attack: myStrat.attack, heal: myStrat.heal }; });
   const myCtx = { phoenixLeft: 0 };
   mine.forEach(u => { u.ctx = myCtx; });
-  if (s0 && s0.artifact) _tcgApplyArtifact(mine, s0.artifact, myCtx);
+  if (s0 && s0.artifact) _tcgApplyArtifact(mine, s0.artifact, myCtx, tcgArtiLevel(s0.artifact));
   const myArt = tcgArtifactById(s0 && s0.artifact);
   // A real opponent's published artifact buffs their team too — fair is fair.
   const theirCtx = { phoenixLeft: 0 };
   theirs.forEach(u => { u.ctx = theirCtx; });
-  if (opp.artifact) _tcgApplyArtifact(theirs, opp.artifact, theirCtx);
+  // A payload from before artifact levels existed carries none, and Lv1 is
+  // exactly what those artifacts were worth when it was written.
+  if (opp.artifact) _tcgApplyArtifact(theirs, opp.artifact, theirCtx, _tcgClampArti(opp.artiLvl || 1));
   const oppArt = tcgArtifactById(opp.artifact);
   const o = document.createElement('div');
   o.className = 'tcg-overlay';
@@ -45682,7 +45803,8 @@ async function tcgRunBattle(myTeam, me, opp) {
     + '</div>'
     + '<div class="tcgb-stage" id="tcgbStage">'
     +   '<div class="tcgb-vs-splash"><div class="who">' + escapeHtml(opp.name) + '</div><div class="vs">VS</div><div class="who">' + escapeHtml(me.name) + '</div></div>'
-    +   _tcgArtiBadge(oppArt, 'left', opp.name) + _tcgArtiBadge(myArt, 'right', 'Your team')
+    +   _tcgArtiBadge(oppArt, 'left', opp.name, _tcgClampArti(opp.artiLvl || 1))
+    +   _tcgArtiBadge(myArt, 'right', 'Your team', tcgArtiLevel(s0 && s0.artifact))
     +   theirs.map(_tcgUnitHtml).join('') + mine.map(_tcgUnitHtml).join('')
     +   '<div class="tcgb-flash"></div>'
     +   '<div class="tcgb-result" id="tcgbResult"></div>'
