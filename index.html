@@ -7022,15 +7022,28 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 .tcg-pack .btn { width: 100%; }
 /* pack opening ceremony */
 .tcg-overlay { position: fixed; inset: 0; z-index: 2600; background: rgba(10,8,24,0.94); display: flex; align-items: center; justify-content: center; padding: 18px; }
-.tcg-reveal-inner { max-width: 1320px; width: 100%; max-height: 100%; overflow-y: auto; text-align: center; padding: 12px; }
+/* A COLUMN, not a single scroller. The title stays put and the two columns
+   below it scroll independently — which is the whole fix for the panel: it gets
+   its own scroll region, so reaching its bottom no longer scrolls the cards and
+   drags the cursor across a different one on the way. */
+.tcg-reveal-inner {
+  max-width: 1320px; width: 100%; max-height: 100%; text-align: center; padding: 12px;
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+}
 /* Two columns: the cards, and the panel that fills the space beside them. The
    panel is what the empty right-hand side was crying out for — hover a card and
    everything it can do, in every mode, is right there. */
-.tcg-reveal-stage { display: flex; gap: 22px; align-items: flex-start; justify-content: center; }
-.tcg-reveal-main { flex: 1 1 auto; min-width: 0; }
+.tcg-reveal-stage {
+  display: flex; gap: 22px; align-items: stretch; justify-content: center;
+  flex: 1 1 auto; min-height: 0;
+}
+.tcg-reveal-main { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; padding-right: 4px; }
+/* Its own scroller. overscroll-behavior stops a wheel that runs off the end of
+   the panel from carrying on into the cards behind it. */
 .tcg-reveal-side {
-  flex: 0 0 340px; width: 340px; text-align: left; position: sticky; top: 0;
-  max-height: min(78vh, 760px); overflow-y: auto;
+  flex: 0 0 340px; width: 340px; text-align: left;
+  min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .tcg-reveal-side .tcg-peek-card { box-shadow: 0 18px 44px rgba(0,0,0,0.5); }
 .tcg-reveal-side-empty {
@@ -7043,6 +7056,18 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 /* The card being described wears a quiet ring, so the panel and the card it
    belongs to are unmistakably the same thing. */
 .tcg-flip.detailed { outline: 2px solid rgba(240,205,122,0.7); outline-offset: 5px; border-radius: 18px; }
+.tcg-flip.pinned { outline-color: #f0cd7a; box-shadow: 0 0 22px rgba(240,205,122,0.45); }
+/* The pin line. It is a real control, not decoration: it says whether the panel
+   is following the cursor or held on one card, and switches between the two. */
+.tcg-peek-pin {
+  display: flex; align-items: center; gap: 8px; width: 100%; cursor: pointer; font: inherit;
+  font-size: 0.68rem; line-height: 1.5; text-align: left; margin-bottom: 2px;
+  padding: 6px 10px; border-radius: 9px; color: #93a4cd;
+  background: rgba(147,164,205,0.08); border: 1px solid rgba(147,164,205,0.22);
+}
+.tcg-peek-pin:hover { color: #fff3d2; border-color: rgba(240,205,122,0.6); }
+.tcg-peek-pin b { color: #f0cd7a; }
+.tcg-peek-pin.on { color: #f5e6bd; background: rgba(240,205,122,0.12); border-color: rgba(240,205,122,0.5); }
 /* All four modes stacked — the reveal's panel, not a picker's. */
 .tcg-peek-card.allmodes { max-height: none; }
 .tcg-peek-modehead {
