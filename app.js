@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.284.0';
+const APP_VERSION = 'v1.285.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -6663,7 +6663,22 @@ async function applyCropTool() {
   #annotCloneSrc { position:absolute; z-index:6; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; border:2px solid #2d6ca8; background:rgba(37,99,235,0.18); box-shadow:0 0 0 1px rgba(255,255,255,0.8); pointer-events:none; }
   #annotCloneSrc::before, #annotCloneSrc::after { content:''; position:absolute; background:#2d6ca8; }
   #annotCloneSrc::before { left:6px; top:1px; width:2px; height:12px; }
-  #annotCloneSrc::after { top:6px; left:1px; height:2px; width:12px; }`;
+  #annotCloneSrc::after { top:6px; left:1px; height:2px; width:12px; }
+  /* The brush cursor: a ring the exact size of the mark about to be made, at
+     the current zoom. Black ring inside a white one, so it stays visible on a
+     white page and on black card art alike. */
+  #annotBrushRing { position:absolute; z-index:7; box-sizing:border-box; border-radius:50%; pointer-events:none; display:none;
+    border:1px solid rgba(0,0,0,0.9); box-shadow:0 0 0 1px rgba(255,255,255,0.9), inset 0 0 0 1px rgba(255,255,255,0.9); }
+  /* Under a few screen pixels a circle is just a blob — draw a crosshair, the
+     way every paint program does for a tiny brush. */
+  #annotBrushRing.tiny { border-color:transparent; box-shadow:none; }
+  #annotBrushRing.tiny::before, #annotBrushRing.tiny::after { content:''; position:absolute; background:rgba(0,0,0,0.85); box-shadow:0 0 0 1px rgba(255,255,255,0.9); }
+  #annotBrushRing.tiny::before { left:50%; top:50%; width:1px; height:11px; margin:-5.5px 0 0 -0.5px; }
+  #annotBrushRing.tiny::after { left:50%; top:50%; height:1px; width:11px; margin:-0.5px 0 0 -5.5px; }
+  #annotBrushHud { position:absolute; z-index:8; pointer-events:none; opacity:0; transition:opacity 0.16s ease; transform:translateX(-50%);
+    background:rgba(17,20,18,0.88); color:#fff; font-family:'DM Sans',sans-serif; font-size:11px; font-weight:700; line-height:1;
+    padding:5px 8px; border-radius:6px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  #annotBrushHud.show { opacity:1; }`;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
 })();
 
@@ -6711,7 +6726,10 @@ function _annotOpenSrc(srcP, target, title) {
       eraseTo: target.artSlot ? 'clear' : 'white',
       canvas, ctx, tool: 'erase', color: '#e23c3c', size: 6, tol: 32, drawing: false, history: [], start: null, snap: null,
       zoom: 1, fit: 1, panX: 0, panY: 0, space: false, panning: false, cloneSrc: null, cloneSnap: null, cloneOff: null,
-      anchor: null, sel: null, selPts: null, selCanvas, aiFillBusy: false, origSnap: orig, float: null, xform: null, xfStart: null };
+      anchor: null, sel: null, selPts: null, selCanvas, aiFillBusy: false, origSnap: orig, float: null, xform: null, xfStart: null,
+      // Where the pointer is, in STAGE coordinates, and how long the size badge
+      // stays up after a change — see the brush cursor below.
+      ptr: null, ptrIn: false, hudUntil: 0, hudTimer: null };
     _annotSelSyncBar();
     if (!_annotAntsRunning) _annotAntsLoop();
     _annotSyncControls();
@@ -6761,6 +6779,7 @@ function _annotResetCompose() {
 }
 function _annotSyncControls() {
   const col = document.getElementById('annotColor'), sz = document.getElementById('annotSize'), tl = document.getElementById('annotTol');
+  const _sizeWas = _annot ? _annot.size : 0;
   if (_annot) {
     if (col) _annot.color = col.value || _annot.color;
     if (sz) _annot.size = parseInt(sz.value, 10) || _annot.size;
@@ -6769,6 +6788,9 @@ function _annotSyncControls() {
     if (lbl) lbl.innerHTML = _annot.size + '&nbsp;px';
     const tlbl = document.getElementById('annotTolVal');
     if (tlbl) tlbl.textContent = _annot.tol;
+    // Every route to the size — the slider, the wheel, [ and ] — lands here, so
+    // this is the one place that has to say what it did on the picture itself.
+    if (_annot.size !== _sizeWas) _annotBrushFlash(); else _annotUpdateBrushRing();
   }
   // The bucket icon always shows the colour it would pour, open tool or not.
   const bucket = document.querySelector('.annot-tool[data-atool="fill"]');
@@ -6826,6 +6848,7 @@ function _annotUpdateTransform() {
   const zl = document.getElementById('annotZoomVal');
   if (zl) zl.textContent = Math.round(s * 100) + '%';
   _annotUpdateCloneMarker();   // the source pin rides along with zoom / pan
+  _annotUpdateBrushRing();     // ... and so does the brush ring: it is drawn at the zoomed size
 }
 // A small pin marking the clone-stamp source point, kept aligned under zoom/pan.
 function _annotUpdateCloneMarker() {
@@ -6838,6 +6861,93 @@ function _annotUpdateCloneMarker() {
   m.style.display = 'block';
   m.style.left = (_annot.panX + _annot.cloneSrc.x * s) + 'px';
   m.style.top = (_annot.panY + _annot.cloneSrc.y * s) + 'px';
+}
+// ---- The brush cursor — what you are about to paint with, drawn on the picture
+// -----------------------------------------------------------------------------
+// A brush whose size you can only read as a number on a slider is a brush you
+// are guessing with: "12 px" at 40% zoom is a quarter of the mark "12 px" makes
+// at 400%. So every size-driven tool shows its real footprint under the pointer,
+// at the current zoom, the way Photoshop does — erase, paint, clone, history and
+// the line tool, whose thickness IS the brush size. The tools that take no size
+// (fill, wand, select, lasso, move, the transforms, text) keep their own cursor
+// and deliberately show no ring; a circle round a paint bucket would be a lie.
+const ANNOT_RING_TOOLS = { erase: 1, paint: 1, clone: 1, history: 1, line: 1 };
+const ANNOT_RING_TINY = 7;     // under this many screen px a circle is a blob: draw a crosshair instead
+const ANNOT_HUD_MS = 1200;     // how long the "12 px" badge stays up after a size change
+// The ring and its badge live in the STAGE, like the clone-source pin — not on
+// the canvas, which is scaled and panned underneath them.
+function _annotRingEls(make) {
+  const st = document.getElementById('annotStage');
+  if (!st) return null;
+  let ring = document.getElementById('annotBrushRing'), hud = document.getElementById('annotBrushHud');
+  if (!ring && make) { ring = document.createElement('div'); ring.id = 'annotBrushRing'; st.appendChild(ring); }
+  if (!hud && make) { hud = document.createElement('div'); hud.id = 'annotBrushHud'; st.appendChild(hud); }
+  return ring ? { st, ring, hud } : null;
+}
+function _annotBrushRingVisible() {
+  if (!_annot || !ANNOT_RING_TOOLS[_annot.tool]) return false;
+  if (_annot.space || _annot.panning) return false;                 // pan mode has its own hand cursor
+  // Mid-stroke it stays up even if the drag has run off the edge; otherwise it
+  // follows the pointer, or shows briefly while the size is being changed.
+  return _annot.drawing || _annot.ptrIn || _annot.hudUntil > Date.now();
+}
+// Remember where the pointer is, in stage coordinates, and redraw the ring.
+function _annotTrackPointer(e) {
+  if (!_annot) return;
+  const box = _annotStageBox();
+  const x = e.clientX - box.left, y = e.clientY - box.top;
+  // A text label inside the stage is its own thing to click and drag, so the
+  // brush cursor gets out of the way over it.
+  const overLabel = !!(e.target && e.target.closest && e.target.closest('.annot-textbox'));
+  _annot.ptr = { x, y };
+  _annot.ptrIn = !overLabel && x >= 0 && y >= 0 && x <= box.width && y <= box.height;
+  _annotUpdateBrushRing();
+}
+function _annotUpdateBrushRing() {
+  const want = _annotBrushRingVisible();
+  const els = _annotRingEls(want);
+  if (!els) return;
+  const ring = els.ring, hud = els.hud, st = els.st, c = document.getElementById('annotCanvas');
+  // The system cursor is only ever hidden for a tool that HAS a ring — the
+  // resize handles and the transform tools set their own cursor and must keep it.
+  if (c && ANNOT_RING_TOOLS[_annot ? _annot.tool : '']) {
+    c.style.cursor = (want && _annot.ptrIn) ? 'none' : (ANNOT_CURSORS[_annot.tool] || 'crosshair');
+  }
+  if (!want) {
+    ring.style.display = 'none';
+    if (hud) hud.classList.remove('show');
+    return;
+  }
+  const box = _annotStageBox();
+  // While the pointer is away (a slider drag) the preview sits in the middle of
+  // the view, so the size still shows on the picture rather than only on a label.
+  const p = (_annot.ptrIn || _annot.drawing) && _annot.ptr ? _annot.ptr : { x: box.width / 2, y: box.height / 2 };
+  const px = Math.max(1, Math.round(_annot.size));
+  const d = px * _annotDisplayScale();
+  ring.style.display = 'block';
+  ring.classList.toggle('tiny', d < ANNOT_RING_TINY);
+  ring.style.width = ring.style.height = Math.max(1, d) + 'px';
+  ring.style.left = (p.x - d / 2) + 'px';
+  ring.style.top = (p.y - d / 2) + 'px';
+  if (hud) {
+    const on = _annot.hudUntil > Date.now();
+    hud.classList.toggle('show', on);
+    if (on) {
+      hud.textContent = px + ' px';
+      hud.style.left = Math.min(box.width - 8, Math.max(8, p.x)) + 'px';
+      hud.style.top = Math.min(box.height - 26, p.y + d / 2 + 12) + 'px';
+    }
+  }
+}
+// Show the ring and its "12 px" badge for a moment after the size changes, so
+// the slider, the wheel and [ ] all say what they did even when the pointer is
+// nowhere near the picture.
+function _annotBrushFlash() {
+  if (!_annot) return;
+  _annot.hudUntil = Date.now() + ANNOT_HUD_MS;
+  _annotUpdateBrushRing();
+  clearTimeout(_annot.hudTimer);
+  _annot.hudTimer = setTimeout(() => { if (_annot) _annotUpdateBrushRing(); }, ANNOT_HUD_MS + 40);
 }
 // hex → [r,g,b]
 function _annotHexToRgb(hex) {
@@ -7471,7 +7581,7 @@ function _annotTypingInField(e) {
 }
 function _annotKeyDown(e) {
   if (!_annot) return;
-  if (e.code === 'Space' && !_annotTypingInField(e)) { _annot.space = true; const st = document.getElementById('annotStage'); if (st) st.classList.add('canpan'); e.preventDefault(); }
+  if (e.code === 'Space' && !_annotTypingInField(e)) { _annot.space = true; const st = document.getElementById('annotStage'); if (st) st.classList.add('canpan'); _annotUpdateBrushRing(); e.preventDefault(); }
   // Escape backs out of the open transform first, then out of a selection.
   if (e.key === 'Escape' && !_annotTypingInField(e) && _annot.xform) { e.preventDefault(); _annot.drawing = false; annotXformCancel(); return; }
   if (e.key === 'Escape' && !_annotTypingInField(e) && (_annot.sel || _annot.selPts)) { _annot.selPts = null; _annot.drawing = false; annotSelClear(); }
@@ -7492,10 +7602,16 @@ function _annotKeyDown(e) {
   const tool = ANNOT_KEYS[String(k).toLowerCase()];
   if (tool) { e.preventDefault(); _annotSetTool(tool); }
 }
-function _annotKeyUp(e) { if (_annot && e.code === 'Space') { _annot.space = false; const st = document.getElementById('annotStage'); if (st) st.classList.remove('canpan'); } }
+function _annotKeyUp(e) { if (_annot && e.code === 'Space') { _annot.space = false; const st = document.getElementById('annotStage'); if (st) st.classList.remove('canpan'); _annotUpdateBrushRing(); } }
 function _annotBindZoomListeners() {
   const st = document.getElementById('annotStage');
-  if (st && !st._zoomBound) { st.addEventListener('wheel', _annotWheel, { passive: false }); st._zoomBound = true; }
+  if (st && !st._zoomBound) {
+    st.addEventListener('wheel', _annotWheel, { passive: false });
+    // The pointer can leave the stage (or the window) without another move
+    // event ever arriving, which would strand the ring where it was last seen.
+    st.addEventListener('pointerleave', () => { if (_annot) { _annot.ptrIn = false; _annotUpdateBrushRing(); } });
+    st._zoomBound = true;
+  }
   window.addEventListener('keydown', _annotKeyDown);
   window.addEventListener('keyup', _annotKeyUp);
 }
@@ -7525,6 +7641,9 @@ function _annotSetTool(t) {
   // discover the panel.
   if (_annot && (t === 'rotate' || t === 'skew' || t === 'scale') && !_annot.xform) _annotXformBegin();
   _annotXformSyncBar();
+  // Switching to a brush tool should show its size straight away — you should
+  // not have to make a mark to find out how big the mark will be.
+  if (_annot && ANNOT_RING_TOOLS[t]) _annotBrushFlash(); else _annotUpdateBrushRing();
 }
 // Single-key tool switching, Photoshop's letters where they exist.
 const ANNOT_KEYS = { e: 'erase', b: 'paint', g: 'fill', s: 'clone', y: 'history', m: 'select', l: 'lasso', w: 'wand', v: 'move', u: 'line', t: 'text', r: 'rotate', k: 'skew', f: 'scale' };
@@ -8300,6 +8419,9 @@ function closeAnnotTool() {
   const o = document.getElementById('annotOverlay'); if (o) o.classList.remove('show');
   const s = document.getElementById('annotStage'); if (s) s.querySelectorAll('.annot-textbox').forEach(el => el.remove());
   const cm = document.getElementById('annotCloneSrc'); if (cm) cm.remove();
+  const br = document.getElementById('annotBrushRing'); if (br) br.remove();
+  const bh = document.getElementById('annotBrushHud'); if (bh) bh.remove();
+  if (_annot) clearTimeout(_annot.hudTimer);
   const sc = document.getElementById('annotSelCanvas'); if (sc) sc.getContext('2d').clearRect(0, 0, sc.width, sc.height);
   _annotUnbindZoomListeners();
   _annot = null;
@@ -8315,6 +8437,7 @@ function _annotPanStart(e) {
   _annot.panning = true;
   _annot.panFrom = { x: e.clientX, y: e.clientY, panX: _annot.panX, panY: _annot.panY };
   const st = document.getElementById('annotStage'); if (st) st.classList.add('panning');
+  _annotUpdateBrushRing();
   try { e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId); } catch (_) {}
 }
 function _annotPanMove(e) {
@@ -8325,16 +8448,18 @@ function _annotPanMove(e) {
   _annotUpdateTransform();
 }
 function _annotPanEnd() {
-  if (_annot && _annot.panning) { _annot.panning = false; _annot.panFrom = null; const st = document.getElementById('annotStage'); if (st) st.classList.remove('panning'); }
+  if (_annot && _annot.panning) { _annot.panning = false; _annot.panFrom = null; const st = document.getElementById('annotStage'); if (st) st.classList.remove('panning'); _annotUpdateBrushRing(); }
 }
 document.addEventListener('pointerdown', function (e) {
   const c = document.getElementById('annotCanvas');
   if (!_annot || !c || e.target !== c) return;
+  _annotTrackPointer(e);   // a tap with no movement before it still gets its ring
   if (_annot.space || e.button === 1) { e.preventDefault(); _annotPanStart(e); return; }
   if (e.button === 0) _annotDown(e);
 });
 document.addEventListener('pointermove', function (e) {
   if (!_annot) return;
+  _annotTrackPointer(e);   // the ring follows the pointer whatever else is going on
   if (_annot.panning) { _annotPanMove(e); return; }
   if (_annot.drawing) { _annotMove(e); return; }
   // Hovering the transform box: the pointer says what each handle will do, so
@@ -8348,7 +8473,7 @@ document.addEventListener('pointermove', function (e) {
     }
   }
 });
-document.addEventListener('pointerup', function () { _annotPanEnd(); _annotUp(); });
+document.addEventListener('pointerup', function () { _annotPanEnd(); _annotUp(); _annotUpdateBrushRing(); });
 
 // =====================================================================
 // AI QUESTION BUILDER — upload a screenshot/PDF of an exam question;
