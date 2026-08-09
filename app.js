@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.283.0';
+const APP_VERSION = 'v1.283.1';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -34613,7 +34613,10 @@ function tcgNavPrizeBadges() {
   set('navPrizeLegends', 'legend', elgAccessAllowed());
   const legRow = document.getElementById('navModeLegends');
   if (legRow) legRow.style.display = elgAccessAllowed() ? '' : 'none';
-  // Ember Duel pays no prize while it is in beta, so it gets a row and no badge.
+  // Ember Duel pays its top 3 a voucher too (v1.282.0), so it wears the badge on
+  // the same terms as the other two: only once the mode is open to students,
+  // and never in a month listed in RPG_NO_PRIZE_MONTHS.
+  set('navPrizeDuel', 'duel', duelAccessAllowed());
   const duelRow = document.getElementById('navModeDuel');
   if (duelRow) duelRow.style.display = duelAccessAllowed() ? '' : 'none';
 }
