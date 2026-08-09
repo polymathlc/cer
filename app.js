@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.283.2';
+const APP_VERSION = 'v1.284.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -12773,6 +12773,56 @@ function _pushAnswerKeySection(sections, label, content, part) {
   if (!stripHtml(html)) return;
   sections.push({ label, content: html, part: qPartNormalize(part) });
 }
+// EVERY block that carries an answer, pushed onto the printed answer key. An
+// MCQ's correct option, an answer line's answer and a 🔑 answer-key block are
+// all answers, and none of them lives in an `answer`/`plainanswer` box — so
+// before this existed a worksheet of MCQs printed a key that listed only the
+// handful of open-ended questions and silently skipped the rest (v1.284.0).
+// Both print paths call this, which is the only reason they cannot drift.
+function _pushBlockAnswerKey(sections, block, part) {
+  if (!block) return;
+  const p = qPartNormalize(part);
+  switch (block.type) {
+    case 'mcq': {
+      const mo = block.options || [];
+      const ci = mo.findIndex(o => o && o.id === block.correctId);
+      // No correct option ticked is an authoring gap, not an answer — the
+      // "no answer recorded" placeholder below is what surfaces it.
+      if (ci >= 0) sections.push({ label: 'Answer', content: `<b>${ci + 1}.</b> ` + sanitizeAnswerKeyHtml(mo[ci].text || ''), part: p });
+      break;
+    }
+    case 'answerLine':
+      _pushAnswerKeySection(sections, stripHtml(block.label || '').trim() || 'Answer', block.answer, part);
+      break;
+    case 'answerKey': {
+      const words = sanitizeAnswerKeyHtml(block.text || '');
+      const url = String(block.url || '').trim();
+      if (!stripHtml(words) && !url) break;
+      sections.push({
+        label: 'Answer key', part: p,
+        content: words + (url ? `<div><img src="${escapeHtml(transformImageUrl(url))}" style="max-width:100%;max-height:180pt;"></div>` : '')
+      });
+      break;
+    }
+    default: break;
+  }
+}
+// A question with no answer-bearing block at all still has to say something on
+// the key, or the teacher reads the gap in the numbering as a printing fault.
+// The explanation is the only thing left that says what the answer was, so it
+// stands in — never alongside a real answer, which is why the past-paper flag
+// still prints explanations in full.
+function _qFallbackKeySection(q) {
+  const ex = ((q && q.blocks) || []).find(b => b && b.type === 'explanation' && stripHtml(b.content));
+  return ex ? { label: 'Explanation', content: sanitizeAnswerKeyHtml(ex.content) } : null;
+}
+// Placeholder for a question that yielded nothing. It is NEVER what makes the
+// key page appear (see the `hasAny` guards) — a bank with no model answers at
+// all must still print no key sheet rather than a page of these.
+const AK_NO_ANSWER = [{ label: null, content: '<i>No answer recorded for this question.</i>' }];
+function _akQuestionSections(qData) {
+  return (qData && qData.sections && qData.sections.length) ? qData.sections : AK_NO_ANSWER;
+}
 // Render the answer-key body for one question. The part label is printed once,
 // when the part CHANGES — so a question with a Claim/Evidence/Reasoning trio
 // under part (b) gets one "(b)" heading above the three, not three of them.
@@ -12958,17 +13008,12 @@ function doPrintWorksheetOpen() {
         }
         default: {
           qHtml += renderImportedBlockStudent(block);
-          // The correct option belongs on the key. Without it an MCQ-only
-          // question produced NO sections at all, and the
-          // `sections.length === 0` guard below dropped it from the key
-          // entirely — so a mostly-MCQ paper printed a key that silently
-          // skipped most of its questions. Same shape the saved-worksheet
-          // builder uses, so the two keys read alike.
-          if (block.type === 'mcq') {
-            const mo = block.options || [];
-            const ci = mo.findIndex(o => o && o.id === block.correctId);
-            if (ci >= 0) qSections.push({ label: 'Answer', content: `<b>${ci + 1}.</b> ` + sanitizeAnswerKeyHtml(mo[ci].text || ''), part: qPartNormalize(bPart) });
-          }
+          // The correct option, an answer line's answer and a 🔑 answer-key
+          // block all belong on the key. Without them an MCQ-only question
+          // produced NO sections at all and was dropped from the key entirely,
+          // so a mostly-MCQ paper printed a key that silently skipped most of
+          // its questions.
+          _pushBlockAnswerKey(qSections, block, bPart);
           break;
         }
       }
@@ -12978,20 +13023,26 @@ function doPrintWorksheetOpen() {
     allHtml += qHtml;
     const _akExtra = _qAnswerKeyExtraSection(q);
     if (_akExtra) qSections.push(_akExtra);
+    if (!qSections.length) {
+      const _fb = _qFallbackKeySection(q);
+      if (_fb) qSections.push(_fb);
+    }
     answerKeyData.push({ title: q.title, sections: qSections });
   });
 
-  // Answer Key Page (open ended — full answer text)
+  // Answer Key Page (full answer text). Whether the sheet is printed at all is
+  // decided by the REAL answers — a bank with none must not produce a page of
+  // placeholders — but once it prints, EVERY question is listed, so a gap in
+  // the numbering can only mean a question really has no answer on file.
   const hasAnySections = answerKeyData.some(d => d.sections.length > 0);
   if (hasAnySections) {
     allHtml += `<div class="print-question-page print-answer-key-page">`;
     allHtml += `<h2>Answer Key</h2>`;
     answerKeyData.forEach(qData => {
-      if (qData.sections.length === 0) return;
       allHtml += `<div class="print-ak-question">`;
       allHtml += `<h4>${escapeHtml(qData.title)}</h4>`;
       allHtml += `<div class="print-ak-fulltext">`;
-      allHtml += _akSectionsHtml(qData.sections);
+      allHtml += _akSectionsHtml(_akQuestionSections(qData));
       allHtml += `</div></div>`;
     });
     allHtml += `</div>`;
@@ -20969,8 +21020,12 @@ function _wsHeaderHtml(worksheetTitle, hasCover, noFields) {
 // printer and the live preview so the two render identically. Each chunk carries
 // data-qid so the packer can honour manual page breaks keyed by question.
 function buildWorksheetHtml(selected, worksheetTitle, opts) {
-  // answerKeyExtras: also put MCQ correct answers, explanation blocks and
-  // answer-key blocks into the printed answer key (used by past-paper prints).
+  // answerKeyExtras: also put EXPLANATION blocks into the printed answer key
+  // (used by past-paper prints). Answers themselves — the MCQ's correct option,
+  // an answer line, a 🔑 answer-key block — are never gated on this: they are
+  // the answer, and a worksheet key that omits them is the bug this flag used
+  // to cause. An explanation is teaching commentary, so it stays optional and
+  // is only used elsewhere as the fallback for a question with no answer at all.
   // frontHtml: pre-built front-matter pages (cover / cheat sheet) placed
   // before question 1 — each .print-front-page prints on its own sheet.
   const akExtras = !!(opts && opts.answerKeyExtras);
@@ -21075,14 +21130,12 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
           }
           default: {
             qHtml += renderImportedBlockStudent(block);
-            if (akExtras && block.type === 'mcq') {
-              const mo = block.options || [];
-              const ci = mo.findIndex(o => o.id === block.correctId);
-              if (ci >= 0) qSections.push({ label: 'Answer', content: `<b>${ci + 1}.</b> ` + sanitizeAnswerKeyHtml(mo[ci].text || ''), part: bPart });
-            }
-            if (akExtras && block.type === 'answerKey' && (stripHtml(block.text) || block.url)) {
-              qSections.push({ label: 'Answer key', content: sanitizeAnswerKeyHtml(block.text || '') + (block.url ? `<div><img src="${escapeHtml(transformImageUrl(block.url))}" style="max-width:100%;max-height:180pt;"></div>` : ''), part: bPart });
-            }
+            // Unconditional, exactly as doPrintWorksheetOpen does it: an MCQ's
+            // correct option is the answer to that question, not an optional
+            // extra, and gating it behind `answerKeyExtras` meant every
+            // ordinary worksheet printed a key listing only its open-ended
+            // questions.
+            _pushBlockAnswerKey(qSections, block, bPart);
             break;
           }
         }
@@ -21091,6 +21144,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
       allHtml += qHtml;
       const _akExtra = _qAnswerKeyExtraSection(q);
       if (_akExtra) qSections.push(_akExtra);
+      if (!qSections.length) {
+        const _fb = _qFallbackKeySection(q);
+        if (_fb) qSections.push(_fb);
+      }
       answerKeyData.push({ title: plainNums ? ('Question ' + (qIndex + 1)) : q.title, type: 'open', sections: qSections });
     }
   });
@@ -21098,13 +21155,16 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
 
   // Answer Key Page
   {
+    // Whether the sheet prints at all is decided by the REAL answers — a bank
+    // with none must not produce a page of placeholders — but once it prints,
+    // EVERY question is listed, so a numbering gap can only mean the question
+    // really has no answer on file.
     const hasAny = answerKeyData.some(d => d.sections && d.sections.length > 0);
     if (hasAny) {
       allHtml += `<div class="print-question-page print-answer-key-page"><h2>Answer Key</h2>`;
       answerKeyData.forEach(qData => {
-        if (!qData.sections || qData.sections.length === 0) return;
         allHtml += `<div class="print-ak-question"><h4>${escapeHtml(qData.title)}</h4><div class="print-ak-fulltext">`;
-        allHtml += _akSectionsHtml(qData.sections);
+        allHtml += _akSectionsHtml(_akQuestionSections(qData));
         allHtml += `</div></div>`;
       });
       allHtml += `</div>`;
