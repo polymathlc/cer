@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.286.0';
+const APP_VERSION = 'v1.286.1';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -5477,9 +5477,14 @@ function renderImportedBlockStudent(block, q) {
     // 1560px (413mm) solid box — taller than any sheet, with no print rule
     // bounding it — so the question could not be laid out on a page at all.
     // WS_BLOCK_LINES_MAX rows is the most a sheet can hold with a stem above.
+    // BLANK SPACE, not ruled lines. Working is not prose: a student answers with
+    // a bar model, a table, a diagram, a long division — and a rule across the
+    // page fights every one of them, while promising the answer is a sentence
+    // that fits between two lines. The HEIGHT is deliberately unchanged (rows ×
+    // 26px), so the print planner measures exactly what it measured before and
+    // the pagination cannot shift underneath it.
     case 'openLines':
-      return `<div class="ws-open-lines" style="margin:10px 0;">` +
-        Array.from({ length: _wsBlockLines(block.lines, 4) }).map(() => `<div style="border-bottom:1px solid #d4d4d4;height:26px;"></div>`).join('') + `</div>`;
+      return `<div class="ws-open-lines" style="margin:10px 0;height:${_wsBlockLines(block.lines, 4) * 26}px;"></div>`;
     case 'workingSpace':
       return `<div class="ws-working" style="margin:10px 0;border:1px dashed #c4c4c4;border-radius:8px;height:${_wsBlockLines(block.lines, 6) * 26}px;"></div>`;
     case 'fillblank':
