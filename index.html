@@ -7022,7 +7022,40 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 .tcg-pack .btn { width: 100%; }
 /* pack opening ceremony */
 .tcg-overlay { position: fixed; inset: 0; z-index: 2600; background: rgba(10,8,24,0.94); display: flex; align-items: center; justify-content: center; padding: 18px; }
-.tcg-reveal-inner { max-width: 900px; width: 100%; max-height: 100%; overflow-y: auto; text-align: center; padding: 12px; }
+.tcg-reveal-inner { max-width: 1320px; width: 100%; max-height: 100%; overflow-y: auto; text-align: center; padding: 12px; }
+/* Two columns: the cards, and the panel that fills the space beside them. The
+   panel is what the empty right-hand side was crying out for — hover a card and
+   everything it can do, in every mode, is right there. */
+.tcg-reveal-stage { display: flex; gap: 22px; align-items: flex-start; justify-content: center; }
+.tcg-reveal-main { flex: 1 1 auto; min-width: 0; }
+.tcg-reveal-side {
+  flex: 0 0 340px; width: 340px; text-align: left; position: sticky; top: 0;
+  max-height: min(78vh, 760px); overflow-y: auto;
+}
+.tcg-reveal-side .tcg-peek-card { box-shadow: 0 18px 44px rgba(0,0,0,0.5); }
+.tcg-reveal-side-empty {
+  padding: 26px 20px; border-radius: 16px; text-align: center; color: #93a4cd;
+  background: rgba(12,22,54,0.6); border: 1px dashed rgba(240,205,122,0.3);
+}
+.tcg-reveal-side-empty .big { font-size: 34px; margin-bottom: 10px; opacity: 0.8; }
+.tcg-reveal-side-empty p { font-size: 0.84rem; line-height: 1.65; margin: 0 0 8px; color: #c3d1f2; }
+.tcg-reveal-side-empty p.dim { font-size: 0.76rem; color: #7f90ba; margin-bottom: 0; }
+/* The card being described wears a quiet ring, so the panel and the card it
+   belongs to are unmistakably the same thing. */
+.tcg-flip.detailed { outline: 2px solid rgba(240,205,122,0.7); outline-offset: 5px; border-radius: 18px; }
+/* All four modes stacked — the reveal's panel, not a picker's. */
+.tcg-peek-card.allmodes { max-height: none; }
+.tcg-peek-modehead {
+  font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: #f0cd7a; margin-top: 6px; padding-top: 10px; border-top: 1px solid rgba(240,205,122,0.22);
+}
+.tcg-peek-modehead:first-of-type { border-top: 0; padding-top: 0; }
+.tcg-peek-modehead span { font-weight: 600; letter-spacing: 0; text-transform: none; color: #7f90ba; }
+.tcg-peek-n .duel-atk, .tcg-peek-n .duel-hp { font-size: 0.88rem; }
+@media (max-width: 1080px) {
+  .tcg-reveal-stage { flex-direction: column; align-items: center; }
+  .tcg-reveal-side { flex: 0 0 auto; width: min(340px, 100%); position: static; max-height: none; }
+}
 .tcg-reveal-title { color: #fff; font-size: 1.3rem; font-weight: 800; margin-bottom: 6px; }
 .tcg-reveal-sub { color: rgba(255,255,255,0.65); font-size: 0.85rem; margin-bottom: 22px; }
 .tcg-reveal-row { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; margin-bottom: 24px; }
