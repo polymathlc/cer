@@ -97,6 +97,34 @@
   #ppHover .pp-hv-edit { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; font-size:0.8rem; font-weight:700; color:#fff; background:var(--primary,#0b6b4f); border:none; border-radius:9px; cursor:pointer; box-shadow:0 2px 6px rgba(49,99,66,0.22); transition:background .15s, transform .1s; }
   #ppHover .pp-hv-edit:hover { background:var(--primary-dark,#085740); }
   #ppHover .pp-hv-edit:active { transform:translateY(1px); }
+/* ---- 🎯 The learning-objective chips on a question, and their picker ----
+   These live on the CREATE page, not inside the Learning Objectives page's
+   injected loStyles(), so they belong here, once, globally. The names are
+   deliberately NOT .lo-chip / .lo-pick-row: those already mean something else
+   on that page (a filter chip, a question row), and reusing them would restyle
+   it from underneath. */
+  .qlo-chips { display:flex; gap:8px; flex-wrap:wrap; align-items:center; min-height:28px; }
+  .qlo-empty { font-size:0.82rem; color:var(--text-muted); line-height:1.6; }
+  .qlo-chip { display:inline-flex; align-items:center; gap:8px; max-width:100%; font-size:0.78rem; line-height:1.4; border:1px solid var(--border); background:var(--surface-alt,#fafbfa); border-radius:999px; padding:6px 8px 6px 12px; }
+  .qlo-chip b { font-size:0.7rem; font-weight:700; color:var(--primary,#0b6b4f); letter-spacing:0.03em; }
+  .qlo-chip > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:320px; }
+  .qlo-chip button { border:0; background:none; color:var(--text-muted); font-size:0.95rem; line-height:1; cursor:pointer; padding:2px 5px; border-radius:6px; }
+  .qlo-chip button:hover { background:rgba(0,0,0,0.07); color:var(--text); }
+  /* An objective the list no longer has. Kept on the question and shown as
+     itself rather than quietly dropped. */
+  .qlo-chip.gone { border-style:dashed; opacity:0.72; }
+  .qlop-group { font-size:0.72rem; font-weight:800; letter-spacing:0.07em; text-transform:uppercase; color:var(--text-muted); background:var(--surface-alt,#fafbfa); padding:9px 16px; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:1; }
+  .qlop-row { display:flex; align-items:flex-start; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); cursor:pointer; }
+  .qlop-row:last-child { border-bottom:0; }
+  .qlop-row:hover { background:var(--surface-alt,#fafbfa); }
+  .qlop-row.on { background:var(--primary-light,#eaf3ef); }
+  /* Tailwind's preflight sets appearance:none on form controls, which renders a
+     bare checkbox as an invisible white box. */
+  .qlop-row input { appearance:auto; -webkit-appearance:auto; width:17px; height:17px; min-width:17px; margin:2px 0 0; flex:0 0 auto; accent-color:var(--primary,#0b6b4f); cursor:pointer; }
+  .qlop-main { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .qlop-title { font-size:0.88rem; font-weight:600; line-height:1.45; }
+  .qlop-sub { font-size:0.78rem; color:var(--text-muted); line-height:1.55; }
+  .qlop-empty { padding:26px 16px; text-align:center; font-size:0.85rem; color:var(--text-muted); }
 .material-symbols-outlined {
   display: inline-block;
   vertical-align: middle;
@@ -7979,6 +8007,20 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <div id="questionTagsReuse" class="qtag-reuse" style="display:none;"></div>
         </div>
 
+        <!-- 🎯 Learning objectives: the syllabus outcome(s) this question actually
+             assesses. Filed on the question itself (q.los), and read back by the
+             🎯 Learning Objectives page alongside the questions attached from
+             that end — one system, entered from whichever end suits you. -->
+        <div class="form-group">
+          <label class="form-label">🎯 Learning objectives <span style="font-weight:400;color:var(--text-muted);">(optional — the syllabus outcome this question tests)</span></label>
+          <div class="qlo-chips" id="qLoChips"><span class="qlo-empty">Not filed under a learning objective yet.</span></div>
+          <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:10px;">
+            <button type="button" class="btn btn-outline" style="font-size:0.82rem;" onclick="loPickerOpen()">＋ Add objectives</button>
+            <button type="button" class="btn btn-outline" style="font-size:0.82rem;" title="Let the AI read this question and propose the learning objectives it assesses. Nothing is filed until you save the question." onclick="loSuggestForEditor(this)">✨ Suggest</button>
+          </div>
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-top:8px;line-height:1.5;">Files this question under the MOE Primary Science Syllabus objectives on the <strong>🎯 Learning Objectives</strong> page, so a student can practise that one objective on its own. The list is yours — edit, add to or delete from it on that page.</div>
+        </div>
+
         <div class="form-group">
           <label class="form-label" style="display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600;">
             <input type="checkbox" id="questionAnnotation" style="width:18px;height:18px;flex:0 0 auto;cursor:pointer;">
@@ -10389,6 +10431,27 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <div class="btn-group" style="justify-content:flex-end;margin-top:18px;gap:8px;">
       <button class="btn btn-outline" onclick="loClosePicker()">Cancel</button>
       <button class="btn btn-primary" id="loPickAttachBtn" disabled onclick="loPickAttach()">Add questions</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== LEARNING OBJECTIVES — PICK THEM FOR ONE QUESTION ====================
+     The other end of the same system: opened from the question editor's 🎯 field.
+     Ticking is a working copy — nothing reaches the question until Apply, and
+     nothing reaches the bank until the question itself is saved. -->
+<div class="confirm-overlay" id="qLoPickOverlay">
+  <div class="confirm-dialog" style="max-width:660px;text-align:left;max-height:88vh;display:flex;flex-direction:column;">
+    <h3 style="margin-bottom:8px;">🎯 Learning objectives</h3>
+    <p style="font-size:0.85rem;color:var(--text-muted);line-height:1.65;margin:0 0 14px;">Tick every objective this question actually assesses — usually one, sometimes two or three. The level is preset from the question's topic; clear it to search the whole syllabus.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+      <select id="qLoPickLevel" class="form-select" style="flex:0 0 150px;" onchange="loPickerSetLevel(this.value)"></select>
+      <input id="qLoPickSearch" class="form-input" type="text" style="flex:1 1 200px;" placeholder="Search objectives…" oninput="loPickerSetSearch(this.value)">
+    </div>
+    <div id="qLoPickCount" style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px;"></div>
+    <div id="qLoPickList" style="flex:1;overflow-y:auto;min-height:150px;border:1px solid var(--border);border-radius:12px;"></div>
+    <div class="btn-group" style="justify-content:flex-end;margin-top:18px;gap:8px;">
+      <button class="btn btn-outline" onclick="loPickerClose()">Cancel</button>
+      <button class="btn btn-primary" onclick="loPickerApply()">Apply</button>
     </div>
   </div>
 </div>

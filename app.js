@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.286.1';
+const APP_VERSION = 'v1.287.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -2974,6 +2974,7 @@ function navigateTo(page) {
       const nisEl = document.getElementById('questionNotInSyllabus');
       if (nisEl) nisEl.checked = false;
       if (typeof setQuestionTagsField === 'function') setQuestionTagsField(null);
+      if (typeof loEditorSet === 'function') loEditorSet([]);
       renderBlocks();
       setEditMode(false);
       if (window.ppCancelPendingAttach) window.ppCancelPendingAttach();
@@ -10480,6 +10481,10 @@ function collectQuestionData() {
     annotation: !!(document.getElementById('questionAnnotation') && document.getElementById('questionAnnotation').checked),
     notInSyllabus: !!(document.getElementById('questionNotInSyllabus') && document.getElementById('questionNotInSyllabus').checked),
     tags: _snapTagsToBank(parseTagInput(document.getElementById('questionTags')?.value || '')),
+    // The 🎯 learning objectives ticked in the editor. Objective-list order, so
+    // a question's objectives always read the way the syllabus does rather than
+    // the order they happened to be ticked in.
+    los: (typeof _loOrderIds === 'function') ? _loOrderIds(editorLos || []) : (editorLos || []).slice(),
     blocks: blocksClone,
     blanks: JSON.parse(JSON.stringify(selectedBlanks)),
     createdAt: new Date().toISOString(),
@@ -10535,10 +10540,11 @@ function addToBank() {
 // has no field in the editor, so a save would silently drop it.
 // 'tags' MUST be in here: without it, carryOverQuestionMeta below would restore
 // the old tags every time an admin cleared the box, and a tag could never be
-// removed.
+// removed. 'los' is in for exactly the same reason — an objective removed in
+// the editor would walk straight back in on the next save.
 const EDITOR_OWNED_QUESTION_FIELDS = new Set([
   'id', 'title', 'category', 'category2', 'topic', 'topic2', 'markingGuide',
-  'answerKeyNote', 'answerKeyImage', 'annotation', 'notInSyllabus', 'tags',
+  'answerKeyNote', 'answerKeyImage', 'annotation', 'notInSyllabus', 'tags', 'los',
   'blocks', 'blanks', 'createdAt', 'createdBy',
 ]);
 
@@ -10684,6 +10690,7 @@ function clearForm() {
     const nisEl = document.getElementById('questionNotInSyllabus');
     if (nisEl) nisEl.checked = false;
     setQuestionTagsField(null);
+    if (typeof loEditorSet === 'function') loEditorSet([]);
     _hideDupBanner();
     renderBlocks();
     setEditMode(false);
@@ -11445,6 +11452,7 @@ function editQuestion(id) {
   const nisEl = document.getElementById('questionNotInSyllabus');
   if (nisEl) nisEl.checked = !!q.notInSyllabus;
   setQuestionTagsField(q);
+  if (typeof loEditorSet === 'function') loEditorSet(qLos(q));
 
   // Try to set topic, handle custom topics
   const topicSelect = document.getElementById('topicSelect');
@@ -53955,9 +53963,26 @@ function loList() { return (loData && Array.isArray(loData.objectives)) ? loData
 function loFind(id) { return loList().find(o => o && o.id === id); }
 function loNewId() { return 'lo_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 function loQIds(id) { const a = (loData && loData.map) ? loData.map[id] : null; return Array.isArray(a) ? a : []; }
-// Attached questions that still exist in the bank. A question deleted from the
-// bank simply stops appearing here rather than breaking the objective.
-function loQuestions(id) { return loQIds(id).map(qid => questionBank.find(q => q.id === qid)).filter(Boolean); }
+// An objective's questions, from BOTH directions and deduped:
+//   • the ones attached here (loData.map) — picked on this page, and
+//   • the ones that carry the objective on themselves (q.los) — ticked in the
+//     question editor's 🎯 field.
+// The two are one system read from opposite ends, exactly as the math app's
+// syllabus map is: whichever end a teacher files a question from, it appears at
+// the other. A question deleted from the bank simply stops appearing rather
+// than breaking the objective.
+function loQuestions(id) {
+  const seen = new Set();
+  const out = [];
+  loQIds(id).forEach(qid => {
+    const q = questionBank.find(x => x.id === qid);
+    if (q && !seen.has(q.id)) { seen.add(q.id); out.push(q); }
+  });
+  (questionBank || []).forEach(q => {
+    if (q && !seen.has(q.id) && qLos(q).indexOf(id) >= 0) { seen.add(q.id); out.push(q); }
+  });
+  return out;
+}
 function loThemeColor(theme) { return PP_THEME_C[String(theme || '').toLowerCase()] || PP_THEME_C[({ Diversity:'diversity', Cycles:'cycles', Systems:'systems', Interactions:'interactions', Energy:'energy' })[theme]] || '#0b6b4f'; }
 
 // Build the starting list from the syllabus data already in this file.
@@ -54011,11 +54036,24 @@ async function loAttachQuestions(loId, qids) {
   await saveLOData();
   return added;
 }
+// Removing a question from an objective has to clear BOTH ends, or the one
+// that was left behind puts it straight back on the next render.
 async function loDetachQuestion(loId, qid) {
   if (!loIsAdmin()) return;
   if (!loData.map) loData.map = {};
-  loData.map[loId] = loQIds(loId).filter(x => x !== qid);
-  await saveLOData();
+  if (loQIds(loId).indexOf(qid) >= 0) {
+    loData.map[loId] = loQIds(loId).filter(x => x !== qid);
+    await saveLOData();
+  }
+  const q = questionBank.find(x => x.id === qid);
+  if (q && qLos(q).indexOf(loId) >= 0) {
+    q.los = qLos(q).filter(id => id !== loId);
+    // The question in the editor is the same object the bank holds, so its
+    // chips have to follow — otherwise a save from the editor writes the
+    // objective back.
+    if (currentEditingQuestion === qid && typeof loEditorSet === 'function') loEditorSet(q.los);
+    await saveQuestion(q);
+  }
   loRenderBody();
 }
 
@@ -54144,7 +54182,9 @@ function loClosePicker() { ppHoverHide(); const ov = document.getElementById('lo
 // Bank questions not already in this objective, best matches first, so the
 // admin usually finds what they want without typing anything.
 function _loCandidates(lo, limit) {
-  const already = new Set(loQIds(lo.id));
+  // Everything already in this objective from EITHER end — attached here, or
+  // tagged on the question itself in the editor.
+  const already = new Set(loQuestions(lo.id).map(q => q.id));
   const scored = [];
   questionBank.forEach(q => {
     if (already.has(q.id)) return;
@@ -54320,6 +54360,260 @@ async function loAiAttach() {
   showToast(`Added ${n} question${n === 1 ? '' : 's'}`, 'success');
 }
 
+// =====================================================================
+// 🎯 OBJECTIVES ON A QUESTION — the editor's own field
+//
+// The page above files questions from the OBJECTIVE's end: open an objective,
+// pick questions for it. This is the other end, ported from the math app: while
+// you are writing a question, say which objectives it assesses. Both write into
+// the same system — loQuestions(id) reads the attached map and the questions'
+// own `q.los` together — so a question filed from either end appears at both.
+//
+// The objective list is the admin's own (loList(), seeded from the MOE Primary
+// Science Syllabus 2023 and editable from the 🎯 Learning Objectives page), so
+// the field is filled from whatever objectives this school actually teaches.
+//
+// Nothing is written until the question itself is saved: ＋ Add objectives ticks
+// into a working copy that Apply commits to the editor, and ✨ Suggest only ever
+// ADDS to the chips for the author to check.
+// =====================================================================
+// `var`, not `let`, and that is load-bearing: this block sits near the END of
+// the module and navigateTo('create') can run before it is reached — a `let`
+// would still be in its temporal dead zone there and take the whole app down.
+var editorLos = [];
+let _loPickerSel = [];          // the picker's working copy — Apply commits it
+let _loPickerLevel = '';
+let _loPickerTerm = '';
+
+// A question's objectives, filtered to ones that still exist. A tag pointing at
+// an objective the admin has since deleted is dropped at READ time rather than
+// erased, so an objective list edited by mistake loses nothing. Nothing is
+// dropped at all until that list has actually LOADED — otherwise a question
+// opened before it arrives would come back from the editor stripped of every
+// objective it had.
+function qLos(q) {
+  const raw = (q && Array.isArray(q.los)) ? q.los : [];
+  const out = [];
+  raw.forEach(x => {
+    const id = String(x || '');
+    if (!id || out.indexOf(id) >= 0) return;
+    if (_loLoaded && !loFind(id)) return;
+    out.push(id);
+  });
+  return out;
+}
+// Objective-list order, never the order they were ticked in. An id the list
+// does not know (it has not loaded yet, or the objective was deleted) keeps its
+// place at the end rather than being thrown away.
+function _loOrderIds(ids) {
+  const want = new Set(ids || []);
+  const out = loList().filter(o => want.has(o.id)).map(o => o.id);
+  (ids || []).forEach(id => { if (out.indexOf(id) < 0) out.push(id); });
+  return out;
+}
+// The level a topic belongs to — the editor has a topic, not a level, and the
+// picker and the AI prompt both want to start at the right one.
+function _loLevelForTopic(topic) {
+  const t = String(topic || '').toLowerCase().trim();
+  if (!t) return '';
+  const lv = Object.keys(topicsByLevel).find(k => (topicsByLevel[k] || []).some(x => String(x).toLowerCase() === t));
+  return lv || '';
+}
+
+// ---------- the chips in the editor ----------
+function loEditorSet(ids) {
+  editorLos = Array.isArray(ids) ? ids.slice() : [];
+  loEditorRender();
+  // The objective list is a document, so it may not be in hand when a question
+  // is opened. Load it once and repaint, rather than leaving bare ids on show.
+  // Wrapped because this can be reached from the create page's reset before the
+  // objective state above it has been evaluated — the chips are worth nothing
+  // next to taking the whole app down.
+  try { if (!_loLoaded) loadLOData().then(() => loEditorRender()).catch(() => {}); }
+  catch (e) { console.warn('objective list', e); }
+}
+function loEditorRender() {
+  const host = document.getElementById('qLoChips');
+  if (!host) return;
+  if (!editorLos.length) {
+    host.innerHTML = '<span class="qlo-empty">Not filed under a learning objective yet.</span>';
+    return;
+  }
+  host.innerHTML = editorLos.map(id => {
+    const o = loFind(id);
+    const meta = o ? [o.level, o.theme, o.topic].filter(Boolean).join(' · ') : 'No longer in your objective list';
+    const tip = o && o.obj ? meta + ' — ' + o.obj : meta;
+    return `<span class="qlo-chip${o ? '' : ' gone'}" title="${escapeHtml(tip)}">
+      <b>${escapeHtml(o ? (o.level || '—') : '?')}</b><span>${escapeHtml(o ? (o.title || id) : id)}</span>
+      <button type="button" title="Remove this objective" onclick="loEditorRemove('${escapeHtml(id)}')">&times;</button>
+    </span>`;
+  }).join('');
+}
+function loEditorRemove(id) {
+  editorLos = editorLos.filter(x => x !== id);
+  loEditorRender();
+}
+
+// ---------- ＋ Add objectives ----------
+async function loPickerOpen() {
+  if (!_canAuthor()) { showToast('Only admin and employee accounts can file questions', 'error'); return; }
+  await loadLOData();
+  if (!loList().length) { showToast('There are no learning objectives to choose from yet', 'error'); return; }
+  _loPickerSel = editorLos.slice();
+  _loPickerTerm = '';
+  // Preset to the question's own level — that is nearly always the right
+  // answer; clearing it searches the whole syllabus.
+  _loPickerLevel = _loLevelForTopic(document.getElementById('topicSelect')?.value || '');
+  const sel = document.getElementById('qLoPickLevel');
+  if (sel) {
+    sel.innerHTML = '<option value="">All levels</option>' + LO_LEVELS.map(l => `<option value="${l}">${l}</option>`).join('');
+    sel.value = _loPickerLevel;
+  }
+  const s = document.getElementById('qLoPickSearch'); if (s) s.value = '';
+  loPickerRender();
+  const ov = document.getElementById('qLoPickOverlay'); if (ov) ov.classList.add('active');
+}
+function loPickerClose() { const ov = document.getElementById('qLoPickOverlay'); if (ov) ov.classList.remove('active'); }
+function loPickerSetLevel(v) { _loPickerLevel = v || ''; loPickerRender(); }
+function loPickerSetSearch(v) { _loPickerTerm = String(v || '').toLowerCase().trim(); loPickerRender(); }
+function _loPickerSyncCount() {
+  const cnt = document.getElementById('qLoPickCount');
+  if (cnt) cnt.textContent = `${_loPickerSel.length} objective${_loPickerSel.length === 1 ? '' : 's'} ticked`;
+}
+function loPickerRender() {
+  const host = document.getElementById('qLoPickList');
+  if (!host) return;
+  const matches = loList().filter(o => {
+    if (_loPickerLevel && o.level !== _loPickerLevel) return false;
+    if (_loPickerTerm) {
+      const hay = ((o.title || '') + ' ' + (o.obj || '') + ' ' + (o.intro || '') + ' ' + (o.topic || '') + ' ' +
+        (o.theme || '') + ' ' + (o.kw || []).join(' ')).toLowerCase();
+      if (!hay.includes(_loPickerTerm)) return false;
+    }
+    return true;
+  });
+  _loPickerSyncCount();
+  if (!matches.length) { host.innerHTML = '<div class="qlop-empty">No objective matches that.</div>'; return; }
+  let html = '', group = '';
+  matches.forEach(o => {
+    const g = [o.level, o.theme, o.topic].filter(Boolean).join(' · ') || 'Objectives';
+    if (g !== group) { group = g; html += `<div class="qlop-group">${escapeHtml(g)}</div>`; }
+    const on = _loPickerSel.indexOf(o.id) >= 0;
+    html += `<label class="qlop-row${on ? ' on' : ''}" data-lo="${escapeHtml(o.id)}">
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="loPickerToggle('${escapeHtml(o.id)}', this.checked)">
+      <span class="qlop-main">
+        <span class="qlop-title">${escapeHtml(o.title || 'Untitled objective')}</span>
+        ${o.obj ? `<span class="qlop-sub">${escapeHtml(o.obj)}</span>` : ''}
+      </span>
+    </label>`;
+  });
+  host.innerHTML = html;
+}
+function loPickerToggle(id, on) {
+  if (on) { if (_loPickerSel.indexOf(id) < 0) _loPickerSel.push(id); }
+  else _loPickerSel = _loPickerSel.filter(x => x !== id);
+  const key = (window.CSS && CSS.escape) ? CSS.escape(id) : id;
+  const row = document.querySelector(`#qLoPickList .qlop-row[data-lo="${key}"]`);
+  if (row) row.classList.toggle('on', !!on);
+  _loPickerSyncCount();
+}
+function loPickerApply() {
+  editorLos = _loOrderIds(_loPickerSel);
+  loPickerClose();
+  loEditorRender();
+}
+
+// ---------- ✨ Suggest ----------
+// Scoped to the question's own level when its topic has one (a P3 question is
+// not assessing a P6 objective), and to every objective when it does not.
+function _loPromptList(level) {
+  const all = loList();
+  const pool = level ? all.filter(o => o.level === level) : all;
+  return (pool.length ? pool : all).map(o =>
+    `${o.id} — ${o.title}: ${o.obj || o.title}  [${[o.level, o.theme, o.topic].filter(Boolean).join(' · ')}]`
+  ).join('\n');
+}
+function _loQuestionText(q) {
+  const parts = [q.title || ''];
+  if (q.topic) parts.push('Topic: ' + [q.topic, qSecondaryTopic(q)].filter(Boolean).join(', '));
+  const tags = qTagList(q);
+  if (tags.length) parts.push('Tags: ' + tags.join(', '));
+  (q.blocks || []).forEach(b => {
+    if (!b || !b.type) return;
+    if (b.type === 'text' || b.type === 'part') parts.push(stripHtmlToText(b.content));
+    else if (b.type === 'mcq') (b.options || []).forEach(o => parts.push(stripHtmlToText(o && o.text)));
+    else if (b.type === 'answer') parts.push([b.claim, b.evidence, b.reasoning].map(stripHtmlToText).filter(Boolean).join(' '));
+    else if (b.type === 'plainanswer' || b.type === 'answerKey') parts.push(stripHtmlToText(b.text || b.content));
+    else if (b.type === 'answerLine') parts.push(stripHtmlToText(b.answer));
+    else if (b.type === 'image') parts.push(stripHtmlToText(b.caption));
+  });
+  if (q.markingGuide) parts.push('Marking guide: ' + q.markingGuide);
+  return parts.filter(Boolean).join('\n').slice(0, 4000);
+}
+async function loSuggestLos(q, level) {
+  const prompt =
+    'You are filing a Singapore primary school SCIENCE question under the learning objectives of the MOE Primary Science Syllabus.\n\n' +
+    'QUESTION\n' + _loQuestionText(q) + '\n\n' +
+    'Choose EVERY learning objective below that this question actually assesses — usually one, sometimes two or three. ' +
+    'Do not choose an objective just because the topic sounds related: the question must genuinely test its science content. ' +
+    'If none of them fit, return an empty list.\n\n' +
+    'LEARNING OBJECTIVES (id — title: outcome)\n' + _loPromptList(level) + '\n\n' +
+    'Reply with JSON only, in this exact shape: {"ids":["heat-effects"]}';
+  const raw = await askGemini(prompt, { maxOutputTokens: 500, temperature: 0.1, json: true });
+  let ids = [];
+  try {
+    const data = _parseAIJson(raw);
+    ids = Array.isArray(data) ? data : (data && Array.isArray(data.ids) ? data.ids : []);
+  } catch (e) {
+    // The reply did not parse at all. Every id is checked against the objective
+    // list below, so reading them straight out of the text can only ever yield
+    // REAL objectives — which beats making the teacher file the question by
+    // hand because a model wrapped its answer in prose.
+    console.warn('objective suggestion JSON', e);
+    ids = String(raw || '').match(/[A-Za-z][\w-]{2,}/g) || [];
+    if (!ids.length) throw e;
+  }
+  const out = [];
+  ids.map(x => String(x || '').trim()).forEach(id => { if (loFind(id) && out.indexOf(id) < 0) out.push(id); });
+  return out;
+}
+async function loSuggestForEditor(btn) {
+  if (!_canAuthor()) { showToast('Only admin and employee accounts can file questions', 'error'); return; }
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not configured — pick the objectives by hand instead', 'error'); return; }
+  await loadLOData();
+  if (!loList().length) { showToast('There are no learning objectives to choose from yet', 'error'); return; }
+  syncEditorDomToBlocks();
+  const q = {
+    title: document.getElementById('questionTitle')?.value || '',
+    topic: document.getElementById('topicSelect')?.value || '',
+    topic2: document.getElementById('topicSelect2')?.value || '',
+    tags: parseTagInput(document.getElementById('questionTags')?.value || ''),
+    markingGuide: (document.getElementById('questionMarkingGuide')?.value || '').trim(),
+    blocks: blocks
+  };
+  if (!_loQuestionText(q).trim()) { showToast('Write the question first, then Suggest', 'error'); return; }
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Reading…'; }
+  try {
+    const level = _loLevelForTopic(q.topic);
+    const ids = await loSuggestLos(q, level);
+    if (!ids.length) { showToast('The AI could not match this to an objective — pick one by hand', 'info'); return; }
+    const before = editorLos.length;
+    ids.forEach(id => { if (editorLos.indexOf(id) < 0) editorLos.push(id); });
+    editorLos = _loOrderIds(editorLos);
+    loEditorRender();
+    const added = editorLos.length - before;
+    showToast(added
+      ? `Suggested ${added} objective${added === 1 ? '' : 's'} — check them before saving`
+      : 'Already filed under everything the AI suggested', added ? 'success' : 'info');
+  } catch (e) {
+    console.warn('lo suggest', e);
+    showToast('Could not read the question — try again', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig || '✨ Suggest'; }
+  }
+}
+
 // ---------- page ----------
 async function renderObjectivesPage() {
   const body = document.getElementById('loBody');
@@ -54372,7 +54666,7 @@ function loRenderBody() {
     </div>`).join('') || `<div class="lo-empty">No objectives match this filter.${admin ? ' Change the filter, or add a new objective.' : ''}</div>`;
 
   const note = admin
-    ? 'Every objective below comes from the MOE Primary Science Syllabus (P3–P6 Standard) — but they are yours now: edit the wording, add objectives of your own, or delete any you do not teach. Attach questions from your bank to an objective and your students can practise that objective on its own. <strong>🤖 AI find</strong> reads your bank and suggests questions for one objective — it only ever suggests, nothing is added until you tick it.'
+    ? 'Every objective below comes from the MOE Primary Science Syllabus (P3–P6 Standard) — but they are yours now: edit the wording, add objectives of your own, or delete any you do not teach. Attach questions from your bank to an objective and your students can practise that objective on its own. <strong>🤖 AI find</strong> reads your bank and suggests questions for one objective — it only ever suggests, nothing is added until you tick it. You can also file a question from the other end: the question editor has a <strong>🎯 Learning objectives</strong> field with its own <strong>✨ Suggest</strong> button, and anything filed there appears here too.'
     : 'Practise by syllabus learning objective. Pick the objective you want to work on and press <strong>▶ Practise</strong> — you will get just the questions that test it.';
 
   body.innerHTML = loStyles() + `
@@ -54532,3 +54826,13 @@ window.loAiFind = loAiFind;
 window.loCloseAi = loCloseAi;
 window.loAiToggle = loAiToggle;
 window.loAiAttach = loAiAttach;
+// The editor's 🎯 field, its picker and ✨ Suggest.
+window.loEditorSet = loEditorSet;
+window.loEditorRemove = loEditorRemove;
+window.loPickerOpen = loPickerOpen;
+window.loPickerClose = loPickerClose;
+window.loPickerSetLevel = loPickerSetLevel;
+window.loPickerSetSearch = loPickerSetSearch;
+window.loPickerToggle = loPickerToggle;
+window.loPickerApply = loPickerApply;
+window.loSuggestForEditor = loSuggestForEditor;
