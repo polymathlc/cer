@@ -1439,7 +1439,7 @@ const SUPER_ADMIN_EMAIL = 'chungzhikai@gmail.com';
 // into the teacher's bank (_bankOwnerUid), because a question filed under the
 // employee's own uid is a question no student would ever be served.
 const EMPLOYEE_EMAILS = ['pkeertana21@gmail.com'];
-const EMPLOYEE_PAGES = ['create', 'exampaper', 'bank', 'vetting', 'worksheet', 'myworksheets', 'worksession'];
+const EMPLOYEE_PAGES = ['create', 'exampaper', 'bank', 'vetting', 'checkq', 'worksheet', 'myworksheets', 'worksession'];
 let adminUid = null; // the bank owner: loaded for student AND employee accounts
 // Maps question/vetting id -> owning admin's uid. Populated when super admin
 // loads other admins' subcollections so writes/deletes target the right doc.
@@ -1689,7 +1689,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.287.0';
+const APP_VERSION = 'v1.288.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -2120,6 +2120,10 @@ function _syncBackToPapersBtn() {
     b.style.display = '';
     b.innerHTML = '&larr; Back to the worksheet';
     b.title = 'Return to the worksheet preview you were checking';
+  } else if (_editReturnPage === 'checkq') {
+    b.style.display = '';
+    b.innerHTML = '&larr; Back to Check Questions';
+    b.title = 'Return to the check queue, on the same question';
   } else {
     b.style.display = 'none';
   }
@@ -2990,6 +2994,7 @@ function navigateTo(page) {
   if (page === 'papers') renderPapersPage();
   if (page === 'notes') renderNotesPage();
   if (page === 'vetting') renderVettingList();
+  if (page === 'checkq') renderCheckQPage();
   if (page === 'student') {
     populateStudentSelect();
     renderStudentView();
@@ -10639,6 +10644,7 @@ function cancelEdit() {
   const backDest = _editReturnPage === 'papers' ? 'PSLE Papers'
     : _editReturnPage === 'vetting' ? 'the vetting list'
     : (_editReturnPage === 'myworksheets' || _editReturnPage === 'worksheet') ? 'the worksheet preview'
+    : _editReturnPage === 'checkq' ? 'the check queue'
     : 'the question bank';
   showConfirm('Cancel Edit', `Discard changes and go back to ${backDest}?`, () => {
     currentEditingQuestion = null;
@@ -17537,6 +17543,10 @@ async function loadFromStorage() {
 function updateCounts() {
   document.getElementById('bankCount').textContent = questionBank.length;
   document.getElementById('vettingCount').textContent = vettingList.length;
+  // The Check Questions badge rides the same refresh: every path that adds,
+  // edits or deletes a question already calls updateCounts(), so the count of
+  // questions nobody has read yet cannot go stale.
+  try { _cqUpdateBadge(); } catch (e) {}
 }
 
 // ── Topic filter: a tick list, grouped by the level each topic is taught at ──
@@ -20589,7 +20599,12 @@ function toggleWsPreview(qId, btn) {
   }
 }
 
-function renderQuestionPreviewHtml(qId) {
+// `opts.tryIt === false` drops the "Answer it yourself" button. Its handler
+// writes into an element called wsPreview_<id>, so a surface that renders the
+// preview somewhere else (the ✅ Check Questions card) would otherwise show a
+// button that silently does nothing — or, worse, one that reaches into the
+// worksheet page's copy of the same question.
+function renderQuestionPreviewHtml(qId, opts) {
   const q = questionBank.find(qb => qb.id === qId);
   if (!q) return '<p>Question not found</p>';
   let html = '';
@@ -20633,7 +20648,7 @@ function renderQuestionPreviewHtml(qId) {
     }
   });
   if (!html) return '<p style="color:var(--text-muted);font-style:italic;">No content</p>';
-  if (questionHasMarkableAnswer(q)) {
+  if (questionHasMarkableAnswer(q) && !(opts && opts.tryIt === false)) {
     html += `<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);">
       <button class="btn btn-outline" style="padding:6px 14px;font-size:0.84rem;" onclick="wsPreviewTryIt('${qId}')">✍️ Answer it yourself — AI marks it</button>
     </div>`;
@@ -26870,6 +26885,518 @@ function doctorDelete(id) {
     if (document.querySelector('#page-bank.active')) renderQuestionBank();
     _doctorRenderResults();
   });
+}
+
+
+// =====================================================================
+// ✅ CHECK QUESTIONS (admin + employee) — the questions added MOST RECENTLY,
+// served ONE at a time for a second pair of eyes. It is deliberately not the
+// Question Doctor: the Doctor is a whole-bank audit an admin runs occasionally
+// and reads as a list of problems, while this is a queue an employee works
+// through a question at a time and which never stops offering the next one.
+//
+// The headline check is the one the whole page exists for: a question whose
+// TABLE OR DIAGRAM already shows the four choices, with the options underneath
+// repeating what the picture has already said. Those options should read just
+// (1) (2) (3) (4) — the picture is the choice list — and the fix is one tap
+// (`mcqNumberOptions` writes exactly the same thing in the block editor).
+//
+// Two layers find it, because neither can do the job alone:
+//   · STRUCTURAL, instant, no AI — decidable when the choices are in a TABLE
+//     block: the table labels its rows 1..n, or the option wording is already
+//     printed in the cells.
+//   · AI WITH VISION — the same question in a PICTURE is invisible to any text
+//     check, so the diagrams are attached and the model is asked about them
+//     FIRST. Without the images this check cannot be made at all; do not
+//     "optimise" the pass down to askGemini.
+//
+// Checked state lives on the question (`q.checked`) rather than per user, so
+// two employees never read the same question twice. It is written with a QUIET
+// save: marking a question read is housekeeping, not authoring, and must not
+// land in anybody's work-session log as a question written.
+// =====================================================================
+const CQ_RECENT_DAYS = 45;   // what "recently added" means for the badge + queue
+const CQ_MIN_QUEUE = 25;     // …but never offer an empty queue while unread questions exist
+const CQ_AI_IMAGES = 3;      // diagrams attached to one AI check
+const CQ_LONG_OPTION = 20;   // avg chars before wordy options are worth a look
+
+let _cqQueue = [];               // question ids, newest first
+let _cqPos = 0;                  // where we are in it
+const _cqReviews = new Map();    // id -> { state:'running'|'done'|'error', findings, error }
+let _cqAuto = true;              // run the AI pass automatically on each question
+let _cqLastChecked = '';         // id the last ✓ marked — for Undo
+
+// ---- reading a question -------------------------------------------------
+function _cqCheckedAt(q) { return (q && q.checked && q.checked.at) || ''; }
+function _cqAddedAt(q) { return String((q && q.createdAt) || ''); }
+function _cqRecentCut() { return new Date(Date.now() - CQ_RECENT_DAYS * 864e5).toISOString(); }
+function _cqUnchecked() {
+  return (Array.isArray(questionBank) ? questionBank : [])
+    .filter(q => q && q.id && !_cqCheckedAt(q))
+    .sort((a, b) => _cqAddedAt(b).localeCompare(_cqAddedAt(a)));
+}
+// The badge counts only what the page PROMISES — the recent ones. A bank of
+// several thousand older questions would otherwise show a number nobody could
+// ever clear, which reads as broken rather than as work to do.
+function _cqRecentUncheckedCount() {
+  const cut = _cqRecentCut();
+  return (Array.isArray(questionBank) ? questionBank : [])
+    .filter(q => q && q.id && !_cqCheckedAt(q) && _cqAddedAt(q) >= cut).length;
+}
+function _cqBuildQueue() {
+  const all = _cqUnchecked();
+  const cut = _cqRecentCut();
+  const recent = all.filter(q => _cqAddedAt(q) >= cut);
+  // Recent first — but a bank whose newest question predates the window still
+  // gets a queue, or the page sits empty while nothing has ever been read.
+  const list = recent.length >= CQ_MIN_QUEUE ? recent : all.slice(0, Math.max(CQ_MIN_QUEUE, recent.length));
+  _cqQueue = list.map(q => q.id);
+  _cqPos = 0;
+}
+// The question on show. Anything deleted or checked since the queue was built
+// is stepped over rather than rendered as a gap.
+function _cqCurrent() {
+  while (_cqPos < _cqQueue.length) {
+    const q = _docQById(_cqQueue[_cqPos]);
+    if (q && !_cqCheckedAt(q)) return q;
+    _cqPos++;
+  }
+  return null;
+}
+
+// ---- the tables an option list can be repeating -------------------------
+// A LOADED question carries table data as array-of-arrays (normalizeLoadedQuestion
+// restores it), but a question held straight from a Firestore read has the
+// object-of-rows shape — so read both rather than crashing on one of them.
+function _cqTableRows(b) {
+  let data = b && b.data;
+  if (!data) return [];
+  const rowsOf = v => Array.isArray(v) ? v
+    : (v && typeof v === 'object' ? Object.keys(v).sort((x, y) => Number(x) - Number(y)).map(k => v[k]) : []);
+  return rowsOf(data).map(row => rowsOf(row).map(c => stripHtml(String(c == null ? '' : c)).replace(/\s+/g, ' ').trim()));
+}
+function _cqTableCells(b) { return _cqTableRows(b).flat().filter(Boolean); }
+function _cqOptText(o) { return stripHtml((o && o.text) || '').replace(/\s+/g, ' ').trim(); }
+function _cqMcqBlock(q) { return ((q && q.blocks) || []).find(b => b && b.type === 'mcq'); }
+// "(1)", "2.", "  3 )" — an option that is already nothing but its own number.
+const CQ_NUMBERISH_RE = /^[\s([]*\d{1,2}[\s)\].:-]*$/;
+function _cqOptsAreBareNumbers(mcq) {
+  const t = ((mcq && mcq.options) || []).map(_cqOptText);
+  return t.length > 0 && t.every(s => !s || CQ_NUMBERISH_RE.test(s));
+}
+// Can the one-tap fix be offered at all? Only for a real option list that is
+// not already numbered — the button must never be a no-op.
+function _cqMcqFixable(q) {
+  const mcq = _cqMcqBlock(q);
+  if (!mcq || !Array.isArray(mcq.options) || mcq.options.length < 2) return null;
+  if (_cqOptsAreBareNumbers(mcq)) return null;
+  return mcq;
+}
+const CQ_STOPWORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'are', 'was', 'were', 'has', 'have', 'had', 'its', 'his', 'her', 'their', 'than', 'then', 'into', 'onto', 'out', 'not', 'but', 'all', 'any', 'each', 'more', 'most', 'only', 'same']);
+function _cqWords(s) {
+  return _docNorm(s).split(' ').filter(w => w.length >= 3 && !CQ_STOPWORDS.has(w));
+}
+// A table that labels its own rows 1..n IS the option list — the strongest
+// signal there is, and it needs no wording match at all.
+function _cqTableLabelsChoices(tables, n) {
+  if (n < 2) return false;
+  const nums = new Set();
+  tables.forEach(b => _cqTableCells(b).forEach(c => {
+    const m = c.match(/^\(?\s*(\d{1,2})\s*\)?[.)]?$/);
+    if (m) nums.add(Number(m[1]));
+  }));
+  for (let i = 1; i <= n; i++) if (!nums.has(i)) return false;
+  return true;
+}
+
+// ---- structural findings (instant, no AI) -------------------------------
+function _cqFinding(type, severity, title, detail, fix) {
+  return { type, severity, title, detail, fix: fix || '' };
+}
+function _cqLocalFindings(q, aiAnswered) {
+  const out = [];
+  // `bl`, not `blocks` — the module-level `blocks` is the block EDITOR's array
+  // and shadowing it inside a checker that never touches the editor is exactly
+  // the kind of confusion that costs an afternoon.
+  const bl = (q && q.blocks) || [];
+  const mcq = _cqMcqBlock(q);
+  const tables = bl.filter(b => b && b.type === 'table');
+  const pics = bl.filter(b => b && b.type === 'image');
+  const hasPicture = pics.some(b => b.url) || bl.some(b => /<img[\s>]/i.test(String(b && (b.content || b.claim || b.evidence || b.reasoning) || '')));
+
+  if (mcq) {
+    const opts = (mcq.options || []).map(_cqOptText);
+    const real = opts.filter(Boolean);
+    const fixable = !!_cqMcqFixable(q);
+    // ── THE HEADLINE CHECK, decidable half ──────────────────────────────
+    if (fixable && tables.length && real.length >= 2) {
+      const labelled = _cqTableLabelsChoices(tables, opts.length);
+      const cellWords = new Set(tables.flatMap(b => _cqTableCells(b)).flatMap(_cqWords));
+      const echoed = real.filter(t => {
+        const w = _cqWords(t);
+        return w.length > 0 && w.filter(x => cellWords.has(x)).length / w.length >= 0.8;
+      }).length;
+      const mostEchoed = echoed >= Math.max(2, Math.ceil(real.length / 2));
+      if (labelled || mostEchoed) {
+        out.push(_cqFinding('Options', 'high', 'The table already shows the choices — the options repeat it',
+          labelled
+            ? 'The table in this question labels its rows 1, 2, 3… so the table IS the list of choices. The options underneath should read just (1) (2) (3) (4) and let the table do the work.'
+            : `${echoed} of the ${real.length} options are already written out in the table. Where the table shows the choice, the option only needs to be its number — (1) (2) (3) (4).`,
+          'numberOptions'));
+      }
+    }
+    // ── the same shape with a PICTURE is undecidable here: only the AI can
+    // read the diagram, so this is a nudge and it stands down once it has.
+    if (fixable && !tables.length && hasPicture && real.length >= 2 && !aiAnswered) {
+      const avg = real.reduce((n, t) => n + t.length, 0) / real.length;
+      if (avg >= CQ_LONG_OPTION) {
+        out.push(_cqFinding('Options', 'low', 'Wordy options next to a diagram — does the picture already show them?',
+          'If the diagram already labels each choice, the options should be just (1) (2) (3) (4) rather than repeating the picture in words. The AI check below reads the diagram and will say.'));
+      }
+    }
+    const correct = (mcq.options || []).find(o => o.id === mcq.correctId);
+    if (!correct) out.push(_cqFinding('MCQ', 'high', 'No correct option is marked', 'Nothing is ticked as the answer, so this question can never be marked right.'));
+    if (real.length < 2) out.push(_cqFinding('MCQ', 'high', 'Fewer than two real options', 'A multiple-choice question needs at least two options with text in them.'));
+    const norm = real.map(_docNorm);
+    if (new Set(norm).size < norm.length) out.push(_cqFinding('MCQ', 'med', 'Two options are identical', 'Two or more options say exactly the same thing — one of them cannot be right.'));
+  }
+
+  if (pics.some(b => !b.url) && !hasPicture) {
+    out.push(_cqFinding('Diagram', 'med', 'An empty picture placeholder', 'A picture block has no picture in it, so students will see a blank space where the diagram should be.'));
+  }
+  // Wording that promises a figure the question does not have.
+  const stem = bl.filter(b => b && (b.type === 'text' || b.type === 'part')).map(b => stripHtml(b.content || '')).join(' ');
+  if (!hasPicture && !tables.length && /\b(diagram|figure|picture|graph|the table|shown below|as shown)\b/i.test(stem)) {
+    out.push(_cqFinding('Diagram', 'med', 'The wording refers to something that is not there', 'The question mentions a diagram, table or picture, but none is attached.'));
+  }
+  bl.forEach(b => {
+    if (!b) return;
+    if (b.type === 'answer' && !stripHtml([b.claim, b.evidence, b.reasoning].join(' ')).trim()) {
+      out.push(_cqFinding('Answer', 'high', 'The model answer is blank', 'Claim / Evidence / Reasoning are all empty, so there is nothing for the AI to mark a student against.'));
+    }
+    if (b.type === 'plainanswer' && !stripHtml(b.content || '').trim()) {
+      out.push(_cqFinding('Answer', 'high', 'The model answer is blank', 'The answer box is empty, so there is nothing for the AI to mark a student against.'));
+    }
+  });
+  if (bl.length && !questionHasMarkableAnswer(q) && !(q && q.annotation)) {
+    out.push(_cqFinding('Answer', 'high', 'Nothing here can be marked', 'This question has no answer section at all and is not an annotation question, so practice cannot score it.'));
+  }
+  if (bl.length && !String((q && q.topic) || '').trim()) out.push(_cqFinding('Filing', 'low', 'No topic set', 'Without a topic this question never appears in topical practice.'));
+  return out;
+}
+
+// ---- the AI pass: the question AND its diagrams -------------------------
+async function _cqMedia(q) {
+  const urls = [];
+  ((q && q.blocks) || []).forEach(b => {
+    if (!b) return;
+    if (b.type === 'image' && b.url) urls.push(b.url);
+    // Pasted diagrams live inside a text or answer box as an inline <img>.
+    ['content', 'claim', 'evidence', 'reasoning'].forEach(f => {
+      const html = typeof b[f] === 'string' ? b[f] : '';
+      const re = /<img[^>]+src\s*=\s*["']([^"']+)["']/gi;
+      let m;
+      while ((m = re.exec(html))) urls.push(m[1]);
+    });
+  });
+  const media = [];
+  for (const u of urls) {
+    if (media.length >= CQ_AI_IMAGES) break;
+    try {
+      const dataUrl = await _urlToDataUrlRobust(transformImageUrl(u));
+      const parsed = _parseImageDataUrl(dataUrl);
+      if (parsed) media.push({ mimeType: parsed.mime, data: dataUrl.split(',')[1] || '' });
+    } catch (e) { console.warn('check-questions: could not read a diagram', e); }
+  }
+  return media;
+}
+// The question as words. Unlike the Doctor's representation this spells the
+// TABLE out in full — the table is the very thing the options may be echoing.
+function _cqRepr(q) {
+  const lines = [];
+  lines.push('Title: ' + (q.title || '(untitled)'));
+  const meta = [q.topic, normalizeCategoryValue(q.category || '')].filter(Boolean).join(' / ');
+  if (meta) lines.push('Filed under: ' + meta);
+  ((q && q.blocks) || []).forEach(b => {
+    if (!b) return;
+    switch (b.type) {
+      case 'text': { const t = stripHtml(b.content || '').trim(); if (t) lines.push(t); break; }
+      case 'part': { const t = ((b.label || '') + ' ' + stripHtml(b.content || '')).trim(); if (t) lines.push(t); break; }
+      case 'table': {
+        const rows = _cqTableRows(b).filter(r => r.some(Boolean));
+        if (rows.length) lines.push('TABLE printed in the question:\n' + rows.map(r => '  | ' + r.join(' | ') + ' |').join('\n'));
+        break;
+      }
+      case 'image':
+        lines.push(b.url
+          ? '[a picture is printed here' + (b.caption ? ': ' + stripHtml(b.caption) : '') + ' — it is attached to this message]'
+          : '[an EMPTY picture placeholder — no picture has been added]');
+        break;
+      case 'mcq': {
+        const opts = (b.options || []).map((o, i) => '  (' + (i + 1) + ') ' + (_cqOptText(o) || '(blank)'));
+        const c = (b.options || []).findIndex(o => o.id === b.correctId);
+        lines.push('OPTIONS exactly as they are written now:\n' + opts.join('\n') + '\nMarked correct: ' + (c >= 0 ? '(' + (c + 1) + ')' : 'NONE'));
+        break;
+      }
+      case 'answer':
+        lines.push('Model answer — Claim: ' + stripHtml(b.claim || '') + ' | Evidence: ' + stripHtml(b.evidence || '') + ' | Reasoning: ' + stripHtml(b.reasoning || ''));
+        break;
+      case 'plainanswer': lines.push('Model answer: ' + stripHtml(b.content || '')); break;
+      case 'answerLine': lines.push('Answer line' + (b.label ? ' (' + stripHtml(b.label) + ')' : '') + ': ' + stripHtml(b.answer || '')); break;
+      case 'fillblank': lines.push('Fill in the blanks: ' + stripHtml(b.text || '')); break;
+      case 'explanation': lines.push('Explanation given to the student: ' + stripHtml(b.content || '')); break;
+      default: break;
+    }
+  });
+  return _docClip(lines.join('\n'), 4000);
+}
+async function _cqAiCheck(q) {
+  const media = await _cqMedia(q);
+  const prompt =
+    `You are a meticulous Singapore primary-school science question editor. A colleague has just written the question below and you are giving it a second read before it is used with a class.\n\n` +
+    `CHECK THIS FIRST — options that repeat the picture.\n` +
+    `If the question's TABLE, DIAGRAM or PICTURE already sets out the choices — for example its rows or parts are labelled 1, 2, 3, 4 — and the multiple-choice options underneath simply repeat in words what the picture already shows, that is the problem to report. Those options should read just "(1)", "(2)", "(3)", "(4)" and let the picture do the work. Report it with "fix":"numberOptions".\n` +
+    `Do NOT report it when the options carry information that is NOT already in the picture or table, and do NOT report it when the options are already bare numbers.\n\n` +
+    `Then check for: an answer or marked option that is wrong or does not match the question; a blank or incomplete model answer; options that do not match the diagram; unclear, ambiguous or grammatically broken wording; a scientific mistake; wording that refers to a figure the question does not have.\n\n` +
+    (media.length
+      ? `${media.length} picture${media.length === 1 ? '' : 's'} from this question ${media.length === 1 ? 'is' : 'are'} attached — study ${media.length === 1 ? 'it' : 'them'} against the options.\n`
+      : `This question has no picture attached.\n`) +
+    `Report only REAL, clear problems — if the question is fine, say so by returning an empty list. Never invent an issue, and never report the question as truncated or cut off.\n\n` +
+    `THE QUESTION:\n${_cqRepr(q)}\n\n` +
+    `Return ONLY JSON: {"findings":[{"type":"Options|MCQ|Answer|Wording|Science|Diagram|Other","severity":"high|medium|low","summary":"<=14 words naming the problem","detail":"one or two sentences: what is wrong and how to fix it","fix":"numberOptions or empty string"}]}`;
+  const raw = media.length
+    ? await askGeminiVision(prompt, media, { maxOutputTokens: 900, json: true })
+    : await askGemini(prompt, { maxOutputTokens: 900, temperature: 0.2, json: true });
+  const parsed = _parseAIJson(raw);
+  const arr = Array.isArray(parsed) ? parsed : ((parsed && parsed.findings) || []);
+  const fixable = !!_cqMcqFixable(q);
+  return arr.map(f => _cqNormFinding(f, fixable)).filter(Boolean);
+}
+function _cqNormFinding(f, fixable) {
+  if (!f || typeof f !== 'object') return null;
+  const summary = String(f.summary || f.title || '').trim();
+  if (!summary) return null;
+  return {
+    type: (String(f.type || 'Check').replace(/[^A-Za-z ]/g, '').trim() || 'Check').slice(0, 18),
+    severity: /high/i.test(f.severity) ? 'high' : /low/i.test(f.severity) ? 'low' : 'med',
+    title: summary.slice(0, 160),
+    detail: String(f.detail || '').slice(0, 600),
+    // The button must never be a no-op: offer the fix only when there really
+    // is an option list to renumber and it is not already numbered.
+    fix: (fixable && /numberoptions/i.test(String(f.fix || ''))) ? 'numberOptions' : '',
+    ai: true
+  };
+}
+
+// ---- rendering ----------------------------------------------------------
+function renderCheckQPage() {
+  if (!_canAuthor()) return;
+  const auto = document.getElementById('cqAuto');
+  if (auto) auto.checked = _cqAuto;
+  if (!_cqQueue.length) _cqBuildQueue();
+  _cqRender();
+}
+function _cqRender() {
+  const host = document.getElementById('cqBody');
+  if (!host) return;
+  const undo = document.getElementById('cqUndoBtn');
+  if (undo) undo.style.display = _cqLastChecked && _docQById(_cqLastChecked) ? '' : 'none';
+  const q = _cqCurrent();
+  _cqUpdateBadge();
+  if (!q) {
+    host.innerHTML = `<div class="cq-empty">
+      <div style="font-size:2rem;margin-bottom:10px;">🎉</div>
+      <h3>Nothing waiting to be checked</h3>
+      <p>Every recently added question has been read. New ones appear here as soon as they are saved to the bank — press Refresh to pick them up.</p>
+      <button class="btn btn-outline" style="font-size:0.86rem;" onclick="cqRefresh()">🔄 Refresh queue</button>
+    </div>`;
+    _cqSetProgress('');
+    return;
+  }
+  const total = _cqQueue.length;
+  const recent = _cqRecentUncheckedCount();
+  _cqSetProgress(`Question ${Math.min(_cqPos + 1, total)} of ${total} in this queue${recent ? ` · ${recent} added in the last ${CQ_RECENT_DAYS} days still unchecked` : ''}`);
+  host.innerHTML = _cqCardHtml(q);
+  _cqRenderFindings();
+  _cqMaybeRunAi(q.id);
+}
+function _cqSetProgress(txt) {
+  const el = document.getElementById('cqProgress'); if (el) el.textContent = txt || '';
+  const c = document.getElementById('cqCount');
+  if (c) { const n = _cqRecentUncheckedCount(); c.textContent = n ? n + ' to check' : ''; }
+}
+function _cqCardHtml(q) {
+  const added = q.createdAt ? new Date(q.createdAt).toLocaleString() : 'date unknown';
+  const by = String(q.createdBy || '').trim();
+  const id = escapeHtml(q.id);
+  const meta = [
+    escapeHtml(q.topic || 'no topic'),
+    q.category ? escapeHtml(normalizeCategoryValue(q.category)) : '',
+    'added ' + escapeHtml(added) + (by ? ' by ' + escapeHtml(by) : '')
+  ].filter(Boolean).join(' · ');
+  const btn = 'font-size:0.84rem;padding:8px 14px;';
+  return `<div class="cq-card">
+      <div class="cq-head">
+        <div class="cq-title">${escapeHtml(q.title || 'Untitled question')}</div>
+        <div class="cq-meta">${meta}</div>
+      </div>
+      <div class="cq-find" id="cqFindings"></div>
+      <div class="cq-preview"><div class="cq-preview-inner">${renderQuestionPreviewHtml(q.id, { tryIt: false })}</div></div>
+      <div class="cq-actions">
+        <button class="btn btn-primary" style="${btn}" onclick="cqLooksFine('${id}')">✓ Looks fine</button>
+        ${_cqMcqFixable(q) ? `<button class="btn btn-outline" style="${btn}" title="Set every option to its own number and let the table or diagram show the choices" onclick="cqNumberOptions('${id}')">＃ Make options (1)(2)(3)(4)</button>` : ''}
+        <button class="btn btn-outline" style="${btn}" onclick="cqOpenEditor('${id}')">✏️ Open in editor</button>
+        <button class="btn btn-outline" style="${btn}" onclick="cqSkip()">⏭ Skip for now</button>
+        <button class="btn btn-outline" style="${btn}margin-left:auto;" onclick="cqRecheck()">🤖 Check with AI</button>
+      </div>
+    </div>`;
+}
+// Only the findings panel is repainted when the AI answers — rebuilding the
+// whole card would re-fetch every diagram in the preview underneath it.
+function _cqRenderFindings() {
+  const host = document.getElementById('cqFindings');
+  if (!host) return;
+  const q = _cqCurrent(); if (!q) return;
+  const rev = _cqReviews.get(q.id) || { state: 'idle', findings: [] };
+  const list = _cqLocalFindings(q, rev.state === 'done')
+    .concat(rev.findings || [])
+    .sort((a, b) => _sevRank(a.severity) - _sevRank(b.severity));
+  let head = '';
+  if (rev.state === 'running') head = `<div class="cq-note">🤖 The AI is reading this question and its diagrams…</div>`;
+  else if (rev.state === 'error') head = `<div class="cq-note">🤖 The AI check could not run${rev.error ? ' (' + escapeHtml(rev.error) + ')' : ''} — the instant checks still apply. Press <b>🤖 Check with AI</b> to try again.</div>`;
+  if (!list.length) {
+    const aiOn = !!(window.__aiReady && window.__aiReady());
+    host.innerHTML = head + (rev.state === 'running' ? ''
+      : rev.state === 'done' ? `<div class="cq-note">✅ Nothing flagged — read it over, then mark it fine.</div>`
+      : `<div class="cq-note">Nothing flagged by the instant checks.${aiOn ? '' : ' AI is off, so only those ran.'}</div>`);
+    return;
+  }
+  host.innerHTML = head + list.map(f => _cqFindingHtml(f, q.id)).join('');
+}
+function _cqFindingHtml(f, qid) {
+  const color = f.severity === 'high' ? '#dc2626' : f.severity === 'med' ? '#d97706' : '#6b7280';
+  const bg = f.severity === 'high' ? '#fef2f2' : f.severity === 'med' ? '#fffbeb' : '#f3f4f6';
+  return `<div class="cq-find-row" style="border-left:4px solid ${color};">
+      <span class="cq-badge" style="background:${bg};color:${color};">${escapeHtml(f.type)}${f.ai ? ' · AI' : ''}</span>
+      <div style="flex:1;min-width:0;">
+        <div class="cq-find-title">${escapeHtml(f.title)}</div>
+        ${f.detail ? `<div class="cq-find-detail">${escapeHtml(f.detail)}</div>` : ''}
+        ${f.fix === 'numberOptions' ? `<div class="cq-find-fix"><button class="btn btn-outline" style="font-size:0.8rem;padding:6px 12px;" onclick="cqNumberOptions('${escapeHtml(qid)}')">＃ Make options (1)(2)(3)(4)</button></div>` : ''}
+      </div>
+    </div>`;
+}
+
+// ---- the AI pass, driven from the page ----------------------------------
+function _cqMaybeRunAi(id) {
+  if (!_cqAuto) return;
+  const rev = _cqReviews.get(id);
+  if (rev && (rev.state === 'running' || rev.state === 'done')) return;   // already answered
+  _cqRunAi(id);
+}
+async function _cqRunAi(id) {
+  if (!(window.__aiReady && window.__aiReady())) return;
+  const q = _docQById(id); if (!q) return;
+  const rev = _cqReviews.get(id);
+  if (rev && rev.state === 'running') return;
+  _cqReviews.set(id, { state: 'running', findings: [] });
+  _cqRenderFindings();
+  try {
+    _cqReviews.set(id, { state: 'done', findings: await _cqAiCheck(q) });
+  } catch (e) {
+    console.warn('check-questions AI pass failed', e);
+    _cqReviews.set(id, { state: 'error', findings: [], error: (e && e.message) || 'AI error' });
+  }
+  // The employee may have moved on while it was thinking — only paint the
+  // answer if it still belongs to the question on screen.
+  const cur = _cqCurrent();
+  if (cur && cur.id === id) _cqRenderFindings();
+}
+
+// ---- actions ------------------------------------------------------------
+function cqToggleAuto(on) {
+  _cqAuto = !!on;
+  if (_cqAuto) { const q = _cqCurrent(); if (q) _cqMaybeRunAi(q.id); }
+}
+function cqRefresh() {
+  _cqBuildQueue();
+  _cqRender();
+  showToast(_cqQueue.length ? `${_cqQueue.length} question${_cqQueue.length === 1 ? '' : 's'} to check` : 'Nothing left to check', 'info');
+}
+function cqSkip() { _cqPos++; _cqRender(); }
+function cqRecheck() {
+  const q = _cqCurrent(); if (!q) return;
+  if (!(window.__aiReady && window.__aiReady())) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+  _cqReviews.delete(q.id);
+  _cqRunAi(q.id);
+}
+function cqOpenEditor(id) {
+  if (!_docQById(id)) { showToast('That question no longer exists', 'info'); _cqRender(); return; }
+  // Whatever the AI said is about to be about an older version of the question.
+  _cqReviews.delete(id);
+  editQuestion(id);
+  _editReturnPage = 'checkq';   // editQuestion resets it — callers override after
+  try { _syncBackToPapersBtn(); } catch (e) {}
+}
+// Mark the question read. The advance is optimistic so the queue never stalls
+// on the network, and it is rolled back if the write does not land.
+async function cqLooksFine(id) {
+  const q = _docQById(id); if (!q) { _cqRender(); return; }
+  q.checked = {
+    at: new Date().toISOString(),
+    by: (currentUser && currentUser.uid) || '',
+    name: (currentUser && (currentUser.name || currentUser.email)) || ''
+  };
+  _cqLastChecked = id;
+  _cqPos++;
+  _cqRender();
+  // Quiet: reading a question is housekeeping, not a question authored, so it
+  // must never land in a work session's log.
+  const ok = await saveQuestion(q, { quiet: true });
+  if (!ok) {
+    delete q.checked;
+    _cqLastChecked = '';
+    _cqPos = Math.max(0, _cqQueue.indexOf(id) >= 0 ? _cqQueue.indexOf(id) : _cqPos - 1);
+    showToast('Could not save that check — try again', 'error');
+    _cqRender();
+  }
+}
+async function cqUndo() {
+  const id = _cqLastChecked;
+  const q = id && _docQById(id);
+  if (!q) { _cqLastChecked = ''; _cqRender(); return; }
+  delete q.checked;
+  _cqLastChecked = '';
+  const at = _cqQueue.indexOf(id);
+  if (at >= 0) _cqPos = at;
+  _cqRender();
+  await saveQuestion(q, { quiet: true });
+}
+// The one-tap fix — the same thing the block editor's ＃ button writes, so a
+// question fixed from here and one fixed by hand come out identical.
+async function cqNumberOptions(id) {
+  const q = _docQById(id);
+  const mcq = q && _cqMcqFixable(q);
+  if (!mcq) { showToast('There are no options here to renumber', 'error'); _cqRender(); return; }
+  const before = mcq.options.map(o => o.text);
+  mcq.options.forEach((o, i) => { o.text = `(${i + 1})`; });
+  // A real edit to the question — NOT quiet: the other tabs must pick it up
+  // and a running work session should count it as work done.
+  const ok = await saveQuestion(q);
+  if (!ok) { mcq.options.forEach((o, i) => { o.text = before[i]; }); _cqRender(); return; }
+  // The finding is answered — drop it rather than binning the whole review,
+  // which would spend another AI call re-reading a question we just fixed.
+  const rev = _cqReviews.get(id);
+  if (rev) rev.findings = (rev.findings || []).filter(f => f.fix !== 'numberOptions');
+  showToast('Options are now (1) (2) (3) (4) — the picture shows the choices', 'success');
+  if (document.querySelector('#page-bank.active')) renderQuestionBank();
+  _cqRender();
+}
+function _cqUpdateBadge() {
+  const badge = document.getElementById('cqBadge');
+  if (!badge) return;
+  const n = _canAuthor() ? _cqRecentUncheckedCount() : 0;
+  if (n) { badge.style.display = ''; badge.textContent = n > 999 ? '999+' : String(n); }
+  else badge.style.display = 'none';
 }
 
 
@@ -53871,6 +54398,15 @@ window.doctorToggle = doctorToggle;
 window.doctorDismiss = doctorDismiss;
 window.doctorOpen = doctorOpen;
 window.doctorDelete = doctorDelete;
+// ✅ Check Questions (inline handlers)
+window.cqRefresh = cqRefresh;
+window.cqSkip = cqSkip;
+window.cqRecheck = cqRecheck;
+window.cqUndo = cqUndo;
+window.cqToggleAuto = cqToggleAuto;
+window.cqLooksFine = cqLooksFine;
+window.cqOpenEditor = cqOpenEditor;
+window.cqNumberOptions = cqNumberOptions;
 // Worksheet-creator block types + AI image enhance (inline handlers)
 window.saveBlockField = saveBlockField;
 window.saveBlockNum = saveBlockNum;
