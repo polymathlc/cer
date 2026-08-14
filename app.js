@@ -70,7 +70,14 @@ const googleProvider = new GoogleAuthProvider();
 //         Until a real key is pasted, App Check stays off and AI still
 //         works while App Check enforcement is disabled.
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-3.6-flash"; // higher quality (~4x the cost of 2.5 Flash, still <1c/question)
+const AI_MODEL = "gemini-3.7-flash"; // higher quality (~4x the cost of 2.5 Flash, still <1c/question)
+// The FLOOR of the thinking scale, and the only one this app asks for by
+// default. Gemini 3.7 Flash dropped the "minimal" level 3.6 accepted — sending
+// it now comes back 400 INVALID_ARGUMENT, so every call in the app would fail.
+// The scale is low / medium / high (medium is the model's own default); "low"
+// is the nearest thing to the old "minimal" and keeps the token budget going
+// to the answer rather than to reasoning. Change the model, change this.
+const AI_THINK_MIN = "low";
 
 if (RECAPTCHA_SITE_KEY && !RECAPTCHA_SITE_KEY.startsWith("PASTE_")) {
   try {
@@ -219,17 +226,17 @@ async function openAiGenerateImageDataUrl(prompt, { size = '1024x1024', transpar
 }
 
 // Single swap-point for all model calls. Returns trimmed text.
-// thinkingLevel:"minimal" keeps Gemini "thinking" to a minimum so the whole
-// token budget goes to the actual answer (faster + cheaper for our short
-// tasks). Gemini 3.x rejects the older numeric thinkingBudget with
-// 400 INVALID_ARGUMENT.
+// AI_THINK_MIN keeps Gemini "thinking" to a minimum so the whole token budget
+// goes to the actual answer (faster + cheaper for our short tasks). Gemini 3.x
+// rejects the older numeric thinkingBudget with 400 INVALID_ARGUMENT, and 3.7
+// rejects the "minimal" level too — see AI_THINK_MIN.
 async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, json = false } = {}) {
   if (openAiActive()) {
     try { return await askOpenAI(prompt, null, { maxOutputTokens, temperature, json }); }
     catch (e) { console.warn('ChatGPT engine failed, falling back to Gemini:', e); }
   }
   if (!geminiModel) throw new Error("AI is not configured yet");
-  const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingLevel: "minimal" } };
+  const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingLevel: AI_THINK_MIN } };
   if (json) generationConfig.responseMimeType = "application/json";
   const res = await geminiModel.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -1689,7 +1696,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.288.0';
+const APP_VERSION = 'v1.289.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -4653,7 +4660,7 @@ function makeBlockInsertBar(index) {
 const WIDGET_HTML_MAX = 300000;   // ~300 KB — a question doc must stay well under Firestore's 1 MB
 const WIDGET_EFFORTS = {
   // 'pro' is deliberately uncapped: no output-token ceiling, maximum thinking.
-  standard: { label: 'Standard', gem: { thinkingLevel: 'minimal', maxOutputTokens: 16384 }, oa: { effort: 'low',    maxTokens: 16384 } },
+  standard: { label: 'Standard', gem: { thinkingLevel: AI_THINK_MIN, maxOutputTokens: 16384 }, oa: { effort: 'low',    maxTokens: 16384 } },
   high:     { label: 'High',     gem: { thinkingLevel: 'high',    maxOutputTokens: 32768 }, oa: { effort: 'medium', maxTokens: 32768 } },
   pro:      { label: 'Pro — no limits', gem: { thinkingLevel: 'high' },                    oa: { effort: 'high' } },
 };
@@ -8662,7 +8669,7 @@ async function askGeminiVision(prompt, media, { maxOutputTokens = 2048, json = f
   if (!geminiModel) throw new Error('AI is not configured yet');
   const parts = [{ text: prompt }];
   (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
-  const generationConfig = { maxOutputTokens, temperature: 0.2, thinkingConfig: { thinkingLevel: "minimal" } };
+  const generationConfig = { maxOutputTokens, temperature: 0.2, thinkingConfig: { thinkingLevel: AI_THINK_MIN } };
   if (json) generationConfig.responseMimeType = 'application/json';
   const res = await geminiModel.generateContent({ contents: [{ role: 'user', parts }], generationConfig });
   return (res.response.text() || '').trim();

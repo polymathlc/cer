@@ -533,7 +533,10 @@ const firebaseConfig = {
   measurementId: "G-0MWZFG211D"
 };
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-3.6-flash";
+const AI_MODEL = "gemini-3.7-flash";
+// The floor of the thinking scale — 3.7 Flash rejects the "minimal" level 3.6
+// took, with a 400, so "low" is the cheapest level it will accept.
+const AI_THINK_MIN = "low";
 const ADMIN_EMAILS = ['chungzhikai@gmail.com', 'abigail.yew@stanfordmanpower.com'];
 
 const app = initializeApp(firebaseConfig);
@@ -554,7 +557,7 @@ async function askGeminiVision(prompt, media, { maxOutputTokens = 1024, json = t
   if (!geminiModel) throw new Error("AI is not configured yet");
   const parts = [{ text: prompt }];
   (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
-  const generationConfig = { maxOutputTokens, temperature: 0.2, thinkingConfig: { thinkingLevel: "minimal" } };
+  const generationConfig = { maxOutputTokens, temperature: 0.2, thinkingConfig: { thinkingLevel: AI_THINK_MIN } };
   if (json) generationConfig.responseMimeType = "application/json";
   const res = await geminiModel.generateContent({ contents: [{ role: "user", parts }], generationConfig });
   return (res.response.text() || "").trim();
