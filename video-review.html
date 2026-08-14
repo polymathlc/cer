@@ -524,7 +524,10 @@ const firebaseConfig = {
 };
 const ADMIN_EMAILS = ['chungzhikai@gmail.com'];
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-3.6-flash";
+const AI_MODEL = "gemini-3.7-flash";
+// The floor of the thinking scale — 3.7 Flash rejects the "minimal" level 3.6
+// took, with a 400, so "low" is the cheapest level it will accept.
+const AI_THINK_MIN = "low";
 const LESSONS_COL = 'videoLessons';   // shared lesson library (admin writes, students read)
 const PROFILES_COL = 'videoProfiles'; // per-student name / level / subject
 
@@ -1009,7 +1012,7 @@ document.getElementById('aiTsFile').addEventListener('change', async e => {
         maxOutputTokens: 2048,
         temperature: 0.1,
         responseMimeType: 'application/json',
-        thinkingConfig: { thinkingLevel: "minimal" }
+        thinkingConfig: { thinkingLevel: AI_THINK_MIN }
       }
     });
     let raw = (res.response.text() || '').trim();

@@ -28,7 +28,10 @@ const firebaseConfig = {
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
 
 // Model used app-wide (text + vision)
-const AI_MODEL = "gemini-3.6-flash";
+const AI_MODEL = "gemini-3.7-flash";
+// The floor of the thinking scale — 3.7 Flash rejects the "minimal" level
+// 3.6 took, with a 400, so "low" is the cheapest level it will accept.
+const AI_THINK_MIN = "low";
 ```
 
 If the new app is hosted on a NEW domain (not `polymathlc.github.io`), add that
@@ -49,7 +52,10 @@ import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.
 
 const firebaseConfig = { /* …from section 1… */ };
 const RECAPTCHA_SITE_KEY = "6Le98gwtAAAAAAzkjJTZXFM5D8tpjx_P4rtRuhuH";
-const AI_MODEL = "gemini-3.6-flash";
+const AI_MODEL = "gemini-3.7-flash";
+// The floor of the thinking scale — 3.7 Flash rejects the "minimal" level
+// 3.6 took, with a 400, so "low" is the cheapest level it will accept.
+const AI_THINK_MIN = "low";
 
 const app = initializeApp(firebaseConfig);
 
@@ -76,17 +82,21 @@ const aiReady = () => !!geminiModel;
 
 ## 3. Text call — `askGemini`
 
-`thinkingLevel: "minimal"` keeps Gemini "thinking" to a minimum so the whole
-token budget goes to the answer (faster + cheaper for short tasks). Gemini 3.x
-rejects the older numeric `thinkingBudget` with 400 INVALID_ARGUMENT. Valid
-levels are `"minimal"`, `"low"`, `"medium"`, `"high"` — use `"minimal"` for
-short/fast tasks; bump to `"high"` only for genuinely hard reasoning.
-`json: true` switches on strict-JSON response mode.
+`thinkingLevel: "low"` keeps Gemini "thinking" to a minimum so the whole token
+budget goes to the answer (faster + cheaper for short tasks). Gemini 3.x rejects
+the older numeric `thinkingBudget` with 400 INVALID_ARGUMENT.
+
+**On 3.7 Flash the valid levels are `"low"`, `"medium"` (the default) and
+`"high"`.** The `"minimal"` level 3.6 accepted was dropped and now comes back
+400 — so keep the floor in one constant (`AI_THINK_MIN`) rather than writing the
+string at each call site, and a future model change is one edit rather than a
+hunt through the file. Use the floor for short/fast tasks; bump to `"high"` only
+for genuinely hard reasoning. `json: true` switches on strict-JSON response mode.
 
 ```js
 async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, json = false } = {}) {
   if (!geminiModel) throw new Error("AI is not configured yet");
-  const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingLevel: "minimal" } };
+  const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingLevel: AI_THINK_MIN } };
   if (json) generationConfig.responseMimeType = "application/json";
   const res = await geminiModel.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -114,7 +124,7 @@ async function askGeminiVision(promptText, imageBase64, mimeType, options) {
   const generationConfig = {
     maxOutputTokens: options.maxOutputTokens || 1200,
     temperature: 0.2,
-    thinkingConfig: { thinkingLevel: "minimal" }
+    thinkingConfig: { thinkingLevel: AI_THINK_MIN }
   };
   if (options.json !== false) generationConfig.responseMimeType = "application/json";
   const result = await geminiModel.generateContent({
