@@ -1696,7 +1696,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.289.0';
+const APP_VERSION = 'v1.290.0';
 // ---- The always-visible session bar ----
 // Staff must never be in any doubt about whose account is being played, so
 // this sits above everything until the session ends.
@@ -9849,10 +9849,46 @@ function openRapidAdd() {
   document.getElementById('rapidAddOverlay').classList.add('active');
   _updateRapidCounts();
   const zone = document.getElementById('rapidPasteZone');
-  if (zone) setTimeout(() => zone.focus(), 50);
+  // On a phone, focusing the pad pops the on-screen keyboard over the very
+  // buttons the author needs — and there is nothing to paste anyway.
+  if (_rapidTouch()) _setRapidStatus('Take a photo or choose one — each reads in the background.');
+  else if (zone) setTimeout(() => zone.focus(), 50);
 }
 function closeRapidAdd() {
   document.getElementById('rapidAddOverlay').classList.remove('active');
+}
+
+// ---- The phone route ------------------------------------------------------
+// A phone has no Ctrl/⌘+V, no clipboard image to paste and nothing to drag, so
+// on a touch screen the pad has always been a box that could not be filled.
+// The camera and the gallery are the way in there instead — and both go
+// through startRapidJob, the ONE queue entry point every route already shares,
+// so a photo is read, cropped and filed exactly as a pasted screenshot is.
+//
+// The pad itself is unchanged on a mouse: the buttons and the tap-to-pick are
+// behind `(pointer: coarse)` in the CSS and behind this predicate in the JS,
+// so a desktop paste is the same keystroke into the same box it always was.
+function _rapidTouch() {
+  try { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); }
+  catch (e) { return false; }
+}
+function rapidZoneClick() {
+  if (_rapidTouch()) { const f = document.getElementById('rapidFile'); if (f) f.click(); return; }
+  const zone = document.getElementById('rapidPasteZone');
+  if (zone) zone.focus();
+}
+function rapidPickFiles(input) {
+  const files = Array.from((input && input.files) || []);
+  // Cleared FIRST: a picker that still holds last time's file fires no change
+  // event for the same photo picked twice, so the second tap does nothing at
+  // all and reads as a broken button.
+  if (input) input.value = '';
+  let found = 0;
+  for (const file of files) {
+    if (file.type && (file.type.startsWith('image/') || file.type === 'application/pdf')) { startRapidJob(file); found++; }
+  }
+  if (found) _setRapidStatus(`Queued ${found} photo${found > 1 ? 's' : ''} — add the next one whenever you like…`);
+  else if (files.length) showToast('Please choose an image or a PDF', 'error');
 }
 function rapidPaste(e) {
   const items = (e.clipboardData && e.clipboardData.items) || [];
@@ -9885,13 +9921,59 @@ function rapidDrop(e) {
   else if (zone) setTimeout(() => zone.focus(), 30);
 }
 
+// A screenshot is a few hundred KB; a phone camera photo is 12 megapixels and
+// several times the size guard below. Refusing one is refusing the phone route
+// outright, and sending it whole spends a minute of the school's uplink for
+// nothing — the AI reads a 2600px page exactly as well as a 6000px one, and the
+// crop comes out of the same picture either way.
+const RAPID_PHOTO_MAX_SIDE = 2600;
+const RAPID_SHRINK_OVER = 4 * 1024 * 1024;   // a pasted screenshot never reaches this
+const RAPID_MAX_BYTES = 18 * 1024 * 1024;
+
+async function _rapidPrepFile(file) {
+  try {
+    if (!file || !file.type || !file.type.startsWith('image/')) return file;   // a PDF goes through untouched
+    if (file.size <= RAPID_SHRINK_OVER) return file;                           // a pasted screenshot is byte-for-byte what it was
+    const dataUrl = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = () => rej(fr.error || new Error('could not read the file'));
+      fr.readAsDataURL(file);
+    });
+    const img = await _loadImageEl(dataUrl);
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    const max = Math.max(w, h);
+    if (!max) return file;
+    const s = Math.min(1, RAPID_PHOTO_MAX_SIDE / max);
+    const cw = Math.max(1, Math.round(w * s)), ch = Math.max(1, Math.round(h * s));
+    const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+    c.getContext('2d').drawImage(img, 0, 0, cw, ch);
+    // JPEG, never PNG: a photograph re-encoded as PNG comes out BIGGER than it
+    // went in, which is the opposite of the point.
+    const blob = _dataUrlToBlob(c.toDataURL('image/jpeg', 0.9));
+    if (!blob || blob.size >= file.size) return file;   // never hand back something worse
+    try { return new File([blob], (file.name || 'photo') + '.jpg', { type: 'image/jpeg' }); }
+    catch (e) { return blob; }                          // a Blob carries .size and .type, which is all the job reads
+  } catch (e) {
+    console.warn('rapid photo prep failed; sending the original', e);
+    return file;
+  }
+}
+
 function startRapidJob(file) {
-  if (file.size > 18 * 1024 * 1024) { showToast('That image is too large (max ~18 MB)', 'error'); return; }
   const jobId = 'rapid_' + (++_rapidSeq);
   rapidJobs.unshift({ id: jobId, status: 'processing', title: 'Reading screenshot…', sub: 'AI is reading the question…' });
   _updateRapidCounts();
   renderVettingList(); // show the loading card immediately
-  processRapidJob(jobId, file); // fire-and-forget; runs in the background
+  // The size guard runs AFTER the shrink, or a phone's own photo is refused for
+  // being a phone's own photo. processRapidJob never rejects — it files its own
+  // red card — so this catch only ever sees a prep or size failure.
+  _rapidPrepFile(file)
+    .then(f => {
+      if (f.size > RAPID_MAX_BYTES) throw new Error('that file is too large (max ~18 MB)');
+      return processRapidJob(jobId, f); // fire-and-forget; runs in the background
+    })
+    .catch(err => _failRapidJob(jobId, err));
 }
 
 async function processRapidJob(jobId, file) {
@@ -9959,14 +10041,21 @@ async function processRapidJob(jobId, file) {
     _setRapidStatus('✓ Added "' + (q.title || 'question') + '" to vetting.');
     showToast('Added "' + (q.title || 'question') + '" to vetting ✓', 'success');
   } catch (err) {
-    console.error('rapid job failed:', err);
-    const job = rapidJobs.find(j => j.id === jobId);
-    if (job) { job.status = 'error'; job.title = "Couldn't read this screenshot"; job.error = (err && err.message) ? err.message : String(err); }
-    _updateRapidCounts();
-    renderVettingList();
-    _setRapidStatus('⚠ One screenshot could not be read — see the red card in vetting.');
-    showToast('A screenshot could not be read — see the red card in vetting', 'error');
+    _failRapidJob(jobId, err);
   }
+}
+
+// A failure must always leave a card behind: a screenshot that silently
+// vanished reads as "that one worked". Both the read itself and the prep in
+// startRapidJob land here, so there is one shape of failure however it arrived.
+function _failRapidJob(jobId, err) {
+  console.error('rapid job failed:', err);
+  const job = rapidJobs.find(j => j.id === jobId);
+  if (job) { job.status = 'error'; job.title = "Couldn't read this screenshot"; job.error = (err && err.message) ? err.message : String(err); }
+  _updateRapidCounts();
+  renderVettingList();
+  _setRapidStatus('⚠ One screenshot could not be read — see the red card in vetting.');
+  showToast('A screenshot could not be read — see the red card in vetting', 'error');
 }
 
 function _setRapidJobState(jobId, patch) {
@@ -54388,6 +54477,8 @@ window.openRapidAdd = openRapidAdd;
 window.closeRapidAdd = closeRapidAdd;
 window.rapidPaste = rapidPaste;
 window.rapidDrop = rapidDrop;
+window.rapidZoneClick = rapidZoneClick;
+window.rapidPickFiles = rapidPickFiles;
 window.dismissRapidJob = dismissRapidJob;
 window.submitFlag = submitFlag;
 // Flagged Questions (admin)
