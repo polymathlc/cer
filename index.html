@@ -700,6 +700,27 @@ option {
   border-color: var(--accent-blue, #1565c0);
   color: var(--accent-blue, #1565c0);
 }
+/* ⚡ Rapid add has TWO ways in, and which one a device gets is decided here.
+   A phone has no Ctrl/⌘+V, nothing on its clipboard to paste and nothing to
+   drag, so the pad was a box that could not be filled: `.rapid-touch` shows
+   the camera and the gallery instead. `(pointer: coarse)` is the whole gate —
+   on a mouse the pad is byte-for-byte the box it always was, and a touchscreen
+   laptop driven by a trackpad still reports a fine pointer, so it keeps the
+   paste pad too. */
+.rapid-touch { display: none; }
+@media (pointer: coarse) {
+  .rapid-desk { display: none; }
+  p.rapid-touch { display: block; }
+  span.rapid-touch { display: inline; }
+  .rapid-upload-row.rapid-touch {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 14px;
+  }
+  .rapid-upload-row .btn { flex: 1 1 44%; justify-content: center; }
+}
 .image-preview {
   margin-top: 10px;
   border-radius: var(--radius-sm);
@@ -10170,15 +10191,31 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 <div class="confirm-overlay" id="rapidAddOverlay">
   <div class="confirm-dialog" style="max-width:560px;text-align:left;">
     <h3 style="margin-bottom:4px;">⚡ Rapid add to vetting</h3>
-    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste a screenshot (Ctrl/⌘+V). AI reads it, enhances the whole picture to black &amp; white, and drops the question straight into your <b>Vetting</b> list — no editor stop. Keep pasting to add more; they all process in the background. <span style="color:var(--text-muted);opacity:0.85;">Tip: open this from anywhere with <b>Ctrl/⌘+Shift+V</b>.</span></p>
+    <p class="rapid-desk" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste a screenshot (Ctrl/⌘+V). AI reads it, enhances the whole picture to black &amp; white, and drops the question straight into your <b>Vetting</b> list — no editor stop. Keep pasting to add more; they all process in the background. <span style="color:var(--text-muted);opacity:0.85;">Tip: open this from anywhere with <b>Ctrl/⌘+Shift+V</b>.</span></p>
+    <p class="rapid-touch" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Photograph a question, or pick one from your gallery. AI reads it and drops the question straight into your <b>Vetting</b> list — no editor stop. Add as many as you like; they all read in the background, so you can keep going or close this window.</p>
     <div class="image-paste-zone" id="rapidPasteZone" tabindex="0" style="padding:40px 16px;"
-         onclick="this.focus()"
+         onclick="rapidZoneClick()"
          onpaste="rapidPaste(event)"
          ondragover="event.preventDefault(); this.classList.add('dragover')"
          ondragleave="this.classList.remove('dragover')"
          ondrop="rapidDrop(event)">
-      📋 Paste your screenshot here (Ctrl/⌘+V)<br>— then paste the next one, and the next…
+      <span class="rapid-desk">📋 Paste your screenshot here (Ctrl/⌘+V)<br>— then paste the next one, and the next…</span>
+      <span class="rapid-touch">📷 Tap here to add photos<br>— or use the buttons below.</span>
     </div>
+    <!-- The phone route. A touch screen has no Ctrl/⌘+V and nothing on its
+         clipboard to paste, so the camera and the gallery are the way in — and
+         both hand their files to the same queue a paste does. They are hidden
+         on a mouse (see `.rapid-touch` in the CSS), so the desktop pad is
+         exactly the box it always was. -->
+    <div class="rapid-touch rapid-upload-row">
+      <button class="btn btn-primary" onclick="document.getElementById('rapidCam').click()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Take photo
+      </button>
+      <button class="btn btn-outline" onclick="document.getElementById('rapidFile').click()">🖼️ Choose photos / PDF</button>
+    </div>
+    <input type="file" accept="image/*" capture="environment" hidden id="rapidCam" onchange="rapidPickFiles(this)">
+    <input type="file" accept="image/*,application/pdf" multiple hidden id="rapidFile" onchange="rapidPickFiles(this)">
     <div id="rapidStatus" style="margin-top:12px;font-size:0.84rem;color:var(--text-muted);min-height:1.2em;">Click the box above, then paste.</div>
     <div class="btn-group" style="justify-content:space-between;align-items:center;margin-top:14px;">
       <span style="font-size:0.82rem;color:var(--text-muted);">Added <b id="rapidAddedCount" style="color:var(--primary);">0</b> · Processing <b id="rapidProcCount" style="color:var(--accent-orange);">0</b></span>
