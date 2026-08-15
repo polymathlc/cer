@@ -234,6 +234,120 @@ Guidance for Claude when working in this repo.
   - `wsMeta.slot` is the only thing left of that link: the free-form class string ("P5 Science — Wednesday 5pm–6.45pm") that the Ans Key Reward window pins a worksheet to. Nothing here edits it; `performSave` just writes back whatever was loaded so the pin survives a save made from this app.
   - Version badge (`#versionTag`, `APP_VERSION`) is hard-coded — bump on every change to this file.
 
+## The subject switcher — four apps, one student (v1.291.0)
+
+`SUBJECT_APPS` / `subject*` (in `app.js`, search `THE SUBJECT SWITCHER`), plus
+`#subjectSwitch` and the `.subject-*` CSS in `index.html`. A pill in the
+**top-right of every page** naming the subject you are in; click it and the
+other three are one tap away.
+
+Polymath teaches four subjects through four separate apps, and they share a
+Firebase project and a sign-in and **nothing else** — four banks, four sets of
+progress, four topic lists. A student taught three of them had one bookmark per
+subject on a school Chromebook, and the subject they never bookmarked is the
+one they stopped using.
+
+- **It is a LINK, not a router.** Four `<a href>`s and no JS navigation: each
+  app stays reachable at its own URL exactly as before, nothing here redirects
+  or gates anything, and middle-click / open-in-new-tab behave the way a
+  student expects — which a `location.href =` handler would quietly break.
+- **The URLs are RELATIVE (`../cer/`), and that is load-bearing.** The four are
+  GitHub Pages project sites — `polymathlc.github.io/{math,english,chinese,cer}`
+  — so they are sibling folders on one host, and a relative hop resolves there,
+  on a local checkout with the four repos side by side, and on a custom domain
+  later, without this file ever naming a host. An absolute
+  `https://polymathlc.github.io/…` works perfectly until the centre moves to a
+  domain of its own and then sends every student back to the old one.
+- **Science lives at `../cer/`** — the repo name, not the subject name. The
+  label and the folder differ on purpose; `../science/` is a 404 for the whole
+  school at once and reads as a link somebody forgot to finish.
+- **`SUBJECT_KEY` says which of the four THIS app is**, and it is the ONE line
+  that differs between the repos — everything else in the block is identical in
+  all four, so a fix copies straight across. `subjectCurrent()` falls back to
+  the first entry, so a `SUBJECT_KEY` naming nothing does not throw: it labels
+  this app "Math" and offers a link back to the app you are already in.
+- **The menu is built from `SUBJECT_APPS`**, never written out in `index.html`,
+  so a subject added to that list appears by editing one line per app.
+- **The current subject is shown and marked, never dropped.** A menu that
+  silently omits where you already are leaves a student unable to tell which
+  app they are looking at. It is a `<div>` rather than an `<a>` — a link back to
+  the page you are on reloads the app and loses whatever was half-typed.
+- **It is turned on from `configureSidebarForRole`**, the one function every
+  signed-in path (admin, employee, student) already goes through, rather than
+  from three call sites that could drift. It is hidden until then, or it floats
+  over the login card belonging to nobody.
+- **`z-index: 150` sits in a deliberate gap**: above the sidebar (100) and every
+  sticky `.page-header` (50) so it is always reachable, and below every modal
+  (`.confirm-overlay` and friends start at 200) so a dialog covers it rather
+  than being covered by it.
+- **`.page-header` gives up its right-hand corner** (`padding-right`), because
+  that is where every page keeps its action buttons and the switcher floats
+  over them. It is fixed to the viewport rather than dropped into a header
+  because this app has no global top bar at all — forty-odd pages carry their
+  own `.page-header`, and a page added next month would be the one that quietly
+  had no switcher on it.
+- The CSS is written against the design tokens and nothing else, so the **same
+  block is used in all four apps** and each paints it in its own palette. A
+  themed copy per app is a copy that drifts.
+- Run **`node tools/subject-level-tests.mjs`** after touching any of it.
+
+### 📚 The level a BATCH is filed at (v1.291.0)
+
+`rapidLevel` / `setRapidLevel` / `_rapidApplyLevel` / `_rapidLevelOptions`, and
+the `#rapidLevelWrap` picker above the pad. An author working through a pile of
+screenshots is nearly always working through ONE year's paper, and the AI was
+choosing the topic — and therefore the level — one screenshot at a time with no
+idea which paper it came from. Saying "these are all P5" once is both less work
+and more accurate than correcting forty questions in vetting afterwards.
+
+- **A LEVEL IS NOT A FIELD ON A QUESTION HERE**, and that is the whole design.
+  It is read off the TOPIC (`getTopicLevel`), and every surface that cares — the
+  bank filter, the student-level gate, the topic grid — reads it that way. So
+  stamping `q.level` would write a field nothing in this app looks at, and the
+  question would still be served at whatever level its topic belongs to.
+  Choosing a level instead **narrows the topics the AI may pick from** to that
+  level's, and the level follows from the topic exactly as it always has.
+- **`_aiBuildQuestionPrompt` takes the level as a third argument** and blank —
+  every other caller, including 🤖 Build from screenshot — leaves the prompt
+  byte-for-byte what it was: the whole topic list, chosen from freely.
+- **A level whose topics have all been removed falls back to the full list.**
+  An empty "choose from EXACTLY this list" leaves the model nothing to choose
+  from and it invents a topic instead.
+- **`_rapidApplyLevel` is the guard for a reply that ignored the list**, and it
+  is what makes the promise true. An off-level or unknown topic is snapped into
+  the level and the question is marked **`topicConfidence: 'low'`** — an
+  existing signal that already draws the "⚠ check topic" badge in vetting. The
+  author asked for a level and gets it; the one thing that had to be guessed —
+  WHICH topic within it — is flagged for the glance it deserves.
+- **A RETIRED topic is never a snap target.** Cell Systems has left the
+  syllabus and `qInSyllabus` keeps it out of every practice mode and every
+  game, so filing a brand-new question into it would write one no student can
+  ever be served — worse than an off-level topic and just as invisible. It is
+  filtered inside `_rapidApplyLevel` rather than out of `currentTopicsByLevel`,
+  because the authoring dropdown must still offer it for the PSLE papers that
+  use it.
+- **A SECONDARY topic counts too.** `qLevelNum` takes the MAX over both, so a
+  `topic2` from a higher level puts the question above the level the author
+  chose while the primary topic looks perfectly right.
+- **The level is captured in `startRapidJob`, synchronously, as the file is
+  queued** — never read inside the job. `_rapidPrepFile` re-encodes a phone
+  photo, which takes real time, and the pad stays open the whole while: an
+  author who queues a P3 paper and switches the picker for the next one must
+  not have the first paper land at P4 because its prep finished second. It is
+  carried on the job (and shown on its vetting card) and applied to **every**
+  question the page held — a page of five is five questions at that level.
+- **It lives in `sessionStorage`**, which is the honest lifetime: a batch is one
+  sitting, so it survives a reload mid-pile and is back to "Any level" in a new
+  tab or tomorrow. A level that persisted for a week would be the one an author
+  set last Tuesday and never noticed again, filing a P3 paper as P5.
+- **The options are generated from `TOPIC_LEVELS`**, never typed into
+  `index.html`: a level added to the topics and missing from the picker is a
+  level nobody can file at.
+- The chosen level is **named back in the toast and the status line**. Filing at
+  a level and never confirming it is how a whole pile ends up at the wrong one.
+- Run **`node tools/subject-level-tests.mjs`** after touching any of it.
+
+
 ## Versioning convention — applies to EVERY change (do this every time)
 1. **Bump the version.** In `index.html`, update `const APP_VERSION = 'vX.Y.Z'` (search `APP_VERSION`). Patch bump for fixes/small tweaks, minor bump for new features.
 2. **Keep it visible.** The version renders in the sidebar footer for admins only (`#appVersionBadge`, class `admin-only`). This is how the user confirms the latest build is actually deployed.
@@ -251,6 +365,17 @@ The whole point: the user checks the version shown in the app's sidebar against 
 ## House rules
 - After editing `app.js`, validate it: `cp app.js /tmp/c.mjs && node --check /tmp/c.mjs` (the `.mjs` copy makes Node parse it as a module, so `import` at the top is accepted).
 - **The Gemini model is `AI_MODEL` and its thinking floor is `AI_THINK_MIN`, and the two move TOGETHER** (v1.289.0). Every model has its own thinking scale and a level it does not know is a **400 INVALID_ARGUMENT on every single AI call in the app** — not a degraded answer, no answer at all. `gemini-3.7-flash` takes `low` / `medium` / `high` and **dropped the `"minimal"` that 3.6 accepted**, exactly as 3.x had already dropped 2.x's numeric `thinkingBudget`. So the floor is a named constant used at every call site rather than a string typed out in six places, and swapping the model means checking its scale first. The same pair lives in `fractions.html`, `math.html`, `video-review.html` and `bar-model.html` — each has its own copy, so a model change is five files, and `polymathlc/english`, `polymathlc/anskey` and `polymathlc/math` carry the same stack again.
+- After touching **the subject switcher** (`SUBJECT_APPS`, `SUBJECT_KEY`,
+  `subject*`) or **⚡ Rapid add's batch level** (`rapidLevel`, `setRapidLevel`,
+  `_rapidApplyLevel`, `_rapidLevelOptions`, `_aiBuildQuestionPrompt`'s
+  `levelHint`), run `node tools/subject-level-tests.mjs`. A url pointing at the
+  wrong folder does not error, it loads the WRONG subject's app, and
+  `../science/` is a 404 for the whole school (the folder is `cer`). An
+  absolute url is the same failure delayed until the centre moves domain. And
+  the batch level has no field to check itself against — a level is read off
+  the TOPIC here, so if the narrowing stops working the picker still says
+  "filed at P5", the toast still says "at P5", and forty questions land
+  wherever the AI's topic put them.
 - After touching **Ember Duel's sound or screen shake** (`DUEL_HIT_TIERS`, `DUEL_HEAL_TIERS`, `DUEL_CUES`, `DUEL_SYNTHS`, `duelSfxFlush`, `duelSfxPlay`, `duelSfxCue`, `duelQuake`), run `node tools/duel-sfx-tests.mjs`. It loads the REAL sound section out of `app.js` against a Web Audio shim and pins the ladder (every tier louder / deeper / longer / shaking harder than the one below), the one-beat-per-flush rule, the lunge delay, the routine cues staying under the blows, the draw riffle and its defer cap, and the mute switch.
 - After touching **Ember Duel's heroes** (`DUEL_HEROES`, `duelResolvePower`, `duelCanUsePower`, `duelHurtHero`'s armour rule, `duelHeroId`), run `node tools/duel-hero-tests.mjs`. It loads the REAL hero table, armour rule and power resolver out of `app.js` and pins the things that break silently: the default being the safest hero, a retired hero id falling back rather than crashing, armour being spent before life, the two-mana once-a-turn rule, and **every** hero power `kind` actually doing something.
 - After touching **Ember Duel's rival decks or the AI's card timing** (`DUEL_RIVAL_PLANS`, `duelPlanFor`, `duelDeckIsSwarm`, `duelRivalDeck`, `_duelFill`, `duelAiWorthPlaying`), run `node tools/duel-rival-tests.mjs`. It loads the REAL rival-deck section and worth-test out of `app.js` and runs them over a synthetic dex, pinning both halves of the swarm counter: the sweeper deck really holding board clears, the AI really holding them until two minions are on the table, the counter being likelier against a swarm **and** still not the only deck a swarm player meets, and the deck staying legal (40 cards, copy limits, one star past the band at most).

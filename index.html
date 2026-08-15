@@ -721,6 +721,36 @@ option {
   }
   .rapid-upload-row .btn { flex: 1 1 44%; justify-content: center; }
 }
+/* The level this BATCH is being filed at. A level is not a field on a question
+   here — it is read off the topic (getTopicLevel) — so this picker narrows the
+   list of topics the AI may choose from rather than stamping a number. It sits
+   above the pad because it applies to everything queued after it, and an
+   author who reads it only after pasting forty screenshots has filed forty
+   questions at the wrong level. */
+.rapid-level {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-alt);
+}
+.rapid-level.on { border-color: var(--primary); background: var(--primary-light); }
+.rapid-level label { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; }
+.rapid-level label b { font-weight: 700; }
+.rapid-level label span { color: var(--text-muted); font-size: 0.76rem; line-height: 1.6; }
+.rapid-level select {
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  font-family: inherit;
+  font-size: 0.84rem;
+  color: var(--text);
+}
+
 .image-preview {
   margin-top: 10px;
   border-radius: var(--radius-sm);
@@ -7356,6 +7386,26 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   <button type="button" class="wk-bar-btn wk-bar-ghost" onclick="navigateTo('worksession')" title="See every question logged this session">Details</button>
 </div>
 
+<!-- ==================== SUBJECT SWITCHER ====================
+     Top-right on every page, for everyone signed in. The four subject portals
+     are separate apps with separate question banks, progress and games; this
+     is how one student moves between the ones they are taught.
+
+     The menu itself is built by subjectRenderMenu() from SUBJECT_APPS in
+     app.js — ONE list, so a subject added there appears here without this
+     markup being touched. It stays hidden until sign-in (subjectShow()), or
+     it would sit over the login card. -->
+<div class="subject-switch" id="subjectSwitch" style="display:none;">
+  <button type="button" class="subject-btn" id="subjectBtn"
+          aria-haspopup="true" aria-expanded="false" aria-controls="subjectMenu"
+          onclick="subjectToggle(event)" title="Switch subject — your Math, English, Chinese and Science portals">
+    <span class="subject-ico" id="subjectIco">🔬</span>
+    <span class="subject-name" id="subjectName">Science</span>
+    <span class="subject-caret" aria-hidden="true">▾</span>
+  </button>
+  <div class="subject-menu" id="subjectMenu" role="menu"></div>
+</div>
+
 <!-- ==================== IMAGE PRELOAD OVERLAY ==================== -->
 <div class="preload-overlay" id="preloadOverlay" style="display:none;">
   <img class="preload-logo" src="https://dl.dropboxusercontent.com/scl/fi/h40yjlyg8ldefwfaa3dib/polymath-logo-sticker.png?rlkey=o1ra4taqy79gt9t8u096v82zj" alt="Loading" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2280%22 height=%2280%22 viewBox=%220 0 80 80%22%3E%3Crect width=%2280%22 height=%2280%22 rx=%2216%22 fill=%22%234a7c59%22/%3E%3Ctext x=%2240%22 y=%2256%22 font-family=%22DM Sans,sans-serif%22 font-size=%2248%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22%3EP%3C/text%3E%3C/svg%3E';">
@@ -10193,6 +10243,18 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <h3 style="margin-bottom:4px;">⚡ Rapid add to vetting</h3>
     <p class="rapid-desk" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Paste a screenshot (Ctrl/⌘+V). AI reads it, enhances the whole picture to black &amp; white, and drops the question straight into your <b>Vetting</b> list — no editor stop. Keep pasting to add more; they all process in the background. <span style="color:var(--text-muted);opacity:0.85;">Tip: open this from anywhere with <b>Ctrl/⌘+Shift+V</b>.</span></p>
     <p class="rapid-touch" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:14px;">Photograph a question, or pick one from your gallery. AI reads it and drops the question straight into your <b>Vetting</b> list — no editor stop. Add as many as you like; they all read in the background, so you can keep going or close this window.</p>
+    <!-- The level everything queued after it is filed at. It sits ABOVE the pad
+         on purpose: it applies to the whole batch, and an author who notices it
+         only after pasting forty screenshots has filed forty questions at the
+         wrong level. The <option>s are built by _rapidLevelOptions() from
+         TOPIC_LEVELS, so the list cannot drift from the topics themselves. -->
+    <div class="rapid-level" id="rapidLevelWrap">
+      <label for="rapidLevel">
+        <b>📚 Level for this batch</b>
+        <span id="rapidLevelNote">Every question added from here is filed at this level.</span>
+      </label>
+      <select id="rapidLevel" onchange="setRapidLevel(this.value)"></select>
+    </div>
     <div class="image-paste-zone" id="rapidPasteZone" tabindex="0" style="padding:40px 16px;"
          onclick="rapidZoneClick()"
          onpaste="rapidPaste(event)"
@@ -11955,6 +12017,99 @@ body.lore-reading { overflow: hidden; }
 .arcade-card h3{ margin:0; font-size:1.02rem; }
 .arcade-card p{ margin:0; color:var(--text-muted); font-size:0.84rem; line-height:1.65; }
 .arcade-card .btn{ margin-top:10px; }
+
+/* ==================== THE SUBJECT SWITCHER ====================
+   One student, four subjects, one place to change between them. The four
+   portals are separate apps with separate banks — this is a LINK, not a
+   shared surface, so it is four <a>s and no JS navigation: middle-click and
+   open-in-new-tab work the way a student expects.
+
+   It is FIXED to the top-right of the viewport rather than dropped into a
+   header, because these three portals have no global top bar at all — every
+   page carries its own sticky `.page-header`, forty-odd of them, and a page
+   added next month would be the one that quietly had no switcher on it.
+
+   The whole block is written against the design tokens (--surface, --border,
+   --text, --primary) and nothing else, so the SAME css is used in all four
+   apps and each one paints it in its own palette. Keep it that way: a themed
+   copy per app is a copy that drifts.
+
+   z-index 150 is deliberate and sits in a gap: above the sidebar (100) and
+   every sticky `.page-header` (50) so it is always reachable, and below every
+   modal (`.confirm-overlay` and friends start at 200) so a dialog covers it
+   rather than being covered by it. */
+.subject-switch { position: fixed; top: 12px; right: 16px; z-index: 150; font-family: inherit; }
+.subject-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 8px 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  /* A <button> does not inherit colour — without this the label falls back to
+     the browser's own button text and vanishes on a dark surface. */
+  color: var(--text);
+  font-family: inherit; font-size: 0.83rem; font-weight: 600; line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.subject-btn:hover { border-color: var(--primary); box-shadow: 0 4px 14px rgba(15, 23, 42, 0.13); }
+.subject-btn .subject-ico { font-size: 1rem; line-height: 1; }
+.subject-btn .subject-caret { font-size: 0.62rem; color: var(--text-muted); }
+.subject-switch.open .subject-btn { border-color: var(--primary); }
+.subject-menu {
+  display: none;
+  position: absolute; top: calc(100% + 8px); right: 0;
+  min-width: 264px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.16);
+}
+.subject-switch.open .subject-menu { display: block; }
+.subject-menu-title {
+  padding: 7px 11px 9px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.subject-opt {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 11px;
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.87rem; line-height: 1.4;
+}
+.subject-opt:hover { background: var(--surface-alt); }
+.subject-opt .subject-ico { font-size: 1.12rem; line-height: 1; flex: 0 0 auto; }
+.subject-opt b { font-weight: 600; }
+/* The subject you are already in is shown, never hidden: a menu that silently
+   drops the current app leaves a student unable to tell where they are. */
+.subject-opt.here { background: var(--primary-light); cursor: default; }
+.subject-opt.here b { color: var(--primary-dark, var(--primary)); font-weight: 700; }
+.subject-opt .subject-tick { margin-left: auto; padding-left: 8px; font-size: 0.72rem; color: var(--primary);
+  font-weight: 700; white-space: nowrap; }   /* nowrap: wrapped onto two lines it squeezes the subject's own name */
+.subject-menu-foot {
+  padding: 9px 11px 5px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  font-size: 0.72rem; line-height: 1.6; color: var(--text-muted);
+}
+/* The switcher floats OVER the sticky page header, whose right-hand end is
+   where every page keeps its action buttons — so the header has to give that
+   corner up or the buttons sit underneath it, clickable nowhere. */
+.page-header { padding-right: 200px; }
+@media (max-width: 900px) {
+  /* Narrow: the pill keeps its icon and drops its label, so it needs far less
+     room and stops crowding a header that is already wrapping. */
+  .subject-btn .subject-name { display: none; }
+  .subject-btn { padding: 8px 10px; gap: 6px; }
+  .page-header { padding-right: 74px; }
+  .subject-menu { min-width: 232px; }
+}
+@media print { .subject-switch { display: none !important; } }
+
 </style>
 <div class="overlay" id="spireBookOverlay">
   <div class="overlay-card spirebook">
