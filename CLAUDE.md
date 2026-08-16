@@ -529,6 +529,108 @@ left, what is already filed on the right.
   the direction of the difference strip is the silent one: reversed, the two
   lists read perfectly and tell the author the opposite of the truth.
 
+## 🔍 Answer key cross-check — TWO engines at once (v1.296.0)
+
+`akc*` (search `ANSWER KEY CROSS-CHECK`), plus `#akcOverlay`, the `#akcBankBar`
+on the Question Bank and 🔍 Check answer keys on a 📄 My Worksheets card.
+**Ported from `polymathlc/math`, which carries the same block — keep the two in
+step**; what genuinely differs here is the question SHAPE and the agreement
+test, and both are called out below.
+
+✅ Check Questions serves a question back to a HUMAN for a second pair of eyes.
+This asks **two models** — ChatGPT (`gpt-5.6-sol` by default) and Gemini
+(`AI_MODEL`) — to answer every question from scratch **simultaneously**, and
+reports their two answers beside the teacher's own key, with a recommendation.
+Gated on `_canAuthor()`.
+
+- **The two calls are `Promise.all`ed and neither model is shown the other's
+  answer.** That independence is the only reason an agreement between them
+  means anything — chain them and the second is just agreeing with the first.
+- **`skipOpenAi: true` on the Gemini call is load-bearing**, and it is why
+  `askGeminiVision` / `askGemini` grew that option at all. They route through
+  ChatGPT whenever the sidebar's engine toggle says so, so without it both
+  columns are the same model twice: they would then agree constantly and the
+  report would read as a clean bill of health.
+- **Both engines get the identical prompt**, built once per question. A
+  comparison between two models asked different questions compares the
+  questions.
+- **It READS ONLY — no path here writes a question.** Every row ends in a
+  recommendation. A model that is confidently wrong must not be able to
+  overwrite a teacher's key; ✎ Edit opens the question in the editor instead.
+- **The key is read through the SHARED printed-key pushers.** `akcKeySections`
+  calls `_pushBlockAnswerKey` / `_pushAnswerKeySection` — the same two the
+  printed answer key uses — so what is checked is exactly what the teacher
+  prints and marks from. A second answer reader written for this feature would
+  be free to drift, and a cross-check comparing against the wrong half of a
+  question is worse than no cross-check. An MCQ is a **block** here
+  (`correctId` against `options[].id`), which is the main shape difference from
+  the Maths app's copy.
+- **`akcCompare` is PLAIN CODE, never a third AI call.** The same two answers
+  must always produce the same advice. Its statuses: `agree` (green), `guide`
+  (answer right, model answer flagged), `split`, `no-key`, `single`,
+  `key-wrong` and `split-none` (both red), `failed`.
+- **`compare.tone` is the ONLY thing that colours, tallies and sorts a row.**
+  One status can carry two colours — a lone engine agreeing with the key is
+  amber, a lone engine contradicting it is red — so a lookup table keyed on
+  `status` would be a second opinion about the first.
+- **A science answer is usually a SENTENCE, so agreement is decided in three
+  different ways and the split between them is the whole safety story.**
+  - An **MCQ** is compared by option NUMBER, never by the words.
+  - A **number** is settled on its numbers and then its units through
+    `AKC_UNIT_CANON`: "24" and "24 g" agree (one side left the unit off),
+    "24 g" and "24 kg" do not. The text test is never allowed to rescue a
+    numeric disagreement — "the mass is 24 g" and "the mass is 42 g" share
+    every content word.
+  - A **worded** answer against the KEY is settled by the engine's **own
+    `statedAnswerVerdict`**, because that is a semantic judgement no token
+    count can make: "a good conductor" and "a good insulator" are one word
+    apart and opposite, while "the water evaporated" and "the liquid turned to
+    vapour" share no words and are the same answer. `unsure` falls through to
+    the words.
+  - Engine against ENGINE has no verdict to read (neither saw the other), so it
+    uses `akcTextOverlap` — **JACCARD, shared over the UNION, never an overlap
+    coefficient**. Over the shorter side, conductor/insulator scores 0.67 and
+    reads as agreement; over the union it is 0.50 and does not.
+- **The bank's window is a filter ON TOP of what the bank is showing**, so the
+  count on the button is the set the eye can see — `_akcSyncBankBar` runs from
+  `renderQuestionBank`, which is every keystroke in the filters. An undated
+  question can only ever appear under "any time".
+- **Which rows are expanded is state (`_akc.open`), not a class on a div** —
+  the report re-renders on every result that lands, so a panel opened mid-run
+  would snap shut under the teacher reading it.
+- Guards: `AKC_PAR` questions in flight, `AKC_MAX` per run, a confirm over
+  `AKC_CONFIRM_OVER`, ⏹ Stop honoured between questions, and closing the
+  overlay stops the run rather than leaving model calls billing away behind it.
+- The handlers are bound **lazily** (`akcBindOnce`), because the block sits
+  above the point where `$` is declared and must not touch the DOM at
+  module-evaluation time — the usual temporal-dead-zone trap.
+- Run **`node tools/answer-key-check-tests.mjs`** after touching any of it.
+
+## One ChatGPT key for all four portals (v1.296.0)
+
+`AI_ENGINE_STORE` (search `ONE KEY, ALL FOUR PORTALS`).
+
+The four apps are sibling folders on ONE GitHub Pages origin
+(`polymathlc.github.io/{math,english,chinese,cer}`), so they have always shared
+a localStorage — they were simply writing **different slots** in it, which meant
+the same key had to be pasted once per subject.
+
+- **It is not a convenience.** 🔍 Answer key cross-check needs ChatGPT and
+  Gemini BOTH live to be worth running, so an app missing the key runs it with
+  one column and reports "no second opinion" forever — which looks exactly like
+  a working feature.
+- **The four slot names are `sq_ai_engine` / `sq_openai_key` /
+  `sq_openai_model` / `sq_openai_image_model` in ALL FOUR apps.** They are this
+  app's original names because this is where the key already was; Maths
+  migrated onto them and copies its old `mq_` values across **only into an
+  empty slot**, so a stale key cannot sign the other three apps out. Do not
+  rename them to something subject-neutral without migrating all four at once.
+- **The key is NEVER in the repo.** These are public, static sites served to
+  every student's browser, so a key committed here is a key handed to the whole
+  school. It lives in the admin's own browser; both harnesses fail on an
+  `sk-`-shaped string in the source.
+- Run **`node tools/answer-key-check-tests.mjs`** after touching any of it.
+
 ## Versioning convention — applies to EVERY change (do this every time)
 1. **Bump the version.** In `index.html`, update `const APP_VERSION = 'vX.Y.Z'` (search `APP_VERSION`). Patch bump for fixes/small tweaks, minor bump for new features.
 2. **Keep it visible.** The version renders in the sidebar footer for admins only (`#appVersionBadge`, class `admin-only`). This is how the user confirms the latest build is actually deployed.
@@ -663,6 +765,16 @@ that door: a line to type in, and the same image model behind it.
   is X?" opens with a bracket and is prose, and a block labelled (b) whose text
   opens "(a)" is a disagreement somebody should see rather than have tidied
   away.
+- After touching **the answer key cross-check** (`akcCompare`,
+  `akcAnswersAgree`, `akcAgreesWithKey`, `akcTextOverlap`, `akcKeySections`,
+  `akcAskEngine`, `akcPrompt`, `akcRecentQuestions`) **or the shared
+  `AI_ENGINE_STORE` slot names**, run `node tools/answer-key-check-tests.mjs`.
+  Every failure here looks like a working report: a loose agreement test turns
+  the whole run green and certifies wrong keys, a reversed comparison tells the
+  teacher to change a correct one, a Gemini call that quietly went through
+  ChatGPT is two columns of the same model agreeing with itself, and a slot
+  name that drifts from the other three portals leaves the key unreadable here
+  — which reports as "only one engine is available" and never as a fault.
 - After touching **✅ Check Questions' detectors** (`_cqTableLabelsChoices`, `_cqOptsAreBareNumbers`, `_cqMcqFixable`, `_cqLocalFindings`, `_cqTableRows`), run `node tools/check-questions-tests.mjs`. Both directions fail silently: too loose and the page tells an employee to blank the options of a question whose choices are NOT in the table — one tap and the wording of all four is gone, with the ＃ button looking like it did the right thing; too tight and the one problem the page exists to catch is never flagged.
 - After touching **🎯 learning-objective tagging** (`qLos`, `_loOrderIds`, `loQuestions`, `loDetachQuestion`, `_loCandidates`), run `node tools/objective-tag-tests.mjs`. Every failure mode here is silent — a tag dropped because the objective list had not loaded, a tag lost because the list no longer knows that id, a filed question that simply does not appear under its objective — and none of them throws.
 - After touching **the printed ANSWER KEY** (`_pushBlockAnswerKey`, `_pushAnswerKeySection`, `_pushAnnotAnswerKey`, `_qFallbackKeySection`, `_akQuestionSections`, `_akSectionsHtml`, or either print path's answer-key branch), run `node tools/answer-key-tests.mjs`. A key that drops a question prints perfectly and looks tidy — there is no error anywhere — so the omission is only found in front of the class.
