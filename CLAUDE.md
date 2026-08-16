@@ -500,7 +500,84 @@ The whole point: the user checks the version shown in the app's sidebar against 
 - Keep spacing scale consistent across the whole app so every surface feels like the same design system.
 - (The user wants this as a standing design principle for ALL their projects — mirror this section into other repos' CLAUDE.md / their global memory.)
 
+## The clone stamp shows what it is about to stamp (vv1.294.0)
+
+`_annotClonePeekSrc` / `_annotUpdateClonePeek` / `ANNOT_PEEK_MIN` and the
+`#annotClonePeek` canvas inside `#annotBrushRing` (search `The clone stamp's
+live preview`).
+
+The source pin says where the copy comes FROM and the brush ring says how big
+the mark will be. Neither says what the mark will BE, so lining a stamp up
+meant clicking and then looking at what landed — and undoing it when it was
+half a letter out. **The ring is now filled with the patch that would be
+stamped this instant**: a lens on the source, carried under the pointer, at the
+same zoom as everything else.
+
+- **It lives INSIDE the ring**, so it is positioned, sized and hidden by exactly
+  the code that already does all three for the ring. `_annotUpdateBrushRing` is
+  still the ONE place either of them moves.
+- **The source point is different before and during a stroke, and getting that
+  backwards is the silent failure.** Before the first dab there is no offset, so
+  starting the drag here is what would put the source POINT under the pointer —
+  the preview is centred on `cloneSrc`. Mid-stroke the offset was locked in at
+  pointer-down, so it is `(pointer in image px) − cloneOff`, which drifts away
+  from the mark at the speed of the hand if it is computed the other way round.
+- **`_annot.ptr` is in STAGE coordinates and the source is in IMAGE pixels**, so
+  zoom and pan come off first. Read it raw and the preview is right only at 100%
+  with no panning — which is how the editor opens, and therefore how anyone
+  would check it by hand.
+- **Mid-stroke it reads `cloneSnap`, not the live canvas** — the stamp reads the
+  frozen snapshot, so dragging back over ground already covered would otherwise
+  preview the copy instead of the source, and the two diverge exactly where it
+  matters.
+- The backing store is the brush in **image** pixels, so the preview is
+  pixel-for-pixel what the dab puts down however far the view is zoomed; under
+  `ANNOT_PEEK_MIN` (14) screen px there is nothing to see in the ring and it is
+  not drawn. The ring goes white-on-black while it is previewing — a black
+  hairline over arbitrary artwork is the one thing that disappears.
+- Run **`node tools/clone-preview-tests.mjs`** after touching any of it.
+
+## ✨ Regenerate — say what you want and the AI redraws it (vv1.294.0)
+
+`annotAiRegen` / `_annotAiBarInit` / `_annotAiSyncScope` / `_annotSelBox` /
+`ANNOT_AI_KEEP` (search `REGENERATE`), plus the `#annotAiBar` under the
+selection bar in the Touch up editor.
+
+AI content-aware fill answers exactly ONE question — *take this out* — with a
+prompt nobody can change. Everything else an author actually wants of a picture
+("rub out the pencil marks", "make the arrow red", "redraw this beaker
+cleanly", "put the missing axis label back") had **no door at all**. This is
+that door: a line to type in, and the same image model behind it.
+
+- **TWO SCOPES, and the difference between them is the whole safety story.**
+  With an area SELECTED only that area may change: the model is shown the
+  picture with the area **RINGED rather than blanked** — "make the arrow red"
+  needs the arrow still visible, which is exactly what content-aware fill's
+  magenta blanking destroys — and the reply is composited back through
+  `_annotWithSelClip`, so a model that quietly rewrote the whole page cannot
+  touch one pixel outside the selection. With NOTHING selected the whole picture
+  is redrawn, which is the honest reading of "no area chosen".
+- **The bar NAMES the scope it is about to use** (`_annotAiSyncScope`, kicked
+  from `_annotSelSyncBar`), because those two are very different things to press
+  a button on.
+- **The magenta marker is drawn just OUTSIDE the selection**, so it never covers
+  the content the instruction is about — and anything of it that survives into
+  the reply is outside the clip and therefore cannot be composited back.
+- **It is ONE history step either way**, so ↶ Undo puts the original back. That
+  is what makes an experimental prompt cheap enough to actually experiment with.
+- The whole-picture branch **clears the canvas and draws**, never a `'copy'`
+  composite: a canvas stranded in a composite mode erases everything drawn
+  afterwards (the same trap `_annotResetCompose` exists for).
+- `_annotAiBarInit` runs on every open, so **last picture's instruction is never
+  left sitting in the box** one Enter away from being run on this one.
+
 ## House rules
+- After touching **the clone stamp's live preview** (`_annotClonePeekSrc`,
+  `_annotUpdateClonePeek`, `ANNOT_PEEK_MIN`, `_annotUpdateBrushRing`), run
+  `node tools/clone-preview-tests.mjs`. A preview that does not appear is
+  obvious the first time anyone picks the tool; a preview centred on the WRONG
+  source point looks exactly like a working one and aims every stamp a little
+  way off — which is worse than the pin-and-guess it replaced.
 - After editing `app.js`, validate it: `cp app.js /tmp/c.mjs && node --check /tmp/c.mjs` (the `.mjs` copy makes Node parse it as a module, so `import` at the top is accepted).
 - **The Gemini model is `AI_MODEL` and its thinking floor is `AI_THINK_MIN`, and the two move TOGETHER** (v1.289.0). Every model has its own thinking scale and a level it does not know is a **400 INVALID_ARGUMENT on every single AI call in the app** — not a degraded answer, no answer at all. `gemini-3.7-flash` takes `low` / `medium` / `high` and **dropped the `"minimal"` that 3.6 accepted**, exactly as 3.x had already dropped 2.x's numeric `thinkingBudget`. So the floor is a named constant used at every call site rather than a string typed out in six places, and swapping the model means checking its scale first. The same pair lives in `fractions.html`, `math.html`, `video-review.html` and `bar-model.html` — each has its own copy, so a model change is five files, and `polymathlc/english`, `polymathlc/anskey` and `polymathlc/math` carry the same stack again.
 - After touching **the subject switcher** (`SUBJECT_APPS`, `SUBJECT_KEY`,
