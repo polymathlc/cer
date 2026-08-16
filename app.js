@@ -1696,7 +1696,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.294.0';
+const APP_VERSION = 'v1.295.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -9730,26 +9730,154 @@ function _tagDuplicate(q) {
 // `guard` is for the EDITOR BANNER, which is on screen while the author is
 // mid-compose: opening the twin there replaces the draft they are looking at,
 // so it asks first. The vetting card needs no guard — nothing is being typed.
-function _dupSeeOriginalBtn(dup, style, guard) {
+// `mineId` is the question being COMPARED — a vetting card passes its own id,
+// and the editor banner passes nothing, because what it is comparing has not
+// been saved and only exists in the editor.
+function _dupSeeOriginalBtn(dup, style, mineId) {
   const hover = (dup && dup.where === 'vetting') ? ''
     : `onmouseenter="ppHoverShowBank(event,'${dup.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverChipLeave()"`;
   const tip = (dup && dup.where === 'vetting')
-    ? 'Open the question already waiting in vetting'
-    : 'Hover to preview the existing question · click to open it';
-  const click = guard ? `dupOpenOriginal('${dup.id}')` : `editQuestion('${dup.id}')`;
-  return `<button type="button" class="btn btn-outline" style="${style || ''}" onclick="${click}"
+    ? 'Put the two questions side by side and read them together'
+    : 'Hover for a quick look · click to put the two questions side by side';
+  return `<button type="button" class="btn btn-outline" style="${style || ''}" onclick="dupCompare('${dup.id}','${mineId || ''}')"
       ${hover}
-      title="${tip}">👁 See original question</button>`;
+      title="${tip}">⇄ Compare side by side</button>`;
 }
 // Leaving the editor for the twin costs the author whatever is in it, so it is
-// never done on one click. Hovering the same button previews a BANK twin
-// without leaving at all, which is the answer most of the time.
+// never done on one click. It is reached from INSIDE the comparison now, which
+// is the only place anybody has actually seen the two questions together.
 function dupOpenOriginal(id) {
   showConfirm(
     'Open the original?',
     'This replaces what is in the editor. Anything you have not saved will be lost.',
-    () => editQuestion(id)
+    () => { dupCompareClose(); editQuestion(id); }
   );
+}
+
+// =====================================================================
+// SIDE BY SIDE — the draft against the question it may be a copy of
+//
+// The banner said "this looks 90% like Sharing a Sum of Money" and offered
+// exactly one button: OPEN that question. Which replaces the draft — so the
+// only way to answer the question the banner asks ("are these two the same?")
+// was to throw away the thing being compared, go and look, and then build it
+// again from memory. Nobody does that, so the warning got clicked past, which
+// makes it a warning that costs attention and buys nothing.
+//
+// The two questions now go up NEXT TO EACH OTHER: what is being written on the
+// left, what is already filed on the right.
+//
+//   * BOTH SIDES GO THROUGH THE SAME RENDERER (`renderQuestionBodyPreviewHtml`,
+//     which every other preview in the app uses). A second renderer written for
+//     this view would be free to drift, and a comparison whose two halves are
+//     drawn by different code can flatter one of them.
+//   * NOTHING IS WRITTEN AND NOTHING IS REPLACED by opening it. It is a read.
+//     The one destructive action — loading the original into the editor — is
+//     inside the overlay, still behind its confirm, and is now reached only by
+//     someone who has actually seen what they are about to lose.
+//   * IT SAYS WHAT DIFFERS IN WORDS (`_dupDiffHtml`). Two near-identical
+//     questions are near-identical to look at, which is the whole problem: the
+//     eye slides over the one changed number. The words that appear on ONE side
+//     only are the fastest honest answer to "so what did they change?", and
+//     when there are none it says that outright — word-for-word identical is
+//     the verdict an author most needs handed to them.
+// =====================================================================
+const DUP_DIFF_WORDS_MAX = 40;   // past this the list stops being readable and starts being a wall
+
+// The suspected twin, from whichever list it is in.
+function _dupFindQuestion(id) {
+  if (!id) return null;
+  const b = (Array.isArray(questionBank) ? questionBank : []).find(q => q && q.id === id);
+  if (b) return { q: b, where: 'bank' };
+  const v = (Array.isArray(vettingList) ? vettingList : []).find(q => q && q.id === id);
+  return v ? { q: v, where: 'vetting' } : null;
+}
+// The words on one side and not the other. Both go through the matcher's own
+// normalisation, so what is listed here is exactly what the percentage counted
+// — a difference strip computed on some other footing would contradict the
+// score printed above it.
+function _dupDiffWords(a, b) {
+  const out = [];
+  a.forEach(w => { if (!b.has(w)) out.push(w); });
+  return out.sort();
+}
+function _dupWordList(words, colour) {
+  if (!words.length) return '<span style="color:var(--text-muted);font-style:italic;">nothing</span>';
+  const shown = words.slice(0, DUP_DIFF_WORDS_MAX);
+  const more = words.length - shown.length;
+  return shown.map(w => `<span style="display:inline-block;background:${colour};border-radius:4px;padding:1px 6px;margin:2px 3px 2px 0;font-size:0.8rem;">${escapeHtml(w)}</span>`).join('')
+    + (more ? `<span style="color:var(--text-muted);font-size:0.8rem;"> and ${more} more</span>` : '');
+}
+function _dupDiffHtml(mine, theirs) {
+  const a = _dupTokenSet(mine), b = _dupTokenSet(theirs);
+  const onlyMine = _dupDiffWords(a, b), onlyTheirs = _dupDiffWords(b, a);
+  let shared = 0; a.forEach(w => { if (b.has(w)) shared++; });
+  if (!onlyMine.length && !onlyTheirs.length) {
+    return `<div style="margin:16px auto 0;max-width:900px;padding:14px 18px;border:1.5px solid #e0b768;background:#fffbeb;border-radius:10px;color:#7a5410;font-size:0.88rem;line-height:1.6;">
+      <strong>The wording is word for word the same.</strong> Every word in one is in the other. If the pictures match too, this is the same question twice.</div>`;
+  }
+  return `<div style="margin:16px auto 0;max-width:900px;padding:14px 18px;border:1px solid var(--border);background:var(--surface-alt,#fafbfa);border-radius:10px;">
+    <div style="font-weight:700;font-size:0.86rem;margin-bottom:10px;">🔍 What is actually different <span style="font-weight:400;color:var(--text-muted);">— ${shared} word${shared === 1 ? '' : 's'} in common</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
+      <div><div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:5px;">Only in the one you are writing</div>${_dupWordList(onlyMine, '#dbeafe')}</div>
+      <div><div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:5px;">Only in the one already filed</div>${_dupWordList(onlyTheirs, '#fde68a')}</div>
+    </div>
+  </div>`;
+}
+// One column. `sub` is the line under the title — where this question lives, or
+// that it lives nowhere yet.
+function _dupCompareSide(q, heading, headColour, sub) {
+  const body = renderQuestionBodyPreviewHtml(q)
+    || '<p style="color:var(--text-muted);font-style:italic;">Nothing in it yet</p>';
+  return `<div style="border:1.5px solid ${headColour};border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-width:0;">
+    <div style="padding:12px 16px;background:${headColour}1a;border-bottom:1px solid ${headColour};">
+      <div style="font-weight:700;font-size:0.82rem;color:${headColour};letter-spacing:0.02em;">${escapeHtml(heading)}</div>
+      <div style="font-weight:700;font-size:1rem;margin-top:6px;line-height:1.4;">${escapeHtml(q.title || 'Untitled')}</div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">${escapeHtml(sub)}</div>
+    </div>
+    <div style="padding:16px;overflow:auto;text-align:left;flex:1;">${body}</div>
+  </div>`;
+}
+let _dupCompareOriginalId = null;
+// `mineId` names the question on the LEFT: a vetting card passes its own id,
+// and the editor banner passes nothing, because what it is comparing is the
+// draft in the editor and has no id to look up.
+function dupCompare(dupId, mineId) {
+  const found = _dupFindQuestion(dupId);
+  if (!found) { showToast('That question is no longer there', 'error'); return; }
+  const mineFound = mineId ? _dupFindQuestion(mineId) : null;
+  const mine = mineFound ? mineFound.q : _dupEditorQuestion();
+  const mineSub = mineFound
+    ? (mineFound.where === 'vetting' ? 'Waiting in your vetting list' : 'In your question bank')
+    : 'Not saved anywhere yet — this is what is in the editor';
+  const theirSub = found.where === 'vetting' ? 'Already waiting in your vetting list' : 'Already in your question bank';
+  const pct = (findDuplicateCandidate(mine, mine.id) || {}).pct;
+  _dupCompareOriginalId = dupId;
+  const body = document.getElementById('dupCompareBody');
+  if (body) {
+    body.innerHTML =
+      `<p style="color:var(--text-muted);font-size:0.86rem;line-height:1.65;margin-bottom:16px;max-width:820px;">
+         Read them together and decide${pct != null ? ` — the matcher puts them <strong>${pct}% alike</strong>` : ''}. Nothing here changes either question; close it and carry on writing.
+       </p>
+       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;align-items:stretch;">
+         ${_dupCompareSide(mine, '📝 THE ONE YOU ARE WRITING', '#2563eb', mineSub)}
+         ${_dupCompareSide(found.q, '📚 THE ONE ALREADY FILED', '#b45309', theirSub)}
+       </div>
+       ${_dupDiffHtml(mine, found.q)}`;
+  }
+  // The one destructive way out is only offered when there is a draft to lose;
+  // from a vetting card it is an ordinary edit and needs no warning.
+  const btn = document.getElementById('dupCompareOpenBtn');
+  if (btn) btn.style.display = mineFound ? 'none' : '';
+  const ov = document.getElementById('dupCompareOverlay');
+  if (ov) ov.classList.add('show');
+}
+function dupCompareClose() {
+  const ov = document.getElementById('dupCompareOverlay');
+  if (ov) ov.classList.remove('show');
+}
+function dupCompareOpenOriginal() {
+  if (_dupCompareOriginalId) dupOpenOriginal(_dupCompareOriginalId);
 }
 // The question currently in the editor, in the shape the matcher wants.
 function _dupEditorQuestion() {
@@ -9772,7 +9900,7 @@ function checkEditorDuplicate() {
        <div style="font-weight:700;color:#7a5410;margin-bottom:2px;">Possible duplicate (${dup.pct}% match)</div>
        <div style="font-size:0.84rem;color:#7a5410;line-height:1.5;">This looks a lot like <strong>“${escapeHtml(dup.title)}”</strong>, already in ${escapeHtml(_dupWhereLabel(dup))}. Review before saving.</div>
      </div>
-     ${_dupSeeOriginalBtn(dup, 'white-space:nowrap;border-color:#e0b768;color:#7a5410;', true)}`;
+     ${_dupSeeOriginalBtn(dup, 'white-space:nowrap;border-color:#e0b768;color:#7a5410;')}`;
 }
 function _hideDupBanner() { const b = document.getElementById('dupWarnBanner'); if (b) { b.style.display = 'none'; b.innerHTML = ''; } }
 
@@ -12432,7 +12560,7 @@ function renderVettingList() {
           </div>
         </div>
         <div class="qb-card-preview">${escapeHtml(preview)}</div>
-        ${dup ? `<div class="vetting-flag-note" style="background:#fffbeb;border-color:#e0b768;color:#7a5410;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">🟡 <b>Possible duplicate</b> of “${escapeHtml(dup.title)}” (${dup.pct}% match). ${_dupSeeOriginalBtn(dup, 'font-size:0.76rem;padding:4px 10px;border-color:#e0b768;color:#7a5410;')}</div>` : ''}
+        ${dup ? `<div class="vetting-flag-note" style="background:#fffbeb;border-color:#e0b768;color:#7a5410;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">🟡 <b>Possible duplicate</b> of “${escapeHtml(dup.title)}” (${dup.pct}% match). ${_dupSeeOriginalBtn(dup, 'font-size:0.76rem;padding:4px 10px;border-color:#e0b768;color:#7a5410;', q.id)}</div>` : ''}
         ${q.status === 'flagged' && q._flag ? `<div class="vetting-flag-note">🚩 <b>Flagged by ${escapeHtml(q._flag.by || 'a student')}</b>${q._flag.when ? ' · ' + escapeHtml(q._flag.when) : ''}${q._flag.comment ? `<div class="vfn-comment">“${escapeHtml(q._flag.comment)}”</div>` : ''}</div>` : ''}
         ${isNew ? `<div style="margin-top:10px;"><button class="btn btn-outline" style="font-size:0.78rem;padding:5px 12px;" onclick="editQuestion('${q.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;vertical-align:-2px;margin-right:4px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Open in editor</button></div>` : ''}
       </div>`;
@@ -21529,8 +21657,23 @@ function toggleWsPreview(qId, btn) {
 function renderQuestionPreviewHtml(qId, opts) {
   const q = questionBank.find(qb => qb.id === qId);
   if (!q) return '<p>Question not found</p>';
+  let html = renderQuestionBodyPreviewHtml(q);
+  if (!html) return '<p style="color:var(--text-muted);font-style:italic;">No content</p>';
+  if (questionHasMarkableAnswer(q) && !(opts && opts.tryIt === false)) {
+    html += `<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);">
+      <button class="btn btn-outline" style="padding:6px 14px;font-size:0.84rem;" onclick="wsPreviewTryIt('${qId}')">✍️ Answer it yourself — AI marks it</button>
+    </div>`;
+  }
+  return html;
+}
+// The BODY of a preview, from the question OBJECT rather than its id. Split out
+// so the same rendering serves a question filed in the bank and one that has
+// never been saved at all — the left-hand column of the duplicate comparison is
+// the draft still sitting in the editor, and a second renderer written for it
+// would be free to flatter or damn one of the two questions being compared.
+function renderQuestionBodyPreviewHtml(q) {
   let html = '';
-  q.blocks.forEach(block => {
+  ((q && q.blocks) || []).forEach(block => {
     switch (block.type) {
       case 'text':
         if (block.content) html += `<div style="margin:6px 0;">${block.content}</div>`;
@@ -21569,12 +21712,6 @@ function renderQuestionPreviewHtml(qId, opts) {
         break;
     }
   });
-  if (!html) return '<p style="color:var(--text-muted);font-style:italic;">No content</p>';
-  if (questionHasMarkableAnswer(q) && !(opts && opts.tryIt === false)) {
-    html += `<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);">
-      <button class="btn btn-outline" style="padding:6px 14px;font-size:0.84rem;" onclick="wsPreviewTryIt('${qId}')">✍️ Answer it yourself — AI marks it</button>
-    </div>`;
-  }
   return html;
 }
 
@@ -55030,6 +55167,9 @@ window.deleteQuestion = deleteQuestion;
 window.approveVetting = approveVetting;
 window.deleteVetting = deleteVetting;
 window.dupOpenOriginal = dupOpenOriginal;
+window.dupCompare = dupCompare;
+window.dupCompareClose = dupCompareClose;
+window.dupCompareOpenOriginal = dupCompareOpenOriginal;
 window.vetSelToggle = vetSelToggle;
 window.vetSelAllVisible = vetSelAllVisible;
 window.vetSelClear = vetSelClear;

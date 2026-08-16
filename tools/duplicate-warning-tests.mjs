@@ -61,6 +61,17 @@ return {
   seed(bank, vetting) { questionBank = bank || []; vettingList = vetting || []; },
 };`)();
 
+// The side-by-side comparison's own helpers, cut separately: they sit after
+// `_tagDuplicate`, past the end of the matcher block above.
+const cmpBlock = cut('function _dupFindQuestion(id) {', '\nfunction _dupWordList', 'compare');
+const C = new Function(FIXTURE + block + cmpBlock + `
+return {
+  findQ: _dupFindQuestion,
+  diff: _dupDiffWords,
+  tokens: _dupTokenSet,
+  seed(bank, vetting) { questionBank = bank || []; vettingList = vetting || []; },
+};`)();
+
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
 const ok = (cond, what) => { if (!cond) throw new Error(what); };
@@ -188,6 +199,44 @@ test('a twin that has been DELETED stops being shown', () => {
 
 test('the threshold is a named constant, in the sane middle of the range', () => {
   ok(M.MIN > 0.5 && M.MIN < 0.95, 'DUP_MIN_SCORE is outside the useful range: ' + M.MIN);
+});
+
+// ── the side-by-side comparison ──────────────────────────────────────────────
+// The comparison itself is visible — two columns with headings that say which
+// is which — so a swap there is caught by looking. What is NOT visible is the
+// difference strip underneath: "only in the one you are writing" and "only in
+// the one already filed" are two lists of plain words, and reversed they read
+// perfectly and tell the author the opposite of the truth.
+
+test('the twin is resolved from whichever list it is in', () => {
+  C.seed([ORIGINAL], [SIBLING]);
+  eq(C.findQ('a1').where, 'bank', 'a bank twin');
+  eq(C.findQ('b1').where, 'vetting', 'a vetting twin');
+  eq(C.findQ('a1').q.id, 'a1', 'the wrong question came back');
+  eq(C.findQ('nope'), null, 'a missing id');
+  eq(C.findQ(''), null, 'an empty id');
+});
+
+test('the difference strip lists each side\'s OWN words, not the other side\'s', () => {
+  // The direction that fails silently. `cupboard` is only in the pair above,
+  // `salty` only in the sibling — so each has to come back under its own side.
+  const mine = C.tokens(ORIGINAL), theirs = C.tokens(SIBLING);
+  const onlyMine = C.diff(mine, theirs), onlyTheirs = C.diff(theirs, mine);
+  ok(onlyMine.includes('cupboard'), '"cupboard" is only in the original and was not listed under it');
+  ok(!onlyTheirs.includes('cupboard'), '"cupboard" was listed as being only in the other question');
+  ok(onlyTheirs.includes('salty'), '"salty" is only in the sibling and was not listed under it');
+  ok(!onlyMine.includes('salty'), '"salty" was listed as being only in the original');
+  // A word in both is in neither list — that is what makes the strip short
+  // enough to read at all.
+  ok(!onlyMine.includes('plant') && !onlyTheirs.includes('plant'), 'a shared word was listed as a difference');
+});
+
+test('two identical questions have NOTHING on either side', () => {
+  // This is what the strip prints "word for word the same" on, and it is the
+  // strongest thing it can tell an author.
+  const a = C.tokens(ORIGINAL), b = C.tokens(ORIGINAL);
+  eq(C.diff(a, b), [], 'a question differed from itself');
+  eq(C.diff(b, a), [], 'a question differed from itself the other way round');
 });
 
 // ── runner ───────────────────────────────────────────────────────────────────
