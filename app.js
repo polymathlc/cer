@@ -1696,7 +1696,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.291.0';
+const APP_VERSION = 'v1.292.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -12043,8 +12043,10 @@ function renderVettingList() {
   const container = document.getElementById('vettingListGrid');
   // Live "processing" / "failed" placeholders from Rapid add, shown on top.
   const jobCards = rapidJobs.map(_rapidJobCardHtml).join('');
+  _vetPruneSelection();
 
   if (vettingList.length === 0 && rapidJobs.length === 0) {
+    _vetRenderBulkBar([]);
     container.innerHTML = `
       <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -12054,15 +12056,11 @@ function renderVettingList() {
     return;
   }
 
-  // Search filter — same engine as the Question Bank: every token (or "quoted
-  // phrase") must appear somewhere in the title, tags or block content.
-  const searchTokens = parseSearchTokens((document.getElementById('vettingSearch')?.value || '').trim());
-  const visible = searchTokens.length === 0 ? vettingList : vettingList.filter(q => {
-    const haystack = extractQuestionSearchText(q);
-    return searchTokens.every(token => haystack.includes(token));
-  });
+  const searchTokens = _vetSearchTokens();
+  const ordered = _vetVisibleQuestions();
 
-  if (visible.length === 0 && searchTokens.length > 0) {
+  if (ordered.length === 0 && searchTokens.length > 0) {
+    _vetRenderBulkBar([]);
     container.innerHTML = jobCards + `
       <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -12072,15 +12070,7 @@ function renderVettingList() {
     return;
   }
 
-  // Newest additions first, so the most recently added (most relevant to review
-  // now) sit at the top. Falls back to array order when timestamps are missing.
-  const ordered = visible
-    .map((q, i) => ({ q, i }))
-    .sort((a, b) => {
-      const ta = Date.parse(_vetAddedAt(a.q)) || 0, tb = Date.parse(_vetAddedAt(b.q)) || 0;
-      return tb - ta || a.i - b.i;
-    })
-    .map(x => x.q);
+  _vetRenderBulkBar(ordered.map(q => q.id));
 
   const qCards = ordered.map(q => {
     const statusClass = q.status || 'pending';
@@ -12089,8 +12079,13 @@ function renderVettingList() {
     // Only surface the duplicate warning if the suspected original still exists.
     const dup = (q._dupOf && q._dupOf.id && questionBank.some(b => b.id === q._dupOf.id)) ? q._dupOf : null;
     const dupBorder = dup ? ' style="border-color:#f59e0b;box-shadow:0 0 0 1px #f59e0b;"' : (isNew ? ' style="border-color:var(--accent-orange);box-shadow:0 0 0 1px var(--accent-orange);"' : '');
+    // A ticked card outranks the duplicate / just-added outline while it is
+    // ticked, and gets that outline back the moment it is unticked — both are
+    // inline styles, so one has to win outright rather than being layered.
+    const picked = _vetSelected.has(q.id);
+    const cardStyle = picked ? ' style="border-color:var(--accent-red);box-shadow:0 0 0 1px var(--accent-red);"' : dupBorder;
     return `
-      <div class="qb-card" data-vetid="${q.id}"${dupBorder}>
+      <div class="qb-card" data-vetid="${q.id}"${cardStyle}>
         <div class="qb-card-header">
           <div>
             <div class="qb-card-title">${escapeHtml(q.title)}</div>
@@ -12106,6 +12101,9 @@ function renderVettingList() {
             </div>
           </div>
           <div class="qb-card-actions">
+            <label class="vet-pick-wrap" title="Tick this question, then use 🗑 Delete selected">
+              <input type="checkbox" class="vet-pick" ${picked ? 'checked' : ''} onchange="vetSelToggle('${q.id}', this.checked)">
+            </label>
             <button class="qb-action-btn" title="Approve & Add to Bank" onclick="approveVetting('${q.id}')" style="color:var(--primary);">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
             </button>
@@ -12173,11 +12171,177 @@ function approveVetting(id) {
 function deleteVetting(id) {
   showConfirm('Delete from Vetting', 'Remove this question from the vetting list?', () => {
     vettingList = vettingList.filter(q => q.id !== id);
+    _vetSelected.delete(id);
     renderVettingList();
     updateCounts();
     showToast('Question removed from vetting list', 'info');
     deleteVettingDoc(id);
   });
+}
+
+// =====================================================================
+// DELETING SEVERAL VETTING QUESTIONS AT ONCE
+//
+// The vetting list is where a whole BAD BATCH lands — forty screenshots off
+// the wrong paper, an import run twice, a set the model made a mess of — and
+// clearing that one card at a time is forty confirm dialogs, which is why it
+// gets left instead. So the page can delete a TICKED set, or everything it is
+// currently listing.
+//
+// Four rules hold it together:
+//
+//   • "All" means every card the author can SEE. The search box narrows this
+//     list, so `_vetVisibleQuestions` is the ONE place that set is worked out
+//     and every surface — the cards, the tick-all box, Delete selected and
+//     Delete all — reads it. Deleting questions hidden behind a filter is the
+//     one outcome nobody could have predicted from the button they pressed,
+//     which is why the confirm says which of the two it is doing.
+//
+//   • The deletes are AWAITED, one document at a time, unlike the single
+//     card's fire-and-forget drop. A batch has to be able to say that four of
+//     forty would not go, and those four must stay on screen rather than being
+//     taken off a list they are still in.
+//
+//   • A question is removed from `vettingList` only once its document really
+//     went. That is the same order every other move in this app uses, for the
+//     same reason: a list that has dropped a question the database still holds
+//     looks perfectly right until the next sign-in.
+//
+//   • The selection is PRUNED on every render (`_vetPruneSelection`). A ticked
+//     question that has since been approved, edited into the bank or auto-vetted
+//     away is not a thing to delete, and "3 selected" outliving the cards it
+//     counted is how the wrong question gets deleted.
+// =====================================================================
+
+// Ticked ids. Deliberately not a flag on the question objects: those are
+// replaced wholesale by re-reads and cross-tab syncs, which would silently
+// drop the tick, and a selection is view state rather than anything to store.
+let _vetSelected = new Set();
+// { done, total } while a batch is running, null otherwise — both the progress
+// line and the double-press guard read it.
+let _vetBulkBusy = null;
+
+function _vetSearchTokens() {
+  return parseSearchTokens((document.getElementById('vettingSearch')?.value || '').trim());
+}
+
+// The questions the vetting page is CURRENTLY showing, in the order it shows
+// them: filtered by the search box, newest first (falling back to array order
+// when timestamps are missing). Everything that means "all of them" asks here.
+// Same search engine as the Question Bank: every token (or "quoted phrase")
+// must appear somewhere in the title, tags or block content.
+function _vetVisibleQuestions() {
+  const searchTokens = _vetSearchTokens();
+  const visible = searchTokens.length === 0 ? vettingList : vettingList.filter(q => {
+    const haystack = extractQuestionSearchText(q);
+    return searchTokens.every(token => haystack.includes(token));
+  });
+  return visible
+    .map((q, i) => ({ q, i }))
+    .sort((a, b) => {
+      const ta = Date.parse(_vetAddedAt(a.q)) || 0, tb = Date.parse(_vetAddedAt(b.q)) || 0;
+      return tb - ta || a.i - b.i;
+    })
+    .map(x => x.q);
+}
+
+// Drop ticks for questions that have left the list by any route at all. Doing
+// it here rather than in each of approve / edit / auto-vet is what makes a
+// path added later safe without knowing this exists.
+function _vetPruneSelection() {
+  if (!_vetSelected.size) return;
+  const live = new Set(vettingList.map(q => q.id));
+  Array.from(_vetSelected).forEach(id => { if (!live.has(id)) _vetSelected.delete(id); });
+}
+
+function _vetRenderBulkBar(visibleIds) {
+  const bar = document.getElementById('vetBulkBar');
+  if (!bar) return;
+  if (_vetBulkBusy) {
+    bar.style.display = '';
+    bar.innerHTML = `<span class="vet-bulk-count">Deleting ${_vetBulkBusy.done} of ${_vetBulkBusy.total}…</span>`;
+    return;
+  }
+  if (!visibleIds.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  const picked = visibleIds.filter(id => _vetSelected.has(id)).length;
+  const allOn = picked === visibleIds.length;
+  bar.style.display = '';
+  bar.innerHTML = `
+    <label class="vet-pick-wrap" title="Tick every question shown">
+      <input type="checkbox" class="vet-pick" ${allOn ? 'checked' : ''} onchange="vetSelAllVisible(this.checked)">
+      <span>Select all ${visibleIds.length}</span>
+    </label>
+    <span class="vet-bulk-count">${picked ? picked + ' selected' : 'Nothing selected'}</span>
+    <button class="btn btn-outline vet-danger-btn" onclick="vetDeleteSelected()" ${picked ? '' : 'disabled'}>🗑 Delete selected</button>
+    ${picked ? '<button class="btn btn-outline" onclick="vetSelClear()">Clear</button>' : ''}`;
+}
+
+function vetSelToggle(id, on) {
+  if (on) _vetSelected.add(id); else _vetSelected.delete(id);
+  renderVettingList();
+}
+
+function vetSelAllVisible(on) {
+  const ids = _vetVisibleQuestions().map(q => q.id);
+  ids.forEach(id => { if (on) _vetSelected.add(id); else _vetSelected.delete(id); });
+  renderVettingList();
+}
+
+function vetSelClear() {
+  _vetSelected.clear();
+  renderVettingList();
+}
+
+// The one worker both bulk buttons go through.
+async function _vetDeleteMany(ids) {
+  if (!ids.length || _vetBulkBusy) return;
+  _vetBulkBusy = { done: 0, total: ids.length };
+  _vetRenderBulkBar([]);
+  let ok = 0;
+  const failed = [];
+  for (const id of ids) {
+    const gone = await deleteVettingDocAwait(id);
+    if (gone) {
+      ok++;
+      vettingList = vettingList.filter(q => q.id !== id);
+      _vetSelected.delete(id);
+      _rapidJustAdded.delete(id);
+    } else {
+      failed.push(id);   // left exactly where it was, and still on screen
+    }
+    _vetBulkBusy.done = ok + failed.length;
+    _vetRenderBulkBar([]);
+  }
+  _vetBulkBusy = null;
+  renderVettingList();
+  updateCounts();
+  if (ok) showToast(`${ok} question${ok === 1 ? '' : 's'} deleted from the vetting list`, 'success');
+  if (failed.length) showToast(`${failed.length} could not be deleted — still in the vetting list`, 'error');
+}
+
+function vetDeleteSelected() {
+  if (_vetBulkBusy) return;
+  const ids = _vetVisibleQuestions().map(q => q.id).filter(id => _vetSelected.has(id));
+  if (!ids.length) { showToast('Tick the questions you want to delete first', 'info'); return; }
+  showConfirm(
+    'Delete from Vetting',
+    `Delete ${ids.length} ticked question${ids.length === 1 ? '' : 's'} from the vetting list? This cannot be undone.`,
+    () => { _vetDeleteMany(ids); }
+  );
+}
+
+function vetDeleteAllVisible() {
+  if (_vetBulkBusy) return;
+  const list = _vetVisibleQuestions();
+  if (!list.length) { showToast('There is nothing in the vetting list to delete', 'info'); return; }
+  const hidden = vettingList.length - list.length;
+  showConfirm(
+    'Delete the whole vetting list',
+    hidden > 0
+      ? `Delete all ${list.length} question${list.length === 1 ? '' : 's'} your search is showing? The other ${hidden} stay in the list. This cannot be undone.`
+      : `Delete all ${list.length} question${list.length === 1 ? '' : 's'} waiting in the vetting list? This cannot be undone.`,
+    () => { _vetDeleteMany(list.map(q => q.id)); }
+  );
 }
 
 // =====================================================================
@@ -17569,6 +17733,22 @@ function deleteVettingDoc(id) {
   deleteDoc(_vRef(id))
     .then(() => _xtAnnounceQuestion(id, 'vetting', 'del'))
     .catch(err => console.warn('deleteVettingDoc:', err));
+}
+
+// The AWAITED twin, for the bulk delete. A single card's delete has nothing
+// waiting on it, but a batch has to know which of forty really went: the ones
+// that did not are kept on screen rather than being taken off a list the
+// database still holds them in.
+async function deleteVettingDocAwait(id) {
+  if (!currentUser) return false;
+  try {
+    await deleteDoc(_vRef(id));
+    _xtAnnounceQuestion(id, 'vetting', 'del');
+    return true;
+  } catch (err) {
+    console.warn('deleteVettingDocAwait:', err);
+    return false;
+  }
 }
 
 // =====================================================================
@@ -54438,6 +54618,11 @@ window.confirmRegenerate = confirmRegenerate;
 window.deleteQuestion = deleteQuestion;
 window.approveVetting = approveVetting;
 window.deleteVetting = deleteVetting;
+window.vetSelToggle = vetSelToggle;
+window.vetSelAllVisible = vetSelAllVisible;
+window.vetSelClear = vetSelClear;
+window.vetDeleteSelected = vetDeleteSelected;
+window.vetDeleteAllVisible = vetDeleteAllVisible;
 window.aiAutoVetAll = aiAutoVetAll;
 window.closeAutoVet = closeAutoVet;
 window.openCropTool = openCropTool;
