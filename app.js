@@ -1696,7 +1696,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.293.0';
+const APP_VERSION = 'v1.293.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -11961,7 +11961,12 @@ function editQuestion(id) {
 
   blocks = JSON.parse(JSON.stringify(q.blocks));
   selectedBlanks = JSON.parse(JSON.stringify(q.blanks || {}));
-  
+  // A question written before the doubling was fixed cleans itself the moment
+  // somebody opens it, so the bank tidies up as it is worked through rather
+  // than needing a migration. Only ever removes a marker naming the block's
+  // OWN part, and nothing is written until the author saves.
+  blocks.forEach(qStripOwnPartMarker);
+
   renderBlocks();
   if (window.ppCancelPendingAttach) window.ppCancelPendingAttach();
   _skipCreateReset = true;
@@ -13103,11 +13108,11 @@ function qPartCountMarkers(html) {
 // from the original html — tags are left exactly where they were, because an
 // empty <strong></strong> is harmless and the sanitizer collapses it, whereas
 // guessing which tags to close would not be.
-function qPartDetect(html) {
+function qPartDetect(html, re) {
   const chars = qPartWalkPlain(html);
   let start = 0;
   while (start < chars.length && /\s/.test(chars[start].ch)) start++;
-  const m = chars.slice(start).map(c => c.ch).join('').match(QPART_MARKER_RE);
+  const m = chars.slice(start).map(c => c.ch).join('').match(re || QPART_MARKER_RE);
   if (!m) return null;
   const letter = (m[1] || m[2] || m[3]).toLowerCase();
   let n = m[0].length;
@@ -13126,6 +13131,92 @@ function qPartNormalize(v) {
   const s = String(v == null ? '' : v).trim().toLowerCase().replace(/[()\s.]/g, '');
   return QPART_ASSIGN.indexOf(s) >= 0 ? s : '';
 }
+// =====================================================================
+// THE LABEL IS DRAWN FROM THE BLOCK, SO IT MUST NOT ALSO BE IN THE TEXT
+//
+// A block that opens part (a) already wears its label: the chip in the editor,
+// the tag beside the question on screen, the marker in the margin on paper.
+// When the SAME marker is also typed at the front of its content the question
+// reads
+//
+//     (a) (a) 文中形容“问题得到处理，有了结果”的词语是________。
+//
+// on every surface at once. It comes in from the AI paths: the model is asked
+// to letter the sub-questions and it answers by BOTH stamping `"part":"a"` and
+// writing "(a)" into the wording, and `qLiftPartMarkers` — whose whole job is
+// to move a typed marker into the field — skipped exactly those blocks,
+// because they already had a part. The one case it could not fix was the one
+// case that needed fixing.
+//
+// It is handled at BOTH ends, and both are needed:
+//   • `qStripOwnPartMarker` takes it out of the block, so every question
+//     authored from now on is stored clean and reads clean in the editor.
+//   • `qPartBodyHtml` takes it out at RENDER, because the bank is already full
+//     of questions written the other way and nobody will open them one at a
+//     time. It never touches the block, so an author still sees exactly what
+//     is stored.
+//
+// The marker must name THIS block's OWN part. A block labelled (b) whose text
+// opens "(a)" is two people disagreeing about which question this is, and that
+// is for a human to look at — not something to tidy away silently.
+// =====================================================================
+
+// The same marker QPART_MARKER_RE finds, pinned to ONE letter — and accepting
+// full-width brackets, which QPART_MARKER_RE deliberately does not. That regex
+// has to find a part in text nobody has labelled, where being wrong files a
+// question under the wrong letter; here the block already says it is part (a),
+// so a leading "（a）" can only be the same label written twice. A 华文 paper
+// prints （a）, and ZH_PROMPT_RULES asks every model to keep the paper's
+// punctuation exactly as printed.
+// A BRACKETED marker needs no whitespace after it and QPART_MARKER_RE's
+// `(?=\s|$)` is why: a 华文 paper writes （a）文中形容……, with the character hard
+// against the closing bracket, so demanding a space there missed every
+// full-width case — which is most of them in this subject. The two BARE forms
+// keep the space guard, or "a." would eat the front of any sentence opening
+// with a lone letter.
+function _qPartOwnMarkerRe(letter) {
+  const L = '[' + letter + letter.toUpperCase() + ']';
+  return new RegExp('^(?:[(（]\\s*(' + L + ')\\s*[)）]|(' + L + ')\\s*[)）](?=\\s|$)|(' + L + ')\\s*[.．](?=\\s|$))');
+}
+const QPART_MARKER_WIDE_RE = /^(?:[(（]\s*([a-hA-H])\s*[)）]|([a-hA-H])\s*[)）](?=\s|$)|([a-h])\s*[.．](?=\s|$))/;
+function _qPartCountMarkersWide(html) {
+  return qPartPlain(html).split('\n').filter(l => QPART_MARKER_WIDE_RE.test(l.trim())).length;
+}
+
+// The leading marker on this block that merely repeats its own part, or null.
+function _qPartOwnMarker(b) {
+  if (!b || b.type === 'part') return null;        // its label IS its content
+  const own = qPartNormalize(b.part);
+  // A NUMBERED part is left alone: detection is letters only, on purpose — a
+  // number at the start of a line is a quantity or a year far more often than
+  // it is a part, and "16" is what a comprehension passage prints against the
+  // word the question is about.
+  if (!own || own === QPART_NONE || !/^[a-h]$/.test(own)) return null;
+  const html = String(b.content == null ? '' : b.content);
+  if (!html.trim()) return null;
+  // Two markers is an options list, or several parts written into one box —
+  // neither is something to fix by removing the first. Same guard the scan and
+  // autoNumberParts use.
+  if (_qPartCountMarkersWide(html) !== 1) return null;
+  const hit = qPartDetect(html, _qPartOwnMarkerRe(own));
+  return (hit && hit.letter === own) ? hit : null;
+}
+
+// Take it out of the block. Returns true if anything was removed.
+function qStripOwnPartMarker(b) {
+  const hit = _qPartOwnMarker(b);
+  if (!hit) return false;
+  b.content = hit.html;
+  return true;
+}
+
+// The content to RENDER for a block, with a marker that only repeats its own
+// label left out. The block is not touched.
+function qPartBodyHtml(b) {
+  const hit = _qPartOwnMarker(b);
+  return hit ? hit.html : ((b && b.content) || '');
+}
+
 function qPartLabel(p) { const n = qPartNormalize(p); return n ? '(' + n + ')' : ''; }
 // The part each block belongs to: a block carrying `part` opens it, and every
 // block after it inherits until the next one opens. Returns a plain object
@@ -13308,7 +13399,12 @@ function qLiftPartMarkers(blocks) {
     // Inside an MCQ, only the question's OWN opening label can be a part:
     // every other lettered line down an MCQ is an option or a statement.
     if (hasMcq && !isFirst) return;
-    if (qBlockOpensPart(b)) return;                       // already labelled
+    // Already labelled — so the label is the block's, and the marker typed at
+    // the front of the text is the SAME one written twice. This was a bare
+    // `return`, which is why the AI paths were the one place the doubling
+    // survived: the function that exists to move a marker into the field
+    // skipped every block that already had one.
+    if (qBlockOpensPart(b)) { qStripOwnPartMarker(b); return; }
     // One marker per block. Two means an options list, or several parts in one
     // box that could not be split — neither converts by stripping the first.
     if (qPartCountMarkers(b.content) !== 1) return;
@@ -13420,6 +13516,10 @@ function setBlockPart(blockId, value) {
   const b = blocks.find(x => x.id === blockId);
   if (!b) return;
   b.part = qPartNormalize(value);
+  // Labelling a block whose text already opens with that marker would print it
+  // twice. autoNumberParts has always stripped for this reason; setting one by
+  // hand is the same act one block at a time.
+  qStripOwnPartMarker(b);
   renderBlocks();
 }
 // The explanation chip's switch: filed under the part above it, or a note on
@@ -13873,7 +13973,7 @@ function doPrintWorksheetOpen() {
         case 'text': {
           // Text blocks are shown normally (questions / instructions),
           // keeping line breaks so inline option lists stay separated.
-          const textHtml = escapeHtmlKeepLines(block.content);
+          const textHtml = escapeHtmlKeepLines(qPartBodyHtml(block));
           // A block that OPENS a part prints its label in the margin, so the
           // paper reads "(a) What is X?" exactly as it used to when the marker
           // was typed into the text — only now it is a field, not characters.
@@ -19190,7 +19290,7 @@ function buildOpenBody(q, containerSel, markCfg) {
         // The part sits BESIDE the question, not above it: a label on its own
         // line costs a whole row of vertical space on every part of every
         // question, and the marker belongs in front of the words it labels.
-        add(_qpTextHtml(qBlockOpensPart(block), block.content));
+        add(_qpTextHtml(qBlockOpensPart(block), qPartBodyHtml(block)));
         break;
       case 'part':
         // The legacy part BLOCK. It used to fall through to `default:`, which
@@ -20191,7 +20291,7 @@ function _questionContext(q) {
   blocks.forEach(b => {
     if (b.type !== 'text') return;
     const opens = qBlockOpensPart(b);
-    parts.push((opens ? qPartLabel(opens) + ' ' : '') + stripHtml(b.content || ''));
+    parts.push((opens ? qPartLabel(opens) + ' ' : '') + stripHtml(qPartBodyHtml(b)));
   });
   return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 800);
 }
@@ -22038,7 +22138,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
         _pushAnnotAnswerKey(qSections, block, bPart);
         switch (block.type) {
           case 'text': {
-            const textHtml = escapeHtmlKeepLines(block.content);
+            const textHtml = escapeHtmlKeepLines(qPartBodyHtml(block));
             const own = qPartNormalize(block.part);
             if (textHtml || own) {
               qHtml += `<div class="print-text-block${own ? ' print-has-part' : ''}">`

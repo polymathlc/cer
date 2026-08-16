@@ -348,6 +348,48 @@ and more accurate than correcting forty questions in vetting afterwards.
 - Run **`node tools/subject-level-tests.mjs`** after touching any of it.
 
 
+### The label is drawn from the BLOCK, so it must not also be in the TEXT (v1.293.1)
+
+`qStripOwnPartMarker` / `qPartBodyHtml` / `_qPartOwnMarker` (in `app.js`, search
+`THE LABEL IS DRAWN FROM THE BLOCK`).
+
+A block that opens part (a) already wears its label — the chip in the editor,
+the tag beside the question on screen, the marker in the margin on paper. When
+the SAME marker is also typed at the front of its content the question reads
+**"(a) (a) 文中形容…"** on every surface at once.
+
+- **It came in from the AI paths.** The model is asked to letter the
+  sub-questions and answers by BOTH stamping `"part":"a"` and writing "(a)"
+  into the wording — and `qLiftPartMarkers`, whose whole job is to move a typed
+  marker into the field, opened with `if (qBlockOpensPart(b)) return;`. The one
+  case it could not fix was the one case that needed fixing.
+- **It is handled at BOTH ends, and both are needed.**
+  `qStripOwnPartMarker` takes it out of the BLOCK (from `qLiftPartMarkers`, from
+  `setBlockPart` when an author labels one by hand, and on `editQuestion` so a
+  question tidies itself the moment somebody opens it), and **`qPartBodyHtml`
+  takes it out at RENDER** — the bank is already full of questions written the
+  other way and nobody will open them one at a time. The render side never
+  touches the block, so an author still sees exactly what is stored.
+- **The marker must name the block's OWN part.** A block labelled (b) whose
+  text opens "(a)" is two people disagreeing about which question this is, and
+  that is for a human to look at — not something to tidy away silently.
+- **`_qPartOwnMarkerRe` accepts FULL-WIDTH brackets and `QPART_MARKER_RE`
+  deliberately does not.** That regex has to find a part in text nobody has
+  labelled, where being wrong files a question under the wrong letter; here the
+  block already says it is part (a), so a leading `（a）` can only be the same
+  label twice. It also drops the `(?=\s|$)` guard **for the bracketed forms
+  only**: a 华文 paper writes `（a）文中形容……` with the character hard against
+  the bracket, so demanding whitespace there matched none of them. The two BARE
+  forms keep it, or `a.` would eat the front of any sentence opening with a
+  lone letter.
+- **Two markers in one box is refused**, the same guard the Doctor's scan and
+  `autoNumberParts` use: that is several parts written into one box, or an
+  options list, and neither is fixed by removing the first.
+- A **NUMBERED** part is left alone — detection is letters only, on purpose.
+- `qPartDetect` now takes an optional regex; its default is byte-for-byte
+  `QPART_MARKER_RE`, so nothing else about detection moved.
+- Run **`node tools/part-marker-tests.mjs`** after touching any of it.
+
 ## Clearing the vetting list — deleting several at once (v1.292.0)
 
 `_vetSelected` / `_vetVisibleQuestions` / `_vetDeleteMany` (in `app.js`, search
@@ -493,6 +535,14 @@ The whole point: the user checks the version shown in the app's sidebar against 
   it. The harness also pins that the VETTING list is searched — the commonest
   duplicate of all is the same screenshot read twice in one sitting, and both
   copies are then in vetting where a bank-only search sees neither.
+- After touching **the doubled part marker** (`qStripOwnPartMarker`,
+  `qPartBodyHtml`, `_qPartOwnMarker`, `_qPartOwnMarkerRe`, `qLiftPartMarkers`),
+  run `node tools/part-marker-tests.mjs`. Both directions are silent: too timid
+  and every AI-built sub-question prints its letter twice ("(a) (a) What is
+  X?"), too eager and it eats the front of the question — "(see Diagram 1) What
+  is X?" opens with a bracket and is prose, and a block labelled (b) whose text
+  opens "(a)" is a disagreement somebody should see rather than have tidied
+  away.
 - After touching **✅ Check Questions' detectors** (`_cqTableLabelsChoices`, `_cqOptsAreBareNumbers`, `_cqMcqFixable`, `_cqLocalFindings`, `_cqTableRows`), run `node tools/check-questions-tests.mjs`. Both directions fail silently: too loose and the page tells an employee to blank the options of a question whose choices are NOT in the table — one tap and the wording of all four is gone, with the ＃ button looking like it did the right thing; too tight and the one problem the page exists to catch is never flagged.
 - After touching **🎯 learning-objective tagging** (`qLos`, `_loOrderIds`, `loQuestions`, `loDetachQuestion`, `_loCandidates`), run `node tools/objective-tag-tests.mjs`. Every failure mode here is silent — a tag dropped because the objective list had not loaded, a tag lost because the list no longer knows that id, a filed question that simply does not appear under its objective — and none of them throws.
 - After touching **the printed ANSWER KEY** (`_pushBlockAnswerKey`, `_pushAnswerKeySection`, `_pushAnnotAnswerKey`, `_qFallbackKeySection`, `_akQuestionSections`, `_akSectionsHtml`, or either print path's answer-key branch), run `node tools/answer-key-tests.mjs`. A key that drops a question prints perfectly and looks tidy — there is no error anywhere — so the omission is only found in front of the class.
