@@ -348,6 +348,50 @@ and more accurate than correcting forty questions in vetting afterwards.
 - Run **`node tools/subject-level-tests.mjs`** after touching any of it.
 
 
+## Clearing the vetting list — deleting several at once (v1.292.0)
+
+`_vetSelected` / `_vetVisibleQuestions` / `_vetDeleteMany` (in `app.js`, search
+`DELETING SEVERAL VETTING QUESTIONS AT ONCE`), plus the tick box on every
+vetting card, the `#vetBulkBar` above the grid and **🗑 Delete all** beside
+✨ AI Auto-Vet All.
+
+The vetting list is where a whole BAD BATCH lands — forty screenshots off the
+wrong paper, an import run twice, a set the model made a mess of. Clearing that
+one card at a time is forty confirm dialogs, which is why it gets left instead,
+and a vetting list nobody clears is one nobody reads either.
+
+- **"All" means every card the author can SEE.** `_vetVisibleQuestions` is the
+  ONE place that set is worked out — filtered by the search box, newest first —
+  and the cards, the tick-all box, 🗑 Delete selected and 🗑 Delete all all read
+  it. Deleting questions hidden behind a filter is the one outcome nobody could
+  have predicted from the button they pressed, so the confirm **says which of
+  the two it is doing** and how many are being spared.
+- **The deletes are AWAITED, one document at a time** (`deleteVettingDocAwait`,
+  the awaited twin of the fire-and-forget `deleteVettingDoc`). A batch has to be
+  able to report that four of forty would not go, and a question leaves
+  `vettingList` only once its document really went — the same order every other
+  move in this app uses. A list that has dropped a question the database still
+  holds looks perfectly right until the next sign-in.
+- **The selection is PRUNED on every render** (`_vetPruneSelection`). A ticked
+  question approved into the bank, edited away or auto-vetted out is not a thing
+  to delete; doing it in the renderer rather than in each of those paths is what
+  covers a path added later. "3 selected" outliving the cards it counted is how
+  the wrong question gets deleted.
+- **The ticks live in a `Set` of ids, never as a flag on the question.** Those
+  objects are replaced wholesale by re-reads and cross-tab syncs, which would
+  silently drop the tick.
+- **`.vet-pick` must set `appearance: auto`** — Tailwind's preflight sets it to
+  `none`, which leaves an invisible white square exactly where the control the
+  author is looking for should be. The usual trap.
+- A ticked card's outline **outranks** the duplicate / just-added one while it is
+  ticked and gives it back when unticked: both are inline styles, so one has to
+  win outright rather than being layered.
+- **This delete is FINAL — it does not go through the 🗑 bin.** It is the same
+  `deleteVettingDoc` the single card's 🗑 has always used, and the confirm says
+  so in as many words. A vetting draft that should be kept is approved into the
+  bank, where deleting *is* a move to the bin.
+- Run **`node tools/vetting-bulk-delete-tests.mjs`** after touching any of it.
+
 ## Versioning convention — applies to EVERY change (do this every time)
 1. **Bump the version.** In `index.html`, update `const APP_VERSION = 'vX.Y.Z'` (search `APP_VERSION`). Patch bump for fixes/small tweaks, minor bump for new features.
 2. **Keep it visible.** The version renders in the sidebar footer for admins only (`#appVersionBadge`, class `admin-only`). This is how the user confirms the latest build is actually deployed.
@@ -379,6 +423,14 @@ The whole point: the user checks the version shown in the app's sidebar against 
 - After touching **Ember Duel's sound or screen shake** (`DUEL_HIT_TIERS`, `DUEL_HEAL_TIERS`, `DUEL_CUES`, `DUEL_SYNTHS`, `duelSfxFlush`, `duelSfxPlay`, `duelSfxCue`, `duelQuake`), run `node tools/duel-sfx-tests.mjs`. It loads the REAL sound section out of `app.js` against a Web Audio shim and pins the ladder (every tier louder / deeper / longer / shaking harder than the one below), the one-beat-per-flush rule, the lunge delay, the routine cues staying under the blows, the draw riffle and its defer cap, and the mute switch.
 - After touching **Ember Duel's heroes** (`DUEL_HEROES`, `duelResolvePower`, `duelCanUsePower`, `duelHurtHero`'s armour rule, `duelHeroId`), run `node tools/duel-hero-tests.mjs`. It loads the REAL hero table, armour rule and power resolver out of `app.js` and pins the things that break silently: the default being the safest hero, a retired hero id falling back rather than crashing, armour being spent before life, the two-mana once-a-turn rule, and **every** hero power `kind` actually doing something.
 - After touching **Ember Duel's rival decks or the AI's card timing** (`DUEL_RIVAL_PLANS`, `duelPlanFor`, `duelDeckIsSwarm`, `duelRivalDeck`, `_duelFill`, `duelAiWorthPlaying`), run `node tools/duel-rival-tests.mjs`. It loads the REAL rival-deck section and worth-test out of `app.js` and runs them over a synthetic dex, pinning both halves of the swarm counter: the sweeper deck really holding board clears, the AI really holding them until two minions are on the table, the counter being likelier against a swarm **and** still not the only deck a swarm player meets, and the deck staying legal (40 cards, copy limits, one star past the band at most).
+- After touching **the vetting list's bulk delete** (`_vetSelected`,
+  `_vetVisibleQuestions`, `_vetDeleteMany`, `_vetPruneSelection`,
+  `deleteVettingDocAwait`), run `node tools/vetting-bulk-delete-tests.mjs`. One
+  press can clear the whole vetting list, and both ways it can go wrong are
+  silent: 🗑 Delete all reading `vettingList` instead of the VISIBLE set
+  destroys the questions the author had filtered away and never saw, and a
+  question dropped from the list on a delete the database refused leaves a page
+  that looks tidy and a question that is back at the next sign-in.
 - After touching **✅ Check Questions' detectors** (`_cqTableLabelsChoices`, `_cqOptsAreBareNumbers`, `_cqMcqFixable`, `_cqLocalFindings`, `_cqTableRows`), run `node tools/check-questions-tests.mjs`. Both directions fail silently: too loose and the page tells an employee to blank the options of a question whose choices are NOT in the table — one tap and the wording of all four is gone, with the ＃ button looking like it did the right thing; too tight and the one problem the page exists to catch is never flagged.
 - After touching **🎯 learning-objective tagging** (`qLos`, `_loOrderIds`, `loQuestions`, `loDetachQuestion`, `_loCandidates`), run `node tools/objective-tag-tests.mjs`. Every failure mode here is silent — a tag dropped because the objective list had not loaded, a tag lost because the list no longer knows that id, a filed question that simply does not appear under its objective — and none of them throws.
 - After touching **the printed ANSWER KEY** (`_pushBlockAnswerKey`, `_pushAnswerKeySection`, `_pushAnnotAnswerKey`, `_qFallbackKeySection`, `_akQuestionSections`, `_akSectionsHtml`, or either print path's answer-key branch), run `node tools/answer-key-tests.mjs`. A key that drops a question prints perfectly and looks tidy — there is no error anywhere — so the omission is only found in front of the class.
