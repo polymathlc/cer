@@ -1696,7 +1696,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.292.0';
+const APP_VERSION = 'v1.293.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -3074,6 +3074,7 @@ function navigateTo(page) {
   if (backdrop) backdrop.style.display = 'none';
   ensureMobileToggles();
   if (page === 'create') {
+    dupWatchBind();          // idempotent; the listener outlives every reset
     if (_skipCreateReset) {
       // Coming from editQuestion — switch to edit mode
       setEditMode(!!currentEditingQuestion);
@@ -4725,6 +4726,11 @@ function renderBlocks() {
 
   // A final bar so you can insert at the very end too.
   container.appendChild(makeBlockInsertBar(blocks.length));
+
+  // Anything that rewrites the blocks — the passage builder, an AI build, a
+  // paste — lands here and fires no `input` event of its own, so the watch
+  // would never see it. Coalesced, so a burst of renders is still one check.
+  dupWatchKick();
 }
 
 // A slim "+" bar between block cards that inserts a new block at `index`.
@@ -9495,23 +9501,53 @@ function _dupTokenSet(q) {
   if (p.mcq) s += ' ' + (p.mcq.options || []).map(o => _docNorm(o.text)).join(' ');
   return new Set(s.split(/\s+/).filter(w => w.length > 2));
 }
-// Best matching EXISTING bank question, or null. Threshold tuned so near-
-// identical questions trip it but genuinely different ones don't.
+// How alike two questions have to be before the author is asked to look.
+// Tuned so near-identical questions trip it and genuinely different ones do
+// not: it is a PROMPT, never a verdict, so the cost of a false positive is one
+// glance and the cost of a miss is the same question set twice.
+const DUP_MIN_SCORE = 0.7;
+
+// Best matching question ALREADY FILED, or null. Both lists are searched, and
+// the result says which one the twin is in.
+//
+// The vetting list matters as much as the bank, and for a while it was the
+// half that was missing: the commonest duplicate of all is the same
+// screenshot read twice in one sitting, and BOTH copies are then sitting in
+// vetting where a bank-only search can see neither. Nothing was flagged, and
+// the pair was approved into the bank one after the other.
 function findDuplicateCandidate(q, excludeId) {
-  if (!q || !Array.isArray(questionBank)) return null;
+  if (!q) return null;
   const skip = excludeId || (q && q.id) || null;
   const target = _dupTokenSet(q);
   if (target.size < 3) return null;
-  let best = null, bestScore = 0;
-  for (const bq of questionBank) {
-    if (!bq || bq.id === skip) continue;
-    const bset = _dupTokenSet(bq);
-    if (bset.size < 3) continue;
-    let inter = 0; target.forEach(x => { if (bset.has(x)) inter++; });
-    const score = inter / (target.size + bset.size - inter);
-    if (score > bestScore) { bestScore = score; best = bq; }
+  let best = null, bestScore = 0, bestWhere = 'bank';
+  for (const [where, pool] of [['bank', questionBank], ['vetting', vettingList]]) {
+    if (!Array.isArray(pool)) continue;
+    for (const bq of pool) {
+      if (!bq || bq.id === skip) continue;
+      const bset = _dupTokenSet(bq);
+      if (bset.size < 3) continue;
+      let inter = 0; target.forEach(x => { if (bset.has(x)) inter++; });
+      const score = inter / (target.size + bset.size - inter);
+      if (score > bestScore) { bestScore = score; best = bq; bestWhere = where; }
+    }
   }
-  return (best && bestScore >= 0.7) ? { id: best.id, title: best.title || 'Untitled', pct: Math.round(bestScore * 100) } : null;
+  return (best && bestScore >= DUP_MIN_SCORE)
+    ? { id: best.id, title: best.title || 'Untitled', pct: Math.round(bestScore * 100), where: bestWhere }
+    : null;
+}
+// Where a suspected twin lives, in words. One place, because the banner, the
+// vetting card and the save dialog all say it and must not drift.
+function _dupWhereLabel(dup) {
+  return (dup && dup.where === 'vetting') ? 'your vetting list' : 'your question bank';
+}
+// The suspected original must STILL EXIST, or the card and the banner point at
+// nothing. It may be in either list — the second copy of a batch is flagged
+// against the first, which is itself still sitting in vetting.
+function _dupStillThere(dup) {
+  if (!dup || !dup.id) return false;
+  return (Array.isArray(questionBank) && questionBank.some(b => b && b.id === dup.id))
+      || (Array.isArray(vettingList) && vettingList.some(v => v && v.id === dup.id));
 }
 // Stamp q._dupOf if it looks like an existing bank question (used for Rapid
 // add / bulk import cards).
@@ -9520,28 +9556,122 @@ function _tagDuplicate(q) {
   return q;
 }
 // A hover-to-preview "See original question" control (reuses the bank hover).
-function _dupSeeOriginalBtn(dup, style) {
-  return `<button type="button" class="btn btn-outline" style="${style || ''}" onclick="editQuestion('${dup.id}')"
-      onmouseenter="ppHoverShowBank(event,'${dup.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverChipLeave()"
-      title="Hover to preview the existing question · click to open it">👁 See original question</button>`;
+// The hover is attached ONLY for a twin in the BANK: `ppBankHoverHtml` reads
+// `questionBank` and nothing else, so a vetting original would open an empty
+// card that reads as a broken preview. Clicking still works either way —
+// `editQuestion` looks in both lists.
+// `guard` is for the EDITOR BANNER, which is on screen while the author is
+// mid-compose: opening the twin there replaces the draft they are looking at,
+// so it asks first. The vetting card needs no guard — nothing is being typed.
+function _dupSeeOriginalBtn(dup, style, guard) {
+  const hover = (dup && dup.where === 'vetting') ? ''
+    : `onmouseenter="ppHoverShowBank(event,'${dup.id}')" onmousemove="ppHoverMove(event)" onmouseleave="ppHoverChipLeave()"`;
+  const tip = (dup && dup.where === 'vetting')
+    ? 'Open the question already waiting in vetting'
+    : 'Hover to preview the existing question · click to open it';
+  const click = guard ? `dupOpenOriginal('${dup.id}')` : `editQuestion('${dup.id}')`;
+  return `<button type="button" class="btn btn-outline" style="${style || ''}" onclick="${click}"
+      ${hover}
+      title="${tip}">👁 See original question</button>`;
 }
-// Editor banner: check the question currently in the editor for a bank duplicate.
+// Leaving the editor for the twin costs the author whatever is in it, so it is
+// never done on one click. Hovering the same button previews a BANK twin
+// without leaving at all, which is the answer most of the time.
+function dupOpenOriginal(id) {
+  showConfirm(
+    'Open the original?',
+    'This replaces what is in the editor. Anything you have not saved will be lost.',
+    () => editQuestion(id)
+  );
+}
+// The question currently in the editor, in the shape the matcher wants.
+function _dupEditorQuestion() {
+  return {
+    id: currentEditingQuestion || null,
+    title: (document.getElementById('questionTitle')?.value || ''),
+    blocks: blocks
+  };
+}
+// Editor banner: check the question currently in the editor against both lists.
 function checkEditorDuplicate() {
   const banner = document.getElementById('dupWarnBanner');
   if (!banner) return;
-  const q = { id: currentEditingQuestion || null, title: (document.getElementById('questionTitle')?.value || ''), blocks: blocks };
-  const dup = findDuplicateCandidate(q);
+  const dup = findDuplicateCandidate(_dupEditorQuestion());
   if (!dup) { banner.style.display = 'none'; banner.innerHTML = ''; return; }
   banner.style.display = 'flex';
   banner.innerHTML =
     `<span style="font-size:1.3rem;line-height:1;">🟡</span>
      <div style="flex:1;min-width:220px;">
        <div style="font-weight:700;color:#7a5410;margin-bottom:2px;">Possible duplicate (${dup.pct}% match)</div>
-       <div style="font-size:0.84rem;color:#7a5410;line-height:1.5;">This looks a lot like <strong>“${escapeHtml(dup.title)}”</strong> already in your bank. Review before saving.</div>
+       <div style="font-size:0.84rem;color:#7a5410;line-height:1.5;">This looks a lot like <strong>“${escapeHtml(dup.title)}”</strong>, already in ${escapeHtml(_dupWhereLabel(dup))}. Review before saving.</div>
      </div>
-     ${_dupSeeOriginalBtn(dup, 'white-space:nowrap;border-color:#e0b768;color:#7a5410;')}`;
+     ${_dupSeeOriginalBtn(dup, 'white-space:nowrap;border-color:#e0b768;color:#7a5410;', true)}`;
 }
 function _hideDupBanner() { const b = document.getElementById('dupWarnBanner'); if (b) { b.style.display = 'none'; b.innerHTML = ''; } }
+
+// =====================================================================
+// THE DUPLICATE WATCH — the warning has to be there BEFORE the save
+//
+// The banner above already existed and was raised from exactly ONE place:
+// straight after 🤖 Build from screenshot. So a question TYPED into the block
+// editor — or pasted, or built by the passage builder, or opened and reworked
+// — was never checked against anything at all, and the only duplicate warning
+// in the app was a badge on a Rapid add card. The bank fills up with the same
+// question twice and nothing anywhere says so.
+//
+// Two halves, and both are needed:
+//
+//   • THE BANNER IS LIVE. `dupWatchKick` re-checks as the author works, so the
+//     warning is on screen while there is still something to do about it.
+//   • THE SAVE ASKS. A banner can be missed — it sits at the top of a long
+//     editor and the Save button is at the bottom — so `_dupGateSave` is the
+//     backstop every editor save goes through. It is a PROMPT, never a block:
+//     only the author can tell a real duplicate from two questions that merely
+//     share a stem, so "Save anyway" is always there.
+//
+// The listener is ONE delegated pair on the create page rather than a binding
+// per field, for the reason the 拼音 IME is: this app builds the editor's DOM
+// continuously, so anything bound per element covers the fields that existed
+// when it ran and silently misses every one made afterwards. `renderBlocks`
+// kicks it too, because a builder writing blocks programmatically fires no
+// input event at all.
+// =====================================================================
+// `var`, not `let` / `const`: this block sits two-thirds of the way down the
+// module and `renderBlocks` — which kicks the watch — is declared far above
+// it. A `let` would be in its temporal dead zone for any call that landed
+// early, and that is the house trap `var editorLos` exists to avoid.
+var DUP_WATCH_MS = 500;        // coalesce a burst of typing into one check
+var _dupWatchTimer = null;
+
+function dupWatchKick() {
+  clearTimeout(_dupWatchTimer);
+  _dupWatchTimer = setTimeout(() => {
+    const page = document.getElementById('page-create');
+    if (!page || !page.classList.contains('active')) return;   // not being edited
+    try { checkEditorDuplicate(); } catch (e) { console.warn('dup watch', e); }
+  }, DUP_WATCH_MS);
+}
+
+function dupWatchBind() {
+  const page = document.getElementById('page-create');
+  if (!page || page.dataset.dupBound) return;
+  page.dataset.dupBound = '1';
+  page.addEventListener('input', dupWatchKick);
+  page.addEventListener('change', dupWatchKick);
+}
+
+// The backstop on every editor save. `proceed` is called when the author has
+// nothing to answer for, or has said to save anyway.
+function _dupGateSave(q, proceed) {
+  let dup = null;
+  try { dup = findDuplicateCandidate(q, (q && q.id) || null); } catch (e) { console.warn('dup gate', e); }
+  if (!dup) { proceed(); return; }
+  showConfirm(
+    'Possible duplicate',
+    `This looks ${dup.pct}% like “${dup.title}”, already in ${_dupWhereLabel(dup)}. Save it anyway?`,
+    () => proceed()
+  );
+}
 
 async function handleAiBuildFile(file) { return handleAiBuildFiles(file ? [file] : []); }
 
@@ -10910,7 +11040,10 @@ function saveEditedQuestion() {
   const q = collectQuestionData();
     q.id = currentEditingQuestion;
   carryOverQuestionMeta(q);
+  _dupGateSave(q, () => _saveEditedQuestionConfirmed(q));
+}
 
+function _saveEditedQuestionConfirmed(q) {
   let savedToVetting = false;
   const qIdx = questionBank.findIndex(qb => qb.id === currentEditingQuestion);
   if (qIdx !== -1) {
@@ -10946,6 +11079,10 @@ function saveEditToBank() {
   q.id = id;
   carryOverQuestionMeta(q);
   q.status = 'approved';
+  _dupGateSave(q, () => _saveEditToBankConfirmed(q, id));
+}
+
+async function _saveEditToBankConfirmed(q, id) {
 
   const wasVetting = vettingList.some(v => v.id === id);
   if (wasVetting) {
@@ -10994,6 +11131,13 @@ function addToVetting() {
   }
   const q = collectQuestionData();
   q.status = 'pending';
+  // A question the author is about to file is exactly the moment to say it may
+  // already be filed — and vetting is searched too, so the second copy of a
+  // batch is caught against the first rather than against nothing.
+  _dupGateSave(q, () => _addToVettingConfirmed(q));
+}
+
+function _addToVettingConfirmed(q) {
   vettingList.push(q);
   updateCounts();
   // Reset form right away so user cannot double-add
@@ -12077,7 +12221,7 @@ function renderVettingList() {
     const isNew = _rapidJustAdded.has(q.id); // freshly added via Rapid add this session
     const preview = getQuestionPreview(q);
     // Only surface the duplicate warning if the suspected original still exists.
-    const dup = (q._dupOf && q._dupOf.id && questionBank.some(b => b.id === q._dupOf.id)) ? q._dupOf : null;
+    const dup = _dupStillThere(q._dupOf) ? q._dupOf : null;
     const dupBorder = dup ? ' style="border-color:#f59e0b;box-shadow:0 0 0 1px #f59e0b;"' : (isNew ? ' style="border-color:var(--accent-orange);box-shadow:0 0 0 1px var(--accent-orange);"' : '');
     // A ticked card outranks the duplicate / just-added outline while it is
     // ticked, and gets that outline back the moment it is unticked — both are
@@ -54618,6 +54762,7 @@ window.confirmRegenerate = confirmRegenerate;
 window.deleteQuestion = deleteQuestion;
 window.approveVetting = approveVetting;
 window.deleteVetting = deleteVetting;
+window.dupOpenOriginal = dupOpenOriginal;
 window.vetSelToggle = vetSelToggle;
 window.vetSelAllVisible = vetSelAllVisible;
 window.vetSelClear = vetSelClear;
