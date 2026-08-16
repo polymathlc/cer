@@ -1696,7 +1696,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.293.1';
+const APP_VERSION = 'v1.294.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -6809,6 +6809,14 @@ async function applyCropTool() {
   #annotBrushRing.tiny::before, #annotBrushRing.tiny::after { content:''; position:absolute; background:rgba(0,0,0,0.85); box-shadow:0 0 0 1px rgba(255,255,255,0.9); }
   #annotBrushRing.tiny::before { left:50%; top:50%; width:1px; height:11px; margin:-5.5px 0 0 -0.5px; }
   #annotBrushRing.tiny::after { left:50%; top:50%; height:1px; width:11px; margin:-0.5px 0 0 -5.5px; }
+  /* Clone stamp: the ring is FILLED with the pixels that would be stamped, so
+     the mark is aimed by looking at it rather than by counting across from the
+     source pin. The ring goes white-on-black while it is showing a picture —
+     a black hairline over arbitrary artwork is the one thing that disappears. */
+  #annotBrushRing.peeking { border-color:rgba(255,255,255,0.95); box-shadow:0 0 0 1px rgba(0,0,0,0.85), 0 2px 10px rgba(0,0,0,0.35); }
+  #annotClonePeek { position:absolute; inset:0; width:100%; height:100%; border-radius:50%; display:none; pointer-events:none; }
+  #annotBrushRing.peeking #annotClonePeek { display:block; }
+  #annotClonePeek.pixelated { image-rendering:pixelated; image-rendering:crisp-edges; }
   #annotBrushHud { position:absolute; z-index:8; pointer-events:none; opacity:0; transition:opacity 0.16s ease; transform:translateX(-50%);
     background:rgba(17,20,18,0.88); color:#fff; font-family:'DM Sans',sans-serif; font-size:11px; font-weight:700; line-height:1;
     padding:5px 8px; border-radius:6px; white-space:nowrap; font-variant-numeric:tabular-nums; }
@@ -6865,6 +6873,7 @@ function _annotOpenSrc(srcP, target, title) {
       // stays up after a change — see the brush cursor below.
       ptr: null, ptrIn: false, hudUntil: 0, hudTimer: null };
     _annotSelSyncBar();
+    _annotAiBarInit();
     if (!_annotAntsRunning) _annotAntsLoop();
     _annotSyncControls();
     _annotBindSliderWheel();
@@ -7014,7 +7023,13 @@ function _annotRingEls(make) {
   const st = document.getElementById('annotStage');
   if (!st) return null;
   let ring = document.getElementById('annotBrushRing'), hud = document.getElementById('annotBrushHud');
-  if (!ring && make) { ring = document.createElement('div'); ring.id = 'annotBrushRing'; st.appendChild(ring); }
+  if (!ring && make) {
+    ring = document.createElement('div'); ring.id = 'annotBrushRing';
+    // The clone preview lives INSIDE the ring, so it is positioned, sized and
+    // hidden by exactly the code that already does all three for the ring.
+    const pk = document.createElement('canvas'); pk.id = 'annotClonePeek'; ring.appendChild(pk);
+    st.appendChild(ring);
+  }
   if (!hud && make) { hud = document.createElement('div'); hud.id = 'annotBrushHud'; st.appendChild(hud); }
   return ring ? { st, ring, hud } : null;
 }
@@ -7049,6 +7064,7 @@ function _annotUpdateBrushRing() {
   }
   if (!want) {
     ring.style.display = 'none';
+    ring.classList.remove('peeking');
     if (hud) hud.classList.remove('show');
     return;
   }
@@ -7063,6 +7079,7 @@ function _annotUpdateBrushRing() {
   ring.style.width = ring.style.height = Math.max(1, d) + 'px';
   ring.style.left = (p.x - d / 2) + 'px';
   ring.style.top = (p.y - d / 2) + 'px';
+  _annotUpdateClonePeek(ring, d);
   if (hud) {
     const on = _annot.hudUntil > Date.now();
     hud.classList.toggle('show', on);
@@ -7072,6 +7089,47 @@ function _annotUpdateBrushRing() {
       hud.style.top = Math.min(box.height - 26, p.y + d / 2 + 12) + 'px';
     }
   }
+}
+// ---- The clone stamp's live preview ----------------------------------------
+// The source pin says where the copy comes FROM and the ring says how big the
+// mark will be. Neither says what the mark will BE, so lining a stamp up meant
+// clicking and then looking at what landed — and undoing it when it was half a
+// letter out. The ring is therefore filled with the patch that would be stamped
+// this instant: a lens on the source, carried under the pointer, at the same
+// zoom as everything else. That is what turns "cover this word with the paper
+// beside it" into something you aim rather than guess at.
+const ANNOT_PEEK_MIN = 14;    // under this many screen px there is nothing to see inside the ring
+
+// Where the pixels under the brush would be copied FROM, right now. Mid-stroke
+// the offset was locked in at pointer-down; before the first dab, starting the
+// drag here is what would put the source point itself under the pointer — so
+// the preview is centred on the source, which is exactly what would land.
+function _annotClonePeekSrc() {
+  if (!_annot || _annot.tool !== 'clone' || !_annot.cloneSrc || !_annot.ptr) return null;
+  if (!_annot.cloneOff) return { x: _annot.cloneSrc.x, y: _annot.cloneSrc.y };
+  const s = _annotDisplayScale();
+  const ix = (_annot.ptr.x - _annot.panX) / s, iy = (_annot.ptr.y - _annot.panY) / s;
+  return { x: ix - _annot.cloneOff.x, y: iy - _annot.cloneOff.y };
+}
+function _annotUpdateClonePeek(ring, d) {
+  const peek = ring && ring.firstElementChild;
+  if (!peek || peek.tagName !== 'CANVAS') return;
+  const src = d >= ANNOT_PEEK_MIN ? _annotClonePeekSrc() : null;
+  ring.classList.toggle('peeking', !!src);
+  if (!src) return;
+  // Mid-stroke the stamp reads the FROZEN snapshot, so the preview must read it
+  // too — dragging back over ground already covered would otherwise preview the
+  // copy instead of the source, and the two diverge exactly where it matters.
+  const from = _annot.cloneSnap || _annot.canvas;
+  const px = Math.max(1, Math.round(_annot.size));
+  // The backing store is the brush in IMAGE pixels, so what is drawn here is
+  // pixel-for-pixel what the dab will put down, however far the view is zoomed.
+  if (peek.width !== px || peek.height !== px) { peek.width = px; peek.height = px; }
+  const g = peek.getContext('2d');
+  g.clearRect(0, 0, px, px);
+  g.imageSmoothingEnabled = false;
+  try { g.drawImage(from, Math.round(src.x - px / 2), Math.round(src.y - px / 2), px, px, 0, 0, px, px); } catch (_) {}
+  peek.classList.toggle('pixelated', d / px >= 3);
 }
 // Show the ring and its "12 px" badge for a moment after the size changes, so
 // the slider, the wheel and [ ] all say what they did even when the pointer is
@@ -8022,6 +8080,16 @@ function _annotSelPath(pts) {
 function _annotSelSyncBar() {
   const bar = document.getElementById('annotSelBar');
   if (bar) bar.style.display = (_annot && _annot.sel) ? 'flex' : 'none';
+  _annotAiSyncScope();   // ✨ Regenerate says which of its two scopes it is about to use
+}
+// The bounding box of a selection, whichever shape it is — a polygon from the
+// rectangle / lasso tools, or a masked rect from the magic wand.
+function _annotSelBox(sel) {
+  if (!sel) return null;
+  if (!sel.pts) return { x: sel.x, y: sel.y, w: sel.w, h: sel.h };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  sel.pts.forEach(p => { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); });
+  return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
 }
 function annotSelClear() {
   if (!_annot) return;
@@ -8331,6 +8399,102 @@ async function annotSelAiFill() {
     showToast('AI fill failed: ' + (e && e.message ? e.message : e), 'error');
   } finally { if (_annot) _annot.aiFillBusy = false; }
 }
+
+// ---- ✨ REGENERATE: say what you want and the AI redraws it ------------------
+// AI content-aware fill answers exactly ONE question — "take this out" — with a
+// prompt nobody can change. Everything else an author actually wants of a
+// picture ("rub out the pencil marks", "make the arrow red", "redraw this
+// beaker cleanly", "put the missing axis label back") had no door at all. This
+// is that door: a line to type in, and the same image model behind it.
+//
+// TWO SCOPES, and the difference between them is the whole safety story:
+//   * With an area SELECTED, only that area may change. The model is shown the
+//     picture with the area RINGED rather than blanked — "make the arrow red"
+//     needs the arrow still visible, which is exactly what content-aware fill's
+//     magenta blanking destroys — and the reply is composited back through
+//     _annotWithSelClip, so a model that quietly rewrote the whole page cannot
+//     touch one pixel outside the selection.
+//   * With NOTHING selected the whole picture is redrawn, which is the honest
+//     reading of "no area chosen".
+// The bar names the scope it is about to use, because those two are very
+// different things to press a button on.
+//
+// It is one history step either way, so ↶ Undo puts the original back — which
+// is what makes an experimental prompt cheap enough to actually experiment with.
+const ANNOT_AI_KEEP = ' Return the ENTIRE image at the SAME size and aspect ratio. The picture is usually a scan, photocopy or photo of a printed page, so match the grain, tone, brightness and line weight of the surrounding picture exactly — do not clean it up, sharpen it, whiten it, straighten it or restyle it. Do not add labels, watermarks, borders, captions or any object that was not asked for.';
+function _annotAiSyncScope() {
+  const el = document.getElementById('annotAiScope');
+  if (el) el.textContent = (_annot && _annot.sel) ? 'the selected area only' : 'the whole picture';
+}
+// Opening the editor on a new picture starts the bar empty — last picture's
+// instruction sitting in the box is one Enter away from being run on this one —
+// and hides it outright where there is no image model to run it.
+function _annotAiBarInit() {
+  const bar = document.getElementById('annotAiBar');
+  if (bar) bar.style.display = imageAiReady() ? 'flex' : 'none';
+  const input = document.getElementById('annotAiPrompt');
+  if (input) input.value = '';
+  const btn = document.getElementById('annotAiGoBtn');
+  if (btn) { btn.disabled = false; btn.textContent = '✨ Regenerate'; }
+  _annotAiSyncScope();
+}
+async function annotAiRegen() {
+  if (!_annot) return;
+  const input = document.getElementById('annotAiPrompt');
+  const want = ((input && input.value) || '').trim();
+  if (!want) { showToast('Type what you want changed first', 'info'); if (input) input.focus(); return; }
+  if (_annot.aiFillBusy) { showToast('The AI is already working on this picture…', 'info'); return; }
+  if (!imageAiReady()) { showToast('Image AI is not available in this project', 'error'); return; }
+  const canvas = _annot.canvas, sel = _annot.sel;
+  const btn = document.getElementById('annotAiGoBtn');
+  _annot.aiFillBusy = true;
+  if (btn) { btn.disabled = true; btn.textContent = '✨ Regenerating…'; }
+  showToast('✨ Regenerating ' + (sel ? 'the selected area' : 'the picture') + '…', 'info');
+  try {
+    const marked = document.createElement('canvas');
+    marked.width = canvas.width; marked.height = canvas.height;
+    const mx = marked.getContext('2d');
+    mx.drawImage(canvas, 0, 0);
+    let prompt;
+    if (sel) {
+      // The marker is drawn just OUTSIDE the selection, so it never covers the
+      // content the instruction is about — and anything of it that survives
+      // into the reply is outside the clip and therefore cannot be composited.
+      const b = _annotSelBox(sel);
+      const pad = Math.max(3, Math.round(Math.min(canvas.width, canvas.height) * 0.006));
+      mx.save();
+      mx.strokeStyle = '#ff00ff';
+      mx.lineWidth = pad;
+      mx.strokeRect(b.x - pad, b.y - pad, b.w + pad * 2, b.h + pad * 2);
+      mx.restore();
+      prompt = 'Reproduce this ENTIRE image exactly as it is — same size, same colours, same content — and change ONLY what is inside the magenta (#FF00FF) rectangle: ' + want + '. '
+        + 'The magenta rectangle is a marker, not part of the picture: do not draw it in your output, and blend your change seamlessly into the picture at its edges. Change NOTHING outside it.' + ANNOT_AI_KEEP;
+    } else {
+      prompt = 'Redraw this image with the following change: ' + want + '. Keep everything else in the picture exactly as it is.' + ANNOT_AI_KEEP;
+    }
+    const dataUrl = marked.toDataURL('image/png');
+    const outUrl = await generateEnhancedImageDataUrl(prompt, { mimeType: 'image/png', data: dataUrl.split(',')[1] || '' });
+    const img = await _loadImageEl(outUrl);
+    if (!_annot || _annot.canvas !== canvas) return;   // the editor was closed while the AI was thinking
+    _annotPushHistory();
+    if (sel) {
+      _annotWithSelClip(c => c.drawImage(img, 0, 0, canvas.width, canvas.height));
+    } else {
+      // clearRect first, never a 'copy' composite: a canvas stranded in a
+      // composite mode erases everything drawn afterwards.
+      const ctx = _annot.ctx;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    }
+    showToast('Regenerated ✓ — ↶ Undo puts it back', 'success');
+  } catch (e) {
+    console.warn('AI regenerate failed', e);
+    showToast('Regenerate failed: ' + (e && e.message ? e.message : e), 'error');
+  } finally {
+    if (_annot) _annot.aiFillBusy = false;
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Regenerate'; }
+  }
+}
 function _annotDown(e) {
   if (!_annot) return;
   e.preventDefault();
@@ -8395,7 +8559,8 @@ function _annotDown(e) {
     if (e.altKey || !_annot.cloneSrc) {
       _annot.cloneSrc = { x: p.x, y: p.y };
       _annotUpdateCloneMarker();
-      showToast('Clone source set — now drag to stamp that area elsewhere', 'info');
+      _annotUpdateBrushRing();   // the ring can start previewing the moment there is a source
+      showToast('Clone source set — the ring under your pointer now shows what will be stamped', 'info');
       return;
     }
     _annotPushHistory();
@@ -8407,6 +8572,7 @@ function _annotDown(e) {
     _annot.drawing = true;
     _annot.last = p;
     _annotCloneDab(ctx, p.x, p.y);
+    _annotUpdateBrushRing();   // the offset is locked in now — preview from the frozen snapshot
     return;
   }
   _annotPushHistory();
@@ -8579,6 +8745,7 @@ function _annotUp() {
   if ((_annot.tool === 'erase' || _annot.tool === 'paint') && _annot.last) _annot.anchor = _annot.last;
   _annotResetCompose();
   _annot.drawing = false; _annot.start = null; _annot.snap = null; _annot.shiftSeg = null; _annot.last = null; _annot.cloneSnap = null; _annot.cloneOff = null;
+  _annotUpdateBrushRing();   // the offset is released — the preview goes back to showing the source itself
 }
 function _annotPlaceText(p) {
   const stage = document.getElementById('annotStage');
@@ -54884,6 +55051,7 @@ window._annotSyncControls = _annotSyncControls;
 window.annotSelFillColour = annotSelFillColour;
 window.annotSelPatchFill = annotSelPatchFill;
 window.annotSelAiFill = annotSelAiFill;
+window.annotAiRegen = annotAiRegen;
 window.annotSelClear = annotSelClear;
 window.annotXformSet = annotXformSet;
 window.annotXformSetScale = annotXformSetScale;
