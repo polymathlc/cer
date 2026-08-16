@@ -12186,6 +12186,24 @@ body.lore-reading { overflow: hidden; }
   </div>
 </div>
 
+<!-- ==================== SIDE-BY-SIDE DUPLICATE COMPARISON ====================
+     Opened from the duplicate banner in the editor and from the 🟡 badge on a
+     vetting card. It only READS: the draft on the left, the question already
+     filed on the right, and a word-level account of what differs. The one
+     destructive action (loading the original into the editor) lives in the
+     foot, behind its own confirm, and is hidden when there is no draft to lose.
+-->
+<div class="overlay" id="dupCompareOverlay">
+  <div class="overlay-card" style="max-width:1180px;width:96vw;">
+    <div class="overlay-head"><h3>⇄ Are these the same question?</h3><button class="close" onclick="dupCompareClose()" type="button">×</button></div>
+    <div class="overlay-body" style="text-align:left;" id="dupCompareBody"></div>
+    <div class="overlay-foot">
+      <button class="btn btn-ghost" onclick="dupCompareClose()" type="button">✕ Close — keep what I am writing</button>
+      <button class="btn btn-outline" id="dupCompareOpenBtn" onclick="dupCompareOpenOriginal()" type="button" title="Load the original into the editor instead. This replaces the draft you are looking at, so it asks first.">👁 Open the original instead</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==================== IMAGE TOUCH-UP & LABELS ==================== -->
 <div class="overlay" id="annotOverlay">
   <div class="overlay-card" style="max-width:96vw;width:auto;">
