@@ -5398,6 +5398,74 @@ option {
 .overlay-body { padding: 22px; }
 .overlay-foot { padding: 16px 22px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
 
+/* ===== 🔍 Answer key cross-check — two engines at once =====
+   Written against the design tokens only, so the same block serves this app
+   and the Maths app's copy of the feature. */
+.akc-bar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 16px 20px; margin-bottom: 16px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+}
+.akc-bar-text { flex: 1 1 280px; min-width: 0; line-height: 1.6; }
+.akc-bar-text b { display: block; font-size: 0.92rem; margin-bottom: 4px; }
+.akc-bar-text span { font-size: 0.79rem; color: var(--text-muted); }
+.akc-bar-pick { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-muted); }
+.akc-bar-pick select { padding: 8px 10px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--surface); font-family: inherit; font-size: 0.82rem; }
+.akc-note { font-size: 0.8rem; color: var(--text-muted); line-height: 1.65; margin-bottom: 16px; }
+.akc-note.warn { color: var(--accent-red); }
+.akc-progress { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; font-size: 0.84rem; color: var(--text-muted); }
+.akc-progress-track { flex: 1; height: 7px; border-radius: 99px; background: var(--surface-alt); overflow: hidden; }
+.akc-progress-fill { height: 100%; background: var(--primary); border-radius: 99px; transition: width 0.25s; }
+.akc-tallies { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.akc-tally {
+  flex: 1 1 130px; padding: 14px 16px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface-alt);
+}
+.akc-tally b { display: block; font-size: 1.35rem; font-weight: 700; }
+.akc-tally span { font-size: 0.74rem; color: var(--text-muted); }
+.akc-tally.good b { color: #2f855a; }
+.akc-tally.warn b { color: #b7791f; }
+.akc-tally.bad b { color: var(--accent-red); }
+.akc-filter { display: flex; gap: 8px; margin-bottom: 16px; }
+.akc-rows { display: grid; gap: 14px; }
+.akc-empty { padding: 28px; text-align: center; color: var(--text-muted); font-size: 0.88rem; }
+.akc-row {
+  padding: 18px 20px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); border-left: 4px solid var(--border);
+  background: var(--surface);
+}
+.akc-row.good { border-left-color: #2f855a; }
+.akc-row.warn { border-left-color: #d69e2e; }
+.akc-row.bad { border-left-color: var(--accent-red); }
+.akc-row.idle { border-left-color: var(--border); }
+.akc-row-head { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.akc-row-title { flex: 1 1 220px; min-width: 0; font-size: 0.93rem; font-weight: 600; line-height: 1.5; }
+.akc-row-title small { display: block; font-weight: 400; font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+.akc-verdict { flex: 0 0 auto; font-size: 0.73rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 6px 11px; border-radius: 99px; background: var(--surface-alt); color: var(--text-muted); }
+.akc-verdict.good { background: #e6f4ec; color: #2f855a; }
+.akc-verdict.warn { background: #fdf3dd; color: #975a16; }
+.akc-verdict.bad { background: #fdecec; color: var(--accent-red); }
+.akc-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+@media (max-width: 760px) { .akc-cols { grid-template-columns: 1fr; } }
+.akc-col { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 13px; background: var(--surface-alt); min-width: 0; }
+.akc-col-lbl { font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 7px; }
+.akc-col-ans { font-size: 0.9rem; font-weight: 600; line-height: 1.55; overflow-wrap: anywhere; }
+.akc-col-ans.none { font-weight: 400; color: var(--text-muted); font-style: italic; }
+.akc-col-meta { font-size: 0.74rem; color: var(--text-muted); margin-top: 7px; line-height: 1.55; }
+.akc-rec { margin-top: 14px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-alt); font-size: 0.87rem; line-height: 1.65; }
+.akc-rec b { font-weight: 700; }
+.akc-rec.bad { background: #fdecec; }
+.akc-rec.warn { background: #fdf3dd; }
+.akc-issues { margin: 10px 0 0; padding-left: 20px; font-size: 0.82rem; color: var(--text-muted); line-height: 1.7; }
+.akc-more { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+.akc-work { display: none; margin-top: 12px; }
+.akc-row.open .akc-work { display: block; }
+.akc-work-box { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; background: var(--surface-alt); margin-bottom: 10px; }
+.akc-work-box pre { margin: 6px 0 0; white-space: pre-wrap; font-family: inherit; font-size: 0.83rem; line-height: 1.65; color: var(--text); }
+.akc-spin { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: akcspin 0.8s linear infinite; vertical-align: -2px; }
+@keyframes akcspin { to { transform: rotate(360deg); } }
+
 :root {
   --rar-common: #8a8f98;
   --rar-uncommon: #0f7a5a;
@@ -8427,6 +8495,19 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             </button>
           </div>
         </div>
+        <!-- 🔍 Cross-check the answer keys of everything added recently. The
+             window is a filter ON TOP of what the bank is already showing, so
+             the count on the button is always the set the eye can see. -->
+        <div class="akc-bar" id="akcBankBar" style="display:none;">
+          <div class="akc-bar-text">
+            <b>🔍 Check answer keys</b>
+            <span>ChatGPT and Gemini each answer the question from scratch, at the same time and without seeing each other. The report puts their two answers beside your own key and says what to do.</span>
+          </div>
+          <label class="akc-bar-pick">Added in the past
+            <select id="akcWindow" title="Only questions saved inside this window are checked"></select>
+          </label>
+          <button class="btn btn-primary" id="akcBankBtn" onclick="akcCheckRecent()">🔍 Check</button>
+        </div>
         <div class="bank-pick-bar" id="bankPickBar" style="display:none;"></div>
         <div class="question-bank-grid" id="questionBankGrid"></div>
       </div>
@@ -9990,6 +10071,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   <div class="confirm-dialog" style="max-width:560px;text-align:left;max-height:88vh;overflow-y:auto;">
     <h3 style="margin-bottom:4px;">AI Engine</h3>
     <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Choose which AI powers every mode in this app — <strong>Create Question's AI answer &amp; explanation, Build from screenshot / PDF, Rapid add</strong>, plus marking and explanations. Switch to ChatGPT gpt-5.6-sol for heavy-duty question building, and back to Gemini for everyday use. Your choice is saved on this device and stays until you change it. If ChatGPT ever fails, the app falls back to Gemini automatically.</p>
+    <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:16px;line-height:1.6;">🔗 <strong>One key covers all four subjects.</strong> Science, Maths, English and Chinese share this browser's storage, so a key saved here is saved for all of them — and 🔍 <strong>Check answer keys</strong> can put ChatGPT and Gemini side by side in whichever app you are in.</p>
 
     <div class="form-group">
       <label class="form-label">Engine</label>
@@ -12193,6 +12275,15 @@ body.lore-reading { overflow: hidden; }
      destructive action (loading the original into the editor) lives in the
      foot, behind its own confirm, and is hidden when there is no draft to lose.
 -->
+<!-- ============ 🔍 ANSWER KEY CROSS-CHECK — TWO ENGINES AT ONCE ============ -->
+<div class="overlay" id="akcOverlay">
+  <div class="overlay-card" style="max-width:1180px;width:96vw;">
+    <div class="overlay-head"><h3>🔍 Answer key cross-check</h3><button class="close" onclick="akcClose()" type="button">×</button></div>
+    <div class="overlay-body" style="text-align:left;" id="akcBody"></div>
+    <div class="overlay-foot" id="akcFoot"></div>
+  </div>
+</div>
+
 <div class="overlay" id="dupCompareOverlay">
   <div class="overlay-card" style="max-width:1180px;width:96vw;">
     <div class="overlay-head"><h3>⇄ Are these the same question?</h3><button class="close" onclick="dupCompareClose()" type="button">×</button></div>
