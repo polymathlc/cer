@@ -1716,7 +1716,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.298.0';
+const APP_VERSION = 'v1.299.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -6257,6 +6257,154 @@ const SCAN_SOURCE_PROMPT =
 const SCAN_READING_NOTE =
   'ABOUT THE IMAGE: it is a scan, photocopy or phone photo of a printed exam paper, not a clean digital page. Expect faint or broken lines, a grey or unevenly lit background, speckle and dirt, show-through of print from the back of the sheet, slight skew or page curve, shadows near the spine or the edges, and blurred or double-struck text. Read THROUGH that damage: a faint or patchy figure is still a figure — do NOT skip a diagram, graph, table or picture just because it is faint or partly faded — and a speck of dirt is not punctuation, a decimal point or a tick. Where the scan has genuinely destroyed a word or a number, do NOT invent a plausible replacement: leave it out or say it is unclear.\n';
 
+// =====================================================================
+// 🧻 CLEAN PAPER — take the faint texture out of a picture's background
+//
+// WHY IT EXISTS. A question's diagram is passed through an image MODEL on the
+// way in (`_BW_ENHANCE_PROMPT` — "clean this scan up into a sharp black-and-
+// white line diagram"), and an image model has no notion of a flat, uniform
+// white: it PAINTS the background like everything else, and its decoder leaves
+// a faint regular weave behind — most often a diagonal hatch a few units off
+// white. The prompt already forbids textures in as many words, and the model
+// still does it, because this is not the model choosing to add a texture: it
+// is how the picture is reconstructed. A prompt cannot fix it, which is why
+// this is pixels.
+//
+// Nothing in the app draws those lines — there is no diagonal pattern in the
+// print CSS, no watermark step, nothing behind a transparent PNG. They are
+// baked into the picture itself, which is also why they survive into the PDF.
+// On screen at 300px nobody sees them; printed at 92mm a laser printer has to
+// halftone that near-white, and a 4-unit weave becomes a visible stripe.
+//
+// WHAT IT DOES. One deterministic pass, no AI: measure the paper's white point
+// and snap everything within `PAPER_TEX_DEPTH` of it to pure white. That is
+// the white-point clamp a scanner driver does, and it removes the weave, a
+// grey scan background and a faint printed watermark alike, because all three
+// are the same thing — near-white, low-chroma pixels that are not the drawing.
+//
+// WHAT IT MUST NEVER DO is touch the drawing, so three guards gate it and any
+// one of them refuses the whole pass rather than half-cleaning a picture:
+// the background has to BE bright (`PAPER_WHITE_MIN`), it has to be most of
+// the picture (`PAPER_BG_MIN`), and the picture has to be ink on paper at all
+// (`PAPER_INK_MIN`) — a photograph of an experiment has bright areas and no
+// line work, and flattening its highlights into a flat plate is exactly the
+// kind of quiet damage the game-art cutters are so careful about.
+// =====================================================================
+
+// A background darker than this is not paper — a photo, a dark artwork, a
+// screenshot of a dark UI — and the pass is refused rather than dragging its
+// mid-tones up to white.
+const PAPER_WHITE_MIN = 200;
+// How much of the picture the near-white background has to be. A bright patch
+// in a photograph is not a page.
+const PAPER_BG_MIN = 0.30;
+// How far below the measured white point still counts as background. The weave
+// is only a few units deep and a grey scan a couple of dozen; a deliberate pale
+// grey fill in a diagram sits well below this and is kept.
+const PAPER_TEX_DEPTH = 20;
+// …and how far from grey a background pixel may drift. A pale wash of real
+// colour — the blue of water in a beaker — is part of the drawing, whatever
+// its brightness.
+const PAPER_TEX_CHROMA = 22;
+// The picture must have line work to be worth protecting: below this there is
+// no drawing here, so there is nothing this pass can be said to be cleaning.
+const PAPER_INK_MIN = 0.004;
+// Ink is what must survive the pass untouched. Nothing at or below this
+// brightness is ever written to, by construction — the assertion is in the
+// harness, because "the pass ate the diagram" is the one failure that would
+// look like a beautifully clean picture.
+const PAPER_INK_MAX = 128;
+
+// Where the paper's white sits. The 98th percentile rather than the maximum:
+// one stray blown-out pixel must not set the white point for the whole page,
+// and with a background covering most of the picture the 98th percentile lands
+// squarely in it. Transparent pixels are not paper and are left out entirely.
+function _paperWhitePoint(px) {
+  const hist = new Uint32Array(256);
+  let n = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] < 8) continue;
+    const l = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000 | 0;
+    hist[l]++; n++;
+  }
+  if (!n) return { white: 0, n: 0 };
+  const want = n * 0.98;
+  let seen = 0, white = 255;
+  for (let l = 0; l < 256; l++) { seen += hist[l]; if (seen >= want) { white = l; break; } }
+  return { white, n, hist };
+}
+
+// The pass itself, over a raw RGBA buffer, in place. Returns a report; the
+// caller decides what to say about it. `ok:false` means NOTHING was written —
+// a refusal is all-or-nothing on purpose, because a picture that has been
+// half-cleaned is worse than one that was left alone.
+function _paperCleanPixels(px, w, h) {
+  const { white, n, hist } = _paperWhitePoint(px);
+  if (!n) return { ok: false, reason: 'empty', white: 0, changed: 0 };
+  if (white < PAPER_WHITE_MIN) return { ok: false, reason: 'no-white', white, changed: 0 };
+
+  const floor = white - PAPER_TEX_DEPTH;
+  let bg = 0, ink = 0;
+  for (let l = 0; l < 256; l++) { if (l >= floor) bg += hist[l]; else if (l <= PAPER_INK_MAX) ink += hist[l]; }
+  if (bg / n < PAPER_BG_MIN) return { ok: false, reason: 'not-paper', white, changed: 0 };
+  if (ink / n < PAPER_INK_MIN) return { ok: false, reason: 'no-ink', white, changed: 0 };
+
+  let changed = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] < 8) continue;                       // a hole stays a hole
+    const r = px[i], g = px[i + 1], b = px[i + 2];
+    const l = (r * 299 + g * 587 + b * 114) / 1000 | 0;
+    if (l < floor) continue;                           // the drawing
+    const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+    if (chroma > PAPER_TEX_CHROMA) continue;           // a pale wash of real colour
+    if (r === 255 && g === 255 && b === 255) continue; // already paper
+    px[i] = 255; px[i + 1] = 255; px[i + 2] = 255;
+    changed++;
+  }
+  return { ok: true, reason: 'cleaned', white, changed, bg: bg / n, ink: ink / n };
+}
+
+// Canvas wrapper: a data: URL in, a cleaned data: URL out. It NEVER throws and
+// never returns nothing — a picture that could not be cleaned is handed back
+// exactly as it arrived, because this runs inside the enhance path and a
+// diagram is worth far more than the weave on it. PNG in, PNG out: a JPEG step
+// here would put its own texture back and flatten any transparency to black.
+function _paperCleanDataUrl(dataUrl) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const cv = document.createElement('canvas');
+          cv.width = img.naturalWidth || img.width;
+          cv.height = img.naturalHeight || img.height;
+          if (!cv.width || !cv.height) { resolve({ url: dataUrl, report: { ok: false, reason: 'no-size' } }); return; }
+          const ctx = cv.getContext('2d', { willReadFrequently: true });
+          ctx.drawImage(img, 0, 0);
+          const id = ctx.getImageData(0, 0, cv.width, cv.height);
+          const report = _paperCleanPixels(id.data, cv.width, cv.height);
+          if (!report.ok || !report.changed) { resolve({ url: dataUrl, report }); return; }
+          ctx.putImageData(id, 0, 0);
+          resolve({ url: cv.toDataURL('image/png'), report });
+        } catch (e) { console.warn('clean paper failed', e); resolve({ url: dataUrl, report: { ok: false, reason: 'error' } }); }
+      };
+      img.onerror = () => resolve({ url: dataUrl, report: { ok: false, reason: 'load' } });
+      img.src = dataUrl;
+    } catch (e) { console.warn('clean paper failed', e); resolve({ url: dataUrl, report: { ok: false, reason: 'error' } }); }
+  });
+}
+
+// The ONE door every diagram re-render goes through: ask the image model, then
+// take the weave its decoder left behind straight back out. Every call site
+// that used to call `generateEnhancedImageDataUrl` with a diagram prompt calls
+// this instead — a picture cleaned on one authoring path and not on another is
+// exactly the drift the print paths' shared helpers exist to prevent.
+async function generateCleanEnhancedImage(prompt, media) {
+  const out = await generateEnhancedImageDataUrl(prompt, media);
+  const res = await _paperCleanDataUrl(out);
+  return res.url;
+}
+
 // Ask an image model to produce an image; returns a data: URL.
 // `media` may be a single { mimeType, data } or an array of them.
 async function generateEnhancedImageDataUrl(prompt, media) {
@@ -6617,7 +6765,9 @@ async function enhanceBlockImage(blockId, colour) {
       ? 'TASK: add colour to this diagram. Keep the SAME line drawing — identical shapes, labels, text, proportions and positions — repair the scanning damage described above, then fill the existing shapes with flat, natural colours like a clean textbook illustration. Do NOT make it photo-realistic, do NOT add shading, gradients, 3D rendering, textures or a new style, and do NOT restyle, rearrange, add or remove anything. Output only the image, same aspect ratio.'
       : 'TASK: clean this up into a sharp BLACK-AND-WHITE line diagram — crisp black line-work and clearly legible black text on a clean white background, like a freshly printed textbook figure rather than a photocopy. Keep the SAME diagram: every shape, label, text, proportion and position stays where it is, with the scanning damage described above repaired. Do NOT make it photo-realistic, do NOT add shading, gradients, rendering, textures, colour or a new style, and do NOT restyle, rearrange, add or remove anything. Output only the image, same aspect ratio.');
     if (remark) prompt += ' IMPORTANT — also follow these specific instructions from the teacher for this regeneration (apply them even where they relax the rules above, but still keep it the SAME diagram and the same aspect ratio, and output only the image): ' + remark;
-    const dataUrl = await generateEnhancedImageDataUrl(prompt, [media]);
+    // Through the cleaning door: the model's decoder leaves a faint weave on
+    // the white it paints, and this picture is going to be printed.
+    const dataUrl = await generateCleanEnhancedImage(prompt, [media]);
     previewImage(blockId, dataUrl); // show immediately
     const url = await uploadImageDataUrl(dataUrl);
     saveBlockContent(blockId, 'url', url);
@@ -8017,6 +8167,34 @@ function _annotPushHistory() {
     if (_annot.history.length > 10) _annot.history.shift();
   } catch (_) {}
 }
+// 🧻 Clean paper — the manual twin of the automatic pass in the enhance door,
+// for every picture that is ALREADY in the bank. Those were re-rendered before
+// the cleaner existed and carry the weave in their stored pixels; nobody is
+// going to reopen a thousand of them, but the one being touched up anyway is a
+// tap away from clean. One history step, so ↶ Undo puts the texture back if
+// the guards let through something they should not have.
+function annotCleanPaper() {
+  if (!_annot) return;
+  const W = _annot.canvas.width, H = _annot.canvas.height;
+  let id;
+  try { id = _annot.ctx.getImageData(0, 0, W, H); }
+  catch (e) { showToast('Could not read the picture to clean it', 'error'); return; }
+  const rep = _paperCleanPixels(id.data, W, H);
+  if (!rep.ok) {
+    // Every refusal is named, because "nothing happened" on a button is the
+    // one outcome nobody can act on.
+    showToast(rep.reason === 'no-white' ? 'Left alone — this picture has no white paper to clean (it is a photo or dark artwork)'
+      : rep.reason === 'not-paper' ? 'Left alone — the bright part is not a page background here'
+      : rep.reason === 'no-ink' ? 'Left alone — there is no line work in this picture to protect'
+      : 'Nothing to clean', 'info');
+    return;
+  }
+  if (!rep.changed) { showToast('Already clean — the background is pure white ✓', 'info'); return; }
+  _annotPushHistory();
+  _annot.ctx.putImageData(id, 0, 0);
+  showToast(`🧻 Cleaned the background — ${Math.round(rep.changed / (W * H) * 100)}% of the picture snapped to white ✓`, 'success');
+}
+
 function annotUndo() {
   if (!_annot) return;
   // While a rotate/skew is open, undo means "abandon this turn" — stepping the
@@ -8407,6 +8585,11 @@ async function annotSelAiFill() {
     const prompt = 'This image has one region painted solid magenta (#FF00FF). Reproduce the ENTIRE image exactly as it is — same size, same colours, same content — but replace the magenta region with a seamless, content-aware reconstruction of the background and surrounding texture, as if whatever was there had been removed. Continue any lines, shading or patterns that pass through the region naturally. ' +
       'The picture is a scan, photocopy or photo of a printed exam paper, so the area around the region is probably speckled, greyish, unevenly lit, slightly blurred and a little skewed. MATCH that surrounding grain, tone and brightness exactly so the repair is invisible — do NOT clean it up, sharpen it, whiten it or straighten it, and do not let the patch look newer than the paper around it. ' +
       'Do not change ANYTHING outside the magenta region. Do not add labels, watermarks or new objects.';
+    // Deliberately NOT `generateCleanEnhancedImage`. This reply is a PATCH that
+    // has to disappear into the picture around it — `ANNOT_AI_KEEP` asks the
+    // model to match the grain and tone of a scan rather than clean it up — so
+    // whitening its background would leave a bright rectangle on a grey page.
+    // Cleaning the whole picture is the 🧻 button's job, not this one's.
     const outUrl = await generateEnhancedImageDataUrl(prompt, { mimeType: 'image/png', data: dataUrl.split(',')[1] || '' });
     const img = await _loadImageEl(outUrl);
     if (!_annot || _annot.canvas !== canvas) return;   // tool was closed meanwhile
@@ -8493,6 +8676,11 @@ async function annotAiRegen() {
       prompt = 'Redraw this image with the following change: ' + want + '. Keep everything else in the picture exactly as it is.' + ANNOT_AI_KEEP;
     }
     const dataUrl = marked.toDataURL('image/png');
+    // Deliberately NOT `generateCleanEnhancedImage`. This reply is a PATCH that
+    // has to disappear into the picture around it — `ANNOT_AI_KEEP` asks the
+    // model to match the grain and tone of a scan rather than clean it up — so
+    // whitening its background would leave a bright rectangle on a grey page.
+    // Cleaning the whole picture is the 🧻 button's job, not this one's.
     const outUrl = await generateEnhancedImageDataUrl(prompt, { mimeType: 'image/png', data: dataUrl.split(',')[1] || '' });
     const img = await _loadImageEl(outUrl);
     if (!_annot || _annot.canvas !== canvas) return;   // the editor was closed while the AI was thinking
@@ -10297,7 +10485,7 @@ async function _fillBlocksFromAiBoxes(imgBlocks, boxes, mimeType, b64, onStatus,
     if (imageAiReady() && enhanced < maxEnhance) {
       enhanced++;
       if (onStatus) onStatus(`Enhancing picture ${filled + 1} (black & white)…`);
-      try { dataUrl = await generateEnhancedImageDataUrl(_BW_ENHANCE_PROMPT, [{ mimeType: 'image/png', data: crops[i].split(',')[1] || '' }]); }
+      try { dataUrl = await generateCleanEnhancedImage(_BW_ENHANCE_PROMPT, [{ mimeType: 'image/png', data: crops[i].split(',')[1] || '' }]); }
       catch (e) { console.warn('crop enhance failed — keeping the sharp crop', e); dataUrl = crops[i]; }
     }
     try {
@@ -10397,7 +10585,7 @@ async function _autoFillDiagramFromUpload(mimeType, b64) {
   setBar(`<div style="margin-top:8px;font-size:0.82rem;color:var(--primary);display:flex;align-items:center;gap:8px;"><span class="spinner" style="border-color:rgba(74,124,89,.3);border-top-color:var(--primary);"></span>Enhancing the image (black &amp; white)… (10–25s)</div>`);
   showToast('🖼️ Enhancing the whole image in high quality (black & white)…', 'info');
   try {
-    const enhanced = await generateEnhancedImageDataUrl(_BW_ENHANCE_PROMPT, [{ mimeType, data: b64 }]);
+    const enhanced = await generateCleanEnhancedImage(_BW_ENHANCE_PROMPT, [{ mimeType, data: b64 }]);
     if (await place(enhanced)) showToast('Enhanced in black & white ✓ — tap ✂️ Crop / reposition to crop to the picture', 'success');
   } catch (e) {
     console.warn('whole-image B&W enhance failed', e);
@@ -10695,7 +10883,7 @@ async function processRapidJob(jobId, file, batchLevel) {
           const original = 'data:' + file.type + ';base64,' + b64;
           try {
             const dataUrl = imageAiReady()
-              ? await generateEnhancedImageDataUrl(_BW_ENHANCE_PROMPT, [{ mimeType: file.type, data: b64 }])
+              ? await generateCleanEnhancedImage(_BW_ENHANCE_PROMPT, [{ mimeType: file.type, data: b64 }])
               : original;
             imgBlock.url = await uploadImageDataUrl(dataUrl);
             // Seed in-session image state so Crop / Touch up / Enhance work when this
@@ -49235,6 +49423,7 @@ window.duelFxCleanRun = duelFxCleanRun;
 window.tcgCleanSlotBg = tcgCleanSlotBg;
 window.tcgTouchUpSlot = tcgTouchUpSlot;
 window.annotSelDelete = annotSelDelete;
+window.annotCleanPaper = annotCleanPaper;
 window.annotToggleEraseTo = annotToggleEraseTo;
 window.annotPasteFromClipboard = annotPasteFromClipboard;
 window.elgOpen = elgOpen;
