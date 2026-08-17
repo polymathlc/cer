@@ -713,6 +713,71 @@ nothing on any screen says so.
   must never interrupt a game mid-answer, and a question answered offline must
   still stop being re-served.
 
+## 🧻 Clean paper — the faint diagonal weave on a printed diagram (v1.299.0)
+
+`PAPER_*` / `_paperWhitePoint` / `_paperCleanPixels` / `_paperCleanDataUrl` /
+`generateCleanEnhancedImage` (in `app.js`, search `CLEAN PAPER`), plus
+`annotCleanPaper` and its 🧻 button in the Touch up toolbar.
+
+**Where the stripes come from.** Nothing in this app draws them — there is no
+diagonal pattern in the print CSS, no watermark step, and nothing striped
+behind a transparent PNG. They are baked into the picture's own pixels, and
+they get there on the way IN: a question's diagram is passed through an image
+MODEL (`_BW_ENHANCE_PROMPT` — *"clean this scan up into a sharp black-and-white
+line diagram"*), and an image model has no notion of a flat, uniform white. It
+PAINTS the background like everything else, and its decoder leaves a faint
+regular weave — most often a diagonal hatch a few units off white. The prompt
+already forbids textures in as many words and the model still does it, because
+this is not the model choosing to add a texture: it is how the picture is
+reconstructed. **A prompt cannot fix it, which is why the fix is pixels.**
+
+It is invisible on screen at 300px and obvious on paper, which is why it turns
+up as a printing complaint: a laser printer has to halftone that near-white, so
+a 4-unit weave becomes a visible stripe across the whole figure.
+
+- **`_paperCleanPixels(px, w, h)` is the pass**: measure the paper's white point
+  and snap everything within `PAPER_TEX_DEPTH` of it to pure white. That is the
+  white-point clamp a scanner driver does, and it takes out the weave, a grey
+  scan background and a faint printed watermark alike — all three are the same
+  thing, near-white low-chroma pixels that are not the drawing. No AI: the same
+  picture must always come out the same way.
+- **The white point is the 98th PERCENTILE, never the maximum.** One blown-out
+  speck is 255 whatever the page really is, and on a grey scan that difference
+  is the whole pass.
+- **Three guards, and a refusal writes NOTHING.** The background has to be
+  bright (`PAPER_WHITE_MIN`), it has to be most of the picture (`PAPER_BG_MIN`),
+  and there has to be line work to protect (`PAPER_INK_MIN`). A photograph of an
+  experiment has bright areas and no line work, and flattening its highlights
+  into a plate is exactly the quiet damage the game-art cutters are so careful
+  about. Half-cleaning a picture is worse than leaving it alone, so the whole
+  pass is all-or-nothing.
+- **A pale wash of real COLOUR is part of the drawing** (`PAPER_TEX_CHROMA`) —
+  the blue of water in a beaker is bright and nothing like grey, and whitening
+  it deletes half of what the question is about. A deliberate grey shading sits
+  well below `PAPER_TEX_DEPTH` and is kept for the same reason.
+- **A hole stays a hole.** Transparent pixels are skipped and are left out of
+  the white-point measurement entirely, or a cut-out sprite comes back boxed.
+- **`generateCleanEnhancedImage` is the ONE door every diagram re-render goes
+  through** — the three `_BW_ENHANCE_PROMPT` sites (rapid add / the crop flow /
+  the whole-screenshot backup) and the ✨ Enhance / 🎨 Colourise button. A picture
+  cleaned on one authoring path and not on another is exactly the drift the
+  shared print helpers exist to prevent. It never throws: a picture that could
+  not be cleaned is handed back as it arrived.
+- **The two annot AI patches are deliberately NOT cleaned.** `annotSelAiFill`
+  and `annotAiRegen` return a patch that has to disappear into the picture
+  around it — `ANNOT_AI_KEEP` asks the model to MATCH the grain of a scan rather
+  than clean it up — so whitening its background would leave a bright rectangle
+  on a grey page.
+- **🧻 Clean paper is the manual twin, for pictures already in the bank.** Those
+  were re-rendered before the cleaner existed and carry the weave in their
+  stored pixels; nobody is going to reopen a thousand of them, but the one being
+  touched up anyway is a tap away. One history step, so ↶ Undo puts it back.
+  Every refusal is NAMED in the toast — "nothing happened" on a button is the
+  one outcome nobody can act on.
+- PNG in, PNG out. A JPEG step here would put its own texture back and flatten
+  any transparency to black.
+- Run **`node tools/paper-clean-tests.mjs`** after touching any of it.
+
 ## 🔘 A printed MCQ has somewhere to write the answer (v1.298.0)
 
 `_printMcqBlockHtml` / `_printMcqAnswerBoxHtml` (in `app.js`, search `A printed
@@ -842,6 +907,16 @@ that door: a line to type in, and the same image model behind it.
   to say which is lying, and an export that reads a different window from the
   table it came from sends a parent a report of work in a mode the teacher had
   filtered away.
+- After touching **🧻 Clean paper** (`PAPER_*`, `_paperWhitePoint`,
+  `_paperCleanPixels`, `_paperCleanDataUrl`, `generateCleanEnhancedImage`,
+  `annotCleanPaper`), run `node tools/paper-clean-tests.mjs`. Both directions
+  are silent and both are found in front of a class: too timid and every
+  diagram keeps the weave an image model's decoder left on it, which is
+  invisible on screen and prints as a striped grey wash; too greedy and the
+  pass reaches past the background into the drawing, flattening a pale blue
+  water fill, a grey shading or a photograph's highlights to blank white — and
+  the picture still looks perfectly clean, so the damage is only visible
+  against an original nobody kept.
 - After touching **the printed MCQ answer box** (`_printMcqBlockHtml`,
   `_printMcqAnswerBoxHtml`, either print path's `case 'mcq'`, the
   `.print-mcq-answer*` print CSS), run `node tools/print-mcq-box-tests.mjs`.
