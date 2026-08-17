@@ -1716,7 +1716,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.296.0';
+const APP_VERSION = 'v1.297.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -26961,91 +26961,343 @@ function formatGap(ms) {
   return `${Math.floor(h / 24)}d`;
 }
 
-// Drill into one student: list every question they attempted, in order, with the
-// exact time (SGT). Consecutive attempts under RAPID_ATTEMPT_MS apart are flagged
-// red so a teacher can spot rapid-fire (potentially copied) answers.
-async function showStudentDetail(uid) {
-  const s = _usageStudentStats[uid] || { uid, name: 'Student', email: '' };
-  document.getElementById('studentDetailName').textContent = s.name || 'Student';
-  document.getElementById('studentDetailEmail').textContent = s.email || '';
-  document.getElementById('studentDetailSummary').innerHTML = '';
-  document.getElementById('studentDetailBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</td></tr>';
-  document.getElementById('studentDetailOverlay').classList.add('active');
+// =====================================================================
+// 📊 THE STUDENT USAGE TRACKER
+// =====================================================================
+// Every question one student has completed, the result they got, and the MODE
+// they did it in — practice, a worksheet, Snap & Mark, or any of the games.
+//
+// The attempt log was always being written; what was missing was a way to READ
+// it. The old drill-in listed the rows and nothing else, so a teacher looking
+// at four hundred attempts could not answer either of the two questions they
+// actually have: *what has this child been doing?* and *how are they getting
+// on in it?* A list that can only be scrolled is a list nobody reads.
+//
+// Three things carry the design:
+//
+//   • **`USAGE_MODES` is the ONE place a raw mode string becomes words.** The
+//     log stores `tcg-siege`, `quickpractice-open`, `snapmark-open` — which are
+//     internal names, not English. The chip, the breakdown table, the filter
+//     dropdown and the CSV all read this map, so they cannot drift apart. A
+//     mode with no entry still shows (as its raw string, in the "other" group)
+//     rather than vanishing — an unlabelled mode is a missing label, and a
+//     question dropped out of the log because nobody wrote a label for its mode
+//     is a missing question, which is far worse.
+//
+//   • **The breakdown by mode is the headline, not the log.** "43 in Quick
+//     Practice at 71%, 210 in Ember Siege at 88%" is the answer to what a
+//     teacher opened this for; the row-by-row log is the evidence underneath.
+//
+//   • **It renders from state.** `_sut` holds the attempts and the filters, and
+//     `sutRender()` paints the whole overlay from them. Changing a filter never
+//     re-reads Firestore, so filtering four hundred attempts is instant and a
+//     teacher can sweep through the modes without paying for a query each time.
+//
+// It is READ-ONLY. Nothing in this block writes anything anywhere.
 
-  try {
-    // Single-field equality query — no composite index needed; we sort client-side.
-    const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', uid)));
-    const attempts = [];
-    snap.forEach(d => attempts.push(d.data()));
-    // Chronological order so we can measure the gap between consecutive attempts.
-    attempts.sort((a, b) => attemptTime(a) - attemptTime(b));
+// Raw mode → what a human calls it. `group` colours the chip and groups the
+// filter, and is the only thing that must stay in the three-value set the CSS
+// knows (`practice` / `game` / `other`).
+const USAGE_MODES = {
+  'practice':            { icon: '📝', label: 'Practice',          group: 'practice' },
+  'practice-open':       { icon: '📝', label: 'Practice',          group: 'practice' },
+  'quickpractice-open':  { icon: '⚡', label: 'Quick Practice',     group: 'practice' },
+  'topicalpractice-open':{ icon: '🎯', label: 'Topical Practice',  group: 'practice' },
+  'worksheet-open':      { icon: '📄', label: 'Worksheet',         group: 'practice' },
+  'snapmark-open':       { icon: '📸', label: 'Snap & Mark',       group: 'practice' },
+  'flashcards':          { icon: '🗂️', label: 'Flashcards',        group: 'practice' },
+  'preview':             { icon: '👁️', label: 'Preview',           group: 'other'    },
+  'tcg-train':           { icon: '🎓', label: 'Embers Trainer',    group: 'game'     },
+  'tcg-duel':            { icon: '🎴', label: 'Ember Duel',        group: 'game'     },
+  'tcg-siege':           { icon: '🌋', label: 'Ember Siege',       group: 'game'     },
+  'tcg-legends':         { icon: '⚔️', label: 'Ember Legends',     group: 'game'     },
+  'defenders':           { icon: '🏰', label: 'Science Defenders', group: 'game'     },
+  'raiders':             { icon: '🚀', label: 'Science Raiders',   group: 'game'     },
+  'spire':               { icon: '🃏', label: 'Science Spire',     group: 'game'     },
+  'legends':             { icon: '⚔️', label: 'Science Legends',   group: 'game'     },
+  'slayers':             { icon: '🗡️', label: 'Science Slayers',   group: 'game'     },
+  'fps':                 { icon: '🔫', label: 'Science Strike',    group: 'game'     }
+};
+const USAGE_GROUP_ORDER = { practice: 0, game: 1, other: 2 };
 
-    let prev = null, rapidCount = 0, totalScore = 0, totalBlanks = 0;
-    attempts.forEach(a => {
-      const t = attemptTime(a);
-      a._date = t ? new Date(t) : null;
-      a._gapMs = prev != null ? (t - prev) : null;
-      if (a._gapMs != null && a._gapMs < RAPID_ATTEMPT_MS) rapidCount++;
-      totalScore += (a.score || 0);
-      totalBlanks += (a.totalBlanks || 0);
-      prev = t;
-    });
-
-    const last = attempts.length ? attempts[attempts.length - 1]._date : null;
-    const avgPct = totalBlanks > 0 ? Math.round((totalScore / totalBlanks) * 100) + '%' : '--';
-
-    // The points side of the record, from the audit block on this student's
-    // published leaderboard row — so the log and the wallet read together.
-    const ar = (_auditRows || []).find(x => x.uid === uid);
-    const cards = [
-      { label: 'Questions Attempted', value: attempts.length, color: 'var(--accent-orange)' },
-      { label: 'Average Score', value: avgPct, color: 'var(--primary)' },
-      { label: 'Rapid (&lt;15s apart)', value: rapidCount, color: rapidCount ? 'var(--accent-red)' : 'var(--text-muted)' },
-      { label: 'Last Active', value: last ? formatDateTimeSGT(last) : '--', color: 'var(--accent-blue)', small: true }
-    ];
-    if (ar && ar.hasAudit) {
-      const perQ = ar.marked > 0 ? Math.round(ar.earned / ar.marked) : null;
-      cards.push(
-        { label: '🪙 Points now', value: (ar.points | 0).toLocaleString(), color: 'var(--accent-orange)' },
-        { label: 'Points earned all-time', value: (ar.earned | 0).toLocaleString() + (perQ != null ? ` (${perQ}/Q)` : ''), color: 'var(--primary)', small: true },
-        { label: '👻 Duels won', value: (ar.duelWins | 0).toLocaleString(), color: ar.duelWins >= 20 ? 'var(--accent-red)' : 'var(--text-muted)' },
-        { label: '🔥 Embers power', value: (ar.power | 0).toLocaleString(), color: 'var(--accent-blue)' }
-      );
-    }
-    document.getElementById('studentDetailSummary').innerHTML = cards.map(c =>
-      `<div class="usage-card"><div class="usage-card-value" style="color:${c.color};${c.small ? 'font-size:0.8rem;line-height:1.35;' : ''}">${c.value}</div><div class="usage-card-label">${c.label}</div></div>`
-    ).join('');
-
-    const tbody = document.getElementById('studentDetailBody');
-    if (!attempts.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No question attempts recorded for this student yet.</td></tr>';
-      return;
-    }
-    // Display newest first, but the gap was already computed in chronological order.
-    tbody.innerHTML = attempts.slice().reverse().map((a, i) => {
-      const n = attempts.length - i; // attempt number in chronological order
-      const timeStr = a._date ? formatDateTimeSGT(a._date) : 'Unknown';
-      const pct = a.totalBlanks > 0 ? Math.round((a.score / a.totalBlanks) * 100) : null;
-      const scoreStr = a.totalBlanks > 0 ? `${a.score}/${a.totalBlanks} (${pct}%)` : (a.score != null ? String(a.score) : '--');
-      const rapid = a._gapMs != null && a._gapMs < RAPID_ATTEMPT_MS;
-      const gapStr = a._gapMs == null ? '—' : formatGap(a._gapMs);
-      return `<tr${rapid ? ' class="attempt-rapid"' : ''}>
-        <td style="color:var(--text-muted);font-family:'Space Mono',monospace;font-size:0.78rem;">${n}</td>
-        <td style="font-size:0.82rem;white-space:nowrap;">${timeStr}</td>
-        <td style="font-weight:600;font-size:0.85rem;">${escapeHtml(a.questionTitle || a.questionId || 'Untitled question')}</td>
-        <td style="text-align:center;font-family:'Space Mono',monospace;font-size:0.8rem;font-weight:600;color:${pct != null ? (pct >= 50 ? 'var(--primary)' : 'var(--accent-orange)') : 'var(--text-muted)'};">${scoreStr}</td>
-        <td style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml(a.mode || '—')}</td>
-        <td style="font-size:0.78rem;${rapid ? 'color:var(--accent-red);font-weight:700;' : 'color:var(--text-muted);'}">${rapid ? '⚡ ' : ''}${gapStr}</td>
-      </tr>`;
-    }).join('');
-  } catch (err) {
-    console.error('showStudentDetail failed:', err);
-    document.getElementById('studentDetailBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--accent-red);">Could not load this student\'s attempts — check your connection.</td></tr>';
-  }
+// The ONE place a raw mode becomes something to show. An unknown mode keeps its
+// own string — never "Unknown", which would merge two different modes into one
+// row of the breakdown and hide that a mode had been added without a label.
+function usageMode(mode) {
+  const key = String(mode || '').trim();
+  if (!key) return { key: '', icon: '•', label: 'Not recorded', group: 'other' };
+  const m = USAGE_MODES[key];
+  return m ? { key, icon: m.icon, label: m.label, group: m.group }
+           : { key, icon: '•', label: key, group: 'other' };
+}
+function usageModeChip(mode) {
+  const m = usageMode(mode);
+  return '<span class="sut-mode g-' + m.group + '">' + m.icon + ' ' + escapeHtml(m.label) + '</span>';
 }
 
+// The tracker's whole state. `all` is what came back from Firestore ONCE; the
+// filters only ever narrow it, so nothing here needs a second read.
+let _sut = { uid: '', name: '', email: '', all: [], mode: '', result: '', days: '', search: '', loading: false };
+
+// A fraction of the marks earned, so a part-right open answer is not rounded
+// into a pass or a fail. Everything downstream — the verdict, the average, the
+// bar — reads this one number.
+function sutCredit(a) {
+  const t = Number(a && a.totalBlanks) || 0;
+  if (t <= 0) return null;
+  return Math.max(0, Math.min(1, (Number(a.score) || 0) / t));
+}
+// Right / part right / wrong, at the same ≥0.95 threshold the rest of the app
+// treats as "correct" — so a tracker row and a progress counter never disagree
+// about the same answer.
+function sutVerdict(a) {
+  const c = sutCredit(a);
+  if (c == null) return { key: 'unknown', label: '—', cls: 'part' };
+  if (c >= 0.95)  return { key: 'correct', label: 'Correct',    cls: 'ok'   };
+  if (c > 0)      return { key: 'partial', label: 'Part right', cls: 'part' };
+  return              { key: 'wrong',   label: 'Wrong',      cls: 'no'   };
+}
+
+// The bank is the authority on a question's title and topic, so they are
+// resolved at READ time rather than trusted from whatever was stamped on the
+// attempt. Game modes log no title at all, and an edited question's title would
+// otherwise be frozen at whatever it was on the day it was answered.
+function sutQuestionMeta(a) {
+  const id = String((a && a.questionId) || '');
+  const q = id ? (questionBank || []).find(x => x && x.id === id) : null;
+  const title = (q && q.title) || (a && a.questionTitle) || '';
+  const bits = [];
+  if (q && q.topic) bits.push(q.topic);
+  if (q && q.category) bits.push(q.category);
+  return {
+    title: title || (id ? 'Question ' + id.slice(0, 8) : 'Untitled question'),
+    meta: bits.join(' · '),
+    gone: !!(id && !q)          // answered, then deleted from the bank since
+  };
+}
+
+// The rows the filters leave standing. The ONE place the window is decided —
+// the count, the table, the breakdown and the CSV all read it, so the number on
+// screen can never disagree with what gets exported.
+function sutVisible() {
+  const cut = _sut.days ? Date.now() - Number(_sut.days) * 86400000 : 0;
+  const needle = _sut.search.trim().toLowerCase();
+  return _sut.all.filter(a => {
+    if (_sut.mode && String(a.mode || '') !== _sut.mode) return false;
+    if (_sut.result && sutVerdict(a).key !== _sut.result) return false;
+    if (cut && a._t < cut) return false;
+    if (needle) {
+      const m = a._q;
+      if (!((m.title + ' ' + m.meta).toLowerCase().includes(needle))) return false;
+    }
+    return true;
+  });
+}
+
+// Attempts, correct, average and last-done PER MODE — the answer to "what has
+// this child actually been doing", which is what the tracker is for.
+function sutByMode(rows) {
+  const map = new Map();
+  rows.forEach(a => {
+    const m = usageMode(a.mode);
+    const r = map.get(m.key) || { m, n: 0, correct: 0, sum: 0, scored: 0, last: 0 };
+    r.n++;
+    const c = sutCredit(a);
+    if (c != null) { r.sum += c; r.scored++; if (c >= 0.95) r.correct++; }
+    if (a._t > r.last) r.last = a._t;
+    map.set(m.key, r);
+  });
+  return Array.from(map.values()).sort((x, y) =>
+    (USAGE_GROUP_ORDER[x.m.group] - USAGE_GROUP_ORDER[y.m.group]) || (y.n - x.n));
+}
+
+// Open the tracker on one student. Kept under its old name because the usage
+// table, the audit table and the reminder list all call it.
+async function showStudentDetail(uid) {
+  const s = _usageStudentStats[uid] || { uid, name: 'Student', email: '' };
+  _sut = { uid, name: s.name || 'Student', email: s.email || '', all: [],
+           mode: '', result: '', days: '', search: '', loading: true };
+  document.getElementById('studentDetailName').textContent = _sut.name;
+  document.getElementById('studentDetailEmail').textContent = _sut.email;
+  document.getElementById('studentDetailBody').innerHTML =
+    '<div class="sut-empty">Loading this student\'s question log…</div>';
+  document.getElementById('studentDetailOverlay').classList.add('active');
+  try {
+    // Single-field equality query — no composite index needed; sorted client-side.
+    const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', uid)));
+    const rows = [];
+    snap.forEach(d => rows.push(d.data()));
+    if (_sut.uid !== uid) return;                 // a newer open superseded this one
+    // Chronological first, so the gap to the PREVIOUS attempt can be measured;
+    // the table then shows them newest-first without recomputing anything.
+    rows.sort((a, b) => attemptTime(a) - attemptTime(b));
+    let prev = null;
+    rows.forEach(a => {
+      a._t = attemptTime(a);
+      a._gap = prev != null ? (a._t - prev) : null;
+      a._q = sutQuestionMeta(a);
+      prev = a._t;
+    });
+    _sut.all = rows;
+    _sut.loading = false;
+    sutRender();
+  } catch (err) {
+    console.error('showStudentDetail failed:', err);
+    document.getElementById('studentDetailBody').innerHTML =
+      '<div class="sut-empty" style="color:var(--accent-red);">Could not load this student\'s question log — check your connection, then try again.</div>';
+  }
+}
 function closeStudentDetail() {
   document.getElementById('studentDetailOverlay').classList.remove('active');
+  _sut.uid = '';                    // a reply from a superseded load is now ignored
+}
+// Every filter lands here, so the overlay is repainted from exactly one place.
+function sutSetFilter(key, value) {
+  if (!(key in _sut)) return;
+  _sut[key] = value == null ? '' : String(value);
+  sutRender();
+}
+
+function sutRender() {
+  const host = document.getElementById('studentDetailBody');
+  if (!host) return;
+  const all = _sut.all;
+  if (!all.length) {
+    host.innerHTML = '<div class="sut-empty">No questions recorded for this student yet.<br>'
+      + 'Attempts appear here as soon as they answer one — in practice, on a worksheet, or in any game.</div>';
+    return;
+  }
+  const rows = sutVisible();
+  const byMode = sutByMode(rows);
+
+  // ---- summary of the WINDOW on show, not of everything ever ----
+  let sum = 0, scored = 0, correct = 0, rapid = 0;
+  const days = new Set();
+  rows.forEach(a => {
+    const c = sutCredit(a);
+    if (c != null) { sum += c; scored++; if (c >= 0.95) correct++; }
+    if (a._gap != null && a._gap < RAPID_ATTEMPT_MS) rapid++;
+    if (a._t) days.add(new Date(a._t).toDateString());
+  });
+  const avg = scored ? Math.round((sum / scored) * 100) + '%' : '—';
+  const last = rows.length ? rows[rows.length - 1]._t : 0;
+  const cards = [
+    { label: 'Questions done', value: rows.length.toLocaleString(), color: 'var(--accent-orange)' },
+    { label: 'Average score',  value: avg, color: 'var(--primary)' },
+    { label: 'Fully correct',  value: scored ? correct + ' (' + Math.round(correct / scored * 100) + '%)' : '—', color: 'var(--primary)' },
+    { label: 'Modes used',     value: byMode.length, color: 'var(--accent-purple)' },
+    { label: 'Days active',    value: days.size, color: 'var(--accent-blue)' },
+    { label: 'Rapid (&lt;15s apart)', value: rapid, color: rapid ? 'var(--accent-red)' : 'var(--text-muted)' },
+    { label: 'Last done', value: last ? formatDateTimeSGT(new Date(last)) : '—', color: 'var(--accent-blue)', small: true }
+  ];
+  const cardsHtml = '<div class="usage-summary-cards" style="margin-bottom:22px;">' + cards.map(c =>
+    '<div class="usage-card"><div class="usage-card-value" style="color:' + c.color + ';'
+    + (c.small ? 'font-size:0.78rem;line-height:1.35;' : '') + '">' + c.value + '</div>'
+    + '<div class="usage-card-label">' + c.label + '</div></div>').join('') + '</div>';
+
+  // ---- what they have been doing, by mode ----
+  const modeRows = byMode.map(r => {
+    const pct = r.scored ? Math.round((r.sum / r.scored) * 100) : null;
+    const col = pct == null ? 'var(--text-muted)' : pct >= 70 ? 'var(--primary)' : pct >= 40 ? 'var(--accent-orange)' : 'var(--accent-red)';
+    const share = rows.length ? Math.round((r.n / rows.length) * 100) : 0;
+    return '<tr>'
+      + '<td>' + usageModeChip(r.m.key) + '</td>'
+      + '<td class="sut-num" style="text-align:right;font-weight:700;">' + r.n.toLocaleString() + '</td>'
+      + '<td style="width:120px;"><span class="sut-bar"><i style="width:' + share + '%;background:' + col + ';"></i></span>'
+        + '<span class="sut-qmeta">' + share + '% of the log</span></td>'
+      + '<td class="sut-num" style="text-align:right;">' + r.correct.toLocaleString() + '</td>'
+      + '<td class="sut-num" style="text-align:right;font-weight:700;color:' + col + ';">' + (pct == null ? '—' : pct + '%') + '</td>'
+      + '<td style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">' + (r.last ? formatDateTimeSGT(new Date(r.last)) : '—') + '</td>'
+      + '</tr>';
+  }).join('');
+  const breakdown = '<div class="sut-section">'
+    + '<div class="sut-section-title">What they have been doing — by mode</div>'
+    + '<div class="usage-table-wrapper"><table class="usage-table"><thead><tr>'
+    + '<th>Mode</th><th style="text-align:right;">Questions</th><th>Share</th>'
+    + '<th style="text-align:right;">Correct</th><th style="text-align:right;">Avg</th><th>Last done</th>'
+    + '</tr></thead><tbody>' + (modeRows || '<tr><td colspan="6" class="sut-empty">Nothing matches these filters.</td></tr>')
+    + '</tbody></table></div></div>';
+
+  // ---- the filter bar. Built from the modes THIS student has actually used,
+  // so it never offers a mode that would empty the table. ----
+  const usedModes = sutByMode(all);
+  const opt = (v, lbl, cur) => '<option value="' + escapeHtml(v) + '"' + (cur === v ? ' selected' : '') + '>' + escapeHtml(lbl) + '</option>';
+  const filters = '<div class="sut-filters">'
+    + '<label>Mode <select onchange="sutSetFilter(\'mode\', this.value)">'
+      + opt('', 'All modes (' + all.length + ')', _sut.mode)
+      + usedModes.map(r => opt(r.m.key, r.m.icon + ' ' + r.m.label + ' (' + r.n + ')', _sut.mode)).join('')
+    + '</select></label>'
+    + '<label>Result <select onchange="sutSetFilter(\'result\', this.value)">'
+      + opt('', 'Any result', _sut.result) + opt('correct', '✅ Correct', _sut.result)
+      + opt('partial', '🟡 Part right', _sut.result) + opt('wrong', '❌ Wrong', _sut.result)
+    + '</select></label>'
+    + '<label>When <select onchange="sutSetFilter(\'days\', this.value)">'
+      + opt('', 'All time', _sut.days) + opt('1', 'Today', _sut.days) + opt('7', 'Last 7 days', _sut.days)
+      + opt('30', 'Last 30 days', _sut.days) + opt('90', 'Last 90 days', _sut.days)
+    + '</select></label>'
+    + '<input type="search" placeholder="Search question or topic…" value="' + escapeHtml(_sut.search)
+      + '" oninput="sutSetFilter(\'search\', this.value)">'
+    + '<span class="sut-count">' + rows.length.toLocaleString() + ' of ' + all.length.toLocaleString() + ' shown</span>'
+    + '</div>';
+
+  // ---- the log itself, newest first ----
+  const logRows = rows.slice().reverse().map((a, i) => {
+    const n = rows.length - i;                       // its number in chronological order
+    const v = sutVerdict(a);
+    const c = sutCredit(a);
+    const pct = c == null ? null : Math.round(c * 100);
+    const score = (Number(a.totalBlanks) || 0) > 0 ? a.score + '/' + a.totalBlanks : (a.score != null ? String(a.score) : '—');
+    const isRapid = a._gap != null && a._gap < RAPID_ATTEMPT_MS;
+    return '<tr' + (isRapid ? ' class="attempt-rapid"' : '') + '>'
+      + '<td class="sut-num" style="color:var(--text-muted);font-size:0.76rem;">' + n + '</td>'
+      + '<td style="font-size:0.8rem;white-space:nowrap;">' + (a._t ? formatDateTimeSGT(new Date(a._t)) : 'Unknown') + '</td>'
+      + '<td><div class="sut-qtitle">' + escapeHtml(a._q.title)
+        + (a._q.gone ? ' <span class="sut-qmeta" title="This question has since been deleted from the bank">· removed from the bank</span>' : '')
+        + '</div>' + (a._q.meta ? '<div class="sut-qmeta">' + escapeHtml(a._q.meta) + '</div>' : '') + '</td>'
+      + '<td>' + usageModeChip(a.mode) + '</td>'
+      + '<td style="text-align:center;"><span class="sut-v ' + v.cls + '">' + v.label + '</span>'
+        + '<div class="sut-qmeta sut-num">' + score + (pct == null ? '' : ' · ' + pct + '%') + '</div></td>'
+      + '<td style="font-size:0.77rem;' + (isRapid ? 'color:var(--accent-red);font-weight:700;' : 'color:var(--text-muted);') + '">'
+        + (isRapid ? '⚡ ' : '') + formatGap(a._gap) + '</td>'
+      + '</tr>';
+  }).join('');
+  const log = '<div class="sut-section">'
+    + '<div class="sut-section-title">Every question, newest first</div>' + filters
+    + '<div class="usage-table-wrapper"><table class="usage-table"><thead><tr>'
+    + '<th style="width:34px;">#</th><th>Date &amp; time (SGT)</th><th>Question</th><th>Mode</th>'
+    + '<th style="text-align:center;">Result</th><th>Gap</th>'
+    + '</tr></thead><tbody>'
+    + (logRows || '<tr><td colspan="6" class="sut-empty">No questions match these filters — widen them to see more.</td></tr>')
+    + '</tbody></table></div></div>';
+
+  host.innerHTML = cardsHtml + breakdown + log;
+}
+
+// One student's whole log as a spreadsheet — exactly the rows on screen, so a
+// teacher who filtered to one mode exports that mode and nothing else.
+function sutExportCsv() {
+  const rows = sutVisible();
+  if (!rows.length) { showToast('Nothing to export — widen the filters first', 'error'); return; }
+  const esc = v => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const cols = ['#', 'Date & time (SGT)', 'Question', 'Question ID', 'Topic', 'Mode', 'Mode (raw)',
+                'Score', 'Out of', 'Percent', 'Result', 'Gap from previous'];
+  const lines = [cols.join(',')].concat(rows.map((a, i) => {
+    const c = sutCredit(a);
+    return [i + 1, a._t ? formatDateTimeSGT(new Date(a._t)) : '', a._q.title, a.questionId || '', a._q.meta,
+            usageMode(a.mode).label, a.mode || '', a.score == null ? '' : a.score, a.totalBlanks || '',
+            c == null ? '' : Math.round(c * 100), sutVerdict(a).label, formatGap(a._gap)].map(esc).join(',');
+  }));
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'question-log-' + (_sut.name || 'student').replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '-' + _todayKey() + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  showToast('⬇️ Exported ' + rows.length + ' question' + (rows.length === 1 ? '' : 's'), 'success');
 }
 
 // =====================================================================
@@ -35436,6 +35688,55 @@ function _gamePtsReset() {
   _gameRunPts = 0;
   document.querySelectorAll('[data-game-pts]').forEach(el => { el.textContent = '0'; });
 }
+// ---------------------------------------------------------------------------
+// THE GAME ATTEMPT LOG — one door, so no mode can be forgotten
+// ---------------------------------------------------------------------------
+// The Student Usage Tracker promises the teacher EVERY question a student has
+// completed, and in what mode. That promise is only as good as the weakest
+// game: a mode that pays points and never writes an attempt is a mode whose
+// questions the teacher cannot see at all, and nothing on any screen says so.
+//
+// Ember Legends was exactly that — it called rpgAwardGameQuestion (so the
+// points, the ⚡ bar and the All-Time counters all moved) and wrote no attempt,
+// so a student could answer two hundred questions inside it and the tracker
+// would show none of them.
+//
+// Three near-identical copies of this function had already been written (the
+// trainer, the duel, the Siege) and a fourth was simply missed. So there is now
+// ONE, and every game calls it. Adding a mode means adding a call here and a
+// label in USAGE_MODES — never a fourth copy.
+//
+// It is deliberately fire-and-forget: a failed log must never interrupt a game
+// mid-answer. The local stats are stamped first so the serving rotation treats
+// the question as done even when the network is out.
+function logGameAttempt(q, correct, mode, ms) {
+  if (!q || !q.db || !q.id) return;          // a built-in fallback question is not the teacher's
+  try { _gqMark(q.id); } catch (e) {}
+  if (!(currentUser && currentUser.role === 'student')) return;
+  try { noteAttemptLocally(q.id, correct ? 1 : 0, 1); } catch (e) {}
+  try {
+    addDoc(collection(db, 'questionAttempts'), {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      displayName: currentUser.name,
+      questionId: q.id,
+      // The bank is the authority on the title, and a game question is served
+      // from it — so the tracker resolves the title at READ time and this stays
+      // as the games have always written it.
+      questionTitle: q.title || '',
+      score: correct ? 1 : 0,
+      totalBlanks: 1,
+      answerHash: '',
+      ms: Math.max(0, Math.round(Number(ms) || 0)),
+      timestamp: Timestamp.now(),
+      mode: String(mode || 'game')
+    }).catch(err => console.warn('game attempt log failed', err));
+  } catch (e) {}
+}
+// The embedded games report their answers through one postMessage, so the mode
+// arrives as a string from inside an iframe: it is matched against this list
+// rather than trusted, and anything unknown falls back to Defenders.
+const SD_GAME_MODES = ['defenders', 'raiders', 'spire', 'legends', 'slayers'];
 function _sdRecordAttempt(d) {
   try {
     if (!currentUser || currentUser.role !== 'student' || !d || !d.questionId) return;
@@ -35451,7 +35752,11 @@ function _sdRecordAttempt(d) {
       answerHash: '',
       ms: ms,
       timestamp: Timestamp.now(),
-      mode: (d.mode === 'raiders' ? 'raiders' : d.mode === 'legends' ? 'legends' : d.mode === 'slayers' ? 'slayers' : 'defenders')
+      // The mode is taken from an EMBEDDED GAME, so it is checked against the
+      // list rather than trusted — but an unrecognised one must not be filed as
+      // Defenders. Science Spire was, which is why its questions used to show up
+      // in the tracker under a game the student had never opened.
+      mode: (SD_GAME_MODES.indexOf(String(d.mode || '')) >= 0 ? String(d.mode) : 'defenders')
     }).catch(err => console.warn('SD record attempt failed', err));
     noteAttemptLocally(d.questionId, d.correct ? 1 : 0, 1);
     // Count this game MCQ toward the monthly unique-questions total using the
@@ -41536,19 +41841,7 @@ function _tcgQuizAnswer(idx) {
   // Training answers on real bank questions count as attempts everywhere else:
   // stamp the shared game rotation and write the teacher-visible attempt log,
   // so practice/quests/games stop re-serving trainer-grinded questions as new.
-  if (q.db && q.id) {
-    try { _gqMark(q.id); } catch (e) {}
-    if (currentUser && currentUser.role === 'student') {
-      try { noteAttemptLocally(q.id, correct ? 1 : 0, 1); } catch (e) {}
-      try {
-        addDoc(collection(db, 'questionAttempts'), {
-          uid: currentUser.uid, email: currentUser.email, displayName: currentUser.name,
-          questionId: q.id, questionTitle: '', score: correct ? 1 : 0, totalBlanks: 1,
-          answerHash: '', ms: 0, timestamp: Timestamp.now(), mode: 'tcg-train'
-        }).catch(err => console.warn('tcg attempt log failed', err));
-      } catch (e) {}
-    }
-  }
+  logGameAttempt(q, correct, 'tcg-train', _tcgQuiz.at ? (performance.now() - _tcgQuiz.at) : 0);
   // Training answers pay points like every other game mode — training a
   // monster up and saving for the next booster pack are the same session now.
   const pts = rpgAwardGameQuestion(q && q.id, correct, _tcgQuiz.at ? performance.now() - _tcgQuiz.at : 0);
@@ -45540,7 +45833,7 @@ function duelAnswer(i) {
   // not rpgAwardGameQuestion decided to pay for it, because the board ranks on
   // questions done, not on points earned.
   try { duelNoteQuestion(correct); } catch (_) {}
-  try { _duelLogAttempt(q, correct); } catch (_) {}
+  try { _duelLogAttempt(q, correct, ms); } catch (_) {}
   const box = document.getElementById('duelQuiz');
   (box || document).querySelectorAll('.duel-quiz-opt').forEach((b, n) => {
     b.disabled = true;
@@ -45609,21 +45902,9 @@ function duelRefreshBoard() {
   });
   return any;
 }
-// The teacher's attempt log — same shape as the Siege's, with its own mode
-// string so duel answers are tellable apart in My Progress.
-function _duelLogAttempt(q, correct) {
-  if (!q || !q.db || !q.id) return;                 // never log a fallback question
-  try { _gqMark(q.id); } catch (e) {}
-  if (!(currentUser && currentUser.role === 'student')) return;
-  try { noteAttemptLocally(q.id, correct ? 1 : 0, 1); } catch (e) {}
-  try {
-    addDoc(collection(db, 'questionAttempts'), {
-      uid: currentUser.uid, email: currentUser.email, displayName: currentUser.name,
-      questionId: q.id, questionTitle: '', score: correct ? 1 : 0, totalBlanks: 1,
-      answerHash: '', ms: 0, timestamp: Timestamp.now(), mode: 'tcg-duel'
-    }).catch(err => console.warn('duel attempt log failed', err));
-  } catch (e) {}
-}
+// The teacher's attempt log — its own mode string, so duel answers are
+// tellable apart from every other game in the Student Usage Tracker.
+function _duelLogAttempt(q, correct, ms) { logGameAttempt(q, correct, 'tcg-duel', ms); }
 
 // =====================================================================
 // 🌋 EMBER SIEGE — lane defence, powered by science questions
@@ -46642,7 +46923,7 @@ function emsAnswer(i) {
   emsSyncHud();
   emsRenderDeck();
   emsManaPop(gain);
-  _emsLogAttempt(q, correct);
+  _emsLogAttempt(q, correct, ms);
   const body = document.getElementById('emsQuizBody');
   const btns = body ? body.querySelectorAll('.ems-quiz-opt') : [];
   btns.forEach(b => { b.disabled = true; const bi = +b.dataset.i; if (bi === q.a) b.classList.add('right'); else if (bi === i) b.classList.add('wrong'); });
@@ -46672,19 +46953,7 @@ function emsAnswer(i) {
 }
 // Siege answers count like every other attempt in the app: same shared
 // rotation, same teacher-visible attempt log.
-function _emsLogAttempt(q, correct) {
-  if (!q || !q.db || !q.id) return;
-  try { _gqMark(q.id); } catch (e) {}
-  if (!(currentUser && currentUser.role === 'student')) return;
-  try { noteAttemptLocally(q.id, correct ? 1 : 0, 1); } catch (e) {}
-  try {
-    addDoc(collection(db, 'questionAttempts'), {
-      uid: currentUser.uid, email: currentUser.email, displayName: currentUser.name,
-      questionId: q.id, questionTitle: '', score: correct ? 1 : 0, totalBlanks: 1,
-      answerHash: '', ms: 0, timestamp: Timestamp.now(), mode: 'tcg-siege'
-    }).catch(err => console.warn('siege attempt log failed', err));
-  } catch (e) {}
-}
+function _emsLogAttempt(q, correct, ms) { logGameAttempt(q, correct, 'tcg-siege', ms); }
 function emsManaPop(gain) {
   const host = document.querySelector('.ems-mana');
   if (!host) return;
@@ -47977,6 +48246,10 @@ function elgAnswer(i) {
   r.answered++;
   const pts = rpgAwardGameQuestion(q && q.id, correct, ms);
   r.qPoints = (r.qPoints | 0) + pts;
+  // Legends answers reach the teacher's log like every other mode's. Until
+  // v1.297.0 this was the ONE game that paid for a question and never recorded
+  // it, so a whole run of them was invisible in the Student Usage Tracker.
+  try { logGameAttempt(q, correct, 'tcg-legends', ms); } catch (_) {}
   let extra = '';
   if (correct) {
     r.correct++; r.streak++; r.bestStreak = Math.max(r.bestStreak, r.streak);
@@ -56211,6 +56484,8 @@ window.onLegendsObjDrop = onLegendsObjDrop;
 window.onLegendsObjPick = onLegendsObjPick;
 window.resetLegendsObj = resetLegendsObj;
 window.showStudentDetail = showStudentDetail;
+window.sutSetFilter = sutSetFilter;
+window.sutExportCsv = sutExportCsv;
 window.setStudentLevel = setStudentLevel;
 window.setPrizeMonth = setPrizeMonth;
 window.closeStudentDetail = closeStudentDetail;
