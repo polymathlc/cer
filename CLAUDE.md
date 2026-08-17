@@ -645,6 +645,74 @@ The whole point: the user checks the version shown in the app's sidebar against 
 - Keep spacing scale consistent across the whole app so every surface feels like the same design system.
 - (The user wants this as a standing design principle for ALL their projects — mirror this section into other repos' CLAUDE.md / their global memory.)
 
+## 📊 The Student Usage Tracker (v1.297.0)
+
+`USAGE_MODES` / `usageMode` / `_sut` / `sutRender` / `sutVisible` / `sutByMode` /
+`sutExportCsv` (in `app.js`, search `THE STUDENT USAGE TRACKER`), plus the
+`#studentDetailOverlay` and the `.sut-*` CSS in `index.html`. Opened by clicking
+a student anywhere on the Usage page. **The same block is in all four portals —
+keep them in step**; only the collection constant and the mode table differ.
+
+Every question one student has completed, the result they got, and the **mode**
+they did it in. The attempt log was always being written; what was missing was a
+way to READ it. The old drill-in listed the rows and nothing else, so a teacher
+looking at four hundred attempts could not answer either of the two questions
+they actually have — *what has this child been doing?* and *how are they getting
+on in it?* A list that can only be scrolled is a list nobody reads.
+
+- **`USAGE_MODES` is the ONE place a raw mode string becomes words.** The log
+  stores `tcg-siege`, `quickpractice-open`, `snapmark-open` — internal names, not
+  English. The chip, the breakdown, the filter dropdown and the CSV all read that
+  map, so they cannot drift apart. A mode with **no entry still shows**, as its
+  own raw string in the `other` group, rather than being dropped or folded into
+  "Unknown": an unlabelled mode is a missing label, but a question dropped out of
+  the log because nobody wrote a label for its mode is a **missing question**,
+  and two unlabelled modes merged into one row is a breakdown that lies.
+- **The breakdown BY MODE is the headline, not the log.** "43 in Quick Practice
+  at 71%, 210 in Ember Siege at 88%" is what a teacher opened this for; the
+  row-by-row log is the evidence underneath it. Practice modes sort ahead of
+  games, so the schoolwork is read first even when a game has more attempts.
+- **It renders from state.** `_sut` holds the attempts and the filters and
+  `sutRender()` paints the whole overlay from them, so changing a filter never
+  re-reads Firestore — sweeping through the modes is instant and costs nothing.
+  `closeStudentDetail` clears `_sut.uid`, which is also what makes a reply from
+  a superseded load harmless.
+- **`sutVisible()` is the ONE place the window is decided**, and the count, the
+  table, the breakdown and the CSV all read it. A CSV holding more rows than the
+  table it came from is a teacher sending a parent a report of work in a mode
+  they had filtered away.
+- **The verdict threshold is the app-wide ≥0.95** that `progressOnMarked` and
+  `lgNoteWin` already use, and `sutCredit` is FRACTIONAL — a half-marks open
+  answer is **part right**, its own verdict, never rounded into a pass or a fail.
+- **The title and topic are resolved from the BANK at read time**
+  (`sutQuestionMeta`), not trusted from the attempt: the games log no title at
+  all, and an edited question would otherwise wear its old title in the log
+  forever. A question **deleted since** is marked *removed from the bank* and
+  keeps its row — the work was still done.
+- It is **READ-ONLY**. Nothing in the block writes anything anywhere.
+- Run **`node tools/usage-tracker-tests.mjs`** after touching any of it.
+
+### Every mode must actually log (v1.297.0)
+
+The tracker is only as good as the weakest game: a mode that pays points and
+writes no attempt is a mode whose questions the teacher cannot see at all, and
+nothing on any screen says so.
+
+- **`logGameAttempt(q, correct, mode, ms)` is the ONE door.** Three
+  near-identical copies had already been written (the trainer, the duel, the
+  Siege) and a fourth was simply missed — **Ember Legends called
+  `rpgAwardGameQuestion` and logged nothing**, so a student could answer two
+  hundred questions inside it and the tracker showed none of them. Adding a game
+  is a call here plus a row in `USAGE_MODES`, never a fourth copy.
+- **A mode arriving from an EMBEDDED GAME is checked, not trusted.**
+  `_sdRecordAttempt` used to map anything unrecognised to `defenders`, so
+  **Science Spire's questions were filed under a game the student never opened**.
+  `SD_GAME_MODES` is the list; an unknown mode still falls back rather than
+  writing a mode nothing can label.
+- It is fire-and-forget, and the local rotation stamp comes FIRST: a failed log
+  must never interrupt a game mid-answer, and a question answered offline must
+  still stop being re-served.
+
 ## The clone stamp shows what it is about to stamp (vv1.294.0)
 
 `_annotClonePeekSrc` / `_annotUpdateClonePeek` / `ANNOT_PEEK_MIN` and the
@@ -717,6 +785,16 @@ that door: a line to type in, and the same image model behind it.
   left sitting in the box** one Enter away from being run on this one.
 
 ## House rules
+- After touching **the Student Usage Tracker** (`USAGE_MODES`, `usageMode`,
+  `sutCredit`, `sutVerdict`, `sutQuestionMeta`, `sutVisible`, `sutByMode`,
+  `sutExportCsv`) or **`logGameAttempt` / `SD_GAME_MODES`**, run
+  `node tools/usage-tracker-tests.mjs`. Every failure here is silent and a
+  teacher acts on it: a mode that falls out of the log is a child's work made
+  invisible, a verdict threshold that drifts from the app-wide 0.95 makes the
+  tracker and the progress counters disagree about the same answer with nothing
+  to say which is lying, and an export that reads a different window from the
+  table it came from sends a parent a report of work in a mode the teacher had
+  filtered away.
 - After touching **the clone stamp's live preview** (`_annotClonePeekSrc`,
   `_annotUpdateClonePeek`, `ANNOT_PEEK_MIN`, `_annotUpdateBrushRing`), run
   `node tools/clone-preview-tests.mjs`. A preview that does not appear is

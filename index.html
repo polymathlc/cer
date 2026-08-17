@@ -4891,6 +4891,56 @@ option {
 .usage-table tbody tr.attempt-rapid:hover { background: var(--accent-red-light); }
 .usage-open-hint { color: var(--primary); font-weight: 600; font-size: 0.8rem; white-space: nowrap; }
 
+
+/* ---- 📊 Student Usage Tracker ------------------------------------------- */
+/* The whole overlay is rendered from state, so everything here is layout — no
+   rule may depend on a row's position, or a filter would repaint it wrong. */
+.sut-dialog { max-width: 1120px; width: 97%; text-align: left; max-height: 92vh;
+  overflow-y: auto; padding: 26px; }
+.sut-head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+.sut-head h3 { margin-bottom: 3px; }
+.sut-head-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.sut-intro { color: var(--text-muted); font-size: 0.83rem; line-height: 1.7; margin: 12px 0 20px; }
+.sut-section { margin-bottom: 24px; }
+.sut-section-title { font-size: 0.79rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-muted); font-weight: 700; margin-bottom: 12px; }
+.sut-empty { padding: 34px 20px; text-align: center; color: var(--text-muted); font-size: 0.86rem; line-height: 1.7; }
+
+/* The mode chip — one look wherever a mode is named, so the breakdown table and
+   the log read as the same vocabulary. */
+.sut-mode { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px;
+  border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--border);
+  font-size: 0.76rem; font-weight: 600; color: var(--text); white-space: nowrap; }
+.sut-mode.g-practice { background: var(--primary-light); border-color: transparent; color: var(--primary); }
+.sut-mode.g-game     { background: var(--accent-purple-light); border-color: transparent; color: var(--accent-purple); }
+.sut-mode.g-other    { background: var(--accent-blue-light); border-color: transparent; color: var(--accent-blue); }
+
+/* Filters */
+.sut-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+.sut-filters label { font-size: 0.8rem; color: var(--text-muted); display: inline-flex;
+  align-items: center; gap: 6px; }
+.sut-filters select, .sut-filters input {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); font-size: 0.82rem; color: var(--text); font-family: inherit;
+  -webkit-appearance: auto; appearance: auto;
+}
+.sut-filters input[type="search"] { min-width: 190px; }
+.sut-count { font-size: 0.8rem; color: var(--text-muted); margin-left: auto; }
+
+/* Verdict pills — the RESULT of a question at a glance. */
+.sut-v { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.74rem;
+  font-weight: 700; white-space: nowrap; }
+.sut-v.ok   { background: var(--primary-light);       color: var(--primary); }
+.sut-v.part { background: var(--accent-orange-light); color: var(--accent-orange); }
+.sut-v.no   { background: var(--accent-red-light);    color: var(--accent-red); }
+
+.sut-bar { display: block; height: 6px; border-radius: 999px; background: var(--surface-alt);
+  overflow: hidden; min-width: 74px; }
+.sut-bar i { display: block; height: 100%; border-radius: 999px; }
+.sut-qtitle { font-weight: 600; font-size: 0.85rem; line-height: 1.45; }
+.sut-qmeta { color: var(--text-muted); font-size: 0.75rem; margin-top: 2px; }
+.sut-num { font-family: 'Space Mono', monospace; white-space: nowrap; }
+
 /* ---- 🕵️ Activity & points audit ---- */
 .usage-table tbody tr.audit-flagged { background: var(--accent-orange-light); }
 .usage-table tbody tr.audit-flagged:hover { background: var(--accent-orange-light); }
@@ -10894,33 +10944,25 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 
 <!-- ==================== STUDENT ACTIVITY DETAIL OVERLAY (Admin Only) ==================== -->
 <div class="confirm-overlay" id="studentDetailOverlay">
-  <div class="confirm-dialog" style="max-width:900px;width:96%;text-align:left;max-height:90vh;overflow-y:auto;padding:24px;">
-    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:4px;">
-      <div style="flex:1;min-width:0;">
-        <h3 id="studentDetailName" style="margin-bottom:2px;">Student</h3>
+  <div class="confirm-dialog sut-dialog">
+    <div class="sut-head">
+      <div style="min-width:0;">
+        <h3 id="studentDetailName">Student</h3>
         <div id="studentDetailEmail" style="color:var(--text-muted);font-size:0.82rem;"></div>
       </div>
-      <button class="btn btn-outline" onclick="closeStudentDetail()" style="font-size:0.8rem;padding:6px 12px;">Close</button>
+      <div class="sut-head-actions">
+        <button class="btn btn-outline" onclick="sutExportCsv()" style="font-size:0.8rem;padding:6px 12px;" title="Download this student's whole question log as a spreadsheet">⬇️ Export CSV</button>
+        <button class="btn btn-outline" onclick="closeStudentDetail()" style="font-size:0.8rem;padding:6px 12px;">Close</button>
+      </div>
     </div>
-    <p style="color:var(--text-muted);font-size:0.82rem;margin:10px 0 16px;">Every question this student attempted, in order, with the exact time (Singapore time). Attempts answered less than 15&nbsp;seconds after the previous one are highlighted in red — rapid-fire answers can be a sign of copying.</p>
-    <div id="studentDetailSummary" class="usage-summary-cards" style="margin-bottom:18px;"></div>
-    <div class="usage-table-wrapper">
-      <table class="usage-table">
-        <thead>
-          <tr>
-            <th style="width:34px;">#</th>
-            <th>Date &amp; Time (SGT)</th>
-            <th>Question</th>
-            <th style="text-align:center;">Score</th>
-            <th>Mode</th>
-            <th>Gap</th>
-          </tr>
-        </thead>
-        <tbody id="studentDetailBody">
-          <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">Loading…</td></tr>
-        </tbody>
-      </table>
-    </div>
+    <p class="sut-intro">
+      <b>Every question this student has completed</b> — the result they got, and the mode they did it in
+      (practice, worksheets, Snap &amp; Mark and every game). Times are Singapore time.
+      Attempts answered less than 15&nbsp;seconds after the previous one are highlighted in red: rapid-fire
+      answers can be a sign of copying, though a run of easy MCQs inside a game looks the same, so treat it
+      as a prompt to look rather than a verdict.
+    </p>
+    <div id="studentDetailBody"></div>
   </div>
 </div>
 
