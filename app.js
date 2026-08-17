@@ -1716,7 +1716,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.297.0';
+const APP_VERSION = 'v1.298.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -14252,6 +14252,46 @@ function printAnswerLines(block, text) {
   return Math.max(PRINT_ANSWER_LINES, Math.min(PRINT_LINES_MAX, need));
 }
 
+// A printed MCQ needs somewhere to WRITE THE ANSWER.
+//
+// On screen an MCQ is answered by tapping an option, so nothing had to be
+// written down — and the printed sheet inherited exactly that: four options
+// with a radio circle beside each and no answer box anywhere. A student writes
+// their choice in the margin, two students write it in two different places,
+// and a teacher marking thirty scripts has nowhere to look. Every past paper
+// this app reads FROM prints the bracket; the worksheets it printed did not.
+//
+// `_printMcqBlockHtml` is the ONE place a printed MCQ is built, and BOTH print
+// paths (`doPrintWorksheetOpen` and `buildWorksheetHtml`) call it through an
+// explicit `case 'mcq'`. They had already drifted apart once over the answer
+// KEY — one path keyed MCQs and the other did not — and a shared function is
+// the only thing that stops the same thing happening to the sheet itself.
+//
+// The box is sized and placed like the paper's: one line, right-aligned under
+// the options, so it reads as belonging to the question above it and never
+// competes with an open-ended writing box for the eye.
+function _printMcqBlockHtml(block, part) {
+  const html = renderImportedBlockStudent(block);
+  // A box on a question with NO options is a mark the student can never earn:
+  // there is nothing to choose, so there is nothing to write in it. Same rule
+  // as `syStudentHtml` refusing a block with nothing given.
+  if (!(block && (block.options || []).length)) return html;
+  return html + _printMcqAnswerBoxHtml(part);
+}
+
+// The bracket itself. The part letter is printed ON the box (Answer (b):)
+// because a question with parts prints three of these down one sheet, and
+// three identical unlabelled boxes is exactly the confusion parts exist to
+// prevent. It comes from the SAME `qPartOf` map the rest of the page uses, so
+// the label on the box and the label on the key cannot disagree.
+function _printMcqAnswerBoxHtml(part) {
+  const label = qPartLabel(part);
+  return `<div class="print-mcq-answer">`
+    + `<span class="print-mcq-answer-label">Answer${label ? ' ' + escapeHtml(label) : ''}:</span>`
+    + `<span class="print-mcq-answer-slot"></span>`
+    + `</div>`;
+}
+
 // ===== OPEN ENDED MODE =====
 function doPrintWorksheetOpen() {
   const selected = questionBank.filter(q => printSelectedIds.has(q.id));
@@ -14361,6 +14401,15 @@ function doPrintWorksheetOpen() {
           } else {
             qHtml += `<div class="print-text-block">${escapeHtmlKeepLines(block.text || '')}</div>`;
           }
+          break;
+        }
+        // Explicit, so it does NOT fall through to the shared default: a
+        // printed MCQ carries an answer box the on-screen one has no need of.
+        // `buildWorksheetHtml` carries the identical case — keep the two in
+        // step, which is what `_printMcqBlockHtml` is for.
+        case 'mcq': {
+          qHtml += _printMcqBlockHtml(block, bPart);
+          _pushBlockAnswerKey(qSections, block, bPart);
           break;
         }
         default: {
@@ -22518,6 +22567,15 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             } else {
               qHtml += `<div class="print-text-block">${escapeHtmlKeepLines(block.text || '')}</div>`;
             }
+            break;
+          }
+          // Explicit, for the reason `fillblank` is: the shared student
+          // rendering has no answer box, and a printed MCQ needs one. The
+          // identical case is in `doPrintWorksheetOpen` and both build the
+          // block through `_printMcqBlockHtml`, so the two sheets cannot drift.
+          case 'mcq': {
+            qHtml += _printMcqBlockHtml(block, bPart);
+            _pushBlockAnswerKey(qSections, block, bPart);
             break;
           }
           default: {

@@ -713,6 +713,53 @@ nothing on any screen says so.
   must never interrupt a game mid-answer, and a question answered offline must
   still stop being re-served.
 
+## 🔘 A printed MCQ has somewhere to write the answer (v1.298.0)
+
+`_printMcqBlockHtml` / `_printMcqAnswerBoxHtml` (in `app.js`, search `A printed
+MCQ needs somewhere to WRITE THE ANSWER`), plus the `.print-mcq-answer*` rules
+inside `index.html`'s `@media print` block.
+
+On screen an MCQ is answered by tapping an option, so nothing has to be written
+down — and the printed sheet inherited exactly that: four options, a radio
+circle beside each, and no answer box anywhere on the page. A student writes
+their choice in the margin, thirty students write it in thirty different
+places, and the teacher marking the pile has nowhere to look. Every past paper
+this app READS prints the bracket; the worksheets it printed did not.
+
+- **`_printMcqBlockHtml(block, part)` is the ONE place a printed MCQ is built**,
+  and BOTH print paths call it through an explicit `case 'mcq'` —
+  `doPrintWorksheetOpen` and `buildWorksheetHtml`. Those two switches had
+  already drifted apart once over the answer KEY (path A keyed MCQs, path B did
+  not), and a shared function is the only thing that stops the same thing
+  happening to the sheet itself. The drift is silent: the box appears on a
+  worksheet printed from the bank and not on the same worksheet printed from
+  📄 My Worksheets.
+- **Taking the MCQ out of the `default` branch takes it away from
+  `_pushBlockAnswerKey`**, which is called there. Both new cases push it
+  explicitly, or a mostly-MCQ paper goes back to printing a key that silently
+  skips most of its questions — which is the exact bug v1.284.0 fixed.
+- **An MCQ with NO options gets no box.** There is nothing to choose, so there
+  is nothing to write: a box there is a mark the student can never earn, and an
+  empty bracket under a blank question reads as a printing fault. Same rule as
+  `syStudentHtml` refusing a block with nothing given.
+- **The part letter is printed ON the box** (*Answer (b):*), from the same
+  `qPartOf` map the rest of the page reads, so the label on the box and the
+  label on the key cannot disagree. A question with parts prints three of these
+  down one sheet, and three identical unlabelled boxes is exactly the confusion
+  parts exist to prevent.
+- **`renderImportedBlockStudent` is untouched.** It is shared with practice, and
+  a bracket rendered there would put an empty box under every MCQ a student
+  answers by tapping.
+- The box is **one line and right-aligned**, and that is deliberate: a tall
+  bordered box on this sheet already means an open-ended writing box
+  (`.print-open-answer-box`), and a printed MCQ must not look like it wants a
+  sentence. It carries `break-inside: avoid` so it is never stranded at the top
+  of the next sheet away from the options it belongs to.
+- The extra height is measured, not assumed — it goes through the print planner
+  like everything else (see **The print planner must MEASURE**), so the
+  two-compact-MCQs-per-page packing re-plans around it for free.
+- Run **`node tools/print-mcq-box-tests.mjs`** after touching any of it.
+
 ## The clone stamp shows what it is about to stamp (vv1.294.0)
 
 `_annotClonePeekSrc` / `_annotUpdateClonePeek` / `ANNOT_PEEK_MIN` and the
@@ -795,6 +842,14 @@ that door: a line to type in, and the same image model behind it.
   to say which is lying, and an export that reads a different window from the
   table it came from sends a parent a report of work in a mode the teacher had
   filtered away.
+- After touching **the printed MCQ answer box** (`_printMcqBlockHtml`,
+  `_printMcqAnswerBoxHtml`, either print path's `case 'mcq'`, the
+  `.print-mcq-answer*` print CSS), run `node tools/print-mcq-box-tests.mjs`.
+  Every failure here is found in front of a class rather than at a keyboard,
+  and the worst of them is silent: the two print paths drifting apart, so the
+  box prints from one button and not from the other. Taking the MCQ out of the
+  `default` branch also takes it away from `_pushBlockAnswerKey`, which the
+  harness pins — a key that drops every MCQ prints perfectly and looks tidy.
 - After touching **the clone stamp's live preview** (`_annotClonePeekSrc`,
   `_annotUpdateClonePeek`, `ANNOT_PEEK_MIN`, `_annotUpdateBrushRing`), run
   `node tools/clone-preview-tests.mjs`. A preview that does not appear is

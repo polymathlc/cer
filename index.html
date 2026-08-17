@@ -3127,6 +3127,41 @@ option {
     height: 20pt;
     width: 100%;
   }
+  /* The MCQ answer box — where the student writes the option they chose.
+     A printed MCQ used to end at its last option, so the answer went in the
+     margin, in a different place on every script. Right-aligned and one line
+     tall on purpose: it belongs to the question above it and must never read
+     as an open-ended writing box, which is the other thing a bordered box on
+     this sheet means. `break-inside: avoid` keeps it with its options — a box
+     stranded at the top of the next sheet is a box nobody connects to a
+     question. */
+  .print-mcq-answer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8pt;
+    margin: 6pt 0 8pt 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Deliberately NOT uppercased, unlike the CER labels above it: the part
+     letter is printed inside this label, and `text-transform` turned the
+     question's own (a) into (A) — the same part named two ways on one sheet. */
+  .print-mcq-answer-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9pt;
+    letter-spacing: 0.04em;
+    font-weight: 700;
+    color: #555;
+  }
+  .print-mcq-answer-slot {
+    display: inline-block;
+    width: 52pt;
+    height: 24pt;
+    border: 1.5pt solid #999;
+    border-radius: 4pt;
+  }
+
   /* Claim / Evidence / Reasoning: the wrapper may split between the three
      boxes on a long question, but a single labelled box never splits and a
      label never gets stranded at the foot of a sheet without its box. */
