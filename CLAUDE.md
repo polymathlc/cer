@@ -1130,7 +1130,114 @@ producer — arrowhead and water lily — so 3 is wrong."*
   re-render or a tick set a moment ago is silently undone.
 - Run **`node tools/why-not-tests.mjs`** after touching any of it.
 
+## 🖼 Auto diagram — the answer key drawn, not just written (v1.304.0)
+
+`akd*` (search `AUTO DIAGRAM`), plus the `.akd-*` CSS in `index.html`, the bar
+on the question's 📝 **Answer-key explanation & picture** panel and the same bar
+inside every 🔑 `answerKey` block.
+
+An answer key says what the answer IS. A diagram says why — the beaker with the
+arrows on it, the four stages labelled, the circuit with the break marked. A
+teacher draws one on the whiteboard every lesson and it never reaches the
+printed key, because drawing it properly takes half an hour.
+
+🖼 **Auto diagram** reads the question AND its answer and draws one, into the
+answer-key picture slot that already exists — so it prints on the key, beside
+the answer, with no other plumbing.
+
+- **THE LABELS ARE THE PART TO CHECK, and the app says so out loud.** An image
+  model draws a beaker perfectly and then letters it "watr vapuor" — the same
+  weakness `TCG_BANNED_PROMPT_RE` exists for elsewhere in this file. That is not
+  a reason to skip the labels (an unlabelled science diagram explains nothing);
+  it is the reason ✏️ **Touch up** sits on the same row, and why every toast
+  that finishes a generation says to check them.
+- **It is drawn for PAPER.** The key is printed and photocopied, so
+  `AKD_PRINT_RULES` — the ONE place the style is stated, shared by the first
+  draw and every regeneration — asks for black line-work on plain white, one
+  idea, few large elements, colour only where it carries meaning, and labels of
+  1–3 words. No title in the picture: that is the thing that always comes out
+  as gibberish.
+- **`generateImageDataUrlGemini` takes exactly ONE reference picture**, so which
+  one it is decides what the button does. Drawing fresh passes the QUESTION's
+  own figure, so the answer diagram shows the apparatus the student was looking
+  at rather than a stock drawing of a different one — and the prompt has to say
+  in as many words that it is *not* the thing to hand back, or the model returns
+  it unchanged. 🔄 **Regenerate** passes the CURRENT diagram instead, so "make
+  the arrows red" edits that picture. Two buttons, because they are two
+  different intentions and one would always be the wrong one.
+- **The instructions box outranks the rest of the prompt**, is clipped to
+  `AKD_NOTE_MAX`, and is REMEMBERED — on the block for a 🔑 block
+  (`block.diagramNote`), and on the question for the panel
+  (`q.answerKeyDiagramNote`, which therefore has to be in
+  `EDITOR_OWNED_QUESTION_FIELDS` or `carryOverQuestionMeta` restores a note the
+  author just cleared).
+- **`_akdMake` is the ONE generator** both surfaces call. Two would be two
+  prompts to improve and two to keep in step.
+- **The result goes through `_paperCleanDataUrl`**, the same pass an enhanced
+  scan takes: an image model has no flat white, so it leaves the faint weave
+  that prints as a grey wash. It returns `{ url, report }`, not a bare url, and
+  a refusal hands the picture back untouched.
+- **Drawing over a picture that is already there asks first; regenerating does
+  not** — 🔄 *is* the redraw the confirm would be offering.
+- **Nothing is written until the question is saved.** The diagram is uploaded to
+  Storage (it must be, to have a URL) and the URL goes into the editor's own
+  field, exactly where 🖼 Upload answer-key image puts one.
+- Run **`node tools/auto-diagram-tests.mjs`** after touching any of it.
+
+## 🎨 Photo Editor — the touch-up tool on its own (v1.304.0)
+
+`pe*` / `annotDownloadPng` (search `PHOTO EDITOR`), plus `#page-photoedit`, its
+`admin-only` nav item and the `.pe-*` CSS. Admin only.
+
+The touch-up editor already does erase, paint, fill, clone, history brush,
+select / lasso / wand, move, resize, rotate, skew, straighten, line, text,
+paste-in, AI content-aware fill and ✨ Regenerate. Everywhere else it is reached
+THROUGH something and writes back to that thing. This page is the same editor
+with nothing behind it: bring a picture in, edit it, take a PNG away.
+
+- **It is the SAME editor, not a copy.** `_annotOpenSrc` already takes a
+  `target` saying where ✓ Apply writes back to; this adds one more kind
+  (`standalone`) and one branch in `applyAnnotTool`. A second editor would be a
+  second editor to fix every bug in — and it is what the CER app's ✏️ Touch up
+  rule has said since v1.278.0: add a destination by adding a branch, never by
+  forking the tool.
+- **Admin-only in TWO places.** The nav item carries `admin-only`, `photoedit`
+  is not on `EMPLOYEE_PAGES`, and `navigateTo` sends anyone else away. Hiding a
+  nav item is not a lock.
+- **Three ways in, one door.** Paste, drop and the file picker all end at
+  `_peOpen`. The picker's `value` is cleared BEFORE the read, or the same
+  picture chosen twice fires no `change` and the second attempt does nothing.
+- **The page's paste stands down while the editor is open**, because in there
+  Ctrl+V means something else and equally wanted: it drops a picture ONTO the
+  one being edited.
+- **⬇️ Download PNG is on EVERY target**, not just this page — a diagram worth
+  keeping outside the app is one click, and it never leaves the editor. PNG end
+  to end, so anything cut out to transparent stays transparent.
+- **A picture scaled down on the way in SAYS SO.** The canvas is capped
+  (`ANNOT_MAX_PX`, and `ANNOT_MAX_PX_STANDALONE` here) because ten full-frame
+  undo snapshots sit behind it. A downloaded file quietly smaller than what went
+  in is the one thing a picture editor must never do without saying so.
+- **Erasing CUTS here** (`eraseTo`), as it does on a game art slot: a scanned
+  question is paper, and a picture on its way to a PNG is not.
+- **Nothing is uploaded and nothing is saved.** ✓ Done *is* the download, and
+  that branch returns before any upload the other targets do.
+- Run **`node tools/auto-diagram-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🖼 Auto diagram** or the **🎨 Photo Editor** (`_akdPrompt`,
+  `AKD_PRINT_RULES`, `_akdAnswerText`, `_akdMake`, `akdRunQuestion`,
+  `akdRunBlock`, `_peOpen`, `pePickFiles`, `_pePaste`, `peDownloadName`,
+  `annotDownloadPng`, `applyAnnotTool`'s target branches, or `_annotOpenSrc`'s
+  target/cap handling), run `node tools/auto-diagram-tests.mjs`. Both features
+  hang off ONE editor and ONE picture slot, and every way they go wrong is
+  quiet: a fresh draw that stops asking destroys a scan that may be the only
+  copy of it; a prompt that stops asking for flat black-on-white line-work
+  returns a shaded render that looks fine on screen and is unreadable at 60mm
+  in grey; the two reference pictures swapped makes 🔄 Regenerate start from
+  scratch every time, which reads as the instructions being ignored; a target
+  with no branch in `applyAnnotTool` writes an answer-key diagram into a
+  question's picture instead; and a Photo Editor that is not admin-gated in
+  `navigateTo` is a page a hidden nav item does not actually close.
 - After touching **🔎 Why not this one** (`_wnyOpts`, `_wnyUsable`,
   `_wnyNormItems`, `_wnyKeyRows`, `_wnyPrintJobs`, `wnyArm`, `wnyPrepare`,
   `_mcqPaintResult`, or `_pushBlockAnswerKey`'s `why` argument), run

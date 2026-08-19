@@ -1716,7 +1716,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.303.0';
+const APP_VERSION = 'v1.304.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -3060,6 +3060,12 @@ function navigateTo(page) {
   // items is not enough on its own — a bookmark, a deep link (#usage) or any
   // navigateTo() call from shared code would otherwise walk straight in.
   if (_isEmployee() && EMPLOYEE_PAGES.indexOf(page) < 0) page = 'create';
+  // 🎨 The Photo Editor is an admin tool. The nav item carries `admin-only` so
+  // nobody else sees it, and an employee has already been sent to `create` by
+  // the line above — this is the guard for arriving at the page any other way,
+  // the same shape the Realm of Embers release gate uses. Hiding a nav item is
+  // never on its own what keeps a page shut.
+  if (page === 'photoedit' && !_isAdmin()) page = rpgHomePage();
   // Science Quest game pages: respect the "Hide game" toggle, and leaving
   // the dungeon abandons the current run (rewards are kept).
   if ((page === 'character' || page === 'leaderboard' || page === 'adventure' || page === 'arcade' || page === 'defenders' || page === 'raiders' || page === 'spire' || page === 'legends' || page === 'slayers' || page === 'tcg') && rpgGameHidden()) page = rpgHomePage();
@@ -3133,6 +3139,7 @@ function navigateTo(page) {
   if (page === 'notes') renderNotesPage();
   if (page === 'vetting') renderVettingList();
   if (page === 'checkq') renderCheckQPage();
+  if (page === 'photoedit') _peStatus('');
   if (page === 'student') {
     populateStudentSelect();
     renderStudentView();
@@ -5759,6 +5766,8 @@ function renderImportedBlockEditorBody(block) {
                oninput="saveBlockContent('${id}','text',this.innerHTML)">${block.text || ''}</div>
           <input class="form-input" type="text" placeholder="…or an answer-key image URL" style="margin-top:8px;"
                  value="${escapeHtml(block.url || '')}" oninput="saveBlockField('${id}','url',this.value)">
+          ${akdBarHtml(id, block.diagramNote, !!String(block.url || '').trim())}
+          ${String(block.url || '').trim() ? `<img src="${escapeHtml(transformImageUrl(block.url))}" alt="answer-key diagram" onerror="handleImgError(this)" style="display:block;max-width:100%;max-height:220px;margin-top:10px;border:1px solid var(--border);border-radius:8px;">` : ''}
         </div>`;
     case 'pageBreak':
       return `<div class="block-body"><div style="text-align:center;color:var(--text-muted);border-top:2px dashed var(--border);padding-top:8px;font-size:0.85rem;">⤵️ Page break (affects printed worksheets only)</div></div>`;
@@ -6024,13 +6033,373 @@ function _renderAnswerKeyPreview() {
   const rm = document.getElementById('answerKeyImageRemove');
   if (prev) { if (img) { prev.src = transformImageUrl(img); prev.style.display = ''; } else { prev.style.display = 'none'; prev.removeAttribute('src'); } }
   if (rm) rm.style.display = img ? '' : 'none';
+  // 🔄 Regenerate and ✏️ Touch up only mean anything once there IS a picture,
+  // and this is the one function every path that changes it already calls.
+  try { _akdSyncQuestionBar(); } catch (e) {}
 }
-function _setAnswerKeyFields(note, img) {
+function _setAnswerKeyFields(note, img, diagramNote) {
   const t = document.getElementById('questionAnswerKeyNote'); if (t) t.value = note || '';
   const h = document.getElementById('questionAnswerKeyImage'); if (h) h.value = img || '';
+  const d = document.getElementById('akdQuestionNote'); if (d) d.value = diagramNote || '';
   const s = document.getElementById('answerKeyImageStatus'); if (s) s.textContent = '';
   _renderAnswerKeyPreview();
 }
+
+// =====================================================================
+// 🖼 AUTO DIAGRAM — the answer key drawn, not just written
+// =====================================================================
+// An answer key says what the answer IS. A diagram says why — the beaker with
+// the arrows on it, the four stages labelled, the circuit with the break
+// marked. Teachers draw one on the whiteboard every lesson and it never
+// reaches the printed key, because drawing it properly takes half an hour.
+//
+// 🖼 Auto diagram reads the question AND its answer and draws one. It lands in
+// the answer-key picture slot that already exists — so it prints on the key,
+// beside the answer, with no other plumbing.
+//
+// Five things hold it together:
+//
+//  • THE LABELS ARE THE PART TO CHECK, and the app says so out loud. An image
+//    model draws a beaker perfectly and then letters it "watr vapuor" — the
+//    same weakness `TCG_BANNED_PROMPT_RE` exists for elsewhere in this file.
+//    That is not a reason to skip the labels (an unlabelled science diagram
+//    explains nothing); it is the reason ✏️ Touch up sits on the same row, so
+//    a wrong word is retyped in ten seconds rather than the picture thrown
+//    away. Every toast that finishes a generation says to check them.
+//  • IT IS DRAWN FOR PAPER. The key is printed and photocopied, so the prompt
+//    asks for black line-work on plain white, one idea, no shading and no
+//    decoration — and `AKD_PRINT_RULES` is the one place that is said, shared
+//    by the first draw and every regeneration.
+//  • THE QUESTION'S OWN DIAGRAM IS THE REFERENCE. `generateImageDataUrlGemini`
+//    takes ONE reference picture: on the first draw it is the question's own
+//    figure, so the answer diagram shows the same apparatus the student was
+//    looking at rather than a stock drawing of a different one. The prompt has
+//    to say in as many words that it is the apparatus and NOT the thing to
+//    copy, or the model returns it back unchanged.
+//  • REGENERATE EDITS, GENERATE REDRAWS. 🔄 hands the CURRENT diagram back as
+//    the reference, so "make the arrows red" changes that picture; 🖼 starts
+//    again from the question. Two buttons because they are two different
+//    intentions, and a single one would always be the wrong one of them.
+//  • NOTHING IS WRITTEN UNTIL THE QUESTION IS SAVED. The diagram is uploaded
+//    to Storage (it has to be, to have a URL at all) and the URL is put in the
+//    editor's own field — exactly where 🖼 Upload answer-key image puts one.
+//    A question abandoned without saving leaves an unreferenced upload and no
+//    change to the bank, which is what every other picture in the editor does.
+const AKD_NOTE_MAX = 400;      // how much steering the box will carry
+// Said once, used by the first draw and every regeneration. A key is printed,
+// photocopied and marked in pen, so anything that survives only in colour or
+// only at screen size is worse than nothing.
+const AKD_PRINT_RULES =
+  ' STYLE — follow every one:\n' +
+  '- A clean SCHOOL TEXTBOOK DIAGRAM: black line-work on a plain white background. Flat, simple, confident lines.\n' +
+  '- No photograph, no 3D render, no shading, no gradients, no texture, no drop shadows, no background scene, no border or frame.\n' +
+  '- Colour ONLY where it carries meaning (a red arrow for heat, blue for water). Everything else black on white, and it must still read when photocopied in grey.\n' +
+  '- Landscape, roughly 4:3, and filling the frame. It is printed about 60mm tall on an answer key, so use few, large elements — never a busy scene.\n' +
+  '- ONE idea. If the answer has two stages, show two panels side by side, not ten small pictures.\n' +
+  '- Label the parts that matter with SHORT text (1-3 words) and a leader line. Spell every label correctly. No sentences, no paragraph of explanation, no title, no watermark, no signature.\n' +
+  '- Do not draw the question, the options, or any exam paper furniture. Draw the SCIENCE.';
+
+// The question as it stands in the EDITOR, not as it was last saved — the
+// author is very often typing the answer and pressing this in the same breath.
+function _akdEditorQuestion() {
+  try { syncEditorDomToBlocks(); } catch (e) {}
+  return {
+    id: currentEditingQuestion || null,
+    title: (document.getElementById('questionTitle')?.value || ''),
+    topic: (document.getElementById('topicSelect')?.value || ''),
+    category: (document.getElementById('categorySelect')?.value || ''),
+    blocks: Array.isArray(blocks) ? blocks : []
+  };
+}
+function _akdClipNote(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, AKD_NOTE_MAX); }
+
+// What the diagram has to explain. `_cqRepr` is the same whole-question
+// representation ✅ Check Questions and 🔎 Why not this one use — it spells the
+// TABLES out and names where a picture sits — so a diagram is drawn from
+// exactly what those two read, rather than from a third description that could
+// drift from both.
+function _akdPrompt(q, answerText, note, refKind) {
+  const ref =
+    refKind === 'current'
+      ? '\nThe picture attached to this message is the CURRENT diagram. Redraw it with the change asked for below, keeping everything else about it the same.\n'
+      : refKind === 'question'
+        ? '\nThe picture attached to this message is the FIGURE PRINTED IN THE QUESTION. It is there so your apparatus matches what the student was looking at — reuse its layout and shapes. It is NOT the answer and it is NOT to be handed back unchanged: draw a NEW diagram that explains the answer.\n'
+        : '\n';
+  return 'Draw ONE diagram for the ANSWER KEY of the Singapore primary-school (PSLE) science question below. ' +
+    'It is for the teacher to show the class, and for a pupil to look at after they have been marked: it must make the answer obvious at a glance.\n\n' +
+    'THE QUESTION:\n' + _cqRepr(q) + '\n\n' +
+    'THE ANSWER IT MUST EXPLAIN:\n' + (answerText || '(no written answer was recorded — work it out from the question)') + '\n' +
+    ref +
+    (note ? '\nWHAT THE TEACHER ASKED FOR — this outranks anything below it:\n' + note + '\n' : '') +
+    '\n' + AKD_PRINT_RULES;
+}
+// Everything on the question that says what the answer is: the model answers,
+// the answer-key note, the explanation. The diagram explains THIS.
+function _akdAnswerText(q, note) {
+  const out = [];
+  if (note) out.push(note);
+  ((q && q.blocks) || []).forEach(b => {
+    if (!b) return;
+    if (b.type === 'answer') {
+      const t = ['Claim: ' + stripHtml(b.claim || ''), 'Evidence: ' + stripHtml(b.evidence || ''), 'Reasoning: ' + stripHtml(b.reasoning || '')]
+        .filter(x => x.split(': ')[1]).join(' | ');
+      if (t) out.push(t);
+    }
+    if (b.type === 'plainanswer') { const t = stripHtml(b.content || ''); if (t) out.push(t); }
+    if (b.type === 'answerLine') { const t = stripHtml(b.answer || ''); if (t) out.push((stripHtml(b.label || '') || 'Answer') + ': ' + t); }
+    if (b.type === 'answerKey') { const t = stripHtml(b.text || ''); if (t) out.push(t); }
+    if (b.type === 'explanation') { const t = stripHtml(b.content || ''); if (t) out.push('Explanation: ' + t); }
+    if (b.type === 'mcq') {
+      const i = (b.options || []).findIndex(o => o && o.id === b.correctId);
+      if (i >= 0) out.push('The correct option is (' + (i + 1) + ') ' + stripHtml(b.options[i].text || ''));
+    }
+  });
+  return _docClip(out.join('\n'), 1600);
+}
+// The question's own figure, as a data URL, for the first draw. A question with
+// no picture simply gets none — the model works from the words, which is what
+// it did before this existed.
+async function _akdQuestionFigure(q) {
+  const b = ((q && q.blocks) || []).find(x => x && x.type === 'image' && x.url);
+  if (!b) return null;
+  try { return await _urlToDataUrlRobust(transformImageUrl(b.url)); }
+  catch (e) { console.warn('auto diagram: could not read the question figure', e); return null; }
+}
+
+// The ONE generator. Both surfaces — the question's answer-key panel and the
+// 🔑 answer-key block — call it, so a diagram drawn from either is drawn the
+// same way and there is one prompt to improve rather than two to keep in step.
+// Returns the uploaded URL.
+async function _akdMake(q, answerText, note, currentUrl, regen) {
+  if (!imageAiReady()) throw new Error('image AI is not available in this project');
+  let ref = null, kind = 'none';
+  if (regen && currentUrl) {
+    try { ref = await _urlToDataUrlRobust(transformImageUrl(currentUrl)); kind = 'current'; }
+    catch (e) { console.warn('auto diagram: could not read the current diagram, drawing fresh', e); }
+  }
+  if (!ref) { ref = await _akdQuestionFigure(q); kind = ref ? 'question' : 'none'; }
+  const dataUrl = await generateImageDataUrlGemini(_akdPrompt(q, answerText, note, kind), ref);
+  // Straight through the shared paper cleaner, exactly as an enhanced scan is:
+  // an image model has no flat white, so it leaves the faint weave that prints
+  // as a grey wash. A refusal there hands the picture back untouched.
+  let cleaned = dataUrl;
+  try { const res = await _paperCleanDataUrl(dataUrl); if (res && res.url) cleaned = res.url; }
+  catch (e) { console.warn('auto diagram: paper clean skipped', e); }
+  return await uploadImageDataUrl(cleaned);
+}
+function _akdBusy(btn, on, label) {
+  if (!btn) return;
+  if (on) { btn._akdWas = btn.innerHTML; btn.disabled = true; btn.innerHTML = label || '🖼 Drawing…'; }
+  else { btn.disabled = false; if (btn._akdWas != null) btn.innerHTML = btn._akdWas; }
+}
+const AKD_DONE = 'Diagram drawn ✓ — check the labels are spelled right, then ✏️ Touch up to fix anything';
+
+// ---- the question's own answer-key panel ----------------------------------
+function akdQuestionNote() { return _akdClipNote(document.getElementById('akdQuestionNote')?.value || ''); }
+function akdRunQuestion(btn, regen) {
+  if (!_canAuthor()) return;
+  const hidden = document.getElementById('questionAnswerKeyImage');
+  if (!hidden) return;
+  const cur = (hidden.value || '').trim();
+  if (regen && !cur) { showToast('Draw a diagram first, then 🔄 Regenerate changes it', 'info'); return; }
+  // A picture already there is somebody's upload or somebody's last draw, so
+  // 🖼 (which starts again) asks first. 🔄 is a redraw OF that picture and is
+  // what the confirm would be offering anyway, so it never asks.
+  if (!regen && cur) { showConfirm('Replace the answer-key picture?', 'This answer key already has a picture. Drawing a new diagram will replace it.', () => _akdGoQuestion(btn, regen)); return; }
+  _akdGoQuestion(btn, regen);
+}
+async function _akdGoQuestion(btn, regen) {
+  const hidden = document.getElementById('questionAnswerKeyImage');
+  if (!hidden) return;
+  const cur = (hidden.value || '').trim();
+  if (!imageAiReady()) { showToast('Image AI is not available in this project', 'error'); return; }
+  const q = _akdEditorQuestion();
+  const note = _akdClipNote(document.getElementById('questionAnswerKeyNote')?.value || '');
+  _akdBusy(btn, true, regen ? '🔄 Redrawing…' : '🖼 Drawing…');
+  const status = document.getElementById('answerKeyImageStatus');
+  if (status) status.textContent = regen ? 'Redrawing the diagram…' : 'Drawing the diagram…';
+  try {
+    const url = await _akdMake(q, _akdAnswerText(q, note), akdQuestionNote(), cur, regen);
+    hidden.value = url;
+    _renderAnswerKeyPreview();
+    _akdSyncQuestionBar();
+    if (status) status.textContent = '';
+    showToast(AKD_DONE, 'success');
+  } catch (e) {
+    console.warn('auto diagram failed', e);
+    if (status) status.textContent = '';
+    showToast('Could not draw the diagram: ' + (e && e.message ? e.message : e), 'error');
+  } finally { _akdBusy(btn, false); }
+}
+// 🔄 Regenerate and ✏️ Touch up only mean anything once there is a picture.
+function _akdSyncQuestionBar() {
+  const has = !!(document.getElementById('questionAnswerKeyImage')?.value || '').trim();
+  ['akdQuestionRegen', 'akdQuestionTouch'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.style.display = has ? '' : 'none';
+  });
+}
+function akdTouchUpQuestion() {
+  const url = (document.getElementById('questionAnswerKeyImage')?.value || '').trim();
+  if (!url) { showToast('Draw or upload an answer-key picture first', 'info'); return; }
+  _annotOpenSrc(_urlToDataUrlRobust(transformImageUrl(url)), { akQuestion: true }, '✏️ Touch up the answer-key diagram');
+}
+
+// ---- the 🔑 answer-key BLOCK ----------------------------------------------
+function akdRunBlock(blockId, btn, regen) {
+  if (!_canAuthor()) return;
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const cur = String(block.url || '').trim();
+  if (regen && !cur) { showToast('Draw a diagram first, then 🔄 Regenerate changes it', 'info'); return; }
+  if (!regen && cur) { showConfirm('Replace this answer-key picture?', 'This block already has a picture. Drawing a new diagram will replace it.', () => _akdGoBlock(blockId, btn, regen)); return; }
+  _akdGoBlock(blockId, btn, regen);
+}
+async function _akdGoBlock(blockId, btn, regen) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const cur = String(block.url || '').trim();
+  if (!imageAiReady()) { showToast('Image AI is not available in this project', 'error'); return; }
+  const q = _akdEditorQuestion();
+  _akdBusy(btn, true, regen ? '🔄 Redrawing…' : '🖼 Drawing…');
+  try {
+    const url = await _akdMake(q, _akdAnswerText(q, stripHtml(block.text || '')), _akdClipNote(block.diagramNote), cur, regen);
+    const live = blocks.find(b => b.id === blockId);   // renderBlocks may have replaced it while the AI drew
+    if (!live) return;
+    live.url = url;
+    renderBlocks();
+    showToast(AKD_DONE, 'success');
+  } catch (e) {
+    console.warn('auto diagram failed', e);
+    showToast('Could not draw the diagram: ' + (e && e.message ? e.message : e), 'error');
+  } finally { _akdBusy(btn, false); }
+}
+function akdTouchUpBlock(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block || !String(block.url || '').trim()) { showToast('Draw or add a picture on this block first', 'info'); return; }
+  _annotOpenSrc(_urlToDataUrlRobust(transformImageUrl(block.url)), { akBlockId: blockId }, '✏️ Touch up the answer-key diagram');
+}
+// The steering note lives ON the block, so it is saved with the question and
+// the next regeneration a week later still knows what was asked for.
+function setAkdBlockNote(blockId, v) {
+  const b = blocks.find(x => x.id === blockId);
+  if (b) b.diagramNote = _akdClipNote(v);
+}
+// The three buttons, shared by both surfaces so they cannot look different.
+function akdBarHtml(blockId, note, hasPic) {
+  return `
+    <div class="akd-bar">
+      <button type="button" class="akd-btn" onclick="akdRunBlock('${blockId}', this, false)" title="Let the AI draw a clear diagram that explains this answer. It reads the question and the answer, and the picture lands in the box above.">🖼 Auto diagram</button>
+      <button type="button" class="akd-btn"${hasPic ? '' : ' style="display:none;"'} id="akdBlockRegen_${blockId}" onclick="akdRunBlock('${blockId}', this, true)" title="Redraw the diagram that is there now, with the instructions below applied to it">🔄 Regenerate</button>
+      <button type="button" class="akd-btn"${hasPic ? '' : ' style="display:none;"'} id="akdBlockTouch_${blockId}" onclick="akdTouchUpBlock('${blockId}')" title="Open the diagram in the touch-up editor — fix a label, move an arrow, erase anything wrong">✏️ Touch up</button>
+      <input class="akd-note" type="text" placeholder="Instructions for the diagram — e.g. side view, label the anther, arrows in red"
+             maxlength="${AKD_NOTE_MAX}" value="${escapeHtml(note || '')}" oninput="setAkdBlockNote('${blockId}', this.value)">
+    </div>`;
+}
+
+// =====================================================================
+// 🎨 PHOTO EDITOR — the touch-up tool on its own, for any picture at all
+// =====================================================================
+// The touch-up editor already does erase, paint, fill, clone, history,
+// select / lasso / wand, move, resize, rotate, skew, straighten, line, text,
+// paste-in, AI content-aware fill and ✨ Regenerate. Everywhere else in this
+// app it is reached THROUGH something — a question's image block, an answer-key
+// diagram, a Realm of Embers art slot — and it writes back to that thing.
+//
+// This page is the same editor with nothing behind it: bring a picture in,
+// edit it, take a PNG away. Nothing is uploaded, nothing is saved, nothing
+// touches the bank.
+//
+//  • IT IS THE SAME EDITOR, not a copy. `_annotOpenSrc` already takes a
+//    `target` saying where ✓ Apply writes back to; this adds one more kind of
+//    target (`standalone`) and one branch in `applyAnnotTool`. A second editor
+//    would be a second editor to fix every bug in.
+//  • ADMIN ONLY, and gated in the two places every other admin page is: the
+//    nav item carries `admin-only`, and `navigateTo` sends an employee to
+//    `create` because `photoedit` is not on EMPLOYEE_PAGES. Hiding the nav item
+//    alone would leave a bookmark walking straight in.
+//  • THREE WAYS IN and one door out of them. Paste, drop and the file picker
+//    all end at `_peOpen`, so a picture behaves the same however it arrived —
+//    the ⚡ Rapid add rule, for the same reason.
+//  • THE PICKER'S VALUE IS CLEARED BEFORE THE FILE IS READ. An <input type=file>
+//    still holding last time's file fires no `change` for the same picture
+//    picked twice, so the second attempt does nothing at all — a button that
+//    looks like it works and does not.
+const PE_MAX_BYTES = 30 * 1024 * 1024;
+
+function _peStatus(msg) {
+  const el = document.getElementById('peStatus');
+  if (el) el.textContent = msg || '';
+}
+// The ONE door. Everything that can bring a picture into this page comes here.
+function _peOpen(dataUrl, name) {
+  if (!dataUrl) { _peStatus('That did not look like a picture.'); return; }
+  _peName = _peCleanName(name);
+  _peStatus('');
+  _annotOpenSrc(Promise.resolve(dataUrl), { standalone: true }, '🎨 Photo Editor');
+}
+// What the downloaded file is called. The name a picture arrived with, minus
+// its extension, so an edited photo.jpg comes back as photo.png rather than as
+// something nobody can find again.
+let _peName = '';
+function _peCleanName(n) {
+  return String(n || '').replace(/\.[a-z0-9]+$/i, '').replace(/[^\w. -]+/g, '').trim().slice(0, 60);
+}
+function peDownloadName() {
+  return (_peName || 'edited-image') + '.png';
+}
+function _peReadFile(file) {
+  if (!file) return;
+  if (!/^image\//i.test(file.type || '')) { _peStatus('That file is not a picture.'); return; }
+  if (file.size > PE_MAX_BYTES) { _peStatus('That picture is very large (' + Math.round(file.size / 1048576) + ' MB) — try a smaller one.'); return; }
+  _peStatus('Opening ' + (file.name || 'the picture') + '…');
+  const r = new FileReader();
+  r.onload = () => _peOpen(String(r.result || ''), file.name);
+  r.onerror = () => _peStatus('Could not read that file.');
+  r.readAsDataURL(file);
+}
+function pePickFiles(input) {
+  const f = input && input.files && input.files[0];
+  // Cleared BEFORE the read, or picking the same file twice fires no change.
+  const file = f;
+  if (input) input.value = '';
+  _peReadFile(file);
+}
+function peDrop(e) {
+  e.preventDefault();
+  const zone = document.getElementById('peZone');
+  if (zone) zone.classList.remove('dragover');
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) { _peReadFile(f); return; }
+  const url = e.dataTransfer && e.dataTransfer.getData('text/uri-list');
+  if (url) {
+    _peStatus('Fetching that picture…');
+    _urlToDataUrlRobust(url).then(d => _peOpen(d, url.split('/').pop()))
+      .catch(() => _peStatus('Could not load that picture from the web.'));
+  }
+}
+// Paste is bound to the PAGE, not to the zone, so ⌘V works wherever the caret
+// happens to be — and it is ignored while the editor itself is open, because
+// the editor has its own paste (it drops the picture ONTO the one being
+// edited, which is a different and equally wanted thing).
+function _pePaste(e) {
+  const page = document.getElementById('page-photoedit');
+  if (!page || !page.classList.contains('active')) return;
+  if (_annot) return;
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items) {
+    if (it.kind === 'file' && /^image\//i.test(it.type || '')) {
+      const f = it.getAsFile();
+      if (f) { e.preventDefault(); _peReadFile(f); return; }
+    }
+  }
+}
+document.addEventListener('paste', _pePaste);
+function peZoneClick() {
+  const inp = document.getElementById('peFile');
+  if (inp) inp.click();
+}
+
 // =====================================================================
 // 🔑 ANSWER SCREENSHOT FOR AN ANNOTATION PART
 //
@@ -7190,8 +7559,15 @@ function openAnnotTool(blockId) {
 function _annotOpenSrc(srcP, target, title) {
   srcP.then(_loadImageEl).then(img => {
     const canvas = document.getElementById('annotCanvas');
-    const cap = 1600; // keep the working canvas (and undo snapshots) sane
-    const scale = Math.min(1, cap / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+    // Keep the working canvas — and the ten full-frame undo snapshots behind
+    // it — sane. A question's diagram never needs more; the 🎨 Photo Editor is
+    // handed real photographs and the point of it is the file you take away,
+    // so it gets a bigger ceiling and SAYS when it had to use it. A download
+    // that is quietly smaller than what went in is the one thing a picture
+    // editor must never do without saying so.
+    const cap = target.standalone ? ANNOT_MAX_PX_STANDALONE : ANNOT_MAX_PX;
+    const wasW = img.naturalWidth || 1, wasH = img.naturalHeight || 1;
+    const scale = Math.min(1, cap / Math.max(wasW, wasH));
     canvas.width = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
     canvas.height = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
     const ctx = canvas.getContext('2d');
@@ -7205,11 +7581,17 @@ function _annotOpenSrc(srcP, target, title) {
     orig.width = canvas.width; orig.height = canvas.height;
     orig.getContext('2d').drawImage(canvas, 0, 0);
     _annot = { blockId: target.blockId || null, artSlot: target.artSlot || null,
+      // Where ✓ Apply writes it back to. Adding a destination is a field here
+      // and a branch in applyAnnotTool — never a second editor.
+      akQuestion: !!target.akQuestion, akBlockId: target.akBlockId || null, standalone: !!target.standalone,
       // WHAT ERASE LEAVES BEHIND. A scanned question is paper, so erasing a
       // word means painting it white. A piece of game art stands on nothing, so
       // erasing means erasing — real transparency, not a white patch. The
       // default follows what is being edited; the toolbar button flips it.
-      eraseTo: target.artSlot ? 'clear' : 'white',
+      // A scanned question is paper, so erasing a word means painting it
+      // white. Game art and anything in the Photo Editor stand on nothing, and
+      // the file that leaves is a PNG, so there erasing means erasing.
+      eraseTo: (target.artSlot || target.standalone) ? 'clear' : 'white',
       canvas, ctx, tool: 'erase', color: '#e23c3c', size: 6, tol: 32, drawing: false, history: [], start: null, snap: null,
       zoom: 1, fit: 1, panX: 0, panY: 0, space: false, panning: false, cloneSrc: null, cloneSnap: null, cloneOff: null,
       anchor: null, sel: null, selPts: null, selCanvas, aiFillBusy: false, origSnap: orig, float: null, xform: null, xfStart: null,
@@ -7229,6 +7611,10 @@ function _annotOpenSrc(srcP, target, title) {
     // Fit the image after the overlay is visible so the stage has real dimensions.
     requestAnimationFrame(() => { annotZoomFit(); });
     _annotBindZoomListeners();
+    if (scale < 1) {
+      showToast('This picture was scaled to ' + canvas.width + '×' + canvas.height +
+        ' to edit (it came in at ' + wasW + '×' + wasH + ') — anything you save will be that size', 'info');
+    }
   }).catch(e => { console.warn('open annot', e); showToast('Could not open touch-up for this image', 'error'); });
 }
 // Does the eraser CUT rather than paint white?
@@ -7663,6 +8049,9 @@ function _annotXformBegin() {
 // It is its OWN transform scope (`paste`) rather than a selection lift, because
 // the pixels do not come off the canvas: `base` is the picture untouched, so
 // Cancel — and the history step taken here — simply leave no trace of it.
+// The working ceiling for the editor's canvas. See _annotOpenSrc.
+const ANNOT_MAX_PX = 1600;
+const ANNOT_MAX_PX_STANDALONE = 2400;
 const ANNOT_PASTE_FIT = 0.9;       // land inside this much of the canvas, so the handles have room
 const ANNOT_PASTE_MAX_PX = 2200;   // never hold a layer bitmap bigger than this
 // The image file on the clipboard, if there is one. `items` is what a
@@ -9206,16 +9595,74 @@ function _annotPlaceText(p) {
   });
   input.addEventListener('blur', () => { if (!drag) commit(); });   // don't commit while mid-drag
 }
+// ⬇️ Save the picture as it stands to a PNG file, without leaving the editor.
+// It is on EVERY target, not just the standalone page: an answer-key diagram
+// worth keeping outside the app, or a piece of card art wanted as a file, is
+// the same one click. PNG end to end — a JPEG step here would flatten the
+// alpha of anything that has been cut out to transparent.
+function annotDownloadPng() {
+  if (!_annot) return;
+  if (_annot.xform) annotXformApply(true);
+  document.querySelectorAll('#annotStage .annot-textbox-input').forEach(i => i.blur());
+  try {
+    const a = document.createElement('a');
+    a.href = _annot.canvas.toDataURL('image/png');
+    a.download = _annot.standalone ? peDownloadName() : 'polymath-image.png';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast('⬇️ Saved as a PNG', 'success');
+  } catch (e) {
+    console.warn('annot download failed', e);
+    showToast('Could not save the PNG: ' + (e && e.message ? e.message : e), 'error');
+  }
+}
 async function applyAnnotTool() {
   if (!_annot) return;
   // Settle an open rotate/skew so the turn isn't lost on the way out.
   if (_annot.xform) annotXformApply(true);
   // Burn any label that's still being edited so it isn't lost on Apply.
   document.querySelectorAll('#annotStage .annot-textbox-input').forEach(i => i.blur());
-  const { blockId, artSlot, canvas } = _annot;
+  const { blockId, artSlot, akQuestion, akBlockId, standalone, canvas } = _annot;
   const dataUrl = canvas.toDataURL('image/png');
+  // 🎨 The Photo Editor has nothing behind it, so there is nothing to save to:
+  // ✓ Done IS the download. Nothing here is uploaded and nothing is written.
+  if (standalone) { annotDownloadPng(); closeAnnotTool(); return; }
   closeAnnotTool();
   showToast('✏️ Saving touch-ups…', 'info');
+  // The question's own answer-key picture. It goes back into the editor field
+  // it came from, exactly where 🖼 Upload answer-key image puts one — so it is
+  // saved with the question and not a moment before.
+  if (akQuestion) {
+    try {
+      const url = await uploadImageDataUrl(dataUrl);
+      const h = document.getElementById('questionAnswerKeyImage');
+      if (h) h.value = url;
+      _renderAnswerKeyPreview();
+      _akdSyncQuestionBar();
+      showToast('Touch-ups applied ✓', 'success');
+    } catch (e) {
+      console.warn('annot apply (answer key) failed', e);
+      showToast('Could not save touch-ups: ' + (e && e.message ? e.message : e), 'error');
+    }
+    return;
+  }
+  // A 🔑 answer-key BLOCK. Re-resolved by id rather than captured, because
+  // renderBlocks may have replaced the object while the editor was open.
+  if (akBlockId) {
+    try {
+      const url = await uploadImageDataUrl(dataUrl);
+      const b = blocks.find(x => x.id === akBlockId);
+      if (!b) return;
+      b.url = url;
+      renderBlocks();
+      showToast('Touch-ups applied ✓', 'success');
+    } catch (e) {
+      console.warn('annot apply (answer-key block) failed', e);
+      showToast('Could not save touch-ups: ' + (e && e.message ? e.message : e), 'error');
+    }
+    return;
+  }
   // A Realm of Embers art slot. It is stored with `cleaned` set: the admin has
   // just spent time looking at this picture in an editor, so the automatic
   // background cutter must not run behind them and second-guess it. 🧼 Remove
@@ -11628,6 +12075,7 @@ function collectQuestionData() {
     markingGuide: (document.getElementById('questionMarkingGuide')?.value || '').trim(),
     answerKeyNote: (document.getElementById('questionAnswerKeyNote')?.value || '').trim(),
     answerKeyImage: (document.getElementById('questionAnswerKeyImage')?.value || '').trim(),
+    answerKeyDiagramNote: akdQuestionNote(),
     annotation: !!(document.getElementById('questionAnnotation') && document.getElementById('questionAnnotation').checked),
     notInSyllabus: !!(document.getElementById('questionNotInSyllabus') && document.getElementById('questionNotInSyllabus').checked),
     tags: _snapTagsToBank(parseTagInput(document.getElementById('questionTags')?.value || '')),
@@ -11694,7 +12142,7 @@ function addToBank() {
 // the editor would walk straight back in on the next save.
 const EDITOR_OWNED_QUESTION_FIELDS = new Set([
   'id', 'title', 'category', 'category2', 'topic', 'topic2', 'markingGuide',
-  'answerKeyNote', 'answerKeyImage', 'annotation', 'notInSyllabus', 'tags', 'los',
+  'answerKeyNote', 'answerKeyImage', 'answerKeyDiagramNote', 'annotation', 'notInSyllabus', 'tags', 'los',
   'blocks', 'blanks', 'createdAt', 'createdBy',
 ]);
 
@@ -12616,7 +13064,7 @@ function editQuestion(id) {
   if (mgEl) mgEl.value = q.markingGuide || '';
   const annEl = document.getElementById('questionAnnotation');
   if (annEl) annEl.checked = !!q.annotation;
-  _setAnswerKeyFields(q.answerKeyNote || '', q.answerKeyImage || '');
+  _setAnswerKeyFields(q.answerKeyNote || '', q.answerKeyImage || '', q.answerKeyDiagramNote || '');
   const nisEl = document.getElementById('questionNotInSyllabus');
   if (nisEl) nisEl.checked = !!q.notInSyllabus;
   setQuestionTagsField(q);
@@ -57833,6 +58281,17 @@ window.openAnnotTool = openAnnotTool;
 window.closeAnnotTool = closeAnnotTool;
 window.annotUndo = annotUndo;
 window.applyAnnotTool = applyAnnotTool;
+window.annotDownloadPng = annotDownloadPng;
+// 🖼 Auto diagram — both surfaces, and the touch-up each of them opens.
+window.akdRunQuestion = akdRunQuestion;
+window.akdTouchUpQuestion = akdTouchUpQuestion;
+window.akdRunBlock = akdRunBlock;
+window.akdTouchUpBlock = akdTouchUpBlock;
+window.setAkdBlockNote = setAkdBlockNote;
+// 🎨 Photo Editor
+window.pePickFiles = pePickFiles;
+window.peDrop = peDrop;
+window.peZoneClick = peZoneClick;
 window.annotZoomFit = annotZoomFit;
 window.annotZoomStep = annotZoomStep;
 window._annotSyncControls = _annotSyncControls;
