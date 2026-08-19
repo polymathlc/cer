@@ -38,7 +38,7 @@ import {
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
 import { getAI, getGenerativeModel, GoogleAIBackend, ResponseModality } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
 // Cloud Storage — paste/drop images upload here instead of needing a Dropbox link
-import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
+import { getStorage, ref as storageRef, uploadString, getDownloadURL, listAll, getMetadata } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -1716,7 +1716,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.299.0';
+const APP_VERSION = 'v1.300.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -38087,6 +38087,11 @@ async function tcgInit() {
 
 // ---- Card art overrides (admin pastes a PNG per monster on Game Objects) ----
 let _tcgArt = null;
+// A read that FAILED is not an empty art store, and telling the two apart is
+// the difference between "your artwork is gone" and "the network hiccuped".
+// An empty map looks EXACTLY like a wipe, so anything that reports on the
+// collection, backs it up or offers to redraw it asks this first.
+let _tcgArtLoadFailed = false;
 async function tcgLoadArt(force) {
   if (_tcgArt && !force) return _tcgArt;
   const uid = _tcgOwnerUid();
@@ -38094,7 +38099,8 @@ async function tcgLoadArt(force) {
   try {
     const snap = await getDoc(doc(db, 'users', uid, 'settings', 'tcgArt'));
     _tcgArt = (snap.exists() && snap.data().overrides) ? snap.data().overrides : {};
-  } catch (e) { console.warn('tcg art load', e); _tcgArt = _tcgArt || {}; }
+    _tcgArtLoadFailed = false;
+  } catch (e) { console.warn('tcg art load', e); _tcgArtLoadFailed = true; _tcgArt = _tcgArt || {}; }
   try { tcgApplyLogo(); } catch (e) {}   // put the crest on as soon as we know there is one
   return _tcgArt;
 }
@@ -38164,6 +38170,378 @@ async function resetTcgArt(id) {
     showToast('Reset to default', 'success');
   } catch (e) { console.error('tcg art reset', e); showToast('Reset failed', 'error'); }
 }
+// =====================================================================
+// ART SAFETY & RECOVERY (admin, Card Art tab)
+// =====================================================================
+// Every picture in Realm of Embers -- card art, `:av` battle avatars, `fx:`
+// and `dfx:` frames, `pk:` pack frames, `arti:`, `hero:`, `logo:`, `set:` and
+// `lore:` -- is ONE KEY in ONE document's `overrides` map. Hundreds of hours
+// of generated artwork, and a single map deciding what the game shows.
+//
+// That map was lost once. The Maths app (polymathlc/math) carries a port of
+// this game with the card ids deliberately kept identical, it was writing
+// THIS document, and its "Reset ALL art" button did
+// `setDoc(..., { overrides: {} })` -- a whole-document overwrite. One press,
+// both games blank. That app has its own document and a surgical reset now,
+// so it cannot happen from that direction again. This section is what makes
+// the map survivable whatever happens to it next.
+//
+// THE PICTURES ARE NOT THE MAP, and that is the whole reason recovery is
+// possible: uploads are content-addressed into `cer-images/`, nothing in this
+// app has ever deleted one, and the Maths app writes to `mathImages/`. The
+// artwork outlives any accident to the index.
+const TCG_ART_BACKUP_DOC = 'tcgArtBackup';
+
+// ---- The rolling backup ----------------------------------------------
+// Refreshed whenever an admin opens the Card Art tab: often enough to stay
+// current, rare enough to cost nothing.
+//
+// IT MUST NEVER SHRINK. A wipe presents as an empty map, so a backup that
+// blindly mirrored the live map would faithfully copy the wipe over the last
+// good copy and destroy the only remaining record -- turning the safety net
+// into a second way to lose everything. The rule is therefore: write only
+// when the live map holds AT LEAST as many pictures as the backup already
+// does. Going backwards is always a deliberate act (the restore button), and
+// never something that happens on its own while nobody is looking.
+let _tcgArtBackup = null;             // { overrides, savedAt, count } | {}
+async function tcgArtBackupLoad(force) {
+  if (_tcgArtBackup && !force) return _tcgArtBackup;
+  const uid = _tcgOwnerUid();
+  if (!uid) return (_tcgArtBackup = {});
+  try {
+    const snap = await getDoc(doc(db, 'users', uid, 'settings', TCG_ART_BACKUP_DOC));
+    _tcgArtBackup = snap.exists() ? (snap.data() || {}) : {};
+  } catch (e) { console.warn('art backup load', e); _tcgArtBackup = {}; }
+  return _tcgArtBackup;
+}
+function _tcgArtBackupMap(b) { return (b && b.overrides) || {}; }
+async function tcgArtBackupSync() {
+  if (!_isAdmin()) return;
+  // Backing up a map that could not be READ would be backing up nothing at
+  // all, under a name that says otherwise.
+  if (_tcgArtLoadFailed) return;
+  const uid = _tcgOwnerUid(); if (!uid) return;
+  const live = Object.keys(_tcgArt || {});
+  if (!live.length) return;                       // never back up an empty map
+  const b = await tcgArtBackupLoad();
+  if (live.length < Object.keys(_tcgArtBackupMap(b)).length) return;   // never shrink
+  try {
+    await setDoc(doc(db, 'users', uid, 'settings', TCG_ART_BACKUP_DOC),
+      { overrides: Object.assign({}, _tcgArt), count: live.length, savedAt: new Date().toISOString() });
+    _tcgArtBackup = null;                          // re-read next time it is asked for
+  } catch (e) { console.warn('art backup save', e); }
+}
+// Restore MERGES: it puts back every picture the backup remembers and leaves
+// anything drawn since alone. A restore that also deleted would be a second
+// destructive button sitting next to the one that caused all this.
+async function tcgArtRestoreBackup() {
+  if (!_isAdmin()) { showToast('Admins only', 'error'); return; }
+  const b = await tcgArtBackupLoad(true);
+  const map = _tcgArtBackupMap(b);
+  const fresh = Object.keys(map).filter(k => !(_tcgArt && _tcgArt[k]));
+  if (!Object.keys(map).length) { showToast('There is no backup stored yet', 'error'); return; }
+  if (!fresh.length) { showToast('Every picture in the backup is already in place', 'info'); return; }
+  if (!confirm('Put back ' + fresh.length + ' picture' + (fresh.length === 1 ? '' : 's') + ' from the backup of ' + _tcgArtWhen(b.savedAt) + '?\n\nNothing is removed — slots that already have art are left exactly as they are.')) return;
+  try {
+    await _tcgArtWriteMany(fresh.reduce((o, k) => { o[k] = map[k]; return o; }, {}));
+    tcgArtRefresh();
+    showToast('Restored ' + fresh.length + ' picture' + (fresh.length === 1 ? '' : 's'), 'success');
+    tcgArtSafetyRender();
+  } catch (e) { console.error('art restore', e); showToast('Restore failed: ' + (e && e.message ? e.message : e), 'error'); }
+}
+// The one writer every recovery path goes through: merged, chunked, and never
+// a whole-document overwrite. See the Maths app's CLAUDE.md for what a blunt
+// write to this document costs.
+const TCG_ART_WRITE_CHUNK = 200;
+async function _tcgArtWriteMany(patch) {
+  const uid = _tcgOwnerUid(); if (!uid) throw new Error('Not signed in');
+  const keys = Object.keys(patch);
+  for (let i = 0; i < keys.length; i += TCG_ART_WRITE_CHUNK) {
+    const slice = {};
+    keys.slice(i, i + TCG_ART_WRITE_CHUNK).forEach(k => { slice[k] = patch[k]; });
+    await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: slice }, { merge: true });
+    Object.assign((_tcgArt = _tcgArt || {}), slice);
+  }
+}
+function _tcgArtWhen(iso) {
+  if (!iso) return 'an unknown date';
+  const d = new Date(iso);
+  return isNaN(d) ? 'an unknown date' : d.toLocaleString();
+}
+
+// ---- Export / import the map -----------------------------------------
+// The off-platform copy. A Firestore backup lives in the same project as the
+// thing it protects; a file on the admin's own machine does not, and it is
+// the only copy that survives the project itself going wrong.
+function tcgArtExport() {
+  if (!_isAdmin()) { showToast('Admins only', 'error'); return; }
+  const map = _tcgArt || {};
+  const n = Object.keys(map).length;
+  if (!n) { showToast('There is no art to export', 'error'); return; }
+  const payload = { app: 'realm-of-embers', kind: 'tcgArt', savedAt: new Date().toISOString(), count: n, overrides: map };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'realm-of-embers-art-' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  showToast('Exported ' + n + ' picture' + (n === 1 ? '' : 's'), 'success');
+}
+async function tcgArtImport(e) {
+  const file = e && e.target && e.target.files && e.target.files[0];
+  if (e && e.target) e.target.value = '';           // same file twice must still fire
+  if (!file || !_isAdmin()) return;
+  try {
+    const data = JSON.parse(await file.text());
+    const map = (data && data.overrides) || null;
+    if (!map || typeof map !== 'object') throw new Error('that file has no art map in it');
+    // Only real slot values, and only slots this app has nothing in: an
+    // import is a rescue, not a way to overwrite work done since.
+    const fresh = Object.keys(map).filter(k => typeof map[k] === 'string' && /^https?:/i.test(map[k]) && !(_tcgArt && _tcgArt[k]));
+    if (!fresh.length) { showToast('Nothing new in that file — every picture in it is already in place', 'info'); return; }
+    if (!confirm('Put back ' + fresh.length + ' picture' + (fresh.length === 1 ? '' : 's') + ' from ' + file.name + '?\n\nNothing is removed — slots that already have art are left exactly as they are.')) return;
+    await _tcgArtWriteMany(fresh.reduce((o, k) => { o[k] = map[k]; return o; }, {}));
+    tcgArtRefresh();
+    showToast('Imported ' + fresh.length + ' picture' + (fresh.length === 1 ? '' : 's'), 'success');
+    tcgArtSafetyRender();
+  } catch (err) { console.error('art import', err); showToast('Import failed: ' + (err && err.message ? err.message : err), 'error'); }
+}
+// ---- Rescue: rebuild the map from Storage ----------------------------
+// The retroactive half. A backup only helps if one existed BEFORE the map was
+// lost; this is what is left when none did.
+//
+// Uploads are content-addressed (`cer-images/<sha256>.png`) and nothing here
+// has ever deleted one, so after a wipe every picture is still sitting in the
+// bucket -- with no record of which slot it belonged to. What survives is the
+// ORDER: `tcgGenerateAllArt` walks TCG_CARDS and draws each monster's card
+// art and then its battle avatar, strictly one at a time, so a generation run
+// lands in the bucket in exactly that sequence. Laying a run back onto that
+// sequence reconstructs the map.
+//
+// It is a PROPOSAL, never an automatic write. Card art is self-identifying --
+// 201 named monsters -- so a misalignment is obvious at a glance, which is
+// why every picture is shown with the slot it is about to be filed into and
+// nothing is saved until the admin says so.
+const TCG_RESCUE_FOLDER = 'cer-images';
+const TCG_RESCUE_GAP_MS = 15 * 60 * 1000;  // a longer pause than this starts a new run
+const TCG_RESCUE_META_PAR = 12;            // metadata reads in flight
+const TCG_RESCUE_RUN_MIN = 4;              // a "run" shorter than this is ordinary authoring
+let _tcgRescue = null;
+
+function _tcgRescueSlotSequence() {
+  // The generator's own order, narrowed to slots that are currently EMPTY:
+  // rescue fills gaps, it does not overwrite work already in place.
+  const seq = [];
+  TCG_CARDS.forEach(c => {
+    if (!(_tcgArt && _tcgArt[c.id])) seq.push({ id: c.id, label: '#' + String(c.num).padStart(3, '0') + ' ' + c.name + ' — card' });
+    if (!(_tcgArt && _tcgArt[c.id + ':av'])) seq.push({ id: c.id + ':av', label: '#' + String(c.num).padStart(3, '0') + ' ' + c.name + ' — avatar' });
+  });
+  return seq;
+}
+async function tcgArtRescueScan() {
+  if (!_isAdmin()) { showToast('Admins only', 'error'); return; }
+  _tcgRescue = { scanning: true, items: [], runs: [], run: null, assign: {}, error: '' };
+  tcgArtSafetyRender();
+  const say = t => { const el = document.getElementById('tcgRescueStatus'); if (el) el.textContent = t; };
+  try {
+    say('Listing ' + TCG_RESCUE_FOLDER + '/…');
+    const res = await listAll(storageRef(storage, TCG_RESCUE_FOLDER));
+    const refs = res.items || [];
+    if (!refs.length) throw new Error('no files found in ' + TCG_RESCUE_FOLDER + '/');
+    const items = [];
+    for (let i = 0; i < refs.length; i += TCG_RESCUE_META_PAR) {
+      say('Reading dates — ' + Math.min(i + TCG_RESCUE_META_PAR, refs.length) + ' of ' + refs.length + '…');
+      await Promise.all(refs.slice(i, i + TCG_RESCUE_META_PAR).map(async r => {
+        try {
+          const m = await getMetadata(r);
+          items.push({ ref: r, name: r.name, t: Date.parse(m.timeCreated) || 0, size: +m.size || 0 });
+        } catch (e) { /* one unreadable object must not sink the scan */ }
+      }));
+    }
+    items.sort((a, b) => a.t - b.t);
+    // Group into runs: a generation batch is hundreds of uploads back to back,
+    // ordinary question authoring is ones and twos with hours between them.
+    const runs = [];
+    let cur = null;
+    items.forEach(it => {
+      if (!cur || it.t - cur.end > TCG_RESCUE_GAP_MS) { cur = { items: [it], start: it.t, end: it.t }; runs.push(cur); }
+      else { cur.items.push(it); cur.end = it.t; }
+    });
+    _tcgRescue.items = items;
+    _tcgRescue.runs = runs.filter(r => r.items.length >= TCG_RESCUE_RUN_MIN).reverse();  // newest first
+    _tcgRescue.scanning = false;
+    if (!_tcgRescue.runs.length) _tcgRescue.error = 'No upload runs of ' + TCG_RESCUE_RUN_MIN + ' pictures or more — nothing here looks like a generation batch.';
+  } catch (e) {
+    console.error('rescue scan', e);
+    _tcgRescue.scanning = false;
+    // Listing needs `list` on the folder in the Storage rules, which is a
+    // different permission from reading a file by its download URL — so this
+    // is the one failure worth naming precisely rather than as "scan failed".
+    _tcgRescue.error = (e && e.code === 'storage/unauthorized')
+      ? 'Storage would not list ' + TCG_RESCUE_FOLDER + '/. Listing needs read (list) permission on that folder in the Firebase Storage rules.'
+      : 'Could not scan Storage: ' + (e && e.message ? e.message : e);
+  }
+  tcgArtSafetyRender();
+}
+// The proposal is a pure function of two things: how far the run is OFFSET
+// along the generator's sequence, and which uploads are strays to be skipped.
+// Both are re-laid from scratch every time either changes, so a correction
+// made halfway down the grid moves everything below it and nothing above.
+function _tcgRescueRelay() {
+  const R = _tcgRescue; if (!R || R.run == null) return;
+  const run = R.runs[R.run];
+  const seq = _tcgRescueSlotSequence();
+  const off = R.offset || 0;
+  R.assign = {};
+  let j = 0;
+  run.items.forEach((it, k) => {
+    if (R.skip && R.skip[k]) { R.assign[k] = ''; return; }   // a stray takes no slot
+    const idx = j + off; j++;
+    R.assign[k] = (idx >= 0 && seq[idx]) ? seq[idx].id : '';
+  });
+  R.seq = seq;
+}
+async function tcgArtRescueOpenRun(i) {
+  if (!_tcgRescue || !_tcgRescue.runs[i]) return;
+  const run = _tcgRescue.runs[i];
+  _tcgRescue.run = i;
+  _tcgRescue.offset = 0;
+  _tcgRescue.skip = {};
+  _tcgRescueRelay();
+  tcgArtSafetyRender();
+  // Thumbnails are fetched after the grid is on screen, so a long run shows
+  // its shape immediately instead of after every URL has resolved.
+  for (let k = 0; k < run.items.length; k++) {
+    const it = run.items[k];
+    if (it.url) continue;
+    try { it.url = await getDownloadURL(it.ref); } catch (e) { it.url = ''; }
+    const img = document.getElementById('tcgRescueImg' + k);
+    if (img && it.url) { img.src = it.url; }
+  }
+}
+// Shift the whole proposal along by one. If a run has an extra picture at the
+// front (a retry, a stray upload) every slot after it is out by one, and the
+// names on the cards make that instantly visible — this is the fix for it.
+function tcgArtRescueShift(by) {
+  if (!_tcgRescue || _tcgRescue.run == null) return;
+  const seq = _tcgRescueSlotSequence();
+  _tcgRescue.offset = Math.max(-seq.length, Math.min(seq.length, (_tcgRescue.offset || 0) + by));
+  _tcgRescueRelay();
+  tcgArtSafetyRender();
+}
+// A stray upload in the middle of a run -- a retry, a picture pasted by hand
+// while the batch was drawing -- puts every slot after it out by one. Marking
+// it a stray takes it out of the sequence and pulls everything below it back
+// into line, which is the correction that actually matches the fault.
+function tcgArtRescueDrop(k) {
+  if (!_tcgRescue || _tcgRescue.run == null) return;
+  _tcgRescue.skip = _tcgRescue.skip || {};
+  if (_tcgRescue.skip[k]) delete _tcgRescue.skip[k]; else _tcgRescue.skip[k] = 1;
+  _tcgRescueRelay();
+  tcgArtSafetyRender();
+}
+async function tcgArtRescueApply() {
+  if (!_isAdmin() || !_tcgRescue || _tcgRescue.run == null) return;
+  const run = _tcgRescue.runs[_tcgRescue.run];
+  const patch = {};
+  const seen = {};
+  run.items.forEach((it, k) => {
+    const slot = _tcgRescue.assign[k];
+    if (!slot || !it.url || seen[slot]) return;     // one picture per slot
+    seen[slot] = 1;
+    patch[slot] = it.url;
+  });
+  const n = Object.keys(patch).length;
+  if (!n) { showToast('Nothing assigned yet', 'error'); return; }
+  if (!confirm('File ' + n + ' picture' + (n === 1 ? '' : 's') + ' into their slots?\n\nOnly empty slots are filled — nothing already in place is changed, and 💾 Export first if you want a copy of the map as it stands.')) return;
+  const btn = document.getElementById('tcgRescueApplyBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Filing…'; }
+  try {
+    await _tcgArtWriteMany(patch);
+    tcgArtRefresh();
+    showToast('Filed ' + n + ' picture' + (n === 1 ? '' : 's'), 'success');
+    _tcgRescue.run = null;
+    tcgArtSafetyRender();
+  } catch (e) {
+    console.error('rescue apply', e);
+    showToast('Filing failed: ' + (e && e.message ? e.message : e), 'error');
+  } finally { if (btn) { btn.disabled = false; btn.textContent = '✅ File these into their slots'; } }
+}
+function tcgArtRescueClose() { if (_tcgRescue) { _tcgRescue.run = null; _tcgRescue.offset = 0; } tcgArtSafetyRender(); }
+
+// ---- The panel -------------------------------------------------------
+// Rendered into a placeholder after paint, because the backup count and the
+// rescue state both need reads that a plain string builder cannot wait for.
+function tcgArtSafetyRender() {
+  const host = document.getElementById('tcgArtSafety');
+  if (!host || !_isAdmin()) return;
+  host.innerHTML = _tcgArtSafetyHtml();
+}
+function _tcgArtSafetyHtml() {
+  const live = Object.keys(_tcgArt || {}).length;
+  const b = _tcgArtBackup || {};
+  const bn = Object.keys(_tcgArtBackupMap(b)).length;
+  let h = '<div class="tcg-safety">'
+    + '<h4>🛟 Art safety &amp; recovery</h4>';
+  if (_tcgArtLoadFailed) {
+    // The single most important thing this panel says. Without it an
+    // unreadable store and a wiped one look identical, and the natural
+    // response to "everything is gone" is to redraw it.
+    h += '<div class="tcg-safety-alarm">⚠️ <b>The art store could not be read.</b> This is <b>not</b> the same as having no art — do not redraw or reset anything until a reload shows the collection again.</div>';
+  }
+  h += '<p>Every picture in the game is one key in <b>one</b> Firestore map. The pictures themselves live in Storage and are never deleted, so a lost map is recoverable — but only if there is something to recover it <i>from</i>.</p>'
+    + '<div class="tcg-safety-stat"><b>' + live + '</b> picture' + (live === 1 ? '' : 's') + ' in the collection'
+    + ' · backup holds <b>' + bn + '</b>' + (b.savedAt ? ' from ' + escapeHtml(_tcgArtWhen(b.savedAt)) : ' — none yet') + '</div>';
+  if (bn > live && live >= 0) {
+    h += '<div class="tcg-safety-alarm">⚠️ The backup holds <b>' + (bn - live) + '</b> more picture' + (bn - live === 1 ? '' : 's') + ' than the collection does. If art has gone missing, <b>↩️ Restore</b> puts it back.</div>';
+  }
+  h += '<div class="tcg-gen-actions">'
+    + '<button type="button" class="btn btn-outline" onclick="tcgArtExport()">💾 Export a copy</button>'
+    + '<label class="btn btn-outline" style="cursor:pointer;">📥 Import a copy<input type="file" accept="application/json,.json" style="display:none;" onchange="tcgArtImport(event)"></label>'
+    + '<button type="button" class="btn btn-outline"' + (bn ? '' : ' disabled') + ' onclick="tcgArtRestoreBackup()">↩️ Restore from backup</button>'
+    + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueScan()">🚑 Rescue from Storage</button>'
+    + '</div>'
+    + _tcgRescueHtml()
+    + '</div>';
+  return h;
+}
+function _tcgRescueHtml() {
+  const R = _tcgRescue;
+  if (!R) return '';
+  if (R.scanning) return '<div class="tcg-rescue"><div id="tcgRescueStatus" class="tcg-gen-status">Scanning…</div></div>';
+  if (R.error) return '<div class="tcg-rescue"><div class="tcg-safety-alarm">' + escapeHtml(R.error) + '</div></div>';
+  if (R.run == null) {
+    let h = '<div class="tcg-rescue"><p><b>' + R.runs.length + ' upload run' + (R.runs.length === 1 ? '' : 's') + '</b> found in ' + TCG_RESCUE_FOLDER + '/, newest first. A generation batch is hundreds of pictures uploaded back to back; ordinary question authoring is a handful. Open the run that looks like your artwork.</p><div class="tcg-rescue-runs">';
+    R.runs.slice(0, 40).forEach((r, i) => {
+      h += '<button type="button" class="tcg-rescue-run" onclick="tcgArtRescueOpenRun(' + i + ')">'
+        + '<b>' + r.items.length + ' pictures</b>'
+        + '<span>' + escapeHtml(new Date(r.start).toLocaleString()) + '</span></button>';
+    });
+    return h + '</div></div>';
+  }
+  const run = R.runs[R.run];
+  const byId = {}; (R.seq || []).forEach(sl => { byId[sl.id] = sl.label; });
+  const filed = Object.keys(R.assign || {}).filter(k => R.assign[k]).length;
+  let h = '<div class="tcg-rescue">'
+    + '<p>The ' + run.items.length + ' pictures of that run, <b>in the order they were uploaded</b>, laid back onto the order the generator draws in: each monster\'s card art, then its battle avatar. <b>Check a few names against the pictures.</b> If everything is out by one, nudge it; if one upload is a stray, mark it and the rest fall back into line.</p>'
+    + '<div class="tcg-gen-actions">'
+    + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueShift(-1)">\u25C0 Nudge back</button>'
+    + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueShift(1)">Nudge on \u25B6</button>'
+    + '<button type="button" class="btn btn-primary" id="tcgRescueApplyBtn" onclick="tcgArtRescueApply()">\u2705 File ' + filed + ' into their slots</button>'
+    + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueClose()">Back</button>'
+    + '</div><div class="tcg-rescue-grid">';
+  run.items.forEach((it, k) => {
+    const slot = R.assign[k] || '';
+    const skipped = !!(R.skip && R.skip[k]);
+    h += '<div class="tcg-rescue-cell' + (skipped ? ' skipped' : '') + '">'
+      + '<img id="tcgRescueImg' + k + '" alt="" loading="lazy" ' + (it.url ? 'src="' + escapeHtml(it.url) + '"' : '') + '>'
+      + '<div class="tcg-rescue-slot">' + (skipped ? '\u2014 stray \u2014' : (slot ? escapeHtml(byId[slot] || slot) : '\u2014 no slot left \u2014')) + '</div>'
+      + '<button type="button" class="tcg-rescue-skip" onclick="tcgArtRescueDrop(' + k + ')">' + (skipped ? '\u21A9 put back' : '\u2702 stray') + '</button>'
+      + '</div>';
+  });
+  return h + '</div></div>';
+}
+
 // =====================================================================
 // AI ART GENERATOR (admin, Card Art tab)
 // =====================================================================
@@ -41096,6 +41474,7 @@ async function tcgGenAllFx() {
 
 function tcgArtAdminHtml() {
   let html = '<div class="tcg-art-admin">'
+    + '<div id="tcgArtSafety"></div>'
     + '<div class="tcg-section-note">Every monster carries <b>two graphics</b>: the <b>🃏 trading-card art</b> shown on the card face, and the <b>⚔️ battle avatar</b> that fights on the arena stage. Paste a PNG into either slot, upload one, or let the AI draw them — until both are set, one image stands in for the other. Square images look best.</div>'
     + tcgArtGenPanelHtml()
     + tcgLogoArtAdminHtml()
@@ -41814,7 +42193,12 @@ function tcgRenderBody() {
   else if (tcgTab === 'board') { host.innerHTML = '<div class="ga-loading" style="text-align:center;color:#94a3b8;padding:30px;">Loading rankings…</div>'; tcgRenderBoard(); }
   else if (tcgTab === 'lore') host.innerHTML = tcgLoreHtml();
   else if (tcgTab === 'guide') host.innerHTML = tcgGuideHtml();
-  else if (tcgTab === 'art') host.innerHTML = _isAdmin() ? tcgArtAdminHtml() : tcgDexHtml(s);
+  else if (tcgTab === 'art') {
+    host.innerHTML = _isAdmin() ? tcgArtAdminHtml() : tcgDexHtml(s);
+    // The backup is refreshed from here — an admin opening the Card Art tab is
+    // exactly the moment the map is known-good and worth remembering.
+    if (_isAdmin()) tcgArtBackupLoad().then(() => { tcgArtSafetyRender(); return tcgArtBackupSync(); }).then(() => tcgArtSafetyRender()).catch(() => {});
+  }
   else host.innerHTML = tcgArenaHtml(s);
 }
 // -- Collection tab --
@@ -49372,6 +49756,17 @@ window.onTcgArtPaste = onTcgArtPaste;
 window.onTcgArtDrop = onTcgArtDrop;
 window.onTcgArtPick = onTcgArtPick;
 window.resetTcgArt = resetTcgArt;
+// 🛟 Art safety & recovery — every one of these is reached from an inline
+// handler, so the module scope has to hand them out explicitly.
+window.tcgArtExport = tcgArtExport;
+window.tcgArtImport = tcgArtImport;
+window.tcgArtRestoreBackup = tcgArtRestoreBackup;
+window.tcgArtRescueScan = tcgArtRescueScan;
+window.tcgArtRescueOpenRun = tcgArtRescueOpenRun;
+window.tcgArtRescueShift = tcgArtRescueShift;
+window.tcgArtRescueDrop = tcgArtRescueDrop;
+window.tcgArtRescueApply = tcgArtRescueApply;
+window.tcgArtRescueClose = tcgArtRescueClose;
 window.openPracticeAsPicker = openPracticeAsPicker;
 window.practiceAsToggleDetail = practiceAsToggleDetail;
 window.closePracticeAsPicker = closePracticeAsPicker;
