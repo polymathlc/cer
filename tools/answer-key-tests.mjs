@@ -78,7 +78,10 @@ test('an answer line puts its answer on the key', () => {
   eq(s.length, 1, 'one section');
   eq(s[0].label, 'Ans:', 'keeps the author\'s own label');
   ok(s[0].content.indexOf('4.5 N') >= 0, 'and the answer');
-  eq(M._pushBlockAnswerKey.length, 3, 'signature is (sections, block, part)');
+  // The 4th is `why` — the ⓘ "why each other option is wrong" notes, threaded
+  // through this ONE pusher rather than added to each print path's own switch,
+  // for the reason the pusher exists at all. See tools/why-not-tests.mjs.
+  eq(M._pushBlockAnswerKey.length, 4, 'signature is (sections, block, part, why)');
   eq(push({ type: 'answerLine', answer: 'Oxygen' })[0].label, 'Answer', 'unlabelled falls back');
   eq(push({ type: 'answerLine', label: 'Ans:', answer: '   ' }).length, 0, 'a blank answer is not an answer');
 });

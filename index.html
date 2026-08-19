@@ -3241,6 +3241,20 @@ option {
   .print-ak-fulltext .ak-fullcontent sub {
     line-height: 0;
   }
+  /* Why each of the OTHER options is wrong. Set lighter and a size down from
+     the answer above it: the answer is what the teacher marks from at a
+     glance, and these are the notes they read out afterwards. */
+  .print-ak-fulltext .ak-why {
+    font-size: 8.6pt;
+    line-height: 1.42;
+    font-weight: 400;
+    color: #444;
+    margin: 2pt 0 0 10pt;
+    text-indent: -10pt;
+    padding-left: 0;
+    break-inside: avoid;
+  }
+  .print-ak-fulltext .ak-why b { color: #111; }
 
   /* Question chunk within grouped pages (auto-detect layout). break-inside
      (modern) alongside page-break-inside (legacy) so the browser never splits
@@ -8898,6 +8912,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           </select>
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment.">
+            <input type="checkbox" id="printIncludeWhy" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#9432; Why the other options are wrong
+          </label>
           <span class="selected-count" id="printSelectedCount">0 selected</span>
           <button class="btn btn-primary" onclick="printWorksheet()" id="printBtn" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -9000,6 +9018,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <input type="checkbox" id="wsIncludeFields" checked style="width:16px;height:16px;accent-color:var(--primary);">
             ✍️ Name / Date / Class fields
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment.">
+            <input type="checkbox" id="wsIncludeWhy" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#9432; Why the other options are wrong
+          </label>
         </div>
 
         <div class="ws-actions-bar">
@@ -9050,6 +9072,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <label title="Print the blank Name / Date / Class lines at the top of the sheet. Turn it off for a clean copy with no student fields.">
             <input type="checkbox" id="mwIncludeFields" checked style="width:16px;height:16px;accent-color:var(--primary);">
             ✍️ Name / Date / Class fields
+          </label>
+          <label title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment.">
+            <input type="checkbox" id="mwIncludeWhy" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#9432; Why the other options are wrong
           </label>
         </div>
         <div class="ws-saved-grid" id="savedWsGrid"></div>
@@ -12137,6 +12163,70 @@ body.lore-reading { overflow: hidden; }
 .qp-qtext{ line-height:1.85; font-size:0.97rem; margin:0 0 12px; color:var(--on-surface,#14161a); }
 .qp-qtext + .qp-qtext{ margin-top:-2px; }
 .qp-part .open-answer-section{ margin-bottom:10px; }
+
+/* ── 🔎 Why not this one — the ⓘ on a MARKED question's wrong options ──────
+   The badge is added by wnyArm AFTER marking and only to the options that are
+   wrong, so nothing here may be visible before a question has been marked. */
+.wny-badge{
+  margin-left:auto; flex:0 0 auto; align-self:center;
+  width:22px; height:22px; padding:0;
+  display:inline-flex; align-items:center; justify-content:center;
+  border:1px solid var(--border); border-radius:999px;
+  background:#fff; color:var(--text-muted,#6b7280);
+  font-size:0.86rem; line-height:1; cursor:help;
+  transition:color .12s, border-color .12s, background .12s;
+}
+.wny-badge:hover, .wny-badge:focus-visible{
+  color:#b91c1c; border-color:#b91c1c; background:#fef2f2; outline:none;
+}
+#wnyPop{
+  position:fixed; z-index:400; display:none;
+  width:min(340px, calc(100vw - 24px));
+  max-height:min(60vh, 420px); overflow:auto;
+  background:var(--surface,#fff); color:var(--text,#14161a);
+  border:1px solid var(--border); border-radius:14px;
+  box-shadow:0 12px 34px rgba(15,23,42,0.17);
+  padding:16px 18px; font-size:0.88rem; line-height:1.6;
+}
+#wnyPop.wny-pinned{ box-shadow:0 14px 40px rgba(15,23,42,0.24); }
+.wny-head{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+.wny-num{
+  flex:0 0 auto; font-weight:800; color:var(--primary,#0b6b4f);
+  font-size:0.95rem;
+}
+.wny-word{ font-weight:600; flex:1 1 auto; min-width:0; word-break:break-word; }
+.wny-yours{
+  flex:0 0 auto; font-size:0.68rem; font-weight:700; letter-spacing:0.05em;
+  text-transform:uppercase; color:#b45309; background:#fef3c7;
+  border-radius:999px; padding:2px 8px;
+}
+.wny-close{
+  flex:0 0 auto; border:none; background:transparent; cursor:pointer;
+  color:var(--text-muted); font-size:0.9rem; line-height:1; padding:2px 4px;
+}
+.wny-verdict{ font-size:0.72rem; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; margin-bottom:10px; }
+.wny-verdict.ok{ color:#15803d; }
+.wny-verdict.no{ color:#b91c1c; }
+.wny-txt{ color:var(--text,#14161a); }
+.wny-note{ color:var(--text-muted); font-size:0.84rem; }
+.wny-load{ display:flex; align-items:center; gap:9px; color:var(--text-muted); font-size:0.84rem; }
+.wny-dots{ display:inline-flex; gap:3px; }
+.wny-dots i{ width:5px; height:5px; border-radius:50%; background:currentColor; animation:wnyDot 1s ease-in-out infinite; }
+.wny-dots i:nth-child(2){ animation-delay:.15s; }
+.wny-dots i:nth-child(3){ animation-delay:.3s; }
+@keyframes wnyDot{ 0%,80%,100%{ opacity:.25; } 40%{ opacity:1; } }
+@media (prefers-reduced-motion: reduce){ .wny-dots i{ animation:none; opacity:.6; } }
+/* The past-papers toolbar switch. Tailwind's preflight strips a bare
+   checkbox to an invisible white square, so appearance goes back to auto. */
+.pp-whybox{
+  display:inline-flex; align-items:center; gap:7px; cursor:pointer;
+  font-size:0.78rem; font-weight:600; color:var(--text-muted);
+  margin-left:10px; white-space:nowrap;
+}
+.pp-whybox input[type="checkbox"]{
+  appearance:auto; -webkit-appearance:auto;
+  width:15px; height:15px; accent-color:var(--primary);
+}
 /* ── Student Home & Arcade ───────────────────────────────────────────── */
 .home-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }
 .home-card{ background:var(--surface,#fff); border:1px solid var(--border); border-radius:16px; padding:24px 26px; display:flex; flex-direction:column; gap:12px; }
