@@ -1716,7 +1716,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.301.0';
+const APP_VERSION = 'v1.302.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -4533,7 +4533,7 @@ function renderBlocks() {
             <span class="toolbar-divider"></span>
             ${micForBlockHtml(block.id, 'content', 'Dictate the question text')}
             ${improveBtnHtml(block.id, 'content')}
-            ${shortenBtnHtml(block.id, 'content')}
+            ${shortenBtnHtml(block.id, 'content')} ${completeBtnHtml(block.id, 'content')}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Enter question text..."
                data-block-id="${block.id}" data-field="content"
@@ -4605,19 +4605,19 @@ function renderBlocks() {
               ${aiAnswerBtnHtml(block.id)}
             </div>
             <div class="cer-section" data-mic-wrap>
-              <div class="cer-label claim-label">Claim ${micButtonHtml('', 'Speak the claim')} ${improveBtnHtml(block.id, 'claim')} ${shortenBtnHtml(block.id, 'claim')}</div>
+              <div class="cer-label claim-label">Claim ${micButtonHtml('', 'Speak the claim')} ${improveBtnHtml(block.id, 'claim')} ${shortenBtnHtml(block.id, 'claim')} ${completeBtnHtml(block.id, 'claim')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the claim answer..."
                    data-block-id="${block.id}" data-field="claim"
                    oninput="saveBlockContent('${block.id}', 'claim', this.innerHTML)">${block.claim || ''}</div>
             </div>
             <div class="cer-section" data-mic-wrap>
-              <div class="cer-label evidence-label">Evidence ${micButtonHtml('', 'Speak the evidence')} ${improveBtnHtml(block.id, 'evidence')} ${shortenBtnHtml(block.id, 'evidence')}</div>
+              <div class="cer-label evidence-label">Evidence ${micButtonHtml('', 'Speak the evidence')} ${improveBtnHtml(block.id, 'evidence')} ${shortenBtnHtml(block.id, 'evidence')} ${completeBtnHtml(block.id, 'evidence')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the evidence answer..."
                    data-block-id="${block.id}" data-field="evidence"
                    oninput="saveBlockContent('${block.id}', 'evidence', this.innerHTML)">${block.evidence || ''}</div>
             </div>
             <div class="cer-section" data-mic-wrap>
-              <div class="cer-label reasoning-label">Reasoning ${micButtonHtml('', 'Speak the reasoning')} ${improveBtnHtml(block.id, 'reasoning')} ${shortenBtnHtml(block.id, 'reasoning')}</div>
+              <div class="cer-label reasoning-label">Reasoning ${micButtonHtml('', 'Speak the reasoning')} ${improveBtnHtml(block.id, 'reasoning')} ${shortenBtnHtml(block.id, 'reasoning')} ${completeBtnHtml(block.id, 'reasoning')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the reasoning answer..."
                    data-block-id="${block.id}" data-field="reasoning"
                    oninput="saveBlockContent('${block.id}', 'reasoning', this.innerHTML)">${block.reasoning || ''}</div>
@@ -4641,7 +4641,7 @@ function renderBlocks() {
               <span class="toolbar-divider"></span>
               ${micButtonHtml('', 'Dictate the answer')}
               ${improveBtnHtml(block.id, 'content')}
-              ${shortenBtnHtml(block.id, 'content')}
+              ${shortenBtnHtml(block.id, 'content')} ${completeBtnHtml(block.id, 'content')}
               ${aiAnswerBtnHtml(block.id)}
             </div>
             <div class="content-editable" contenteditable="true" data-placeholder="Enter the answer..."
@@ -4672,7 +4672,7 @@ function renderBlocks() {
             <span class="toolbar-divider"></span>
             ${micForBlockHtml(block.id, 'content', 'Dictate the explanation')}
             ${improveBtnHtml(block.id, 'content')}
-            ${shortenBtnHtml(block.id, 'content')}
+            ${shortenBtnHtml(block.id, 'content')} ${completeBtnHtml(block.id, 'content')}
             ${aiExplainBtnHtml(block.id)}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Enter explanation text… (you can paste a picture here too)"
@@ -5099,6 +5099,13 @@ function shortenBtnHtml(blockId, field) {
   return `<button type="button" class="improve-btn shorten-btn" data-shorten-block="${blockId}" data-shorten-field="${field}" title="Shorten with AI — trims the words down but keeps every keyword, science fact and the exact meaning">✂️ Shorten</button>`;
 }
 
+// "✍️ AI complete" - the third sibling of ✨ Improve and ✂️ Shorten, and the one
+// that only ever ADDS. It carries the paragraph on from where the author
+// stopped; nothing already in the box is rewritten, re-ordered or removed.
+function completeBtnHtml(blockId, field) {
+  return `<button type="button" class="improve-btn complete-btn" data-complete-block="${blockId}" data-complete-field="${field}" title="Carry on writing with AI from where you stopped — it only adds to the end and never changes a word you have already typed">✍️ AI complete</button>`;
+}
+
 // "🤖 AI answer" button shown on every ANSWER block (CER and plain answer).
 // Reads the whole question above it — text, parts, tables and diagrams — and
 // crafts the model answer, grounded FIRST on the Teaching Notes database.
@@ -5303,7 +5310,9 @@ document.addEventListener('click', function (e) {
   .improve-btn:hover { border-color:var(--primary,#0b6b4f); background:var(--primary-light,#e8f3ec); }
   .improve-btn:disabled { opacity:.6; cursor:default; }
   .improve-btn.shorten-btn { color:#b45309; }
-  .improve-btn.shorten-btn:hover { border-color:#b45309; background:#fdf4e3; }`;
+  .improve-btn.shorten-btn:hover { border-color:#b45309; background:#fdf4e3; }
+  .improve-btn.complete-btn { color:#4f46e5; }
+  .improve-btn.complete-btn:hover { border-color:#4f46e5; background:#eef2ff; }`;
   const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
 })();
 // Delegated handler: rewrite the box's current text with better grammar /
@@ -5313,6 +5322,7 @@ document.addEventListener('click', async function (e) {
   const btn = e.target.closest && e.target.closest('.improve-btn');
   if (!btn || btn.disabled) return;
   if (btn.classList.contains('shorten-btn')) return;   // ✂️ Shorten shares the styling, not the handler
+  if (btn.classList.contains('complete-btn')) return;   // ✍️ AI complete likewise
   e.preventDefault();
   const blockId = btn.getAttribute('data-improve-block');
   const field = btn.getAttribute('data-improve-field');
@@ -5426,6 +5436,170 @@ document.addEventListener('click', async function (e) {
   } finally { btn.disabled = false; btn.innerHTML = orig; }
 });
 
+// ── ✍️ AI COMPLETE ──────────────────────────────────────────────────────────
+// The third sibling of ✨ Improve and ✂️ Shorten, and the ONE of the three that
+// may not touch a word the author has already typed: it carries the paragraph
+// ON from where they stopped. The other two rewrite the box wholesale, which is
+// honest for what they do — but a "complete" that rewrote the opening would be
+// the same button doing a different job, and the author would only find out by
+// re-reading a paragraph they thought they had finished with.
+//
+// So the guarantee is STRUCTURAL, not something the prompt asks for: the reply
+// is APPENDED and the existing markup is never re-serialised. What is already
+// in the box cannot change, whatever the model returns.
+const AIC_ECHO_MAX = 400;   // how far back a restated tail is looked for
+const AIC_ECHO_MIN = 10;    // shorter than this and an overlap is a coincidence
+const AIC_WORDS    = 90;    // roughly how much the model is asked for
+
+// Whitespace-folded, lower-cased text PLUS an index back into the original, so
+// a match found on the folded text can be cut out of the raw string. `idx` has
+// one entry per folded character and a closing sentinel, so idx[folded.length]
+// is always the end of the source.
+function _aicNormIdx(s) {
+  const str = String(s == null ? '' : s);
+  const out = [], idx = [];
+  let sp = false;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (/\s/.test(c)) { if (out.length && !sp) { out.push(' '); idx.push(i); sp = true; } continue; }
+    sp = false; out.push(c.toLowerCase()); idx.push(i);
+  }
+  while (out.length && out[out.length - 1] === ' ') { out.pop(); idx.pop(); }
+  idx.push(str.length);
+  return { s: out.join(''), idx };
+}
+function _aicNorm(s) { return _aicNormIdx(s).s; }
+
+// A model asked to "carry on" restates the last sentence first far more often
+// than not — and sometimes the WHOLE paragraph. Appended verbatim, that is how
+// the author's own opening ends up in the box twice, which reads exactly like
+// the button having mangled it. Whatever of the existing text the reply opens
+// with is cut off; anything it opens with that is NOT already there is kept.
+function _aicTrimEcho(before, reply) {
+  const raw = String(reply == null ? '' : reply);
+  const B = _aicNorm(before);
+  const O = _aicNormIdx(raw);
+  if (!B || !O.s) return raw.trim();
+  const cutAt = (k) => raw.slice(O.idx[k]).replace(/^\s+/, '').trim();
+  if (O.s.startsWith(B)) return cutAt(B.length);          // the whole thing echoed back
+  const max = Math.min(B.length, AIC_ECHO_MAX);
+  for (let k = max; k >= AIC_ECHO_MIN; k--) {             // longest restated tail wins
+    if (O.s.startsWith(B.slice(B.length - k))) return cutAt(k);
+  }
+  return raw.trim();
+}
+
+// 中文 and 华文 are written without spaces between characters, so a space welded
+// on between two of them is a space in the middle of a word. Latin either side
+// gets the space it needs, and text the author left ending in one keeps theirs.
+function _aicCjk(ch) { return /[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/.test(String(ch || '')); }
+function _aicJoin(before, add) {
+  const b = String(before == null ? '' : before);
+  const a = String(add == null ? '' : add).trim();
+  if (!b.trim() || !a) return '';
+  if (/\s$/.test(b)) return '';
+  if (_aicCjk(b.trim().slice(-1)) || _aicCjk(a.charAt(0))) return '';
+  return ' ';
+}
+
+// A model told "plain text only" still wraps its reply in quotation marks now
+// and then. Only a matched pair around the WHOLE reply comes off — a completion
+// that legitimately opens a line of dialogue keeps its opening quote.
+function _aicUnquote(s) {
+  const t = String(s == null ? '' : s).trim();
+  const m = t.match(/^(["'“‘「『])([\s\S]*)(["'”’」』])$/);
+  return m && m[2] && !m[2].includes(m[1]) ? m[2].trim() : t;
+}
+
+// How much was added, for the toast. Its own helper so the whole block above is
+// one self-contained, portable unit: all four portals carry it byte for byte,
+// and one harness pins it for all four.
+function _aicWords(t) { return (String(t == null ? '' : t).trim().match(/\S+/g) || []).length; }
+
+// What the model is asked for. Rule 1 is the one that matters: a reply that
+// restates the opening is the whole failure mode, and _aicTrimEcho is only the
+// net under it.
+function _aicPrompt(text) {
+  return [
+    'Carry on writing the text below. It comes from a Singapore primary-school (PSLE) science question, model answer or teacher explanation.',
+    'RULES - follow every one:',
+    '1. Return ONLY the NEW text that continues it. Do NOT repeat, quote or restate any part of the text given - not even its last few words.',
+    '2. Do NOT rewrite, correct, re-order or comment on what is already there. It stays exactly as it is and your text is added straight after it.',
+    '3. Continue from exactly where it stops. If it stops in the middle of a sentence, carry THAT sentence on from that word - do not start a new one.',
+    '4. Finish the sentence in progress, complete the paragraph, and then STOP. About ' + AIC_WORDS + ' words at most.',
+    '5. Match the voice, tense, register and reading level of what is there, and keep every keyword consistent with it.',
+    '6. If the text is a QUESTION being written, finish ASKING it - never answer it and never give the answer away.',
+    '7. Plain text only - no markdown, no quotation marks around your reply, no labels, no commentary, no [[brackets]].',
+    'Return ONLY the continuation.',
+    '',
+    'Text so far:',
+    text
+  ].join('\n');
+}
+
+// Where the completion is written. It is APPENDED and the existing markup is
+// never re-serialised, so the author's own bold, underline and pasted pictures
+// survive untouched - a plain-text round trip would flatten all three.
+// execCommand keeps the browser's own undo stack, so ONE Ctrl+Z takes the whole
+// completion back off again, which is what makes it cheap to try.
+function _aicAppendInto(el, html) {
+  try {
+    el.focus();
+    const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    if (document.execCommand('insertHTML', false, html)) return;
+  } catch (_) { /* fall through to the plain append */ }
+  el.innerHTML = el.innerHTML + html;
+}
+
+// Delegated handler: carry on writing from the end of the box. Same wiring as
+// the other two - content-editables use data-complete-block + data-complete-field,
+// plain inputs/textareas use data-complete-el.
+document.addEventListener('click', async function (e) {
+  const btn = e.target.closest && e.target.closest('.complete-btn');
+  if (!btn || btn.disabled) return;
+  e.preventDefault();
+  const blockId = btn.getAttribute('data-complete-block');
+  const field = btn.getAttribute('data-complete-field');
+  const elId = btn.getAttribute('data-complete-el');
+  let getText, append;
+  if (blockId && field) {
+    const el = document.querySelector('.content-editable[data-block-id="' + blockId + '"][data-field="' + field + '"]');
+    if (!el) return;
+    getText = () => _boxPlainText(el.innerHTML || '');
+    append = (sep, t) => {
+      _aicAppendInto(el, sep + escapeHtml(t).replace(/\n/g, '<br>'));
+      saveBlockContent(blockId, field, el.innerHTML);
+    };
+  } else if (elId) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    getText = () => el.value || '';
+    append = (sep, t) => { el.value = (el.value || '') + sep + t; el.dispatchEvent(new Event('input', { bubbles: true })); };
+  } else return;
+
+  const text = (getText() || '').trim();
+  // A completion from an empty box is not a completion, it is a question
+  // written from nothing - a different job, and not this button's.
+  if (!text) { showToast('Write the start of it first — AI complete carries on from what is already in the box', 'info'); return; }
+  if (!window.__aiReady || !window.__aiReady()) { showToast('AI is not ready yet — try again in a moment', 'error'); return; }
+
+  const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '✍️ …';
+  try {
+    const reply = _aicUnquote((await askGemini(_aicPrompt(text), { maxOutputTokens: 400, temperature: 0.5 }) || '')
+      .replace(/^\s*```[a-z]*\s*|\s*```\s*$/gi, '')
+      .replace(/\[\[|\]\]/g, '')
+      .trim());
+    const add = _aicTrimEcho(text, reply);
+    if (!add) { showToast('The AI only gave back what you had already written — nothing was added', 'info'); return; }
+    append(_aicJoin(text, add), add);
+    showToast('Carried on ✍️ ' + _aicWords(add) + ' words added — nothing you had typed was changed', 'success');
+  } catch (err) {
+    console.error('AI complete failed', err);
+    showToast('AI complete failed: ' + (err && err.message ? err.message : err), 'error');
+  } finally { btn.disabled = false; btn.innerHTML = orig; }
+});
+
 const COMMON_MISTAKE_COLORS = { teal: '#0d9488', orange: '#ea580c', red: '#dc2626', purple: '#7c3aed', blue: '#2d6ca8' };
 
 // "Printed lines" control for the two answer blocks — how tall this answer box
@@ -5461,7 +5635,7 @@ function renderImportedBlockEditorBody(block) {
         <div class="block-body">
           <input class="form-input" type="text" placeholder="Label (e.g. (a))" style="max-width:160px;margin-bottom:8px;"
                  value="${escapeHtml(block.label || '')}" oninput="saveBlockField('${id}','label',this.value)">
-          <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:4px;">${micForBlockHtml(id, 'content', 'Dictate the part text')} ${improveBtnHtml(id, 'content')} ${shortenBtnHtml(id, 'content')}</div>
+          <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:4px;">${micForBlockHtml(id, 'content', 'Dictate the part text')} ${improveBtnHtml(id, 'content')} ${shortenBtnHtml(id, 'content')} ${completeBtnHtml(id, 'content')}</div>
           <div class="content-editable" contenteditable="true" data-placeholder="Part text…"
                data-block-id="${id}" data-field="content"
                oninput="saveBlockContent('${id}','content',this.innerHTML)">${block.content || ''}</div>
@@ -5556,7 +5730,7 @@ function renderImportedBlockEditorBody(block) {
                    value="${escapeHtml(block.title || 'Common Mistake')}" oninput="saveBlockField('${id}','title',this.value)">
             <select class="form-input" style="max-width:130px;" onchange="saveBlockField('${id}','color',this.value)">${colorOpts}</select>
             ${micForBlockHtml(id, 'text', 'Dictate the common mistake')}
-            ${shortenBtnHtml(id, 'text')}
+            ${shortenBtnHtml(id, 'text')} ${completeBtnHtml(id, 'text')}
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Describe the common mistake…"
                data-block-id="${id}" data-field="text"
@@ -5568,7 +5742,7 @@ function renderImportedBlockEditorBody(block) {
         <div class="block-body">
           <input class="form-input" type="text" placeholder="Label" style="margin-bottom:8px;"
                  value="${escapeHtml(block.label || "Student's Answer")}" oninput="saveBlockField('${id}','label',this.value)">
-          <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:4px;">${micForBlockHtml(id, 'answer', 'Dictate the student answer')} ${shortenBtnHtml(id, 'answer')}</div>
+          <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:4px;">${micForBlockHtml(id, 'answer', 'Dictate the student answer')} ${shortenBtnHtml(id, 'answer')} ${completeBtnHtml(id, 'answer')}</div>
           <div class="content-editable" contenteditable="true" data-placeholder="Example (often incorrect) answer…"
                data-block-id="${id}" data-field="answer"
                oninput="saveBlockContent('${id}','answer',this.innerHTML)">${block.answer || ''}</div>
@@ -5578,7 +5752,7 @@ function renderImportedBlockEditorBody(block) {
         <div class="block-body">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
             <span style="font-size:0.8rem;color:var(--text-muted);">🔑 Answer key — hidden from students during practice.</span>
-            <span style="display:flex;align-items:center;gap:6px;">${micForBlockHtml(id, 'text', 'Dictate the answer key')} ${shortenBtnHtml(id, 'text')}</span>
+            <span style="display:flex;align-items:center;gap:6px;">${micForBlockHtml(id, 'text', 'Dictate the answer key')} ${shortenBtnHtml(id, 'text')} ${completeBtnHtml(id, 'text')}</span>
           </div>
           <div class="content-editable" contenteditable="true" data-placeholder="Answer key text…"
                data-block-id="${id}" data-field="text"
