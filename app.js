@@ -1716,7 +1716,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.304.0';
+const APP_VERSION = 'v1.305.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -6289,7 +6289,7 @@ function setAkdBlockNote(blockId, v) {
 function akdBarHtml(blockId, note, hasPic) {
   return `
     <div class="akd-bar">
-      <button type="button" class="akd-btn" onclick="akdRunBlock('${blockId}', this, false)" title="Let the AI draw a clear diagram that explains this answer. It reads the question and the answer, and the picture lands in the box above.">🖼 Auto diagram</button>
+      <button type="button" class="akd-btn" onclick="akdRunBlock('${blockId}', this, false)" title="Let the AI draw an OPTIONAL picture that explains this answer. It is a teaching aid on the answer key — the student sees it only after their answer is marked, and it never asks anyone to draw anything.">🖼 Auto diagram</button>
       <button type="button" class="akd-btn"${hasPic ? '' : ' style="display:none;"'} id="akdBlockRegen_${blockId}" onclick="akdRunBlock('${blockId}', this, true)" title="Redraw the diagram that is there now, with the instructions below applied to it">🔄 Regenerate</button>
       <button type="button" class="akd-btn"${hasPic ? '' : ' style="display:none;"'} id="akdBlockTouch_${blockId}" onclick="akdTouchUpBlock('${blockId}')" title="Open the diagram in the touch-up editor — fix a label, move an arrow, erase anything wrong">✏️ Touch up</button>
       <input class="akd-note" type="text" placeholder="Instructions for the diagram — e.g. side view, label the anther, arrows in red"
@@ -20577,7 +20577,11 @@ function buildOpenBody(q, containerSel, markCfg) {
   // Single-part questions render plain (no extra frame); multi-part questions
   // get one softly-bordered card per part so the structure is obvious.
   const solo = sections.length <= 1;
-  let html = sections.map(s => `<div class="qp-part${solo ? ' solo' : ''}">${s.html}</div>`).join('');
+  // A question is text and pictures, and the text lands first. The bar says so
+  // while the pictures are still coming — it starts hidden and shows itself
+  // only if the wait is real (see IMG_WAIT_GRACE).
+  let html = imgWaitBarHtml(containerSel) +
+    sections.map(s => `<div class="qp-part${solo ? ' solo' : ''}">${s.html}</div>`).join('');
   const fbItemCount = fbBlocks.reduce((s, b) => s + b.oidxs.length, 0);
   if (annotCount) {
     // Each annotation pad carries its own Check / AI Check bar; just add the
@@ -20601,6 +20605,7 @@ function buildOpenBody(q, containerSel, markCfg) {
   _openFinalized[containerSel] = false;
   _openPhoto[containerSel] = null; // fresh render — drop any previous photo
   if (annotCount) _scheduleAnnotInit(containerSel);
+  _scheduleImgWait(containerSel);
   return html;
 }
 
@@ -21328,6 +21333,156 @@ const _openPhoto = {}; // containerSel -> { dataUrl, mimeType, data, name }
 // Keep underscores: the file-input "change" handler rebuilds the container
 // selector as '#' + key, so the key must round-trip for ids like wsPreview_q_….
 function _openPhotoKey(containerSel) { return String(containerSel || '').replace(/[^a-z0-9_]/gi, ''); }
+// =====================================================================
+// ⏳ STILL LOADING — the bar on a question whose pictures have not arrived
+// =====================================================================
+// A question is text and pictures, and the text lands first. On a slow school
+// connection a diagram can take ten or twenty seconds, and until it does the
+// student is looking at a question with a gap where the thing they need is
+// supposed to be — with nothing on screen to say the gap is temporary. They
+// answer around it, or they give up on the question, or they reload and start
+// the wait again. All three are the app's fault, not theirs.
+//
+// So a question that is still fetching pictures says so, and shows how far it
+// has got.
+//
+//  • IT IS HONEST. The bar is `loaded / total`, counted from the real <img>
+//    elements — not a timer pretending to be progress. What a timer CAN say is
+//    that something is still happening, so the bar also carries a moving stripe
+//    while any picture is outstanding: it never looks frozen at 0 of 1, and it
+//    never claims progress it has not made.
+//  • IT ONLY APPEARS WHEN THERE IS A WAIT. `IMG_WAIT_GRACE` is a beat before
+//    the bar is drawn at all — a cached picture is there in 20ms, and flashing
+//    a loading bar on every question is worse than the problem. A question
+//    whose pictures are all decoded already never shows one.
+//  • IT GOES WHEN THE LAST PICTURE LANDS, and it goes on an ERROR too: a
+//    picture that failed has stopped loading, and `handleImgError` already puts
+//    a "could not be loaded" placeholder in its place. A bar that waits for
+//    something that is never coming is the frozen bar this exists to prevent.
+//  • IT SAYS SO WHEN IT IS SLOW. Past `IMG_WAIT_SLOW` the wording changes and
+//    a Retry appears, which re-requests only the pictures that are still out —
+//    the same cache-busting retry `handleImgError` does, done by hand.
+//  • ONE WATCHER PER SURFACE, keyed by container selector exactly as
+//    `_openItemsStore` and friends are, so a re-render replaces its own watcher
+//    rather than leaving a second one counting the same pictures.
+const IMG_WAIT_GRACE = 400;    // ms before a wait is worth telling anyone about
+const IMG_WAIT_SLOW = 6000;    // ms after which it is a slow connection, not a wait
+const IMG_WAIT_TICK = 200;     // how often the bar is repainted
+let _imgWait = {};             // containerSel -> { timer, started, imgs, bar }
+
+function _imgWaitBarId(containerSel) { return 'imgwait_' + _openPhotoKey(containerSel); }
+// The bar is emitted with the question body and starts hidden, so nothing has
+// to be inserted into a container that may not exist yet.
+function imgWaitBarHtml(containerSel) {
+  return `<div class="imgwait" id="${_imgWaitBarId(containerSel)}" style="display:none;" role="status" aria-live="polite">
+    <div class="imgwait-row">
+      <span class="imgwait-spin" aria-hidden="true"></span>
+      <span class="imgwait-text">Loading the pictures for this question…</span>
+      <span class="imgwait-count"></span>
+      <button type="button" class="imgwait-retry" style="display:none;" onclick="imgWaitRetry('${containerSel}')">Try again</button>
+    </div>
+    <div class="imgwait-track"><div class="imgwait-fill"></div></div>
+  </div>`;
+}
+// Every picture in this surface that the browser has not finished with. An
+// <img> with no src is not loading — it is an empty placeholder — and the
+// annotation pads' own backdrop is counted like any other.
+function _imgWaitImages(c) {
+  return Array.from(c.querySelectorAll('img')).filter(im => {
+    const s = im.getAttribute('src') || '';
+    return !!s && !/^data:/i.test(s);
+  });
+}
+function _imgWaitDone(im) {
+  // An error event is an END, whatever `complete` says. It has to be checked
+  // FIRST: handleImgError replaces a picture that failed twice with a "could
+  // not be loaded" box, and the detached element it leaves behind can sit at
+  // complete === false for ever. A bar waiting on that is the frozen bar this
+  // whole thing exists to prevent.
+  if (im.dataset.imgwaitFailed === '1') return true;
+  return !!(im.complete && im.naturalWidth > 0);
+}
+function imgWaitStop(containerSel) {
+  const st = _imgWait[containerSel];
+  if (st && st.timer) clearInterval(st.timer);
+  delete _imgWait[containerSel];
+  const bar = document.getElementById(_imgWaitBarId(containerSel));
+  if (bar) bar.style.display = 'none';
+}
+function _imgWaitPaint(containerSel) {
+  const st = _imgWait[containerSel];
+  if (!st) return;
+  const bar = document.getElementById(_imgWaitBarId(containerSel));
+  if (!bar) { imgWaitStop(containerSel); return; }
+  const total = st.imgs.length;
+  const done = st.imgs.filter(_imgWaitDone).length;
+  if (!total || done >= total) { imgWaitStop(containerSel); return; }
+  const waited = Date.now() - st.started;
+  if (waited < IMG_WAIT_GRACE) return;          // a cached picture needs no bar
+  const slow = waited >= IMG_WAIT_SLOW;
+  bar.style.display = '';
+  bar.classList.toggle('slow', slow);
+  const txt = bar.querySelector('.imgwait-text');
+  if (txt) txt.textContent = slow
+    ? 'Still loading the pictures — the connection looks slow'
+    : 'Loading the pictures for this question…';
+  const cnt = bar.querySelector('.imgwait-count');
+  if (cnt) cnt.textContent = total > 1 ? done + ' of ' + total : '';
+  const fill = bar.querySelector('.imgwait-fill');
+  // Real progress only. The stripe animation on the track is what says
+  // something is still happening while this sits at 0.
+  if (fill) fill.style.width = Math.round((done / total) * 100) + '%';
+  const retry = bar.querySelector('.imgwait-retry');
+  if (retry) retry.style.display = slow ? '' : 'none';
+}
+// Re-request the pictures that are still out, cache-busted — the same move
+// `handleImgError` makes on a failure, done by hand for one that is merely
+// stuck. The retry restarts the clock, so the bar goes back to counting.
+function imgWaitRetry(containerSel) {
+  const st = _imgWait[containerSel];
+  if (!st) return;
+  st.imgs.filter(im => !_imgWaitDone(im)).forEach(im => {
+    const src = im.getAttribute('src') || '';
+    if (!src) return;
+    im.src = src.split('#')[0] + (src.includes('?') ? '&' : '?') + '_iw=' + Date.now();
+  });
+  st.started = Date.now();
+  _imgWaitPaint(containerSel);
+}
+// Called after a question body has been injected. Idempotent per surface.
+function imgWaitStart(containerSel) {
+  imgWaitStop(containerSel);
+  const c = document.querySelector(containerSel);
+  if (!c) return;
+  const bar = document.getElementById(_imgWaitBarId(containerSel));
+  if (!bar) return;
+  const imgs = _imgWaitImages(c);
+  if (!imgs.length || imgs.every(_imgWaitDone)) return;
+  const st = { started: Date.now(), imgs, timer: null };
+  _imgWait[containerSel] = st;
+  // A picture that ERRORS has stopped loading. handleImgError replaces the
+  // element, so the flag is what lets the count move on for one that is about
+  // to disappear from the DOM entirely.
+  imgs.forEach(im => {
+    if (im.dataset.imgwaitBound === '1') return;
+    im.dataset.imgwaitBound = '1';
+    // NOT `{ once: true }`: handleImgError retries a failed picture once with
+    // a cache-buster, so a second load can follow an error and it clears the
+    // flag again.
+    im.addEventListener('load', () => { delete im.dataset.imgwaitFailed; _imgWaitPaint(containerSel); });
+    im.addEventListener('error', () => { im.dataset.imgwaitFailed = '1'; _imgWaitPaint(containerSel); });
+  });
+  st.timer = setInterval(() => _imgWaitPaint(containerSel), IMG_WAIT_TICK);
+  _imgWaitPaint(containerSel);
+}
+// The same shape _scheduleAnnotInit uses: the body has to be in the DOM before
+// its pictures can be found, and the two attempts cover both injection orders.
+function _scheduleImgWait(containerSel) {
+  const run = () => { try { imgWaitStart(containerSel); } catch (e) { console.warn('img wait', e); } };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+  setTimeout(run, 80);
+}
+
 function openPhotoBarHtml(containerSel) {
   const key = _openPhotoKey(containerSel);
   return `<div class="open-photo-bar" style="margin:6px 0 14px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;background:var(--surface-alt,#fafbfa);">
@@ -21474,6 +21629,7 @@ function resetOpenAnswersIn(containerSel, scoreElId) {
   // second attempt was even started.
   document.querySelectorAll(containerSel + ' .mcq-block').forEach(w => wnyDisarm(w));
   document.querySelectorAll(containerSel + ' .mcq-block input[type="radio"]').forEach(r => { r.checked = false; });
+  imgWaitStop(containerSel);
   const c = document.querySelector(containerSel);
   if (c) c.querySelectorAll('.post-explanation').forEach(el => el.remove());
   // Wipe any diagram annotations (strokes + text labels + feedback) too.
@@ -27138,6 +27294,24 @@ function _deriveModelAnswer(q) {
   });
   return parts.join('\n');
 }
+// Every answer-key PICTURE a question carries: the one on the question's own
+// answer-key panel, and any on a 🔑 answer-key block. Both are the same thing —
+// a diagram drawn to explain the answer — so both are shown, deduped and in the
+// order they are filed.
+//
+// IT IS A TEACHING AID AND NOTHING ELSE. 🖼 Auto diagram draws an OPTIONAL
+// picture for the answer key; it never becomes part of the question, it is
+// never something a student has to draw on or produce, and it does not make a
+// question an annotation question (that is `q.annotation`, a separate flag with
+// its own pads). The one place it reaches a student is the card below, and only
+// once they have been marked.
+function _qAnswerDiagrams(q) {
+  const out = [];
+  const push = u => { const t = String(u || '').trim(); if (t && out.indexOf(t) < 0) out.push(t); };
+  push(q && q.answerKeyImage);
+  ((q && q.blocks) || []).forEach(b => { if (b && b.type === 'answerKey') push(b.url); });
+  return out;
+}
 function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
   const c = document.querySelector(containerSel);
   if (!c) return;
@@ -27165,6 +27339,17 @@ function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
     cards +=
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--primary);background:var(--primary-light,#e4f1ec);border-radius:10px;">
         <div style="font-weight:700;color:var(--primary);margin-bottom:6px;">✅ Model answer</div><div style="line-height:1.7;white-space:pre-wrap;">${escapeHtml(model)}</div></div>`;
+  }
+  // The answer-key diagram, if the teacher made one. Revealed HERE and nowhere
+  // else — the question itself never shows it, or it would be the answer. It is
+  // a picture to look at, not a thing to do: nobody is asked to draw anything.
+  const diagrams = _qAnswerDiagrams(q);
+  if (diagrams.length) {
+    cards +=
+      `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--accent-blue);background:var(--accent-blue-light,#eaf1f8);border-radius:10px;">
+        <div style="font-weight:700;color:var(--accent-blue);margin-bottom:8px;">🖼 Answer diagram</div>` +
+      diagrams.map(u => `<img src="${escapeHtml(transformImageUrl(u))}" alt="Diagram explaining the answer" onerror="handleImgError(this)" loading="lazy" decoding="async" style="display:block;max-width:100%;margin:0 auto 6px;border-radius:8px;border:1px solid var(--border);background:#fff;">`).join('') +
+      `</div>`;
   }
   // Interactive widget(s) authored on the question: revealed only here, after
   // the answer, in a sandboxed iframe. allow-scripts WITHOUT allow-same-origin

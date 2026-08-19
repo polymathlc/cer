@@ -286,6 +286,108 @@ test('the steering note survives being saved', () => {
   ok(/function setAkdBlockNote/.test(src), 'the 🔑 block keeps its own note on the block');
 });
 
+// ── what the diagram IS, and what it is not ─────────────────────────────────
+
+test('the diagram is answer-key only — it never reaches the question', () => {
+  // 🖼 Auto diagram draws an OPTIONAL teaching picture. It must never become
+  // part of the question, and it must never turn a question into one the
+  // student has to draw on — that is `q.annotation`, a separate flag with its
+  // own pads. The block-level 🔑 answer key is hidden from students outright.
+  const i = src.indexOf('function renderImportedBlockStudent');
+  const body = src.slice(i, src.indexOf('\n}\n', i));
+  const ak = body.slice(body.indexOf("case 'answerKey':"));
+  ok(/^\s*case 'answerKey':\s*\n\s*return '';/.test(ak), 'a 🔑 answer-key block must render nothing in the question');
+  // Nothing in the generator may touch the annotation flag.
+  const gen = src.slice(src.indexOf('const AKD_NOTE_MAX'), src.indexOf('\n// =====', src.indexOf('const AKD_NOTE_MAX')));
+  ok(!/\.annotation\s*=/.test(gen), 'drawing a diagram must not set q.annotation');
+  ok(!/answerImg/.test(gen), 'and must not write an annotation pad\'s model answer');
+});
+
+test('the student sees it only AFTER marking', () => {
+  // showExplanation is the ONE place the post-marking cards are built, and it
+  // is only ever called once a question has been marked. A diagram shown any
+  // earlier is the answer, printed above the question.
+  const i = src.indexOf('function showExplanation');
+  const body = src.slice(i, src.indexOf('\nfunction ', i + 40));
+  ok(/_qAnswerDiagrams\(q\)/.test(body), 'the answer diagram card is missing');
+  ok(/🖼 Answer diagram/.test(body), 'and its heading');
+  // Nowhere else may render it.
+  eq((src.match(/_qAnswerDiagrams\(/g) || []).length, 2, '_qAnswerDiagrams: its definition and the ONE card that shows it');
+});
+
+test('both answer-key pictures reach that card, deduped', () => {
+  const i = src.indexOf('function _qAnswerDiagrams');
+  // +3 so the function's own closing brace comes with it.
+  const M2 = new Function(src.slice(i, src.indexOf('\n}\n', i) + 3) + '\nreturn _qAnswerDiagrams;')();
+  eq(JSON.stringify(M2({ answerKeyImage: ' a.png ', blocks: [{ type: 'answerKey', url: 'b.png' }] })), '["a.png","b.png"]', 'both, trimmed');
+  eq(JSON.stringify(M2({ answerKeyImage: 'a.png', blocks: [{ type: 'answerKey', url: 'a.png' }] })), '["a.png"]', 'the same picture filed twice is one card entry');
+  eq(JSON.stringify(M2({ blocks: [{ type: 'image', url: 'q.png' }] })), '[]', "a QUESTION's own picture is not an answer diagram");
+  eq(JSON.stringify(M2(null)), '[]', 'null');
+});
+
+// ── ⏳ the still-loading bar ────────────────────────────────────────────────
+
+test('every question body carries the bar, and starts it', () => {
+  const i = src.indexOf('function buildOpenBody');
+  const body = src.slice(i, src.indexOf('\n// =====', i));
+  ok(/imgWaitBarHtml\(containerSel\)/.test(body), 'the bar is not emitted with the body');
+  ok(/_scheduleImgWait\(containerSel\)/.test(body), 'nothing starts the watcher');
+  // buildOpenBody is the ONE renderer every practice surface goes through, so
+  // one hook covers all ten of them.
+  ok((src.match(/buildOpenBody\(q, /g) || []).length >= 8, 'buildOpenBody should still be the shared renderer');
+});
+
+test('a reset stops the old watcher', () => {
+  const i = src.indexOf('function resetOpenAnswersIn');
+  const body = src.slice(i, src.indexOf('\n}\n', i));
+  ok(/imgWaitStop\(containerSel\)/.test(body), 'a re-render would otherwise leave a second watcher counting');
+});
+
+test('the bar shows real progress, and only real progress', () => {
+  const i = src.indexOf('function _imgWaitPaint');
+  const body = src.slice(i, src.indexOf('\n}\n', i));
+  ok(/done \/ total/.test(body), 'the fill must be loaded/total, not a timer');
+  ok(!/Date\.now\(\) - st\.started[\s\S]{0,80}width/.test(body), 'elapsed time must never drive the width');
+  ok(/waited < IMG_WAIT_GRACE/.test(body), 'a cached picture must not flash a loading bar');
+  ok(/done >= total/.test(body), 'the bar has to go when the last picture lands');
+});
+
+test('a picture that FAILED counts as finished', () => {
+  // handleImgError replaces the element with a "could not be loaded"
+  // placeholder. A bar still waiting for it is the frozen bar this exists to
+  // prevent.
+  const i = src.indexOf('function _imgWaitDone');
+  ok(/imgwaitFailed/.test(src.slice(i, src.indexOf('\n}\n', i))), 'a failed picture must count as done');
+  const j = src.indexOf('function imgWaitStart');
+  ok(/'error'[\s\S]{0,90}imgwaitFailed = '1'/.test(src.slice(j, src.indexOf('\n}\n', j))), 'nothing sets the flag');
+});
+
+test('data: pictures are never waited on', () => {
+  const i = src.indexOf('function _imgWaitImages');
+  const body = src.slice(i, src.indexOf('\n}\n', i));
+  ok(/\^data:/.test(body), 'an inline data: picture is already here — waiting on it would never end');
+  ok(/!!s/.test(body), 'an <img> with no src is a placeholder, not a download');
+});
+
+test('a slow wait says so and offers a retry', () => {
+  const i = src.indexOf('function _imgWaitPaint');
+  const body = src.slice(i, src.indexOf('\n}\n', i));
+  ok(/IMG_WAIT_SLOW/.test(body), 'nothing distinguishes slow from ordinary');
+  ok(/connection looks slow/.test(body), 'the wording never changes');
+  const r = src.indexOf('function imgWaitRetry');
+  const rb = src.slice(r, src.indexOf('\n}\n', r));
+  ok(/!_imgWaitDone/.test(rb), 'a retry must re-request only what is still out');
+  ok(/_iw=/.test(rb), 'and cache-bust it, or the browser serves the same stalled response');
+  ok(/st\.started = Date\.now\(\)/.test(rb), 'a retry restarts the clock');
+});
+
+test('the bar is announced to a screen reader and respects reduced motion', () => {
+  ok(/role="status" aria-live="polite"/.test(src), 'a silent progress bar tells a screen-reader user nothing');
+  const i = html.indexOf('.imgwait{');
+  const css = html.slice(i, html.indexOf('/* ──', i + 10));
+  ok(/prefers-reduced-motion/.test(html.slice(i, i + 3000)), 'the spinner and the stripe both move');
+});
+
 // ── run ─────────────────────────────────────────────────────────────────────
 const only = process.argv[2];
 let pass = 0, fail = 0;

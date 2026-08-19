@@ -1223,7 +1223,86 @@ with nothing behind it: bring a picture in, edit it, take a PNG away.
   that branch returns before any upload the other targets do.
 - Run **`node tools/auto-diagram-tests.mjs`** after touching any of it.
 
+## ⏳ Still loading — the bar on a question whose pictures have not arrived (v1.305.0)
+
+`imgWait*` / `_imgWait*` / `IMG_WAIT_*` (in `app.js`, search `STILL LOADING`),
+plus the `.imgwait-*` CSS in `index.html`. Emitted at the top of every question
+body by `buildOpenBody`.
+
+A question is text and pictures, and the text lands first. On a slow school
+connection a diagram can take twenty seconds, and until it does the student is
+looking at a question with a gap where the thing they need is meant to be —
+with nothing on screen saying the gap is temporary. They answer around it, give
+up on the question, or reload and start the wait again. All three are the app's
+fault, not theirs.
+
+- **The bar is HONEST.** The fill is `loaded / total`, counted from the real
+  `<img>` elements — never a timer pretending to be progress. What a timer *can*
+  say is that something is still happening, so the TRACK carries a moving stripe
+  while anything is outstanding: it never looks frozen at 0 of 1 and it never
+  claims progress it has not made. Keep those two separate if you touch it.
+- **`buildOpenBody` is the ONE hook**, because it is the one renderer every
+  practice surface goes through — practice, quick practice, topical, the student
+  view, the worksheet preview, Snap & Mark, Ai-nstein's quiz. Ten call sites,
+  one bar. `_scheduleImgWait` mirrors `_scheduleAnnotInit` exactly (rAF plus an
+  80ms fallback), because the body has to be in the DOM before its pictures can
+  be found.
+- **It only appears when there is a wait.** `IMG_WAIT_GRACE` is a beat before it
+  is drawn at all — a cached picture is there in 20ms, and flashing a loading
+  bar on every question is worse than the problem it fixes.
+- **An ERROR is an END, and `_imgWaitDone` checks that flag FIRST.**
+  `handleImgError` replaces a picture that failed twice with a "could not be
+  loaded" box, and the detached element it leaves behind can sit at
+  `complete === false` for ever. A bar waiting on that is exactly the frozen bar
+  this exists to prevent. The `load` listener is deliberately NOT `{once:true}`:
+  `handleImgError` retries once with a cache-buster, so a load can follow an
+  error and clear the flag again.
+- **`data:` pictures and an `<img>` with no `src` are never waited on** — the
+  first is already here, the second is a placeholder, and both would wait for
+  ever.
+- **Past `IMG_WAIT_SLOW` the wording changes and a Retry appears**, which
+  re-requests only the pictures still out, cache-busted (the same move
+  `handleImgError` makes on a failure) and restarts the clock.
+- **One watcher per surface**, keyed by container selector exactly as
+  `_openItemsStore` is, and `resetOpenAnswersIn` stops it — a re-render would
+  otherwise leave a second watcher counting the same pictures.
+- `role="status" aria-live="polite"`, and both animations are dropped under
+  `prefers-reduced-motion`.
+- Run **`node tools/auto-diagram-tests.mjs`** after touching any of it.
+
+### 🖼 What the auto diagram IS — and what it is not (v1.305.0)
+
+It is an **optional teaching picture for the answer key**. It explains the
+answer; it is not part of the question, and it never asks a student to draw or
+upload anything. A question students annotate is `q.annotation` — a separate
+flag with its own pads, its own `answerImg` model answer and its own AI check.
+Nothing in `akd*` touches either.
+
+- **The one place it reaches a student is `showExplanation`**, the ONE builder
+  of the post-marking cards, so it appears beside ✅ Model answer and only once
+  the question has been marked. Shown any earlier it would be the answer,
+  printed above the question. `_qAnswerDiagrams(q)` is the ONE reader — the
+  question's own `answerKeyImage` plus every 🔑 `answerKey` block's `url`,
+  deduped — and it is called from that card and nowhere else.
+- A 🔑 `answerKey` block still renders as **nothing** inside the question
+  (`renderImportedBlockStudent` returns `''`). That is what keeps the words of
+  an answer key out of the question while the picture is revealed afterwards.
+- The editor says all of this in as many words, because the panel sits directly
+  under the ✍️ Annotation question checkbox and the two are easy to confuse.
+
 ## House rules
+- After touching **⏳ Still loading** (`imgWaitBarHtml`, `imgWaitStart`,
+  `_imgWaitPaint`, `_imgWaitDone`, `_imgWaitImages`, `imgWaitRetry`,
+  `imgWaitStop`, `_scheduleImgWait`, `IMG_WAIT_*`) or **`_qAnswerDiagrams`**,
+  run `node tools/auto-diagram-tests.mjs`. A loading bar is only worth having
+  while it is honest, and every way it goes wrong is worse than not having it:
+  a fill driven by elapsed time is a bar that lies about how far it has got; a
+  bar that never appears leaves the gap unexplained, which is the original
+  problem; and a bar that never LEAVES — because a failed picture is still
+  being waited on, or a re-render left a second watcher behind — tells a
+  student a question is still coming when it has already arrived. On the other
+  side, `_qAnswerDiagrams` reaching anywhere but the post-marking card prints
+  the answer above the question.
 - After touching **🖼 Auto diagram** or the **🎨 Photo Editor** (`_akdPrompt`,
   `AKD_PRINT_RULES`, `_akdAnswerText`, `_akdMake`, `akdRunQuestion`,
   `akdRunBlock`, `_peOpen`, `pePickFiles`, `_pePaste`, `peDownloadName`,
