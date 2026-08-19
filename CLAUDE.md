@@ -713,6 +713,66 @@ nothing on any screen says so.
   must never interrupt a game mid-answer, and a question answered offline must
   still stop being re-served.
 
+## 🛟 Art safety & recovery — the art map is ONE document (v1.300.0)
+
+`TCG_ART_BACKUP_DOC` / `tcgArtBackupSync` / `tcgArtRestoreBackup` /
+`tcgArtExport` / `tcgArtImport` / `_tcgArtWriteMany` / `tcgArtRescue*` /
+`_tcgArtLoadFailed` (search `ART SAFETY & RECOVERY`), plus the `#tcgArtSafety`
+panel at the top of the Card Art tab and the `.tcg-safety-*` / `.tcg-rescue-*`
+CSS in `index.html`.
+
+Every picture in Realm of Embers — card art, `:av` battle avatars, `fx:` and
+`dfx:` frames, `pk:` pack frames, `arti:`, `hero:`, `logo:`, `set:`, `lore:` —
+is **one key in one Firestore document's `overrides` map**. Hundreds of hours of
+generated artwork, and a single map deciding what the game shows.
+
+**That map was lost once.** The Maths app (`polymathlc/math`) carries a port of
+this game with the card ids deliberately kept identical (`c001`, `<id>:av`), it
+was writing **this very document**, and its ♻️ Reset ALL art did
+`setDoc(..., { overrides: {} })` — a whole-document overwrite. One press, both
+games blank. That app has its own document (`novaArt`) and a surgical reset now,
+so it cannot happen from that direction again; this section is what makes the
+map survivable whatever happens next.
+
+- **THE PICTURES ARE NOT THE MAP**, and that is the whole reason recovery is
+  possible at all. Uploads are content-addressed into `cer-images/`, nothing
+  here has ever deleted one, and the Maths app writes to `mathImages/`. The
+  artwork outlives any accident to the index.
+- **The backup MUST NEVER SHRINK.** A wipe presents as an empty map, so a
+  backup that mirrored the live map would faithfully copy the wipe over the last
+  good copy — turning the safety net into a second way to lose everything, at
+  the exact moment it is needed. `tcgArtBackupSync` writes only when the live
+  map holds **at least as many** pictures as the backup already does. Going
+  backwards is always the ↩️ button, never something that happens by itself.
+- **A failed read is NOT an empty store.** `_tcgArtLoadFailed` is what keeps
+  "the network hiccuped" from reading as "your artwork is gone" — and the
+  natural response to the latter is to redraw everything. It suppresses the
+  backup (backing up an unreadable map writes "0 pictures" under a name that
+  says the collection is safe) and the panel says so in as many words.
+- **Restore, import and rescue are ADDITIVE, all three.** They exist to fill
+  gaps, so every one of them writes only into slots that are **empty**. A
+  recovery tool that overwrites work is the fault this section answers.
+- **`_tcgArtWriteMany` is the ONE writer they share** — merged and chunked,
+  never a whole-document overwrite.
+- **🚑 Rescue rebuilds the map from Storage**, and it works because of what
+  survives a wipe: the ORDER. `tcgGenerateAllArt` walks `TCG_CARDS` drawing each
+  monster's card art and then its battle avatar, strictly one at a time, so a
+  generation run lands in the bucket in exactly that sequence — and laying a run
+  back onto that sequence reconstructs the map. It is a **proposal, never an
+  automatic write**: card art is self-identifying (201 named monsters), so every
+  picture is shown with the slot it is about to be filed into and nothing is
+  saved until the admin says so. ◀▶ Nudge fixes a whole-run offset; ✂ stray
+  takes one bad upload out of the sequence and pulls everything **below** it
+  back into line, which is the correction that matches the actual fault.
+- **A denied `listAll` is named precisely.** Listing needs `list` permission on
+  the folder in the Storage rules, which is a *different* permission from
+  reading a file by its download URL — so that one failure says so rather than
+  reporting an empty bucket, which would read as "your pictures are gone too".
+- 💾 Export is the off-platform copy, and it is the only one that survives the
+  Firebase project itself going wrong: a backup document lives in the same
+  project as the thing it protects.
+- Run **`node tools/art-safety-tests.mjs`** after touching any of it.
+
 ## 🧻 Clean paper — the faint diagonal weave on a printed diagram (v1.299.0)
 
 `PAPER_*` / `_paperWhitePoint` / `_paperCleanPixels` / `_paperCleanDataUrl` /
@@ -897,6 +957,18 @@ that door: a line to type in, and the same image model behind it.
   left sitting in the box** one Enter away from being run on this one.
 
 ## House rules
+- After touching **🛟 art safety & recovery** (`tcgArtBackupSync`,
+  `tcgArtRestoreBackup`, `tcgArtExport`, `tcgArtImport`, `_tcgArtWriteMany`,
+  `_tcgRescueSlotSequence`, `_tcgRescueRelay`, `tcgArtRescueApply`,
+  `_tcgArtLoadFailed`), run `node tools/art-safety-tests.mjs`. This protects the
+  one document that decides what every picture in the game is, and it has
+  already been lost once. Every failure here is silent and each turns a safety
+  net into a hazard: a backup that mirrors a wipe destroys the last good copy at
+  the exact moment it is needed, a failed read mistaken for an empty store
+  invites a redraw of artwork that was never gone, a restore or a rescue that
+  overwrites rather than fills gaps destroys the work it was run to save, and a
+  rescue proposal laid on out of step files every picture under the wrong
+  monster while looking exactly like a successful recovery.
 - After touching **the Student Usage Tracker** (`USAGE_MODES`, `usageMode`,
   `sutCredit`, `sutVerdict`, `sutQuestionMeta`, `sutVisible`, `sutByMode`,
   `sutExportCsv`) or **`logGameAttempt` / `SD_GAME_MODES`**, run
