@@ -986,6 +986,58 @@ that door: a line to type in, and the same image model behind it.
 - `_annotAiBarInit` runs on every open, so **last picture's instruction is never
   left sitting in the box** one Enter away from being run on this one.
 
+## ✍️ AI complete — carry the paragraph on from where you stopped (v1.302.0)
+
+`completeBtnHtml` / `_aicTrimEcho` / `_aicJoin` / `_aicUnquote` / `_aicAppendInto`
+(search `✍️ AI COMPLETE`), plus the ✍️ **AI complete** button beside ✨ Improve
+and ✂️ Shorten on every prose box in the question editor. **All four portals
+carry the same block — keep them in step**; only the subject line of the prompt
+differs.
+
+An author half way through writing a passage, a model answer or an explanation
+had two AI buttons and both of them *rewrote what was there*. Neither is any
+use to somebody who has stopped mid-sentence and wants the rest — so the thing
+they actually wanted, they typed themselves.
+
+- **It only ever ADDS, and that guarantee is STRUCTURAL rather than something
+  the prompt asks for.** ✨ Improve and ✂️ Shorten hand their reply to a setter
+  that REPLACES the whole box; `_aicAppendInto` appends, and the existing markup
+  is never re-serialised. So nothing the model returns can change a word that is
+  already there — and the author's own bold, underline and pasted pictures
+  survive, which a plain-text round trip would flatten.
+- **`_aicTrimEcho` is the net, because the model restates before it continues.**
+  Asked to carry on, it very often repeats the last sentence first, and now and
+  then the WHOLE paragraph. Appended verbatim that puts the author's opening in
+  the box twice, which reads exactly like the button having mangled it. Whatever
+  of the existing text the reply opens with is cut — matched on
+  whitespace-folded, lower-cased text so a reply that reflows the spacing is
+  still caught, and **longest tail first**, or a shorter match leaves the rest of
+  the repeat behind.
+- **The other direction is the one that eats the work.** A trim firing on a
+  coincidental few characters throws the real continuation away, so
+  `AIC_ECHO_MIN` (10) is the floor below which an overlap is treated as
+  coincidence. Both directions are silent and the app works either way.
+- **`_aicJoin` never welds a space between two CJK characters.** 中文 and 华文 are
+  written without them, so a space there is a space in the middle of a word;
+  latin either side needs one, and a trailing space the author typed is not
+  doubled. It is in all four portals, not just the Chinese one — a 华文 name or
+  a quoted phrase turns up in any of them.
+- **execCommand is what makes it cheap to try**: it keeps the browser's own undo
+  stack, so ONE Ctrl+Z takes the whole completion back off again. The caret is
+  moved to the END of the box first — appending at the caret (which is what
+  🎤 Dictate does) would drop a completion into the middle of a sentence.
+- **An empty box is refused.** Writing from nothing is a generated question,
+  which is a different job and a different button; this one carries on from what
+  is there.
+- **The model is told to finish ASKING a question, never to answer it** — a stem
+  the author is still writing must not come back with its own answer appended.
+- **It shares `.improve-btn` for its looks, so ✨ Improve's handler needs a
+  guard.** Improve is the one that runs on the bare class; without
+  `contains('complete-btn') return` one press runs BOTH, and Improve rewrites the
+  box — the exact damage this button promises never to do, delivered by the
+  button itself. ✂️ Shorten has carried the same guard from the start.
+- Run **`node tools/ai-complete-tests.mjs`** after touching any of it.
+
 ## House rules
 - After touching **🛟 art safety & recovery** (`tcgArtBackupSync`,
   `tcgArtRestoreBackup`, `tcgArtExport`, `tcgArtImport`, `_tcgArtWriteMany`,
@@ -1027,6 +1079,14 @@ that door: a line to type in, and the same image model behind it.
   box prints from one button and not from the other. Taking the MCQ out of the
   `default` branch also takes it away from `_pushBlockAnswerKey`, which the
   harness pins — a key that drops every MCQ prints perfectly and looks tidy.
+- After touching **✍️ AI complete** (`completeBtnHtml`, `_aicTrimEcho`,
+  `_aicJoin`, `_aicUnquote`, `_aicWords`, `_aicAppendInto`, `_aicPrompt`, or
+  ✨ Improve's `complete-btn` guard), run `node tools/ai-complete-tests.mjs`.
+  Every failure is silent and lands in the middle of writing somebody was part
+  way through: trim too eagerly and the real continuation is thrown away or
+  starts halfway through a word, too timidly and the author's own opening is in
+  the box twice, and lose ✨ Improve's guard and one press of ✍️ AI complete also
+  runs the button that REWRITES the box.
 - After touching **the clone stamp's live preview** (`_annotClonePeekSrc`,
   `_annotUpdateClonePeek`, `ANNOT_PEEK_MIN`, `_annotUpdateBrushRing`), run
   `node tools/clone-preview-tests.mjs`. A preview that does not appear is
