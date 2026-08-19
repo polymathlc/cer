@@ -8323,7 +8323,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
         </div>
 
         <div class="form-group">
-          <label class="form-label">📝 Answer-key explanation &amp; picture <span style="font-weight:400;color:var(--text-muted);">(optional — shown on the printed answer key when you export a worksheet; ideal for annotation questions that have no answer block)</span></label>
+          <label class="form-label">📝 Answer-key explanation &amp; picture <span style="font-weight:400;color:var(--text-muted);">(optional — shown on the printed answer key, and to the student after their answer is marked; ideal for annotation questions that have no answer block)</span></label>
           <textarea id="questionAnswerKeyNote" class="form-input" rows="2" placeholder="e.g. Tick the box next to the splitting fruit (right); label part X as the anther." style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;">
             <input type="hidden" id="questionAnswerKeyImage">
@@ -8339,12 +8339,12 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
                other picture in this app uses, which is where a mis-spelled
                label gets retyped. -->
           <div class="akd-bar" style="margin-top:10px;">
-            <button type="button" class="akd-btn" onclick="akdRunQuestion(this, false)" title="Let the AI draw a clear diagram that explains this answer. It reads the question and the answer, and the picture lands in the box above.">🖼 Auto diagram</button>
+            <button type="button" class="akd-btn" onclick="akdRunQuestion(this, false)" title="Let the AI draw an OPTIONAL picture that explains this answer. It is a teaching aid on the answer key — the student sees it only after their answer is marked, and it never asks anyone to draw anything.">🖼 Auto diagram</button>
             <button type="button" class="akd-btn" id="akdQuestionRegen" style="display:none;" onclick="akdRunQuestion(this, true)" title="Redraw the diagram that is there now, with the instructions below applied to it">🔄 Regenerate</button>
             <button type="button" class="akd-btn" id="akdQuestionTouch" style="display:none;" onclick="akdTouchUpQuestion()" title="Open the diagram in the touch-up editor — fix a label, move an arrow, erase anything wrong">✏️ Touch up</button>
             <input class="akd-note" id="akdQuestionNote" type="text" maxlength="400" placeholder="Instructions for the diagram — e.g. side view, label the anther, arrows in red">
           </div>
-          <div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;line-height:1.6;">The AI draws the picture; <strong>check the labels</strong> — an image model spells them wrong more often than it draws them wrong. ✏️ Touch up retypes one in seconds.</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;line-height:1.6;">An <strong>optional teaching picture for the answer key</strong>: it explains the answer, and the student sees it only <strong>after their answer has been marked</strong>. It never becomes part of the question, and it never asks anyone to draw or upload anything — for a question students annotate, tick <strong>✍️ Annotation question</strong> above instead.<br>The AI draws the picture; <strong>check the labels</strong> — an image model spells them wrong more often than it draws them wrong. ✏️ Touch up retypes one in seconds.</div>
           <img id="answerKeyImagePreview" alt="Answer-key image" style="display:none;max-width:100%;max-height:220px;margin-top:8px;border:1px solid var(--border);border-radius:8px;">
         </div>
 
@@ -12214,6 +12214,55 @@ body.lore-reading { overflow: hidden; }
 .qp-qtext{ line-height:1.85; font-size:0.97rem; margin:0 0 12px; color:var(--on-surface,#14161a); }
 .qp-qtext + .qp-qtext{ margin-top:-2px; }
 .qp-part .open-answer-section{ margin-bottom:10px; }
+
+/* ── ⏳ Still loading — a question whose pictures have not arrived yet ───── */
+.imgwait{
+  margin:0 0 12px; padding:10px 14px;
+  border:1px solid var(--border); border-radius:10px;
+  background:var(--surface-alt,#fafbfa);
+}
+.imgwait-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.imgwait-text{ font-size:0.84rem; color:var(--text-muted); font-weight:500; }
+.imgwait-count{
+  font-family:'Space Mono',monospace; font-size:0.74rem;
+  color:var(--text-muted); margin-left:auto; white-space:nowrap;
+}
+.imgwait-spin{
+  width:13px; height:13px; flex:0 0 auto; border-radius:50%;
+  border:2px solid var(--border); border-top-color:var(--primary,#0b6b4f);
+  animation:imgwaitSpin .8s linear infinite;
+}
+.imgwait-retry{
+  font-family:inherit; font-size:0.75rem; font-weight:600; cursor:pointer;
+  padding:3px 10px; border-radius:7px;
+  border:1px solid var(--border); background:#fff; color:var(--primary,#0b6b4f);
+}
+.imgwait-retry:hover{ border-color:var(--primary,#0b6b4f); background:var(--primary-light,#e8f3ec); }
+/* The track carries a moving stripe while anything is outstanding — that is
+   what says "still going" while the fill sits at 0 of 1. The FILL is real
+   progress and nothing else. */
+.imgwait-track{
+  position:relative; height:5px; margin-top:9px; border-radius:99px; overflow:hidden;
+  background:var(--border);
+  background-image:linear-gradient(115deg, rgba(255,255,255,0) 35%, rgba(255,255,255,.85) 50%, rgba(255,255,255,0) 65%);
+  background-size:180px 100%; background-repeat:repeat-x;
+  animation:imgwaitSlide 1.15s linear infinite;
+}
+.imgwait-fill{
+  height:100%; width:0%; border-radius:99px;
+  background:var(--primary,#0b6b4f);
+  transition:width .25s ease;
+}
+.imgwait.slow .imgwait-spin{ border-top-color:var(--accent-orange,#c77b28); }
+.imgwait.slow .imgwait-fill{ background:var(--accent-orange,#c77b28); }
+.imgwait.slow .imgwait-text{ color:var(--accent-orange,#c77b28); font-weight:600; }
+@keyframes imgwaitSpin{ to{ transform:rotate(360deg); } }
+@keyframes imgwaitSlide{ from{ background-position:-180px 0; } to{ background-position:180px 0; } }
+@media (prefers-reduced-motion: reduce){
+  .imgwait-spin{ animation:none; }
+  .imgwait-track{ animation:none; background-image:none; }
+  .imgwait-fill{ transition:none; }
+}
 
 /* ── 🖼 Auto diagram — the row of buttons on both answer-key surfaces ────── */
 .akd-bar{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px; }
