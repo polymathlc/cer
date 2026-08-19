@@ -1716,7 +1716,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.302.0';
+const APP_VERSION = 'v1.303.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -13683,12 +13683,14 @@ function hidePrintPreview() {
   }, 100);
 }
 
-function printWorksheet() {
+async function printWorksheet() {
   if (printSelectedIds.size === 0) {
     showToast('Select at least one question to print', 'info');
     return;
   }
-  doPrintWorksheetOpen();
+  const selected = questionBank.filter(q => printSelectedIds.has(q.id));
+  const why = await _wnyRunPrepare(selected, wnyPrintOn('bank'));
+  doPrintWorksheetOpen(why);
 }
 
 // Helper: generate dotted writing lines for open-ended boxes
@@ -14498,7 +14500,13 @@ function _pushAnswerKeySection(sections, label, content, part) {
 // before this existed a worksheet of MCQs printed a key that listed only the
 // handful of open-ended questions and silently skipped the rest (v1.284.0).
 // Both print paths call this, which is the only reason they cannot drift.
-function _pushBlockAnswerKey(sections, block, part) {
+// `why` is the per-question map of ⓘ reasons ({ blockId: { optionNumber: why } })
+// built by `wnyPrepare`, or null when the teacher did not ask for them. It is
+// threaded through this ONE pusher rather than added to each print path's own
+// switch, for the reason the pusher exists at all: the two paths had already
+// drifted over the MCQ answer once, and a key that carries the reasons from one
+// print button and not the other is the same fault wearing a new hat.
+function _pushBlockAnswerKey(sections, block, part, why) {
   if (!block) return;
   const p = qPartNormalize(part);
   switch (block.type) {
@@ -14508,6 +14516,13 @@ function _pushBlockAnswerKey(sections, block, part) {
       // No correct option ticked is an authoring gap, not an answer — the
       // "no answer recorded" placeholder below is what surfaces it.
       if (ci >= 0) sections.push({ label: 'Answer', content: `<b>${ci + 1}.</b> ` + sanitizeAnswerKeyHtml(mo[ci].text || ''), part: p });
+      // …and, when asked for, why each of the others is not. Only ever BESIDE
+      // a real answer: these are teaching notes, and a key that offered
+      // reasons where it could not name the answer would be the wrong way up.
+      if (ci >= 0 && why) {
+        const rows = _wnyKeyRows(block, why[block.id], ci);
+        if (rows) sections.push({ label: 'Why the other options are wrong', content: rows, part: p });
+      }
       break;
     }
     case 'answerLine':
@@ -14655,7 +14670,9 @@ function _printMcqAnswerBoxHtml(part) {
 }
 
 // ===== OPEN ENDED MODE =====
-function doPrintWorksheetOpen() {
+// `whyNotes` is the ⓘ reasons for the printed key, keyed by question id — see
+// `wnyPrepare`. Null (the ordinary case) prints exactly the key it always did.
+function doPrintWorksheetOpen(whyNotes) {
   const selected = questionBank.filter(q => printSelectedIds.has(q.id));
   const output = document.getElementById('printOutput');
   let allHtml = '';
@@ -14687,6 +14704,7 @@ function doPrintWorksheetOpen() {
     </div>`;
 
     const qSections = [];
+    const qWhy = whyNotes ? whyNotes[q.id] : null;
     const qParts = qPartMap(q.blocks);
 
     q.blocks.forEach(block => {
@@ -14771,7 +14789,7 @@ function doPrintWorksheetOpen() {
         // step, which is what `_printMcqBlockHtml` is for.
         case 'mcq': {
           qHtml += _printMcqBlockHtml(block, bPart);
-          _pushBlockAnswerKey(qSections, block, bPart);
+          _pushBlockAnswerKey(qSections, block, bPart, qWhy);
           break;
         }
         default: {
@@ -14781,7 +14799,7 @@ function doPrintWorksheetOpen() {
           // produced NO sections at all and was dropped from the key entirely,
           // so a mostly-MCQ paper printed a key that silently skipped most of
           // its questions.
-          _pushBlockAnswerKey(qSections, block, bPart);
+          _pushBlockAnswerKey(qSections, block, bPart, qWhy);
           break;
         }
       }
@@ -21003,6 +21021,10 @@ function resetOpenAnswersIn(containerSel, scoreElId) {
   document.querySelectorAll(containerSel + ' .part-hint-box').forEach(h => { h.style.display = 'none'; h.innerHTML = ''; });
   document.querySelectorAll(containerSel + ' .part-ai-btn').forEach(b => { b.disabled = false; });
   document.querySelectorAll(containerSel + ' .mcq-block label').forEach(l => { l.style.background = ''; l.style.borderColor = 'var(--border)'; });
+  // The badges go with the colours. They sit on the WRONG options, so a reset
+  // question that kept them would point straight at the answer before the
+  // second attempt was even started.
+  document.querySelectorAll(containerSel + ' .mcq-block').forEach(w => wnyDisarm(w));
   document.querySelectorAll(containerSel + ' .mcq-block input[type="radio"]').forEach(r => { r.checked = false; });
   const c = document.querySelector(containerSel);
   if (c) c.querySelectorAll('.post-explanation').forEach(el => el.remove());
@@ -21030,6 +21052,464 @@ function _questionContext(q) {
     parts.push((opens ? qPartLabel(opens) + ' ' : '') + stripHtml(qPartBodyHtml(b)));
   });
   return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 800);
+}
+
+// =====================================================================
+// 🔎 WHY NOT THIS ONE — the ⓘ on a MARKED question's wrong options
+// =====================================================================
+// Once a multiple-choice question has been marked, every option the student
+// did NOT get right grows an ⓘ on its right-hand edge. Hover it — tap it on a
+// touch screen — and a card says why that option is wrong, against the
+// evidence actually printed in the question:
+//
+//     "There are only 2 populations of producer — arrowhead and water lily —
+//      so 3 is wrong."
+//
+// Being told "✗ incorrect, the answer is 2" teaches nothing. On an MCQ-only
+// question it is *all* the student is told, because the A.I. Explanation card
+// is only generated when the question has an OPEN part — so a whole paper of
+// multiple choice can end at a red border and a green one.
+//
+// Five rules hold it together:
+//
+//  • IT IS A VISION CALL, and that is not an optimisation waiting to happen.
+//    A science distractor is almost always wrong because of what a food web,
+//    a circuit, a table or a graph SHOWS — "only 2 producers" cannot be said
+//    from the wording alone, and a reason that does not point at the evidence
+//    is the "this is incorrect" the student already had. `_cqMedia` attaches
+//    the diagrams and `_cqRepr` spells the tables out, both borrowed from
+//    ✅ Check Questions rather than forked.
+//  • It arms only AFTER marking, from `_mcqPaintResult` — the ONE painter all
+//    three marking paths go through — and from nowhere else. Armed a moment
+//    earlier it is an answer key: the badges appear on the WRONG options, so
+//    before marking they would point straight at the right one.
+//    `resetOpenAnswersIn` disarms for the same reason, or a reset question
+//    keeps its badges and the second attempt is open book.
+//  • ONE call covers the WHOLE option list, never one per option. The model
+//    has to see the four together to say why this one beats that one, and the
+//    student reads two or three in a row.
+//  • An answer is placed against an option by the option's OWN number and
+//    nothing else. This is the one failure the feature produces silently: a
+//    reason shown under the wrong option reads perfectly and teaches a child
+//    something untrue about a question they just got wrong. See
+//    `_wnyNormItems`.
+//  • The SAME generator feeds the printed answer key (`wnyPrepare` below), so
+//    what a student reads on screen and what the teacher marks from on paper
+//    are the same sentences. Two generators would be free to disagree about
+//    the same option.
+const WNY_HOVER_MS = 160;      // hover intent — a cursor crossing the list must not fire four cards
+const WNY_HIDE_MS = 160;       // grace on the way out, so moving INTO the card doesn't close it
+const WNY_WHY_MAX = 320;       // characters kept: the card is a glance, not an essay
+const WNY_PRINT_PAR = 3;       // questions read at once when a printed key asks for the notes
+
+// The marking store and a raw block describe an option list differently — one
+// carries .letter/.correct per option, the other carries options[] plus a
+// separate correctId. ONE shape reaches the prompt, so the cache key a student
+// hovering builds and the one a teacher printing builds are the same string:
+// the hover and the printed key can never end up answering different questions.
+function _wnyOpts(src) {
+  if (!src) return [];
+  const list = src.options || [];
+  if (src.type === 'mcq' || 'correctId' in src) {
+    return list.map((o, i) => ({
+      letter: String(i + 1),
+      text: stripHtml((o && o.text) || '').replace(/\s+/g, ' ').trim(),
+      correct: !!(o && src.correctId && o.id === src.correctId)
+    }));
+  }
+  return list.map((o, i) => ({
+    letter: String((o && o.letter) != null ? o.letter : i + 1),
+    text: stripHtml((o && o.text) || '').replace(/\s+/g, ' ').trim(),
+    correct: !!(o && o.correct)
+  }));
+}
+// Is there anything to explain? Two options at least, and ONE of them ticked
+// correct — "why is this one wrong" has no answer on a question whose right
+// answer was never recorded, and a badge that cannot keep its promise is worse
+// than no badge. (That gap is an authoring fault; ✅ Check Questions is where
+// it gets found, not here.)
+function _wnyUsable(opts) {
+  return (opts || []).length >= 2 && opts.some(o => o && o.correct);
+}
+function _wnyClean(v) {
+  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, WNY_WHY_MAX);
+}
+// The model's reasons put back against the options they were written about.
+//
+// Placed by the entry's OWN number, run through _normMcqChoice so "(2)", "2."
+// and "B" all land on option 2, and a number the option list does not have is
+// dropped rather than squeezed in somewhere. A repeated number is a duplicate,
+// not a second option, so the first one wins.
+//
+// Positional order is the fallback and ONLY when the model numbered NOTHING at
+// all and returned exactly one entry per option. A partial unnumbered list
+// cannot be lined up — the third entry might belong to option 3 or to option 4
+// — and a guess there tells a child the wrong thing with every appearance of
+// being right.
+function _wnyNormItems(parsed, opts) {
+  const raw = Array.isArray(parsed) ? parsed
+    : ((parsed && (parsed.options || parsed.items || parsed.reasons)) || []);
+  const list = Array.isArray(raw) ? raw : [];
+  const options = opts || [];
+  const known = new Set(options.map(o => String(o && o.letter)));
+  const out = {};
+  let numbered = 0;
+  list.forEach(it => {
+    if (!it || typeof it !== 'object') return;
+    const src = it.n != null ? it.n : (it.option != null ? it.option : (it.number != null ? it.number : it.letter));
+    const n = _normMcqChoice(src);
+    if (!n || !known.has(n)) return;
+    numbered++;
+    if (out[n]) return;
+    const why = _wnyClean(it.why != null ? it.why : (it.reason != null ? it.reason : it.text));
+    if (why) out[n] = why;
+  });
+  if (!numbered && list.length === options.length) {
+    options.forEach((o, i) => {
+      const it = list[i];
+      const why = _wnyClean(it && typeof it === 'object' ? (it.why != null ? it.why : it.reason) : it);
+      if (why) out[String(o && o.letter)] = why;
+    });
+  }
+  return out;
+}
+function _wnyPrompt(q, opts) {
+  const printed = opts.map(o => `(${o.letter}) ${o.text || '(blank)'}`).join('\n');
+  const correct = opts.find(o => o.correct) || opts[0];
+  return `You are a patient Singapore primary-school science teacher (PSLE). A student has just answered the multiple-choice question below and has been told which option was right. They are now going through the options one at a time asking "why is that one wrong?".\n\n` +
+    `THE QUESTION EXACTLY AS IT IS PRINTED:\n${_cqRepr(q)}\n\n` +
+    `THE OPTIONS:\n${printed}\n\n` +
+    `Option (${correct.letter}) is the correct one.\n\n` +
+    `Any diagram, food web, circuit, table or graph in this question is ATTACHED to this message as a picture. Read it. Most of these options are wrong because of something the picture or the table actually shows, and a reason that does not point at that evidence is no use to the student.\n\n` +
+    `For EVERY option write "why", addressed to the student as "you":\n` +
+    `- For a WRONG option: say what is actually TRUE — naming the things, counting them, quoting the row or the label — and then why that makes this option wrong. "There are only 2 populations of producer, arrowhead and water lily, so 3 is wrong." "The bulb at X still lights, so that part of the circuit is not broken." Never write only "this is incorrect" or "this does not match the diagram": name what it should have been.\n` +
+    `- For the CORRECT option: one sentence on why it IS right, on the same evidence.\n` +
+    `Max 40 words each. Plain sentences a 10-year-old reads. No markdown, no bullet characters, no mention of any option number other than the one the entry is about, and never open with "The answer is".\n\n` +
+    `Return ONLY JSON: {"options":[{"n":"1","why":"..."},{"n":"2","why":"..."}]} — one entry per option, in order, "n" being the option number exactly as printed above.`;
+}
+
+// ---- the AI call, cached per option list -----------------------------------
+let _wnyCache = {};    // cache key -> Promise<{letter: why}>, one entry per option list
+// The PROMPT is the cache key. It carries the whole question, every option and
+// which one is correct, so an edited question can never be served the previous
+// wording's reasons. The in-memory promise collapses the two or three hovers a
+// student fires while the first call is still in the air into one request; the
+// sessionStorage copy is what makes re-printing a paper free, and it is the
+// same mechanism askGeminiCached uses (this one keeps its own because the call
+// carries pictures, which askGeminiCached does not).
+async function _wnyLoad(q, mcqLike) {
+  const opts = _wnyOpts(mcqLike);
+  if (!q || !_wnyUsable(opts)) return null;
+  const prompt = _wnyPrompt(q, opts);
+  const key = _aiHash(prompt);
+  if (_wnyCache[key]) return _wnyCache[key];
+  if (!window.__aiReady || !window.__aiReady()) return null;
+  const p = (async () => {
+    let raw = null;
+    try { raw = sessionStorage.getItem(key); } catch (e) {}
+    if (raw === null) {
+      const media = await _cqMedia(q);
+      raw = await askGeminiVision(prompt, media, { maxOutputTokens: 260 + opts.length * 160, json: true });
+      try { sessionStorage.setItem(key, raw); } catch (e) {}
+    }
+    return _wnyNormItems(_parseAIJson(raw), opts);
+  })().catch(e => {
+    console.warn('Why-not-this-one failed:', e);
+    delete _wnyCache[key];
+    // If it was the PARSE that failed, a cached bad reply would make every
+    // retry for the rest of the session fail instantly on the same bad reply.
+    try { sessionStorage.removeItem(key); } catch (_) {}
+    return null;
+  });
+  _wnyCache[key] = p;
+  return p;
+}
+
+// ---- the card --------------------------------------------------------------
+let _wnyEl = null;        // the card; one for the whole page
+let _wnyTimer = null;     // hover intent
+let _wnyHideTimer = null;
+let _wnyShowing = '';     // token of the option on screen, so a slow call cannot overwrite a newer card
+let _wnyPinned = false;   // opened by tap or keyboard rather than hover — stays until dismissed
+function _wnyToken(containerSel, blockId, letter) { return containerSel + '|' + blockId + '|' + letter; }
+function _wnyCoarsePointer() {
+  try { return !!(window.matchMedia && window.matchMedia('(hover: none)').matches); } catch (e) { return false; }
+}
+function _wnyCardEl() {
+  if (_wnyEl) return _wnyEl;
+  _wnyEl = document.createElement('div');
+  _wnyEl.id = 'wnyPop';
+  _wnyEl.addEventListener('mouseenter', () => clearTimeout(_wnyHideTimer));
+  _wnyEl.addEventListener('mouseleave', () => { if (!_wnyPinned) _wnyHideSoon(); });
+  _wnyEl.addEventListener('click', ev => { if (ev.target.closest('[data-wny-close]')) _wnyHide(); });
+  document.body.appendChild(_wnyEl);
+  // A fixed card whose anchor has scrolled away points at nothing, so it goes
+  // when the page moves. All of this is bound once, on first use — a student
+  // who never opens one pays for none of it.
+  window.addEventListener('scroll', _wnyHide, true);
+  window.addEventListener('resize', _wnyHide);
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape') _wnyHide(); });
+  document.addEventListener('click', ev => {
+    if (!_wnyPinned || !_wnyEl) return;
+    if (_wnyEl.contains(ev.target) || (ev.target.closest && ev.target.closest('.wny-badge'))) return;
+    _wnyHide();
+  });
+  return _wnyEl;
+}
+function _wnyHide() {
+  clearTimeout(_wnyTimer); clearTimeout(_wnyHideTimer);
+  _wnyShowing = ''; _wnyPinned = false;
+  if (_wnyEl) { _wnyEl.style.display = 'none'; _wnyEl.classList.remove('wny-pinned'); }
+}
+function _wnyHideSoon() { clearTimeout(_wnyHideTimer); _wnyHideTimer = setTimeout(_wnyHide, WNY_HIDE_MS); }
+// Beside the option first. A card dropped straight below covers the NEXT
+// option, and a student reading down the list then cannot reach it; under and
+// over are the fallbacks for a narrow screen, where there is no room either
+// side. Clamped to the viewport last, so nothing ever opens off the edge.
+//
+// It hangs off the ⓘ, not off the option row. An option here is a full-width
+// <label>, so there is never room to the right of it and the card fell to its
+// "no room either side" branch every single time — landing under option 1 and
+// covering option 2, which is the exact thing this function exists to avoid.
+// The badge sits at the right-hand edge, so anchoring there leaves the whole
+// column to its left free.
+function _wnyPlace(lab) {
+  const el = _wnyCardEl();
+  const anchor = (lab && lab.querySelector && lab.querySelector('.wny-badge')) || lab;
+  if (!anchor || !anchor.getBoundingClientRect) return;
+  const r = anchor.getBoundingClientRect();
+  el.style.visibility = 'hidden';
+  el.style.left = '0px'; el.style.top = '0px';
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const GAP = 12, PAD = 10;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = r.right + GAP, top = r.top - 4;
+  if (left + w > vw - PAD) {
+    const leftSide = r.left - GAP - w;
+    if (leftSide >= PAD) left = leftSide;
+    else {
+      left = r.left;
+      top = r.bottom + GAP;
+      if (top + h > vh - PAD) top = r.top - GAP - h;
+    }
+  }
+  el.style.left = Math.round(Math.max(PAD, Math.min(left, vw - w - PAD))) + 'px';
+  el.style.top = Math.round(Math.max(PAD, Math.min(top, vh - h - PAD))) + 'px';
+  el.style.visibility = '';
+}
+function _wnyCardHtml(opt, why, state, chosen, pinned) {
+  const yours = (chosen && String(chosen) === String(opt.letter)) ? `<span class="wny-yours">you chose this</span>` : '';
+  const close = pinned ? `<button type="button" class="wny-close" data-wny-close aria-label="Close">✕</button>` : '';
+  const head =
+    `<div class="wny-head"><span class="wny-num">${escapeHtml(String(opt.letter))}</span>` +
+    `<span class="wny-word">${escapeHtml(opt.text || '')}</span>${yours}${close}</div>` +
+    (opt.correct
+      ? `<div class="wny-verdict ok">✓ This one is right</div>`
+      : `<div class="wny-verdict no">✗ Why this one is wrong</div>`);
+  if (state === 'loading') return head + `<div class="wny-load"><span class="wny-dots"><i></i><i></i><i></i></span>Reading the question…</div>`;
+  if (state === 'off') return head + `<div class="wny-note">This needs the A.I. to be switched on for this account.</div>`;
+  if (!why) return head + `<div class="wny-note">No reason came back for this option. Move away and hover it again to try once more.</div>`;
+  return head + `<div class="wny-txt">${escapeHtml(why)}</div>`;
+}
+async function _wnyOpen(lab, containerSel, blockId, pin) {
+  const mcq = (_openMcqStore[containerSel] || []).find(m => m.blockId === blockId);
+  if (!mcq) return;
+  const letter = String(lab.dataset.wnyLetter || '');
+  const opts = _wnyOpts(mcq);
+  const opt = opts.find(o => String(o.letter) === letter);
+  if (!opt) return;
+  // The armed class is the gate, checked HERE rather than by unbinding the
+  // listeners, because it is the one place all three ways in — hover, tap and
+  // keyboard — have to pass. `wnyDisarm` takes the badges away, but a listener
+  // bound to a <label> cannot be removed without keeping a handle on every
+  // closure, and a reset question that still answers a hover is exactly the
+  // open-book retry the disarm exists to prevent.
+  const wrap = lab.closest('.mcq-block');
+  if (!wrap || !wrap.classList.contains('wny-on')) return;
+  const chosen = wrap.dataset.wnyChosen || '';
+  const token = _wnyToken(containerSel, blockId, letter);
+  _wnyShowing = token;
+  _wnyPinned = !!pin;
+  const aiOn = !!(window.__aiReady && window.__aiReady());
+  const el = _wnyCardEl();
+  el.classList.toggle('wny-pinned', !!pin);
+  el.innerHTML = _wnyCardHtml(opt, null, aiOn ? 'loading' : 'off', chosen, !!pin);
+  el.style.display = 'block';
+  el.scrollTop = 0;
+  _wnyPlace(lab);
+  if (!aiOn) return;
+  let map = null;
+  try { map = await _wnyLoad(_openQStore[containerSel], mcq); } catch (e) { map = null; }
+  if (_wnyShowing !== token) return;   // the student has moved on — never overwrite a newer card
+  const why = map ? map[letter] : null;
+  el.innerHTML = _wnyCardHtml(opt, why, why ? 'ready' : 'none', chosen, _wnyPinned);
+  _wnyPlace(lab);
+}
+function _wnyQueue(lab, containerSel, blockId, pin) {
+  clearTimeout(_wnyTimer); clearTimeout(_wnyHideTimer);
+  if (pin) { _wnyOpen(lab, containerSel, blockId, true); return; }
+  _wnyTimer = setTimeout(() => _wnyOpen(lab, containerSel, blockId, false), WNY_HOVER_MS);
+}
+function _wnyToggle(lab, containerSel, blockId) {
+  if (_wnyPinned && _wnyShowing === _wnyToken(containerSel, blockId, String(lab.dataset.wnyLetter || ''))) { _wnyHide(); return; }
+  _wnyQueue(lab, containerSel, blockId, true);
+}
+// Called from _mcqPaintResult and nowhere else — see the rules at the top.
+// The badge goes on the WRONG options only: the right one is already painted
+// green with the answer beside it, so an ⓘ there would be a second way of
+// saying the same thing, on the one option that needs no defending.
+function wnyArm(containerSel, blockId, options, chosenLetter) {
+  const wrap = document.querySelector(containerSel + ' .mcq-block[data-block="' + blockId + '"]');
+  if (!wrap) return;
+  wrap.dataset.wnyChosen = chosenLetter || '';
+  const opts = _wnyOpts({ options: options || [] });
+  if (!_wnyUsable(opts)) return;
+  wrap.classList.add('wny-on');
+  wrap.querySelectorAll('label').forEach((lab, idx) => {
+    const o = opts[idx];
+    if (!o) return;
+    lab.dataset.wnyLetter = String(o.letter);
+    if (lab.dataset.wnyBound !== '1') {
+      lab.dataset.wnyBound = '1';
+      lab.addEventListener('mouseenter', () => { if (!_wnyCoarsePointer()) _wnyQueue(lab, containerSel, blockId, false); });
+      lab.addEventListener('mouseleave', () => { clearTimeout(_wnyTimer); if (!_wnyPinned) _wnyHideSoon(); });
+    }
+    if (o.correct) return;                       // nothing to defend on the right answer
+    if (lab.querySelector('.wny-badge')) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'wny-badge';
+    b.textContent = 'ⓘ';
+    b.title = 'Why is this one wrong?';
+    b.setAttribute('aria-label', 'Why option ' + o.letter + ' is wrong');
+    // The badge sits INSIDE the <label>, so a plain click would also tick the
+    // radio: reading why an option is wrong would silently change the answer.
+    // preventDefault on the click is what stops that, and on the mousedown is
+    // what stops the pointer focusing the badge — the focus handler is for the
+    // keyboard, and firing it here would open the card and the click would
+    // close it again.
+    b.addEventListener('mousedown', ev => ev.preventDefault());
+    b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); _wnyToggle(lab, containerSel, blockId); });
+    b.addEventListener('focus', () => _wnyQueue(lab, containerSel, blockId, true));
+    b.addEventListener('blur', () => { if (_wnyPinned) _wnyHide(); });
+    lab.appendChild(b);
+  });
+}
+function wnyDisarm(wrap) {
+  if (!wrap) return;
+  wrap.classList.remove('wny-on');
+  delete wrap.dataset.wnyChosen;
+  wrap.querySelectorAll('.wny-badge').forEach(b => b.remove());
+  _wnyHide();
+}
+
+// The ONE painter for a marked MCQ. All three marking paths — whole-question
+// marking, the local per-part mark and the AI per-part mark — carried their own
+// copy of this loop, which is exactly how the ⓘ would have ended up armed on
+// two surfaces out of three and mysteriously missing on the third.
+function _mcqPaintResult(containerSel, blockId, options, chosenLetter) {
+  const wrap = document.querySelector(containerSel + ' .mcq-block[data-block="' + blockId + '"]');
+  if (!wrap) return;
+  wrap.querySelectorAll('label').forEach((lab, idx) => {
+    const o = (options || [])[idx];
+    if (!o) return;
+    lab.style.background = ''; lab.style.borderColor = 'var(--border)';
+    if (o.correct) { lab.style.background = '#dcfce7'; lab.style.borderColor = '#16a34a'; }
+    if (chosenLetter && o.letter === chosenLetter && !o.correct) { lab.style.background = '#fee2e2'; lab.style.borderColor = '#dc2626'; }
+  });
+  wnyArm(containerSel, blockId, options, chosenLetter);
+}
+
+// ---- the same reasons, on the printed answer key ----------------------------
+// Which surface asked for them. Same shape as _wsStudentFieldsOn: the checkbox
+// lives on the page the print was started from.
+// Named explicitly, one per surface. A default that fell through to another
+// page's checkbox would honour a switch the teacher set somewhere else, on a
+// print they started from here — and there is nothing on this screen that
+// could explain it.
+const WNY_SWITCHES = { builder: 'wsIncludeWhy', saved: 'mwIncludeWhy', paper: 'ppIncludeWhy', bank: 'printIncludeWhy' };
+function wnyPrintOn(where) {
+  const id = WNY_SWITCHES[where];
+  if (!id) return false;
+  const el = document.getElementById(id);
+  return !!(el && el.checked);
+}
+// Every MCQ block on the sheet that can be explained at all.
+function _wnyPrintJobs(selected) {
+  const jobs = [];
+  (selected || []).forEach(q => ((q && q.blocks) || []).forEach(b => {
+    if (b && b.type === 'mcq' && _wnyUsable(_wnyOpts(b))) jobs.push({ q, b });
+  }));
+  return jobs;
+}
+// The pre-pass, run BEFORE the sheet is built because the notes have to be in
+// hand when the answer key is assembled — and because the planner measures the
+// finished page, so a note that arrived afterwards would not be counted in the
+// page it has to fit on.
+//
+// It is one AI call per MCQ, which is why it is behind a switch that is OFF by
+// default: a thirty-question paper is thirty calls. They are cached by prompt,
+// so re-printing the same paper in the same sitting costs nothing.
+//
+// Nothing is written to the bank. A question whose call fails simply prints
+// without its notes — the answer itself is never at risk, and a printed key
+// that quietly carried a WRONG reason would be worse than one carrying none.
+async function wnyPrepare(selected, on, onProgress) {
+  if (!on) return null;
+  const jobs = _wnyPrintJobs(selected);
+  if (!jobs.length) return null;
+  if (!window.__aiReady || !window.__aiReady()) {
+    showToast('The A.I. is not switched on, so "why each option is wrong" was left off the key', 'info');
+    return null;
+  }
+  const total = jobs.length;
+  const notes = {};
+  let done = 0;
+  const worker = async () => {
+    while (jobs.length) {
+      const j = jobs.shift();
+      try {
+        const map = await _wnyLoad(j.q, j.b);
+        if (map && Object.keys(map).length) {
+          (notes[j.q.id] = notes[j.q.id] || {})[j.b.id] = map;
+        }
+      } catch (e) { console.warn('why-not notes failed for one question', e); }
+      done++;
+      if (onProgress) onProgress(done, total);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(WNY_PRINT_PAR, total) }, worker));
+  return Object.keys(notes).length ? notes : null;
+}
+// The live preview shows the notes it ALREADY has and never fires a call for
+// them. It is redrawn on every page-break click, and one AI call per
+// multiple-choice question on each of those is not a preview, it is a bill.
+// The divergence from the printed sheet is confined to the answer key's own
+// pages at the back: the breaks the teacher is arranging are on the QUESTION
+// chunks, and these notes never touch one.
+function _wnyCachedNotes(selected, on) {
+  if (!on) return null;
+  const notes = {};
+  _wnyPrintJobs(selected).forEach(j => {
+    const opts = _wnyOpts(j.b);
+    let raw = null;
+    try { raw = sessionStorage.getItem(_aiHash(_wnyPrompt(j.q, opts))); } catch (e) {}
+    if (raw == null) return;
+    const map = _wnyNormItems(_parseAIJson(raw), opts);
+    if (map && Object.keys(map).length) (notes[j.q.id] = notes[j.q.id] || {})[j.b.id] = map;
+  });
+  return Object.keys(notes).length ? notes : null;
+}
+// The rows for one MCQ block: every option that is NOT the answer, in the order
+// they are printed, each with the reason it is wrong. `ci` is the correct
+// option's index, so the answer is never listed among the reasons it is not.
+function _wnyKeyRows(block, why, ci) {
+  if (!block || !why) return '';
+  return (block.options || []).map((o, i) => {
+    if (i === ci) return '';
+    const t = _wnyClean(why[String(i + 1)]);
+    return t ? `<div class="ak-why"><b>${i + 1}.</b> ${escapeHtml(t)}</div>` : '';
+  }).join('');
 }
 
 // Last-resort explanation built locally, used when the AI returns nothing so
@@ -21190,15 +21670,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       const chosenLetter = (v && v.chosen) ? _normMcqChoice(v.chosen) : e.studentLetter;
       e.chosenLetter = chosenLetter;
       if (verdict !== 'correct') mistakes.push({ expected: correctOpt ? (correctOpt.letter + ') ' + correctOpt.text) : '', student: chosenLetter });
-      const wrap = document.querySelector(containerSel + ' .mcq-block[data-block="' + m.blockId + '"]');
-      if (wrap) {
-        wrap.querySelectorAll('label').forEach((lab, idx) => {
-          const o = m.options[idx]; if (!o) return;
-          lab.style.background = ''; lab.style.borderColor = 'var(--border)';
-          if (o.correct) { lab.style.background = '#dcfce7'; lab.style.borderColor = '#16a34a'; }
-          if (chosenLetter && o.letter === chosenLetter && !o.correct) { lab.style.background = '#fee2e2'; lab.style.borderColor = '#dc2626'; }
-        });
-      }
+      _mcqPaintResult(containerSel, m.blockId, m.options, chosenLetter);
       const fb = document.querySelector(containerSel + ' [data-mcq-fb="' + m.blockId + '"]');
       if (fb) {
         let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(chosenLetter)})</span>` : '');
@@ -21417,13 +21889,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     const pts = verdict === 'correct' ? 1 : 0;
     const color = verdict === 'correct' ? 'var(--primary)' : 'var(--accent-red)';
     const icon = verdict === 'correct' ? '✓' : '✗';
-    const wrap = document.querySelector(containerSel + ' .mcq-block[data-block="' + pid + '"]');
-    if (wrap) wrap.querySelectorAll('label').forEach((lab, idx) => {
-      const o = mcq.options[idx]; if (!o) return;
-      lab.style.background = ''; lab.style.borderColor = 'var(--border)';
-      if (o.correct) { lab.style.background = '#dcfce7'; lab.style.borderColor = '#16a34a'; }
-      if (studentLetter && o.letter === studentLetter && !o.correct) { lab.style.background = '#fee2e2'; lab.style.borderColor = '#dc2626'; }
-    });
+    _mcqPaintResult(containerSel, pid, mcq.options, studentLetter);
     if (fbEl) {
       let inner = `<span style="color:${color};font-weight:600;font-size:0.85rem;text-transform:capitalize;">${icon} ${escapeHtml(verdict)}</span>` +
         (studentLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(studentLetter)})</span>` : '');
@@ -21499,15 +21965,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     _setPartResult(containerSel, 'open:' + pid, verdict, pts, model, student);
   } else {
     const chosenLetter = parsed.chosen ? _normMcqChoice(parsed.chosen) : studentLetter;
-    const wrap = document.querySelector(containerSel + ' .mcq-block[data-block="' + pid + '"]');
-    if (wrap) {
-      wrap.querySelectorAll('label').forEach((lab, idx) => {
-        const o = mcq.options[idx]; if (!o) return;
-        lab.style.background = ''; lab.style.borderColor = 'var(--border)';
-        if (o.correct) { lab.style.background = '#dcfce7'; lab.style.borderColor = '#16a34a'; }
-        if (chosenLetter && o.letter === chosenLetter && !o.correct) { lab.style.background = '#fee2e2'; lab.style.borderColor = '#dc2626'; }
-      });
-    }
+    _mcqPaintResult(containerSel, pid, mcq.options, chosenLetter);
     if (fbEl) {
       let inner = fbHead + (chosenLetter ? `<span style="color:var(--text-muted);font-size:0.85rem;"> (you chose ${escapeHtml(chosenLetter)})</span>` : '');
       if (correctOpt) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Correct answer:</strong> ${escapeHtml(correctOpt.letter)}) ${escapeHtml(correctOpt.text)}</div>`;
@@ -22367,7 +22825,7 @@ function deleteWorksheet(id) {
   });
 }
 
-function reprintWorksheet(id) {
+async function reprintWorksheet(id) {
   const ws = savedWorksheets.find(w => w.id === id);
   if (!ws) return;
   const selected = _wsSavedQuestions(ws);
@@ -22377,7 +22835,8 @@ function reprintWorksheet(id) {
   }
   const noFields = !_wsStudentFieldsOn('saved');
   const wantCover = !!document.getElementById('mwIncludeCover')?.checked;
-  doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields);
+  const why = await _wnyRunPrepare(selected, wnyPrintOn('saved'));
+  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields, why);
 }
 
 // The questions of a saved worksheet, in the order they were chosen — the ids
@@ -22793,7 +23252,8 @@ async function printStudentWorksheet() {
   const selected = questionBank.filter(q => wsSelectedIds.has(q.id));
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
   const frontHtml = await _wsFrontHtml(selected, title);
-  doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'));
+  const why = await _wnyRunPrepare(selected, wnyPrintOn('builder'));
+  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why);
 }
 
 // Worksheet title banner + name/date/class strip printed at the top of page 1.
@@ -22832,6 +23292,10 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   // frontHtml: pre-built front-matter pages (cover / cheat sheet) placed
   // before question 1 — each .print-front-page prints on its own sheet.
   const akExtras = !!(opts && opts.answerKeyExtras);
+  // whyNotes: the ⓘ "why each other option is wrong" reasons, keyed by question
+  // id then by MCQ block id, as `wnyPrepare` builds them. Absent (the ordinary
+  // case) the key is byte-for-byte the one that printed before.
+  const whyNotes = (opts && opts.whyNotes) || null;
   // plainNumbers: show a clean running "Question N" header and hide the bank
   // question's own title + category/topic meta (used for PSLE-paper prints so
   // the sheet shows just the question number, not the database title).
@@ -22878,6 +23342,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     // Open ended writing boxes
     {
       const qSections = [];
+      const qWhy = whyNotes ? whyNotes[q.id] : null;
       const qParts = qPartMap(q.blocks);
       q.blocks.forEach(block => {
         const bPart = qPartOf(qParts, block);
@@ -22937,7 +23402,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
           // block through `_printMcqBlockHtml`, so the two sheets cannot drift.
           case 'mcq': {
             qHtml += _printMcqBlockHtml(block, bPart);
-            _pushBlockAnswerKey(qSections, block, bPart);
+            _pushBlockAnswerKey(qSections, block, bPart, qWhy);
             break;
           }
           default: {
@@ -22947,7 +23412,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             // extra, and gating it behind `answerKeyExtras` meant every
             // ordinary worksheet printed a key listing only its open-ended
             // questions.
-            _pushBlockAnswerKey(qSections, block, bPart);
+            _pushBlockAnswerKey(qSections, block, bPart, qWhy);
             break;
           }
         }
@@ -22986,12 +23451,25 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
   return allHtml;
 }
 
-function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields) {
+// One AI call per MCQ is a real wait, so it gets the progress bar the print
+// already owns rather than a dead click. Shared by every print path, so the
+// wording and the cancel-free behaviour cannot differ between two buttons.
+async function _wnyRunPrepare(selected, on) {
+  if (!on) return null;
+  const jobs = _wnyPrintJobs(selected);
+  if (!jobs.length) return null;
+  _printProgressShow('Preparing worksheet\u2026', 'Reading the options\u2026');
+  const notes = await wnyPrepare(selected, true, (done, total) =>
+    _printProgressUpdate('Working out why each option is wrong\u2026', 0.02 + 0.5 * (done / total), done + '/' + total + ' questions'));
+  return notes;
+}
+
+async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes) {
   const output = document.getElementById('printOutput');
   // plainNumbers: a worksheet is numbered "Question 1, 2, 3…" for the student.
   // The bank's own title and its category/topic line are internal filing —
   // useful in the admin's bank, meaningless (and a giveaway) on a printed sheet.
-  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields });
+  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null });
   autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
 }
 
@@ -23558,7 +24036,8 @@ function _wsPreviewCtx() {
       selected: ws ? _wsSavedQuestions(ws) : [],
       title: (ws && ws.title) || _wsPreviewSaved.title || 'CER Worksheet',
       cover: !!document.getElementById('mwIncludeCover')?.checked,
-      noFields: !_wsStudentFieldsOn('saved')
+      noFields: !_wsStudentFieldsOn('saved'),
+      where: 'saved'
     };
   }
   return {
@@ -23566,7 +24045,8 @@ function _wsPreviewCtx() {
     selected: questionBank.filter(q => wsSelectedIds.has(q.id)),
     title: (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet',
     cover: !!document.getElementById('wsIncludeCover')?.checked,
-    noFields: !_wsStudentFieldsOn('builder')
+    noFields: !_wsStudentFieldsOn('builder'),
+    where: 'builder'
   };
 }
 
@@ -23630,7 +24110,10 @@ async function renderWsPreview() {
   const selected = ctx.selected;
   const title = ctx.title;
   const frontHtml = ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields) : '';
-  const html = buildWorksheetHtml(selected, title, { frontHtml, plainNumbers: true, noStudentFields: ctx.noFields });   // exactly what will print
+  const html = buildWorksheetHtml(selected, title, {
+    frontHtml, plainNumbers: true, noStudentFields: ctx.noFields,
+    whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where))
+  });   // exactly what will print
   const fontLinks = _printFontLinksHtml();
   const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
   if (!doc) return;
@@ -52814,6 +53297,13 @@ function ppRenderBody(){
     </div>`;
   }).join('') || '<div style="color:var(--text-muted);padding:8px;">No recurring concepts yet.</div>';
   const addConcept = edit ? `<button class="pp-add" onclick="ppAddConcept()">+ Add concept</button>` : '';
+  // The switch is OFF by default and says what it costs: one AI call per
+  // multiple-choice question on the paper.
+  // This toolbar is rebuilt whenever the paper data changes, so the switch has
+  // to carry its own state across the re-render or a tick set a moment ago is
+  // silently undone before the teacher presses print.
+  const whyOn = !!document.getElementById('ppIncludeWhy')?.checked;
+  const whyBox = !edit ? `<label class="pp-whybox" title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment."><input type="checkbox" id="ppIncludeWhy" ${whyOn ? 'checked' : ''}> \u24d8 Why the other options are wrong</label>` : '';
   const printSelBtn = !edit ? `<button class="pp-add" id="ppPrintSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Print every attached question from the concepts you ticked below as ONE worksheet — questions first, the full answer key on the last pages. Tick concepts with the checkbox at their top-right corner." onclick="ppPrintSelected()">🖨 Print selected${_ppPrintSel.size ? ' (' + _ppPrintSel.size + ')' : ''}</button>` : '';
 
   // --- question map ---
@@ -52906,7 +53396,7 @@ function ppRenderBody(){
     <div class="pp-note">${roleLine}</div>
     ${practiceCard}
     <div class="pp-card">
-      <h3 class="pp-h">The concepts that keep coming back ${addConcept}${printSelBtn}</h3>
+      <h3 class="pp-h">The concepts that keep coming back ${addConcept}${printSelBtn}${whyBox}</h3>
       <p class="pp-sub">Patterns that recur across the papers — the highest-yield things to master, ordered by how many questions touched each.</p>
       ${recCards}
     </div>
@@ -53336,10 +53826,18 @@ async function ppDoPrint(items, missing, title, opts){
   const urls = [];
   selected.forEach(q => { if (q.answerKeyImage) urls.push(transformImageUrl(q.answerKeyImage)); (q.blocks || []).forEach(b => { if (b && b.url && (b.type === 'image' || b.type === 'answerKey')) urls.push(transformImageUrl(b.url)); }); });
   await _preloadImageUrls(urls, (done, tot) => _printProgressUpdate('Loading question images…', 0.05 + 0.7 * (done / tot), done + '/' + tot + ' images'));
+  // The ⓘ reasons, when the paper's own switch asked for them. Read BEFORE the
+  // layout runs: the planner measures the finished page, so a note that
+  // arrived afterwards would not be counted in the page it has to fit on.
+  const why = wnyPrintOn('paper')
+    ? await wnyPrepare(selected, true, (done, total) =>
+        _printProgressUpdate('Working out why each option is wrong…', 0.75 + 0.05 * (done / total), done + '/' + total + ' questions'))
+    : null;
   _printProgressUpdate('Laying out pages…', 0.8, 'Measuring each question at print size');
   output.innerHTML = buildWorksheetHtml(selected, title, {
     answerKeyExtras: true,
     plainNumbers: true,
+    whyNotes: why,
     frontHtml: _ppCoverHtml((opts && opts.coverTitle) || title),
   });
   autoscaleAndPrint(output);

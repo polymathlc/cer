@@ -1038,7 +1038,114 @@ they actually wanted, they typed themselves.
   button itself. ✂️ Shorten has carried the same guard from the start.
 - Run **`node tools/ai-complete-tests.mjs`** after touching any of it.
 
+## 🔎 Why not this one — the ⓘ on a marked MCQ's wrong options (v1.303.0)
+
+`wny*` (in `app.js`, search `WHY NOT THIS ONE`), plus `_mcqPaintResult`, the
+`.wny-*` / `#wnyPop` CSS in `index.html`, and the ⓘ **Why the other options are
+wrong** switch on all four print surfaces — the worksheet builder, the 📄 My
+Worksheets card, the 🖨 print picker and the past-papers toolbar.
+
+Being told **✗ incorrect, the answer is 2** teaches nothing. On an MCQ-only
+question it is *all* a student is told — `_genAndShowExplanation` writes an
+A.I. Explanation only when the question has an OPEN part — so a whole paper of
+multiple choice ends at a red border and a green one. Now every option they did
+not get right grows an ⓘ, and it says why *that* one is wrong against the
+evidence actually printed in the question: *"There are only 2 populations of
+producer — arrowhead and water lily — so 3 is wrong."*
+
+- **IT IS A VISION CALL, and that is not an optimisation waiting to happen.** A
+  science distractor is almost always wrong because of what a food web, a
+  circuit, a table or a graph SHOWS. "Only 2 producers" cannot be said from the
+  wording alone, and a reason that does not point at the evidence is the "this
+  is incorrect" the student already had. `_cqMedia` attaches the diagrams and
+  `_cqRepr` spells the tables out — both borrowed from ✅ Check Questions rather
+  than forked, and for the same reason that page's AI pass may not be
+  downgraded to `askGemini` either.
+- **It arms only AFTER marking, from `_mcqPaintResult`.** That painter is new:
+  all three marking paths — whole-question marking, the local per-part mark and
+  the AI per-part mark — carried their own copy of the colouring loop, which is
+  exactly how the ⓘ would have ended up on two surfaces out of three and
+  mysteriously missing on the third. Armed a moment earlier it is an **answer
+  key**: the badges go on the WRONG options, so before marking they would point
+  straight at the right one. `resetOpenAnswersIn` disarms for the same reason —
+  a reset question that kept them is an open-book retry.
+- **The badge is on the wrong options only.** The right one is already painted
+  green with the answer beside it; an ⓘ there would be a second way of saying
+  the same thing, on the one option that needs no defending.
+- **ONE call covers the WHOLE option list.** The model has to see the four
+  together to say why this one beats that one, and the student reads two or
+  three in a row.
+- **A reason is placed against an option by the option's OWN number** and
+  nothing else (`_wnyNormItems`, through the shared `_normMcqChoice`, so "(2)",
+  "2." and "B" all land on option 2). This is the one failure the feature
+  produces silently: a reason shown under the wrong option reads perfectly and
+  teaches a child something untrue about a question they have just got wrong.
+  Positional order is the fallback and **only** when the model numbered nothing
+  at all and returned exactly one entry per option.
+- **`_wnyUsable` refuses a question with no correct option ticked.** "Why is
+  this one wrong" has no answer when nothing is recorded as right, and a badge
+  that cannot keep its promise is worse than no badge. That gap is an authoring
+  fault, and ✅ Check Questions is where it gets found.
+- **`_wnyOpts` is the ONE normaliser, and it is what keeps the two surfaces
+  honest.** The marking store carries `.letter`/`.correct` per option; a raw
+  block carries `options[]` plus a separate `correctId`. Both go through it, so
+  the prompt — and therefore the cache key — is the same string either way: a
+  student's hover and a teacher's printed key are the same sentences, and the
+  print does not re-bill what the hover already paid for.
+
+### …and the same reasons on the printed key
+
+- **`wnyPrepare` is the pre-pass**, run BEFORE the sheet is built: the notes
+  have to be in hand when the answer key is assembled, and the planner measures
+  the finished page, so a note arriving afterwards would not be counted in the
+  page it has to fit on.
+- **It is OFF by default and says what it costs** — one AI call per
+  multiple-choice question, `WNY_PRINT_PAR` at a time, on the progress bar the
+  print already owns. They are cached by prompt, so re-printing the same paper
+  in the same sitting is free.
+- **Nothing is written anywhere.** The notes live in memory and in
+  `sessionStorage`; no path here touches the bank. A question whose call fails
+  simply prints without its notes — a printed key quietly carrying a WRONG
+  reason would be far worse than one carrying none.
+- **`_pushBlockAnswerKey(sections, block, part, why)` is where the rows are
+  built**, threaded through that ONE pusher rather than added to each print
+  path's own switch. Those two switches had already drifted over the MCQ answer
+  itself once (v1.284.0); a key that carries the reasons from one print button
+  and not the other is that same fault wearing a new hat.
+- **The correct option is never listed among the reasons it is not the answer**,
+  and the section is only ever pushed BESIDE a real answer — these are teaching
+  notes, and offering them where the key cannot even name the answer would be
+  the wrong way up.
+- **The live A4 preview shows the notes it ALREADY has and never fires a call**
+  (`_wnyCachedNotes`). It is redrawn on every page-break click, and one AI call
+  per MCQ on each of those is not a preview, it is a bill. The divergence from
+  the printed sheet is confined to the answer key's own pages at the back: the
+  breaks the teacher is arranging are on the QUESTION chunks, and these notes
+  never touch one.
+- **`WNY_SWITCHES` names the checkbox for each surface and an unknown surface
+  returns false.** A default that fell through to another page's checkbox would
+  honour a switch the teacher set somewhere else, on a print they started from
+  here, with nothing on the screen able to explain it. The past-papers toolbar
+  is rebuilt on every data change, so its box carries its own state across the
+  re-render or a tick set a moment ago is silently undone.
+- Run **`node tools/why-not-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🔎 Why not this one** (`_wnyOpts`, `_wnyUsable`,
+  `_wnyNormItems`, `_wnyKeyRows`, `_wnyPrintJobs`, `wnyArm`, `wnyPrepare`,
+  `_mcqPaintResult`, or `_pushBlockAnswerKey`'s `why` argument), run
+  `node tools/why-not-tests.mjs`. This one tells a child something about a
+  question they have just got wrong and prints it on the sheet a teacher marks
+  from, so every failure states something untrue, confidently, on a page that
+  looks perfectly right: a reason lined up against the wrong option reads
+  exactly as well as it does against the right one and teaches the opposite of
+  the truth; the correct option appearing among "why the other options are
+  wrong" is the key contradicting itself two lines below the answer it just
+  gave; the badge armed before marking points straight at the answer, since it
+  only ever goes on the WRONG options; and `_wnyOpts` drifting apart for a
+  block and a marking-store entry silently splits one generator into two, so
+  the student reads one sentence, the teacher marks from another, and every
+  print re-bills the AI.
 - After touching **🛟 art safety & recovery** (`tcgArtBackupSync`,
   `tcgArtRestoreBackup`, `tcgArtExport`, `tcgArtImport`, `_tcgArtWriteMany`,
   `_tcgRescueSlotSequence`, `_tcgRescueRelay`, `tcgArtRescueApply`,
