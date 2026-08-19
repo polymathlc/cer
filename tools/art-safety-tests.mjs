@@ -79,13 +79,39 @@ function tcgArtRefresh() { refreshes++; }
 function tcgArtSafetyRender() { renders++; }
 function escapeHtml(s) { return String(s); }
 
-// Three monsters is enough to see the card/avatar interleave the rescue
-// proposal depends on.
+// Two sets, because the fault this section was rebuilt for is a run from ONE
+// set being laid onto the other's slots: the National Day cards were drawn
+// months after the original dex, so their run got filed onto monster slots
+// and every picture wore a name that had nothing to do with it.
+const TCG_SETS = {
+  gen1: { key: 'gen1', name: 'Original dex', em: '\u{1F409}' },
+  nd:   { key: 'nd',   name: 'Lionheart Legion', em: '\u{1F981}' },
+};
 const TCG_CARDS = [
-  { id: 'c001', num: 1, name: 'Alpha' },
-  { id: 'c002', num: 2, name: 'Bravo' },
-  { id: 'c003', num: 3, name: 'Charlie' },
+  { id: 'c001', num: 1, name: 'Alpha',   em: 'A', element: 'fire',  stars: 1, set: 'gen1' },
+  { id: 'c002', num: 2, name: 'Bravo',   em: 'B', element: 'aqua',  stars: 1, set: 'gen1' },
+  { id: 'c003', num: 3, name: 'Charlie', em: 'C', element: 'terra', stars: 1, set: 'gen1' },
+  { id: 'c004', num: 4, name: 'Knight',  em: 'K', element: 'light', stars: 5, set: 'nd', human: true, cls: 'paladin', sex: 'female' },
+  { id: 'c005', num: 5, name: 'Mage',    em: 'M', element: 'spark', stars: 5, set: 'nd', human: true, cls: 'wizard',  sex: 'male' },
 ];
+
+// --- AI + image shims -------------------------------------------------
+// aiReply is what the vision model answers; alphaFor says which pictures
+// are cut-out avatars, which is the deterministic half of the match.
+let aiReply = null;
+let aiCalls = 0;
+let alphaFor = {};
+let lastPrompt = '';
+async function askGeminiVision(prompt, media, opts) { aiCalls++; lastPrompt = prompt; return JSON.stringify(typeof aiReply === 'function' ? aiReply(prompt, media) : aiReply); }
+function _parseAIJson(raw) { try { return JSON.parse(raw); } catch (e) { return null; } }
+async function _urlToDataUrlRobust(url) { return 'data:image/png;base64,' + String(url).split('/').pop(); }
+function _parseImageDataUrl(d) { return String(d).indexOf('data:image/') === 0 ? { mime: 'image/png' } : null; }
+class Image {
+  set src(v) { this._src = v; setTimeout(() => this.onload && this.onload(), 0); }
+  get src() { return this._src; }
+  get naturalWidth() { return 8; }
+  get naturalHeight() { return 8; }
+}
 
 // Storage shim: a bucket of objects with upload times.
 let bucket = [];
@@ -98,7 +124,30 @@ async function listAll() {
 }
 async function getMetadata(r) { return { timeCreated: new Date(r._b.t).toISOString(), size: r._b.size || 1 }; }
 async function getDownloadURL(r) { return 'https://files/' + r.name; }
-const document = { getElementById: () => null, createElement: () => ({ click() {}, remove() {} }), body: { appendChild() {} } };
+const document = {
+  getElementById: () => null,
+  body: { appendChild() {} },
+  createElement(tag) {
+    if (tag !== 'canvas') return { click() {}, remove() {} };
+    const cv = {
+      width: 0, height: 0,
+      getContext: () => ({
+        drawImage(img) { cv._src = img._src; },
+        getImageData(_x, _y, w, h) {
+          // alphaFor is keyed by the picture's file name, which survives
+          // into the shimmed data url.
+          const key = Object.keys(alphaFor).find(n => String(cv._src || '').includes(n));
+          const frac = key ? alphaFor[key] : 0;
+          const px = new Uint8ClampedArray(w * h * 4);
+          const clear = Math.round(w * h * frac);
+          for (let i = 0; i < w * h; i++) px[i * 4 + 3] = i < clear ? 0 : 255;
+          return { data: px };
+        },
+      }),
+    };
+    return cv;
+  },
+};
 `;
 
 const block = cut(
@@ -127,6 +176,13 @@ return {
   apply: tcgArtRescueApply,
   rescue: () => _tcgRescue,
   seq: _tcgRescueSlotSequence,
+  scope: tcgArtRescueScope,
+  identify: tcgArtRescueIdentify,
+  pick: tcgArtRescueSet,
+  ai(reply) { aiReply = reply; },
+  aiCalls: () => aiCalls,
+  prompt: () => lastPrompt,
+  alpha(m) { alphaFor = m; },
 };`)();
 
 const cases = [];
@@ -331,6 +387,154 @@ test('a denied Storage listing is named, not reported as an empty bucket', async
   ok(/permission|list/i.test(R.error), 'a denied listing must say the rules deny listing, got: ' + R.error);
 });
 
+// ── the scope: which half of the dex a run belongs to ───────────────────────
+// This is the fault that shipped. Art is drawn one SET at a time — the
+// National Day cards were generated months after the original 151 — so a run
+// laid onto the whole dex in order put human knights and sorceresses against
+// a tiger, a turtle and a polar bear, each captioned with a name that had
+// nothing to do with the picture. A nudge of one cannot cross a gap of a
+// hundred, so the scope has to be pickable.
+
+test('the scope narrows the sequence to one set', async () => {
+  const M = mk(); M.setArt({}); M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.scope('set:nd');
+  eq(M.seq().map(s => s.id), ['c004', 'c004:av', 'c005', 'c005:av'], 'the National Day slots only');
+});
+
+test('a National Day run is never offered an original-dex slot', async () => {
+  const M = mk(); M.setArt({}); M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.scope('set:nd');
+  const gen1 = ['c001', 'c002', 'c003'];
+  const proposed = Object.values(M.rescue().assign).filter(Boolean).map(x => x.replace(':av', ''));
+  ok(proposed.every(id => !gen1.includes(id)),
+    'a run scoped to the National Day set was offered original-dex slots: ' + proposed.join(', '));
+});
+
+test('the AI is only ever shown the scope\'s own cards as candidates', async () => {
+  const M = mk(); M.setArt({}); M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.scope('set:nd');
+  M.ai({ cards: [] });
+  await M.identify();
+  const p = M.prompt();
+  ok(/c004/.test(p) && /c005/.test(p), 'the National Day cards were not offered as candidates');
+  ok(!/c001|c002|c003/.test(p),
+    'original-dex cards were offered as candidates for a National Day run — that is how a sorceress ends up filed as a polar bear');
+});
+
+// ── identification beats position ───────────────────────────────────────────
+
+test('what the picture SHOWS wins over where it sits', async () => {
+  const M = mk(); M.setArt({}); M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.scope('set:nd');
+  // deliberately the reverse of the positional order
+  M.ai({ cards: [
+    { i: 0, id: 'c005', confidence: 0.9 },
+    { i: 1, id: 'c005', confidence: 0.9 },
+    { i: 2, id: 'c004', confidence: 0.9 },
+    { i: 3, id: 'c004', confidence: 0.9 },
+  ] });
+  M.alpha({ f1: 0.5, f3: 0.5 });          // pictures 1 and 3 are cut-out avatars
+  await M.identify();
+  eq([0, 1, 2, 3].map(k => M.rescue().assign[k]),
+     ['c005', 'c005:av', 'c004', 'c004:av'], 'the identified assignment');
+});
+
+test('the ALPHA CHANNEL decides card art from battle avatar', async () => {
+  const M = mk(); M.setArt({}); M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.scope('set:nd');
+  M.ai({ cards: [{ i: 0, id: 'c004', confidence: 0.9 }, { i: 1, id: 'c004', confidence: 0.9 }] });
+  M.alpha({ f0: 0, f1: 0.5 });
+  await M.identify();
+  eq(M.rescue().assign[0], 'c004', 'an opaque picture is the card art');
+  eq(M.rescue().assign[1], 'c004:av', 'a cut-out picture is the battle avatar');
+});
+
+test('a picture the AI could not name is left UNASSIGNED, never guessed', async () => {
+  const M = mk(); M.setArt({}); M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.scope('set:nd');
+  M.ai({ cards: [{ i: 0, id: 'c004', confidence: 0.9 }] });
+  await M.identify();
+  eq(M.rescue().assign[0], 'c004', 'the one that was identified');
+  eq([1, 2, 3].map(k => M.rescue().assign[k]), ['', '', ''],
+     'the rest must be left alone — once anything is identified the positional ' +
+     'guesses no longer line up with anything, and filing under a guess is the whole fault');
+});
+
+test('an id the model invented is ignored', async () => {
+  const M = mk(); M.setArt({}); M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.ai({ cards: [{ i: 0, id: 'c999', confidence: 0.9 }, { i: 1, id: 'c001', confidence: 0.9 }] });
+  await M.identify();
+  eq(M.rescue().assign[0], '', 'an unknown card id must not be filed anywhere');
+  eq(M.rescue().assign[1], 'c001', 'the real one still lands');
+});
+
+test('two pictures naming the same card keep the more confident one', async () => {
+  const M = mk(); M.setArt({}); M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.ai({ cards: [{ i: 0, id: 'c001', confidence: 0.4 }, { i: 1, id: 'c001', confidence: 0.95 }] });
+  await M.identify();
+  eq(M.rescue().assign[0], '', 'the less confident duplicate');
+  eq(M.rescue().assign[1], 'c001', 'the more confident duplicate');
+});
+
+test('identification never proposes a slot that already has art', async () => {
+  const M = mk();
+  M.setArt({ c001: 'https://files/KEEP' });
+  M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.ai({ cards: [{ i: 0, id: 'c001', confidence: 0.9 }] });
+  await M.identify();
+  eq(M.rescue().assign[0], '', 'a filled slot was proposed for overwriting');
+});
+
+test('an identified run files what it identified', async () => {
+  const M = mk(); M.setArt({}); M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.scope('set:nd');
+  M.ai({ cards: [{ i: 0, id: 'c004', confidence: 0.9 }, { i: 1, id: 'c005', confidence: 0.9 }] });
+  await M.identify();
+  await M.apply();
+  eq(Object.keys(M.state().art).sort(), ['c004', 'c005'], 'the filed slots');
+});
+
+test('a hand-set slot counts as an identification and outranks position', async () => {
+  const M = mk(); M.setArt({}); M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.pick(2, 'c003');
+  eq(M.rescue().assign[2], 'c003', 'the hand-set slot');
+  eq(M.rescue().assign[0], '', 'the rest fall back to unassigned rather than a stale guess');
+});
+
+test('a picture whose card is already in place is NAMED, not left blank', async () => {
+  const M = mk();
+  M.setArt({ c001: 'https://files/KEEP' });
+  M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.ai({ cards: [{ i: 0, id: 'c001', confidence: 0.9 }] });
+  await M.identify();
+  eq(M.rescue().have[0], 'c001', 'the cell must say the card is already in place');
+  eq(M.rescue().assign[0], '', 'and it must not be filed again');
+});
+
+test('nudging puts an identified run back onto position', async () => {
+  const M = mk(); M.setArt({}); M.bucket(RUN(4));
+  await M.scan(); await M.openRun(0);
+  M.ai({ cards: [{ i: 3, id: 'c001', confidence: 0.9 }] });
+  await M.identify();
+  eq(M.rescue().assign[0], '', 'identified run: unidentified pictures stay unassigned');
+  M.shift(0);
+  eq(M.rescue().assign[0], 'c001',
+    'after a nudge the run must match by position again, or the nudge buttons ' +
+    'appear to do nothing at all');
+});
+
 // ── runner ───────────────────────────────────────────────────────────────────
 
 const only = process.argv[2];
@@ -338,7 +542,7 @@ let passed = 0, failed = 0;
 for (const c of cases) {
   if (only && c.name !== only) continue;
   try { await c.fn(); console.log('  ok   ' + c.name); passed++; }
-  catch (err) { console.log('  FAIL ' + c.name + '\n         ' + err.message); failed++; }
+  catch (err) { console.log('  FAIL ' + c.name + '\n' + (process.env.STACK ? err.stack : '         ' + err.message)); failed++; }
 }
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -754,7 +754,37 @@ map survivable whatever happens next.
   recovery tool that overwrites work is the fault this section answers.
 - **`_tcgArtWriteMany` is the ONE writer they share** — merged and chunked,
   never a whole-document overwrite.
-- **🚑 Rescue rebuilds the map from Storage**, and it works because of what
+- **🚑 Rescue matches on WHAT THE PICTURE SHOWS, not where it sits** (v1.301.0).
+  The first version laid every run onto the whole dex in order, and it was wrong
+  in the most misleading way possible: art is generated a SET at a time, so the
+  National Day run got filed onto monster slots — human knights and sorceresses
+  proposed for a tiger, a turtle and a polar bear, each captioned with a name
+  that had nothing to do with the picture. **A nudge of one cannot cross a gap
+  of a hundred**, so two things were added and both are needed.
+  - **The SCOPE** says which family of slots a run belongs to (each set, or the
+    whole dex). It narrows the target sequence *and* the AI's candidate list,
+    which is why it earns its place twice: a National Day sorceress can never be
+    offered a monster's slot. The worked example in the prompt uses an id **from
+    that scope** — hard-coding `c001` was itself a suggestion to answer outside
+    the list.
+  - **🔍 Identify with AI** shows each picture to `askGeminiVision` with the
+    scope's cards as candidates. Every card is a named character with an element
+    and a creature behind it, so the model can say which it is and the admin can
+    check it against the thumbnail beside it.
+  - **The ALPHA CHANNEL decides card art from battle avatar**, never the model:
+    card art keeps its painted scene and an avatar is background-stripped on the
+    way into storage, so this is a fact about the file rather than a judgement.
+  - **An identification always beats a position, and `identRan` is what keeps a
+    guess from creeping back.** Once the pictures have been looked at, the
+    positional proposal is dead — a picture the model could not name is left
+    **unassigned** rather than filed under a guess, and one whose card is
+    already in place is marked *✓ already in place* rather than reading as a
+    failure. Nudging deliberately clears the identification, because a nudge
+    means "match by position again"; without that the buttons would appear to
+    do nothing.
+  - Duplicates keep the **more confident** picture, an invented card id is
+    dropped, and a slot that already holds art is never proposed.
+- **The positional fallback is still there**, and it works because of what
   survives a wipe: the ORDER. `tcgGenerateAllArt` walks `TCG_CARDS` drawing each
   monster's card art and then its battle avatar, strictly one at a time, so a
   generation run lands in the bucket in exactly that sequence — and laying a run

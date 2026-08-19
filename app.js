@@ -1716,7 +1716,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.300.0';
+const APP_VERSION = 'v1.301.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -38328,19 +38328,103 @@ const TCG_RESCUE_META_PAR = 12;            // metadata reads in flight
 const TCG_RESCUE_RUN_MIN = 4;              // a "run" shorter than this is ordinary authoring
 let _tcgRescue = null;
 
+// ---------------------------------------------------------------------
+// WHICH SLOTS a run is being laid onto -- the SCOPE
+// ---------------------------------------------------------------------
+// The first version of this laid every run onto the whole dex in order, and
+// it was wrong in the most misleading way possible: the National Day cards
+// were drawn in their OWN run, months after the original 151, so that run got
+// filed onto monster slots -- human knights and sorceresses proposed for a
+// tiger, a turtle and a polar bear, each one captioned with a name that had
+// nothing to do with the picture. A nudge of one cannot cross a gap of a
+// hundred.
+//
+// So a run is laid onto ONE named family of slots. Art is generated a set at
+// a time, which is exactly how it lands in the bucket.
+function _tcgRescueScopes() {
+  const out = [];
+  Object.keys(TCG_SETS).forEach(k => {
+    const cards = TCG_CARDS.filter(c => (c.set || 'gen1') === k);
+    if (cards.length) out.push({ key: 'set:' + k, label: TCG_SETS[k].em + ' ' + TCG_SETS[k].name, cards });
+  });
+  out.push({ key: 'all', label: '🃏 Every card', cards: TCG_CARDS.slice() });
+  return out;
+}
+function _tcgRescueScope() {
+  const all = _tcgRescueScopes();
+  return all.find(x => x.key === ((_tcgRescue && _tcgRescue.scope) || '')) || all[0];
+}
+// The generator's own order, narrowed to the chosen scope and to slots that
+// are currently EMPTY: rescue fills gaps, it never overwrites work in place.
 function _tcgRescueSlotSequence() {
-  // The generator's own order, narrowed to slots that are currently EMPTY:
-  // rescue fills gaps, it does not overwrite work already in place.
   const seq = [];
-  TCG_CARDS.forEach(c => {
-    if (!(_tcgArt && _tcgArt[c.id])) seq.push({ id: c.id, label: '#' + String(c.num).padStart(3, '0') + ' ' + c.name + ' — card' });
-    if (!(_tcgArt && _tcgArt[c.id + ':av'])) seq.push({ id: c.id + ':av', label: '#' + String(c.num).padStart(3, '0') + ' ' + c.name + ' — avatar' });
+  _tcgRescueScope().cards.forEach(c => {
+    if (!(_tcgArt && _tcgArt[c.id])) seq.push({ id: c.id, label: _tcgSlotLabel(c.id) });
+    if (!(_tcgArt && _tcgArt[c.id + ':av'])) seq.push({ id: c.id + ':av', label: _tcgSlotLabel(c.id + ':av') });
   });
   return seq;
 }
+function _tcgSlotLabel(slot) {
+  const av = slot.endsWith(':av');
+  const c = TCG_CARDS.find(x => x.id === (av ? slot.slice(0, -3) : slot));
+  if (!c) return slot;
+  return '#' + String(c.num).padStart(3, '0') + ' ' + c.em + ' ' + c.name + ' — ' + (av ? 'avatar' : 'card');
+}
+function tcgArtRescueScope(key) {
+  if (!_tcgRescue) return;
+  _tcgRescue.scope = key;
+  _tcgRescue.offset = 0; _tcgRescue.skip = {}; _tcgRescue.ident = {}; _tcgRescue.conf = {}; _tcgRescue.have = {}; _tcgRescue.identRan = false;
+  _tcgRescueRelay();
+  tcgArtSafetyRender();
+}
+
+// The proposal is a pure function of the scope, how far the run is OFFSET
+// along it, and which uploads are strays -- with anything the AI has actually
+// IDENTIFIED laid over the top. Everything is recomputed from those, so a
+// correction made halfway down the grid moves what is below it and nothing
+// above.
+function _tcgRescueRelay() {
+  const R = _tcgRescue; if (!R || R.run == null) return;
+  const run = R.runs[R.run];
+  const seq = _tcgRescueSlotSequence();
+  const off = R.offset || 0;
+  R.seq = seq;
+  R.assign = {};
+  let j = 0;
+  run.items.forEach((it, k) => {
+    if (R.skip && R.skip[k]) { R.assign[k] = ''; return; }   // a stray takes no slot
+    const idx = j + off; j++;
+    R.assign[k] = (idx >= 0 && seq[idx]) ? seq[idx].id : '';
+  });
+  // An identification beats a position every time: position is an assumption
+  // about how the run lines up, an identification is a look at the picture.
+  const ident = R.ident || {};
+  const keys = Object.keys(ident).filter(k => ident[k]);
+  // Once the pictures have been LOOKED at, the positional guesses are dead --
+  // the run no longer lines up with anything, and a picture whose card is
+  // already in place would otherwise fall through to whatever slot its
+  // position happened to point at. `identRan` is what keeps a guess from
+  // quietly taking over after an identification pass.
+  if (keys.length || R.identRan) {
+    // Once anything has been identified the positional guesses are worthless
+    // -- the run no longer lines up with anything -- and filing a picture
+    // under a guess is the whole fault this is fixing. Unidentified pictures
+    // are left unassigned instead.
+    R.assign = {};
+    const best = {};                       // slot -> picture index
+    keys.forEach(k => {
+      const slot = ident[k];
+      const cur = best[slot];
+      if (cur == null || (R.conf[k] || 0) > (R.conf[cur] || 0)) best[slot] = +k;
+    });
+    Object.keys(best).forEach(slot => { R.assign[best[slot]] = slot; });
+    run.items.forEach((it, k) => { if (R.assign[k] == null) R.assign[k] = ''; });
+  }
+}
 async function tcgArtRescueScan() {
   if (!_isAdmin()) { showToast('Admins only', 'error'); return; }
-  _tcgRescue = { scanning: true, items: [], runs: [], run: null, assign: {}, error: '' };
+  const keepScope = _tcgRescue && _tcgRescue.scope;
+  _tcgRescue = { scanning: true, items: [], runs: [], run: null, assign: {}, ident: {}, conf: {}, skip: {}, offset: 0, scope: keepScope, error: '' };
   tcgArtSafetyRender();
   const say = t => { const el = document.getElementById('tcgRescueStatus'); if (el) el.textContent = t; };
   try {
@@ -38383,30 +38467,16 @@ async function tcgArtRescueScan() {
   }
   tcgArtSafetyRender();
 }
-// The proposal is a pure function of two things: how far the run is OFFSET
-// along the generator's sequence, and which uploads are strays to be skipped.
-// Both are re-laid from scratch every time either changes, so a correction
-// made halfway down the grid moves everything below it and nothing above.
-function _tcgRescueRelay() {
-  const R = _tcgRescue; if (!R || R.run == null) return;
-  const run = R.runs[R.run];
-  const seq = _tcgRescueSlotSequence();
-  const off = R.offset || 0;
-  R.assign = {};
-  let j = 0;
-  run.items.forEach((it, k) => {
-    if (R.skip && R.skip[k]) { R.assign[k] = ''; return; }   // a stray takes no slot
-    const idx = j + off; j++;
-    R.assign[k] = (idx >= 0 && seq[idx]) ? seq[idx].id : '';
-  });
-  R.seq = seq;
-}
 async function tcgArtRescueOpenRun(i) {
   if (!_tcgRescue || !_tcgRescue.runs[i]) return;
   const run = _tcgRescue.runs[i];
   _tcgRescue.run = i;
   _tcgRescue.offset = 0;
   _tcgRescue.skip = {};
+  _tcgRescue.ident = {};
+  _tcgRescue.conf = {};
+  _tcgRescue.have = {};
+  _tcgRescue.identRan = false;
   _tcgRescueRelay();
   tcgArtSafetyRender();
   // Thumbnails are fetched after the grid is on screen, so a long run shows
@@ -38419,11 +38489,12 @@ async function tcgArtRescueOpenRun(i) {
     if (img && it.url) { img.src = it.url; }
   }
 }
-// Shift the whole proposal along by one. If a run has an extra picture at the
-// front (a retry, a stray upload) every slot after it is out by one, and the
-// names on the cards make that instantly visible — this is the fix for it.
 function tcgArtRescueShift(by) {
   if (!_tcgRescue || _tcgRescue.run == null) return;
+  // Nudging is a POSITIONAL correction, so it means "go back to matching by
+  // position" — otherwise the buttons would appear to do nothing at all on a
+  // run that has been identified.
+  _tcgRescue.ident = {}; _tcgRescue.conf = {}; _tcgRescue.identRan = false;
   const seq = _tcgRescueSlotSequence();
   _tcgRescue.offset = Math.max(-seq.length, Math.min(seq.length, (_tcgRescue.offset || 0) + by));
   _tcgRescueRelay();
@@ -38440,6 +38511,135 @@ function tcgArtRescueDrop(k) {
   _tcgRescueRelay();
   tcgArtSafetyRender();
 }
+function tcgArtRescueSet(k, slot) {
+  if (!_tcgRescue) return;
+  _tcgRescue.ident = _tcgRescue.ident || {};
+  _tcgRescue.conf = _tcgRescue.conf || {};
+  if (slot) { _tcgRescue.ident[k] = slot; _tcgRescue.conf[k] = 1; _tcgRescue.identRan = true; }
+  else { delete _tcgRescue.ident[k]; delete _tcgRescue.conf[k]; }
+  _tcgRescueRelay();
+  tcgArtSafetyRender();
+}
+
+// ---------------------------------------------------------------------
+// IDENTIFY THE PICTURE, rather than guessing from where it sits
+// ---------------------------------------------------------------------
+// This is what makes the rescue trustworthy. A position is an assumption
+// about how a run lines up with the generator's order; an identification is
+// a look at the artwork. Every card is a named character with an element and
+// a creature behind it -- a maelstrom queen, a stormtiger, a polar bear --
+// so a model shown the picture and the candidate list can say which it is,
+// and be checked at a glance by the admin against the picture beside it.
+//
+// The candidates are the CHOSEN SCOPE's cards, which is why the scope picker
+// earns its place twice: it shortens the list and it keeps a National Day
+// sorceress from ever being offered a monster's slot.
+const TCG_RESCUE_ID_BATCH = 6;       // pictures per vision call
+const TCG_RESCUE_ALPHA_MIN = 0.04;   // transparent fraction that means "cut out"
+let _tcgRescueStop = false;
+function tcgArtRescueStopId() { _tcgRescueStop = true; }
+
+// Card art keeps its painted scene; a battle avatar is background-stripped on
+// the way into storage. So the alpha channel says which of the two a picture
+// is, with no model involved and no room for opinion.
+async function _tcgRescueAlpha(dataUrl) {
+  return await new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const w = Math.min(96, img.naturalWidth || 96), h = Math.min(96, img.naturalHeight || 96);
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0, w, h);
+        const px = cx.getImageData(0, 0, w, h).data;
+        let clear = 0;
+        for (let i = 3; i < px.length; i += 4) if (px[i] < 16) clear++;
+        resolve(clear / (w * h));
+      } catch (e) { resolve(0); }
+    };
+    img.onerror = () => resolve(0);
+    img.src = dataUrl;
+  });
+}
+function _tcgRescueCandidateList(cards) {
+  return cards.map(c => c.id + ' — ' + c.name + ' — ' + c.em + ' — ' + c.element
+    + ' — ' + c.stars + '-star' + (c.human ? ' — a HUMAN ' + (c.sex || '') + ' ' + (c.cls || 'warrior') : ' — a creature')).join('\n');
+}
+async function tcgArtRescueIdentify() {
+  const R = _tcgRescue;
+  if (!_isAdmin() || !R || R.run == null) return;
+  const run = R.runs[R.run];
+  const scope = _tcgRescueScope();
+  _tcgRescueStop = false;
+  R.identing = true;
+  R.ident = R.ident || {}; R.conf = R.conf || {};
+  R.identRan = true;
+  tcgArtSafetyRender();
+  const say = t => { const el = document.getElementById('tcgRescueIdStatus'); if (el) el.textContent = t; };
+  const list = _tcgRescueCandidateList(scope.cards);
+  let done = 0, failed = 0;
+  try {
+    for (let i = 0; i < run.items.length; i += TCG_RESCUE_ID_BATCH) {
+      if (_tcgRescueStop) break;
+      const batch = run.items.slice(i, i + TCG_RESCUE_ID_BATCH);
+      say('Looking at ' + (i + 1) + '–' + Math.min(i + batch.length, run.items.length) + ' of ' + run.items.length + '…');
+      const media = [];
+      for (const it of batch) {
+        if (!it.url) { try { it.url = await getDownloadURL(it.ref); } catch (e) { it.url = ''; } }
+        if (!it.dataUrl && it.url) {
+          try { it.dataUrl = await _urlToDataUrlRobust(it.url); } catch (e) { it.dataUrl = ''; }
+        }
+        if (it.dataUrl && it.alpha == null) it.alpha = await _tcgRescueAlpha(it.dataUrl);
+        const parsed = it.dataUrl ? _parseImageDataUrl(it.dataUrl) : null;
+        media.push(parsed ? { mimeType: parsed.mime, data: it.dataUrl.split(',')[1] || '' } : null);
+      }
+      const usable = media.map((m, j) => m ? j : -1).filter(j => j >= 0);
+      if (!usable.length) { failed += batch.length; continue; }
+      const prompt = 'Each picture below is artwork from ONE card in a fantasy trading card game. Say which card each picture shows.\n\n'
+        + 'THE CARDS:\n' + list + '\n\n'
+        + 'RULES\n'
+        + '- There are ' + usable.length + ' pictures, in order. Answer for every one.\n'
+        + '- A picture is either the full CARD ART (a painted scene) or the BATTLE AVATAR (the same character cut out with nothing behind it). Identify the CHARACTER either way — do not try to say which of the two it is.\n'
+        + '- Match on what the picture actually shows: the creature or person, the element, the weapon, the colours. The name and the emoji in the list tell you what each card is.\n'
+        + '- If you are not reasonably sure, return an empty id for that picture rather than guessing.\n\n'
+        // The worked example uses a card from THIS scope. Hard-coding one meant
+        // a National Day run was shown an original-dex id as its example, which
+        // is a suggestion to the model to answer outside the candidate list.
+        + 'Return JSON only: {"cards":[{"i":0,"id":"' + ((scope.cards[0] && scope.cards[0].id) || 'c001') + '","confidence":0.9}]}  — i is the picture number starting at 0.';
+      try {
+        const raw = await askGeminiVision(prompt, usable.map(j => media[j]), { json: true, maxOutputTokens: 2048 });
+        const parsed = _parseAIJson(raw);
+        const rows = (parsed && (parsed.cards || parsed.result || parsed)) || [];
+        (Array.isArray(rows) ? rows : []).forEach(r => {
+          const j = usable[+r.i];
+          if (j == null) return;
+          const k = i + j;
+          const card = TCG_CARDS.find(c => c.id === String(r.id || '').trim());
+          if (!card) return;
+          const it = run.items[k];
+          // The alpha channel decides card art vs avatar — the model is never
+          // asked, because this is a fact about the file rather than a judgement.
+          const isAv = (it && it.alpha != null) ? it.alpha >= TCG_RESCUE_ALPHA_MIN : false;
+          const slot = card.id + (isAv ? ':av' : '');
+          // Never propose a filled slot -- but say WHY this picture is being
+          // passed over, or it reads as one the AI failed on.
+          if (_tcgArt && _tcgArt[slot]) { R.have = R.have || {}; R.have[k] = slot; return; }
+          R.ident[k] = slot;
+          R.conf[k] = typeof r.confidence === 'number' ? r.confidence : 0.5;
+        });
+      } catch (e) { console.warn('rescue identify batch', e); failed += batch.length; }
+      done += batch.length;
+      _tcgRescueRelay();
+      tcgArtSafetyRender();
+    }
+  } finally {
+    R.identing = false;
+    _tcgRescueRelay();
+    tcgArtSafetyRender();
+    const n = Object.keys(R.ident).filter(k => R.ident[k]).length;
+    showToast('Identified ' + n + ' of ' + run.items.length + ' picture' + (run.items.length === 1 ? '' : 's')
+      + (failed ? ' · ' + failed + ' could not be read' : ''), n ? 'success' : 'error');
+  }
+}
 async function tcgArtRescueApply() {
   if (!_isAdmin() || !_tcgRescue || _tcgRescue.run == null) return;
   const run = _tcgRescue.runs[_tcgRescue.run];
@@ -38448,12 +38648,17 @@ async function tcgArtRescueApply() {
   run.items.forEach((it, k) => {
     const slot = _tcgRescue.assign[k];
     if (!slot || !it.url || seen[slot]) return;     // one picture per slot
+    if (_tcgArt && _tcgArt[slot]) return;           // never overwrite art in place
     seen[slot] = 1;
     patch[slot] = it.url;
   });
   const n = Object.keys(patch).length;
   if (!n) { showToast('Nothing assigned yet', 'error'); return; }
-  if (!confirm('File ' + n + ' picture' + (n === 1 ? '' : 's') + ' into their slots?\n\nOnly empty slots are filled — nothing already in place is changed, and 💾 Export first if you want a copy of the map as it stands.')) return;
+  const identified = Object.keys(_tcgRescue.ident || {}).filter(k => _tcgRescue.ident[k]).length;
+  const how = identified
+    ? 'These were matched by LOOKING at each picture.'
+    : 'These were matched by POSITION only — check a few names against the pictures first, or press 🔍 Identify with AI.';
+  if (!confirm('File ' + n + ' picture' + (n === 1 ? '' : 's') + ' into their slots?\n\n' + how + '\n\nOnly empty slots are filled — nothing already in place is changed.')) return;
   const btn = document.getElementById('tcgRescueApplyBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Filing…'; }
   try {
@@ -38520,23 +38725,61 @@ function _tcgRescueHtml() {
     return h + '</div></div>';
   }
   const run = R.runs[R.run];
-  const byId = {}; (R.seq || []).forEach(sl => { byId[sl.id] = sl.label; });
+  const scope = _tcgRescueScope();
+  const identified = Object.keys(R.ident || {}).filter(k => R.ident[k]).length;
   const filed = Object.keys(R.assign || {}).filter(k => R.assign[k]).length;
-  let h = '<div class="tcg-rescue">'
-    + '<p>The ' + run.items.length + ' pictures of that run, <b>in the order they were uploaded</b>, laid back onto the order the generator draws in: each monster\'s card art, then its battle avatar. <b>Check a few names against the pictures.</b> If everything is out by one, nudge it; if one upload is a stray, mark it and the rest fall back into line.</p>'
+  // ONE datalist for every cell — a <select> per picture would be hundreds of
+  // options times hundreds of cells, which is a page that cannot be scrolled.
+  const slots = [];
+  scope.cards.forEach(c => { slots.push(c.id); slots.push(c.id + ':av'); });
+  const dl = '<datalist id="tcgRescueSlots">'
+    + slots.map(id => '<option value="' + escapeHtml(id) + '">' + escapeHtml(_tcgSlotLabel(id)) + '</option>').join('')
+    + '</datalist>';
+
+  let h = '<div class="tcg-rescue">' + dl
+    + '<p><b>Which cards is this run?</b> Art is drawn one set at a time, so a run belongs to one set — pick the wrong one and every picture is offered a slot from the wrong half of the dex.</p>'
+    + '<div class="tcg-rescue-scopes">'
+    + _tcgRescueScopes().map(sc => '<button type="button" class="tcg-rescue-scope' + (sc.key === scope.key ? ' on' : '') + '" onclick="tcgArtRescueScope(\'' + sc.key + '\')">' + escapeHtml(sc.label) + '</button>').join('')
+    + '</div>';
+
+  h += '<p>' + (identified
+      ? '<b>' + identified + ' of ' + run.items.length + ' pictures identified by looking at them.</b> Anything the AI could not name is left unassigned rather than filed under a guess — set those by hand below, or leave them.'
+      : 'Right now these are matched by <b>position only</b> — the order the generator draws in, card art then battle avatar, monster by monster. That is a guess about how the run lines up. <b>Check a few names against the pictures</b>, or have the AI look at each one.')
+    + '</p>'
     + '<div class="tcg-gen-actions">'
-    + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueShift(-1)">\u25C0 Nudge back</button>'
-    + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueShift(1)">Nudge on \u25B6</button>'
-    + '<button type="button" class="btn btn-primary" id="tcgRescueApplyBtn" onclick="tcgArtRescueApply()">\u2705 File ' + filed + ' into their slots</button>'
+    + (R.identing
+        ? '<button type="button" class="btn btn-outline" onclick="tcgArtRescueStopId()">⏹ Stop</button>'
+        : '<button type="button" class="btn btn-primary" onclick="tcgArtRescueIdentify()">🔍 Identify with AI</button>')
+    + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueShift(-1)">◀ Nudge back</button>'
+    + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueShift(1)">Nudge on ▶</button>'
+    + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueShift(-10)">◀◀ 10</button>'
+    + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueShift(10)">10 ▶▶</button>'
+    + '<button type="button" class="btn ' + (identified ? 'btn-primary' : 'btn-outline') + '" id="tcgRescueApplyBtn" onclick="tcgArtRescueApply()">✅ File ' + filed + ' into their slots</button>'
     + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueClose()">Back</button>'
-    + '</div><div class="tcg-rescue-grid">';
+    + '</div>'
+    + '<div class="tcg-gen-status" id="tcgRescueIdStatus"></div>'
+    + '<div class="tcg-rescue-grid">';
+
   run.items.forEach((it, k) => {
     const slot = R.assign[k] || '';
     const skipped = !!(R.skip && R.skip[k]);
-    h += '<div class="tcg-rescue-cell' + (skipped ? ' skipped' : '') + '">'
+    const byAi = !!(R.ident && R.ident[k]);
+    const conf = R.conf ? R.conf[k] : null;
+    const have = R.have && R.have[k];
+    const badge = byAi
+      ? '<span class="tcg-rescue-tag ai">🔍 ' + (conf != null ? Math.round(conf * 100) + '%' : 'identified') + '</span>'
+      : have
+        // Passed over because its card is ALREADY in place — quite different
+        // from one the AI could not name, and it reads as a failure unless
+        // the cell says so.
+        ? '<span class="tcg-rescue-tag have">✓ already in place</span>'
+        : (slot ? '<span class="tcg-rescue-tag pos">▦ by position</span>' : '');
+    h += '<div class="tcg-rescue-cell' + (skipped ? ' skipped' : '') + (byAi ? ' ai' : '') + '">'
       + '<img id="tcgRescueImg' + k + '" alt="" loading="lazy" ' + (it.url ? 'src="' + escapeHtml(it.url) + '"' : '') + '>'
-      + '<div class="tcg-rescue-slot">' + (skipped ? '\u2014 stray \u2014' : (slot ? escapeHtml(byId[slot] || slot) : '\u2014 no slot left \u2014')) + '</div>'
-      + '<button type="button" class="tcg-rescue-skip" onclick="tcgArtRescueDrop(' + k + ')">' + (skipped ? '\u21A9 put back' : '\u2702 stray') + '</button>'
+      + '<div class="tcg-rescue-slot">' + (skipped ? '— stray —' : (slot ? escapeHtml(_tcgSlotLabel(slot)) : (have ? escapeHtml(_tcgSlotLabel(have)) : '— not assigned —'))) + '</div>'
+      + badge
+      + '<input class="tcg-rescue-pick" list="tcgRescueSlots" placeholder="set by hand…" value="' + escapeHtml(slot) + '" onchange="tcgArtRescueSet(' + k + ', this.value.trim())">'
+      + '<button type="button" class="tcg-rescue-skip" onclick="tcgArtRescueDrop(' + k + ')">' + (skipped ? '↩ put back' : '✂ stray') + '</button>'
       + '</div>';
   });
   return h + '</div></div>';
@@ -49764,6 +50007,10 @@ window.tcgArtRestoreBackup = tcgArtRestoreBackup;
 window.tcgArtRescueScan = tcgArtRescueScan;
 window.tcgArtRescueOpenRun = tcgArtRescueOpenRun;
 window.tcgArtRescueShift = tcgArtRescueShift;
+window.tcgArtRescueScope = tcgArtRescueScope;
+window.tcgArtRescueIdentify = tcgArtRescueIdentify;
+window.tcgArtRescueStopId = tcgArtRescueStopId;
+window.tcgArtRescueSet = tcgArtRescueSet;
 window.tcgArtRescueDrop = tcgArtRescueDrop;
 window.tcgArtRescueApply = tcgArtRescueApply;
 window.tcgArtRescueClose = tcgArtRescueClose;
