@@ -526,15 +526,33 @@ async function loadTeachingNotes(force) {
   return teachingNotes;
 }
 
+// ---- The teacher's own STANDING INSTRUCTIONS ----
+// `guidance` is a note typed by hand rather than extracted from a document
+// (✍️ Add a note, and the same button in the Ans Key annotator, which shares
+// this collection). It is a HOUSE RULE, so unlike every other field here it
+// is deliberately NOT filtered by topic — a rule that only applied to the
+// notes matching the question in front of us would not be a house rule — and
+// it reaches every kind of call, marking included. It goes in verbatim:
+// nothing is extracted, nothing is summarised, and it LEADS the digest.
+const NOTES_GUIDE_CHARS = 1600;
+function _notesGuidanceBlock() {
+  if (!teachingNotes.length) return '';
+  const guide = teachingNotes.map(n => String(n.guidance || '').trim())
+    .filter(Boolean).join('\n').slice(0, NOTES_GUIDE_CHARS);
+  if (!guide) return '';
+  return `THE TEACHER'S GENERAL GUIDANCE (standing instructions they typed themselves — house rules, obey them on every question):\n${guide}\n`;
+}
+
 // Compact digest for MARKING prompts: keywords + marking standards from the
-// notes covering this question's topic (general/untagged notes as fallback).
+// notes covering this question's topic (general/untagged notes as fallback),
+// with the standing instructions ahead of them.
 // Kept tight so every marking call stays cheap.
 function _notesMarkingBlock(topic) {
   if (!teachingNotes.length) return '';
+  const guide = _notesGuidanceBlock();
   const t = String(topic || '').toLowerCase().trim();
   let rel = t ? teachingNotes.filter(n => (n.topics || []).some(x => String(x).toLowerCase().trim() === t)) : [];
   if (!rel.length) rel = teachingNotes.filter(n => !(n.topics || []).length);
-  if (!rel.length) return '';
   const kw = [...new Set(rel.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 40);
   const std = rel.map(n => String(n.markingStandards || '').trim()).filter(Boolean).join(' ').slice(0, 900);
   const com = rel.map(n => String(n.comment || '').trim()).filter(Boolean).join(' ').slice(0, 300);
@@ -542,9 +560,15 @@ function _notesMarkingBlock(topic) {
   if (kw.length) bits.push(`Preferred science keywords from the teacher's own notes — expect and accept these exact terms in a full-mark answer: ${kw.join(', ')}.`);
   if (std) bits.push(`The teacher's marking standards from those notes: ${std}`);
   if (com) bits.push(`The teacher's comment on those notes: ${com}`);
-  return bits.length
-    ? `TEACHER'S REFERENCE NOTES (from the teacher's uploaded notes database): ${bits.join(' ')} AUTHORITY ORDER: the question's own expected/model answer (when provided) is ALWAYS the highest authority — never mark against it; use these notes for the preferred keywords, phrasing and standards, and base the model answer on them whenever you have to craft one yourself.`
-    : '';
+  // Standing instructions alone are worth a block: a teacher who has typed a
+  // house rule and uploaded no documents at all must still be obeyed.
+  if (!bits.length) return guide;
+  // The authority order only mentions the guidance when there IS guidance:
+  // pointing a model at "the general guidance above" when none was sent is a
+  // small invented obligation, and models do try to honour those.
+  const thenGuide = guide ? ' then the general guidance above;' : '';
+  return guide +
+    `TEACHER'S REFERENCE NOTES (from the teacher's uploaded notes database): ${bits.join(' ')} AUTHORITY ORDER: the question's own expected/model answer (when provided) is ALWAYS the highest authority — never mark against it;${thenGuide} use these notes for the preferred keywords, phrasing and standards, and base the model answer on them whenever you have to craft one yourself.`;
 }
 // Compact digest for QUESTION-GENERATION prompts: the teacher's preferred
 // keyword vocabulary + key facts across all uploaded notes. Every answer or
@@ -552,13 +576,14 @@ function _notesMarkingBlock(topic) {
 // answer already shown in the source document always wins.
 function _notesGenBlock() {
   if (!teachingNotes.length) return '';
+  const guide = _notesGuidanceBlock();
   const kw = [...new Set(teachingNotes.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 60);
   const facts = teachingNotes.map(n => String(n.keyFacts || '').trim()).filter(Boolean).join('\n').slice(0, 1200);
   const bits = [];
   if (kw.length) bits.push(`TEACHER'S NOTES DATABASE — preferred science vocabulary: ${kw.join(', ')}.`);
   if (facts) bits.push(`Key facts from the teacher's notes:\n${facts}`);
-  if (!bits.length) return '';
-  return bits.join('\n') +
+  if (!bits.length) return guide;
+  return guide + bits.join('\n') +
     `\nWhen you WRITE any answer or explanation content, base the science and the wording on this database first (use its exact terms where relevant); fall back to standard PSLE syllabus knowledge only where the database does not cover it. ` +
     `EXCEPTION — highest authority: if the source document already shows or implies an answer, keep that provided answer exactly; the database only guides its phrasing.\n`;
 }
@@ -568,6 +593,7 @@ function _notesGenBlock() {
 // database as a last resort — keywords, standards AND key facts.
 function _notesAnswerBlock(topic) {
   if (!teachingNotes.length) return '';
+  const guide = _notesGuidanceBlock();
   const t = String(topic || '').toLowerCase().trim();
   let rel = t ? teachingNotes.filter(n => (n.topics || []).some(x => String(x).toLowerCase().trim() === t)) : [];
   if (!rel.length) rel = teachingNotes.filter(n => !(n.topics || []).length);
@@ -579,7 +605,8 @@ function _notesAnswerBlock(topic) {
   if (kw.length) bits.push(`Preferred keywords: ${kw.join(', ')}.`);
   if (std) bits.push(`Answer standards: ${std}`);
   if (facts) bits.push(`Key facts:\n${facts}`);
-  return bits.length ? `TEACHER'S NOTES DATABASE (the primary source for the science and wording — use only what is relevant to this question):\n${bits.join('\n')}` : '';
+  if (!bits.length) return guide;
+  return guide + `TEACHER'S NOTES DATABASE (the primary source for the science and wording — use only what is relevant to this question):\n${bits.join('\n')}`;
 }
 
 // ---- Teaching Notes page (admin only) ----
@@ -595,34 +622,58 @@ async function renderNotesPage() {
   notesRenderBody();
 }
 
-function notesRenderBody() {
-  const body = document.getElementById('notesBody');
-  if (!body || !currentUser || currentUser.role !== 'admin') return;
-  const cards = teachingNotes.map(n => {
-    const topics = (n.topics || []).map(t => `<span class="tn-chip tn-topic">${escapeHtml(t)}</span>`).join('') || '<span class="tn-none">No topic tagged — used as general notes</span>';
-    const kws = (n.keywords || []).map(k => `<span class="tn-chip tn-kw">${escapeHtml(k)}</span>`).join('') || '<span class="tn-none">No keywords extracted yet — add some via Edit</span>';
-    const facts = String(n.keyFacts || '').trim();
-    const std = String(n.markingStandards || '').trim();
-    const com = String(n.comment || '').trim();
-    const when = n.createdAt ? new Date(n.createdAt).toLocaleDateString() : '';
-    return `<div class="tn-card">
+// One notebook, three apps: a note written in the Ans Key annotator or the
+// Scan app lands in this very collection, so the card says which one it came
+// from rather than pretending every note was uploaded here.
+function _noteSourceLabel(n) {
+  if (n.source === 'anskey') return 'from Ans Key';
+  if (n.source === 'scan') return 'from Scan & Answer';
+  return '';
+}
+
+function notesCardHtml(n) {
+  const guide = String(n.guidance || '').trim();
+  const topics = (n.topics || []).map(t => `<span class="tn-chip tn-topic">${escapeHtml(t)}</span>`).join('') || '<span class="tn-none">No topic tagged — used as general notes</span>';
+  const kws = (n.keywords || []).map(k => `<span class="tn-chip tn-kw">${escapeHtml(k)}</span>`).join('') || '<span class="tn-none">No keywords extracted yet — add some via Edit</span>';
+  const facts = String(n.keyFacts || '').trim();
+  const std = String(n.markingStandards || '').trim();
+  const com = String(n.comment || '').trim();
+  const when = n.createdAt ? new Date(n.createdAt).toLocaleDateString() : '';
+  const src = _noteSourceLabel(n);
+  const meta = [
+    n.fileName ? escapeHtml(n.fileName) : '',
+    when ? (guide && !n.fileName ? 'written ' : 'uploaded ') + escapeHtml(when) : '',
+    src ? escapeHtml(src) : ''
+  ].filter(Boolean).join(' · ');
+  return `<div class="tn-card">
       <div class="tn-head">
         <div>
           <div class="tn-title">${escapeHtml(n.title || n.fileName || 'Untitled notes')}</div>
-          <div class="tn-meta">${escapeHtml(n.fileName || '')}${when ? ' · uploaded ' + escapeHtml(when) : ''}</div>
+          <div class="tn-meta">${meta}</div>
         </div>
         <div class="tn-actions">
           <button class="btn btn-outline btn-sm" onclick="notesEditOpen('${n.id}')">✎ Edit</button>
           <button class="btn btn-outline btn-sm" onclick="notesDelete('${n.id}')">× Delete</button>
         </div>
       </div>
-      <div class="tn-row"><div class="tn-label">Topics</div><div class="tn-chips">${topics}</div></div>
-      <div class="tn-row"><div class="tn-label">Keywords</div><div class="tn-chips">${kws}</div></div>
+      ${guide ? `<div class="tn-row"><div class="tn-label">General guidance</div><div class="tn-text">${escapeHtml(guide)}</div></div>` : ''}
+      ${guide ? '' : `<div class="tn-row"><div class="tn-label">Topics</div><div class="tn-chips">${topics}</div></div>`}
+      ${guide && !(n.keywords || []).length ? '' : `<div class="tn-row"><div class="tn-label">Keywords</div><div class="tn-chips">${kws}</div></div>`}
       ${std ? `<div class="tn-row"><div class="tn-label">Marking standards</div><div class="tn-text">${escapeHtml(std)}</div></div>` : ''}
       ${com ? `<div class="tn-row"><div class="tn-label">Your comment</div><div class="tn-text tn-comment">${escapeHtml(com)}</div></div>` : ''}
       ${facts ? `<details class="tn-facts"><summary>Key facts (${facts.split('\n').filter(s => s.trim()).length})</summary><div class="tn-text">${escapeHtml(facts).replace(/\n/g, '<br>')}</div></details>` : ''}
     </div>`;
-  }).join('') || '<div class="tn-empty">No notes yet — upload your first PDF above. Everything the AI extracts stays editable.</div>';
+}
+
+function notesRenderBody() {
+  const body = document.getElementById('notesBody');
+  if (!body || !currentUser || currentUser.role !== 'admin') return;
+  // A hand-typed house rule and an uploaded document are read very
+  // differently — one is obeyed word for word, the other is a source of
+  // keywords — so they are listed apart rather than mixed into one pile.
+  const guideNotes = teachingNotes.filter(n => String(n.guidance || '').trim());
+  const fileNotes = teachingNotes.filter(n => !String(n.guidance || '').trim());
+  const cards = fileNotes.map(notesCardHtml).join('') || '<div class="tn-empty">No uploaded notes yet — upload your first PDF above. Everything the AI extracts stays editable.</div>';
 
   body.innerHTML = `<style>
     .tn-wrap { max-width:880px; margin:0 auto; }
@@ -655,6 +706,15 @@ function notesRenderBody() {
   </style>
   <div class="tn-wrap">
     <div class="tn-upload">
+      <h3>📌 General guidance</h3>
+      <p class="tn-sub">House rules in your own words. They apply to <b>every</b> question and go into the prompt exactly as you typed them — nothing is extracted, nothing is summarised — so the AI follows them whenever it builds a question, writes a model answer, explains something <b>or marks a student</b>. This is the quickest way in: type it and it is live. Shared with your <b>Ans Key</b> annotator and the <b>Scan &amp; Answer</b> app.</p>
+      <div class="tn-upbtns">
+        <button class="btn btn-primary" onclick="openQuickNote()">✍️ Add a note</button>
+        <span style="font-size:0.78rem;color:var(--text-muted);">No file, no waiting — saved exactly as you type it</span>
+      </div>
+    </div>
+    ${guideNotes.length ? guideNotes.map(notesCardHtml).join('') : '<div class="tn-empty" style="margin-bottom:20px;">Nothing here yet. Add a note and every question, answer, explanation and mark follows it from the next one onwards.</div>'}
+    <div class="tn-upload">
       <h3>📚 Upload notes</h3>
       <p class="tn-sub">Upload one or more PDFs and/or photos of your teaching notes — select several files at once and they are read <b>together as one set of notes</b>. The AI extracts the <b>topics</b>, the <b>keywords</b> students must use, the <b>marking standards</b> and the key facts — then follows them whenever it builds questions or marks answers. Only you can see this page.</p>
       <div class="form-group" style="margin-bottom:0;">
@@ -668,7 +728,7 @@ function notesRenderBody() {
       <div id="notesStatus"></div>
     </div>
     <div class="tn-list-head" style="display:flex;align-items:baseline;gap:10px;margin:0 2px 12px;">
-      <h3 style="margin:0;font-size:1.02rem;">Your notes (${teachingNotes.length})</h3>
+      <h3 style="margin:0;font-size:1.02rem;">Uploaded notes (${fileNotes.length})</h3>
       <span style="font-size:0.8rem;color:var(--text-muted);">marking uses the notes matching each question's topic; question-building uses the keywords from all notes</span>
     </div>
     ${cards}
@@ -741,6 +801,82 @@ async function notesHandleFiles(files) {
   }
 }
 
+/* ================= ✍️ Adding a note by hand =================
+   The shortcut, ported from the Ans Key annotator (`polymathlc/anskey`),
+   which shares this very collection. No file, no AI call, no waiting: what is
+   typed is saved verbatim as a note with no topics — so it applies to every
+   question — and carried into every AI digest as a standing instruction.
+
+   `guidance` is the annotator's own field and is read by both apps; the
+   general fields (`topics`, `keywords`, …) are still written, empty, so a
+   note added here reads correctly over there and in the Scan app. */
+function _quickNoteTitleFrom(text) {
+  const first = String(text || '').split('\n')[0].replace(/\s+/g, ' ').trim();
+  if (!first) return 'Quick note';
+  return first.length > 60 ? first.slice(0, 60).trim() + '…' : first;
+}
+function _qnStatus(msg) {
+  const el = document.getElementById('qnStatus');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.style.display = msg ? '' : 'none';
+}
+function openQuickNote() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  _qnStatus('');
+  document.getElementById('quickNoteOverlay').classList.add('active');
+  setTimeout(() => { const t = document.getElementById('qnText'); if (t) t.focus(); }, 50);
+}
+function closeQuickNote() {
+  document.getElementById('quickNoteOverlay').classList.remove('active');
+}
+async function quickNoteSave() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  const textEl = document.getElementById('qnText');
+  const text = ((textEl && textEl.value) || '').trim();
+  if (!text) {
+    _qnStatus('Type the note first — one line is enough.');
+    if (textEl) textEl.focus();
+    return;
+  }
+  const typedTitle = ((document.getElementById('qnTitle') || {}).value || '').trim();
+  const note = {
+    title: typedTitle.slice(0, 140) || _quickNoteTitleFrom(text),
+    fileName: '',
+    comment: '',
+    guidance: text.slice(0, 4000),
+    noteKind: 'guidance',
+    topics: [],
+    keywords: [],
+    markingStandards: '',
+    keyFacts: '',
+    source: 'cer',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  const btn = document.getElementById('qnSaveBtn');
+  if (btn) btn.disabled = true;
+  _qnStatus('⏳ Saving…');
+  try {
+    const id = 'note_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    await setDoc(doc(db, 'users', currentUser.uid, 'teachingNotes', id), note);
+    note.id = id;
+    teachingNotes.unshift(note);
+    if (textEl) textEl.value = '';
+    const t = document.getElementById('qnTitle');
+    if (t) t.value = '';
+    _qnStatus('');
+    closeQuickNote();
+    notesRenderBody();
+    showToast(`✅ Noted — the AI follows “${note.title}” from now on`, 'success');
+  } catch (e) {
+    console.error('quick note failed', e);
+    _qnStatus('Could not save: ' + (e && e.message ? e.message : e));
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 let _noteEditId = null;
 function notesEditOpen(id) {
   const n = teachingNotes.find(x => x.id === id);
@@ -748,6 +884,7 @@ function notesEditOpen(id) {
   _noteEditId = id;
   document.getElementById('nteTitle').value = n.title || '';
   document.getElementById('nteTopics').value = (n.topics || []).join(', ');
+  document.getElementById('nteGuide').value = n.guidance || '';
   document.getElementById('nteKeywords').value = (n.keywords || []).join(', ');
   document.getElementById('nteStandards').value = n.markingStandards || '';
   document.getElementById('nteFacts').value = n.keyFacts || '';
@@ -768,6 +905,7 @@ async function notesEditSave() {
   n.keywords = (document.getElementById('nteKeywords').value || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean).slice(0, 60);
   n.markingStandards = (document.getElementById('nteStandards').value || '').trim().slice(0, 1600);
   n.keyFacts = (document.getElementById('nteFacts').value || '').trim().slice(0, 2000);
+  n.guidance = (document.getElementById('nteGuide').value || '').trim().slice(0, 4000);
   n.comment = (document.getElementById('nteComment').value || '').trim();
   n.updatedAt = new Date().toISOString();
   try {
@@ -1716,7 +1854,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.308.0';
+const APP_VERSION = 'v1.309.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -56328,6 +56466,9 @@ window.ppTopicClose = ppTopicClose;
 window.ppTopicShowAll = ppTopicShowAll;
 window.ppTopicPrint = ppTopicPrint;
 window.notesHandleFiles = notesHandleFiles;
+window.openQuickNote = openQuickNote;
+window.closeQuickNote = closeQuickNote;
+window.quickNoteSave = quickNoteSave;
 window.notesEditOpen = notesEditOpen;
 window.notesEditClose = notesEditClose;
 window.notesEditSave = notesEditSave;
