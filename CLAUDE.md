@@ -29,7 +29,7 @@ Guidance for Claude when working in this repo.
     - **`_pushBlockAnswerKey(sections, block, part)` is the ONE pusher both print paths call** — `doPrintWorksheetOpen` and `buildWorksheetHtml` had drifted apart (path A keyed MCQs, path B did not), and a shared function is the only thing that stops that happening again. Adding an answer-bearing block type means adding a case there, not in two switches.
     - **A question with nothing still gets a ROW.** No answer-bearing block at all → the explanation stands in (`_qFallbackKeySection`, labelled *Explanation*, never alongside a real answer); still nothing → the row says "No answer recorded for this question", because a gap in the numbering reads as a printing fault. The placeholder is substituted at RENDER time (`_akQuestionSections`) and is deliberately **not** what `hasAny` counts — a bank with no model answers must still print no key sheet at all, rather than a page of placeholders. That guard predates this and must stay.
     - Run **`node tools/answer-key-tests.mjs`** after touching any of it.
-  - **📚 Teaching Notes are SHARED with the Ans Key annotator** (`polymathlc/anskey`, `index.html`). Both apps read and write `users/{adminUid}/teachingNotes/{id}` — one notebook, so notes uploaded on either side ground the AI on both. Keep the field names compatible, and ship a change to the shape in both repos together. `topics` is **this** app's syllabus list (`currentTopics()`), matched by exact string in `_notesMarkingBlock` / `_notesAnswerBlock`; Ans Key therefore writes it EMPTY (its notes read as general notes here, which is what a note from another app should be) and keeps its own free wording in `noteTopics` / `subjects` / `levels`. Renaming `keywords`, `markingStandards` or `keyFacts` here silently ungrounds the other app — nothing throws, the digests just come back empty.
+  - **📚 Teaching Notes are SHARED with the Ans Key annotator** (`polymathlc/anskey`, `index.html`). Both apps read and write `users/{adminUid}/teachingNotes/{id}` — one notebook, so notes uploaded on either side ground the AI on both. Keep the field names compatible, and ship a change to the shape in both repos together. `topics` is **this** app's syllabus list (`currentTopics()`), matched by exact string in `_notesMarkingBlock` / `_notesAnswerBlock`; Ans Key therefore writes it EMPTY (its notes read as general notes here, which is what a note from another app should be) and keeps its own free wording in `noteTopics` / `subjects` / `levels`. Renaming `keywords`, `markingStandards` or `keyFacts` here silently ungrounds the other app — nothing throws, the digests just come back empty. **`guidance` — the hand-typed standing instruction — is read here too since v1.309.0**; see **📌 The standing instruction** below. The **Scan app** (`polymathlc/scan`) is the third reader of the same notebook.
   - **Roles are admin / employee / student.** `EMPLOYEE_EMAILS` (v1.235.0) names accounts hired to WRITE QUESTIONS: they get exactly the pages in `EMPLOYEE_PAGES` (create, bank, vetting, worksheet, myworksheets) and nothing else. **Three** rules keep it default-deny: `configureSidebarForRole('employee')` hides EVERY `.nav-item` and shows back only those pages, `navigateTo` rewrites any other page to `create` — hiding nav items alone would leave a bookmark or a deep link walking straight in — and **`_navAllowed(page)` guards every LATE nav show**. That third one is not optional: `rpgApplyVisibility` runs when the hero doc resolves, seconds AFTER the sidebar was locked down, and it turns `.rpg-el` (Character, Leaderboard, Adventure, Arcade, the Hide-game toggle) back on and calls `tcgApplyNavVisibility` / `fpsApplyNavVisibility`, which do the same for Realm of Embers and Science Strike. Until v1.240.0 the whole game menu reappeared for an employee a second after login. Anything that switches a nav item on after sign-in must ask `_navAllowed` (or `!_isEmployee()`) first, and the two game release banners (`fpsShowAnnounce`, `tcgAnnounceVisible`) do too. Gate authoring on **`_canAuthor()`** (admin OR employee), never by widening `_isAdmin()`, which keeps its old meaning everywhere else. An employee has **no bank of their own**: `_bankOwnerUid()` points `_qCol`/`_vCol`/`_qOwner`/`_vOwner` at the teacher's subtree, so `_resolveBankOwner()` must run (and `adminUid` be set) before anything reads or writes. Employees must never write `config/admin` — that pointer is what students resolve the bank from. **The account itself** is made in the admin's create-account dialog, which has a Student / Employee toggle (`csSetRole`, v1.240.0): an employee must be created with their REAL email (a synthetic `username@students…` address could never match `EMPLOYEE_EMAILS`), and the dialog refuses an address that is not already on that list rather than quietly handing out a student account. The `role` written to `userProfiles` is descriptive only — the live role is always decided at sign-in from `ADMIN_EMAILS` / `EMPLOYEE_EMAILS`. Firebase Auth rejects passwords under 6 characters, so that floor is not the app's to relax.
   - **The Exam Paper builder** (`ep*` in `app.js`, `.ep-*` CSS + `#page-exampaper` in `index.html`, v1.241.0) takes a whole paper the way a teacher actually has one: question screenshots added ONE AT A TIME, the marking scheme added SEPARATELY, and the paper's own answers slotted into the built questions by **question number**. Available to anyone `_canAuthor()`.
     - It is deliberately its own page and its own state. `handleBulkAiFile` (the bulk PDF import) streams a whole file straight into Vetting with no key step and nothing to check first; the block editor builds one question by hand. Neither can slot an answer key in — do not merge the three.
@@ -630,6 +630,46 @@ the same key had to be pasted once per subject.
   school. It lives in the admin's own browser; both harnesses fail on an
   `sk-`-shaped string in the source.
 - Run **`node tools/answer-key-check-tests.mjs`** after touching any of it.
+
+## 📌 The standing instruction — a note the teacher types, not uploads (v1.309.0)
+
+`_notesGuidanceBlock` / `openQuickNote` / `quickNoteSave` / `NOTES_GUIDE_CHARS` (in `app.js`,
+search `STANDING INSTRUCTIONS`), plus the `#quickNoteOverlay` in `index.html`, the ✍️ **Add a
+note** button at the top of the 🎯 Teaching Notes page and the **General guidance** field in the
+note editor. **Ported from the Ans Key annotator (`polymathlc/anskey`), which shares this very
+collection — keep the two in step.**
+
+Uploading a PDF and waiting for the AI to read it is the right shape for a set of notes and the
+wrong shape for one sentence. Most of what a teacher wants the AI to do is one sentence — *always
+name the process*, *units on every numerical answer*, *never accept "it dries up"* — and there was
+nowhere to put it. So it went unsaid, and every question, answer and mark was written without it.
+
+- **It is a HOUSE RULE, so it is deliberately NOT filtered by topic.** Every other field here is
+  narrowed to the notes matching the question in front of us, which is what keeps a marking call
+  cheap; a rule that only applied to the matching notes would not be a house rule. `guidance` is
+  read across the WHOLE notebook and **leads** each digest — read after the extracted keywords it
+  would be competing with them, read first it is the rule they are applied under.
+- **It reaches all three digests** — `_notesMarkingBlock`, `_notesGenBlock`, `_notesAnswerBlock` —
+  so it is obeyed when a question is built, when a model answer is written, when something is
+  explained **and when a student is marked**. It is the only field that reaches marking as well as
+  answering.
+- **Guidance ALONE is worth a block.** All three digests used to bail out the moment there were no
+  keywords, standards or facts to report, so a teacher who had typed a house rule and uploaded no
+  documents at all would have been ignored entirely.
+- **Nothing is sent to the AI when one is saved.** What is typed is written to Firestore verbatim,
+  as a note with no topics — so it applies to everything — and with the extracted fields empty. It
+  is live on the next question, with no analysis step to wait for.
+- **The digests are the ONLY thing that changed.** No other AI function in this app was touched:
+  the three digest builders are the notes system's own, every call site is exactly where it was,
+  and no prompt outside this section was edited.
+- **One notebook, three apps.** `guidance` is Ans Key's field name and the Scan app writes it too,
+  so a rule typed in any of the three is obeyed in all three from the next question onwards. The
+  card says which app a note came from (`source`), because "I never wrote that" about a note
+  written on an iPad in another app is a genuinely confusing five minutes.
+- A hand-typed rule and an uploaded document are **listed apart** on the page rather than mixed
+  into one pile: they are read very differently — one is obeyed word for word, the other is a
+  source of keywords.
+- Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
 
 ## Versioning convention — applies to EVERY change (do this every time)
 1. **Bump the version.** In `index.html`, update `const APP_VERSION = 'vX.Y.Z'` (search `APP_VERSION`). Patch bump for fixes/small tweaks, minor bump for new features.
@@ -1579,6 +1619,17 @@ DISPLAY ONLY**, everywhere a student can see one. It writes nothing anywhere.
 - Run **`node tools/pink-screen-tests.mjs`** after touching any of it.
 
 ## House rules
+- After touching **the teaching-notes digests** (`_notesGuidanceBlock`, `_notesMarkingBlock`,
+  `_notesGenBlock`, `_notesAnswerBlock`, `NOTES_GUIDE_CHARS`, `quickNoteSave`), run
+  `node tools/teaching-notes-tests.mjs`. Every failure here is silent: a digest that comes back
+  without the teacher's standing instruction is an ungrounded prompt, so the AI still builds the
+  question, still writes the answer and still marks the student — in its own voice instead of
+  theirs, with nothing anywhere saying so. Two of them are worse than that. Filtering `guidance` by
+  topic looks perfectly reasonable and quietly makes a HOUSE RULE apply to some questions and not
+  others; and a digest that bails out before the guidance when there are no keywords to report
+  ignores a teacher who has typed a rule and uploaded nothing else at all. The notebook is shared
+  with `polymathlc/anskey` and `polymathlc/scan`, so a field that stops being read here goes on
+  being written there — the version of this bug that is invisible from both sides.
 - After touching **the siege squad** (`EMS_SQUAD_PER_ROLE`, `emsSquadClean`,
   `emsSquadDefault`, `emsSquadSaved`, `emsSquadStore`, `emsRenderDeck`'s squad
   read, or the `squad` field in `tcgHydrateState`'s `siege` literal), run

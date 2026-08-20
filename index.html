@@ -10361,6 +10361,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <input id="nteTopics" class="form-input" type="text" placeholder="e.g. Heat, Matter and its 3 States">
     </div>
     <div class="form-group">
+      <label class="form-label">General guidance <span style="font-weight:400;color:var(--text-muted);">(a house rule, obeyed word for word on every question — including when marking)</span></label>
+      <textarea id="nteGuide" class="form-input" rows="3" placeholder="e.g. Always name the process — “evaporation”, not “it dries up”." style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
+    </div>
+    <div class="form-group">
       <label class="form-label">Keywords <span style="font-weight:400;color:var(--text-muted);">(comma-separated — the exact exam-answer vocabulary)</span></label>
       <textarea id="nteKeywords" class="form-input" rows="4" placeholder="e.g. good conductor of heat, gains heat, expands, contracts" style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
     </div>
@@ -10379,6 +10383,31 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <div class="btn-group" style="justify-content:flex-end;">
       <button class="btn btn-outline" onclick="notesEditClose()">Cancel</button>
       <button class="btn btn-primary" onclick="notesEditSave()">Save Note</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== ✍️ ADD A NOTE (Admin) ====================
+     A standing instruction typed by hand. No file and no AI call: what is
+     typed is saved verbatim and carried into every AI digest from the next
+     question onwards. Shared with the Ans Key annotator and the Scan app,
+     which write the same `guidance` field into the same collection. -->
+<div class="confirm-overlay" id="quickNoteOverlay">
+  <div class="confirm-dialog" style="max-width:520px;text-align:left;">
+    <h3 style="margin-bottom:6px;">✍️ Add a note</h3>
+    <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.55;margin-bottom:18px;">House rules in your own words. They go into the prompt exactly as you type them — nothing is extracted, nothing is summarised — so the AI follows them whenever it builds a question, writes a model answer, explains something or marks a student.</p>
+    <div class="form-group">
+      <label class="form-label">Title <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+      <input id="qnTitle" class="form-input" type="text" placeholder="e.g. Always name the process">
+    </div>
+    <div class="form-group">
+      <label class="form-label">The note</label>
+      <textarea id="qnText" class="form-input" rows="6" placeholder="e.g. Every answer must name the process — “evaporation”, not “it dries up”. Marks are only given for a full sentence." style="resize:vertical;font-family:'DM Sans',sans-serif;font-size:0.88rem;"></textarea>
+    </div>
+    <div id="qnStatus" style="display:none;font-size:0.85rem;color:var(--text-muted);margin-bottom:14px;"></div>
+    <div class="btn-group" style="justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeQuickNote()">Cancel</button>
+      <button class="btn btn-primary" id="qnSaveBtn" onclick="quickNoteSave()">Save note</button>
     </div>
   </div>
 </div>
