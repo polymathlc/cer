@@ -671,6 +671,42 @@ nowhere to put it. So it went unsaid, and every question, answer and mark was wr
   source of keywords.
 - Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
 
+## 🔄 The notebook is LIVE, and it is shared (v1.310.0)
+
+`loadTeachingNotes` / `_notesApplySnap` / `_notesDetach` / `stopTeachingNotes` /
+`_notesLiveRepaint` / `_noteSuitsThisApp` / `_notesFor` (in `app.js`, search
+`The notebook is LIVE`). **The collection `users/{adminUid}/teachingNotes` is written by three
+apps** — this one, the Ans Key annotator (`polymathlc/anskey`) and the Scan app
+(`polymathlc/scan`). Two things stopped a note written in either of the others from ever reaching
+this app's prompts, and both were silent.
+
+- **It was read ONCE at sign-in.** A `getDocs` meant this tab held whatever the notebook said when
+  the teacher signed in and never looked again: a note typed on the iPad mid-lesson reached the app
+  it was typed in and NO other, so the same question was marked against two different notebooks
+  depending on which tab it was marked in. It is now an `onSnapshot`. Three rules hold that
+  together, and each is a way it could go quietly wrong: **`_notesDetach` releases anyone waiting
+  on the first snapshot** (a waiter holding a promise whose listener has just been unsubscribed is
+  never answered, and `renderNotesPage` awaits it — the page would say "Loading your teaching
+  notes…" for the rest of the session); the listener **comes down on sign-out**, or one account's
+  notes go on grounding the next person to sign in on the device; and **`_notesLiveRepaint` yields
+  to whatever is being typed**, because `notesRenderBody` rebuilds the whole page and a snapshot
+  arriving mid-sentence would empty the upload comment box.
+- **A general note only applied when nothing else did.** The other two apps write `topics` EMPTY on
+  purpose — it is this app's syllabus list and they have never heard of it — so every note they
+  write arrives here untagged. The digests treated untagged notes as a FALLBACK
+  (`if (!rel.length) rel = untagged`), so the moment the teacher had one note of their own tagged
+  "Heat", the entire shared notebook was dropped from marking a Heat question. **`_notesFor(topic)`
+  is now the ONE place that is decided**: topic-matched notes first (so they win the character
+  caps), general notes always after them.
+- **…but a MATHS note is still not welcome.** The notebook is shared with an app that teaches both
+  subjects, and a maths marking standard in a science prompt is worse than no note at all.
+  **`_noteSuitsThisApp` is the ONE place that is decided** — a note naming no subject is for
+  everything (which is what every note uploaded here looks like), one naming maths and not science
+  is dropped, guidance included — so it cannot leak through whichever digest forgot to ask.
+  **A dropped note is still LISTED on the Teaching Notes page and says it is dropped**, because a
+  note sitting in the list reads as a note being followed.
+- Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
+
 ## Versioning convention — applies to EVERY change (do this every time)
 1. **Bump the version.** In `index.html`, update `const APP_VERSION = 'vX.Y.Z'` (search `APP_VERSION`). Patch bump for fixes/small tweaks, minor bump for new features.
 2. **Keep it visible.** The version renders in the sidebar footer for admins only (`#appVersionBadge`, class `admin-only`). This is how the user confirms the latest build is actually deployed.
@@ -1619,8 +1655,9 @@ DISPLAY ONLY**, everywhere a student can see one. It writes nothing anywhere.
 - Run **`node tools/pink-screen-tests.mjs`** after touching any of it.
 
 ## House rules
-- After touching **the teaching-notes digests** (`_notesGuidanceBlock`, `_notesMarkingBlock`,
-  `_notesGenBlock`, `_notesAnswerBlock`, `NOTES_GUIDE_CHARS`, `quickNoteSave`), run
+- After touching **the teaching-notes digests or the live notebook** (`_notesGuidanceBlock`,
+  `_notesMarkingBlock`, `_notesGenBlock`, `_notesAnswerBlock`, `_notesFor`, `_noteSuitsThisApp`,
+  `loadTeachingNotes`, `_notesDetach`, `stopTeachingNotes`, `NOTES_GUIDE_CHARS`, `quickNoteSave`), run
   `node tools/teaching-notes-tests.mjs`. Every failure here is silent: a digest that comes back
   without the teacher's standing instruction is an ungrounded prompt, so the AI still builds the
   question, still writes the answer and still marks the student — in its own voice instead of
@@ -1629,7 +1666,10 @@ DISPLAY ONLY**, everywhere a student can see one. It writes nothing anywhere.
   others; and a digest that bails out before the guidance when there are no keywords to report
   ignores a teacher who has typed a rule and uploaded nothing else at all. The notebook is shared
   with `polymathlc/anskey` and `polymathlc/scan`, so a field that stops being read here goes on
-  being written there — the version of this bug that is invisible from both sides.
+  being written there — the version of this bug that is invisible from both sides. The harness also
+  pins the two rules that make the sharing real: a general note applying ALONGSIDE the topic match
+  rather than only when nothing matched (which is how every note those apps write arrives), and a
+  maths-only note staying out of a science prompt whatever else it carries.
 - After touching **the siege squad** (`EMS_SQUAD_PER_ROLE`, `emsSquadClean`,
   `emsSquadDefault`, `emsSquadSaved`, `emsSquadStore`, `emsRenderDeck`'s squad
   read, or the `squad` field in `tcgHydrateState`'s `siege` literal), run

@@ -509,21 +509,138 @@ function _genPreamble() {
 // =====================================================================
 let teachingNotes = [];
 let _notesLoaded = false;
+let _notesUnsub = null;
+let _notesWatching = '';   // whose notebook the listener is on
+let _notesFirst = null;    // resolves on the FIRST snapshot, so callers can await a load
+let _notesPending = [];    // first-load waiters, released if the listener goes
+
+// ---- The notebook is LIVE, not a one-shot read ----
+// It is ONE collection shared with the Ans Key annotator (`polymathlc/anskey`)
+// and the Scan app (`polymathlc/scan`), and it is written from all three. A
+// single `getDocs` at sign-in meant this tab held whatever the notebook said
+// when the teacher signed in and never looked again: a note typed on the iPad
+// mid-lesson reached the app it was typed in and NO other, so the same
+// question was marked against two different notebooks depending on which tab
+// it was marked in — and nothing anywhere said so. A listener is what makes
+// "the notes ground every app" true rather than true-at-sign-in.
+function _notesApplySnap(snap) {
+  const list = [];
+  snap.forEach(d => { const n = d.data(); if (n) { n.id = d.id; list.push(n); } });
+  list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  teachingNotes = list;
+  _notesLoaded = true;
+  _notesLiveRepaint();
+}
+
+// A note arriving while the Teaching Notes page is open should show up there
+// too — but never at the cost of what the admin is in the middle of typing.
+// notesRenderBody() rebuilds the whole body, so a repaint fired while they are
+// half way through an upload comment would silently empty the box; the page
+// simply waits for the next render instead, and the notes are already live in
+// every prompt whatever the screen shows.
+function _notesLiveRepaint() {
+  try {
+    const page = document.getElementById('page-notes');
+    if (!page || !page.classList.contains('active')) return;
+    const body = document.getElementById('notesBody');
+    if (!body) return;
+    if (document.activeElement && body.contains(document.activeElement)) return;
+    const comment = document.getElementById('notesComment');
+    const typed = comment ? comment.value : null;
+    notesRenderBody();
+    if (typed) {
+      const again = document.getElementById('notesComment');
+      if (again) again.value = typed;
+    }
+  } catch (e) { console.warn('teaching notes repaint', e); }
+}
 
 async function loadTeachingNotes(force) {
-  if (_notesLoaded && !force) return teachingNotes;
   if (!currentUser) return teachingNotes;
   const owner = currentUser.role === 'admin' ? currentUser.uid : adminUid;
   if (!owner) return teachingNotes;
+  // Already watching this notebook: it is current by definition, so `force`
+  // has nothing left to do but wait for the first snapshot.
+  if (_notesUnsub && _notesWatching === owner) {
+    if (_notesFirst && !_notesLoaded) { try { await _notesFirst; } catch (e) {} }
+    return teachingNotes;
+  }
+  _notesDetach();
+  _notesWatching = owner;
   try {
-    const snap = await getDocs(collection(db, 'users', owner, 'teachingNotes'));
-    const list = [];
-    snap.forEach(d => { const n = d.data(); if (n) { n.id = d.id; list.push(n); } });
-    list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-    teachingNotes = list;
-    _notesLoaded = true;
-  } catch (e) { console.warn('teaching notes load', e); }
+    let settle = null;
+    _notesFirst = new Promise(res => { settle = res; });
+    const finish = () => { if (settle) { settle(teachingNotes); settle = null; } };
+    _notesPending.push(finish);   // released if these listeners are taken down first
+    _notesUnsub = onSnapshot(collection(db, 'users', owner, 'teachingNotes'), snap => {
+      _notesApplySnap(snap);
+      finish();
+    }, err => {
+      // A student whose rules do not allow the teacher's notes, or an offline
+      // device: the AI carries on ungrounded exactly as it did before any of
+      // this existed. Never an error worth showing.
+      console.warn('teaching notes listen failed', err);
+      finish();
+    });
+    await _notesFirst;
+  } catch (e) {
+    console.warn('teaching notes load', e);
+  }
   return teachingNotes;
+}
+
+// Take the listener down, and RELEASE anyone waiting on the first snapshot.
+// That second half is not tidiness: renderNotesPage() awaits the first load,
+// so a waiter left holding a promise whose listener has just been
+// unsubscribed would never be answered and the page would say "Loading your
+// teaching notes…" for the rest of the session.
+function _notesDetach() {
+  if (_notesUnsub) { try { _notesUnsub(); } catch (e) {} }
+  _notesUnsub = null;
+  _notesWatching = '';
+  const waiting = _notesPending;
+  _notesPending = [];
+  waiting.forEach(fn => { try { fn(); } catch (e) {} });
+}
+
+function stopTeachingNotes() {
+  _notesDetach();
+  _notesLoaded = false;
+  _notesFirst = null;
+  teachingNotes = [];
+}
+
+// ---- Which notes belong to THIS app ----
+// The notebook is shared with an app that teaches maths as well as science, so
+// a note may name the subjects it is for. One that names none is for
+// everything (that is what every note uploaded here looks like); one that
+// names maths and not science has no business in a science prompt. This is the
+// ONE place that is decided, so a maths marking standard cannot reach a
+// science digest through whichever of them forgot to ask.
+function _noteSuitsThisApp(n) {
+  const subs = Array.isArray(n && n.subjects)
+    ? n.subjects.map(s => String(s).toLowerCase().trim()).filter(Boolean) : [];
+  if (!subs.length) return true;
+  return subs.indexOf('science') !== -1 || subs.indexOf('both') !== -1;
+}
+
+// ---- Which notes apply to THIS question ----
+// A note uploaded in the Ans Key annotator carries NO topics, by design: that
+// app writes `topics` empty so its notes read here as GENERAL notes rather
+// than ones tagged with a syllabus it has never heard of. But an untagged note
+// used to reach a topic-filtered prompt only when NOTHING matched the topic —
+// so the moment the teacher had one note tagged "Heat", every note they had
+// ever written in Ans Key was silently dropped from marking a Heat question.
+// General notes now ALWAYS apply, with the topic-matched ones ahead of them so
+// they win the character caps.
+function _notesFor(topic) {
+  const usable = teachingNotes.filter(_noteSuitsThisApp);
+  const t = String(topic || '').toLowerCase().trim();
+  const matched = t
+    ? usable.filter(n => (n.topics || []).some(x => String(x).toLowerCase().trim() === t))
+    : [];
+  const general = usable.filter(n => !(n.topics || []).length);
+  return matched.concat(general);
 }
 
 // ---- The teacher's own STANDING INSTRUCTIONS ----
@@ -537,7 +654,8 @@ async function loadTeachingNotes(force) {
 const NOTES_GUIDE_CHARS = 1600;
 function _notesGuidanceBlock() {
   if (!teachingNotes.length) return '';
-  const guide = teachingNotes.map(n => String(n.guidance || '').trim())
+  const guide = teachingNotes.filter(_noteSuitsThisApp)
+    .map(n => String(n.guidance || '').trim())
     .filter(Boolean).join('\n').slice(0, NOTES_GUIDE_CHARS);
   if (!guide) return '';
   return `THE TEACHER'S GENERAL GUIDANCE (standing instructions they typed themselves — house rules, obey them on every question):\n${guide}\n`;
@@ -550,9 +668,7 @@ function _notesGuidanceBlock() {
 function _notesMarkingBlock(topic) {
   if (!teachingNotes.length) return '';
   const guide = _notesGuidanceBlock();
-  const t = String(topic || '').toLowerCase().trim();
-  let rel = t ? teachingNotes.filter(n => (n.topics || []).some(x => String(x).toLowerCase().trim() === t)) : [];
-  if (!rel.length) rel = teachingNotes.filter(n => !(n.topics || []).length);
+  const rel = _notesFor(topic);
   const kw = [...new Set(rel.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 40);
   const std = rel.map(n => String(n.markingStandards || '').trim()).filter(Boolean).join(' ').slice(0, 900);
   const com = rel.map(n => String(n.comment || '').trim()).filter(Boolean).join(' ').slice(0, 300);
@@ -577,8 +693,9 @@ function _notesMarkingBlock(topic) {
 function _notesGenBlock() {
   if (!teachingNotes.length) return '';
   const guide = _notesGuidanceBlock();
-  const kw = [...new Set(teachingNotes.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 60);
-  const facts = teachingNotes.map(n => String(n.keyFacts || '').trim()).filter(Boolean).join('\n').slice(0, 1200);
+  const all = teachingNotes.filter(_noteSuitsThisApp);
+  const kw = [...new Set(all.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 60);
+  const facts = all.map(n => String(n.keyFacts || '').trim()).filter(Boolean).join('\n').slice(0, 1200);
   const bits = [];
   if (kw.length) bits.push(`TEACHER'S NOTES DATABASE — preferred science vocabulary: ${kw.join(', ')}.`);
   if (facts) bits.push(`Key facts from the teacher's notes:\n${facts}`);
@@ -594,10 +711,11 @@ function _notesGenBlock() {
 function _notesAnswerBlock(topic) {
   if (!teachingNotes.length) return '';
   const guide = _notesGuidanceBlock();
-  const t = String(topic || '').toLowerCase().trim();
-  let rel = t ? teachingNotes.filter(n => (n.topics || []).some(x => String(x).toLowerCase().trim() === t)) : [];
-  if (!rel.length) rel = teachingNotes.filter(n => !(n.topics || []).length);
-  if (!rel.length) rel = teachingNotes;
+  let rel = _notesFor(topic);
+  // Last resort: nothing matched the topic and nothing is general, so the
+  // whole (usable) database stands in rather than writing an answer against
+  // nothing at all.
+  if (!rel.length) rel = teachingNotes.filter(_noteSuitsThisApp);
   const kw = [...new Set(rel.flatMap(n => n.keywords || []).map(s => String(s).trim()).filter(Boolean))].slice(0, 40);
   const std = rel.map(n => String(n.markingStandards || '').trim()).filter(Boolean).join(' ').slice(0, 800);
   const facts = rel.map(n => String(n.keyFacts || '').trim()).filter(Boolean).join('\n').slice(0, 1800);
@@ -645,7 +763,12 @@ function notesCardHtml(n) {
     when ? (guide && !n.fileName ? 'written ' : 'uploaded ') + escapeHtml(when) : '',
     src ? escapeHtml(src) : ''
   ].filter(Boolean).join(' · ');
-  return `<div class="tn-card">
+  // A note the subject filter drops is still LISTED here — it belongs to the
+  // shared notebook — so it has to say that it is not being used, or the
+  // teacher reads a note on the page and assumes the AI is following it.
+  const unused = _noteSuitsThisApp(n) ? '' :
+    `<div class="tn-row"><div class="tn-label">Not used here</div><div class="tn-text tn-comment">Tagged for ${escapeHtml((n.subjects || []).join(', '))} only, so it never reaches a science prompt in this app. Change its subjects in the Ans Key app to use it here.</div></div>`;
+  return `<div class="tn-card"${unused ? ' style="opacity:0.72;"' : ''}>
       <div class="tn-head">
         <div>
           <div class="tn-title">${escapeHtml(n.title || n.fileName || 'Untitled notes')}</div>
@@ -656,6 +779,7 @@ function notesCardHtml(n) {
           <button class="btn btn-outline btn-sm" onclick="notesDelete('${n.id}')">× Delete</button>
         </div>
       </div>
+      ${unused}
       ${guide ? `<div class="tn-row"><div class="tn-label">General guidance</div><div class="tn-text">${escapeHtml(guide)}</div></div>` : ''}
       ${guide ? '' : `<div class="tn-row"><div class="tn-label">Topics</div><div class="tn-chips">${topics}</div></div>`}
       ${guide && !(n.keywords || []).length ? '' : `<div class="tn-row"><div class="tn-label">Keywords</div><div class="tn-chips">${kws}</div></div>`}
@@ -1854,7 +1978,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.309.0';
+const APP_VERSION = 'v1.310.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -2325,6 +2449,10 @@ onAuthStateChanged(auth, (user) => {
   } else {
     currentUser = null;
     rpgOnSignOut();
+    // The notebook belongs to whoever was signed in — a live listener left
+    // running would go on feeding one account's notes to the next person to
+    // sign in on the same device.
+    try { stopTeachingNotes(); } catch (e) {}
     students = [];
     studentSetupSeen = false;
     // A revision deck and a mistake log belong to one account — never let a
