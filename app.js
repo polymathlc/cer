@@ -39395,11 +39395,106 @@ async function tcgLoadArt(force) {
   tcgLiveRefresh();                      // …and start watching for pictures that still wear a screen
   return _tcgArt;
 }
+// =====================================================================
+// THE BUNDLED REALM OF EMBERS ART
+// =====================================================================
+// A complete art pass for the realm ships IN THE REPOSITORY, under
+// assets/realm-of-embers/ — 201 card scenes, 201 battle avatars, 180 elemental
+// effect frames, 42 pack-tearing frames and 5 hero portraits. This is the layer
+// that puts them on the screen: an admin override always wins, and any slot
+// nobody has overridden falls back to the picture that shipped with the app.
+//
+// WHY IT IS A FALLBACK AND NOT AN IMPORT. The obvious alternative is to upload
+// all 629 into Storage and write them into the override map, and that is
+// exactly what the map is NOT for: it is the record of what an admin has drawn
+// or replaced, it is one document, and it has already been lost once (see ART
+// SAFETY & RECOVERY). Art that ships with the app needs no record — it is in
+// git, which is the one backup nothing in Firebase can wipe, it is served from
+// the same origin as the page, and a student who has never met an admin sees it
+// on their first visit with nothing to press. `_tcgArt` therefore stays what it
+// was: overrides, and only overrides. Every count, every backup, every rescue
+// proposal in this file still means "what has somebody changed", which is the
+// only question those tools can usefully answer.
+//
+// THE PATHS ARE DERIVED, NOT LISTED. A card's file is its id and the slug of
+// its own name, an effect frame is its element and phase, a pack frame is its
+// set and tier — so a set added to TCG_SETS or a card added to the dex needs
+// nothing typed out here twice. What that costs is a rename: change a card's
+// name and its picture is looked for under the new slug, does not exist, and
+// the card quietly falls back to its emoji. That failure is silent in the app
+// and LOUD in CI — tools/bundled-art-tests.mjs walks all 629 slots against both
+// the shipped slot map and the files actually on disk.
+const TCG_ART_ROOT = 'assets/realm-of-embers/';
+// The five duel heroes are named files rather than derived ones: a hero's id
+// and its portrait's name are different words ('warden' / 'Warden Elowen'), and
+// there is no rule joining them that is not just this table written out longer.
+const TCG_BUNDLED_HEROES = {
+  warden: 'warden-warden-elowen', ember: 'ember-emberfist-rook', grove: 'grove-sage-wren',
+  frost: 'frost-tidecaller-nell', scribe: 'scribe-ashen-scribe-pip'
+};
+// tcgFxSlotId writes the charge phase with an EMPTY prefix ('fx:flame:4'), so
+// the empty string is a real key here, not a missing one.
+const TCG_BUNDLED_FX_DIR = { '': 'charge', fly: 'fly', hit: 'hit', blast: 'blast' };
+// 'Pyrrik, the Cinderwhelp' → 'pyrrik-the-cinderwhelp'.
+function _tcgSlug(name) {
+  return String(name || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+const _tcgTwo = n => (n < 10 ? '0' : '') + n;
+let _tcgCardFileBy = null;                 // card id → '<id>-<slug>', built once
+function _tcgCardStem(id) {
+  if (!_tcgCardFileBy) {
+    _tcgCardFileBy = {};
+    try { TCG_CARDS.forEach(c => { _tcgCardFileBy[c.id] = c.id + '-' + _tcgSlug(c.name); }); }
+    catch (e) { _tcgCardFileBy = null; return null; }   // asked before the dex exists
+  }
+  return _tcgCardFileBy[id] || null;
+}
+// The file that ships for this slot, as a path relative to the page — or '' for
+// a slot the repository has no picture for (artifacts, the logo, set banners,
+// the Chronicle's plates and the duel's zone effects are all still admin-drawn).
+function tcgBundledArtPath(slot) {
+  const id = String(slot || '');
+  let m = /^(c\d{3})(:av)?$/.exec(id);
+  if (m) {
+    const stem = _tcgCardStem(m[1]);
+    return stem ? TCG_ART_ROOT + (m[2] ? 'battle-avatars/' : 'card-art/') + stem + '.webp' : '';
+  }
+  m = /^fx:([a-z]+):([a-z]*)(\d+)$/.exec(id);
+  if (m && TCG_ELEMENTS[m[1]] && TCG_BUNDLED_FX_DIR[m[2]] !== undefined) {
+    return TCG_ART_ROOT + 'attack-animation/' + m[1] + '/' + TCG_BUNDLED_FX_DIR[m[2]] + '-' + _tcgTwo(+m[3]) + '.webp';
+  }
+  m = /^pk:([a-z0-9]+):([a-z]+):(\d+)$/.exec(id);
+  if (m && TCG_SETS[m[1]]) return TCG_ART_ROOT + 'pack-ripping/' + m[1] + '/' + m[2] + '/frame-' + _tcgTwo(+m[3]) + '.webp';
+  m = /^hero:([a-z]+)$/.exec(id);
+  if (m && TCG_BUNDLED_HEROES[m[1]]) return TCG_ART_ROOT + 'heroes/' + TCG_BUNDLED_HEROES[m[1]] + '.webp';
+  return '';
+}
+// …as an absolute URL, which is what everything downstream wants: an <img> on
+// any page, and _urlToDataUrlRobust when Touch up or an AI redraw needs the
+// pixels back. Resolved lazily and cached — `location` is fine at call time and
+// this file is evaluated long before the page settles.
+const _tcgBundledUrl = {};
+function tcgBundledArt(slot) {
+  if (_tcgBundledUrl[slot] !== undefined) return _tcgBundledUrl[slot];
+  const p = tcgBundledArtPath(slot);
+  let u = '';
+  if (p) { try { u = new URL(p, location.href).href; } catch (e) { u = p; } }
+  return (_tcgBundledUrl[slot] = u);
+}
+// THE ONE READER. Everything that puts a Realm picture on the screen — a card
+// face, an avatar on the arena stage, a projectile frame, a pack tearing open,
+// a hero's portrait — asks this and not `_tcgArt` directly, or the bundled
+// layer is a layer some surfaces have and others do not.
+function tcgSlotArt(slot) { return (_tcgArt && _tcgArt[slot]) || tcgBundledArt(slot) || ''; }
+// Is this slot showing a picture at all, from either layer? Used by the
+// animations, which play only when every frame of a run is present.
+function tcgSlotHasArt(slot) { return !!tcgSlotArt(slot); }
 // Two graphics per monster: '<id>' is the trading-card art shown on the card
 // face; '<id>:av' is the battle avatar used on the arena stage. Each falls
 // back to the other so a single pasted image still shows everywhere.
-function tcgArtUrl(id) { return (_tcgArt && (_tcgArt[id] || _tcgArt[id + ':av'])) || null; }
-function tcgAvatarUrl(id) { return (_tcgArt && (_tcgArt[id + ':av'] || _tcgArt[id])) || null; }
+function tcgArtUrl(id) { return tcgSlotArt(id) || tcgSlotArt(id + ':av') || null; }
+function tcgAvatarUrl(id) { return tcgSlotArt(id + ':av') || tcgSlotArt(id) || null; }
 // Repaint whichever art surface is on screen after an upload/reset.
 function tcgArtRefresh() {
   tcgLiveRefresh();                      // the map changed — re-read which urls may be keyed
@@ -39606,103 +39701,71 @@ async function tcgArtImport(e) {
   } catch (err) { console.error('art import', err); showToast('Import failed: ' + (err && err.message ? err.message : err), 'error'); }
 }
 
-// ---- Verified repository art installer ------------------------------
-// Generated Realm of Embers art is versioned with the app, along with one
-// compact slot map. This gives the admin a deterministic recovery path when
-// another game accidentally writes pictures into the same-looking slot ids.
-// Card scenes can be referenced directly from GitHub Pages. Stand-alone art
-// still goes through the ordinary store so avatars, VFX, packs and heroes get
-// the exact same background removal and scaling as a hand-uploaded picture.
-const TCG_BUNDLED_ART_ROOT = 'assets/realm-of-embers/';
-const TCG_BUNDLED_ART_MAP = TCG_BUNDLED_ART_ROOT + 'manifests/slot-map.json';
-let _tcgBundledInstallBusy = false;
-
+// ---- Letting the bundled art show ------------------------------------
+// The 629 Realm pictures ship with the app (see THE BUNDLED REALM OF EMBERS
+// ART), so "install" is the wrong verb now — there is nothing to fetch, nothing
+// to upload and nothing to write. What CAN be wrong is an override sitting on
+// top of one: another game's picture written into a slot with the same name, a
+// rescue proposal applied a frame out, a hand-uploaded sprite that has not
+// aged well. This takes those overrides off, and the bundled picture underneath
+// is what shows.
+//
+// Nothing goes blank. Every slot it clears is a slot the app ships a picture
+// for — that is exactly the list — and the BACKUP still holds whatever was
+// removed, because tcgArtBackupSync refuses to shrink. ↩️ Restore puts it all
+// back, which is what makes this safe to press.
+function tcgBundledSlotIds() {
+  const ids = [];
+  TCG_CARDS.forEach(c => { ids.push(c.id, c.id + ':av'); });
+  Object.keys(TCG_ELEMENTS).forEach(el => TCG_FX_PHASES.forEach(p => {
+    for (let i = 1; i <= p.frames; i++) ids.push(tcgFxSlotId(el, p.prefix, i));
+  }));
+  Object.keys(TCG_SETS).forEach(k => TCG_PACKS.forEach(p => {
+    for (let i = 1; i <= TCG_PACK_FRAMES; i++) ids.push(tcgPackSlotId(k, p.tier, i));
+  }));
+  Object.keys(TCG_BUNDLED_HEROES).forEach(h => ids.push(tcgHeroSlotId(h)));
+  return ids.filter(id => !!tcgBundledArtPath(id));
+}
 function _tcgBundledStatus(text) {
   const el = document.getElementById('tcgBundledStatus');
   if (el) el.textContent = text || '';
 }
-function _tcgBlobDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.onerror = () => reject(r.error || new Error('Could not read image'));
-    r.readAsDataURL(blob);
-  });
-}
-async function _tcgBundledSlotMap() {
-  const res = await fetch(TCG_BUNDLED_ART_MAP, { cache: 'no-cache' });
-  if (!res.ok) throw new Error('Could not load the bundled art map (' + res.status + ')');
-  const data = await res.json();
-  if (!data || data.game !== 'realm-of-embers' || !data.slots || typeof data.slots !== 'object') {
-    throw new Error('The bundled art map is invalid');
+// Chunked like _tcgArtWriteMany, and a MERGE like every other write in this
+// file — the one thing that must never happen to this document is a
+// whole-document set, which is how the map was lost the first time.
+async function _tcgArtDeleteMany(ids) {
+  const uid = _tcgOwnerUid(); if (!uid) throw new Error('Not signed in');
+  for (let i = 0; i < ids.length; i += 120) {
+    const slice = ids.slice(i, i + 120);
+    const patch = {};
+    slice.forEach(id => { patch[id] = deleteField(); });
+    await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: patch }, { merge: true });
+    slice.forEach(id => { if (_tcgArt) delete _tcgArt[id]; });
   }
-  const keys = Object.keys(data.slots);
-  if (data.count !== keys.length || keys.length !== 629) throw new Error('Expected 629 bundled slots, found ' + keys.length);
-  return data.slots;
 }
-async function _tcgInstallBundledSprite(id, file) {
-  const url = new URL(TCG_BUNDLED_ART_ROOT + file, location.href).href;
-  const res = await fetch(url, { cache: 'force-cache' });
-  if (!res.ok) throw new Error(id + ': image returned ' + res.status);
-  await _tcgArtStore(id, await _tcgBlobDataUrl(await res.blob()));
-}
-async function tcgInstallBundledRealmArt() {
+async function tcgUseBundledRealmArt() {
   if (!_isAdmin()) { showToast('Admins only', 'error'); return; }
-  if (_tcgBundledInstallBusy) { showToast('Realm art installation is already running', 'info'); return; }
-  let slots;
-  try { slots = await _tcgBundledSlotMap(); }
-  catch (e) { showToast(e && e.message ? e.message : String(e), 'error'); return; }
-  const ids = Object.keys(slots);
-  if (!confirm('Replace all ' + ids.length + ' Realm of Embers art slots with the verified repository set?\n\n'
-    + 'This overwrites misplaced card art, battle avatars, pack-ripping frames, attack frames and hero portraits. Other game assets, logos, lore and set banners are not touched.')) return;
-
-  _tcgBundledInstallBusy = true;
+  if (_tcgArtLoadFailed) { showToast('The art store could not be read — reload before changing anything', 'error'); return; }
+  const ids = tcgBundledSlotIds().filter(id => _tcgArt && _tcgArt[id]);
+  if (!ids.length) { showToast('Every Realm slot is already showing the art that ships with the app', 'success'); return; }
+  if (!confirm('Put ' + ids.length + ' Realm of Embers slot' + (ids.length === 1 ? '' : 's') + ' back to the artwork that ships with the app?\n\n'
+    + 'This removes the override on those slots only — the bundled picture underneath shows immediately, so nothing goes blank. '
+    + 'Whatever is removed stays in the backup, so ↩️ Restore puts it back.\n\n'
+    + 'Artifacts, the logo, set banners, the Chronicle plates and the duel effects are not touched.')) return;
   const btn = document.getElementById('tcgBundledInstallBtn');
   if (btn) btn.disabled = true;
-  const failed = [];
   try {
-    // Full-bleed card scenes need no preprocessing. Pointing those slots at
-    // their versioned Pages URLs replaces the mixed-in pictures immediately
-    // and avoids 201 redundant Storage uploads.
-    const cards = {};
-    ids.filter(id => /^c\d{3}$/.test(id)).forEach(id => {
-      cards[id] = new URL(TCG_BUNDLED_ART_ROOT + slots[id], location.href).href;
-    });
-    _tcgBundledStatus('Installing card art 0 / ' + Object.keys(cards).length + '…');
-    await _tcgArtWriteMany(cards);
-    _tcgBundledStatus('Installed ' + Object.keys(cards).length + ' card scenes. Cleaning stand-alone art…');
-
-    // Four at a time keeps the run practical without flooding Storage or
-    // Firestore. Each successful slot is durable even if the tab closes later.
-    const sprites = ids.filter(id => !/^c\d{3}$/.test(id));
-    let done = 0;
-    for (let i = 0; i < sprites.length; i += 4) {
-      const batch = sprites.slice(i, i + 4);
-      await Promise.all(batch.map(async id => {
-        try { await _tcgInstallBundledSprite(id, slots[id]); }
-        catch (e) { failed.push({ id, error: e && e.message ? e.message : String(e) }); }
-        done++;
-        _tcgBundledStatus('Cleaning and installing stand-alone art ' + done + ' / ' + sprites.length + '…');
-      }));
-    }
+    _tcgBundledStatus('Clearing ' + ids.length + ' override' + (ids.length === 1 ? '' : 's') + '…');
+    await _tcgArtDeleteMany(ids);
     tcgArtRefresh();
-    if (failed.length) {
-      console.warn('bundled Realm art install failures', failed);
-      showToast('Realm art installed; ' + failed.length + ' stand-alone slot' + (failed.length === 1 ? '' : 's') + ' need retrying', 'error');
-      _tcgBundledStatus('Finished with ' + failed.length + ' failed slot' + (failed.length === 1 ? '' : 's') + '. Press Install again to retry them.');
-    } else {
-      showToast('All 629 Realm of Embers art slots installed ✓', 'success');
-      _tcgBundledStatus('All 629 verified Realm of Embers slots are installed.');
-    }
+    showToast(ids.length + ' slot' + (ids.length === 1 ? '' : 's') + ' back to the bundled artwork ✓', 'success');
+    _tcgBundledStatus('All ' + tcgBundledSlotIds().length + ' Realm slots are showing the artwork that ships with the app.');
     tcgArtSafetyRender();
   } catch (e) {
-    console.error('bundled Realm art install', e);
-    showToast('Realm art install stopped: ' + (e && e.message ? e.message : e), 'error');
-    _tcgBundledStatus('Install stopped. Finished slots are safe; press Install to resume.');
-  } finally {
-    _tcgBundledInstallBusy = false;
-    if (btn) btn.disabled = false;
-  }
+    console.error('bundled Realm art', e);
+    showToast('Could not clear the overrides: ' + (e && e.message ? e.message : e), 'error');
+    _tcgBundledStatus('Stopped. Slots already cleared are showing the bundled artwork.');
+  } finally { if (btn) btn.disabled = false; }
 }
 // ---- Rescue: rebuild the map from Storage ----------------------------
 // The retroactive half. A backup only helps if one existed BEFORE the map was
@@ -40082,6 +40145,7 @@ function tcgArtSafetyRender() {
 }
 function _tcgArtSafetyHtml() {
   const live = Object.keys(_tcgArt || {}).length;
+  const bundled = tcgBundledSlotIds().length;
   const b = _tcgArtBackup || {};
   const bn = Object.keys(_tcgArtBackupMap(b)).length;
   let h = '<div class="tcg-safety">'
@@ -40092,20 +40156,28 @@ function _tcgArtSafetyHtml() {
     // response to "everything is gone" is to redraw it.
     h += '<div class="tcg-safety-alarm">⚠️ <b>The art store could not be read.</b> This is <b>not</b> the same as having no art — do not redraw or reset anything until a reload shows the collection again.</div>';
   }
-  h += '<p>Every picture in the game is one key in <b>one</b> Firestore map. The pictures themselves live in Storage and are never deleted, so a lost map is recoverable — but only if there is something to recover it <i>from</i>.</p>'
-    + '<div class="tcg-safety-stat"><b>' + live + '</b> picture' + (live === 1 ? '' : 's') + ' in the collection'
+  h += '<p>Every picture an admin has drawn or replaced is one key in <b>one</b> Firestore map. The pictures themselves live in Storage and are never deleted, so a lost map is recoverable — and the <b>' + bundled + '</b> Realm pictures that ship with the app are in the repository, which nothing in Firebase can touch.</p>'
+    + '<div class="tcg-safety-stat"><b>' + live + '</b> override' + (live === 1 ? '' : 's') + ' in the collection'
+    + ' · <b>' + bundled + '</b> bundled with the app'
     + ' · backup holds <b>' + bn + '</b>' + (b.savedAt ? ' from ' + escapeHtml(_tcgArtWhen(b.savedAt)) : ' — none yet') + '</div>';
-  if (bn > live && live >= 0) {
-    h += '<div class="tcg-safety-alarm">⚠️ The backup holds <b>' + (bn - live) + '</b> more picture' + (bn - live === 1 ? '' : 's') + ' than the collection does. If art has gone missing, <b>↩️ Restore</b> puts it back.</div>';
+  // Only a slot showing NOTHING is missing. A backed-up override that has since
+  // been cleared is still a picture on the screen if the app ships one for that
+  // slot, and calling that "gone" would send an admin to Restore to undo the
+  // very thing they just chose.
+  const gone = Object.keys(_tcgArtBackupMap(b)).filter(k => !(_tcgArt && _tcgArt[k]) && !tcgBundledArtPath(k)).length;
+  if (gone) {
+    h += '<div class="tcg-safety-alarm">⚠️ The backup holds <b>' + gone + '</b> picture' + (gone === 1 ? '' : 's') + ' that nothing is showing now. If art has gone missing, <b>↩️ Restore</b> puts it back.</div>';
   }
   h += '<div class="tcg-gen-actions">'
     + '<button type="button" class="btn btn-outline" onclick="tcgArtExport()">💾 Export a copy</button>'
     + '<label class="btn btn-outline" style="cursor:pointer;">📥 Import a copy<input type="file" accept="application/json,.json" style="display:none;" onchange="tcgArtImport(event)"></label>'
     + '<button type="button" class="btn btn-outline"' + (bn ? '' : ' disabled') + ' onclick="tcgArtRestoreBackup()">↩️ Restore from backup</button>'
     + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueScan()">🚑 Rescue from Storage</button>'
-    + '<button type="button" class="btn btn-primary" id="tcgBundledInstallBtn" onclick="tcgInstallBundledRealmArt()">🔥 Install bundled Realm art</button>'
+    + '<button type="button" class="btn btn-primary" id="tcgBundledInstallBtn" onclick="tcgUseBundledRealmArt()">🔥 Use the bundled artwork</button>'
     + '</div>'
-    + '<div id="tcgBundledStatus" class="hint" style="margin-top:8px;">Replaces only the 629 verified Realm card, avatar, pack, attack and hero slots; unrelated game assets are untouched.</div>'
+    + '<div id="tcgBundledStatus" class="hint" style="margin-top:8px;">'
+    +   '<b>' + bundled + '</b> Realm pictures ship with the app — card art, battle avatars, attack frames, pack frames and hero portraits — and show wherever nobody has overridden them. '
+    +   'Use the bundled artwork removes those overrides so the shipped pictures come back; artifacts, the logo, set banners, the Chronicle plates and the duel effects are not touched.</div>'
     + _tcgRescueHtml()
     + '</div>';
   return h;
@@ -40421,7 +40493,7 @@ function _tcgArtEngineLabel() { return openAiActive() ? 'ChatGPT · ' + getOpenA
 // Re-download the saved card art so it can be handed to the model as the
 // avatar's reference.
 async function _tcgCardArtDataUrl(card) {
-  const url = _tcgArt && _tcgArt[card.id];
+  const url = tcgSlotArt(card.id);
   if (!url) return null;
   try { return await _urlToDataUrlRobust(transformImageUrl(url)); }
   catch (e) { console.warn('could not reload card art for ' + card.name, e); return null; }
@@ -40539,7 +40611,14 @@ async function _tcgGenAvatar(card, cardDataUrl) {
 // Every monster has TWO slots — the trading-card art (card face) and the
 // battle avatar (arena sprite) — each with paste / drop / upload / ✨ AI.
 function _tcgArtSlotHtml(slotId, label, icon, thumb, aiLabel, hint) {
+  // `has` is an OVERRIDE — the admin drew or pasted this one, and Reset is what
+  // takes it back off. `shown` is whether the game is putting a picture here at
+  // all, which since the bundled art landed is usually true without anybody
+  // having done anything. Touch up and 🧼 follow `shown`, because they act on
+  // the picture that is actually on screen (and both write an override, which
+  // is exactly what editing a bundled picture should do).
   const has = !!(_tcgArt && _tcgArt[slotId]);
+  const shown = !!tcgSlotArt(slotId);
   const isAv = slotId.endsWith(':av');
   const aiText = aiLabel || (isAv ? 'avatar' : 'card art');
   const key = _tcgSlotKey(slotId);
@@ -40556,20 +40635,24 @@ function _tcgArtSlotHtml(slotId, label, icon, thumb, aiLabel, hint) {
     + '<div class="ga-actions">'
     +   '<button type="button" class="btn btn-primary ga-mini" onclick="tcgAiGenSlot(\'' + slotId + '\')">✨ AI ' + aiText + '</button>'
     +   '<label class="btn btn-outline ga-mini">Upload<input type="file" accept="image/*" style="display:none" onchange="onTcgArtPick(\'' + slotId + '\', event)"></label>'
-    +   (has ? '<button type="button" class="btn btn-outline ga-mini" onclick="tcgTouchUpSlot(\'' + slotId + '\')"'
+    +   (shown ? '<button type="button" class="btn btn-outline ga-mini" onclick="tcgTouchUpSlot(\'' + slotId + '\')"'
             + ' title="Open this picture in the full Touch up &amp; label editor — erase, paint, fill, clone, select, move, resize, rotate, straighten, add text and AI content-aware fill">✏️ Touch up</button>' : '')
-    +   (has && _tcgSlotStandsOnNothing(slotId)
+    +   (shown && _tcgSlotStandsOnNothing(slotId)
           ? '<button type="button" class="btn btn-outline ga-mini" onclick="tcgCleanSlotBg(\'' + slotId + '\')"'
             + ' title="Remove the flat colour behind this picture — the magenta, green or blue screen it was drawn against, or any other plate the model left in">🧼 Remove background</button>'
           : '')
     +   (has ? '<button type="button" class="btn btn-ghost ga-mini" onclick="resetTcgArt(\'' + slotId + '\')">Reset</button>' : '')
     + '</div>'
-    + '<div class="ga-status ' + (has ? 'custom' : '') + '" id="tcgstatus-' + key + '">' + (has ? '● Custom' : 'Default') + '</div>'
+    + '<div class="ga-status ' + (has ? 'custom' : '') + '" id="tcgstatus-' + key + '">'
+    +   (has ? '● Custom' : shown ? '◆ Bundled with the app' : 'Default') + '</div>'
     + '</div>';
 }
 function tcgArtRowInnerHtml(c) {
-  const cardOv = _tcgArt && _tcgArt[c.id];
-  const avOv = _tcgArt && _tcgArt[c.id + ':av'];
+  // The thumbnails show what the GAME shows, bundled art included — an admin
+  // panel that draws a row of emoji beside 201 cards the students can plainly
+  // see reads as art that has gone missing.
+  const cardOv = tcgSlotArt(c.id);
+  const avOv = tcgSlotArt(c.id + ':av');
   const em = '<div style="font-size:34px;line-height:64px;text-align:center;opacity:.7;">' + c.em + '</div>';
   const cardThumb = cardOv ? '<img src="' + cardOv + '" alt="' + escapeHtml(c.name) + '">' : em;
   const avThumb = avOv ? '<img src="' + avOv + '" alt="' + escapeHtml(c.name) + ' avatar">' : (cardOv ? '<img src="' + cardOv + '" alt="" style="opacity:.45;">' : em);
@@ -40591,8 +40674,14 @@ function _tcgSlotStatus(slotId, text) {
 }
 function _tcgArtMissing() {
   let pics = 0, monsters = 0;
+  // "Missing" means NOTHING IS SHOWING, bundled art included — not "nobody has
+  // overridden it". Counting overrides here would put "402 pictures for 201
+  // monsters" on a button beside 201 monsters the students can plainly see, and
+  // pressing it would spend hundreds of image calls redrawing artwork that is
+  // already there. Replacing the bundled set is what ↻ Redraw every monster is
+  // for, and it says so.
   TCG_CARDS.forEach(c => {
-    const needCard = !(_tcgArt && _tcgArt[c.id]), needAv = !(_tcgArt && _tcgArt[c.id + ':av']);
+    const needCard = !tcgSlotArt(c.id), needAv = !tcgSlotArt(c.id + ':av');
     if (needCard) pics++;
     if (needAv) pics++;
     if (needCard || needAv) monsters++;
@@ -40982,7 +41071,7 @@ function duelFxDoneCount() {
 // without a second editor existing to drift out of step with the first.
 function tcgTouchUpSlot(slotId) {
   if (!_isAdmin()) return;
-  const url = _tcgArt && _tcgArt[slotId];
+  const url = tcgSlotArt(slotId);
   if (!url) { showToast('Nothing in that slot yet — draw, paste or upload a picture first', 'error'); return; }
   // Straight to a data URL: an art slot is a hosted Storage URL, and the canvas
   // cannot read one back without CORS. _urlToDataUrlRobust is the same door the
@@ -41296,7 +41385,7 @@ async function _tcgCutBackdrop(dataUrl, strict) {
 // straight back to the same slot.
 async function tcgCleanSlotBg(slotId, quiet) {
   if (!_isAdmin()) return false;
-  const url = _tcgArt && _tcgArt[slotId];
+  const url = tcgSlotArt(slotId);
   if (!url) { if (!quiet) showToast('Nothing drawn in that slot yet', 'error'); return false; }
   if (!quiet) _tcgSlotStatus(slotId, '🧼 Cleaning…');
   try {
@@ -41449,7 +41538,7 @@ async function tcgRepairArtBackgrounds() {
       : 'No painted backgrounds found — every sprite and pack is already clean',
     fixed || !unreadable ? 'success' : 'error');
 }
-function tcgFxHas(element, prefix, n) { return !!(_tcgArt && _tcgArt[tcgFxSlotId(element, prefix, n)]); }
+function tcgFxHas(element, prefix, n) { return tcgSlotHasArt(tcgFxSlotId(element, prefix, n)); }
 function tcgFxPhaseDone(element, phase) {
   for (let i = 1; i <= phase.frames; i++) if (!tcgFxHas(element, phase.prefix, i)) return false;
   return true;
@@ -41470,7 +41559,7 @@ function tcgFxMissing() {
 // been drawn yet, it is drawn first (which chains back through frames 1-4).
 async function _tcgFxAnchor(element) {
   const charge = TCG_FX_BY_KEY.charge;
-  const url = _tcgArt && _tcgArt[tcgFxSlotId(element, charge.prefix, charge.frames)];
+  const url = tcgSlotArt(tcgFxSlotId(element, charge.prefix, charge.frames));
   if (url) {
     try { return await _tcgRefOnScreen(url, tcgScreenForElement(element)); }
     catch (e) { console.warn('charge anchor reload failed — redrawing it', e); }
@@ -41481,7 +41570,7 @@ async function _tcgFxRef(element, phase, n) {
   // Frame 1 of flight / impact / blast follows the fully-charged ball…
   if (n === 1) return phase.key === 'charge' ? null : await _tcgFxAnchor(element);
   // …every other frame follows the frame before it.
-  const prev = _tcgArt && _tcgArt[tcgFxSlotId(element, phase.prefix, n - 1)];
+  const prev = tcgSlotArt(tcgFxSlotId(element, phase.prefix, n - 1));
   if (prev) {
     try { return await _tcgRefOnScreen(prev, tcgScreenForElement(element)); }
     catch (e) { console.warn('fx ref reload', e); }
@@ -41533,7 +41622,7 @@ function tcgFxRowInnerHtml(element) {
     let slots = '';
     for (let i = 1; i <= phase.frames; i++) {
       const id = tcgFxSlotId(element, phase.prefix, i);
-      const url = _tcgArt && _tcgArt[id];
+      const url = tcgSlotArt(id);
       const step = phase.steps[i - 1];
       const size = phase.key === 'charge' ? 14 + i * 9 : phase.key === 'blast' ? 46 : 34;
       const ph = '<div class="ems-shot-orb fx-ph" style="width:' + size + 'px;height:' + size + 'px;background:radial-gradient(circle at 35% 35%, ' + fx.a + ', ' + fx.b + ' 68%);box-shadow:0 0 8px 2px ' + fx.glow + ';"></div>';
@@ -41878,7 +41967,7 @@ async function duelFxDrawAll() {
 // nothing saved until the backdrop is really gone. Each hero names its own
 // screen in DUEL_HEROES — a colour that hero cannot be wearing.
 function tcgHeroSlotId(id) { return 'hero:' + id; }
-function tcgHeroArtUrl(id) { return (_tcgArt && _tcgArt[tcgHeroSlotId(id)]) || ''; }
+function tcgHeroArtUrl(id) { return tcgSlotArt(tcgHeroSlotId(id)); }
 function tcgHeroArtPrompt(h, harder) {
   return 'A single fantasy HERO PORTRAIT for a children\'s collectible card game — the face a player wears on the duel board.\n'
     + 'THE HERO: "' + h.name + '", ' + h.title + ' — ' + h.look + '.\n'
@@ -42101,7 +42190,7 @@ function _tcgSetArtThumb(setKey) {
 function tcgSetArtRowInnerHtml(setKey) {
   const set = TCG_SETS[setKey] || TCG_SETS.gen1;
   const heroes = tcgSetHeroes(setKey);
-  const drawn = heroes.filter(c => _tcgArt && _tcgArt[c.id]).length;
+  const drawn = heroes.filter(c => tcgSlotArt(c.id)).length;
   return _tcgArtSlotHtml(tcgSetArtSlotId(setKey), escapeHtml(set.series) + ' · ' + escapeHtml(set.title), set.em,
     _tcgSetArtThumb(setKey), 'set art',
     'Drawn from this set\'s ' + heroes.length + ' legendary 7★ cards — ' + drawn + ' of them have card art so far'
@@ -43105,7 +43194,7 @@ function tcgPackParseSlot(slotId) {
   if (!TCG_SETS[m[1]] || !TCG_PACK_LOOK[m[2]] || n < 1 || n > TCG_PACK_FRAMES) return null;
   return { setKey: m[1], tier: m[2], n: n };
 }
-function tcgPackHas(setKey, tier, n) { return !!(_tcgArt && _tcgArt[tcgPackSlotId(setKey, tier, n)]); }
+function tcgPackHas(setKey, tier, n) { return tcgSlotHasArt(tcgPackSlotId(setKey, tier, n)); }
 // Every frame present = the animation can play. A partial run is not played
 // at all — half a tear looks broken, and the plain reveal is fine.
 function tcgPackAnimReady(setKey, tier) {
@@ -43114,7 +43203,7 @@ function tcgPackAnimReady(setKey, tier) {
 }
 function tcgPackFramesFor(setKey, tier) {
   const out = [];
-  for (let i = 1; i <= TCG_PACK_FRAMES; i++) out.push(_tcgArt[tcgPackSlotId(setKey, tier, i)]);
+  for (let i = 1; i <= TCG_PACK_FRAMES; i++) out.push(tcgSlotArt(tcgPackSlotId(setKey, tier, i)));
   return out;
 }
 function tcgPackFramePrompt(setKey, tier, n, harder) {
@@ -43149,7 +43238,7 @@ function tcgPackRowInnerHtml(setKey, tier) {
   let slots = '';
   for (let i = 1; i <= TCG_PACK_FRAMES; i++) {
     const id = tcgPackSlotId(setKey, tier, i);
-    const url = _tcgArt && _tcgArt[id];
+    const url = tcgSlotArt(id);
     const step = TCG_PACK_STEPS[i - 1];
     const thumb = url ? '<img src="' + url + '" alt="' + escapeHtml(step.t) + '">'
       : '<div class="tcg-pack-ph tcg-pack-' + tier + '">' + tcgPackArt(tier) + '</div>';
@@ -43212,7 +43301,7 @@ async function _tcgPackRunFrames(setKey, tier, redraw, onProgress) {
     const id = tcgPackSlotId(setKey, tier, n);
     if (!redraw && tcgPackHas(setKey, tier, n)) {
       // Already drawn — still needed as the reference for the next frame.
-      try { ref = await _tcgRefOnScreen(_tcgArt[id], tcgScreenForSet(setKey)); } catch (e) { ref = null; }
+      try { ref = await _tcgRefOnScreen(tcgSlotArt(id), tcgScreenForSet(setKey)); } catch (e) { ref = null; }
       continue;
     }
     if (onProgress) onProgress(n);
@@ -43603,7 +43692,7 @@ async function tcgAiGenSlot(slotId) {
         // Frame N-1 is the reference — draw the run up to here if the earlier
         // frames aren't there yet, or the packet won't match.
         if (!tcgPackHas(setKey, tier, n - 1)) await _tcgPackRunFrames(setKey, tier, false);
-        const prev = _tcgArt && _tcgArt[tcgPackSlotId(setKey, tier, n - 1)];
+        const prev = tcgSlotArt(tcgPackSlotId(setKey, tier, n - 1));
         if (prev) { try { ref = await _tcgRefOnScreen(prev, tcgScreenForSet(setKey)); } catch (e) { ref = null; } }
       }
       const got = await _tcgGenPackClean(setKey, tier, n, ref);
@@ -43675,8 +43764,8 @@ async function tcgGenerateAllArt(mode) {
   const all = mode === 'all';
   const jobs = [];
   TCG_CARDS.forEach(c => {
-    const needCard = all || !(_tcgArt && _tcgArt[c.id]);
-    const needAv = all || !(_tcgArt && _tcgArt[c.id + ':av']);
+    const needCard = all || !tcgSlotArt(c.id);
+    const needAv = all || !tcgSlotArt(c.id + ':av');
     if (needCard || needAv) jobs.push({ card: c, needCard, needAv });
   });
   if (!jobs.length) { showToast('Every monster already has both pictures 🎉', 'success'); return; }
@@ -44476,7 +44565,7 @@ function _tcgEnergyHtml() {
 // name is HTML rather than part of the picture, so it stays sharp and legible
 // at any size and reads correctly however the artwork came out.
 function _tcgHeroFaceHtml(c, owned) {
-  const art = (_tcgArt && (_tcgArt[c.id] || _tcgArt[c.id + ':av'])) || '';
+  const art = tcgArtUrl(c.id) || '';
   const face = art
     ? '<img src="' + art + '" alt="' + escapeHtml(c.name) + '">'
     : '<span class="tcg-setpick-em">' + c.em + '</span>';
@@ -44531,7 +44620,7 @@ function tcgPacksHtml(s) {
     + '</div>'
     + '<div class="tcg-packs">' + TCG_PACKS.map(p => {
         const anim = tcgPackAnimReady(tcgPackSet, p.tier);
-        const art = _tcgArt && _tcgArt[tcgPackSlotId(tcgPackSet, p.tier, 1)];
+        const art = tcgSlotArt(tcgPackSlotId(tcgPackSet, p.tier, 1));
         const set = TCG_SETS[tcgPackSet] || TCG_SETS.gen1;
         return '<div class="tcg-pack tcg-pack-' + p.tier + '">'
         + '<div class="tcg-pack-art' + (art ? ' has-img' : '') + '">'
@@ -48715,7 +48804,7 @@ function emsFxFrameUrls() {
   Object.keys(TCG_ELEM_FX).forEach(el => {
     TCG_FX_PHASES.forEach(p => {
       for (let i = 1; i <= p.frames; i++) {
-        const u = _tcgArt[tcgFxSlotId(el, p.prefix, i)];
+        const u = tcgSlotArt(tcgFxSlotId(el, p.prefix, i));
         if (u && !_emsFxCache.has(u) && out.indexOf(u) < 0) out.push(u);
       }
     });
@@ -49251,7 +49340,7 @@ function tcgFxSet(element, prefix) {
   if (!phase) return null;
   const out = [];
   for (let i = 1; i <= phase.frames; i++) {
-    const u = _tcgArt[tcgFxSlotId(element, phase.prefix, i)];
+    const u = tcgSlotArt(tcgFxSlotId(element, phase.prefix, i));
     if (!u) return null;
     out.push(u);
   }
@@ -51692,7 +51781,7 @@ window.resetTcgArt = resetTcgArt;
 // handler, so the module scope has to hand them out explicitly.
 window.tcgArtExport = tcgArtExport;
 window.tcgArtImport = tcgArtImport;
-window.tcgInstallBundledRealmArt = tcgInstallBundledRealmArt;
+window.tcgUseBundledRealmArt = tcgUseBundledRealmArt;
 window.tcgArtRestoreBackup = tcgArtRestoreBackup;
 window.tcgArtRescueScan = tcgArtRescueScan;
 window.tcgArtRescueOpenRun = tcgArtRescueOpenRun;

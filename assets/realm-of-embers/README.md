@@ -1,8 +1,7 @@
-# Realm of Embers generated art
+# Realm of Embers art
 
-This folder contains a complete generated-art pass for every requested Realm of Embers slot defined in `app.js`.
-
-## Contents
+A complete art pass for every Realm of Embers slot the app defines, versioned
+with the app itself.
 
 | Folder | Files | App slots |
 | --- | ---: | --- |
@@ -14,24 +13,58 @@ This folder contains a complete generated-art pass for every requested Realm of 
 
 Total game-facing WebP images: **629**.
 
-`manifests/slot-map.json` is the compact runtime slot-to-file map. `manifests/asset-manifest.json` records the full character metadata and production prompts extracted from the app. `manifests/asset-prompts.jsonl` is a line-oriented prompt/job list. `previews/` contains representative QA montages.
+## How they reach the screen
 
-## Import behavior
+They are the app's **bundled default layer** — see *THE BUNDLED REALM OF EMBERS
+ART* in `app.js` and `CLAUDE.md`. `tcgSlotArt(slot)` returns the admin's
+override if there is one and this artwork otherwise, so every picture here is
+live for every student with nothing to press and nothing uploaded.
 
-The Card Art admin panel includes **Install bundled Realm art**. It reads `slot-map.json`, replaces the 629 Realm-owned slots with this verified mapping, and runs stand-alone sprites through CER's existing background cleaner before upload. This is the safe recovery path when another game's art has been written into matching slot IDs.
+Nothing is copied into Firestore or Storage. The `overrides` map stays what it
+has always been — the record of what an admin has drawn or replaced — and this
+folder is the floor underneath it. That also makes the art the one thing in the
+game a lost `overrides` map cannot take away: it is in git.
 
-- Card art is already full-bleed and keeps its painted scene.
-- Battle avatars, pack frames, attack frames, and hero portraits are production sources on the flat chroma screens requested by CER's own art pipeline. Uploading them through the app calls `_tcgArtStore`, which runs `_stripImageBackground` for every stand-on-nothing slot.
-- Aeonyx's battle avatar already has a verified alpha channel; the installer safely accepts it too.
-- If a model retained a dark or patterned plate, use the existing **Clean painted backgrounds** action after upload. The app was built for this exact generated-art failure mode.
+The paths are **derived** from the slot id (a card's file is its id plus the
+slug of its own name; an effect frame is its element and phase; a pack frame is
+its set and tier), so nothing has to be listed twice. `tools/bundled-art-tests.mjs`
+walks all 629 against both `manifests/slot-map.json` and the files on disk —
+run it after renaming a card, moving a file or adding a set.
 
-## Output sizes
+## Backgrounds
 
-The game-facing WebP images are normalized to the same ceilings used by `_tcgArtStore`:
+Card scenes keep their painted background. Everything that **stands on nothing**
+— battle avatars, hero portraits, effect frames, pack frames — carries a real
+alpha channel and is ready to composite as-is.
 
-- card art, pack frames, and hero portraits: 512 × 512
-- battle avatars and elemental effect frames: 256 × 256
+They did not arrive that way: an image model has no alpha channel, so those were
+drawn against one flat chroma wall (the only instruction a model can actually
+follow) and the wall was keyed out at build time by
+**`tools/key-realm-sprites.mjs`**, which runs the app's own `_screenKeyOut`
+rather than a copy of it. That tool is idempotent — a sprite already standing on
+nothing carries no wall and is left untouched — so it is safe to re-run after
+adding art.
 
-Generation source atlases are intentionally kept outside the checkout under the workspace `work/realm-of-embers-intermediates/` folder, so the repository contains only deployable PNGs, manifests, and QA previews.
+## Manifests and previews
 
-Run `node tools/check-realm-assets.mjs` from the repository root to verify every expected PNG and dimension.
+- `manifests/slot-map.json` — the compact slot → file map. The harness checks the
+  app's derived paths against it.
+- `manifests/asset-manifest.json` — full character metadata and the production
+  prompts extracted from `app.js`.
+- `manifests/asset-prompts.jsonl` — the same prompts, line-oriented.
+- `previews/*-qa.png` — the generation pass's own QA montages. `avatar-qa.png`
+  and `heroes-qa.png` show those sprites **as drawn**, on their chroma wall.
+- `previews/keyed-sprites-qa.png` — the same sprites **after keying**, over a
+  checkerboard so a hole punched in a sprite would be visible. Written by
+  `tools/key-realm-sprites.mjs`.
+
+## Sizes
+
+Normalised to the same ceilings `_tcgArtStore` uses:
+
+- card art, pack frames and hero portraits: 512 × 512
+- battle avatars and effect frames: 256 × 256
+
+Run `node tools/check-realm-assets.mjs` to verify every expected file and
+dimension, and `node tools/bundled-art-tests.mjs` to verify the app can find
+them.
