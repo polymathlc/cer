@@ -13,7 +13,7 @@
 // monster and the white frost effect whose backdrops could not be removed at
 // all, the scale armour deleted by the chequerboard cutter on its second pass.
 import fs from 'fs';
-const APP = '/home/user/cer/app.js';
+const APP = new URL('../app.js', import.meta.url);
 const src = fs.readFileSync(APP, 'utf8');
 const grab = sig => { const i = src.indexOf(sig); if (i < 0) throw new Error('missing ' + sig);
   let d = 0; const j = src.indexOf('{', i);

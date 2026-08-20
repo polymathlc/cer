@@ -39774,6 +39774,10 @@ async function tcgLoadArt(force) {
 // and LOUD in CI — tools/bundled-art-tests.mjs walks all 629 slots against both
 // the shipped slot map and the files actually on disk.
 const TCG_ART_ROOT = 'assets/realm-of-embers/';
+// Same filenames are intentionally replaced when the committed build-time
+// keyer improves. Version the URL so a browser cannot keep an old chroma-wall
+// response after the app itself has updated.
+const TCG_BUNDLED_ART_REV = '20260821-clean-sprites';
 // The five duel heroes are named files rather than derived ones: a hero's id
 // and its portrait's name are different words ('warden' / 'Warden Elowen'), and
 // there is no rule joining them that is not just this table written out longer.
@@ -39828,7 +39832,13 @@ function tcgBundledArt(slot) {
   if (_tcgBundledUrl[slot] !== undefined) return _tcgBundledUrl[slot];
   const p = tcgBundledArtPath(slot);
   let u = '';
-  if (p) { try { u = new URL(p, location.href).href; } catch (e) { u = p; } }
+  if (p) {
+    try {
+      const asset = new URL(p, location.href);
+      asset.searchParams.set('v', TCG_BUNDLED_ART_REV);
+      u = asset.href;
+    } catch (e) { u = p; }
+  }
   return (_tcgBundledUrl[slot] = u);
 }
 // THE ONE READER. Everything that puts a Realm picture on the screen — a card

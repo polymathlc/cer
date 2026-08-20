@@ -43,7 +43,10 @@ follow) and the wall was keyed out at build time by
 **`tools/key-realm-sprites.mjs`**, which runs the app's own `_screenKeyOut`
 rather than a copy of it. That tool is idempotent — a sprite already standing on
 nothing carries no wall and is left untouched — so it is safe to re-run after
-adding art.
+adding art. If a violet subject shares the broad magenta screen hue, the build
+tool falls back to a sampled-RGB key that removes the actual border plate while
+retaining the main connected character. This is what lets all 201 battle
+avatars ship with alpha without dissolving the psychic and shadow characters.
 
 ## Manifests and previews
 

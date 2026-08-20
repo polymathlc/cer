@@ -80,7 +80,7 @@ ok('hero slot shape', M.tcgBundledArtPath(M.tcgHeroSlotId('warden')) === 'assets
 // 6. The paths become absolute URLs against the page — which is what makes the
 //    four portals' shared 'sibling folders on one host' layout work, and what
 //    lets Touch up read the pixels back without a CORS argument.
-ok('absolute url', M.tcgBundledArt('c001') === 'https://polymathlc.github.io/cer/assets/realm-of-embers/card-art/c001-pyrrik-the-cinderwhelp.webp',
+ok('absolute versioned url', M.tcgBundledArt('c001') === 'https://polymathlc.github.io/cer/assets/realm-of-embers/card-art/c001-pyrrik-the-cinderwhelp.webp?v=20260821-clean-sprites',
    'got ' + M.tcgBundledArt('c001'));
 ok('no url for an unbundled slot', M.tcgBundledArt('logo:realm') === '');
 // 7. AN OVERRIDE ALWAYS WINS. This is the whole contract: the bundled layer is
