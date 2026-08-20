@@ -1716,7 +1716,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.305.0';
+const APP_VERSION = 'v1.306.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -39392,6 +39392,7 @@ async function tcgLoadArt(force) {
     _tcgArtLoadFailed = false;
   } catch (e) { console.warn('tcg art load', e); _tcgArtLoadFailed = true; _tcgArt = _tcgArt || {}; }
   try { tcgApplyLogo(); } catch (e) {}   // put the crest on as soon as we know there is one
+  tcgLiveRefresh();                      // …and start watching for pictures that still wear a screen
   return _tcgArt;
 }
 // Two graphics per monster: '<id>' is the trading-card art shown on the card
@@ -39401,6 +39402,7 @@ function tcgArtUrl(id) { return (_tcgArt && (_tcgArt[id] || _tcgArt[id + ':av'])
 function tcgAvatarUrl(id) { return (_tcgArt && (_tcgArt[id + ':av'] || _tcgArt[id])) || null; }
 // Repaint whichever art surface is on screen after an upload/reset.
 function tcgArtRefresh() {
+  tcgLiveRefresh();                      // the map changed — re-read which urls may be keyed
   try { tcgApplyLogo(); } catch (e) {}   // the crest is worn outside the page body
   try { if (document.querySelector('#page-tcg.active')) tcgRenderBody(); } catch (e) {}
   try { if (document.querySelector('#page-gameassets.active')) loadGameAssets(); } catch (e) {}
@@ -39420,8 +39422,13 @@ async function _tcgArtStore(id, dataUrl, opts) {
   // first, pasted and uploaded pictures included. Card art, set banners and the
   // Chronicle's illustrations keep their painted scene and are never cut,
   // whatever else changes here.
-  const standsOnNothing = id.endsWith(':av') || id.indexOf('fx:') === 0 || id.indexOf('dfx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0 || id.indexOf('hero:') === 0;
-  if (standsOnNothing && !(opts && opts.cleaned)) dataUrl = await _stripImageBackground(dataUrl);
+  // ONE list, read from ONE place — _tcgSlotStandsOnNothing. It used to be
+  // written out here as well, and a third time inside _tcgBgFreeIds.
+  const standsOnNothing = _tcgSlotStandsOnNothing(id);
+  // …and the cut is the chroma screen first, then the flood fill. A pasted or
+  // installed picture shot against a magenta wall used to get only the second
+  // of those, which hands a picture it cannot cut safely straight back.
+  if (standsOnNothing && !(opts && opts.cleaned)) dataUrl = await _tcgCutBackdrop(dataUrl, _tcgStrictBg(id));
   // Battle avatars are small stage sprites; card art gets more resolution.
   // Blast frames are stretched over a 3×3 block of panels, so they get more
   // pixels than the small sprites (avatars, charge/flight/impact frames).
@@ -39435,6 +39442,7 @@ async function _tcgArtStore(id, dataUrl, opts) {
   const uid = _tcgOwnerUid(); if (!uid) throw new Error('Not signed in');
   await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: { [id]: url } }, { merge: true });
   (_tcgArt = _tcgArt || {})[id] = url;
+  tcgLiveRefresh();
   return url;
 }
 async function _tcgArtApply(id, dataUrl) {
@@ -39552,6 +39560,7 @@ async function _tcgArtWriteMany(patch) {
     await setDoc(doc(db, 'users', uid, 'settings', 'tcgArt'), { overrides: slice }, { merge: true });
     Object.assign((_tcgArt = _tcgArt || {}), slice);
   }
+  tcgLiveRefresh();
 }
 function _tcgArtWhen(iso) {
   if (!iso) return 'an unknown date';
@@ -41118,6 +41127,171 @@ function _tcgSlotStandsOnNothing(id) {
     || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0
     || id.indexOf('arti:') === 0 || id.indexOf('hero:') === 0;
 }
+// =====================================================================
+// THE PINK WALL — keying a screen off a picture nobody generated here
+// =====================================================================
+// _tcgGenClean keys the screen because it KNOWS which one it briefed. A
+// picture that arrives any other way — pasted, dropped, uploaded, or installed
+// from the bundled asset set — carries no such note, and until v1.306.0 it got
+// the flood-fill knock-out and nothing else. The knock-out is deliberately
+// cautious and hands a picture it cannot cut safely straight back, so 201
+// battle avatars on a bright magenta wall and 5 hero portraits on magenta,
+// green and blue ones went into the game with their walls still on.
+//
+// Which screen a picture was shot against is not something a stored slot
+// records, so all three are tried. They cannot both fire: the ring test demands
+// a border that is almost entirely ONE of them, and magenta, green and blue are
+// mutually exclusive hues — a magenta wall scores about -1 for greenness.
+const TCG_SCREENS_TRY = ['magenta', 'green', 'blue'];
+// At least this much of the frame must still be painted afterwards. It is NOT
+// TCG_BG_KEEP_MIN, and the difference is the whole point of a chroma cut: a
+// forced flood fill may not cost more than a share of the artwork, but a wall
+// legitimately IS most of the frame — an avatar here is 54-72% screen, so
+// judging it by that rule would refuse every single one. What a keep-guard has
+// to catch is the opposite failure: a key that took the subject with it.
+// How much of the SUBJECT must survive the key. This is the guard the hue
+// keyer never had, and it is the one that matters most for a picture nobody
+// generated here: `_screenDn` asks "is this pixel that HUE", so a violet
+// monster shot on a MAGENTA wall scores as wall and is eaten alive. The
+// bundled set is full of them — every psychic, shadow and cosmic card was shot
+// on magenta although tcgScreenForElement routes exactly those elements to a
+// GREEN screen for this reason — and a half-dissolved sprite is far worse than
+// a visible wall, because nothing on screen says it happened.
+// No local test separates violet paint from a violet-tinted wall pixel; what
+// CAN be measured is the damage in aggregate, and it separates cleanly. Read
+// off the 206 bundled avatars and portraits: an undamaged cut leaves 73-100%
+// of the subject, and every picture below about 70% is visibly eaten.
+const TCG_SCREEN_SUBJECT_MIN = 0.72;
+// …and this much of the frame must still be painted at all, which catches the
+// degenerate case the ratio above cannot: a frame that was nearly all wall.
+const TCG_SCREEN_KEEP_MIN = 0.06;
+// The WALL is unambiguous — screen colour that can be reached from the frame
+// edge — so everything else is the subject plus whatever the subject encloses.
+// Measuring survival against THAT, rather than against the whole picture, is
+// what makes the number mean the same thing on a sprite standing in a 70% wall
+// and on one that fills its frame.
+async function _screenSubjectKept(before, after, screen) {
+  const name = (TCG_SCREENS[screen] || TCG_SCREENS.magenta).name;
+  const read = async url => {
+    const img = await _loadImageEl(url);
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    return { w: w, h: h, px: ctx.getImageData(0, 0, w, h).data };
+  };
+  const a = await read(before), b = await read(after);
+  if (!a.w || !a.h || a.w !== b.w || a.h !== b.h) return 1;
+  const w = a.w, h = a.h, n = w * h, px = a.px;
+  const wall = new Uint8Array(n), st = [];
+  const push = i => {
+    if (wall[i]) return;
+    const o = i * 4;
+    if (px[o + 3] >= 24 && _screenDn(px[o], px[o + 1], px[o + 2], name) < TCG_SCREEN_HI) return;
+    wall[i] = 1; st.push(i);
+  };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+  while (st.length) {
+    const i = st.pop(), x = i % w, y = (i - x) / w;
+    if (x > 0) push(i - 1);
+    if (x < w - 1) push(i + 1);
+    if (y > 0) push(i - w);
+    if (y < h - 1) push(i + w);
+  }
+  let was = 0, now = 0;
+  for (let i = 0; i < n; i++) {
+    if (wall[i] || px[i * 4 + 3] < 200) continue;
+    was++;
+    if (b.px[i * 4 + 3] >= 200) now++;
+  }
+  return was ? now / was : 1;
+}
+// TWO PASSES, and which one a picture takes is the whole safety story.
+//
+// Pass 1 is the strict key, unchanged and untouched: enclosed screen colour is
+// read as the model having painted the wall's colour ONTO the subject, and the
+// key is refused rather than punching a hole in the artwork.
+//
+// Pass 2 exists because that reading is wrong for a large share of real
+// artwork. A monster is not a silhouette — a fire ring, a water curl, a coiled
+// serpent, a pair of wings all enclose real wall that never reaches the border,
+// and the tighter the subject glows the less that trapped wall looks like a
+// flat wall (measured across the bundled set: mean screen-ness 0.83-0.93 and a
+// spread of 0.10-0.13 where a clean wall is 0.99 and 0.00, because the glow
+// spills onto it). No threshold separates that from a gem painted in the wall's
+// colour — the two are the same pixels, which is a limit this file has
+// documented since v1.280.0 — so pass 2 does not try to. It simply notes that
+// the two outcomes are not symmetrical:
+//   * refusing costs a bright magenta square behind a sprite, in every game
+//     surface, seen by every student, until somebody presses a button they do
+//     not know exists. That was the state of 104 of the 206 bundled avatars
+//     and hero portraits.
+//   * keying wrongly costs a hole in ONE sprite, which the admin can see, and
+//     can undo with ✏️ Touch up or by uploading the picture again.
+// So pass 2 runs the SAME key with the enclosed-paint guard off, and only ever
+// on a picture that pass 1 has already refused — a picture that was otherwise
+// going to keep its wall. It is verified by the two checks that have no false
+// positives: the wall really is gone, and the subject really did survive.
+//
+// GENERATED art never comes here. _tcgGenClean has a redraw available and a
+// refusal there is cheap, so it keeps the strict key and nothing else.
+async function _tcgScreenCut(dataUrl, strict) {
+  const safe = await _tcgTryScreens(dataUrl, strict);
+  if (safe || !strict) return safe;
+  const deep = await _tcgTryScreens(dataUrl, false);
+  if (deep) console.info('screen cut: the strict key refused this picture, so the '
+    + deep.screen + ' wall was keyed without the enclosed-paint guard — openings in the '
+    + 'artwork are now transparent. Check it if the sprite looks holed.');
+  return deep;
+}
+// Returns { url, screen } or null. Null means "not safe to key" — the caller
+// falls back to the ordinary knock-out, never to a hole.
+async function _tcgTryScreens(dataUrl, strict) {
+  if (!dataUrl) return null;
+  for (const screen of TCG_SCREENS_TRY) {
+    let keyed = null;
+    try { keyed = await _screenKeyOut(dataUrl, screen, strict, false); }
+    catch (e) { keyed = null; }
+    if (!keyed) continue;
+    try {
+      // The subject is briefed to contain none of the screen colour, so "is any
+      // of it still here, anywhere?" is a question with no false positives —
+      // and unlike _bgLeftover it can see a wall in the MIDDLE of the frame.
+      // _bgLeftover is deliberately NOT used here: a figure standing on the
+      // bottom edge fills that edge by design and would be condemned for it.
+      if (await _screenStillThere(keyed, screen)) continue;
+      const kept = await _screenSubjectKept(dataUrl, keyed, screen);
+      if (kept < TCG_SCREEN_SUBJECT_MIN) {
+        console.warn('screen cut refused — keying the ' + screen + ' screen would have taken '
+          + Math.round((1 - kept) * 100) + '% of the SUBJECT with it. The picture keeps its '
+          + 'wall; it was almost certainly shot against a screen its own palette contains.');
+        continue;
+      }
+      const [was, now] = await Promise.all([_opaqueArea(dataUrl), _opaqueArea(keyed)]);
+      if (was > 0 && now < was * TCG_SCREEN_KEEP_MIN) {
+        console.warn('screen cut refused — keying the ' + screen + ' screen left only '
+          + Math.round(now / was * 100) + '% of the picture painted');
+        continue;
+      }
+    } catch (e) { /* unmeasurable — fall through and use the key */ }
+    return { url: keyed, screen: screen };
+  }
+  return null;
+}
+// The ONE backdrop cut every picture arriving from outside the generator gets.
+// Chroma FIRST, because it is a fact about COLOUR: it reaches a wall seen
+// through a gap between a monster's legs for the same reason it reaches the
+// corners, and it can never walk into the artwork through a join. The
+// flood-fill knock-out stays underneath it for everything that was not shot
+// against a screen at all.
+async function _tcgCutBackdrop(dataUrl, strict) {
+  try {
+    const keyed = await _tcgScreenCut(dataUrl, strict);
+    if (keyed) return keyed.url;
+  } catch (e) { console.warn('screen cut skipped', e); }
+  return await _stripImageBackground(dataUrl);
+}
 // The button. Reads the stored picture back, removes the plate, writes it
 // straight back to the same slot.
 async function tcgCleanSlotBg(slotId, quiet) {
@@ -41207,6 +41381,16 @@ function _tcgStrictBg(id) {
 }
 async function _recleanStoredArt(url, strict) {
   const before = await _tcgArtToDataUrl(url);
+  // The chroma screen first, exactly as a freshly drawn frame gets it. Without
+  // this the sweep could not repair the one fault it is now most often run for
+  // — a bright magenta, green or blue studio wall — because every step below is
+  // seeded from the frame edge and the knock-out refuses what it cannot cut
+  // safely. A picture that was not shot against a screen returns null here and
+  // falls through to precisely the behaviour this function always had.
+  try {
+    const keyed = await _tcgScreenCut(before, strict);
+    if (keyed) return keyed.url;
+  } catch (e) { console.warn('screen key skipped during repair', e); }
   // Exactly what a freshly drawn frame gets — the gentle knock-out, then the
   // check, then the forced cut if the check still finds a backdrop — so
   // repairing old art and drawing new art can never disagree.
@@ -41228,8 +41412,7 @@ async function _recleanStoredArt(url, strict) {
 // Every id whose picture is meant to stand on nothing: the battlefield sprites
 // and the booster packs. Card art keeps its painted scene and is never touched.
 function _tcgBgFreeIds() {
-  return Object.keys(_tcgArt || {}).filter(id =>
-    id.indexOf('fx:') === 0 || id.indexOf('dfx:') === 0 || id.indexOf('pk:') === 0 || id.indexOf('logo:') === 0 || id.indexOf('arti:') === 0 || id.indexOf('hero:') === 0 || id.endsWith(':av'));
+  return Object.keys(_tcgArt || {}).filter(_tcgSlotStandsOnNothing);
 }
 async function tcgRepairArtBackgrounds() {
   const uid = _tcgOwnerUid();
@@ -42745,41 +42928,154 @@ const TCG_PACK_SET_LOOK = {
   gen1: 'The wrapper carries the ORIGINAL monster set: a bold fantasy-creature emblem — scales, horns and claws — over a dark starry field, in the style of a painted monster-collecting card game.',
   nd:   'The wrapper carries the NATIONAL DAY set, the Lionheart Legion: a heraldic LION crest on a red-and-white banner, flanked by a crossed sword and staff, in the style of a painted fantasy card game. Regal and ceremonial.'
 };
-// The knock-out in _tcgArtStore runs when a frame is SAVED, so any frame drawn
-// before it learned about packs still has its plate baked into the PNG sitting
-// in Storage. 🧽 Clean painted backgrounds fixes those for good; until someone
-// presses it, this cuts them out FOR DISPLAY ONLY on the two surfaces a student
-// sees — the shop card and the tear-open overlay — using the same border
-// flood-fill Ember Legends runs on its sprites. It writes nothing anywhere and
-// is cached per picture, and a frame that is already a cut-out comes straight
-// back, so a cleaned pack costs one decode.
-// The admin's Card Art thumbnails are deliberately LEFT RAW: that panel is
-// where the plate has to be visible, or nobody would know to press the button.
-// Display-only cleaning uses the SAME knock-out the generator uses — gentle
-// cut, check, and a forced cut if the check still finds something — rather
+// =====================================================================
+// THE PINK WALL AT DISPLAY TIME
+// =====================================================================
+// The cut in _tcgArtStore runs when a picture is SAVED, so anything already in
+// the art map keeps whatever backdrop it was stored with — and 201 battle
+// avatars and 5 hero portraits are in there standing on a bright magenta,
+// green or blue studio wall. 🧽 Clean painted backgrounds fixes those for good;
+// until someone presses it, this cuts them out FOR DISPLAY ONLY, everywhere a
+// student can see one. It writes nothing anywhere.
+// It used to cover the two booster-pack surfaces and nothing else, which is
+// why it is written the way it is: the machinery was already proven, it just
+// needed to stop being about packs.
+const TCG_LIVE_WAIT_MS = 1500;    // never leave a picture hidden longer than this
+const TCG_LIVE_CACHE_MAX = 120;   // keyed pictures held in memory at once
+const _tcgLiveCut = new Map();    // stored url -> Promise<cut url | null>
+const _tcgLiveReady = new Map();  // stored url -> cut url, once it has resolved
+let _tcgLiveUrls = null;          // stored url -> strict, for the slots that stand on nothing
+let _tcgLiveObserver = null;
+
+// Which STORED URLS may be keyed. Built from the slot ids, because the rule has
+// always been about the slot: `:av`, `fx:`, `dfx:`, `pk:`, `logo:`, `arti:` and
+// `hero:` stand on nothing, and card art, set banners and the Chronicle's
+// plates keep their painted scene.
+// A url serving BOTH kinds of slot is dropped rather than cut — tcgArtUrl falls
+// back to the avatar and tcgAvatarUrl falls back to the card art, so one
+// picture can legitimately be doing both jobs, and cutting it would strip the
+// scene off a card face.
+function _tcgLiveIndex() {
+  const art = _tcgArt || {};
+  const cut = new Map(), keep = new Set();
+  Object.keys(art).forEach(id => {
+    const u = art[id];
+    if (typeof u !== 'string' || !u) return;
+    if (_tcgSlotStandsOnNothing(id)) { if (!cut.has(u)) cut.set(u, _tcgStrictBg(id)); }
+    else keep.add(u);
+  });
+  keep.forEach(u => cut.delete(u));
+  _tcgLiveUrls = cut;
+  return cut;
+}
+function _tcgLiveTrim() {
+  while (_tcgLiveCut.size > TCG_LIVE_CACHE_MAX) {
+    const oldest = _tcgLiveCut.keys().next().value;
+    _tcgLiveCut.delete(oldest);
+    _tcgLiveReady.delete(oldest);
+  }
+}
+// Display-only cleaning uses the SAME cut the generator and the 🧽 sweep use —
+// the chroma screen, then the gentle knock-out, then the forced one — rather
 // than a second, weaker algorithm. Two cleaners disagreeing is exactly how a
-// plate ends up on screen that the admin panel swears is gone.
-const _tcgPackClean = new Map();
-function _tcgPackDisplayClean(url) {
+// plate ends up on screen that the admin panel swears is gone. It writes
+// nothing anywhere, and a picture that is already a cut-out comes straight
+// back, so a clean picture costs one decode.
+function _tcgLiveClean(url, strict) {
   if (!url) return Promise.resolve(null);
-  if (_tcgPackClean.has(url)) return _tcgPackClean.get(url);
+  if (_tcgLiveCut.has(url)) return _tcgLiveCut.get(url);
   const p = (async () => {
     try {
       const data = await _tcgArtToDataUrl(url);
+      const keyed = await _tcgScreenCut(data, strict);
+      if (keyed) return keyed.url;
       const cut = await _stripImageBackground(data);
-      if (!(await _bgLeftover(cut, true))) return cut;
-      return await _stripImageBackground(cut, true);
-    } catch (e) { console.warn('pack display clean skipped', e); return null; }
+      if (!(await _bgLeftover(cut, strict))) return cut === data ? null : cut;
+      const forced = await _tcgForceClean(cut, 'display', strict);
+      return forced === data ? null : forced;
+    } catch (e) { console.warn('art display clean skipped', e); return null; }
   })();
-  _tcgPackClean.set(url, p);
+  _tcgLiveCut.set(url, p);
+  p.then(out => { if (out) _tcgLiveReady.set(url, out); _tcgLiveTrim(); }, () => { _tcgLiveTrim(); });
   return p;
+}
+// One <img>. Already keyed once this session → swapped straight away, inside
+// the observer's own microtask, so it is never painted with its wall on. First
+// sighting → hidden while it is cut, and NEVER left hidden: an unkeyable
+// picture, a tainted canvas, a stalled decode and a thrown error all end with
+// the picture shown exactly as it arrived.
+function _tcgLiveImg(img, urls) {
+  if (!img || img.tagName !== 'IMG') return;
+  const src = img.getAttribute('src');
+  if (!src) return;
+  const ready = _tcgLiveReady.get(src);
+  if (ready) { img.dataset.rkey = '1'; img.src = ready; return; }
+  if (img.dataset.rkey === '1' || !urls.has(src)) return;
+  // The admin's Card Art thumbnails are deliberately LEFT RAW: that panel is
+  // where a wall has to be visible, or nobody would know it was there.
+  if (img.closest && img.closest('.ga-prev')) return;
+  img.dataset.rkey = '1';
+  const was = img.style.visibility;
+  img.style.visibility = 'hidden';
+  let done = false;
+  const show = keyed => {
+    if (done) return;
+    done = true;
+    if (keyed && keyed !== src) img.src = keyed;
+    img.style.visibility = was || '';
+  };
+  setTimeout(() => show(null), TCG_LIVE_WAIT_MS);
+  try { _tcgLiveClean(src, urls.get(src)).then(show, () => show(null)); }
+  catch (e) { show(null); }
+}
+// Sweep a subtree. Safe to call on anything, including nothing.
+function tcgKeyArtImgs(root) {
+  const urls = _tcgLiveUrls || _tcgLiveIndex();
+  if (!urls.size) return;
+  const el = root || document.body;
+  if (!el) return;
+  if (el.tagName === 'IMG') { _tcgLiveImg(el, urls); return; }
+  if (el.querySelectorAll) Array.prototype.forEach.call(el.querySelectorAll('img'), i => _tcgLiveImg(i, urls));
+}
+// THE ONE HOOK. Forty-odd surfaces render Realm of Embers art — the arena, the
+// duel board and its hand, the Siege field, the Legends picker, the artifact
+// chooser, the hero picker, the peek panel, the pack reveal, the page header —
+// and every one of them writes a plain <img src>. Tagging each call site is how
+// a surface added next month ends up being the one that quietly still shows the
+// wall, so the DOM itself is watched instead: one observer, bound once, for
+// every picture the app will ever paint.
+// Setting img.src from inside the callback re-enters it exactly once with a url
+// that is no longer in the index, so there is no loop.
+function _tcgLiveWatch() {
+  if (_tcgLiveObserver || typeof MutationObserver === 'undefined' || !document.body) return;
+  _tcgLiveObserver = new MutationObserver(recs => {
+    const urls = _tcgLiveUrls;
+    if (!urls || !urls.size) return;
+    for (const r of recs) {
+      if (r.type === 'attributes') { _tcgLiveImg(r.target, urls); continue; }
+      for (const n of r.addedNodes) {
+        if (!n || n.nodeType !== 1) continue;
+        if (n.tagName === 'IMG') _tcgLiveImg(n, urls);
+        else if (n.querySelectorAll) Array.prototype.forEach.call(n.querySelectorAll('img'), i => _tcgLiveImg(i, urls));
+      }
+    }
+  });
+  _tcgLiveObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
+}
+// Re-read the index and re-sweep whatever is on screen. Called whenever the art
+// map changes — a slot uploaded, reset, restored, imported or installed.
+function tcgLiveRefresh() {
+  try { _tcgLiveIndex(); _tcgLiveWatch(); tcgKeyArtImgs(); } catch (e) { console.warn('art keying skipped', e); }
+}
+// The pack overlay keeps its own entry point because the rip animation may not
+// start until every frame is on screen — but it goes through the SAME cache, so
+// a frame keyed here is keyed everywhere and costs one decode in total.
+function _tcgPackDisplayClean(url) {
+  return _tcgLiveClean(url, _tcgStrictBg('pk:'));
 }
 function _tcgPackImgHtml(url, alt, cls) {
   return '<img' + (cls ? ' class="' + cls + '"' : '') + ' data-packkey="1" src="' + url + '" alt="' + escapeHtml(alt || '') + '">';
 }
-// Hidden until the cut-out lands, so a plate never flashes on screen — and
-// NEVER left hidden: an unkeyable picture, a tainted canvas, a stalled decode
-// and a thrown error all end with the picture shown exactly as it arrived.
 function tcgKeyPackImgs(root, onReady) {
   const imgs = Array.prototype.slice.call((root || document).querySelectorAll('img[data-packkey]'));
   if (!imgs.length) { if (onReady) onReady(); return; }
@@ -42790,7 +43086,9 @@ function tcgKeyPackImgs(root, onReady) {
     imgs.forEach(el => { el.style.visibility = ''; });
     if (onReady) onReady();
   };
-  imgs.forEach(el => { el.removeAttribute('data-packkey'); el.style.visibility = 'hidden'; });
+  // Claimed with the same flag the observer sets, so whichever of the two
+  // reaches a frame first is the only one that touches it.
+  imgs.forEach(el => { el.removeAttribute('data-packkey'); el.dataset.rkey = '1'; el.style.visibility = 'hidden'; });
   setTimeout(show, 2500);
   imgs.forEach(el => {
     const src = el.getAttribute('src');
@@ -51941,6 +52239,20 @@ const TCG_SCREEN_RING_MIN = 0.90;   // this much of the border ring must be scre
 // wall rather than a licence to key anything containing the hue.
 const TCG_SCREEN_RING_WIDE = 0.30;
 const TCG_SCREEN_EDGE_MIN = 0.85;   // …and one full edge at least this clean
+// …and the other way a real wall fails the whole-ring test: a figure STANDING
+// on the bottom of its frame. A hero portrait is a person from the knees up,
+// so the bottom edge is boots and cloak and reads 13-42% screen while the top
+// and both sides are 100% — the ring lands near 80% and the key was refused,
+// which is why every hero portrait in the bundled set still had its wall.
+// THREE whole clean edges is stronger evidence of a studio wall than the ring
+// test it replaces, not weaker: a picture that merely CONTAINS the hue cannot
+// have three complete frame edges of it. The strict enclosed-paint test below
+// still runs, so the subject is protected exactly as before.
+const TCG_SCREEN_EDGES_MIN = 3;     // this many whole clean edges is a wall
+// …and this much of the border must still be PAINTED for there to be a border
+// to judge at all. A picture that is already a cut-out has none, and nothing
+// here has any business keying it a second time.
+const TCG_SCREEN_RING_SEEN_MIN = 0.25;
 // Enclosed screen inside the subject, as a share of the frame. Small on
 // purpose: a patch this size is already a visible hole, and refusing to key
 // only costs a fall back to the cautious knock-out — the safe direction. A
@@ -52047,20 +52359,34 @@ async function _screenKeyOut(dataUrl, screen, strict, wide) {
     if (cover < n * TCG_SCREEN_MIN_COVER) return null;  // no screen to key — not this path
     // The ring. A picture that merely CONTAINS the hue is not a picture shot
     // against a wall of it, and keying the difference is how art gets holed.
-    let ring = 0, ringScreen = 0;
+    let ring = 0, ringScreen = 0, ringSeen = 0;
     // Per EDGE as well as overall — a wide effect leaves whole edges buried and
     // whole edges clean, and it is the clean one that proves the wall is there.
     const edges = [0, 0, 0, 0], edgeN = [0, 0, 0, 0];
+    // An ALREADY EMPTY border pixel is not evidence either way, so it is left
+    // out of the count entirely — the same correction _tcgPlateColour carries.
+    // It used to count as PROOF of a wall, which meant a picture that is
+    // already a clean cut-out had a "100% screen" border by definition: any
+    // sprite with enough of a screen hue in its own paint then passed every
+    // precondition and was keyed. That is how an already-transparent blue
+    // dragon came back with holes in it.
     const ringAt = (x, y, e) => {
-      const i = y * w + x; ring++; edgeN[e]++;
-      if (isScreen[i] || px[i * 4 + 3] < 24) { ringScreen++; edges[e]++; }
+      const i = y * w + x; ring++;
+      if (px[i * 4 + 3] < 24) return;
+      ringSeen++; edgeN[e]++;
+      if (isScreen[i]) { ringScreen++; edges[e]++; }
     };
     for (let x = 0; x < w; x++) { ringAt(x, 0, 0); ringAt(x, h - 1, 1); }
     for (let y = 0; y < h; y++) { ringAt(0, y, 2); ringAt(w - 1, y, 3); }
-    if (!ring) return null;
+    if (!ring || ringSeen < ring * TCG_SCREEN_RING_SEEN_MIN) return null;
+    ring = ringSeen;   // judge the border that is actually THERE
     if (ringScreen < ring * TCG_SCREEN_RING_MIN) {
-      const cleanEdge = edges.some((v, e) => edgeN[e] && v >= edgeN[e] * TCG_SCREEN_EDGE_MIN);
-      if (!wide || !cleanEdge || ringScreen < ring * TCG_SCREEN_RING_WIDE) return null;
+      const clean = edges.filter((v, e) => edgeN[e] && v >= edgeN[e] * TCG_SCREEN_EDGE_MIN).length;
+      // A subject standing on the bottom of the frame — three whole clean edges.
+      const stands = clean >= TCG_SCREEN_EDGES_MIN;
+      // A wide effect — one whole clean edge, plus a ring that is still part screen.
+      const wideOk = wide && clean >= 1 && ringScreen >= ring * TCG_SCREEN_RING_WIDE;
+      if (!stands && !wideOk) return null;
     }
     // Screen colour that does NOT connect to the border is screen colour the
     // model painted onto the subject. Keying that is exactly the hole we are
