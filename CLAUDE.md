@@ -1374,6 +1374,86 @@ Nothing in `akd*` touches either.
 - The editor says all of this in as many words, because the panel sits directly
   under the ✍️ Annotation question checkbox and the two are easy to confuse.
 
+## 🎯 The siege squad — three per role, chosen before the gate opens (v1.308.0)
+
+`EMS_SQUAD_PER_ROLE` / `emsSquadClean` / `emsSquadDefault` / `emsSquadSaved` /
+`emsSquadStore` / `emsOpenSquad` / `emsLaunch` (search `CHOOSING A SQUAD`), plus
+the `.ems-pick-*` CSS in `index.html` and `siege.squad` on the save.
+
+A collection past 150 monsters turned the deck column into a scroll: six
+shelves, forty tiles on some of them, and a wave walking on the gate while the
+student hunts for the healer they meant to summon. Shelving by role was the
+first half of that fix; this is the second — **a run is fought with a SQUAD
+chosen before it starts**, at most three from each role, so the deck is a dozen
+tiles that all fit without scrolling.
+
+- **It is a FILTER on the deck and nothing else.** Every monster is still owned,
+  still levels, still fights in the Arena, the Dungeon, a duel and Legends. What
+  the squad decides is which of them are on the bench for this siege.
+- **The cap is PER ROLE, never a flat total.** "Three of each" is a line-up a
+  student can reason about; a flat eighteen is the same hunt with a shorter
+  list, and it lets somebody field eighteen attackers and no healer — which is
+  the mess this exists to end, wearing a tidier heading.
+- **`emsSquadClean` is the ONE place the cap and the ownership test are
+  applied**, and every read goes through it: the saved squad, the pick screen's
+  ⚔️ Start, and the run itself. A card merged away, sold, or carried in from
+  another account's save drops out rather than sitting on the bench as a tile
+  that costs mana and summons nothing.
+- **A squad is never EMPTY.** The deck column is the only way to summon
+  anything, so an empty one is a game that renders perfectly and cannot be
+  played. `emsSquadDefault` fields the best three of every role (by
+  `tcgCardPower`, so BOTH progression tracks count), `emsSquadSaved` falls back
+  to it, and `emsRenderDeck` falls back to it again.
+- **The squad is REMEMBERED** on `siege.squad`, so a student who has settled on
+  a line-up is not made to re-pick it every run. `tcgHydrateState` is a
+  **WHITELIST**, so that field has to stay in its `siege` literal or it is
+  dropped on the next load — and it validates OWNERSHIP only: the per-role cap
+  is applied on the way out, because the `EMS_*` constants sit far below the
+  hydrator and reading one from up there is the temporal-dead-zone trap this
+  file documents elsewhere.
+- **The pick screen is its own overlay, shown BEFORE the battlefield exists.**
+  The field, the FX preload and the wave timer all start on ⚔️ Start
+  (`emsLaunch`, which is the old `emsOpen` body), so nothing is running behind a
+  student who is still choosing.
+- **A full role REFUSES a fourth rather than swapping one out.** Which of the
+  three to drop is the student's decision, and a silent replacement takes a
+  monster off the bench they never asked to lose.
+- It reuses the deck column's own tiles (`.ems-role` / `.ems-role-grid` /
+  `.ems-card`) rather than forking a second set, so a monster looks the same
+  being chosen as it does being summoned — and it carries the same 👁, which is
+  how a student reads what a monster does in the Siege before committing to it.
+- ↻ **Play again** keeps the squad (it is the same fight); 🎴 **Change squad** on
+  the result card goes back to the picker, because a siege that just fell is
+  exactly when a student knows what they wanted instead.
+- **`polymathlc/math` carries the same block** for 🌋 Orbital Siege — keep the
+  two in step.
+- Run **`node tools/siege-squad-tests.mjs`** after touching any of it.
+
+## 🗑 Deleting a question from ✅ Check Questions (v1.308.0)
+
+`cqDelete` / `cqUndo` / `_cqDeleted` (search `🗑 Delete the question on show`),
+plus the `.cq-del` rule in `index.html`.
+
+The queue served a bad question back and offered ✓, ✏️ and ⏭ — so the only way
+to get rid of one was to leave the page, find it in the bank, and delete it
+there. In practice it got skipped instead, and came back round on the next pass.
+
+- **It ASKS first, and that is the one place this button differs from the same
+  button in the English and Chinese portals.** Those move a question to a bin
+  that holds it for a week; **this app has no bin** — `deleteQuestionDoc` is the
+  same permanent delete the bank card and the Question Doctor use. So the safety
+  net here is the confirm plus a WHOLE deep copy of the question kept in memory,
+  and the dialog says exactly that rather than promising a week that does not
+  exist.
+- **↩ Undo covers the deletion, newest first**, and it SAYS which of the two it
+  is about to undo — "↩ Undo" over a deletion the author has forgotten about is
+  how the wrong thing gets put back. A restored question comes back
+  **unchecked**, and the queue is put back on it rather than leaving it to
+  surface again whenever the queue is next rebuilt.
+- The copy is taken **before** anything is removed and it is a DEEP one: the
+  entry in `questionBank` is the only object holding that question.
+- Run **`node tools/check-questions-tests.mjs`** after touching the page.
+
 ## 🩷 The pink wall — keying a screen off art nobody generated here (v1.307.0)
 
 `_tcgScreenCut` / `_tcgTryScreens` / `_screenSubjectKept` / `_tcgCutBackdrop` and
@@ -1499,6 +1579,17 @@ DISPLAY ONLY**, everywhere a student can see one. It writes nothing anywhere.
 - Run **`node tools/pink-screen-tests.mjs`** after touching any of it.
 
 ## House rules
+- After touching **the siege squad** (`EMS_SQUAD_PER_ROLE`, `emsSquadClean`,
+  `emsSquadDefault`, `emsSquadSaved`, `emsSquadStore`, `emsRenderDeck`'s squad
+  read, or the `squad` field in `tcgHydrateState`'s `siege` literal), run
+  `node tools/siege-squad-tests.mjs`. Every failure is silent and lands on a
+  student mid-game: lose the per-role cap and a squad is eighteen attackers and
+  no healer, lose the ownership test and a merged-away monster sits on the bench
+  costing mana and summoning nothing, and lose either the deck read or the save
+  field and the pick screen is decoration — the choice is made, confirmed, and
+  then ignored by the battlefield or forgotten by the next run. An EMPTY squad
+  is the worst of them: the deck column is the only way to summon anything, so
+  the game renders perfectly and cannot be played.
 - After touching **🩷 the pink wall** (`_tcgScreenCut`, `_tcgTryScreens`,
   `_screenSubjectKept`, `_tcgCutBackdrop`, `_tcgSlotStandsOnNothing`,
   `_tcgLiveIndex`, `_tcgLiveClean`, `_tcgLiveImg`, `_tcgLiveWatch`,

@@ -1716,7 +1716,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.307.0';
+const APP_VERSION = 'v1.308.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -29803,6 +29803,13 @@ let _cqPos = 0;                  // where we are in it
 const _cqReviews = new Map();    // id -> { state:'running'|'done'|'error', findings, error }
 let _cqAuto = true;              // run the AI pass automatically on each question
 let _cqLastChecked = '';         // id the last ✓ marked — for Undo
+// The last question 🗑 Delete removed, kept WHOLE. There is no bin in this app
+// — a deletion here is a Firestore delete, exactly as the bank's and the
+// Doctor's are — so this in-memory copy is the only thing ↩ Undo has to put
+// back, and it lasts as long as the page does. It is why the button asks
+// first, unlike the same button in the two language portals, where the bin
+// holds a deleted question for a week.
+let _cqDeleted = null;           // { at, q } — the last deletion, for Undo
 
 // ---- reading a question -------------------------------------------------
 function _cqCheckedAt(q) { return (q && q.checked && q.checked.at) || ''; }
@@ -30078,7 +30085,18 @@ function _cqRender() {
   const host = document.getElementById('cqBody');
   if (!host) return;
   const undo = document.getElementById('cqUndoBtn');
-  if (undo) undo.style.display = _cqLastChecked && _docQById(_cqLastChecked) ? '' : 'none';
+  // One button for both actions, so it has to say which one it is about to
+  // undo — "↩ Undo" over a deletion the author has forgotten about is how the
+  // wrong thing gets put back.
+  const canUndoDel = !!(_cqDeleted && _cqDeleted.q && !_docQById(_cqDeleted.q.id));
+  const canUndoChk = !!(_cqLastChecked && _docQById(_cqLastChecked));
+  if (undo) {
+    undo.style.display = (canUndoDel || canUndoChk) ? '' : 'none';
+    undo.textContent = canUndoDel ? '↩ Undo delete' : '↩ Undo';
+    undo.title = canUndoDel
+      ? 'Put “' + ((_cqDeleted.q.title || 'Untitled question')) + '” back in the bank'
+      : 'Mark the last question unread again';
+  }
   const q = _cqCurrent();
   _cqUpdateBadge();
   if (!q) {
@@ -30126,6 +30144,12 @@ function _cqCardHtml(q) {
         <button class="btn btn-outline" style="${btn}" onclick="cqOpenEditor('${id}')">✏️ Open in editor</button>
         <button class="btn btn-outline" style="${btn}" onclick="cqSkip()">⏭ Skip for now</button>
         <button class="btn btn-outline" style="${btn}margin-left:auto;" onclick="cqRecheck()">🤖 Check with AI</button>
+        <!-- Far right and on its own, away from the buttons this queue is
+             worked with, because it is the one action here that removes
+             something. There is no bin in this app, so it asks first and
+             ↩ Undo at the top of the page holds the question until the page
+             is left. -->
+        <button class="btn btn-outline cq-del" style="${btn}" title="Delete this question from the bank" onclick="cqDelete('${id}')">🗑 Delete</button>
       </div>
     </div>`;
 }
@@ -30238,7 +30262,57 @@ async function cqLooksFine(id) {
     _cqRender();
   }
 }
+// 🗑 Delete the question on show, and step on.
+//
+// It ASKS first, and that is the one place this button differs from the same
+// button in the English and Chinese portals: those move a question to a bin
+// that holds it for a week, and this app has no bin — `deleteQuestionDoc` is
+// the same permanent delete the bank card and the Question Doctor use. So the
+// safety net here is the confirm plus a WHOLE copy of the question kept in
+// memory for ↩ Undo, and the dialog says exactly that rather than promising a
+// week that does not exist.
+async function cqDelete(id) {
+  const q = _docQById(id);
+  if (!q) { _cqRender(); return; }
+  const title = q.title || 'Untitled question';
+  showConfirm('Delete question',
+    'Delete “' + title + '” from the question bank? ↩ Undo delete at the top of the page will put it back, '
+    + 'but only until you leave — there is no bin in this app.',
+    () => {
+      // The copy is taken BEFORE anything is removed, and it is a deep one:
+      // the array in questionBank is the only object holding this question,
+      // and Undo has to be able to write it back exactly as it was.
+      const copy = JSON.parse(JSON.stringify(q));
+      questionBank = questionBank.filter(x => x.id !== id);
+      deleteQuestionDoc(id);
+      _cqDeleted = { at: Date.now(), q: copy };
+      _cqLastChecked = '';        // the Undo button means the deletion now
+      _cqReviews.delete(id);      // nothing left to have an opinion about
+      updateCounts();
+      _cqRender();
+      if (document.querySelector('#page-bank.active')) renderQuestionBank();
+      showToast('“' + title + '” deleted — ↩ Undo delete is at the top of the page', 'info');
+    });
+}
+
+// One Undo for both actions, newest first: the deletion if that was the last
+// thing done, otherwise the last ✓.
 async function cqUndo() {
+  if (_cqDeleted && _cqDeleted.q && !_docQById(_cqDeleted.q.id)) {
+    const q = _cqDeleted.q;
+    _cqDeleted = null;
+    questionBank.push(q);
+    updateCounts();
+    // It comes back UNCHECKED, so put the queue back on it rather than leaving
+    // it to surface again whenever the queue is next rebuilt.
+    const at = _cqQueue.indexOf(q.id);
+    if (at >= 0) _cqPos = at; else _cqBuildQueue();
+    _cqRender();
+    if (document.querySelector('#page-bank.active')) renderQuestionBank();
+    const ok = await saveQuestion(q);
+    showToast(ok ? 'Question restored ✓' : 'Could not restore that question — try again', ok ? 'success' : 'error');
+    return;
+  }
   const id = _cqLastChecked;
   const q = id && _docQById(id);
   if (!q) { _cqLastChecked = ''; _cqRender(); return; }
@@ -39033,7 +39107,16 @@ function tcgHydrateState(saved) {
   const dl = (s.duel && typeof s.duel === 'object') ? s.duel : {};
   return {
     dungeon: { level: Math.max(1, dg.level | 0), cleared: Math.max(0, dg.cleared | 0) },
-    siege: { best: Math.max(0, sg.best | 0), runs: Math.max(0, sg.runs | 0) },
+    // `squad` is the Ember Siege bench (see 🎯 CHOOSING A SQUAD). This is a
+    // WHITELIST, so it has to be carried here or a student's line-up is
+    // dropped on every load. Only OWNERSHIP is checked here: the per-role cap
+    // lives in emsSquadClean, far below, and reading EMS_SQUAD_PER_ROLE from
+    // up here would touch it in its temporal dead zone.
+    siege: {
+      best: Math.max(0, sg.best | 0),
+      runs: Math.max(0, sg.runs | 0),
+      squad: (Array.isArray(sg.squad) ? sg.squad : []).filter((id, i, a) => cards[id] && a.indexOf(id) === i)
+    },
     legends: { best: Math.max(0, lg.best | 0), runs: Math.max(0, lg.runs | 0), kills: Math.max(0, lg.kills | 0) },
     duel: {
       // The student's DECK SLOTS — up to DUEL_DECKS_MAX of them, each a name
@@ -48749,8 +48832,219 @@ function emsArtHtml(card, cls) {
     : '<span class="' + cls + ' em">' + card.em + '</span>';
 }
 
+// =====================================================================
+// 🎯 CHOOSING A SQUAD — three per role, before the gate opens
+// =====================================================================
+// A collection past 150 monsters turned the deck column into a scroll: six
+// shelves, forty tiles on some of them, and a wave walking on the gate while
+// the student hunts for the healer they meant to summon. Shelving by role
+// (above) was the first half of that fix; this is the second — a run is fought
+// with a SQUAD chosen before it starts, at most EMS_SQUAD_PER_ROLE from each
+// role, so the deck is a dozen tiles that all fit without scrolling.
+//
+// It is a FILTER on the deck and NOTHING else. Every monster is still owned,
+// still levels, still fights in every other mode; what the squad decides is
+// which of them are on the bench for this siege.
+//
+//   · The cap is PER ROLE, never a flat total. "Three of each" is a squad a
+//     student can reason about — a flat 18 is the same hunt with a smaller
+//     list, and it lets somebody field eighteen tanks and no healer at all.
+//   · A student who has never picked is not stopped at a blank screen:
+//     emsSquadDefault fields the best three of every role, so ⚔️ Start is one
+//     tap from opening the game.
+//   · emsSquadClean is the ONE place the cap and the ownership test are
+//     applied, and every read goes through it — the saved squad, the pick
+//     screen's Start, and the run itself. A card merged away or a save carried
+//     between accounts drops out rather than putting a monster on the bench
+//     that cannot be summoned.
+const EMS_SQUAD_PER_ROLE = 3;
+let _emsSquad = [];              // the ids this run is fought with
+let _emsPick = null;             // Set of ids while the pick screen is open
+
+function emsOwnedCards() {
+  const s = tcgState();
+  return s ? Object.keys(s.cards).map(id => TCG_BY_ID[id]).filter(Boolean) : [];
+}
+function emsSquadShelves(cards) {
+  const shelves = {};
+  (cards || []).forEach(c => { const r = emsRole(c); (shelves[r.key] = shelves[r.key] || []).push(c); });
+  return shelves;
+}
+// Strongest first inside a shelf — both progression tracks, through
+// tcgCardPower — because "the best three I own" is what a student means by a
+// squad, and the pick screen is read top-left first.
+function emsSquadSort(cards) {
+  return (cards || []).slice().sort((a, b) =>
+    tcgCardPower(b.id) - tcgCardPower(a.id) || b.stars - a.stars || a.num - b.num);
+}
+function emsSquadClean(ids) {
+  const owned = {};
+  emsOwnedCards().forEach(c => { owned[c.id] = c; });
+  const per = {}, out = [];
+  (Array.isArray(ids) ? ids : []).forEach(id => {
+    const c = owned[id];
+    if (!c || out.indexOf(id) >= 0) return;      // sold, merged away, or listed twice
+    const k = emsRole(c).key;
+    if ((per[k] || 0) >= EMS_SQUAD_PER_ROLE) return;
+    per[k] = (per[k] || 0) + 1;
+    out.push(id);
+  });
+  return out;
+}
+function emsSquadDefault() {
+  const shelves = emsSquadShelves(emsOwnedCards());
+  const out = [];
+  EMS_ROLES.forEach(r => emsSquadSort(shelves[r.key]).slice(0, EMS_SQUAD_PER_ROLE).forEach(c => out.push(c.id)));
+  return out;
+}
+// The squad a student last played with, or the best of what they own if they
+// have never picked one. `siege.squad` is on the save, so tcgHydrateState's
+// WHITELIST has to keep carrying it — it validates ownership only, and the
+// per-role cap is applied here on the way out because the EMS_* constants sit
+// far below the hydrator and would be in their temporal dead zone up there.
+function emsSquadSaved() {
+  const s = tcgState();
+  const saved = emsSquadClean((s && s.siege && s.siege.squad) || []);
+  return saved.length ? saved : emsSquadDefault();
+}
+function emsSquadStore(ids) {
+  const s = tcgState(); if (!s) return;
+  s.siege = s.siege || { best: 0, runs: 0 };
+  s.siege.squad = emsSquadClean(ids);
+  try { rpgSave(); } catch (_) {}
+}
+
+// ---- The pick screen ----------------------------------------------------
+// Its own overlay, shown BEFORE the battlefield is built: the field, the
+// preload and the wave timer all start on ⚔️ Start, so nothing is running
+// behind a student who is still choosing.
+function emsOpenSquad() {
+  const owned = emsOwnedCards();
+  if (!owned.length) { showToast('Open a booster pack first — you need at least one monster', 'error'); return; }
+  _emsPick = new Set(emsSquadSaved());
+  const old = document.getElementById('emsSquadOverlay'); if (old) old.remove();
+  const o = document.createElement('div');
+  o.className = 'ems-overlay'; o.id = 'emsSquadOverlay';
+  o.innerHTML = '<div class="ems-pick">'
+    + '<div class="ems-pick-head">'
+    +   '<div class="ems-pick-eyebrow">🌋 Ember Siege</div>'
+    +   '<h3>Choose your squad</h3>'
+    +   '<p>Pick up to <b>' + EMS_SQUAD_PER_ROLE + '</b> from each role — those are the monsters you can summon in this siege, and only those appear in your deck. '
+    +     'Everything else stays safely in your collection. Tap 👁 on a monster to read what it does on the battlefield.</p>'
+    + '</div>'
+    + '<div class="ems-pick-body" id="emsPickBody"></div>'
+    + '<div class="ems-pick-foot">'
+    +   '<div class="ems-pick-note" id="emsPickNote"></div>'
+    +   '<button type="button" class="btn btn-outline" onclick="emsSquadBest()">⭐ Best I own</button>'
+    +   '<button type="button" class="btn btn-outline" onclick="emsSquadClear()">Clear</button>'
+    +   '<button type="button" class="btn btn-outline" onclick="emsSquadCancel()">Cancel</button>'
+    +   '<button type="button" class="btn btn-primary" id="emsPickGo" onclick="emsSquadGo()">⚔️ Start the siege</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(o);
+  emsRenderPick();
+}
+function emsRenderPick() {
+  const host = document.getElementById('emsPickBody');
+  if (!host || !_emsPick) return;
+  const shelves = emsSquadShelves(emsOwnedCards());
+  // An empty shelf is left out entirely rather than shown as a gap — a new
+  // player with three monsters gets three tidy headings, not six.
+  host.innerHTML = EMS_ROLES.filter(r => shelves[r.key] && shelves[r.key].length).map(role => {
+    const cards = emsSquadSort(shelves[role.key]);
+    const n = cards.filter(c => _emsPick.has(c.id)).length;
+    const cap = Math.min(EMS_SQUAD_PER_ROLE, cards.length);
+    return '<section class="ems-role ems-pick-role' + (n >= cap ? ' full' : '') + '">'
+      + '<h4 class="ems-role-head"><span>' + role.icon + '</span><span>' + role.name + '</span>'
+      +   '<span class="ems-role-count">' + n + ' / ' + cap + '</span></h4>'
+      + '<div class="ems-role-note">' + escapeHtml(role.blurb) + '</div>'
+      + '<div class="ems-role-grid">' + cards.map(c => emsPickCardHtml(c, role)).join('') + '</div>'
+      + '</section>';
+  }).join('');
+  emsSyncPickFoot();
+}
+function emsPickCardHtml(c, role) {
+  const on = _emsPick.has(c.id);
+  const lv = tcgLevel(c.id), mg = tcgMergeLevel(c.id);
+  const p = emsDefProfile(c);
+  const tip = c.name + ' · ⚡' + emsCost(c) + ' · Lv ' + lv + ' · ⟡ M' + mg
+    + '\n' + p.hp + ' HP · ' + p.atk + ' ATK'
+    + '\n' + emsSkillLine(c);
+  return '<div class="ems-card-wrap">'
+    + '<button type="button" class="ems-card' + (on ? ' picked' : '') + '" onclick="emsSquadToggle(\'' + c.id + '\')" title="' + escapeHtml(tip) + '">'
+    + '<span class="ems-card-art">' + emsArtHtml(c, 'ems-art') + '</span>'
+    + '<span class="ems-card-lvl">Lv ' + lv + (mg > 1 ? ' <i>⟡' + mg + '</i>' : '') + '</span>'
+    + '<span class="ems-card-name">' + escapeHtml(tcgShortName(c)) + '</span>'
+    + '<span class="ems-card-cost">⚡' + emsCost(c) + '</span>'
+    + (on ? '<span class="ems-pick-tick">✓</span>' : '')
+    + '</button>'
+    + tcgEyeHtml(c.id, 'siege')
+    + '</div>';
+}
+// The foot is patched in place rather than through emsRenderPick, so ticking a
+// monster never rebuilds forty tiles (and re-fetches forty avatars) underneath
+// the finger that ticked it.
+function emsSyncPickFoot() {
+  const note = document.getElementById('emsPickNote');
+  const go = document.getElementById('emsPickGo');
+  const n = _emsPick ? _emsPick.size : 0;
+  if (note) note.textContent = n
+    ? n + ' monster' + (n === 1 ? '' : 's') + ' in your squad'
+    : 'Pick at least one monster to hold the line';
+  if (go) go.disabled = !n;
+}
+let _emsPickWarnT = 0;
+function emsSquadToggle(id) {
+  if (!_emsPick) return;
+  const c = TCG_BY_ID[id]; if (!c) return;
+  if (_emsPick.has(id)) { _emsPick.delete(id); emsRenderPick(); return; }
+  const role = emsRole(c);
+  const n = Array.from(_emsPick).filter(x => TCG_BY_ID[x] && emsRole(TCG_BY_ID[x]).key === role.key).length;
+  // Refused rather than swapped: which of the three to drop is the student's
+  // decision, and a silent replacement takes a monster off the bench they
+  // never asked to lose.
+  if (n >= EMS_SQUAD_PER_ROLE) {
+    const note = document.getElementById('emsPickNote');
+    if (note) {
+      note.textContent = role.name + ' is full at ' + EMS_SQUAD_PER_ROLE + ' — untick one first';
+      note.classList.add('warn');
+      clearTimeout(_emsPickWarnT);
+      _emsPickWarnT = setTimeout(() => { const el = document.getElementById('emsPickNote'); if (el) el.classList.remove('warn'); emsSyncPickFoot(); }, 2200);
+    }
+    return;
+  }
+  _emsPick.add(id);
+  emsRenderPick();
+}
+function emsSquadBest() { _emsPick = new Set(emsSquadDefault()); emsRenderPick(); }
+function emsSquadClear() { _emsPick = new Set(); emsRenderPick(); }
+function emsSquadCancel() {
+  _emsPick = null;
+  const o = document.getElementById('emsSquadOverlay'); if (o) o.remove();
+}
+function emsSquadGo() {
+  const ids = emsSquadClean(Array.from(_emsPick || []));
+  if (!ids.length) { emsSyncPickFoot(); return; }
+  _emsSquad = ids;
+  emsSquadStore(ids);            // remembered, so the next run opens on it
+  emsSquadCancel();
+  emsLaunch();
+}
+// Back to the pick screen from a finished run — the siege that just fell is
+// exactly when a student knows what they wanted instead.
+function emsChangeSquad() {
+  emsClose();
+  emsOpenSquad();
+}
+
 // ---- Run lifecycle ----
 function emsOpen() {
+  const s = tcgState();
+  if (!s) { showToast('Answer a question anywhere in the app to wake your hero first', 'error'); return; }
+  if (!Object.keys(s.cards).length) { showToast('Open a booster pack first — you need at least one monster', 'error'); return; }
+  emsOpenSquad();
+}
+function emsLaunch() {
   const s = tcgState();
   if (!s) { showToast('Answer a question anywhere in the app to wake your hero first', 'error'); return; }
   if (!Object.keys(s.cards).length) { showToast('Open a booster pack first — you need at least one monster', 'error'); return; }
@@ -48760,8 +49054,8 @@ function emsOpen() {
   o.innerHTML = '<div class="ems-shell">'
     + '<aside class="ems-deck-col">'
     +   '<div class="ems-deck-head">'
-    +     '<b>🎴 Your monsters</b>'
-    +     '<span>Tap one, then tap a square in a lane to summon it. They are shelved by what they do on the battlefield. Every correct answer 🎓 trains whoever is standing on the field — levels are yours to keep.</span>'
+    +     '<b>🎴 Your squad</b>'
+    +     '<span>Tap one, then tap a square in a lane to summon it. These are the ' + EMS_SQUAD_PER_ROLE + '-per-role you chose before the siege, shelved by what they do on the battlefield. Every correct answer 🎓 trains whoever is standing on the field — levels are yours to keep.</span>'
     +   '</div>'
     +   '<div class="ems-deck" id="emsDeck"></div>'
     + '</aside>'
@@ -48871,7 +49165,11 @@ function emsStart() {
     defenders: [], enemies: [], shots: [], nextId: 1,
     sel: null, cooldowns: {},
     gold: 0, answered: 0, correct: 0, streak: 0, bestStreak: 0,
-    quiz: null, pool: null
+    quiz: null, pool: null,
+    // The bench for this run, fixed as it starts. Read once here rather than
+    // per render, so a monster merged away mid-siege cannot empty the deck
+    // column under a student who is holding a lane with it.
+    squad: emsSquadClean(_emsSquad.length ? _emsSquad : emsSquadSaved())
   };
   // Least-recently-served first, same rotation the trainer uses, so the siege
   // doesn't re-serve questions the student has just done elsewhere.
@@ -49166,6 +49464,7 @@ function emsGameOver() {
     + '<div class="ems-result-best">🏅 Your best siege: wave <b>' + best + '</b></div>'
     + '<div class="ems-result-actions">'
     +   '<button type="button" class="btn btn-primary" onclick="emsRestart()">↻ Play again</button>'
+    +   '<button type="button" class="btn btn-outline" onclick="emsChangeSquad()">🎴 Change squad</button>'
     +   '<button type="button" class="btn btn-outline" onclick="emsClose()">Done</button>'
     + '</div>'
     + '</div>';
@@ -49212,9 +49511,11 @@ function emsRenderDeck() {
   const host = document.getElementById('emsDeck');
   const s = tcgState();
   if (!host || !s || !emsRun) return;
-  const owned = Object.keys(s.cards).map(id => TCG_BY_ID[id]).filter(Boolean);
-  const shelves = {};
-  owned.forEach(c => { const r = emsRole(c); (shelves[r.key] = shelves[r.key] || []).push(c); });
+  // The SQUAD, never the whole collection — see 🎯 CHOOSING A SQUAD. A run
+  // that somehow started without one falls back to the best of what is owned
+  // rather than drawing an empty deck, which is a game that cannot be played.
+  const ids = (emsRun.squad && emsRun.squad.length) ? emsRun.squad : emsSquadDefault();
+  const shelves = emsSquadShelves(ids.map(id => TCG_BY_ID[id]).filter(Boolean));
   // An empty shelf is left out entirely rather than shown as a gap — a new
   // player with three monsters gets three tidy headings, not six.
   host.innerHTML = EMS_ROLES.filter(r => shelves[r.key] && shelves[r.key].length).map(role => {
@@ -51862,6 +52163,12 @@ window.elgAnswer = elgAnswer;
 window.elgCloseQuiz = elgCloseQuiz;
 window.elgSetReleased = elgSetReleased;
 window.emsOpen = emsOpen;
+window.emsSquadToggle = emsSquadToggle;
+window.emsSquadBest = emsSquadBest;
+window.emsSquadClear = emsSquadClear;
+window.emsSquadCancel = emsSquadCancel;
+window.emsSquadGo = emsSquadGo;
+window.emsChangeSquad = emsChangeSquad;
 window.emsClose = emsClose;
 window.emsRestart = emsRestart;
 window.emsTogglePause = emsTogglePause;
@@ -59290,6 +59597,7 @@ window.cqRefresh = cqRefresh;
 window.cqSkip = cqSkip;
 window.cqRecheck = cqRecheck;
 window.cqUndo = cqUndo;
+window.cqDelete = cqDelete;
 window.cqToggleAuto = cqToggleAuto;
 window.cqLooksFine = cqLooksFine;
 window.cqOpenEditor = cqOpenEditor;

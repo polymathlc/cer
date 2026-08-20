@@ -6768,6 +6768,24 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
 .ems-quiz-fb { margin-top: 14px; font-size: 0.8rem; line-height: 1.6; color: #b79b74; min-height: 20px; }
 .ems-quiz-fb .ok { color: #6fe09a; }
 .ems-quiz-fb .no { color: #ff9a8a; }
+/* ---- 🎯 The squad pick screen -----------------------------------------
+   Its own overlay, shown before the battlefield exists. It reuses the deck
+   column's shelves (.ems-role / .ems-role-grid / .ems-card) rather than
+   forking a second set of tiles, so a monster looks the same being chosen as
+   it does being summoned. */
+.ems-pick { width: min(1040px, 100%); max-height: 100%; display: flex; flex-direction: column; gap: 16px; padding: 24px 26px 20px; border: 1px solid #8a5a1e; border-radius: 18px; background: linear-gradient(135deg,#2a1608,#160d06); color: #f6ecdc; font-family: 'DM Sans', system-ui, sans-serif; }
+.ems-pick-eyebrow { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #ffd76a; }
+.ems-pick-head h3 { margin: 8px 0 10px; font-size: 1.25rem; font-weight: 800; }
+.ems-pick-head p { margin: 0; font-size: 0.8rem; line-height: 1.75; color: #b79b74; max-width: 720px; }
+.ems-pick-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 8px; display: flex; flex-direction: column; gap: 22px; }
+.ems-pick-role.full .ems-role-count { background: rgba(255,215,106,0.18); color: #ffd76a; }
+.ems-pick .ems-role-grid { grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); }
+.ems-card.picked { border-color: #ffd76a; background: rgba(255,215,106,0.12); box-shadow: 0 0 0 2px rgba(255,215,106,0.35); }
+.ems-pick-tick { position: absolute; top: 3px; left: 4px; font-size: 0.62rem; font-weight: 800; color: #ffd76a; }
+.ems-pick-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid #4a3316; }
+.ems-pick-note { flex: 1 1 auto; min-width: 160px; font-size: 0.78rem; color: #b79b74; }
+.ems-pick-note.warn { color: #ffb4a2; font-weight: 700; }
+.ems-pick-foot .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .ems-result { position: absolute; inset: 0; z-index: 1600; display: flex; align-items: center; justify-content: center; background: rgba(8,5,5,0.82); padding: 16px; }
 .ems-result-card { width: min(520px, 100%); text-align: center; padding: 32px 30px; border: 1px solid #8a5a1e; border-radius: 18px; background: linear-gradient(135deg,#2a1608,#160d06); color: #f6ecdc; }
 .ems-result-card h3 { margin: 0 0 10px; font-size: 1.2rem; font-weight: 800; }
@@ -8764,6 +8782,11 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           .cq-preview{ padding:6px 22px 18px; }
           .cq-preview-inner{ border:1px solid var(--border); border-radius:12px; padding:16px 18px; background:#fff; font-size:0.88rem; line-height:1.7; max-height:520px; overflow:auto; }
           .cq-actions{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; padding:16px 22px 20px; border-top:1px solid var(--border); background:var(--surface-alt,#fafbfa); }
+          /* 🗑 Delete is the one action in this queue that REMOVES something,
+             so it is the only one wearing the warning colour — it sits far
+             right, away from the buttons the queue is actually worked with. */
+          .cq-del{ color:#b3261e; border-color:rgba(179,38,30,0.35); }
+          .cq-del:hover{ background:rgba(179,38,30,0.07); border-color:rgba(179,38,30,0.6); }
           .cq-empty{ border:1px solid var(--border); border-radius:16px; background:var(--surface,#fff); padding:44px 28px; text-align:center; }
           .cq-empty h3{ margin:0 0 10px; font-size:1.02rem; }
           .cq-empty p{ margin:0 auto 18px; font-size:0.87rem; color:var(--text-muted); line-height:1.75; max-width:460px; }
