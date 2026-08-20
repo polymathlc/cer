@@ -7,7 +7,7 @@
 // flood-fill knock-out entirely (a torn pack, an almost-black monster, an
 // almost-white effect), plus the refusals that keep the keyer safe.
 import fs from 'fs';
-const src = fs.readFileSync('/home/user/cer/app.js','utf8');
+const src = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const grab = sig => { const i = src.indexOf(sig); if (i < 0) throw new Error('missing ' + sig);
   let d = 0; const j = src.indexOf('{', i);
   for (let k = j; k < src.length; k++) { if (src[k] === '{') d++; else if (src[k] === '}') { d--; if (!d) return src.slice(i, k + 1); } } };

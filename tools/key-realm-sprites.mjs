@@ -41,16 +41,15 @@
 // It is IDEMPOTENT. A sprite that is already cut carries no wall, fails the
 // "is there a screen here at all" precondition, and is left untouched.
 //
-// AND IT REFUSES A SPRITE ITS OWN PALETTE WOULD LOSE. `_screenDn` asks "is this
-// pixel that HUE", so a violet monster shot on a MAGENTA wall reads as wall and
-// is dissolved. That is not hypothetical: the first run of this tool hollowed
-// out the dream moth, the owl sage, the mindrender and the psywhisker, and
-// reported all four as clean successes, because every check it had was
-// satisfied BY the monster having been removed. `_screenSubjectKept` is the app
-// guard that can see it. Those sprites keep their wall; the real repair is to
-// redraw the avatar, which ✨ AI avatar already does on the right screen per
-// element (tcgScreenForElement routes psychic, shadow and cosmic to GREEN, and
-// every one of the damaged cards is one of those).
+// VIOLET SUBJECTS NEED A NARROWER SECOND KEY. `_screenDn` asks "is this pixel
+// that HUE", so a violet monster shot on a MAGENTA wall reads as wall and is
+// dissolved. That is not hypothetical: the first run hollowed out the dream
+// moth, the owl sage, the mindrender and the psywhisker. `_screenSubjectKept`
+// catches that failure. When it does, `preciseScreenKey` samples the wall's
+// actual border RGB and removes only pixels close to that plate. Soft spill is
+// followed from the frame edge; exact plate colour is removed even inside wing
+// gaps and coils. Finally only the main connected subject is kept, so detached
+// magenta screen artefacts cannot become part of the battle avatar.
 import fs from 'fs';
 import path from 'path';
 import url from 'url';
@@ -102,6 +101,11 @@ const M = new Function('_loadImageEl', 'ImageData', 'console',
 // that disagrees with it keys the wrong colour -- which fails silently and
 // ships the wall.
 const RING_MIN = 0.30;   // a monster may fill the frame; a third of the border is still proof
+// The app guard measures survival against every non-border screen-coloured
+// pixel, so same-hue glow and detached plate decoration inflate its baseline.
+// The sampled key additionally keeps the largest connected painted subject;
+// 35% is therefore the conservative floor for this fallback only.
+const PRECISE_SUBJECT_MIN = 0.35;
 // A wall is OPAQUE, and counting an empty pixel as evidence of one is what
 // makes this tool dangerous to run twice: a sprite that has already been cut
 // has a fully transparent border, which reads as a perfect ring of every colour
@@ -125,20 +129,113 @@ const screenCover = (px, name) => { let n = 0, c = 0;
     if (M._screenDn(px[i], px[i + 1], px[i + 2], name) >= M.TCG_SCREEN_HI) c++; }
   return c / n; };
 
+// The ordinary key is intentionally hue-based, which is ideal until the wall
+// and the subject share that hue. This fallback is deliberately colour-sample
+// based instead. It is used only after the subject-survival guard has proved
+// the ordinary result destructive.
+function preciseScreenKey(w, h, source, name) {
+  const samples = [[], [], []];
+  const sample = i => {
+    const o = i * 4;
+    if (source[o + 3] < 24 || M._screenDn(source[o], source[o + 1], source[o + 2], name) < M.TCG_SCREEN_HI) return;
+    samples[0].push(source[o]); samples[1].push(source[o + 1]); samples[2].push(source[o + 2]);
+  };
+  for (let x = 0; x < w; x++) { sample(x); sample((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { sample(y * w); sample(y * w + w - 1); }
+  if (samples[0].length < (w + h) * 0.6) return null;
+  const med = a => { a.sort((x, y) => x - y); return a[a.length >> 1]; };
+  const ref = [med(samples[0]), med(samples[1]), med(samples[2])];
+  const n = w * h, hard = 42, soft = 105;
+  const dist = new Float32Array(n), score = new Float32Array(n), reached = new Uint8Array(n);
+  const screenScore = (r, g, b) => {
+    let floor, gap, balance = 0;
+    if (name === 'magenta') { floor = Math.min(r, b); gap = floor - g; balance = Math.abs(r - b); }
+    else if (name === 'green') { floor = g; gap = g - Math.max(r, b); balance = Math.abs(r - b); }
+    else { floor = b; gap = b - Math.max(r, g); balance = Math.abs(r - g); }
+    const light = Math.max(0, Math.min(1, (floor - 165) / 70));
+    const apart = Math.max(0, Math.min(1, (gap - 15) / 80));
+    const even = Math.max(0, Math.min(1, (95 - balance) / 70));
+    return light * apart * even;
+  };
+  for (let i = 0; i < n; i++) {
+    const o = i * 4, dr = source[o] - ref[0], dg = source[o + 1] - ref[1], db = source[o + 2] - ref[2];
+    dist[i] = Math.sqrt(dr * dr + dg * dg + db * db);
+    score[i] = screenScore(source[o], source[o + 1], source[o + 2]);
+  }
+  const q = [];
+  const push = i => {
+    if (reached[i]) return;
+    const o = i * 4;
+    if (source[o + 3] >= 24 && dist[i] > soft && score[i] < 0.18) return;
+    reached[i] = 1; q.push(i);
+  };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+  for (let at = 0; at < q.length; at++) {
+    const i = q[at], x = i % w, y = (i - x) / w;
+    if (x) push(i - 1); if (x + 1 < w) push(i + 1);
+    if (y) push(i - w); if (y + 1 < h) push(i + w);
+  }
+  const out = source.slice();
+  for (let i = 0; i < n; i++) {
+    const o = i * 4, a = source[o + 3];
+    if (dist[i] <= hard) out[o + 3] = 0;
+    else if (reached[i] && (dist[i] < soft || score[i] >= 0.18)) {
+      const byDist = Math.max(0, Math.min(1, (soft - dist[i]) / (soft - hard)));
+      const key = Math.max(byDist, score[i]);
+      out[o + 3] = key >= 0.72 ? 0 : Math.round(a * (1 - key / 0.72));
+    }
+  }
+
+  // An avatar is one subject. Keeping the main painted component drops the
+  // detached squares, bands and plate fragments that a model sometimes paints
+  // into a "flat" screen, while preserving every connected body pixel.
+  const seen = new Uint8Array(n); let largest = [];
+  for (let start = 0; start < n; start++) {
+    if (seen[start] || out[start * 4 + 3] < 24) continue;
+    const part = [start]; seen[start] = 1;
+    for (let at = 0; at < part.length; at++) {
+      const i = part[at], x = i % w, y = (i - x) / w;
+      const add = j => { if (!seen[j] && out[j * 4 + 3] >= 24) { seen[j] = 1; part.push(j); } };
+      if (x) add(i - 1); if (x + 1 < w) add(i + 1);
+      if (y) add(i - w); if (y + 1 < h) add(i + w);
+    }
+    if (part.length > largest.length) largest = part;
+  }
+  if (!largest.length) return null;
+  const keep = new Uint8Array(n); largest.forEach(i => { keep[i] = 1; });
+  // Retain one ring of low-alpha antialiasing around the main component.
+  largest.forEach(i => {
+    const x = i % w, y = (i - x) / w;
+    for (let yy = Math.max(0, y - 1); yy <= Math.min(h - 1, y + 1); yy++)
+      for (let xx = Math.max(0, x - 1); xx <= Math.min(w - 1, x + 1); xx++) keep[yy * w + xx] = 1;
+  });
+  for (let i = 0; i < n; i++) if (!keep[i]) out[i * 4 + 3] = 0;
+  return { px: out, ref: ref, hard: hard };
+}
+function preciseRest(got) {
+  let painted = 0;
+  for (let i = 0; i < got.px.length; i += 4) {
+    if (got.px[i + 3] < 24) continue;
+    const dr = got.px[i] - got.ref[0], dg = got.px[i + 1] - got.ref[1], db = got.px[i + 2] - got.ref[2];
+    if (Math.sqrt(dr * dr + dg * dg + db * db) <= got.hard) painted++;
+  }
+  return painted / (got.px.length / 4);
+}
+
 const slots = JSON.parse(fs.readFileSync(path.join(ART, 'manifests', 'slot-map.json'), 'utf8')).slots;
 const standsOnNothing = id => /(:av$|^fx:|^dfx:|^pk:|^logo:|^arti:|^hero:)/.test(id);
 const ids = Object.keys(slots).filter(standsOnNothing).sort();
 
-// A sprite the guards turn down is not a failure — it is the tool working, and
-// 32 of them is the permanent normal state of this asset set. Counting those as
-// failures would leave the exit code stuck at 1 for ever, which trains everyone
-// to ignore it on the day something is really wrong.
-let keyed = 0, already = 0, failed = 0, refused = 0;
+let keyed = 0, precise = 0, already = 0, failed = 0, refused = 0;
 const notes = [], sheet = [];
 for (const id of ids) {
   const file = path.join(ART, slots[id]);
   if (!fs.existsSync(file)) { notes.push([id, 'MISSING ' + slots[id]]); failed++; continue; }
-  const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  // Decode from a Buffer, not the path. libvips can retain a Windows file
+  // handle after decoding a path, which prevents the keyed file replacing its
+  // own source later in the same process.
+  const { data, info } = await sharp(fs.readFileSync(file)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const w = info.width, h = info.height;
   const px = new Uint8ClampedArray(data.buffer, data.byteOffset, data.length);
   const found = detectScreen(w, h, px);
@@ -157,7 +254,7 @@ for (const id of ids) {
   const out = await M._screenKeyOut(mk(w, h, px.slice()), found.name, false, false)
            || await M._screenKeyOut(mk(w, h, px.slice()), found.name, false, true);
   if (!out) { notes.push([id, 'the keyer refused the ' + found.name + ' screen (ring ' + Math.round(found.ring * 100) + '%)']); refused++; continue; }
-  const got = store.get(out);
+  let got = store.get(out);
 
   // --- verification, and it is the whole reason the looser cut is allowed ---
   // 1. Nothing the wall did not touch may have been removed. The key only ever
@@ -193,21 +290,41 @@ for (const id of ids) {
   //    Every psychic, shadow and cosmic card in the bundled set was shot on
   //    magenta although tcgScreenForElement routes those elements to a GREEN
   //    screen for this reason — so this is not a rare case, it is a whole
-  //    element family, and the honest answer for them is to keep the wall and
-  //    redraw the avatar on the right screen.
-  const survived = await M._screenSubjectKept(mk(w, h, px.slice()), out, found.name);
+  //    element family. Those are the pictures the sampled-RGB key below is for.
+  let survived = await M._screenSubjectKept(mk(w, h, px.slice()), out, found.name);
   if (survived < M.TCG_SCREEN_SUBJECT_MIN) {
-    notes.push([id, 'REFUSED — the cut would take ' + Math.round((1 - survived) * 100)
-      + '% of the SUBJECT with it; it was drawn on a ' + found.name + ' screen its own palette contains']);
-    refused++; continue;
+    const narrow = preciseScreenKey(w, h, px, found.name);
+    if (narrow) {
+      const narrowUrl = mk(w, h, narrow.px.slice());
+      const narrowSurvived = await M._screenSubjectKept(mk(w, h, px.slice()), narrowUrl, found.name);
+      const opaque = narrow.px.reduce((n, _, i) => i % 4 === 3 && narrow.px[i] >= 24 ? n + 1 : n, 0) / (w * h);
+      if (narrowSurvived >= PRECISE_SUBJECT_MIN && opaque >= 0.04 && preciseRest(narrow) <= M.TCG_SCREEN_REST_MAX) {
+        got = narrow; survived = narrowSurvived; precise++;
+      } else {
+        notes.push([id, 'REFUSED — broad key lost ' + Math.round((1 - survived) * 100)
+          + '% of the subject and precise key did not pass verification']);
+        refused++; continue;
+      }
+    } else {
+      notes.push([id, 'REFUSED — the cut would take ' + Math.round((1 - survived) * 100)
+        + '% of the SUBJECT and the wall could not be sampled precisely']);
+      refused++; continue;
+    }
   }
 
   keyed++;
   if (sheet.length < 64) sheet.push({ id, px: got.px, w, h });
   if (!CHECK) {
+    const tmp = file + '.tmp';
+    if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
     await sharp(Buffer.from(got.px.buffer, got.px.byteOffset, got.px.length), { raw: { width: w, height: h, channels: 4 } })
-      .webp({ lossless: true, effort: 5 }).toFile(file + '.tmp');
-    fs.renameSync(file + '.tmp', file);
+      .webp({ lossless: true, effort: 5 }).toFile(tmp);
+    // rename-over-existing is atomic on POSIX but fails with EPERM on Windows,
+    // and Node's copyFile can hit the same WebP/AV scanner lock there. Writing
+    // the completed bytes replaces the destination on both; the source stays
+    // intact if encoding fails before this point.
+    fs.writeFileSync(file, fs.readFileSync(tmp));
+    fs.unlinkSync(tmp);
   }
 }
 
@@ -233,7 +350,8 @@ if (!CHECK && sheet.length) {
 }
 
 console.log((CHECK ? 'Would key ' : 'Keyed ') + keyed + ' sprite' + (keyed === 1 ? '' : 's')
-  + ' · ' + already + ' already standing on nothing · ' + refused + ' kept their wall on purpose'
+  + (precise ? ' (' + precise + ' same-hue screen' + (precise === 1 ? '' : 's') + ' used the precise key)' : '')
+  + ' · ' + already + ' already standing on nothing · ' + refused + ' refused'
   + (failed ? ' · ' + failed + ' COULD NOT BE READ' : ''));
 notes.forEach(([id, why]) => console.log('  ' + id.padEnd(24) + why));
 process.exit(failed ? 1 : 0);

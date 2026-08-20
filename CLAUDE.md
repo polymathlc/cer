@@ -1584,18 +1584,19 @@ surface, for every student.
     from the frame edge — not against the whole picture, so the number means the
     same thing on a sprite standing in a 70% wall and on one that fills its
     frame.
-  - 0.72 is read off the 206 bundled pictures: an undamaged cut leaves 73-100%
-    of the subject and everything below about 70% is visibly eaten. **Refusing
-    is the right answer** for the ones below it — the fault is in the asset
-    (shot on a screen its own palette contains), and the repair is to redraw
-    the avatar, which ✨ AI avatar already does on the right screen per element.
+  - 0.72 is read off the 206 bundled pictures: an undamaged broad-hue cut leaves
+    73-100% of the subject and everything below about 70% is visibly eaten.
+    **Refusing that broad cut is the right answer.** The committed build keyer
+    can then sample the screen's actual border RGB and keep the largest connected
+    subject; the live/runtime keyer still refuses because it has neither a
+    reviewable contact sheet nor git as a reversible source of truth.
   - **The same guard is what `tools/key-realm-sprites.mjs` was missing**, and
     the build tool had already shipped four hollowed sprites into the repo
     before it got one. See its house rule below.
-  - Nothing else can rescue those sprites either: the flood-fill knock-out
-    refuses them too (correctly — a violet body is a small colour step from a
-    magenta wall). They keep their wall on every layer, and that is the honest
-    ceiling for an asset shot against a screen its own palette contains.
+  - The flood-fill knock-out cannot rescue those sprites (correctly — a violet
+    body is a small colour step from a magenta wall). The build-only sampled-RGB
+    fallback can: it follows soft spill only from the border, removes exact
+    plate RGB inside gaps, and keeps the main connected painted component.
 
 ### Two passes, and which one a picture takes is the whole safety story
 
@@ -1722,11 +1723,12 @@ DISPLAY ONLY**, everywhere a student can see one. It writes nothing anywhere.
     only pixels the wall never touched (their bodies were screenish, so they
     were not counted), and the "is the wall gone" test was satisfied *because*
     the monster went with it. It now also runs the app's own
-    `_screenSubjectKept`, and those sprites keep their wall instead. **32 of
-    206 do**, permanently: that is the tool working, so a refusal no longer
-    counts towards the exit code — a build step stuck at exit 1 for ever is one
-    everybody learns to ignore. The real repair for those 32 is to redraw the
-    avatar, which ✨ AI avatar already does on the correct per-element screen.
+    `_screenSubjectKept`. The 32 same-hue battle avatars then take a build-only
+    sampled-RGB fallback: the real border colour is keyed, detached plate
+    fragments are discarded, and the largest connected character is retained.
+    Its looser 35% survival floor applies only after the 72% broad-key guard has
+    failed and is paired with the ordinary minimum-area and leftover-screen
+    checks. A refusal remains non-destructive and leaves the source untouched.
 - After touching **⏳ Still loading** (`imgWaitBarHtml`, `imgWaitStart`,
   `_imgWaitPaint`, `_imgWaitDone`, `_imgWaitImages`, `imgWaitRetry`,
   `imgWaitStop`, `_scheduleImgWait`, `IMG_WAIT_*`) or **`_qAnswerDiagrams`**,
