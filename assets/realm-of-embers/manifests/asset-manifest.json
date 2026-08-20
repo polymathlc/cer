@@ -6,9 +6,10 @@
     "cardArt": 201,
     "battleAvatars": 201,
     "heroes": 5,
+    "artifacts": 30,
     "packFrames": 42,
     "attackFrames": 180,
-    "totalFiles": 629
+    "totalFiles": 659
   },
   "cards": [
     {
@@ -3815,6 +3816,248 @@
       "name": "Ashen Scribe Pip",
       "file": "heroes/scribe-ashen-scribe-pip.webp",
       "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers duel hero portrait\nPrimary request: a single fantasy hero portrait for \"Ashen Scribe Pip\", Reader of Cinders: a small studious young person in a soot-smudged grey scholar's robe with ink-stained fingers, round spectacles, an open book floating open in front of them with glowing ember-orange letters drifting off the page.\nPower flavor: Ashen Study — Draw a card. Your hero takes 1 damage.; imply this visually without words, symbols or diagrams.\nSubject: exactly one character alone, facing viewer at a slight three-quarter angle, waist up, centered, head and shoulders readable at 48 pixels.\nStyle/medium: polished painterly digital game art, rich saturated color and dramatic rim lighting; heroic, warm, friendly, matching the Realm of Embers card set.\nComposition/framing: square with clear margin around hero; no other people, creatures or scenery.\nBackground: genuinely transparent alpha background.\nConstraints: no text, letters, numbers, readable runes, labels, signature, watermark, card frame, banner or UI; no weapon pointed at viewer; child-friendly; nothing gruesome, frightening or revealing."
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "pin",
+      "slot": "arti:pin",
+      "name": "Iron Pin",
+      "stars": 1,
+      "file": "artifacts/pin-iron-pin.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Iron Pin\": a small plain iron pin or brooch.\nPower flavor: Your whole team takes a little less damage (Defence +8%). Imply this visually without words or diagrams.\nRarity: 1 out of 7 stars, a trinket. PLAIN AND HUMBLE. Everyday materials, honest wear and small chips, no gold, no gemstones, NO glow and NO magic at all. It is a useful little thing somebody has carried for years.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "flint",
+      "slot": "arti:flint",
+      "name": "Flint Charm",
+      "stars": 1,
+      "file": "artifacts/flint-flint-charm.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Flint Charm\": a rough chip of red flint on a leather cord.\nPower flavor: Your whole team hits a little harder (Attack +6%). Imply this visually without words or diagrams.\nRarity: 1 out of 7 stars, a trinket. PLAIN AND HUMBLE. Everyday materials, honest wear and small chips, no gold, no gemstones, NO glow and NO magic at all. It is a useful little thing somebody has carried for years.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "moss",
+      "slot": "arti:moss",
+      "name": "Moss Band",
+      "stars": 1,
+      "file": "artifacts/moss-moss-band.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Moss Band\": a simple woven band wrapped in living green moss.\nPower flavor: Every monster regrows 2% of its max HP at the start of its turn. Imply this visually without words or diagrams.\nRarity: 1 out of 7 stars, a trinket. PLAIN AND HUMBLE. Everyday materials, honest wear and small chips, no gold, no gemstones, NO glow and NO magic at all. It is a useful little thing somebody has carried for years.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "pebble",
+      "slot": "arti:pebble",
+      "name": "Pebble Ward",
+      "stars": 1,
+      "file": "artifacts/pebble-pebble-ward.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Pebble Ward\": a smooth grey river pebble carved with one protective mark.\nPower flavor: Every monster starts the battle with a small shield (6% of its max HP). Imply this visually without words or diagrams.\nRarity: 1 out of 7 stars, a trinket. PLAIN AND HUMBLE. Everyday materials, honest wear and small chips, no gold, no gemstones, NO glow and NO magic at all. It is a useful little thing somebody has carried for years.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "vial",
+      "slot": "arti:vial",
+      "name": "Glow Vial",
+      "stars": 1,
+      "file": "artifacts/vial-glow-vial.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Glow Vial\": a small glass vial of faintly glowing liquid, stoppered with cork.\nPower flavor: Healing skills restore 10% more HP. Imply this visually without words or diagrams.\nRarity: 1 out of 7 stars, a trinket. PLAIN AND HUMBLE. Everyday materials, honest wear and small chips, no gold, no gemstones, NO glow and NO magic at all. It is a useful little thing somebody has carried for years.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "feather",
+      "slot": "arti:feather",
+      "name": "Feather Token",
+      "stars": 1,
+      "file": "artifacts/feather-feather-token.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Feather Token\": a single light feather token bound with thread.\nPower flavor: Your whole team is a touch quicker (Speed +8%). Imply this visually without words or diagrams.\nRarity: 1 out of 7 stars, a trinket. PLAIN AND HUMBLE. Everyday materials, honest wear and small chips, no gold, no gemstones, NO glow and NO magic at all. It is a useful little thing somebody has carried for years.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "swift",
+      "slot": "arti:swift",
+      "name": "Swift Sigil",
+      "stars": 2,
+      "file": "artifacts/swift-swift-sigil.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Swift Sigil\": an hourglass sigil of pale metal, sand caught mid-fall.\nPower flavor: Your whole team is faster (Speed +25%), so your monsters act sooner each round. Imply this visually without words or diagrams.\nRarity: 2 out of 7 stars, a charm. WELL MADE AND CARED FOR. Cleanly worked metal or wood with one small ornament, and the faintest warm glow — a hint of magic, nothing more. A couple of tiny motes of light at most.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "oak",
+      "slot": "arti:oak",
+      "name": "Oakheart Plate",
+      "stars": 2,
+      "file": "artifacts/oak-oakheart-plate.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Oakheart Plate\": a chest plate of banded oak heartwood with iron studs.\nPower flavor: Your whole team takes less damage (Defence +14%). Imply this visually without words or diagrams.\nRarity: 2 out of 7 stars, a charm. WELL MADE AND CARED FOR. Cleanly worked metal or wood with one small ornament, and the faintest warm glow — a hint of magic, nothing more. A couple of tiny motes of light at most.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "emberdrop",
+      "slot": "arti:emberdrop",
+      "name": "Ember Drop",
+      "stars": 2,
+      "file": "artifacts/emberdrop-ember-drop.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Ember Drop\": a faceted amber-orange gemstone shaped like a falling drop.\nPower flavor: Your whole team hits harder (Attack +10%). Imply this visually without words or diagrams.\nRarity: 2 out of 7 stars, a charm. WELL MADE AND CARED FOR. Cleanly worked metal or wood with one small ornament, and the faintest warm glow — a hint of magic, nothing more. A couple of tiny motes of light at most.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "bud",
+      "slot": "arti:bud",
+      "name": "Spring Bud",
+      "stars": 2,
+      "file": "artifacts/bud-spring-bud.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Spring Bud\": a silver clasp cradling one green sprouting bud.\nPower flavor: Every monster regrows 3% of its max HP at the start of its turn. Imply this visually without words or diagrams.\nRarity: 2 out of 7 stars, a charm. WELL MADE AND CARED FOR. Cleanly worked metal or wood with one small ornament, and the faintest warm glow — a hint of magic, nothing more. A couple of tiny motes of light at most.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "bead",
+      "slot": "arti:bead",
+      "name": "Aegis Bead",
+      "stars": 2,
+      "file": "artifacts/bead-aegis-bead.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Aegis Bead\": a string of round prayer beads carved from pale stone.\nPower flavor: Every monster starts the battle with a shield worth 10% of its max HP. Imply this visually without words or diagrams.\nRarity: 2 out of 7 stars, a charm. WELL MADE AND CARED FOR. Cleanly worked metal or wood with one small ornament, and the faintest warm glow — a hint of magic, nothing more. A couple of tiny motes of light at most.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "sunchip",
+      "slot": "arti:sunchip",
+      "name": "Sun Chip",
+      "stars": 2,
+      "file": "artifacts/sunchip-sun-chip.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Sun Chip\": a warm golden disc like a chip broken off the sun.\nPower flavor: Healing skills restore 18% more HP. Imply this visually without words or diagrams.\nRarity: 2 out of 7 stars, a charm. WELL MADE AND CARED FOR. Cleanly worked metal or wood with one small ornament, and the faintest warm glow — a hint of magic, nothing more. A couple of tiny motes of light at most.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "keen",
+      "slot": "arti:keen",
+      "name": "Keen Lens",
+      "stars": 3,
+      "file": "artifacts/keen-keen-lens.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Keen Lens\": a lens of polished crystal in a brass ring, an aiming reticle etched on it.\nPower flavor: Your team lands critical hits far more often (+18% crit chance). Imply this visually without words or diagrams.\nRarity: 3 out of 7 stars, a relic. ORNATE AND CLEARLY MAGICAL. Carved detail, precious-metal inlay, a steady inner light, and a scatter of drifting sparks around it. Something a temple would keep.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "leech",
+      "slot": "arti:leech",
+      "name": "Leech Fang",
+      "stars": 3,
+      "file": "artifacts/leech-leech-fang.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Leech Fang\": a curved fang of dark bone with a single crimson drop at its tip.\nPower flavor: Every attack heals the attacker for 12% of the damage dealt. Imply this visually without words or diagrams.\nRarity: 3 out of 7 stars, a relic. ORNATE AND CLEARLY MAGICAL. Carved detail, precious-metal inlay, a steady inner light, and a scatter of drifting sparks around it. Something a temple would keep.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "bramble",
+      "slot": "arti:bramble",
+      "name": "Bramble Vest",
+      "stars": 3,
+      "file": "artifacts/bramble-bramble-vest.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Bramble Vest\": a vest woven from thorned bramble and hardened bark.\nPower flavor: Foes that hit your monsters take 12% of the damage back. Imply this visually without words or diagrams.\nRarity: 3 out of 7 stars, a relic. ORNATE AND CLEARLY MAGICAL. Carved detail, precious-metal inlay, a steady inner light, and a scatter of drifting sparks around it. Something a temple would keep.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "idol",
+      "slot": "arti:idol",
+      "name": "Stoneheart Idol",
+      "stars": 3,
+      "file": "artifacts/idol-stoneheart-idol.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Stoneheart Idol\": a squat carved stone idol with a heavy blunt face.\nPower flavor: Your whole team is beefier (Max HP +10%). Imply this visually without words or diagrams.\nRarity: 3 out of 7 stars, a relic. ORNATE AND CLEARLY MAGICAL. Carved detail, precious-metal inlay, a steady inner light, and a scatter of drifting sparks around it. Something a temple would keep.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "gale",
+      "slot": "arti:gale",
+      "name": "Gale Feather",
+      "stars": 3,
+      "file": "artifacts/gale-gale-feather.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Gale Feather\": a long curved feather of white and pale blue, wind curling round it.\nPower flavor: Your whole team is much faster (Speed +40%). Imply this visually without words or diagrams.\nRarity: 3 out of 7 stars, a relic. ORNATE AND CLEARLY MAGICAL. Carved detail, precious-metal inlay, a steady inner light, and a scatter of drifting sparks around it. Something a temple would keep.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "ward",
+      "slot": "arti:ward",
+      "name": "Warding Charm",
+      "stars": 4,
+      "file": "artifacts/ward-warding-charm.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Warding Charm\": a blue-and-white glass eye amulet on a silver chain.\nPower flavor: Your team is immune to stun and poison — no more skipped turns or damage-over-time. Imply this visually without words or diagrams.\nRarity: 4 out of 7 stars, a treasure. MAGNIFICENT. Gold filigree, set gemstones, a bright coloured aura, swirling motes of light and a faint ring of energy turning slowly around it. A king's treasure.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "banner",
+      "slot": "arti:banner",
+      "name": "War Banner",
+      "stars": 4,
+      "file": "artifacts/banner-war-banner.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"War Banner\": a crimson war banner on a spear haft, torn at the edge.\nPower flavor: Your whole team hits much harder (Attack +16%). Imply this visually without words or diagrams.\nRarity: 4 out of 7 stars, a treasure. MAGNIFICENT. Gold filigree, set gemstones, a bright coloured aura, swirling motes of light and a faint ring of energy turning slowly around it. A king's treasure.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "torc",
+      "slot": "arti:torc",
+      "name": "Lifebloom Torc",
+      "stars": 4,
+      "file": "artifacts/torc-lifebloom-torc.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Lifebloom Torc\": a golden neck torc blooming with living pink flowers.\nPower flavor: Every monster regrows 5% of its max HP at the start of its turn. Imply this visually without words or diagrams.\nRarity: 4 out of 7 stars, a treasure. MAGNIFICENT. Gold filigree, set gemstones, a bright coloured aura, swirling motes of light and a faint ring of energy turning slowly around it. A king's treasure.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "bulwark",
+      "slot": "arti:bulwark",
+      "name": "Bulwark Plate",
+      "stars": 4,
+      "file": "artifacts/bulwark-bulwark-plate.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Bulwark Plate\": a huge tower shield shaped like a fortress wall, iron and stone.\nPower flavor: Every monster starts the battle with a big shield (16% of its max HP). Imply this visually without words or diagrams.\nRarity: 4 out of 7 stars, a treasure. MAGNIFICENT. Gold filigree, set gemstones, a bright coloured aura, swirling motes of light and a faint ring of energy turning slowly around it. A king's treasure.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "falcon",
+      "slot": "arti:falcon",
+      "name": "Falcon Eye",
+      "stars": 4,
+      "file": "artifacts/falcon-falcon-eye.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Falcon Eye\": a golden falcon-eye amulet, the iris a sharp amber gemstone.\nPower flavor: Your team lands critical hits constantly (+26% crit chance). Imply this visually without words or diagrams.\nRarity: 4 out of 7 stars, a treasure. MAGNIFICENT. Gold filigree, set gemstones, a bright coloured aura, swirling motes of light and a faint ring of energy turning slowly around it. A king's treasure.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "battery",
+      "slot": "arti:battery",
+      "name": "Battery Core",
+      "stars": 5,
+      "file": "artifacts/battery-battery-core.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Battery Core\": a heavy arcane power cell of dark metal with glowing green cells.\nPower flavor: Skills charge one turn faster, so your monsters unleash their special skills sooner. Imply this visually without words or diagrams.\nRarity: 5 out of 7 stars, a wonder. AWE-INSPIRING. Radiant light pouring out of it, orbiting rings of arcane energy, crackling power arcing across the surface, shards of light floating free around it. The air itself is bent by it.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "ember",
+      "slot": "arti:ember",
+      "name": "Catalyst Prism",
+      "stars": 5,
+      "file": "artifacts/ember-catalyst-prism.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Catalyst Prism\": a floating prism of red crystal splitting light into elements.\nPower flavor: Super-effective element hits deal ×2.5 instead of ×2 — reward good matchups even more. Imply this visually without words or diagrams.\nRarity: 5 out of 7 stars, a wonder. AWE-INSPIRING. Radiant light pouring out of it, orbiting rings of arcane energy, crackling power arcing across the surface, shards of light floating free around it. The air itself is bent by it.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "chalice",
+      "slot": "arti:chalice",
+      "name": "Reaper Chalice",
+      "stars": 5,
+      "file": "artifacts/chalice-reaper-chalice.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Reaper Chalice\": a tall dark chalice with a deep red pool inside it.\nPower flavor: Every attack heals the attacker for 22% of the damage dealt. Imply this visually without words or diagrams.\nRarity: 5 out of 7 stars, a wonder. AWE-INSPIRING. Radiant light pouring out of it, orbiting rings of arcane energy, crackling power arcing across the surface, shards of light floating free around it. The air itself is bent by it.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "titan",
+      "slot": "arti:titan",
+      "name": "Titan Heart",
+      "stars": 5,
+      "file": "artifacts/titan-titan-heart.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Titan Heart\": a colossal crystalline heart, still beating, veined with red light.\nPower flavor: Your whole team is far beefier (Max HP +18%). Imply this visually without words or diagrams.\nRarity: 5 out of 7 stars, a wonder. AWE-INSPIRING. Radiant light pouring out of it, orbiting rings of arcane energy, crackling power arcing across the surface, shards of light floating free around it. The air itself is bent by it.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "phoenix",
+      "slot": "arti:phoenix",
+      "name": "Phoenix Plume",
+      "stars": 6,
+      "file": "artifacts/phoenix-phoenix-plume.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Phoenix Plume\": a single enormous burning feather, orange-gold and alive with flame.\nPower flavor: The first ally to faint is revived once at 35% HP. A second chance every battle. Imply this visually without words or diagrams.\nRarity: 6 out of 7 stars, a legend. LEGENDARY AND OVERWHELMING. Blinding radiance, a storm of fire and light wrapped around it, orbiting runes and shattered fragments turning in the air, energy tearing outward in every direction. Only two of these exist.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "mirror",
+      "slot": "arti:mirror",
+      "name": "Mirror Shell",
+      "stars": 6,
+      "file": "artifacts/mirror-mirror-shell.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Mirror Shell\": a great spiral shell with an inner surface like a mirror.\nPower flavor: Foes that hit your monsters take 30% of the damage back. Imply this visually without words or diagrams.\nRarity: 6 out of 7 stars, a legend. LEGENDARY AND OVERWHELMING. Blinding radiance, a storm of fire and light wrapped around it, orbiting runes and shattered fragments turning in the air, energy tearing outward in every direction. Only two of these exist.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "wyrm",
+      "slot": "arti:wyrm",
+      "name": "Wyrmheart Ruby",
+      "stars": 7,
+      "file": "artifacts/wyrm-wyrmheart-ruby.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Wyrmheart Ruby\": an enormous cut ruby with a dragon's slit pupil burning inside it.\nPower flavor: Super-effective element hits deal ×3 damage instead of ×2 — devastating matchups. Imply this visually without words or diagrams.\nRarity: 7 out of 7 stars, a myth. A WORLD-SHAPING MYTH — the single most spectacular object in the entire realm. Divine, overwhelming radiance; reality visibly bending and cracking around it; a vortex of golden and elemental energy; orbiting constellations, falling embers and rings of light stacked one inside another. Absolutely enormous presence. Nothing else in the game may look more powerful than this.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
+    },
+    {
+      "id": "ankh",
+      "slot": "arti:ankh",
+      "name": "Eternity Ankh",
+      "stars": 7,
+      "file": "artifacts/ankh-eternity-ankh.webp",
+      "prompt": "Use case: stylized-concept\nAsset type: Realm of Embers collectible-card artifact cutout\nPrimary request: one fantasy artifact named \"Eternity Ankh\": a great golden ankh, worn smooth, older than the world.\nPower flavor: The first ally to faint is reborn at 60% HP. Fainting is only a suggestion. Imply this visually without words or diagrams.\nRarity: 7 out of 7 stars, a myth. A WORLD-SHAPING MYTH — the single most spectacular object in the entire realm. Divine, overwhelming radiance; reality visibly bending and cracking around it; a vortex of golden and elemental energy; orbiting constellations, falling embers and rings of light stacked one inside another. Absolutely enormous presence. Nothing else in the game may look more powerful than this.\nSubject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.\nStyle/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children's fantasy trading-card set.\nComposition/framing: square with a generous clear margin on all four sides.\nBackground: genuinely transparent alpha background.\nConstraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly."
     }
   ],
   "packs": [

@@ -11,6 +11,7 @@ const expected = [
     { slot: c.avatarSlot, file: c.avatarFile, size: 256 }
   ]),
   ...manifest.heroes.map(h => ({ slot: h.slot, file: h.file, size: 512 })),
+  ...manifest.artifacts.map(a => ({ slot: a.slot, file: a.file, size: 512 })),
   ...manifest.packs.flatMap(p => p.frames.map(f => ({ slot: f.slot, file: f.file, size: 512 }))),
   ...manifest.attack.flatMap(a => a.frames.map(f => ({ slot: f.slot, file: f.file, size: 256 })))
 ];
@@ -57,4 +58,4 @@ const result = {
 };
 
 console.log(JSON.stringify(result, null, 2));
-if (missing.length || invalid.length || dimensions.length || duplicateSlots.length || expected.length !== 629) process.exitCode = 1;
+if (missing.length || invalid.length || dimensions.length || duplicateSlots.length || expected.length !== 659) process.exitCode = 1;

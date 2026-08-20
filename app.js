@@ -1978,7 +1978,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.310.0';
+const APP_VERSION = 'v1.311.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -39771,13 +39771,13 @@ async function tcgLoadArt(force) {
 // nothing typed out here twice. What that costs is a rename: change a card's
 // name and its picture is looked for under the new slug, does not exist, and
 // the card quietly falls back to its emoji. That failure is silent in the app
-// and LOUD in CI — tools/bundled-art-tests.mjs walks all 629 slots against both
+// and LOUD in CI — tools/bundled-art-tests.mjs walks all 659 slots against both
 // the shipped slot map and the files actually on disk.
 const TCG_ART_ROOT = 'assets/realm-of-embers/';
 // Same filenames are intentionally replaced when the committed build-time
 // keyer improves. Version the URL so a browser cannot keep an old chroma-wall
 // response after the app itself has updated.
-const TCG_BUNDLED_ART_REV = '20260821-clean-sprites';
+const TCG_BUNDLED_ART_REV = '20260821-artifacts-packs';
 // The five duel heroes are named files rather than derived ones: a hero's id
 // and its portrait's name are different words ('warden' / 'Warden Elowen'), and
 // there is no rule joining them that is not just this table written out longer.
@@ -39804,8 +39804,8 @@ function _tcgCardStem(id) {
   return _tcgCardFileBy[id] || null;
 }
 // The file that ships for this slot, as a path relative to the page — or '' for
-// a slot the repository has no picture for (artifacts, the logo, set banners,
-// the Chronicle's plates and the duel's zone effects are all still admin-drawn).
+// a slot the repository has no picture for (the logo, set banners, the
+// Chronicle's plates and the duel's zone effects are still admin-drawn).
 function tcgBundledArtPath(slot) {
   const id = String(slot || '');
   let m = /^(c\d{3})(:av)?$/.exec(id);
@@ -39821,6 +39821,11 @@ function tcgBundledArtPath(slot) {
   if (m && TCG_SETS[m[1]]) return TCG_ART_ROOT + 'pack-ripping/' + m[1] + '/' + m[2] + '/frame-' + _tcgTwo(+m[3]) + '.webp';
   m = /^hero:([a-z]+)$/.exec(id);
   if (m && TCG_BUNDLED_HEROES[m[1]]) return TCG_ART_ROOT + 'heroes/' + TCG_BUNDLED_HEROES[m[1]] + '.webp';
+  m = /^arti:([a-z0-9]+)$/.exec(id);
+  if (m) {
+    const artifact = TCG_ARTIFACTS.find(a => a.id === m[1]);
+    if (artifact) return TCG_ART_ROOT + 'artifacts/' + artifact.id + '-' + _tcgSlug(artifact.name) + '.webp';
+  }
   return '';
 }
 // …as an absolute URL, which is what everything downstream wants: an <img> on
@@ -40083,6 +40088,7 @@ function tcgBundledSlotIds() {
     for (let i = 1; i <= TCG_PACK_FRAMES; i++) ids.push(tcgPackSlotId(k, p.tier, i));
   }));
   Object.keys(TCG_BUNDLED_HEROES).forEach(h => ids.push(tcgHeroSlotId(h)));
+  TCG_ARTIFACTS.forEach(a => ids.push(tcgArtifactSlotId(a.id)));
   return ids.filter(id => !!tcgBundledArtPath(id));
 }
 function _tcgBundledStatus(text) {
@@ -40110,7 +40116,7 @@ async function tcgUseBundledRealmArt() {
   if (!confirm('Put ' + ids.length + ' Realm of Embers slot' + (ids.length === 1 ? '' : 's') + ' back to the artwork that ships with the app?\n\n'
     + 'This removes the override on those slots only — the bundled picture underneath shows immediately, so nothing goes blank. '
     + 'Whatever is removed stays in the backup, so ↩️ Restore puts it back.\n\n'
-    + 'Artifacts, the logo, set banners, the Chronicle plates and the duel effects are not touched.')) return;
+    + 'The logo, set banners, the Chronicle plates and the duel effects are not touched.')) return;
   const btn = document.getElementById('tcgBundledInstallBtn');
   if (btn) btn.disabled = true;
   try {
@@ -42005,7 +42011,7 @@ function tcgFxRowInnerHtml(element) {
   return html;
 }
 // ---- 🔱 Artifact artwork ---------------------------------------------------
-// The 32 artifacts had no pictures at all — an emoji stood in on the reveal
+// The 30 artifacts had no pictures at all — an emoji stood in on the reveal
 // card and in the chooser, which made a 7★ Wyrmheart Ruby look exactly as
 // special as a 1★ Iron Pin. They get the same art pipeline as everything else:
 // slot `arti:<id>`, paste / drop / upload / ✨ AI on the Card Art tab.
@@ -42019,7 +42025,7 @@ function tcgFxRowInnerHtml(element) {
 // around the object, so a student can tell a trinket from a myth across a room
 // without reading a word. TCG_ARTI_TIER is the only place that scales.
 function tcgArtifactSlotId(id) { return 'arti:' + id; }
-function tcgArtifactArtUrl(id) { return (_tcgArt && _tcgArt[tcgArtifactSlotId(id)]) || ''; }
+function tcgArtifactArtUrl(id) { return tcgSlotArt(tcgArtifactSlotId(id)); }
 // The screen has to be a colour the artifact cannot contain. Most are metal,
 // stone or wood, so magenta; anything red, pink or fiery gets green (red sits
 // too close to magenta), and anything green gets blue.
