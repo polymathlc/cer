@@ -703,6 +703,8 @@ this app's prompts, and both were silent.
   **`_noteSuitsThisApp` is the ONE place that is decided** — a note naming no subject is for
   everything (which is what every note uploaded here looks like), one naming maths and not science
   is dropped, guidance included — so it cannot leak through whichever digest forgot to ask.
+  **A dropped note is still LISTED on the Teaching Notes page and says it is dropped**, because a
+  note sitting in the list reads as a note being followed.
 - Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
 
 ## Versioning convention — applies to EVERY change (do this every time)

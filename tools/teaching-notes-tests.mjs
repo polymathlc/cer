@@ -176,6 +176,10 @@ api.notes = [{ id: 'b2', topics: [], subjects: ['both'], keywords: ['fair test']
 ok('a both-subjects note is welcome', api._notesGenBlock().includes('fair test'));
 api.notes = [{ id: 'b3', topics: [], keywords: ['photosynthesis'] }];
 ok('a note naming no subject at all is welcome', api._notesGenBlock().includes('photosynthesis'));
+/* A dropped note is still listed on the page, so the page has to SAY it is
+   dropped: a note sitting in the list reads as a note being followed. */
+ok('the page says when a shared note is not being used here',
+   /Not used here/.test(src) && /never reaches a science prompt/.test(src));
 ok('_noteSuitsThisApp is the one place that is decided',
    api._noteSuitsThisApp({}) === true &&
    api._noteSuitsThisApp({ subjects: ['math'] }) === false &&

@@ -763,7 +763,12 @@ function notesCardHtml(n) {
     when ? (guide && !n.fileName ? 'written ' : 'uploaded ') + escapeHtml(when) : '',
     src ? escapeHtml(src) : ''
   ].filter(Boolean).join(' · ');
-  return `<div class="tn-card">
+  // A note the subject filter drops is still LISTED here — it belongs to the
+  // shared notebook — so it has to say that it is not being used, or the
+  // teacher reads a note on the page and assumes the AI is following it.
+  const unused = _noteSuitsThisApp(n) ? '' :
+    `<div class="tn-row"><div class="tn-label">Not used here</div><div class="tn-text tn-comment">Tagged for ${escapeHtml((n.subjects || []).join(', '))} only, so it never reaches a science prompt in this app. Change its subjects in the Ans Key app to use it here.</div></div>`;
+  return `<div class="tn-card"${unused ? ' style="opacity:0.72;"' : ''}>
       <div class="tn-head">
         <div>
           <div class="tn-title">${escapeHtml(n.title || n.fileName || 'Untitled notes')}</div>
@@ -774,6 +779,7 @@ function notesCardHtml(n) {
           <button class="btn btn-outline btn-sm" onclick="notesDelete('${n.id}')">× Delete</button>
         </div>
       </div>
+      ${unused}
       ${guide ? `<div class="tn-row"><div class="tn-label">General guidance</div><div class="tn-text">${escapeHtml(guide)}</div></div>` : ''}
       ${guide ? '' : `<div class="tn-row"><div class="tn-label">Topics</div><div class="tn-chips">${topics}</div></div>`}
       ${guide && !(n.keywords || []).length ? '' : `<div class="tn-row"><div class="tn-label">Keywords</div><div class="tn-chips">${kws}</div></div>`}
