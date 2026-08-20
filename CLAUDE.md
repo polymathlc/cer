@@ -803,6 +803,90 @@ map survivable whatever happens next.
   project as the thing it protects.
 - Run **`node tools/art-safety-tests.mjs`** after touching any of it.
 
+## 🖼 The bundled Realm of Embers art — 629 pictures that ship with the app (v1.306.0)
+
+`TCG_ART_ROOT` / `tcgBundledArtPath` / `tcgBundledArt` / **`tcgSlotArt`** /
+`tcgSlotHasArt` / `tcgBundledSlotIds` / `tcgUseBundledRealmArt` (in `app.js`,
+search `THE BUNDLED REALM OF EMBERS ART`), plus everything under
+`assets/realm-of-embers/` and `tools/key-realm-sprites.mjs`.
+
+A complete art pass for the realm now lives **in the repository** — 201 card
+scenes, 201 battle avatars, 180 elemental effect frames, 42 pack-tearing frames
+and 5 hero portraits. Before this the game had 201 monsters drawn as **emoji**
+unless an admin sat and generated every picture by hand, one slot at a time.
+
+- **It is a FALLBACK, not an import, and that is the whole design.**
+  `tcgSlotArt(slot)` returns the admin's override if there is one and the
+  bundled picture otherwise. Nothing is uploaded to Storage and nothing is
+  written to `users/{uid}/settings/tcgArt` — so `_tcgArt` stays exactly what it
+  was: the record of **what somebody has changed**, which is the only question
+  the backup, the rescue proposal and the safety panel's counts can usefully
+  answer. Copying 629 pictures into that map instead would have doubled the
+  thing that has already been lost once (see **🛟 Art safety & recovery**) in
+  order to store something git already holds.
+- **`tcgSlotArt` is the ONE reader**, and `tcgSlotHasArt` is the ONE has-check.
+  Every surface that puts a Realm picture on the screen goes through them —
+  `tcgArtUrl` / `tcgAvatarUrl`, `tcgFxHas`, `tcgPackHas` / `tcgPackFramesFor`,
+  `tcgHeroArtUrl`, the Siege's frame preload, the pack on the shop card, the
+  set banner's line-up of legends. A reader left on `_tcgArt` is a surface where
+  the bundled layer silently does not exist, and the symptom is one screen in
+  the game still showing emoji.
+- **THE PATHS ARE DERIVED, NOT LISTED.** A card's file is its id plus the slug
+  of its own NAME, an effect frame is its element and phase, a pack frame is its
+  set and tier — so a card or a set added to the dex needs nothing typed out
+  here twice. The price is a rename: change a card's name and its picture is
+  looked for under the new slug, is not there, and the card quietly falls back
+  to its emoji. **That failure is silent in the app and loud in CI** —
+  `tools/bundled-art-tests.mjs` walks all 629 slots against both the shipped
+  slot map and the files on disk.
+- **The sprites are keyed at BUILD time** (`tools/key-realm-sprites.mjs`). An
+  image model has no alpha channel, so everything that stands on nothing was
+  drawn against a flat chroma wall; the app keys that wall out on the way
+  through `_tcgArtStore`, and bundled art is served straight off the origin and
+  never passes that door. The tool runs the app's own `_screenKeyOut` — extracted
+  out of `app.js` the way `tools/chroma-key-tests.mjs` extracts it, never a
+  second copy — against a canvas shim backed by `sharp`, and it is idempotent:
+  a sprite already standing on nothing carries no wall and is left alone.
+  - **Its one deliberate difference is that it keys with `strict` OFF**, and the
+    reason is written out in the tool's header: these monsters defeat the
+    enclosed-hole geometry test wholesale (a coiled serpent, a dragon's wing
+    gaps and a ring of fire are all real wall seen through a real opening whose
+    surrounding material is thicker than the opening is wide), and the fallback
+    knock-out cannot reach an enclosed region at all, so refusing would have
+    shipped those coils full of magenta. What makes the looser cut safe there
+    and **not** at runtime is that it is a build step: the cut is pure colour,
+    every result is verified (nothing the wall did not touch was removed, none
+    of the wall is left anywhere, the sprite still has a body), a contact sheet
+    is written for a person to look at, and the sources are in git.
+  - **A wall is OPAQUE, and counting an empty pixel as evidence of one is the
+    trap.** An already-cut sprite has a fully transparent border, which reads as
+    a perfect ring of *every* colour at once — and the loser of that argument is
+    whichever hue the artwork happens to contain. A blue dragon would have had
+    its own blue keyed out on the second run. `detectScreen` therefore ignores
+    transparency entirely.
+- **🔥 Use the bundled artwork** (`tcgUseBundledRealmArt`, on the Card Art tab's
+  safety panel) is what is left of the old uploader: it **removes the overrides**
+  on those 629 slots so the shipped picture underneath shows. Nothing goes blank
+  — every slot it clears is a slot the app ships a picture for — and the backup
+  still holds what was removed, because `tcgArtBackupSync` refuses to shrink, so
+  ↩️ Restore puts it back. Like every other write here it is a chunked MERGE with
+  `deleteField()`, never a whole-document set.
+- **"Missing" now means NOTHING IS SHOWING**, for the generator's counts
+  (`_tcgArtMissing`, `tcgGenerateAllArt('missing')`, `_tcgHeroMissing`,
+  `tcgFxPhaseDone`, `tcgPackAnimReady`). Counting overrides would have put
+  "402 pictures for 201 monsters" on a button beside 201 monsters the students
+  can plainly see, and pressing it would spend hundreds of image calls redrawing
+  artwork that is already there. Replacing the bundled set is ↻ **Redraw every
+  monster**, which says so.
+  - **The rescue and backup counts deliberately did NOT change.** They answer
+    "what has an admin drawn that is now missing from the map", and an admin's
+    own artwork is still lost even when a bundled picture is standing in front
+    of the gap. The safety panel's alarm is the one that had to learn the
+    difference: it now counts only backed-up slots that nothing at all is
+    showing, or clearing an override would raise "art has gone missing" about
+    art the admin had just chosen to stop using.
+- Run **`node tools/bundled-art-tests.mjs`** after touching any of it.
+
 ## 🧻 Clean paper — the faint diagonal weave on a printed diagram (v1.299.0)
 
 `PAPER_*` / `_paperWhitePoint` / `_paperCleanPixels` / `_paperCleanDataUrl` /
@@ -1291,6 +1375,26 @@ Nothing in `akd*` touches either.
   under the ✍️ Annotation question checkbox and the two are easy to confuse.
 
 ## House rules
+- After touching **the bundled Realm of Embers art** (`tcgBundledArtPath`,
+  `tcgBundledArt`, `tcgSlotArt`, `tcgSlotHasArt`, `tcgBundledSlotIds`,
+  `TCG_BUNDLED_HEROES`, `TCG_BUNDLED_FX_DIR`, `_tcgSlug`), or after renaming a
+  card, moving a file under `assets/realm-of-embers/` or adding a set, run
+  `node tools/bundled-art-tests.mjs`. Every failure here is silent in the app
+  and expensive: a derived path that misses is an `<img>` that 404s and a
+  monster that falls back to its emoji — no error, nothing in the console a
+  student could report, and the game looking unfinished for everybody at once.
+  The harness also pins the half nothing else can: that an **override still
+  wins**. The bundled layer is a floor, never a ceiling, and a resolver that
+  got that backwards would make every picture an admin has ever drawn
+  invisible while the game carried on looking perfectly fine.
+- After touching **`tools/key-realm-sprites.mjs`**, re-run it (`--check` first)
+  and look at `assets/realm-of-embers/previews/keyed-sprites-qa.png` before
+  committing. It rewrites 206 sprites in place, both directions are quiet, and
+  the checkerboard is what makes them visible: key too little and a monster
+  walks onto the battlefield in a magenta box; key too much and a hole is
+  punched clean through it. And a detector that counts transparency as evidence
+  of a wall turns the tool into one that eats the artwork on its SECOND run —
+  which is the run nobody watches.
 - After touching **⏳ Still loading** (`imgWaitBarHtml`, `imgWaitStart`,
   `_imgWaitPaint`, `_imgWaitDone`, `_imgWaitImages`, `imgWaitRetry`,
   `imgWaitStop`, `_scheduleImgWait`, `IMG_WAIT_*`) or **`_qAnswerDiagrams`**,
