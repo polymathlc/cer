@@ -117,6 +117,10 @@ class Image {
 let bucket = [];
 let listFails = null;
 const storage = {};
+// Display-time keying of the pink screen — a repaint concern, and nothing to
+// do with what a write puts in the document. Shimmed so the write path under
+// test is exactly the shipping one.
+function tcgLiveRefresh() {}
 function storageRef(_s, path) { return { path }; }
 async function listAll() {
   if (listFails) throw listFails;

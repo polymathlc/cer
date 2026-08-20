@@ -1374,7 +1374,145 @@ Nothing in `akd*` touches either.
 - The editor says all of this in as many words, because the panel sits directly
   under the ✍️ Annotation question checkbox and the two are easy to confuse.
 
+## 🩷 The pink wall — keying a screen off art nobody generated here (v1.307.0)
+
+`_tcgScreenCut` / `_tcgTryScreens` / `_screenSubjectKept` / `_tcgCutBackdrop` and
+the display layer `_tcgLiveIndex` / `_tcgLiveClean` / `_tcgLiveImg` /
+`tcgKeyArtImgs` / `_tcgLiveWatch` / `tcgLiveRefresh` (search `THE PINK WALL`),
+plus `TCG_SCREEN_EDGES_MIN` / `TCG_SCREEN_RING_SEEN_MIN` /
+`TCG_SCREEN_SUBJECT_MIN` in the chroma keyer.
+
+`_tcgGenClean` keys the chroma screen because it KNOWS which one it briefed. A
+picture arriving ANY other way — pasted, dropped, uploaded, or installed from
+the bundled asset set — carries no such note, and got the flood-fill knock-out
+and nothing else. The knock-out is deliberately cautious and hands back what it
+cannot cut safely, so **201 battle avatars and 5 hero portraits went into the
+game standing on a bright magenta, green or blue studio wall**, on every game
+surface, for every student.
+
+- **`_tcgSlotStandsOnNothing` is now the ONE list**, read by `_tcgArtStore`,
+  `_tcgBgFreeIds`, the 🧼 button and the display index. It was written out three
+  times, each copy free to drift from the others.
+- **`_tcgCutBackdrop` is the ONE cut** a picture from outside the generator
+  gets: chroma FIRST, then the flood fill. Chroma is a fact about COLOUR, so it
+  reaches a wall seen through a gap between a monster's legs for the same reason
+  it reaches the corners, and it can never walk into the artwork through a join.
+- **`_recleanStoredArt` tries it first too**, so one press of 🧽 makes it
+  permanent for art already in the map. **Generated art never comes here** —
+  `_tcgGenClean` has a redraw available and keeps the strict key, unchanged.
+
+### Three rules had to change, and each was a real picture failing
+
+- **`TCG_SCREEN_EDGES_MIN` (3) — a figure STANDING on the bottom of its frame.**
+  A hero portrait is a person from the knees up: top and both sides are 100%
+  screen and the bottom edge is boots, so the whole-ring test landed near 80%
+  and refused all five. Three WHOLE clean edges is stronger evidence of a studio
+  wall than the ring test it stands in for, not weaker — a picture that merely
+  CONTAINS the hue cannot have three complete frame edges of it. **Two is not
+  three**: a subject wedged into a corner leaves two clean edges and is not a
+  wall, and the harness pins that.
+- **`TCG_SCREEN_RING_SEEN_MIN` — an empty border pixel is not evidence.** It
+  used to count as PROOF of a wall, so a picture that is ALREADY a clean cut-out
+  had a "100% screen" border by definition: any sprite with enough of a screen
+  hue in its own paint then passed every precondition and was keyed. That is how
+  an already-transparent blue dragon came back full of holes. `_tcgPlateColour`
+  carries the same correction, and for the same reason.
+- **`TCG_SCREEN_SUBJECT_MIN` (0.72) — the guard the hue keyer never had, and the
+  one that matters most.** `_screenDn` asks "is this pixel that HUE", so a
+  **violet monster shot on a MAGENTA wall scores as wall and is eaten alive**.
+  The bundled set is full of them: every psychic, shadow and cosmic card was shot
+  on magenta although `tcgScreenForElement` routes exactly those elements to a
+  GREEN screen for this reason. A half-dissolved sprite is far worse than a
+  visible wall, because nothing on screen says it happened.
+  - `_screenSubjectKept` measures it against the WALL — screen colour reachable
+    from the frame edge — not against the whole picture, so the number means the
+    same thing on a sprite standing in a 70% wall and on one that fills its
+    frame.
+  - 0.72 is read off the 206 bundled pictures: an undamaged cut leaves 73-100%
+    of the subject and everything below about 70% is visibly eaten. **Refusing
+    is the right answer** for the ones below it — the fault is in the asset
+    (shot on a screen its own palette contains), and the repair is to redraw
+    the avatar, which ✨ AI avatar already does on the right screen per element.
+  - **The same guard is what `tools/key-realm-sprites.mjs` was missing**, and
+    the build tool had already shipped four hollowed sprites into the repo
+    before it got one. See its house rule below.
+  - Nothing else can rescue those sprites either: the flood-fill knock-out
+    refuses them too (correctly — a violet body is a small colour step from a
+    magenta wall). They keep their wall on every layer, and that is the honest
+    ceiling for an asset shot against a screen its own palette contains.
+
+### Two passes, and which one a picture takes is the whole safety story
+
+Pass 1 is the **strict** key, untouched: enclosed screen colour is read as the
+model having painted the wall's colour ONTO the subject, and the key is refused.
+Pass 2 runs the SAME key with that guard off, and **only ever on a picture pass
+1 has already refused** — one that was otherwise going to keep its wall.
+
+Pass 2 exists because the strict reading is wrong for a lot of real artwork: a
+fire ring, a water curl, a coiled serpent and a pair of wings all enclose real
+wall that never reaches the border, and the tighter the subject glows the less
+that trapped wall looks flat (measured: mean screen-ness 0.83–0.93 and a spread
+of 0.10–0.13, where clean wall is 0.99 and 0.00). **No threshold separates that
+from a gem painted in the wall's colour** — a limit this file has documented
+since v1.280.0, and a parameter sweep over the real set confirmed it: even at
+settings loose enough to break the adversarial cases, a third still refused. So
+pass 2 does not try to. It weighs the two outcomes, which are not symmetrical: a
+refusal costs a magenta square behind a sprite everywhere, for everyone, until
+somebody presses a button they do not know exists; a wrong key costs a hole in
+ONE sprite, which the admin can see and can undo with ✏️ Touch up or by
+uploading the picture again. Both passes are still verified by the two checks
+with no false positives — the wall really is gone (`_screenStillThere`) and the
+subject really did survive (`_screenSubjectKept`).
+
+### …and the art already in the map, with nobody pressing anything
+
+`_tcgArtStore` only cuts what it SAVES, so everything already filed keeps
+whatever backdrop it was stored with. The display layer cuts those out **FOR
+DISPLAY ONLY**, everywhere a student can see one. It writes nothing anywhere.
+
+- **`_tcgLiveWatch` is THE ONE HOOK.** Forty-odd surfaces render Realm of Embers
+  art — the arena, the duel board and its hand, the Siege field, the Legends
+  picker, the artifact chooser, the hero picker, the peek panel, the pack
+  reveal, the page header — and every one writes a plain `<img src>`. Tagging
+  each call site is how a surface added next month becomes the one that quietly
+  still shows the wall, so the DOM itself is watched: one MutationObserver,
+  bound once, covering every picture the app will ever paint. Setting `img.src`
+  from inside the callback re-enters it once with a url no longer in the index,
+  so there is no loop.
+- **It is keyed by the SLOT, through `_tcgLiveIndex`** — and a url serving BOTH
+  a stands-on-nothing slot and a scene slot is dropped rather than cut, because
+  `tcgArtUrl` falls back to the avatar and `tcgAvatarUrl` falls back to the card
+  art, so one picture can legitimately be doing both jobs and cutting it would
+  strip the painted scene off a card face.
+- **Already keyed once this session → swapped inside the observer's own
+  microtask**, before paint, so it is never seen wearing its wall. First sighting
+  → hidden while it is cut, and NEVER left hidden: an unkeyable picture, a
+  tainted canvas, a stalled decode and a thrown error all end with the picture
+  shown exactly as it arrived (`TCG_LIVE_WAIT_MS`).
+- **The admin's Card Art thumbnails are deliberately LEFT RAW** (`.ga-prev`) —
+  that panel is where a wall has to be visible, or nobody would know it is there.
+- The booster-pack overlay keeps `tcgKeyPackImgs` because the rip animation may
+  not start until every frame is up, but it goes through the SAME cache and
+  claims its frames with the same `dataset.rkey` flag, so the two never fight.
+- The cache is capped (`TCG_LIVE_CACHE_MAX`) — these are full data URLs, and a
+  session that browsed the whole dex would otherwise hold tens of megabytes.
+- Run **`node tools/pink-screen-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🩷 the pink wall** (`_tcgScreenCut`, `_tcgTryScreens`,
+  `_screenSubjectKept`, `_tcgCutBackdrop`, `_tcgSlotStandsOnNothing`,
+  `_tcgLiveIndex`, `_tcgLiveClean`, `_tcgLiveImg`, `_tcgLiveWatch`,
+  `tcgKeyArtImgs`, `TCG_SCREEN_EDGES_MIN`, `TCG_SCREEN_RING_SEEN_MIN`,
+  `TCG_SCREEN_SUBJECT_MIN`), run `node tools/pink-screen-tests.mjs` **and**
+  `node tools/chroma-key-tests.mjs`. Every failure here is silent and lands on
+  every game surface at once: too timid and 206 avatars and portraits stand on
+  a bright magenta wall in front of the whole school; too eager and a violet
+  monster shot on a magenta screen is dissolved instead, which nothing on
+  screen reports and which no test but `_screenSubjectKept` can see. The
+  two-clean-edges refusal and the already-a-cut-out refusal are the boundaries
+  that keep the relaxed ring rule from becoming a licence, and the display
+  index dropping a url that serves BOTH an avatar slot and a card-art slot is
+  what stops a card face having its painted scene cut off it.
 - After touching **the bundled Realm of Embers art** (`tcgBundledArtPath`,
   `tcgBundledArt`, `tcgSlotArt`, `tcgSlotHasArt`, `tcgBundledSlotIds`,
   `TCG_BUNDLED_HEROES`, `TCG_BUNDLED_FX_DIR`, `_tcgSlug`), or after renaming a
@@ -1395,6 +1533,18 @@ Nothing in `akd*` touches either.
   punched clean through it. And a detector that counts transparency as evidence
   of a wall turns the tool into one that eats the artwork on its SECOND run —
   which is the run nobody watches.
+  - **Its first run hollowed out four sprites and called all four a success**
+    (v1.307.0): the dream moth, the owl sage, the mindrender and the psywhisker
+    are VIOLET monsters shot on a MAGENTA wall, so `_screenDn` scored their
+    bodies as wall. Nothing it checked could see it — the "lost" test counts
+    only pixels the wall never touched (their bodies were screenish, so they
+    were not counted), and the "is the wall gone" test was satisfied *because*
+    the monster went with it. It now also runs the app's own
+    `_screenSubjectKept`, and those sprites keep their wall instead. **32 of
+    206 do**, permanently: that is the tool working, so a refusal no longer
+    counts towards the exit code — a build step stuck at exit 1 for ever is one
+    everybody learns to ignore. The real repair for those 32 is to redraw the
+    avatar, which ✨ AI avatar already does on the correct per-element screen.
 - After touching **⏳ Still loading** (`imgWaitBarHtml`, `imgWaitStart`,
   `_imgWaitPaint`, `_imgWaitDone`, `_imgWaitImages`, `imgWaitRetry`,
   `imgWaitStop`, `_scheduleImgWait`, `IMG_WAIT_*`) or **`_qAnswerDiagrams`**,

@@ -40,6 +40,17 @@
 //
 // It is IDEMPOTENT. A sprite that is already cut carries no wall, fails the
 // "is there a screen here at all" precondition, and is left untouched.
+//
+// AND IT REFUSES A SPRITE ITS OWN PALETTE WOULD LOSE. `_screenDn` asks "is this
+// pixel that HUE", so a violet monster shot on a MAGENTA wall reads as wall and
+// is dissolved. That is not hypothetical: the first run of this tool hollowed
+// out the dream moth, the owl sage, the mindrender and the psywhisker, and
+// reported all four as clean successes, because every check it had was
+// satisfied BY the monster having been removed. `_screenSubjectKept` is the app
+// guard that can see it. Those sprites keep their wall; the real repair is to
+// redraw the avatar, which ✨ AI avatar already does on the right screen per
+// element (tcgScreenForElement routes psychic, shadow and cosmic to GREEN, and
+// every one of the damaged cards is one of those).
 import fs from 'fs';
 import path from 'path';
 import url from 'url';
@@ -64,7 +75,9 @@ const pieces = [
   slice('const TCG_SCREENS = {', 'function tcgScreenForElement'),
   slice('const TCG_SCREEN_HI', 'function _screenDn'),
   slice('const TCG_SCREEN_RING_MIN', 'async function _screenKeyOut'),
-  grab('function _screenDn'), grab('function _chamferDist'), grab('async function _screenKeyOut')
+  slice('const TCG_SCREEN_SUBJECT_MIN', 'async function _screenSubjectKept'),
+  grab('function _screenDn'), grab('function _chamferDist'), grab('async function _screenKeyOut'),
+  grab('async function _screenSubjectKept')
 ].join('\n');
 
 const store = new Map(); let seq = 0;
@@ -81,7 +94,7 @@ global.document = { createElement: canvas };
 const hush = { warn() {}, info() {}, log() {}, error(...a) { console.error(...a); } };
 const _loadImageEl = async u => { const b = store.get(u); return { naturalWidth: b.w, naturalHeight: b.h, width: b.w, height: b.h, src: u }; };
 const M = new Function('_loadImageEl', 'ImageData', 'console',
-  pieces + '\nreturn {_screenKeyOut,_screenDn,TCG_SCREEN_HI,TCG_SCREEN_LO,TCG_SCREEN_MIN_COVER,TCG_SCREEN_REST_MAX};')(_loadImageEl, ImageData, hush);
+  pieces + '\nreturn {_screenKeyOut,_screenDn,_screenSubjectKept,TCG_SCREEN_HI,TCG_SCREEN_LO,TCG_SCREEN_MIN_COVER,TCG_SCREEN_REST_MAX,TCG_SCREEN_SUBJECT_MIN};')(_loadImageEl, ImageData, hush);
 
 // ---- which wall is this sprite standing on? ---------------------------------
 // Asked of the PICTURE, never looked up from the generator's routing table: the
@@ -116,7 +129,11 @@ const slots = JSON.parse(fs.readFileSync(path.join(ART, 'manifests', 'slot-map.j
 const standsOnNothing = id => /(:av$|^fx:|^dfx:|^pk:|^logo:|^arti:|^hero:)/.test(id);
 const ids = Object.keys(slots).filter(standsOnNothing).sort();
 
-let keyed = 0, already = 0, failed = 0;
+// A sprite the guards turn down is not a failure — it is the tool working, and
+// 32 of them is the permanent normal state of this asset set. Counting those as
+// failures would leave the exit code stuck at 1 for ever, which trains everyone
+// to ignore it on the day something is really wrong.
+let keyed = 0, already = 0, failed = 0, refused = 0;
 const notes = [], sheet = [];
 for (const id of ids) {
   const file = path.join(ART, slots[id]);
@@ -139,7 +156,7 @@ for (const id of ids) {
   // of a wall rather than a licence to key anything containing the hue.
   const out = await M._screenKeyOut(mk(w, h, px.slice()), found.name, false, false)
            || await M._screenKeyOut(mk(w, h, px.slice()), found.name, false, true);
-  if (!out) { notes.push([id, 'the keyer refused the ' + found.name + ' screen (ring ' + Math.round(found.ring * 100) + '%)']); failed++; continue; }
+  if (!out) { notes.push([id, 'the keyer refused the ' + found.name + ' screen (ring ' + Math.round(found.ring * 100) + '%)']); refused++; continue; }
   const got = store.get(out);
 
   // --- verification, and it is the whole reason the looser cut is allowed ---
@@ -160,9 +177,30 @@ for (const id of ids) {
   //    this question has no false positives (the app asks it as
   //    _screenStillThere before it saves a generated frame).
   const rest = screenCover(got.px, found.name);
-  if (lost) { notes.push([id, 'REFUSED — the cut took ' + lost + ' pixel(s) the ' + found.name + ' wall never touched']); failed++; continue; }
-  if (rest > M.TCG_SCREEN_REST_MAX) { notes.push([id, 'REFUSED — ' + Math.round(rest * 100) + '% of the ' + found.name + ' screen is still there']); failed++; continue; }
-  if (kept < w * h * 0.04) { notes.push([id, 'REFUSED — only ' + Math.round(kept / (w * h) * 100) + '% of the frame is left; that is not a sprite']); failed++; continue; }
+  if (lost) { notes.push([id, 'REFUSED — the cut took ' + lost + ' pixel(s) the ' + found.name + ' wall never touched']); refused++; continue; }
+  if (rest > M.TCG_SCREEN_REST_MAX) { notes.push([id, 'REFUSED — ' + Math.round(rest * 100) + '% of the ' + found.name + ' screen is still there']); refused++; continue; }
+  if (kept < w * h * 0.04) { notes.push([id, 'REFUSED — only ' + Math.round(kept / (w * h) * 100) + '% of the frame is left; that is not a sprite']); refused++; continue; }
+  // 3. DID THE SUBJECT SURVIVE? Checks 1 and 2 cannot answer this and it is the
+  //    way this tool actually damaged the art. `_screenDn` asks "is this pixel
+  //    that HUE", so a VIOLET monster shot on a MAGENTA wall scores as wall
+  //    everywhere: check 1 counts none of it as "lost" (it was screenish), and
+  //    check 2 is satisfied precisely BECAUSE the monster was removed along
+  //    with the wall. The first run of this tool hollowed out the dream moth,
+  //    the owl sage, the mindrender and the psywhisker exactly that way, and
+  //    reported every one of them as a clean success.
+  //    The app's own guard is the one that can see it, because it measures
+  //    survival against the border-connected WALL rather than the whole frame.
+  //    Every psychic, shadow and cosmic card in the bundled set was shot on
+  //    magenta although tcgScreenForElement routes those elements to a GREEN
+  //    screen for this reason — so this is not a rare case, it is a whole
+  //    element family, and the honest answer for them is to keep the wall and
+  //    redraw the avatar on the right screen.
+  const survived = await M._screenSubjectKept(mk(w, h, px.slice()), out, found.name);
+  if (survived < M.TCG_SCREEN_SUBJECT_MIN) {
+    notes.push([id, 'REFUSED — the cut would take ' + Math.round((1 - survived) * 100)
+      + '% of the SUBJECT with it; it was drawn on a ' + found.name + ' screen its own palette contains']);
+    refused++; continue;
+  }
 
   keyed++;
   if (sheet.length < 64) sheet.push({ id, px: got.px, w, h });
@@ -195,6 +233,7 @@ if (!CHECK && sheet.length) {
 }
 
 console.log((CHECK ? 'Would key ' : 'Keyed ') + keyed + ' sprite' + (keyed === 1 ? '' : 's')
-  + ' · ' + already + ' already standing on nothing · ' + failed + ' left alone');
+  + ' · ' + already + ' already standing on nothing · ' + refused + ' kept their wall on purpose'
+  + (failed ? ' · ' + failed + ' COULD NOT BE READ' : ''));
 notes.forEach(([id, why]) => console.log('  ' + id.padEnd(24) + why));
 process.exit(failed ? 1 : 0);
