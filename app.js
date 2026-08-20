@@ -39596,6 +39596,105 @@ async function tcgArtImport(e) {
     tcgArtSafetyRender();
   } catch (err) { console.error('art import', err); showToast('Import failed: ' + (err && err.message ? err.message : err), 'error'); }
 }
+
+// ---- Verified repository art installer ------------------------------
+// Generated Realm of Embers art is versioned with the app, along with one
+// compact slot map. This gives the admin a deterministic recovery path when
+// another game accidentally writes pictures into the same-looking slot ids.
+// Card scenes can be referenced directly from GitHub Pages. Stand-alone art
+// still goes through the ordinary store so avatars, VFX, packs and heroes get
+// the exact same background removal and scaling as a hand-uploaded picture.
+const TCG_BUNDLED_ART_ROOT = 'assets/realm-of-embers/';
+const TCG_BUNDLED_ART_MAP = TCG_BUNDLED_ART_ROOT + 'manifests/slot-map.json';
+let _tcgBundledInstallBusy = false;
+
+function _tcgBundledStatus(text) {
+  const el = document.getElementById('tcgBundledStatus');
+  if (el) el.textContent = text || '';
+}
+function _tcgBlobDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error || new Error('Could not read image'));
+    r.readAsDataURL(blob);
+  });
+}
+async function _tcgBundledSlotMap() {
+  const res = await fetch(TCG_BUNDLED_ART_MAP, { cache: 'no-cache' });
+  if (!res.ok) throw new Error('Could not load the bundled art map (' + res.status + ')');
+  const data = await res.json();
+  if (!data || data.game !== 'realm-of-embers' || !data.slots || typeof data.slots !== 'object') {
+    throw new Error('The bundled art map is invalid');
+  }
+  const keys = Object.keys(data.slots);
+  if (data.count !== keys.length || keys.length !== 629) throw new Error('Expected 629 bundled slots, found ' + keys.length);
+  return data.slots;
+}
+async function _tcgInstallBundledSprite(id, file) {
+  const url = new URL(TCG_BUNDLED_ART_ROOT + file, location.href).href;
+  const res = await fetch(url, { cache: 'force-cache' });
+  if (!res.ok) throw new Error(id + ': image returned ' + res.status);
+  await _tcgArtStore(id, await _tcgBlobDataUrl(await res.blob()));
+}
+async function tcgInstallBundledRealmArt() {
+  if (!_isAdmin()) { showToast('Admins only', 'error'); return; }
+  if (_tcgBundledInstallBusy) { showToast('Realm art installation is already running', 'info'); return; }
+  let slots;
+  try { slots = await _tcgBundledSlotMap(); }
+  catch (e) { showToast(e && e.message ? e.message : String(e), 'error'); return; }
+  const ids = Object.keys(slots);
+  if (!confirm('Replace all ' + ids.length + ' Realm of Embers art slots with the verified repository set?\n\n'
+    + 'This overwrites misplaced card art, battle avatars, pack-ripping frames, attack frames and hero portraits. Other game assets, logos, lore and set banners are not touched.')) return;
+
+  _tcgBundledInstallBusy = true;
+  const btn = document.getElementById('tcgBundledInstallBtn');
+  if (btn) btn.disabled = true;
+  const failed = [];
+  try {
+    // Full-bleed card scenes need no preprocessing. Pointing those slots at
+    // their versioned Pages URLs replaces the mixed-in pictures immediately
+    // and avoids 201 redundant Storage uploads.
+    const cards = {};
+    ids.filter(id => /^c\d{3}$/.test(id)).forEach(id => {
+      cards[id] = new URL(TCG_BUNDLED_ART_ROOT + slots[id], location.href).href;
+    });
+    _tcgBundledStatus('Installing card art 0 / ' + Object.keys(cards).length + '…');
+    await _tcgArtWriteMany(cards);
+    _tcgBundledStatus('Installed ' + Object.keys(cards).length + ' card scenes. Cleaning stand-alone art…');
+
+    // Four at a time keeps the run practical without flooding Storage or
+    // Firestore. Each successful slot is durable even if the tab closes later.
+    const sprites = ids.filter(id => !/^c\d{3}$/.test(id));
+    let done = 0;
+    for (let i = 0; i < sprites.length; i += 4) {
+      const batch = sprites.slice(i, i + 4);
+      await Promise.all(batch.map(async id => {
+        try { await _tcgInstallBundledSprite(id, slots[id]); }
+        catch (e) { failed.push({ id, error: e && e.message ? e.message : String(e) }); }
+        done++;
+        _tcgBundledStatus('Cleaning and installing stand-alone art ' + done + ' / ' + sprites.length + '…');
+      }));
+    }
+    tcgArtRefresh();
+    if (failed.length) {
+      console.warn('bundled Realm art install failures', failed);
+      showToast('Realm art installed; ' + failed.length + ' stand-alone slot' + (failed.length === 1 ? '' : 's') + ' need retrying', 'error');
+      _tcgBundledStatus('Finished with ' + failed.length + ' failed slot' + (failed.length === 1 ? '' : 's') + '. Press Install again to retry them.');
+    } else {
+      showToast('All 629 Realm of Embers art slots installed ✓', 'success');
+      _tcgBundledStatus('All 629 verified Realm of Embers slots are installed.');
+    }
+    tcgArtSafetyRender();
+  } catch (e) {
+    console.error('bundled Realm art install', e);
+    showToast('Realm art install stopped: ' + (e && e.message ? e.message : e), 'error');
+    _tcgBundledStatus('Install stopped. Finished slots are safe; press Install to resume.');
+  } finally {
+    _tcgBundledInstallBusy = false;
+    if (btn) btn.disabled = false;
+  }
+}
 // ---- Rescue: rebuild the map from Storage ----------------------------
 // The retroactive half. A backup only helps if one existed BEFORE the map was
 // lost; this is what is left when none did.
@@ -39995,7 +40094,9 @@ function _tcgArtSafetyHtml() {
     + '<label class="btn btn-outline" style="cursor:pointer;">📥 Import a copy<input type="file" accept="application/json,.json" style="display:none;" onchange="tcgArtImport(event)"></label>'
     + '<button type="button" class="btn btn-outline"' + (bn ? '' : ' disabled') + ' onclick="tcgArtRestoreBackup()">↩️ Restore from backup</button>'
     + '<button type="button" class="btn btn-outline" onclick="tcgArtRescueScan()">🚑 Rescue from Storage</button>'
+    + '<button type="button" class="btn btn-primary" id="tcgBundledInstallBtn" onclick="tcgInstallBundledRealmArt()">🔥 Install bundled Realm art</button>'
     + '</div>'
+    + '<div id="tcgBundledStatus" class="hint" style="margin-top:8px;">Replaces only the 629 verified Realm card, avatar, pack, attack and hero slots; unrelated game assets are untouched.</div>'
     + _tcgRescueHtml()
     + '</div>';
   return h;
@@ -51293,6 +51394,7 @@ window.resetTcgArt = resetTcgArt;
 // handler, so the module scope has to hand them out explicitly.
 window.tcgArtExport = tcgArtExport;
 window.tcgArtImport = tcgArtImport;
+window.tcgInstallBundledRealmArt = tcgInstallBundledRealmArt;
 window.tcgArtRestoreBackup = tcgArtRestoreBackup;
 window.tcgArtRescueScan = tcgArtRescueScan;
 window.tcgArtRescueOpenRun = tcgArtRescueOpenRun;
