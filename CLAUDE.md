@@ -42,7 +42,7 @@ Guidance for Claude when working in this repo.
     - **Parts have to be RECOGNISED before they can be matched**, so two things feed them: `_epSplitPartBlocks` splits a text block that holds several markers ("(a) …&lt;br&gt;(b) …") into one block per part — the Question Doctor refuses that case because it is rewriting vetted questions, but here the model wrote the block seconds ago from a screenshot that plainly had parts. It only ever splits when `<br>` is the only markup (`EP_ONLY_BR_RE` — the cut is a source offset, and slicing through a `<p>` would leave it unbalanced), when the letters are **lowercase and consecutive** (an uppercase `(A) (B) (C)` run is an options list), and **never inside a question with an `mcq` block** (those lettered lines are its statements). On the key side, `_epKeyNumber` gives a bare `(a)` row back the last full number seen (`_epKeyBase`), because a marking scheme very often prints "44" once with its parts listed underneath.
     - **Every part gets its OWN explanation** (v1.245.0), because an explanation is read as explaining the question directly above it. The build prompt asks for one explanation block per part, placed after that part's answer; `qPlacePartExplanation` puts the key's note for a part inside that part (never merged with another part's, and a part the key says nothing about keeps the model's note); and `qScopeExplanations` repairs the case the model gets wrong. Both are shared with every other authoring path — see **Question parts** above.
     - The part machinery itself is NOT the exam builder's own: `_epStripNumbering` only adds what is specific to a paper (dropping the printed number, and the number-derived part fallback) on top of `qSplitPartBlocks` / `qLiftPartMarkers` / `qScopeExplanations`, and the `_ep*` part helpers are one-line views of the shared `qPartSpan` / `qPartFind` / `qPlacePartExplanation` that take a whole question instead of a block list. Order matters: the number comes off the wording FIRST, because a marker hiding behind it ("45 (a) Name the process") cannot be lifted until it does.
-    - The AI writes a placeholder answer for every question (some numbers never appear on a key), and the official answer **replaces** it: `_epPlaceAnswerBlock` keeps the answer at its original index, `_epDropBlanks` clears the blanks that belonged to the old wording (they are word positions, so keeping them blanks the wrong words), and the key's explanation beats the model's. The key prompt asks for `[[keywords]]` in the answer fields so the fill-in-the-blank marks survive the swap. `_epOptionIndex` accepts an MCQ answer printed as a number, a letter, or the option's own wording.
+    - The AI writes a placeholder answer for every question (some numbers never appear on a key), and the official answer **replaces** it: `_epPlaceAnswerBlock` keeps the answer at its original index, `_epDropBlanks` clears the blanks that belonged to the old wording (they are word positions, so keeping them blanks the wrong words), and the key's explanation beats the model's. No prompt asks for `[[keywords]]` any more — a keyword is a teaching decision made by a person on the 🔑 panel (see **🔑 Keywords in a model answer** below), so `q.blanks` and `_epDropBlanks` are now housekeeping for an artefact nothing reads. `_epOptionIndex` accepts an MCQ answer printed as a number, a letter, or the option's own wording.
   - **Mark Paper** (`mp*` in `app.js`, `.mp-*` CSS + `#page-markpaper` in `index.html`, v1.248.0) is the exam paper builder read backwards: `_ep*` takes a BLANK paper into the bank, this takes the same paper back once a student has WRITTEN on it. Scan every page, and the AI finds each question, transcribes the handwriting, marks the lot, and hands back the four things a teacher gives back — the **answer key**, the **student's own answer**, **feedback on everything they got wrong**, and a **report over the whole script**. Gated on `_canAuthor()`; the nav item is `admin-only` and `markpaper` is deliberately NOT on `EMPLOYEE_PAGES` (an employee is hired to write questions, not to mark a class), so the render gate is the one that would need nothing changing if that were ever revisited.
     - **It is not Snap & Mark, and the two must not be merged.** Snap & Mark is the STUDENT's tool: one photo, one question, matched against a question that must already be **in the bank**, and it goes quiet the moment the question is not there. A marked script is the opposite case — thirty questions the bank has never seen over ten pages, and every one of them has to come back with a mark. So the questions here are read off the paper itself.
     - **The answer key has three sources, best first, and every row says which it used**: 🔑 the paper's own marking scheme (scanned separately into ② and matched by number through `_epNumKey`, so "Q12 (b)", "12b" and "12(B)" are one key), 📚 a question in the bank that is plainly the same question (`_mpBankMatch` — the cheap `_snapTokens`/`_snapSim` overlap, NOT an AI call, with `MP_BANK_MIN_SIM` deliberately high at 0.62 because a wrong bank match marks the student against the wrong question entirely), then 🤖 the model's own answer. `_mpApplyMark` never lets the AI answer overwrite a key that came from the paper or the bank. The badge is not decoration — a teacher checking a mark has to know whether the key came off the paper or was written by the AI.
@@ -1662,7 +1662,7 @@ DISPLAY ONLY**, everywhere a student can see one. It writes nothing anywhere.
   session that browsed the whole dex would otherwise hold tens of megabytes.
 - Run **`node tools/pink-screen-tests.mjs`** after touching any of it.
 
-## 🔑 Keywords in a model answer, and 🔲 Fill-in-the-Blanks practice (v1.311.0)
+## 🔑 Keywords in a model answer, and 🔲 Fill-in-the-Blanks practice (v1.312.0)
 
 `kw*` / `_kw*` / `qKw*` / `qKeyword*` / `qpFib*` (in `app.js`, search `KEYWORDS IN A
 MODEL ANSWER`), plus the `.kw-*` CSS in `index.html`, the 🔑 **Assign keywords**
@@ -1675,15 +1675,31 @@ words turns ONE model answer into three things — a key that prints them
 **<u>bold and underlined</u>**, a recall drill that punches them out, and the
 same ordinary question everywhere else.
 
-- **THE STORE IS NOT NEW, AND THAT IS THE POINT.** `q.blanks` — keyed
-  `<blockId>` for a plain answer box and `<blockId>_claim` / `_evidence` /
-  `_reasoning` for a CER block, each holding `{ wordIndex: true }` — has been
-  written by `_markedToBlanks` from the `[[double bracket]]` marks **every** AI
-  authoring prompt already asks for (build-from-screenshot, rapid add, the bulk
-  PDF import, regenerate, the exam paper builder). It was simply never read back
-  by anything. So the bank already carries keywords on every question the AI
-  built, and they light up the moment this ships — nobody has to go back over a
-  thousand questions by hand. Do not invent a second store on the block.
+- **NOTHING IS ASSIGNED BY DEFAULT, and that is the whole design.** A keyword
+  is a teaching decision — which word is the one worth recalling — so it is made
+  by a PERSON, on purpose, one question at a time. No AI path writes one, no
+  import writes one, and **a question nobody has marked simply has no
+  fill-in-the-blanks version of itself**: it is not offered in the mode, its
+  answer key prints exactly as it always did, and nothing anywhere says it is
+  missing anything, because it is not.
+  - The first cut of this (v1.311.0) got it wrong, and the mistake is worth
+    keeping written down. `_markedToBlanks` had long been turning the
+    `[[double bracket]]` marks the AI prompts asked for into a `q.blanks` map
+    that **nothing ever read**, so reading it back looked like a free head
+    start and was in fact the whole bank silently acquiring keywords the
+    teacher never chose. The prompts no longer ask for the brackets at all
+    (`_aiBuildQuestionPrompt`, `_bulkPagePrompt`, `_regenPrompt`,
+    `_epQuestionPrompt` and the exam-paper KEY prompt each say plain prose
+    instead); `_markedToBlanks` stays, purely as the guard that strips a stray
+    pair back out of an answer, since a bracket printed in the middle of a
+    model answer is a bug on its own.
+- **`q.answerKeywords` is the store** — keyed `<blockId>` for a plain answer box
+  and `<blockId>_claim` / `_evidence` / `_reasoning` for a CER block, each
+  holding `{ wordIndex: true }`. It is deliberately its OWN field rather than a
+  flag on `q.blanks`: "did a person choose these words" then has exactly one
+  answer, with no history to reason about and no legacy data sitting in the
+  same map meaning something else. `q.blanks` is untouched and unread — it is
+  not deleted either, because nothing is gained by destroying it.
 - **THE INDEX IS A WORD COUNT, so anything that reads it must count words the
   way `_markedToBlanks` writes them.** `_kwParse` is the ONE walker, and the two
   things it must keep doing are the two ways the count silently drifts: an HTML
@@ -1739,28 +1755,34 @@ same ordinary question everywhere else.
   carry the same one). Without it one press also runs the button that REWRITES
   the box. The panel's own *Clear all* / *Done* carry `kw-btn` for the same
   reason.
-- Nothing is written until the question is SAVED: the panel edits
-  `selectedBlanks`, which `collectQuestionData` already carries onto the question
-  as `blanks` — and `blanks` is already in `EDITOR_OWNED_QUESTION_FIELDS`, so a
-  keyword the author has just removed is not restored by `carryOverQuestionMeta`.
-  `kwSyncPanel` is called from `saveBlockContent` rather than by re-rendering the
-  block, because the answer boxes are contenteditable and a re-render would put
-  the caret back at the top on every keystroke.
+- **The 🔑 panel is the ONLY writer there is.** Nothing is written until the
+  question is SAVED: the panel edits `editorKeywords`, which
+  `collectQuestionData` carries onto the question as `answerKeywords` — a field
+  in `EDITOR_OWNED_QUESTION_FIELDS`, or `carryOverQuestionMeta` would restore a
+  keyword the author had just removed. `kwSyncPanel` is called from
+  `saveBlockContent` rather than by re-rendering the block, because the answer
+  boxes are contenteditable and a re-render would put the caret back at the top
+  on every keystroke; `kwForgetBlock` clears all of a deleted block's keys,
+  since a CER block leaves three behind if only its bare id is cleared.
 - Run **`node tools/keyword-blank-tests.mjs`** after touching any of it.
 
 ## House rules
 - After touching **🔑 keywords / 🔲 fill-in-the-blanks** (`_kwParse`, `kwIndices`,
-  `qKeywordWords`, `qHasKeywords`, `kwBoldPlain`, `kwBoldHtml`, `qKeyFieldHtml`,
-  `qKeyPlainHtml`, `kwBlankFieldHtml`, `kwPreviewFieldHtml`, `_kwFibBlockHtml`,
-  `qpSetMode`, or `_markedToBlanks`), run `node tools/keyword-blank-tests.mjs`.
-  Every failure is silent and the app goes on working. A word count that drifts
-  from `_markedToBlanks` by ONE slides every keyword on every AI-built question
-  in the bank along its sentence — the mode then blanks "the" and the printed
-  key underlines "of", and nothing anywhere says so. Splicing the bolding front
-  to back instead of back to front prints mangled markup in the middle of a
-  teacher's answer key. And a blank renderer that returns an empty string rather
-  than null takes the answer box off the question and puts nothing in its place:
-  a question that renders perfectly and cannot be answered.
+  `qKwIndices`, `qKeywordWords`, `qHasKeywords`, `kwBoldPlain`, `kwBoldHtml`,
+  `qKeyFieldHtml`, `qKeyPlainHtml`, `kwBlankFieldHtml`, `kwPreviewFieldHtml`,
+  `_kwFibBlockHtml`, `qpSetMode`, `editorKeywords`, or `_markedToBlanks`), run
+  `node tools/keyword-blank-tests.mjs`. Every failure is silent and the app goes
+  on working. **Reading `q.blanks` as keywords** is the one that has already
+  happened: it hands every AI-built question in the bank a set of words the
+  teacher never chose and a practice mode they never asked for, and it looks
+  from the inside like the feature working unusually well. A word count that
+  drifts by ONE slides every keyword along its sentence — the mode then blanks
+  "the" and the printed key underlines "of", and nothing anywhere says so.
+  Splicing the bolding front to back instead of back to front prints mangled
+  markup in the middle of a teacher's answer key. And a blank renderer that
+  returns an empty string rather than null takes the answer box off the question
+  and puts nothing in its place: a question that renders perfectly and cannot be
+  answered.
 - After touching **the teaching-notes digests or the live notebook** (`_notesGuidanceBlock`,
   `_notesMarkingBlock`, `_notesGenBlock`, `_notesAnswerBlock`, `_notesFor`, `_noteSuitsThisApp`,
   `loadTeachingNotes`, `_notesDetach`, `stopTeachingNotes`, `NOTES_GUIDE_CHARS`, `quickNoteSave`), run

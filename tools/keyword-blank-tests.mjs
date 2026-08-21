@@ -3,18 +3,22 @@
 //     node tools/keyword-blank-tests.mjs            all cases
 //     node tools/keyword-blank-tests.mjs <name>     one case
 //
-// It loads the REAL functions out of app.js, including `_markedToBlanks` —
-// the writer of this data since long before anything read it back.
+// It loads the REAL functions out of app.js, including `_markedToBlanks`.
 //
 // Every failure here is SILENT, and each one is silent in a different place:
 //
-//  • A WORD COUNT THAT DRIFTS is the worst of them. `q.blanks` stores word
-//    POSITIONS, and `_markedToBlanks` has been writing them from the
-//    `[[double bracket]]` marks every AI prompt asks for. If `_kwParse`
-//    counts words differently by even one, every keyword on every AI-built
-//    question in the bank slides along the sentence — and the app still works
-//    perfectly: it blanks out "the" and bolds "of" on the answer key, and
-//    nothing anywhere says a word about it.
+//  • NOTHING IS ASSIGNED BY DEFAULT is the headline rule, and the one this
+//    started by getting wrong. A keyword is a teaching decision, so it is made
+//    by a person; `q.answerKeywords` is its own field and NOTHING else may
+//    write it. `q.blanks` — the `[[double bracket]]` artefact `_markedToBlanks`
+//    has been producing for years, which nothing ever read — must never be
+//    mistaken for it, or the whole bank silently acquires keywords the teacher
+//    never chose and a mode they never asked for.
+//  • A WORD COUNT THAT DRIFTS is the quietest of them. The field stores word
+//    POSITIONS, so if `_kwParse` counts words differently by even one, every
+//    keyword slides along its sentence — and the app still works perfectly: it
+//    blanks out "the" and bolds "of" on the answer key, and nothing anywhere
+//    says a word about it.
 //  • COUNTING INSIDE MARKUP is how that drift happens in practice. A `<b>` in
 //    the middle of an answer is not a word and `&nbsp;` is not the word
 //    "nbsp" — count either and everything after it shifts.
@@ -72,19 +76,48 @@ const deep = (got, want, what) => eq(JSON.stringify(got), JSON.stringify(want), 
 // A plain answer block plus the question that carries its keywords.
 const plainQ = (content, idxs) => ({
   blocks: [{ id: 'b1', type: 'plainanswer', content }],
-  blanks: { b1: Object.fromEntries((idxs || []).map(i => [String(i), true])) }
+  answerKeywords: { b1: Object.fromEntries((idxs || []).map(i => [String(i), true])) }
 });
 const cerQ = (fields, marks) => ({
   blocks: [Object.assign({ id: 'b1', type: 'answer' }, fields)],
-  blanks: Object.fromEntries(Object.entries(marks || {}).map(
+  answerKeywords: Object.fromEntries(Object.entries(marks || {}).map(
     ([f, idxs]) => ['b1_' + f, Object.fromEntries(idxs.map(i => [String(i), true]))]))
+});
+
+// ── NOTHING IS ASSIGNED BY DEFAULT ──────────────────────────────────────────
+
+test('q.blanks is NOT keywords — a bracketed AI answer assigns nothing', () => {
+  // The regression this whole file exists for. `_markedToBlanks` still writes
+  // its map; reading it as keywords would hand every AI-built question in the
+  // bank a set of words the teacher never chose, and a practice mode they
+  // never asked for.
+  const { content, blanks } = M.marked('Water [[evaporates]] into water [[vapour]].');
+  ok(Object.keys(blanks).length, 'the artefact is still produced (this test is not vacuous)');
+  const q = { blocks: [{ id: 'b1', type: 'plainanswer', content }], blanks: { b1: blanks } };
+  ok(!M.has(q), 'the question must have NO keywords');
+  eq(M.count(q), 0, 'and no blanks to fill in');
+  deep([...M.words(q)], [], 'and nothing to bold on the answer key');
+});
+
+test('a question with nothing marked has no fill-in-the-blanks version at all', () => {
+  const q = { blocks: [{ id: 'b1', type: 'plainanswer', content: 'Water vapour rises.' }] };
+  ok(!M.has(q), 'not offered in the mode');
+  eq(M.fib(q, q.blocks[0], [], [], '#c', ''), null, 'and nothing to render if it somehow got there');
+  eq(M.keyPlain(q, 'Water vapour rises.'), 'Water vapour rises.', 'its answer key is exactly what it always was');
+});
+
+test('the brackets themselves never survive into the answer', () => {
+  // No prompt asks for them now, but a model asked for prose still emits a
+  // stray pair — and a bracket printed in the middle of a model answer is a
+  // bug whether or not anything reads the map beside it.
+  eq(M.marked('Water [[evaporates]] here.').content, 'Water evaporates here.', 'the stripped answer');
 });
 
 // ── the word count, which everything else stands on ─────────────────────────
 
-test('the AI writer and this reader count the same words', () => {
-  // THE compatibility test. `_markedToBlanks` turned the model's [[brackets]]
-  // into indices; _kwParse has to land on the same words reading them back.
+test('the word walker and _markedToBlanks agree on where the words are', () => {
+  // They no longer share a job, but they still share a definition of "a word".
+  // Anything that drifts here drifts silently, so it is pinned from both sides.
   const marked = 'Water [[evaporates]] from the leaves as water [[vapour]] through the [[stomata]].';
   const { content, blanks } = M.marked(marked);
   const parsed = M.parse(content);
@@ -143,7 +176,7 @@ test('indices come back ASCENDING however they were stored', () => {
 
 test('a false in the map is not a keyword', () => {
   const q = plainQ('one two three', []);
-  q.blanks.b1 = { 0: true, 1: false };
+  q.answerKeywords.b1 = { 0: true, 1: false };
   deep(M.qIndices(q, q.blocks[0], 'content'), [0], 'only the true one');
 });
 
@@ -197,7 +230,7 @@ test('a filler word is never bolded automatically', () => {
 
 test('bolding the printed key keeps the author\'s own formatting', () => {
   const q = { blocks: [{ id: 'b1', type: 'plainanswer', content: 'The <b>water</b> vapour escapes.' }],
-              blanks: { b1: { 2: true } } };
+              answerKeywords: { b1: { 2: true } } };
   eq(M.keyField(q, q.blocks[0], 'content'),
     'The <b>water</b> <strong><u>vapour</u></strong> escapes.', 'the <b> survives');
 });
@@ -221,7 +254,7 @@ test('the keyword set is gathered from all three CER fields', () => {
 
 test('a question with nothing marked is never served in fill-in-the-blanks', () => {
   ok(!M.has(plainQ('Water vapour rises.', [])), 'no marks');
-  ok(!M.has({ blocks: [{ id: 'b1', type: 'mcq' }], blanks: { b1: { 0: true } } }), 'an MCQ is not an answer field');
+  ok(!M.has({ blocks: [{ id: 'b1', type: 'mcq' }], answerKeywords: { b1: { 0: true } } }), 'an MCQ is not an answer field');
   ok(!M.has({}), 'an empty question');
 });
 
@@ -298,7 +331,7 @@ test('a block with no keywords renders NOTHING, so the caller falls back', () =>
 
 test('an annotation pad is never turned into blanks', () => {
   const q = { blocks: [{ id: 'b1', type: 'workingSpace', annotate: true, content: 'Draw the arrows' }],
-              blanks: { b1: { 1: true } } };
+              answerKeywords: { b1: { 1: true } } };
   eq(M.fib(q, q.blocks[0], [], [], '#c', ''), null, 'left as a drawing pad');
 });
 
