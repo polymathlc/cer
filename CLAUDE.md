@@ -1953,7 +1953,73 @@ as one block of text, and the answer is what a teacher marks from at a glance.
 
 Run **`node tools/answer-key-pagination-tests.mjs`** after touching any of it.
 
+## (b)(i) — roman sub-parts (v1.316.0)
+
+`QPART_ROMANS` / `qSubNormalize` / `qPartKey` / `qPartLetterOf` / `qPartSubOf` /
+`qPartKeyIn` / `qBlockOpensSub` / `qBlockOpensKey` / `setBlockSubPart` (in
+`app.js`, search `ROMAN SUB-PARTS`), plus the second select in a text block's
+header and `.qpart-sub` in `index.html`.
+
+A PSLE part very often splits again into (i) and (ii), and the app had no way
+to say so: both sub-answers inherited the same letter, so the printed answer key
+gave ONE "(b)" heading with two answers run together under it and the A.I.
+marker was handed both sub-questions as a single item.
+
+- **It is a SECOND FIELD, `block.subPart`, not a wider alphabet on `part`.**
+  That is what lets a sub-part INHERIT its letter: a block carrying only
+  `subPart: 'ii'` belongs to whatever letter is current, so renaming (b) to (c)
+  carries its sub-parts along. Storing `"b.ii"` on the block would freeze the
+  letter at the moment it was typed.
+- **`qPartMap` hands back a part KEY, not a bare letter** — `'b'`, `'b.i'`, and
+  `'.i'` for a question numbered (i) (ii) with no letters at all. The `.` can
+  never occur inside either half, so the key always comes back apart
+  (`qPartLetterOf` / `qPartSubOf`). Everything that RENDERS goes through
+  `qPartLabel`, which turns a key into `(b)(i)`; everything that COMPARES
+  compares keys, so (b)(i) and (b)(ii) are properly different questions
+  everywhere at once — the answer key's headings, `_openSection`'s
+  `items[].label`, `_partPromptText`, `_aiPartScopeLine` and `_questionContext`.
+- **`qBlockOpensPart` still returns a bare LETTER**, through the new strict
+  `qPartLetterNormalize`. The exam paper builder, `autoNumberParts`, the
+  Question Doctor's scan and `qScopeExplanations` are all letter-scoped, and
+  handing any of them `'b.i'` makes it silently match nothing.
+- **A LETTER covers its own sub-parts** (`qPartKeyIn`): `qPartSpan(blocks,'b')`
+  and `qPartFind` still find everything in (b)(i) and (b)(ii), or the marking
+  scheme's answer for part (b) would land nowhere. `qPlacePartExplanation` also
+  stamps `part: letter` on the note it inserts — a part ending on (b)(ii) would
+  otherwise have the whole part's explanation inherit that key and read as
+  explaining only the second sub-question.
+- **A NEW letter starts fresh.** `(c)` takes only the sub-part its own block
+  declares; without that, everything under (c) would be filed as (c)(ii).
+- **DETECTION IS STILL LETTERS ONLY.** `QPART_LETTERS` stops at `h` precisely
+  because `i` collides with the roman `(i)`, and nothing here changes that: a
+  sub-part is set by hand on the block, never guessed out of unvetted text. No
+  AI prompt writes `subPart`.
+- **The label is drawn from the block, so a roman must not ALSO be in the
+  text.** `_qSubOwnMarker` / `_qOwnMarkersOff` extend the v1.293.1 rule: the
+  letter marker comes off first, then a roman that names this block's OWN
+  sub-part, so "(b)(ii) placing all three beakers" loses both. A roman that is
+  NOT this block's own is left for a human — two people disagreeing about which
+  question this is.
+- **`qBlockOpensKey(b, map)` is what a block prints beside ITSELF.** A block
+  that opens only a roman would otherwise show nothing at all, on screen and on
+  paper: `qBlockOpensPart` is a letter and this block has none of its own.
+- **The whole part vocabulary lives together, immediately after
+  `qPartNormalize`.** Four harnesses cut that window out of `app.js`; a helper
+  declared anywhere else is a `ReferenceError` in all of them.
+- Run **`node tools/sub-part-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **(b)(i) roman sub-parts** (`QPART_ROMANS`, `qSubNormalize`,
+  `qPartKey`, `qPartLetterOf`, `qPartSubOf`, `qPartKeyIn`, `qPartNormalize`,
+  `qPartLabel`, `qPartMap`, `qBlockOpensSub`, `qBlockOpensKey`,
+  `_qSubOwnMarker`, `setBlockSubPart`), run `node tools/sub-part-tests.mjs`
+  **and** `node tools/part-marker-tests.mjs`. Every failure is silent: a
+  sub-part that stops inheriting its letter leaves a renumbered question
+  pointing at the old one; a new letter that inherits the last sub-part files
+  everything under (c) as (c)(ii); `qBlockOpensPart` returning a KEY makes the
+  exam paper builder, autoNumberParts and the Doctor match nothing at all; and
+  a letter that stops covering its own sub-parts drops the marking scheme's
+  answer for part (b) on the floor.
 - After touching **the paginated answer key or the past-paper preview**
   (`_packAkRows`, `_akPageTitle`, `_printAkPageEl`, `_printPlanAkPages`,
   `plan.akPlans`, `_wsPreviewPaper`, `ppPreview`, `_ppPrintQuestions`, or

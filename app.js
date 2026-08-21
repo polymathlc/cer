@@ -1978,7 +1978,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.315.0';
+const APP_VERSION = 'v1.316.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -13478,7 +13478,7 @@ function _serializeQuestionForRegen(q) {
   (q.blocks || []).forEach((b, i) => {
     const n = i + 1;
     const p = qPartOf(pmap, b);
-    const tag = p ? ` [part (${p})]` : (qPartUnfiled(b) ? ' [no part — about the whole question]' : '');
+    const tag = p ? ` [part ${qPartLabel(p)}]` : (qPartUnfiled(b) ? ' [no part — about the whole question]' : '');
     if (b.type === 'text') lines.push(`${n}. TEXT${tag}: ${stripHtml(b.content || '')}`);
     else if (b.type === 'part') lines.push(`${n}. TEXT: ${((b.label || '') + ' ' + stripHtml(b.content || '')).trim()}`);
     else if (b.type === 'image') lines.push(`${n}. IMAGE PLACEHOLDER${b.caption ? ' (caption: ' + stripHtml(b.caption) + ')' : ''}`);
@@ -14574,9 +14574,75 @@ function qPartDetect(html, re) {
   for (let p = 0; p < s.length; p++) if (!kill.has(p)) out += s[p];
   return { letter, html: out };
 }
+// =====================================================================
+// (b)(i) — ROMAN SUB-PARTS
+//
+// A PSLE question does not stop at (a) (b) (c): a part very often splits again
+// into (i) and (ii), and until now the app had no way to say so. Both
+// sub-answers inherited the same letter, so the answer key printed ONE "(b)"
+// heading with two answers run together under it and the AI marker was given
+// both sub-questions as one — which is what this fixes.
+//
+// It is a SECOND FIELD, `block.subPart`, beside `block.part`, and not a wider
+// alphabet on `part`. That is what lets a sub-part INHERIT its letter: a block
+// carrying only `subPart: 'ii'` belongs to whatever letter is current, so
+// renaming (b) to (c) carries its sub-parts along with it. Storing "b.ii" on
+// the block would freeze the letter at the moment it was typed.
+//
+// `qPartMap` therefore hands back a part KEY rather than a bare letter:
+// 'b' for part (b), 'b.i' for (b)(i), and '.i' for a question numbered (i)
+// (ii) with no letters at all. The '.' can never occur inside either half, so
+// the key always comes back apart. Everything that RENDERS a part goes through
+// `qPartLabel`, which turns a key into "(b)(i)"; everything that compares one
+// part to another compares keys, so (b)(i) and (b)(ii) are properly different
+// questions. `qBlockOpensPart` still returns a bare LETTER — the exam paper
+// builder and the Question Doctor are letter-scoped and stay that way.
+//
+// DETECTION IS STILL LETTERS ONLY. `QPART_LETTERS` stops at 'h' precisely
+// because 'i' collides with the roman "(i)", and nothing here changes that: a
+// sub-part is set by hand on the block, never guessed out of unvetted text.
+// =====================================================================
 function qPartNormalize(v) {
+  const raw = String(v == null ? '' : v).trim().toLowerCase();
+  const dot = raw.indexOf('.');
+  if (dot >= 0) {
+    const L = qPartLetterNormalize(raw.slice(0, dot));
+    const S = qSubNormalize(raw.slice(dot + 1));
+    if (S && (L || !raw.slice(0, dot).trim())) return qPartKey(L, S);
+  }
+  return qPartLetterNormalize(raw);
+}
+// The romans a sub-part may be, in order. Eight is more than any PSLE question
+// has ever needed and stops short of 'ix', which reads as a typo for 'x'.
+const QPART_ROMANS = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii'];
+// The strict LETTER normaliser — what `part` may hold, and nothing else.
+function qPartLetterNormalize(v) {
   const s = String(v == null ? '' : v).trim().toLowerCase().replace(/[()\s.]/g, '');
   return QPART_ASSIGN.indexOf(s) >= 0 ? s : '';
+}
+function qSubNormalize(v) {
+  const s = String(v == null ? '' : v).trim().toLowerCase().replace(/[()\s.]/g, '');
+  return QPART_ROMANS.indexOf(s) >= 0 ? s : '';
+}
+// letter + roman → the key the rest of the app compares and labels by.
+function qPartKey(letter, sub) {
+  if (letter && sub) return letter + '.' + sub;
+  if (letter) return letter;
+  return sub ? '.' + sub : '';
+}
+function qPartLetterOf(key) { const s = String(key == null ? '' : key); const i = s.indexOf('.'); return i < 0 ? s : s.slice(0, i); }
+function qPartSubOf(key) { const s = String(key == null ? '' : key); const i = s.indexOf('.'); return i < 0 ? '' : s.slice(i + 1); }
+// …and the roman sub-part a block opens, if any. It lives here rather than
+// beside qBlockOpensPart so the whole part vocabulary reads in one place.
+function qBlockOpensSub(b) { return b ? qSubNormalize(b.subPart) : ''; }
+// Does a block filed under `key` belong to `want`? A bare LETTER covers its own
+// sub-parts — (b) is where (b)(i) and (b)(ii) live — which is what keeps the
+// letter-scoped callers (the exam paper builder, the explanation placer)
+// meaning exactly what they meant before sub-parts existed.
+function qPartKeyIn(key, want) {
+  const k = qPartNormalize(key), w = qPartNormalize(want);
+  if (!w) return !k;
+  return qPartSubOf(w) ? k === w : qPartLetterOf(k) === w;
 }
 // =====================================================================
 // THE LABEL IS DRAWN FROM THE BLOCK, SO IT MUST NOT ALSO BE IN THE TEXT
@@ -14626,6 +14692,14 @@ function _qPartOwnMarkerRe(letter) {
   return new RegExp('^(?:[(（]\\s*(' + L + ')\\s*[)）]|(' + L + ')\\s*[)）](?=\\s|$)|(' + L + ')\\s*[.．](?=\\s|$))');
 }
 const QPART_MARKER_WIDE_RE = /^(?:[(（]\s*([a-hA-H])\s*[)）]|([a-hA-H])\s*[)）](?=\s|$)|([a-h])\s*[.．](?=\s|$))/;
+// The same idea for a ROMAN sub-part: "(ii) placing all three beakers…". Pinned
+// to the one roman this block declares, because a roman is far more ambiguous
+// than a letter — "i" is a word, "v" is a symbol — and a marker that does not
+// name this block's own sub-part is somebody else's.
+function _qSubOwnMarkerRe(sub) {
+  const S = '(?:' + sub.split('').map(c => '[' + c + c.toUpperCase() + ']').join('') + ')';
+  return new RegExp('^(?:[(（]\\s*(' + S + ')\\s*[)）]|(' + S + ')\\s*[)）](?=\\s|$)|(' + S + ')\\s*[.．](?=\\s|$))');
+}
 function _qPartCountMarkersWide(html) {
   return qPartPlain(html).split('\n').filter(l => QPART_MARKER_WIDE_RE.test(l.trim())).length;
 }
@@ -14649,11 +14723,45 @@ function _qPartOwnMarker(b) {
   return (hit && hit.letter === own) ? hit : null;
 }
 
+// The label a block prints beside ITSELF: the full key it opens, so a block
+// that opens only a roman ("(ii)") still shows "(b)(ii)" rather than nothing.
+// `map` is the question's part map; without one it falls back to the block's
+// own two fields, which is all a lone block can know.
+function qBlockOpensKey(b, map) {
+  if (!b || !(qBlockOpensPart(b) || qBlockOpensSub(b))) return '';
+  const k = map ? qPartOf(map, b) : '';
+  return k || qPartKey(qBlockOpensPart(b), qBlockOpensSub(b));
+}
+
+// The leading ROMAN marker that merely repeats this block's own sub-part, or
+// null. Run on the wording AFTER the letter marker has come off, so
+// "(b)(ii) placing…" loses both.
+function _qSubOwnMarker(html, b) {
+  const sub = qBlockOpensSub(b);
+  if (!sub) return null;
+  const s = String(html == null ? '' : html);
+  if (!s.trim()) return null;
+  const hit = qPartDetect(s, _qSubOwnMarkerRe(sub));
+  return (hit && hit.letter === sub) ? hit : null;
+}
+// Both markers off one block's wording. Returns the cleaned html.
+function _qOwnMarkersOff(b) {
+  const letterHit = _qPartOwnMarker(b);
+  let html = letterHit ? letterHit.html : ((b && b.content) || '');
+  const subHit = _qSubOwnMarker(html, b);
+  return subHit ? subHit.html : html;
+}
+
 // Take it out of the block. Returns true if anything was removed.
 function qStripOwnPartMarker(b) {
-  const hit = _qPartOwnMarker(b);
-  if (!hit) return false;
-  b.content = hit.html;
+  if (!b) return false;
+  // Compared against the same fallback the reader used, never against
+  // `b.content` raw: a block with no content at all would otherwise be
+  // reported as "changed" from undefined to '' and written to.
+  const before = String(b.content == null ? '' : b.content);
+  const cleaned = _qOwnMarkersOff(b);
+  if (cleaned === before) return false;
+  b.content = cleaned;
   return true;
 }
 
@@ -14661,8 +14769,7 @@ function qStripOwnPartMarker(b) {
 // label left out, and the [2] marks marker put back in. The block is not
 // touched — an author still sees exactly what is stored.
 function qPartBodyHtml(b) {
-  const hit = _qPartOwnMarker(b);
-  const html = hit ? hit.html : ((b && b.content) || '');
+  const html = _qOwnMarkersOff(b);
   const n = qMarksOf(b);
   // The field is the source of truth for the marks, so a marker printed in the
   // wording as well is the same label twice — see [2] below.
@@ -14786,7 +14893,12 @@ function commitBlockMarks(blockId) {
   _qMarksSyncChip(blockId);
 }
 
-function qPartLabel(p) { const n = qPartNormalize(p); return n ? '(' + n + ')' : ''; }
+function qPartLabel(p) {
+  const n = qPartNormalize(p);
+  if (!n) return '';
+  const L = qPartLetterOf(n), S = qPartSubOf(n);
+  return (L ? '(' + L + ')' : '') + (S ? '(' + S + ')' : '');
+}
 // The part each block belongs to: a block carrying `part` opens it, and every
 // block after it inherits until the next one opens. Returns a plain object
 // keyed by block id (blocks always have one — see generateBlockId).
@@ -14797,20 +14909,26 @@ function qPartLabel(p) { const n = qPartNormalize(p); return n ? '(' + n + ')' :
 // Read it with qPartOf(map, block).
 function qPartMap(blocks) {
   const map = new Map();
-  let cur = '';
+  let cur = '', sub = '';
   (blocks || []).forEach(b => {
     if (!b) return;
     const opens = qBlockOpensPart(b);
+    const opensSub = qBlockOpensSub(b);
+    // A NEW LETTER starts fresh: (c) is not still inside (b)(ii). It takes only
+    // the sub-part its own block declares, which is how "(b)(i)" on one block
+    // works. A sub-part on its own keeps whatever letter is current — that is
+    // what lets (i) and (ii) sit under (b) without restating the b.
+    if (opens) { cur = opens; sub = opensSub; }
+    else if (opensSub) sub = opensSub;
     // A legacy `part` BLOCK always ends the previous part, even when its label
     // is something qPartNormalize cannot name ("Part 1", "(i)"). Letting it
     // inherit instead would file its answers under the PREVIOUS part, which is
     // worse than leaving them unlabelled.
-    if (opens) cur = opens;
-    else if (b.type === 'part') cur = '';
+    else if (b.type === 'part') { cur = ''; sub = ''; }
     // QPART_NONE unfiles THIS block only and does not close the part: a
     // teacher's note about the whole question can sit anywhere among the
     // parts without detaching everything printed after it.
-    map.set(b, qPartUnfiled(b) ? '' : cur);
+    map.set(b, qPartUnfiled(b) ? '' : qPartKey(cur, sub));
   });
   return map;
 }
@@ -14853,7 +14971,7 @@ function qPartSpan(blocks, letter) {
   let first = -1, last = -1;
   bs.forEach((b, i) => {
     if (!b || b.type === 'explanation') return;
-    if (qPartOf(map, b) !== letter) return;
+    if (!qPartKeyIn(qPartOf(map, b), letter)) return;   // (b) covers (b)(i) and (b)(ii)
     if (first < 0) first = i;
     last = i;
   });
@@ -14864,7 +14982,7 @@ function qPartSpan(blocks, letter) {
 function qPartFind(blocks, letter, want) {
   const bs = blocks || [];
   const map = qPartMap(bs);
-  return bs.find(b => b && want(b) && qPartOf(map, b) === letter) || null;
+  return bs.find(b => b && want(b) && qPartKeyIn(qPartOf(map, b), letter)) || null;
 }
 
 // A part's explanation goes IN that part — replacing the note already there,
@@ -14876,7 +14994,11 @@ function qPlacePartExplanation(blocks, letter, text) {
   const ex = qPartFind(bs, letter, b => b.type === 'explanation');
   if (ex) { ex.content = text; return ex; }
   const span = qPartSpan(bs, letter);
-  const nb = { id: generateBlockId(), type: 'explanation', content: text };
+  // Filed under the LETTER outright, not left to inherit. A part with roman
+  // sub-parts ends on (b)(ii), so an explanation inserted after it would
+  // inherit that key and read as explaining (b)(ii) — when what the marking
+  // scheme wrote is the note for the whole of (b).
+  const nb = { id: generateBlockId(), type: 'explanation', content: text, part: letter };
   if (span.first < 0) bs.push(nb); else bs.splice(span.last + 1, 0, nb);
   return nb;
 }
@@ -15031,14 +15153,20 @@ function qPartOf(map, block) { return (map && block && map.get(block)) || ''; }
 // under a 'part' block would be filed under whatever came before it.
 function qBlockOpensPart(b) {
   if (!b) return '';
-  const own = qPartNormalize(b.part);
+  // Strictly a LETTER: `part` has never held anything else, and the callers
+  // that ask this question (the exam paper builder, the explanation placer,
+  // autoNumberParts) are all letter-scoped.
+  const own = qPartLetterNormalize(b.part);
   if (own) return own;
-  if (b.type === 'part') return qPartNormalize(b.label);
+  if (b.type === 'part') return qPartLetterNormalize(b.label);
   return '';
 }
+// (qBlockOpensSub — the roman half — lives with the rest of the part
+// vocabulary, up beside qPartNormalize.)
 // Does this question use parts at all? Cheap guard so single-part questions
-// render exactly as they always did.
-function qHasParts(blocks) { return (blocks || []).some(b => qBlockOpensPart(b)); }
+// render exactly as they always did. A question numbered (i) (ii) with no
+// letters uses parts just as much as one numbered (a) (b).
+function qHasParts(blocks) { return (blocks || []).some(b => qBlockOpensPart(b) || qBlockOpensSub(b)); }
 // The next unused letter, for the editor's "add a part" affordance.
 function qPartNext(blocks) {
   const used = new Set((blocks || []).map(b => qBlockOpensPart(b)).filter(Boolean));
@@ -15071,23 +15199,43 @@ function qPartPickerHtml(block) {
   }
   if (QPART_OPENER_TYPES.indexOf(block.type) < 0) {
     return inherited
-      ? `<span class="qpart-chip inherit" title="This block belongs to part (${inherited}). Set the part on the text above it.">↳ ${escapeHtml(qPartLabel(inherited))}</span>`
+      ? `<span class="qpart-chip inherit" title="This block belongs to part ${escapeHtml(qPartLabel(inherited))}. Set the part on the text above it.">↳ ${escapeHtml(qPartLabel(inherited))}</span>`
       : '';
   }
+  const ownSub = qBlockOpensSub(block);
   const opts = ['<option value="">Part —</option>'].concat(
     QPART_ASSIGN.split('').slice(0, 12).map(c => `<option value="${c}"${own === c ? ' selected' : ''}>Part (${c})</option>`)
   ).join('');
+  // …and the roman SUB-part. A PSLE part very often splits again into (i) and
+  // (ii); without this both sub-answers inherit the same letter and the answer
+  // key prints them run together under one "(b)". It is its own field, so a
+  // block that sets only the roman keeps whatever letter is current above it.
+  const subOpts = ['<option value="">(–)</option>'].concat(
+    QPART_ROMANS.map(r => `<option value="${r}"${ownSub === r ? ' selected' : ''}>(${r})</option>`)
+  ).join('');
   return `<select class="qpart-select${own ? ' on' : ''}" title="Start question part (a), (b), … here. Everything below belongs to this part until the next one starts."
     onchange="setBlockPart('${block.id}', this.value)">${opts}</select>`
-    + (!own && inherited ? `<span class="qpart-chip inherit" title="Inherited from the part above">↳ ${escapeHtml(qPartLabel(inherited))}</span>` : '');
+    + `<select class="qpart-select qpart-sub${ownSub ? ' on' : ''}" title="Start roman sub-part (i), (ii), … here — it sits inside whichever lettered part is current, so (b)(i) and (b)(ii) get their own heading on the answer key and are answered and marked separately."
+    onchange="setBlockSubPart('${block.id}', this.value)">${subOpts}</select>`
+    + ((!own || ownSub) && inherited ? `<span class="qpart-chip inherit" title="Where this block and everything under it is filed">↳ ${escapeHtml(qPartLabel(inherited))}</span>` : '');
 }
 function setBlockPart(blockId, value) {
   const b = blocks.find(x => x.id === blockId);
   if (!b) return;
-  b.part = qPartNormalize(value);
+  b.part = qPartLetterNormalize(value);
   // Labelling a block whose text already opens with that marker would print it
   // twice. autoNumberParts has always stripped for this reason; setting one by
   // hand is the same act one block at a time.
+  qStripOwnPartMarker(b);
+  renderBlocks();
+}
+function setBlockSubPart(blockId, value) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b) return;
+  const v = qSubNormalize(value);
+  if (v) b.subPart = v; else delete b.subPart;
+  // Labelling a block whose text already opens with that marker would print it
+  // twice — the same rule the letter has carried since v1.293.1.
   qStripOwnPartMarker(b);
   renderBlocks();
 }
@@ -15608,7 +15756,7 @@ function doPrintWorksheetOpen(whyNotes) {
           // A block that OPENS a part prints its label in the margin, so the
           // paper reads "(a) What is X?" exactly as it used to when the marker
           // was typed into the text — only now it is a field, not characters.
-          const own = qPartNormalize(block.part);
+          const own = qBlockOpensKey(block, qParts);
           if (textHtml || own) {
             qHtml += `<div class="print-text-block${own ? ' print-has-part' : ''}">`
               + (own ? `<span class="print-part-label">${escapeHtml(qPartLabel(own))}</span>` : '')
@@ -21050,11 +21198,11 @@ function buildOpenBody(q, containerSel, markCfg) {
       case 'text':
         // An official part label starts a new card outright; otherwise fall
         // back to the old heuristic (a text block after an answer area).
-        if (cur && (cur.hasAnswer || qBlockOpensPart(block))) cur = null;
+        if (cur && (cur.hasAnswer || qBlockOpensKey(block, pMap))) cur = null;
         // The part sits BESIDE the question, not above it: a label on its own
         // line costs a whole row of vertical space on every part of every
         // question, and the marker belongs in front of the words it labels.
-        add(_qpTextHtml(qBlockOpensPart(block), qPartBodyHtml(block)));
+        add(_qpTextHtml(qBlockOpensKey(block, pMap), qPartBodyHtml(block)));
         break;
       case 'part':
         // The legacy part BLOCK. It used to fall through to `default:`, which
@@ -21062,7 +21210,7 @@ function buildOpenBody(q, containerSel, markCfg) {
         // rendered as one undivided wall. It opens a part like any other
         // opener now, and its own label is not repeated under the tag.
         if (cur) cur = null;
-        add(_qpTextHtml(qBlockOpensPart(block) || String(block.label || ''), block.content));
+        add(_qpTextHtml(qBlockOpensKey(block, pMap) || String(block.label || ''), block.content));
         break;
       case 'image':
         if (block.url) {
@@ -22686,9 +22834,12 @@ function _questionContext(q) {
   // and explanation call reads this, and "(b)" is often what makes the
   // sub-question intelligible on its own.
   const blocks = (q && q.blocks) || [];
+  const cxMap = qPartMap(blocks);
   blocks.forEach(b => {
     if (b.type !== 'text') return;
-    const opens = qBlockOpensPart(b);
+    // The FULL key, so a sub-question reaches the marker as "(b)(ii) …" — one
+    // of the two things that made both sub-answers read as one question.
+    const opens = qBlockOpensKey(b, cxMap);
     parts.push((opens ? qPartLabel(opens) + ' ' : '') + stripHtml(qPartBodyHtml(b)));
   });
   return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 800);
@@ -25034,7 +25185,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
         switch (block.type) {
           case 'text': {
             const textHtml = escapeHtmlKeepLines(qPartBodyHtml(block));
-            const own = qPartNormalize(block.part);
+            const own = qBlockOpensKey(block, qParts);
             if (textHtml || own) {
               qHtml += `<div class="print-text-block${own ? ' print-has-part' : ''}">`
                 + (own ? `<span class="print-part-label">${escapeHtml(qPartLabel(own))}</span>` : '')
@@ -26348,11 +26499,18 @@ function closeAke() {
 // there is nothing to choose otherwise, and an empty select reads as broken.
 function _akePartPickHtml(blocks, b) {
   if (!qHasParts(blocks)) return '';
-  const letters = [];
-  (blocks || []).forEach(x => { const p = qBlockOpensPart(x); if (p && letters.indexOf(p) < 0) letters.push(p); });
-  const cur = qPartUnfiled(b) ? QPART_NONE : (qPartNormalize(b.part) || QPART_NONE);
+  // Every part KEY the question actually uses, in reading order — so a question
+  // split into (b)(i) and (b)(ii) offers those, not just "(b)". The keys come
+  // from qPartMap, which is the one thing that knows where each block is filed.
+  const map = qPartMap(blocks);
+  const keys = [];
+  (blocks || []).forEach(x => {
+    const k = qPartOf(map, x);
+    if (k && keys.indexOf(k) < 0) keys.push(k);
+  });
+  const cur = qPartUnfiled(b) ? QPART_NONE : (qPartKey(qBlockOpensPart(b), qBlockOpensSub(b)) || QPART_NONE);
   const opts = [`<option value="${QPART_NONE}"${cur === QPART_NONE ? ' selected' : ''}>the whole question</option>`]
-    .concat(letters.map(l => `<option value="${escapeHtml(l)}"${cur === l ? ' selected' : ''}>part ${escapeHtml(qPartLabel(l))}</option>`));
+    .concat(keys.map(k => `<option value="${escapeHtml(k)}"${cur === k ? ' selected' : ''}>part ${escapeHtml(qPartLabel(k))}</option>`));
   return `<div class="ake-partpick">Explains
       <select class="ake-select" onchange="akeSetPart('${escapeHtml(String(b.id))}', this.value)">${opts.join('')}</select>
     </div>`;
@@ -26477,7 +26635,14 @@ function akeSetPart(bid, val) {
   if (!b) return;
   // QPART_NONE unfiles THIS block only — a whole-question note that does not
   // close the part it happens to sit inside.
-  b.part = (val === QPART_NONE) ? QPART_NONE : qPartNormalize(val);
+  if (val === QPART_NONE) { b.part = QPART_NONE; delete b.subPart; return; }
+  // A part KEY comes back apart into the two FIELDS a block carries. Writing
+  // "b.i" into `part` would be ignored by qBlockOpensPart, which is strictly a
+  // letter — the explanation would silently inherit instead of being filed.
+  const key = qPartNormalize(val);
+  const letter = qPartLetterOf(key), sub = qPartSubOf(key);
+  b.part = letter;
+  if (sub) b.subPart = sub; else delete b.subPart;
 }
 
 // A NEW explanation block for this question. The rule lives here, on its own,
@@ -61153,6 +61318,7 @@ window.adminSetBoardBan = adminSetBoardBan;
 window.exportActivityAudit = exportActivityAudit;
 window.adminHeroOp = adminHeroOp;
 window.setBlockPart = setBlockPart;
+window.setBlockSubPart = setBlockSubPart;
 window.setBlockMarks = setBlockMarks;
 window.commitBlockMarks = commitBlockMarks;
 window.toggleBlockPartScope = toggleBlockPartScope;
