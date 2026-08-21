@@ -1978,7 +1978,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.313.0';
+const APP_VERSION = 'v1.314.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -5007,6 +5007,7 @@ function renderBlocks() {
           </div>
           <span class="block-type-badge ${badgeClass}">${badgeIcon} ${badgeLabel}</span>
           ${qPartPickerHtml(block)}
+          ${qMarksPickerHtml(block)}
         </div>
         <div class="block-actions">
           <button class="block-action-btn" title="Move Up" onclick="moveBlock('${block.id}', 'up')">
@@ -14386,7 +14387,9 @@ function showPrintPreview(qid, btnEl) {
   q.blocks.forEach(block => {
     switch (block.type) {
       case 'text':
-        html += `<div class="preview-block">${block.content || ''}</div>`;
+        // Through qPartBodyHtml like every other surface, or this preview is
+        // the one place the [2] does not show.
+        html += `<div class="preview-block">${qPartBodyHtml(block)}</div>`;
         break;
       case 'image':
         if (block.url) html += `<div class="preview-block"><img src="${escapeHtml(transformImageUrl(block.url))}" alt="Image" style="${imgSizeStyle(block)}"></div>`;
@@ -14654,11 +14657,133 @@ function qStripOwnPartMarker(b) {
   return true;
 }
 
-// The content to RENDER for a block, with a marker that only repeats its own
-// label left out. The block is not touched.
+// The content to RENDER for a block: the part marker that only repeats its own
+// label left out, and the [2] marks marker put back in. The block is not
+// touched — an author still sees exactly what is stored.
 function qPartBodyHtml(b) {
   const hit = _qPartOwnMarker(b);
-  return hit ? hit.html : ((b && b.content) || '');
+  const html = hit ? hit.html : ((b && b.content) || '');
+  const n = qMarksOf(b);
+  // The field is the source of truth for the marks, so a marker printed in the
+  // wording as well is the same label twice — see [2] below.
+  return n ? qMarksAppendHtml(qStripTailMarks(html), n) : html;
+}
+
+// =====================================================================
+// [2] — HOW MANY MARKS A QUESTION IS WORTH
+//
+// An exam paper prints the marks at the end of the question it belongs to:
+//
+//     Explain why the bulb lit up when the iron ball was at point A. [2]
+//
+// It is a FIELD on the block (`block.marks`), never characters typed into the
+// wording — the same design as `block.part`, and for the same reasons. The
+// number can then be read (a total for the sheet, a marking prompt that knows
+// what it is marking out of), the author sets it in one place instead of
+// remembering the bracket convention, and it cannot end up in the middle of a
+// sentence after an edit.
+//
+// TWO RULES, both inherited from the part marker above:
+//
+//  • THE LABEL IS DRAWN FROM THE BLOCK, so it must not ALSO be in the text.
+//    `qPartBodyHtml` strips a trailing marks marker whenever the field is set,
+//    exactly as it strips a part marker that only repeats the block's own
+//    label. Unlike a part letter there is nothing to disagree about — "[2]" at
+//    the end of a question can only mean its marks, and there is exactly one
+//    marks field — so ANY trailing bracket goes, whatever number is in it: the
+//    field is the correction, and printing both is never right.
+//
+//  • IT IS APPENDED AT RENDER, INSIDE THE LAST TAG. `block.content` is
+//    authored HTML that almost always ends `…point A.</p>`, so gluing the
+//    marker onto the end of the string would put it on a line of its own.
+//    `_qMarksInsertAt` finds the point where nothing but closing tags and
+//    whitespace is left and inserts there, which is where the full stop is.
+// =====================================================================
+const QMARKS_MAX = 99;
+// A marks marker at the very END of a block's wording: "[2]", "[ 12 ]".
+// Anchored by a lookahead over trailing whitespace and tags rather than by `$`,
+// because the marker is nearly always INSIDE the closing </p>.
+const QMARKS_TAIL_RE = /(?:\s|&nbsp;)*\[\s*\d{1,2}\s*\](?=(?:\s|&nbsp;|<[^>]*>)*$)/;
+// Everything from here to the end is closing tags and whitespace — so this is
+// where the wording actually ends, and where the marker belongs.
+const QMARKS_TAIL_POS_RE = /(?:\s|<[^>]*>)*$/;
+
+function qMarksOf(b) {
+  const n = parseInt(b && b.marks, 10);
+  return (isFinite(n) && n > 0 && n <= QMARKS_MAX) ? n : 0;
+}
+// The bracket convention, written ONCE. Everything that shows the marks — the
+// wording, the editor's chip, the tidy-up toast — reads it from here, so
+// changing how a mark total is printed is one edit rather than four.
+function qMarksBracket(n) { return '[' + n + ']'; }
+function qMarksLabel(b) { const n = qMarksOf(b); return n ? qMarksBracket(n) : ''; }
+// Take a printed marks marker back out of the wording. Never touches the block.
+function qStripTailMarks(html) {
+  return String(html == null ? '' : html).replace(QMARKS_TAIL_RE, '');
+}
+// …and put one back, in the right place.
+function qMarksAppendHtml(html, n) {
+  const s = String(html == null ? '' : html);
+  if (!n) return s;
+  const m = QMARKS_TAIL_POS_RE.exec(s);
+  const at = m ? m.index : s.length;
+  return s.slice(0, at) + ' <span class="q-marks">' + qMarksBracket(n) + '</span>' + s.slice(at);
+}
+
+// ---- the editor control, beside the Part picker ----------------------------
+// Only on the blocks that may OPEN a part, which are the blocks that ASK
+// something — an answer box is not a question and has no marks of its own.
+function qMarksPickerHtml(block) {
+  if (!block || QPART_OPENER_TYPES.indexOf(block.type) < 0) return '';
+  const n = qMarksOf(block);
+  const id = escapeHtml(String(block.id));
+  return `<label class="qmarks-wrap${n ? ' on' : ''}" id="qmarksWrap_${id}" title="How many marks this question is worth. It prints at the end of the wording — “… at point A. [2]” — and you never type the brackets yourself.">
+      <span class="qmarks-lab">Marks</span>
+      <input class="qmarks-input" type="number" min="1" max="${QMARKS_MAX}" step="1" inputmode="numeric"
+             value="${n || ''}" placeholder="–"
+             oninput="setBlockMarks('${id}', this.value)"
+             onchange="commitBlockMarks('${id}')">
+      <span class="qmarks-preview" id="qmarksPrev_${id}">${qMarksLabel(block)}</span>
+    </label>`;
+}
+// Repaint the control in place — the lit border and the [2] beside it. Never a
+// re-render: the author is typing IN this box, and rebuilding the block card
+// under them takes the caret with it.
+function _qMarksSyncChip(blockId) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b) return;
+  const wrap = document.getElementById('qmarksWrap_' + blockId);
+  if (wrap) wrap.classList.toggle('on', !!qMarksOf(b));
+  const prev = document.getElementById('qmarksPrev_' + blockId);
+  if (prev) prev.textContent = qMarksLabel(b);
+}
+// Typed into: record it and repaint the chip. Nothing else.
+function setBlockMarks(blockId, value) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b) return;
+  const n = parseInt(value, 10);
+  if (isFinite(n) && n > 0) b.marks = Math.min(QMARKS_MAX, n);
+  else delete b.marks;
+  _qMarksSyncChip(blockId);
+}
+// Left the box: tidy up. A wording that already ended in its own "[2]" — which
+// is how nearly every imported past-paper question arrives — would otherwise
+// show the marker twice. The block is only re-rendered when that actually
+// happened, and it is SAID OUT LOUD: words disappearing out of a question box
+// with no explanation is far more alarming than the tidy-up is worth.
+function commitBlockMarks(blockId) {
+  const b = blocks.find(x => x.id === blockId);
+  if (!b) return;
+  if (qMarksOf(b)) {
+    const cleaned = qStripTailMarks(b.content || '');
+    if (cleaned !== b.content) {
+      b.content = cleaned;
+      renderBlocks();
+      showToast('Removed the “' + qMarksLabel(b) + '” from the wording — the Marks box prints it now', 'info');
+      return;
+    }
+  }
+  _qMarksSyncChip(blockId);
 }
 
 function qPartLabel(p) { const n = qPartNormalize(p); return n ? '(' + n + ')' : ''; }
@@ -23999,7 +24124,7 @@ function renderQuestionBodyPreviewHtml(q) {
   ((q && q.blocks) || []).forEach(block => {
     switch (block.type) {
       case 'text':
-        if (block.content) html += `<div style="margin:6px 0;">${block.content}</div>`;
+        if (block.content) html += `<div style="margin:6px 0;">${qPartBodyHtml(block)}</div>`;
         break;
       case 'image':
         // Preview images (Doctor cards, past-paper hover, worksheet preview) load
@@ -60844,6 +60969,8 @@ window.adminSetBoardBan = adminSetBoardBan;
 window.exportActivityAudit = exportActivityAudit;
 window.adminHeroOp = adminHeroOp;
 window.setBlockPart = setBlockPart;
+window.setBlockMarks = setBlockMarks;
+window.commitBlockMarks = commitBlockMarks;
 window.toggleBlockPartScope = toggleBlockPartScope;
 window.autoNumberParts = autoNumberParts;
 window.clearAllParts = clearAllParts;
