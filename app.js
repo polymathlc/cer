@@ -1978,7 +1978,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.311.0';
+const APP_VERSION = 'v1.312.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -2483,7 +2483,14 @@ let _rapidAddedCount = 0;
 // IDs of questions added via Rapid add this session — highlighted in the vetting
 // grid with a badge + "Open in editor" link. Session-only; never saved to Firestore.
 let _rapidJustAdded = new Set();
-let selectedBlanks = {}; // { blockId: { wordIndex: true } }
+let selectedBlanks = {}; // { blockId: { wordIndex: true } } — the AI's [[bracket]] artefact; see _markedToBlanks. NOT the keywords.
+// 🔑 The keywords the AUTHOR marked on this question's model answer, keyed the
+// same way: { '<blockId>'|'<blockId>_claim': { wordIndex: true } }. Deliberately
+// its own field rather than a flag on `selectedBlanks` above, because "did a
+// person choose these words" then has exactly one answer and no history to
+// reason about. Declared here, beside the editor's other top-level state, so
+// nothing can reach it in its temporal dead zone.
+let editorKeywords = {};
 let currentEditingQuestion = null;
 let _skipCreateReset = false;
 // When an edit is launched from the Past Papers page, we return there (not the
@@ -3374,6 +3381,7 @@ function navigateTo(page) {
       // Fresh create — reset everything
       blocks = [];
       selectedBlanks = {};
+      editorKeywords = {};
       currentEditingQuestion = null;
       _editReturnPage = null;           // a brand-new question won't return to Past Papers
       _hideDupBanner();
@@ -3669,6 +3677,10 @@ function addBlockAt(type, index) {
 function removeBlock(id) {
   blocks = blocks.filter(b => b.id !== id);
   if (selectedBlanks[id]) delete selectedBlanks[id];
+  // …and the keywords marked on it. A CER block keeps three keys, so the whole
+  // family goes: an orphan left behind would come back on a later block that
+  // happened to be given the same id.
+  kwForgetBlock(id);
   renderBlocks();
 }
 
@@ -10072,6 +10084,13 @@ async function askGeminiVision(prompt, media, { maxOutputTokens = 2048, json = f
 
 // Convert text with [[keyword]] marks into { content, blanks } where blanks
 // maps the word index of each marked word → true (matches renderStudentText).
+// [[double brackets]] in an AI answer. No prompt asks for them any more — a
+// keyword is a teaching decision and is made by a person (see KEYWORDS IN A
+// MODEL ANSWER) — but a model asked for prose still produces a stray pair now
+// and then, and a bracket printed in the middle of a model answer is a bug on
+// its own. So this stays: `content` is the answer with the brackets taken back
+// out. The `blanks` map it also returns is a leftover of the era when they
+// were asked for, and is NOT read as keywords by anything.
 function _markedToBlanks(marked) {
   const blanks = {};
   let content = '';
@@ -10337,7 +10356,7 @@ function _bulkPagePrompt(pageNo, pageCount) {
     _rectangleRules() +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, and set "correctIndex" to the 0-based correct option (work the correct answer out yourself if the paper shows no answer key); no "answer"/"plainanswer".\n` +
-    `- open question: include an answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing the model answer yourself if the paper does not show one, and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only. One answer block for a question with no parts, one per part for a question with parts.\n` +
+    `- open question: include an answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing the model answer yourself if the paper does not show one. One answer block for a question with no parts, one per part for a question with parts.\n` +
     `- EVERY question (mcq AND open) must have an "explanation" block: 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct. Write it yourself — papers almost never print one, so do NOT skip it just because it is not shown.\n` +
     _partsPromptRules() +
     `- "title": a short label including the question number if present (e.g. "Q1 — Heat").\n` +
@@ -10725,7 +10744,7 @@ function _aiBuildQuestionPrompt(isPdf, imageCount, levelHint) {
     _rectangleRules() +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n") so they do not run together in one paragraph.\n` +
     `- If questionType is "mcq": include exactly ONE "mcq" block. Copy each answer option verbatim into "options" WITHOUT its leading number/letter, and set "correctIndex" to the 0-based index of the correct option. Do NOT include "answer" or "plainanswer" blocks.\n` +
-    `- If questionType is "open": include an answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer — one for a question with no parts, one per part for a question with parts. In these answer fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
+    `- If questionType is "open": include an answer block — use "answer" (Claim-Evidence-Reasoning) for a full explanation, or "plainanswer" for a short answer — one for a question with no parts, one per part for a question with parts. Write the answer as plain prose: no brackets, marks or markup of any kind around individual words.\n` +
     `- An "explanation" block is 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct — write it yourself if the source shows none, and never leave the question without one.\n` +
     _partsPromptRules() +
     _aiTagsPromptLine() +
@@ -12361,6 +12380,9 @@ function collectQuestionData() {
     los: (typeof _loOrderIds === 'function') ? _loOrderIds(editorLos || []) : (editorLos || []).slice(),
     blocks: blocksClone,
     blanks: JSON.parse(JSON.stringify(selectedBlanks)),
+    // 🔑 The keywords a PERSON marked. Never written by any AI path — see the
+    // KEYWORDS IN A MODEL ANSWER header.
+    answerKeywords: JSON.parse(JSON.stringify(editorKeywords)),
     createdAt: new Date().toISOString(),
     createdBy: currentUser?.name || 'Admin'
   });
@@ -12400,6 +12422,7 @@ function addToBank() {
   // Reset form right away so user cannot double-add
   blocks = [];
   selectedBlanks = {};
+  editorKeywords = {};
   currentEditingQuestion = null;
   renderBlocks();
   renderQuestionBank();
@@ -12419,7 +12442,7 @@ function addToBank() {
 const EDITOR_OWNED_QUESTION_FIELDS = new Set([
   'id', 'title', 'category', 'category2', 'topic', 'topic2', 'markingGuide',
   'answerKeyNote', 'answerKeyImage', 'answerKeyDiagramNote', 'annotation', 'notInSyllabus', 'tags', 'los',
-  'blocks', 'blanks', 'createdAt', 'createdBy',
+  'blocks', 'blanks', 'answerKeywords', 'createdAt', 'createdBy',
 ]);
 
 // An edited question is rebuilt from scratch by collectQuestionData(), so every
@@ -12506,6 +12529,7 @@ async function _saveEditToBankConfirmed(q, id) {
   setEditMode(false);
   blocks = [];
   selectedBlanks = {};
+  editorKeywords = {};
   renderBlocks();
   updateCounts();
   renderQuestionBank();
@@ -12527,6 +12551,7 @@ function cancelEdit() {
     setEditMode(false);
     blocks = [];
     selectedBlanks = {};
+    editorKeywords = {};
     renderBlocks();
     _afterEditNavigate();
   });
@@ -12551,6 +12576,7 @@ function _addToVettingConfirmed(q) {
   // Reset form right away so user cannot double-add
   blocks = [];
   selectedBlanks = {};
+  editorKeywords = {};
   currentEditingQuestion = null;
   renderBlocks();
   renderVettingList();
@@ -12564,6 +12590,7 @@ function clearForm() {
   showConfirm('Clear Form', 'This will remove all blocks and reset the form. Are you sure?', () => {
     blocks = [];
     selectedBlanks = {};
+    editorKeywords = {};
     currentEditingQuestion = null;
     document.getElementById('questionTitle').value = '';
     document.getElementById('categorySelect').value = 'CER';
@@ -13372,6 +13399,10 @@ function editQuestion(id) {
 
   blocks = JSON.parse(JSON.stringify(q.blocks));
   selectedBlanks = JSON.parse(JSON.stringify(q.blanks || {}));
+  // 🔑 …and the keywords, from their OWN field. `q.blanks` above is the AI's
+  // [[bracket]] artefact and is deliberately not read as keywords: a question
+  // nobody has marked has none, whatever the model once bracketed.
+  editorKeywords = JSON.parse(JSON.stringify(q.answerKeywords || {}));
   // A question written before the doubling was fixed cleans itself the moment
   // somebody opens it, so the bank tidies up as it is worked through rather
   // than needing a migration. Only ever removes a marker naming the block's
@@ -13484,7 +13515,7 @@ function _regenPrompt(q, remark) {
     `- Every question ends with an explanation even if the original had none.\n` +
     _partsPromptRules() +
     `- If a text block lists labelled items or options inline, put EACH on its own line separated by a real line break ("\\n").\n` +
-    `- For "answer"/"plainanswer" fields only, wrap each KEY science keyword a student should recall in [[double brackets]] (whole words, about 3 to 8 total). Do NOT bracket anything in text, options or explanation.\n` +
+    `- Write every answer as plain prose: no brackets, marks or markup of any kind around individual words.\n` +
     `- Choose topic from EXACTLY this list: ${currentTopics().join('; ')}.\n` +
     `- Choose category from EXACTLY this list: ${categories.join('; ')}.\n` +
     `- Use plain text only, no markdown.`;
@@ -16794,7 +16825,7 @@ function _epQuestionPrompt(n, from, total) {
     _rectangleRules() +
     `- If a text block lists labelled statements or answer options inline (e.g. "A: ...", "B: ...", "(1) ...", "(2) ..."), put EACH labelled item on its OWN line — separate them with a real line break ("\\n").\n` +
     `- mcq question: include exactly ONE "mcq" block, copy each option verbatim WITHOUT its leading number/letter, and set "correctIndex" to the 0-based correct option (work it out yourself); no "answer"/"plainanswer".\n` +
-    `- open question: include an answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing your best model answer, and wrap 3-8 key science keywords in [[double brackets]] in those answer fields only. One answer block for a question with no parts, one per part for a question with parts.\n` +
+    `- open question: include an answer block — "answer" (Claim-Evidence-Reasoning) or "plainanswer" — writing your best model answer. One answer block for a question with no parts, one per part for a question with parts.\n` +
     `- The answer you write is a PLACEHOLDER: the paper's official marking scheme is read separately and will replace it. Write it anyway — some questions never get an official answer.\n` +
     `- An "explanation" block is 2-4 sentences a teacher would give a P3-P6 student explaining WHY the correct answer is correct.\n` +
     _partsPromptRules() +
@@ -16819,7 +16850,7 @@ function _epKeyPrompt(i, total) {
     `- "option": for a multiple-choice answer, the chosen option as printed — "1"-"4" or "A"-"D". Empty string for an open question.\n` +
     `- "answer": the full written answer for an open question, copied as printed. Empty string for a multiple-choice answer.\n` +
     `- "claim"/"evidence"/"reasoning": ONLY if the key itself splits the answer into those three parts. Otherwise leave all three empty and put the whole answer in "answer".\n` +
-    `- Wrap 3-8 key science keywords in [[double brackets]] inside "answer", "claim", "evidence" and "reasoning" — this is the only thing you may add to the printed wording.\n` +
+    `- Copy the answer fields word for word. Do NOT add brackets, emphasis or any other markup of your own to the printed wording.\n` +
     `- "explanation": any working, marking note, accepted-alternative or reason printed beside the answer. Empty string if there is none.\n` +
     `- Copy the paper's wording. Do NOT write an answer of your own for a number the key does not show — leave that number out entirely.\n` +
     `- Plain text only, no markdown.`;
@@ -21500,15 +21531,29 @@ document.addEventListener('click', function (e) {
 //   3. nothing else changes — the question is still the same question in
 //      ordinary practice, and a question with no keywords is untouched.
 //
-// WHERE THEY LIVE. `q.blanks` — the question's own map, keyed by the answer
-// FIELD: `<blockId>` on its own for a plain answer box, `<blockId>_claim` /
-// `_evidence` / `_reasoning` for the three fields of a CER answer block.
-// Each entry is `{ wordIndex: true }`, counting WORDS (not characters) from
-// the start of that field. That shape is NOT new: `_markedToBlanks` has been
-// writing it from the `[[double bracket]]` marks every AI authoring prompt
-// asks for since long before this feature existed — it was simply never read
-// back by anything. So the bank already carries keywords on the questions the
-// AI built, and they light up the moment this ships.
+// NOTHING IS ASSIGNED BY DEFAULT, and that is the point of the whole design.
+// A keyword is a teaching decision — which word is the one worth recalling —
+// so it is made by a PERSON, on purpose, one question at a time. No AI path
+// writes one, no import writes one, and a question nobody has marked simply
+// has no fill-in-the-blanks version of itself. It is not offered in the mode,
+// its answer key prints exactly as it always did, and nothing anywhere says
+// it is missing anything, because it is not.
+//
+//   The first cut of this got that wrong. `_markedToBlanks` has long turned
+//   the `[[double bracket]]` marks the AI prompts used to ask for into a
+//   `q.blanks` map that nothing ever read, so reading it back would have
+//   handed the whole bank a set of keywords the teacher never chose. The
+//   prompts no longer ask for the brackets at all; `_markedToBlanks` stays,
+//   purely as the guard that strips a stray pair back out of an answer.
+//
+// WHERE THEY LIVE. `q.answerKeywords` — the question's own map, keyed by the
+// answer FIELD: `<blockId>` on its own for a plain answer box,
+// `<blockId>_claim` / `_evidence` / `_reasoning` for the three fields of a CER
+// answer block. Each entry is `{ wordIndex: true }`, counting WORDS (not
+// characters) from the start of that field. It is deliberately its OWN field
+// and not a flag on `q.blanks`: "did a person choose these words" then has
+// exactly one answer, with no history to reason about and no legacy data
+// sitting in the same map meaning something else.
 //
 // TWO WAYS TO READ THEM, and the split is deliberate:
 //   - PRACTICE blanks the marked INDEX and nothing else. Blanking every
@@ -21633,7 +21678,7 @@ function kwIndices(store, block, field, parsed) {
     .filter(i => Number.isInteger(i) && i >= 0 && i < n)
     .sort((a, b) => a - b);
 }
-function qKwIndices(q, block, field, parsed) { return kwIndices(q && q.blanks, block, field, parsed); }
+function qKwIndices(q, block, field, parsed) { return kwIndices(q && q.answerKeywords, block, field, parsed); }
 
 // Every keyword WORD on a question, lower-cased. This is what the answer key
 // bolds by — see the header: a key is read, not answered, so a keyword is
@@ -21820,10 +21865,10 @@ function kwFibNoteHtml() {
 // keywords from a set that has gutted the sentence.
 //
 // Nothing is written anywhere until the question is SAVED: the panel edits
-// `selectedBlanks`, which `collectQuestionData` already carries onto the
-// question as `blanks` — and which is already in EDITOR_OWNED_QUESTION_FIELDS,
-// so a keyword the author has just removed is not restored by
-// carryOverQuestionMeta on the next save.
+// `editorKeywords`, which `collectQuestionData` carries onto the question as
+// `answerKeywords` — a field in EDITOR_OWNED_QUESTION_FIELDS, so a keyword the
+// author has just removed is not restored by carryOverQuestionMeta on the
+// next save. This panel is the ONLY writer there is.
 // =====================================================================
 const _kwOpen = new Set();   // block ids whose keyword panel is open
 
@@ -21845,7 +21890,7 @@ function kwTogglePanel(blockId) {
 function _kwChipsHtml(blockId, block, field) {
   const parsed = _kwParse((block && block[field]) || '');
   if (!parsed.words.length) return '<span style="font-size:0.8rem;color:var(--text-muted);">Write the answer above, then click its key words here.</span>';
-  const marked = new Set(kwIndices(selectedBlanks, block, field, parsed));
+  const marked = new Set(kwIndices(editorKeywords, block, field, parsed));
   return parsed.words.map((w, i) =>
     `<span class="fb-chip${marked.has(i) ? ' on' : ''}" onclick="kwToggleWord('${blockId}','${field}',${i})" title="${marked.has(i) ? 'Click to unmark this keyword' : 'Click to make this a keyword'}">${escapeHtml(w.w)}</span>`
   ).join(' ');
@@ -21856,13 +21901,13 @@ function kwPanelHtml(block) {
   if (!id || !_kwOpen.has(id)) return '';
   const fields = kwBlockFields(block);
   if (!fields.length) return '';
-  const total = fields.reduce((n, f) => n + kwIndices(selectedBlanks, block, f.field).length, 0);
+  const total = fields.reduce((n, f) => n + kwIndices(editorKeywords, block, f.field).length, 0);
   const body = fields.map(({ field, label }) => `
       <div style="margin-top:14px;">
         ${label ? `<div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;">${escapeHtml(label)}</div>` : ''}
         <div class="fb-chip-wrap" id="kwChips_${id}_${field}">${_kwChipsHtml(id, block, field)}</div>
         <div style="font-size:0.76rem;color:var(--text-muted);margin:10px 0 5px;">What a student sees in 🔲 Fill-in-the-Blanks practice:</div>
-        <div class="fb-preview" id="kwPrev_${id}_${field}">${kwPreviewFieldHtml(block, field, kwIndices(selectedBlanks, block, field))}</div>
+        <div class="fb-preview" id="kwPrev_${id}_${field}">${kwPreviewFieldHtml(block, field, kwIndices(editorKeywords, block, field))}</div>
       </div>`).join('');
   return `
     <div class="kw-panel" id="kwPanel_${id}">
@@ -21888,7 +21933,7 @@ function kwSyncPanel(blockId) {
   if (!block) return;
   let total = 0;
   kwBlockFields(block).forEach(({ field }) => {
-    const idxs = kwIndices(selectedBlanks, block, field);
+    const idxs = kwIndices(editorKeywords, block, field);
     total += idxs.length;
     const c = document.getElementById('kwChips_' + blockId + '_' + field);
     if (c) c.innerHTML = _kwChipsHtml(blockId, block, field);
@@ -21903,16 +21948,25 @@ function kwToggleWord(blockId, field, idx) {
   const block = blocks.find(b => b.id === blockId);
   if (!block) return;
   const key = kwFieldKey(blockId, field);
-  const map = selectedBlanks[key] || (selectedBlanks[key] = {});
+  const map = editorKeywords[key] || (editorKeywords[key] = {});
   if (map[idx]) delete map[idx]; else map[idx] = true;
-  if (!Object.keys(map).length) delete selectedBlanks[key];
+  if (!Object.keys(map).length) delete editorKeywords[key];
   kwSyncPanel(blockId);
+}
+
+// Drop every keyword filed against a block that has just been deleted. Keyed by
+// FIELD, so a CER block leaves three entries behind if only its bare id is
+// cleared — and a block later given the same id would inherit them.
+function kwForgetBlock(blockId) {
+  ['content', 'text'].concat(KW_CER_FIELDS.map(f => f.field))
+    .forEach(field => { delete editorKeywords[kwFieldKey(blockId, field)]; });
+  _kwOpen.delete(blockId);
 }
 
 function kwClearBlock(blockId) {
   const block = blocks.find(b => b.id === blockId);
   if (!block) return;
-  kwBlockFields(block).forEach(({ field }) => { delete selectedBlanks[kwFieldKey(blockId, field)]; });
+  kwBlockFields(block).forEach(({ field }) => { delete editorKeywords[kwFieldKey(blockId, field)]; });
   kwSyncPanel(blockId);
 }
 
@@ -56030,7 +56084,7 @@ function ppCreateForAssign(){
   ppCloseAssign(); ppHoverHide();
 
   // Fresh editor, prefilled from the past-paper question
-  blocks = []; selectedBlanks = {}; currentEditingQuestion = null;
+  blocks = []; selectedBlanks = {}; editorKeywords = {}; currentEditingQuestion = null;
   const cs2 = document.getElementById('categorySelect2'); if (cs2) cs2.value = '';
   const ts2 = document.getElementById('topicSelect2'); if (ts2) ts2.value = '';
   if (typeof _setAnswerKeyFields === 'function') _setAnswerKeyFields('', '');
