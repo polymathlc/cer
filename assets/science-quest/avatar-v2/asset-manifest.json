@@ -1,0 +1,1310 @@
+{
+  "version": 2,
+  "status": "admin-beta",
+  "generatedWith": "OpenAI ImageGen",
+  "generatedAt": "2026-08-21",
+  "releaseFlag": "RPG_ART_BETA_RELEASED",
+  "characters": [
+    {
+      "id": "male",
+      "name": "Hero — Male",
+      "file": "characters/male.webp",
+      "prompt": "Edit the aligned Science Quest modular base character into the matching male version. Preserve the exact full-body pose, scale, placement, limb positions, open empty hands, charcoal neutral undersuit, black boots, proportions, clean silhouette and painterly chibi rendering. Change only to short side-swept brown hair with no ponytail and a simple male child face without eyelashes. Use one perfectly flat vivid #00FF00 chroma background with no gradient, texture, checkerboard, glow, floor, shadow or scenery. No armour, equipment, pet, text or watermark."
+    },
+    {
+      "id": "female",
+      "name": "Hero — Female",
+      "file": "characters/female.webp",
+      "prompt": "Create the aligned female Science Quest modular base character in the same front-facing open-hand pose, charcoal neutral undersuit and black boots as the male base. Friendly painterly chibi style, full body, clean silhouette, genuine transparent alpha, no armour, equipment, pet, scenery, text, or watermark."
+    }
+  ],
+  "items": [
+    {
+      "id": "wood_sword",
+      "name": "Wooden Sword",
+      "slot": "weapon",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/weapon/wood_sword.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Wooden Sword\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "iron_sword",
+      "name": "Iron Sword",
+      "slot": "weapon",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/weapon/iron_sword.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Iron Sword\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "steel_sword",
+      "name": "Steel Sword",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/steel_sword.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Steel Sword\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "silver_rapier",
+      "name": "Silver Rapier",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/silver_rapier.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Silver Rapier\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "shadow_dagger",
+      "name": "Shadow Dagger",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/shadow_dagger.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Shadow Dagger\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "knight_sword",
+      "name": "Knight's Blade",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/knight_sword.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Knight's Blade\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "corsair_cutlass",
+      "name": "Corsair's Cutlass",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/corsair_cutlass.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Corsair's Cutlass\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "frost_brand",
+      "name": "Frostbrand",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/frost_brand.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Frostbrand\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "elven_blade",
+      "name": "Elven Blade",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/elven_blade.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Elven Blade\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "flame_sword",
+      "name": "Flameblade",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/flame_sword.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Flameblade\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "dragon_blade",
+      "name": "Dragonfang",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/dragon_blade.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Dragonfang\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "obsidian_greatsword",
+      "name": "Obsidian Greatsword",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/obsidian_greatsword.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Obsidian Greatsword\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "excalibur",
+      "name": "Excalibur",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/excalibur.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Excalibur\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "apprentice_staff",
+      "name": "Apprentice Staff",
+      "slot": "weapon",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/weapon/apprentice_staff.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Apprentice Staff\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "oak_staff",
+      "name": "Oak Staff",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/oak_staff.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Oak Staff\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "ember_staff",
+      "name": "Ember Staff",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/ember_staff.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Ember Staff\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "sprout_staff",
+      "name": "Sprout Staff",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/sprout_staff.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Sprout Staff\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "arcane_staff",
+      "name": "Arcane Staff",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/arcane_staff.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Arcane Staff\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "glacier_staff",
+      "name": "Glacier Staff",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/glacier_staff.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Glacier Staff\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "rune_staff",
+      "name": "Runewood Staff",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/rune_staff.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Runewood Staff\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "crystal_staff",
+      "name": "Crystal Staff",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/crystal_staff.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Crystal Staff\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "void_staff",
+      "name": "Void Staff",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/void_staff.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Void Staff\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "royal_crook",
+      "name": "Crook of Kings",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/royal_crook.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Crook of Kings\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "star_wand",
+      "name": "Star Wand",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/star_wand.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Star Wand\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "comet_wand",
+      "name": "Comet Wand",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/comet_wand.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Comet Wand\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "sun_scepter",
+      "name": "Scepter of Dawn",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/sun_scepter.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Scepter of Dawn\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "soldier_spear",
+      "name": "Soldier's Spear",
+      "slot": "weapon",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/weapon/soldier_spear.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Soldier's Spear\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "battle_axe",
+      "name": "Battle Axe",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/battle_axe.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Battle Axe\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "war_hammer",
+      "name": "Doom Hammer",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/war_hammer.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Doom Hammer\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "executioner_axe",
+      "name": "Executioner's Axe",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/executioner_axe.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Executioner's Axe\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "reaper_scythe",
+      "name": "Grim Scythe",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/reaper_scythe.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Grim Scythe\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "golden_trident",
+      "name": "Golden Trident",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/golden_trident.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Golden Trident\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "crown_halberd",
+      "name": "Halberd of the Crown",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/crown_halberd.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Halberd of the Crown\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "shortbow",
+      "name": "Hunter's Shortbow",
+      "slot": "weapon",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/weapon/shortbow.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Hunter's Shortbow\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "longbow",
+      "name": "Longbow",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/longbow.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Longbow\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "elven_bow",
+      "name": "Elven Warbow",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/elven_bow.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Elven Warbow\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "shadow_bow",
+      "name": "Nightwhisper Bow",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/shadow_bow.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Nightwhisper Bow\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "frostfang_bow",
+      "name": "Frostfang Bow",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/frostfang_bow.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Frostfang Bow\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "stormpiercer",
+      "name": "Stormpiercer",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/stormpiercer.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Stormpiercer\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "ember_dagger",
+      "name": "Ember Dagger",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/ember_dagger.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Ember Dagger\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "glacier_spear",
+      "name": "Glacier Spear",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/glacier_spear.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Glacier Spear\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "elven_rapier",
+      "name": "Elven Rapier",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/elven_rapier.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Elven Rapier\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "sunblade",
+      "name": "Sunblade",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/sunblade.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Sunblade\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "obsidian_axe",
+      "name": "Obsidian Axe",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/obsidian_axe.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Obsidian Axe\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "starfall_katana",
+      "name": "Starfall Katana",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/starfall_katana.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Starfall Katana\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "wooden_shield",
+      "name": "Wooden Shield",
+      "slot": "shield",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/shield/wooden_shield.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Wooden Shield\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "swift_buckler",
+      "name": "Swift Buckler",
+      "slot": "shield",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/shield/swift_buckler.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Swift Buckler\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "iron_shield",
+      "name": "Iron Shield",
+      "slot": "shield",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/shield/iron_shield.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Iron Shield\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "kite_shield",
+      "name": "Kite Shield",
+      "slot": "shield",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/shield/kite_shield.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Kite Shield\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "knight_shield",
+      "name": "Knight's Shield",
+      "slot": "shield",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/shield/knight_shield.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Knight's Shield\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "grimoire",
+      "name": "Grimoire of Shadows",
+      "slot": "shield",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/shield/grimoire.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Grimoire of Shadows\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "tower_shield",
+      "name": "Tower Shield",
+      "slot": "shield",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/shield/tower_shield.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Tower Shield\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "mirror_shield",
+      "name": "Mirror Shield",
+      "slot": "shield",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/shield/mirror_shield.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Mirror Shield\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "aegis_shield",
+      "name": "Aegis of Wisdom",
+      "slot": "shield",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/shield/aegis_shield.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Aegis of Wisdom\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "royal_bulwark",
+      "name": "Royal Bulwark",
+      "slot": "shield",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/shield/royal_bulwark.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Royal Bulwark\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "dragonscale_ward",
+      "name": "Dragonscale Ward",
+      "slot": "shield",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/shield/dragonscale_ward.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Dragonscale Ward\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "fallen_star_aegis",
+      "name": "Aegis of the Fallen Star",
+      "slot": "shield",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/shield/fallen_star_aegis.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Aegis of the Fallen Star\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "cloth_tunic",
+      "name": "Cloth Tunic",
+      "slot": "armor",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/armor/cloth_tunic.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Cloth Tunic\". front-facing torso wearable shell, empty neck and arm openings, no body inside. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "leather_armor",
+      "name": "Leather Armour",
+      "slot": "armor",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/armor/leather_armor.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Leather Armour\". front-facing torso wearable shell, empty neck and arm openings, no body inside. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "travelers_garb",
+      "name": "Traveller's Garb",
+      "slot": "armor",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/armor/travelers_garb.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Traveller's Garb\". front-facing torso wearable shell, empty neck and arm openings, no body inside. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "chainmail",
+      "name": "Chainmail",
+      "slot": "armor",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/armor/chainmail.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Chainmail\". front-facing torso wearable shell, empty neck and arm openings, no body inside. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "mage_robe",
+      "name": "Apprentice Robe",
+      "slot": "armor",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/armor/mage_robe.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Apprentice Robe\". front-facing torso wearable shell, empty neck and arm openings, no body inside. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "bronze_plate",
+      "name": "Bronze Plate",
+      "slot": "armor",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/armor/bronze_plate.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Bronze Plate\". front-facing torso wearable shell, empty neck and arm openings, no body inside. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "ninja_garb",
+      "name": "Ninja Garb",
+      "slot": "armor",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/armor/ninja_garb.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Ninja Garb\". front-facing torso wearable shell, empty neck and arm openings, no body inside. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "knight_plate",
+      "name": "Knight's Plate",
+      "slot": "armor",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/armor/knight_plate.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Knight's Plate\". front-facing torso wearable shell, empty neck and arm openings, no body inside. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "emerald_scale",
+      "name": "Emerald Scale Mail",
+      "slot": "armor",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/armor/emerald_scale.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Emerald Scale Mail\". front-facing torso wearable shell, empty neck and arm openings, no body inside. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "frost_plate",
+      "name": "Glacier Plate",
+      "slot": "armor",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/armor/frost_plate.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Glacier Plate\". front-facing torso wearable shell, empty neck and arm openings, no body inside. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "archmage_robe",
+      "name": "Archmage Robe",
+      "slot": "armor",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/armor/archmage_robe.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Archmage Robe\". front-facing torso wearable shell, empty neck and arm openings, no body inside. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "gilded_plate",
+      "name": "Gilded Plate",
+      "slot": "armor",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/armor/gilded_plate.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Gilded Plate\". front-facing torso wearable shell, empty neck and arm openings, no body inside. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "dragon_plate",
+      "name": "Dragonscale Plate",
+      "slot": "armor",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/armor/dragon_plate.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Dragonscale Plate\". front-facing torso wearable shell, empty neck and arm openings, no body inside. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "starweaver_robe",
+      "name": "Starweaver Robe",
+      "slot": "armor",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/armor/starweaver_robe.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Starweaver Robe\". front-facing torso wearable shell, empty neck and arm openings, no body inside. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "leather_cap",
+      "name": "Leather Cap",
+      "slot": "helmet",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/helmet/leather_cap.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Leather Cap\". front-facing empty headwear, open face area, no head inside. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "adventurers_hood",
+      "name": "Adventurer's Hood",
+      "slot": "helmet",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/helmet/adventurers_hood.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Adventurer's Hood\". front-facing empty headwear, open face area, no head inside. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "warrior_headband",
+      "name": "Warrior's Headband",
+      "slot": "helmet",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/helmet/warrior_headband.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Warrior's Headband\". front-facing empty headwear, open face area, no head inside. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "iron_helm",
+      "name": "Iron Helm",
+      "slot": "helmet",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/helmet/iron_helm.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Iron Helm\". front-facing empty headwear, open face area, no head inside. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "shadow_hood",
+      "name": "Shadow Hood",
+      "slot": "helmet",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/helmet/shadow_hood.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Shadow Hood\". front-facing empty headwear, open face area, no head inside. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "wizard_hat",
+      "name": "Wizard's Hat",
+      "slot": "helmet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/helmet/wizard_hat.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Wizard's Hat\". front-facing empty headwear, open face area, no head inside. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "knight_helm",
+      "name": "Knight's Helm",
+      "slot": "helmet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/helmet/knight_helm.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Knight's Helm\". front-facing empty headwear, open face area, no head inside. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "berserker_horns",
+      "name": "Berserker Horns",
+      "slot": "helmet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/helmet/berserker_horns.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Berserker Horns\". front-facing empty headwear, open face area, no head inside. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "glacier_helm",
+      "name": "Glacier Helm",
+      "slot": "helmet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/helmet/glacier_helm.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Glacier Helm\". front-facing empty headwear, open face area, no head inside. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "gilded_helm",
+      "name": "Gilded Helm",
+      "slot": "helmet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/helmet/gilded_helm.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Gilded Helm\". front-facing empty headwear, open face area, no head inside. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "seer_circlet",
+      "name": "Circlet of the Seer",
+      "slot": "helmet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/helmet/seer_circlet.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Circlet of the Seer\". front-facing empty headwear, open face area, no head inside. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "crown_wisdom",
+      "name": "Crown of Wisdom",
+      "slot": "helmet",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/helmet/crown_wisdom.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Crown of Wisdom\". front-facing empty headwear, open face area, no head inside. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "dragonfang_helm",
+      "name": "Dragonfang Helm",
+      "slot": "helmet",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/helmet/dragonfang_helm.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Dragonfang Helm\". front-facing empty headwear, open face area, no head inside. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "seraph_halo",
+      "name": "Seraph's Halo",
+      "slot": "helmet",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/helmet/seraph_halo.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Seraph's Halo\". front-facing empty headwear, open face area, no head inside. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "scholar_cape",
+      "name": "Squire's Cape",
+      "slot": "accessory",
+      "rarity": "common",
+      "layer": "back",
+      "file": "items/accessory/scholar_cape.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Squire's Cape\". centered wearable charm, pendant, orb, ring, die, or magical trinket. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "forest_cloak",
+      "name": "Forest Cloak",
+      "slot": "accessory",
+      "rarity": "uncommon",
+      "layer": "back",
+      "file": "items/accessory/forest_cloak.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Forest Cloak\". centered wearable charm, pendant, orb, ring, die, or magical trinket. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "hero_cape",
+      "name": "Hero's Cape",
+      "slot": "accessory",
+      "rarity": "rare",
+      "layer": "back",
+      "file": "items/accessory/hero_cape.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Hero's Cape\". centered wearable charm, pendant, orb, ring, die, or magical trinket. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "elven_cloak",
+      "name": "Elven Cloak",
+      "slot": "accessory",
+      "rarity": "rare",
+      "layer": "back",
+      "file": "items/accessory/elven_cloak.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Elven Cloak\". centered wearable charm, pendant, orb, ring, die, or magical trinket. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "phoenix_cape",
+      "name": "Phoenix Cape",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "back",
+      "file": "items/accessory/phoenix_cape.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Phoenix Cape\". centered wearable charm, pendant, orb, ring, die, or magical trinket. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "dragon_wings",
+      "name": "Dragon Wings",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "back",
+      "file": "items/accessory/dragon_wings.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Dragon Wings\". centered wearable charm, pendant, orb, ring, die, or magical trinket. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "starfall_cape",
+      "name": "Starfall Cape",
+      "slot": "accessory",
+      "rarity": "legendary",
+      "layer": "back",
+      "file": "items/accessory/starfall_cape.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Starfall Cape\". centered wearable charm, pendant, orb, ring, die, or magical trinket. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "angel_wings",
+      "name": "Wings of Light",
+      "slot": "accessory",
+      "rarity": "legendary",
+      "layer": "back",
+      "file": "items/accessory/angel_wings.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Wings of Light\". centered wearable charm, pendant, orb, ring, die, or magical trinket. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "lucky_amulet",
+      "name": "Lucky Amulet",
+      "slot": "accessory",
+      "rarity": "uncommon",
+      "layer": "front",
+      "file": "items/accessory/lucky_amulet.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Lucky Amulet\". centered wearable charm, pendant, orb, ring, die, or magical trinket. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "ruby_pendant",
+      "name": "Ruby Pendant",
+      "slot": "accessory",
+      "rarity": "uncommon",
+      "layer": "front",
+      "file": "items/accessory/ruby_pendant.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Ruby Pendant\". centered wearable charm, pendant, orb, ring, die, or magical trinket. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "hawk_feather",
+      "name": "Hawk Feather Charm",
+      "slot": "accessory",
+      "rarity": "uncommon",
+      "layer": "front",
+      "file": "items/accessory/hawk_feather.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Hawk Feather Charm\". centered wearable charm, pendant, orb, ring, die, or magical trinket. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "wolf_fang",
+      "name": "Wolf Fang Charm",
+      "slot": "accessory",
+      "rarity": "rare",
+      "layer": "front",
+      "file": "items/accessory/wolf_fang.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Wolf Fang Charm\". centered wearable charm, pendant, orb, ring, die, or magical trinket. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "sage_amulet",
+      "name": "Sage's Amulet",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "front",
+      "file": "items/accessory/sage_amulet.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Sage's Amulet\". centered wearable charm, pendant, orb, ring, die, or magical trinket. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "royal_medallion",
+      "name": "Royal Medallion",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "front",
+      "file": "items/accessory/royal_medallion.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Royal Medallion\". centered wearable charm, pendant, orb, ring, die, or magical trinket. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "phoenix_amulet",
+      "name": "Amulet of the Phoenix",
+      "slot": "accessory",
+      "rarity": "legendary",
+      "layer": "front",
+      "file": "items/accessory/phoenix_amulet.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Amulet of the Phoenix\". centered wearable charm, pendant, orb, ring, die, or magical trinket. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "loyal_pup",
+      "name": "Loyal Pup",
+      "slot": "pet",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/pet/loyal_pup.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Loyal Pup\". small full-body companion creature, facing slightly right, compact readable silhouette. simple practical construction, no glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "shadow_cat",
+      "name": "Shadow Cat",
+      "slot": "pet",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/pet/shadow_cat.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Shadow Cat\". small full-body companion creature, facing slightly right, compact readable silhouette. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "tortoise_knight",
+      "name": "Tortoise Knight",
+      "slot": "pet",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/pet/tortoise_knight.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Tortoise Knight\". small full-body companion creature, facing slightly right, compact readable silhouette. well-crafted with a faint magical accent. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "frost_penguin",
+      "name": "Frost Penguin",
+      "slot": "pet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/pet/frost_penguin.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Frost Penguin\". small full-body companion creature, facing slightly right, compact readable silhouette. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "wisp_familiar",
+      "name": "Will-o'-Wisp",
+      "slot": "pet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/pet/wisp_familiar.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Will-o'-Wisp\". small full-body companion creature, facing slightly right, compact readable silhouette. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "ember_fox",
+      "name": "Ember Fox",
+      "slot": "pet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/pet/ember_fox.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Ember Fox\". small full-body companion creature, facing slightly right, compact readable silhouette. distinctive materials and a controlled magical glow. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "storm_chick",
+      "name": "Storm Chick",
+      "slot": "pet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/pet/storm_chick.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Storm Chick\". small full-body companion creature, facing slightly right, compact readable silhouette. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "owl_familiar",
+      "name": "Owl Familiar",
+      "slot": "pet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/pet/owl_familiar.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Owl Familiar\". small full-body companion creature, facing slightly right, compact readable silhouette. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "star_unicorn",
+      "name": "Star Unicorn",
+      "slot": "pet",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/pet/star_unicorn.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Star Unicorn\". small full-body companion creature, facing slightly right, compact readable silhouette. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "pocket_dragon",
+      "name": "Dragon Whelp",
+      "slot": "pet",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/pet/pocket_dragon.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Dragon Whelp\". small full-body companion creature, facing slightly right, compact readable silhouette. radiant masterwork with refined gold accents and powerful light. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "warlords_banner",
+      "name": "Warlord's Banner",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "back",
+      "file": "items/accessory/warlords_banner.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Warlord's Banner\". centered wearable charm, pendant, orb, ring, die, or magical trinket. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "thieves_dice",
+      "name": "Thieves' Dice",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "front",
+      "file": "items/accessory/thieves_dice.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Thieves' Dice\". centered wearable charm, pendant, orb, ring, die, or magical trinket. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "archmage_orb",
+      "name": "Archmage's Orb",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "front",
+      "file": "items/accessory/archmage_orb.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Archmage's Orb\". centered wearable charm, pendant, orb, ring, die, or magical trinket. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "worldender",
+      "name": "Worldender",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/worldender.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Worldender\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "staff_of_creation",
+      "name": "Staff of Creation",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/staff_of_creation.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Staff of Creation\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "eclipse_reaper",
+      "name": "Eclipse Reaper",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/eclipse_reaper.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Eclipse Reaper\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "aegis_eternity",
+      "name": "Aegis of Eternity",
+      "slot": "shield",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/shield/aegis_eternity.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Aegis of Eternity\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "dawnforged_plate",
+      "name": "Dawnforged Plate",
+      "slot": "armor",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/armor/dawnforged_plate.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Dawnforged Plate\". front-facing torso wearable shell, empty neck and arm openings, no body inside. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "crown_infinity",
+      "name": "Crown of Infinity",
+      "slot": "helmet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/helmet/crown_infinity.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Crown of Infinity\". front-facing empty headwear, open face area, no head inside. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "wings_eternity",
+      "name": "Wings of Eternity",
+      "slot": "accessory",
+      "rarity": "mythic",
+      "layer": "back",
+      "file": "items/accessory/wings_eternity.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Wings of Eternity\". centered wearable charm, pendant, orb, ring, die, or magical trinket. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "eternal_phoenix",
+      "name": "Eternal Phoenix",
+      "slot": "pet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/pet/eternal_phoenix.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Eternal Phoenix\". small full-body companion creature, facing slightly right, compact readable silhouette. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "streak_sprite",
+      "name": "Streak Sprite",
+      "slot": "pet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/pet/streak_sprite.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Streak Sprite\". small full-body companion creature, facing slightly right, compact readable silhouette. ornate heroic construction with luminous magical details. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "nova_dragon",
+      "name": "Nova",
+      "slot": "pet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/pet/nova_dragon.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Nova\". small full-body companion creature, facing slightly right, compact readable silhouette. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "celestial_edge",
+      "name": "Celestial Edge",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/celestial_edge.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Celestial Edge\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "galaxy_greatblade",
+      "name": "Galaxy Greatblade",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/galaxy_greatblade.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Galaxy Greatblade\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "phoenix_talon",
+      "name": "Phoenix Talon",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/phoenix_talon.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Phoenix Talon\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "astral_scythe",
+      "name": "Astral Scythe",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/astral_scythe.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Astral Scythe\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "heavens_halberd",
+      "name": "Heaven's Halberd",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/heavens_halberd.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Heaven's Halberd\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "starfire_staff",
+      "name": "Starfire Staff",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/starfire_staff.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Starfire Staff\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "tempest_bow",
+      "name": "Tempest Bow",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/tempest_bow.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG weapon asset named \"Tempest Bow\". upright weapon, blade or striking head upward, grip in the lower quarter, sized so a chibi hand can cover the grip. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "aurora_aegis",
+      "name": "Aurora Aegis",
+      "slot": "shield",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/shield/aurora_aegis.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Aurora Aegis\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "solar_bulwark",
+      "name": "Solar Bulwark",
+      "slot": "shield",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/shield/solar_bulwark.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Solar Bulwark\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "void_ward",
+      "name": "Void Ward",
+      "slot": "shield",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/shield/void_ward.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG shield asset named \"Void Ward\". front-facing off-hand shield, handle hidden behind it, readable defensive silhouette. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "celestial_plate",
+      "name": "Celestial Plate",
+      "slot": "armor",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/armor/celestial_plate.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Celestial Plate\". front-facing torso wearable shell, empty neck and arm openings, no body inside. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "phoenix_mantle",
+      "name": "Phoenix Mantle",
+      "slot": "armor",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/armor/phoenix_mantle.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Phoenix Mantle\". front-facing torso wearable shell, empty neck and arm openings, no body inside. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "astral_scalemail",
+      "name": "Astral Scalemail",
+      "slot": "armor",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/armor/astral_scalemail.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG armor asset named \"Astral Scalemail\". front-facing torso wearable shell, empty neck and arm openings, no body inside. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "astral_hat",
+      "name": "Astral Hat",
+      "slot": "helmet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/helmet/astral_hat.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Astral Hat\". front-facing empty headwear, open face area, no head inside. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "cosmos_crown",
+      "name": "Crown of the Cosmos",
+      "slot": "helmet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/helmet/cosmos_crown.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG helmet asset named \"Crown of the Cosmos\". front-facing empty headwear, open face area, no head inside. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "wings_dawn",
+      "name": "Wings of Dawn",
+      "slot": "accessory",
+      "rarity": "mythic",
+      "layer": "back",
+      "file": "items/accessory/wings_dawn.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Wings of Dawn\". centered wearable charm, pendant, orb, ring, die, or magical trinket. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "cosmos_amulet",
+      "name": "Heart of the Cosmos",
+      "slot": "accessory",
+      "rarity": "mythic",
+      "layer": "front",
+      "file": "items/accessory/cosmos_amulet.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG accessory asset named \"Heart of the Cosmos\". centered wearable charm, pendant, orb, ring, die, or magical trinket. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "astral_drake",
+      "name": "Astral Drake",
+      "slot": "pet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/pet/astral_drake.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Astral Drake\". small full-body companion creature, facing slightly right, compact readable silhouette. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "prism_peacock",
+      "name": "Prism Peacock",
+      "slot": "pet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/pet/prism_peacock.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Prism Peacock\". small full-body companion creature, facing slightly right, compact readable silhouette. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    },
+    {
+      "id": "cosmic_wyrm",
+      "name": "Cosmic Wyrm",
+      "slot": "pet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/pet/cosmic_wyrm.webp",
+      "prompt": "Create a single transparent-background modular Science Quest RPG pet asset named \"Cosmic Wyrm\". small full-body companion creature, facing slightly right, compact readable silhouette. cosmic reality-bending masterwork with exceptional but controlled magical energy. Polished painterly 2D game art, soft dimensional shading, crisp clean silhouette, friendly chibi adventure aesthetic, cohesive with one shared premium inventory and avatar equipment set. Center the entire object with generous transparent padding. Square canvas. One isolated asset only. No person, mannequin, hands, scenery, floor, cast shadow, card frame, border, UI, labels, letters, numbers, signature, or watermark. Preserve true transparent alpha outside the object."
+    }
+  ]
+}

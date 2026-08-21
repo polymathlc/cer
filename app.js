@@ -32012,6 +32012,32 @@ function akcBindOnce() {
 const $ = (id) => document.getElementById(id);
 function toast(msg, type = "") { showToast(msg, type || "info"); }
 function rpgCanPreview() { return !!currentUser && currentUser.role === "admin"; }
+// Generated Science Quest characters and equipment stay in teacher beta until
+// the release flag is deliberately flipped. Admins can compare old/new art in
+// one session without changing what students see.
+const RPG_ART_BETA_RELEASED = false;
+const RPG_ART_BETA_KEY = "scienceQuestAvatarV2";
+const RPG_ART_BETA_ROOT = "assets/science-quest/avatar-v2";
+function rpgArtBetaEnabled() {
+  if (RPG_ART_BETA_RELEASED) return true;
+  if (!rpgCanPreview()) return false;
+  try { return sessionStorage.getItem(RPG_ART_BETA_KEY) !== "off"; }
+  catch (_) { return true; }
+}
+function rpgSetArtBeta(on) {
+  if (!rpgCanPreview() || RPG_ART_BETA_RELEASED) return;
+  try { sessionStorage.setItem(RPG_ART_BETA_KEY, on ? "on" : "off"); } catch (_) {}
+  rpgRenderCharacterPage();
+  rpgRenderBattle();
+  toast(on ? "Generated avatar beta enabled" : "Generated avatar beta disabled", "success");
+}
+function rpgUnlockAllBetaItems() {
+  if (!rpgCanPreview() || !rpgState) return;
+  RPG_ITEMS.forEach(it => { rpgState.inventory[it.id] = Math.max(1, rpgState.inventory[it.id] || 0); });
+  rpgSave();
+  rpgRenderCharacterPage();
+  toast(`Unlocked all ${RPG_ITEMS.length} items for this admin test hero`, "success");
+}
 function rpgHomePage() { return rpgCanPreview() ? "create" : "home"; }
 function rpgPracticePage() { return rpgCanPreview() ? "practice" : "quickpractice"; }
 // Question difficulty rating from the question's level (P3-P6, derived from
@@ -33412,25 +33438,44 @@ function rpgStatLine(it) {
 // box — the same rectangle the inventory icon uses — so it lands in the right
 // avatar slot. For weapon/shield the box is local space and the avatar wraps the
 // art in a translated/animated <g>, so the override inherits the swing animation.
-function rpgItemArtImage(it) {
-  const box = it.box || RPG_SLOT_META[it.slot].box;
-  const [bx, by, bw, bh] = box.split(" ").map(Number);
-  return `<image href="${escapeHtml(_rpgArt[it.id])}" x="${bx}" y="${by}" width="${bw}" height="${bh}" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated;"/>`;
+function rpgBundledItemArtUrl(it) {
+  if (!it || !rpgArtBetaEnabled()) return "";
+  return `${RPG_ART_BETA_ROOT}/items/${encodeURIComponent(it.slot)}/${encodeURIComponent(it.id)}.webp?${encodeURIComponent(APP_VERSION)}`;
+}
+function rpgItemImageUrl(it) {
+  return (it && _rpgArt[it.id]) || rpgBundledItemArtUrl(it) || "";
+}
+function rpgItemImageAspect(src) {
+  // Bundle sprites are authored on a square source canvas specifically to be
+  // mapped into each paper-doll slot (a weapon slot is deliberately tall).
+  // Keep uploaded overrides on their historical aspect-preserving behaviour.
+  return String(src || "").includes(`${RPG_ART_BETA_ROOT}/`) ? "none" : "xMidYMid meet";
+}
+function rpgItemAvatarBox(it, src) {
+  const bundled = String(src || "").includes(`${RPG_ART_BETA_ROOT}/`);
+  if (bundled && it.slot === "helmet") return "60 8 80 78";
+  if (bundled && it.slot === "accessory" && it.layer !== "back") return "74 112 52 70";
+  return it.box || RPG_SLOT_META[it.slot].box;
+}
+function rpgItemArtImage(it, src) {
+  const imageUrl = src || rpgItemImageUrl(it);
+  const [bx, by, bw, bh] = rpgItemAvatarBox(it, imageUrl).split(" ").map(Number);
+  return `<image href="${escapeHtml(imageUrl)}" x="${bx}" y="${by}" width="${bw}" height="${bh}" preserveAspectRatio="${rpgItemImageAspect(imageUrl)}" style="image-rendering:auto;"/>`;
 }
 function rpgItemArt(slot, eq) {
   const it = RPG_ITEMS_BY_ID[(eq || {})[slot]];
   if (!it) return "";
-  const custom = _rpgArt[it.id];
+  const imageUrl = rpgItemImageUrl(it);
   if (slot === "pet") {
     const st = rpgPetStage(it);
     const halo = st ? `<circle cx="33" cy="104" r="${16 + st * 3}" fill="#ffd76a" opacity="${st === 2 ? 0.3 : 0.18}">${svgPulse(0.12, 0.3)}</circle>` : "";
-    if (custom) return halo + rpgItemArtImage(it);
+    if (imageUrl) return halo + rpgItemArtImage(it, imageUrl);
     if (!it.art) return halo;
     const evoEmoji = rpgPetEvoEmoji(it);
     if (evoEmoji) return halo + svgPetEmoji(evoEmoji);
     return halo + it.art();
   }
-  if (custom) return rpgItemArtImage(it);
+  if (imageUrl) return rpgItemArtImage(it, imageUrl);
   if (!it.art) return "";
   return it.art();
 }
@@ -33438,17 +33483,32 @@ function rpgItemArt(slot, eq) {
 // to the generic _character override (and vice-versa) so partial setups still work.
 function rpgCharacterArtUrl(gender) {
   const g = gender !== undefined ? gender : ((rpgState && rpgState.gender) || null);
-  if (g === "female") return _rpgArt._character_female || _rpgArt._character || null;
-  if (g === "male") return _rpgArt._character_male || _rpgArt._character || null;
-  return _rpgArt._character || _rpgArt._character_male || _rpgArt._character_female || null;
+  let custom = null;
+  if (g === "female") custom = _rpgArt._character_female || _rpgArt._character || null;
+  else if (g === "male") custom = _rpgArt._character_male || _rpgArt._character || null;
+  else custom = _rpgArt._character || _rpgArt._character_male || _rpgArt._character_female || null;
+  if (custom || !rpgArtBetaEnabled()) return custom;
+  return `${RPG_ART_BETA_ROOT}/characters/${g === "female" ? "female" : "male"}.webp?${encodeURIComponent(APP_VERSION)}`;
 }
 function rpgAvatarSvg(equipment, gender) {
-  const charUrl = rpgCharacterArtUrl(gender);
-  if (charUrl) return `<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg"><image href="${escapeHtml(charUrl)}" x="0" y="0" width="200" height="240" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated;"/></svg>`;
   const eq = equipment || (rpgState && rpgState.equipment) || {};
   const acc = RPG_ITEMS_BY_ID[eq.accessory];
-  const capeArt = acc && acc.layer === "back" ? acc.art() : "";
-  const frontAccArt = acc && acc.layer === "front" ? acc.art() : "";
+  const accArt = acc ? rpgItemArt("accessory", eq) : "";
+  const capeArt = acc && acc.layer === "back" ? accArt : "";
+  const frontAccArt = acc && acc.layer !== "back" ? accArt : "";
+  const charUrl = rpgCharacterArtUrl(gender);
+  if (charUrl) return `<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Your equipped hero avatar">
+    <ellipse cx="100" cy="222" rx="46" ry="9" fill="rgba(0,0,0,0.10)"/>
+    ${rpgState && rpgState.auraGold ? `<ellipse cx="100" cy="130" rx="78" ry="96" fill="#ffd76a" opacity="0.16">${svgPulse(0.1, 0.22)}</ellipse>` : ""}
+    ${capeArt}
+    <image href="${escapeHtml(charUrl)}" x="0" y="0" width="200" height="240" preserveAspectRatio="xMidYMid meet" style="image-rendering:auto;"/>
+    ${rpgItemArt("armor", eq)}
+    ${rpgItemArt("helmet", eq)}
+    ${frontAccArt}
+    ${rpgItemArt("pet", eq)}
+    <g transform="translate(58,158)">${rpgItemArt("shield", eq)}</g>
+    <g transform="translate(142,158)"><g class="av-swing" transform="rotate(14)"><animateTransform class="av-anim-slash" attributeName="transform" type="rotate" values="14;-44;112;78;14" keyTimes="0;0.26;0.52;0.66;1" dur="0.62s" begin="indefinite"/><animateTransform class="av-anim-chop" attributeName="transform" type="rotate" values="14;-78;122;14" keyTimes="0;0.36;0.6;1" dur="0.74s" begin="indefinite"/><animateTransform class="av-anim-raise" attributeName="transform" type="rotate" values="14;-30;-30;14" keyTimes="0;0.3;0.72;1" dur="0.8s" begin="indefinite"/>${rpgItemArt("weapon", eq)}</g></g>
+  </svg>`;
   return `<svg viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Your hero avatar">
     <ellipse cx="100" cy="222" rx="46" ry="9" fill="rgba(0,0,0,0.10)"/>
     ${rpgState && rpgState.auraGold ? `<ellipse cx="100" cy="130" rx="78" ry="96" fill="#ffd76a" opacity="0.16">${svgPulse(0.1, 0.22)}</ellipse>` : ""}
@@ -33485,9 +33545,10 @@ function rpgAvatarSvg(equipment, gender) {
 }
 function rpgItemIconSvg(it) {
   const box = it.box || RPG_SLOT_META[it.slot].box;
-  if (_rpgArt[it.id]) {
+  const imageUrl = rpgItemImageUrl(it);
+  if (imageUrl) {
     const [bx, by, bw, bh] = box.split(" ").map(Number);
-    return `<svg viewBox="${box}" xmlns="http://www.w3.org/2000/svg"><image href="${escapeHtml(_rpgArt[it.id])}" x="${bx}" y="${by}" width="${bw}" height="${bh}" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated;"/></svg>`;
+    return `<svg viewBox="${box}" xmlns="http://www.w3.org/2000/svg"><image href="${escapeHtml(imageUrl)}" x="${bx}" y="${by}" width="${bw}" height="${bh}" preserveAspectRatio="${rpgItemImageAspect(imageUrl)}" style="image-rendering:auto;"/></svg>`;
   }
   const rank = RPG_RARITY[it.rarity].rank;
   const [bx, by, bw, bh] = box.split(" ").map(Number);
@@ -34650,6 +34711,17 @@ function rpgRenderCharacterPage() {
   if (_genderRow) _genderRow.innerHTML =
     `<button type="button" class="rpg-gender-btn${_g === "male" ? " on" : ""}" onclick="rpgSetGender('male')">👦 Male</button>
      <button type="button" class="rpg-gender-btn${_g === "female" ? " on" : ""}" onclick="rpgSetGender('female')">👧 Female</button>`;
+  const betaPanel = $("rpgArtBetaPanel");
+  if (betaPanel) {
+    betaPanel.hidden = !rpgCanPreview() || RPG_ART_BETA_RELEASED;
+    if (!betaPanel.hidden) {
+      const betaOn = rpgArtBetaEnabled();
+      const owned = RPG_ITEMS.reduce((n, it) => n + (rpgState.inventory[it.id] ? 1 : 0), 0);
+      betaPanel.innerHTML = `<div><b>🧪 Generated avatar beta</b><span>${betaOn ? "ON — generated character + layered gear" : "OFF — current SVG art"}</span></div>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="rpgSetArtBeta(${betaOn ? "false" : "true"})">${betaOn ? "Compare old art" : "Test new art"}</button>
+        <button class="btn btn-primary btn-sm" type="button" onclick="rpgUnlockAllBetaItems()">🔓 Unlock all ${RPG_ITEMS.length} (${owned}/${RPG_ITEMS.length})</button>`;
+    }
+  }
   $("rpgHeroName").textContent = (currentUser && currentUser.name) || "Hero";
   $("rpgHeroBars").innerHTML =
     `<div class="rpg-hero-title">Lv ${info.level} science adventurer · ${rpgState.stats.wins} battles won${rpgState.stats.bestFloor ? ` · 🏰 best floor ${rpgState.stats.bestFloor}` : ``} · ${rpgState.monthXp || 0} XP this month</div>
@@ -34689,7 +34761,7 @@ function rpgItemCardHtml(it, mode) {
   const level = rpgLevelInfo().level;
   const owned = !!rpgState.inventory[it.id];
   const equipped = rpgState.equipment[it.slot] === it.id;
-  const locked = it.levelReq > level;
+  const locked = it.levelReq > level && !rpgCanPreview();
   const up = rpgUpgradeLevel(it.id);
   const el = it.slot === "weapon" ? rpgWeaponElement(it.id) : "neutral";
   const setOf = rpgSetOf(it.id);
@@ -34700,7 +34772,7 @@ function rpgItemCardHtml(it, mode) {
       ? `<button class="btn btn-ghost" type="button" data-rpg-unequip="${it.slot}">Unequip</button>`
       : locked
         ? `<button class="btn btn-ghost" type="button" disabled>Needs Lv ${it.levelReq}</button>`
-        : !rpgClassCanEquip(it)
+        : !rpgClassCanEquip(it) && !rpgCanPreview()
           ? `<button class="btn btn-ghost" type="button" disabled>🚫 ${RPG_CLASSES[rpgState.clazz].name}</button>`
           : `<button class="btn btn-primary" type="button" data-rpg-equip="${it.id}">Equip</button>`;
     action += up >= RPG_UPGRADE_MAX
@@ -35019,8 +35091,8 @@ function rpgShowPackSummary(results, spent, refund, n) {
 function rpgEquip(itemId) {
   const it = RPG_ITEMS_BY_ID[itemId];
   if (!it || !rpgState.inventory[itemId]) return;
-  if (it.levelReq > rpgLevelInfo().level && !(rpgState.rebirths > 0)) { toast(`Reach Lv ${it.levelReq} to equip ${it.name}`, "error"); return; }
-  if (!rpgClassCanEquip(it)) { toast(rpgClassEquipNote(it), "error"); return; }
+  if (it.levelReq > rpgLevelInfo().level && !(rpgState.rebirths > 0) && !rpgCanPreview()) { toast(`Reach Lv ${it.levelReq} to equip ${it.name}`, "error"); return; }
+  if (!rpgClassCanEquip(it) && !rpgCanPreview()) { toast(rpgClassEquipNote(it), "error"); return; }
   rpgState.equipment[it.slot] = itemId;
   rpgState.hp = Math.min(rpgState.hp, rpgPlayerStats().maxHp);
   rpgSave();
@@ -35123,6 +35195,7 @@ function rpgPublishLeaderboard() {
       },
       house: rpgHouseOf(currentUser.uid).id,
       clazz: rpgState.clazz || null,
+      gender: rpgState.gender || null,
       equipment: rpgState.equipment,
       td: rpgGameBoardData("defenders"),
       raid: rpgGameBoardData("raiders"),
@@ -35451,7 +35524,7 @@ async function rpgRenderLeaderboard(force = false) {
       arenaWins: (rpgState.stats && rpgState.stats.arenaWins) || 0, rebirths: rpgState.rebirths || 0,
       score: rpgScorePayload(),
       games: { q: (rpgState.stats && rpgState.stats.gameQ) | 0, correct: (rpgState.stats && rpgState.stats.gameCorrect) | 0 },
-      house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null,
+      house: rpgHouseOf(currentUser.uid).id, clazz: rpgState.clazz || null, gender: rpgState.gender || null,
       equipment: rpgState.equipment,
       td: rpgGameBoardData("defenders"), raid: rpgGameBoardData("raiders"), spire: rpgGameBoardData("spire"), legend: rpgGameBoardData("legend"), siege: rpgGameBoardData("siege"),
       updatedAt: new Date().toISOString()
@@ -35497,7 +35570,7 @@ async function rpgRenderLeaderboard(force = false) {
     const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : rank;
     return `<div class="rpg-board-row ${rpgRowClass(rank)} ${me ? "me" : ""}">
       <div class="rpg-board-rank">${medal}</div>
-      <div class="rpg-board-ava">${rpgAvatarSvg(r.equipment || {})}</div>
+      <div class="rpg-board-ava">${rpgAvatarSvg(r.equipment || {}, r.gender)}</div>
       <div class="rpg-board-main">
         <div class="rpg-board-name">${r.clazz && RPG_CLASSES[r.clazz] ? RPG_CLASSES[r.clazz].icon + " " : ""}${escapeHtml(r.name)}${r.rebirths ? ` <span class="rpg-item-up" title="Starfall rebirths">R${r.rebirths}</span>` : ""}${me ? `<span class="rpg-you-tag">You</span>` : ""}</div>
         <div class="rpg-board-meta">${(RPG_HOUSES.find(h => h.id === (r.house || rpgHouseOf(r.uid).id)) || RPG_HOUSES[0]).icon} Lv ${r.level || 1} · ${r.wins || 0} battles won${r.bestFloor ? ` · 🏰 F${r.bestFloor}` : ""}${r.arenaWins ? ` · ⚔️ ${r.arenaWins}W` : ""}</div>
@@ -37031,7 +37104,7 @@ function advStartArena(row) {
   chip.textContent = "👻 Arena duel";
   $("advFoes").innerHTML = `<div class="adv-actor adv-foe" id="advFoeEl0" style="transform:translateX(${adv.foes[0].wx}px);">
     <div class="adv-tag">👻 ${escapeHtml(row.name || "Ghost")}</div>
-    <span class="adv-ghost">${rpgAvatarSvg(row.equipment || {})}</span>
+    <span class="adv-ghost">${rpgAvatarSvg(row.equipment || {}, row.gender)}</span>
     ${advBarHtml("advFoeHp0")}</div>`;
   $("advStatus").textContent = `Duel vs ${row.name}'s build — Lv ${row.level || 1} ${row.clazz ? RPG_CLASSES[row.clazz].name : "hero"}!`;
 }
