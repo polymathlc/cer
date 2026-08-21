@@ -4548,6 +4548,40 @@ option {
 .wsqe-size-val { min-width: 44px; text-align: center; font-size: 0.86rem; font-weight: 700; }
 .wsqe-hint { font-size: 0.76rem; color: var(--text-muted); line-height: 1.5; }
 @media print { .wsqe-overlay { display: none !important; } }
+/* ✏️ The answer-key drawer. Everything structural is .wsqe-* above — these are
+   only the parts this drawer has and the quick-edit one does not. */
+.ake-panel { width: min(560px, 100%); }
+.ake-row-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.ake-row-head .wsqe-block-label { flex: 1; }
+.ake-del {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--accent-red, #b23b36);
+  background: none;
+  border: 1px solid rgba(178, 59, 54, 0.35);
+  border-radius: 7px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.ake-del:hover { background: var(--accent-red, #b23b36); color: #fff; border-color: var(--accent-red, #b23b36); }
+.ake-expl { border-color: rgba(45, 108, 168, 0.4); background: rgba(45, 108, 168, 0.04); }
+.ake-partpick { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 12px; }
+.ake-select {
+  padding: 5px 9px;
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  font-family: inherit;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+.ake-opt { display: flex; gap: 9px; align-items: flex-start; padding: 8px 11px; border: 1px solid var(--border); border-radius: 9px; margin-bottom: 7px; cursor: pointer; font-size: 0.88rem; line-height: 1.5; }
+/* Tailwind's preflight sets appearance:none on form controls, which leaves an
+   invisible white square exactly where the control you are looking for is. */
+.ake-opt input[type="radio"] { appearance: auto; -webkit-appearance: auto; width: 15px; height: 15px; margin-top: 2px; flex: 0 0 auto; accent-color: var(--primary); }
+.ake-add { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 16px; }
+.ake-note { font-size: 0.79rem; line-height: 1.6; color: var(--text-muted); padding: 11px 14px; border: 1px dashed var(--border); border-radius: 10px; margin-bottom: 16px; }
+.ake-note-warn { border-style: solid; border-color: var(--accent-orange, #b8791f); background: rgba(184, 121, 31, 0.07); color: var(--text); }
 
 /* ── Saved worksheet — add / remove its questions ─────────────────────────
    A saved worksheet is an ORDERED list of bank ids, so editing one is editing
@@ -9006,6 +9040,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <input type="checkbox" id="printIncludeWhy" style="width:16px;height:16px;accent-color:var(--primary);">
             &#9432; Why the other options are wrong
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print each question's explanation on the answer key, under its answer.">
+            <input type="checkbox" id="printIncludeExpl" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#128161; Explanations on the answer key
+          </label>
           <span class="selected-count" id="printSelectedCount">0 selected</span>
           <button class="btn btn-primary" onclick="printWorksheet()" id="printBtn" disabled>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -9112,6 +9150,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
             <input type="checkbox" id="wsIncludeWhy" style="width:16px;height:16px;accent-color:var(--primary);">
             &#9432; Why the other options are wrong
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;font-weight:500;" title="Print each question's explanation on the answer key, under its answer. Write and edit them from the preview with ✏️ edit answer.">
+            <input type="checkbox" id="wsIncludeExpl" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#128161; Explanations on the answer key
+          </label>
         </div>
 
         <div class="ws-actions-bar">
@@ -9169,6 +9211,10 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <label title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment.">
             <input type="checkbox" id="mwIncludeWhy" style="width:16px;height:16px;accent-color:var(--primary);">
             &#9432; Why the other options are wrong
+          </label>
+          <label title="Print each question's explanation on the answer key, under its answer. Write and edit them from the preview with ✏️ edit answer.">
+            <input type="checkbox" id="mwIncludeExpl" style="width:16px;height:16px;accent-color:var(--primary);">
+            &#128161; Explanations on the answer key
           </label>
         </div>
         <div class="ws-saved-grid" id="savedWsGrid"></div>
@@ -10721,7 +10767,11 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
   <div class="wspv-bar">
     <button class="btn btn-outline" type="button" onclick="closeWorksheetPreview()">← Back</button>
     <span class="wspv-title">Worksheet preview <span class="wspv-count" id="wsPreviewPageCount"></span></span>
-    <span class="wspv-hint">⬆ pulls a question onto the previous page (fit 2+ per page) · ⤓ pushes it onto a new page · ✏️ edits the question itself · ✕ takes it off the sheet · updates live.</span>
+    <span class="wspv-hint">⬆ pulls a question onto the previous page (fit 2+ per page) · ⤓ pushes it onto a new page · ✏️ edits the question itself · ✕ takes it off the sheet · ✏️ on the answer key edits its answer &amp; explanation · updates live.</span>
+    <label class="wspv-toggle" title="Print each question's explanation on the answer key, under its answer. The same switch as “💡 Explanations on the answer key” in the printing options.">
+      <input type="checkbox" id="wsPreviewExpl" onchange="akeSetExplPrint(this.checked)">
+      &#128161; Explanations on key
+    </label>
     <button class="btn btn-outline" type="button" id="wsPreviewEditBtn" style="display:none;" onclick="wseOpenFromPreview()" title="Add or remove questions on this saved worksheet">✎ Questions</button>
     <button class="btn btn-primary" type="button" onclick="printFromPreview()">🖨️ Print / Save PDF</button>
   </div>
@@ -10746,6 +10796,31 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
       <span style="flex:1;"></span>
       <button class="btn btn-outline" type="button" onclick="closeWsQuickEdit()">Cancel</button>
       <button class="btn btn-primary" type="button" onclick="saveWsQuickEdit()">Save to bank</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== ANSWER KEY — EDIT FROM THE PREVIEW ====================
+     Opened by the ✏️ edit answer button on a row of the printed answer key.
+     Reuses the quick-edit drawer's own .wsqe-* styling rather than growing a
+     second set that could drift; only the few things this drawer has and that
+     one does not are .ake-*. -->
+<div class="wsqe-overlay ake-overlay" id="akeOverlay">
+  <div class="wsqe-panel ake-panel" role="dialog" aria-label="Edit this question's answer key">
+    <div class="wsqe-head">
+      <div>
+        <h3>Answer key for this question</h3>
+        <div class="wsqe-sub" id="akeSub"></div>
+      </div>
+      <button class="preview-close" type="button" onclick="closeAke()" title="Close without saving">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="wsqe-body" id="akeBody"></div>
+    <div class="wsqe-foot">
+      <span class="wsqe-hint" style="flex:1;">Saves to the question bank — every worksheet using this question follows.</span>
+      <button class="btn btn-outline" type="button" onclick="closeAke()">Cancel</button>
+      <button class="btn btn-primary" type="button" onclick="akeSave()">Save to bank</button>
     </div>
   </div>
 </div>

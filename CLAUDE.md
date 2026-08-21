@@ -1770,7 +1770,93 @@ same ordinary question everywhere else.
   since a CER block leaves three behind if only its bare id is cleared.
 - Run **`node tools/keyword-blank-tests.mjs`** after touching any of it.
 
+## ✏️ The answer key, edited from the preview (v1.313.0)
+
+`ake*` / `akx*` (in `app.js`, search `THE ANSWER KEY, EDITED FROM THE PREVIEW`),
+plus `#akeOverlay` and the `.ake-*` CSS in `index.html`, the ✏️ **edit answer**
+button on every row of the printed answer key in the A4 preview, and the
+💡 **Explanations on the answer key** switch on all three printing surfaces.
+
+The answer key is the one page of a worksheet a teacher READS rather than prints
+and forgets — it is what they mark thirty scripts from. So the preview is exactly
+where a wrong answer or a missing explanation gets noticed, and noticing it was
+as far as anyone could get: the fix meant leaving the sheet, finding the question
+in the bank, opening the full editor, and finding the way back.
+
+- **It edits the SAME BLOCKS the key is built from.** `_akeRows(blocks)` walks
+  the question's own blocks and offers exactly the fields `_pushBlockAnswerKey` /
+  `_pushAnswerKeySection` read — a `plainanswer`'s content, a CER block's three
+  fields, an `answerLine`'s answer, a 🔑 `answerKey` block's text, an MCQ's
+  correct option. So anything printed on the key can be edited here, and
+  anything editable here really is what prints. A second list of "the answer
+  fields" would be free to drift from the pushers, and the symptom is a key row
+  nobody can fix — or an edit that saves and changes nothing on paper.
+- **`_wsPreviewPack` hangs the button on each `.print-ak-question` AFTER
+  planning**, exactly as the per-question ⬆ / ⤓ / ✏️ / ✕ tools are hung, and
+  `.wspv-tools` is absolutely positioned — so nothing it adds changes a measured
+  height and the preview still shows the pagination that will print. For the
+  same reason `.print-ak-question` gets **only** `position: relative` in
+  `WS_PREVIEW_CSS`: the planner measures those pages in that very document, so a
+  rule touching their WIDTH would show a page count the PDF does not reproduce.
+  The row carries `data-qid` from BOTH print builders, kept in step.
+- **Nothing is written until Save.** The drawer edits a deep copy, like the
+  ✏️ edit question drawer; Cancel and ✕ leave the bank untouched. Save writes
+  through `saveQuestion`, so a running work session logs it, and every other
+  worksheet, quest and game using that question follows.
+- **An added explanation is filed under a part EXPLICITLY** (`_akeNewExplanation`).
+  `qPartMap` inherits forward, so an explanation appended to a question with
+  parts and no `part` of its own silently reads as explaining the LAST part —
+  the exact fault `QPART_NONE` exists for. A new one is created as a
+  whole-question note (`part: QPART_NONE`) and the drawer offers a picker to
+  attach it to one part instead; on a question with no parts there is nothing to
+  choose and no picker is drawn. The rule is its own function purely so the
+  harness can pin it without a DOM.
+- **A question with NO answer at all is offered a 🔑 `answerKey` block**, not a
+  `plainanswer`. That block prints on the key and renders as nothing inside the
+  question, so the "No answer recorded for this question" row can be fixed
+  without adding a writing box to the student's sheet.
+
+### 💡 Explanations on the answer key
+
+- **`answerKeyExtras` still gates explanations only** — an answer is never
+  optional, an explanation is teaching commentary — but until now only the two
+  past-paper call sites ever turned it on, so a teacher who wrote an explanation
+  on an ordinary worksheet question had nowhere it could be printed. It is a
+  checkbox now: `AKX_SWITCHES` / `akxPrintOn(where)`, the same shape as
+  `WNY_SWITCHES` and for the same reason — an unknown surface returns false
+  rather than falling through to another page's checkbox, which would honour a
+  switch set somewhere else with nothing on screen able to explain it.
+- **All three print surfaces carry it** (`wsIncludeExpl`, `mwIncludeExpl`,
+  `printIncludeExpl`), and `doPrintWorksheetOpen`'s `case 'explanation'` now
+  reads the same switch instead of dropping explanations outright — those two
+  paths had already drifted over the MCQ answer once, and a key that carries the
+  explanations from one print button and not the other is that fault wearing a
+  new hat.
+- **The preview's own 💡 toggle is a VIEW of that checkbox, never a second
+  state** (`akeSetExplPrint` / `akeSyncExplToggle`). The preview overlay covers
+  the printing options behind it, and this is the switch a teacher wants the
+  moment they have just written an explanation — but two switches meaning the
+  same thing is how a sheet prints without the explanations they watched appear
+  on screen.
+- **An explanation reaching the key carries its PART** (`part: qPartNormalize(bPart)`).
+  It used to be pushed unlabelled, which was harmless while nothing could file
+  one per part and is not any more.
+- Run **`node tools/answer-key-edit-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **✏️ the answer key edited from the preview** (`_akeRows`,
+  `_akeHasAnswer`, `_akeNewExplanation`, `_akeKey` / `_akeSplitKey`,
+  `_akeSyncFromDom`, `akeSave`, `AKX_SWITCHES` / `akxPrintOn`, or either print
+  path's `case 'explanation'`), run `node tools/answer-key-edit-tests.mjs`.
+  This is the page a teacher marks thirty scripts from, so every failure is met
+  in front of a class and none of them throws. A field the KEY prints and the
+  drawer does not offer is a wrong answer nobody can fix from the place they
+  noticed it; a field the drawer offers and the key does not print is worse — it
+  is edited, saved, and the sheet comes off the printer unchanged. An
+  explanation added with no part on a question that HAS parts silently reads as
+  explaining the last one. And the box key split on the FIRST separator instead
+  of the last writes an imported block's answer onto a field that does not
+  exist, so the edit simply vanishes on save.
 - After touching **🔑 keywords / 🔲 fill-in-the-blanks** (`_kwParse`, `kwIndices`,
   `qKwIndices`, `qKeywordWords`, `qHasKeywords`, `kwBoldPlain`, `kwBoldHtml`,
   `qKeyFieldHtml`, `qKeyPlainHtml`, `kwBlankFieldHtml`, `kwPreviewFieldHtml`,

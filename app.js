@@ -1978,7 +1978,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.312.0';
+const APP_VERSION = 'v1.313.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -15520,7 +15520,16 @@ function doPrintWorksheetOpen(whyNotes) {
           _pushAnswerKeySection(qSections, null, qKeyFieldHtml(q, block, 'content'), bPart);
           break;
         }
-        case 'explanation': break;
+        // Explanations reach the key on the SAME rule the other print path
+        // uses — the "💡 Explanations on the answer key" switch — so a key
+        // printed from here and one printed from a worksheet cannot differ.
+        // Both had already drifted over the MCQ answer once.
+        case 'explanation': {
+          if (akxPrintOn('bank') && stripHtml(block.content)) {
+            qSections.push({ label: 'Explanation', content: sanitizeAnswerKeyHtml(block.content), part: qPartNormalize(bPart) });
+          }
+          break;
+        }
         case 'video': {
           if (block.url) {
             qHtml += `<div class="print-text-block" style="font-style:italic;color:#666;">Video: ${escapeHtml(block.url)}</div>`;
@@ -15572,7 +15581,7 @@ function doPrintWorksheetOpen(whyNotes) {
       const _fb = _qFallbackKeySection(q);
       if (_fb) qSections.push(_fb);
     }
-    answerKeyData.push({ title: q.title, sections: qSections });
+    answerKeyData.push({ qid: q.id, title: q.title, sections: qSections });
   });
 
   // Answer Key Page (full answer text). Whether the sheet is printed at all is
@@ -15584,7 +15593,9 @@ function doPrintWorksheetOpen(whyNotes) {
     allHtml += `<div class="print-question-page print-answer-key-page">`;
     allHtml += `<h2>Answer Key</h2>`;
     answerKeyData.forEach(qData => {
-      allHtml += `<div class="print-ak-question">`;
+      // Carries its question id for the same reason the other print path's row
+      // does — kept in step so the two keys stay identical.
+      allHtml += `<div class="print-ak-question" data-qid="${escapeHtml(String(qData.qid || ''))}">`;
       allHtml += `<h4>${escapeHtml(qData.title)}</h4>`;
       allHtml += `<div class="print-ak-fulltext">`;
       allHtml += _akSectionsHtml(_akQuestionSections(qData));
@@ -22830,6 +22841,23 @@ function wnyPrintOn(where) {
   const el = document.getElementById(id);
   return !!(el && el.checked);
 }
+
+// 💡 EXPLANATIONS ON THE PRINTED ANSWER KEY. `answerKeyExtras` has always
+// gated them — an answer is never optional, an explanation is teaching
+// commentary — and until now only the two past-paper call sites turned it on,
+// so a teacher who wrote an explanation on an ordinary worksheet question had
+// nowhere it could ever be printed. It is a checkbox now, on the same two
+// surfaces the other print options live on. Same shape as WNY_SWITCHES on
+// purpose: an unknown surface returns false rather than falling through to
+// another page's checkbox, which would honour a switch set somewhere else with
+// nothing on screen able to explain it.
+const AKX_SWITCHES = { builder: 'wsIncludeExpl', saved: 'mwIncludeExpl', bank: 'printIncludeExpl' };
+function akxPrintOn(where) {
+  const id = AKX_SWITCHES[where];
+  if (!id) return false;
+  const el = document.getElementById(id);
+  return !!(el && el.checked);
+}
 // Every MCQ block on the sheet that can be explained at all.
 function _wnyPrintJobs(selected) {
   const jobs = [];
@@ -24235,7 +24263,7 @@ async function reprintWorksheet(id) {
   const noFields = !_wsStudentFieldsOn('saved');
   const wantCover = !!document.getElementById('mwIncludeCover')?.checked;
   const why = await _wnyRunPrepare(selected, wnyPrintOn('saved'));
-  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields, why);
+  await doPrintStudentWorksheet(selected, ws.title, wantCover ? _wsCoverHtml(ws.title, undefined, undefined, noFields) : '', noFields, why, akxPrintOn('saved'));
 }
 
 // The questions of a saved worksheet, in the order they were chosen — the ids
@@ -24676,7 +24704,7 @@ async function printStudentWorksheet() {
   const title = (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet';
   const frontHtml = await _wsFrontHtml(selected, title);
   const why = await _wnyRunPrepare(selected, wnyPrintOn('builder'));
-  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why);
+  await doPrintStudentWorksheet(selected, title, frontHtml, !_wsStudentFieldsOn('builder'), why, akxPrintOn('builder'));
 }
 
 // Worksheet title banner + name/date/class strip printed at the top of page 1.
@@ -24806,7 +24834,11 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
           }
           case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
           case 'explanation': {
-            if (akExtras && stripHtml(block.content)) qSections.push({ label: 'Explanation', content: sanitizeAnswerKeyHtml(block.content) });
+            // `bPart` matters now that explanations can be filed per part from
+            // the preview: without it the key prints (b)'s explanation under
+            // whichever part happened to come before it. `qPartMap` resolves a
+            // QPART_NONE block to '', so a whole-question note stays unlabelled.
+            if (akExtras && stripHtml(block.content)) qSections.push({ label: 'Explanation', content: sanitizeAnswerKeyHtml(block.content), part: qPartNormalize(bPart) });
             break;
           }
           // Explicit, so it does NOT fall through to
@@ -24851,7 +24883,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
         const _fb = _qFallbackKeySection(q);
         if (_fb) qSections.push(_fb);
       }
-      answerKeyData.push({ title: plainNums ? ('Question ' + (qIndex + 1)) : q.title, type: 'open', sections: qSections });
+      answerKeyData.push({ qid: q.id, title: plainNums ? ('Question ' + (qIndex + 1)) : q.title, type: 'open', sections: qSections });
     }
   });
 
@@ -24866,7 +24898,9 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
     if (hasAny) {
       allHtml += `<div class="print-question-page print-answer-key-page"><h2>Answer Key</h2>`;
       answerKeyData.forEach(qData => {
-        allHtml += `<div class="print-ak-question"><h4>${escapeHtml(qData.title)}</h4><div class="print-ak-fulltext">`;
+        // data-qid is what lets the LIVE PREVIEW hang an "✏️ edit answer"
+        // button on this row. It prints nothing and changes no layout.
+        allHtml += `<div class="print-ak-question" data-qid="${escapeHtml(String(qData.qid || ''))}"><h4>${escapeHtml(qData.title)}</h4><div class="print-ak-fulltext">`;
         allHtml += _akSectionsHtml(_akQuestionSections(qData));
         allHtml += `</div></div>`;
       });
@@ -24890,12 +24924,12 @@ async function _wnyRunPrepare(selected, on) {
   return notes;
 }
 
-async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes) {
+async function doPrintStudentWorksheet(selected, worksheetTitle, frontHtml, noStudentFields, whyNotes, akExtras) {
   const output = document.getElementById('printOutput');
   // plainNumbers: a worksheet is numbered "Question 1, 2, 3…" for the student.
   // The bank's own title and its category/topic line are internal filing —
   // useful in the admin's bank, meaningless (and a giveaway) on a printed sheet.
-  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null });
+  output.innerHTML = buildWorksheetHtml(selected, worksheetTitle, { frontHtml: frontHtml || '', plainNumbers: true, noStudentFields: !!noStudentFields, whyNotes: whyNotes || null, answerKeyExtras: !!akExtras });
   autoscaleAndPrint(output, { forcedBreakIds: wsManualBreaks, mergeUpIds: wsMergeUp });
 }
 
@@ -25395,6 +25429,11 @@ async function generateSyllabusPdf() {
   .wspv-bar .wspv-title{ font-weight:700; }
   .wspv-bar .wspv-count{ font-weight:500; color:var(--text-muted,#666c71); font-size:0.85rem; }
   .wspv-bar .wspv-hint{ flex:1; min-width:120px; font-size:0.8rem; color:var(--text-muted,#666c71); }
+  /* 💡 Explanations on the key, reachable WHILE previewing — the preview
+     overlay covers the printing options behind it, and this is the switch a
+     teacher wants the moment they have just written an explanation. */
+  .wspv-toggle{ display:flex; align-items:center; gap:8px; font-size:0.82rem; font-weight:600; color:var(--text,#1a1a1a); cursor:pointer; white-space:nowrap; }
+  .wspv-toggle input[type="checkbox"]{ appearance:auto; -webkit-appearance:auto; width:15px; height:15px; accent-color:var(--primary,#0b6b4f); cursor:pointer; }
   .wspv-stage{ flex:1; overflow:hidden; }
   #wsPreviewFrame{ width:100%; height:100%; border:0; display:block; background:#525659; }
   @media print { .wspv-overlay{ display:none !important; } }`;
@@ -25410,6 +25449,11 @@ const WS_PREVIEW_CSS = `
   .wspv-content{ position:relative; }
   .wspv-pageno{ position:absolute; left:0; right:0; bottom:7mm; text-align:center; font-size:8pt; color:#b3b3b3; }
   .print-question-chunk{ position:relative; }
+  /* The answer-key rows carry an ✏️ button too, so they need to be a
+     positioning context. Nothing else: the planner measures these very pages
+     in this very document, so any rule that changed their WIDTH would show the
+     teacher a page count the printed PDF does not reproduce. */
+  .print-ak-question{ position:relative; }
   .wspv-tools{ position:absolute; top:5px; right:6px; z-index:9; display:flex; gap:6px; }
   .wspv-brk{ font:600 11px 'DM Sans',sans-serif; border:1px solid #cfcfcf; background:#fff; color:#555; border-radius:6px; padding:2px 9px; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.2); }
   .wspv-brk.on{ background:#0b6b4f; color:#fff; border-color:#0b6b4f; }
@@ -25503,6 +25547,7 @@ function _wsShowPreviewOverlay() {
   // driven by the tick boxes on the page behind it.
   const editBtn = document.getElementById('wsPreviewEditBtn');
   if (editBtn) editBtn.style.display = _wsPreviewSaved ? '' : 'none';
+  akeSyncExplToggle();   // the builder and My Worksheets have their own checkbox
   renderWsPreview();
 }
 
@@ -25510,6 +25555,7 @@ function closeWorksheetPreview() {
   const ov = document.getElementById('wsPreviewOverlay');
   if (ov) ov.classList.remove('show');
   closeWsQuickEdit();
+  closeAke();
   _wsPreviewSaved = null;
 }
 function wsBreakBefore(qid) { // push this question onto a new page
@@ -25538,7 +25584,8 @@ async function renderWsPreview() {
   const frontHtml = ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields) : '';
   const html = buildWorksheetHtml(selected, title, {
     frontHtml, plainNumbers: true, noStudentFields: ctx.noFields,
-    whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where))
+    whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where)),
+    answerKeyExtras: akxPrintOn(ctx.where)
   });   // exactly what will print
   const fontLinks = _printFontLinksHtml();
   const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
@@ -25684,6 +25731,30 @@ function _wsPreviewPack(doc) {
       content.appendChild(chunk);
     });
   }, plan.pageZoom[gi]));
+  // ✏️ Every row of the printed answer key gets an edit button. The key is the
+  // page a teacher MARKS from, so the preview is where a wrong answer or a
+  // missing explanation is actually noticed — and noticing it used to be as far
+  // as anyone could get. Added AFTER planning, exactly as the question tools
+  // are, and `.wspv-tools` is absolutely positioned, so nothing here changes a
+  // measured height and the preview still shows the pagination that will print.
+  if (_canAuthor()) {
+    answerKeys.forEach(ak => {
+      Array.from(ak.querySelectorAll('.print-ak-question')).forEach(row => {
+        const qid = row.dataset.qid;
+        if (!qid || qid.indexOf('__lo__') === 0) return;
+        const tools = doc.createElement('div');
+        tools.className = 'wspv-tools';
+        const eb = doc.createElement('button');
+        eb.type = 'button';
+        eb.className = 'wspv-brk edit';
+        eb.textContent = '✏️ edit answer';
+        eb.title = 'Edit this question\'s model answer and explanation — it saves to the question bank';
+        eb.setAttribute('onclick', "parent.akeOpen('" + qid + "')");
+        tools.appendChild(eb);
+        row.appendChild(tools);
+      });
+    });
+  }
   answerKeys.forEach((ak, ai) => addSheet(akSpans[ai], content => content.appendChild(ak), (plan.akPlans[ai] || {}).zoom));
   const cnt = document.getElementById('wsPreviewPageCount');
   if (cnt) cnt.textContent = '· ' + totalPages + ' page' + (totalPages === 1 ? '' : 's');
@@ -25870,6 +25941,306 @@ function _wsQeReopenPreview() {
   _wsQeReturn = null;
   if (!back) return;
   setTimeout(() => { if (savedWorksheets.some(w => w.id === back.id)) previewSavedWorksheet(back.id); }, 60);
+}
+
+// =====================================================================
+// ✏️ THE ANSWER KEY, EDITED FROM THE PREVIEW  (`ake*`)
+//
+// The answer key is the one page of a worksheet a teacher READS rather than
+// prints and forgets — it is what they mark thirty scripts from. So the
+// preview is exactly where a wrong answer or a missing explanation is
+// noticed, and until now noticing it was as far as you could get: the fix
+// meant leaving the sheet, finding the question in the bank, opening the full
+// editor, and finding your way back.
+//
+// Every row of the printed key now carries an **✏️ edit answer** button. It
+// opens a drawer holding that question's model answers and its explanations,
+// each one editable in place, with ➕ to add an explanation and 🗑 to take one
+// away — and Save writes them back to the question in the bank, so the sheet,
+// every other worksheet using it, practice and the games all see the change.
+//
+// THREE THINGS KEEP IT HONEST:
+//
+//  • It edits the SAME BLOCKS the key is built from. The rows are generated by
+//    walking the question's own blocks — a `plainanswer`'s content, a CER
+//    block's three fields, an `answerLine`'s answer, a 🔑 `answerKey` block's
+//    text, an MCQ's correct option — which is the same set `_pushBlockAnswerKey`
+//    reads. Anything printed on the key can therefore be edited here, and
+//    anything editable here really is what prints. A second list of "the
+//    answer fields" would be free to drift from the pusher, and the symptom
+//    would be a key row nobody can fix.
+//
+//  • NOTHING IS WRITTEN UNTIL SAVE. The drawer edits a deep copy, exactly as
+//    the ✏️ edit question drawer does; Cancel or ✕ leaves the bank untouched.
+//    Save writes through `saveQuestion` like every other authoring path, so a
+//    running work session logs it.
+//
+//  • AN ADDED EXPLANATION IS FILED UNDER A PART, EXPLICITLY. `qPartMap`
+//    inherits forward, so an explanation appended to a question with parts
+//    would silently attach itself to the LAST part and read as explaining it —
+//    the exact fault QPART_NONE exists for. A new one is therefore created as
+//    a whole-question note (`part: QPART_NONE`) and the drawer offers a picker
+//    to attach it to one part instead. On a question with no parts there is
+//    nothing to choose and no picker is drawn.
+//
+// An explanation only PRINTS on the key when "💡 Explanations" is ticked in
+// the printing options (`akxPrintOn`) — an answer is never optional, an
+// explanation is teaching commentary. The drawer says so, rather than letting
+// somebody write one and wonder where it went.
+// =====================================================================
+let _akeQid = null;     // id of the question in the drawer
+let _akeDraft = null;   // working copy; discarded unless Save is pressed
+
+// One editable row per answer FIELD, in the order the key prints them. The
+// `kind` decides how it is drawn and read back.
+function _akeRows(blocks) {
+  const rows = [];
+  const parts = qHasParts(blocks) ? qPartMap(blocks) : null;
+  const lab = b => {
+    const p = parts ? qPartOf(parts, b) : '';
+    return (p && !qPartUnfiled(b)) ? qPartLabel(p) + ' ' : '';
+  };
+  (blocks || []).forEach(b => {
+    if (!b) return;
+    switch (b.type) {
+      case 'answer':
+        rows.push({ kind: 'rich', block: b, field: 'claim', label: lab(b) + 'Claim' });
+        rows.push({ kind: 'rich', block: b, field: 'evidence', label: lab(b) + 'Evidence' });
+        rows.push({ kind: 'rich', block: b, field: 'reasoning', label: lab(b) + 'Reasoning' });
+        break;
+      case 'plainanswer':
+        rows.push({ kind: 'rich', block: b, field: 'content', label: lab(b) + 'Model answer' });
+        break;
+      case 'answerLine':
+        rows.push({ kind: 'text', block: b, field: 'answer', label: lab(b) + (b.label ? stripHtml(b.label) + ' — answer' : 'Answer line') });
+        break;
+      case 'answerKey':
+        rows.push({ kind: 'rich', block: b, field: 'text', label: lab(b) + '🔑 Answer key' });
+        break;
+      case 'mcq':
+        rows.push({ kind: 'mcq', block: b, label: lab(b) + 'Correct option' });
+        break;
+      case 'explanation':
+        rows.push({ kind: 'explanation', block: b, field: 'content', label: 'Explanation' });
+        break;
+      default: break;
+    }
+  });
+  return rows;
+}
+// Does this question say anything on the key at all? Drives the "➕ Add an
+// answer" offer — a question showing "No answer recorded" is exactly the one
+// a teacher wants to be able to fix from here.
+function _akeHasAnswer(blocks) {
+  return _akeRows(blocks).some(r => r.kind !== 'explanation');
+}
+
+function akeOpen(qid) {
+  if (!_canAuthor()) return;
+  const q = questionBank.find(x => String(x.id) === String(qid));
+  if (!q) { showToast('That question is no longer in the bank', 'error'); return; }
+  _akeQid = String(q.id);
+  _akeDraft = JSON.parse(JSON.stringify({ blocks: q.blocks || [] }));
+  const sub = document.getElementById('akeSub');
+  if (sub) sub.textContent = [q.title, q.topic].filter(Boolean).join(' · ');
+  _akeRender();
+  const ov = document.getElementById('akeOverlay');
+  if (ov) ov.classList.add('show');
+}
+
+function closeAke() {
+  const ov = document.getElementById('akeOverlay');
+  if (ov) ov.classList.remove('show');
+  _akeQid = null;
+  _akeDraft = null;
+}
+
+// The part picker on an explanation. Only drawn when the question HAS parts —
+// there is nothing to choose otherwise, and an empty select reads as broken.
+function _akePartPickHtml(blocks, b) {
+  if (!qHasParts(blocks)) return '';
+  const letters = [];
+  (blocks || []).forEach(x => { const p = qBlockOpensPart(x); if (p && letters.indexOf(p) < 0) letters.push(p); });
+  const cur = qPartUnfiled(b) ? QPART_NONE : (qPartNormalize(b.part) || QPART_NONE);
+  const opts = [`<option value="${QPART_NONE}"${cur === QPART_NONE ? ' selected' : ''}>the whole question</option>`]
+    .concat(letters.map(l => `<option value="${escapeHtml(l)}"${cur === l ? ' selected' : ''}>part ${escapeHtml(qPartLabel(l))}</option>`));
+  return `<div class="ake-partpick">Explains
+      <select class="ake-select" onchange="akeSetPart('${escapeHtml(String(b.id))}', this.value)">${opts.join('')}</select>
+    </div>`;
+}
+
+function _akeRender() {
+  const body = document.getElementById('akeBody');
+  if (!body || !_akeDraft) return;
+  const blocks = _akeDraft.blocks || [];
+  const rows = _akeRows(blocks);
+  const html = rows.map(r => {
+    const bid = escapeHtml(String(r.block.id || ''));
+    const key = _akeKey(r.block.id, r.field || '');
+    if (r.kind === 'mcq') {
+      const opts = (r.block.options || []);
+      if (!opts.length) return '';
+      return `<div class="wsqe-block">
+        <div class="wsqe-block-label">${escapeHtml(r.label)}</div>
+        ${opts.map((o, i) => `<label class="ake-opt">
+            <input type="radio" name="akeMcq_${bid}" ${o.id === r.block.correctId ? 'checked' : ''}
+                   onchange="akeSetCorrect('${bid}','${escapeHtml(String(o.id))}')">
+            <span><b>${i + 1}.</b> ${o.text || '<i>(empty option)</i>'}</span>
+          </label>`).join('')}
+      </div>`;
+    }
+    if (r.kind === 'explanation') {
+      return `<div class="wsqe-block ake-expl">
+        <div class="ake-row-head">
+          <div class="wsqe-block-label" style="margin:0;">💡 ${escapeHtml(r.label)}</div>
+          <button type="button" class="ake-del" onclick="akeRemoveExplanation('${bid}')" title="Take this explanation off the question">🗑 Remove</button>
+        </div>
+        ${_akePartPickHtml(blocks, r.block)}
+        <div class="wsqe-rich" contenteditable="true" data-ake-rich="${escapeHtml(key)}">${r.block[r.field] || ''}</div>
+      </div>`;
+    }
+    if (r.kind === 'text') {
+      return `<div class="wsqe-block">
+        <div class="wsqe-block-label">${escapeHtml(r.label)}</div>
+        <input class="wsqe-input" type="text" value="${escapeHtml(r.block[r.field] || '')}" data-ake-text="${escapeHtml(key)}">
+      </div>`;
+    }
+    return `<div class="wsqe-block">
+      <div class="wsqe-block-label">${escapeHtml(r.label)}</div>
+      <div class="wsqe-rich" contenteditable="true" data-ake-rich="${escapeHtml(key)}">${r.block[r.field] || ''}</div>
+    </div>`;
+  }).join('');
+
+  const noAnswer = !_akeHasAnswer(blocks);
+  const explOn = akxPrintOn(_wsPreviewCtx().where);
+  body.innerHTML =
+    (noAnswer
+      ? `<div class="ake-note ake-note-warn">This question has no model answer on file, so the key prints “No answer recorded”. Add one below — a 🔑 answer-key note prints on the key and changes nothing on the student's sheet.</div>`
+      : '') +
+    (html || '') +
+    `<div class="ake-add">
+      ${noAnswer ? `<button type="button" class="btn btn-outline" onclick="akeAddAnswerKey()">➕ Add an answer for the key</button>` : ''}
+      <button type="button" class="btn btn-outline" onclick="akeAddExplanation()">➕ Add an explanation</button>
+    </div>` +
+    `<div class="ake-note">${explOn
+      ? '💡 Explanations are printing on this key — the “💡 Explanations” box is ticked in the printing options.'
+      : '💡 Explanations are <strong>not</strong> printing on this key. Tick “💡 Explanations” in the printing options to include them. (A question with no answer at all still prints its explanation instead.)'}</div>`;
+}
+
+function _akeBlock(bid) {
+  return ((_akeDraft && _akeDraft.blocks) || []).find(b => String(b.id) === String(bid));
+}
+
+// Read every box back into the draft. Called before anything that re-renders
+// the drawer as well as on Save, because the rich text lives in the DOM until
+// it is asked for — a repaint without this loses whatever was just typed.
+// The key a box is tagged with, and the two halves back out again. Split on the
+// LAST separator, never the first: a field name never contains one, and a block
+// id imported from the worksheet creator might.
+function _akeKey(bid, field) { return String(bid) + '|' + String(field); }
+function _akeSplitKey(key) {
+  const s = String(key || ''), i = s.lastIndexOf('|');
+  return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)];
+}
+function _akeSyncFromDom() {
+  if (!_akeDraft) return;
+  document.querySelectorAll('#akeBody [data-ake-rich]').forEach(el => {
+    const [bid, field] = _akeSplitKey(el.dataset.akeRich);
+    const b = _akeBlock(bid);
+    if (b && field) b[field] = el.innerHTML;
+  });
+  document.querySelectorAll('#akeBody [data-ake-text]').forEach(el => {
+    const [bid, field] = _akeSplitKey(el.dataset.akeText);
+    const b = _akeBlock(bid);
+    if (b && field) b[field] = el.value;
+  });
+}
+
+// The preview's own 💡 toggle. It is a VIEW of the printing-options checkbox,
+// never a second state: the preview overlay covers that checkbox, and two
+// switches meaning the same thing is how a sheet prints without the
+// explanations the teacher watched appear on screen.
+function akeSetExplPrint(on) {
+  const id = AKX_SWITCHES[_wsPreviewCtx().where];
+  const el = id ? document.getElementById(id) : null;
+  if (el) el.checked = !!on;
+  akeSyncExplToggle();
+  renderWsPreview();
+}
+// Put the toolbar toggle back in step with the checkbox it mirrors — called
+// whenever the preview opens, since the two surfaces have their own boxes.
+function akeSyncExplToggle() {
+  const t = document.getElementById('wsPreviewExpl');
+  if (t) t.checked = akxPrintOn(_wsPreviewCtx().where);
+}
+
+function akeSetCorrect(bid, optId) {
+  const b = _akeBlock(bid);
+  if (b) b.correctId = optId;
+}
+
+function akeSetPart(bid, val) {
+  const b = _akeBlock(bid);
+  if (!b) return;
+  // QPART_NONE unfiles THIS block only — a whole-question note that does not
+  // close the part it happens to sit inside.
+  b.part = (val === QPART_NONE) ? QPART_NONE : qPartNormalize(val);
+}
+
+// A NEW explanation block for this question. The rule lives here, on its own,
+// because it is the one thing about adding an explanation that can be silently
+// wrong: `qPartMap` inherits forward, so an explanation appended to a question
+// with parts and no `part` of its own reads as explaining the LAST part. It is
+// filed under NONE until the author says otherwise; on a question with no parts
+// there is nothing to file it under and the field is left off entirely.
+function _akeNewExplanation(blocks, id) {
+  const b = { id: id || generateBlockId(), type: 'explanation', content: '' };
+  if (qHasParts(blocks)) b.part = QPART_NONE;
+  return b;
+}
+function akeAddExplanation() {
+  if (!_akeDraft) return;
+  _akeSyncFromDom();
+  const blocks = _akeDraft.blocks || (_akeDraft.blocks = []);
+  const b = _akeNewExplanation(blocks);
+  blocks.push(b);
+  _akeRender();
+  const el = document.querySelector('#akeBody [data-ake-rich="' + _akeKey(b.id, 'content') + '"]');
+  if (el) el.focus();
+}
+
+function akeRemoveExplanation(bid) {
+  if (!_akeDraft) return;
+  _akeSyncFromDom();
+  _akeDraft.blocks = (_akeDraft.blocks || []).filter(b => String(b.id) !== String(bid));
+  _akeRender();
+}
+
+// A 🔑 answer-key block: it prints on the key and renders as nothing inside the
+// question, so a missing answer can be supplied without adding a writing box to
+// the student's sheet.
+function akeAddAnswerKey() {
+  if (!_akeDraft) return;
+  _akeSyncFromDom();
+  const blocks = _akeDraft.blocks || (_akeDraft.blocks = []);
+  const b = { id: generateBlockId(), type: 'answerKey', text: '', url: '' };
+  blocks.push(b);
+  _akeRender();
+  const el = document.querySelector('#akeBody [data-ake-rich="' + _akeKey(b.id, 'text') + '"]');
+  if (el) el.focus();
+}
+
+async function akeSave() {
+  if (!_akeDraft) return;
+  const q = questionBank.find(x => String(x.id) === String(_akeQid));
+  if (!q) { showToast('That question is no longer in the bank', 'error'); closeAke(); return; }
+  _akeSyncFromDom();
+  q.blocks = JSON.parse(JSON.stringify(_akeDraft.blocks || []));
+  closeAke();
+  renderWsPreview();                       // the key redraws with the change
+  try { renderQuestionBank(); } catch (e) { /* bank not on screen — fine */ }
+  const ok = await saveQuestion(q);
+  if (ok) showToast('Answer key updated ✓', 'success');
 }
 
 // =====================================================================
@@ -60438,6 +60809,15 @@ window.deleteWorksheet = deleteWorksheet;
 window.reprintWorksheet = reprintWorksheet;
 window.practiceCurrentWorksheet = practiceCurrentWorksheet;
 window.practiceSavedWorksheet = practiceSavedWorksheet;
+window.akeOpen = akeOpen;
+window.closeAke = closeAke;
+window.akeSave = akeSave;
+window.akeAddExplanation = akeAddExplanation;
+window.akeRemoveExplanation = akeRemoveExplanation;
+window.akeAddAnswerKey = akeAddAnswerKey;
+window.akeSetCorrect = akeSetCorrect;
+window.akeSetPart = akeSetPart;
+window.akeSetExplPrint = akeSetExplPrint;
 window.closeSaveWsDialog = closeSaveWsDialog;
 window.confirmSaveWorksheet = confirmSaveWorksheet;
 // Quick Practice
