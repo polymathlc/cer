@@ -1978,7 +1978,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.310.0';
+const APP_VERSION = 'v1.311.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -3705,6 +3705,11 @@ function saveBlockContent(id, field, value) {
       block[field] = value;
     }
   }
+  // The 🔑 keyword chips are word POSITIONS in this very field, so they have to
+  // follow the words as they are typed. Repainted in place rather than by
+  // re-rendering the block, which would put the caret back at the top on every
+  // keystroke. No-op unless that block's panel is open.
+  try { kwSyncPanel(id); } catch (e) { console.warn('keyword panel sync', e); }
 }
 
 function updateTableDimensions(id, dimension, value) {
@@ -4876,7 +4881,9 @@ function renderBlocks() {
               <button class="toolbar-btn" title="Numbered List" onmousedown="event.preventDefault();execCmd('insertOrderedList')">1.</button>
               <span class="toolbar-divider"></span>
               ${aiAnswerBtnHtml(block.id)}
+              ${kwAssignBtnHtml(block.id)}
             </div>
+            ${kwPanelHtml(block)}
             <div class="cer-section" data-mic-wrap>
               <div class="cer-label claim-label">Claim ${micButtonHtml('', 'Speak the claim')} ${improveBtnHtml(block.id, 'claim')} ${shortenBtnHtml(block.id, 'claim')} ${completeBtnHtml(block.id, 'claim')}</div>
               <div class="content-editable" contenteditable="true" data-placeholder="Enter the claim answer..."
@@ -4916,7 +4923,9 @@ function renderBlocks() {
               ${improveBtnHtml(block.id, 'content')}
               ${shortenBtnHtml(block.id, 'content')} ${completeBtnHtml(block.id, 'content')}
               ${aiAnswerBtnHtml(block.id)}
+              ${kwAssignBtnHtml(block.id)}
             </div>
+            ${kwPanelHtml(block)}
             <div class="content-editable" contenteditable="true" data-placeholder="Enter the answer..."
                  data-block-id="${block.id}" data-field="content"
                  oninput="saveBlockContent('${block.id}', 'content', this.innerHTML)">${block.content || ''}</div>
@@ -5596,6 +5605,7 @@ document.addEventListener('click', async function (e) {
   if (!btn || btn.disabled) return;
   if (btn.classList.contains('shorten-btn')) return;   // ✂️ Shorten shares the styling, not the handler
   if (btn.classList.contains('complete-btn')) return;   // ✍️ AI complete likewise
+  if (btn.classList.contains('kw-btn')) return;   // 🔑 Assign keywords and its panel's own buttons, likewise
   e.preventDefault();
   const blockId = btn.getAttribute('data-improve-block');
   const field = btn.getAttribute('data-improve-field');
@@ -15463,16 +15473,20 @@ function doPrintWorksheetOpen(whyNotes) {
           // pushing blank sections made hasAnySections true for a bank with no
           // model answers, which printed an Answer Key sheet holding nothing
           // but its heading and a row of empty labels.
-          _pushAnswerKeySection(qSections, 'Claim', block.claim, bPart);
-          _pushAnswerKeySection(qSections, 'Evidence', block.evidence, bPart);
-          _pushAnswerKeySection(qSections, 'Reasoning', block.reasoning, bPart);
+          // 🔑 through qKeyFieldHtml, so the keywords the author marked print
+          // BOLD AND UNDERLINED on the key — the same words 🔲 Fill-in-the-
+          // blanks practice takes out. It hands the field back untouched when
+          // the question has no keywords.
+          _pushAnswerKeySection(qSections, 'Claim', qKeyFieldHtml(q, block, 'claim'), bPart);
+          _pushAnswerKeySection(qSections, 'Evidence', qKeyFieldHtml(q, block, 'evidence'), bPart);
+          _pushAnswerKeySection(qSections, 'Reasoning', qKeyFieldHtml(q, block, 'reasoning'), bPart);
           break;
         }
         case 'plainanswer': {
           // Plain answer — blank writing box, sized from the model answer
           const paLines = openEndedLines(printAnswerLines(block, block.content));
           qHtml += `<div class="print-open-answer-box"><div class="print-open-lines">${paLines}</div></div>`;
-          _pushAnswerKeySection(qSections, null, block.content, bPart);
+          _pushAnswerKeySection(qSections, null, qKeyFieldHtml(q, block, 'content'), bPart);
           break;
         }
         case 'explanation': break;
@@ -20718,6 +20732,13 @@ function buildOpenBody(q, containerSel, markCfg) {
   const items = [];
   const mcqItems = [];
   const fbBlocks = [];
+  // 🔲 Fill-in-the-blanks: the SAME question, with every answer box replaced by
+  // the model answer minus its keywords. It is a flag on markCfg rather than a
+  // separate renderer, so every practice surface gets the mode for free and the
+  // two can never drift apart. A block with no keywords still falls back to its
+  // ordinary typing box, so a half-marked question is still answerable.
+  const fib = !!(markCfg && markCfg.fillBlanks);
+  let fibUsed = 0;
   const isAnnot = !!(q && q.annotation);
   let annotCount = 0;
   // Blocks are grouped into visual PARTS: a run of question content (text,
@@ -20776,16 +20797,22 @@ function buildOpenBody(q, containerSel, markCfg) {
           else add(`<div style="margin:12px 0;"><img src="${escapeHtml(transformImageUrl(block.url))}" onerror="handleImgError(this)" loading="eager" decoding="async" fetchpriority="high" style="${imgSizeStyle(block)};border-radius:8px;border:1px solid var(--border);"></div>`);
         }
         break;
-      case 'answer':
+      case 'answer': {
+        const fibHtml = fib ? _kwFibBlockHtml(q, block, items, fbBlocks, containerSel, pLab) : null;
+        if (fibHtml) { fibUsed++; addAnswer(fibHtml); break; }
         addAnswer(
           _openSection(items, 'Claim', stripHtml(block.claim || ''), 'var(--accent-blue-light)', 'var(--accent-blue)', containerSel, { block, field: 'claim' }, pLab) +
           _openSection(items, 'Evidence', stripHtml(block.evidence || ''), 'var(--accent-orange-light)', 'var(--accent-orange)', containerSel, { block, field: 'evidence' }, pLab) +
           _openSection(items, 'Reasoning', stripHtml(block.reasoning || ''), 'var(--primary-light)', 'var(--primary)', containerSel, { block, field: 'reasoning' }, pLab)
         );
         break;
-      case 'plainanswer':
+      }
+      case 'plainanswer': {
+        const fibHtml = fib ? _kwFibBlockHtml(q, block, items, fbBlocks, containerSel, pLab) : null;
+        if (fibHtml) { fibUsed++; addAnswer(fibHtml); break; }
         addAnswer(_openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }, pLab));
         break;
+      }
       case 'openLines':
       case 'workingSpace':
         // Annotation working area: a blank pen-and-label pad for annotating the
@@ -20797,6 +20824,10 @@ function buildOpenBody(q, containerSel, markCfg) {
         }
         // Open-ended mode: just a writing box (no lines). Reads any stored model
         // answer so an admin-set answer persists across renders.
+        {
+          const fibHtml = fib ? _kwFibBlockHtml(q, block, items, fbBlocks, containerSel, pLab) : null;
+          if (fibHtml) { fibUsed++; addAnswer(fibHtml); break; }
+        }
         addAnswer(_openSection(items, '', stripHtml(block.content || ''), '', '', containerSel, { block, field: 'content' }, pLab));
         break;
       case 'fillblank': {
@@ -20847,6 +20878,7 @@ function buildOpenBody(q, containerSel, markCfg) {
   // while the pictures are still coming — it starts hidden and shows itself
   // only if the wait is real (see IMG_WAIT_GRACE).
   let html = imgWaitBarHtml(containerSel) +
+    (fibUsed ? kwFibNoteHtml() : '') +
     sections.map(s => `<div class="qp-part${solo ? ' solo' : ''}">${s.html}</div>`).join('');
   const fbItemCount = fbBlocks.reduce((s, b) => s + b.oidxs.length, 0);
   if (annotCount) {
@@ -21449,6 +21481,446 @@ document.addEventListener('click', function (e) {
   if (aichk) { e.preventDefault(); annotAiCheck(aichk.getAttribute('data-dgn-aicheck'), aichk.getAttribute('data-dgn-pid'), aichk); return; }
   const jump = e.target.closest && e.target.closest('[data-dgn-jump]');
   if (jump) { e.preventDefault(); _annotJumpToDiagram(jump.getAttribute('data-dgn-jump'), jump.textContent); return; }
+});
+
+// =====================================================================
+// KEYWORDS IN A MODEL ANSWER  —  🔑 Assign keywords + 🔲 Fill-in-the-blanks
+//
+// An open-ended answer is a sentence, and what a student actually has to
+// RECALL is a handful of words inside it: "vapour", "stomata", "evaporate".
+// Those words are the keywords. Marking them turns one model answer into
+// three different things:
+//
+//   1. the ANSWER KEY prints them BOLD AND UNDERLINED, everywhere an answer
+//      key is shown — on paper, in the exported worksheet, and on the
+//      ✅ Model answer card a student reads after marking;
+//   2. 🔲 FILL-IN-THE-BLANKS mode serves the model answer with exactly those
+//      words punched out, so an open-ended question becomes a recall drill
+//      without anybody authoring a second version of it;
+//   3. nothing else changes — the question is still the same question in
+//      ordinary practice, and a question with no keywords is untouched.
+//
+// WHERE THEY LIVE. `q.blanks` — the question's own map, keyed by the answer
+// FIELD: `<blockId>` on its own for a plain answer box, `<blockId>_claim` /
+// `_evidence` / `_reasoning` for the three fields of a CER answer block.
+// Each entry is `{ wordIndex: true }`, counting WORDS (not characters) from
+// the start of that field. That shape is NOT new: `_markedToBlanks` has been
+// writing it from the `[[double bracket]]` marks every AI authoring prompt
+// asks for since long before this feature existed — it was simply never read
+// back by anything. So the bank already carries keywords on the questions the
+// AI built, and they light up the moment this ships.
+//
+// TWO WAYS TO READ THEM, and the split is deliberate:
+//   - PRACTICE blanks the marked INDEX and nothing else. Blanking every
+//     occurrence of "water" in a three-sentence answer is not a drill, it is
+//     a wall of empty boxes.
+//   - The ANSWER KEY bolds the WORD wherever it appears in that answer. A key
+//     is being read, not answered, and a keyword bold in one sentence and
+//     plain in the next reads as a mistake. It is also the only rule that can
+//     work there at all: the ✅ Model answer card is often the AI's own
+//     wording, which has no word indices to line up against.
+//
+// THE INDEX IS A WORD COUNT OVER THE FIELD, so anything that reads it must
+// count words the same way `_markedToBlanks` does. `_kwParse` is the ONE
+// walker: it skips HTML tags and decodes entities (a `<b>` in the middle of
+// an answer must not shift every keyword after it along by one, and `&nbsp;`
+// is a space, not the word "nbsp"), and it returns each word with BOTH its
+// offset in the plain text and its offset in the HTML source — the plain one
+// for the blanks a student fills in, the source one for the bolding, which
+// has to leave the author's own formatting alone.
+// =====================================================================
+
+// A word, exactly as `_markedToBlanks` counts one: letters and digits, held
+// together across an internal hyphen or apostrophe ("re-freeze", "don't").
+const KW_WORD_RE = /[A-Za-z0-9]+(?:[-'’][A-Za-z0-9]+)*/g;
+// Below this many letters a "keyword" is a filler word ("of", "is", "a").
+// The author can still blank one by hand — this guards only the automatic
+// bolding, where a bold "a" in every sentence is noise, not a keyword.
+const KW_MIN_BOLD = 3;
+const KW_ENTITIES = { nbsp: ' ', '#160': ' ', amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'" };
+
+// Walk an answer field ONCE. Returns the plain text a student reads, plus
+// every word in it with its position in BOTH strings:
+//   { plain, words: [{ w, pa, pb, sa, sb }] }
+// Whitespace is collapsed the way stripHtml collapses it, so the plain text
+// this returns is the sentence the rest of the app already shows.
+function _kwParse(html) {
+  const s = String(html == null ? '' : html);
+  let plain = '';
+  const map = [];                       // plain offset -> source offset
+  const put = (ch, at) => {
+    if (ch === ' ') {
+      if (!plain.length || plain.charAt(plain.length - 1) === ' ') return;  // collapse runs, drop the lead
+      plain += ' '; map.push(at); return;
+    }
+    plain += ch; map.push(at);
+  };
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === '<') {
+      const close = s.indexOf('>', i);
+      if (close < 0) break;
+      put(' ', i);                      // a tag separates words, exactly as stripHtml does
+      i = close + 1;
+      continue;
+    }
+    if (c === '&') {
+      const m = /^&([a-z]+|#\d+);/i.exec(s.slice(i, i + 12));
+      if (m) {
+        // One character, never letters to be counted: "&nbsp;" is a space and
+        // "&amp;" is punctuation. Counting the letters inside would shift
+        // every keyword after it along by one.
+        put(KW_ENTITIES[m[1].toLowerCase()] || ' ', i);
+        i += m[0].length;
+        continue;
+      }
+    }
+    put(/\s/.test(c) ? ' ' : c, i);
+    i++;
+  }
+  while (plain.charAt(plain.length - 1) === ' ') { plain = plain.slice(0, -1); map.pop(); }
+  const words = [];
+  let m2;
+  KW_WORD_RE.lastIndex = 0;
+  while ((m2 = KW_WORD_RE.exec(plain)) !== null) {
+    const pa = m2.index, pb = pa + m2[0].length;
+    words.push({ w: m2[0], pa, pb, sa: map[pa], sb: (map[pb - 1] == null ? map[pa] : map[pb - 1] + 1) });
+  }
+  return { plain, words };
+}
+
+// The `q.blanks` key for one answer field. `<blockId>` on its own for a plain
+// answer box, `<blockId>_claim` for a field of a CER answer block — the
+// convention `_markedToBlanks`' callers have always written.
+function kwFieldKey(blockId, field) {
+  const f = String(field || 'content');
+  return (f === 'content' || f === 'text') ? String(blockId) : String(blockId) + '_' + f;
+}
+
+// Which answer fields a block carries, in the order a student reads them.
+const KW_CER_FIELDS = [
+  { field: 'claim', label: 'Claim' },
+  { field: 'evidence', label: 'Evidence' },
+  { field: 'reasoning', label: 'Reasoning' }
+];
+function kwBlockFields(block) {
+  if (!block) return [];
+  if (block.type === 'answer') return KW_CER_FIELDS.slice();
+  if (block.type === 'plainanswer' || block.type === 'openLines' || block.type === 'workingSpace') {
+    return [{ field: 'content', label: '' }];
+  }
+  return [];
+}
+// Can this block hold keywords at all? An annotation working area is a
+// drawing pad, not a sentence — there is nothing in it to blank.
+function kwBlockTakesKeywords(block) {
+  if (!block) return false;
+  if (block.type === 'workingSpace' && block.annotate) return false;
+  return kwBlockFields(block).length > 0;
+}
+
+// The marked word indices of one field, ascending, and only the ones that
+// still point AT A WORD — an answer edited down to three words must not try
+// to blank a fourth that is no longer there.
+function kwIndices(store, block, field, parsed) {
+  const m = store && store[kwFieldKey(block && block.id, field)];
+  if (!m || typeof m !== 'object') return [];
+  const n = (parsed || _kwParse((block && block[field]) || '')).words.length;
+  return Object.keys(m)
+    .filter(k => m[k])
+    .map(k => parseInt(k, 10))
+    .filter(i => Number.isInteger(i) && i >= 0 && i < n)
+    .sort((a, b) => a - b);
+}
+function qKwIndices(q, block, field, parsed) { return kwIndices(q && q.blanks, block, field, parsed); }
+
+// Every keyword WORD on a question, lower-cased. This is what the answer key
+// bolds by — see the header: a key is read, not answered, so a keyword is
+// bold wherever it appears rather than only where it was marked.
+function qKeywordWords(q) {
+  const out = new Set();
+  ((q && q.blocks) || []).forEach(block => {
+    if (!kwBlockTakesKeywords(block)) return;
+    kwBlockFields(block).forEach(({ field }) => {
+      const parsed = _kwParse(block[field] || '');
+      qKwIndices(q, block, field, parsed).forEach(i => {
+        const w = parsed.words[i] && parsed.words[i].w;
+        if (w && w.length >= KW_MIN_BOLD) out.add(w.toLowerCase());
+      });
+    });
+  });
+  return out;
+}
+// Does this question have anything to fill in? The gate on 🔲 Fill-in-the-
+// blanks mode — a question with no keywords marked is never served there,
+// because it would be an ordinary question with nothing blanked out.
+function qHasKeywords(q) {
+  return ((q && q.blocks) || []).some(block =>
+    kwBlockTakesKeywords(block) &&
+    kwBlockFields(block).some(({ field }) => qKwIndices(q, block, field).length > 0));
+}
+// How many blanks a question would serve.
+function qKeywordCount(q) {
+  let n = 0;
+  ((q && q.blocks) || []).forEach(block => {
+    if (!kwBlockTakesKeywords(block)) return;
+    kwBlockFields(block).forEach(({ field }) => { n += qKwIndices(q, block, field).length; });
+  });
+  return n;
+}
+
+// ---- rendering: bold & underlined on every answer key ----------------------
+// PLAIN text in, HTML out. Used for every answer key a STUDENT is shown — the
+// ✅ Model answer card and the per-part feedback line — because what those
+// carry is a plain string, sometimes the AI's own wording rather than the
+// stored field, so there are no indices to line up against.
+function kwBoldPlain(text, words) {
+  const s = String(text == null ? '' : text);
+  if (!s) return '';
+  if (!words || !words.size) return escapeHtml(s);
+  let out = '', last = 0, m;
+  KW_WORD_RE.lastIndex = 0;
+  while ((m = KW_WORD_RE.exec(s)) !== null) {
+    if (!words.has(m[0].toLowerCase())) continue;
+    out += escapeHtml(s.slice(last, m.index)) + '<strong><u>' + escapeHtml(m[0]) + '</u></strong>';
+    last = m.index + m[0].length;
+  }
+  return out + escapeHtml(s.slice(last));
+}
+// HTML in, HTML out, with the author's own formatting left exactly as it is.
+// Used for the PRINTED / exported answer key, where the stored field is what
+// gets printed and bolding it must not flatten a superscript or a list.
+function kwBoldHtml(html, words) {
+  const s = String(html == null ? '' : html);
+  if (!s || !words || !words.size) return s;
+  const hits = _kwParse(s).words.filter(w =>
+    words.has(w.w.toLowerCase()) && w.sa != null && w.sb != null && w.sb > w.sa);
+  if (!hits.length) return s;
+  let out = s;
+  for (let i = hits.length - 1; i >= 0; i--) {   // back to front, or every offset after the first shifts
+    const h = hits[i];
+    out = out.slice(0, h.sa) + '<strong><u>' + out.slice(h.sa, h.sb) + '</u></strong>' + out.slice(h.sb);
+  }
+  return out;
+}
+// One answer field of a question, ready for the printed answer key.
+function qKeyFieldHtml(q, block, field) {
+  const raw = (block && block[field]) || '';
+  const words = qKeywordWords(q);
+  return words.size ? kwBoldHtml(raw, words) : raw;
+}
+// A plain-text answer key as HTML, with this question's keywords picked out.
+// The ONE door every student-facing answer key goes through.
+function qKeyPlainHtml(q, text) {
+  return kwBoldPlain(text, qKeywordWords(q));
+}
+
+// ---- rendering: the blanks a student fills in ------------------------------
+// One answer field as a sentence with its marked words punched out. Returns
+// null when the field has nothing to blank, so the caller falls back to the
+// ordinary typing box rather than serving an empty exercise.
+//   onBlank(word, i) -> the HTML of one input
+function kwBlankFieldHtml(block, field, idxs, onBlank) {
+  const parsed = _kwParse((block && block[field]) || '');
+  if (!idxs || !idxs.length || !parsed.plain) return null;
+  let out = '', last = 0, n = 0;
+  idxs.forEach(i => {
+    const w = parsed.words[i];
+    if (!w) return;
+    out += escapeHtml(parsed.plain.slice(last, w.pa)) + onBlank(w.w, n++);
+    last = w.pb;
+  });
+  if (!n) return null;
+  return out + escapeHtml(parsed.plain.slice(last));
+}
+// The same sentence with the answers shown in their slots — the editor's live
+// preview of what a student will be handed.
+function kwPreviewFieldHtml(block, field, idxs) {
+  const parsed = _kwParse((block && block[field]) || '');
+  if (!parsed.plain) return '<span style="color:var(--text-muted);font-size:0.82rem;">—</span>';
+  if (!idxs || !idxs.length) return escapeHtml(parsed.plain);
+  let out = '', last = 0;
+  idxs.forEach(i => {
+    const w = parsed.words[i];
+    if (!w) return;
+    out += escapeHtml(parsed.plain.slice(last, w.pa)) +
+      `<span class="fb-blank-slot" title="${escapeHtml(w.w)}">${'&nbsp;'.repeat(Math.max(6, w.w.length + 2))}</span>`;
+    last = w.pb;
+  });
+  return out + escapeHtml(parsed.plain.slice(last));
+}
+
+// ---- 🔲 the practice mode itself ------------------------------------------
+// One ANSWER BLOCK, served as fill-in-the-blanks. Every marked keyword becomes
+// an input; everything else in the model answer is printed as the student's
+// prompt. Returns null when this block has no keywords, so the caller falls
+// straight back to the ordinary typing box — a question can be half and half.
+//
+// It deliberately reuses the 🔲 Fill-in-the-Blanks BLOCK's own store and
+// marking (`_fbStore` / `fbCheck`): exact match first, then the AI accepts
+// synonyms, plurals and spelling slips. A second marker written for this mode
+// would be a second marker to keep in step, and a student typing "water
+// vapor" must be marked the same way whichever of the two they met it in.
+const KW_FIB_COLORS = {
+  Claim: ['var(--accent-blue-light)', 'var(--accent-blue)'],
+  Evidence: ['var(--accent-orange-light)', 'var(--accent-orange)'],
+  Reasoning: ['var(--primary-light)', 'var(--primary)']
+};
+function _kwFibBlockHtml(q, block, items, fbBlocks, containerSel, partLabel) {
+  // `q` is passed in rather than read from _openQStore: buildOpenBody fills that
+  // store at the END of its run, so during the render it is still the PREVIOUS
+  // question — and the keywords would be read off the wrong one.
+  if (!kwBlockTakesKeywords(block)) return null;
+  const oidxs = [], answers = [];
+  let body = '';
+  kwBlockFields(block).forEach(({ field, label }) => {
+    const idxs = qKwIndices(q, block, field);
+    if (!idxs.length) return;
+    const sentence = kwBlankFieldHtml(block, field, idxs, (word) => {
+      const oidx = items.length;
+      items.push({
+        // The label is what the AI marker names this answer by, so it has to
+        // carry the part and the CER section exactly as _openSection's does.
+        label: [partLabel, label, 'Blank ' + (oidxs.length + 1)].filter(Boolean).join(' '),
+        model: word, block, field
+      });
+      oidxs.push(oidx); answers.push(word);
+      const w = Math.max(6, Math.min(22, word.length + 3));
+      return `<input class="fb-input" data-oidx="${oidx}" type="text" autocomplete="off" spellcheck="false" aria-label="missing word" style="width:${w}ch;">`;
+    });
+    if (sentence == null) return;
+    const col = KW_FIB_COLORS[label];
+    body += `<div class="kw-fib">` +
+      (label && col ? `<div class="kw-fib-label" style="background:${col[0]};color:${col[1]};">${escapeHtml(label)}</div>` : '') +
+      `<div class="kw-fib-sentence">${sentence}</div></div>`;
+  });
+  if (!oidxs.length) return null;
+  fbBlocks.push({ blockId: block.id, oidxs, answers });
+  return body +
+    `<div class="fb-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
+      <button type="button" class="btn btn-check" data-fb-check="${containerSel}" data-fb-block="${block.id}" style="padding:6px 14px;font-size:0.82rem;">✓ Check answers</button>
+    </div>
+    <div class="fb-feedback" data-fb-fb="${block.id}" style="margin:2px 0 4px;"></div>`;
+}
+// The banner at the top of a fill-in-the-blanks question, so a student is never
+// left wondering why this question looks different from the last one.
+function kwFibNoteHtml() {
+  return `<div class="kw-mode-note"><span style="font-size:1.1rem;line-height:1;">🔲</span><span><strong>Fill-in-the-blanks</strong> — the model answer is written out for you with its key science words taken out. Type each missing word, then press <strong>✓ Check answers</strong>. Sensible variations are accepted.</span></div>`;
+}
+
+// =====================================================================
+// 🔑 ASSIGN KEYWORDS — the editor panel.
+//
+// Click a word and it becomes a keyword; click it again and it stops being
+// one. The chips are the SAME gesture the 🔲 Fill-in-the-Blanks BLOCK already
+// uses (`_fbChipsHtml` / `fbToggleToken`), so an author who has met one
+// already knows this one — and the preview underneath shows exactly what a
+// student will be handed, which is the only way to tell a good set of
+// keywords from a set that has gutted the sentence.
+//
+// Nothing is written anywhere until the question is SAVED: the panel edits
+// `selectedBlanks`, which `collectQuestionData` already carries onto the
+// question as `blanks` — and which is already in EDITOR_OWNED_QUESTION_FIELDS,
+// so a keyword the author has just removed is not restored by
+// carryOverQuestionMeta on the next save.
+// =====================================================================
+const _kwOpen = new Set();   // block ids whose keyword panel is open
+
+function kwAssignBtnHtml(blockId) {
+  const on = _kwOpen.has(blockId);
+  return `<button type="button" class="improve-btn kw-btn${on ? ' on' : ''}" data-kwtoggle="${blockId}" title="Mark the key science words in this answer. They print bold and underlined on every answer key, and 🔲 Fill-in-the-Blanks practice blanks them out for students to recall.">🔑 Assign keywords</button>`;
+}
+
+function kwTogglePanel(blockId) {
+  // The answer boxes are contenteditable, so what is on screen can be ahead of
+  // `blocks` — read it back before a re-render throws that DOM away, or the
+  // sentence the chips are built from is one keystroke old.
+  try { syncEditorDomToBlocks(); } catch (e) { console.warn('keyword panel sync-in', e); }
+  if (_kwOpen.has(blockId)) _kwOpen.delete(blockId); else _kwOpen.add(blockId);
+  renderBlocks();
+}
+
+// The chips for one field: every word in the answer, the marked ones lit up.
+function _kwChipsHtml(blockId, block, field) {
+  const parsed = _kwParse((block && block[field]) || '');
+  if (!parsed.words.length) return '<span style="font-size:0.8rem;color:var(--text-muted);">Write the answer above, then click its key words here.</span>';
+  const marked = new Set(kwIndices(selectedBlanks, block, field, parsed));
+  return parsed.words.map((w, i) =>
+    `<span class="fb-chip${marked.has(i) ? ' on' : ''}" onclick="kwToggleWord('${blockId}','${field}',${i})" title="${marked.has(i) ? 'Click to unmark this keyword' : 'Click to make this a keyword'}">${escapeHtml(w.w)}</span>`
+  ).join(' ');
+}
+
+function kwPanelHtml(block) {
+  const id = block && block.id;
+  if (!id || !_kwOpen.has(id)) return '';
+  const fields = kwBlockFields(block);
+  if (!fields.length) return '';
+  const total = fields.reduce((n, f) => n + kwIndices(selectedBlanks, block, f.field).length, 0);
+  const body = fields.map(({ field, label }) => `
+      <div style="margin-top:14px;">
+        ${label ? `<div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;">${escapeHtml(label)}</div>` : ''}
+        <div class="fb-chip-wrap" id="kwChips_${id}_${field}">${_kwChipsHtml(id, block, field)}</div>
+        <div style="font-size:0.76rem;color:var(--text-muted);margin:10px 0 5px;">What a student sees in 🔲 Fill-in-the-Blanks practice:</div>
+        <div class="fb-preview" id="kwPrev_${id}_${field}">${kwPreviewFieldHtml(block, field, kwIndices(selectedBlanks, block, field))}</div>
+      </div>`).join('');
+  return `
+    <div class="kw-panel" id="kwPanel_${id}">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="font-weight:700;color:var(--accent-blue,#2d6ca8);font-size:0.88rem;">🔑 Keywords</span>
+        <span class="kw-count" id="kwCount_${id}" style="font-size:0.8rem;color:var(--text-muted);">${total} marked</span>
+        <button type="button" class="improve-btn kw-btn" style="margin-left:auto;" onclick="kwClearBlock('${id}')">Clear all</button>
+        <button type="button" class="improve-btn kw-btn" onclick="kwTogglePanel('${id}')">Done</button>
+      </div>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:8px;line-height:1.6;">
+        👆 Click the words a student has to <strong>recall</strong> — 3 to 8 is usually right. They print <strong><u>bold and underlined</u></strong> on every answer key, and 🔲 Fill-in-the-Blanks practice blanks them out.
+      </div>
+      ${body}
+    </div>`;
+}
+
+// Repaint the panel in place. Called from saveBlockContent as the author
+// types, because the editor deliberately does NOT re-render a block while it
+// is being written in — the caret would jump to the top on every keystroke.
+function kwSyncPanel(blockId) {
+  if (!_kwOpen.has(blockId)) return;
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  let total = 0;
+  kwBlockFields(block).forEach(({ field }) => {
+    const idxs = kwIndices(selectedBlanks, block, field);
+    total += idxs.length;
+    const c = document.getElementById('kwChips_' + blockId + '_' + field);
+    if (c) c.innerHTML = _kwChipsHtml(blockId, block, field);
+    const p = document.getElementById('kwPrev_' + blockId + '_' + field);
+    if (p) p.innerHTML = kwPreviewFieldHtml(block, field, idxs);
+  });
+  const n = document.getElementById('kwCount_' + blockId);
+  if (n) n.textContent = total + ' marked';
+}
+
+function kwToggleWord(blockId, field, idx) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  const key = kwFieldKey(blockId, field);
+  const map = selectedBlanks[key] || (selectedBlanks[key] = {});
+  if (map[idx]) delete map[idx]; else map[idx] = true;
+  if (!Object.keys(map).length) delete selectedBlanks[key];
+  kwSyncPanel(blockId);
+}
+
+function kwClearBlock(blockId) {
+  const block = blocks.find(b => b.id === blockId);
+  if (!block) return;
+  kwBlockFields(block).forEach(({ field }) => { delete selectedBlanks[kwFieldKey(blockId, field)]; });
+  kwSyncPanel(blockId);
+}
+
+document.addEventListener('click', function (e) {
+  const t = e.target.closest && e.target.closest('[data-kwtoggle]');
+  if (!t) return;
+  e.preventDefault();
+  kwTogglePanel(t.getAttribute('data-kwtoggle'));
 });
 
 // =====================================================================
@@ -22530,7 +23002,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       const fb = sec && sec.querySelector('.open-feedback');
       if (fb) {
         let inner = fbHead;
-        if (verdict !== 'correct' && e.model) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${escapeHtml(e.model)}</div>`;
+        if (verdict !== 'correct' && e.model) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${qKeyPlainHtml(q, e.model)}</div>`;
         fb.innerHTML = inner;
       }
       _setPartResult(containerSel, 'open:' + (e.areaEl.dataset.oidx || ''), verdict, pts, e.model, e.student);
@@ -22829,7 +23301,7 @@ async function markQuestionPart(containerSel, kind, pid, btn) {
     const modelShown = model || String(parsed.modelAnswer || '').trim();
     if (fbEl) {
       let inner = fbHead;
-      if (modelShown) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${escapeHtml(modelShown)}</div>`;
+      if (modelShown) inner += `<div style="margin-top:4px;font-size:0.82rem;color:var(--primary);"><strong>Model answer:</strong> ${qKeyPlainHtml(q, modelShown)}</div>`;
       fbEl.innerHTML = inner;
     }
     _setPartResult(containerSel, 'open:' + pid, verdict, pts, model, student);
@@ -23676,6 +24148,9 @@ function renderSavedWorksheets() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
           Practice
         </button>
+        <button class="btn btn-outline" onclick="practiceSavedWorksheet('${ws.id}','fillblanks')" title="Practise this worksheet as fill-in-the-blanks — the model answers written out with their key science words taken out" style="color:var(--accent-blue);border-color:var(--accent-blue);">
+          🔲 Fill blanks
+        </button>
         <button class="qb-action-btn delete-qb" onclick="deleteWorksheet('${ws.id}')" title="Delete">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
@@ -23991,7 +24466,11 @@ function wsePreviewRemove(qid) {
 }
 
 // ---- Practice worksheet questions ----
-function practiceCurrentWorksheet() {
+// `mode` is threaded through so a CUSTOM worksheet (the questions picked in the
+// builder) and a SAVED worksheet can both be started straight in 🔲 Fill-in-the-
+// blanks — the same mode Quick Practice offers on its own Mode dropdown, since
+// all three end up in the same queue.
+function practiceCurrentWorksheet(mode) {
   if (wsSelectedIds.size === 0) {
     showToast('Select at least one question', 'error');
     return;
@@ -24001,10 +24480,10 @@ function practiceCurrentWorksheet() {
     showToast('No questions available to practice', 'error');
     return;
   }
-  launchWorksheetPractice(selected);
+  launchWorksheetPractice(selected, mode);
 }
 
-function practiceSavedWorksheet(id) {
+function practiceSavedWorksheet(id, mode) {
   const ws = savedWorksheets.find(w => w.id === id);
   if (!ws) return;
   const ids = Array.isArray(ws.questionIds) ? ws.questionIds.map(String) : [];
@@ -24013,12 +24492,31 @@ function practiceSavedWorksheet(id) {
     showToast(_wsEmptyMsg(ws), 'error');
     return;
   }
-  launchWorksheetPractice(selected);
+  launchWorksheetPractice(selected, mode);
 }
 
-function launchWorksheetPractice(questions) {
+// `mode` is 'fillblanks' to start this worksheet straight in 🔲 Fill-in-the-
+// blanks, anything else for ordinary practice. It is set BEFORE the queue is
+// built and before navigateTo, because navigating to Quick Practice repaints
+// its controls and the dropdown has to end up agreeing with the flag.
+function launchWorksheetPractice(questions, mode) {
+  qpSetMode(mode === 'fillblanks' ? 'fillblanks' : 'normal');
+  // In fill-in-the-blanks the sheet's questions are filtered the same way the
+  // Quick Practice queue is: one with no keywords marked would arrive with
+  // nothing blanked out. The whole sheet being filtered away is said out loud
+  // rather than silently starting an empty session.
+  let pool = questions || [];
+  if (qpFibOn()) {
+    const withKw = pool.filter(qHasKeywords);
+    if (!withKw.length) {
+      showToast('None of these questions has keywords marked yet — use 🔑 Assign keywords on their model answers first', 'error');
+      return;
+    }
+    if (withKw.length < pool.length) showToast(`${pool.length - withKw.length} question${pool.length - withKw.length === 1 ? '' : 's'} skipped — no keywords marked`, 'info');
+    pool = withKw;
+  }
   // Shuffle the questions
-  const shuffled = [...questions];
+  const shuffled = [...pool];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -24030,6 +24528,7 @@ function launchWorksheetPractice(questions) {
   qpSessionResults = [];
   // Navigate to the Quick Practice page
   navigateTo('quickpractice');
+  qpSetMode(qpFibOn() ? 'fillblanks' : 'normal');   // the page has just repainted its controls
   // Start practicing with these questions
   loadNextQpQuestion();
 }
@@ -24238,14 +24737,17 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             qHtml += `<div class="print-open-cer-label">Evidence</div><div class="print-open-cer-box">${openEndedLines(printAnswerLines(block, block.evidence))}</div>`;
             qHtml += `<div class="print-open-cer-label">Reasoning</div><div class="print-open-cer-box">${openEndedLines(printAnswerLines(block, block.reasoning))}</div>`;
             qHtml += `</div>`;
-            _pushAnswerKeySection(qSections, 'Claim', block.claim, bPart);
-            _pushAnswerKeySection(qSections, 'Evidence', block.evidence, bPart);
-            _pushAnswerKeySection(qSections, 'Reasoning', block.reasoning, bPart);
+            // 🔑 keywords bold and underlined — see the note on the other print
+            // path. Both paths go through the same helper, which is the only
+            // thing that stops the two keys drifting apart again.
+            _pushAnswerKeySection(qSections, 'Claim', qKeyFieldHtml(q, block, 'claim'), bPart);
+            _pushAnswerKeySection(qSections, 'Evidence', qKeyFieldHtml(q, block, 'evidence'), bPart);
+            _pushAnswerKeySection(qSections, 'Reasoning', qKeyFieldHtml(q, block, 'reasoning'), bPart);
             break;
           }
           case 'plainanswer': {
             qHtml += `<div class="print-open-answer-box"><div class="print-open-lines">${openEndedLines(printAnswerLines(block, block.content))}</div></div>`;
-            _pushAnswerKeySection(qSections, null, block.content, bPart);
+            _pushAnswerKeySection(qSections, null, qKeyFieldHtml(q, block, 'content'), bPart);
             break;
           }
           case 'table': { qHtml += renderTableReadonly(block, 'print-table'); break; }
@@ -25853,7 +26355,8 @@ function resetQpSession() {
   updateQpProgress();
   const f = qpFilters();
   const typeLabel = f.type === 'mcq' ? 'MCQ' : f.type === 'written' ? 'written (CER)' : 'all';
-  const scope = `${escapeHtml(qpLevel)} · ${typeLabel} questions${f.topic ? ' · ' + escapeHtml(f.topic) : ''}`;
+  const scope = `${escapeHtml(qpLevel)} · ${typeLabel} questions${f.topic ? ' · ' + escapeHtml(f.topic) : ''}` +
+    (qpFibOn() ? ' · 🔲 fill in the blanks' : '');
   const container = document.getElementById('qpContainer');
   if (container) container.innerHTML = `
     <div class="empty-state">
@@ -25865,6 +26368,42 @@ function resetQpSession() {
         Start Practice
       </button>
     </div>`;
+}
+
+// =====================================================================
+// 🔲 FILL-IN-THE-BLANKS PRACTICE MODE
+//
+// A MODE, not a question type: the same bank, the same queue, the same
+// marking — what changes is that an open-ended question is served as its own
+// model answer with the 🔑 keywords taken out, instead of an empty box.
+//
+// It lives on the Quick Practice page because every other practice surface
+// that can pick its own questions already ends up there: a custom worksheet
+// (bank picks → ✍️ Practice) and a saved worksheet (📄 My Worksheets →
+// Practice) both go through launchWorksheetPractice, which loads the queue
+// into Quick Practice and runs it. So one selector covers all three, and
+// launchWorksheetPractice takes the mode as an argument so those two surfaces
+// can start straight in it.
+//
+// The mode is a plain global rather than a URL or a saved preference. It is a
+// choice about THIS sitting — a student who filled in blanks last Tuesday
+// should meet ordinary practice on Wednesday, not silently be handed the
+// answers again.
+let _qpFibMode = false;
+function qpFibOn() { return !!_qpFibMode; }
+// Point every surface at the same switch. The dropdown is the display of the
+// flag, never the other way round: launchWorksheetPractice sets the flag from
+// somewhere else entirely and the page has to agree with it.
+function qpSetMode(mode) {
+  _qpFibMode = (mode === 'fillblanks');
+  const sel = document.getElementById('qpModeSelect');
+  if (sel) sel.value = _qpFibMode ? 'fillblanks' : 'normal';
+}
+function onQpModeChange() {
+  const sel = document.getElementById('qpModeSelect');
+  qpSetMode(sel ? sel.value : 'normal');
+  populateQpControls();   // the topic counts change — fill-in-the-blanks only serves questions that HAVE keywords
+  resetQpSession();
 }
 
 function onQpLevelChange() {
@@ -26016,6 +26555,7 @@ function qpAvailableTopics(typeFilter) {
   const counts = {};
   questionBank.forEach(q => {
     if (!qInSyllabus(q)) return;          // not in syllabus → never offered in practice
+    if (qpFibOn() && !qHasKeywords(q)) return;   // nothing to blank out → not a fill-in-the-blanks question
     if (!qpMatchesType(q, typeFilter)) return;
     if (!qWithinStudentLevel(q)) return; // topics above the student's level never show
     const ts = qTopicList(q);
@@ -26047,6 +26587,10 @@ function buildQpQueue(level) {
   const { type, topic } = qpFilters();
   const pool = questionBank.filter(q => {
     if (!qInSyllabus(q)) return false;             // not in syllabus → practice-excluded
+    // 🔲 Fill-in-the-blanks serves ONLY questions with keywords marked on their
+    // model answer. A question with none would arrive with nothing blanked out
+    // — an ordinary question wearing the mode's banner, which reads as a bug.
+    if (qpFibOn() && !qHasKeywords(q)) return false;
     if (!qpMatchesType(q, type)) return false;
     if (topic) { const ts = qTopicList(q); if (!(ts.length ? ts.includes(topic) : topic === 'General')) return false; }
     return qLevelNum(q) <= levelNum;   // primary AND secondary topic, highest wins
@@ -26073,6 +26617,11 @@ function buildQpQueue(level) {
 // Student shortcut: jump straight into MCQ-only Quick Practice.
 function startMcqPractice() {
   navigateTo('quickpractice');
+  // An MCQ shortcut is a shortcut to MULTIPLE CHOICE. Left in 🔲 Fill-in-the-
+  // blanks from an earlier sitting it would ask for MCQs that also carry
+  // keywords on a written answer — almost none do, so the button would look
+  // broken rather than filtered.
+  qpSetMode('normal');
   const typeEl = document.getElementById('qpTypeSelect');
   if (typeEl) typeEl.value = 'mcq';
   if (typeof onQpFilterChange === 'function') onQpFilterChange();
@@ -26091,7 +26640,9 @@ async function startQuickPractice() {
       <div class="empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.4;margin-bottom:12px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         <h3>No Questions Available</h3>
-        <p>No questions match your current filters. Try a different type, topic or level.</p>
+        <p>${qpFibOn()
+          ? 'No question here has keywords marked on its model answer yet, so there is nothing to fill in. Switch Mode back to ✍️ Normal, or ask your teacher to mark some keywords with 🔑 Assign keywords.'
+          : 'No questions match your current filters. Try a different type, topic or level.'}</p>
       </div>`;
     updateQpProgress();
     return;
@@ -26280,7 +26831,9 @@ function renderQpQuestion(q) {
       <div class="practice-card-body">`;
 
   html += buildOpenBody(q, '#qpContainer', {
-    scoreElId: 'qpScoreDisplay', scorePrefix: 'AI Score', mode: 'quickpractice-open', onAllMarked: _qpAllPartsMarked
+    scoreElId: 'qpScoreDisplay', scorePrefix: 'AI Score',
+    mode: qpFibOn() ? 'quickpractice-fillblanks' : 'quickpractice-open',
+    fillBlanks: qpFibOn(), onAllMarked: _qpAllPartsMarked
   });
 
   html += `</div>
@@ -27604,7 +28157,7 @@ function showExplanation(containerSel, q, aiText, scoreElId, modelAnswer) {
   if (model) {
     cards +=
       `<div class="post-explanation" style="margin-top:14px;padding:12px 14px;border:1px solid var(--primary);background:var(--primary-light,#e4f1ec);border-radius:10px;">
-        <div style="font-weight:700;color:var(--primary);margin-bottom:6px;">✅ Model answer</div><div style="line-height:1.7;white-space:pre-wrap;">${escapeHtml(model)}</div></div>`;
+        <div style="font-weight:700;color:var(--primary);margin-bottom:6px;">✅ Model answer</div><div style="line-height:1.7;white-space:pre-wrap;">${qKeyPlainHtml(q, model)}</div></div>`;
   }
   // The answer-key diagram, if the teacher made one. Revealed HERE and nowhere
   // else — the question itself never shows it, or it would be the answer. It is
@@ -28804,6 +29357,7 @@ const USAGE_MODES = {
   'practice':            { icon: '📝', label: 'Practice',          group: 'practice' },
   'practice-open':       { icon: '📝', label: 'Practice',          group: 'practice' },
   'quickpractice-open':  { icon: '⚡', label: 'Quick Practice',     group: 'practice' },
+  'quickpractice-fillblanks': { icon: '🔲', label: 'Fill in the Blanks', group: 'practice' },
   'topicalpractice-open':{ icon: '🎯', label: 'Topical Practice',  group: 'practice' },
   'worksheet-open':      { icon: '📄', label: 'Worksheet',         group: 'practice' },
   'snapmark-open':       { icon: '📸', label: 'Snap & Mark',       group: 'practice' },
@@ -59756,6 +60310,7 @@ window.confirmSaveWorksheet = confirmSaveWorksheet;
 // Quick Practice
 window.onQpLevelChange = onQpLevelChange;
 window.onQpFilterChange = onQpFilterChange;
+window.onQpModeChange = onQpModeChange;
 window.qpAiRecommend = qpAiRecommend;
 window.startQuickPractice = startQuickPractice;
 window.startMcqPractice = startMcqPractice;
@@ -59895,6 +60450,9 @@ window.homeStartReview = homeStartReview;
 window.homePractiseWeakest = homePractiseWeakest;
 window.fbSyncChips = fbSyncChips;
 window.fbToggleToken = fbToggleToken;
+window.kwTogglePanel = kwTogglePanel;
+window.kwToggleWord = kwToggleWord;
+window.kwClearBlock = kwClearBlock;
 window.mcqSetCorrect = mcqSetCorrect;
 window.mcqSetOptionText = mcqSetOptionText;
 window.mcqAddOption = mcqAddOption;

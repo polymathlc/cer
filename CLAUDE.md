@@ -1655,7 +1655,105 @@ DISPLAY ONLY**, everywhere a student can see one. It writes nothing anywhere.
   session that browsed the whole dex would otherwise hold tens of megabytes.
 - Run **`node tools/pink-screen-tests.mjs`** after touching any of it.
 
+## 🔑 Keywords in a model answer, and 🔲 Fill-in-the-Blanks practice (v1.311.0)
+
+`kw*` / `_kw*` / `qKw*` / `qKeyword*` / `qpFib*` (in `app.js`, search `KEYWORDS IN A
+MODEL ANSWER`), plus the `.kw-*` CSS in `index.html`, the 🔑 **Assign keywords**
+button beside 🤖 AI answer on every answer block, and the **Mode** dropdown on
+Quick Practice.
+
+An open-ended answer is a sentence, and what a student actually has to RECALL is
+a handful of words inside it: *vapour*, *stomata*, *evaporate*. Marking those
+words turns ONE model answer into three things — a key that prints them
+**<u>bold and underlined</u>**, a recall drill that punches them out, and the
+same ordinary question everywhere else.
+
+- **THE STORE IS NOT NEW, AND THAT IS THE POINT.** `q.blanks` — keyed
+  `<blockId>` for a plain answer box and `<blockId>_claim` / `_evidence` /
+  `_reasoning` for a CER block, each holding `{ wordIndex: true }` — has been
+  written by `_markedToBlanks` from the `[[double bracket]]` marks **every** AI
+  authoring prompt already asks for (build-from-screenshot, rapid add, the bulk
+  PDF import, regenerate, the exam paper builder). It was simply never read back
+  by anything. So the bank already carries keywords on every question the AI
+  built, and they light up the moment this ships — nobody has to go back over a
+  thousand questions by hand. Do not invent a second store on the block.
+- **THE INDEX IS A WORD COUNT, so anything that reads it must count words the
+  way `_markedToBlanks` writes them.** `_kwParse` is the ONE walker, and the two
+  things it must keep doing are the two ways the count silently drifts: an HTML
+  tag is not a word (a `<b>` added mid-answer would otherwise shift every
+  keyword after it along by one) and `&nbsp;` is a space rather than the word
+  "nbsp". It returns each word with its offset in BOTH the plain text and the
+  HTML source — the plain one for the blanks a student fills in, the source one
+  for the bolding, which has to leave the author's own formatting alone.
+- **TWO WAYS TO READ THEM, and the split is deliberate.** PRACTICE blanks the
+  marked INDEX and nothing else — blanking every occurrence of "water" in a
+  three-sentence answer is a wall of empty boxes, not a drill. The ANSWER KEY
+  bolds the WORD wherever it appears in that answer: a key is read rather than
+  answered, so a keyword bold in one sentence and plain in the next reads as a
+  mistake — and it is the only rule that can work there at all, because the
+  ✅ Model answer card a student sees is often the AI's own wording, which has no
+  word indices to line up against. `KW_MIN_BOLD` keeps the automatic bolding off
+  two-letter filler; the author can still blank one by hand.
+- **`qKeyFieldHtml` (HTML in, HTML out) and `qKeyPlainHtml` (plain in, HTML out)
+  are the two doors**, and every answer key goes through one of them: BOTH print
+  paths (`doPrintWorksheetOpen` and `buildWorksheetHtml` — the two that had
+  already drifted over the MCQ answer once), and all three student-facing
+  reveals (`showExplanation`'s ✅ Model answer card, the whole-question mark's
+  per-part line, the per-part mark's). A field with no keywords is handed back
+  **byte for byte**, so nothing about an unmarked question changes.
+- **🔲 Fill-in-the-blanks is a FLAG ON `markCfg`, not a second renderer**
+  (`markCfg.fillBlanks` → `_kwFibBlockHtml` inside `buildOpenBody`). `buildOpenBody`
+  is the ONE body every practice surface renders through, so the mode reaches all
+  of them for free and the two can never drift into showing different questions.
+- **It reuses `_fbStore` / `fbCheck` — the 🔲 Fill-in-the-Blanks BLOCK's own
+  marking** — so exact match comes first and then the AI accepts synonyms,
+  plurals and spelling slips. A student typing "water vapor" must be marked the
+  same way whichever of the two they met it in, and a second marker is a second
+  marker to keep in step.
+- **A block with no keywords falls back to its ordinary typing box** (the
+  renderer returns **null**, never an empty string — an empty string would take
+  the answer box away and put nothing in its place, which renders perfectly and
+  cannot be answered). A question with none anywhere is never SERVED in the mode
+  at all: `qHasKeywords` gates `buildQpQueue`, `qpAvailableTopics` and
+  `launchWorksheetPractice`, because a question with nothing blanked out is an
+  ordinary question wearing the mode's banner.
+- **One selector covers all three surfaces the user asked for**, because they
+  are one queue: Quick Practice has the **Mode** dropdown, and a CUSTOM
+  worksheet (bank picks → 🔲 Fill in the blanks) and a SAVED worksheet
+  (📄 My Worksheets → 🔲 Fill blanks) both go through `launchWorksheetPractice`,
+  which loads the queue into Quick Practice and runs it. `qpSetMode` is the ONE
+  switch and the dropdown is its DISPLAY, never the other way round — a
+  worksheet started in the mode has to leave the page agreeing with it.
+- The mode is a plain global, deliberately not saved: it is a choice about THIS
+  sitting, and a student who filled in blanks last Tuesday should meet ordinary
+  practice on Wednesday rather than be handed the answers again.
+- **🔑 Assign keywords borrows `.improve-btn` for its looks, so ✨ Improve needs
+  a `kw-btn` guard** — the usual trap in this file (✂️ Shorten and ✍️ AI complete
+  carry the same one). Without it one press also runs the button that REWRITES
+  the box. The panel's own *Clear all* / *Done* carry `kw-btn` for the same
+  reason.
+- Nothing is written until the question is SAVED: the panel edits
+  `selectedBlanks`, which `collectQuestionData` already carries onto the question
+  as `blanks` — and `blanks` is already in `EDITOR_OWNED_QUESTION_FIELDS`, so a
+  keyword the author has just removed is not restored by `carryOverQuestionMeta`.
+  `kwSyncPanel` is called from `saveBlockContent` rather than by re-rendering the
+  block, because the answer boxes are contenteditable and a re-render would put
+  the caret back at the top on every keystroke.
+- Run **`node tools/keyword-blank-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **🔑 keywords / 🔲 fill-in-the-blanks** (`_kwParse`, `kwIndices`,
+  `qKeywordWords`, `qHasKeywords`, `kwBoldPlain`, `kwBoldHtml`, `qKeyFieldHtml`,
+  `qKeyPlainHtml`, `kwBlankFieldHtml`, `kwPreviewFieldHtml`, `_kwFibBlockHtml`,
+  `qpSetMode`, or `_markedToBlanks`), run `node tools/keyword-blank-tests.mjs`.
+  Every failure is silent and the app goes on working. A word count that drifts
+  from `_markedToBlanks` by ONE slides every keyword on every AI-built question
+  in the bank along its sentence — the mode then blanks "the" and the printed
+  key underlines "of", and nothing anywhere says so. Splicing the bolding front
+  to back instead of back to front prints mangled markup in the middle of a
+  teacher's answer key. And a blank renderer that returns an empty string rather
+  than null takes the answer box off the question and puts nothing in its place:
+  a question that renders perfectly and cannot be answered.
 - After touching **the teaching-notes digests or the live notebook** (`_notesGuidanceBlock`,
   `_notesMarkingBlock`, `_notesGenBlock`, `_notesAnswerBlock`, `_notesFor`, `_noteSuitsThisApp`,
   `loadTeachingNotes`, `_notesDetach`, `stopTeachingNotes`, `NOTES_GUIDE_CHARS`, `quickNoteSave`), run
