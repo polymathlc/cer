@@ -3223,7 +3223,22 @@ option {
     letter-spacing: 0.06em;
     color: #777;
     font-weight: 700;
-    margin-top: 4pt;
+    margin-top: 8pt;
+  }
+  .print-ak-fulltext > .ak-sublabel:first-child { margin-top: 0; }
+  /* The EXPLANATION is a different kind of thing from the answer above it —
+     the answer is what a teacher marks from at a glance, the explanation is
+     what they read out afterwards. Run on directly underneath, the two read as
+     one block of text; a clear gap and a hairline say where one ends. */
+  .print-ak-fulltext .ak-sublabel.ak-expl {
+    margin-top: 13pt;
+    padding-top: 8pt;
+    border-top: 0.5pt solid #dcdcdc;
+    color: #8a6d3b;
+  }
+  .print-ak-fulltext .ak-fullcontent.ak-expl {
+    font-weight: 400;
+    color: #444;
   }
   .print-ak-fulltext .ak-fullcontent {
     margin-top: 2pt;
@@ -10768,7 +10783,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
     <button class="btn btn-outline" type="button" onclick="closeWorksheetPreview()">← Back</button>
     <span class="wspv-title">Worksheet preview <span class="wspv-count" id="wsPreviewPageCount"></span></span>
     <span class="wspv-hint">⬆ pulls a question onto the previous page (fit 2+ per page) · ⤓ pushes it onto a new page · ✏️ edits the question itself · ✕ takes it off the sheet · ✏️ on the answer key edits its answer &amp; explanation · updates live.</span>
-    <label class="wspv-toggle" title="Print each question's explanation on the answer key, under its answer. The same switch as “💡 Explanations on the answer key” in the printing options.">
+    <label class="wspv-toggle" id="wsPreviewExplWrap" title="Print each question's explanation on the answer key, under its answer. The same switch as “💡 Explanations on the answer key” in the printing options.">
       <input type="checkbox" id="wsPreviewExpl" onchange="akeSetExplPrint(this.checked)">
       &#128161; Explanations on key
     </label>

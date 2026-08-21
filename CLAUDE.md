@@ -1893,7 +1893,78 @@ the wording by hand.
   survives, which is the exam convention and exactly what a paper shows.
 - Run **`node tools/question-marks-tests.mjs`** after touching any of it.
 
+## 📄 The answer key is PAGINATED, and previewable from the past papers (v1.315.0)
+
+`_packAkRows` / `_akPageTitle` / `_printAkPageEl` / `_printPlanAkPages` (in
+`app.js`, search `the ANSWER KEY, paginated`), `_wsPreviewPaper` / `ppPreview` /
+`_ppPrintQuestions` (search `ppPreview`), and the `.ak-expl` rules in
+`index.html`'s `@media print` block.
+
+- **The key used to be ONE pre-built page.** `_printPlanIn` measured it whole:
+  too tall to shrink readably and it was marked `tall` and left to flow. On
+  screen that is a single sheet several pages long with the rows running off
+  the bottom of it, and in the PDF a page box that is a fixed height with
+  visible overflow. A twenty-three-question key is the ORDINARY case. Its rows
+  are packed into sheets now, the way the question chunks already were:
+  `_packAkRows` proposes, and every candidate sheet is then assembled and
+  measured for real — the measure-never-assume rule the rest of the planner
+  follows.
+- **The heading is reprinted on every sheet, so it comes out of EVERY sheet's
+  budget** — charged once, sheet two onwards is over the bar by a heading.
+  Sheet two says *(continued)*: a teacher flipping over needs to know it is not
+  a second key.
+- **`_printAkPageEl` is the ONE builder both consumers call.**
+  `doScaleAndPrint` and `_wsPreviewPack` assemble the sheets separately; if
+  either stops calling it, the preview paginates differently from the PDF and
+  the teacher checks a layout they will not get.
+- **`_printPlanAkPages` hands the rows back in INDEX order.** Measuring moves
+  them about, and the live preview plans against the very DOM it then rebuilds
+  from — a re-query in shuffled order gives sheet one the rows of sheet three,
+  every answer under the wrong question number, with nothing anywhere saying so.
+- **`akPlans[i]` is an ARRAY of sheets now**, not one `{zoom,tall,h}`. Both
+  readers were changed with it.
+
+### 👁 Preview a past paper
+
+- **`_wsPreviewPaper` is the preview's third context**, beside the builder's and
+  a saved worksheet's. A past paper is not a saved worksheet — there is no
+  stored list of ids to edit — so it gets its own slot rather than being
+  squeezed into that one; `_wsPreviewCtx` grows a `paper` branch and the
+  ✎ Questions button and the 💡 toggle are hidden for it.
+- **A paper always prints its explanations** (it is a marking scheme), so the
+  context carries `akExtras: true` and `akeExplPrintOn()` reads the CONTEXT
+  rather than `AKX_SWITCHES` — asking the checkbox table about a surface that
+  has no checkbox would tell the drawer the opposite of the truth.
+- **`_ppPrintQuestions` is the ONE list builder** the preview and the print
+  share, and `printFromPreview` hands `ppDoPrint` back the very arguments the
+  preview was opened with. A preview assembled its own way is a preview of a
+  different paper.
+- Each of the three print entry points (`ppPrintConcept`, `ppPrintYear`,
+  `ppPrintSelected`) takes a `go` argument and dispatches to `ppPreview` or
+  `ppDoPrint`, so the two can never collect different questions.
+
+### The explanation is set apart from the answer
+
+`_akSectionsHtml` tags an explanation section `ak-expl` from its `kind`, never
+from its label text — the label is one literal today and would be a silent
+match on any wording tomorrow. The print CSS gives it a clear gap and a
+hairline above: run on directly underneath, the answer and the explanation read
+as one block of text, and the answer is what a teacher marks from at a glance.
+
+Run **`node tools/answer-key-pagination-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **the paginated answer key or the past-paper preview**
+  (`_packAkRows`, `_akPageTitle`, `_printAkPageEl`, `_printPlanAkPages`,
+  `plan.akPlans`, `_wsPreviewPaper`, `ppPreview`, `_ppPrintQuestions`, or
+  `_akSectionsHtml`'s `kind`), run
+  `node tools/answer-key-pagination-tests.mjs`. The key is the page a teacher
+  marks from and every failure lands on paper: charge the heading to one sheet
+  instead of all of them and sheet two prints over the bar; drop the row-order
+  restore and the live preview rebuilds from a shuffled DOM, putting every
+  answer under the wrong question number; let either consumer stop calling
+  `_printAkPageEl` and the preview paginates differently from the PDF, so the
+  teacher checks a layout they will not get.
 - After touching **[2] question marks** (`qMarksOf`, `qMarksLabel`,
   `qStripTailMarks`, `qMarksAppendHtml`, `QMARKS_TAIL_RE`,
   `QMARKS_TAIL_POS_RE`, `qPartBodyHtml`, `qMarksPickerHtml`, `setBlockMarks`,

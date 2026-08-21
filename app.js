@@ -1978,7 +1978,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.314.0';
+const APP_VERSION = 'v1.315.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -15428,7 +15428,7 @@ function _pushBlockAnswerKey(sections, block, part, why) {
 // still prints explanations in full.
 function _qFallbackKeySection(q) {
   const ex = ((q && q.blocks) || []).find(b => b && b.type === 'explanation' && stripHtml(b.content));
-  return ex ? { label: 'Explanation', content: sanitizeAnswerKeyHtml(ex.content) } : null;
+  return ex ? { label: 'Explanation', kind: 'explanation', content: sanitizeAnswerKeyHtml(ex.content) } : null;
 }
 // Placeholder for a question that yielded nothing. It is NEVER what makes the
 // key page appear (see the `hasAny` guards) — a bank with no model answers at
@@ -15452,8 +15452,14 @@ function _akSectionsHtml(sections) {
     // An unparted section after a parted one (the trailing explanation, say)
     // must not look like it belongs to the last part.
     if (!p) shown = null;
-    if (sec.label) html += `<div class="ak-sublabel">${escapeHtml(sec.label)}</div>`;
-    html += `<div class="ak-fullcontent${p ? ' ak-parted' : ''}">${sec.content}</div>`;
+    // An EXPLANATION is a different kind of thing from an answer — the answer
+    // is what a teacher marks from at a glance, the explanation is what they
+    // read out afterwards — so it is set apart rather than run on under the
+    // answer above it. `kind` rather than a match on the label: the label is
+    // one literal today and would be a silent match on any wording tomorrow.
+    const ex = sec.kind === 'explanation' ? ' ak-expl' : '';
+    if (sec.label) html += `<div class="ak-sublabel${ex}">${escapeHtml(sec.label)}</div>`;
+    html += `<div class="ak-fullcontent${p ? ' ak-parted' : ''}${ex}">${sec.content}</div>`;
   });
   return html;
 }
@@ -15651,7 +15657,7 @@ function doPrintWorksheetOpen(whyNotes) {
         // Both had already drifted over the MCQ answer once.
         case 'explanation': {
           if (akxPrintOn('bank') && stripHtml(block.content)) {
-            qSections.push({ label: 'Explanation', content: sanitizeAnswerKeyHtml(block.content), part: qPartNormalize(bPart) });
+            qSections.push({ label: 'Explanation', kind: 'explanation', content: sanitizeAnswerKeyHtml(block.content), part: qPartNormalize(bPart) });
           }
           break;
         }
@@ -16195,6 +16201,114 @@ function _printVerifiedZoom(startZoom, measureAt, usable) {
   return { zoom: 0, h: 0 };
 }
 
+// ---- the ANSWER KEY, paginated -------------------------------------------
+// One sheet of the answer key: the heading, then the rows this sheet holds.
+// The ONE builder both the printer and the live preview call — they had already
+// drifted over the MCQ answer once, and a key that paginates differently on
+// screen from on paper is the same fault wearing a new hat.
+//
+// The rows are MOVED into the page, so the source `.print-answer-key-page` is
+// left empty and discarded; it is only ever the bag the rows arrived in.
+// The heading on sheet `gi` of the key. A teacher flipping to sheet two needs
+// to know what it is — and needs to know it is not a second key.
+function _akPageTitle(base, gi) {
+  const t = String(base || '').trim() || 'Answer Key';
+  return gi > 0 ? t + ' (continued)' : t;
+}
+function _printAkPageEl(ak, rowEls, group, gi, doc) {
+  const d = doc || document;
+  const page = d.createElement('div');
+  page.className = 'print-question-page print-answer-key-page';
+  const content = d.createElement('div');
+  content.className = 'print-page-content';
+  const head = ak.querySelector(':scope > h2') || ak.querySelector('h2');
+  if (head) {
+    const h = head.cloneNode(true);
+    h.textContent = _akPageTitle(head.textContent, gi);
+    content.appendChild(h);
+  }
+  (group || []).forEach(i => { if (rowEls[i]) content.appendChild(rowEls[i]); });
+  page.appendChild(content);
+  return page;
+}
+
+// Pack one built answer-key page into as many SHEETS as its rows need, and
+// verify each of them at true print size — the same measure-never-assume rule
+// the question pages follow. Returns one entry per sheet:
+//     [{ rows: [rowIndex…], h, zoom, tall }]
+// Which answer-key rows go on which sheet, on their own measured heights. The
+// heading is reprinted on every sheet, so it comes out of every sheet's budget;
+// a row taller than a whole sheet still gets one to itself rather than being
+// dropped, and the verify pass in _printPlanAkPages decides whether it shrinks
+// or flows. Pure, so the decision that turns one endless key into N sheets can
+// be pinned without a browser.
+function _packAkRows(rowHs, headH, budget) {
+  const groups = [];
+  let cur = [], used = headH || 0;
+  (rowHs || []).forEach((h, i) => {
+    if (cur.length && used + h > budget) { groups.push(cur); cur = []; used = headH || 0; }
+    cur.push(i); used += h;
+  });
+  if (cur.length) groups.push(cur);
+  return groups;
+}
+function _printPlanAkPages(doc, stage, ak, ctx) {
+  const rows = Array.from(ak.querySelectorAll('.print-ak-question'));
+  const head = ak.querySelector(':scope > h2') || ak.querySelector('h2');
+  const headH = head ? head.getBoundingClientRect().height : 0;
+
+  // Assemble a candidate sheet for real, read its height, then hand the rows
+  // back so the next candidate can be built from the same nodes.
+  const measure = (group, gi, tall, zoom) => {
+    const page = _printAkPageEl(ak, rows, group, gi, doc);
+    page.classList.add('pm-fit');
+    if (tall) page.classList.add('print-page-tall');
+    const content = page.querySelector(':scope > .print-page-content');
+    if (content && zoom && zoom < 0.999) content.style.zoom = zoom;
+    page.appendChild(ctx.footerNode());
+    stage.appendChild(page);
+    const h = page.getBoundingClientRect().height;
+    group.forEach(i => { if (rows[i]) ak.appendChild(rows[i]); });
+    page.remove();
+    return h;
+  };
+
+  if (!rows.length) return [{ rows: [], h: measure([], 0, false), zoom: 0, tall: false }];
+
+  // Greedy first pass on the rows' own heights, then verified below.
+  const groups = _packAkRows(rows.map(r => r.getBoundingClientRect().height), headH, ctx.budget);
+
+  const out = [];
+  for (let gi = 0; gi < groups.length; gi++) {
+    let guard = 0;
+    let h = measure(groups[gi], gi, false);
+    // Over the sheet with more than one row on it → push the last row onto the
+    // next sheet and re-measure, exactly as an over-full question page does.
+    while (h > ctx.usable && groups[gi].length > 1 && guard++ < groups[gi].length + 2) {
+      const last = groups[gi].pop();
+      const next = groups[gi + 1];
+      if (next) next.unshift(last); else groups.splice(gi + 1, 0, [last]);
+      h = measure(groups[gi], gi, false);
+    }
+    let zoom = 0, tall = false;
+    if (h > ctx.usable) {
+      // One row taller than a sheet — a long CER answer with an explanation
+      // under it. Shrink if that stays readable, otherwise let it flow; the
+      // print CSS already releases `.print-ak-question` on a tall page.
+      const fit = _printVerifiedZoom(ctx.zoomFor(h), z => measure(groups[gi], gi, false, z), ctx.usable);
+      if (fit.zoom) { zoom = fit.zoom; h = fit.h; }
+      else { tall = true; h = measure(groups[gi], gi, true); }
+    }
+    out.push({ rows: groups[gi].slice(), h, zoom, tall });
+  }
+  // Put the rows back in INDEX order. Measuring moved them about, and the live
+  // preview plans against the very DOM it then rebuilds from — a re-query in
+  // shuffled order would hand sheet one the rows of sheet three, with every
+  // answer under the wrong question number and nothing anywhere saying so.
+  rows.forEach(r => ak.appendChild(r));
+  return out;
+}
+
 function _printPlanIn(doc, root, opts) {
   const chunks = Array.from(root.querySelectorAll('.print-question-chunk'));
   const answerKeys = Array.from(root.querySelectorAll('.print-answer-key-page'));
@@ -16323,27 +16437,17 @@ function _printPlanIn(doc, root, opts) {
     pageHs[gi] = h;
   }
 
-  // Answer-key sheets are pre-built pages; measure them the same way.
-  const akPlans = answerKeys.map(ak => {
-    const content = _printWrapPageContent(ak, doc);
-    const measureAk = (z) => {
-      const footer = footerNode();
-      ak.classList.add('pm-fit');
-      if (z && z < 0.999) content.style.zoom = z; else content.style.zoom = '';
-      ak.appendChild(footer);
-      stage.appendChild(ak);
-      const got = ak.getBoundingClientRect().height;
-      footer.remove();
-      ak.classList.remove('pm-fit');
-      content.style.zoom = '';
-      root.appendChild(ak);
-      return got;
-    };
-    const h = measureAk(0);
-    if (h <= usable) return { zoom: 0, tall: false, h };
-    const fit = _printVerifiedZoom(zoomFor(h), measureAk, usable);
-    return fit.zoom ? { zoom: fit.zoom, tall: false, h: fit.h } : { zoom: 0, tall: true, h };
-  });
+  // The answer key is PAGINATED, exactly as the questions are.
+  //
+  // It used to be measured as ONE pre-built page: a key too tall to shrink
+  // readably was marked `tall` and left to flow, which on screen is a single
+  // sheet several pages long with the rows running off the bottom of it — and
+  // in the PDF a page box that is a fixed height with visible overflow. A
+  // twenty-three-question key is the ordinary case, not an edge one, so the
+  // rows are packed into sheets like everything else on the paper.
+  const akPlans = answerKeys.map(ak => _printPlanAkPages(doc, stage, ak, {
+    budget, usable, zoomFor, footerNode
+  }));
 
   const frontSpans = fronts.map(f => Math.max(1, Math.ceil((f.getBoundingClientRect().height || 1) / PRINT_PAGE_PX)));
   stage.remove();
@@ -16561,13 +16665,17 @@ function doScaleAndPrint(output, opts) {
       });
 
       answerKeys.forEach((ak, ai) => {
-        const p = plan.akPlans[ai] || {};
-        if (p.tall) ak.classList.add('print-page-tall');
-        _printWrapPageContent(ak);
-        ak.appendChild(_createPrintPageFooter());
-        _printApplyZoom(ak, p.zoom);
-        _printStampPlanHeight(ak, p.h, plan.numH);
-        output.appendChild(ak);
+        // One entry per SHEET now — the key is paginated like the questions.
+        const sheets = plan.akPlans[ai] || [];
+        const rowEls = Array.from(ak.querySelectorAll('.print-ak-question'));
+        sheets.forEach((p, gi) => {
+          const page = _printAkPageEl(ak, rowEls, p.rows, gi, document);
+          if (p.tall) page.classList.add('print-page-tall');
+          page.appendChild(_createPrintPageFooter());
+          _printApplyZoom(page, p.zoom);
+          _printStampPlanHeight(page, p.h, plan.numH);
+          output.appendChild(page);
+        });
       });
 
       // Front matter goes back in FIRST (cover, then cheat sheet), before Q1.
@@ -24963,7 +25071,7 @@ function buildWorksheetHtml(selected, worksheetTitle, opts) {
             // the preview: without it the key prints (b)'s explanation under
             // whichever part happened to come before it. `qPartMap` resolves a
             // QPART_NONE block to '', so a whole-question note stays unlabelled.
-            if (akExtras && stripHtml(block.content)) qSections.push({ label: 'Explanation', content: sanitizeAnswerKeyHtml(block.content), part: qPartNormalize(bPart) });
+            if (akExtras && stripHtml(block.content)) qSections.push({ label: 'Explanation', kind: 'explanation', content: sanitizeAnswerKeyHtml(block.content), part: qPartNormalize(bPart) });
             break;
           }
           // Explicit, so it does NOT fall through to
@@ -25622,8 +25730,24 @@ function _wsAppCssForPreview() {
 // worksheet reprint has no builder selection behind it, so it sets this instead
 // and every read below goes through _wsPreviewCtx() — one renderer, two sources.
 let _wsPreviewSaved = null;   // { id, title } of the saved worksheet on show
+// { selected, title, coverTitle, items, missing } of the PSLE paper on show.
+// A past paper is not a saved worksheet — there is no stored list of ids to
+// edit — so it gets its own slot rather than being squeezed into that one.
+let _wsPreviewPaper = null;
 
 function _wsPreviewCtx() {
+  if (_wsPreviewPaper) {
+    return {
+      saved: false, paper: true,
+      selected: _wsPreviewPaper.selected || [],
+      title: _wsPreviewPaper.title || 'Past paper',
+      cover: true, noFields: true, where: 'paper',
+      // A past paper always prints its explanations — it is a marking scheme,
+      // not a worksheet — so there is no checkbox and nothing to read.
+      akExtras: true,
+      frontHtml: _ppCoverHtml(_wsPreviewPaper.coverTitle || _wsPreviewPaper.title || 'Past paper')
+    };
+  }
   if (_wsPreviewSaved) {
     const ws = savedWorksheets.find(w => w.id === _wsPreviewSaved.id);
     return {
@@ -25632,7 +25756,8 @@ function _wsPreviewCtx() {
       title: (ws && ws.title) || _wsPreviewSaved.title || 'CER Worksheet',
       cover: !!document.getElementById('mwIncludeCover')?.checked,
       noFields: !_wsStudentFieldsOn('saved'),
-      where: 'saved'
+      where: 'saved',
+      akExtras: akxPrintOn('saved')
     };
   }
   return {
@@ -25641,14 +25766,33 @@ function _wsPreviewCtx() {
     title: (document.getElementById('wsTitle')?.value || '').trim() || 'CER Worksheet',
     cover: !!document.getElementById('wsIncludeCover')?.checked,
     noFields: !_wsStudentFieldsOn('builder'),
-    where: 'builder'
+    where: 'builder',
+    akExtras: akxPrintOn('builder')
   };
 }
 
 function openWorksheetPreview() {
   if (!wsSelectedIds.size) { showToast('Select at least one question first', 'error'); return; }
   _wsPreviewSaved = null;
+  _wsPreviewPaper = null;
   _wsShowPreviewOverlay();
+}
+
+// 👁 Preview a PSLE / past paper — the same A4 preview, so the sheet can be
+// checked and its answers and explanations fixed (✏️ edit answer on every row
+// of the key) before it goes to the printer. Takes the same arguments ppDoPrint
+// does, and hands them straight back to it when Print is pressed, so what is
+// previewed and what is printed are assembled from the identical inputs.
+function ppPreview(items, missing, title, opts) {
+  if (!items.length) { showToast('Nothing to preview — none of these questions have a bank question attached yet', 'error'); return; }
+  _wsPreviewSaved = null;
+  _wsPreviewPaper = {
+    items, missing, title,
+    coverTitle: (opts && opts.coverTitle) || title,
+    selected: _ppPrintQuestions(items)
+  };
+  _wsShowPreviewOverlay();
+  if (missing.length) showToast('Skipped ' + missing.length + ' with no attached question', 'info');
 }
 
 // Preview a SAVED worksheet — the same A4 preview the builder uses, opened from
@@ -25662,6 +25806,7 @@ function previewSavedWorksheet(id) {
     return;
   }
   _wsPreviewSaved = { id: ws.id, title: ws.title };
+  _wsPreviewPaper = null;
   _wsShowPreviewOverlay();
 }
 
@@ -25672,6 +25817,9 @@ function _wsShowPreviewOverlay() {
   // driven by the tick boxes on the page behind it.
   const editBtn = document.getElementById('wsPreviewEditBtn');
   if (editBtn) editBtn.style.display = _wsPreviewSaved ? '' : 'none';
+  // A past paper always prints its explanations, so there is nothing to switch.
+  const explBox = document.getElementById('wsPreviewExplWrap');
+  if (explBox) explBox.style.display = _wsPreviewPaper ? 'none' : '';
   akeSyncExplToggle();   // the builder and My Worksheets have their own checkbox
   renderWsPreview();
 }
@@ -25682,6 +25830,7 @@ function closeWorksheetPreview() {
   closeWsQuickEdit();
   closeAke();
   _wsPreviewSaved = null;
+  _wsPreviewPaper = null;
 }
 function wsBreakBefore(qid) { // push this question onto a new page
   if (!qid) return;
@@ -25696,6 +25845,12 @@ function wsPullUp(qid) { // pull this question onto the previous page
   renderWsPreview();
 }
 function printFromPreview() {
+  if (_wsPreviewPaper) {
+    const p = _wsPreviewPaper;
+    closeWorksheetPreview();
+    ppDoPrint(p.items, p.missing, p.title, { coverTitle: p.coverTitle });
+    return;
+  }
   if (_wsPreviewSaved) { reprintWorksheet(_wsPreviewSaved.id); return; }
   printStudentWorksheet();
 }
@@ -25706,11 +25861,13 @@ async function renderWsPreview() {
   const ctx = _wsPreviewCtx();
   const selected = ctx.selected;
   const title = ctx.title;
-  const frontHtml = ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields) : '';
+  // A past paper brings its own cover; a worksheet's is the checkbox's.
+  const frontHtml = ctx.frontHtml != null ? ctx.frontHtml
+    : (ctx.cover ? _wsCoverHtml(title, undefined, undefined, ctx.noFields) : '');
   const html = buildWorksheetHtml(selected, title, {
     frontHtml, plainNumbers: true, noStudentFields: ctx.noFields,
     whyNotes: _wnyCachedNotes(selected, wnyPrintOn(ctx.where)),
-    answerKeyExtras: akxPrintOn(ctx.where)
+    answerKeyExtras: !!ctx.akExtras
   });   // exactly what will print
   const fontLinks = _printFontLinksHtml();
   const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
@@ -25782,10 +25939,12 @@ function _wsPreviewPack(doc) {
   // answer key does the same once fit-to-page would drop below the zoom floor.
   const spanOf = h => Math.max(1, Math.ceil(h / PRINT_PAGE_PX));
   const groupSpans = pageGroups.map((g, gi) => plan.pageTall[gi] ? spanOf(plan.pageHs[gi]) : 1);
-  const akSpans = answerKeys.map((ak, ai) => {
-    const p = plan.akPlans[ai] || {};
-    return p.tall ? spanOf(p.h || 1) : 1;
-  });
+  // The key is paginated now, so each of its sheets is one page like any other.
+  // A sheet still spans more than one only when a single row was too tall to
+  // shrink readably and had to be let flow.
+  const akSheets = [];
+  answerKeys.forEach((ak, ai) => (plan.akPlans[ai] || []).forEach((p, gi) => akSheets.push({ ak, ai, gi, p })));
+  const akSpans = akSheets.map(s => s.p.tall ? spanOf(s.p.h || 1) : 1);
   const totalPages = frontSpans.reduce((a, b) => a + b, 0) + groupSpans.reduce((a, b) => a + b, 0) + akSpans.reduce((a, b) => a + b, 0);
   let pageNo = 0;
   const addSheet = (span, build, zoom) => {
@@ -25880,7 +26039,12 @@ function _wsPreviewPack(doc) {
       });
     });
   }
-  answerKeys.forEach((ak, ai) => addSheet(akSpans[ai], content => content.appendChild(ak), (plan.akPlans[ai] || {}).zoom));
+  // Built through the SAME _printAkPageEl the printer calls, from the same
+  // plan, so the sheets on screen are the sheets that come out of the PDF.
+  const akRows = answerKeys.map(ak => Array.from(ak.querySelectorAll('.print-ak-question')));
+  akSheets.forEach((sh, si) => addSheet(akSpans[si],
+    content => content.appendChild(_printAkPageEl(sh.ak, akRows[sh.ai], sh.p.rows, sh.gi, doc)),
+    sh.p.zoom));
   const cnt = document.getElementById('wsPreviewPageCount');
   if (cnt) cnt.textContent = '· ' + totalPages + ' page' + (totalPages === 1 ? '' : 's');
 }
@@ -26237,7 +26401,7 @@ function _akeRender() {
   }).join('');
 
   const noAnswer = !_akeHasAnswer(blocks);
-  const explOn = akxPrintOn(_wsPreviewCtx().where);
+  const explOn = akeExplPrintOn();
   body.innerHTML =
     (noAnswer
       ? `<div class="ake-note ake-note-warn">This question has no model answer on file, so the key prints “No answer recorded”. Add one below — a 🔑 answer-key note prints on the key and changes nothing on the student's sheet.</div>`
@@ -26292,11 +26456,15 @@ function akeSetExplPrint(on) {
   akeSyncExplToggle();
   renderWsPreview();
 }
+// Whether the key being previewed is printing its explanations. Reads the
+// CONTEXT, not the checkbox table: a past paper always prints them and has no
+// checkbox, so asking the table would tell the drawer the opposite of the truth.
+function akeExplPrintOn() { return !!_wsPreviewCtx().akExtras; }
 // Put the toolbar toggle back in step with the checkbox it mirrors — called
 // whenever the preview opens, since the two surfaces have their own boxes.
 function akeSyncExplToggle() {
   const t = document.getElementById('wsPreviewExpl');
-  if (t) t.checked = akxPrintOn(_wsPreviewCtx().where);
+  if (t) t.checked = akeExplPrintOn();
 }
 
 function akeSetCorrect(bid, optId) {
@@ -56204,7 +56372,7 @@ function ppRenderBody(){
     const attached = hits.filter(id => ppBankQ(id)).length;
     const tools = edit
       ? `<span class="pp-tools"><button class="pp-mini" title="Edit concept" onclick="ppEditConcept('${c.id}')">&#9998; Edit</button><button class="pp-mini del" title="Delete concept" onclick="ppDeleteConcept('${c.id}')">&times; Delete</button></span>`
-      : `<span class="pp-tools"><button class="pp-mini" title="Print this concept's ${attached} attached question${attached === 1 ? '' : 's'} as a worksheet — answer key on the last pages" onclick="ppPrintConcept('${c.id}')">🖨 Print</button><label class="pp-print-check" title="Tick to include this concept in “Print selected” at the top"><input type="checkbox" ${_ppPrintSel.has(c.id) ? 'checked' : ''} onchange="ppTogglePrintSel('${c.id}', this.checked)"></label></span>`;
+      : `<span class="pp-tools"><button class="pp-mini" title="Live A4 preview — check the sheet and fix any answer or explanation on the key before it goes to the printer" onclick="ppPrintConcept('${c.id}','preview')">👁 Preview</button><button class="pp-mini" title="Print this concept's ${attached} attached question${attached === 1 ? '' : 's'} as a worksheet — answer key on the last pages" onclick="ppPrintConcept('${c.id}')">🖨 Print</button><label class="pp-print-check" title="Tick to include this concept in “Print selected” at the top"><input type="checkbox" ${_ppPrintSel.has(c.id) ? 'checked' : ''} onchange="ppTogglePrintSel('${c.id}', this.checked)"></label></span>`;
     return `<div class="pp-rec">
       <div class="pp-rec-head"><span class="pp-rec-count">${hits.length}&times;</span><span class="pp-rec-title">${escapeHtml(c.concept || 'Untitled concept')}</span>${tools}</div>
       <div class="pp-rec-topic">${escapeHtml(c.topic || '')}${span ? ' &middot; ' + span : ''}${mk ? ' &middot; ~' + mk + ' marks across the papers' : ''}</div>
@@ -56220,7 +56388,7 @@ function ppRenderBody(){
   // silently undone before the teacher presses print.
   const whyOn = !!document.getElementById('ppIncludeWhy')?.checked;
   const whyBox = !edit ? `<label class="pp-whybox" title="On the answer key, print a line under each multiple-choice answer saying why every OTHER option is wrong. It reads the question's own diagram and tables, so it costs one A.I. call per multiple-choice question and takes a moment."><input type="checkbox" id="ppIncludeWhy" ${whyOn ? 'checked' : ''}> \u24d8 Why the other options are wrong</label>` : '';
-  const printSelBtn = !edit ? `<button class="pp-add" id="ppPrintSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Print every attached question from the concepts you ticked below as ONE worksheet — questions first, the full answer key on the last pages. Tick concepts with the checkbox at their top-right corner." onclick="ppPrintSelected()">🖨 Print selected${_ppPrintSel.size ? ' (' + _ppPrintSel.size + ')' : ''}</button>` : '';
+  const printSelBtn = !edit ? `<button class="pp-add" id="ppPrintSelPrevBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Live A4 preview of the ticked concepts — check the sheet and fix any answer or explanation on the key before printing" onclick="ppPrintSelected('preview')">👁 Preview selected</button><button class="pp-add" id="ppPrintSelBtn" ${_ppPrintSel.size ? '' : 'disabled'} title="Print every attached question from the concepts you ticked below as ONE worksheet — questions first, the full answer key on the last pages. Tick concepts with the checkbox at their top-right corner." onclick="ppPrintSelected()">🖨 Print selected${_ppPrintSel.size ? ' (' + _ppPrintSel.size + ')' : ''}</button>` : '';
 
   // --- question map ---
   const yearGroups = years.map(y => {
@@ -56229,11 +56397,12 @@ function ppRenderBody(){
     const chips = yq.map(q => edit ? ppChipEdit(q) : ppChip(q)).join('') || '<span style="color:var(--text-muted);font-size:0.8rem;">No questions</span>';
     const addBtn = edit ? `<button class="pp-add sm" onclick="ppAddQuestion('${y}')">+ Add question</button>` : '';
     const practiceBtn = (!edit && yAssigned) ? `<button class="pp-mini" title="Practise all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} from the ${escapeHtml(y)} paper on the system" onclick="ppPracticeYear('${escapeHtml(y)}')">▶ Practice now</button>` : '';
+    const previewBtn = (!edit && (admin || yAssigned)) ? `<button class="pp-mini" title="Live A4 preview of the whole ${escapeHtml(y)} paper — check the sheet and fix any answer or explanation on the key before it goes to the printer" onclick="ppPrintYear('${escapeHtml(y)}','preview')">👁 Preview</button>` : '';
     const printBtn = (!edit && (admin || yAssigned)) ? `<button class="pp-mini" title="Print the whole ${escapeHtml(y)} paper — all ${yAssigned} attached question${yAssigned === 1 ? '' : 's'} in question order, answer key on the last pages" onclick="ppPrintYear('${escapeHtml(y)}')">🖨 Print year</button>` : '';
     // Whole-paper editor: every question in this year on ONE screen, no
     // question-by-question clicking.
     const bulkEditBtn = admin ? `<button class="pp-mini pp-bulkedit" title="Open the whole ${escapeHtml(y)} paper in one editor — change every question's number, marks, topic, skill, difficulty, title, analysis and answer, then save once" onclick="ppOpenPaperEdit('${escapeHtml(y)}')">🗂 Edit whole paper</button>` : '';
-    const yearTools = (bulkEditBtn || practiceBtn || printBtn) ? `<span class="pp-tools">${bulkEditBtn}${practiceBtn}${printBtn}</span>` : '';
+    const yearTools = (bulkEditBtn || practiceBtn || previewBtn || printBtn) ? `<span class="pp-tools">${bulkEditBtn}${practiceBtn}${previewBtn}${printBtn}</span>` : '';
     return `<div class="pp-year">
       <div class="pp-year-head"><strong>${escapeHtml(y)}</strong> <span class="pp-year-sub">${yq.length} questions &middot; ${yAssigned}/${yq.length} attached</span> ${addBtn}${yearTools}</div>
       <div class="pp-chip-row">${chips}</div>
@@ -56280,6 +56449,7 @@ function ppRenderBody(){
       <div class="pp-pr-btns">
         <button class="pp-add" ${r.avail ? '' : 'disabled'} title="Practise ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'every attached past-paper question'} on the system — MCQ and open-ended, marked as usual" onclick="ppPracticeYear('${escapeHtml(r.y)}')">▶ ${r.y ? 'Practice now' : 'Practice all'}</button>
         <button class="pp-add pp-gamebtn" ${r.avail ? '' : 'disabled'} title="Load ${r.y ? 'the ' + escapeHtml(r.y) + ' paper' : 'all past-paper questions'} into a mini-game — every question answered there counts ×2 on the leaderboards" onclick="ppGameMenuOpen(event,'${escapeHtml(r.y)}')">🎮 Practice in a game <span style="font-size:0.72em;">▾</span></button>
+        ${r.y ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Live A4 preview of the whole ${escapeHtml(r.y)} paper — fix any answer or explanation on the key before printing" onclick="ppPrintYear('${escapeHtml(r.y)}','preview')">👁 Preview</button>` : ''}
         ${r.y ? `<button class="pp-add" ${r.avail ? '' : 'disabled'} title="Print the whole ${escapeHtml(r.y)} paper as a worksheet — answer key on the last pages" onclick="ppPrintYear('${escapeHtml(r.y)}')">🖨 Print paper</button>` : ''}
       </div>
     </div>`).join('');
@@ -56732,9 +56902,16 @@ function ppCollectPrintable(hitIds){
 function _ppCoverHtml(coverTitle) {
   return _wsCoverHtml(coverTitle, 'Primary Science', 'Past Year Paper');
 }
+// The questions a past-paper print is made of, titled by the paper reference
+// they came from. Its own function so the 👁 preview and the 🖨 print are
+// assembled from the identical list — a preview built any other way is a
+// preview of a different sheet.
+function _ppPrintQuestions(items){
+  return (items || []).map(it => Object.assign({}, it.bq, { title: it.refs.join(' / ') + ' — ' + (it.bq.title || 'Untitled') }));
+}
 async function ppDoPrint(items, missing, title, opts){
   if (!items.length) { showToast('Nothing to print — none of these questions have a bank question attached yet', 'error'); return; }
-  const selected = items.map(it => Object.assign({}, it.bq, { title: it.refs.join(' / ') + ' — ' + (it.bq.title || 'Untitled') }));
+  const selected = _ppPrintQuestions(items);
   const output = document.getElementById('printOutput');
   // Preload every image first (progress shown), so measurement is accurate
   // (no questions cut across pages) and the wait is visible, not a dead click.
@@ -56762,34 +56939,40 @@ async function ppDoPrint(items, missing, title, opts){
     showToast('Skipped ' + missing.length + ' with no attached question: ' + list, 'info');
   }
 }
-function ppPrintConcept(id){
+// Each of the three past-paper print buttons has a 👁 Preview twin. `go` is
+// whichever of the two the button asked for, so the sheet previewed and the
+// sheet printed are collected by exactly the same code — a preview assembled
+// its own way is a preview of a different paper.
+function ppPrintConcept(id, go){
   const c = ppRecurring().find(x => x.id === id); if (!c) return;
   const { items, missing } = ppCollectPrintable(c.hits);
-  ppDoPrint(items, missing, c.concept || 'Recurring concept');
+  (go === 'preview' ? ppPreview : ppDoPrint)(items, missing, c.concept || 'Recurring concept');
 }
-function ppPrintYear(y){
+function ppPrintYear(y, go){
   const hitIds = ppQuestions().filter(q => String(q.year) === String(y))
     .sort((a,b) => (Number(a.n)||0) - (Number(b.n)||0)).map(q => q.id);
   const { items, missing } = ppCollectPrintable(hitIds);
-  ppDoPrint(items, missing, 'PSLE Science ' + y, { coverTitle: 'PSLE ' + y + ' Science Paper' });
+  (go === 'preview' ? ppPreview : ppDoPrint)(items, missing, 'PSLE Science ' + y, { coverTitle: 'PSLE ' + y + ' Science Paper' });
 }
-function ppPrintSelected(){
+function ppPrintSelected(go){
   const chosen = ppRecurring().filter(c => _ppPrintSel.has(c.id));
   if (!chosen.length) { showToast('Tick the checkbox on the concepts you want, then print', 'info'); return; }
   const allHits = [];
   chosen.forEach(c => (c.hits || []).forEach(h => allHits.push(h)));
   const { items, missing } = ppCollectPrintable(allHits);
   const title = chosen.length === 1 ? (chosen[0].concept || 'Recurring concept') : 'Recurring Concepts — ' + chosen.length + ' concepts';
-  ppDoPrint(items, missing, title);
+  (go === 'preview' ? ppPreview : ppDoPrint)(items, missing, title);
 }
 function ppTogglePrintSel(id, checked){
   if (checked) _ppPrintSel.add(id); else _ppPrintSel.delete(id);
+  const n = _ppPrintSel.size;
   const btn = document.getElementById('ppPrintSelBtn');
   if (btn) {
-    const n = _ppPrintSel.size;
     btn.textContent = '🖨 Print selected' + (n ? ' (' + n + ')' : '');
     btn.disabled = !n;
   }
+  const prev = document.getElementById('ppPrintSelPrevBtn');
+  if (prev) prev.disabled = !n;   // its twin, or Preview stays live on an empty selection
 }
 
 // -------- topic drill-down (marks-by-topic graph) --------
@@ -60943,6 +61126,7 @@ window.akeAddAnswerKey = akeAddAnswerKey;
 window.akeSetCorrect = akeSetCorrect;
 window.akeSetPart = akeSetPart;
 window.akeSetExplPrint = akeSetExplPrint;
+window.ppPreview = ppPreview;
 window.closeSaveWsDialog = closeSaveWsDialog;
 window.confirmSaveWorksheet = confirmSaveWorksheet;
 // Quick Practice
