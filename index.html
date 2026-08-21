@@ -5670,6 +5670,10 @@ option {
 .rpg-gender-btn { flex: 0 1 120px; padding: 7px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-md); background: #fff; color: var(--text); font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all var(--transition); }
 .rpg-gender-btn:hover { border-color: var(--text-light); }
 .rpg-gender-btn.on { border-color: var(--accent-orange, #f59e0b); background: var(--accent-orange, #f59e0b); color: #fff; }
+.rpg-art-beta-panel { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 10px 0 2px; padding: 10px; border: 1px dashed #7c3aed; border-radius: var(--radius-md); background: #f5f3ff; color: #4c1d95; font-size: 0.78rem; }
+.rpg-art-beta-panel[hidden] { display: none; }
+.rpg-art-beta-panel > div { display: grid; gap: 2px; margin-right: auto; }
+.rpg-art-beta-panel > div span { color: #6d28d9; }
 .rpg-equip-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
 @media (max-width: 560px) { .rpg-equip-row { grid-template-columns: repeat(3, 1fr); } }
 .rpg-slot { position: relative; aspect-ratio: 1; border: 1.5px dashed var(--border); border-radius: var(--radius-md); background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all var(--transition); overflow: hidden; }
@@ -9760,6 +9764,7 @@ body.wk-clocked-in .page-body { padding-bottom: 104px; }
           <div class="card card-pad rpg-hero-card">
             <div class="rpg-avatar-frame" id="rpgAvatarFrame"></div>
             <div class="rpg-gender-row" id="rpgGenderRow"></div>
+            <div class="rpg-art-beta-panel" id="rpgArtBetaPanel" hidden></div>
             <div class="rpg-hero-name" id="rpgHeroName">—</div>
             <div id="rpgHeroBars"></div>
             <div class="rpg-stat-chips" id="rpgHeroStats"></div>
