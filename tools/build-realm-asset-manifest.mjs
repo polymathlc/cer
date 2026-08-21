@@ -55,6 +55,9 @@ const emojiWords = readConst('TCG_EM_WORD');
 const palettes = readConst('TCG_ART_PALETTE');
 const classLooks = readConst('TCG_CLASS_LOOK');
 const heroes = readConst('DUEL_HEROES');
+const artifactRows = readConst('TCG_ARTIFACTS');
+const artifactLooks = readConst('TCG_ARTI_LOOK');
+const artifactTiers = readConst('TCG_ARTI_TIER');
 
 const tierMood = ['', 'small, cute and just starting out', 'small but scrappy and eager',
   'a confident mid-tier fighter', 'a battle-hardened veteran', 'a powerful elite boss',
@@ -183,12 +186,33 @@ const heroAssets = heroes.map(h => ({
   ].join('\n')
 }));
 
+const artifactAssets = artifactRows.map(a => ({
+  id: a.id,
+  slot: `arti:${a.id}`,
+  name: a.name,
+  stars: a.stars,
+  file: `artifacts/${a.id}-${slug(a.name)}.${imageExt}`,
+  prompt: [
+    'Use case: stylized-concept',
+    'Asset type: Realm of Embers collectible-card artifact cutout',
+    `Primary request: one fantasy artifact named "${a.name}": ${artifactLooks[a.id] || a.name}.`,
+    `Power flavor: ${a.blurb} Imply this visually without words or diagrams.`,
+    `Rarity: ${a.stars} out of 7 stars, a ${artifactTiers[a.stars]?.word || 'trinket'}. ${artifactTiers[a.stars]?.look || ''}`,
+    'Subject: exactly one object floating alone, seen at a slight three-quarter angle, centered and entirely visible.',
+    'Style/medium: polished painterly digital game art with rich saturated color, dramatic rim lighting and a bold silhouette readable at 48 pixels; one coherent premium children\'s fantasy trading-card set.',
+    'Composition/framing: square with a generous clear margin on all four sides.',
+    'Background: genuinely transparent alpha background.',
+    'Constraints: no hands, people, creatures, scenery, ground, table, pedestal, cast shadow, text, letters, numbers, readable runes, labels, signature, watermark, card frame, border or UI; child-friendly.'
+  ].join('\n')
+}));
+
 const manifest = {
   schema: 1,
   source: 'app.js',
-  counts: { cards: cards.length, cardArt: cards.length, battleAvatars: cards.length, heroes: heroAssets.length, packFrames: packs.reduce((n, p) => n + p.frames.length, 0), attackFrames: attack.reduce((n, a) => n + a.frames.length, 0), totalFiles: cards.length * 2 + heroAssets.length + packs.reduce((n, p) => n + p.frames.length, 0) + attack.reduce((n, a) => n + a.frames.length, 0) },
+  counts: { cards: cards.length, cardArt: cards.length, battleAvatars: cards.length, heroes: heroAssets.length, artifacts: artifactAssets.length, packFrames: packs.reduce((n, p) => n + p.frames.length, 0), attackFrames: attack.reduce((n, a) => n + a.frames.length, 0), totalFiles: cards.length * 2 + heroAssets.length + artifactAssets.length + packs.reduce((n, p) => n + p.frames.length, 0) + attack.reduce((n, a) => n + a.frames.length, 0) },
   cards: cards.map(c => ({ ...c, slug: slug(c.name), cardSlot: c.id, avatarSlot: `${c.id}:av`, cardFile: `card-art/${c.id}-${slug(c.name)}.${imageExt}`, avatarFile: `battle-avatars/${c.id}-${slug(c.name)}.${imageExt}`, cardPrompt: cardPrompt(c), avatarPrompt: avatarPrompt(c) })),
   heroes: heroAssets,
+  artifacts: artifactAssets,
   packs,
   attack
 };
@@ -198,6 +222,7 @@ fs.writeFileSync(path.join(outDir, 'asset-manifest.json'), JSON.stringify(manife
 fs.writeFileSync(path.join(outDir, 'asset-prompts.jsonl'), [
   ...manifest.cards.flatMap(c => [{ type: 'card-art', slot: c.cardSlot, file: c.cardFile, prompt: c.cardPrompt }, { type: 'battle-avatar', slot: c.avatarSlot, file: c.avatarFile, prompt: c.avatarPrompt, reference: c.cardFile }]),
   ...manifest.heroes.map(h => ({ type: 'hero', slot: h.slot, file: h.file, prompt: h.prompt })),
+  ...manifest.artifacts.map(a => ({ type: 'artifact', slot: a.slot, file: a.file, prompt: a.prompt })),
   ...manifest.packs.map(p => ({ type: 'pack-sheet', set: p.set, tier: p.tier, sourceSheet: p.sourceSheet, prompt: p.prompt, frames: p.frames })),
   ...manifest.attack.map(a => ({ type: 'attack-sheet', element: a.element, sourceSheet: a.sourceSheet, prompt: a.prompt, frames: a.frames }))
 ].map(x => JSON.stringify(x)).join('\n') + '\n');
@@ -205,6 +230,7 @@ fs.writeFileSync(path.join(outDir, 'asset-prompts.jsonl'), [
 const slotMap = Object.fromEntries([
   ...manifest.cards.flatMap(c => [[c.cardSlot, c.cardFile], [c.avatarSlot, c.avatarFile]]),
   ...manifest.heroes.map(h => [h.slot, h.file]),
+  ...manifest.artifacts.map(a => [a.slot, a.file]),
   ...manifest.packs.flatMap(p => p.frames.map(f => [f.slot, f.file])),
   ...manifest.attack.flatMap(a => a.frames.map(f => [f.slot, f.file]))
 ]);

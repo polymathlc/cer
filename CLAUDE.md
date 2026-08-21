@@ -879,7 +879,7 @@ map survivable whatever happens next.
   project as the thing it protects.
 - Run **`node tools/art-safety-tests.mjs`** after touching any of it.
 
-## 🖼 The bundled Realm of Embers art — 629 pictures that ship with the app (v1.306.0)
+## 🖼 The bundled Realm of Embers art — 659 pictures that ship with the app (v1.311.0)
 
 `TCG_ART_ROOT` / `tcgBundledArtPath` / `tcgBundledArt` / **`tcgSlotArt`** /
 `tcgSlotHasArt` / `tcgBundledSlotIds` / `tcgUseBundledRealmArt` (in `app.js`,
@@ -887,9 +887,10 @@ search `THE BUNDLED REALM OF EMBERS ART`), plus everything under
 `assets/realm-of-embers/` and `tools/key-realm-sprites.mjs`.
 
 A complete art pass for the realm now lives **in the repository** — 201 card
-scenes, 201 battle avatars, 180 elemental effect frames, 42 pack-tearing frames
-and 5 hero portraits. Before this the game had 201 monsters drawn as **emoji**
-unless an admin sat and generated every picture by hand, one slot at a time.
+scenes, 201 battle avatars, 30 artifact objects, 180 elemental effect frames,
+42 pack-tearing frames and 5 hero portraits. Before this the game had 201
+monsters and 30 artifacts drawn as **emoji** unless an admin sat and generated
+every picture by hand, one slot at a time.
 
 - **It is a FALLBACK, not an import, and that is the whole design.**
   `tcgSlotArt(slot)` returns the admin's override if there is one and the
@@ -897,27 +898,28 @@ unless an admin sat and generated every picture by hand, one slot at a time.
   written to `users/{uid}/settings/tcgArt` — so `_tcgArt` stays exactly what it
   was: the record of **what somebody has changed**, which is the only question
   the backup, the rescue proposal and the safety panel's counts can usefully
-  answer. Copying 629 pictures into that map instead would have doubled the
+  answer. Copying 659 pictures into that map instead would have doubled the
   thing that has already been lost once (see **🛟 Art safety & recovery**) in
   order to store something git already holds.
 - **`tcgSlotArt` is the ONE reader**, and `tcgSlotHasArt` is the ONE has-check.
   Every surface that puts a Realm picture on the screen goes through them —
   `tcgArtUrl` / `tcgAvatarUrl`, `tcgFxHas`, `tcgPackHas` / `tcgPackFramesFor`,
-  `tcgHeroArtUrl`, the Siege's frame preload, the pack on the shop card, the
-  set banner's line-up of legends. A reader left on `_tcgArt` is a surface where
-  the bundled layer silently does not exist, and the symptom is one screen in
-  the game still showing emoji.
+  `tcgHeroArtUrl`, `tcgArtifactArtUrl`, the Siege's frame preload, the pack on
+  the shop card, the set banner's line-up of legends. A reader left on `_tcgArt`
+  is a surface where the bundled layer silently does not exist, and the symptom
+  is one screen in the game still showing emoji.
 - **THE PATHS ARE DERIVED, NOT LISTED.** A card's file is its id plus the slug
-  of its own NAME, an effect frame is its element and phase, a pack frame is its
-  set and tier — so a card or a set added to the dex needs nothing typed out
-  here twice. The price is a rename: change a card's name and its picture is
+  of its own NAME, an artifact is its id plus the slug of its name, an effect
+  frame is its element and phase, and a pack frame is its set and tier — so a
+  card or a set added to the dex needs nothing typed out here twice. The price
+  is a rename: change a card's name and its picture is
   looked for under the new slug, is not there, and the card quietly falls back
   to its emoji. **That failure is silent in the app and loud in CI** —
-  `tools/bundled-art-tests.mjs` walks all 629 slots against both the shipped
+  `tools/bundled-art-tests.mjs` walks all 659 slots against both the shipped
   slot map and the files on disk.
-- **The sprites are keyed at BUILD time** (`tools/key-realm-sprites.mjs`). An
-  image model has no alpha channel, so everything that stands on nothing was
-  drawn against a flat chroma wall; the app keys that wall out on the way
+- **The sprites are keyed at BUILD time** (`tools/key-realm-sprites.mjs`). Most
+  of the original sprite pass was drawn against a flat chroma wall; the
+  app keys that wall out on the way
   through `_tcgArtStore`, and bundled art is served straight off the origin and
   never passes that door. The tool runs the app's own `_screenKeyOut` — extracted
   out of `app.js` the way `tools/chroma-key-tests.mjs` extracts it, never a
@@ -940,9 +942,14 @@ unless an admin sat and generated every picture by hand, one slot at a time.
     whichever hue the artwork happens to contain. A blue dragon would have had
     its own blue keyed out on the second run. `detectScreen` therefore ignores
     transparency entirely.
+- **Pack crop lines are removed from the files, not hidden with CSS.**
+  `tools/clean-realm-pack-borders.mjs` clears the outer three-pixel crop edge
+  on all 42 frames and removes only nearly-full-width bright source-sheet bands
+  near the top. `--check` is the regression test; it also prevents a future
+  sprite-sheet extraction from putting the thin white line back into the rip.
 - **🔥 Use the bundled artwork** (`tcgUseBundledRealmArt`, on the Card Art tab's
   safety panel) is what is left of the old uploader: it **removes the overrides**
-  on those 629 slots so the shipped picture underneath shows. Nothing goes blank
+  on those 659 slots so the shipped picture underneath shows. Nothing goes blank
   — every slot it clears is a slot the app ships a picture for — and the backup
   still holds what was removed, because `tcgArtBackupSync` refuses to shrink, so
   ↩️ Restore puts it back. Like every other write here it is a chunked MERGE with

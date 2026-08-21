@@ -33,15 +33,17 @@ const pieces = [
   grab('function tcgBundledArtPath'),
   // The dex itself, so the slug really is built from the shipping card names.
   slice('const TCG_GEN1 = ', '// The sets, for the headings and the pack copy.'),
+  slice('const TCG_ARTIFACTS = ', 'function tcgArtifactById'),
   slice('const _tcgBundledUrl = {};', 'function tcgArtRefresh'),
-  grab('function tcgFxSlotId'), grab('function tcgPackSlotId'), grab('function tcgHeroSlotId')
+  grab('function tcgFxSlotId'), grab('function tcgPackSlotId'), grab('function tcgHeroSlotId'),
+  grab('function tcgArtifactSlotId'), grab('function tcgArtifactArtUrl')
 ].join('\n');
 // The absolute-URL step wants a page to resolve against; app.js reads it at
 // call time precisely so it can be one.
 global.location = { href: 'https://polymathlc.github.io/cer/index.html' };
 const M = new Function('_tcgArt',
-  pieces + '\nreturn {tcgBundledArtPath,tcgBundledArt,tcgSlotArt,tcgSlotHasArt,TCG_CARDS,tcgFxSlotId,tcgPackSlotId,tcgHeroSlotId};')(
-  { 'c001': 'https://example.test/an-admin-drew-this.png' });
+  pieces + '\nreturn {tcgBundledArtPath,tcgBundledArt,tcgSlotArt,tcgSlotHasArt,TCG_CARDS,TCG_ARTIFACTS,tcgFxSlotId,tcgPackSlotId,tcgHeroSlotId,tcgArtifactSlotId,tcgArtifactArtUrl};')(
+  { 'c001': 'https://example.test/an-admin-drew-this.png', 'arti:bud': 'https://example.test/admin-spring-bud.png' });
 
 const map = JSON.parse(fs.readFileSync(path.join(ART, 'manifests', 'slot-map.json'), 'utf8'));
 const slots = map.slots;
@@ -69,7 +71,7 @@ M.TCG_CARDS.forEach(c => {
 });
 // 4. A slot the repository ships NOTHING for must derive to nothing, never to a
 //    plausible-looking path that 404s. Those are the admin-drawn families.
-['arti:sunchip', 'logo:realm', 'set:gen1', 'lore:one:c1', 'dfx:sweep:flame:1', '', 'c999', 'hero:nobody', 'fx:nosuch:1', 'pk:nosuch:gold:1']
+['arti:nosuch', 'logo:realm', 'set:gen1', 'lore:one:c1', 'dfx:sweep:flame:1', '', 'c999', 'hero:nobody', 'fx:nosuch:1', 'pk:nosuch:gold:1']
   .forEach(id => ok('no bundle for ' + (id || '(empty)'), M.tcgBundledArtPath(id) === '', 'derived ' + M.tcgBundledArtPath(id)));
 // 5. The slot ids the app BUILDS at runtime are the ones the map is keyed on.
 //    A change to tcgFxSlotId's shape would leave every effect frame unfound.
@@ -77,10 +79,11 @@ ok('fx slot shape', M.tcgBundledArtPath(M.tcgFxSlotId('flame', '', 4)) === 'asse
 ok('fx fly shape', M.tcgBundledArtPath(M.tcgFxSlotId('cosmic', 'fly', 2)) === 'assets/realm-of-embers/attack-animation/cosmic/fly-02.webp');
 ok('pack slot shape', M.tcgBundledArtPath(M.tcgPackSlotId('nd', 'gold', 7)) === 'assets/realm-of-embers/pack-ripping/nd/gold/frame-07.webp');
 ok('hero slot shape', M.tcgBundledArtPath(M.tcgHeroSlotId('warden')) === 'assets/realm-of-embers/heroes/warden-warden-elowen.webp');
+ok('artifact slot shape', M.tcgBundledArtPath(M.tcgArtifactSlotId('bud')) === 'assets/realm-of-embers/artifacts/bud-spring-bud.webp');
 // 6. The paths become absolute URLs against the page — which is what makes the
 //    four portals' shared 'sibling folders on one host' layout work, and what
 //    lets Touch up read the pixels back without a CORS argument.
-ok('absolute versioned url', M.tcgBundledArt('c001') === 'https://polymathlc.github.io/cer/assets/realm-of-embers/card-art/c001-pyrrik-the-cinderwhelp.webp?v=20260821-clean-sprites',
+ok('absolute versioned url', M.tcgBundledArt('c001') === 'https://polymathlc.github.io/cer/assets/realm-of-embers/card-art/c001-pyrrik-the-cinderwhelp.webp?v=20260821-artifacts-packs',
    'got ' + M.tcgBundledArt('c001'));
 ok('no url for an unbundled slot', M.tcgBundledArt('logo:realm') === '');
 // 7. AN OVERRIDE ALWAYS WINS. This is the whole contract: the bundled layer is
@@ -88,12 +91,15 @@ ok('no url for an unbundled slot', M.tcgBundledArt('logo:realm') === '');
 //    nothing on any screen says why.
 ok('override beats the bundle', M.tcgSlotArt('c001') === 'https://example.test/an-admin-drew-this.png');
 ok('the bundle fills a slot with no override', M.tcgSlotArt('c002') === M.tcgBundledArt('c002'));
+ok('the bundle fills an artifact slot', M.tcgSlotArt('arti:sunchip') === M.tcgBundledArt('arti:sunchip'));
+ok('artifact reveal reads the bundled layer', M.tcgArtifactArtUrl('sunchip') === M.tcgBundledArt('arti:sunchip'));
+ok('artifact reveal keeps an admin override', M.tcgArtifactArtUrl('bud') === 'https://example.test/admin-spring-bud.png');
 ok('a slot with neither is empty, not undefined', M.tcgSlotArt('logo:realm') === '');
 ok('hasArt is true for a bundled slot', M.tcgSlotHasArt('fx:frost:blast4') === true);
 ok('hasArt is false for an unbundled one', M.tcgSlotHasArt('dfx:sweep:flame:1') === false);
 
 // 8. The count the app is built around.
-ok('shipped count', Object.keys(slots).length === 629, Object.keys(slots).length + ' slots in the map');
+ok('shipped count', Object.keys(slots).length === 659, Object.keys(slots).length + ' slots in the map');
 
 console.log(fails.length ? '✗ ' + fails.length + ' failed, ' + pass + ' passed' : '✓ all ' + pass + ' bundled-art checks passed');
 fails.slice(0, 30).forEach(f => console.log('   ' + f));
