@@ -1978,7 +1978,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.313.0';
+const APP_VERSION = 'v1.313.1';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -33824,8 +33824,12 @@ function rpgItemImageAspect(src) {
 }
 function rpgItemAvatarBox(it, src) {
   const bundled = String(src || "").includes(`${RPG_ART_BETA_ROOT}/`);
-  if (bundled && it.slot === "helmet") return "60 8 80 78";
-  if (bundled && it.slot === "accessory" && it.layer !== "back") return "74 112 52 70";
+  // The generated base has a much shorter torso than the legacy SVG doll.
+  // Use square, aspect-safe mounts that follow its actual shoulders, head and
+  // chest. The source WebPs are square, so these mounts also avoid stretching.
+  if (bundled && it.slot === "armor") return "65 97 70 70";
+  if (bundled && it.slot === "helmet") return "58 9 84 84";
+  if (bundled && it.slot === "accessory" && it.layer !== "back") return "83 108 34 34";
   return it.box || RPG_SLOT_META[it.slot].box;
 }
 function rpgItemArtImage(it, src) {

@@ -26,6 +26,9 @@ assert.match(app, /function rpgUnlockAllBetaItems\(\)/, "admin test unlock contr
 assert.match(app, /RPG_ITEMS\.forEach\(it => \{ rpgState\.inventory\[it\.id\]/, "unlock control should cover the full catalogue");
 assert.match(app, /function rpgItemImageAspect\(src\)/, "bundled sprites should map into paper-doll slot geometry");
 assert.match(app, /includes\(`\$\{RPG_ART_BETA_ROOT\}\/`\) \? "none" : "xMidYMid meet"/, "manual overrides should keep their historical aspect ratio");
+assert.match(app, /it\.slot === "armor"\) return "65 97 70 70"/, "generated armour should fit the generated torso");
+assert.match(app, /it\.slot === "helmet"\) return "58 9 84 84"/, "generated headgear should fit the generated head");
+assert.match(app, /it\.slot === "accessory" && it\.layer !== "back"\) return "83 108 34 34"/, "generated front accessories should stay pendant-sized");
 assert.match(html, /id="rpgArtBetaPanel" hidden/, "beta UI should start hidden");
 
 const avatarStart = app.indexOf("function rpgAvatarSvg(");
