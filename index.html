@@ -12338,6 +12338,10 @@ body.lore-reading { overflow: hidden; }
   font-family:inherit; font-size:0.74rem; cursor:pointer;
 }
 .qpart-select.on{ border-color:var(--primary); color:var(--primary); font-weight:700; }
+/* (b)(i) — the roman SUB-part, beside the letter it sits inside. Narrower and
+   set apart, because it is the second half of one decision, not a second one. */
+.qpart-select.qpart-sub{ margin-left:4px; }
+.qpart-select.qpart-sub.on{ border-color:var(--accent-blue,#2d6ca8); color:var(--accent-blue,#2d6ca8); }
 .qpart-chip{
   margin-left:7px; padding:2px 8px; border-radius:999px;
   background:var(--surface-alt,#f4f5f6); color:var(--text-muted);
