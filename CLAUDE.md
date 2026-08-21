@@ -1843,7 +1843,68 @@ in the bank, opening the full editor, and finding the way back.
   one per part and is not any more.
 - Run **`node tools/answer-key-edit-tests.mjs`** after touching any of it.
 
+## [2] — how many marks a question is worth (v1.314.0)
+
+`QMARKS_*` / `qMarksOf` / `qMarksLabel` / `qStripTailMarks` / `qMarksAppendHtml`
+/ `qMarksPickerHtml` / `setBlockMarks` / `commitBlockMarks` (in `app.js`, search
+`HOW MANY MARKS A QUESTION IS WORTH`), plus the `.qmarks-*` / `.q-marks` CSS in
+`index.html` and the **Marks** box beside the Part picker in a text block's
+header.
+
+An exam paper prints the marks at the end of the question they belong to —
+*Explain why the bulb lit up when the iron ball was at point A.* **[2]** — and
+until now the only way to get one onto a sheet was to type the brackets into
+the wording by hand.
+
+- **It is a FIELD on the block (`block.marks`), never characters in the
+  wording** — the same design as `block.part` beside it, and for the same
+  reasons: the number can be read by something later, the author sets it in one
+  place instead of remembering a convention, and it cannot end up stranded in
+  the middle of a sentence after an edit.
+- **`qPartBodyHtml` is the ONE place it is drawn**, which is what makes it
+  appear everywhere at once — student practice, the worksheet preview, both
+  print paths, the A.I. marking context — with no surface able to be the one
+  that forgot. The block is never written to: an author sees exactly what they
+  typed in the editor box.
+- **It is inserted INSIDE the last closing tag, not appended to the string.**
+  `block.content` is authored HTML that nearly always ends `…point A.</p>`, so
+  gluing the marker onto the end would put the marks on a line of their own —
+  on every question at once. `QMARKS_TAIL_POS_RE` finds the point where nothing
+  but closing tags and whitespace is left, which is where the full stop is.
+- **The label is drawn from the block, so it must not ALSO be in the text.**
+  `qPartBodyHtml` strips a trailing marks marker whenever the field is set,
+  exactly as it strips a part marker that only repeats the block's own label —
+  and an imported past-paper question very often arrives with "[2]" already
+  transcribed into its wording. Unlike a part letter there is nothing to
+  disagree about (a bracketed number at the end of a question can only be its
+  marks, and there is exactly one marks field), so ANY trailing bracket goes
+  and the field wins. A bracket anywhere else — `[see Diagram 1]`, a reference
+  mid-sentence — is prose and is never touched.
+- **A block with no marks renders BYTE FOR BYTE what it always did.** That is
+  the overwhelming majority of the bank, and the guard the harness leads with.
+- The control is only on `QPART_OPENER_TYPES` blocks — the ones that ASK
+  something. An answer box is not a question and has no marks of its own.
+- **`commitBlockMarks` re-renders only when it really changed the wording**, and
+  says so in a toast. Typing into the box repaints the chip in place
+  (`_qMarksSyncChip`): rebuilding the block card while the author is typing in
+  it takes the caret with it, and words vanishing out of a question box with no
+  explanation is more alarming than the tidy-up is worth.
+- On paper the span is stripped by `escapeHtmlKeepLines` and the plain `[2]`
+  survives, which is the exam convention and exactly what a paper shows.
+- Run **`node tools/question-marks-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **[2] question marks** (`qMarksOf`, `qMarksLabel`,
+  `qStripTailMarks`, `qMarksAppendHtml`, `QMARKS_TAIL_RE`,
+  `QMARKS_TAIL_POS_RE`, `qPartBodyHtml`, `qMarksPickerHtml`, `setBlockMarks`,
+  `commitBlockMarks`), run `node tools/question-marks-tests.mjs`. Every failure
+  is silent and lands on a printed sheet in front of a class: a marker appended
+  to the END of the string instead of inside the last tag puts the marks on a
+  line of their own on every question at once; a marker left in the wording as
+  well as in the field prints "… at point A. [2] [2]"; a strip that reaches
+  past the end of the wording deletes "[see Diagram 1]" out of the middle of a
+  question; and a block with NO marks that does not render byte for byte what
+  it always did changes the whole bank at once.
 - After touching **✏️ the answer key edited from the preview** (`_akeRows`,
   `_akeHasAnswer`, `_akeNewExplanation`, `_akeKey` / `_akeSplitKey`,
   `_akeSyncFromDom`, `akeSave`, `AKX_SWITCHES` / `akxPrintOn`, or either print
