@@ -754,6 +754,11 @@ function notesCardHtml(n) {
   const topics = (n.topics || []).map(t => `<span class="tn-chip tn-topic">${escapeHtml(t)}</span>`).join('') || '<span class="tn-none">No topic tagged — used as general notes</span>';
   const kws = (n.keywords || []).map(k => `<span class="tn-chip tn-kw">${escapeHtml(k)}</span>`).join('') || '<span class="tn-none">No keywords extracted yet — add some via Edit</span>';
   const facts = String(n.keyFacts || '').trim();
+  // A rule typed while looking at a question — the Scan app's ✎ on an answer
+  // card — reads very differently once the question is gone. It is SHOWN,
+  // never sent: the whole question in every prompt would drown the rule it
+  // was written to carry.
+  const askedAbout = String(n.sourceQuestion || '').trim();
   const std = String(n.markingStandards || '').trim();
   const com = String(n.comment || '').trim();
   const when = n.createdAt ? new Date(n.createdAt).toLocaleDateString() : '';
@@ -781,6 +786,7 @@ function notesCardHtml(n) {
       </div>
       ${unused}
       ${guide ? `<div class="tn-row"><div class="tn-label">General guidance</div><div class="tn-text">${escapeHtml(guide)}</div></div>` : ''}
+      ${askedAbout ? `<div class="tn-row"><div class="tn-label">Written against</div><div class="tn-text tn-comment">${escapeHtml(askedAbout)}</div></div>` : ''}
       ${guide ? '' : `<div class="tn-row"><div class="tn-label">Topics</div><div class="tn-chips">${topics}</div></div>`}
       ${guide && !(n.keywords || []).length ? '' : `<div class="tn-row"><div class="tn-label">Keywords</div><div class="tn-chips">${kws}</div></div>`}
       ${std ? `<div class="tn-row"><div class="tn-label">Marking standards</div><div class="tn-text">${escapeHtml(std)}</div></div>` : ''}
@@ -831,7 +837,7 @@ function notesRenderBody() {
   <div class="tn-wrap">
     <div class="tn-upload">
       <h3>📌 General guidance</h3>
-      <p class="tn-sub">House rules in your own words. They apply to <b>every</b> question and go into the prompt exactly as you typed them — nothing is extracted, nothing is summarised — so the AI follows them whenever it builds a question, writes a model answer, explains something <b>or marks a student</b>. This is the quickest way in: type it and it is live. Shared with your <b>Ans Key</b> annotator and the <b>Scan &amp; Answer</b> app.</p>
+      <p class="tn-sub">House rules in your own words. They apply to <b>every</b> question and go into the prompt exactly as you typed them — nothing is extracted, nothing is summarised — so the AI follows them whenever it builds a question, writes a model answer, explains something <b>or marks a student</b>. This is the quickest way in: type it and it is live. Shared with your <b>Ans Key</b> annotator and the <b>Scan &amp; Answer</b> app — including the rules you type on an answer card there when a scanned answer was not good enough, which arrive with the question they were written against.</p>
       <div class="tn-upbtns">
         <button class="btn btn-primary" onclick="openQuickNote()">✍️ Add a note</button>
         <span style="font-size:0.78rem;color:var(--text-muted);">No file, no waiting — saved exactly as you type it</span>
@@ -1978,7 +1984,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.316.0';
+const APP_VERSION = 'v1.317.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)

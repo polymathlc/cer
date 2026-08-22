@@ -20,12 +20,22 @@ const a = src.indexOf('// ---- Which notes belong to THIS app ----');
 const b = src.indexOf('// ---- Teaching Notes page (admin only) ----', a);
 if (a < 0 || b < 0) throw new Error('teaching-notes digest section not found in app.js — did the banner comments change?');
 
+// The note CARD is loaded too. It is the only place a teacher can see what a
+// note written in one of the other two apps actually says, so a field that
+// stops being rendered is a rule sitting in the notebook that nobody here
+// knows is there.
+const c = src.indexOf('function _noteSourceLabel(');
+const d = src.indexOf('function notesRenderBody(', c);
+if (c < 0 || d < 0) throw new Error('note card section not found in app.js');
+
 const api = new Function(`
   let teachingNotes = [];
+  function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
   ${src.slice(a, b)}
+  ${src.slice(c, d)}
   return {
     set notes(v) { teachingNotes = v; },
-    _noteSuitsThisApp, _notesFor,
+    _noteSuitsThisApp, _notesFor, _noteSourceLabel, notesCardHtml,
     _notesGuidanceBlock, _notesMarkingBlock, _notesGenBlock, _notesAnswerBlock
   };
 `)();
@@ -201,6 +211,42 @@ ok('the listener is torn down when the account changes',
    /stopTeachingNotes\(\)/.test(src.slice(src.indexOf('onAuthStateChanged(auth'), src.indexOf('onAuthStateChanged(auth') + 900)));
 ok('a waiter is released when the listener goes, never left hanging',
    /_notesPending/.test(src) && /waiting\.forEach/.test(src));
+
+/* ---------- A rule typed on an answer card in the Scan app ----------
+   The Scan app's ✎ writes an ordinary note in this very collection:
+   `guidance` for the rule, `keyFacts` for the corrected answer with its
+   question above it, and `sourceQuestion` for the question it was written
+   against. Everything below is what makes it READABLE here — a rule the
+   teacher can no longer place is a rule they delete. */
+api.notes = [];
+const scanNote = {
+  id: 's1', title: 'Name the process', source: 'scan', noteKind: 'correction',
+  guidance: 'On "explain" questions, always name the process.',
+  sourceQuestion: 'How would this affect the size of the remaining peaches?',
+  keyFacts: 'Question: How would this affect the size of the remaining peaches?\nThe answer is: They grow larger.',
+  topics: [], keywords: [], subjects: ['science'], levels: ['P5']
+};
+const scanCard = api.notesCardHtml(scanNote);
+ok('the card names the app the rule was typed in',
+   api._noteSourceLabel(scanNote) === 'from Scan & Answer' && scanCard.includes('from Scan &amp; Answer'));
+ok('the rule itself is shown', scanCard.includes('always name the process'));
+ok('and the question it was written against, so it can still be placed',
+   scanCard.includes('Written against') && scanCard.includes('remaining peaches'));
+ok('the corrected answer is kept as a key fact', scanCard.includes('They grow larger.'));
+ok('a note with no question shows no such row',
+   !api.notesCardHtml({ id: 's2', guidance: 'x', topics: [], keywords: [] }).includes('Written against'));
+ok('the question is escaped like everything else on the card',
+   api.notesCardHtml({ id: 's3', guidance: 'x', sourceQuestion: 'a <b>&</b>', topics: [], keywords: [] })
+     .includes('a &lt;b&gt;&amp;&lt;/b&gt;'));
+
+api.notes = [scanNote];
+ok('and the rule really does reach a science prompt here',
+   api._notesGuidanceBlock('').includes('always name the process'));
+ok('a marking call obeys it too — guidance is the one field that reaches marking',
+   api._notesMarkingBlock('').includes('always name the process'));
+ok('the corrected answer reaches an ANSWER, never the marker',
+   api._notesAnswerBlock('').includes('They grow larger.') &&
+   !api._notesMarkingBlock('').includes('They grow larger.'));
 
 console.log((fails ? '✗ ' : '✓ ') + (ran - fails) + '/' + ran + ' checks passed');
 process.exit(fails ? 1 : 0);

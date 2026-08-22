@@ -673,6 +673,15 @@ nowhere to put it. So it went unsaid, and every question, answer and mark was wr
 - A hand-typed rule and an uploaded document are **listed apart** on the page rather than mixed
   into one pile: they are read very differently — one is obeyed word for word, the other is a
   source of keywords.
+- **A rule can be typed on a scanned ANSWER CARD, and it lands here** (scan v1.5.0, this app
+  v1.317.0). When the Scan app's answer is not good enough the teacher corrects it there and says
+  what should have happened in the same breath; that is written as an ordinary note in this
+  collection — `guidance` for the rule (so it reaches every digest here, marking included),
+  `keyFacts` for the corrected answer with its question above it (so it reaches an ANSWER and never
+  the marker, which is the standing rule), and **`sourceQuestion` for the question it was written
+  against**. `sourceQuestion` is for the READER and never for a prompt: the card shows it under
+  *Written against*, because a rule the teacher can no longer place is a rule they delete — and the
+  whole question in every prompt would drown the rule it was written to carry.
 - Run **`node tools/teaching-notes-tests.mjs`** after touching any of it.
 
 ## 🔄 The notebook is LIVE, and it is shared (v1.310.0)
@@ -2073,7 +2082,8 @@ marker was handed both sub-questions as a single item.
   answered.
 - After touching **the teaching-notes digests or the live notebook** (`_notesGuidanceBlock`,
   `_notesMarkingBlock`, `_notesGenBlock`, `_notesAnswerBlock`, `_notesFor`, `_noteSuitsThisApp`,
-  `loadTeachingNotes`, `_notesDetach`, `stopTeachingNotes`, `NOTES_GUIDE_CHARS`, `quickNoteSave`), run
+  `loadTeachingNotes`, `_notesDetach`, `stopTeachingNotes`, `NOTES_GUIDE_CHARS`, `quickNoteSave`,
+  `_noteSourceLabel`, `notesCardHtml`), run
   `node tools/teaching-notes-tests.mjs`. Every failure here is silent: a digest that comes back
   without the teacher's standing instruction is an ungrounded prompt, so the AI still builds the
   question, still writes the answer and still marks the student — in its own voice instead of
