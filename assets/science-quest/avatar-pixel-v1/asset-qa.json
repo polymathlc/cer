@@ -1,0 +1,1745 @@
+{
+  "canvas": 96,
+  "assets": [
+    {
+      "file": "characters/male.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 1920,
+      "bounds": {
+        "left": 29,
+        "top": 8,
+        "right": 68,
+        "bottom": 92
+      }
+    },
+    {
+      "file": "characters/female.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 1906,
+      "bounds": {
+        "left": 30,
+        "top": 7,
+        "right": 67,
+        "bottom": 92
+      }
+    },
+    {
+      "file": "items/weapon/wood_sword.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 403,
+      "bounds": {
+        "left": 65,
+        "top": 8,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/iron_sword.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 369,
+      "bounds": {
+        "left": 64,
+        "top": 8,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/steel_sword.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 257,
+      "bounds": {
+        "left": 65,
+        "top": 9,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/silver_rapier.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 215,
+      "bounds": {
+        "left": 64,
+        "top": 9,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/shadow_dagger.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 400,
+      "bounds": {
+        "left": 66,
+        "top": 8,
+        "right": 81,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/knight_sword.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 329,
+      "bounds": {
+        "left": 64,
+        "top": 9,
+        "right": 84,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/corsair_cutlass.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 313,
+      "bounds": {
+        "left": 65,
+        "top": 9,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/frost_brand.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 437,
+      "bounds": {
+        "left": 63,
+        "top": 8,
+        "right": 84,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/elven_blade.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 282,
+      "bounds": {
+        "left": 66,
+        "top": 8,
+        "right": 80,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/flame_sword.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 367,
+      "bounds": {
+        "left": 66,
+        "top": 9,
+        "right": 80,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/dragon_blade.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 326,
+      "bounds": {
+        "left": 66,
+        "top": 8,
+        "right": 81,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/obsidian_greatsword.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 380,
+      "bounds": {
+        "left": 66,
+        "top": 9,
+        "right": 81,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/excalibur.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 421,
+      "bounds": {
+        "left": 64,
+        "top": 8,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/apprentice_staff.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 216,
+      "bounds": {
+        "left": 68,
+        "top": 8,
+        "right": 79,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/oak_staff.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 283,
+      "bounds": {
+        "left": 67,
+        "top": 9,
+        "right": 81,
+        "bottom": 64
+      }
+    },
+    {
+      "file": "items/weapon/ember_staff.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 327,
+      "bounds": {
+        "left": 65,
+        "top": 9,
+        "right": 81,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/sprout_staff.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 352,
+      "bounds": {
+        "left": 64,
+        "top": 8,
+        "right": 83,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/arcane_staff.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 368,
+      "bounds": {
+        "left": 65,
+        "top": 8,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/glacier_staff.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 358,
+      "bounds": {
+        "left": 66,
+        "top": 9,
+        "right": 81,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/rune_staff.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 324,
+      "bounds": {
+        "left": 64,
+        "top": 9,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/crystal_staff.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 315,
+      "bounds": {
+        "left": 66,
+        "top": 8,
+        "right": 81,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/void_staff.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 325,
+      "bounds": {
+        "left": 65,
+        "top": 8,
+        "right": 81,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/royal_crook.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 343,
+      "bounds": {
+        "left": 65,
+        "top": 9,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/star_wand.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 385,
+      "bounds": {
+        "left": 64,
+        "top": 8,
+        "right": 83,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/comet_wand.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 475,
+      "bounds": {
+        "left": 62,
+        "top": 9,
+        "right": 84,
+        "bottom": 64
+      }
+    },
+    {
+      "file": "items/weapon/sun_scepter.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 523,
+      "bounds": {
+        "left": 61,
+        "top": 9,
+        "right": 86,
+        "bottom": 64
+      }
+    },
+    {
+      "file": "items/weapon/soldier_spear.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 192,
+      "bounds": {
+        "left": 70,
+        "top": 8,
+        "right": 76,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/battle_axe.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 723,
+      "bounds": {
+        "left": 57,
+        "top": 9,
+        "right": 90,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/war_hammer.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 652,
+      "bounds": {
+        "left": 57,
+        "top": 10,
+        "right": 90,
+        "bottom": 63
+      }
+    },
+    {
+      "file": "items/weapon/executioner_axe.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 689,
+      "bounds": {
+        "left": 57,
+        "top": 8,
+        "right": 90,
+        "bottom": 64
+      }
+    },
+    {
+      "file": "items/weapon/reaper_scythe.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 334,
+      "bounds": {
+        "left": 57,
+        "top": 12,
+        "right": 90,
+        "bottom": 60
+      }
+    },
+    {
+      "file": "items/weapon/golden_trident.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 334,
+      "bounds": {
+        "left": 65,
+        "top": 9,
+        "right": 82,
+        "bottom": 64
+      }
+    },
+    {
+      "file": "items/weapon/crown_halberd.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 359,
+      "bounds": {
+        "left": 63,
+        "top": 9,
+        "right": 82,
+        "bottom": 64
+      }
+    },
+    {
+      "file": "items/weapon/shortbow.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 224,
+      "bounds": {
+        "left": 67,
+        "top": 9,
+        "right": 81,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/longbow.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 207,
+      "bounds": {
+        "left": 66,
+        "top": 8,
+        "right": 80,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/elven_bow.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 291,
+      "bounds": {
+        "left": 68,
+        "top": 9,
+        "right": 80,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/shadow_bow.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 387,
+      "bounds": {
+        "left": 65,
+        "top": 10,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/frostfang_bow.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 388,
+      "bounds": {
+        "left": 65,
+        "top": 8,
+        "right": 81,
+        "bottom": 64
+      }
+    },
+    {
+      "file": "items/weapon/stormpiercer.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 319,
+      "bounds": {
+        "left": 66,
+        "top": 9,
+        "right": 80,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/ember_dagger.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 440,
+      "bounds": {
+        "left": 64,
+        "top": 9,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/glacier_spear.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 222,
+      "bounds": {
+        "left": 69,
+        "top": 8,
+        "right": 77,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/elven_rapier.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 278,
+      "bounds": {
+        "left": 67,
+        "top": 9,
+        "right": 80,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/sunblade.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 387,
+      "bounds": {
+        "left": 64,
+        "top": 9,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/obsidian_axe.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 675,
+      "bounds": {
+        "left": 57,
+        "top": 9,
+        "right": 90,
+        "bottom": 64
+      }
+    },
+    {
+      "file": "items/weapon/starfall_katana.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 282,
+      "bounds": {
+        "left": 68,
+        "top": 9,
+        "right": 80,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/shield/wooden_shield.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 1090,
+      "bounds": {
+        "left": 6,
+        "top": 40,
+        "right": 42,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/shield/swift_buckler.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 1084,
+      "bounds": {
+        "left": 5,
+        "top": 40,
+        "right": 42,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/shield/iron_shield.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 681,
+      "bounds": {
+        "left": 10,
+        "top": 40,
+        "right": 37,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/shield/kite_shield.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 590,
+      "bounds": {
+        "left": 12,
+        "top": 39,
+        "right": 35,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/shield/knight_shield.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 634,
+      "bounds": {
+        "left": 11,
+        "top": 40,
+        "right": 36,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/shield/grimoire.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 728,
+      "bounds": {
+        "left": 9,
+        "top": 40,
+        "right": 38,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/shield/tower_shield.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 575,
+      "bounds": {
+        "left": 13,
+        "top": 40,
+        "right": 34,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/shield/mirror_shield.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 617,
+      "bounds": {
+        "left": 10,
+        "top": 40,
+        "right": 37,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/shield/aegis_shield.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 687,
+      "bounds": {
+        "left": 9,
+        "top": 40,
+        "right": 37,
+        "bottom": 75
+      }
+    },
+    {
+      "file": "items/shield/royal_bulwark.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 717,
+      "bounds": {
+        "left": 8,
+        "top": 39,
+        "right": 38,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/shield/dragonscale_ward.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 615,
+      "bounds": {
+        "left": 11,
+        "top": 40,
+        "right": 36,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/shield/fallen_star_aegis.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 598,
+      "bounds": {
+        "left": 10,
+        "top": 39,
+        "right": 36,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/armor/cloth_tunic.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 846,
+      "bounds": {
+        "left": 25,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/leather_armor.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 961,
+      "bounds": {
+        "left": 25,
+        "top": 37,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/travelers_garb.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 906,
+      "bounds": {
+        "left": 25,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/chainmail.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 896,
+      "bounds": {
+        "left": 25,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/mage_robe.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 866,
+      "bounds": {
+        "left": 25,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/bronze_plate.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 929,
+      "bounds": {
+        "left": 25,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/ninja_garb.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 855,
+      "bounds": {
+        "left": 26,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/knight_plate.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 860,
+      "bounds": {
+        "left": 26,
+        "top": 37,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/emerald_scale.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 774,
+      "bounds": {
+        "left": 25,
+        "top": 37,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/frost_plate.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 841,
+      "bounds": {
+        "left": 26,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/archmage_robe.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 829,
+      "bounds": {
+        "left": 25,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/gilded_plate.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 849,
+      "bounds": {
+        "left": 25,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/dragon_plate.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 822,
+      "bounds": {
+        "left": 26,
+        "top": 38,
+        "right": 69,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/starweaver_robe.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 891,
+      "bounds": {
+        "left": 26,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/helmet/leather_cap.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 767,
+      "bounds": {
+        "left": 28,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/adventurers_hood.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 859,
+      "bounds": {
+        "left": 28,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/warrior_headband.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 596,
+      "bounds": {
+        "left": 28,
+        "top": 3,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/iron_helm.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 792,
+      "bounds": {
+        "left": 28,
+        "top": 3,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/shadow_hood.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 757,
+      "bounds": {
+        "left": 28,
+        "top": 3,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/wizard_hat.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 674,
+      "bounds": {
+        "left": 29,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/knight_helm.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 810,
+      "bounds": {
+        "left": 29,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/berserker_horns.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 732,
+      "bounds": {
+        "left": 29,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/glacier_helm.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 772,
+      "bounds": {
+        "left": 29,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/gilded_helm.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 782,
+      "bounds": {
+        "left": 29,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/seer_circlet.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 493,
+      "bounds": {
+        "left": 28,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/crown_wisdom.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 751,
+      "bounds": {
+        "left": 28,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/dragonfang_helm.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 604,
+      "bounds": {
+        "left": 29,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/seraph_halo.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 732,
+      "bounds": {
+        "left": 29,
+        "top": 5,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/accessory/scholar_cape.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 1036,
+      "bounds": {
+        "left": 25,
+        "top": 35,
+        "right": 70,
+        "bottom": 73
+      }
+    },
+    {
+      "file": "items/accessory/forest_cloak.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 957,
+      "bounds": {
+        "left": 25,
+        "top": 35,
+        "right": 70,
+        "bottom": 73
+      }
+    },
+    {
+      "file": "items/accessory/hero_cape.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 983,
+      "bounds": {
+        "left": 25,
+        "top": 36,
+        "right": 70,
+        "bottom": 73
+      }
+    },
+    {
+      "file": "items/accessory/elven_cloak.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 939,
+      "bounds": {
+        "left": 25,
+        "top": 36,
+        "right": 70,
+        "bottom": 73
+      }
+    },
+    {
+      "file": "items/accessory/phoenix_cape.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 944,
+      "bounds": {
+        "left": 25,
+        "top": 35,
+        "right": 70,
+        "bottom": 73
+      }
+    },
+    {
+      "file": "items/accessory/dragon_wings.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 1342,
+      "bounds": {
+        "left": 10,
+        "top": 27,
+        "right": 85,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/accessory/starfall_cape.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 995,
+      "bounds": {
+        "left": 25,
+        "top": 35,
+        "right": 70,
+        "bottom": 73
+      }
+    },
+    {
+      "file": "items/accessory/angel_wings.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 1010,
+      "bounds": {
+        "left": 11,
+        "top": 26,
+        "right": 84,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/accessory/lucky_amulet.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 80,
+      "bounds": {
+        "left": 44,
+        "top": 38,
+        "right": 52,
+        "bottom": 55
+      }
+    },
+    {
+      "file": "items/accessory/ruby_pendant.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 82,
+      "bounds": {
+        "left": 43,
+        "top": 38,
+        "right": 52,
+        "bottom": 55
+      }
+    },
+    {
+      "file": "items/accessory/hawk_feather.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 66,
+      "bounds": {
+        "left": 43,
+        "top": 39,
+        "right": 51,
+        "bottom": 55
+      }
+    },
+    {
+      "file": "items/accessory/wolf_fang.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 81,
+      "bounds": {
+        "left": 42,
+        "top": 39,
+        "right": 52,
+        "bottom": 55
+      }
+    },
+    {
+      "file": "items/accessory/sage_amulet.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 99,
+      "bounds": {
+        "left": 42,
+        "top": 38,
+        "right": 52,
+        "bottom": 55
+      }
+    },
+    {
+      "file": "items/accessory/royal_medallion.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 122,
+      "bounds": {
+        "left": 41,
+        "top": 39,
+        "right": 53,
+        "bottom": 55
+      }
+    },
+    {
+      "file": "items/accessory/phoenix_amulet.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 103,
+      "bounds": {
+        "left": 42,
+        "top": 38,
+        "right": 53,
+        "bottom": 55
+      }
+    },
+    {
+      "file": "items/pet/loyal_pup.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 355,
+      "bounds": {
+        "left": 2,
+        "top": 38,
+        "right": 24,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/shadow_cat.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 366,
+      "bounds": {
+        "left": 1,
+        "top": 37,
+        "right": 24,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/tortoise_knight.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 339,
+      "bounds": {
+        "left": 2,
+        "top": 38,
+        "right": 25,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/frost_penguin.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 291,
+      "bounds": {
+        "left": 4,
+        "top": 37,
+        "right": 23,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/wisp_familiar.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 198,
+      "bounds": {
+        "left": 3,
+        "top": 38,
+        "right": 23,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/ember_fox.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 352,
+      "bounds": {
+        "left": 3,
+        "top": 38,
+        "right": 25,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/storm_chick.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 308,
+      "bounds": {
+        "left": 3,
+        "top": 38,
+        "right": 25,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/owl_familiar.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 280,
+      "bounds": {
+        "left": 3,
+        "top": 37,
+        "right": 23,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/star_unicorn.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 392,
+      "bounds": {
+        "left": 2,
+        "top": 38,
+        "right": 25,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/pocket_dragon.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 320,
+      "bounds": {
+        "left": 2,
+        "top": 38,
+        "right": 26,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/accessory/warlords_banner.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 792,
+      "bounds": {
+        "left": 25,
+        "top": 35,
+        "right": 70,
+        "bottom": 73
+      }
+    },
+    {
+      "file": "items/accessory/thieves_dice.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 75,
+      "bounds": {
+        "left": 41,
+        "top": 39,
+        "right": 54,
+        "bottom": 55
+      }
+    },
+    {
+      "file": "items/accessory/archmage_orb.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 97,
+      "bounds": {
+        "left": 42,
+        "top": 39,
+        "right": 52,
+        "bottom": 55
+      }
+    },
+    {
+      "file": "items/weapon/worldender.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 446,
+      "bounds": {
+        "left": 65,
+        "top": 9,
+        "right": 82,
+        "bottom": 64
+      }
+    },
+    {
+      "file": "items/weapon/staff_of_creation.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 338,
+      "bounds": {
+        "left": 66,
+        "top": 9,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/eclipse_reaper.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 387,
+      "bounds": {
+        "left": 57,
+        "top": 11,
+        "right": 90,
+        "bottom": 60
+      }
+    },
+    {
+      "file": "items/shield/aegis_eternity.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 627,
+      "bounds": {
+        "left": 10,
+        "top": 39,
+        "right": 37,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/armor/dawnforged_plate.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 858,
+      "bounds": {
+        "left": 26,
+        "top": 38,
+        "right": 69,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/helmet/crown_infinity.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 768,
+      "bounds": {
+        "left": 29,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/accessory/wings_eternity.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 1030,
+      "bounds": {
+        "left": 11,
+        "top": 27,
+        "right": 84,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/eternal_phoenix.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 375,
+      "bounds": {
+        "left": 2,
+        "top": 38,
+        "right": 25,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/streak_sprite.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 317,
+      "bounds": {
+        "left": 1,
+        "top": 38,
+        "right": 25,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/nova_dragon.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 335,
+      "bounds": {
+        "left": 1,
+        "top": 38,
+        "right": 25,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/weapon/celestial_edge.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 408,
+      "bounds": {
+        "left": 65,
+        "top": 9,
+        "right": 82,
+        "bottom": 64
+      }
+    },
+    {
+      "file": "items/weapon/galaxy_greatblade.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 357,
+      "bounds": {
+        "left": 67,
+        "top": 9,
+        "right": 80,
+        "bottom": 64
+      }
+    },
+    {
+      "file": "items/weapon/phoenix_talon.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 517,
+      "bounds": {
+        "left": 63,
+        "top": 8,
+        "right": 83,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/astral_scythe.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 463,
+      "bounds": {
+        "left": 58,
+        "top": 8,
+        "right": 89,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/heavens_halberd.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 315,
+      "bounds": {
+        "left": 65,
+        "top": 8,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/starfire_staff.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 332,
+      "bounds": {
+        "left": 65,
+        "top": 10,
+        "right": 81,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/weapon/tempest_bow.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 404,
+      "bounds": {
+        "left": 64,
+        "top": 8,
+        "right": 82,
+        "bottom": 65
+      }
+    },
+    {
+      "file": "items/shield/aurora_aegis.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 662,
+      "bounds": {
+        "left": 10,
+        "top": 40,
+        "right": 37,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/shield/solar_bulwark.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 610,
+      "bounds": {
+        "left": 10,
+        "top": 40,
+        "right": 36,
+        "bottom": 75
+      }
+    },
+    {
+      "file": "items/shield/void_ward.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 618,
+      "bounds": {
+        "left": 9,
+        "top": 40,
+        "right": 37,
+        "bottom": 76
+      }
+    },
+    {
+      "file": "items/armor/celestial_plate.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 882,
+      "bounds": {
+        "left": 25,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/armor/phoenix_mantle.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 895,
+      "bounds": {
+        "left": 25,
+        "top": 38,
+        "right": 70,
+        "bottom": 66
+      }
+    },
+    {
+      "file": "items/armor/astral_scalemail.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 805,
+      "bounds": {
+        "left": 25,
+        "top": 38,
+        "right": 70,
+        "bottom": 67
+      }
+    },
+    {
+      "file": "items/helmet/astral_hat.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 698,
+      "bounds": {
+        "left": 29,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/helmet/cosmos_crown.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 592,
+      "bounds": {
+        "left": 28,
+        "top": 4,
+        "right": 67,
+        "bottom": 41
+      }
+    },
+    {
+      "file": "items/accessory/wings_dawn.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 1043,
+      "bounds": {
+        "left": 10,
+        "top": 27,
+        "right": 85,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/accessory/cosmos_amulet.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 107,
+      "bounds": {
+        "left": 41,
+        "top": 39,
+        "right": 54,
+        "bottom": 55
+      }
+    },
+    {
+      "file": "items/pet/astral_drake.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 320,
+      "bounds": {
+        "left": 2,
+        "top": 39,
+        "right": 26,
+        "bottom": 61
+      }
+    },
+    {
+      "file": "items/pet/prism_peacock.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 328,
+      "bounds": {
+        "left": 3,
+        "top": 38,
+        "right": 23,
+        "bottom": 62
+      }
+    },
+    {
+      "file": "items/pet/cosmic_wyrm.png",
+      "width": 96,
+      "height": 96,
+      "opaquePixels": 260,
+      "bounds": {
+        "left": 5,
+        "top": 38,
+        "right": 21,
+        "bottom": 62
+      }
+    }
+  ]
+}
