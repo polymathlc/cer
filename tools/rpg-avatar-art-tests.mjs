@@ -21,7 +21,7 @@ assert.equal(items.length, 143, "all 143 RPG items should remain in the catalogu
 assert.equal(new Set(items.map(x => x.id)).size, items.length, "RPG item ids should be unique");
 
 assert.match(app, /const RPG_ART_BETA_RELEASED = false;/, "generated art must remain unreleased");
-assert.match(app, /if \(!rpgCanPreview\(\)\) return false;/, "unreleased art should be admin-only");
+assert.match(app, /function rpgArtBetaEnabled\(\) \{[\s\S]*?return false;[\s\S]*?\}/, "legacy illustrated avatar composition should remain disabled");
 assert.match(app, /function rpgUnlockAllBetaItems\(\)/, "admin test unlock control should exist");
 assert.match(app, /RPG_ITEMS\.forEach\(it => \{ rpgState\.inventory\[it\.id\]/, "unlock control should cover the full catalogue");
 assert.match(app, /function rpgItemImageAspect\(src\)/, "bundled sprites should map into paper-doll slot geometry");
@@ -65,4 +65,4 @@ for (const character of manifest.characters) {
   assert.ok(fs.existsSync(file), `character asset missing: ${character.file}`);
 }
 
-console.log(`rpg-avatar-art-tests: ${manifest.characters.length} characters + ${items.length} items OK (admin beta)`);
+console.log(`rpg-avatar-art-tests: ${manifest.characters.length} characters + ${items.length} source-art items OK (legacy compositor disabled)`);

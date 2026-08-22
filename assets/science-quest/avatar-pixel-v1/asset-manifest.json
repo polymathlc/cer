@@ -1,0 +1,2323 @@
+{
+  "version": 1,
+  "status": "admin-beta",
+  "generatedAt": "2026-08-22",
+  "canvas": {
+    "width": 96,
+    "height": 96,
+    "format": "PNG",
+    "rendering": "pixelated"
+  },
+  "layerOrder": [
+    "accessory-back",
+    "character",
+    "armor",
+    "helmet",
+    "accessory-front",
+    "shield",
+    "weapon",
+    "pet"
+  ],
+  "characters": [
+    {
+      "id": "male",
+      "file": "characters/male.png",
+      "source": "sources/characters/male-master.png"
+    },
+    {
+      "id": "female",
+      "file": "characters/female.png",
+      "source": "sources/characters/female-master.png"
+    }
+  ],
+  "items": [
+    {
+      "id": "wood_sword",
+      "name": "Wooden Sword",
+      "slot": "weapon",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/weapon/wood_sword.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/wood_sword.webp"
+    },
+    {
+      "id": "iron_sword",
+      "name": "Iron Sword",
+      "slot": "weapon",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/weapon/iron_sword.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/iron_sword.webp"
+    },
+    {
+      "id": "steel_sword",
+      "name": "Steel Sword",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/steel_sword.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/steel_sword.webp"
+    },
+    {
+      "id": "silver_rapier",
+      "name": "Silver Rapier",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/silver_rapier.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/silver_rapier.webp"
+    },
+    {
+      "id": "shadow_dagger",
+      "name": "Shadow Dagger",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/shadow_dagger.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/shadow_dagger.webp"
+    },
+    {
+      "id": "knight_sword",
+      "name": "Knight's Blade",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/knight_sword.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/knight_sword.webp"
+    },
+    {
+      "id": "corsair_cutlass",
+      "name": "Corsair's Cutlass",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/corsair_cutlass.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/corsair_cutlass.webp"
+    },
+    {
+      "id": "frost_brand",
+      "name": "Frostbrand",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/frost_brand.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/frost_brand.webp"
+    },
+    {
+      "id": "elven_blade",
+      "name": "Elven Blade",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/elven_blade.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/elven_blade.webp"
+    },
+    {
+      "id": "flame_sword",
+      "name": "Flameblade",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/flame_sword.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/flame_sword.webp"
+    },
+    {
+      "id": "dragon_blade",
+      "name": "Dragonfang",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/dragon_blade.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/dragon_blade.webp"
+    },
+    {
+      "id": "obsidian_greatsword",
+      "name": "Obsidian Greatsword",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/obsidian_greatsword.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/obsidian_greatsword.webp"
+    },
+    {
+      "id": "excalibur",
+      "name": "Excalibur",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/excalibur.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/excalibur.webp"
+    },
+    {
+      "id": "apprentice_staff",
+      "name": "Apprentice Staff",
+      "slot": "weapon",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/weapon/apprentice_staff.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/apprentice_staff.webp"
+    },
+    {
+      "id": "oak_staff",
+      "name": "Oak Staff",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/oak_staff.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/oak_staff.webp"
+    },
+    {
+      "id": "ember_staff",
+      "name": "Ember Staff",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/ember_staff.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/ember_staff.webp"
+    },
+    {
+      "id": "sprout_staff",
+      "name": "Sprout Staff",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/sprout_staff.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/sprout_staff.webp"
+    },
+    {
+      "id": "arcane_staff",
+      "name": "Arcane Staff",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/arcane_staff.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/arcane_staff.webp"
+    },
+    {
+      "id": "glacier_staff",
+      "name": "Glacier Staff",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/glacier_staff.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/glacier_staff.webp"
+    },
+    {
+      "id": "rune_staff",
+      "name": "Runewood Staff",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/rune_staff.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/rune_staff.webp"
+    },
+    {
+      "id": "crystal_staff",
+      "name": "Crystal Staff",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/crystal_staff.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/crystal_staff.webp"
+    },
+    {
+      "id": "void_staff",
+      "name": "Void Staff",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/void_staff.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/void_staff.webp"
+    },
+    {
+      "id": "royal_crook",
+      "name": "Crook of Kings",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/royal_crook.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/royal_crook.webp"
+    },
+    {
+      "id": "star_wand",
+      "name": "Star Wand",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/star_wand.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/star_wand.webp"
+    },
+    {
+      "id": "comet_wand",
+      "name": "Comet Wand",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/comet_wand.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/comet_wand.webp"
+    },
+    {
+      "id": "sun_scepter",
+      "name": "Scepter of Dawn",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/sun_scepter.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/sun_scepter.webp"
+    },
+    {
+      "id": "soldier_spear",
+      "name": "Soldier's Spear",
+      "slot": "weapon",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/weapon/soldier_spear.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/soldier_spear.webp"
+    },
+    {
+      "id": "battle_axe",
+      "name": "Battle Axe",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/battle_axe.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/battle_axe.webp"
+    },
+    {
+      "id": "war_hammer",
+      "name": "Doom Hammer",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/war_hammer.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/war_hammer.webp"
+    },
+    {
+      "id": "executioner_axe",
+      "name": "Executioner's Axe",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/executioner_axe.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/executioner_axe.webp"
+    },
+    {
+      "id": "reaper_scythe",
+      "name": "Grim Scythe",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/reaper_scythe.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/reaper_scythe.webp"
+    },
+    {
+      "id": "golden_trident",
+      "name": "Golden Trident",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/golden_trident.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/golden_trident.webp"
+    },
+    {
+      "id": "crown_halberd",
+      "name": "Halberd of the Crown",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/crown_halberd.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/crown_halberd.webp"
+    },
+    {
+      "id": "shortbow",
+      "name": "Hunter's Shortbow",
+      "slot": "weapon",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/weapon/shortbow.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/shortbow.webp"
+    },
+    {
+      "id": "longbow",
+      "name": "Longbow",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/longbow.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/longbow.webp"
+    },
+    {
+      "id": "elven_bow",
+      "name": "Elven Warbow",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/elven_bow.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/elven_bow.webp"
+    },
+    {
+      "id": "shadow_bow",
+      "name": "Nightwhisper Bow",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/shadow_bow.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/shadow_bow.webp"
+    },
+    {
+      "id": "frostfang_bow",
+      "name": "Frostfang Bow",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/frostfang_bow.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/frostfang_bow.webp"
+    },
+    {
+      "id": "stormpiercer",
+      "name": "Stormpiercer",
+      "slot": "weapon",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/weapon/stormpiercer.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/stormpiercer.webp"
+    },
+    {
+      "id": "ember_dagger",
+      "name": "Ember Dagger",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/ember_dagger.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/ember_dagger.webp"
+    },
+    {
+      "id": "glacier_spear",
+      "name": "Glacier Spear",
+      "slot": "weapon",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/weapon/glacier_spear.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/glacier_spear.webp"
+    },
+    {
+      "id": "elven_rapier",
+      "name": "Elven Rapier",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/elven_rapier.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/elven_rapier.webp"
+    },
+    {
+      "id": "sunblade",
+      "name": "Sunblade",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/sunblade.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/sunblade.webp"
+    },
+    {
+      "id": "obsidian_axe",
+      "name": "Obsidian Axe",
+      "slot": "weapon",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/weapon/obsidian_axe.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/obsidian_axe.webp"
+    },
+    {
+      "id": "starfall_katana",
+      "name": "Starfall Katana",
+      "slot": "weapon",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/weapon/starfall_katana.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/starfall_katana.webp"
+    },
+    {
+      "id": "wooden_shield",
+      "name": "Wooden Shield",
+      "slot": "shield",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/shield/wooden_shield.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/wooden_shield.webp"
+    },
+    {
+      "id": "swift_buckler",
+      "name": "Swift Buckler",
+      "slot": "shield",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/shield/swift_buckler.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/swift_buckler.webp"
+    },
+    {
+      "id": "iron_shield",
+      "name": "Iron Shield",
+      "slot": "shield",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/shield/iron_shield.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/iron_shield.webp"
+    },
+    {
+      "id": "kite_shield",
+      "name": "Kite Shield",
+      "slot": "shield",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/shield/kite_shield.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/kite_shield.webp"
+    },
+    {
+      "id": "knight_shield",
+      "name": "Knight's Shield",
+      "slot": "shield",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/shield/knight_shield.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/knight_shield.webp"
+    },
+    {
+      "id": "grimoire",
+      "name": "Grimoire of Shadows",
+      "slot": "shield",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/shield/grimoire.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/grimoire.webp"
+    },
+    {
+      "id": "tower_shield",
+      "name": "Tower Shield",
+      "slot": "shield",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/shield/tower_shield.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/tower_shield.webp"
+    },
+    {
+      "id": "mirror_shield",
+      "name": "Mirror Shield",
+      "slot": "shield",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/shield/mirror_shield.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/mirror_shield.webp"
+    },
+    {
+      "id": "aegis_shield",
+      "name": "Aegis of Wisdom",
+      "slot": "shield",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/shield/aegis_shield.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/aegis_shield.webp"
+    },
+    {
+      "id": "royal_bulwark",
+      "name": "Royal Bulwark",
+      "slot": "shield",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/shield/royal_bulwark.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/royal_bulwark.webp"
+    },
+    {
+      "id": "dragonscale_ward",
+      "name": "Dragonscale Ward",
+      "slot": "shield",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/shield/dragonscale_ward.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/dragonscale_ward.webp"
+    },
+    {
+      "id": "fallen_star_aegis",
+      "name": "Aegis of the Fallen Star",
+      "slot": "shield",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/shield/fallen_star_aegis.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/fallen_star_aegis.webp"
+    },
+    {
+      "id": "cloth_tunic",
+      "name": "Cloth Tunic",
+      "slot": "armor",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/armor/cloth_tunic.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/cloth_tunic.webp"
+    },
+    {
+      "id": "leather_armor",
+      "name": "Leather Armour",
+      "slot": "armor",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/armor/leather_armor.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/leather_armor.webp"
+    },
+    {
+      "id": "travelers_garb",
+      "name": "Traveller's Garb",
+      "slot": "armor",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/armor/travelers_garb.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/travelers_garb.webp"
+    },
+    {
+      "id": "chainmail",
+      "name": "Chainmail",
+      "slot": "armor",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/armor/chainmail.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/chainmail.webp"
+    },
+    {
+      "id": "mage_robe",
+      "name": "Apprentice Robe",
+      "slot": "armor",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/armor/mage_robe.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/mage_robe.webp"
+    },
+    {
+      "id": "bronze_plate",
+      "name": "Bronze Plate",
+      "slot": "armor",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/armor/bronze_plate.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/bronze_plate.webp"
+    },
+    {
+      "id": "ninja_garb",
+      "name": "Ninja Garb",
+      "slot": "armor",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/armor/ninja_garb.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/ninja_garb.webp"
+    },
+    {
+      "id": "knight_plate",
+      "name": "Knight's Plate",
+      "slot": "armor",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/armor/knight_plate.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/knight_plate.webp"
+    },
+    {
+      "id": "emerald_scale",
+      "name": "Emerald Scale Mail",
+      "slot": "armor",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/armor/emerald_scale.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/emerald_scale.webp"
+    },
+    {
+      "id": "frost_plate",
+      "name": "Glacier Plate",
+      "slot": "armor",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/armor/frost_plate.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/frost_plate.webp"
+    },
+    {
+      "id": "archmage_robe",
+      "name": "Archmage Robe",
+      "slot": "armor",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/armor/archmage_robe.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/archmage_robe.webp"
+    },
+    {
+      "id": "gilded_plate",
+      "name": "Gilded Plate",
+      "slot": "armor",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/armor/gilded_plate.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/gilded_plate.webp"
+    },
+    {
+      "id": "dragon_plate",
+      "name": "Dragonscale Plate",
+      "slot": "armor",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/armor/dragon_plate.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/dragon_plate.webp"
+    },
+    {
+      "id": "starweaver_robe",
+      "name": "Starweaver Robe",
+      "slot": "armor",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/armor/starweaver_robe.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/starweaver_robe.webp"
+    },
+    {
+      "id": "leather_cap",
+      "name": "Leather Cap",
+      "slot": "helmet",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/helmet/leather_cap.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/leather_cap.webp"
+    },
+    {
+      "id": "adventurers_hood",
+      "name": "Adventurer's Hood",
+      "slot": "helmet",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/helmet/adventurers_hood.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/adventurers_hood.webp"
+    },
+    {
+      "id": "warrior_headband",
+      "name": "Warrior's Headband",
+      "slot": "helmet",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/helmet/warrior_headband.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/warrior_headband.webp"
+    },
+    {
+      "id": "iron_helm",
+      "name": "Iron Helm",
+      "slot": "helmet",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/helmet/iron_helm.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/iron_helm.webp"
+    },
+    {
+      "id": "shadow_hood",
+      "name": "Shadow Hood",
+      "slot": "helmet",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/helmet/shadow_hood.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/shadow_hood.webp"
+    },
+    {
+      "id": "wizard_hat",
+      "name": "Wizard's Hat",
+      "slot": "helmet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/helmet/wizard_hat.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/wizard_hat.webp"
+    },
+    {
+      "id": "knight_helm",
+      "name": "Knight's Helm",
+      "slot": "helmet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/helmet/knight_helm.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/knight_helm.webp"
+    },
+    {
+      "id": "berserker_horns",
+      "name": "Berserker Horns",
+      "slot": "helmet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/helmet/berserker_horns.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/berserker_horns.webp"
+    },
+    {
+      "id": "glacier_helm",
+      "name": "Glacier Helm",
+      "slot": "helmet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/helmet/glacier_helm.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/glacier_helm.webp"
+    },
+    {
+      "id": "gilded_helm",
+      "name": "Gilded Helm",
+      "slot": "helmet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/helmet/gilded_helm.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/gilded_helm.webp"
+    },
+    {
+      "id": "seer_circlet",
+      "name": "Circlet of the Seer",
+      "slot": "helmet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/helmet/seer_circlet.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/seer_circlet.webp"
+    },
+    {
+      "id": "crown_wisdom",
+      "name": "Crown of Wisdom",
+      "slot": "helmet",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/helmet/crown_wisdom.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/crown_wisdom.webp"
+    },
+    {
+      "id": "dragonfang_helm",
+      "name": "Dragonfang Helm",
+      "slot": "helmet",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/helmet/dragonfang_helm.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/dragonfang_helm.webp"
+    },
+    {
+      "id": "seraph_halo",
+      "name": "Seraph's Halo",
+      "slot": "helmet",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/helmet/seraph_halo.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/seraph_halo.webp"
+    },
+    {
+      "id": "scholar_cape",
+      "name": "Squire's Cape",
+      "slot": "accessory",
+      "rarity": "common",
+      "layer": "back",
+      "file": "items/accessory/scholar_cape.png",
+      "mount": {
+        "x": 25,
+        "y": 35,
+        "width": 46,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/accessory/scholar_cape.webp"
+    },
+    {
+      "id": "forest_cloak",
+      "name": "Forest Cloak",
+      "slot": "accessory",
+      "rarity": "uncommon",
+      "layer": "back",
+      "file": "items/accessory/forest_cloak.png",
+      "mount": {
+        "x": 25,
+        "y": 35,
+        "width": 46,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/accessory/forest_cloak.webp"
+    },
+    {
+      "id": "hero_cape",
+      "name": "Hero's Cape",
+      "slot": "accessory",
+      "rarity": "rare",
+      "layer": "back",
+      "file": "items/accessory/hero_cape.png",
+      "mount": {
+        "x": 25,
+        "y": 35,
+        "width": 46,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/accessory/hero_cape.webp"
+    },
+    {
+      "id": "elven_cloak",
+      "name": "Elven Cloak",
+      "slot": "accessory",
+      "rarity": "rare",
+      "layer": "back",
+      "file": "items/accessory/elven_cloak.png",
+      "mount": {
+        "x": 25,
+        "y": 35,
+        "width": 46,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/accessory/elven_cloak.webp"
+    },
+    {
+      "id": "phoenix_cape",
+      "name": "Phoenix Cape",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "back",
+      "file": "items/accessory/phoenix_cape.png",
+      "mount": {
+        "x": 25,
+        "y": 35,
+        "width": 46,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/accessory/phoenix_cape.webp"
+    },
+    {
+      "id": "dragon_wings",
+      "name": "Dragon Wings",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "back",
+      "file": "items/accessory/dragon_wings.png",
+      "mount": {
+        "x": 10,
+        "y": 26,
+        "width": 76,
+        "height": 37,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/accessory/dragon_wings.webp"
+    },
+    {
+      "id": "starfall_cape",
+      "name": "Starfall Cape",
+      "slot": "accessory",
+      "rarity": "legendary",
+      "layer": "back",
+      "file": "items/accessory/starfall_cape.png",
+      "mount": {
+        "x": 25,
+        "y": 35,
+        "width": 46,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/accessory/starfall_cape.webp"
+    },
+    {
+      "id": "angel_wings",
+      "name": "Wings of Light",
+      "slot": "accessory",
+      "rarity": "legendary",
+      "layer": "back",
+      "file": "items/accessory/angel_wings.png",
+      "mount": {
+        "x": 10,
+        "y": 26,
+        "width": 76,
+        "height": 37,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/accessory/angel_wings.webp"
+    },
+    {
+      "id": "lucky_amulet",
+      "name": "Lucky Amulet",
+      "slot": "accessory",
+      "rarity": "uncommon",
+      "layer": "front",
+      "file": "items/accessory/lucky_amulet.png",
+      "mount": {
+        "x": 40,
+        "y": 38,
+        "width": 16,
+        "height": 18,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/accessory/lucky_amulet.webp"
+    },
+    {
+      "id": "ruby_pendant",
+      "name": "Ruby Pendant",
+      "slot": "accessory",
+      "rarity": "uncommon",
+      "layer": "front",
+      "file": "items/accessory/ruby_pendant.png",
+      "mount": {
+        "x": 40,
+        "y": 38,
+        "width": 16,
+        "height": 18,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/accessory/ruby_pendant.webp"
+    },
+    {
+      "id": "hawk_feather",
+      "name": "Hawk Feather Charm",
+      "slot": "accessory",
+      "rarity": "uncommon",
+      "layer": "front",
+      "file": "items/accessory/hawk_feather.png",
+      "mount": {
+        "x": 40,
+        "y": 38,
+        "width": 16,
+        "height": 18,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/accessory/hawk_feather.webp"
+    },
+    {
+      "id": "wolf_fang",
+      "name": "Wolf Fang Charm",
+      "slot": "accessory",
+      "rarity": "rare",
+      "layer": "front",
+      "file": "items/accessory/wolf_fang.png",
+      "mount": {
+        "x": 40,
+        "y": 38,
+        "width": 16,
+        "height": 18,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/accessory/wolf_fang.webp"
+    },
+    {
+      "id": "sage_amulet",
+      "name": "Sage's Amulet",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "front",
+      "file": "items/accessory/sage_amulet.png",
+      "mount": {
+        "x": 40,
+        "y": 38,
+        "width": 16,
+        "height": 18,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/accessory/sage_amulet.webp"
+    },
+    {
+      "id": "royal_medallion",
+      "name": "Royal Medallion",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "front",
+      "file": "items/accessory/royal_medallion.png",
+      "mount": {
+        "x": 40,
+        "y": 38,
+        "width": 16,
+        "height": 18,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/accessory/royal_medallion.webp"
+    },
+    {
+      "id": "phoenix_amulet",
+      "name": "Amulet of the Phoenix",
+      "slot": "accessory",
+      "rarity": "legendary",
+      "layer": "front",
+      "file": "items/accessory/phoenix_amulet.png",
+      "mount": {
+        "x": 40,
+        "y": 38,
+        "width": 16,
+        "height": 18,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/accessory/phoenix_amulet.webp"
+    },
+    {
+      "id": "loyal_pup",
+      "name": "Loyal Pup",
+      "slot": "pet",
+      "rarity": "common",
+      "layer": null,
+      "file": "items/pet/loyal_pup.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/loyal_pup.webp"
+    },
+    {
+      "id": "shadow_cat",
+      "name": "Shadow Cat",
+      "slot": "pet",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/pet/shadow_cat.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/shadow_cat.webp"
+    },
+    {
+      "id": "tortoise_knight",
+      "name": "Tortoise Knight",
+      "slot": "pet",
+      "rarity": "uncommon",
+      "layer": null,
+      "file": "items/pet/tortoise_knight.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/tortoise_knight.webp"
+    },
+    {
+      "id": "frost_penguin",
+      "name": "Frost Penguin",
+      "slot": "pet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/pet/frost_penguin.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/frost_penguin.webp"
+    },
+    {
+      "id": "wisp_familiar",
+      "name": "Will-o'-Wisp",
+      "slot": "pet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/pet/wisp_familiar.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/wisp_familiar.webp"
+    },
+    {
+      "id": "ember_fox",
+      "name": "Ember Fox",
+      "slot": "pet",
+      "rarity": "rare",
+      "layer": null,
+      "file": "items/pet/ember_fox.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/ember_fox.webp"
+    },
+    {
+      "id": "storm_chick",
+      "name": "Storm Chick",
+      "slot": "pet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/pet/storm_chick.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/storm_chick.webp"
+    },
+    {
+      "id": "owl_familiar",
+      "name": "Owl Familiar",
+      "slot": "pet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/pet/owl_familiar.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/owl_familiar.webp"
+    },
+    {
+      "id": "star_unicorn",
+      "name": "Star Unicorn",
+      "slot": "pet",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/pet/star_unicorn.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/star_unicorn.webp"
+    },
+    {
+      "id": "pocket_dragon",
+      "name": "Dragon Whelp",
+      "slot": "pet",
+      "rarity": "legendary",
+      "layer": null,
+      "file": "items/pet/pocket_dragon.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/pocket_dragon.webp"
+    },
+    {
+      "id": "warlords_banner",
+      "name": "Warlord's Banner",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "back",
+      "file": "items/accessory/warlords_banner.png",
+      "mount": {
+        "x": 25,
+        "y": 35,
+        "width": 46,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/accessory/warlords_banner.webp"
+    },
+    {
+      "id": "thieves_dice",
+      "name": "Thieves' Dice",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "front",
+      "file": "items/accessory/thieves_dice.png",
+      "mount": {
+        "x": 40,
+        "y": 38,
+        "width": 16,
+        "height": 18,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/accessory/thieves_dice.webp"
+    },
+    {
+      "id": "archmage_orb",
+      "name": "Archmage's Orb",
+      "slot": "accessory",
+      "rarity": "epic",
+      "layer": "front",
+      "file": "items/accessory/archmage_orb.png",
+      "mount": {
+        "x": 40,
+        "y": 38,
+        "width": 16,
+        "height": 18,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/accessory/archmage_orb.webp"
+    },
+    {
+      "id": "worldender",
+      "name": "Worldender",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/worldender.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/worldender.webp"
+    },
+    {
+      "id": "staff_of_creation",
+      "name": "Staff of Creation",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/staff_of_creation.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/staff_of_creation.webp"
+    },
+    {
+      "id": "eclipse_reaper",
+      "name": "Eclipse Reaper",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/eclipse_reaper.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/eclipse_reaper.webp"
+    },
+    {
+      "id": "aegis_eternity",
+      "name": "Aegis of Eternity",
+      "slot": "shield",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/shield/aegis_eternity.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/aegis_eternity.webp"
+    },
+    {
+      "id": "dawnforged_plate",
+      "name": "Dawnforged Plate",
+      "slot": "armor",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/armor/dawnforged_plate.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/dawnforged_plate.webp"
+    },
+    {
+      "id": "crown_infinity",
+      "name": "Crown of Infinity",
+      "slot": "helmet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/helmet/crown_infinity.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/crown_infinity.webp"
+    },
+    {
+      "id": "wings_eternity",
+      "name": "Wings of Eternity",
+      "slot": "accessory",
+      "rarity": "mythic",
+      "layer": "back",
+      "file": "items/accessory/wings_eternity.png",
+      "mount": {
+        "x": 10,
+        "y": 26,
+        "width": 76,
+        "height": 37,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/accessory/wings_eternity.webp"
+    },
+    {
+      "id": "eternal_phoenix",
+      "name": "Eternal Phoenix",
+      "slot": "pet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/pet/eternal_phoenix.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/eternal_phoenix.webp"
+    },
+    {
+      "id": "streak_sprite",
+      "name": "Streak Sprite",
+      "slot": "pet",
+      "rarity": "epic",
+      "layer": null,
+      "file": "items/pet/streak_sprite.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/streak_sprite.webp"
+    },
+    {
+      "id": "nova_dragon",
+      "name": "Nova",
+      "slot": "pet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/pet/nova_dragon.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/nova_dragon.webp"
+    },
+    {
+      "id": "celestial_edge",
+      "name": "Celestial Edge",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/celestial_edge.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/celestial_edge.webp"
+    },
+    {
+      "id": "galaxy_greatblade",
+      "name": "Galaxy Greatblade",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/galaxy_greatblade.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/galaxy_greatblade.webp"
+    },
+    {
+      "id": "phoenix_talon",
+      "name": "Phoenix Talon",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/phoenix_talon.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/phoenix_talon.webp"
+    },
+    {
+      "id": "astral_scythe",
+      "name": "Astral Scythe",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/astral_scythe.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/astral_scythe.webp"
+    },
+    {
+      "id": "heavens_halberd",
+      "name": "Heaven's Halberd",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/heavens_halberd.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/heavens_halberd.webp"
+    },
+    {
+      "id": "starfire_staff",
+      "name": "Starfire Staff",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/starfire_staff.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/starfire_staff.webp"
+    },
+    {
+      "id": "tempest_bow",
+      "name": "Tempest Bow",
+      "slot": "weapon",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/weapon/tempest_bow.png",
+      "mount": {
+        "x": 57,
+        "y": 8,
+        "width": 34,
+        "height": 58,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/weapon/tempest_bow.webp"
+    },
+    {
+      "id": "aurora_aegis",
+      "name": "Aurora Aegis",
+      "slot": "shield",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/shield/aurora_aegis.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/aurora_aegis.webp"
+    },
+    {
+      "id": "solar_bulwark",
+      "name": "Solar Bulwark",
+      "slot": "shield",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/shield/solar_bulwark.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/solar_bulwark.webp"
+    },
+    {
+      "id": "void_ward",
+      "name": "Void Ward",
+      "slot": "shield",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/shield/void_ward.png",
+      "mount": {
+        "x": 5,
+        "y": 39,
+        "width": 38,
+        "height": 38,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/shield/void_ward.webp"
+    },
+    {
+      "id": "celestial_plate",
+      "name": "Celestial Plate",
+      "slot": "armor",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/armor/celestial_plate.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/celestial_plate.webp"
+    },
+    {
+      "id": "phoenix_mantle",
+      "name": "Phoenix Mantle",
+      "slot": "armor",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/armor/phoenix_mantle.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/phoenix_mantle.webp"
+    },
+    {
+      "id": "astral_scalemail",
+      "name": "Astral Scalemail",
+      "slot": "armor",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/armor/astral_scalemail.png",
+      "mount": {
+        "x": 25,
+        "y": 37,
+        "width": 46,
+        "height": 31,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/armor/astral_scalemail.webp"
+    },
+    {
+      "id": "astral_hat",
+      "name": "Astral Hat",
+      "slot": "helmet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/helmet/astral_hat.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/astral_hat.webp"
+    },
+    {
+      "id": "cosmos_crown",
+      "name": "Crown of the Cosmos",
+      "slot": "helmet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/helmet/cosmos_crown.png",
+      "mount": {
+        "x": 28,
+        "y": 3,
+        "width": 40,
+        "height": 39,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/helmet/cosmos_crown.webp"
+    },
+    {
+      "id": "wings_dawn",
+      "name": "Wings of Dawn",
+      "slot": "accessory",
+      "rarity": "mythic",
+      "layer": "back",
+      "file": "items/accessory/wings_dawn.png",
+      "mount": {
+        "x": 10,
+        "y": 26,
+        "width": 76,
+        "height": 37,
+        "fit": "fill"
+      },
+      "source": "../avatar-v2/items/accessory/wings_dawn.webp"
+    },
+    {
+      "id": "cosmos_amulet",
+      "name": "Heart of the Cosmos",
+      "slot": "accessory",
+      "rarity": "mythic",
+      "layer": "front",
+      "file": "items/accessory/cosmos_amulet.png",
+      "mount": {
+        "x": 40,
+        "y": 38,
+        "width": 16,
+        "height": 18,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/accessory/cosmos_amulet.webp"
+    },
+    {
+      "id": "astral_drake",
+      "name": "Astral Drake",
+      "slot": "pet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/pet/astral_drake.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/astral_drake.webp"
+    },
+    {
+      "id": "prism_peacock",
+      "name": "Prism Peacock",
+      "slot": "pet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/pet/prism_peacock.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/prism_peacock.webp"
+    },
+    {
+      "id": "cosmic_wyrm",
+      "name": "Cosmic Wyrm",
+      "slot": "pet",
+      "rarity": "mythic",
+      "layer": null,
+      "file": "items/pet/cosmic_wyrm.png",
+      "mount": {
+        "x": 1,
+        "y": 37,
+        "width": 26,
+        "height": 26,
+        "fit": "contain"
+      },
+      "source": "../avatar-v2/items/pet/cosmic_wyrm.webp"
+    }
+  ]
+}

@@ -1978,7 +1978,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.316.0';
+const APP_VERSION = 'v1.317.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -32841,24 +32841,48 @@ function akcBindOnce() {
 const $ = (id) => document.getElementById(id);
 function toast(msg, type = "") { showToast(msg, type || "info"); }
 function rpgCanPreview() { return !!currentUser && currentUser.role === "admin"; }
-// Generated Science Quest characters and equipment stay in teacher beta until
-// the release flag is deliberately flipped. Admins can compare old/new art in
-// one session without changing what students see.
+// The original illustrated layering experiment remains available as source art
+// for the pixel build, but is no longer rendered on avatars. It could not align
+// reliably across every equipment combination.
 const RPG_ART_BETA_RELEASED = false;
 const RPG_ART_BETA_KEY = "scienceQuestAvatarV2";
 const RPG_ART_BETA_ROOT = "assets/science-quest/avatar-v2";
 function rpgArtBetaEnabled() {
   if (RPG_ART_BETA_RELEASED) return true;
-  if (!rpgCanPreview()) return false;
-  try { return sessionStorage.getItem(RPG_ART_BETA_KEY) !== "off"; }
-  catch (_) { return true; }
+  return false;
 }
 function rpgSetArtBeta(on) {
-  if (!rpgCanPreview() || RPG_ART_BETA_RELEASED) return;
-  try { sessionStorage.setItem(RPG_ART_BETA_KEY, on ? "on" : "off"); } catch (_) {}
+  void on;
+}
+
+// Fixed-canvas pixel paper dolls stay admin-only until deliberately released.
+// Every file is a complete transparent 96x96 layer, so runtime code never
+// guesses an item's scale or position.
+const RPG_PIXEL_BETA_RELEASED = false;
+const RPG_PIXEL_BETA_KEY = "scienceQuestPixelAvatarV1";
+const RPG_PIXEL_ROOT = "assets/science-quest/avatar-pixel-v1";
+function rpgPixelBetaEnabled() {
+  if (RPG_PIXEL_BETA_RELEASED) return true;
+  if (!rpgCanPreview()) return false;
+  try { return sessionStorage.getItem(RPG_PIXEL_BETA_KEY) !== "off"; }
+  catch (_) { return true; }
+}
+function rpgSyncPixelModeClass() {
+  if (typeof document === "undefined" || !document.body) return;
+  document.body.classList.toggle("rpg-pixel-beta", rpgPixelBetaEnabled());
+}
+function rpgSetPixelBeta(on) {
+  if (!rpgCanPreview() || RPG_PIXEL_BETA_RELEASED) return;
+  try { sessionStorage.setItem(RPG_PIXEL_BETA_KEY, on ? "on" : "off"); } catch (_) {}
+  rpgSyncPixelModeClass();
   rpgRenderCharacterPage();
   rpgRenderBattle();
-  toast(on ? "Generated avatar beta enabled" : "Generated avatar beta disabled", "success");
+  const hero = $("advHero");
+  if (hero) {
+    hero.innerHTML = advHeroHtml();
+    if (adv) advSetBar("advHeroHp", adv.heroHp / Math.max(1, adv.heroMax));
+  }
+  toast(on ? "Pixel game beta enabled" : "Pixel game beta disabled", "success");
 }
 function rpgUnlockAllBetaItems() {
   if (!rpgCanPreview() || !rpgState) return;
@@ -34319,7 +34343,43 @@ function rpgCharacterArtUrl(gender) {
   if (custom || !rpgArtBetaEnabled()) return custom;
   return `${RPG_ART_BETA_ROOT}/characters/${g === "female" ? "female" : "male"}.webp?${encodeURIComponent(APP_VERSION)}`;
 }
+function rpgPixelAssetUrl(relativePath) {
+  return `${RPG_PIXEL_ROOT}/${relativePath}?${encodeURIComponent(APP_VERSION)}`;
+}
+function rpgPixelItemImage(it, extraClass = "") {
+  if (!it) return "";
+  const cls = extraClass ? ` class="${extraClass}"` : "";
+  const src = rpgPixelAssetUrl(`items/${encodeURIComponent(it.slot)}/${encodeURIComponent(it.id)}.png`);
+  return `<image${cls} href="${escapeHtml(src)}" x="0" y="0" width="96" height="96" preserveAspectRatio="none"/>`;
+}
+function rpgPixelAvatarSvg(equipment, gender) {
+  const eq = equipment || (rpgState && rpgState.equipment) || {};
+  const g = gender !== undefined ? gender : ((rpgState && rpgState.gender) || "male");
+  const armor = RPG_ITEMS_BY_ID[eq.armor];
+  const helmet = RPG_ITEMS_BY_ID[eq.helmet];
+  const accessory = RPG_ITEMS_BY_ID[eq.accessory];
+  const shield = RPG_ITEMS_BY_ID[eq.shield];
+  const weapon = RPG_ITEMS_BY_ID[eq.weapon];
+  const pet = RPG_ITEMS_BY_ID[eq.pet];
+  const backAccessory = accessory && accessory.layer === "back" ? accessory : null;
+  const frontAccessory = accessory && accessory.layer !== "back" ? accessory : null;
+  const character = rpgPixelAssetUrl(`characters/${g === "female" ? "female" : "male"}.png`);
+  return `<svg class="rpg-pixel-avatar" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Your equipped pixel hero avatar">
+    ${rpgState && rpgState.auraGold ? '<rect x="8" y="6" width="80" height="84" rx="7" fill="#ffd76a" opacity="0.13"/>' : ""}
+    ${rpgPixelItemImage(backAccessory, "av-layer av-layer-back")}
+    <image class="av-layer av-layer-character" href="${escapeHtml(character)}" x="0" y="0" width="96" height="96" preserveAspectRatio="none"/>
+    ${rpgPixelItemImage(armor, "av-layer av-layer-armor")}
+    ${rpgPixelItemImage(helmet, "av-layer av-layer-helmet")}
+    ${rpgPixelItemImage(frontAccessory, "av-layer av-layer-accessory")}
+    ${rpgPixelItemImage(shield, "av-layer av-layer-shield")}
+    ${weapon ? `<g class="av-swing"><animateTransform class="av-anim-slash" attributeName="transform" type="rotate" values="0 70 60;-45 70 60;86 70 60;0 70 60" keyTimes="0;0.28;0.62;1" dur="0.62s" begin="indefinite"/><animateTransform class="av-anim-chop" attributeName="transform" type="rotate" values="0 70 60;-72 70 60;96 70 60;0 70 60" keyTimes="0;0.34;0.66;1" dur="0.74s" begin="indefinite"/><animateTransform class="av-anim-raise" attributeName="transform" type="rotate" values="0 70 60;-28 70 60;-28 70 60;0 70 60" keyTimes="0;0.3;0.72;1" dur="0.8s" begin="indefinite"/>${rpgPixelItemImage(weapon, "av-layer av-layer-weapon")}</g>` : ""}
+    ${rpgPixelItemImage(pet, "av-layer av-layer-pet")}
+  </svg>`;
+}
 function rpgAvatarSvg(equipment, gender) {
+  const pixelOn = rpgPixelBetaEnabled();
+  rpgSyncPixelModeClass();
+  if (pixelOn) return rpgPixelAvatarSvg(equipment, gender);
   const eq = equipment || (rpgState && rpgState.equipment) || {};
   const acc = RPG_ITEMS_BY_ID[eq.accessory];
   const accArt = acc ? rpgItemArt("accessory", eq) : "";
@@ -35531,6 +35591,7 @@ function rpgShowLevelUp(newLevel) {
 // ---- UI: character page ----
 function rpgRenderCharacterPage() {
   if (!rpgState) return;
+  rpgSyncPixelModeClass();
   const stats = rpgPlayerStats();
   const info = rpgLevelInfo();
   rpgState.hp = Math.min(rpgState.hp, stats.maxHp);
@@ -35542,12 +35603,12 @@ function rpgRenderCharacterPage() {
      <button type="button" class="rpg-gender-btn${_g === "female" ? " on" : ""}" onclick="rpgSetGender('female')">👧 Female</button>`;
   const betaPanel = $("rpgArtBetaPanel");
   if (betaPanel) {
-    betaPanel.hidden = !rpgCanPreview() || RPG_ART_BETA_RELEASED;
+    betaPanel.hidden = !rpgCanPreview() || RPG_PIXEL_BETA_RELEASED;
     if (!betaPanel.hidden) {
-      const betaOn = rpgArtBetaEnabled();
+      const betaOn = rpgPixelBetaEnabled();
       const owned = RPG_ITEMS.reduce((n, it) => n + (rpgState.inventory[it.id] ? 1 : 0), 0);
-      betaPanel.innerHTML = `<div><b>🧪 Generated avatar beta</b><span>${betaOn ? "ON — generated character + layered gear" : "OFF — current SVG art"}</span></div>
-        <button class="btn btn-ghost btn-sm" type="button" onclick="rpgSetArtBeta(${betaOn ? "false" : "true"})">${betaOn ? "Compare old art" : "Test new art"}</button>
+      betaPanel.innerHTML = `<div><b>🧪 Pixel game beta</b><span>${betaOn ? "ON — fixed 96×96 sprites in character game modes" : "OFF — current SVG avatars"}</span></div>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="rpgSetPixelBeta(${betaOn ? "false" : "true"})">${betaOn ? "Compare current art" : "Test pixel mode"}</button>
         <button class="btn btn-primary btn-sm" type="button" onclick="rpgUnlockAllBetaItems()">🔓 Unlock all ${RPG_ITEMS.length} (${owned}/${RPG_ITEMS.length})</button>`;
     }
   }
@@ -55436,6 +55497,8 @@ window.sendThreadReply = sendThreadReply;
 window.replyToFlag = replyToFlag;
 window.loadGameAssets = loadGameAssets;
 window.rpgSetGender = rpgSetGender;
+window.rpgSetPixelBeta = rpgSetPixelBeta;
+window.rpgUnlockAllBetaItems = rpgUnlockAllBetaItems;
 window.onRpgArtPaste = onRpgArtPaste;
 window.onRpgArtDrop = onRpgArtDrop;
 window.onRpgArtPick = onRpgArtPick;
