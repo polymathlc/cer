@@ -2017,7 +2017,61 @@ marker was handed both sub-questions as a single item.
   declared anywhere else is a `ReferenceError` in all of them.
 - Run **`node tools/sub-part-tests.mjs`** after touching any of it.
 
+## 📷 A question that came off a photograph (v1.318.0)
+
+`_vetIsScanned` / `SCANNED_SOURCE` (search `A QUESTION THAT CAME OFF A PHOTOGRAPH`), plus
+the purple outline and the **📷 From the Scan app** badge on a vetting card.
+
+The Scan app (`polymathlc/scan`) reads a worksheet or an exam paper on a phone.
+The teacher can now send any question it read straight into **this app's
+vetting list** — `users/{adminUid}/vetting` — and it arrives as an
+ordinary pending question with one extra field.
+
+- **`source: "scan"` is the whole contract between two repositories that
+  cannot see each other**, and it fails silently in both directions. Rename
+  the value on either side and the card still arrives, still renders and still
+  approves; it simply stops being purple and stops saying where it came from,
+  with nothing anywhere to say so. **Ship a change to the word in all five
+  repos together** (`scan`, `cer`, `math`, `english`, `chinese`).
+- **It has to be LOUD, because a scanned question is not like a typed one.** It
+  was read by a model from a picture of somebody's worksheet: the wording may
+  be half a line short, **the diagram is not there at all**, and the topic
+  is left blank on purpose (it belongs to the syllabus list that app has
+  never seen), so it arrives flagged `topicConfidence: 'low'` and wears the
+  existing ⚠ check topic badge.
+  A card that looked like every other draft would be approved at the same speed
+  as one somebody typed and checked, and reach the bank with a figure missing.
+- **`_vetIsScanned` is the ONE predicate**, and the outline and the badge both read
+  it. Two tests would drift into a card that is purple with no badge (which
+  reads as a styling bug) or badged with no outline (which is the warning made
+  invisible).
+- **Three outlines compete for one border, so they are RANKED rather than
+  layered (`restBorder`): a possible duplicate is the thing to look at first,
+  then where the question came from, then merely that it is new — and a card
+  ticked for deletion outranks all three. They are all inline styles, so one
+  has to win outright.**
+- **It lands in VETTING and nowhere else.** The Scan app writes one document
+  into this app's vetting collection and touches nothing else — not the bank,
+  not a student's progress, not the notebook. Approving it is the ordinary
+  approve, and from then on it is an ordinary question.
+- **The child's work never travels.** The Scan app marks what the student wrote
+  on the paper; none of that is in the document. A bank question is the
+  QUESTION, its options, its answer and why.
+- Run **`node tools/scanned-question-tests.mjs`** after touching any of it.
+
 ## House rules
+- After touching **📷 a question that came off a photograph** (`SCANNED_SOURCE`,
+  `_vetIsScanned`, `SCANNED_CARD_BORDER`, `SCANNED_CARD_BADGE`, or the
+  `restBorder` ranking in `renderVettingList`), run
+  `node tools/scanned-question-tests.mjs`. One word — `source: 'scan'` — is the
+  whole contract with `polymathlc/scan`, and every way it goes wrong is silent:
+  rename the value and the card still arrives, still renders and still approves,
+  it simply stops being purple and stops saying it came off a photograph. A
+  scanned question has no diagram and no topic, so a card that looks like every
+  other draft is approved at the same speed as one somebody typed and checked —
+  and reaches the bank with the figure missing. The ranking is the other half:
+  purple must beat "just added" and lose to the red of a card ticked for
+  deletion, or the author cannot see what they are about to delete.
 - After touching **(b)(i) roman sub-parts** (`QPART_ROMANS`, `qSubNormalize`,
   `qPartKey`, `qPartLetterOf`, `qPartSubOf`, `qPartKeyIn`, `qPartNormalize`,
   `qPartLabel`, `qPartMap`, `qBlockOpensSub`, `qBlockOpensKey`,

@@ -1984,7 +1984,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.317.0';
+const APP_VERSION = 'v1.318.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -13637,6 +13637,36 @@ function _vetTimeLabel(q) {
   return `<div class="vetting-added" title="Added to vetting: ${escapeHtml(full)}">🕓 Added ${escapeHtml(rel)}</div>`;
 }
 
+// =====================================================================
+// 📷 A QUESTION THAT CAME OFF A PHOTOGRAPH
+//
+// The Scan app (`polymathlc/scan`) reads a worksheet or an exam paper on a
+// phone, and the teacher can send any question it read straight into THIS
+// app's vetting list. It lands as an ordinary pending question with one extra
+// field, `source: 'scan'` — that word is the whole contract between the two
+// apps, and renaming it here breaks nothing and reports nothing: the card
+// still arrives, still renders and still approves, it simply stops being
+// purple and stops saying where it came from.
+//
+// It has to be VISIBLE, because a scanned question is not like a typed one.
+// It was read by a model from a picture of somebody's worksheet: the wording
+// may be half a line short, the DIAGRAM IS NOT THERE AT ALL, and the topic is
+// deliberately left blank (it belongs to this app's syllabus list, which that
+// app has never seen, so it is flagged `topicConfidence: 'low'` rather than
+// guessed). A card that looked like every other draft would be approved at
+// the same speed as one somebody typed and checked.
+//
+// `_vetIsScanned` is the ONE predicate — the outline and the badge read it,
+// so the two can never disagree about the same card.
+// =====================================================================
+const SCANNED_SOURCE = 'scan';
+function _vetIsScanned(q) { return !!q && q.source === SCANNED_SOURCE; }
+const SCANNED_CARD_BORDER = ' style="border-color:#a855f7;box-shadow:0 0 0 1px #a855f7;"';
+const SCANNED_CARD_BADGE =
+  '<span class="qb-tag" style="background:#f3e8ff;color:#7e22ce;border:1px solid #c084fc;"' +
+  ' title="Read off a photograph in the Scan &amp; Answer app and sent here for vetting.' +
+  ' Check the wording, attach the diagram and set the topic before you approve it.">📷 From the Scan app</span>';
+
 function renderVettingList() {
   const container = document.getElementById('vettingListGrid');
   // Live "processing" / "failed" placeholders from Rapid add, shown on top.
@@ -13676,12 +13706,20 @@ function renderVettingList() {
     const preview = getQuestionPreview(q);
     // Only surface the duplicate warning if the suspected original still exists.
     const dup = _dupStillThere(q._dupOf) ? q._dupOf : null;
-    const dupBorder = dup ? ' style="border-color:#f59e0b;box-shadow:0 0 0 1px #f59e0b;"' : (isNew ? ' style="border-color:var(--accent-orange);box-shadow:0 0 0 1px var(--accent-orange);"' : '');
-    // A ticked card outranks the duplicate / just-added outline while it is
-    // ticked, and gets that outline back the moment it is unticked — both are
-    // inline styles, so one has to win outright rather than being layered.
+    // 📷 Sent here from the Scan app — see _vetIsScanned above.
+    const scanned = _vetIsScanned(q);
+    // Three outlines compete for one border, so they are RANKED rather than
+    // layered: a possible duplicate is the thing to look at first, then where
+    // the question came from (a scanned one has no diagram and no topic yet),
+    // then merely that it is new.
+    const restBorder = dup ? ' style="border-color:#f59e0b;box-shadow:0 0 0 1px #f59e0b;"'
+      : scanned ? SCANNED_CARD_BORDER
+      : (isNew ? ' style="border-color:var(--accent-orange);box-shadow:0 0 0 1px var(--accent-orange);"' : '');
+    // A ticked card outranks all three while it is ticked, and gets its own
+    // outline back the moment it is unticked — they are all inline styles, so
+    // one has to win outright rather than being layered.
     const picked = _vetSelected.has(q.id);
-    const cardStyle = picked ? ' style="border-color:var(--accent-red);box-shadow:0 0 0 1px var(--accent-red);"' : dupBorder;
+    const cardStyle = picked ? ' style="border-color:var(--accent-red);box-shadow:0 0 0 1px var(--accent-red);"' : restBorder;
     return `
       <div class="qb-card" data-vetid="${q.id}"${cardStyle}>
         <div class="qb-card-header">
@@ -13691,6 +13729,7 @@ function renderVettingList() {
               <span class="qb-tag category">${escapeHtml(q.category)}</span>
               <span class="qb-tag topic">${escapeHtml(q.topic)}</span>
               ${dup ? `<span class="qb-tag" style="background:#fdf4e3;color:#7a5410;border:1px solid #e0b768;" title="Looks ${dup.pct}% similar to “${escapeHtml(dup.title)}” already in the bank">🟡 Possible duplicate</span>` : ''}
+              ${scanned ? SCANNED_CARD_BADGE : ''}
               ${isNew ? '<span class="qb-tag" style="background:var(--accent-orange-light);color:var(--accent-orange);" title="Just added by Rapid add — review and approve">⚡ Just added</span>' : ''}
               ${q.topicConfidence === 'low' ? '<span class="qb-tag" style="background:#fee2e2;color:#dc2626;" title="AI was unsure of this topic — please check it">⚠ check topic</span>' : q.topicConfidence === 'medium' ? '<span class="qb-tag" style="background:#fdf4e3;color:#b45309;" title="AI was fairly sure of this topic — worth a glance">~ topic?</span>' : ''}
               <span class="vetting-badge ${statusClass}">${statusClass.charAt(0).toUpperCase() + statusClass.slice(1)}</span>
