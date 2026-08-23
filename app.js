@@ -234,32 +234,99 @@ function aiPreferredEngine() {
   return _aiSharedEngine || getAiEngine();
 }
 
+/* WHERE THE SHARED SETTING LIVES, and why it is not a new document.
+
+   It is a field on the app's OWN admin-pointer document — the one every
+   signed-in device already reads to find out whose question bank to load, and
+   that only the admin can write. So it needs NO rules change and NO deploy:
+   the read and the write are both paths this app has been exercising in
+   production since the day it shipped.
+
+   A brand-new document would have been tidier and would have needed a rules
+   deploy — and the shared `firestore.rules` does not even contain this app's
+   own rules (it carries a placeholder telling you to paste them in from the
+   console), so that deploy is a hand-assembly job with the whole project's
+   access as the blast radius. Tidier is not worth that.
+
+   It is a LIVE listener, not a poll: the teacher toggles and every device
+   with the app open follows within seconds, which is what "app-wide" has to
+   mean. The `aiEngineConfig` callable is kept as a FALLBACK for the case
+   where this read is ever denied. */
+function _aiCfgRef() { return doc(db, 'config', 'admin'); }
+
+let _aiCfgStop = null;
+function aiEngineWatchShared() {
+  if (_aiCfgStop) return;
+  try {
+    _aiCfgStop = onSnapshot(_aiCfgRef(), snap => {
+      const eng = snap.exists() && snap.data() ? snap.data().aiEngine : null;
+      // An unset field means nobody has chosen, which is Gemini — the default
+      // every app already had, so a centre that never touches this is
+      // unaffected.
+      _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : 'gemini';
+      _aiSharedAt = Date.now();
+      _aiWhy.shared = '';
+      const ov = document.getElementById('aiEngineOverlay');
+      if (ov && ov.classList.contains('active')) renderAiEngineStatus();
+    }, err => {
+      // A denied read must never stop the app choosing at all: the device
+      // preference carries on, and the chooser says the setting is this
+      // browser's own rather than the centre's.
+      _aiWhy.shared = String((err && err.message) || err || '');
+      _aiCfgStop = null;
+    });
+  } catch (e) { _aiWhy.shared = String((e && e.message) || e || ''); }
+}
+function aiEngineStopShared() { if (_aiCfgStop) { try { _aiCfgStop(); } catch (e) { /* already gone */ } _aiCfgStop = null; } }
+
 async function aiEngineLoadShared(force) {
   if (!force && _aiSharedEngine && Date.now() - _aiSharedAt < AI_SHARED_TTL) return _aiSharedEngine;
+  aiEngineWatchShared();
+  try {
+    const snap = await getDoc(_aiCfgRef());
+    const eng = snap.exists() && snap.data() ? snap.data().aiEngine : null;
+    _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : 'gemini';
+    _aiSharedAt = Date.now();
+    _aiWhy.shared = '';
+    return _aiSharedEngine;
+  } catch (e) {
+    _aiWhy.shared = String((e && e.message) || e || '');
+  }
+  // Only if the document could not be read at all — the callable writes
+  // through the Admin SDK, so it works where a direct read does not.
   try {
     if (!_aiFns) _aiFns = getFunctions(app);
     const res = await httpsCallable(_aiFns, 'aiEngineConfig', { timeout: 20000 })({});
     const eng = res && res.data && res.data.engine;
     if (eng === 'gemini' || eng === 'openai') {
-      _aiSharedEngine = eng;
-      _aiSharedAt = Date.now();
-      _aiWhy.shared = '';
+      _aiSharedEngine = eng; _aiSharedAt = Date.now(); _aiWhy.shared = '';
     }
-  } catch (e) {
-    // Not deployed, or offline. The device preference carries on — a shared
-    // setting that cannot be read must never stop the app choosing at all.
-    _aiWhy.shared = String((e && e.message) || e || '');
-  }
+  } catch (e2) { /* the device preference carries on, and the chooser says so */ }
   return _aiSharedEngine;
 }
 
+/* MERGE, always. This document is the bank pointer as well, and a plain set
+   would take `uid` off it — which is how every student loses the bank. */
 async function aiEngineSetShared(engine) {
-  if (!_aiFns) _aiFns = getFunctions(app);
-  const res = await httpsCallable(_aiFns, 'aiEngineConfig', { timeout: 20000 })({ set: engine });
-  const eng = res && res.data && res.data.engine;
-  _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : engine;
-  _aiSharedAt = Date.now();
-  return _aiSharedEngine;
+  try {
+    await setDoc(_aiCfgRef(), {
+      aiEngine: engine,
+      aiEngineAt: new Date().toISOString(),
+      aiEngineBy: (currentUser && currentUser.email) || ''
+    }, { merge: true });
+    _aiSharedEngine = engine;
+    _aiSharedAt = Date.now();
+    return engine;
+  } catch (e) {
+    // Denied or offline. The callable is the second way in — it writes
+    // through the Admin SDK, so it works where a direct write does not.
+    if (!_aiFns) _aiFns = getFunctions(app);
+    const res = await httpsCallable(_aiFns, 'aiEngineConfig', { timeout: 20000 })({ set: engine });
+    const eng = res && res.data && res.data.engine;
+    _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : engine;
+    _aiSharedAt = Date.now();
+    return _aiSharedEngine;
+  }
 }
 
 /* `openai` (the server) is ALWAYS listed: whether the function is deployed is
@@ -645,9 +712,7 @@ async function saveAiEngineSettings() {
         : 'Gemini is now the first engine for everyone.', 'success');
     } catch (e) {
       const msg = String((e && e.message) || e || '');
-      showToast(/not-?found|internal|unavailable/i.test(msg)
-        ? 'Saved on this device only — the aiEngineConfig function is not deployed yet, so other devices keep their own setting.'
-        : 'Saved on this device only — the centre-wide setting could not be written: ' + msg, 'error');
+      showToast('Saved on this device only — the centre-wide setting could not be written: ' + msg, 'error');
     }
   }
   const key = (document.getElementById('aiEngineKey').value || '').trim();
@@ -1552,6 +1617,9 @@ async function handleGoogleSignIn() {
 // FIREBASE AUTH - Logout
 // =====================================================================
 async function handleLogout() {
+  // Down with the account, or one account's engine setting goes on governing
+  // the next person to sign in on this device.
+  aiEngineStopShared();
   try {
     _practiceAsClear();          // never hand a practice session to the next person
     _practiceAs = null;
@@ -2110,7 +2178,10 @@ async function enterApp(user) {
 
   if (asAdmin) {
     // Admin: save UID to config doc so students can find it
-    setDoc(doc(db, 'config', 'admin'), { uid: user.uid, email: user.email }).catch(err =>
+    // MERGE: this document now also carries the centre-wide AI engine
+    // setting, and a plain set on every admin sign-in would silently wipe
+    // it — the toggle would appear to work and be gone by morning.
+    setDoc(doc(db, 'config', 'admin'), { uid: user.uid, email: user.email }, { merge: true }).catch(err =>
       console.warn('Could not save admin config:', err)
     );
     configureSidebarForRole('admin');
@@ -2248,7 +2319,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.320.0';
+const APP_VERSION = 'v1.321.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -61688,6 +61759,7 @@ window.openAiEngineSettings = openAiEngineSettings;
 window.closeAiEngineSettings = closeAiEngineSettings;
 // Inline on* handlers live outside the module's scope.
 window.aiEngineChoicePreview = aiEngineChoicePreview;
+window.aiEngineStopShared = aiEngineStopShared;
 window.saveAiEngineSettings = saveAiEngineSettings;
 window.closeMarkingSettings = closeMarkingSettings;
 window.saveMarkingSettings = saveMarkingSettings;
