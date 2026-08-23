@@ -36,6 +36,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 // App Check (protects the Gemini quota from abuse) + Firebase AI Logic (free-tier Gemini)
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-functions.js";
 import { getAI, getGenerativeModel, GoogleAIBackend, ResponseModality } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
 // Cloud Storage — paste/drop images upload here instead of needing a Dropbox link
 import { getStorage, ref as storageRef, uploadString, getDownloadURL, listAll, getMetadata } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
@@ -168,6 +169,153 @@ async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, js
   return text.trim();
 }
 
+/* =====================================================================
+   ⚙️ THREE ROUTES, AND WHICHEVER ONE WILL ANSWER
+   ---------------------------------------------------------------------
+   All four portals answer through Gemini on the shared `mathgen--app`
+   project, so when that project's billing cap is hit they ALL die at once
+   and identically: "[429] Your billing account has exceeded its monthly
+   spending cap", on every call, on every device, until the month turns over.
+   ChatGPT is the second engine, and this is how it is reached.
+
+   • THE ORDER IS THE DESIGN: Gemini, then ChatGPT ON THE SERVER, then
+     ChatGPT on a key pasted into THIS browser. Reversed by the engine
+     chooser, which is what "choose the engine" now means: a preference for
+     which is tried FIRST, never a switch that leaves the other unavailable.
+   • THE SERVER ROUTE IS WHAT MAKES THE CHOICE REAL. `askOpenAiServer` calls
+     the `askOpenAi` Cloud Function in `polymathlc/math/functions`, which
+     holds the key as a Firebase secret and enforces the sign-in, the model,
+     the size caps and a daily quota. Before it existed, choosing ChatGPT
+     needed a key pasted into every device separately — so it worked on the
+     teacher's laptop and no student's phone, which is the half of the school
+     that matters. A key cannot simply be shipped in this file instead: this
+     is a public static site served to every student's browser.
+   • A KEY IN `localStorage` IS THE THIRD ROUTE, not the first. It is what
+     keeps ChatGPT working before the function is deployed, or if it ever
+     stops answering, and it is shared with the other three portals.
+   • THE FAILOVER GOES BOTH WAYS, which the old code did not do. It fell from
+     ChatGPT to Gemini and never the other way — so the one failure that
+     actually happens, a capped Gemini, had nothing behind it at all.
+   • A REFUSAL IS REMEMBERED FOR `AI_DOWN_MS`, or a bulk import pays for the
+     same failed call on every page before falling back on every page. The
+     route goes to the BACK of the list, NEVER off it: a cap is lifted
+     eventually, and refusing on a stale note is worse than spending one call
+     finding out.
+   • When every route refuses, the FIRST error is the one thrown — it names
+     the real problem, where the last is usually "no key on this device".
+   • `_aiWhy` keeps what each route last said, because "the function is not
+     deployed yet", "the key was rejected" and "out of credit" are three
+     problems with three different fixes.
+   ===================================================================== */
+const AI_DOWN_MS = 10 * 60 * 1000;
+const _aiDown = { gemini: 0, openai: 0, openaiKey: 0 };
+const _aiWhy = { gemini: '', openai: '', openaiKey: '' };
+let aiLastCall = { engine: '', fellBack: false, error: '' };
+function aiEngineIsDown(e) { return (_aiDown[e] || 0) > Date.now(); }
+function _aiMarkDown(e, why) { _aiDown[e] = Date.now() + AI_DOWN_MS; _aiWhy[e] = why || ''; }
+function _aiMarkUp(e) { _aiDown[e] = 0; _aiWhy[e] = ''; }
+
+/* `openai` (the server) is ALWAYS listed: whether the function is deployed is
+   not something a page can know without asking, and one refused call marks it
+   down rather than being paid for again on every batch. `sort` is stable, so
+   the chooser's order survives underneath the down-marking. */
+function aiEngineOrder() {
+  const chat = ['openai'];
+  if (getOpenAiKey()) chat.push('openaiKey');
+  const have = getAiEngine() === 'openai'
+    ? chat.concat(geminiModel ? ['gemini'] : [])
+    : (geminiModel ? ['gemini'] : []).concat(chat);
+  return have.sort((a, b) => (aiEngineIsDown(a) ? 1 : 0) - (aiEngineIsDown(b) ? 1 : 0));
+}
+
+/* The SERVER route — the one that answers on a device nobody has ever typed a
+   key into. Same modular app as auth and App Check, so the callable carries
+   the signed-in user and the function refuses anybody it cannot name. */
+let _aiFns = null;
+async function askOpenAiServer(prompt, media, { maxOutputTokens = 512, temperature, json = false } = {}) {
+  if (!_aiFns) _aiFns = getFunctions(app);
+  const call = httpsCallable(_aiFns, 'askOpenAi', { timeout: 240000 });
+  const res = await call({
+    prompt: String(prompt == null ? '' : prompt),
+    media: (media || []).filter(m => m && m.data).map(m => ({ mimeType: m.mimeType || 'image/jpeg', data: m.data })),
+    json: !!json,
+    maxOutputTokens,
+    temperature
+  });
+  const text = res && res.data && res.data.text;
+  if (typeof text !== 'string' || !text.trim()) throw new Error('The server backup returned an unexpected response shape.');
+  return text.trim();
+}
+
+function _aiRun(engine, prompt, media, opts) {
+  if (engine === 'openai') return askOpenAiServer(prompt, media, opts);
+  if (engine === 'openaiKey') return askOpenAI(prompt, media, opts);
+  return askGeminiDirect(prompt, media, opts);
+}
+
+async function _aiAsk(prompt, media, opts, order) {
+  if (!order.length) throw new Error('AI is not configured yet');
+  let first = null;
+  for (let i = 0; i < order.length; i++) {
+    const engine = order[i];
+    try {
+      const out = await _aiRun(engine, prompt, media, opts);
+      _aiMarkUp(engine);
+      aiLastCall = { engine, fellBack: i > 0, error: first ? String(first.message || first) : '' };
+      return out;
+    } catch (e) {
+      _aiMarkDown(engine, String((e && e.message) || e || ''));
+      if (!first) first = e;
+      console.warn('AI route ' + engine + ' refused:', e);
+    }
+  }
+  aiLastCall = { engine: '', fellBack: false, error: String((first && first.message) || first || '') };
+  throw first;
+}
+
+/* ChatGPT by whichever route will have it — the server's key first, then a
+   key saved in this browser. Never Gemini, so a caller that means "the other
+   engine" really gets the other engine. */
+async function askChatGpt(prompt, media, opts) {
+  return _aiAsk(prompt, media, opts, aiEngineOrder().filter(e => e !== 'gemini'));
+}
+
+/* The raw Gemini call, factored out so the loop above has one thing to run.
+   Both doors used to carry their own copy of it. */
+async function askGeminiDirect(prompt, media, { maxOutputTokens = 512, temperature = 0.3, json = false } = {}) {
+  if (!geminiModel) throw new Error('AI is not configured yet');
+  const parts = [{ text: prompt }];
+  (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
+  const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingLevel: AI_THINK_MIN } };
+  if (json) generationConfig.responseMimeType = 'application/json';
+  const res = await geminiModel.generateContent({ contents: [{ role: 'user', parts }], generationConfig });
+  return (res.response.text() || '').trim();
+}
+
+/* What the chooser prints. It reports only what it KNOWS — the routes in the
+   order they will be tried, and what each said the last time it refused. A
+   "the backup is fine" that was never tested is the sentence this exists to
+   stop anyone believing. */
+function aiRouteReport() {
+  const label = { gemini: 'Gemini', openai: 'ChatGPT (server key)', openaiKey: 'ChatGPT (key in this browser)' };
+  const order = aiEngineOrder();
+  const notes = [];
+  if (aiEngineIsDown('openai') && _aiWhy.openai) {
+    notes.push(/not-?found|failed-?precondition|not configured|internal error/i.test(_aiWhy.openai)
+      ? 'The server key is not switched on yet — OPENAI_API_KEY has not been set, or the functions have not been deployed. Until then ChatGPT needs a key in this browser. (' + _aiWhy.openai + ')'
+      : 'The server route refused a moment ago and is being skipped for a few minutes: ' + _aiWhy.openai);
+  }
+  if (aiEngineIsDown('gemini') && _aiWhy.gemini) notes.push('Gemini refused a moment ago and is being skipped for a few minutes: ' + _aiWhy.gemini);
+  if (aiEngineIsDown('openaiKey') && _aiWhy.openaiKey) notes.push('The key in this browser was refused: ' + _aiWhy.openaiKey);
+  if (aiLastCall.engine) {
+    notes.push('The last answer came from ' + (label[aiLastCall.engine] || aiLastCall.engine) +
+      (aiLastCall.fellBack ? ', after an earlier route refused.' : '.'));
+  } else if (aiLastCall.error) {
+    notes.push('The last attempt failed on every route: ' + aiLastCall.error);
+  }
+  return { order: order.map(e => label[e] || e), notes };
+}
+
 // ── ChatGPT image generation (Realm of Embers TCG → Card Art) ──────────────
 // Same key/device-local settings as the text engine, but a separate image
 // model (the chat model cannot draw). Two modes:
@@ -249,18 +397,11 @@ async function openAiGenerateImageDataUrl(prompt, { size = '1024x1024', transpar
 // rejects the older numeric thinkingBudget with 400 INVALID_ARGUMENT, and 3.7
 // rejects the "minimal" level too — see AI_THINK_MIN.
 async function askGemini(prompt, { maxOutputTokens = 512, temperature = 0.3, json = false, skipOpenAi = false } = {}) {
-  if (!skipOpenAi && openAiActive()) {
-    try { return await askOpenAI(prompt, null, { maxOutputTokens, temperature, json }); }
-    catch (e) { console.warn('ChatGPT engine failed, falling back to Gemini:', e); }
-  }
-  if (!geminiModel) throw new Error("AI is not configured yet");
-  const generationConfig = { maxOutputTokens, temperature, thinkingConfig: { thinkingLevel: AI_THINK_MIN } };
-  if (json) generationConfig.responseMimeType = "application/json";
-  const res = await geminiModel.generateContent({
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig
-  });
-  return (res.response.text() || "").trim();
+  // skipOpenAi forces the Gemini column of the answer-key cross-check to
+  // really be Gemini — without it both columns can be the same model and
+  // the report reads as a clean bill of health.
+  const order = skipOpenAi ? ['gemini'] : aiEngineOrder();
+  return _aiAsk(prompt, null, { maxOutputTokens, temperature, json }, order);
 }
 
 // Tolerant JSON parse for model output (strips code fences, finds the array/object).
@@ -342,7 +483,10 @@ async function askGeminiCached(prompt, opts) {
   try { sessionStorage.setItem(key, out); } catch (e) {}
   return out;
 }
-window.__aiReady = () => !!geminiModel || openAiActive();
+// A route always exists (the server one is always worth asking), so an app
+// that asked "is Gemini up" would refuse every AI button on a capped
+// project that can in fact answer.
+window.__aiReady = () => true;
 
 // =====================================================================
 // AI MARKING GUIDE — teacher's rubric/style, injected into grading prompts
@@ -366,6 +510,20 @@ async function loadMarkingSettings() {
   } catch (e) { console.warn('Could not load marking settings:', e); }
 }
 
+function aiEngineChoicePreview(v) {
+  // A preview, not a save: it shows the order the chosen engine would produce
+  // without committing the choice, so Cancel really cancels.
+  const el = document.getElementById('aiEngineStatus');
+  if (!el) return;
+  const was = getAiEngine();
+  try {
+    localStorage.setItem(AI_ENGINE_STORE.engine, v === 'openai' ? 'openai' : 'gemini');
+    renderAiEngineStatus();
+  } finally {
+    try { localStorage.setItem(AI_ENGINE_STORE.engine, was); } catch (e) { /* nothing to put back */ }
+  }
+}
+
 function openAiEngineSettings() {
   const eng = getAiEngine();
   document.querySelectorAll('input[name="aiEngineChoice"]').forEach(r => { r.checked = r.value === eng; });
@@ -375,7 +533,22 @@ function openAiEngineSettings() {
   const imgSel = document.getElementById('aiEngineImageModel');
   if (imgSel) { imgSel.value = getOpenAiImageModel(); if (!imgSel.value) imgSel.value = OPENAI_IMAGE_DEFAULT_MODEL; }
   document.getElementById('aiEngineKey').value = getOpenAiKey();
+  renderAiEngineStatus();
   document.getElementById('aiEngineOverlay').classList.add('active');
+}
+
+/* The chooser SAYS what is actually happening, because an app quietly running
+   on its second route looks exactly like one running on its first, and an app
+   with nothing behind its first looks like both — until the morning the cap is
+   hit. It reports only what it knows: the routes in the order they will be
+   tried, and what each said the last time it refused. */
+function renderAiEngineStatus() {
+  const el = document.getElementById('aiEngineStatus');
+  if (!el) return;
+  const r = aiRouteReport();
+  const order = r.order.map((n, i) => `<div>${i + 1}. ${escapeHtml(n)}</div>`).join('');
+  const notes = r.notes.map(n => `<div style="margin-top:8px;color:var(--text-muted);">${escapeHtml(n)}</div>`).join('');
+  el.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">Tried in this order</div>${order}${notes}`;
 }
 
 function closeAiEngineSettings() {
@@ -387,7 +560,6 @@ function saveAiEngineSettings() {
   const eng = picked ? picked.value : 'gemini';
   const key = (document.getElementById('aiEngineKey').value || '').trim();
   const model = document.getElementById('aiEngineModel').value || OPENAI_DEFAULT_MODEL;
-  if (eng === 'openai' && !key) { showToast('Paste your OpenAI API key to use ChatGPT', 'error'); return; }
   const imgSelEl = document.getElementById('aiEngineImageModel');
   const imageModel = (imgSelEl && imgSelEl.value) || OPENAI_IMAGE_DEFAULT_MODEL;
   try {
@@ -1984,7 +2156,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.318.0';
+const APP_VERSION = 'v1.319.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -10076,17 +10248,8 @@ function _fileToBase64(file) {
 // whenever ChatGPT is the selected engine — two columns of the same model,
 // agreeing with each other constantly, reported as an independent check.
 async function askGeminiVision(prompt, media, { maxOutputTokens = 2048, json = false, skipOpenAi = false } = {}) {
-  if (!skipOpenAi && openAiActive()) {
-    try { return await askOpenAI(prompt, media, { maxOutputTokens, temperature: 0.2, json }); }
-    catch (e) { console.warn('ChatGPT engine failed, falling back to Gemini:', e); }
-  }
-  if (!geminiModel) throw new Error('AI is not configured yet');
-  const parts = [{ text: prompt }];
-  (media || []).forEach(m => parts.push({ inlineData: { mimeType: m.mimeType, data: m.data } }));
-  const generationConfig = { maxOutputTokens, temperature: 0.2, thinkingConfig: { thinkingLevel: AI_THINK_MIN } };
-  if (json) generationConfig.responseMimeType = 'application/json';
-  const res = await geminiModel.generateContent({ contents: [{ role: 'user', parts }], generationConfig });
-  return (res.response.text() || '').trim();
+  const order = skipOpenAi ? ['gemini'] : aiEngineOrder();
+  return _aiAsk(prompt, media, { maxOutputTokens, temperature: 0.2, json }, order);
 }
 
 // Convert text with [[keyword]] marks into { content, blanks } where blanks
@@ -32156,10 +32319,14 @@ const AKC_WINDOWS = [
 // two members of them answered.
 function akcEngines() {
   const out = [];
-  // The ChatGPT key is device-local. It is read here whatever the sidebar's
-  // engine toggle says: this feature is asking BOTH engines, so a saved key is
-  // enough to make ChatGPT one of them.
-  if (getOpenAiKey()) out.push({ id: 'openai', label: 'ChatGPT', model: getOpenAiModel() });
+  // ChatGPT is offered whatever the sidebar's engine toggle says — this
+  // feature is asking BOTH engines, so the toggle is not the question.
+  // It is offered even with no key saved on this device: `askChatGpt` goes
+  // through the server's key first, which is what lets the second opinion
+  // exist on a machine nobody has ever set up. A route that is not there
+  // fails the row honestly rather than silently making the report one column
+  // that reads as a clean bill of health.
+  out.push({ id: 'openai', label: 'ChatGPT', model: getOpenAiModel() });
   if (geminiModel) out.push({ id: 'gemini', label: 'Gemini', model: AI_MODEL });
   return out;
 }
@@ -32436,7 +32603,7 @@ async function akcMediaFor(q) {
 // half a comparison is still worth printing.
 async function akcAskEngine(engine, prompt, media) {
   const raw = engine.id === 'openai'
-    ? await askOpenAI(prompt, media, { maxOutputTokens: 3072, json: true })
+    ? await askChatGpt(prompt, media, { maxOutputTokens: 3072, json: true })
     // skipOpenAi: this call must be Gemini even when the sidebar toggle has
     // ChatGPT selected, or both columns are the same model.
     : await askGeminiVision(prompt, media, { maxOutputTokens: 3072, json: true, skipOpenAi: true });
@@ -61423,6 +61590,8 @@ window.closeFlagDialog = closeFlagDialog;
 window.openMarkingSettings = openMarkingSettings;
 window.openAiEngineSettings = openAiEngineSettings;
 window.closeAiEngineSettings = closeAiEngineSettings;
+// Inline on* handlers live outside the module's scope.
+window.aiEngineChoicePreview = aiEngineChoicePreview;
 window.saveAiEngineSettings = saveAiEngineSettings;
 window.closeMarkingSettings = closeMarkingSettings;
 window.saveMarkingSettings = saveMarkingSettings;
