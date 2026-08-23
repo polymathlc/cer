@@ -2494,7 +2494,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.322.0';
+const APP_VERSION = 'v1.323.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -22417,6 +22417,7 @@ async function annotAiCheck(containerSel, pid, btn) {
           score: finalScore,
           totalBlanks: finalTotal,
           answerHash: rpgAnswerFingerprint('annot:' + (q.id || '')),
+          answers: _attemptAnswers(containerSel),
           timestamp: Timestamp.now(),
           mode: cfg.mode || 'practice-open'
         }).catch(err => console.warn('Could not record attempt:', err));
@@ -24059,6 +24060,7 @@ async function markOpenAnswersIn(containerSel, q, opts = {}) {
       score: score,
       totalBlanks: total,
       answerHash: rpgAnswerFingerprint(answerText),
+      answers: _attemptAnswers(containerSel),
       timestamp: Timestamp.now(),
       mode
     }).catch(err => console.warn('Could not record attempt:', err));
@@ -24115,6 +24117,56 @@ function _setPartResult(containerSel, key, verdict, pts, expected, student) {
   (_openPartResults[containerSel] = _openPartResults[containerSel] || {})[key] = { verdict, pts, expected, student };
 }
 
+/* WHAT THE STUDENT ACTUALLY WROTE, KEPT — so the teacher can read it back.
+   ---------------------------------------------------------------------
+   Until now an attempt recorded a SCORE and an `answerHash`, which is a 32-bit
+   fingerprint: one-way, and there purely to stop the same answer being
+   re-submitted for the monthly tally. So the log could say a child got 2 out
+   of 3 and could never say what they put — which makes every mark
+   unarguable. A teacher who thinks the AI has it wrong has nothing to look at,
+   and a child who says "but I wrote the right thing" cannot be checked.
+
+   `_openPartResults` ALREADY HOLDS EXACTLY THIS, per part, on every marked
+   surface — it is what the running score, the per-part feedback and the
+   revision flashcards are all built from — so nothing new is computed here.
+   It is read out and written down.
+
+   THE LABEL IS DERIVED FROM THE KEY, never passed in. `_setPartResult` has six
+   call sites across three marking paths, and a seventh argument threaded
+   through all of them is six chances to forget one — a part logged with no
+   name reads on the panel as an answer to a question nobody can identify.
+
+   BOTH CAPS MATTER. An attempt is a document, a document dies at 1 MB, and a
+   child pasting an essay into one blank must not be able to make their own
+   attempt unwritable: a lost attempt is a lost mark. */
+const SUT_ANS_CHARS = 700;      // one answer, trimmed with an ellipsis
+const SUT_ANS_PARTS = 20;       // parts kept per question
+
+function _attemptAnswers(containerSel) {
+  const results = _openPartResults[containerSel] || {};
+  const items = _openItemsStore[containerSel] || [];
+  const clip = v => {
+    const s = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+    return s.length > SUT_ANS_CHARS ? s.slice(0, SUT_ANS_CHARS) + '…' : s;
+  };
+  return Object.keys(results).slice(0, SUT_ANS_PARTS).map(key => {
+    const r = results[key] || {};
+    let label = 'Answer';
+    if (String(key).startsWith('mcq:')) label = 'Multiple choice';
+    else {
+      const it = items[parseInt(String(key).slice(5), 10)];
+      if (it && it.label) label = String(it.label);
+    }
+    return {
+      label: clip(label),
+      student: clip(r.student),
+      expected: clip(r.expected),
+      verdict: String(r.verdict || ''),
+      pts: Number(r.pts) || 0
+    };
+  });
+}
+
 // Once a part is marked, refresh the running score; when EVERY part of the
 // question has a verdict, record the attempt and hand over to the surface
 // (Quick/Topical practice use this to reveal their Next button).
@@ -24165,6 +24217,7 @@ function _checkAllPartsMarked(containerSel) {
       score: finalScore,
       totalBlanks: finalTotal,
       answerHash: rpgAnswerFingerprint(answerText),
+      answers: _attemptAnswers(containerSel),
       timestamp: Timestamp.now(),
       mode: cfg.mode || 'practice-open'
     }).catch(err => console.warn('Could not record attempt:', err));
@@ -30781,7 +30834,24 @@ function formatGap(ms) {
 //     re-reads Firestore, so filtering four hundred attempts is instant and a
 //     teacher can sweep through the modes without paying for a query each time.
 //
-// It is READ-ONLY. Nothing in this block writes anything anywhere.
+// It WAS read-only. It now writes exactly one thing, and only when the teacher
+// presses it: an `override` on a single attempt, which is the teacher's mark
+// standing in place of the AI's. Nothing else in this block writes anything.
+//
+//   • **The override is the TEACHER'S RECORD, not the student's points.** It
+//     changes what this dashboard, its averages and its export say about the
+//     attempt — which is what a teacher marks and reports from. It deliberately
+//     does NOT reach back into the child's XP, gold or leaderboard standing:
+//     those were awarded at answering time by the student's own client, an
+//     admin cannot write another account's hero doc at all (see the
+//     broadcast-marker pattern), and quietly minting points weeks later would
+//     make two boards disagree with no way to tell which is lying. The panel
+//     says so in as many words rather than leaving it to be assumed.
+//
+//   • **`sutCredit` is the ONE place the override is honoured**, so the row,
+//     the result filter, the by-mode breakdown, the summary cards and the CSV
+//     all follow from a single line. A second reading of `override` somewhere
+//     else is how a row shows Correct while the average still counts it wrong.
 
 // Raw mode → what a human calls it. `group` colours the chip and groups the
 // filter, and is the only thing that must stay in the three-value set the CSS
@@ -30826,7 +30896,13 @@ function usageModeChip(mode) {
 
 // The tracker's whole state. `all` is what came back from Firestore ONCE; the
 // filters only ever narrow it, so nothing here needs a second read.
-let _sut = { uid: '', name: '', email: '', all: [], mode: '', result: '', days: '', search: '', loading: false };
+let _sut = { uid: '', name: '', email: '', all: [], mode: '', result: '', days: '', search: '', loading: false,
+             /* Which rows are expanded, and which is mid-save. Both are STATE
+                rather than a class on a <tr>: the table is repainted from
+                scratch on every filter change and after every override, so a
+                panel opened by hand would snap shut under the teacher reading
+                it. Same reason the answer-key cross-check keeps `_akc.open`. */
+             open: new Set(), saving: '' };
 
 // A fraction of the marks earned, so a part-right open answer is not rounded
 // into a pass or a fail. Everything downstream — the verdict, the average, the
@@ -30834,7 +30910,24 @@ let _sut = { uid: '', name: '', email: '', all: [], mode: '', result: '', days: 
 function sutCredit(a) {
   const t = Number(a && a.totalBlanks) || 0;
   if (t <= 0) return null;
-  return Math.max(0, Math.min(1, (Number(a.score) || 0) / t));
+  /* THE TEACHER'S MARK WINS. This is the one place that is decided, so the
+     verdict chip, the result filter, the by-mode averages, the summary cards
+     and the export cannot disagree about the same attempt. */
+  const o = sutOverrideOf(a);
+  const score = o ? o.score : (Number(a.score) || 0);
+  return Math.max(0, Math.min(1, score / t));
+}
+/* An override the teacher has actually set, or null. A score that will not
+   parse is NOT an override — a stray field must never silently rewrite a mark,
+   and a row that reads "overridden" with the AI's number under it is worse
+   than one that was never touched. */
+function sutOverrideOf(a) {
+  const o = a && a.override;
+  if (!o || typeof o !== 'object') return null;
+  const score = Number(o.score);
+  if (!isFinite(score)) return null;
+  const t = Number(a.totalBlanks) || 0;
+  return { score: Math.max(0, Math.min(t || score, score)), by: String(o.by || ''), at: String(o.at || '') };
 }
 // Right / part right / wrong, at the same ≥0.95 threshold the rest of the app
 // treats as "correct" — so a tracker row and a progress counter never disagree
@@ -30883,6 +30976,129 @@ function sutVisible() {
   });
 }
 
+/* THE ANSWER PANEL — what the child actually put, beside what was wanted.
+   ---------------------------------------------------------------------
+   Three states, and telling them apart is the whole job. A question answered
+   BEFORE answers were recorded has nothing to show and says so; a GAME never
+   records one and says why; anything else shows every part. An empty panel
+   with no explanation reads as a broken feature, and a teacher who reads it
+   that way stops opening it. */
+function sutAnswerRowsHtml(a) {
+  const list = Array.isArray(a && a.answers) ? a.answers : null;
+  if (list && list.length) {
+    return list.map(x => {
+      const v = String(x.verdict || '').toLowerCase();
+      const cls = v === 'correct' ? 'ok' : v === 'partial' ? 'part' : v ? 'no' : 'part';
+      const said = String(x.student || '').trim();
+      return '<div class="sut-ans-part">'
+        + '<div class="sut-ans-head"><span class="sut-ans-label">' + escapeHtml(x.label || 'Answer') + '</span>'
+        + (v ? '<span class="sut-v ' + cls + '">' + escapeHtml(v.charAt(0).toUpperCase() + v.slice(1)) + '</span>' : '')
+        + '</div>'
+        + '<div class="sut-ans-said' + (said ? '' : ' sut-ans-blank') + '">'
+        + (said ? escapeHtml(said) : 'Left blank') + '</div>'
+        + (x.expected ? '<div class="sut-ans-want"><b>Expected:</b> ' + escapeHtml(x.expected) + '</div>' : '')
+        + '</div>';
+    }).join('');
+  }
+  const m = usageMode(a && a.mode);
+  if (m.group === 'game') {
+    return '<div class="sut-ans-none">A game logs whether the answer was right, not what it was — '
+      + escapeHtml(m.label) + ' questions are answered by tapping an option and nothing is written down.</div>';
+  }
+  return '<div class="sut-ans-none">No answer was recorded for this attempt. Answers began being kept in '
+    + escapeHtml(APP_VERSION) + ' — anything answered before that has its mark and its timing only, and there is '
+    + 'no way to recover the wording: what was stored was a one-way fingerprint, not the text.</div>';
+}
+
+/* The teacher's own mark, over the AI's. It is a NUMBER out of the same total
+   the question was marked out of, not a three-way verdict button: this log
+   speaks in score/total everywhere else, and "part right" on a 3-mark question
+   is not the same decision as 2 out of 3. */
+function sutOverrideHtml(a) {
+  const total = Number(a.totalBlanks) || 0;
+  const o = sutOverrideOf(a);
+  const id = escapeHtml(String(a._id || ''));
+  const cur = o ? o.score : (Number(a.score) || 0);
+  const busy = _sut.saving === a._id;
+  if (!a._id) {
+    return '<div class="sut-ans-none">This attempt cannot be re-marked — the log did not keep its record id.</div>';
+  }
+  return '<div class="sut-ov">'
+    + '<div class="sut-ov-row">'
+      + '<label>Your mark</label>'
+      + '<input type="number" id="sutOv_' + id + '" class="sut-ov-num" value="' + escapeHtml(String(cur))
+        + '" min="0" max="' + total + '" step="0.5"' + (busy ? ' disabled' : '') + '>'
+      + '<span class="sut-ov-of">out of ' + total + '</span>'
+      + '<button class="btn btn-primary btn-sm" onclick="sutSaveOverride(\'' + id + '\')"'
+        + (busy ? ' disabled' : '') + '>' + (busy ? 'Saving…' : (o ? 'Update mark' : 'Override mark')) + '</button>'
+      + (o ? '<button class="btn btn-outline btn-sm" onclick="sutClearOverride(\'' + id + '\')"'
+        + (busy ? ' disabled' : '') + '>↩ Use the AI\'s mark</button>' : '')
+    + '</div>'
+    + (o ? '<div class="sut-ov-note">Marked <b>' + o.score + ' / ' + total + '</b> by '
+        + escapeHtml(o.by || 'you') + (o.at ? ' on ' + escapeHtml(formatDateTimeSGT(new Date(o.at))) : '')
+        + ' — the AI had given ' + escapeHtml(String(a.score)) + '.</div>' : '')
+    + '<div class="sut-ov-note">Your mark replaces the AI\'s everywhere on this page and in the export. It does '
+      + '<b>not</b> change the points, XP or leaderboard position the student earned when they answered — those were '
+      + 'awarded on their own device at the time, and re-writing them weeks later would leave two boards disagreeing '
+      + 'with nothing to say which is right.</div>'
+    + '</div>';
+}
+
+/* Expanding is a click on the row. It is a Set of ids rather than a class on
+   the <tr>, because the table is rebuilt on every filter change and after
+   every override. */
+function sutToggleRow(id) {
+  if (!id) return;
+  if (_sut.open.has(id)) _sut.open.delete(id); else _sut.open.add(id);
+  sutRender();
+}
+
+/* The ONE writer in this block. It updates the attempt document itself — the
+   admin is the only account the rules let update one — and it re-reads the
+   number off the input at press time rather than trusting anything captured
+   when the row was drawn. */
+async function sutSaveOverride(id) {
+  const a = _sut.all.find(x => x && x._id === id);
+  if (!a) return;
+  const el = document.getElementById('sutOv_' + id);
+  const total = Number(a.totalBlanks) || 0;
+  const raw = el ? Number(el.value) : NaN;
+  if (!isFinite(raw)) { showToast('Type a mark first', 'error'); return; }
+  const score = Math.max(0, Math.min(total, raw));
+  if (score !== raw) showToast('Marks are capped at 0–' + total + ' for this question', 'info');
+  _sut.saving = id; sutRender();
+  try {
+    const stamp = { score, by: (currentUser && currentUser.email) || 'teacher', at: new Date().toISOString() };
+    await updateDoc(doc(db, 'questionAttempts', id), { override: stamp });
+    a.override = stamp;                 // the row on screen and the database now agree
+    showToast('Re-marked ' + score + '/' + total, 'success');
+  } catch (e) {
+    // Named precisely: "the rules do not let the teacher update this" is a
+    // one-line fix in the console, and "AI error" would send them anywhere but.
+    const msg = String((e && e.message) || e || '');
+    showToast(/permission|insufficient/i.test(msg)
+      ? 'Saved nowhere — this account is not allowed to update the attempt log. The questionAttempts rule needs "allow update: if isAdmin();".'
+      : 'Could not save that mark: ' + msg, 'error');
+  } finally {
+    _sut.saving = ''; sutRender();
+  }
+}
+
+async function sutClearOverride(id) {
+  const a = _sut.all.find(x => x && x._id === id);
+  if (!a) return;
+  _sut.saving = id; sutRender();
+  try {
+    await updateDoc(doc(db, 'questionAttempts', id), { override: deleteField() });
+    delete a.override;
+    showToast('Back to the AI\'s mark', 'success');
+  } catch (e) {
+    showToast('Could not undo that: ' + ((e && e.message) || e), 'error');
+  } finally {
+    _sut.saving = ''; sutRender();
+  }
+}
+
 // Attempts, correct, average and last-done PER MODE — the answer to "what has
 // this child actually been doing", which is what the tracker is for.
 function sutByMode(rows) {
@@ -30905,7 +31121,10 @@ function sutByMode(rows) {
 async function showStudentDetail(uid) {
   const s = _usageStudentStats[uid] || { uid, name: 'Student', email: '' };
   _sut = { uid, name: s.name || 'Student', email: s.email || '', all: [],
-           mode: '', result: '', days: '', search: '', loading: true };
+           mode: '', result: '', days: '', search: '', loading: true,
+           // A fresh open starts closed: rows left expanded from the LAST
+           // student would open different questions under the same ids.
+           open: new Set(), saving: '' };
   document.getElementById('studentDetailName').textContent = _sut.name;
   document.getElementById('studentDetailEmail').textContent = _sut.email;
   document.getElementById('studentDetailBody').innerHTML =
@@ -30915,7 +31134,9 @@ async function showStudentDetail(uid) {
     // Single-field equality query — no composite index needed; sorted client-side.
     const snap = await getDocs(query(collection(db, 'questionAttempts'), where('uid', '==', uid)));
     const rows = [];
-    snap.forEach(d => rows.push(d.data()));
+    // The ID comes with it now: an override is an update to THIS document, and
+    // a row that has forgotten which document it came from cannot be corrected.
+    snap.forEach(d => rows.push(Object.assign({ _id: d.id }, d.data())));
     if (_sut.uid !== uid) return;                 // a newer open superseded this one
     // Chronological first, so the gap to the PREVIOUS attempt can be measured;
     // the table then shows them newest-first without recomputing anything.
@@ -31035,25 +31256,41 @@ function sutRender() {
     const v = sutVerdict(a);
     const c = sutCredit(a);
     const pct = c == null ? null : Math.round(c * 100);
-    const score = (Number(a.totalBlanks) || 0) > 0 ? a.score + '/' + a.totalBlanks : (a.score != null ? String(a.score) : '—');
+    const _ovs = sutOverrideOf(a);
+    const shown = _ovs ? _ovs.score : a.score;
+    const score = (Number(a.totalBlanks) || 0) > 0 ? shown + '/' + a.totalBlanks : (shown != null ? String(shown) : '—');
     const isRapid = a._gap != null && a._gap < RAPID_ATTEMPT_MS;
-    return '<tr' + (isRapid ? ' class="attempt-rapid"' : '') + '>'
-      + '<td class="sut-num" style="color:var(--text-muted);font-size:0.76rem;">' + n + '</td>'
+    const id = String(a._id || '');
+    const open = id && _sut.open.has(id);
+    const ov = sutOverrideOf(a);
+    const cls = [isRapid ? 'attempt-rapid' : '', 'sut-row', open ? 'open' : ''].filter(Boolean).join(' ');
+    const panel = open
+      ? '<tr class="sut-panel-row"><td colspan="6"><div class="sut-panel">'
+        + '<div class="sut-panel-title">What ' + escapeHtml((_sut.name || 'the student').split(' ')[0]) + ' wrote</div>'
+        + sutAnswerRowsHtml(a) + sutOverrideHtml(a)
+        + '</div></td></tr>'
+      : '';
+    return '<tr class="' + cls + '"' + (id ? ' onclick="sutToggleRow(\'' + escapeHtml(id) + '\')"' : '') + '>'
+      + '<td class="sut-num" style="color:var(--text-muted);font-size:0.76rem;">'
+        + '<span class="sut-caret">' + (open ? '▾' : '▸') + '</span>' + n + '</td>'
       + '<td style="font-size:0.8rem;white-space:nowrap;">' + (a._t ? formatDateTimeSGT(new Date(a._t)) : 'Unknown') + '</td>'
       + '<td><div class="sut-qtitle">' + escapeHtml(a._q.title)
         + (a._q.gone ? ' <span class="sut-qmeta" title="This question has since been deleted from the bank">· removed from the bank</span>' : '')
         + '</div>' + (a._q.meta ? '<div class="sut-qmeta">' + escapeHtml(a._q.meta) + '</div>' : '') + '</td>'
       + '<td>' + usageModeChip(a.mode) + '</td>'
       + '<td style="text-align:center;"><span class="sut-v ' + v.cls + '">' + v.label + '</span>'
-        + '<div class="sut-qmeta sut-num">' + score + (pct == null ? '' : ' · ' + pct + '%') + '</div></td>'
+        + '<div class="sut-qmeta sut-num">' + score + (pct == null ? '' : ' · ' + pct + '%') + '</div>'
+        + (ov ? '<div class="sut-ov-flag" title="You re-marked this attempt">✎ your mark</div>' : '') + '</td>'
       + '<td style="font-size:0.77rem;' + (isRapid ? 'color:var(--accent-red);font-weight:700;' : 'color:var(--text-muted);') + '">'
         + (isRapid ? '⚡ ' : '') + formatGap(a._gap) + '</td>'
-      + '</tr>';
+      + '</tr>' + panel;
   }).join('');
   const log = '<div class="sut-section">'
-    + '<div class="sut-section-title">Every question, newest first</div>' + filters
+    + '<div class="sut-section-title">Every question, newest first</div>'
+    + '<div class="sut-hint">Click any row to read what they wrote — and to re-mark it yourself if the AI got it wrong.</div>'
+    + filters
     + '<div class="usage-table-wrapper"><table class="usage-table"><thead><tr>'
-    + '<th style="width:34px;">#</th><th>Date &amp; time (SGT)</th><th>Question</th><th>Mode</th>'
+    + '<th style="width:52px;">#</th><th>Date &amp; time (SGT)</th><th>Question</th><th>Mode</th>'
     + '<th style="text-align:center;">Result</th><th>Gap</th>'
     + '</tr></thead><tbody>'
     + (logRows || '<tr><td colspan="6" class="sut-empty">No questions match these filters — widen them to see more.</td></tr>')
@@ -31072,12 +31309,23 @@ function sutExportCsv() {
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
   const cols = ['#', 'Date & time (SGT)', 'Question', 'Question ID', 'Topic', 'Mode', 'Mode (raw)',
-                'Score', 'Out of', 'Percent', 'Result', 'Gap from previous'];
+                'Score', 'Out of', 'Percent', 'Result', 'Gap from previous',
+                'Re-marked by teacher', "AI's mark", 'Their answer', 'Expected'];
   const lines = [cols.join(',')].concat(rows.map((a, i) => {
     const c = sutCredit(a);
+    const ov = sutOverrideOf(a);
+    const parts = Array.isArray(a.answers) ? a.answers : [];
+    // One cell per column, so a multi-part question stays one row: the export
+    // is a register, and a question that became four rows would be counted
+    // four times by anything that opened it.
+    const said = parts.map(x => (x.label ? x.label + ': ' : '') + (String(x.student || '').trim() || '(blank)')).join(' | ');
+    const want = parts.map(x => String(x.expected || '')).filter(Boolean).join(' | ');
     return [i + 1, a._t ? formatDateTimeSGT(new Date(a._t)) : '', a._q.title, a.questionId || '', a._q.meta,
-            usageMode(a.mode).label, a.mode || '', a.score == null ? '' : a.score, a.totalBlanks || '',
-            c == null ? '' : Math.round(c * 100), sutVerdict(a).label, formatGap(a._gap)].map(esc).join(',');
+            usageMode(a.mode).label, a.mode || '',
+            // The mark IN FORCE, so the spreadsheet and the screen agree.
+            ov ? ov.score : (a.score == null ? '' : a.score), a.totalBlanks || '',
+            c == null ? '' : Math.round(c * 100), sutVerdict(a).label, formatGap(a._gap),
+            ov ? (ov.by || 'yes') : '', ov ? a.score : '', said, want].map(esc).join(',');
   }));
   const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -61893,6 +62141,9 @@ window.resetLegendsObj = resetLegendsObj;
 window.showStudentDetail = showStudentDetail;
 window.sutSetFilter = sutSetFilter;
 window.sutExportCsv = sutExportCsv;
+window.sutToggleRow = sutToggleRow;
+window.sutSaveOverride = sutSaveOverride;
+window.sutClearOverride = sutClearOverride;
 window.setStudentLevel = setStudentLevel;
 window.setPrizeMonth = setPrizeMonth;
 window.closeStudentDetail = closeStudentDetail;

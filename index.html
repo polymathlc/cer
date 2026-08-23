@@ -5048,6 +5048,37 @@ option {
   overflow: hidden; min-width: 74px; }
 .sut-bar i { display: block; height: 100%; border-radius: 999px; }
 .sut-qtitle { font-weight: 600; font-size: 0.85rem; line-height: 1.45; }
+/* The log row opens. The caret and the pointer are what say it is clickable —
+   a row that reveals something on click and looks exactly like one that does
+   not is a feature nobody finds. */
+.sut-row { cursor: pointer; }
+.sut-row:hover > td { background: var(--bg-subtle, #f8fafc); }
+.sut-row.open > td { background: var(--bg-subtle, #f8fafc); }
+.sut-caret { display: inline-block; width: 14px; color: var(--text-muted); font-size: 0.7rem; }
+.sut-hint { font-size: 0.8rem; color: var(--text-muted); margin: -4px 0 12px; }
+.sut-panel-row > td { padding: 0 !important; background: var(--bg-subtle, #f8fafc); }
+.sut-panel { padding: 18px 22px 20px; border-left: 3px solid var(--primary); }
+.sut-panel-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 12px; }
+.sut-ans-part { background: var(--surface, #fff); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+.sut-ans-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.sut-ans-label { font-size: 0.78rem; font-weight: 700; color: var(--text-muted); }
+.sut-ans-said { font-size: 0.9rem; line-height: 1.6; white-space: pre-wrap; }
+.sut-ans-blank { color: var(--text-muted); font-style: italic; }
+.sut-ans-want { font-size: 0.82rem; line-height: 1.55; color: var(--text-muted); margin-top: 8px;
+  padding-top: 8px; border-top: 1px dashed var(--border); }
+.sut-ans-none { font-size: 0.85rem; line-height: 1.6; color: var(--text-muted);
+  background: var(--surface, #fff); border: 1px dashed var(--border);
+  border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+.sut-ov { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.sut-ov-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sut-ov-row label { font-size: 0.8rem; font-weight: 700; color: var(--text-muted); }
+.sut-ov-num { width: 82px; padding: 7px 10px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 0.9rem; font-weight: 700; }
+.sut-ov-of { font-size: 0.82rem; color: var(--text-muted); }
+.sut-ov-note { font-size: 0.78rem; line-height: 1.6; color: var(--text-muted); margin-top: 10px; }
+.sut-ov-flag { font-size: 0.7rem; font-weight: 700; color: var(--accent-purple); margin-top: 3px; }
 .sut-qmeta { color: var(--text-muted); font-size: 0.75rem; margin-top: 2px; }
 .sut-num { font-family: 'Space Mono', monospace; white-space: nowrap; }
 
