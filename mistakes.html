@@ -135,6 +135,12 @@
     font-size: 0.82rem; color: var(--ink-soft); margin: 16px 0 26px;
   }
   .shName span { border-bottom: 1px solid var(--ink-faint); min-width: 150px; padding-bottom: 2px; }
+  /* The instruction that closes the loop. It PRINTS — the whole point is that
+     it is read off the paper, away from any screen. */
+  .shHow {
+    font-size: 0.8rem; color: var(--ink-soft); line-height: 1.6; margin: -12px 0 26px;
+    padding: 10px 14px; border-radius: 8px; background: var(--bg-soft); border: 1px solid var(--line);
+  }
 
   .q { padding: 20px 0; border-bottom: 1px solid var(--line); break-inside: avoid; }
   .q:last-child { border-bottom: 0; }
@@ -230,7 +236,7 @@ import { getFirestore, doc, getDoc, updateDoc }
 import { getStorage, ref as sRef, uploadString, getDownloadURL }
   from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
-const APP_VERSION = 'v1.0.0';
+const APP_VERSION = 'v1.1.0';
 document.getElementById('verTag').textContent = APP_VERSION;
 
 /* The one collection this page reads, and the one folder it writes. Named
@@ -471,6 +477,8 @@ function render() {
         '<div class="shOrg">Polymath Learning Centre · questions to try again</div>' +
       '</div>' +
       '<div class="shName"><span>Name:&nbsp;</span><span>Date:&nbsp;</span></div>' +
+      '<div class="shHow">When you have finished, <b>photograph this back into the Scan app</b> to have it ' +
+        'marked. Get a question right <b>twice in a row</b> and it comes out of your mistake book.</div>' +
       items.map(questionHtml).join('') +
     '</div>' +
     '<div class="sheet keyPage">' +
