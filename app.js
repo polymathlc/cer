@@ -208,12 +208,59 @@ async function askOpenAI(prompt, media, { maxOutputTokens = 512, temperature, js
      problems with three different fixes.
    ===================================================================== */
 const AI_DOWN_MS = 10 * 60 * 1000;
+const AI_ROUTE_LABEL = { gemini: 'Gemini', openai: 'ChatGPT (server key)', openaiKey: 'ChatGPT (key in this browser)' };
 const _aiDown = { gemini: 0, openai: 0, openaiKey: 0 };
-const _aiWhy = { gemini: '', openai: '', openaiKey: '' };
+const _aiWhy = { gemini: '', openai: '', openaiKey: '', shared: '' };
 let aiLastCall = { engine: '', fellBack: false, error: '' };
 function aiEngineIsDown(e) { return (_aiDown[e] || 0) > Date.now(); }
 function _aiMarkDown(e, why) { _aiDown[e] = Date.now() + AI_DOWN_MS; _aiWhy[e] = why || ''; }
 function _aiMarkUp(e) { _aiDown[e] = 0; _aiWhy[e] = ''; }
+
+/* WHICH ENGINE IS PREFERRED IS A SETTING FOR THE WHOLE CENTRE, not for this
+   browser. The admin sets it once (`aiEngineSetShared`) and every signed-in
+   device follows, because the old device-local choice was the bug wearing a
+   feature's clothes: the teacher switched to ChatGPT on their laptop, watched
+   it work, and every student stayed on the capped Gemini.
+
+   `_aiSharedEngine` is null until the callable answers, and the device
+   preference is what stands in until then — so a project where the function
+   has never been deployed behaves exactly as it did before, rather than
+   waiting on a call that is never coming. */
+let _aiSharedEngine = null;
+let _aiSharedAt = 0;
+const AI_SHARED_TTL = 5 * 60 * 1000;
+
+function aiPreferredEngine() {
+  return _aiSharedEngine || getAiEngine();
+}
+
+async function aiEngineLoadShared(force) {
+  if (!force && _aiSharedEngine && Date.now() - _aiSharedAt < AI_SHARED_TTL) return _aiSharedEngine;
+  try {
+    if (!_aiFns) _aiFns = getFunctions(app);
+    const res = await httpsCallable(_aiFns, 'aiEngineConfig', { timeout: 20000 })({});
+    const eng = res && res.data && res.data.engine;
+    if (eng === 'gemini' || eng === 'openai') {
+      _aiSharedEngine = eng;
+      _aiSharedAt = Date.now();
+      _aiWhy.shared = '';
+    }
+  } catch (e) {
+    // Not deployed, or offline. The device preference carries on — a shared
+    // setting that cannot be read must never stop the app choosing at all.
+    _aiWhy.shared = String((e && e.message) || e || '');
+  }
+  return _aiSharedEngine;
+}
+
+async function aiEngineSetShared(engine) {
+  if (!_aiFns) _aiFns = getFunctions(app);
+  const res = await httpsCallable(_aiFns, 'aiEngineConfig', { timeout: 20000 })({ set: engine });
+  const eng = res && res.data && res.data.engine;
+  _aiSharedEngine = (eng === 'gemini' || eng === 'openai') ? eng : engine;
+  _aiSharedAt = Date.now();
+  return _aiSharedEngine;
+}
 
 /* `openai` (the server) is ALWAYS listed: whether the function is deployed is
    not something a page can know without asking, and one refused call marks it
@@ -222,7 +269,7 @@ function _aiMarkUp(e) { _aiDown[e] = 0; _aiWhy[e] = ''; }
 function aiEngineOrder() {
   const chat = ['openai'];
   if (getOpenAiKey()) chat.push('openaiKey');
-  const have = getAiEngine() === 'openai'
+  const have = aiPreferredEngine() === 'openai'
     ? chat.concat(geminiModel ? ['gemini'] : [])
     : (geminiModel ? ['gemini'] : []).concat(chat);
   return have.sort((a, b) => (aiEngineIsDown(a) ? 1 : 0) - (aiEngineIsDown(b) ? 1 : 0));
@@ -269,8 +316,16 @@ async function _aiAsk(prompt, media, opts, order) {
       console.warn('AI route ' + engine + ' refused:', e);
     }
   }
-  aiLastCall = { engine: '', fellBack: false, error: String((first && first.message) || first || '') };
-  throw first;
+  /* EVERY route's refusal, not just the first. The first names the real
+     problem only when the others are noise; when nothing answered at all,
+     reporting one of them hides the rest — a card reading "Gemini: billing
+     cap" and nothing else sends the teacher to the Google console when what
+     actually needs doing is deploying the ChatGPT function. */
+  const why = order.map(e => AI_ROUTE_LABEL[e] + ': ' + (_aiWhy[e] || 'refused')).join(' · ');
+  aiLastCall = { engine: '', fellBack: false, error: why };
+  const err = new Error(why);
+  err.cause = first;
+  throw err;
 }
 
 /* ChatGPT by whichever route will have it — the server's key first, then a
@@ -297,9 +352,14 @@ async function askGeminiDirect(prompt, media, { maxOutputTokens = 512, temperatu
    "the backup is fine" that was never tested is the sentence this exists to
    stop anyone believing. */
 function aiRouteReport() {
-  const label = { gemini: 'Gemini', openai: 'ChatGPT (server key)', openaiKey: 'ChatGPT (key in this browser)' };
+  const label = AI_ROUTE_LABEL;
   const order = aiEngineOrder();
   const notes = [];
+  notes.push(_aiSharedEngine
+    ? 'This order is the centre-wide setting — every signed-in device is using it.'
+    : (_aiWhy.shared
+      ? 'This order is THIS BROWSER\'s own setting: the centre-wide one could not be read, so other devices keep theirs. (' + _aiWhy.shared + ')'
+      : 'Reading the centre-wide setting…'));
   if (aiEngineIsDown('openai') && _aiWhy.openai) {
     notes.push(/not-?found|failed-?precondition|not configured|internal error/i.test(_aiWhy.openai)
       ? 'The server key is not switched on yet — OPENAI_API_KEY has not been set, or the functions have not been deployed. Until then ChatGPT needs a key in this browser. (' + _aiWhy.openai + ')'
@@ -524,8 +584,19 @@ function aiEngineChoicePreview(v) {
   }
 }
 
+/* Read at sign-in so a student's device follows the teacher's choice, and
+   again when the chooser is opened so the teacher is never looking at a stale
+   one. It is deliberately fire-and-forget: a setting that cannot be read must
+   never hold up the app. */
+function aiEngineInit() {
+  aiEngineLoadShared(true).then(() => {
+    const el = document.getElementById('aiEngineStatus');
+    if (el && document.getElementById('aiEngineOverlay').classList.contains('active')) renderAiEngineStatus();
+  }).catch(() => {});
+}
+
 function openAiEngineSettings() {
-  const eng = getAiEngine();
+  const eng = aiPreferredEngine();
   document.querySelectorAll('input[name="aiEngineChoice"]').forEach(r => { r.checked = r.value === eng; });
   const modelSel = document.getElementById('aiEngineModel');
   modelSel.value = getOpenAiModel();
@@ -535,6 +606,7 @@ function openAiEngineSettings() {
   document.getElementById('aiEngineKey').value = getOpenAiKey();
   renderAiEngineStatus();
   document.getElementById('aiEngineOverlay').classList.add('active');
+  aiEngineLoadShared(true).then(renderAiEngineStatus).catch(() => {});
 }
 
 /* The chooser SAYS what is actually happening, because an app quietly running
@@ -555,9 +627,29 @@ function closeAiEngineSettings() {
   document.getElementById('aiEngineOverlay').classList.remove('active');
 }
 
-function saveAiEngineSettings() {
+async function saveAiEngineSettings() {
   const picked = document.querySelector('input[name="aiEngineChoice"]:checked');
   const eng = picked ? picked.value : 'gemini';
+  /* The engine is a setting for the WHOLE centre, so it goes to the server —
+     and only the admin may write it. Everything else in this dialog (the
+     model, the fallback key) stays device-local, because that is what those
+     things honestly are. A shared write that FAILS must not silently leave
+     the teacher believing every student has moved: it is reported, and the
+     device preference is still saved so this browser at least does what the
+     dialog says. */
+  if (_isAdmin()) {
+    try {
+      await aiEngineSetShared(eng);
+      showToast(eng === 'openai'
+        ? 'ChatGPT is now the first engine for everyone.'
+        : 'Gemini is now the first engine for everyone.', 'success');
+    } catch (e) {
+      const msg = String((e && e.message) || e || '');
+      showToast(/not-?found|internal|unavailable/i.test(msg)
+        ? 'Saved on this device only — the aiEngineConfig function is not deployed yet, so other devices keep their own setting.'
+        : 'Saved on this device only — the centre-wide setting could not be written: ' + msg, 'error');
+    }
+  }
   const key = (document.getElementById('aiEngineKey').value || '').trim();
   const model = document.getElementById('aiEngineModel').value || OPENAI_DEFAULT_MODEL;
   const imgSelEl = document.getElementById('aiEngineImageModel');
@@ -2156,7 +2248,7 @@ async function enterApp(user) {
 
 // App version shown to admins in the sidebar. BUMP THIS on every change you
 // deploy (see CLAUDE.md) so the admin can confirm the latest build is live.
-const APP_VERSION = 'v1.319.0';
+const APP_VERSION = 'v1.320.0';
 
 // =====================================================================
 // THE SUBJECT SWITCHER — one student, four subjects (v2.6.0)
@@ -2388,6 +2480,10 @@ async function startPracticeAs(uid) {
 function configureSidebarForRole(role) {
   const vb = document.getElementById('appVersionBadge');
   if (vb) vb.textContent = APP_VERSION;
+  // The engine choice is the centre's, not this browser's, so every signed-in
+  // device reads it here — the one function admin, employee and student paths
+  // all come through, rather than three call sites that could drift apart.
+  aiEngineInit();
   // Every signed-in path — admin, employee and student — comes through here,
   // which is why the subject switcher is turned on from this one place rather
   // than from three call sites that could drift apart. It is shown to ALL
